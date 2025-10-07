@@ -42,7 +42,7 @@
 #define HUF_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)   /* use only *after* variable declarations */
 
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 /* **************************************************************
 *  Utils
 ****************************************************************/

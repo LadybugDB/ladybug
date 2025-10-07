@@ -11,7 +11,7 @@ const arch = process.arch;
 const prebuiltPath = path.join(
   __dirname,
   "prebuilt",
-  `kuzujs-${platform}-${arch}.node`
+  `lbugjs-${platform}-${arch}.node`
 );
 
 // Check if building from source is forced
@@ -24,9 +24,9 @@ if (isNpmBuildFromSourceSet) {
 else if (fsCallback.existsSync(prebuiltPath)) {
   console.log("Prebuilt binary is available.");
   console.log("Copying prebuilt binary to package directory...");
-  fs.copyFileSync(prebuiltPath, path.join(__dirname, "kuzujs.node"));
+  fs.copyFileSync(prebuiltPath, path.join(__dirname, "lbugjs.node"));
   console.log(
-    `Copied ${prebuiltPath} -> ${path.join(__dirname, "kuzujs.node")}.`
+    `Copied ${prebuiltPath} -> ${path.join(__dirname, "lbugjs.node")}.`
   );
   console.log("Copying JS files to package directory...");
   const jsSourceDir = path.join(

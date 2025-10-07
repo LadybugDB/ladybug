@@ -1,5 +1,5 @@
 add_library(
-        kuzu_binder_bind_expression
+        lbug_binder_bind_expression
         OBJECT
         bind_boolean_expression.cpp
         bind_case_expression.cpp
@@ -14,5 +14,5 @@ add_library(
         bind_lambda_expression.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_binder_bind_expression>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_binder_bind_expression>
         PARENT_SCOPE)

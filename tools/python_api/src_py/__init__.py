@@ -33,7 +33,7 @@ while results.has_next():
     print(results.get_next())
 ```
 
-The dataset used in this example can be found [here](https://github.com/kuzudb/lbug/tree/master/dataset/demo-db/csv).
+The dataset used in this example can be found [here](https://github.com/lbugdb/lbug/tree/master/dataset/demo-db/csv).
 
 """
 

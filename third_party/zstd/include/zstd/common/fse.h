@@ -22,7 +22,7 @@
 #include <stddef.h>    /* size_t, ptrdiff_t */
 
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 /*-*****************************************
 *  FSE_PUBLIC_API : control library symbols visibility
 ******************************************/

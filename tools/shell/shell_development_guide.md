@@ -21,7 +21,7 @@ All flag strings are parsed to be lower case so make sure there are no capital l
 
 If the flag is a value flag, you can receive the value by using `args::get()` with the flag as a parameter. You can then handle the flag as needed.
 
-After the flags are parsed, the database and connection are set up, and an `EmbeddedShell` object is created. Using this object, we can process every line in the run command startup file (usually `.kuzurc`) and then start up the shell, calling `shell.run();`
+After the flags are parsed, the database and connection are set up, and an `EmbeddedShell` object is created. Using this object, we can process every line in the run command startup file (usually `.lbugrc`) and then start up the shell, calling `shell.run();`
 
 ### Embedded Shell
 The `embedded_shell.cpp` file contains all the code to process completed queries. It handles the processing of shell `:` commands and processes and prints the query results to the terminal. 

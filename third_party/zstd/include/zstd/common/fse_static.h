@@ -18,7 +18,7 @@
 /* *** Dependency *** */
 #include "zstd/common/bitstream.h"
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 
 /* *****************************************
 *  Static allocation

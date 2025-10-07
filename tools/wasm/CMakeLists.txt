@@ -1,4 +1,4 @@
-add_executable(kuzu_wasm
+add_executable(lbug_wasm
     src_cpp/main.cpp
     ${PROJECT_SOURCE_DIR}/src/c_api/connection.cpp
     ${PROJECT_SOURCE_DIR}/src/c_api/database.cpp
@@ -14,9 +14,9 @@ add_executable(kuzu_wasm
 
 file(GLOB JS_SOURCE_FILES ./src_js/*)
 
-target_link_libraries(kuzu_wasm PRIVATE lbug)
+target_link_libraries(lbug_wasm PRIVATE lbug)
 
-set_target_properties(kuzu_wasm
+set_target_properties(lbug_wasm
     PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build/lbug"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build/lbug"

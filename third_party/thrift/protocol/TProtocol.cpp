@@ -19,15 +19,15 @@
 
 #include "protocol/TProtocol.h"
 
-namespace kuzu_apache {
+namespace lbug_apache {
 namespace thrift {
 namespace protocol {
 
 TProtocol::~TProtocol() = default;
 uint32_t TProtocol::skip_virt(TType type) {
-  return ::kuzu_apache::thrift::protocol::skip(*this, type);
+  return ::lbug_apache::thrift::protocol::skip(*this, type);
 }
 
 TProtocolFactory::~TProtocolFactory() = default;
 
-}}} // kuzu_apache::thrift::protocol
+}}} // lbug_apache::thrift::protocol

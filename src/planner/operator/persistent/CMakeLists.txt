@@ -1,4 +1,4 @@
-add_library(kuzu_planner_persistent
+add_library(lbug_planner_persistent
         OBJECT
         logical_copy_from.cpp
         logical_copy_to.cpp
@@ -9,5 +9,5 @@ add_library(kuzu_planner_persistent
 )
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_planner_persistent>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_planner_persistent>
         PARENT_SCOPE)

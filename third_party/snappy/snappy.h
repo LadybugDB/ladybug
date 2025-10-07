@@ -50,7 +50,7 @@
 
 #include "snappy-stubs-public.h"
 
-namespace kuzu_snappy {
+namespace lbug_snappy {
   class Source;
   class Sink;
 
@@ -256,7 +256,7 @@ namespace kuzu_snappy {
 
   static constexpr int kMaxHashTableBits = 15;
   static constexpr size_t kMaxHashTableSize = 1 << kMaxHashTableBits;
-}  // end namespace kuzu_snappy
+}  // end namespace lbug_snappy
 
 #else // #if SNAPPY_NEW_VERSION
 
@@ -265,7 +265,7 @@ namespace kuzu_snappy {
 
 #include "snappy-stubs-public.h"
 
-namespace kuzu_snappy {
+namespace lbug_snappy {
   class Source;
   class Sink;
 
@@ -405,7 +405,7 @@ namespace kuzu_snappy {
   // unspecified prefix of *compressed.
   bool IsValidCompressed(Source* compressed);
 
-}  // end namespace kuzu_snappy
+}  // end namespace lbug_snappy
 
 #endif  // #if SNAPPY_NEW_VERSION # else
 

@@ -48,7 +48,7 @@
 
 #define THRIFT_UNUSED_VARIABLE(x) ((void)(x))
 
-namespace kuzu_apache {
+namespace lbug_apache {
 namespace thrift {
 
 class TEnumIterator {
@@ -134,6 +134,6 @@ void profile_print_info();
 void profile_write_pprof(FILE* gen_calls_f, FILE* virtual_calls_f);
 #endif
 }
-} // kuzu_apache::thrift
+} // lbug_apache::thrift
 
 #endif // #ifndef _KUZU_THRIFT_THRIFT_H_

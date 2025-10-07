@@ -1,4 +1,4 @@
-#include "kuzu_rs.h"
+#include "lbug_rs.h"
 
 using lbug::common::ArrayTypeInfo;
 using lbug::common::Interval;
@@ -13,7 +13,7 @@ using lbug::main::Connection;
 using lbug::main::Database;
 using lbug::main::SystemConfig;
 
-namespace kuzu_rs {
+namespace lbug_rs {
 
 std::unique_ptr<QueryParams> new_params() {
     return std::make_unique<QueryParams>();
@@ -300,4 +300,4 @@ const lbug::common::Value& recursive_rel_get_rels(const lbug::common::Value& val
     return *lbug::common::RecursiveRelVal::getRels(&val);
 }
 
-} // namespace kuzu_rs
+} // namespace lbug_rs

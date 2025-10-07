@@ -25,7 +25,7 @@
 #include <stack>
 #include <memory>
 
-namespace kuzu_apache {
+namespace lbug_apache {
 namespace thrift {
 namespace protocol {
 
@@ -259,7 +259,7 @@ private:
 typedef TCompactProtocolFactoryT<TTransport> TCompactProtocolFactory;
 }
 }
-} // kuzu_apache::thrift::protocol
+} // lbug_apache::thrift::protocol
 
 #include "protocol/TCompactProtocol.tcc"
 

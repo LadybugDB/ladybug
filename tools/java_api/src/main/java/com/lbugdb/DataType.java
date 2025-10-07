@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 /**
  * DataType is the lbug internal representation of data types.
@@ -13,12 +13,12 @@ public class DataType implements AutoCloseable {
      * @param id: the lbug internal representation of data type IDs.
      */
     public DataType(DataTypeID id) {
-        dt_ref = Native.kuzuDataTypeCreate(id, null, 0);
+        dt_ref = Native.lbugDataTypeCreate(id, null, 0);
     }
 
     public DataType
             (DataTypeID id, DataType child_type, long num_elements_in_array) {
-        dt_ref = Native.kuzuDataTypeCreate(id, child_type, num_elements_in_array);
+        dt_ref = Native.lbugDataTypeCreate(id, child_type, num_elements_in_array);
     }
 
     /**
@@ -48,7 +48,7 @@ public class DataType implements AutoCloseable {
      */
     private void destroy() {
         checkNotDestroyed();
-        Native.kuzuDataTypeDestroy(this);
+        Native.lbugDataTypeDestroy(this);
         destroyed = true;
     }
 
@@ -61,7 +61,7 @@ public class DataType implements AutoCloseable {
         if (destroyed)
             return null;
         else
-            return Native.kuzuDataTypeClone(this);
+            return Native.lbugDataTypeClone(this);
     }
 
     /**
@@ -73,7 +73,7 @@ public class DataType implements AutoCloseable {
      */
     public boolean equals(DataType other) {
         checkNotDestroyed();
-        return Native.kuzuDataTypeEquals(this, other);
+        return Native.lbugDataTypeEquals(this, other);
     }
 
     /**
@@ -84,7 +84,7 @@ public class DataType implements AutoCloseable {
      */
     public DataTypeID getID() {
         checkNotDestroyed();
-        return Native.kuzuDataTypeGetId(this);
+        return Native.lbugDataTypeGetId(this);
     }
 
     /**
@@ -95,7 +95,7 @@ public class DataType implements AutoCloseable {
      */
     public DataType getChildType() {
         checkNotDestroyed();
-        return Native.kuzuDataTypeGetChildType(this);
+        return Native.lbugDataTypeGetChildType(this);
     }
 
     /**
@@ -106,7 +106,7 @@ public class DataType implements AutoCloseable {
      */
     public long getFixedNumElementsInList() {
         checkNotDestroyed();
-        return Native.kuzuDataTypeGetNumElementsInArray(this);
+        return Native.lbugDataTypeGetNumElementsInArray(this);
     }
 
 }

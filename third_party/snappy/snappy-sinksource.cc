@@ -35,7 +35,7 @@
 
 #include "snappy-sinksource.h"
 
-namespace kuzu_snappy {
+namespace lbug_snappy {
 
 Source::~Source() = default;
 
@@ -122,7 +122,7 @@ char* UncheckedByteArraySink::GetAppendBufferVariable(
   return dest_;
 }
 
-}  // namespace kuzu_snappy
+}  // namespace lbug_snappy
 
 #else // #if SNAPPY_NEW_VERSION
 
@@ -130,7 +130,7 @@ char* UncheckedByteArraySink::GetAppendBufferVariable(
 
 #include "snappy-sinksource.h"
 
-namespace kuzu_snappy {
+namespace lbug_snappy {
 
 Source::~Source() { }
 
@@ -201,6 +201,6 @@ char* UncheckedByteArraySink::GetAppendBufferVariable(
 	return dest_;
 }
 
-}  // namespace kuzu_snappy
+}  // namespace lbug_snappy
 
 #endif  // #if SNAPPY_NEW_VERSION # else

@@ -13,7 +13,7 @@
  ***************************************/
 #include "zstd/compress/zstd_compress_sequences.h"
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 /**
  * -log2(x / 256) lookup table for x in [0, 256).
  * If x == 0: Return 0

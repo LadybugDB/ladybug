@@ -411,7 +411,7 @@ std::string getVersion() {
 /**
  * Embind declarations which expose the C++ classes to JavaScript
  */
-EMSCRIPTEN_BINDINGS(kuzu_wasm) {
+EMSCRIPTEN_BINDINGS(lbug_wasm) {
     class_<SystemConfig>("SystemConfig")
         .constructor<uint64_t, uint64_t, bool, bool, uint64_t, bool, uint64_t>()
         .constructor<>()

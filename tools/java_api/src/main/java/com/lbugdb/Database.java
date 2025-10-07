@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 /**
  * The Database class is the main class of KuzuDB. It manages all database
@@ -36,7 +36,7 @@ public class Database implements AutoCloseable {
         this.buffer_size = 0;
         this.max_db_size = 0;
         this.checkpointThreshold = -1;
-        db_ref = Native.kuzuDatabaseInit(databasePath, 0, true, false, max_db_size, autoCheckpoint,
+        db_ref = Native.lbugDatabaseInit(databasePath, 0, true, false, max_db_size, autoCheckpoint,
                 checkpointThreshold, throwOnWalReplayFailure, enableChecksums);
     }
 
@@ -78,7 +78,7 @@ public class Database implements AutoCloseable {
         this.checkpointThreshold = checkpointThreshold;
         this.throwOnWalReplayFailure = throwOnWalReplayFailure;
         this.enableChecksums = enableChecksums;
-        db_ref = Native.kuzuDatabaseInit(databasePath, bufferPoolSize, enableCompression, readOnly, maxDBSize,
+        db_ref = Native.lbugDatabaseInit(databasePath, bufferPoolSize, enableCompression, readOnly, maxDBSize,
                 autoCheckpoint, checkpointThreshold, throwOnWalReplayFailure, enableChecksums);
     }
 
@@ -112,7 +112,7 @@ public class Database implements AutoCloseable {
      */
     private void destroy() {
         checkNotDestroyed();
-        Native.kuzuDatabaseDestroy(this);
+        Native.lbugDatabaseDestroy(this);
         destroyed = true;
     }
 }

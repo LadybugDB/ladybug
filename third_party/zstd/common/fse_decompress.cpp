@@ -54,7 +54,7 @@
 #define FSE_FUNCTION_NAME(X,Y) FSE_CAT(X,Y)
 #define FSE_TYPE_NAME(X,Y) FSE_CAT(X,Y)
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 
 /* Function templates */
 FSE_DTable* FSE_createDTable (unsigned tableLog)

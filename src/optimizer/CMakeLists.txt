@@ -1,4 +1,4 @@
-add_library(kuzu_optimizer
+add_library(lbug_optimizer
         OBJECT
         acc_hash_join_optimizer.cpp
         agg_key_dependency_optimizer.cpp
@@ -17,5 +17,5 @@ add_library(kuzu_optimizer
         limit_push_down_optimizer.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_optimizer>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_optimizer>
         PARENT_SCOPE)

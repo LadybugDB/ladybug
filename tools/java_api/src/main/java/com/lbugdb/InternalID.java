@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 import java.util.Objects;
 

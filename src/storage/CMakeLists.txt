@@ -7,7 +7,7 @@ add_subdirectory(stats)
 add_subdirectory(table)
 add_subdirectory(wal)
 
-add_library(kuzu_storage
+add_library(lbug_storage
         OBJECT
         checkpointer.cpp
         database_header.cpp
@@ -27,5 +27,5 @@ add_library(kuzu_storage
         undo_buffer.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_storage>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_storage>
         PARENT_SCOPE)

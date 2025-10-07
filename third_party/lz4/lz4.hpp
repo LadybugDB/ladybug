@@ -42,7 +42,7 @@
 /* --- Dependency --- */
 #include <stddef.h>   /* size_t */
 
-namespace kuzu_lz4 {
+namespace lbug_lz4 {
 
 /**
   Introduction

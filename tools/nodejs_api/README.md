@@ -60,7 +60,7 @@ const main = async () => {
 
 main().catch(console.error);
 ```
- ✅ The dataset used in this example can be found in the [official Ladybug repository](https://github.com/kuzudb/lbug/tree/master/dataset/demo-db/csv).
+ ✅ The dataset used in this example can be found in the [official Ladybug repository](https://github.com/lbugdb/lbug/tree/master/dataset/demo-db/csv).
 
 ---
 
@@ -118,7 +118,7 @@ If a prebuilt binary is unavailable for your platform, the module will be built 
 2. Name them using the format:
 
    ```
-   kuzujs-${platform}-${arch}.node
+   lbugjs-${platform}-${arch}.node
    ```
 3. Run the packaging script:
 
@@ -144,6 +144,6 @@ Refer to the [npm documentation](https://docs.npmjs.com/cli/v9/commands/npm-publ
 
 ## 🔗 Resources
 
-* [Ladybug GitHub](https://github.com/kuzudb/lbug)
-* [Ladybug Documentation](https://docs.kuzudb.com)
-* [Issue Tracker](https://github.com/kuzudb/lbug/issues)
+* [Ladybug GitHub](https://github.com/lbugdb/lbug)
+* [Ladybug Documentation](https://docs.lbugdb.com)
+* [Issue Tracker](https://github.com/lbugdb/lbug/issues)

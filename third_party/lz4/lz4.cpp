@@ -146,7 +146,7 @@
 # define LZ4_ALIGN_TEST 1
 #endif
 
-namespace kuzu_lz4 {
+namespace lbug_lz4 {
 /*-************************************
 *  Memory routines
 **************************************/

@@ -1,4 +1,4 @@
-add_library(kuzu_string_function
+add_library(lbug_string_function
         OBJECT
         concat_ws.cpp
         string_split_function.cpp
@@ -9,5 +9,5 @@ add_library(kuzu_string_function
         regex_replace_function.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_string_function>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_string_function>
         PARENT_SCOPE)

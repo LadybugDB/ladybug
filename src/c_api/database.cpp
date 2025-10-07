@@ -4,8 +4,8 @@
 using namespace lbug::main;
 using namespace lbug::common;
 
-kuzu_state kuzu_database_init(const char* database_path, kuzu_system_config config,
-    kuzu_database* out_database) {
+lbug_state lbug_database_init(const char* database_path, lbug_system_config config,
+    lbug_database* out_database) {
     try {
         std::string database_path_str = database_path;
         auto systemConfig = SystemConfig(config.buffer_pool_size, config.max_num_threads,
@@ -23,7 +23,7 @@ kuzu_state kuzu_database_init(const char* database_path, kuzu_system_config conf
     return KuzuSuccess;
 }
 
-void kuzu_database_destroy(kuzu_database* database) {
+void lbug_database_destroy(lbug_database* database) {
     if (database == nullptr) {
         return;
     }
@@ -32,9 +32,9 @@ void kuzu_database_destroy(kuzu_database* database) {
     }
 }
 
-kuzu_system_config kuzu_default_system_config() {
+lbug_system_config lbug_default_system_config() {
     SystemConfig config = SystemConfig();
-    auto cSystemConfig = kuzu_system_config();
+    auto cSystemConfig = lbug_system_config();
     cSystemConfig.buffer_pool_size = config.bufferPoolSize;
     cSystemConfig.max_num_threads = config.maxNumThreads;
     cSystemConfig.enable_compression = config.enableCompression;

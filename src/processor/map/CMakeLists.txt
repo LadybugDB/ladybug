@@ -1,4 +1,4 @@
-add_library(kuzu_processor_mapper
+add_library(lbug_processor_mapper
         OBJECT
         create_arrow_result_collector.cpp
         create_factorized_table_scan.cpp
@@ -47,5 +47,5 @@ add_library(kuzu_processor_mapper
         plan_mapper.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_processor_mapper>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_processor_mapper>
         PARENT_SCOPE)

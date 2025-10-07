@@ -33,10 +33,10 @@
 //!
 //! Example:
 //! ```bash
-//! kuzu_prebuilt_dir=/tmp/lbug # pre-built Lbug from https://docs.kuzudb.com/installation/#cc
-//! kuzu_prebuilt_dir=/path_to_kuzu_source/build/release/src # Lbug built from source
-//! export KUZU_LIBRARY_DIR="kuzu_prebuilt_dir"
-//! export KUZU_INCLUDE_DIR="kuzu_prebuilt_dir"
+//! lbug_prebuilt_dir=/tmp/lbug # pre-built Lbug from https://docs.lbugdb.com/installation/#cc
+//! lbug_prebuilt_dir=/path_to_lbug_source/build/release/src # Lbug built from source
+//! export KUZU_LIBRARY_DIR="lbug_prebuilt_dir"
+//! export KUZU_INCLUDE_DIR="lbug_prebuilt_dir"
 //! export KUZU_SHARED=1
 //! ```
 //! On macOS:
@@ -49,7 +49,7 @@
 //!
 //! ## Using Extensions
 //! By default, binaries created using this library will not work with Lbug's
-//! [extensions](https://docs.kuzudb.com/extensions/) (except on Windows/MSVC, where the linker works differently).
+//! [extensions](https://docs.lbugdb.com/extensions/) (except on Windows/MSVC, where the linker works differently).
 //!
 //! If you want to use extensions in binaries (binary crates or tests) using this
 //! library, you will need to add the following (or a similar command; see

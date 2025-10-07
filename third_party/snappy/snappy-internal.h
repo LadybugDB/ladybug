@@ -56,7 +56,7 @@
 #define SNAPPY_HAVE_VECTOR_BYTE_SHUFFLE 0
 #endif
 
-namespace kuzu_snappy {
+namespace lbug_snappy {
 namespace internal {
 
 #if SNAPPY_HAVE_VECTOR_BYTE_SHUFFLE
@@ -423,13 +423,13 @@ static constexpr uint16_t char_table[256] = {
 };
 
 }  // end namespace internal
-}  // end namespace kuzu_snappy
+}  // end namespace lbug_snappy
 
 #else // #if SNAPPY_NEW_VERSION
 
 #include "snappy-stubs-internal.h"
 
-namespace kuzu_snappy {
+namespace lbug_snappy {
 namespace internal {
 
 // Working memory performs a single allocation to hold all scratch space
@@ -640,7 +640,7 @@ static const int kMaxHashTableBits = 14;
 static const size_t kMaxHashTableSize = 1 << kMaxHashTableBits;
 
 
-}  // end namespace kuzu_snappy
+}  // end namespace lbug_snappy
 
 #endif  // #if SNAPPY_NEW_VERSION # else
 

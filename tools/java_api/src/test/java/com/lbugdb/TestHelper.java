@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 import java.io.BufferedReader;
 import java.io.FileReader;

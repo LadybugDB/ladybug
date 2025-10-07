@@ -22,7 +22,7 @@ def test_help(temp_db) -> None:
             "    Note: you can change and see several system configurations, such as num-threads, ",
             "          timeout, and progress_bar using Cypher CALL statements.",
             "          e.g. CALL THREADS=5; or CALL current_setting('threads') return *;",
-            "          See: \x1b]8;;https://docs.kuzudb.com/cypher/configuration\x1b\\https://docs.kuzudb.com/cypher/configuration\x1b]8;;\x1b\\",
+            "          See: \x1b]8;;https://docs.lbugdb.com/cypher/configuration\x1b\\https://docs.lbugdb.com/cypher/configuration\x1b]8;;\x1b\\",
         ],
     )
 
@@ -456,7 +456,7 @@ def test_set_mode(temp_db) -> None:
     )
     result = test.run()
     result.check_stdout("a\tb")
-    result.check_stdout("Databases Rule\tkuzu is cool")
+    result.check_stdout("Databases Rule\tlbug is cool")
 
     # test tsv escaping
     test = (

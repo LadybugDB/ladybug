@@ -1,4 +1,4 @@
-add_library(kuzu_common_arrow
+add_library(lbug_common_arrow
         OBJECT
         arrow_array_scan.cpp
         arrow_converter.cpp
@@ -7,5 +7,5 @@ add_library(kuzu_common_arrow
         arrow_type.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_common_arrow>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_common_arrow>
         PARENT_SCOPE)

@@ -35,7 +35,7 @@
 #include "zstd/common/xxhash.h"                /* XXH_reset, update, digest */
 #include "zstd/common/xxhash_static.h"                /* XXH_reset, update, digest */
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 
 /* ---- static assert (debug) --- */
 #define ZSTD_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)

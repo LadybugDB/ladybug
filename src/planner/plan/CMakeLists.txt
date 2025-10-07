@@ -1,4 +1,4 @@
-add_library(kuzu_planner_plan_operator
+add_library(lbug_planner_plan_operator
         OBJECT
         append_accumulate.cpp
         append_aggregate.cpp
@@ -34,5 +34,5 @@ add_library(kuzu_planner_plan_operator
         plan_port_db.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_planner_plan_operator>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_planner_plan_operator>
         PARENT_SCOPE)

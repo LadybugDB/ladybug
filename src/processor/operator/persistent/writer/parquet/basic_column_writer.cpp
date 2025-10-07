@@ -10,11 +10,11 @@
 namespace lbug {
 namespace processor {
 
-using namespace kuzu_parquet::format;
+using namespace lbug_parquet::format;
 using namespace lbug::common;
 
 std::unique_ptr<ColumnWriterState> BasicColumnWriter::initializeWriteState(
-    kuzu_parquet::format::RowGroup& rowGroup) {
+    lbug_parquet::format::RowGroup& rowGroup) {
     auto result = std::make_unique<BasicColumnWriterState>(rowGroup, rowGroup.columns.size());
     registerToRowGroup(rowGroup);
     return result;
@@ -268,7 +268,7 @@ void BasicColumnWriter::writeDictionary(BasicColumnWriterState& state,
 }
 
 void BasicColumnWriter::setParquetStatistics(BasicColumnWriterState& state,
-    kuzu_parquet::format::ColumnChunk& column) {
+    lbug_parquet::format::ColumnChunk& column) {
     if (maxRepeat == 0) {
         column.meta_data.statistics.null_count = nullCount;
         column.meta_data.statistics.__isset.null_count = true;
@@ -305,7 +305,7 @@ void BasicColumnWriter::setParquetStatistics(BasicColumnWriterState& state,
     }
 }
 
-void BasicColumnWriter::registerToRowGroup(kuzu_parquet::format::RowGroup& rowGroup) {
+void BasicColumnWriter::registerToRowGroup(lbug_parquet::format::RowGroup& rowGroup) {
     ColumnChunk column_chunk;
     column_chunk.__isset.meta_data = true;
     column_chunk.meta_data.codec = writer.getCodec();

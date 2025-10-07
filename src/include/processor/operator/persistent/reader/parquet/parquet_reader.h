@@ -25,7 +25,7 @@ struct ParquetReaderScanState {
     uint64_t groupOffset = UINT64_MAX;
     std::unique_ptr<common::FileInfo> fileInfo;
     std::unique_ptr<ColumnReader> rootReader;
-    std::unique_ptr<kuzu_apache::thrift::protocol::TProtocol> thriftFileProto;
+    std::unique_ptr<lbug_apache::thrift::protocol::TProtocol> thriftFileProto;
 
     bool finished = false;
 
@@ -54,22 +54,22 @@ public:
     std::string getColumnName(uint32_t idx) const { return columnNames[idx]; }
     const common::LogicalType& getColumnType(uint32_t idx) const { return columnTypes[idx]; }
 
-    kuzu_parquet::format::FileMetaData* getMetadata() const { return metadata.get(); }
+    lbug_parquet::format::FileMetaData* getMetadata() const { return metadata.get(); }
 
 private:
-    std::unique_ptr<kuzu_apache::thrift::protocol::TProtocol> createThriftProtocol(
+    std::unique_ptr<lbug_apache::thrift::protocol::TProtocol> createThriftProtocol(
         common::FileInfo* fileInfo_, bool prefetch_mode) {
         return std::make_unique<
-            kuzu_apache::thrift::protocol::TCompactProtocolT<ThriftFileTransport>>(
+            lbug_apache::thrift::protocol::TCompactProtocolT<ThriftFileTransport>>(
             std::make_shared<ThriftFileTransport>(fileInfo_, prefetch_mode));
     }
-    const kuzu_parquet::format::RowGroup& getGroup(ParquetReaderScanState& state) {
+    const lbug_parquet::format::RowGroup& getGroup(ParquetReaderScanState& state) {
         KU_ASSERT(
             state.currentGroup >= 0 && (uint64_t)state.currentGroup < state.groupIdxList.size());
         KU_ASSERT(state.groupIdxList[state.currentGroup] < metadata->row_groups.size());
         return metadata->row_groups[state.groupIdxList[state.currentGroup]];
     }
-    static common::LogicalType deriveLogicalType(const kuzu_parquet::format::SchemaElement& s_ele);
+    static common::LogicalType deriveLogicalType(const lbug_parquet::format::SchemaElement& s_ele);
     void initMetadata();
     std::unique_ptr<ColumnReader> createReader();
     std::unique_ptr<ColumnReader> createReaderRecursive(uint64_t depth, uint64_t maxDefine,
@@ -87,7 +87,7 @@ private:
     std::vector<std::string> columnNames;
     std::vector<common::LogicalType> columnTypes;
 
-    std::unique_ptr<kuzu_parquet::format::FileMetaData> metadata;
+    std::unique_ptr<lbug_parquet::format::FileMetaData> metadata;
     main::ClientContext* context;
 };
 

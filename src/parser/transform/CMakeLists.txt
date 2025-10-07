@@ -1,4 +1,4 @@
-add_library(kuzu_parser_transform
+add_library(lbug_parser_transform
         OBJECT
         transform_copy.cpp
         transform_ddl.cpp
@@ -18,5 +18,5 @@ add_library(kuzu_parser_transform
         transform_use_database.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_parser_transform>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_parser_transform>
         PARENT_SCOPE)

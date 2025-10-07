@@ -182,28 +182,28 @@ def test_history_consecutive_repeats(temp_db, history_path) -> None:
     deleteIfExists(os.path.join(history_path, "history.txt"))
 
 
-def test_kuzurc(temp_db) -> None:
-    deleteIfExists(".kuzurc")
+def test_lbugrc(temp_db) -> None:
+    deleteIfExists(".lbugrc")
     # confirm that nothing is read on startup
     test = ShellTest().add_argument(temp_db)
     result = test.run()
-    result.check_not_stdout("-- Processing: .kuzurc")
+    result.check_not_stdout("-- Processing: .lbugrc")
 
-    # create a .kuzurc file
-    with open(".kuzurc", "w") as f:
+    # create a .lbugrc file
+    with open(".lbugrc", "w") as f:
         f.write("CREATE NODE TABLE a(i STRING, PRIMARY KEY(i));\n")
         f.write(":max_rows 1\n")
 
     # confirm that the file is read on startup
     test = ShellTest().add_argument(temp_db).statement("CALL show_tables() RETURN *;")
     result = test.run()
-    deleteIfExists(".kuzurc")
-    result.check_stdout("-- Processing: .kuzurc")
+    deleteIfExists(".lbugrc")
+    result.check_stdout("-- Processing: .lbugrc")
     result.check_stdout("maxRows set as 1")
     result.check_stdout("a")
 
-    # create a .kuzurc file with errors
-    with open(".kuzurc", "w") as f:
+    # create a .lbugrc file with errors
+    with open(".lbugrc", "w") as f:
         f.write('RETURN "databases rule" S a; RETURN s;\n')
         f.write(":max_rows\n")
         f.write(":mode table\n")
@@ -212,8 +212,8 @@ def test_kuzurc(temp_db) -> None:
     # confirm that the file is read on startup
     test = ShellTest().add_argument(temp_db).statement("CALL show_tables() RETURN *;")
     result = test.run()
-    deleteIfExists(".kuzurc")
-    result.check_stdout("-- Processing: .kuzurc")
+    deleteIfExists(".lbugrc")
+    result.check_stdout("-- Processing: .lbugrc")
     result.check_stdout(
         [
             "Error: Parser exception: Invalid input < S>: expected rule ku_Statements (line: 1, offset: 24)",

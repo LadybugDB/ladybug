@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 public class KuzuMap implements AutoCloseable {
     private Value mapVal;
@@ -35,14 +35,14 @@ public class KuzuMap implements AutoCloseable {
             mapVal = null;
             return;
         }
-        mapVal = Native.kuzuCreateMap(keys, values);
+        mapVal = Native.lbugCreateMap(keys, values);
     }
 
     private Value getMapKeyOrValue(long index, boolean isKey) {
         if (index < 0 || index >= getNumFields()) {
             return null;
         }
-        Value structValue = Native.kuzuValueGetListElement(mapVal, index);
+        Value structValue = Native.lbugValueGetListElement(mapVal, index);
         Value keyOrValue = new KuzuList(structValue).getListElement(isKey ? 0 : 1);
         structValue.close();
         return keyOrValue;
@@ -56,7 +56,7 @@ public class KuzuMap implements AutoCloseable {
         if (mapVal == null) {
             return 0;
         }
-        return Native.kuzuValueGetListSize(mapVal);
+        return Native.lbugValueGetListSize(mapVal);
     }
 
     /**

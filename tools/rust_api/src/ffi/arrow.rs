@@ -17,7 +17,7 @@ unsafe impl cxx::ExternType for ArrowSchema {
 #[cxx::bridge]
 pub(crate) mod ffi_arrow {
     unsafe extern "C++" {
-        include!("lbug/include/kuzu_arrow.h");
+        include!("lbug/include/lbug_arrow.h");
 
         #[namespace = "lbug::main"]
         type QueryResult<'db> = crate::ffi::ffi::QueryResult<'db>;
@@ -26,7 +26,7 @@ pub(crate) mod ffi_arrow {
     unsafe extern "C++" {
         type ArrowArray = crate::ffi::arrow::ArrowArray;
 
-        #[namespace = "kuzu_arrow"]
+        #[namespace = "lbug_arrow"]
         fn query_result_get_next_arrow_chunk<'db>(
             result: Pin<&mut QueryResult<'db>>,
             chunk_size: u64,
@@ -36,7 +36,7 @@ pub(crate) mod ffi_arrow {
     unsafe extern "C++" {
         type ArrowSchema = crate::ffi::arrow::ArrowSchema;
 
-        #[namespace = "kuzu_arrow"]
+        #[namespace = "lbug_arrow"]
         fn query_result_get_arrow_schema<'db>(result: &QueryResult<'db>) -> Result<ArrowSchema>;
     }
 }

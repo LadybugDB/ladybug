@@ -20,7 +20,7 @@
 
 #include "windows_compatibility.h"
 
-namespace kuzu_parquet { namespace format {
+namespace lbug_parquet { namespace format {
 
 struct Type {
   enum type {
@@ -228,7 +228,7 @@ typedef struct _Statistics__isset {
   bool min_value :1;
 } _Statistics__isset;
 
-class Statistics : public virtual ::kuzu_apache::thrift::TBase {
+class Statistics : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   Statistics(const Statistics&);
@@ -292,8 +292,8 @@ class Statistics : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const Statistics & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -303,7 +303,7 @@ void swap(Statistics &a, Statistics &b);
 std::ostream& operator<<(std::ostream& out, const Statistics& obj);
 
 
-class StringType : public virtual ::kuzu_apache::thrift::TBase {
+class StringType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   StringType(const StringType&);
@@ -323,8 +323,8 @@ class StringType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const StringType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -334,7 +334,7 @@ void swap(StringType &a, StringType &b);
 std::ostream& operator<<(std::ostream& out, const StringType& obj);
 
 
-class UUIDType : public virtual ::kuzu_apache::thrift::TBase {
+class UUIDType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   UUIDType(const UUIDType&);
@@ -354,8 +354,8 @@ class UUIDType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const UUIDType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -365,7 +365,7 @@ void swap(UUIDType &a, UUIDType &b);
 std::ostream& operator<<(std::ostream& out, const UUIDType& obj);
 
 
-class MapType : public virtual ::kuzu_apache::thrift::TBase {
+class MapType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   MapType(const MapType&);
@@ -385,8 +385,8 @@ class MapType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const MapType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -396,7 +396,7 @@ void swap(MapType &a, MapType &b);
 std::ostream& operator<<(std::ostream& out, const MapType& obj);
 
 
-class ListType : public virtual ::kuzu_apache::thrift::TBase {
+class ListType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   ListType(const ListType&);
@@ -416,8 +416,8 @@ class ListType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const ListType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -427,7 +427,7 @@ void swap(ListType &a, ListType &b);
 std::ostream& operator<<(std::ostream& out, const ListType& obj);
 
 
-class EnumType : public virtual ::kuzu_apache::thrift::TBase {
+class EnumType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   EnumType(const EnumType&);
@@ -447,8 +447,8 @@ class EnumType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const EnumType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -458,7 +458,7 @@ void swap(EnumType &a, EnumType &b);
 std::ostream& operator<<(std::ostream& out, const EnumType& obj);
 
 
-class DateType : public virtual ::kuzu_apache::thrift::TBase {
+class DateType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   DateType(const DateType&);
@@ -478,8 +478,8 @@ class DateType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const DateType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -489,7 +489,7 @@ void swap(DateType &a, DateType &b);
 std::ostream& operator<<(std::ostream& out, const DateType& obj);
 
 
-class NullType : public virtual ::kuzu_apache::thrift::TBase {
+class NullType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   NullType(const NullType&);
@@ -509,8 +509,8 @@ class NullType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const NullType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -520,7 +520,7 @@ void swap(NullType &a, NullType &b);
 std::ostream& operator<<(std::ostream& out, const NullType& obj);
 
 
-class DecimalType : public virtual ::kuzu_apache::thrift::TBase {
+class DecimalType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   DecimalType(const DecimalType&);
@@ -550,8 +550,8 @@ class DecimalType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const DecimalType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -561,7 +561,7 @@ void swap(DecimalType &a, DecimalType &b);
 std::ostream& operator<<(std::ostream& out, const DecimalType& obj);
 
 
-class MilliSeconds : public virtual ::kuzu_apache::thrift::TBase {
+class MilliSeconds : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   MilliSeconds(const MilliSeconds&);
@@ -581,8 +581,8 @@ class MilliSeconds : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const MilliSeconds & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -592,7 +592,7 @@ void swap(MilliSeconds &a, MilliSeconds &b);
 std::ostream& operator<<(std::ostream& out, const MilliSeconds& obj);
 
 
-class MicroSeconds : public virtual ::kuzu_apache::thrift::TBase {
+class MicroSeconds : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   MicroSeconds(const MicroSeconds&);
@@ -612,8 +612,8 @@ class MicroSeconds : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const MicroSeconds & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -623,7 +623,7 @@ void swap(MicroSeconds &a, MicroSeconds &b);
 std::ostream& operator<<(std::ostream& out, const MicroSeconds& obj);
 
 
-class NanoSeconds : public virtual ::kuzu_apache::thrift::TBase {
+class NanoSeconds : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   NanoSeconds(const NanoSeconds&);
@@ -643,8 +643,8 @@ class NanoSeconds : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const NanoSeconds & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -660,7 +660,7 @@ typedef struct _TimeUnit__isset {
   bool NANOS :1;
 } _TimeUnit__isset;
 
-class TimeUnit : public virtual ::kuzu_apache::thrift::TBase {
+class TimeUnit : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   TimeUnit(const TimeUnit&);
@@ -703,8 +703,8 @@ class TimeUnit : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const TimeUnit & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -714,7 +714,7 @@ void swap(TimeUnit &a, TimeUnit &b);
 std::ostream& operator<<(std::ostream& out, const TimeUnit& obj);
 
 
-class TimestampType : public virtual ::kuzu_apache::thrift::TBase {
+class TimestampType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   TimestampType(const TimestampType&);
@@ -744,8 +744,8 @@ class TimestampType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const TimestampType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -755,7 +755,7 @@ void swap(TimestampType &a, TimestampType &b);
 std::ostream& operator<<(std::ostream& out, const TimestampType& obj);
 
 
-class TimeType : public virtual ::kuzu_apache::thrift::TBase {
+class TimeType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   TimeType(const TimeType&);
@@ -785,8 +785,8 @@ class TimeType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const TimeType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -796,7 +796,7 @@ void swap(TimeType &a, TimeType &b);
 std::ostream& operator<<(std::ostream& out, const TimeType& obj);
 
 
-class IntType : public virtual ::kuzu_apache::thrift::TBase {
+class IntType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   IntType(const IntType&);
@@ -826,8 +826,8 @@ class IntType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const IntType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -837,7 +837,7 @@ void swap(IntType &a, IntType &b);
 std::ostream& operator<<(std::ostream& out, const IntType& obj);
 
 
-class JsonType : public virtual ::kuzu_apache::thrift::TBase {
+class JsonType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   JsonType(const JsonType&);
@@ -857,8 +857,8 @@ class JsonType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const JsonType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -868,7 +868,7 @@ void swap(JsonType &a, JsonType &b);
 std::ostream& operator<<(std::ostream& out, const JsonType& obj);
 
 
-class BsonType : public virtual ::kuzu_apache::thrift::TBase {
+class BsonType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   BsonType(const BsonType&);
@@ -888,8 +888,8 @@ class BsonType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const BsonType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -915,7 +915,7 @@ typedef struct _LogicalType__isset {
   bool UUID :1;
 } _LogicalType__isset;
 
-class LogicalType : public virtual ::kuzu_apache::thrift::TBase {
+class LogicalType : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   LogicalType(const LogicalType&);
@@ -1028,8 +1028,8 @@ class LogicalType : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const LogicalType & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1051,7 +1051,7 @@ typedef struct _SchemaElement__isset {
   bool logicalType :1;
 } _SchemaElement__isset;
 
-class SchemaElement : public virtual ::kuzu_apache::thrift::TBase {
+class SchemaElement : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   SchemaElement(const SchemaElement&);
@@ -1141,8 +1141,8 @@ class SchemaElement : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const SchemaElement & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1156,7 +1156,7 @@ typedef struct _DataPageHeader__isset {
   bool statistics :1;
 } _DataPageHeader__isset;
 
-class DataPageHeader : public virtual ::kuzu_apache::thrift::TBase {
+class DataPageHeader : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   DataPageHeader(const DataPageHeader&);
@@ -1205,8 +1205,8 @@ class DataPageHeader : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const DataPageHeader & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1216,7 +1216,7 @@ void swap(DataPageHeader &a, DataPageHeader &b);
 std::ostream& operator<<(std::ostream& out, const DataPageHeader& obj);
 
 
-class IndexPageHeader : public virtual ::kuzu_apache::thrift::TBase {
+class IndexPageHeader : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   IndexPageHeader(const IndexPageHeader&);
@@ -1236,8 +1236,8 @@ class IndexPageHeader : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const IndexPageHeader & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1251,7 +1251,7 @@ typedef struct _DictionaryPageHeader__isset {
   bool is_sorted :1;
 } _DictionaryPageHeader__isset;
 
-class DictionaryPageHeader : public virtual ::kuzu_apache::thrift::TBase {
+class DictionaryPageHeader : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   DictionaryPageHeader(const DictionaryPageHeader&);
@@ -1290,8 +1290,8 @@ class DictionaryPageHeader : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const DictionaryPageHeader & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1306,7 +1306,7 @@ typedef struct _DataPageHeaderV2__isset {
   bool statistics :1;
 } _DataPageHeaderV2__isset;
 
-class DataPageHeaderV2 : public virtual ::kuzu_apache::thrift::TBase {
+class DataPageHeaderV2 : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   DataPageHeaderV2(const DataPageHeaderV2&);
@@ -1372,8 +1372,8 @@ class DataPageHeaderV2 : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const DataPageHeaderV2 & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1391,7 +1391,7 @@ typedef struct _PageHeader__isset {
   bool data_page_header_v2 :1;
 } _PageHeader__isset;
 
-class PageHeader : public virtual ::kuzu_apache::thrift::TBase {
+class PageHeader : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   PageHeader(const PageHeader&);
@@ -1463,8 +1463,8 @@ class PageHeader : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const PageHeader & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1478,7 +1478,7 @@ typedef struct _KeyValue__isset {
   bool value :1;
 } _KeyValue__isset;
 
-class KeyValue : public virtual ::kuzu_apache::thrift::TBase {
+class KeyValue : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   KeyValue(const KeyValue&);
@@ -1512,8 +1512,8 @@ class KeyValue : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const KeyValue & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1523,7 +1523,7 @@ void swap(KeyValue &a, KeyValue &b);
 std::ostream& operator<<(std::ostream& out, const KeyValue& obj);
 
 
-class SortingColumn : public virtual ::kuzu_apache::thrift::TBase {
+class SortingColumn : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   SortingColumn(const SortingColumn&);
@@ -1558,8 +1558,8 @@ class SortingColumn : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const SortingColumn & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1569,7 +1569,7 @@ void swap(SortingColumn &a, SortingColumn &b);
 std::ostream& operator<<(std::ostream& out, const SortingColumn& obj);
 
 
-class PageEncodingStats : public virtual ::kuzu_apache::thrift::TBase {
+class PageEncodingStats : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   PageEncodingStats(const PageEncodingStats&);
@@ -1604,8 +1604,8 @@ class PageEncodingStats : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const PageEncodingStats & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1623,7 +1623,7 @@ typedef struct _ColumnMetaData__isset {
   bool encoding_stats :1;
 } _ColumnMetaData__isset;
 
-class ColumnMetaData : public virtual ::kuzu_apache::thrift::TBase {
+class ColumnMetaData : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   ColumnMetaData(const ColumnMetaData&);
@@ -1720,8 +1720,8 @@ class ColumnMetaData : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const ColumnMetaData & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1731,7 +1731,7 @@ void swap(ColumnMetaData &a, ColumnMetaData &b);
 std::ostream& operator<<(std::ostream& out, const ColumnMetaData& obj);
 
 
-class EncryptionWithFooterKey : public virtual ::kuzu_apache::thrift::TBase {
+class EncryptionWithFooterKey : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   EncryptionWithFooterKey(const EncryptionWithFooterKey&);
@@ -1751,8 +1751,8 @@ class EncryptionWithFooterKey : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const EncryptionWithFooterKey & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1766,7 +1766,7 @@ typedef struct _EncryptionWithColumnKey__isset {
   bool key_metadata :1;
 } _EncryptionWithColumnKey__isset;
 
-class EncryptionWithColumnKey : public virtual ::kuzu_apache::thrift::TBase {
+class EncryptionWithColumnKey : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   EncryptionWithColumnKey(const EncryptionWithColumnKey&);
@@ -1800,8 +1800,8 @@ class EncryptionWithColumnKey : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const EncryptionWithColumnKey & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1816,7 +1816,7 @@ typedef struct _ColumnCryptoMetaData__isset {
   bool ENCRYPTION_WITH_COLUMN_KEY :1;
 } _ColumnCryptoMetaData__isset;
 
-class ColumnCryptoMetaData : public virtual ::kuzu_apache::thrift::TBase {
+class ColumnCryptoMetaData : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   ColumnCryptoMetaData(const ColumnCryptoMetaData&);
@@ -1852,8 +1852,8 @@ class ColumnCryptoMetaData : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const ColumnCryptoMetaData & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1874,7 +1874,7 @@ typedef struct _ColumnChunk__isset {
   bool encrypted_column_metadata :1;
 } _ColumnChunk__isset;
 
-class ColumnChunk : public virtual ::kuzu_apache::thrift::TBase {
+class ColumnChunk : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   ColumnChunk(const ColumnChunk&);
@@ -1957,8 +1957,8 @@ class ColumnChunk : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const ColumnChunk & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -1975,7 +1975,7 @@ typedef struct _RowGroup__isset {
   bool ordinal :1;
 } _RowGroup__isset;
 
-class RowGroup : public virtual ::kuzu_apache::thrift::TBase {
+class RowGroup : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   RowGroup(const RowGroup&);
@@ -2040,8 +2040,8 @@ class RowGroup : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const RowGroup & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -2051,7 +2051,7 @@ void swap(RowGroup &a, RowGroup &b);
 std::ostream& operator<<(std::ostream& out, const RowGroup& obj);
 
 
-class TypeDefinedOrder : public virtual ::kuzu_apache::thrift::TBase {
+class TypeDefinedOrder : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   TypeDefinedOrder(const TypeDefinedOrder&);
@@ -2071,8 +2071,8 @@ class TypeDefinedOrder : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const TypeDefinedOrder & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -2086,7 +2086,7 @@ typedef struct _ColumnOrder__isset {
   bool TYPE_ORDER :1;
 } _ColumnOrder__isset;
 
-class ColumnOrder : public virtual ::kuzu_apache::thrift::TBase {
+class ColumnOrder : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   ColumnOrder(const ColumnOrder&);
@@ -2115,8 +2115,8 @@ class ColumnOrder : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const ColumnOrder & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -2126,7 +2126,7 @@ void swap(ColumnOrder &a, ColumnOrder &b);
 std::ostream& operator<<(std::ostream& out, const ColumnOrder& obj);
 
 
-class PageLocation : public virtual ::kuzu_apache::thrift::TBase {
+class PageLocation : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   PageLocation(const PageLocation&);
@@ -2161,8 +2161,8 @@ class PageLocation : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const PageLocation & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -2172,7 +2172,7 @@ void swap(PageLocation &a, PageLocation &b);
 std::ostream& operator<<(std::ostream& out, const PageLocation& obj);
 
 
-class OffsetIndex : public virtual ::kuzu_apache::thrift::TBase {
+class OffsetIndex : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   OffsetIndex(const OffsetIndex&);
@@ -2197,8 +2197,8 @@ class OffsetIndex : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const OffsetIndex & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -2212,7 +2212,7 @@ typedef struct _ColumnIndex__isset {
   bool null_counts :1;
 } _ColumnIndex__isset;
 
-class ColumnIndex : public virtual ::kuzu_apache::thrift::TBase {
+class ColumnIndex : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   ColumnIndex(const ColumnIndex&);
@@ -2261,8 +2261,8 @@ class ColumnIndex : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const ColumnIndex & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -2278,7 +2278,7 @@ typedef struct _AesGcmV1__isset {
   bool supply_aad_prefix :1;
 } _AesGcmV1__isset;
 
-class AesGcmV1 : public virtual ::kuzu_apache::thrift::TBase {
+class AesGcmV1 : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   AesGcmV1(const AesGcmV1&);
@@ -2321,8 +2321,8 @@ class AesGcmV1 : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const AesGcmV1 & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -2338,7 +2338,7 @@ typedef struct _AesGcmCtrV1__isset {
   bool supply_aad_prefix :1;
 } _AesGcmCtrV1__isset;
 
-class AesGcmCtrV1 : public virtual ::kuzu_apache::thrift::TBase {
+class AesGcmCtrV1 : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   AesGcmCtrV1(const AesGcmCtrV1&);
@@ -2381,8 +2381,8 @@ class AesGcmCtrV1 : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const AesGcmCtrV1 & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -2397,7 +2397,7 @@ typedef struct _EncryptionAlgorithm__isset {
   bool AES_GCM_CTR_V1 :1;
 } _EncryptionAlgorithm__isset;
 
-class EncryptionAlgorithm : public virtual ::kuzu_apache::thrift::TBase {
+class EncryptionAlgorithm : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   EncryptionAlgorithm(const EncryptionAlgorithm&);
@@ -2433,8 +2433,8 @@ class EncryptionAlgorithm : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const EncryptionAlgorithm & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -2452,7 +2452,7 @@ typedef struct _FileMetaData__isset {
   bool footer_signing_key_metadata :1;
 } _FileMetaData__isset;
 
-class FileMetaData : public virtual ::kuzu_apache::thrift::TBase {
+class FileMetaData : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   FileMetaData(const FileMetaData&);
@@ -2529,8 +2529,8 @@ class FileMetaData : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const FileMetaData & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };
@@ -2544,7 +2544,7 @@ typedef struct _FileCryptoMetaData__isset {
   bool key_metadata :1;
 } _FileCryptoMetaData__isset;
 
-class FileCryptoMetaData : public virtual ::kuzu_apache::thrift::TBase {
+class FileCryptoMetaData : public virtual ::lbug_apache::thrift::TBase {
  public:
 
   FileCryptoMetaData(const FileCryptoMetaData&);
@@ -2578,8 +2578,8 @@ class FileCryptoMetaData : public virtual ::kuzu_apache::thrift::TBase {
 
   bool operator < (const FileCryptoMetaData & ) const;
 
-  uint32_t read(::kuzu_apache::thrift::protocol::TProtocol* iprot);
-  uint32_t write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const;
+  uint32_t read(::lbug_apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(::lbug_apache::thrift::protocol::TProtocol* oprot) const;
 
   virtual void printTo(std::ostream& out) const;
 };

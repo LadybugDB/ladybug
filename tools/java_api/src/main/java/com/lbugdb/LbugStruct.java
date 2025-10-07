@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -45,7 +45,7 @@ public class KuzuStruct implements AutoCloseable {
         for (Value value : fieldValues) {
             value.checkNotDestroyed();
         }
-        structVal = Native.kuzuCreateStruct(fieldNames, fieldValues);
+        structVal = Native.lbugCreateStruct(fieldNames, fieldValues);
     }
 
     /**
@@ -67,7 +67,7 @@ public class KuzuStruct implements AutoCloseable {
         for (Value value : fieldValues) {
             value.checkNotDestroyed();
         }
-        structVal = Native.kuzuCreateStruct(fieldNames, fieldValues);
+        structVal = Native.lbugCreateStruct(fieldNames, fieldValues);
     }
 
     /**
@@ -78,7 +78,7 @@ public class KuzuStruct implements AutoCloseable {
         if (structVal == null) {
             return 0;
         }
-        return Native.kuzuValueGetListSize(structVal);
+        return Native.lbugValueGetListSize(structVal);
     }
 
     /**
@@ -92,7 +92,7 @@ public class KuzuStruct implements AutoCloseable {
         if (structVal == null) {
             return -1;
         }
-        return Native.kuzuValueGetStructIndex(structVal, fieldName);
+        return Native.lbugValueGetStructIndex(structVal, fieldName);
     }
 
     /**
@@ -106,7 +106,7 @@ public class KuzuStruct implements AutoCloseable {
         if (structVal == null) {
             return null;
         }
-        return Native.kuzuValueGetStructFieldName(structVal, index);
+        return Native.lbugValueGetStructFieldName(structVal, index);
     }
 
     /**
@@ -137,7 +137,7 @@ public class KuzuStruct implements AutoCloseable {
         if (index < 0 || index >= getNumFields()) {
             return null;
         }
-        return Native.kuzuValueGetListElement(structVal, index);
+        return Native.lbugValueGetListElement(structVal, index);
     }
 
     /**

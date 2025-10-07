@@ -31,7 +31,7 @@
 #  define ZSTDLIB_API ZSTDLIB_VISIBILITY
 #endif
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 
 /*******************************************************************************
   Introduction

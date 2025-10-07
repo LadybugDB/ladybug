@@ -1,4 +1,4 @@
-add_library(kuzu_catalog_entry
+add_library(lbug_catalog_entry
         OBJECT
         catalog_entry.cpp
         catalog_entry_type.cpp
@@ -13,5 +13,5 @@ add_library(kuzu_catalog_entry
         index_catalog_entry.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_catalog_entry>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_catalog_entry>
         PARENT_SCOPE)

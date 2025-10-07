@@ -24,7 +24,7 @@
 #include <memory>
 #include "duckdb/common/vector.hpp"
 
-namespace kuzu_apache {
+namespace lbug_apache {
 namespace thrift {
 namespace protocol {
 using std::shared_ptr;
@@ -36,7 +36,7 @@ using std::shared_ptr;
  *
  * <p>See p.175 of Design Patterns (by Gamma et al.)</p>
  *
- * @see kuzu_apache::thrift::protocol::TMultiplexedProtocol
+ * @see lbug_apache::thrift::protocol::TMultiplexedProtocol
  */
 class TProtocolDecorator : public TProtocol {
 public:

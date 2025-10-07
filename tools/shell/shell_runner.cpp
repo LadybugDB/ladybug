@@ -27,7 +27,7 @@ void processRunCommands(EmbeddedShell& shell, const std::string& filename) {
     buf[LINENOISE_MAX_LINE] = '\0';
 
     if (fp == NULL) {
-        if (filename != ".kuzurc") {
+        if (filename != ".lbugrc") {
             std::cerr << "Warning: cannot open init file: " << filename << '\n';
         }
         return;
@@ -185,7 +185,7 @@ int main(int argc, char* argv[]) {
         ProgressBar::Get(*clientContext)->toggleProgressBarPrinting(true);
     }
 
-    std::string initFile = ".kuzurc";
+    std::string initFile = ".lbugrc";
     if (init) {
         initFile = args::get(init);
     }

@@ -7,4 +7,4 @@
  * </p>
  */
 
-package com.kuzudb;
+package com.lbugdb;

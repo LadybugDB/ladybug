@@ -197,7 +197,7 @@ impl From<(u64, u64)> for InternalID {
 
 /// Data types supported by Lbug
 ///
-/// Also see <https://kuzudb.com/docusaurus/cypher/data-types/overview.html>
+/// Also see <https://lbugdb.com/docusaurus/cypher/data-types/overview.html>
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Null(LogicalType),
@@ -216,37 +216,37 @@ pub enum Value {
     /// Stored internally as the number of days since 1970-01-01 as a 32-bit signed integer, which
     /// allows for a wider range of dates to be stored than can be represented by `time::Date`
     ///
-    /// <https://kuzudb.com/docusaurus/cypher/data-types/date.html>
+    /// <https://lbugdb.com/docusaurus/cypher/data-types/date.html>
     Date(time::Date),
     /// May be signed or unsigned.
     ///
     /// Nanosecond precision of `time::Duration` (if available) will not be preserved when passed to
     /// queries, and results will always have at most microsecond precision.
     ///
-    /// <https://kuzudb.com/docusaurus/cypher/data-types/interval.html>
+    /// <https://lbugdb.com/docusaurus/cypher/data-types/interval.html>
     Interval(time::Duration),
     /// Stored internally as the number of microseconds since 1970-01-01
     /// Nanosecond precision of `SystemTime` (if available) will not be preserved when used.
     ///
-    /// <https://kuzudb.com/docusaurus/cypher/data-types/timestamp.html>
+    /// <https://lbugdb.com/docusaurus/cypher/data-types/timestamp.html>
     Timestamp(time::OffsetDateTime),
     TimestampTz(time::OffsetDateTime),
     TimestampNs(time::OffsetDateTime),
     TimestampMs(time::OffsetDateTime),
     TimestampSec(time::OffsetDateTime),
     InternalID(InternalID),
-    /// <https://kuzudb.com/docusaurus/cypher/data-types/string.html>
+    /// <https://lbugdb.com/docusaurus/cypher/data-types/string.html>
     String(String),
     Blob(Vec<u8>),
     // TODO: Enforce type of contents
     // LogicalType is necessary so that we can pass the correct type to the C++ API if the list is empty.
     /// These must contain elements which are all the given type.
-    /// <https://kuzudb.com/docusaurus/cypher/data-types/list.html>
+    /// <https://lbugdb.com/docusaurus/cypher/data-types/list.html>
     List(LogicalType, Vec<Value>),
     /// These must contain elements which are all the same type.
-    /// <https://kuzudb.com/docusaurus/cypher/data-types/list.html>
+    /// <https://lbugdb.com/docusaurus/cypher/data-types/list.html>
     Array(LogicalType, Vec<Value>),
-    /// <https://kuzudb.com/docusaurus/cypher/data-types/struct.html>
+    /// <https://lbugdb.com/docusaurus/cypher/data-types/struct.html>
     Struct(Vec<(String, Value)>),
     Node(NodeVal),
     Rel(RelVal),
@@ -258,9 +258,9 @@ pub enum Value {
         /// Sequence of Rels which make up the `RecursiveRel`
         rels: Vec<RelVal>,
     },
-    /// <https://kuzudb.com/docusaurus/cypher/data-types/map>
+    /// <https://lbugdb.com/docusaurus/cypher/data-types/map>
     Map((LogicalType, LogicalType), Vec<(Value, Value)>),
-    /// <https://kuzudb.com/docusaurus/cypher/data-types/union>
+    /// <https://lbugdb.com/docusaurus/cypher/data-types/union>
     Union {
         types: Vec<(String, LogicalType)>,
         value: Box<Value>,
@@ -694,12 +694,12 @@ impl TryInto<cxx::UniquePtr<ffi::Value>> for Value {
             ((value >> 64) as i64, value as u64)
         }
 
-        fn date_to_kuzu_date_t(value: time::Date) -> i32 {
+        fn date_to_lbug_date_t(value: time::Date) -> i32 {
             // Convert to days since 1970-01-01
             (value - time::Date::from_ordinal_date(1970, 1).unwrap())
                 .whole_days()
                 .to_i32()
-                .expect("kuzu_date i64->i32 overflow")
+                .expect("lbug_date i64->i32 overflow")
         }
 
         fn datetime_to_timestamp_t(value: time::OffsetDateTime) -> i64 {
@@ -780,7 +780,7 @@ impl TryInto<cxx::UniquePtr<ffi::Value>> for Value {
                     .to_i64()
                     .expect("TimestampSec i128->i64 overflow"),
             )),
-            Value::Date(value) => Ok(ffi::create_value_date(date_to_kuzu_date_t(value))),
+            Value::Date(value) => Ok(ffi::create_value_date(date_to_lbug_date_t(value))),
             Value::Interval(value) => {
                 let (months, days, micros) = get_interval_t(value);
                 Ok(ffi::create_value_interval(months, days, micros))

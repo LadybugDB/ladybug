@@ -13,7 +13,7 @@
 
 #include "zstd/compress/zstd_compress_internal.h"
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 
 /* used in ZSTD_loadDictionaryContent() */
 void ZSTD_updateTree(ZSTD_matchState_t* ms, const BYTE* ip, const BYTE* iend);

@@ -30,12 +30,12 @@ impl<'a> StringView<'a> {
 #[cxx::bridge]
 pub(crate) mod ffi {
     unsafe extern "C++" {
-        include!("lbug/include/kuzu_rs.h");
+        include!("lbug/include/lbug_rs.h");
         #[namespace = "std"]
         #[cxx_name = "string_view"]
         type StringView<'a> = crate::ffi::StringView<'a>;
 
-        #[namespace = "kuzu_rs"]
+        #[namespace = "lbug_rs"]
         fn string_view_from_str(s: &str) -> StringView<'_>;
     }
 
@@ -130,11 +130,11 @@ pub(crate) mod ffi {
         type PreparedStatement;
         fn isSuccess(&self) -> bool;
 
-        #[namespace = "kuzu_rs"]
+        #[namespace = "lbug_rs"]
         fn prepared_statement_error_message(statement: &PreparedStatement) -> String;
     }
 
-    #[namespace = "kuzu_rs"]
+    #[namespace = "lbug_rs"]
     unsafe extern "C++" {
         type QueryParams;
 
@@ -146,7 +146,7 @@ pub(crate) mod ffi {
         fn new_params() -> UniquePtr<QueryParams>;
     }
 
-    #[namespace = "kuzu_rs"]
+    #[namespace = "lbug_rs"]
     unsafe extern "C++" {
         #[namespace = "lbug::main"]
         type Database;
@@ -173,7 +173,7 @@ pub(crate) mod ffi {
         // We must not destroy a referenced database while a connection is open.
         type Connection<'db>;
 
-        #[namespace = "kuzu_rs"]
+        #[namespace = "lbug_rs"]
         fn database_connect(database: Pin<&mut Database>) -> Result<UniquePtr<Connection<'_>>>;
 
         fn prepare(
@@ -181,14 +181,14 @@ pub(crate) mod ffi {
             query: StringView<'_>,
         ) -> Result<UniquePtr<PreparedStatement>>;
 
-        #[namespace = "kuzu_rs"]
+        #[namespace = "lbug_rs"]
         fn connection_execute<'db>(
             connection: Pin<&mut Connection<'db>>,
             query: Pin<&mut PreparedStatement>,
             params: UniquePtr<QueryParams>,
         ) -> Result<UniquePtr<QueryResult<'db>>>;
 
-        #[namespace = "kuzu_rs"]
+        #[namespace = "lbug_rs"]
         fn connection_query<'a, 'db>(
             connection: Pin<&mut Connection<'db>>,
             query: StringView<'a>,
@@ -206,26 +206,26 @@ pub(crate) mod ffi {
         // (at minimum, the FactorizedTable references the MemoryManager)
         type QueryResult<'db>;
 
-        #[namespace = "kuzu_rs"]
+        #[namespace = "lbug_rs"]
         fn query_result_to_string(query_result: &QueryResult) -> String;
         fn isSuccess(&self) -> bool;
-        #[namespace = "kuzu_rs"]
+        #[namespace = "lbug_rs"]
         fn query_result_get_error_message(query_result: &QueryResult) -> String;
         fn hasNext(&self) -> bool;
         fn getNext(self: Pin<&mut QueryResult>) -> SharedPtr<FlatTuple>;
 
-        #[namespace = "kuzu_rs"]
+        #[namespace = "lbug_rs"]
         fn query_result_get_compiling_time(result: &QueryResult) -> f64;
-        #[namespace = "kuzu_rs"]
+        #[namespace = "lbug_rs"]
         fn query_result_get_execution_time(result: &QueryResult) -> f64;
         fn getNumColumns(&self) -> usize;
         fn getNumTuples(&self) -> u64;
 
-        #[namespace = "kuzu_rs"]
+        #[namespace = "lbug_rs"]
         fn query_result_column_data_types(
             query_result: &QueryResult,
         ) -> UniquePtr<CxxVector<LogicalType>>;
-        #[namespace = "kuzu_rs"]
+        #[namespace = "lbug_rs"]
         fn query_result_column_names(query_result: &QueryResult) -> Vec<String>;
     }
 
@@ -234,11 +234,11 @@ pub(crate) mod ffi {
         type FlatTuple;
 
         fn len(&self) -> u32;
-        #[namespace = "kuzu_rs"]
+        #[namespace = "lbug_rs"]
         fn flat_tuple_get_value(tuple: &FlatTuple, index: u32) -> &Value;
     }
 
-    #[namespace = "kuzu_rs"]
+    #[namespace = "lbug_rs"]
     unsafe extern "C++" {
         #[namespace = "lbug::common"]
         type LogicalType;
@@ -278,7 +278,7 @@ pub(crate) mod ffi {
         fn logical_type_get_decimal_scale(value: &LogicalType) -> u32;
     }
 
-    #[namespace = "kuzu_rs"]
+    #[namespace = "lbug_rs"]
     unsafe extern "C++" {
         type ValueListBuilder;
 
@@ -290,7 +290,7 @@ pub(crate) mod ffi {
         fn create_list() -> UniquePtr<ValueListBuilder>;
     }
 
-    #[namespace = "kuzu_rs"]
+    #[namespace = "lbug_rs"]
     unsafe extern "C++" {
         type TypeListBuilder;
 
@@ -298,7 +298,7 @@ pub(crate) mod ffi {
         fn create_type_list() -> UniquePtr<TypeListBuilder>;
     }
 
-    #[namespace = "kuzu_rs"]
+    #[namespace = "lbug_rs"]
     unsafe extern "C++" {
         #[namespace = "lbug::common"]
         type Value;
@@ -413,7 +413,7 @@ pub(crate) mod ffi {
         fn recursive_rel_get_rels(value: &Value) -> &Value;
     }
 
-    #[namespace = "kuzu_rs"]
+    #[namespace = "lbug_rs"]
     unsafe extern "C++" {
         fn get_storage_version() -> u64;
     }

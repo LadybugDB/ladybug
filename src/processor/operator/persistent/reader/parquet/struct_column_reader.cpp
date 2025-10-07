@@ -4,7 +4,7 @@ namespace lbug {
 namespace processor {
 
 StructColumnReader::StructColumnReader(ParquetReader& reader, common::LogicalType type,
-    const kuzu_parquet::format::SchemaElement& schema, uint64_t schemaIdx, uint64_t maxDefine,
+    const lbug_parquet::format::SchemaElement& schema, uint64_t schemaIdx, uint64_t maxDefine,
     uint64_t maxRepeat, std::vector<std::unique_ptr<ColumnReader>> childReaders)
     : ColumnReader(reader, std::move(type), schema, schemaIdx, maxDefine, maxRepeat),
       childReaders(std::move(childReaders)) {
@@ -17,8 +17,8 @@ ColumnReader* StructColumnReader::getChildReader(uint64_t childIdx) {
 }
 
 void StructColumnReader::initializeRead(uint64_t rowGroupIdx,
-    const std::vector<kuzu_parquet::format::ColumnChunk>& columns,
-    kuzu_apache::thrift::protocol::TProtocol& protocol) {
+    const std::vector<lbug_parquet::format::ColumnChunk>& columns,
+    lbug_apache::thrift::protocol::TProtocol& protocol) {
     for (auto& child : childReaders) {
         child->initializeRead(rowGroupIdx, columns, protocol);
     }

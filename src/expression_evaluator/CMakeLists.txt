@@ -1,4 +1,4 @@
-add_library(kuzu_expression_evaluator
+add_library(lbug_expression_evaluator
         OBJECT
         case_evaluator.cpp
         expression_evaluator.cpp
@@ -13,5 +13,5 @@ add_library(kuzu_expression_evaluator
         reference_evaluator.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_expression_evaluator>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_expression_evaluator>
         PARENT_SCOPE)

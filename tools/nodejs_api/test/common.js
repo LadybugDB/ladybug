@@ -7,12 +7,12 @@ chai.config.includeStack = true;
 const TEST_INSTALLED = process.env.TEST_INSTALLED || false;
 if (TEST_INSTALLED) {
   global.lbug = require("lbug");
-  global.kuzuPath = require.resolve("lbug");
-  console.log("Testing installed version @", kuzuPath);
+  global.lbugPath = require.resolve("lbug");
+  console.log("Testing installed version @", lbugPath);
 } else {
   global.lbug = require("../build/");
-  global.kuzuPath = require.resolve("../build/");
-  console.log("Testing locally built version @", kuzuPath);
+  global.lbugPath = require.resolve("../build/");
+  console.log("Testing locally built version @", lbugPath);
 }
 
 const tmp = require("tmp");

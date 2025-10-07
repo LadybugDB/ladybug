@@ -218,7 +218,7 @@ inline bool tryDoubleCast(const char* input, uint64_t len, T& result) {
         }
     }
     auto end = input + len;
-    auto parse_result = kuzu_fast_float::from_chars(input, end, result);
+    auto parse_result = lbug_fast_float::from_chars(input, end, result);
     if (parse_result.ec != std::errc()) {
         return false;
     }

@@ -83,7 +83,7 @@
 #include <utility>
 #include <vector>
 
-namespace kuzu_snappy {
+namespace lbug_snappy {
 
 namespace {
 
@@ -2646,7 +2646,7 @@ bool Uncompress(Source* compressed, Sink* uncompressed) {
   }
 }
 
-}  // namespace kuzu_snappy
+}  // namespace lbug_snappy
 
 #else // #if SNAPPY_NEW_VERSION
 
@@ -2698,7 +2698,7 @@ bool Uncompress(Source* compressed, Sink* uncompressed) {
 #include <string>
 #include <vector>
 
-namespace kuzu_snappy {
+namespace lbug_snappy {
 
 using internal::COPY_1_BYTE_OFFSET;
 using internal::COPY_2_BYTE_OFFSET;
@@ -4283,6 +4283,6 @@ bool Uncompress(Source* compressed, Sink* uncompressed) {
   }
 }
 
-}  // namespace kuzu_snappy
+}  // namespace lbug_snappy
 
 #endif  // #if SNAPPY_NEW_VERSION # else

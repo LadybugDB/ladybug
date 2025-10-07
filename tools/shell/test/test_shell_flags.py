@@ -452,7 +452,7 @@ def test_mode(temp_db, flag) -> None:
     )
     result = test.run()
     result.check_stdout("a\tb")
-    result.check_stdout("Databases Rule\tkuzu is cool")
+    result.check_stdout("Databases Rule\tlbug is cool")
 
     # test tsv escaping
     test = (

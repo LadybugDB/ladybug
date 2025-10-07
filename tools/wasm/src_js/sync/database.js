@@ -32,7 +32,7 @@ class Database {
     checkpointThreshold = 16777216
   ) {
     KuzuWasm.checkInit();
-    const lbug = KuzuWasm._kuzu;
+    const lbug = KuzuWasm._lbug;
     if (!databasePath) {
       databasePath = ":memory:";
     }

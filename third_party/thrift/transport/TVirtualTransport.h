@@ -22,7 +22,7 @@
 
 #include "transport/TTransport.h"
 
-namespace kuzu_apache {
+namespace lbug_apache {
 namespace thrift {
 namespace transport {
 
@@ -114,7 +114,7 @@ public:
    */
   uint32_t readAll(uint8_t* buf, uint32_t len) {
     auto* trans = static_cast<Transport_*>(this);
-    return ::kuzu_apache::thrift::transport::readAll(*trans, buf, len);
+    return ::lbug_apache::thrift::transport::readAll(*trans, buf, len);
   }
 
 protected:
@@ -135,6 +135,6 @@ protected:
 };
 }
 }
-} // kuzu_apache::thrift::transport
+} // lbug_apache::thrift::transport
 
 #endif // #ifndef _KUZU_THRIFT_TRANSPORT_TVIRTUALTRANSPORT_H_

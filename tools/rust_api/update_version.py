@@ -8,7 +8,7 @@ KUZU_RS_ROOT = Path(__file__).parent
 KUZU_ROOT = KUZU_RS_ROOT.parent.parent
 
 
-def get_kuzu_version():
+def get_lbug_version():
     cmake_file = KUZU_ROOT / "CMakeLists.txt"
     with open(cmake_file) as f:
         for line in f:
@@ -22,7 +22,7 @@ def get_kuzu_version():
 
 
 if __name__ == "__main__":
-    version = get_kuzu_version()
+    version = get_lbug_version()
     version_changed = False
     with open(KUZU_RS_ROOT / "Cargo.toml", encoding="utf-8") as file:
         data = file.readlines()

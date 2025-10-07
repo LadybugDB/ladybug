@@ -23,7 +23,7 @@
 #include <string>
 #include "Thrift.h"
 
-namespace kuzu_apache {
+namespace lbug_apache {
 namespace thrift {
 namespace transport {
 
@@ -35,7 +35,7 @@ namespace transport {
  * pipes etc.
  *
  */
-class TTransportException : public kuzu_apache::thrift::TException {
+class TTransportException : public lbug_apache::thrift::TException {
 public:
   /**
    * Error codes for the various types of exceptions.
@@ -51,15 +51,15 @@ public:
     INTERNAL_ERROR = 7
   };
 
-  TTransportException() : kuzu_apache::thrift::TException(), type_(UNKNOWN) {}
+  TTransportException() : lbug_apache::thrift::TException(), type_(UNKNOWN) {}
 
-  TTransportException(TTransportExceptionType type) : kuzu_apache::thrift::TException(), type_(type) {}
+  TTransportException(TTransportExceptionType type) : lbug_apache::thrift::TException(), type_(type) {}
 
   TTransportException(const std::string& message)
-    : kuzu_apache::thrift::TException(message), type_(UNKNOWN) {}
+    : lbug_apache::thrift::TException(message), type_(UNKNOWN) {}
 
   TTransportException(TTransportExceptionType type, const std::string& message)
-    : kuzu_apache::thrift::TException(message), type_(type) {}
+    : lbug_apache::thrift::TException(message), type_(type) {}
 
   ~TTransportException() noexcept override = default;
 
@@ -97,6 +97,6 @@ protected:
 
 }
 }
-} // kuzu_apache::thrift::transport
+} // lbug_apache::thrift::transport
 
 #endif // #ifndef _KUZU_THRIFT_TRANSPORT_TTRANSPORTEXCEPTION_H_

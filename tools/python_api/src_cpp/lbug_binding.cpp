@@ -13,6 +13,6 @@ void bind(py::module& m) {
     m.add_object("_clean_import_cache", py::capsule(cleanImportCache));
 }
 
-PYBIND11_MODULE(_kuzu, m) {
+PYBIND11_MODULE(_lbug, m) {
     bind(m);
 }

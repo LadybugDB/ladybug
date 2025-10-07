@@ -1,4 +1,4 @@
-add_library(kuzu_planner_join_order
+add_library(lbug_planner_join_order
         OBJECT
         cardinality_estimator.cpp
         cost_model.cpp
@@ -8,5 +8,5 @@ add_library(kuzu_planner_join_order
         join_tree_constructor.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_planner_join_order>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_planner_join_order>
         PARENT_SCOPE)

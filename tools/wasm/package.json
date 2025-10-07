@@ -3,10 +3,10 @@
   "version": "0.0.1",
   "description": "Official WebAssembly build of Lbug in-process property graph database management system.",
   "main": "index.js",
-  "homepage": "https://kuzudb.com/",
+  "homepage": "https://lbugdb.com/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kuzudb/lbug.git"
+    "url": "https://github.com/lbugdb/lbug.git"
   },
   "exports": {
     ".": {

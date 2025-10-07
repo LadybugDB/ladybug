@@ -6,7 +6,7 @@ add_subdirectory(query)
 add_subdirectory(rewriter)
 add_subdirectory(visitor)
 
-add_library(kuzu_binder
+add_library(lbug_binder
         OBJECT
         binder.cpp
         binder_scope.cpp
@@ -18,5 +18,5 @@ add_library(kuzu_binder
         expression_visitor.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_binder>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_binder>
         PARENT_SCOPE)

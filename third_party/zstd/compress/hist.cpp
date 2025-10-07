@@ -20,7 +20,7 @@
 #include "zstd/compress/hist.h"
 
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 
 /* --- Error management --- */
 unsigned HIST_isError(size_t code) { return ERR_isError(code); }

@@ -20,7 +20,7 @@
 
 #define ZSTD_LDM_DEFAULT_WINDOW_LOG ZSTD_WINDOWLOG_LIMIT_DEFAULT
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 
 void ZSTD_ldm_fillHashTable(
             ldmState_t* state, const BYTE* ip,

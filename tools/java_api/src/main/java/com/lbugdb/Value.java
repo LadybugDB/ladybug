@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 /**
  * Value can hold data of different types.
@@ -15,7 +15,7 @@ public class Value implements AutoCloseable {
      */
     public <T> Value(T val) {
         checkNotDestroyed();
-        v_ref = Native.kuzuValueCreateValue(val);
+        v_ref = Native.lbugValueCreateValue(val);
     }
 
     /**
@@ -24,7 +24,7 @@ public class Value implements AutoCloseable {
      * @return The null Value.
      */
     public static Value createNull() {
-        return Native.kuzuValueCreateNull();
+        return Native.lbugValueCreateNull();
     }
 
     /**
@@ -33,7 +33,7 @@ public class Value implements AutoCloseable {
      * @param data_type: The data type of the null Value.
      */
     public static Value createNullWithDataType(DataType data_type) {
-        return Native.kuzuValueCreateNullWithDataType(data_type);
+        return Native.lbugValueCreateNullWithDataType(data_type);
     }
 
     /**
@@ -43,7 +43,7 @@ public class Value implements AutoCloseable {
      * @return The default Value.
      */
     public static Value createDefault(DataType data_type) {
-        return Native.kuzuValueCreateDefault(data_type);
+        return Native.lbugValueCreateDefault(data_type);
     }
 
     /**
@@ -78,7 +78,7 @@ public class Value implements AutoCloseable {
     private void destroy() {
         checkNotDestroyed();
         if (!isOwnedByCPP) {
-            Native.kuzuValueDestroy(this);
+            Native.lbugValueDestroy(this);
             destroyed = true;
         }
     }
@@ -91,7 +91,7 @@ public class Value implements AutoCloseable {
      */
     public boolean isNull() {
         checkNotDestroyed();
-        return Native.kuzuValueIsNull(this);
+        return Native.lbugValueIsNull(this);
     }
 
     /**
@@ -102,7 +102,7 @@ public class Value implements AutoCloseable {
      */
     public void setNull(boolean flag) {
         checkNotDestroyed();
-        Native.kuzuValueSetNull(this, flag);
+        Native.lbugValueSetNull(this, flag);
     }
 
     /**
@@ -113,7 +113,7 @@ public class Value implements AutoCloseable {
      */
     public void copy(Value other) {
         checkNotDestroyed();
-        Native.kuzuValueCopy(this, other);
+        Native.lbugValueCopy(this, other);
     }
 
     /**
@@ -125,7 +125,7 @@ public class Value implements AutoCloseable {
         if (destroyed)
             return null;
         else
-            return Native.kuzuValueClone(this);
+            return Native.lbugValueClone(this);
     }
 
     /**
@@ -136,7 +136,7 @@ public class Value implements AutoCloseable {
      */
     public <T> T getValue() {
         checkNotDestroyed();
-        return Native.kuzuValueGetValue(this);
+        return Native.lbugValueGetValue(this);
     }
 
     /**
@@ -147,7 +147,7 @@ public class Value implements AutoCloseable {
      */
     public DataType getDataType() {
         checkNotDestroyed();
-        return Native.kuzuValueGetDataType(this);
+        return Native.lbugValueGetDataType(this);
     }
 
     /**
@@ -159,6 +159,6 @@ public class Value implements AutoCloseable {
         if (destroyed)
             return "Value has been destroyed.";
         else
-            return Native.kuzuValueToString(this);
+            return Native.lbugValueToString(this);
     }
 }

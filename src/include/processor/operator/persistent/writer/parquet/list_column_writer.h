@@ -14,7 +14,7 @@ public:
           childWriter(std::move(childWriter)) {}
 
     std::unique_ptr<ColumnWriterState> initializeWriteState(
-        kuzu_parquet::format::RowGroup& rowGroup) override;
+        lbug_parquet::format::RowGroup& rowGroup) override;
     bool hasAnalyze() override;
     void analyze(ColumnWriterState& writerState, ColumnWriterState* parent,
         common::ValueVector* vector, uint64_t count) override;
@@ -32,10 +32,10 @@ private:
 
 class ListColumnWriterState : public ColumnWriterState {
 public:
-    ListColumnWriterState(kuzu_parquet::format::RowGroup& rowGroup, uint64_t colIdx)
+    ListColumnWriterState(lbug_parquet::format::RowGroup& rowGroup, uint64_t colIdx)
         : rowGroup{rowGroup}, colIdx{colIdx} {}
 
-    kuzu_parquet::format::RowGroup& rowGroup;
+    lbug_parquet::format::RowGroup& rowGroup;
     uint64_t colIdx;
     std::unique_ptr<ColumnWriterState> childState;
     uint64_t parentIdx = 0;

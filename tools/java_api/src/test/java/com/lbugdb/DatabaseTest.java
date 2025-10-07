@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.Test;

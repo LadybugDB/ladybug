@@ -1,5 +1,5 @@
 add_library(
-        kuzu_binder_expression
+        lbug_binder_expression
         OBJECT
         aggregate_function_expression.cpp
         case_expression.cpp
@@ -15,5 +15,5 @@ add_library(
         variable_expression.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_binder_expression>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_binder_expression>
         PARENT_SCOPE)

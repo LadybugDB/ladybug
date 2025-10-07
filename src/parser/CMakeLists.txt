@@ -3,7 +3,7 @@ add_subdirectory(expression)
 add_subdirectory(transform)
 add_subdirectory(visitor)
 
-add_library(kuzu_parser
+add_library(lbug_parser
         OBJECT
         create_macro.cpp
         parser.cpp
@@ -11,5 +11,5 @@ add_library(kuzu_parser
         transformer.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_parser>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_parser>
         PARENT_SCOPE)

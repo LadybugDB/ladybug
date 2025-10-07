@@ -18,7 +18,7 @@ KUZU_EXEC_PATH = os.path.join(
 )
 
 
-def _get_kuzu_version():
+def _get_lbug_version():
     cmake_file = os.path.join(KUZU_ROOT, "CMakeLists.txt")
     with open(cmake_file) as f:
         for line in f:
@@ -27,7 +27,7 @@ def _get_kuzu_version():
         return None
 
 
-KUZU_VERSION = _get_kuzu_version()
+KUZU_VERSION = _get_lbug_version()
 
 
 class KEY_ACTION(Enum):

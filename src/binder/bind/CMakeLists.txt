@@ -3,7 +3,7 @@ add_subdirectory(ddl)
 add_subdirectory(read)
 
 add_library(
-        kuzu_binder_bind
+        lbug_binder_bind
         OBJECT
         bind_attach_database.cpp
         bind_create_macro.cpp
@@ -28,5 +28,5 @@ add_library(
         bind_table_function.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_binder_bind>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_binder_bind>
         PARENT_SCOPE)

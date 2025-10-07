@@ -46,14 +46,14 @@ file(GLOB JS_SOURCE_FILES
 # Copy all JS/TS files to build directory
 file(COPY ${JS_SOURCE_FILES} DESTINATION  "${CMAKE_CURRENT_SOURCE_DIR}/build")
 
-add_library(kuzujs SHARED ${CPP_SOURCE_FILES} ${CMAKE_JS_SRC})
-set_target_properties(kuzujs PROPERTIES PREFIX "" SUFFIX ".node")
-set_target_properties(kuzujs
+add_library(lbugjs SHARED ${CPP_SOURCE_FILES} ${CMAKE_JS_SRC})
+set_target_properties(lbugjs PROPERTIES PREFIX "" SUFFIX ".node")
+set_target_properties(lbugjs
   PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build"
   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build"
   ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build")
 if(APPLE)
-  target_link_options(kuzujs PRIVATE -undefined dynamic_lookup)
+  target_link_options(lbugjs PRIVATE -undefined dynamic_lookup)
 endif()
-target_link_libraries(kuzujs PRIVATE lbug ${CMAKE_JS_LIB})
+target_link_libraries(lbugjs PRIVATE lbug ${CMAKE_JS_LIB})

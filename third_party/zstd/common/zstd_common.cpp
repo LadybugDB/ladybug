@@ -18,7 +18,7 @@
 #include "zstd/common/error_private.h"
 #include "zstd/common/zstd_internal.h"
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 
 /*-****************************************
 *  Version

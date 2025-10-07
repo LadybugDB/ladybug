@@ -30,7 +30,7 @@
 #else
 #  define ZSTDERRORLIB_API ZSTDERRORLIB_VISIBILITY
 #endif
-namespace kuzu_zstd {
+namespace lbug_zstd {
 /*-*********************************************
  *  Error codes list
  *-*********************************************

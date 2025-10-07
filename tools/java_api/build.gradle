@@ -9,7 +9,7 @@ java {
     withJavadocJar()
 }
 
-group = 'com.kuzudb'
+group = 'com.lbugdb'
 def projectRoot = projectDir.parentFile.parentFile
 def cmakeFile = new File(projectRoot, 'CMakeLists.txt').text
 def versionLine = cmakeFile.readLines().find { it.startsWith('project(Lbug VERSION ') }
@@ -44,7 +44,7 @@ publishing {
             pom {
                 name = 'lbug'
                 description = 'Lbug is an embedded graph database built for query speed and scalability.'
-                url = 'http://kuzudb.com'
+                url = 'http://lbugdb.com'
                 inceptionYear = '2020'
                 properties = [
                         'project.build.sourceEncoding'    : 'UTF-8',
@@ -56,20 +56,20 @@ publishing {
                 licenses {
                     license {
                         name = 'MIT License'
-                        url = 'https://github.com/kuzudb/lbug/blob/master/LICENSE'
+                        url = 'https://github.com/lbugdb/lbug/blob/master/LICENSE'
                     }
                 }
                 developers {
                     developer {
-                        id = 'kuzudb'
+                        id = 'lbugdb'
                         name = 'Kùzu Inc.'
-                        email = 'contact@kuzudb.com'
+                        email = 'contact@lbugdb.com'
                     }
                 }
                 scm {
-                    connection = 'scm:git:git://github.com/kuzudb/lbug.git'
-                    developerConnection = 'scm:git:ssh://github.com/kuzudb/lbug.git'
-                    url = 'https://github.com/kuzudb/lbug'
+                    connection = 'scm:git:git://github.com/lbugdb/lbug.git'
+                    developerConnection = 'scm:git:ssh://github.com/lbugdb/lbug.git'
+                    url = 'https://github.com/lbugdb/lbug'
                 }
             }
             from components.java
@@ -87,7 +87,7 @@ publishing {
         }
         maven {
             name = 'GitHubPackages'
-            url = uri('https://maven.pkg.github.com/kuzudb/lbug')
+            url = uri('https://maven.pkg.github.com/lbugdb/lbug')
             credentials {
                 username = System.getenv('GITHUB_ACTOR')
                 password = System.getenv('GITHUB_TOKEN')
@@ -121,7 +121,7 @@ task cmake {
 
 task copyNativeLibs(type: Copy) {
     from('build') {
-        include 'libkuzu_java_native.*'
+        include 'liblbug_java_native.*'
     }
     into 'src/main/resources'
     dependsOn 'cmake'

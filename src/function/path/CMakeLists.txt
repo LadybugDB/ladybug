@@ -1,4 +1,4 @@
-add_library(kuzu_function_path
+add_library(lbug_function_path
         OBJECT
         length_function.cpp
         nodes_function.cpp
@@ -7,5 +7,5 @@ add_library(kuzu_function_path
         semantic_function.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_function_path>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_function_path>
         PARENT_SCOPE)

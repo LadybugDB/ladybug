@@ -16,7 +16,7 @@
 *  Binary Tree search
 ***************************************/
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 
 static void
 ZSTD_updateDUBT(ZSTD_matchState_t* ms,

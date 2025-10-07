@@ -11,7 +11,7 @@
 
 #include "TToString.h"
 
-namespace kuzu_parquet { namespace format {
+namespace lbug_parquet { namespace format {
 
 std::ostream &operator<<(std::ostream &out, const Type::type &val) {
 	switch (val) {
@@ -287,29 +287,29 @@ std::ostream& operator<<(std::ostream& out, const Statistics& obj)
 }
 
 
-uint32_t Statistics::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t Statistics::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readBinary(this->max);
           this->__isset.max = true;
         } else {
@@ -317,7 +317,7 @@ uint32_t Statistics::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readBinary(this->min);
           this->__isset.min = true;
         } else {
@@ -325,7 +325,7 @@ uint32_t Statistics::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->null_count);
           this->__isset.null_count = true;
         } else {
@@ -333,7 +333,7 @@ uint32_t Statistics::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 4:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->distinct_count);
           this->__isset.distinct_count = true;
         } else {
@@ -341,7 +341,7 @@ uint32_t Statistics::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 5:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readBinary(this->max_value);
           this->__isset.max_value = true;
         } else {
@@ -349,7 +349,7 @@ uint32_t Statistics::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 6:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readBinary(this->min_value);
           this->__isset.min_value = true;
         } else {
@@ -368,38 +368,38 @@ uint32_t Statistics::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t Statistics::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t Statistics::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("Statistics");
 
   if (this->__isset.max) {
-    xfer += oprot->writeFieldBegin("max", ::kuzu_apache::thrift::protocol::T_STRING, 1);
+    xfer += oprot->writeFieldBegin("max", ::lbug_apache::thrift::protocol::T_STRING, 1);
     xfer += oprot->writeBinary(this->max);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.min) {
-    xfer += oprot->writeFieldBegin("min", ::kuzu_apache::thrift::protocol::T_STRING, 2);
+    xfer += oprot->writeFieldBegin("min", ::lbug_apache::thrift::protocol::T_STRING, 2);
     xfer += oprot->writeBinary(this->min);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.null_count) {
-    xfer += oprot->writeFieldBegin("null_count", ::kuzu_apache::thrift::protocol::T_I64, 3);
+    xfer += oprot->writeFieldBegin("null_count", ::lbug_apache::thrift::protocol::T_I64, 3);
     xfer += oprot->writeI64(this->null_count);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.distinct_count) {
-    xfer += oprot->writeFieldBegin("distinct_count", ::kuzu_apache::thrift::protocol::T_I64, 4);
+    xfer += oprot->writeFieldBegin("distinct_count", ::lbug_apache::thrift::protocol::T_I64, 4);
     xfer += oprot->writeI64(this->distinct_count);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.max_value) {
-    xfer += oprot->writeFieldBegin("max_value", ::kuzu_apache::thrift::protocol::T_STRING, 5);
+    xfer += oprot->writeFieldBegin("max_value", ::lbug_apache::thrift::protocol::T_STRING, 5);
     xfer += oprot->writeBinary(this->max_value);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.min_value) {
-    xfer += oprot->writeFieldBegin("min_value", ::kuzu_apache::thrift::protocol::T_STRING, 6);
+    xfer += oprot->writeFieldBegin("min_value", ::lbug_apache::thrift::protocol::T_STRING, 6);
     xfer += oprot->writeBinary(this->min_value);
     xfer += oprot->writeFieldEnd();
   }
@@ -439,7 +439,7 @@ Statistics& Statistics::operator=(const Statistics& other1) {
   return *this;
 }
 void Statistics::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "Statistics(";
   out << "max="; (__isset.max ? (out << to_string(max)) : (out << "<null>"));
   out << ", " << "min="; (__isset.min ? (out << to_string(min)) : (out << "<null>"));
@@ -461,23 +461,23 @@ std::ostream& operator<<(std::ostream& out, const StringType& obj)
 }
 
 
-uint32_t StringType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t StringType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -489,9 +489,9 @@ uint32_t StringType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t StringType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t StringType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("StringType");
 
   xfer += oprot->writeFieldStop();
@@ -513,7 +513,7 @@ StringType& StringType::operator=(const StringType& other3) {
   return *this;
 }
 void StringType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "StringType(";
   out << ")";
 }
@@ -529,23 +529,23 @@ std::ostream& operator<<(std::ostream& out, const UUIDType& obj)
 }
 
 
-uint32_t UUIDType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t UUIDType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -557,9 +557,9 @@ uint32_t UUIDType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t UUIDType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t UUIDType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("UUIDType");
 
   xfer += oprot->writeFieldStop();
@@ -581,7 +581,7 @@ UUIDType& UUIDType::operator=(const UUIDType& other5) {
   return *this;
 }
 void UUIDType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "UUIDType(";
   out << ")";
 }
@@ -597,23 +597,23 @@ std::ostream& operator<<(std::ostream& out, const MapType& obj)
 }
 
 
-uint32_t MapType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t MapType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -625,9 +625,9 @@ uint32_t MapType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t MapType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t MapType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("MapType");
 
   xfer += oprot->writeFieldStop();
@@ -649,7 +649,7 @@ MapType& MapType::operator=(const MapType& other7) {
   return *this;
 }
 void MapType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "MapType(";
   out << ")";
 }
@@ -665,23 +665,23 @@ std::ostream& operator<<(std::ostream& out, const ListType& obj)
 }
 
 
-uint32_t ListType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t ListType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -693,9 +693,9 @@ uint32_t ListType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t ListType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t ListType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("ListType");
 
   xfer += oprot->writeFieldStop();
@@ -717,7 +717,7 @@ ListType& ListType::operator=(const ListType& other9) {
   return *this;
 }
 void ListType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "ListType(";
   out << ")";
 }
@@ -733,23 +733,23 @@ std::ostream& operator<<(std::ostream& out, const EnumType& obj)
 }
 
 
-uint32_t EnumType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t EnumType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -761,9 +761,9 @@ uint32_t EnumType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t EnumType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t EnumType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("EnumType");
 
   xfer += oprot->writeFieldStop();
@@ -785,7 +785,7 @@ EnumType& EnumType::operator=(const EnumType& other11) {
   return *this;
 }
 void EnumType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "EnumType(";
   out << ")";
 }
@@ -801,23 +801,23 @@ std::ostream& operator<<(std::ostream& out, const DateType& obj)
 }
 
 
-uint32_t DateType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t DateType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -829,9 +829,9 @@ uint32_t DateType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t DateType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t DateType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("DateType");
 
   xfer += oprot->writeFieldStop();
@@ -853,7 +853,7 @@ DateType& DateType::operator=(const DateType& other13) {
   return *this;
 }
 void DateType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "DateType(";
   out << ")";
 }
@@ -869,23 +869,23 @@ std::ostream& operator<<(std::ostream& out, const NullType& obj)
 }
 
 
-uint32_t NullType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t NullType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -897,9 +897,9 @@ uint32_t NullType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t NullType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t NullType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("NullType");
 
   xfer += oprot->writeFieldStop();
@@ -921,7 +921,7 @@ NullType& NullType::operator=(const NullType& other15) {
   return *this;
 }
 void NullType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "NullType(";
   out << ")";
 }
@@ -945,17 +945,17 @@ std::ostream& operator<<(std::ostream& out, const DecimalType& obj)
 }
 
 
-uint32_t DecimalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t DecimalType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_scale = false;
   bool isset_precision = false;
@@ -963,13 +963,13 @@ uint32_t DecimalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->scale);
           isset_scale = true;
         } else {
@@ -977,7 +977,7 @@ uint32_t DecimalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->precision);
           isset_precision = true;
         } else {
@@ -1000,16 +1000,16 @@ uint32_t DecimalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t DecimalType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t DecimalType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("DecimalType");
 
-  xfer += oprot->writeFieldBegin("scale", ::kuzu_apache::thrift::protocol::T_I32, 1);
+  xfer += oprot->writeFieldBegin("scale", ::lbug_apache::thrift::protocol::T_I32, 1);
   xfer += oprot->writeI32(this->scale);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("precision", ::kuzu_apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeFieldBegin("precision", ::lbug_apache::thrift::protocol::T_I32, 2);
   xfer += oprot->writeI32(this->precision);
   xfer += oprot->writeFieldEnd();
 
@@ -1034,7 +1034,7 @@ DecimalType& DecimalType::operator=(const DecimalType& other17) {
   return *this;
 }
 void DecimalType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "DecimalType(";
   out << "scale=" << to_string(scale);
   out << ", " << "precision=" << to_string(precision);
@@ -1052,23 +1052,23 @@ std::ostream& operator<<(std::ostream& out, const MilliSeconds& obj)
 }
 
 
-uint32_t MilliSeconds::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t MilliSeconds::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -1080,9 +1080,9 @@ uint32_t MilliSeconds::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t MilliSeconds::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t MilliSeconds::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("MilliSeconds");
 
   xfer += oprot->writeFieldStop();
@@ -1104,7 +1104,7 @@ MilliSeconds& MilliSeconds::operator=(const MilliSeconds& other19) {
   return *this;
 }
 void MilliSeconds::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "MilliSeconds(";
   out << ")";
 }
@@ -1120,23 +1120,23 @@ std::ostream& operator<<(std::ostream& out, const MicroSeconds& obj)
 }
 
 
-uint32_t MicroSeconds::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t MicroSeconds::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -1148,9 +1148,9 @@ uint32_t MicroSeconds::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t MicroSeconds::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t MicroSeconds::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("MicroSeconds");
 
   xfer += oprot->writeFieldStop();
@@ -1172,7 +1172,7 @@ MicroSeconds& MicroSeconds::operator=(const MicroSeconds& other21) {
   return *this;
 }
 void MicroSeconds::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "MicroSeconds(";
   out << ")";
 }
@@ -1188,23 +1188,23 @@ std::ostream& operator<<(std::ostream& out, const NanoSeconds& obj)
 }
 
 
-uint32_t NanoSeconds::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t NanoSeconds::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -1216,9 +1216,9 @@ uint32_t NanoSeconds::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t NanoSeconds::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t NanoSeconds::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("NanoSeconds");
 
   xfer += oprot->writeFieldStop();
@@ -1240,7 +1240,7 @@ NanoSeconds& NanoSeconds::operator=(const NanoSeconds& other23) {
   return *this;
 }
 void NanoSeconds::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "NanoSeconds(";
   out << ")";
 }
@@ -1271,29 +1271,29 @@ std::ostream& operator<<(std::ostream& out, const TimeUnit& obj)
 }
 
 
-uint32_t TimeUnit::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t TimeUnit::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->MILLIS.read(iprot);
           this->__isset.MILLIS = true;
         } else {
@@ -1301,7 +1301,7 @@ uint32_t TimeUnit::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->MICROS.read(iprot);
           this->__isset.MICROS = true;
         } else {
@@ -1309,7 +1309,7 @@ uint32_t TimeUnit::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->NANOS.read(iprot);
           this->__isset.NANOS = true;
         } else {
@@ -1328,23 +1328,23 @@ uint32_t TimeUnit::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t TimeUnit::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t TimeUnit::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("TimeUnit");
 
   if (this->__isset.MILLIS) {
-    xfer += oprot->writeFieldBegin("MILLIS", ::kuzu_apache::thrift::protocol::T_STRUCT, 1);
+    xfer += oprot->writeFieldBegin("MILLIS", ::lbug_apache::thrift::protocol::T_STRUCT, 1);
     xfer += this->MILLIS.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.MICROS) {
-    xfer += oprot->writeFieldBegin("MICROS", ::kuzu_apache::thrift::protocol::T_STRUCT, 2);
+    xfer += oprot->writeFieldBegin("MICROS", ::lbug_apache::thrift::protocol::T_STRUCT, 2);
     xfer += this->MICROS.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.NANOS) {
-    xfer += oprot->writeFieldBegin("NANOS", ::kuzu_apache::thrift::protocol::T_STRUCT, 3);
+    xfer += oprot->writeFieldBegin("NANOS", ::lbug_apache::thrift::protocol::T_STRUCT, 3);
     xfer += this->NANOS.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
@@ -1375,7 +1375,7 @@ TimeUnit& TimeUnit::operator=(const TimeUnit& other25) {
   return *this;
 }
 void TimeUnit::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "TimeUnit(";
   out << "MILLIS="; (__isset.MILLIS ? (out << to_string(MILLIS)) : (out << "<null>"));
   out << ", " << "MICROS="; (__isset.MICROS ? (out << to_string(MICROS)) : (out << "<null>"));
@@ -1402,17 +1402,17 @@ std::ostream& operator<<(std::ostream& out, const TimestampType& obj)
 }
 
 
-uint32_t TimestampType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t TimestampType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_isAdjustedToUTC = false;
   bool isset_unit = false;
@@ -1420,13 +1420,13 @@ uint32_t TimestampType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_BOOL) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_BOOL) {
           xfer += iprot->readBool(this->isAdjustedToUTC);
           isset_isAdjustedToUTC = true;
         } else {
@@ -1434,7 +1434,7 @@ uint32_t TimestampType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->unit.read(iprot);
           isset_unit = true;
         } else {
@@ -1457,16 +1457,16 @@ uint32_t TimestampType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
   return xfer;
 }
 
-uint32_t TimestampType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t TimestampType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("TimestampType");
 
-  xfer += oprot->writeFieldBegin("isAdjustedToUTC", ::kuzu_apache::thrift::protocol::T_BOOL, 1);
+  xfer += oprot->writeFieldBegin("isAdjustedToUTC", ::lbug_apache::thrift::protocol::T_BOOL, 1);
   xfer += oprot->writeBool(this->isAdjustedToUTC);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("unit", ::kuzu_apache::thrift::protocol::T_STRUCT, 2);
+  xfer += oprot->writeFieldBegin("unit", ::lbug_apache::thrift::protocol::T_STRUCT, 2);
   xfer += this->unit.write(oprot);
   xfer += oprot->writeFieldEnd();
 
@@ -1491,7 +1491,7 @@ TimestampType& TimestampType::operator=(const TimestampType& other27) {
   return *this;
 }
 void TimestampType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "TimestampType(";
   out << "isAdjustedToUTC=" << to_string(isAdjustedToUTC);
   out << ", " << "unit=" << to_string(unit);
@@ -1517,17 +1517,17 @@ std::ostream& operator<<(std::ostream& out, const TimeType& obj)
 }
 
 
-uint32_t TimeType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t TimeType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_isAdjustedToUTC = false;
   bool isset_unit = false;
@@ -1535,13 +1535,13 @@ uint32_t TimeType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_BOOL) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_BOOL) {
           xfer += iprot->readBool(this->isAdjustedToUTC);
           isset_isAdjustedToUTC = true;
         } else {
@@ -1549,7 +1549,7 @@ uint32_t TimeType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->unit.read(iprot);
           isset_unit = true;
         } else {
@@ -1572,16 +1572,16 @@ uint32_t TimeType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t TimeType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t TimeType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("TimeType");
 
-  xfer += oprot->writeFieldBegin("isAdjustedToUTC", ::kuzu_apache::thrift::protocol::T_BOOL, 1);
+  xfer += oprot->writeFieldBegin("isAdjustedToUTC", ::lbug_apache::thrift::protocol::T_BOOL, 1);
   xfer += oprot->writeBool(this->isAdjustedToUTC);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("unit", ::kuzu_apache::thrift::protocol::T_STRUCT, 2);
+  xfer += oprot->writeFieldBegin("unit", ::lbug_apache::thrift::protocol::T_STRUCT, 2);
   xfer += this->unit.write(oprot);
   xfer += oprot->writeFieldEnd();
 
@@ -1606,7 +1606,7 @@ TimeType& TimeType::operator=(const TimeType& other29) {
   return *this;
 }
 void TimeType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "TimeType(";
   out << "isAdjustedToUTC=" << to_string(isAdjustedToUTC);
   out << ", " << "unit=" << to_string(unit);
@@ -1632,17 +1632,17 @@ std::ostream& operator<<(std::ostream& out, const IntType& obj)
 }
 
 
-uint32_t IntType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t IntType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_bitWidth = false;
   bool isset_isSigned = false;
@@ -1650,13 +1650,13 @@ uint32_t IntType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_BYTE) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_BYTE) {
           xfer += iprot->readByte(this->bitWidth);
           isset_bitWidth = true;
         } else {
@@ -1664,7 +1664,7 @@ uint32_t IntType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_BOOL) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_BOOL) {
           xfer += iprot->readBool(this->isSigned);
           isset_isSigned = true;
         } else {
@@ -1687,16 +1687,16 @@ uint32_t IntType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t IntType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t IntType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("IntType");
 
-  xfer += oprot->writeFieldBegin("bitWidth", ::kuzu_apache::thrift::protocol::T_BYTE, 1);
+  xfer += oprot->writeFieldBegin("bitWidth", ::lbug_apache::thrift::protocol::T_BYTE, 1);
   xfer += oprot->writeByte(this->bitWidth);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("isSigned", ::kuzu_apache::thrift::protocol::T_BOOL, 2);
+  xfer += oprot->writeFieldBegin("isSigned", ::lbug_apache::thrift::protocol::T_BOOL, 2);
   xfer += oprot->writeBool(this->isSigned);
   xfer += oprot->writeFieldEnd();
 
@@ -1721,7 +1721,7 @@ IntType& IntType::operator=(const IntType& other31) {
   return *this;
 }
 void IntType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "IntType(";
   out << "bitWidth=" << to_string(bitWidth);
   out << ", " << "isSigned=" << to_string(isSigned);
@@ -1739,23 +1739,23 @@ std::ostream& operator<<(std::ostream& out, const JsonType& obj)
 }
 
 
-uint32_t JsonType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t JsonType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -1767,9 +1767,9 @@ uint32_t JsonType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t JsonType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t JsonType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("JsonType");
 
   xfer += oprot->writeFieldStop();
@@ -1791,7 +1791,7 @@ JsonType& JsonType::operator=(const JsonType& other33) {
   return *this;
 }
 void JsonType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "JsonType(";
   out << ")";
 }
@@ -1807,23 +1807,23 @@ std::ostream& operator<<(std::ostream& out, const BsonType& obj)
 }
 
 
-uint32_t BsonType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t BsonType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -1835,9 +1835,9 @@ uint32_t BsonType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t BsonType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t BsonType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("BsonType");
 
   xfer += oprot->writeFieldStop();
@@ -1859,7 +1859,7 @@ BsonType& BsonType::operator=(const BsonType& other35) {
   return *this;
 }
 void BsonType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "BsonType(";
   out << ")";
 }
@@ -1940,29 +1940,29 @@ std::ostream& operator<<(std::ostream& out, const LogicalType& obj)
 }
 
 
-uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t LogicalType::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->STRING.read(iprot);
           this->__isset.STRING = true;
         } else {
@@ -1970,7 +1970,7 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->MAP.read(iprot);
           this->__isset.MAP = true;
         } else {
@@ -1978,7 +1978,7 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->LIST.read(iprot);
           this->__isset.LIST = true;
         } else {
@@ -1986,7 +1986,7 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 4:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->ENUM.read(iprot);
           this->__isset.ENUM = true;
         } else {
@@ -1994,7 +1994,7 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 5:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->DECIMAL.read(iprot);
           this->__isset.DECIMAL = true;
         } else {
@@ -2002,7 +2002,7 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 6:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->DATE.read(iprot);
           this->__isset.DATE = true;
         } else {
@@ -2010,7 +2010,7 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 7:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->TIME.read(iprot);
           this->__isset.TIME = true;
         } else {
@@ -2018,7 +2018,7 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 8:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->TIMESTAMP.read(iprot);
           this->__isset.TIMESTAMP = true;
         } else {
@@ -2026,7 +2026,7 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 10:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->INTEGER.read(iprot);
           this->__isset.INTEGER = true;
         } else {
@@ -2034,7 +2034,7 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 11:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->UNKNOWN.read(iprot);
           this->__isset.UNKNOWN = true;
         } else {
@@ -2042,7 +2042,7 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 12:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->JSON.read(iprot);
           this->__isset.JSON = true;
         } else {
@@ -2050,7 +2050,7 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 13:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->BSON.read(iprot);
           this->__isset.BSON = true;
         } else {
@@ -2058,7 +2058,7 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 14:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->UUID.read(iprot);
           this->__isset.UUID = true;
         } else {
@@ -2077,73 +2077,73 @@ uint32_t LogicalType::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t LogicalType::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t LogicalType::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("LogicalType");
 
   if (this->__isset.STRING) {
-    xfer += oprot->writeFieldBegin("STRING", ::kuzu_apache::thrift::protocol::T_STRUCT, 1);
+    xfer += oprot->writeFieldBegin("STRING", ::lbug_apache::thrift::protocol::T_STRUCT, 1);
     xfer += this->STRING.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.MAP) {
-    xfer += oprot->writeFieldBegin("MAP", ::kuzu_apache::thrift::protocol::T_STRUCT, 2);
+    xfer += oprot->writeFieldBegin("MAP", ::lbug_apache::thrift::protocol::T_STRUCT, 2);
     xfer += this->MAP.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.LIST) {
-    xfer += oprot->writeFieldBegin("LIST", ::kuzu_apache::thrift::protocol::T_STRUCT, 3);
+    xfer += oprot->writeFieldBegin("LIST", ::lbug_apache::thrift::protocol::T_STRUCT, 3);
     xfer += this->LIST.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.ENUM) {
-    xfer += oprot->writeFieldBegin("ENUM", ::kuzu_apache::thrift::protocol::T_STRUCT, 4);
+    xfer += oprot->writeFieldBegin("ENUM", ::lbug_apache::thrift::protocol::T_STRUCT, 4);
     xfer += this->ENUM.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.DECIMAL) {
-    xfer += oprot->writeFieldBegin("DECIMAL", ::kuzu_apache::thrift::protocol::T_STRUCT, 5);
+    xfer += oprot->writeFieldBegin("DECIMAL", ::lbug_apache::thrift::protocol::T_STRUCT, 5);
     xfer += this->DECIMAL.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.DATE) {
-    xfer += oprot->writeFieldBegin("DATE", ::kuzu_apache::thrift::protocol::T_STRUCT, 6);
+    xfer += oprot->writeFieldBegin("DATE", ::lbug_apache::thrift::protocol::T_STRUCT, 6);
     xfer += this->DATE.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.TIME) {
-    xfer += oprot->writeFieldBegin("TIME", ::kuzu_apache::thrift::protocol::T_STRUCT, 7);
+    xfer += oprot->writeFieldBegin("TIME", ::lbug_apache::thrift::protocol::T_STRUCT, 7);
     xfer += this->TIME.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.TIMESTAMP) {
-    xfer += oprot->writeFieldBegin("TIMESTAMP", ::kuzu_apache::thrift::protocol::T_STRUCT, 8);
+    xfer += oprot->writeFieldBegin("TIMESTAMP", ::lbug_apache::thrift::protocol::T_STRUCT, 8);
     xfer += this->TIMESTAMP.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.INTEGER) {
-    xfer += oprot->writeFieldBegin("INTEGER", ::kuzu_apache::thrift::protocol::T_STRUCT, 10);
+    xfer += oprot->writeFieldBegin("INTEGER", ::lbug_apache::thrift::protocol::T_STRUCT, 10);
     xfer += this->INTEGER.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.UNKNOWN) {
-    xfer += oprot->writeFieldBegin("UNKNOWN", ::kuzu_apache::thrift::protocol::T_STRUCT, 11);
+    xfer += oprot->writeFieldBegin("UNKNOWN", ::lbug_apache::thrift::protocol::T_STRUCT, 11);
     xfer += this->UNKNOWN.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.JSON) {
-    xfer += oprot->writeFieldBegin("JSON", ::kuzu_apache::thrift::protocol::T_STRUCT, 12);
+    xfer += oprot->writeFieldBegin("JSON", ::lbug_apache::thrift::protocol::T_STRUCT, 12);
     xfer += this->JSON.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.BSON) {
-    xfer += oprot->writeFieldBegin("BSON", ::kuzu_apache::thrift::protocol::T_STRUCT, 13);
+    xfer += oprot->writeFieldBegin("BSON", ::lbug_apache::thrift::protocol::T_STRUCT, 13);
     xfer += this->BSON.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.UUID) {
-    xfer += oprot->writeFieldBegin("UUID", ::kuzu_apache::thrift::protocol::T_STRUCT, 14);
+    xfer += oprot->writeFieldBegin("UUID", ::lbug_apache::thrift::protocol::T_STRUCT, 14);
     xfer += this->UUID.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
@@ -2204,7 +2204,7 @@ LogicalType& LogicalType::operator=(const LogicalType& other37) {
   return *this;
 }
 void LogicalType::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "LogicalType(";
   out << "STRING="; (__isset.STRING ? (out << to_string(STRING)) : (out << "<null>"));
   out << ", " << "MAP="; (__isset.MAP ? (out << to_string(MAP)) : (out << "<null>"));
@@ -2282,30 +2282,30 @@ std::ostream& operator<<(std::ostream& out, const SchemaElement& obj)
 }
 
 
-uint32_t SchemaElement::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t SchemaElement::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_name = false;
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast38;
           xfer += iprot->readI32(ecast38);
           this->type = (Type::type)ecast38;
@@ -2315,7 +2315,7 @@ uint32_t SchemaElement::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->type_length);
           this->__isset.type_length = true;
         } else {
@@ -2323,7 +2323,7 @@ uint32_t SchemaElement::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast39;
           xfer += iprot->readI32(ecast39);
           this->repetition_type = (FieldRepetitionType::type)ecast39;
@@ -2333,7 +2333,7 @@ uint32_t SchemaElement::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
         }
         break;
       case 4:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readString(this->name);
           isset_name = true;
         } else {
@@ -2341,7 +2341,7 @@ uint32_t SchemaElement::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
         }
         break;
       case 5:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->num_children);
           this->__isset.num_children = true;
         } else {
@@ -2349,7 +2349,7 @@ uint32_t SchemaElement::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
         }
         break;
       case 6:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast40;
           xfer += iprot->readI32(ecast40);
           this->converted_type = (ConvertedType::type)ecast40;
@@ -2359,7 +2359,7 @@ uint32_t SchemaElement::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
         }
         break;
       case 7:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->scale);
           this->__isset.scale = true;
         } else {
@@ -2367,7 +2367,7 @@ uint32_t SchemaElement::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
         }
         break;
       case 8:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->precision);
           this->__isset.precision = true;
         } else {
@@ -2375,7 +2375,7 @@ uint32_t SchemaElement::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
         }
         break;
       case 9:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->field_id);
           this->__isset.field_id = true;
         } else {
@@ -2383,7 +2383,7 @@ uint32_t SchemaElement::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
         }
         break;
       case 10:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->logicalType.read(iprot);
           this->__isset.logicalType = true;
         } else {
@@ -2404,57 +2404,57 @@ uint32_t SchemaElement::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
   return xfer;
 }
 
-uint32_t SchemaElement::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t SchemaElement::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("SchemaElement");
 
   if (this->__isset.type) {
-    xfer += oprot->writeFieldBegin("type", ::kuzu_apache::thrift::protocol::T_I32, 1);
+    xfer += oprot->writeFieldBegin("type", ::lbug_apache::thrift::protocol::T_I32, 1);
     xfer += oprot->writeI32((int32_t)this->type);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.type_length) {
-    xfer += oprot->writeFieldBegin("type_length", ::kuzu_apache::thrift::protocol::T_I32, 2);
+    xfer += oprot->writeFieldBegin("type_length", ::lbug_apache::thrift::protocol::T_I32, 2);
     xfer += oprot->writeI32(this->type_length);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.repetition_type) {
-    xfer += oprot->writeFieldBegin("repetition_type", ::kuzu_apache::thrift::protocol::T_I32, 3);
+    xfer += oprot->writeFieldBegin("repetition_type", ::lbug_apache::thrift::protocol::T_I32, 3);
     xfer += oprot->writeI32((int32_t)this->repetition_type);
     xfer += oprot->writeFieldEnd();
   }
-  xfer += oprot->writeFieldBegin("name", ::kuzu_apache::thrift::protocol::T_STRING, 4);
+  xfer += oprot->writeFieldBegin("name", ::lbug_apache::thrift::protocol::T_STRING, 4);
   xfer += oprot->writeString(this->name);
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.num_children) {
-    xfer += oprot->writeFieldBegin("num_children", ::kuzu_apache::thrift::protocol::T_I32, 5);
+    xfer += oprot->writeFieldBegin("num_children", ::lbug_apache::thrift::protocol::T_I32, 5);
     xfer += oprot->writeI32(this->num_children);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.converted_type) {
-    xfer += oprot->writeFieldBegin("converted_type", ::kuzu_apache::thrift::protocol::T_I32, 6);
+    xfer += oprot->writeFieldBegin("converted_type", ::lbug_apache::thrift::protocol::T_I32, 6);
     xfer += oprot->writeI32((int32_t)this->converted_type);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.scale) {
-    xfer += oprot->writeFieldBegin("scale", ::kuzu_apache::thrift::protocol::T_I32, 7);
+    xfer += oprot->writeFieldBegin("scale", ::lbug_apache::thrift::protocol::T_I32, 7);
     xfer += oprot->writeI32(this->scale);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.precision) {
-    xfer += oprot->writeFieldBegin("precision", ::kuzu_apache::thrift::protocol::T_I32, 8);
+    xfer += oprot->writeFieldBegin("precision", ::lbug_apache::thrift::protocol::T_I32, 8);
     xfer += oprot->writeI32(this->precision);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.field_id) {
-    xfer += oprot->writeFieldBegin("field_id", ::kuzu_apache::thrift::protocol::T_I32, 9);
+    xfer += oprot->writeFieldBegin("field_id", ::lbug_apache::thrift::protocol::T_I32, 9);
     xfer += oprot->writeI32(this->field_id);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.logicalType) {
-    xfer += oprot->writeFieldBegin("logicalType", ::kuzu_apache::thrift::protocol::T_STRUCT, 10);
+    xfer += oprot->writeFieldBegin("logicalType", ::lbug_apache::thrift::protocol::T_STRUCT, 10);
     xfer += this->logicalType.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
@@ -2506,7 +2506,7 @@ SchemaElement& SchemaElement::operator=(const SchemaElement& other42) {
   return *this;
 }
 void SchemaElement::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "SchemaElement(";
   out << "type="; (__isset.type ? (out << to_string(type)) : (out << "<null>"));
   out << ", " << "type_length="; (__isset.type_length ? (out << to_string(type_length)) : (out << "<null>"));
@@ -2553,17 +2553,17 @@ std::ostream& operator<<(std::ostream& out, const DataPageHeader& obj)
 }
 
 
-uint32_t DataPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t DataPageHeader::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_num_values = false;
   bool isset_encoding = false;
@@ -2573,13 +2573,13 @@ uint32_t DataPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->num_values);
           isset_num_values = true;
         } else {
@@ -2587,7 +2587,7 @@ uint32_t DataPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast43;
           xfer += iprot->readI32(ecast43);
           this->encoding = (Encoding::type)ecast43;
@@ -2597,7 +2597,7 @@ uint32_t DataPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast44;
           xfer += iprot->readI32(ecast44);
           this->definition_level_encoding = (Encoding::type)ecast44;
@@ -2607,7 +2607,7 @@ uint32_t DataPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 4:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast45;
           xfer += iprot->readI32(ecast45);
           this->repetition_level_encoding = (Encoding::type)ecast45;
@@ -2617,7 +2617,7 @@ uint32_t DataPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 5:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->statistics.read(iprot);
           this->__isset.statistics = true;
         } else {
@@ -2644,29 +2644,29 @@ uint32_t DataPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
   return xfer;
 }
 
-uint32_t DataPageHeader::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t DataPageHeader::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("DataPageHeader");
 
-  xfer += oprot->writeFieldBegin("num_values", ::kuzu_apache::thrift::protocol::T_I32, 1);
+  xfer += oprot->writeFieldBegin("num_values", ::lbug_apache::thrift::protocol::T_I32, 1);
   xfer += oprot->writeI32(this->num_values);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("encoding", ::kuzu_apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeFieldBegin("encoding", ::lbug_apache::thrift::protocol::T_I32, 2);
   xfer += oprot->writeI32((int32_t)this->encoding);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("definition_level_encoding", ::kuzu_apache::thrift::protocol::T_I32, 3);
+  xfer += oprot->writeFieldBegin("definition_level_encoding", ::lbug_apache::thrift::protocol::T_I32, 3);
   xfer += oprot->writeI32((int32_t)this->definition_level_encoding);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("repetition_level_encoding", ::kuzu_apache::thrift::protocol::T_I32, 4);
+  xfer += oprot->writeFieldBegin("repetition_level_encoding", ::lbug_apache::thrift::protocol::T_I32, 4);
   xfer += oprot->writeI32((int32_t)this->repetition_level_encoding);
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.statistics) {
-    xfer += oprot->writeFieldBegin("statistics", ::kuzu_apache::thrift::protocol::T_STRUCT, 5);
+    xfer += oprot->writeFieldBegin("statistics", ::lbug_apache::thrift::protocol::T_STRUCT, 5);
     xfer += this->statistics.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
@@ -2703,7 +2703,7 @@ DataPageHeader& DataPageHeader::operator=(const DataPageHeader& other47) {
   return *this;
 }
 void DataPageHeader::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "DataPageHeader(";
   out << "num_values=" << to_string(num_values);
   out << ", " << "encoding=" << to_string(encoding);
@@ -2724,23 +2724,23 @@ std::ostream& operator<<(std::ostream& out, const IndexPageHeader& obj)
 }
 
 
-uint32_t IndexPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t IndexPageHeader::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -2752,9 +2752,9 @@ uint32_t IndexPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot
   return xfer;
 }
 
-uint32_t IndexPageHeader::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t IndexPageHeader::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("IndexPageHeader");
 
   xfer += oprot->writeFieldStop();
@@ -2776,7 +2776,7 @@ IndexPageHeader& IndexPageHeader::operator=(const IndexPageHeader& other49) {
   return *this;
 }
 void IndexPageHeader::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "IndexPageHeader(";
   out << ")";
 }
@@ -2805,17 +2805,17 @@ std::ostream& operator<<(std::ostream& out, const DictionaryPageHeader& obj)
 }
 
 
-uint32_t DictionaryPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t DictionaryPageHeader::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_num_values = false;
   bool isset_encoding = false;
@@ -2823,13 +2823,13 @@ uint32_t DictionaryPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->num_values);
           isset_num_values = true;
         } else {
@@ -2837,7 +2837,7 @@ uint32_t DictionaryPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* 
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast50;
           xfer += iprot->readI32(ecast50);
           this->encoding = (Encoding::type)ecast50;
@@ -2847,7 +2847,7 @@ uint32_t DictionaryPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* 
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_BOOL) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_BOOL) {
           xfer += iprot->readBool(this->is_sorted);
           this->__isset.is_sorted = true;
         } else {
@@ -2870,21 +2870,21 @@ uint32_t DictionaryPageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* 
   return xfer;
 }
 
-uint32_t DictionaryPageHeader::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t DictionaryPageHeader::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("DictionaryPageHeader");
 
-  xfer += oprot->writeFieldBegin("num_values", ::kuzu_apache::thrift::protocol::T_I32, 1);
+  xfer += oprot->writeFieldBegin("num_values", ::lbug_apache::thrift::protocol::T_I32, 1);
   xfer += oprot->writeI32(this->num_values);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("encoding", ::kuzu_apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeFieldBegin("encoding", ::lbug_apache::thrift::protocol::T_I32, 2);
   xfer += oprot->writeI32((int32_t)this->encoding);
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.is_sorted) {
-    xfer += oprot->writeFieldBegin("is_sorted", ::kuzu_apache::thrift::protocol::T_BOOL, 3);
+    xfer += oprot->writeFieldBegin("is_sorted", ::lbug_apache::thrift::protocol::T_BOOL, 3);
     xfer += oprot->writeBool(this->is_sorted);
     xfer += oprot->writeFieldEnd();
   }
@@ -2915,7 +2915,7 @@ DictionaryPageHeader& DictionaryPageHeader::operator=(const DictionaryPageHeader
   return *this;
 }
 void DictionaryPageHeader::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "DictionaryPageHeader(";
   out << "num_values=" << to_string(num_values);
   out << ", " << "encoding=" << to_string(encoding);
@@ -2968,17 +2968,17 @@ std::ostream& operator<<(std::ostream& out, const DataPageHeaderV2& obj)
 }
 
 
-uint32_t DataPageHeaderV2::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t DataPageHeaderV2::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_num_values = false;
   bool isset_num_nulls = false;
@@ -2990,13 +2990,13 @@ uint32_t DataPageHeaderV2::read(::kuzu_apache::thrift::protocol::TProtocol* ipro
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->num_values);
           isset_num_values = true;
         } else {
@@ -3004,7 +3004,7 @@ uint32_t DataPageHeaderV2::read(::kuzu_apache::thrift::protocol::TProtocol* ipro
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->num_nulls);
           isset_num_nulls = true;
         } else {
@@ -3012,7 +3012,7 @@ uint32_t DataPageHeaderV2::read(::kuzu_apache::thrift::protocol::TProtocol* ipro
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->num_rows);
           isset_num_rows = true;
         } else {
@@ -3020,7 +3020,7 @@ uint32_t DataPageHeaderV2::read(::kuzu_apache::thrift::protocol::TProtocol* ipro
         }
         break;
       case 4:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast53;
           xfer += iprot->readI32(ecast53);
           this->encoding = (Encoding::type)ecast53;
@@ -3030,7 +3030,7 @@ uint32_t DataPageHeaderV2::read(::kuzu_apache::thrift::protocol::TProtocol* ipro
         }
         break;
       case 5:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->definition_levels_byte_length);
           isset_definition_levels_byte_length = true;
         } else {
@@ -3038,7 +3038,7 @@ uint32_t DataPageHeaderV2::read(::kuzu_apache::thrift::protocol::TProtocol* ipro
         }
         break;
       case 6:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->repetition_levels_byte_length);
           isset_repetition_levels_byte_length = true;
         } else {
@@ -3046,7 +3046,7 @@ uint32_t DataPageHeaderV2::read(::kuzu_apache::thrift::protocol::TProtocol* ipro
         }
         break;
       case 7:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_BOOL) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_BOOL) {
           xfer += iprot->readBool(this->is_compressed);
           this->__isset.is_compressed = true;
         } else {
@@ -3054,7 +3054,7 @@ uint32_t DataPageHeaderV2::read(::kuzu_apache::thrift::protocol::TProtocol* ipro
         }
         break;
       case 8:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->statistics.read(iprot);
           this->__isset.statistics = true;
         } else {
@@ -3085,42 +3085,42 @@ uint32_t DataPageHeaderV2::read(::kuzu_apache::thrift::protocol::TProtocol* ipro
   return xfer;
 }
 
-uint32_t DataPageHeaderV2::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t DataPageHeaderV2::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("DataPageHeaderV2");
 
-  xfer += oprot->writeFieldBegin("num_values", ::kuzu_apache::thrift::protocol::T_I32, 1);
+  xfer += oprot->writeFieldBegin("num_values", ::lbug_apache::thrift::protocol::T_I32, 1);
   xfer += oprot->writeI32(this->num_values);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("num_nulls", ::kuzu_apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeFieldBegin("num_nulls", ::lbug_apache::thrift::protocol::T_I32, 2);
   xfer += oprot->writeI32(this->num_nulls);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("num_rows", ::kuzu_apache::thrift::protocol::T_I32, 3);
+  xfer += oprot->writeFieldBegin("num_rows", ::lbug_apache::thrift::protocol::T_I32, 3);
   xfer += oprot->writeI32(this->num_rows);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("encoding", ::kuzu_apache::thrift::protocol::T_I32, 4);
+  xfer += oprot->writeFieldBegin("encoding", ::lbug_apache::thrift::protocol::T_I32, 4);
   xfer += oprot->writeI32((int32_t)this->encoding);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("definition_levels_byte_length", ::kuzu_apache::thrift::protocol::T_I32, 5);
+  xfer += oprot->writeFieldBegin("definition_levels_byte_length", ::lbug_apache::thrift::protocol::T_I32, 5);
   xfer += oprot->writeI32(this->definition_levels_byte_length);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("repetition_levels_byte_length", ::kuzu_apache::thrift::protocol::T_I32, 6);
+  xfer += oprot->writeFieldBegin("repetition_levels_byte_length", ::lbug_apache::thrift::protocol::T_I32, 6);
   xfer += oprot->writeI32(this->repetition_levels_byte_length);
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.is_compressed) {
-    xfer += oprot->writeFieldBegin("is_compressed", ::kuzu_apache::thrift::protocol::T_BOOL, 7);
+    xfer += oprot->writeFieldBegin("is_compressed", ::lbug_apache::thrift::protocol::T_BOOL, 7);
     xfer += oprot->writeBool(this->is_compressed);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.statistics) {
-    xfer += oprot->writeFieldBegin("statistics", ::kuzu_apache::thrift::protocol::T_STRUCT, 8);
+    xfer += oprot->writeFieldBegin("statistics", ::lbug_apache::thrift::protocol::T_STRUCT, 8);
     xfer += this->statistics.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
@@ -3166,7 +3166,7 @@ DataPageHeaderV2& DataPageHeaderV2::operator=(const DataPageHeaderV2& other55) {
   return *this;
 }
 void DataPageHeaderV2::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "DataPageHeaderV2(";
   out << "num_values=" << to_string(num_values);
   out << ", " << "num_nulls=" << to_string(num_nulls);
@@ -3227,17 +3227,17 @@ std::ostream& operator<<(std::ostream& out, const PageHeader& obj)
 }
 
 
-uint32_t PageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t PageHeader::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_type = false;
   bool isset_uncompressed_page_size = false;
@@ -3246,13 +3246,13 @@ uint32_t PageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast56;
           xfer += iprot->readI32(ecast56);
           this->type = (PageType::type)ecast56;
@@ -3262,7 +3262,7 @@ uint32_t PageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->uncompressed_page_size);
           isset_uncompressed_page_size = true;
         } else {
@@ -3270,7 +3270,7 @@ uint32_t PageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->compressed_page_size);
           isset_compressed_page_size = true;
         } else {
@@ -3278,7 +3278,7 @@ uint32_t PageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 4:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->crc);
           this->__isset.crc = true;
         } else {
@@ -3286,7 +3286,7 @@ uint32_t PageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 5:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->data_page_header.read(iprot);
           this->__isset.data_page_header = true;
         } else {
@@ -3294,7 +3294,7 @@ uint32_t PageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 6:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->index_page_header.read(iprot);
           this->__isset.index_page_header = true;
         } else {
@@ -3302,7 +3302,7 @@ uint32_t PageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 7:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->dictionary_page_header.read(iprot);
           this->__isset.dictionary_page_header = true;
         } else {
@@ -3310,7 +3310,7 @@ uint32_t PageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 8:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->data_page_header_v2.read(iprot);
           this->__isset.data_page_header_v2 = true;
         } else {
@@ -3335,45 +3335,45 @@ uint32_t PageHeader::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t PageHeader::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t PageHeader::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("PageHeader");
 
-  xfer += oprot->writeFieldBegin("type", ::kuzu_apache::thrift::protocol::T_I32, 1);
+  xfer += oprot->writeFieldBegin("type", ::lbug_apache::thrift::protocol::T_I32, 1);
   xfer += oprot->writeI32((int32_t)this->type);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("uncompressed_page_size", ::kuzu_apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeFieldBegin("uncompressed_page_size", ::lbug_apache::thrift::protocol::T_I32, 2);
   xfer += oprot->writeI32(this->uncompressed_page_size);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("compressed_page_size", ::kuzu_apache::thrift::protocol::T_I32, 3);
+  xfer += oprot->writeFieldBegin("compressed_page_size", ::lbug_apache::thrift::protocol::T_I32, 3);
   xfer += oprot->writeI32(this->compressed_page_size);
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.crc) {
-    xfer += oprot->writeFieldBegin("crc", ::kuzu_apache::thrift::protocol::T_I32, 4);
+    xfer += oprot->writeFieldBegin("crc", ::lbug_apache::thrift::protocol::T_I32, 4);
     xfer += oprot->writeI32(this->crc);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.data_page_header) {
-    xfer += oprot->writeFieldBegin("data_page_header", ::kuzu_apache::thrift::protocol::T_STRUCT, 5);
+    xfer += oprot->writeFieldBegin("data_page_header", ::lbug_apache::thrift::protocol::T_STRUCT, 5);
     xfer += this->data_page_header.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.index_page_header) {
-    xfer += oprot->writeFieldBegin("index_page_header", ::kuzu_apache::thrift::protocol::T_STRUCT, 6);
+    xfer += oprot->writeFieldBegin("index_page_header", ::lbug_apache::thrift::protocol::T_STRUCT, 6);
     xfer += this->index_page_header.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.dictionary_page_header) {
-    xfer += oprot->writeFieldBegin("dictionary_page_header", ::kuzu_apache::thrift::protocol::T_STRUCT, 7);
+    xfer += oprot->writeFieldBegin("dictionary_page_header", ::lbug_apache::thrift::protocol::T_STRUCT, 7);
     xfer += this->dictionary_page_header.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.data_page_header_v2) {
-    xfer += oprot->writeFieldBegin("data_page_header_v2", ::kuzu_apache::thrift::protocol::T_STRUCT, 8);
+    xfer += oprot->writeFieldBegin("data_page_header_v2", ::lbug_apache::thrift::protocol::T_STRUCT, 8);
     xfer += this->data_page_header_v2.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
@@ -3419,7 +3419,7 @@ PageHeader& PageHeader::operator=(const PageHeader& other58) {
   return *this;
 }
 void PageHeader::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "PageHeader(";
   out << "type=" << to_string(type);
   out << ", " << "uncompressed_page_size=" << to_string(uncompressed_page_size);
@@ -3452,30 +3452,30 @@ std::ostream& operator<<(std::ostream& out, const KeyValue& obj)
 }
 
 
-uint32_t KeyValue::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t KeyValue::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_key = false;
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readString(this->key);
           isset_key = true;
         } else {
@@ -3483,7 +3483,7 @@ uint32_t KeyValue::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readString(this->value);
           this->__isset.value = true;
         } else {
@@ -3504,17 +3504,17 @@ uint32_t KeyValue::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t KeyValue::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t KeyValue::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("KeyValue");
 
-  xfer += oprot->writeFieldBegin("key", ::kuzu_apache::thrift::protocol::T_STRING, 1);
+  xfer += oprot->writeFieldBegin("key", ::lbug_apache::thrift::protocol::T_STRING, 1);
   xfer += oprot->writeString(this->key);
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.value) {
-    xfer += oprot->writeFieldBegin("value", ::kuzu_apache::thrift::protocol::T_STRING, 2);
+    xfer += oprot->writeFieldBegin("value", ::lbug_apache::thrift::protocol::T_STRING, 2);
     xfer += oprot->writeString(this->value);
     xfer += oprot->writeFieldEnd();
   }
@@ -3542,7 +3542,7 @@ KeyValue& KeyValue::operator=(const KeyValue& other60) {
   return *this;
 }
 void KeyValue::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "KeyValue(";
   out << "key=" << to_string(key);
   out << ", " << "value="; (__isset.value ? (out << to_string(value)) : (out << "<null>"));
@@ -3572,17 +3572,17 @@ std::ostream& operator<<(std::ostream& out, const SortingColumn& obj)
 }
 
 
-uint32_t SortingColumn::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t SortingColumn::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_column_idx = false;
   bool isset_descending = false;
@@ -3591,13 +3591,13 @@ uint32_t SortingColumn::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->column_idx);
           isset_column_idx = true;
         } else {
@@ -3605,7 +3605,7 @@ uint32_t SortingColumn::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_BOOL) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_BOOL) {
           xfer += iprot->readBool(this->descending);
           isset_descending = true;
         } else {
@@ -3613,7 +3613,7 @@ uint32_t SortingColumn::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_BOOL) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_BOOL) {
           xfer += iprot->readBool(this->nulls_first);
           isset_nulls_first = true;
         } else {
@@ -3638,20 +3638,20 @@ uint32_t SortingColumn::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) 
   return xfer;
 }
 
-uint32_t SortingColumn::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t SortingColumn::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("SortingColumn");
 
-  xfer += oprot->writeFieldBegin("column_idx", ::kuzu_apache::thrift::protocol::T_I32, 1);
+  xfer += oprot->writeFieldBegin("column_idx", ::lbug_apache::thrift::protocol::T_I32, 1);
   xfer += oprot->writeI32(this->column_idx);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("descending", ::kuzu_apache::thrift::protocol::T_BOOL, 2);
+  xfer += oprot->writeFieldBegin("descending", ::lbug_apache::thrift::protocol::T_BOOL, 2);
   xfer += oprot->writeBool(this->descending);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("nulls_first", ::kuzu_apache::thrift::protocol::T_BOOL, 3);
+  xfer += oprot->writeFieldBegin("nulls_first", ::lbug_apache::thrift::protocol::T_BOOL, 3);
   xfer += oprot->writeBool(this->nulls_first);
   xfer += oprot->writeFieldEnd();
 
@@ -3679,7 +3679,7 @@ SortingColumn& SortingColumn::operator=(const SortingColumn& other62) {
   return *this;
 }
 void SortingColumn::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "SortingColumn(";
   out << "column_idx=" << to_string(column_idx);
   out << ", " << "descending=" << to_string(descending);
@@ -3710,17 +3710,17 @@ std::ostream& operator<<(std::ostream& out, const PageEncodingStats& obj)
 }
 
 
-uint32_t PageEncodingStats::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t PageEncodingStats::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_page_type = false;
   bool isset_encoding = false;
@@ -3729,13 +3729,13 @@ uint32_t PageEncodingStats::read(::kuzu_apache::thrift::protocol::TProtocol* ipr
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast63;
           xfer += iprot->readI32(ecast63);
           this->page_type = (PageType::type)ecast63;
@@ -3745,7 +3745,7 @@ uint32_t PageEncodingStats::read(::kuzu_apache::thrift::protocol::TProtocol* ipr
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast64;
           xfer += iprot->readI32(ecast64);
           this->encoding = (Encoding::type)ecast64;
@@ -3755,7 +3755,7 @@ uint32_t PageEncodingStats::read(::kuzu_apache::thrift::protocol::TProtocol* ipr
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->count);
           isset_count = true;
         } else {
@@ -3780,20 +3780,20 @@ uint32_t PageEncodingStats::read(::kuzu_apache::thrift::protocol::TProtocol* ipr
   return xfer;
 }
 
-uint32_t PageEncodingStats::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t PageEncodingStats::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("PageEncodingStats");
 
-  xfer += oprot->writeFieldBegin("page_type", ::kuzu_apache::thrift::protocol::T_I32, 1);
+  xfer += oprot->writeFieldBegin("page_type", ::lbug_apache::thrift::protocol::T_I32, 1);
   xfer += oprot->writeI32((int32_t)this->page_type);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("encoding", ::kuzu_apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeFieldBegin("encoding", ::lbug_apache::thrift::protocol::T_I32, 2);
   xfer += oprot->writeI32((int32_t)this->encoding);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("count", ::kuzu_apache::thrift::protocol::T_I32, 3);
+  xfer += oprot->writeFieldBegin("count", ::lbug_apache::thrift::protocol::T_I32, 3);
   xfer += oprot->writeI32(this->count);
   xfer += oprot->writeFieldEnd();
 
@@ -3821,7 +3821,7 @@ PageEncodingStats& PageEncodingStats::operator=(const PageEncodingStats& other66
   return *this;
 }
 void PageEncodingStats::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "PageEncodingStats(";
   out << "page_type=" << to_string(page_type);
   out << ", " << "encoding=" << to_string(encoding);
@@ -3897,17 +3897,17 @@ std::ostream& operator<<(std::ostream& out, const ColumnMetaData& obj)
 }
 
 
-uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t ColumnMetaData::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_type = false;
   bool isset_encodings = false;
@@ -3921,13 +3921,13 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast67;
           xfer += iprot->readI32(ecast67);
           this->type = (Type::type)ecast67;
@@ -3937,11 +3937,11 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->encodings.clear();
             uint32_t _size68;
-            ::kuzu_apache::thrift::protocol::TType _etype71;
+            ::lbug_apache::thrift::protocol::TType _etype71;
             xfer += iprot->readListBegin(_etype71, _size68);
             this->encodings.resize(_size68);
             uint32_t _i72;
@@ -3959,11 +3959,11 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->path_in_schema.clear();
             uint32_t _size74;
-            ::kuzu_apache::thrift::protocol::TType _etype77;
+            ::lbug_apache::thrift::protocol::TType _etype77;
             xfer += iprot->readListBegin(_etype77, _size74);
             this->path_in_schema.resize(_size74);
             uint32_t _i78;
@@ -3979,7 +3979,7 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 4:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast79;
           xfer += iprot->readI32(ecast79);
           this->codec = (CompressionCodec::type)ecast79;
@@ -3989,7 +3989,7 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 5:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->num_values);
           isset_num_values = true;
         } else {
@@ -3997,7 +3997,7 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 6:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->total_uncompressed_size);
           isset_total_uncompressed_size = true;
         } else {
@@ -4005,7 +4005,7 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 7:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->total_compressed_size);
           isset_total_compressed_size = true;
         } else {
@@ -4013,11 +4013,11 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 8:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->key_value_metadata.clear();
             uint32_t _size80;
-            ::kuzu_apache::thrift::protocol::TType _etype83;
+            ::lbug_apache::thrift::protocol::TType _etype83;
             xfer += iprot->readListBegin(_etype83, _size80);
             this->key_value_metadata.resize(_size80);
             uint32_t _i84;
@@ -4033,7 +4033,7 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 9:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->data_page_offset);
           isset_data_page_offset = true;
         } else {
@@ -4041,7 +4041,7 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 10:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->index_page_offset);
           this->__isset.index_page_offset = true;
         } else {
@@ -4049,7 +4049,7 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 11:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->dictionary_page_offset);
           this->__isset.dictionary_page_offset = true;
         } else {
@@ -4057,7 +4057,7 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 12:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->statistics.read(iprot);
           this->__isset.statistics = true;
         } else {
@@ -4065,11 +4065,11 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
         }
         break;
       case 13:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->encoding_stats.clear();
             uint32_t _size85;
-            ::kuzu_apache::thrift::protocol::TType _etype88;
+            ::lbug_apache::thrift::protocol::TType _etype88;
             xfer += iprot->readListBegin(_etype88, _size85);
             this->encoding_stats.resize(_size85);
             uint32_t _i89;
@@ -4112,18 +4112,18 @@ uint32_t ColumnMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot)
   return xfer;
 }
 
-uint32_t ColumnMetaData::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t ColumnMetaData::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("ColumnMetaData");
 
-  xfer += oprot->writeFieldBegin("type", ::kuzu_apache::thrift::protocol::T_I32, 1);
+  xfer += oprot->writeFieldBegin("type", ::lbug_apache::thrift::protocol::T_I32, 1);
   xfer += oprot->writeI32((int32_t)this->type);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("encodings", ::kuzu_apache::thrift::protocol::T_LIST, 2);
+  xfer += oprot->writeFieldBegin("encodings", ::lbug_apache::thrift::protocol::T_LIST, 2);
   {
-    xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_I32, static_cast<uint32_t>(this->encodings.size()));
+    xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_I32, static_cast<uint32_t>(this->encodings.size()));
     std::vector<Encoding::type> ::const_iterator _iter90;
     for (_iter90 = this->encodings.begin(); _iter90 != this->encodings.end(); ++_iter90)
     {
@@ -4133,9 +4133,9 @@ uint32_t ColumnMetaData::write(::kuzu_apache::thrift::protocol::TProtocol* oprot
   }
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("path_in_schema", ::kuzu_apache::thrift::protocol::T_LIST, 3);
+  xfer += oprot->writeFieldBegin("path_in_schema", ::lbug_apache::thrift::protocol::T_LIST, 3);
   {
-    xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->path_in_schema.size()));
+    xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->path_in_schema.size()));
     std::vector<std::string> ::const_iterator _iter91;
     for (_iter91 = this->path_in_schema.begin(); _iter91 != this->path_in_schema.end(); ++_iter91)
     {
@@ -4145,26 +4145,26 @@ uint32_t ColumnMetaData::write(::kuzu_apache::thrift::protocol::TProtocol* oprot
   }
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("codec", ::kuzu_apache::thrift::protocol::T_I32, 4);
+  xfer += oprot->writeFieldBegin("codec", ::lbug_apache::thrift::protocol::T_I32, 4);
   xfer += oprot->writeI32((int32_t)this->codec);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("num_values", ::kuzu_apache::thrift::protocol::T_I64, 5);
+  xfer += oprot->writeFieldBegin("num_values", ::lbug_apache::thrift::protocol::T_I64, 5);
   xfer += oprot->writeI64(this->num_values);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("total_uncompressed_size", ::kuzu_apache::thrift::protocol::T_I64, 6);
+  xfer += oprot->writeFieldBegin("total_uncompressed_size", ::lbug_apache::thrift::protocol::T_I64, 6);
   xfer += oprot->writeI64(this->total_uncompressed_size);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("total_compressed_size", ::kuzu_apache::thrift::protocol::T_I64, 7);
+  xfer += oprot->writeFieldBegin("total_compressed_size", ::lbug_apache::thrift::protocol::T_I64, 7);
   xfer += oprot->writeI64(this->total_compressed_size);
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.key_value_metadata) {
-    xfer += oprot->writeFieldBegin("key_value_metadata", ::kuzu_apache::thrift::protocol::T_LIST, 8);
+    xfer += oprot->writeFieldBegin("key_value_metadata", ::lbug_apache::thrift::protocol::T_LIST, 8);
     {
-      xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->key_value_metadata.size()));
+      xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->key_value_metadata.size()));
       std::vector<KeyValue> ::const_iterator _iter92;
       for (_iter92 = this->key_value_metadata.begin(); _iter92 != this->key_value_metadata.end(); ++_iter92)
       {
@@ -4174,29 +4174,29 @@ uint32_t ColumnMetaData::write(::kuzu_apache::thrift::protocol::TProtocol* oprot
     }
     xfer += oprot->writeFieldEnd();
   }
-  xfer += oprot->writeFieldBegin("data_page_offset", ::kuzu_apache::thrift::protocol::T_I64, 9);
+  xfer += oprot->writeFieldBegin("data_page_offset", ::lbug_apache::thrift::protocol::T_I64, 9);
   xfer += oprot->writeI64(this->data_page_offset);
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.index_page_offset) {
-    xfer += oprot->writeFieldBegin("index_page_offset", ::kuzu_apache::thrift::protocol::T_I64, 10);
+    xfer += oprot->writeFieldBegin("index_page_offset", ::lbug_apache::thrift::protocol::T_I64, 10);
     xfer += oprot->writeI64(this->index_page_offset);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.dictionary_page_offset) {
-    xfer += oprot->writeFieldBegin("dictionary_page_offset", ::kuzu_apache::thrift::protocol::T_I64, 11);
+    xfer += oprot->writeFieldBegin("dictionary_page_offset", ::lbug_apache::thrift::protocol::T_I64, 11);
     xfer += oprot->writeI64(this->dictionary_page_offset);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.statistics) {
-    xfer += oprot->writeFieldBegin("statistics", ::kuzu_apache::thrift::protocol::T_STRUCT, 12);
+    xfer += oprot->writeFieldBegin("statistics", ::lbug_apache::thrift::protocol::T_STRUCT, 12);
     xfer += this->statistics.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.encoding_stats) {
-    xfer += oprot->writeFieldBegin("encoding_stats", ::kuzu_apache::thrift::protocol::T_LIST, 13);
+    xfer += oprot->writeFieldBegin("encoding_stats", ::lbug_apache::thrift::protocol::T_LIST, 13);
     {
-      xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->encoding_stats.size()));
+      xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->encoding_stats.size()));
       std::vector<PageEncodingStats> ::const_iterator _iter93;
       for (_iter93 = this->encoding_stats.begin(); _iter93 != this->encoding_stats.end(); ++_iter93)
       {
@@ -4263,7 +4263,7 @@ ColumnMetaData& ColumnMetaData::operator=(const ColumnMetaData& other95) {
   return *this;
 }
 void ColumnMetaData::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "ColumnMetaData(";
   out << "type=" << to_string(type);
   out << ", " << "encodings=" << to_string(encodings);
@@ -4292,23 +4292,23 @@ std::ostream& operator<<(std::ostream& out, const EncryptionWithFooterKey& obj)
 }
 
 
-uint32_t EncryptionWithFooterKey::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t EncryptionWithFooterKey::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -4320,9 +4320,9 @@ uint32_t EncryptionWithFooterKey::read(::kuzu_apache::thrift::protocol::TProtoco
   return xfer;
 }
 
-uint32_t EncryptionWithFooterKey::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t EncryptionWithFooterKey::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("EncryptionWithFooterKey");
 
   xfer += oprot->writeFieldStop();
@@ -4344,7 +4344,7 @@ EncryptionWithFooterKey& EncryptionWithFooterKey::operator=(const EncryptionWith
   return *this;
 }
 void EncryptionWithFooterKey::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "EncryptionWithFooterKey(";
   out << ")";
 }
@@ -4369,34 +4369,34 @@ std::ostream& operator<<(std::ostream& out, const EncryptionWithColumnKey& obj)
 }
 
 
-uint32_t EncryptionWithColumnKey::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t EncryptionWithColumnKey::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_path_in_schema = false;
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->path_in_schema.clear();
             uint32_t _size98;
-            ::kuzu_apache::thrift::protocol::TType _etype101;
+            ::lbug_apache::thrift::protocol::TType _etype101;
             xfer += iprot->readListBegin(_etype101, _size98);
             this->path_in_schema.resize(_size98);
             uint32_t _i102;
@@ -4412,7 +4412,7 @@ uint32_t EncryptionWithColumnKey::read(::kuzu_apache::thrift::protocol::TProtoco
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readBinary(this->key_metadata);
           this->__isset.key_metadata = true;
         } else {
@@ -4433,14 +4433,14 @@ uint32_t EncryptionWithColumnKey::read(::kuzu_apache::thrift::protocol::TProtoco
   return xfer;
 }
 
-uint32_t EncryptionWithColumnKey::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t EncryptionWithColumnKey::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("EncryptionWithColumnKey");
 
-  xfer += oprot->writeFieldBegin("path_in_schema", ::kuzu_apache::thrift::protocol::T_LIST, 1);
+  xfer += oprot->writeFieldBegin("path_in_schema", ::lbug_apache::thrift::protocol::T_LIST, 1);
   {
-    xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->path_in_schema.size()));
+    xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->path_in_schema.size()));
     std::vector<std::string> ::const_iterator _iter103;
     for (_iter103 = this->path_in_schema.begin(); _iter103 != this->path_in_schema.end(); ++_iter103)
     {
@@ -4451,7 +4451,7 @@ uint32_t EncryptionWithColumnKey::write(::kuzu_apache::thrift::protocol::TProtoc
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.key_metadata) {
-    xfer += oprot->writeFieldBegin("key_metadata", ::kuzu_apache::thrift::protocol::T_STRING, 2);
+    xfer += oprot->writeFieldBegin("key_metadata", ::lbug_apache::thrift::protocol::T_STRING, 2);
     xfer += oprot->writeBinary(this->key_metadata);
     xfer += oprot->writeFieldEnd();
   }
@@ -4479,7 +4479,7 @@ EncryptionWithColumnKey& EncryptionWithColumnKey::operator=(const EncryptionWith
   return *this;
 }
 void EncryptionWithColumnKey::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "EncryptionWithColumnKey(";
   out << "path_in_schema=" << to_string(path_in_schema);
   out << ", " << "key_metadata="; (__isset.key_metadata ? (out << to_string(key_metadata)) : (out << "<null>"));
@@ -4507,29 +4507,29 @@ std::ostream& operator<<(std::ostream& out, const ColumnCryptoMetaData& obj)
 }
 
 
-uint32_t ColumnCryptoMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t ColumnCryptoMetaData::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->ENCRYPTION_WITH_FOOTER_KEY.read(iprot);
           this->__isset.ENCRYPTION_WITH_FOOTER_KEY = true;
         } else {
@@ -4537,7 +4537,7 @@ uint32_t ColumnCryptoMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* 
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->ENCRYPTION_WITH_COLUMN_KEY.read(iprot);
           this->__isset.ENCRYPTION_WITH_COLUMN_KEY = true;
         } else {
@@ -4556,18 +4556,18 @@ uint32_t ColumnCryptoMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* 
   return xfer;
 }
 
-uint32_t ColumnCryptoMetaData::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t ColumnCryptoMetaData::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("ColumnCryptoMetaData");
 
   if (this->__isset.ENCRYPTION_WITH_FOOTER_KEY) {
-    xfer += oprot->writeFieldBegin("ENCRYPTION_WITH_FOOTER_KEY", ::kuzu_apache::thrift::protocol::T_STRUCT, 1);
+    xfer += oprot->writeFieldBegin("ENCRYPTION_WITH_FOOTER_KEY", ::lbug_apache::thrift::protocol::T_STRUCT, 1);
     xfer += this->ENCRYPTION_WITH_FOOTER_KEY.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.ENCRYPTION_WITH_COLUMN_KEY) {
-    xfer += oprot->writeFieldBegin("ENCRYPTION_WITH_COLUMN_KEY", ::kuzu_apache::thrift::protocol::T_STRUCT, 2);
+    xfer += oprot->writeFieldBegin("ENCRYPTION_WITH_COLUMN_KEY", ::lbug_apache::thrift::protocol::T_STRUCT, 2);
     xfer += this->ENCRYPTION_WITH_COLUMN_KEY.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
@@ -4595,7 +4595,7 @@ ColumnCryptoMetaData& ColumnCryptoMetaData::operator=(const ColumnCryptoMetaData
   return *this;
 }
 void ColumnCryptoMetaData::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "ColumnCryptoMetaData(";
   out << "ENCRYPTION_WITH_FOOTER_KEY="; (__isset.ENCRYPTION_WITH_FOOTER_KEY ? (out << to_string(ENCRYPTION_WITH_FOOTER_KEY)) : (out << "<null>"));
   out << ", " << "ENCRYPTION_WITH_COLUMN_KEY="; (__isset.ENCRYPTION_WITH_COLUMN_KEY ? (out << to_string(ENCRYPTION_WITH_COLUMN_KEY)) : (out << "<null>"));
@@ -4657,30 +4657,30 @@ std::ostream& operator<<(std::ostream& out, const ColumnChunk& obj)
 }
 
 
-uint32_t ColumnChunk::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t ColumnChunk::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_file_offset = false;
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readString(this->file_path);
           this->__isset.file_path = true;
         } else {
@@ -4688,7 +4688,7 @@ uint32_t ColumnChunk::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->file_offset);
           isset_file_offset = true;
         } else {
@@ -4696,7 +4696,7 @@ uint32_t ColumnChunk::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->meta_data.read(iprot);
           this->__isset.meta_data = true;
         } else {
@@ -4704,7 +4704,7 @@ uint32_t ColumnChunk::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 4:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->offset_index_offset);
           this->__isset.offset_index_offset = true;
         } else {
@@ -4712,7 +4712,7 @@ uint32_t ColumnChunk::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 5:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->offset_index_length);
           this->__isset.offset_index_length = true;
         } else {
@@ -4720,7 +4720,7 @@ uint32_t ColumnChunk::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 6:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->column_index_offset);
           this->__isset.column_index_offset = true;
         } else {
@@ -4728,7 +4728,7 @@ uint32_t ColumnChunk::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 7:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->column_index_length);
           this->__isset.column_index_length = true;
         } else {
@@ -4736,7 +4736,7 @@ uint32_t ColumnChunk::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 8:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->crypto_metadata.read(iprot);
           this->__isset.crypto_metadata = true;
         } else {
@@ -4744,7 +4744,7 @@ uint32_t ColumnChunk::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 9:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readBinary(this->encrypted_column_metadata);
           this->__isset.encrypted_column_metadata = true;
         } else {
@@ -4765,52 +4765,52 @@ uint32_t ColumnChunk::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t ColumnChunk::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t ColumnChunk::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("ColumnChunk");
 
   if (this->__isset.file_path) {
-    xfer += oprot->writeFieldBegin("file_path", ::kuzu_apache::thrift::protocol::T_STRING, 1);
+    xfer += oprot->writeFieldBegin("file_path", ::lbug_apache::thrift::protocol::T_STRING, 1);
     xfer += oprot->writeString(this->file_path);
     xfer += oprot->writeFieldEnd();
   }
-  xfer += oprot->writeFieldBegin("file_offset", ::kuzu_apache::thrift::protocol::T_I64, 2);
+  xfer += oprot->writeFieldBegin("file_offset", ::lbug_apache::thrift::protocol::T_I64, 2);
   xfer += oprot->writeI64(this->file_offset);
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.meta_data) {
-    xfer += oprot->writeFieldBegin("meta_data", ::kuzu_apache::thrift::protocol::T_STRUCT, 3);
+    xfer += oprot->writeFieldBegin("meta_data", ::lbug_apache::thrift::protocol::T_STRUCT, 3);
     xfer += this->meta_data.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.offset_index_offset) {
-    xfer += oprot->writeFieldBegin("offset_index_offset", ::kuzu_apache::thrift::protocol::T_I64, 4);
+    xfer += oprot->writeFieldBegin("offset_index_offset", ::lbug_apache::thrift::protocol::T_I64, 4);
     xfer += oprot->writeI64(this->offset_index_offset);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.offset_index_length) {
-    xfer += oprot->writeFieldBegin("offset_index_length", ::kuzu_apache::thrift::protocol::T_I32, 5);
+    xfer += oprot->writeFieldBegin("offset_index_length", ::lbug_apache::thrift::protocol::T_I32, 5);
     xfer += oprot->writeI32(this->offset_index_length);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.column_index_offset) {
-    xfer += oprot->writeFieldBegin("column_index_offset", ::kuzu_apache::thrift::protocol::T_I64, 6);
+    xfer += oprot->writeFieldBegin("column_index_offset", ::lbug_apache::thrift::protocol::T_I64, 6);
     xfer += oprot->writeI64(this->column_index_offset);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.column_index_length) {
-    xfer += oprot->writeFieldBegin("column_index_length", ::kuzu_apache::thrift::protocol::T_I32, 7);
+    xfer += oprot->writeFieldBegin("column_index_length", ::lbug_apache::thrift::protocol::T_I32, 7);
     xfer += oprot->writeI32(this->column_index_length);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.crypto_metadata) {
-    xfer += oprot->writeFieldBegin("crypto_metadata", ::kuzu_apache::thrift::protocol::T_STRUCT, 8);
+    xfer += oprot->writeFieldBegin("crypto_metadata", ::lbug_apache::thrift::protocol::T_STRUCT, 8);
     xfer += this->crypto_metadata.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.encrypted_column_metadata) {
-    xfer += oprot->writeFieldBegin("encrypted_column_metadata", ::kuzu_apache::thrift::protocol::T_STRING, 9);
+    xfer += oprot->writeFieldBegin("encrypted_column_metadata", ::lbug_apache::thrift::protocol::T_STRING, 9);
     xfer += oprot->writeBinary(this->encrypted_column_metadata);
     xfer += oprot->writeFieldEnd();
   }
@@ -4859,7 +4859,7 @@ ColumnChunk& ColumnChunk::operator=(const ColumnChunk& other109) {
   return *this;
 }
 void ColumnChunk::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "ColumnChunk(";
   out << "file_path="; (__isset.file_path ? (out << to_string(file_path)) : (out << "<null>"));
   out << ", " << "file_offset=" << to_string(file_offset);
@@ -4916,17 +4916,17 @@ std::ostream& operator<<(std::ostream& out, const RowGroup& obj)
 }
 
 
-uint32_t RowGroup::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t RowGroup::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_columns = false;
   bool isset_total_byte_size = false;
@@ -4935,17 +4935,17 @@ uint32_t RowGroup::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->columns.clear();
             uint32_t _size110;
-            ::kuzu_apache::thrift::protocol::TType _etype113;
+            ::lbug_apache::thrift::protocol::TType _etype113;
             xfer += iprot->readListBegin(_etype113, _size110);
             this->columns.resize(_size110);
             uint32_t _i114;
@@ -4961,7 +4961,7 @@ uint32_t RowGroup::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->total_byte_size);
           isset_total_byte_size = true;
         } else {
@@ -4969,7 +4969,7 @@ uint32_t RowGroup::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->num_rows);
           isset_num_rows = true;
         } else {
@@ -4977,11 +4977,11 @@ uint32_t RowGroup::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 4:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->sorting_columns.clear();
             uint32_t _size115;
-            ::kuzu_apache::thrift::protocol::TType _etype118;
+            ::lbug_apache::thrift::protocol::TType _etype118;
             xfer += iprot->readListBegin(_etype118, _size115);
             this->sorting_columns.resize(_size115);
             uint32_t _i119;
@@ -4997,7 +4997,7 @@ uint32_t RowGroup::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 5:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->file_offset);
           this->__isset.file_offset = true;
         } else {
@@ -5005,7 +5005,7 @@ uint32_t RowGroup::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 6:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->total_compressed_size);
           this->__isset.total_compressed_size = true;
         } else {
@@ -5013,7 +5013,7 @@ uint32_t RowGroup::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 7:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I16) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I16) {
           xfer += iprot->readI16(this->ordinal);
           this->__isset.ordinal = true;
         } else {
@@ -5038,14 +5038,14 @@ uint32_t RowGroup::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t RowGroup::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t RowGroup::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("RowGroup");
 
-  xfer += oprot->writeFieldBegin("columns", ::kuzu_apache::thrift::protocol::T_LIST, 1);
+  xfer += oprot->writeFieldBegin("columns", ::lbug_apache::thrift::protocol::T_LIST, 1);
   {
-    xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->columns.size()));
+    xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->columns.size()));
     std::vector<ColumnChunk> ::const_iterator _iter120;
     for (_iter120 = this->columns.begin(); _iter120 != this->columns.end(); ++_iter120)
     {
@@ -5055,18 +5055,18 @@ uint32_t RowGroup::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) cons
   }
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("total_byte_size", ::kuzu_apache::thrift::protocol::T_I64, 2);
+  xfer += oprot->writeFieldBegin("total_byte_size", ::lbug_apache::thrift::protocol::T_I64, 2);
   xfer += oprot->writeI64(this->total_byte_size);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("num_rows", ::kuzu_apache::thrift::protocol::T_I64, 3);
+  xfer += oprot->writeFieldBegin("num_rows", ::lbug_apache::thrift::protocol::T_I64, 3);
   xfer += oprot->writeI64(this->num_rows);
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.sorting_columns) {
-    xfer += oprot->writeFieldBegin("sorting_columns", ::kuzu_apache::thrift::protocol::T_LIST, 4);
+    xfer += oprot->writeFieldBegin("sorting_columns", ::lbug_apache::thrift::protocol::T_LIST, 4);
     {
-      xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->sorting_columns.size()));
+      xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->sorting_columns.size()));
       std::vector<SortingColumn> ::const_iterator _iter121;
       for (_iter121 = this->sorting_columns.begin(); _iter121 != this->sorting_columns.end(); ++_iter121)
       {
@@ -5077,17 +5077,17 @@ uint32_t RowGroup::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) cons
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.file_offset) {
-    xfer += oprot->writeFieldBegin("file_offset", ::kuzu_apache::thrift::protocol::T_I64, 5);
+    xfer += oprot->writeFieldBegin("file_offset", ::lbug_apache::thrift::protocol::T_I64, 5);
     xfer += oprot->writeI64(this->file_offset);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.total_compressed_size) {
-    xfer += oprot->writeFieldBegin("total_compressed_size", ::kuzu_apache::thrift::protocol::T_I64, 6);
+    xfer += oprot->writeFieldBegin("total_compressed_size", ::lbug_apache::thrift::protocol::T_I64, 6);
     xfer += oprot->writeI64(this->total_compressed_size);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.ordinal) {
-    xfer += oprot->writeFieldBegin("ordinal", ::kuzu_apache::thrift::protocol::T_I16, 7);
+    xfer += oprot->writeFieldBegin("ordinal", ::lbug_apache::thrift::protocol::T_I16, 7);
     xfer += oprot->writeI16(this->ordinal);
     xfer += oprot->writeFieldEnd();
   }
@@ -5130,7 +5130,7 @@ RowGroup& RowGroup::operator=(const RowGroup& other123) {
   return *this;
 }
 void RowGroup::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "RowGroup(";
   out << "columns=" << to_string(columns);
   out << ", " << "total_byte_size=" << to_string(total_byte_size);
@@ -5153,23 +5153,23 @@ std::ostream& operator<<(std::ostream& out, const TypeDefinedOrder& obj)
 }
 
 
-uint32_t TypeDefinedOrder::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t TypeDefinedOrder::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     xfer += iprot->skip(ftype);
@@ -5181,9 +5181,9 @@ uint32_t TypeDefinedOrder::read(::kuzu_apache::thrift::protocol::TProtocol* ipro
   return xfer;
 }
 
-uint32_t TypeDefinedOrder::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t TypeDefinedOrder::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("TypeDefinedOrder");
 
   xfer += oprot->writeFieldStop();
@@ -5205,7 +5205,7 @@ TypeDefinedOrder& TypeDefinedOrder::operator=(const TypeDefinedOrder& other125) 
   return *this;
 }
 void TypeDefinedOrder::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "TypeDefinedOrder(";
   out << ")";
 }
@@ -5226,29 +5226,29 @@ std::ostream& operator<<(std::ostream& out, const ColumnOrder& obj)
 }
 
 
-uint32_t ColumnOrder::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t ColumnOrder::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->TYPE_ORDER.read(iprot);
           this->__isset.TYPE_ORDER = true;
         } else {
@@ -5267,13 +5267,13 @@ uint32_t ColumnOrder::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t ColumnOrder::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t ColumnOrder::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("ColumnOrder");
 
   if (this->__isset.TYPE_ORDER) {
-    xfer += oprot->writeFieldBegin("TYPE_ORDER", ::kuzu_apache::thrift::protocol::T_STRUCT, 1);
+    xfer += oprot->writeFieldBegin("TYPE_ORDER", ::lbug_apache::thrift::protocol::T_STRUCT, 1);
     xfer += this->TYPE_ORDER.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
@@ -5298,7 +5298,7 @@ ColumnOrder& ColumnOrder::operator=(const ColumnOrder& other127) {
   return *this;
 }
 void ColumnOrder::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "ColumnOrder(";
   out << "TYPE_ORDER="; (__isset.TYPE_ORDER ? (out << to_string(TYPE_ORDER)) : (out << "<null>"));
   out << ")";
@@ -5327,17 +5327,17 @@ std::ostream& operator<<(std::ostream& out, const PageLocation& obj)
 }
 
 
-uint32_t PageLocation::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t PageLocation::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_offset = false;
   bool isset_compressed_page_size = false;
@@ -5346,13 +5346,13 @@ uint32_t PageLocation::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->offset);
           isset_offset = true;
         } else {
@@ -5360,7 +5360,7 @@ uint32_t PageLocation::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->compressed_page_size);
           isset_compressed_page_size = true;
         } else {
@@ -5368,7 +5368,7 @@ uint32_t PageLocation::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->first_row_index);
           isset_first_row_index = true;
         } else {
@@ -5393,20 +5393,20 @@ uint32_t PageLocation::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t PageLocation::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t PageLocation::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("PageLocation");
 
-  xfer += oprot->writeFieldBegin("offset", ::kuzu_apache::thrift::protocol::T_I64, 1);
+  xfer += oprot->writeFieldBegin("offset", ::lbug_apache::thrift::protocol::T_I64, 1);
   xfer += oprot->writeI64(this->offset);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("compressed_page_size", ::kuzu_apache::thrift::protocol::T_I32, 2);
+  xfer += oprot->writeFieldBegin("compressed_page_size", ::lbug_apache::thrift::protocol::T_I32, 2);
   xfer += oprot->writeI32(this->compressed_page_size);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("first_row_index", ::kuzu_apache::thrift::protocol::T_I64, 3);
+  xfer += oprot->writeFieldBegin("first_row_index", ::lbug_apache::thrift::protocol::T_I64, 3);
   xfer += oprot->writeI64(this->first_row_index);
   xfer += oprot->writeFieldEnd();
 
@@ -5434,7 +5434,7 @@ PageLocation& PageLocation::operator=(const PageLocation& other129) {
   return *this;
 }
 void PageLocation::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "PageLocation(";
   out << "offset=" << to_string(offset);
   out << ", " << "compressed_page_size=" << to_string(compressed_page_size);
@@ -5457,34 +5457,34 @@ std::ostream& operator<<(std::ostream& out, const OffsetIndex& obj)
 }
 
 
-uint32_t OffsetIndex::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t OffsetIndex::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_page_locations = false;
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->page_locations.clear();
             uint32_t _size130;
-            ::kuzu_apache::thrift::protocol::TType _etype133;
+            ::lbug_apache::thrift::protocol::TType _etype133;
             xfer += iprot->readListBegin(_etype133, _size130);
             this->page_locations.resize(_size130);
             uint32_t _i134;
@@ -5513,14 +5513,14 @@ uint32_t OffsetIndex::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t OffsetIndex::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t OffsetIndex::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("OffsetIndex");
 
-  xfer += oprot->writeFieldBegin("page_locations", ::kuzu_apache::thrift::protocol::T_LIST, 1);
+  xfer += oprot->writeFieldBegin("page_locations", ::lbug_apache::thrift::protocol::T_LIST, 1);
   {
-    xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->page_locations.size()));
+    xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->page_locations.size()));
     std::vector<PageLocation> ::const_iterator _iter135;
     for (_iter135 = this->page_locations.begin(); _iter135 != this->page_locations.end(); ++_iter135)
     {
@@ -5548,7 +5548,7 @@ OffsetIndex& OffsetIndex::operator=(const OffsetIndex& other137) {
   return *this;
 }
 void OffsetIndex::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "OffsetIndex(";
   out << "page_locations=" << to_string(page_locations);
   out << ")";
@@ -5586,17 +5586,17 @@ std::ostream& operator<<(std::ostream& out, const ColumnIndex& obj)
 }
 
 
-uint32_t ColumnIndex::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t ColumnIndex::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_null_pages = false;
   bool isset_min_values = false;
@@ -5606,17 +5606,17 @@ uint32_t ColumnIndex::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->null_pages.clear();
             uint32_t _size138;
-            ::kuzu_apache::thrift::protocol::TType _etype141;
+            ::lbug_apache::thrift::protocol::TType _etype141;
             xfer += iprot->readListBegin(_etype141, _size138);
             this->null_pages.resize(_size138);
             uint32_t _i142;
@@ -5632,11 +5632,11 @@ uint32_t ColumnIndex::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->min_values.clear();
             uint32_t _size143;
-            ::kuzu_apache::thrift::protocol::TType _etype146;
+            ::lbug_apache::thrift::protocol::TType _etype146;
             xfer += iprot->readListBegin(_etype146, _size143);
             this->min_values.resize(_size143);
             uint32_t _i147;
@@ -5652,11 +5652,11 @@ uint32_t ColumnIndex::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->max_values.clear();
             uint32_t _size148;
-            ::kuzu_apache::thrift::protocol::TType _etype151;
+            ::lbug_apache::thrift::protocol::TType _etype151;
             xfer += iprot->readListBegin(_etype151, _size148);
             this->max_values.resize(_size148);
             uint32_t _i152;
@@ -5672,7 +5672,7 @@ uint32_t ColumnIndex::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 4:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           int32_t ecast153;
           xfer += iprot->readI32(ecast153);
           this->boundary_order = (BoundaryOrder::type)ecast153;
@@ -5682,11 +5682,11 @@ uint32_t ColumnIndex::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 5:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->null_counts.clear();
             uint32_t _size154;
-            ::kuzu_apache::thrift::protocol::TType _etype157;
+            ::lbug_apache::thrift::protocol::TType _etype157;
             xfer += iprot->readListBegin(_etype157, _size154);
             this->null_counts.resize(_size154);
             uint32_t _i158;
@@ -5721,14 +5721,14 @@ uint32_t ColumnIndex::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t ColumnIndex::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t ColumnIndex::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("ColumnIndex");
 
-  xfer += oprot->writeFieldBegin("null_pages", ::kuzu_apache::thrift::protocol::T_LIST, 1);
+  xfer += oprot->writeFieldBegin("null_pages", ::lbug_apache::thrift::protocol::T_LIST, 1);
   {
-    xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_BOOL, static_cast<uint32_t>(this->null_pages.size()));
+    xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_BOOL, static_cast<uint32_t>(this->null_pages.size()));
     std::vector<bool> ::const_iterator _iter159;
     for (_iter159 = this->null_pages.begin(); _iter159 != this->null_pages.end(); ++_iter159)
     {
@@ -5738,9 +5738,9 @@ uint32_t ColumnIndex::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) c
   }
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("min_values", ::kuzu_apache::thrift::protocol::T_LIST, 2);
+  xfer += oprot->writeFieldBegin("min_values", ::lbug_apache::thrift::protocol::T_LIST, 2);
   {
-    xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->min_values.size()));
+    xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->min_values.size()));
     std::vector<std::string> ::const_iterator _iter160;
     for (_iter160 = this->min_values.begin(); _iter160 != this->min_values.end(); ++_iter160)
     {
@@ -5750,9 +5750,9 @@ uint32_t ColumnIndex::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) c
   }
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("max_values", ::kuzu_apache::thrift::protocol::T_LIST, 3);
+  xfer += oprot->writeFieldBegin("max_values", ::lbug_apache::thrift::protocol::T_LIST, 3);
   {
-    xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->max_values.size()));
+    xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRING, static_cast<uint32_t>(this->max_values.size()));
     std::vector<std::string> ::const_iterator _iter161;
     for (_iter161 = this->max_values.begin(); _iter161 != this->max_values.end(); ++_iter161)
     {
@@ -5762,14 +5762,14 @@ uint32_t ColumnIndex::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) c
   }
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("boundary_order", ::kuzu_apache::thrift::protocol::T_I32, 4);
+  xfer += oprot->writeFieldBegin("boundary_order", ::lbug_apache::thrift::protocol::T_I32, 4);
   xfer += oprot->writeI32((int32_t)this->boundary_order);
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.null_counts) {
-    xfer += oprot->writeFieldBegin("null_counts", ::kuzu_apache::thrift::protocol::T_LIST, 5);
+    xfer += oprot->writeFieldBegin("null_counts", ::lbug_apache::thrift::protocol::T_LIST, 5);
     {
-      xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_I64, static_cast<uint32_t>(this->null_counts.size()));
+      xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_I64, static_cast<uint32_t>(this->null_counts.size()));
       std::vector<int64_t> ::const_iterator _iter162;
       for (_iter162 = this->null_counts.begin(); _iter162 != this->null_counts.end(); ++_iter162)
       {
@@ -5812,7 +5812,7 @@ ColumnIndex& ColumnIndex::operator=(const ColumnIndex& other164) {
   return *this;
 }
 void ColumnIndex::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "ColumnIndex(";
   out << "null_pages=" << to_string(null_pages);
   out << ", " << "min_values=" << to_string(min_values);
@@ -5848,29 +5848,29 @@ std::ostream& operator<<(std::ostream& out, const AesGcmV1& obj)
 }
 
 
-uint32_t AesGcmV1::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t AesGcmV1::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readBinary(this->aad_prefix);
           this->__isset.aad_prefix = true;
         } else {
@@ -5878,7 +5878,7 @@ uint32_t AesGcmV1::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readBinary(this->aad_file_unique);
           this->__isset.aad_file_unique = true;
         } else {
@@ -5886,7 +5886,7 @@ uint32_t AesGcmV1::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_BOOL) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_BOOL) {
           xfer += iprot->readBool(this->supply_aad_prefix);
           this->__isset.supply_aad_prefix = true;
         } else {
@@ -5905,23 +5905,23 @@ uint32_t AesGcmV1::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t AesGcmV1::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t AesGcmV1::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("AesGcmV1");
 
   if (this->__isset.aad_prefix) {
-    xfer += oprot->writeFieldBegin("aad_prefix", ::kuzu_apache::thrift::protocol::T_STRING, 1);
+    xfer += oprot->writeFieldBegin("aad_prefix", ::lbug_apache::thrift::protocol::T_STRING, 1);
     xfer += oprot->writeBinary(this->aad_prefix);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.aad_file_unique) {
-    xfer += oprot->writeFieldBegin("aad_file_unique", ::kuzu_apache::thrift::protocol::T_STRING, 2);
+    xfer += oprot->writeFieldBegin("aad_file_unique", ::lbug_apache::thrift::protocol::T_STRING, 2);
     xfer += oprot->writeBinary(this->aad_file_unique);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.supply_aad_prefix) {
-    xfer += oprot->writeFieldBegin("supply_aad_prefix", ::kuzu_apache::thrift::protocol::T_BOOL, 3);
+    xfer += oprot->writeFieldBegin("supply_aad_prefix", ::lbug_apache::thrift::protocol::T_BOOL, 3);
     xfer += oprot->writeBool(this->supply_aad_prefix);
     xfer += oprot->writeFieldEnd();
   }
@@ -5952,7 +5952,7 @@ AesGcmV1& AesGcmV1::operator=(const AesGcmV1& other166) {
   return *this;
 }
 void AesGcmV1::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "AesGcmV1(";
   out << "aad_prefix="; (__isset.aad_prefix ? (out << to_string(aad_prefix)) : (out << "<null>"));
   out << ", " << "aad_file_unique="; (__isset.aad_file_unique ? (out << to_string(aad_file_unique)) : (out << "<null>"));
@@ -5986,29 +5986,29 @@ std::ostream& operator<<(std::ostream& out, const AesGcmCtrV1& obj)
 }
 
 
-uint32_t AesGcmCtrV1::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t AesGcmCtrV1::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readBinary(this->aad_prefix);
           this->__isset.aad_prefix = true;
         } else {
@@ -6016,7 +6016,7 @@ uint32_t AesGcmCtrV1::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readBinary(this->aad_file_unique);
           this->__isset.aad_file_unique = true;
         } else {
@@ -6024,7 +6024,7 @@ uint32_t AesGcmCtrV1::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_BOOL) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_BOOL) {
           xfer += iprot->readBool(this->supply_aad_prefix);
           this->__isset.supply_aad_prefix = true;
         } else {
@@ -6043,23 +6043,23 @@ uint32_t AesGcmCtrV1::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t AesGcmCtrV1::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t AesGcmCtrV1::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("AesGcmCtrV1");
 
   if (this->__isset.aad_prefix) {
-    xfer += oprot->writeFieldBegin("aad_prefix", ::kuzu_apache::thrift::protocol::T_STRING, 1);
+    xfer += oprot->writeFieldBegin("aad_prefix", ::lbug_apache::thrift::protocol::T_STRING, 1);
     xfer += oprot->writeBinary(this->aad_prefix);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.aad_file_unique) {
-    xfer += oprot->writeFieldBegin("aad_file_unique", ::kuzu_apache::thrift::protocol::T_STRING, 2);
+    xfer += oprot->writeFieldBegin("aad_file_unique", ::lbug_apache::thrift::protocol::T_STRING, 2);
     xfer += oprot->writeBinary(this->aad_file_unique);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.supply_aad_prefix) {
-    xfer += oprot->writeFieldBegin("supply_aad_prefix", ::kuzu_apache::thrift::protocol::T_BOOL, 3);
+    xfer += oprot->writeFieldBegin("supply_aad_prefix", ::lbug_apache::thrift::protocol::T_BOOL, 3);
     xfer += oprot->writeBool(this->supply_aad_prefix);
     xfer += oprot->writeFieldEnd();
   }
@@ -6090,7 +6090,7 @@ AesGcmCtrV1& AesGcmCtrV1::operator=(const AesGcmCtrV1& other168) {
   return *this;
 }
 void AesGcmCtrV1::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "AesGcmCtrV1(";
   out << "aad_prefix="; (__isset.aad_prefix ? (out << to_string(aad_prefix)) : (out << "<null>"));
   out << ", " << "aad_file_unique="; (__isset.aad_file_unique ? (out << to_string(aad_file_unique)) : (out << "<null>"));
@@ -6119,29 +6119,29 @@ std::ostream& operator<<(std::ostream& out, const EncryptionAlgorithm& obj)
 }
 
 
-uint32_t EncryptionAlgorithm::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t EncryptionAlgorithm::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->AES_GCM_V1.read(iprot);
           this->__isset.AES_GCM_V1 = true;
         } else {
@@ -6149,7 +6149,7 @@ uint32_t EncryptionAlgorithm::read(::kuzu_apache::thrift::protocol::TProtocol* i
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->AES_GCM_CTR_V1.read(iprot);
           this->__isset.AES_GCM_CTR_V1 = true;
         } else {
@@ -6168,18 +6168,18 @@ uint32_t EncryptionAlgorithm::read(::kuzu_apache::thrift::protocol::TProtocol* i
   return xfer;
 }
 
-uint32_t EncryptionAlgorithm::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t EncryptionAlgorithm::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("EncryptionAlgorithm");
 
   if (this->__isset.AES_GCM_V1) {
-    xfer += oprot->writeFieldBegin("AES_GCM_V1", ::kuzu_apache::thrift::protocol::T_STRUCT, 1);
+    xfer += oprot->writeFieldBegin("AES_GCM_V1", ::lbug_apache::thrift::protocol::T_STRUCT, 1);
     xfer += this->AES_GCM_V1.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.AES_GCM_CTR_V1) {
-    xfer += oprot->writeFieldBegin("AES_GCM_CTR_V1", ::kuzu_apache::thrift::protocol::T_STRUCT, 2);
+    xfer += oprot->writeFieldBegin("AES_GCM_CTR_V1", ::lbug_apache::thrift::protocol::T_STRUCT, 2);
     xfer += this->AES_GCM_CTR_V1.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
@@ -6207,7 +6207,7 @@ EncryptionAlgorithm& EncryptionAlgorithm::operator=(const EncryptionAlgorithm& o
   return *this;
 }
 void EncryptionAlgorithm::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "EncryptionAlgorithm(";
   out << "AES_GCM_V1="; (__isset.AES_GCM_V1 ? (out << to_string(AES_GCM_V1)) : (out << "<null>"));
   out << ", " << "AES_GCM_CTR_V1="; (__isset.AES_GCM_CTR_V1 ? (out << to_string(AES_GCM_CTR_V1)) : (out << "<null>"));
@@ -6266,17 +6266,17 @@ std::ostream& operator<<(std::ostream& out, const FileMetaData& obj)
 }
 
 
-uint32_t FileMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t FileMetaData::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_version = false;
   bool isset_schema = false;
@@ -6286,13 +6286,13 @@ uint32_t FileMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I32) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->version);
           isset_version = true;
         } else {
@@ -6300,11 +6300,11 @@ uint32_t FileMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->schema.clear();
             uint32_t _size171;
-            ::kuzu_apache::thrift::protocol::TType _etype174;
+            ::lbug_apache::thrift::protocol::TType _etype174;
             xfer += iprot->readListBegin(_etype174, _size171);
             this->schema.resize(_size171);
             uint32_t _i175;
@@ -6320,7 +6320,7 @@ uint32_t FileMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 3:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_I64) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_I64) {
           xfer += iprot->readI64(this->num_rows);
           isset_num_rows = true;
         } else {
@@ -6328,11 +6328,11 @@ uint32_t FileMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 4:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->row_groups.clear();
             uint32_t _size176;
-            ::kuzu_apache::thrift::protocol::TType _etype179;
+            ::lbug_apache::thrift::protocol::TType _etype179;
             xfer += iprot->readListBegin(_etype179, _size176);
             this->row_groups.resize(_size176);
             uint32_t _i180;
@@ -6348,11 +6348,11 @@ uint32_t FileMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 5:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->key_value_metadata.clear();
             uint32_t _size181;
-            ::kuzu_apache::thrift::protocol::TType _etype184;
+            ::lbug_apache::thrift::protocol::TType _etype184;
             xfer += iprot->readListBegin(_etype184, _size181);
             this->key_value_metadata.resize(_size181);
             uint32_t _i185;
@@ -6368,7 +6368,7 @@ uint32_t FileMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 6:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readString(this->created_by);
           this->__isset.created_by = true;
         } else {
@@ -6376,11 +6376,11 @@ uint32_t FileMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 7:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_LIST) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_LIST) {
           {
             this->column_orders.clear();
             uint32_t _size186;
-            ::kuzu_apache::thrift::protocol::TType _etype189;
+            ::lbug_apache::thrift::protocol::TType _etype189;
             xfer += iprot->readListBegin(_etype189, _size186);
             this->column_orders.resize(_size186);
             uint32_t _i190;
@@ -6396,7 +6396,7 @@ uint32_t FileMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 8:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->encryption_algorithm.read(iprot);
           this->__isset.encryption_algorithm = true;
         } else {
@@ -6404,7 +6404,7 @@ uint32_t FileMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
         }
         break;
       case 9:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readBinary(this->footer_signing_key_metadata);
           this->__isset.footer_signing_key_metadata = true;
         } else {
@@ -6431,18 +6431,18 @@ uint32_t FileMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
   return xfer;
 }
 
-uint32_t FileMetaData::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t FileMetaData::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("FileMetaData");
 
-  xfer += oprot->writeFieldBegin("version", ::kuzu_apache::thrift::protocol::T_I32, 1);
+  xfer += oprot->writeFieldBegin("version", ::lbug_apache::thrift::protocol::T_I32, 1);
   xfer += oprot->writeI32(this->version);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("schema", ::kuzu_apache::thrift::protocol::T_LIST, 2);
+  xfer += oprot->writeFieldBegin("schema", ::lbug_apache::thrift::protocol::T_LIST, 2);
   {
-    xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->schema.size()));
+    xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->schema.size()));
     std::vector<SchemaElement> ::const_iterator _iter191;
     for (_iter191 = this->schema.begin(); _iter191 != this->schema.end(); ++_iter191)
     {
@@ -6452,13 +6452,13 @@ uint32_t FileMetaData::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) 
   }
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("num_rows", ::kuzu_apache::thrift::protocol::T_I64, 3);
+  xfer += oprot->writeFieldBegin("num_rows", ::lbug_apache::thrift::protocol::T_I64, 3);
   xfer += oprot->writeI64(this->num_rows);
   xfer += oprot->writeFieldEnd();
 
-  xfer += oprot->writeFieldBegin("row_groups", ::kuzu_apache::thrift::protocol::T_LIST, 4);
+  xfer += oprot->writeFieldBegin("row_groups", ::lbug_apache::thrift::protocol::T_LIST, 4);
   {
-    xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->row_groups.size()));
+    xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->row_groups.size()));
     std::vector<RowGroup> ::const_iterator _iter192;
     for (_iter192 = this->row_groups.begin(); _iter192 != this->row_groups.end(); ++_iter192)
     {
@@ -6469,9 +6469,9 @@ uint32_t FileMetaData::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) 
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.key_value_metadata) {
-    xfer += oprot->writeFieldBegin("key_value_metadata", ::kuzu_apache::thrift::protocol::T_LIST, 5);
+    xfer += oprot->writeFieldBegin("key_value_metadata", ::lbug_apache::thrift::protocol::T_LIST, 5);
     {
-      xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->key_value_metadata.size()));
+      xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->key_value_metadata.size()));
       std::vector<KeyValue> ::const_iterator _iter193;
       for (_iter193 = this->key_value_metadata.begin(); _iter193 != this->key_value_metadata.end(); ++_iter193)
       {
@@ -6482,14 +6482,14 @@ uint32_t FileMetaData::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) 
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.created_by) {
-    xfer += oprot->writeFieldBegin("created_by", ::kuzu_apache::thrift::protocol::T_STRING, 6);
+    xfer += oprot->writeFieldBegin("created_by", ::lbug_apache::thrift::protocol::T_STRING, 6);
     xfer += oprot->writeString(this->created_by);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.column_orders) {
-    xfer += oprot->writeFieldBegin("column_orders", ::kuzu_apache::thrift::protocol::T_LIST, 7);
+    xfer += oprot->writeFieldBegin("column_orders", ::lbug_apache::thrift::protocol::T_LIST, 7);
     {
-      xfer += oprot->writeListBegin(::kuzu_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->column_orders.size()));
+      xfer += oprot->writeListBegin(::lbug_apache::thrift::protocol::T_STRUCT, static_cast<uint32_t>(this->column_orders.size()));
       std::vector<ColumnOrder> ::const_iterator _iter194;
       for (_iter194 = this->column_orders.begin(); _iter194 != this->column_orders.end(); ++_iter194)
       {
@@ -6500,12 +6500,12 @@ uint32_t FileMetaData::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) 
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.encryption_algorithm) {
-    xfer += oprot->writeFieldBegin("encryption_algorithm", ::kuzu_apache::thrift::protocol::T_STRUCT, 8);
+    xfer += oprot->writeFieldBegin("encryption_algorithm", ::lbug_apache::thrift::protocol::T_STRUCT, 8);
     xfer += this->encryption_algorithm.write(oprot);
     xfer += oprot->writeFieldEnd();
   }
   if (this->__isset.footer_signing_key_metadata) {
-    xfer += oprot->writeFieldBegin("footer_signing_key_metadata", ::kuzu_apache::thrift::protocol::T_STRING, 9);
+    xfer += oprot->writeFieldBegin("footer_signing_key_metadata", ::lbug_apache::thrift::protocol::T_STRING, 9);
     xfer += oprot->writeBinary(this->footer_signing_key_metadata);
     xfer += oprot->writeFieldEnd();
   }
@@ -6555,7 +6555,7 @@ FileMetaData& FileMetaData::operator=(const FileMetaData& other196) {
 }
 
 void FileMetaData::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "FileMetaData(";
   out << "version=" << to_string(version);
   out << ", " << "schema=" << to_string(schema);
@@ -6589,30 +6589,30 @@ std::ostream& operator<<(std::ostream& out, const FileCryptoMetaData& obj)
 }
 
 
-uint32_t FileCryptoMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* iprot) {
+uint32_t FileCryptoMetaData::read(::lbug_apache::thrift::protocol::TProtocol* iprot) {
 
-  ::kuzu_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
+  ::lbug_apache::thrift::protocol::TInputRecursionTracker tracker(*iprot);
   uint32_t xfer = 0;
   std::string fname;
-  ::kuzu_apache::thrift::protocol::TType ftype;
+  ::lbug_apache::thrift::protocol::TType ftype;
   int16_t fid;
 
   xfer += iprot->readStructBegin(fname);
 
-  using ::kuzu_apache::thrift::protocol::TProtocolException;
+  using ::lbug_apache::thrift::protocol::TProtocolException;
 
   bool isset_encryption_algorithm = false;
 
   while (true)
   {
     xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == ::kuzu_apache::thrift::protocol::T_STOP) {
+    if (ftype == ::lbug_apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRUCT) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRUCT) {
           xfer += this->encryption_algorithm.read(iprot);
           isset_encryption_algorithm = true;
         } else {
@@ -6620,7 +6620,7 @@ uint32_t FileCryptoMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* ip
         }
         break;
       case 2:
-        if (ftype == ::kuzu_apache::thrift::protocol::T_STRING) {
+        if (ftype == ::lbug_apache::thrift::protocol::T_STRING) {
           xfer += iprot->readBinary(this->key_metadata);
           this->__isset.key_metadata = true;
         } else {
@@ -6641,17 +6641,17 @@ uint32_t FileCryptoMetaData::read(::kuzu_apache::thrift::protocol::TProtocol* ip
   return xfer;
 }
 
-uint32_t FileCryptoMetaData::write(::kuzu_apache::thrift::protocol::TProtocol* oprot) const {
+uint32_t FileCryptoMetaData::write(::lbug_apache::thrift::protocol::TProtocol* oprot) const {
   uint32_t xfer = 0;
-  ::kuzu_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
+  ::lbug_apache::thrift::protocol::TOutputRecursionTracker tracker(*oprot);
   xfer += oprot->writeStructBegin("FileCryptoMetaData");
 
-  xfer += oprot->writeFieldBegin("encryption_algorithm", ::kuzu_apache::thrift::protocol::T_STRUCT, 1);
+  xfer += oprot->writeFieldBegin("encryption_algorithm", ::lbug_apache::thrift::protocol::T_STRUCT, 1);
   xfer += this->encryption_algorithm.write(oprot);
   xfer += oprot->writeFieldEnd();
 
   if (this->__isset.key_metadata) {
-    xfer += oprot->writeFieldBegin("key_metadata", ::kuzu_apache::thrift::protocol::T_STRING, 2);
+    xfer += oprot->writeFieldBegin("key_metadata", ::lbug_apache::thrift::protocol::T_STRING, 2);
     xfer += oprot->writeBinary(this->key_metadata);
     xfer += oprot->writeFieldEnd();
   }
@@ -6679,7 +6679,7 @@ FileCryptoMetaData& FileCryptoMetaData::operator=(const FileCryptoMetaData& othe
   return *this;
 }
 void FileCryptoMetaData::printTo(std::ostream& out) const {
-  using ::kuzu_apache::thrift::to_string;
+  using ::lbug_apache::thrift::to_string;
   out << "FileCryptoMetaData(";
   out << "encryption_algorithm=" << to_string(encryption_algorithm);
   out << ", " << "key_metadata="; (__isset.key_metadata ? (out << to_string(key_metadata)) : (out << "<null>"));

@@ -11,7 +11,7 @@ const openDatabaseOnSubprocess = (dbPath) => {
     const node = process.argv[0];
     const code = `
       (async() => {
-        const lbug = require("${kuzuPath}");
+        const lbug = require("${lbugPath}");
         const db = new lbug.Database("${dbPath}", 1 << 28);
         await db.init();
         console.log("Database initialized.");

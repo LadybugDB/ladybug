@@ -11,7 +11,7 @@
 #include "zstd/compress/zstd_compress_internal.h"  /* ZSTD_hashPtr, ZSTD_count, ZSTD_storeSeq */
 #include "zstd/compress/zstd_fast.h"
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 
 void ZSTD_fillHashTable(ZSTD_matchState_t* ms,
                         const void* const end,

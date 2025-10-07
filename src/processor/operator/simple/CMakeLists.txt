@@ -1,4 +1,4 @@
-add_library(kuzu_processor_operator_simple
+add_library(lbug_processor_operator_simple
         OBJECT
         attach_database.cpp
         detach_database.cpp
@@ -10,5 +10,5 @@ add_library(kuzu_processor_operator_simple
         uninstall_extension.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_processor_operator_simple>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_processor_operator_simple>
         PARENT_SCOPE)

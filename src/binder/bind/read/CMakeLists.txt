@@ -1,4 +1,4 @@
-add_library(kuzu_binder_bind_read
+add_library(lbug_binder_bind_read
         OBJECT
         bind_in_query_call.cpp
         bind_load_from.cpp
@@ -6,5 +6,5 @@ add_library(kuzu_binder_bind_read
         bind_unwind.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_binder_bind_read>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_binder_bind_read>
         PARENT_SCOPE)

@@ -7,7 +7,7 @@ include_directories(
 
 add_subdirectory(printer)
 
-add_executable(kuzu_shell
+add_executable(lbug_shell
         ${KUZU_SHELL_OBJECT_FILES}
         embedded_shell.cpp
         linenoise.cpp
@@ -17,16 +17,16 @@ if (NOT MSVC)
     # On Windows, rename the executable to lbug.exe will cause an error
     # "multiple rules generate src/lbug.lib", so we do not set the output
     # name for MSVC.
-    set_target_properties(kuzu_shell PROPERTIES OUTPUT_NAME lbug)
+    set_target_properties(lbug_shell PROPERTIES OUTPUT_NAME lbug)
 endif ()
 
 
-target_link_libraries(kuzu_shell lbug)
+target_link_libraries(lbug_shell lbug)
 if (ENABLE_BACKTRACES)
-    target_link_libraries(kuzu_shell register_backtrace_signal_handler)
+    target_link_libraries(lbug_shell register_backtrace_signal_handler)
 endif ()
 if (MSVC)
-    target_link_libraries(kuzu_shell ws2_32)
+    target_link_libraries(lbug_shell ws2_32)
 endif ()
 
-install(TARGETS kuzu_shell)
+install(TARGETS lbug_shell)

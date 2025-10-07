@@ -12,11 +12,11 @@
 namespace lbug {
 namespace processor {
 
-using namespace kuzu_parquet::format;
+using namespace lbug_parquet::format;
 using namespace lbug::common;
 
 ParquetWriter::ParquetWriter(std::string fileName, std::vector<common::LogicalType> types,
-    std::vector<std::string> columnNames, kuzu_parquet::format::CompressionCodec::type codec,
+    std::vector<std::string> columnNames, lbug_parquet::format::CompressionCodec::type codec,
     main::ClientContext* context)
     : fileName{std::move(fileName)}, types{std::move(types)}, columnNames{std::move(columnNames)},
       codec{codec}, fileOffset{0}, mm{storage::MemoryManager::Get(*context)} {
@@ -26,7 +26,7 @@ ParquetWriter::ParquetWriter(std::string fileName, std::vector<common::LogicalTy
     fileInfo->writeFile(reinterpret_cast<const uint8_t*>(ParquetConstants::PARQUET_MAGIC_WORDS),
         strlen(ParquetConstants::PARQUET_MAGIC_WORDS), fileOffset);
     fileOffset += strlen(ParquetConstants::PARQUET_MAGIC_WORDS);
-    kuzu_apache::thrift::protocol::TCompactProtocolFactoryT<ParquetWriterTransport> tprotoFactory;
+    lbug_apache::thrift::protocol::TCompactProtocolFactoryT<ParquetWriterTransport> tprotoFactory;
     protocol = tprotoFactory.getProtocol(
         std::make_shared<ParquetWriterTransport>(fileInfo.get(), fileOffset));
 
@@ -39,10 +39,10 @@ ParquetWriter::ParquetWriter(std::string fileName, std::vector<common::LogicalTy
     fileMetaData.schema.resize(1);
 
     // populate root schema object
-    fileMetaData.schema[0].name = "kuzu_schema";
+    fileMetaData.schema[0].name = "lbug_schema";
     fileMetaData.schema[0].num_children = this->types.size();
     fileMetaData.schema[0].__isset.num_children = true;
-    fileMetaData.schema[0].repetition_type = kuzu_parquet::format::FieldRepetitionType::REQUIRED;
+    fileMetaData.schema[0].repetition_type = lbug_parquet::format::FieldRepetitionType::REQUIRED;
     fileMetaData.schema[0].__isset.repetition_type = true;
 
     std::vector<std::string> schemaPath;

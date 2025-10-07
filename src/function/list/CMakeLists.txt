@@ -1,4 +1,4 @@
-add_library(kuzu_list_function
+add_library(lbug_list_function
         OBJECT
         list_agg_function.cpp
         list_any_value_function.cpp
@@ -29,5 +29,5 @@ add_library(kuzu_list_function
         list_has_all.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_list_function>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_list_function>
         PARENT_SCOPE)

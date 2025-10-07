@@ -22,7 +22,7 @@
 
 #include <string>
 
-namespace kuzu_apache {
+namespace lbug_apache {
 namespace thrift {
 namespace protocol {
 
@@ -34,7 +34,7 @@ namespace protocol {
  * pipes etc.
  *
  */
-class TProtocolException : public kuzu_apache::thrift::TException {
+class TProtocolException : public lbug_apache::thrift::TException {
 public:
   /**
    * Error codes for the various types of exceptions.
@@ -49,15 +49,15 @@ public:
     DEPTH_LIMIT = 6
   };
 
-  TProtocolException() : kuzu_apache::thrift::TException(), type_(UNKNOWN) {}
+  TProtocolException() : lbug_apache::thrift::TException(), type_(UNKNOWN) {}
 
-  TProtocolException(TProtocolExceptionType type) : kuzu_apache::thrift::TException(), type_(type) {}
+  TProtocolException(TProtocolExceptionType type) : lbug_apache::thrift::TException(), type_(type) {}
 
   TProtocolException(const std::string& message)
-    : kuzu_apache::thrift::TException(message), type_(UNKNOWN) {}
+    : lbug_apache::thrift::TException(message), type_(UNKNOWN) {}
 
   TProtocolException(TProtocolExceptionType type, const std::string& message)
-    : kuzu_apache::thrift::TException(message), type_(type) {}
+    : lbug_apache::thrift::TException(message), type_(type) {}
 
   ~TProtocolException() noexcept override = default;
 
@@ -100,6 +100,6 @@ protected:
 };
 }
 }
-} // kuzu_apache::thrift::protocol
+} // lbug_apache::thrift::protocol
 
 #endif // #ifndef _KUZU_THRIFT_PROTOCOL_TPROTOCOLEXCEPTION_H_

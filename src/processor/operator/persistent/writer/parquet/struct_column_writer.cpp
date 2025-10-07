@@ -6,11 +6,11 @@
 namespace lbug {
 namespace processor {
 
-using namespace kuzu_parquet::format;
+using namespace lbug_parquet::format;
 using namespace lbug::common;
 
 std::unique_ptr<ColumnWriterState> StructColumnWriter::initializeWriteState(
-    kuzu_parquet::format::RowGroup& rowGroup) {
+    lbug_parquet::format::RowGroup& rowGroup) {
     auto result = std::make_unique<StructColumnWriterState>(rowGroup, rowGroup.columns.size());
 
     result->childStates.reserve(childWriters.size());

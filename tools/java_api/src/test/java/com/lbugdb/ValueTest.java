@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -1397,23 +1397,23 @@ public class ValueTest extends TestBase {
     void CreateMapLiteral() {
         Value[] keys = { new Value("Alice"), new Value("Bob") };
         Value[] values = { new Value(1), new Value(2) };
-        KuzuMap kuzuMap = new KuzuMap(keys, values);
-        assertEquals(keys.length, kuzuMap.getNumFields());
-        int aliceKeyIdx = (kuzuMap.getKey(0).getValue().equals("Alice")) ? 0 : 1;
+        KuzuMap lbugMap = new KuzuMap(keys, values);
+        assertEquals(keys.length, lbugMap.getNumFields());
+        int aliceKeyIdx = (lbugMap.getKey(0).getValue().equals("Alice")) ? 0 : 1;
         int bobKeyIdx = 1 - aliceKeyIdx;
-        assertEquals("Alice", kuzuMap.getKey(aliceKeyIdx).getValue());
-        assertEquals(1, (Integer) kuzuMap.getValue(aliceKeyIdx).getValue());
-        assertEquals("Bob", kuzuMap.getKey(bobKeyIdx).getValue());
-        assertEquals(2, (Integer) kuzuMap.getValue(bobKeyIdx).getValue());
+        assertEquals("Alice", lbugMap.getKey(aliceKeyIdx).getValue());
+        assertEquals(1, (Integer) lbugMap.getValue(aliceKeyIdx).getValue());
+        assertEquals("Bob", lbugMap.getKey(bobKeyIdx).getValue());
+        assertEquals(2, (Integer) lbugMap.getValue(bobKeyIdx).getValue());
 
         PreparedStatement stmt = conn
                 .prepare("MATCH (m:movies) WHERE m.name = 'Roma' SET m.audience = $audience");
         Map<String, Value> options = Map.of(
-                "audience", kuzuMap.getValue());
+                "audience", lbugMap.getValue());
         QueryResult result = conn.execute(stmt, options);
 
         assertTrue(result.isSuccess());
-        kuzuMap.close();
+        lbugMap.close();
     }
 
     @Test
@@ -1425,10 +1425,10 @@ public class ValueTest extends TestBase {
         Value[] nestedMaps = { map0.getValue(), map1.getValue() };
 
         Value[] keys = { new Value(Long.valueOf(0)), new Value(Long.valueOf(1)) };
-        KuzuMap kuzuMap = new KuzuMap(keys, nestedMaps);
-        assertEquals(keys.length, kuzuMap.getNumFields());
+        KuzuMap lbugMap = new KuzuMap(keys, nestedMaps);
+        assertEquals(keys.length, lbugMap.getNumFields());
 
-        KuzuMap map1Actual = new KuzuMap(kuzuMap.getValue(1));
+        KuzuMap map1Actual = new KuzuMap(lbugMap.getValue(1));
         int carolKeyIdx = (map1Actual.getKey(0).getValue().equals("Carol")) ? 0 : 1;
         int danKeyIdx = 1 - carolKeyIdx;
         assertEquals("Carol", map1Actual.getKey(carolKeyIdx).getValue());
@@ -1442,7 +1442,7 @@ public class ValueTest extends TestBase {
                 .prepare(
                         "MATCH (m:movies) WHERE m.name = 'Roma' SET m.audience = list_element(element_at($audience, CAST(1, 'INT64')), 1)");
         Map<String, Value> options = Map.of(
-                "audience", kuzuMap.getValue());
+                "audience", lbugMap.getValue());
         QueryResult result = conn.execute(stmt, options);
         assertTrue(result.isSuccess());
 
@@ -1452,7 +1452,7 @@ public class ValueTest extends TestBase {
         assertEquals(1, result.getNumTuples());
         assertEquals(4, (Long) result.getNext().getValue(0).getValue());
 
-        kuzuMap.close();
+        lbugMap.close();
         map1Actual.close();
         map0.close();
         map1.close();

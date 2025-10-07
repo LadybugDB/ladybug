@@ -23,7 +23,7 @@
 #include "Thrift.h"
 #include "protocol/TProtocol.h"
 
-namespace kuzu_apache {
+namespace lbug_apache {
 namespace thrift {
 
 class TBase {
@@ -33,6 +33,6 @@ public:
   virtual uint32_t write(protocol::TProtocol* oprot) const = 0;
 };
 }
-} // kuzu_apache::thrift
+} // lbug_apache::thrift
 
 #endif // #ifndef _KUZU_THRIFT_TBASE_H_

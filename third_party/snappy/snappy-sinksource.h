@@ -35,7 +35,7 @@
 
 #include <stddef.h>
 
-namespace kuzu_snappy {
+namespace lbug_snappy {
 
 // A Sink is an interface that consumes a sequence of bytes.
 class Sink {
@@ -181,13 +181,13 @@ class UncheckedByteArraySink : public Sink {
   char* dest_;
 };
 
-}  // namespace kuzu_snappy
+}  // namespace lbug_snappy
 
 #else // #if SNAPPY_NEW_VERSION
 
 #include <stddef.h>
 
-namespace kuzu_snappy {
+namespace lbug_snappy {
 
 // A Sink is an interface that consumes a sequence of bytes.
 class Sink {
@@ -333,7 +333,7 @@ class UncheckedByteArraySink : public Sink {
   char* dest_;
 };
 
-}  // namespace kuzu_snappy
+}  // namespace lbug_snappy
 
 #endif  // #if SNAPPY_NEW_VERSION # else
 

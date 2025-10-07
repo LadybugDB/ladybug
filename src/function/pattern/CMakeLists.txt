@@ -1,4 +1,4 @@
-add_library(kuzu_function_pattern
+add_library(lbug_function_pattern
         OBJECT
         cost_function.cpp
         id_function.cpp
@@ -6,5 +6,5 @@ add_library(kuzu_function_pattern
         start_end_node_function.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_function_pattern>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_function_pattern>
         PARENT_SCOPE)

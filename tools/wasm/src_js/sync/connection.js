@@ -18,7 +18,7 @@ class Connection {
    */
   constructor(database, numThreads = null) {
     KuzuWasm.checkInit();
-    const lbug = KuzuWasm._kuzu;
+    const lbug = KuzuWasm._lbug;
     if (!database || typeof database !== "object") {
       throw new Error("Database must be an object.");
     }

@@ -24,22 +24,22 @@ using namespace lbug::common;
 namespace lbug {
 namespace processor {
 
-using kuzu_parquet::format::CompressionCodec;
-using kuzu_parquet::format::ConvertedType;
-using kuzu_parquet::format::Encoding;
-using kuzu_parquet::format::PageType;
-using kuzu_parquet::format::Type;
+using lbug_parquet::format::CompressionCodec;
+using lbug_parquet::format::ConvertedType;
+using lbug_parquet::format::Encoding;
+using lbug_parquet::format::PageType;
+using lbug_parquet::format::Type;
 
 ColumnReader::ColumnReader(ParquetReader& reader, LogicalType type,
-    const kuzu_parquet::format::SchemaElement& schema, idx_t fileIdx, uint64_t maxDefinition,
+    const lbug_parquet::format::SchemaElement& schema, idx_t fileIdx, uint64_t maxDefinition,
     uint64_t maxRepeat)
     : schema{schema}, fileIdx{fileIdx}, maxDefine{maxDefinition}, maxRepeat{maxRepeat},
       reader{reader}, type{std::move(type)}, protocol(nullptr), pageRowsAvailable{0},
       groupRowsAvailable(0), chunkReadOffset(0) {}
 
 void ColumnReader::initializeRead(uint64_t /*rowGroupIdx*/,
-    const std::vector<kuzu_parquet::format::ColumnChunk>& columns,
-    kuzu_apache::thrift::protocol::TProtocol& protocol) {
+    const std::vector<lbug_parquet::format::ColumnChunk>& columns,
+    lbug_apache::thrift::protocol::TProtocol& protocol) {
     KU_ASSERT(fileIdx < columns.size());
     chunk = &columns[fileIdx];
     this->protocol = &protocol;
@@ -199,7 +199,7 @@ uint64_t ColumnReader::read(uint64_t numValues, parquet_filter_t& filter, uint8_
 }
 
 std::unique_ptr<ColumnReader> ColumnReader::createReader(ParquetReader& reader,
-    common::LogicalType type, const kuzu_parquet::format::SchemaElement& schema, uint64_t fileIdx,
+    common::LogicalType type, const lbug_parquet::format::SchemaElement& schema, uint64_t fileIdx,
     uint64_t maxDefine, uint64_t maxRepeat) {
     switch (type.getLogicalTypeID()) {
     case common::LogicalTypeID::BOOL:
@@ -273,7 +273,7 @@ void ColumnReader::prepareRead(parquet_filter_t& /*filter*/) {
     dictDecoder.reset();
     defineDecoder.reset();
     block.reset();
-    kuzu_parquet::format::PageHeader pageHdr;
+    lbug_parquet::format::PageHeader pageHdr;
     pageHdr.read(protocol);
 
     switch (pageHdr.type) {
@@ -318,7 +318,7 @@ static void brotliDecompress(uint8_t* dst, size_t dstSize, const uint8_t* src, s
     BrotliDecoderDestroyInstance(instance);
 }
 
-void ColumnReader::decompressInternal(kuzu_parquet::format::CompressionCodec::type codec,
+void ColumnReader::decompressInternal(lbug_parquet::format::CompressionCodec::type codec,
     const uint8_t* src, uint64_t srcSize, uint8_t* dst, uint64_t dstSize) {
     switch (codec) {
     case CompressionCodec::UNCOMPRESSED:
@@ -331,7 +331,7 @@ void ColumnReader::decompressInternal(kuzu_parquet::format::CompressionCodec::ty
     case CompressionCodec::SNAPPY: {
         {
             size_t uncompressedSize = 0;
-            auto res = kuzu_snappy::GetUncompressedLength(reinterpret_cast<const char*>(src),
+            auto res = lbug_snappy::GetUncompressedLength(reinterpret_cast<const char*>(src),
                 srcSize, &uncompressedSize);
             // LCOV_EXCL_START
             if (!res) {
@@ -343,7 +343,7 @@ void ColumnReader::decompressInternal(kuzu_parquet::format::CompressionCodec::ty
             }
             // LCOV_EXCL_STOP
         }
-        auto res = kuzu_snappy::RawUncompress(reinterpret_cast<const char*>(src), srcSize,
+        auto res = lbug_snappy::RawUncompress(reinterpret_cast<const char*>(src), srcSize,
             reinterpret_cast<char*>(dst));
         // LCOV_EXCL_START
         if (!res) {
@@ -352,9 +352,9 @@ void ColumnReader::decompressInternal(kuzu_parquet::format::CompressionCodec::ty
         // LCOV_EXCL_STOP
     } break;
     case CompressionCodec::ZSTD: {
-        auto res = kuzu_zstd::ZSTD_decompress(dst, dstSize, src, srcSize);
+        auto res = lbug_zstd::ZSTD_decompress(dst, dstSize, src, srcSize);
         // LCOV_EXCL_START
-        if (kuzu_zstd::ZSTD_isError(res) || res != (size_t)dstSize) {
+        if (lbug_zstd::ZSTD_isError(res) || res != (size_t)dstSize) {
             throw common::RuntimeException{"ZSTD decompression failed."};
         }
         // LCOV_EXCL_STOP
@@ -363,7 +363,7 @@ void ColumnReader::decompressInternal(kuzu_parquet::format::CompressionCodec::ty
         brotliDecompress(dst, dstSize, src, srcSize);
     } break;
     case CompressionCodec::LZ4_RAW: {
-        auto res = kuzu_lz4::LZ4_decompress_safe(reinterpret_cast<const char*>(src),
+        auto res = lbug_lz4::LZ4_decompress_safe(reinterpret_cast<const char*>(src),
             reinterpret_cast<char*>(dst), srcSize, dstSize);
         // LCOV_EXCL_START
         if (res != (int64_t)dstSize) {
@@ -382,7 +382,7 @@ void ColumnReader::decompressInternal(kuzu_parquet::format::CompressionCodec::ty
     }
 }
 
-void ColumnReader::preparePageV2(kuzu_parquet::format::PageHeader& pageHdr) {
+void ColumnReader::preparePageV2(lbug_parquet::format::PageHeader& pageHdr) {
     KU_ASSERT(pageHdr.type == PageType::DATA_PAGE_V2);
 
     auto& trans = reinterpret_cast<ThriftFileTransport&>(*protocol->getTransport());
@@ -418,7 +418,7 @@ void ColumnReader::preparePageV2(kuzu_parquet::format::PageHeader& pageHdr) {
         block->ptr + uncompressedBytes, pageHdr.uncompressed_page_size - uncompressedBytes);
 }
 
-void ColumnReader::preparePage(kuzu_parquet::format::PageHeader& pageHdr) {
+void ColumnReader::preparePage(lbug_parquet::format::PageHeader& pageHdr) {
     auto& trans = reinterpret_cast<ThriftFileTransport&>(*protocol->getTransport());
 
     allocateBlock(pageHdr.uncompressed_page_size + 1);
@@ -437,7 +437,7 @@ void ColumnReader::preparePage(kuzu_parquet::format::PageHeader& pageHdr) {
         block->ptr, pageHdr.uncompressed_page_size);
 }
 
-void ColumnReader::prepareDataPage(kuzu_parquet::format::PageHeader& pageHdr) {
+void ColumnReader::prepareDataPage(lbug_parquet::format::PageHeader& pageHdr) {
     if (pageHdr.type == PageType::DATA_PAGE && !pageHdr.__isset.data_page_header) {
         throw std::runtime_error("Missing data page header from data page");
     }
@@ -517,7 +517,7 @@ uint64_t ColumnReader::getTotalCompressedSize() {
 }
 
 std::unique_ptr<ColumnReader> ColumnReader::createTimestampReader(ParquetReader& reader,
-    common::LogicalType type, const kuzu_parquet::format::SchemaElement& schema, uint64_t fileIdx,
+    common::LogicalType type, const lbug_parquet::format::SchemaElement& schema, uint64_t fileIdx,
     uint64_t maxDefine, uint64_t maxRepeat) {
     switch (schema.type) {
     case Type::INT96: {

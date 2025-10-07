@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 /**
  * Utility functions for Value of rel type.
@@ -14,7 +14,7 @@ public class ValueRelUtil {
      */
     public static InternalID getID(Value value) {
         value.checkNotDestroyed();
-        return Native.kuzuRelValGetId(value);
+        return Native.lbugRelValGetId(value);
     }
 
     /**
@@ -26,7 +26,7 @@ public class ValueRelUtil {
      */
     public static InternalID getSrcID(Value value) {
         value.checkNotDestroyed();
-        return Native.kuzuRelValGetSrcId(value);
+        return Native.lbugRelValGetSrcId(value);
     }
 
     /**
@@ -38,7 +38,7 @@ public class ValueRelUtil {
      */
     public static InternalID getDstID(Value value) {
         value.checkNotDestroyed();
-        return Native.kuzuRelValGetDstId(value);
+        return Native.lbugRelValGetDstId(value);
     }
 
     /**
@@ -50,7 +50,7 @@ public class ValueRelUtil {
      */
     public static String getLabelName(Value value) {
         value.checkNotDestroyed();
-        return Native.kuzuRelValGetLabelName(value);
+        return Native.lbugRelValGetLabelName(value);
     }
 
     /**
@@ -62,7 +62,7 @@ public class ValueRelUtil {
      */
     public static long getPropertySize(Value value) {
         value.checkNotDestroyed();
-        return Native.kuzuRelValGetPropertySize(value);
+        return Native.lbugRelValGetPropertySize(value);
     }
 
     /**
@@ -75,7 +75,7 @@ public class ValueRelUtil {
      */
     public static String getPropertyNameAt(Value value, long index) {
         value.checkNotDestroyed();
-        return Native.kuzuRelValGetPropertyNameAt(value, index);
+        return Native.lbugRelValGetPropertyNameAt(value, index);
     }
 
     /**
@@ -88,7 +88,7 @@ public class ValueRelUtil {
      */
     public static Value getPropertyValueAt(Value value, long index) {
         value.checkNotDestroyed();
-        return Native.kuzuRelValGetPropertyValueAt(value, index);
+        return Native.lbugRelValGetPropertyValueAt(value, index);
     }
 
     /**
@@ -100,6 +100,6 @@ public class ValueRelUtil {
      */
     public static String toString(Value value) {
         value.checkNotDestroyed();
-        return Native.kuzuRelValToString(value);
+        return Native.lbugRelValToString(value);
     }
 }

@@ -1,4 +1,4 @@
-add_library(kuzu_processor_operator_scan
+add_library(lbug_processor_operator_scan
         OBJECT
         primary_key_scan_node_table.cpp
         scan_multi_rel_tables.cpp
@@ -7,5 +7,5 @@ add_library(kuzu_processor_operator_scan
         scan_table.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_processor_operator_scan>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_processor_operator_scan>
         PARENT_SCOPE)

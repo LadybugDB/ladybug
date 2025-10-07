@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 /**
  * Utility functions for Value of node type.
@@ -13,7 +13,7 @@ public class ValueNodeUtil {
      */
     public static InternalID getID(Value value) {
         value.checkNotDestroyed();
-        return Native.kuzuNodeValGetId(value);
+        return Native.lbugNodeValGetId(value);
     }
 
     /**
@@ -25,7 +25,7 @@ public class ValueNodeUtil {
      */
     public static String getLabelName(Value value) {
         value.checkNotDestroyed();
-        return Native.kuzuNodeValGetLabelName(value);
+        return Native.lbugNodeValGetLabelName(value);
     }
 
     /**
@@ -37,7 +37,7 @@ public class ValueNodeUtil {
      */
     public static long getPropertySize(Value value) {
         value.checkNotDestroyed();
-        return Native.kuzuNodeValGetPropertySize(value);
+        return Native.lbugNodeValGetPropertySize(value);
     }
 
     /**
@@ -50,7 +50,7 @@ public class ValueNodeUtil {
      */
     public static String getPropertyNameAt(Value value, long index) {
         value.checkNotDestroyed();
-        return Native.kuzuNodeValGetPropertyNameAt(value, index);
+        return Native.lbugNodeValGetPropertyNameAt(value, index);
     }
 
     /**
@@ -63,7 +63,7 @@ public class ValueNodeUtil {
      */
     public static Value getPropertyValueAt(Value value, long index) {
         value.checkNotDestroyed();
-        return Native.kuzuNodeValGetPropertyValueAt(value, index);
+        return Native.lbugNodeValGetPropertyValueAt(value, index);
     }
 
     /**
@@ -75,6 +75,6 @@ public class ValueNodeUtil {
      */
     public static String toString(Value value) {
         value.checkNotDestroyed();
-        return Native.kuzuNodeValToString(value);
+        return Native.lbugNodeValToString(value);
     }
 }

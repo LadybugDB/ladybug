@@ -9,7 +9,7 @@ add_subdirectory(simple)
 add_subdirectory(table_scan)
 add_subdirectory(macro)
 
-add_library(kuzu_processor_operator
+add_library(lbug_processor_operator
         OBJECT
         arrow_result_collector.cpp
         base_partitioner_shared_state.cpp
@@ -37,5 +37,5 @@ add_library(kuzu_processor_operator
         unwind.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_processor_operator>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_processor_operator>
         PARENT_SCOPE)

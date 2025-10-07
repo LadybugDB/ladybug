@@ -27,7 +27,7 @@
 #include <sstream>
 #include <string>
 
-namespace kuzu_apache {
+namespace lbug_apache {
 namespace thrift {
 
 template <typename T>
@@ -108,6 +108,6 @@ std::string to_string(const std::set<T>& s) {
   return o.str();
 }
 }
-} // kuzu_apache::thrift
+} // lbug_apache::thrift
 
 #endif // _KUZU_THRIFT_TOSTRING_H_

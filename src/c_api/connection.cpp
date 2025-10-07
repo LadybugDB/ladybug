@@ -11,7 +11,7 @@ class Value;
 using namespace lbug::common;
 using namespace lbug::main;
 
-kuzu_state kuzu_connection_init(kuzu_database* database, kuzu_connection* out_connection) {
+lbug_state lbug_connection_init(lbug_database* database, lbug_connection* out_connection) {
     if (database == nullptr || database->_database == nullptr) {
         out_connection->_connection = nullptr;
         return KuzuError;
@@ -25,7 +25,7 @@ kuzu_state kuzu_connection_init(kuzu_database* database, kuzu_connection* out_co
     return KuzuSuccess;
 }
 
-void kuzu_connection_destroy(kuzu_connection* connection) {
+void lbug_connection_destroy(lbug_connection* connection) {
     if (connection == nullptr) {
         return;
     }
@@ -34,7 +34,7 @@ void kuzu_connection_destroy(kuzu_connection* connection) {
     }
 }
 
-kuzu_state kuzu_connection_set_max_num_thread_for_exec(kuzu_connection* connection,
+lbug_state lbug_connection_set_max_num_thread_for_exec(lbug_connection* connection,
     uint64_t num_threads) {
     if (connection == nullptr || connection->_connection == nullptr) {
         return KuzuError;
@@ -47,7 +47,7 @@ kuzu_state kuzu_connection_set_max_num_thread_for_exec(kuzu_connection* connecti
     return KuzuSuccess;
 }
 
-kuzu_state kuzu_connection_get_max_num_thread_for_exec(kuzu_connection* connection,
+lbug_state lbug_connection_get_max_num_thread_for_exec(lbug_connection* connection,
     uint64_t* out_result) {
     if (connection == nullptr || connection->_connection == nullptr) {
         return KuzuError;
@@ -60,8 +60,8 @@ kuzu_state kuzu_connection_get_max_num_thread_for_exec(kuzu_connection* connecti
     return KuzuSuccess;
 }
 
-kuzu_state kuzu_connection_query(kuzu_connection* connection, const char* query,
-    kuzu_query_result* out_query_result) {
+lbug_state lbug_connection_query(lbug_connection* connection, const char* query,
+    lbug_query_result* out_query_result) {
     if (connection == nullptr || connection->_connection == nullptr) {
         return KuzuError;
     }
@@ -82,8 +82,8 @@ kuzu_state kuzu_connection_query(kuzu_connection* connection, const char* query,
     }
 }
 
-kuzu_state kuzu_connection_prepare(kuzu_connection* connection, const char* query,
-    kuzu_prepared_statement* out_prepared_statement) {
+lbug_state lbug_connection_prepare(lbug_connection* connection, const char* query,
+    lbug_prepared_statement* out_prepared_statement) {
     if (connection == nullptr || connection->_connection == nullptr) {
         return KuzuError;
     }
@@ -103,8 +103,8 @@ kuzu_state kuzu_connection_prepare(kuzu_connection* connection, const char* quer
     return KuzuSuccess;
 }
 
-kuzu_state kuzu_connection_execute(kuzu_connection* connection,
-    kuzu_prepared_statement* prepared_statement, kuzu_query_result* out_query_result) {
+lbug_state lbug_connection_execute(lbug_connection* connection,
+    lbug_prepared_statement* prepared_statement, lbug_query_result* out_query_result) {
     if (connection == nullptr || connection->_connection == nullptr ||
         prepared_statement == nullptr || prepared_statement->_prepared_statement == nullptr ||
         prepared_statement->_bound_values == nullptr) {
@@ -140,11 +140,11 @@ kuzu_state kuzu_connection_execute(kuzu_connection* connection,
         return KuzuError;
     }
 }
-void kuzu_connection_interrupt(kuzu_connection* connection) {
+void lbug_connection_interrupt(lbug_connection* connection) {
     static_cast<Connection*>(connection->_connection)->interrupt();
 }
 
-kuzu_state kuzu_connection_set_query_timeout(kuzu_connection* connection, uint64_t timeout_in_ms) {
+lbug_state lbug_connection_set_query_timeout(lbug_connection* connection, uint64_t timeout_in_ms) {
     if (connection == nullptr || connection->_connection == nullptr) {
         return KuzuError;
     }

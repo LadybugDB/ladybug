@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 /**
  * Version is a class to get the version of the Lbug.
@@ -11,7 +11,7 @@ public class Version {
      * @return The version of the Lbug.
      */
     public static String getVersion() {
-        return Native.kuzuGetVersion();
+        return Native.lbugGetVersion();
     }
 
     /**
@@ -20,6 +20,6 @@ public class Version {
      * @return The storage version of the Lbug.
      */
     public static long getStorageVersion() {
-        return Native.kuzuGetStorageVersion();
+        return Native.lbugGetStorageVersion();
     }
 }

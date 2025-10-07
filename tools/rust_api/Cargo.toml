@@ -4,8 +4,8 @@ version = "0.11.1"
 description = "An in-process property graph database management system built for query speed and scalability"
 keywords = ["database", "graph", "ffi"]
 readme = "lbug-src/README.md"
-homepage = "https://kuzudb.com/"
-repository = "https://github.com/kuzudb/lbug"
+homepage = "https://lbugdb.com/"
+repository = "https://github.com/lbugdb/lbug"
 license = "MIT"
 categories = ["database"]
 

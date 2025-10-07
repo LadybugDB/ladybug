@@ -11,7 +11,7 @@
 #include "zstd/compress/zstd_compress_internal.h"
 #include "zstd/compress/zstd_double_fast.h"
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 
 void ZSTD_fillDoubleHashTable(ZSTD_matchState_t* ms,
                               void const* end, ZSTD_dictTableLoadMethod_e dtlm)

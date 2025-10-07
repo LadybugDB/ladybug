@@ -21,7 +21,7 @@ public:
 
 public:
     StringColumnReader(ParquetReader& reader, common::LogicalType type,
-        const kuzu_parquet::format::SchemaElement& schema, uint64_t schemaIdx, uint64_t maxDefine,
+        const lbug_parquet::format::SchemaElement& schema, uint64_t schemaIdx, uint64_t maxDefine,
         uint64_t maxRepeat);
 
     std::unique_ptr<common::ku_string_t[]> dictStrs;

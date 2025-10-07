@@ -7,10 +7,10 @@ keywords = ["graph", "database"]
 version = "0.0.1"
 
 [project.urls]
-Homepage = "https://kuzudb.com/"
-Documentation = "https://docs.kuzudb.com/"
-Repository = "https://github.com/kuzudb/lbug"
-Changelog = "https://github.com/kuzudb/lbug/releases"
+Homepage = "https://lbugdb.com/"
+Documentation = "https://docs.lbugdb.com/"
+Repository = "https://github.com/lbugdb/lbug"
+Changelog = "https://github.com/lbugdb/lbug/releases"
 
 [tool.mypy]
 files = ["src_py", "test"]
@@ -27,7 +27,7 @@ disable_error_code = [
 
 [[tool.mypy.overrides]]
 module = [
-  "_kuzu.*",
+  "_lbug.*",
   "networkx.*",
   "pandas.*",
   "pyarrow.*",

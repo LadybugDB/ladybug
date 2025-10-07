@@ -36,7 +36,7 @@ public:
         common::ValueVector& inputVector, common::ValueVector& resultVector, bool ascOrder,
         bool nullFirst) {
         // TODO(Ziyi) - Replace this sort implementation with radix_sort implementation:
-        //  https://github.com/kuzudb/lbug/issues/1536.
+        //  https://github.com/lbugdb/lbug/issues/1536.
         auto inputDataVector = common::ListVector::getDataVector(&inputVector);
         auto inputPos = input.offset;
 

@@ -22,7 +22,7 @@
 
 #include "Thrift.h"
 
-namespace kuzu_apache {
+namespace lbug_apache {
 namespace thrift {
 
 namespace protocol {
@@ -107,6 +107,6 @@ protected:
   TApplicationExceptionType type_;
 };
 }
-} // kuzu_apache::thrift
+} // lbug_apache::thrift
 
 #endif // #ifndef _KUZU_THRIFT_TAPPLICATIONEXCEPTION_H_

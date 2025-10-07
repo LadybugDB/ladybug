@@ -12,8 +12,8 @@ struct CAPIHelper {
 };
 } // namespace lbug::common
 
-void kuzu_data_type_create(kuzu_data_type_id id, kuzu_logical_type* child_type,
-    uint64_t num_elements_in_array, kuzu_logical_type* out_data_type) {
+void lbug_data_type_create(lbug_data_type_id id, lbug_logical_type* child_type,
+    uint64_t num_elements_in_array, lbug_logical_type* out_data_type) {
     uint8_t data_type_id_u8 = id;
     LogicalType* data_type = nullptr;
     auto logicalTypeID = static_cast<LogicalTypeID>(data_type_id_u8);
@@ -30,12 +30,12 @@ void kuzu_data_type_create(kuzu_data_type_id id, kuzu_logical_type* child_type,
     out_data_type->_data_type = data_type;
 }
 
-void kuzu_data_type_clone(kuzu_logical_type* data_type, kuzu_logical_type* out_data_type) {
+void lbug_data_type_clone(lbug_logical_type* data_type, lbug_logical_type* out_data_type) {
     out_data_type->_data_type =
         new LogicalType(static_cast<LogicalType*>(data_type->_data_type)->copy());
 }
 
-void kuzu_data_type_destroy(kuzu_logical_type* data_type) {
+void lbug_data_type_destroy(lbug_logical_type* data_type) {
     if (data_type == nullptr) {
         return;
     }
@@ -44,18 +44,18 @@ void kuzu_data_type_destroy(kuzu_logical_type* data_type) {
     }
 }
 
-bool kuzu_data_type_equals(kuzu_logical_type* data_type1, kuzu_logical_type* data_type2) {
+bool lbug_data_type_equals(lbug_logical_type* data_type1, lbug_logical_type* data_type2) {
     return *static_cast<LogicalType*>(data_type1->_data_type) ==
            *static_cast<LogicalType*>(data_type2->_data_type);
 }
 
-kuzu_data_type_id kuzu_data_type_get_id(kuzu_logical_type* data_type) {
+lbug_data_type_id lbug_data_type_get_id(lbug_logical_type* data_type) {
     auto data_type_id_u8 =
         static_cast<uint8_t>(static_cast<LogicalType*>(data_type->_data_type)->getLogicalTypeID());
-    return static_cast<kuzu_data_type_id>(data_type_id_u8);
+    return static_cast<lbug_data_type_id>(data_type_id_u8);
 }
 
-kuzu_state kuzu_data_type_get_num_elements_in_array(kuzu_logical_type* data_type,
+lbug_state lbug_data_type_get_num_elements_in_array(lbug_logical_type* data_type,
     uint64_t* out_result) {
     auto parent_type = static_cast<LogicalType*>(data_type->_data_type);
     if (parent_type->getLogicalTypeID() != LogicalTypeID::ARRAY) {

@@ -13,10 +13,10 @@
     }
   },
   "type": "commonjs",
-  "homepage": "https://kuzudb.com/",
+  "homepage": "https://lbugdb.com/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kuzudb/lbug.git"
+    "url": "https://github.com/lbugdb/lbug.git"
   },
   "scripts": {
     "test": "mocha test --timeout 20000",

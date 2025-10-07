@@ -21,7 +21,7 @@ add_subdirectory(transaction)
 add_subdirectory(extension)
 
 add_library(lbug STATIC ${ALL_OBJECT_FILES})
-add_library(kuzu_shared SHARED ${ALL_OBJECT_FILES})
+add_library(lbug_shared SHARED ${ALL_OBJECT_FILES})
 
 set(KUZU_LIBRARIES antlr4_cypher antlr4_runtime brotlidec brotlicommon fast_float utf8proc re2 fastpfor parquet snappy thrift yyjson zstd miniz mbedtls lz4 roaring_bitmap simsimd)
 if (NOT __SINGLE_THREADED__)
@@ -39,12 +39,12 @@ if (ENABLE_BACKTRACES)
         set(KUZU_LIBRARIES ${KUZU_LIBRARIES} cpptrace::cpptrace)
 endif()
 target_link_libraries(lbug PUBLIC ${KUZU_LIBRARIES})
-target_link_libraries(kuzu_shared PUBLIC ${KUZU_LIBRARIES})
+target_link_libraries(lbug_shared PUBLIC ${KUZU_LIBRARIES})
 unset(KUZU_LIBRARIES)
 
 set(KUZU_INCLUDES $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include/c_api)
 target_include_directories(lbug PUBLIC ${KUZU_INCLUDES})
-target_include_directories(kuzu_shared PUBLIC ${KUZU_INCLUDES})
+target_include_directories(lbug_shared PUBLIC ${KUZU_INCLUDES})
 unset(KUZU_INCLUDES)
 
 if(WIN32)
@@ -53,10 +53,10 @@ if(WIN32)
 endif()
 
 if(NOT WIN32)
-        set_target_properties(kuzu_shared PROPERTIES OUTPUT_NAME lbug)
+        set_target_properties(lbug_shared PROPERTIES OUTPUT_NAME lbug)
 endif()
 
-install(TARGETS lbug kuzu_shared)
+install(TARGETS lbug lbug_shared)
 
 if(${BUILD_SINGLE_FILE_HEADER})
         # Create a command to generate lbug.hpp, and then create a target that is
@@ -68,7 +68,7 @@ if(${BUILD_SINGLE_FILE_HEADER})
                 COMMAND
                         ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/collect-single-file-header.py ${CMAKE_CURRENT_BINARY_DIR}/..
                 DEPENDS
-                        ${PROJECT_SOURCE_DIR}/scripts/collect-single-file-header.py kuzu_shared)
+                        ${PROJECT_SOURCE_DIR}/scripts/collect-single-file-header.py lbug_shared)
         add_custom_target(single_file_header ALL DEPENDS lbug.hpp)
 endif()
 

@@ -38,7 +38,7 @@
                                        This constant is required by ZSTD_compressBlock_btlazy2() and ZSTD_reduceTable_internal() */
 
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 /*-*************************************
 *  Context memory management
 ***************************************/

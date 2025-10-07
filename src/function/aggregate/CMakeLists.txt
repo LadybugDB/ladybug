@@ -1,4 +1,4 @@
-add_library(kuzu_function_aggregate
+add_library(lbug_function_aggregate
         OBJECT
         count.cpp
         count_star.cpp
@@ -8,5 +8,5 @@ add_library(kuzu_function_aggregate
         avg.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_function_aggregate>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_function_aggregate>
         PARENT_SCOPE)

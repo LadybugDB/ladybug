@@ -19,7 +19,7 @@
 #include <stddef.h>        /* size_t */
 #include "zstd/common/zstd_errors.h"  /* enum list */
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 /* ****************************************
 *  Compiler-specific
 ******************************************/

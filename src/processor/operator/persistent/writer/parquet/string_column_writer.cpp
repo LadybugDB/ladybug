@@ -9,7 +9,7 @@ namespace lbug {
 namespace processor {
 
 using namespace lbug::common;
-using namespace kuzu_parquet::format;
+using namespace lbug_parquet::format;
 
 std::size_t StringHash::operator()(const ku_string_t& k) const {
     hash_t result = 0;

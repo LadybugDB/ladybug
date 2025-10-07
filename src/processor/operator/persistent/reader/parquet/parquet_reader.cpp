@@ -15,7 +15,7 @@
 #include "processor/operator/persistent/reader/reader_bind_utils.h"
 #include "processor/warning_context.h"
 
-using namespace kuzu_parquet::format;
+using namespace lbug_parquet::format;
 
 namespace lbug {
 namespace processor {
@@ -382,7 +382,7 @@ uint64_t ParquetReader::getGroupSpan(ParquetReaderScanState& state) {
     return max_offset - min_offset;
 }
 
-LogicalType ParquetReader::deriveLogicalType(const kuzu_parquet::format::SchemaElement& s_ele) {
+LogicalType ParquetReader::deriveLogicalType(const lbug_parquet::format::SchemaElement& s_ele) {
     // inner node
     if (s_ele.type == Type::FIXED_LEN_BYTE_ARRAY && !s_ele.__isset.type_length) {
         // LCOV_EXCL_START

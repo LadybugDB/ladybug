@@ -22,7 +22,7 @@
 #include "zstd/common/huf.h"
 #include "zstd/common/huf_static.h"
 
-namespace kuzu_zstd {
+namespace lbug_zstd {
 
 /*===   Version   ===*/
 unsigned FSE_versionNumber(void) { return FSE_VERSION_NUMBER; }

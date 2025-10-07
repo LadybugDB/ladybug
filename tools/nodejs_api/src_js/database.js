@@ -1,6 +1,6 @@
 "use strict";
 
-const KuzuNative = require("./kuzu_native.js");
+const KuzuNative = require("./lbug_native.js");
 
 class Database {
   /**

@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 public class KuzuList implements AutoCloseable {
     private Value listVal;
@@ -25,7 +25,7 @@ public class KuzuList implements AutoCloseable {
      * @param values: the array to construct the list from
      */
     public KuzuList(Value[] values) {
-        listVal = Native.kuzuCreateList(values);
+        listVal = Native.lbugCreateList(values);
     }
 
     /**
@@ -34,7 +34,7 @@ public class KuzuList implements AutoCloseable {
      * @param numElements: the size of the list to construct
      */
     public KuzuList(DataType type, long numElements) {
-        listVal = Native.kuzuCreateList(type, numElements);
+        listVal = Native.lbugCreateList(type, numElements);
     }
 
     /**
@@ -45,7 +45,7 @@ public class KuzuList implements AutoCloseable {
      */
     public long getListSize() {
         listVal.checkNotDestroyed();
-        return Native.kuzuValueGetListSize(listVal);
+        return Native.lbugValueGetListSize(listVal);
     }
 
     /**
@@ -57,7 +57,7 @@ public class KuzuList implements AutoCloseable {
      */
     public Value getListElement(long index) {
         listVal.checkNotDestroyed();
-        return Native.kuzuValueGetListElement(listVal, index);
+        return Native.lbugValueGetListElement(listVal, index);
     }
 
     /**

@@ -10,7 +10,7 @@ add_subdirectory(types)
 add_subdirectory(vector)
 add_subdirectory(file_system)
 
-add_library(kuzu_common
+add_library(lbug_common
         OBJECT
         case_insensitive_map.cpp
         checksum.cpp
@@ -33,5 +33,5 @@ add_library(kuzu_common
         windows_utils.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_common>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_common>
         PARENT_SCOPE)

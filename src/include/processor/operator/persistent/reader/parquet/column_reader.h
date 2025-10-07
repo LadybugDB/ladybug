@@ -20,7 +20,7 @@ typedef std::bitset<common::DEFAULT_VECTOR_CAPACITY> parquet_filter_t;
 class ColumnReader {
 public:
     ColumnReader(ParquetReader& reader, common::LogicalType type,
-        const kuzu_parquet::format::SchemaElement& schema, common::idx_t fileIdx,
+        const lbug_parquet::format::SchemaElement& schema, common::idx_t fileIdx,
         uint64_t maxDefinition, uint64_t maxRepeat);
     virtual ~ColumnReader() = default;
     const common::LogicalType& getDataType() const { return type; }
@@ -43,8 +43,8 @@ public:
     virtual void resetPage() {}
     virtual uint64_t getGroupRowsAvailable() { return groupRowsAvailable; }
     virtual void initializeRead(uint64_t rowGroupIdx,
-        const std::vector<kuzu_parquet::format::ColumnChunk>& columns,
-        kuzu_apache::thrift::protocol::TProtocol& protocol);
+        const std::vector<lbug_parquet::format::ColumnChunk>& columns,
+        lbug_apache::thrift::protocol::TProtocol& protocol);
     virtual uint64_t getTotalCompressedSize();
     virtual void registerPrefetch(ThriftFileTransport& transport, bool allowMerge);
     virtual uint64_t fileOffset() const;
@@ -52,16 +52,16 @@ public:
     virtual uint64_t read(uint64_t numValues, parquet_filter_t& filter, uint8_t* defineOut,
         uint8_t* repeatOut, common::ValueVector* resultOut);
     static std::unique_ptr<ColumnReader> createReader(ParquetReader& reader,
-        common::LogicalType type, const kuzu_parquet::format::SchemaElement& schema,
+        common::LogicalType type, const lbug_parquet::format::SchemaElement& schema,
         uint64_t fileIdx, uint64_t maxDefine, uint64_t maxRepeat);
     void prepareRead(parquet_filter_t& filter);
     void allocateBlock(uint64_t size);
     void allocateCompressed(uint64_t size);
-    void decompressInternal(kuzu_parquet::format::CompressionCodec::type codec, const uint8_t* src,
+    void decompressInternal(lbug_parquet::format::CompressionCodec::type codec, const uint8_t* src,
         uint64_t srcSize, uint8_t* dst, uint64_t dstSize);
-    void preparePageV2(kuzu_parquet::format::PageHeader& pageHdr);
-    void preparePage(kuzu_parquet::format::PageHeader& pageHdr);
-    void prepareDataPage(kuzu_parquet::format::PageHeader& pageHdr);
+    void preparePageV2(lbug_parquet::format::PageHeader& pageHdr);
+    void preparePage(lbug_parquet::format::PageHeader& pageHdr);
+    void prepareDataPage(lbug_parquet::format::PageHeader& pageHdr);
     template<class VALUE_TYPE, class CONVERSION>
     void plainTemplated(const std::shared_ptr<ByteBuffer>& plainData, const uint8_t* defines,
         uint64_t numValues, parquet_filter_t& filter, uint64_t resultOffset,
@@ -83,11 +83,11 @@ public:
 
 private:
     static std::unique_ptr<ColumnReader> createTimestampReader(ParquetReader& reader,
-        common::LogicalType type, const kuzu_parquet::format::SchemaElement& schema,
+        common::LogicalType type, const lbug_parquet::format::SchemaElement& schema,
         uint64_t fileIdx, uint64_t maxDefine, uint64_t maxRepeat);
 
 protected:
-    const kuzu_parquet::format::SchemaElement& schema;
+    const lbug_parquet::format::SchemaElement& schema;
 
     uint64_t fileIdx;
     uint64_t maxDefine;
@@ -98,9 +98,9 @@ protected:
 
     uint64_t pendingSkips = 0;
 
-    const kuzu_parquet::format::ColumnChunk* chunk = nullptr;
+    const lbug_parquet::format::ColumnChunk* chunk = nullptr;
 
-    kuzu_apache::thrift::protocol::TProtocol* protocol;
+    lbug_apache::thrift::protocol::TProtocol* protocol;
     uint64_t pageRowsAvailable;
     uint64_t groupRowsAvailable;
     uint64_t chunkReadOffset;

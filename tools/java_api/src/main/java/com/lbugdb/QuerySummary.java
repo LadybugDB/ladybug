@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 /**
  * QuerySummary stores the execution time, plan, compiling time and query options of a query.

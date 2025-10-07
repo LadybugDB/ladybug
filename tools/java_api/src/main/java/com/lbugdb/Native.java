@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 import java.util.Map;
 import java.io.File;
@@ -48,9 +48,9 @@ public class Native {
             } else if (os_name_detect.startsWith("linux")) {
                 os_name = "linux";
             }
-            String lib_res_name = "/libkuzu_java_native.so" + "_" + os_name + "_" + os_arch;
+            String lib_res_name = "/liblbug_java_native.so" + "_" + os_name + "_" + os_arch;
 
-            Path lib_file = Files.createTempFile("libkuzu_java_native", ".so");
+            Path lib_file = Files.createTempFile("liblbug_java_native", ".so");
             URL lib_res = Native.class.getResource(lib_res_name);
             if (lib_res == null) {
                 throw new IOException(lib_res_name + " not found");
@@ -60,7 +60,7 @@ public class Native {
             String lib_path = lib_file.toAbsolutePath().toString();
             System.load(lib_path);
             if (os_name.equals("linux")) {
-                kuzuNativeReloadLibrary(lib_path);
+                lbugNativeReloadLibrary(lib_path);
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -70,171 +70,171 @@ public class Native {
     // Hack: Reload the native library again in JNI bindings to work around the
     // extension loading issue on Linux as System.load() does not set
     // `RTLD_GLOBAL` flag and there is no way to set it in Java.
-    protected static native void kuzuNativeReloadLibrary(String libPath);
+    protected static native void lbugNativeReloadLibrary(String libPath);
 
     // Database
-    protected static native long kuzuDatabaseInit(String databasePath, long bufferPoolSize,
+    protected static native long lbugDatabaseInit(String databasePath, long bufferPoolSize,
             boolean enableCompression, boolean readOnly, long maxDbSize, boolean autoCheckpoint,
             long checkpointThreshold,boolean throwOnWalReplayFailure, boolean enableChecksums);
 
-    protected static native void kuzuDatabaseDestroy(Database db);
+    protected static native void lbugDatabaseDestroy(Database db);
 
-    protected static native void kuzuDatabaseSetLoggingLevel(String loggingLevel);
+    protected static native void lbugDatabaseSetLoggingLevel(String loggingLevel);
 
     // Connection
-    protected static native long kuzuConnectionInit(Database database);
+    protected static native long lbugConnectionInit(Database database);
 
-    protected static native void kuzuConnectionDestroy(Connection connection);
+    protected static native void lbugConnectionDestroy(Connection connection);
 
-    protected static native void kuzuConnectionSetMaxNumThreadForExec(
+    protected static native void lbugConnectionSetMaxNumThreadForExec(
             Connection connection, long numThreads);
 
-    protected static native long kuzuConnectionGetMaxNumThreadForExec(Connection connection);
+    protected static native long lbugConnectionGetMaxNumThreadForExec(Connection connection);
 
-    protected static native QueryResult kuzuConnectionQuery(Connection connection, String query);
+    protected static native QueryResult lbugConnectionQuery(Connection connection, String query);
 
-    protected static native PreparedStatement kuzuConnectionPrepare(
+    protected static native PreparedStatement lbugConnectionPrepare(
             Connection connection, String query);
 
-    protected static native QueryResult kuzuConnectionExecute(
+    protected static native QueryResult lbugConnectionExecute(
             Connection connection, PreparedStatement preparedStatement, Map<String, Value> param);
 
-    protected static native void kuzuConnectionInterrupt(Connection connection);
+    protected static native void lbugConnectionInterrupt(Connection connection);
 
-    protected static native void kuzuConnectionSetQueryTimeout(
+    protected static native void lbugConnectionSetQueryTimeout(
             Connection connection, long timeoutInMs);
 
     // PreparedStatement
-    protected static native void kuzuPreparedStatementDestroy(PreparedStatement preparedStatement);
+    protected static native void lbugPreparedStatementDestroy(PreparedStatement preparedStatement);
 
-    protected static native boolean kuzuPreparedStatementIsSuccess(PreparedStatement preparedStatement);
+    protected static native boolean lbugPreparedStatementIsSuccess(PreparedStatement preparedStatement);
 
-    protected static native String kuzuPreparedStatementGetErrorMessage(
+    protected static native String lbugPreparedStatementGetErrorMessage(
             PreparedStatement preparedStatement);
 
     // QueryResult
-    protected static native void kuzuQueryResultDestroy(QueryResult queryResult);
+    protected static native void lbugQueryResultDestroy(QueryResult queryResult);
 
-    protected static native boolean kuzuQueryResultIsSuccess(QueryResult queryResult);
+    protected static native boolean lbugQueryResultIsSuccess(QueryResult queryResult);
 
-    protected static native String kuzuQueryResultGetErrorMessage(QueryResult queryResult);
+    protected static native String lbugQueryResultGetErrorMessage(QueryResult queryResult);
 
-    protected static native long kuzuQueryResultGetNumColumns(QueryResult queryResult);
+    protected static native long lbugQueryResultGetNumColumns(QueryResult queryResult);
 
-    protected static native String kuzuQueryResultGetColumnName(QueryResult queryResult, long index);
+    protected static native String lbugQueryResultGetColumnName(QueryResult queryResult, long index);
 
-    protected static native DataType kuzuQueryResultGetColumnDataType(
+    protected static native DataType lbugQueryResultGetColumnDataType(
             QueryResult queryResult, long index);
 
-    protected static native long kuzuQueryResultGetNumTuples(QueryResult queryResult);
+    protected static native long lbugQueryResultGetNumTuples(QueryResult queryResult);
 
-    protected static native QuerySummary kuzuQueryResultGetQuerySummary(QueryResult queryResult);
+    protected static native QuerySummary lbugQueryResultGetQuerySummary(QueryResult queryResult);
 
-    protected static native boolean kuzuQueryResultHasNext(QueryResult queryResult);
+    protected static native boolean lbugQueryResultHasNext(QueryResult queryResult);
 
-    protected static native FlatTuple kuzuQueryResultGetNext(QueryResult queryResult);
+    protected static native FlatTuple lbugQueryResultGetNext(QueryResult queryResult);
 
-    protected static native boolean kuzuQueryResultHasNextQueryResult(QueryResult queryResult);
+    protected static native boolean lbugQueryResultHasNextQueryResult(QueryResult queryResult);
 
-    protected static native QueryResult kuzuQueryResultGetNextQueryResult(QueryResult queryResult);
+    protected static native QueryResult lbugQueryResultGetNextQueryResult(QueryResult queryResult);
 
-    protected static native String kuzuQueryResultToString(QueryResult queryResult);
+    protected static native String lbugQueryResultToString(QueryResult queryResult);
 
-    protected static native void kuzuQueryResultResetIterator(QueryResult queryResult);
+    protected static native void lbugQueryResultResetIterator(QueryResult queryResult);
 
     // FlatTuple
-    protected static native void kuzuFlatTupleDestroy(FlatTuple flatTuple);
+    protected static native void lbugFlatTupleDestroy(FlatTuple flatTuple);
 
-    protected static native Value kuzuFlatTupleGetValue(FlatTuple flatTuple, long index);
+    protected static native Value lbugFlatTupleGetValue(FlatTuple flatTuple, long index);
 
-    protected static native String kuzuFlatTupleToString(FlatTuple flatTuple);
+    protected static native String lbugFlatTupleToString(FlatTuple flatTuple);
 
     // DataType
-    protected static native long kuzuDataTypeCreate(
+    protected static native long lbugDataTypeCreate(
             DataTypeID id, DataType childType, long numElementsInArray);
 
-    protected static native DataType kuzuDataTypeClone(DataType dataType);
+    protected static native DataType lbugDataTypeClone(DataType dataType);
 
-    protected static native void kuzuDataTypeDestroy(DataType dataType);
+    protected static native void lbugDataTypeDestroy(DataType dataType);
 
-    protected static native boolean kuzuDataTypeEquals(DataType dataType1, DataType dataType2);
+    protected static native boolean lbugDataTypeEquals(DataType dataType1, DataType dataType2);
 
-    protected static native DataTypeID kuzuDataTypeGetId(DataType dataType);
+    protected static native DataTypeID lbugDataTypeGetId(DataType dataType);
 
-    protected static native DataType kuzuDataTypeGetChildType(DataType dataType);
+    protected static native DataType lbugDataTypeGetChildType(DataType dataType);
 
-    protected static native long kuzuDataTypeGetNumElementsInArray(DataType dataType);
+    protected static native long lbugDataTypeGetNumElementsInArray(DataType dataType);
 
     // Value
-    protected static native Value kuzuValueCreateNull();
+    protected static native Value lbugValueCreateNull();
 
-    protected static native Value kuzuValueCreateNullWithDataType(DataType dataType);
+    protected static native Value lbugValueCreateNullWithDataType(DataType dataType);
 
-    protected static native boolean kuzuValueIsNull(Value value);
+    protected static native boolean lbugValueIsNull(Value value);
 
-    protected static native void kuzuValueSetNull(Value value, boolean isNull);
+    protected static native void lbugValueSetNull(Value value, boolean isNull);
 
-    protected static native Value kuzuValueCreateDefault(DataType dataType);
+    protected static native Value lbugValueCreateDefault(DataType dataType);
 
-    protected static native <T> long kuzuValueCreateValue(T val);
+    protected static native <T> long lbugValueCreateValue(T val);
 
-    protected static native Value kuzuValueClone(Value value);
+    protected static native Value lbugValueClone(Value value);
 
-    protected static native void kuzuValueCopy(Value value, Value other);
+    protected static native void lbugValueCopy(Value value, Value other);
 
-    protected static native void kuzuValueDestroy(Value value);
+    protected static native void lbugValueDestroy(Value value);
 
-    protected static native Value kuzuCreateMap(Value[] keys, Value[] values);
+    protected static native Value lbugCreateMap(Value[] keys, Value[] values);
 
-    protected static native Value kuzuCreateList(Value[] values);
+    protected static native Value lbugCreateList(Value[] values);
 
-    protected static native Value kuzuCreateList(DataType type, long numElements);
+    protected static native Value lbugCreateList(DataType type, long numElements);
 
-    protected static native long kuzuValueGetListSize(Value value);
+    protected static native long lbugValueGetListSize(Value value);
 
-    protected static native Value kuzuValueGetListElement(Value value, long index);
+    protected static native Value lbugValueGetListElement(Value value, long index);
 
-    protected static native DataType kuzuValueGetDataType(Value value);
+    protected static native DataType lbugValueGetDataType(Value value);
 
-    protected static native <T> T kuzuValueGetValue(Value value);
+    protected static native <T> T lbugValueGetValue(Value value);
 
-    protected static native String kuzuValueToString(Value value);
+    protected static native String lbugValueToString(Value value);
 
-    protected static native InternalID kuzuNodeValGetId(Value nodeVal);
+    protected static native InternalID lbugNodeValGetId(Value nodeVal);
 
-    protected static native String kuzuNodeValGetLabelName(Value nodeVal);
+    protected static native String lbugNodeValGetLabelName(Value nodeVal);
 
-    protected static native long kuzuNodeValGetPropertySize(Value nodeVal);
+    protected static native long lbugNodeValGetPropertySize(Value nodeVal);
 
-    protected static native String kuzuNodeValGetPropertyNameAt(Value nodeVal, long index);
+    protected static native String lbugNodeValGetPropertyNameAt(Value nodeVal, long index);
 
-    protected static native Value kuzuNodeValGetPropertyValueAt(Value nodeVal, long index);
+    protected static native Value lbugNodeValGetPropertyValueAt(Value nodeVal, long index);
 
-    protected static native String kuzuNodeValToString(Value nodeVal);
+    protected static native String lbugNodeValToString(Value nodeVal);
 
-    protected static native InternalID kuzuRelValGetId(Value relVal);
+    protected static native InternalID lbugRelValGetId(Value relVal);
 
-    protected static native InternalID kuzuRelValGetSrcId(Value relVal);
+    protected static native InternalID lbugRelValGetSrcId(Value relVal);
 
-    protected static native InternalID kuzuRelValGetDstId(Value relVal);
+    protected static native InternalID lbugRelValGetDstId(Value relVal);
 
-    protected static native String kuzuRelValGetLabelName(Value relVal);
+    protected static native String lbugRelValGetLabelName(Value relVal);
 
-    protected static native long kuzuRelValGetPropertySize(Value relVal);
+    protected static native long lbugRelValGetPropertySize(Value relVal);
 
-    protected static native String kuzuRelValGetPropertyNameAt(Value relVal, long index);
+    protected static native String lbugRelValGetPropertyNameAt(Value relVal, long index);
 
-    protected static native Value kuzuRelValGetPropertyValueAt(Value relVal, long index);
+    protected static native Value lbugRelValGetPropertyValueAt(Value relVal, long index);
 
-    protected static native String kuzuRelValToString(Value relVal);
+    protected static native String lbugRelValToString(Value relVal);
 
-    protected static native Value kuzuCreateStruct(String[] fieldNames, Value[] fieldValues);
+    protected static native Value lbugCreateStruct(String[] fieldNames, Value[] fieldValues);
 
-    protected static native String kuzuValueGetStructFieldName(Value structVal, long index);
+    protected static native String lbugValueGetStructFieldName(Value structVal, long index);
 
-    protected static native long kuzuValueGetStructIndex(Value structVal, String fieldName);
+    protected static native long lbugValueGetStructIndex(Value structVal, String fieldName);
 
-    protected static native String kuzuGetVersion();
+    protected static native String lbugGetVersion();
 
-    protected static native long kuzuGetStorageVersion();
+    protected static native long lbugGetStorageVersion();
 }

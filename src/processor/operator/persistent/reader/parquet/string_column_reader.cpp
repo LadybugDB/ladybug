@@ -5,13 +5,13 @@
 #include "parquet_types.h"
 #include "utf8proc_wrapper.h"
 
-using kuzu_parquet::format::Type;
+using lbug_parquet::format::Type;
 
 namespace lbug {
 namespace processor {
 
 StringColumnReader::StringColumnReader(ParquetReader& reader, common::LogicalType type,
-    const kuzu_parquet::format::SchemaElement& schema, uint64_t schemaIdx, uint64_t maxDefine,
+    const lbug_parquet::format::SchemaElement& schema, uint64_t schemaIdx, uint64_t maxDefine,
     uint64_t maxRepeat)
     : TemplatedColumnReader<common::ku_string_t, StringParquetValueConversion>(reader,
           std::move(type), schema, schemaIdx, maxDefine, maxRepeat) {

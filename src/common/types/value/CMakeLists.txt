@@ -1,4 +1,4 @@
-add_library(kuzu_common_types_value
+add_library(lbug_common_types_value
         OBJECT
         nested.cpp
         node.cpp
@@ -7,5 +7,5 @@ add_library(kuzu_common_types_value
         value.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_common_types_value>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_common_types_value>
         PARENT_SCOPE)

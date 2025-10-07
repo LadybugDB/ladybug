@@ -1,4 +1,4 @@
-add_library(kuzu_utility_function
+add_library(lbug_utility_function
         OBJECT
         coalesce.cpp
         md5.cpp
@@ -10,5 +10,5 @@ add_library(kuzu_utility_function
         typeof.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_utility_function>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_utility_function>
         PARENT_SCOPE)

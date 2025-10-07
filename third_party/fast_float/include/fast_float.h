@@ -40,7 +40,7 @@
 
 #include <system_error>
 
-namespace kuzu_fast_float {
+namespace lbug_fast_float {
 enum chars_format {
     scientific = 1<<0,
     fixed = 1<<2,
@@ -159,7 +159,7 @@ from_chars_result from_chars(const char *first, const char *last,
 #define fastfloat_really_inline inline __attribute__((always_inline))
 #endif
 
-namespace kuzu_fast_float {
+namespace lbug_fast_float {
 
 // Compares two ASCII strings in a case insensitive manner.
 inline bool fastfloat_strncasecmp(const char *input1, const char *input2,
@@ -406,11 +406,11 @@ inline constexpr int binary_format<float>::smallest_power_of_ten() {
     return -65;
 }
 
-} // namespace kuzu_fast_float
+} // namespace lbug_fast_float
 
 // for convenience:
 template<class OStream>
-inline OStream& operator<<(OStream &out, const kuzu_fast_float::decimal &d) {
+inline OStream& operator<<(OStream &out, const lbug_fast_float::decimal &d) {
     out << "0.";
     for (size_t i = 0; i < d.num_digits; i++) {
         out << int32_t(d.digits[i]);
@@ -431,7 +431,7 @@ inline OStream& operator<<(OStream &out, const kuzu_fast_float::decimal &d) {
 #include <cstring>
 
 
-namespace kuzu_fast_float {
+namespace lbug_fast_float {
 
 // Next function can be micro-optimized, but compilers are entirely
 // able to optimize it well.
@@ -735,7 +735,7 @@ fastfloat_really_inline decimal parse_decimal(const char *p, const char *pend, c
 
     return answer;
 }
-} // namespace kuzu_fast_float
+} // namespace lbug_fast_float
 
 #endif
 
@@ -744,7 +744,7 @@ fastfloat_really_inline decimal parse_decimal(const char *p, const char *pend, c
 #define FASTFLOAT_FAST_TABLE_H
 #include <cstdint>
 
-namespace kuzu_fast_float {
+namespace lbug_fast_float {
 
 /**
  * When mapping numbers from decimal to binary,
@@ -1450,7 +1450,7 @@ using powers = powers_template<>;
 #include <cstdlib>
 #include <cstring>
 
-namespace kuzu_fast_float {
+namespace lbug_fast_float {
 
 // This will compute or rather approximate w * 5**q and return a pair of 64-bit words approximating
 // the result, with the "high" part corresponding to the most significant bits and the
@@ -1608,7 +1608,7 @@ fastfloat_really_inline
 }
 
 
-} // namespace kuzu_fast_float
+} // namespace lbug_fast_float
 
 #endif
 
@@ -1622,7 +1622,7 @@ fastfloat_really_inline
 #include <cstring>
 
 
-namespace kuzu_fast_float {
+namespace lbug_fast_float {
 
 // Next function can be micro-optimized, but compilers are entirely
 // able to optimize it well.
@@ -1926,7 +1926,7 @@ fastfloat_really_inline decimal parse_decimal(const char *p, const char *pend, c
 
     return answer;
 }
-} // namespace kuzu_fast_float
+} // namespace lbug_fast_float
 
 #endif
 
@@ -1948,7 +1948,7 @@ fastfloat_really_inline decimal parse_decimal(const char *p, const char *pend, c
  **/
 #include <cstdint>
 
-namespace kuzu_fast_float {
+namespace lbug_fast_float {
 
 namespace detail {
 
@@ -2287,7 +2287,7 @@ adjusted_mantissa parse_long_mantissa(const char *first, const char* last) {
     return compute_float<binary>(d);
 }
 
-} // namespace kuzu_fast_float
+} // namespace lbug_fast_float
 #endif
 
 
@@ -2300,7 +2300,7 @@ adjusted_mantissa parse_long_mantissa(const char *first, const char* last) {
 #include <limits>
 #include <system_error>
 
-namespace kuzu_fast_float {
+namespace lbug_fast_float {
 
 
 namespace detail {
@@ -2413,7 +2413,7 @@ from_chars_result from_chars(const char *first, const char *last,
     return answer;
 }
 
-} // namespace kuzu_fast_float
+} // namespace lbug_fast_float
 
 #endif
 

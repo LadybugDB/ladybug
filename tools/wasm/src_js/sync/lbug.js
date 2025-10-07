@@ -1,43 +1,43 @@
 /**
  * @file lbug.js is the internal wrapper for the WebAssembly module.
  */
-const kuzu_wasm = require("../lbug/kuzu_wasm.js");
+const lbug_wasm = require("../lbug/lbug_wasm.js");
 
 class lbug {
   constructor() {
-    this._kuzu = null;
+    this._lbug = null;
   }
 
   async init() {
-    this._kuzu = await kuzu_wasm();
+    this._lbug = await lbug_wasm();
   }
 
   checkInit() {
-    if (!this._kuzu) {
+    if (!this._lbug) {
       throw new Error("The WebAssembly module is not initialized.");
     }
   }
 
   getVersion() {
     this.checkInit();
-    return this._kuzu.getVersion();
+    return this._lbug.getVersion();
   }
 
   getStorageVersion() {
     this.checkInit();
-    return this._kuzu.getStorageVersion();
+    return this._lbug.getStorageVersion();
   }
 
   getFS() {
     this.checkInit();
-    return this._kuzu.FS;
+    return this._lbug.FS;
   }
 
   getWasmMemory() {
     this.checkInit();
-    return this._kuzu.wasmMemory;
+    return this._lbug.wasmMemory;
   }
 }
 
-const kuzuInstance = new lbug();
-module.exports = kuzuInstance;
+const lbugInstance = new lbug();
+module.exports = lbugInstance;

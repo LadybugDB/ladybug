@@ -303,7 +303,7 @@ std::unique_ptr<ArrowSchema> ArrowConverter::toArrowSchema(
     outSchema->format = "+s"; // struct apparently
     outSchema->flags = 0;
     outSchema->metadata = nullptr;
-    outSchema->name = "kuzu_query_result";
+    outSchema->name = "lbug_query_result";
     outSchema->dictionary = nullptr;
 
     for (auto i = 0u; i < columnCount; i++) {

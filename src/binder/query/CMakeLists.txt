@@ -1,5 +1,5 @@
 add_library(
-        kuzu_binder_query
+        lbug_binder_query
         OBJECT
         bound_insert_clause.cpp
         bound_delete_clause.cpp
@@ -9,5 +9,5 @@ add_library(
         query_graph_label_analyzer.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_binder_query>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_binder_query>
         PARENT_SCOPE)

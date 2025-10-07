@@ -19,7 +19,7 @@
 #include <lbug.hpp>
 #endif
 
-namespace kuzu_rs {
+namespace lbug_rs {
 
 struct TypeListBuilder {
     std::vector<lbug::common::LogicalType> types;
@@ -240,4 +240,4 @@ inline lbug::storage::storage_version_t get_storage_version() {
     return lbug::storage::StorageVersionInfo::getStorageVersion();
 }
 
-} // namespace kuzu_rs
+} // namespace lbug_rs

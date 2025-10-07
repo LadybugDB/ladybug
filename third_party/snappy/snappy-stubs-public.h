@@ -51,7 +51,7 @@
 #define SNAPPY_VERSION \
     ((SNAPPY_MAJOR << 16) | (SNAPPY_MINOR << 8) | SNAPPY_PATCHLEVEL)
 
-namespace kuzu_snappy {
+namespace lbug_snappy {
 
 #ifdef _WIN32  // !HAVE_SYS_UIO_H
 // Windows does not have an iovec type, yet the concept is universally useful.
@@ -62,7 +62,7 @@ struct iovec {
 };
 #endif  // !HAVE_SYS_UIO_H
 
-}  // namespace kuzu_snappy
+}  // namespace lbug_snappy
 
 #else // #if SNAPPY_NEW_VERSION
 
@@ -80,7 +80,7 @@ struct iovec {
 #define SNAPPY_VERSION \
 ((SNAPPY_MAJOR << 16) | (SNAPPY_MINOR << 8) | SNAPPY_PATCHLEVEL)
 
-namespace kuzu_snappy {
+namespace lbug_snappy {
 
 using int8 = std::int8_t;
 using uint8 = std::uint8_t;
@@ -102,7 +102,7 @@ struct iovec {
 };
 #endif  // !HAVE_SYS_UIO_H
 
-}  // namespace kuzu_snappy
+}  // namespace lbug_snappy
 
 #endif  // #if SNAPPY_NEW_VERSION # else
 

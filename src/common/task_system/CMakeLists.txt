@@ -1,4 +1,4 @@
-add_library(kuzu_common_task_system
+add_library(lbug_common_task_system
         OBJECT
         task.cpp
         task_scheduler.cpp 
@@ -6,5 +6,5 @@ add_library(kuzu_common_task_system
         terminal_progress_bar_display.cpp)
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_common_task_system>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_common_task_system>
         PARENT_SCOPE)

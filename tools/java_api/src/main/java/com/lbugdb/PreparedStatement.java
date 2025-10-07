@@ -1,4 +1,4 @@
-package com.kuzudb;
+package com.lbugdb;
 
 /**
  * PreparedStatement is a parameterized query which can avoid planning the same query for repeated execution.
@@ -34,7 +34,7 @@ public class PreparedStatement implements AutoCloseable {
      */
     private void destroy() {
         checkNotDestroyed();
-        Native.kuzuPreparedStatementDestroy(this);
+        Native.lbugPreparedStatementDestroy(this);
         destroyed = true;
     }
 
@@ -46,7 +46,7 @@ public class PreparedStatement implements AutoCloseable {
      */
     public boolean isSuccess() {
         checkNotDestroyed();
-        return Native.kuzuPreparedStatementIsSuccess(this);
+        return Native.lbugPreparedStatementIsSuccess(this);
     }
 
     /**
@@ -57,7 +57,7 @@ public class PreparedStatement implements AutoCloseable {
      */
     public String getErrorMessage() {
         checkNotDestroyed();
-        return Native.kuzuPreparedStatementGetErrorMessage(this);
+        return Native.lbugPreparedStatementGetErrorMessage(this);
     }
 
 }

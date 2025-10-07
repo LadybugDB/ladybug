@@ -3,7 +3,7 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/extension/json/src/include
 )
 
-add_library(kuzu_shell_printer
+add_library(lbug_shell_printer
         OBJECT
         json_printer.cpp
         printer_factory.cpp
@@ -12,5 +12,5 @@ add_library(kuzu_shell_printer
 )
 
 set(KUZU_SHELL_OBJECT_FILES
-        ${KUZU_SHELL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_shell_printer>
+        ${KUZU_SHELL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_shell_printer>
         PARENT_SCOPE)

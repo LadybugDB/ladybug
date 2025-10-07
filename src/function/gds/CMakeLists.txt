@@ -1,4 +1,4 @@
-add_library(kuzu_function_algorithm
+add_library(lbug_function_algorithm
         OBJECT
         asp_destinations.cpp
         asp_paths.cpp
@@ -20,5 +20,5 @@ add_library(kuzu_function_algorithm
         )
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_function_algorithm>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_function_algorithm>
         PARENT_SCOPE)

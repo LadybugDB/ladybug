@@ -1,4 +1,4 @@
-add_library(kuzu_table_function
+add_library(lbug_table_function
         OBJECT
         bind_data.cpp
         bind_input.cpp
@@ -33,5 +33,5 @@ add_library(kuzu_table_function
         )
 
 set(ALL_OBJECT_FILES
-        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_table_function>
+        ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_table_function>
         PARENT_SCOPE)

@@ -7,7 +7,7 @@ using namespace lbug::main;
 using namespace lbug::common;
 using namespace lbug::processor;
 
-void kuzu_query_result_destroy(kuzu_query_result* query_result) {
+void lbug_query_result_destroy(lbug_query_result* query_result) {
     if (query_result == nullptr) {
         return;
     }
@@ -18,11 +18,11 @@ void kuzu_query_result_destroy(kuzu_query_result* query_result) {
     }
 }
 
-bool kuzu_query_result_is_success(kuzu_query_result* query_result) {
+bool lbug_query_result_is_success(lbug_query_result* query_result) {
     return static_cast<QueryResult*>(query_result->_query_result)->isSuccess();
 }
 
-char* kuzu_query_result_get_error_message(kuzu_query_result* query_result) {
+char* lbug_query_result_get_error_message(lbug_query_result* query_result) {
     auto error_message = static_cast<QueryResult*>(query_result->_query_result)->getErrorMessage();
     if (error_message.empty()) {
         return nullptr;
@@ -30,11 +30,11 @@ char* kuzu_query_result_get_error_message(kuzu_query_result* query_result) {
     return convertToOwnedCString(error_message);
 }
 
-uint64_t kuzu_query_result_get_num_columns(kuzu_query_result* query_result) {
+uint64_t lbug_query_result_get_num_columns(lbug_query_result* query_result) {
     return static_cast<QueryResult*>(query_result->_query_result)->getNumColumns();
 }
 
-kuzu_state kuzu_query_result_get_column_name(kuzu_query_result* query_result, uint64_t index,
+lbug_state lbug_query_result_get_column_name(lbug_query_result* query_result, uint64_t index,
     char** out_column_name) {
     auto column_names = static_cast<QueryResult*>(query_result->_query_result)->getColumnNames();
     if (index >= column_names.size()) {
@@ -44,8 +44,8 @@ kuzu_state kuzu_query_result_get_column_name(kuzu_query_result* query_result, ui
     return KuzuSuccess;
 }
 
-kuzu_state kuzu_query_result_get_column_data_type(kuzu_query_result* query_result, uint64_t index,
-    kuzu_logical_type* out_column_data_type) {
+lbug_state lbug_query_result_get_column_data_type(lbug_query_result* query_result, uint64_t index,
+    lbug_logical_type* out_column_data_type) {
     auto column_data_types =
         static_cast<QueryResult*>(query_result->_query_result)->getColumnDataTypes();
     if (index >= column_data_types.size()) {
@@ -56,12 +56,12 @@ kuzu_state kuzu_query_result_get_column_data_type(kuzu_query_result* query_resul
     return KuzuSuccess;
 }
 
-uint64_t kuzu_query_result_get_num_tuples(kuzu_query_result* query_result) {
+uint64_t lbug_query_result_get_num_tuples(lbug_query_result* query_result) {
     return static_cast<QueryResult*>(query_result->_query_result)->getNumTuples();
 }
 
-kuzu_state kuzu_query_result_get_query_summary(kuzu_query_result* query_result,
-    kuzu_query_summary* out_query_summary) {
+lbug_state lbug_query_result_get_query_summary(lbug_query_result* query_result,
+    lbug_query_summary* out_query_summary) {
     if (out_query_summary == nullptr) {
         return KuzuError;
     }
@@ -70,17 +70,17 @@ kuzu_state kuzu_query_result_get_query_summary(kuzu_query_result* query_result,
     return KuzuSuccess;
 }
 
-bool kuzu_query_result_has_next(kuzu_query_result* query_result) {
+bool lbug_query_result_has_next(lbug_query_result* query_result) {
     return static_cast<QueryResult*>(query_result->_query_result)->hasNext();
 }
 
-bool kuzu_query_result_has_next_query_result(kuzu_query_result* query_result) {
+bool lbug_query_result_has_next_query_result(lbug_query_result* query_result) {
     return static_cast<QueryResult*>(query_result->_query_result)->hasNextQueryResult();
 }
 
-kuzu_state kuzu_query_result_get_next_query_result(kuzu_query_result* query_result,
-    kuzu_query_result* out_query_result) {
-    if (!kuzu_query_result_has_next_query_result(query_result)) {
+lbug_state lbug_query_result_get_next_query_result(lbug_query_result* query_result,
+    lbug_query_result* out_query_result) {
+    if (!lbug_query_result_has_next_query_result(query_result)) {
         return KuzuError;
     }
     auto next_query_result =
@@ -93,8 +93,8 @@ kuzu_state kuzu_query_result_get_next_query_result(kuzu_query_result* query_resu
     return KuzuSuccess;
 }
 
-kuzu_state kuzu_query_result_get_next(kuzu_query_result* query_result,
-    kuzu_flat_tuple* out_flat_tuple) {
+lbug_state lbug_query_result_get_next(lbug_query_result* query_result,
+    lbug_flat_tuple* out_flat_tuple) {
     try {
         auto flat_tuple = static_cast<QueryResult*>(query_result->_query_result)->getNext();
         out_flat_tuple->_flat_tuple = flat_tuple.get();
@@ -105,16 +105,16 @@ kuzu_state kuzu_query_result_get_next(kuzu_query_result* query_result,
     }
 }
 
-char* kuzu_query_result_to_string(kuzu_query_result* query_result) {
+char* lbug_query_result_to_string(lbug_query_result* query_result) {
     std::string result_string = static_cast<QueryResult*>(query_result->_query_result)->toString();
     return convertToOwnedCString(result_string);
 }
 
-void kuzu_query_result_reset_iterator(kuzu_query_result* query_result) {
+void lbug_query_result_reset_iterator(lbug_query_result* query_result) {
     static_cast<QueryResult*>(query_result->_query_result)->resetIterator();
 }
 
-kuzu_state kuzu_query_result_get_arrow_schema(kuzu_query_result* query_result,
+lbug_state lbug_query_result_get_arrow_schema(lbug_query_result* query_result,
     ArrowSchema* out_schema) {
     try {
         *out_schema = *static_cast<QueryResult*>(query_result->_query_result)->getArrowSchema();
@@ -124,7 +124,7 @@ kuzu_state kuzu_query_result_get_arrow_schema(kuzu_query_result* query_result,
     }
 }
 
-kuzu_state kuzu_query_result_get_next_arrow_chunk(kuzu_query_result* query_result,
+lbug_state lbug_query_result_get_next_arrow_chunk(lbug_query_result* query_result,
     int64_t chunk_size, ArrowArray* out_arrow_array) {
     try {
         *out_arrow_array =

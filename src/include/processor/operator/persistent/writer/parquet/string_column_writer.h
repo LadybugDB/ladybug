@@ -38,7 +38,7 @@ public:
 
 class StringColumnWriterState : public BasicColumnWriterState {
 public:
-    StringColumnWriterState(kuzu_parquet::format::RowGroup& rowGroup, uint64_t colIdx,
+    StringColumnWriterState(lbug_parquet::format::RowGroup& rowGroup, uint64_t colIdx,
         storage::MemoryManager* mm)
         : BasicColumnWriterState{rowGroup, colIdx}, estimatedDictPageSize{0},
           estimatedRlePagesSize{0}, estimatedPlainSize{0},
@@ -88,7 +88,7 @@ public:
     }
 
     std::unique_ptr<ColumnWriterState> initializeWriteState(
-        kuzu_parquet::format::RowGroup& rowGroup) override;
+        lbug_parquet::format::RowGroup& rowGroup) override;
 
     inline bool hasAnalyze() override { return true; }
 
@@ -98,11 +98,11 @@ public:
         return std::make_unique<StringWriterPageState>(state.keyBitWidth, state.dictionary);
     }
 
-    inline kuzu_parquet::format::Encoding::type getEncoding(
+    inline lbug_parquet::format::Encoding::type getEncoding(
         BasicColumnWriterState& writerState) override {
         auto& state = reinterpret_cast<StringColumnWriterState&>(writerState);
-        return state.isDictionaryEncoded() ? kuzu_parquet::format::Encoding::RLE_DICTIONARY :
-                                             kuzu_parquet::format::Encoding::PLAIN;
+        return state.isDictionaryEncoded() ? lbug_parquet::format::Encoding::RLE_DICTIONARY :
+                                             lbug_parquet::format::Encoding::PLAIN;
     }
 
     inline bool hasDictionary(BasicColumnWriterState& writerState) override {
