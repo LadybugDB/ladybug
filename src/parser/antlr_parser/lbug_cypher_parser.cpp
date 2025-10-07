@@ -1,6 +1,6 @@
-#include <string>
-
 #include "parser/antlr_parser/lbug_cypher_parser.h"
+
+#include <string>
 
 namespace lbug {
 namespace parser {
