@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#ifndef _KUZU_THRIFT_TRANSPORT_TVIRTUALTRANSPORT_H_
-#define _KUZU_THRIFT_TRANSPORT_TVIRTUALTRANSPORT_H_ 1
+#ifndef _LBUG_THRIFT_TRANSPORT_TVIRTUALTRANSPORT_H_
+#define _LBUG_THRIFT_TRANSPORT_TVIRTUALTRANSPORT_H_ 1
 
 #include "transport/TTransport.h"
 
@@ -137,4 +137,4 @@ protected:
 }
 } // lbug_apache::thrift::transport
 
-#endif // #ifndef _KUZU_THRIFT_TRANSPORT_TVIRTUALTRANSPORT_H_
+#endif // #ifndef _LBUG_THRIFT_TRANSPORT_TVIRTUALTRANSPORT_H_

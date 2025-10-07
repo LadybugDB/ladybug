@@ -7,7 +7,7 @@
 namespace lbug {
 namespace planner {
 
-class KUZU_API LogicalTableFunctionCall final : public LogicalOperator {
+class LBUG_API LogicalTableFunctionCall final : public LogicalOperator {
     static constexpr LogicalOperatorType operatorType_ = LogicalOperatorType::TABLE_FUNCTION_CALL;
 
 public:

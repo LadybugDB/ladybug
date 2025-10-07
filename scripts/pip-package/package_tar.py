@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def _get_kuzu_version():
+def _get_lbug_version():
     cmake_file = os.path.abspath(os.path.join(base_dir, "..", "CMakeLists.txt"))
     with open(cmake_file) as f:
         for line in f:
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         file_name = sys.argv[1]
     else:
-        file_name = "lbug-%s.tar.gz" % _get_kuzu_version()
+        file_name = "lbug-%s.tar.gz" % _get_lbug_version()
     print("Creating %s..." % file_name)
 
     with TemporaryDirectory() as tempdir:
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         with open(os.path.join(tempdir, "pyproject.toml"), "w") as f:
             for line in lines:
                 if line.startswith("version ="):
-                    f.write('version = "%s"\n' % _get_kuzu_version())
+                    f.write('version = "%s"\n' % _get_lbug_version())
                 else:
                     f.write(line)
         shutil.copy2("README.md", os.path.join(tempdir, "README_PYTHON_BUILD.md"))

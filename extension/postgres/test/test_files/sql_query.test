@@ -97,7 +97,7 @@ Binder Error: Failed to prepare query "SELECT * PERSON": ERROR:  syntax error at
 LINE 1: SELECT * PERSON
                  ^
 -LOAD_DYNAMIC_EXTENSION postgres
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/extension/sqlite/test/sqlite_database/tinysnb' as sqlitets (dbtype sqlite);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/extension/sqlite/test/sqlite_database/tinysnb' as sqlitets (dbtype sqlite);
 ---- 1
 Attached database successfully.
 -STATEMENT CALL SQL_QUERY('sqlitets', "SELECT * FROM PERSON") RETURN *

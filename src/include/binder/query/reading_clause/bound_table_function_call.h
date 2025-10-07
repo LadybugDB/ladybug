@@ -7,7 +7,7 @@
 namespace lbug {
 namespace binder {
 
-class KUZU_API BoundTableFunctionCall : public BoundReadingClause {
+class LBUG_API BoundTableFunctionCall : public BoundReadingClause {
     static constexpr common::ClauseType clauseType_ = common::ClauseType::TABLE_FUNCTION_CALL;
 
 public:

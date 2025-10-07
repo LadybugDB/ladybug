@@ -4,7 +4,7 @@
 
 -CASE ScanSqliteTable
 -LOAD_DYNAMIC_EXTENSION sqlite
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/extension/sqlite/test/sqlite_database/tinysnb' as tinysnb (dbtype sqlite);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/extension/sqlite/test/sqlite_database/tinysnb' as tinysnb (dbtype sqlite);
 ---- 1
 Attached database successfully.
 # TODO(Xiyang): There is no BOOL,DATE type in sqlite, so we should apply a casting from int64->bool when doing copy from.
@@ -61,7 +61,7 @@ Detached database successfully.
 -CASE ScanSqliteDynamicTable
 -SKIP_FSM_LEAK_CHECK
 -LOAD_DYNAMIC_EXTENSION sqlite
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/extension/sqlite/test/sqlite_database/dynamic' as tinysnb (dbtype sqlite);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/extension/sqlite/test/sqlite_database/dynamic' as tinysnb (dbtype sqlite);
 ---- ok
 -STATEMENT LOAD FROM tinysnb.dynamic_person RETURN *
 ----- error(regex)
@@ -77,7 +77,7 @@ alice
 -CASE TestingDataTypesSqlite
 -SKIP_FSM_LEAK_CHECK
 -LOAD_DYNAMIC_EXTENSION sqlite
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/extension/sqlite/test/sqlite_database/datatypeTestingSqlite' as datatype (dbtype sqlite);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/extension/sqlite/test/sqlite_database/datatypeTestingSqlite' as datatype (dbtype sqlite);
 ---- ok
 -STATEMENT CALL table_info('datatype.person') RETURN *;
 ---- 10
@@ -112,7 +112,7 @@ Conversion Error: timestamp field value out of range: "08:30:00", expected forma
 ---- ok
 -STATEMENT load extension sqlite
 ---- ok
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/extension/sqlite/test/sqlite_database/tinysnb' as tinysnb (dbtype sqlite);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/extension/sqlite/test/sqlite_database/tinysnb' as tinysnb (dbtype sqlite);
 ---- 1
 Attached database successfully.
 -STATEMENT LOAD FROM tinysnb.person RETURN *;

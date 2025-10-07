@@ -6,12 +6,12 @@
 
 -STATEMENT CREATE NODE TABLE User1(name INT64, age DOUBLE, PRIMARY KEY (name));
 ---- ok
--STATEMENT Copy User1 FROM "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/parquet/user.parquet";
+-STATEMENT Copy User1 FROM "${LBUG_ROOT_DIRECTORY}/dataset/demo-db/parquet/user.parquet";
 ---- error
 Conversion exception: Cast failed. Could not convert "Adam" to INT64.
 -STATEMENT CREATE NODE TABLE User2(name STRING, age DOUBLE, PRIMARY KEY (name));
 ---- ok
--STATEMENT Copy User2 FROM "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/parquet/user.parquet";
+-STATEMENT Copy User2 FROM "${LBUG_ROOT_DIRECTORY}/dataset/demo-db/parquet/user.parquet";
 ---- ok
 -STATEMENT MATCH (a:User2) RETURN a.*;
 ---- 4
@@ -21,12 +21,12 @@ Noura|25.000000
 Zhang|50.000000
 -STATEMENT CREATE REL TABLE Follows1(FROM User2 TO User2, since INT64[]);
 ---- ok
--STATEMENT Copy Follows1 FROM "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/parquet/follows.parquet";
+-STATEMENT Copy Follows1 FROM "${LBUG_ROOT_DIRECTORY}/dataset/demo-db/parquet/follows.parquet";
 ---- error
 Conversion exception: Unsupported casting function from INT64 to LIST.
 -STATEMENT CREATE REL TABLE Follows2(FROM User2 TO User2, since DOUBLE);
 ---- ok
--STATEMENT Copy Follows2 FROM "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/parquet/follows.parquet";
+-STATEMENT Copy Follows2 FROM "${LBUG_ROOT_DIRECTORY}/dataset/demo-db/parquet/follows.parquet";
 ---- ok
 -STATEMENT MATCH (a:User2)-[e:Follows2]->(b:User2) RETURN a.name, b.name, e.since;
 ---- 4

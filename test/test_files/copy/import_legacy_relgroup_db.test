@@ -3,7 +3,7 @@
 --
 
 -CASE ImportDBWithLegacyRelGroup
--STATEMENT IMPORT DATABASE "${KUZU_ROOT_DIRECTORY}/dataset/import_db_legacy_relgroup"
+-STATEMENT IMPORT DATABASE "${LBUG_ROOT_DIRECTORY}/dataset/import_db_legacy_relgroup"
 ---- ok
 -STATEMENT call show_connection('knows') return *;
 ---- 2

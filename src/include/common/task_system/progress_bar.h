@@ -34,7 +34,7 @@ public:
 
     void toggleProgressBarPrinting(bool enable);
 
-    KUZU_API void updateProgress(uint64_t queryID, double curPipelineProgress);
+    LBUG_API void updateProgress(uint64_t queryID, double curPipelineProgress);
 
     void setDisplay(std::shared_ptr<ProgressBarDisplay> progressBarDipslay);
 
@@ -42,7 +42,7 @@ public:
 
     bool getProgressBarPrinting() const { return trackProgress; }
 
-    KUZU_API static ProgressBar* Get(const main::ClientContext& context);
+    LBUG_API static ProgressBar* Get(const main::ClientContext& context);
 
 private:
     void resetProgressBar(uint64_t queryID);

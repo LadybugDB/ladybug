@@ -11,7 +11,7 @@ class ParserRuleContext;
 namespace lbug {
 namespace extension {
 
-class KUZU_API TransformerExtension {
+class LBUG_API TransformerExtension {
 public:
     TransformerExtension() {}
 

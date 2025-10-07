@@ -1,6 +1,6 @@
 namespace lbug {
 namespace common {
 
-const char* KUZU_VERSION = KUZU_CMAKE_VERSION;
+const char* LBUG_VERSION = LBUG_CMAKE_VERSION;
 }
 } // namespace lbug

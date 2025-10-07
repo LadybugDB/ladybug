@@ -19,11 +19,11 @@
 -STATEMENT return nextval('seq');
 ---- 1
 10
--STATEMENT Export Database "${KUZU_EXPORT_DB_DIRECTORY}_case1/demo-db"
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}_case1/demo-db"
 ---- 1
 Exported database successfully.
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case1/demo-db"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case1/demo-db"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case1/demo-db"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case1/demo-db"
 ---- 1
 Imported database successfully.
 -STATEMENT MATCH (u:User) WHERE u.name = "Adam" SET u.age = 50
@@ -41,11 +41,11 @@ Imported database successfully.
 
 -CASE ExportImportDatabaseWithCSVOption
 -SKIP_WASM
--STATEMENT Export Database "${KUZU_EXPORT_DB_DIRECTORY}_case2/demo-db2" (format="csv", header=true)
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}_case2/demo-db2" (format="csv", header=true)
 ---- 1
 Exported database successfully.
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case2/demo-db2"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case2/demo-db2"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case2/demo-db2"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case2/demo-db2"
 ---- 1
 Imported database successfully.
 -STATEMENT MATCH (u:User) WHERE u.name = "Adam" SET u.age = 50
@@ -54,16 +54,16 @@ Imported database successfully.
 -STATEMENT MATCH (u:User) WHERE u.name="Adam" RETURN u.age
 ---- 1
 50
--STATEMENT Export Database "${KUZU_EXPORT_DB_DIRECTORY}_case2/demo-db2" (format="csv", header=true)
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}_case2/demo-db2" (format="csv", header=true)
 ---- error
-Runtime exception: Directory ${KUZU_EXPORT_DB_DIRECTORY}_case2/demo-db2 already exists.
+Runtime exception: Directory ${LBUG_EXPORT_DB_DIRECTORY}_case2/demo-db2 already exists.
 
 -CASE ExportImportDatabaseWithPARQUET
 -SKIP_WASM
--STATEMENT Export Database "${KUZU_EXPORT_DB_DIRECTORY}_case3/demo-db3" (format="parquet")
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}_case3/demo-db3" (format="parquet")
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case3/demo-db3"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case3/demo-db3"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case3/demo-db3"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case3/demo-db3"
 ---- ok
 -STATEMENT MATCH (u:User) WHERE u.name = "Adam" SET u.age = 50
 ---- ok
@@ -74,31 +74,31 @@ Runtime exception: Directory ${KUZU_EXPORT_DB_DIRECTORY}_case2/demo-db2 already 
 
 -CASE ExportImportDatabaseError
 -SKIP_WASM
--STATEMENT Export Database "${KUZU_EXPORT_DB_DIRECTORY}_case4/demo-db4" (format="npy")
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}_case4/demo-db4" (format="npy")
 ---- error
 Binder exception: Export database currently only supports csv and parquet files.
 
--STATEMENT Export Database "${KUZU_EXPORT_DB_DIRECTORY}_case4/demo-db4" (format=false)
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}_case4/demo-db4" (format=false)
 ---- error
 Binder exception: The type of format option must be a string.
 
--STATEMENT Export Database "${KUZU_EXPORT_DB_DIRECTORY}_case4/demo-db4" (format="PARQUET", header=true)
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}_case4/demo-db4" (format="PARQUET", header=true)
 ---- error
 Binder exception: Only export to csv can have options.
 
--STATEMENT Export Database "${KUZU_EXPORT_DB_DIRECTORY}_case4/demo-db4" (format="CSV", header=true)
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}_case4/demo-db4" (format="CSV", header=true)
 ---- ok
 
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case4/demo-db5"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case4/demo-db5"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case4/demo-db5"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case4/demo-db5"
 ---- error
-Binder exception: Directory ${KUZU_EXPORT_DB_DIRECTORY}_case4/demo-db5 does not exist.
+Binder exception: Directory ${LBUG_EXPORT_DB_DIRECTORY}_case4/demo-db5 does not exist.
 
--REMOVE_FILE "${KUZU_EXPORT_DB_DIRECTORY}_case4/demo-db4/schema.cypher"
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case4/demo-db4"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case4/demo-db4"
+-REMOVE_FILE "${LBUG_EXPORT_DB_DIRECTORY}_case4/demo-db4/schema.cypher"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case4/demo-db4"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case4/demo-db4"
 ---- error(regex)
-^Binder exception: File ${KUZU_EXPORT_DB_DIRECTORY}_case4/demo-db4[/\\]schema.cypher does not exist.$
+^Binder exception: File ${LBUG_EXPORT_DB_DIRECTORY}_case4/demo-db4[/\\]schema.cypher does not exist.$
 
 
 -CASE ExportImportDatabaseRelGroup
@@ -125,11 +125,11 @@ Binder exception: Directory ${KUZU_EXPORT_DB_DIRECTORY}_case4/demo-db5 does not 
            RETURN a.ID, b.ID;
 ---- 1
 0|1
--STATEMENT Export Database "${KUZU_EXPORT_DB_DIRECTORY}_case5/demo-db"
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}_case5/demo-db"
 ---- 1
 Exported database successfully.
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case5/demo-db"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case5/demo-db"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case5/demo-db"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case5/demo-db"
 ---- 1
 Imported database successfully.
 -STATEMENT MATCH (a)-[r:REL3]->(b:B)
@@ -165,10 +165,10 @@ Imported database successfully.
 ---- ok
 -STATEMENT CREATE (o:twoserial {prop: "Dan"})
 ---- ok
--STATEMENT Export Database "${KUZU_EXPORT_DB_DIRECTORY}_case7/demo-db"
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}_case7/demo-db"
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case7/demo-db"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case7/demo-db"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case7/demo-db"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case7/demo-db"
 ---- 1
 Imported database successfully.
 -STATEMENT MATCH (o:twoserial) RETURN o.*;
@@ -200,10 +200,10 @@ Imported database successfully.
 
 -CASE DocExportImportExampleCSV
 -SKIP_WASM
--STATEMENT Export Database "${KUZU_EXPORT_DB_DIRECTORY}_case8/demo-db" (format="csv", header=true);
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}_case8/demo-db" (format="csv", header=true);
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case8/demo-db"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case8/demo-db"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case8/demo-db"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case8/demo-db"
 ---- ok
 -STATEMENT MATCH (u:User)-[:Follows]->(f:User) RETURN u.name, f.name;
 ---- 4
@@ -215,10 +215,10 @@ Zhang|Noura
 
 -CASE DocExportImportExampleParquet
 -SKIP_WASM
--STATEMENT Export Database "${KUZU_EXPORT_DB_DIRECTORY}_case9/demo-db" (format="parquet");
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}_case9/demo-db" (format="parquet");
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case9/demo-db"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_case9/demo-db"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case9/demo-db"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_case9/demo-db"
 ---- ok
 -STATEMENT MATCH (u:User)-[:Follows]->(f:User) RETURN u.name, f.name;
 ---- 4
@@ -230,11 +230,11 @@ Zhang|Noura
 -CASE ExplainExport
 -SKIP_WASM
 -SKIP_IN_MEM
--STATEMENT EXPLAIN EXPORT Database "${KUZU_EXPORT_DB_DIRECTORY}_case10/demo-db" (format="parquet");
+-STATEMENT EXPLAIN EXPORT Database "${LBUG_EXPORT_DB_DIRECTORY}_case10/demo-db" (format="parquet");
 ---- ok
--STATEMENT LOAD FROM "${KUZU_EXPORT_DB_DIRECTORY}_case9/demo-db/city.parquet" RETURN *
+-STATEMENT LOAD FROM "${LBUG_EXPORT_DB_DIRECTORY}_case9/demo-db/city.parquet" RETURN *
 ---- error
-Binder exception: No file found that matches the pattern: ${KUZU_EXPORT_DB_DIRECTORY}_case9/demo-db/city.parquet.
+Binder exception: No file found that matches the pattern: ${LBUG_EXPORT_DB_DIRECTORY}_case9/demo-db/city.parquet.
 
 -CASE ExportDBWithSpecialTableName
 -SKIP_WASM
@@ -247,16 +247,16 @@ Binder exception: No file found that matches the pattern: ${KUZU_EXPORT_DB_DIREC
 ---- ok
 -STATEMENT CREATE REL TABLE `0_idx_knows_group` (FROM `0_idx_person` TO  `0_idx_person`, FROM person TO `0_idx_person`)
 ---- ok
--STATEMENT EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/special_char" (format="csv");
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_char" (format="csv");
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/special_char"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/special_char";
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_char"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_char";
 ---- ok
 
 -CASE ImportError
 -SKIP_WASM
 -SKIP_IN_MEM
--STATEMENT IMPORT Database "${KUZU_ROOT_DIRECTORY}/dataset/import_db_error"
+-STATEMENT IMPORT Database "${LBUG_ROOT_DIRECTORY}/dataset/import_db_error"
 ---- error
 Runtime exception: Import database failed: Binder exception: Table org does not exist.
 
@@ -269,10 +269,10 @@ Runtime exception: Import database failed: Binder exception: Table org does not 
 ---- ok
 -STATEMENT CREATE (a:`N Table` {id:0, `prop 1`: 'A'})-[:`R Table` {`prop 1`: 'Edge'}]->(b: `N Table` {id:1, `prop 1`: 'B'})
 ---- ok
--STATEMENT EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/special_property_name" (format="csv");
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_property_name" (format="csv");
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/special_property_name"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/special_property_name";
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_property_name"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_property_name";
 ---- ok
 -STATEMENT MATCH (a:`N Table`)-[e:`R Table`]->(b:`N Table`) RETURN a.*, e.*, b.*;
 ---- 1
@@ -281,13 +281,13 @@ Runtime exception: Import database failed: Binder exception: Table org does not 
 -CASE ExportDBSchemaOnly
 -SKIP_WASM
 -SKIP_IN_MEM
--STATEMENT EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/special_property_name" (SCHEMA_ONLY=true, format='csv');
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_property_name" (SCHEMA_ONLY=true, format='csv');
 ---- error
 Binder exception: When 'SCHEMA_ONLY' option is set to true in export database, no other options are allowed.
--STATEMENT EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/special_property_name" (SCHEMA_ONLY='abc');
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_property_name" (SCHEMA_ONLY='abc');
 ---- error
 Binder exception: The 'SCHEMA_ONLY' option must have a BOOL value.
--STATEMENT EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/special_property_name" (SCHEMA_ONLY=false, format='csv');
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_property_name" (SCHEMA_ONLY=false, format='csv');
 ---- ok
 -STATEMENT CREATE NODE TABLE `N Table` (ID INT64 PRIMARY KEY, `PROP 1` STRING);
 ---- ok
@@ -295,10 +295,10 @@ Binder exception: The 'SCHEMA_ONLY' option must have a BOOL value.
 ---- ok
 -STATEMENT CREATE (a:`N Table` {id:0, `prop 1`: 'A'})-[:`R Table` {`prop 1`: 'Edge'}]->(b: `N Table` {id:1, `prop 1`: 'B'})
 ---- ok
--STATEMENT EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/special_property_name1" (SCHEMA_ONLY=true);
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_property_name1" (SCHEMA_ONLY=true);
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/special_property_name1"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/special_property_name1";
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_property_name1"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_property_name1";
 ---- ok
 -STATEMENT MATCH (a:`N Table`)-[e:`R Table`]->(b:`N Table`) RETURN a.*, e.*, b.*;
 ---- 0
@@ -306,10 +306,10 @@ Binder exception: The 'SCHEMA_ONLY' option must have a BOOL value.
 -CASE ExportEmptyDBSchemaOnly
 -SKIP_WASM
 -SKIP_IN_MEM
--STATEMENT EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/empty-db-schema-only" (SCHEMA_ONLY=true);
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/empty-db-schema-only" (SCHEMA_ONLY=true);
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/empty-db-schema-only"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/empty-db-schema-only";
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/empty-db-schema-only"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/empty-db-schema-only";
 ---- ok
 -STATEMENT MATCH (a) return a
 ---- 0
@@ -321,12 +321,12 @@ Binder exception: The 'SCHEMA_ONLY' option must have a BOOL value.
 -SKIP_IN_MEM
 -STATEMENT create node table Forum (id INT64, title STRING, creationDate INT64, PRIMARY KEY (id));
 ---- ok
--STATEMENT COPY Forum from "${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Forum.csv";
+-STATEMENT COPY Forum from "${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Forum.csv";
 ---- ok
--STATEMENT EXPORT DATABASE '${KUZU_EXPORT_DB_DIRECTORY}_quoted_delim/delim-test'(format="csv", header=true);
+-STATEMENT EXPORT DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_quoted_delim/delim-test'(format="csv", header=true);
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_quoted_delim/delim-test"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_quoted_delim/delim-test";
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_quoted_delim/delim-test"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_quoted_delim/delim-test";
 ---- ok
 
 -CASE ExportImportDBWithMultilineString
@@ -334,12 +334,12 @@ Binder exception: The 'SCHEMA_ONLY' option must have a BOOL value.
 -SKIP_IN_MEM
 -STATEMENT CREATE NODE TABLE `mixed-newlines`(A STRING, B STRING, PRIMARY KEY(A));
 ---- ok
--STATEMENT COPY `mixed-newlines` FROM "${KUZU_ROOT_DIRECTORY}/dataset/csv-multiline-quote-tests/mixed-newlines.csv" (PARALLEL=FALSE);
+-STATEMENT COPY `mixed-newlines` FROM "${LBUG_ROOT_DIRECTORY}/dataset/csv-multiline-quote-tests/mixed-newlines.csv" (PARALLEL=FALSE);
 ---- ok
--STATEMENT EXPORT DATABASE '${KUZU_EXPORT_DB_DIRECTORY}_special/_multilinestring'(format="csv")
+-STATEMENT EXPORT DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_special/_multilinestring'(format="csv")
 ---- ok
--IMPORT_DATABASE '${KUZU_EXPORT_DB_DIRECTORY}_special/_multilinestring'
--STATEMENT IMPORT DATABASE '${KUZU_EXPORT_DB_DIRECTORY}_special/_multilinestring';
+-IMPORT_DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_special/_multilinestring'
+-STATEMENT IMPORT DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_special/_multilinestring';
 ---- ok
 
 -CASE ExportDBWithOptions
@@ -347,10 +347,10 @@ Binder exception: The 'SCHEMA_ONLY' option must have a BOOL value.
 ---- ok
 -STATEMENT CREATE (:csvoptions { name: 'First Last', age: 27 });
 ---- ok
--STATEMENT EXPORT DATABASE '${KUZU_EXPORT_DB_DIRECTORY}_options/with_options' (format="csv", quote="'", delimiter=";", escape="\\");
+-STATEMENT EXPORT DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_options/with_options' (format="csv", quote="'", delimiter=";", escape="\\");
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_options/with_options"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_options/with_options";
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_options/with_options"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_options/with_options";
 ---- ok
 -STATEMENT MATCH (u:csvoptions) return u.*
 ---- 1

@@ -6,10 +6,10 @@
 -SKIP_FSM_LEAK_CHECK
 -LOAD_DYNAMIC_EXTENSION duckdb
 -LOG AttachUnsupportedTableError
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as tinysnb (dbtype duckdb);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as tinysnb (dbtype duckdb);
 ---- error
 Binder exception: Unsupported duckdb type: ENUM('sad', 'ok', 'happy').
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as tinysnb (dbtype duckdb, skip_unsupported_table = true);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as tinysnb (dbtype duckdb, skip_unsupported_table = true);
 ---- 1
 Attached database successfully.
 -STATEMENT create node table person_copy (ID INt64, fName StRING, gender INT64, isStudent BoOLEAN, isWorker BOOLEAN, age INT64, eyeSight DOUBLE, birthdate DATE, registerTime TIMESTAMP, lastJobDuration interval, workedHours INT64[], usedNames STRING[], courseScoresPerTerm INT64[][], height float, u UUID, grades INT64[4], PRIMARY KEY (ID));
@@ -104,10 +104,10 @@ Detached database successfully.
 ---- error
 Runtime exception: No database named tinysnb.
 -LOG AttachMultipleDuckDB
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' (dbtype duckdb, skip_unsupported_table = true);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' (dbtype duckdb, skip_unsupported_table = true);
 ---- 1
 Attached database successfully.
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/other.db' as Other1 (dbtype duckdb, skip_unsupported_table = true);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/other.db' as Other1 (dbtype duckdb, skip_unsupported_table = true);
 ---- 1
 Attached database successfully.
 -STATEMENT CALL SHOW_TABLES() RETURN *;
@@ -189,7 +189,7 @@ Catalog exception: personxx does not exist in catalog.
 ---- error
 Runtime exception: No database named tinysnbxx.
 -LOG AttachWithNonDefaultSchema
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as lbug (dbtype duckdb, schema = 'lbug');
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as lbug (dbtype duckdb, schema = 'lbug');
 ---- 1
 Attached database successfully.
 -STATEMENT LOAD FROM lbug.employee RETURN *;
@@ -197,7 +197,7 @@ Attached database successfully.
 0|alice|52
 2|carol|23
 10|dan|72
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as noneExist (dbtype duckdb, schema = 'noneExist');
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as noneExist (dbtype duckdb, schema = 'noneExist');
 ---- ok
 -STATEMENT USE noneExist;
 ---- ok
@@ -218,7 +218,7 @@ Attached database successfully.
 -CASE TestingSupportedDBDataTypes
 -SKIP_FSM_LEAK_CHECK
 -LOAD_DYNAMIC_EXTENSION duckdb
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/datatypeTesting.db' as dataType (dbtype duckdb);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/datatypeTesting.db' as dataType (dbtype duckdb);
 ---- ok
 -STATEMENT CALL table_info('dataType.person') RETURN *;
 ---- 10
@@ -258,18 +258,18 @@ Runtime exception: No database named NONEXIST.
 
 -CASE ScanDuckdbDatabaseWithoutExt
 -LOAD_DYNAMIC_EXTENSION duckdb
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/dbfilewithoutext' (dbtype duckdb);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/dbfilewithoutext' (dbtype duckdb);
 ---- ok
 -STATEMENT LOAD FROM dbfilewithoutext.persons RETURN *
 ---- 2
 Jeff|32
 Wendy|28
 -LOG AttachDBWithSameAlias
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/other.db' as dbfilewithoutext (dbtype duckdb);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/other.db' as dbfilewithoutext (dbtype duckdb);
 ---- error
 Runtime exception: Duplicate attached database name: dbfilewithoutext. Attached database name must be unique.
 -LOG AttachSameDBError
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/dbfilewithoutext' (dbtype duckdb);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/dbfilewithoutext' (dbtype duckdb);
 ---- error
 Runtime exception: Duplicate attached database name: dbfilewithoutext. Attached database name must be unique.
 -LOG DetachExistDB
@@ -307,7 +307,7 @@ Runtime exception: No loaded extension can handle database type: sqlite.
 ---- ok
 -STATEMENT load extension duckdb
 ---- ok
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as tinysnb (dbtype duckdb, skip_unsupported_table = true);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as tinysnb (dbtype duckdb, skip_unsupported_table = true);
 ---- 1
 Attached database successfully.
 -STATEMENT LOAD FROM tinysnb.person RETURN *;

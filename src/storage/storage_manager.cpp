@@ -56,7 +56,7 @@ void StorageManager::initDataFileHandle(VirtualFileSystem* vfs, main::ClientCont
                     std::make_shared<InMemFileWriter>(*MemoryManager::Get(*context));
                 Serializer headerSerializer(headerWriter);
                 initialHeader->serialize(headerSerializer);
-                dataFH->getFileInfo()->writeFile(headerWriter->getPage(0).data(), KUZU_PAGE_SIZE,
+                dataFH->getFileInfo()->writeFile(headerWriter->getPage(0).data(), LBUG_PAGE_SIZE,
                     StorageConstants::DB_HEADER_PAGE_IDX);
                 dataFH->getFileInfo()->syncFile();
             }

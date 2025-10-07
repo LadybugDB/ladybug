@@ -8,7 +8,7 @@ include_directories(
 add_subdirectory(printer)
 
 add_executable(lbug_shell
-        ${KUZU_SHELL_OBJECT_FILES}
+        ${LBUG_SHELL_OBJECT_FILES}
         embedded_shell.cpp
         linenoise.cpp
         shell_runner.cpp)

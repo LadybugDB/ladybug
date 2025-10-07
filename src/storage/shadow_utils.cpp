@@ -24,7 +24,7 @@ ShadowPageAndFrame ShadowUtils::createShadowVersionIfNecessaryAndPinPage(page_id
                 shadowFile.getShadowingFH().pinPage(shadowPage, PageReadPolicy::DONT_READ_PAGE);
             if (!skipReadingOriginalPage) {
                 fileHandle.optimisticReadPage(originalPage, [&](const uint8_t* frame) -> void {
-                    memcpy(shadowFrame, frame, KUZU_PAGE_SIZE);
+                    memcpy(shadowFrame, frame, LBUG_PAGE_SIZE);
                 });
             }
         }

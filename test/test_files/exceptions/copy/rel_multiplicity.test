@@ -2,16 +2,16 @@
 --
 
 -CASE ManyOneMultiplicityViolationError
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-fault-tests/rel-table-multiplicity-violation/eKnows.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/rel-table-multiplicity-violation/eKnows.csv"
 ---- error
 Copy exception: Node(nodeOffset: 0) has more than one neighbour in table knows in the fwd direction, which violates the rel multiplicity constraint.
 
 -CASE OneManyMultiplicityViolationError
--STATEMENT COPY teaches FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-fault-tests/rel-table-multiplicity-violation/eTeaches.csv"
+-STATEMENT COPY teaches FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/rel-table-multiplicity-violation/eTeaches.csv"
 ---- error
 Copy exception: Node(nodeOffset: 2) has more than one neighbour in table teaches in the bwd direction, which violates the rel multiplicity constraint.
 
 -CASE OneOneMultiplicityViolationError
--STATEMENT COPY matches FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-fault-tests/rel-table-multiplicity-violation/eMatches.csv"
+-STATEMENT COPY matches FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/rel-table-multiplicity-violation/eMatches.csv"
 ---- error
 Copy exception: Node(nodeOffset: 1) has more than one neighbour in table matches in the fwd direction, which violates the rel multiplicity constraint.

@@ -14,7 +14,7 @@
 namespace lbug {
 namespace common {
 
-class KUZU_API Deserializer {
+class LBUG_API Deserializer {
 public:
     explicit Deserializer(std::unique_ptr<Reader> reader) : reader(std::move(reader)) {}
 

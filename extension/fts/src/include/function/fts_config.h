@@ -65,7 +65,7 @@ struct Tokenizer {
 struct TokenizerInfo {
     std::string tokenizer = Tokenizer::DEFAULT_VALUE;
     std::string jiebaDictDir =
-        common::stringFormat("{}/extension/fts/build/dict", KUZU_ROOT_DIRECTORY);
+        common::stringFormat("{}/extension/fts/build/dict", LBUG_ROOT_DIRECTORY);
 
     TokenizerInfo() = default;
 };

@@ -144,10 +144,10 @@ Binder exception: Create node a with multiple node labels is not supported.
 -CASE COPYWithFROMTO
 -STATEMENT create rel table test (FROM personA TO personA, FROM personA To personB, date DATE);
 ---- ok
--STATEMENT COPY test FROM '${KUZU_ROOT_DIRECTORY}/dataset/rel-group/edge.csv';
+-STATEMENT COPY test FROM '${LBUG_ROOT_DIRECTORY}/dataset/rel-group/edge.csv';
 ---- error
 Binder exception: The table test has multiple FROM and TO pairs defined in the schema. A specific pair of FROM and TO options is expected when copying data into the test table.
--STATEMENT COPY test FROM '${KUZU_ROOT_DIRECTORY}/dataset/rel-group/edge.csv' (from = 'personA', to = 'personB');
+-STATEMENT COPY test FROM '${LBUG_ROOT_DIRECTORY}/dataset/rel-group/edge.csv' (from = 'personA', to = 'personB');
 ---- ok
 -STATEMENT MATCH (a:personA)-[e:test]->(b:personB) WHERE a.ID = 0 RETURN label(e), label(b), b.*
 ---- 3
@@ -176,7 +176,7 @@ True
 -SKIP
 -STATEMENT create rel table group likes_import (FROM personA TO personB, FROM personB To personA, date DATE);
 ---- ok
--STATEMENT COPY likes_import_personA_personB FROM "${KUZU_ROOT_DIRECTORY}/dataset/rel-group/edge.csv";
+-STATEMENT COPY likes_import_personA_personB FROM "${LBUG_ROOT_DIRECTORY}/dataset/rel-group/edge.csv";
 ---- ok
 -STATEMENT MATCH (a:personA)-[e:likes_import]->(b:personB) WHERE a.ID = 0 RETURN label(e), label(b), b.*
 ---- 3
@@ -188,15 +188,15 @@ likes_import|personB|5|Dan
 6
 
 -CASE BulkInsertManyFromTo
--STATEMENT create node table personA2 as load from "${KUZU_ROOT_DIRECTORY}/dataset/rel-group/node.csv" return *;
+-STATEMENT create node table personA2 as load from "${LBUG_ROOT_DIRECTORY}/dataset/rel-group/node.csv" return *;
 ---- ok
--STATEMENT create node table personB2 as load from "${KUZU_ROOT_DIRECTORY}/dataset/rel-group/node.csv" return *;
+-STATEMENT create node table personB2 as load from "${LBUG_ROOT_DIRECTORY}/dataset/rel-group/node.csv" return *;
 ---- ok
--STATEMENT create node table personC2 as load from "${KUZU_ROOT_DIRECTORY}/dataset/rel-group/node.csv" return *;
+-STATEMENT create node table personC2 as load from "${LBUG_ROOT_DIRECTORY}/dataset/rel-group/node.csv" return *;
 ---- ok
 -STATEMENT create rel table knowsA (from personA2 to personA2, from personA2 to personB2, d date);
 ---- ok
--STATEMENT copy knowsA from "${KUZU_ROOT_DIRECTORY}/dataset/rel-group/edge.csv" (from='personA2', to='personA2');
+-STATEMENT copy knowsA from "${LBUG_ROOT_DIRECTORY}/dataset/rel-group/edge.csv" (from='personA2', to='personA2');
 ---- ok
--STATEMENT copy knowsA from "${KUZU_ROOT_DIRECTORY}/dataset/rel-group/edge.csv" (from='personA2', to='personB2');
+-STATEMENT copy knowsA from "${LBUG_ROOT_DIRECTORY}/dataset/rel-group/edge.csv" (from='personA2', to='personB2');
 ---- ok

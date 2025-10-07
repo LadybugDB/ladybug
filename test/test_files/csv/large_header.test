@@ -6,6 +6,6 @@
 -STATEMENT CALL threads=1;
 ---- ok
 
--STATEMENT LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/large-header.csv" (HEADER=TRUE) RETURN *;
+-STATEMENT LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/large-header.csv" (HEADER=TRUE) RETURN *;
 ---- 1
 data|data2

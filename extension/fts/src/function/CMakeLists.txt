@@ -1,4 +1,4 @@
-add_library(kuzu_fts_function
+add_library(lbug_fts_function
         OBJECT
         create_fts_index.cpp
         drop_fts_index.cpp
@@ -10,5 +10,5 @@ add_library(kuzu_fts_function
         tokenize.cpp)
 
 set(FTS_EXTENSION_OBJECT_FILES
-        ${FTS_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_fts_function>
+        ${FTS_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:lbug_fts_function>
         PARENT_SCOPE)

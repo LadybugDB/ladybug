@@ -207,7 +207,7 @@ LogicalType convertFromNeo4jTypeStr(const std::string& neo4jTypeStr) {
     }
 }
 
-static LogicalType inferKuzuType(nlohmann::json types) {
+static LogicalType inferLbugType(nlohmann::json types) {
     auto kuType = convertFromNeo4jTypeStr(types[0].get<std::string>());
     for (auto i = 1u; i < types.size(); i++) {
         kuType = LogicalTypeUtils::combineTypes(
@@ -230,7 +230,7 @@ std::pair<std::string, std::string> getCreateNodeTableQuery(httplib::Client& cli
             continue;
         }
         auto property = item["row"][0].get<std::string>();
-        auto kuType = inferKuzuType(item["row"][1]);
+        auto kuType = inferLbugType(item["row"][1]);
 
         auto newNode = stringFormat("['{}','{}','{}','{}']", nodeName, property, kuType.toString(),
             nlohmann::to_string(item["row"][1]));
@@ -293,7 +293,7 @@ std::string getCreateRelTableQuery(httplib::Client& cli, const std::string& relN
     std::vector<binder::ColumnDefinition> propertyDefinitions;
     for (const auto& item : data) {
         auto property = item["row"][0].get<std::string>();
-        auto kuType = inferKuzuType(item["row"][1]);
+        auto kuType = inferLbugType(item["row"][1]);
         propertyTypes.emplace(property, kuType.toString());
         originalTypes.emplace(property, nlohmann::to_string(item["row"][1]));
         propertyDefinitions.emplace_back(property, kuType.copy());
@@ -395,8 +395,8 @@ std::string migrateQuery(ClientContext& /*context*/, const TableFuncBindData& bi
             outputQuery.append(",");
         }
     }
-    outputQuery.append("] as row RETURN row[1] as kuzu_table, row[2] as kuzu_property, row[3] as "
-                       "kuzu_type, row[4] as neo4j_types;");
+    outputQuery.append("] as row RETURN row[1] as lbug_table, row[2] as lbug_property, row[3] as "
+                       "lbug_type, row[4] as neo4j_types;");
     result += outputQuery;
     return result;
 }

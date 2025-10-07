@@ -7,7 +7,7 @@ import subprocess
 import pexpect
 import pytest
 
-from test_helper import KUZU_EXEC_PATH, KUZU_ROOT, deleteIfExists
+from test_helper import LBUG_EXEC_PATH, LBUG_ROOT, deleteIfExists
 
 
 def pytest_addoption(parser) -> None:
@@ -55,7 +55,7 @@ class TestResult:
 
 class ShellTest:
     def __init__(self) -> None:
-        self.shell = KUZU_EXEC_PATH
+        self.shell = LBUG_EXEC_PATH
         self.arguments = [self.shell]
         self.statements: list[str] = []
         self.input = None
@@ -180,19 +180,19 @@ def get_tmp_path(tmp_path):
 
 @pytest.fixture()
 def history_path():
-    path = os.path.join(KUZU_ROOT, "tools", "shell", "test", "files")
+    path = os.path.join(LBUG_ROOT, "tools", "shell", "test", "files")
     deleteIfExists(os.path.join(path, "history.txt"))
     return path
 
 
 @pytest.fixture()
 def csv_path():
-    return os.path.join(KUZU_ROOT, "tools", "shell", "test", "files", "vPerson.csv")
+    return os.path.join(LBUG_ROOT, "tools", "shell", "test", "files", "vPerson.csv")
 
 
 @pytest.fixture()
 def init_path():
-    return os.path.join(KUZU_ROOT, "tools", "shell", "test", "files", "start.cypher")
+    return os.path.join(LBUG_ROOT, "tools", "shell", "test", "files", "start.cypher")
 
 
 @pytest.fixture

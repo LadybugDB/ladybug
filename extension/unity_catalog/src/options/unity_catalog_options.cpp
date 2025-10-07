@@ -29,8 +29,8 @@ static std::string getUnityCatalogOptions(main::ClientContext* context, std::str
     static common::case_insensitive_map_t<std::string> UNITY_CATALOG_OPTIONS = {
         {UnityCatalogToken::NAME, "TOKEN"}, {UnityCatalogEndPoint::NAME, "ENDPOINT"}};
     auto optionNameInDuckDB = UNITY_CATALOG_OPTIONS.at(optionName);
-    auto optionValueInKuzu = context->getCurrentSetting(optionName).toString();
-    return common::stringFormat("{} '{}',", optionNameInDuckDB, optionValueInKuzu);
+    auto optionValueInLbug = context->getCurrentSetting(optionName).toString();
+    return common::stringFormat("{} '{}',", optionNameInDuckDB, optionValueInLbug);
 }
 
 std::string DuckDBUnityCatalogSecretManager::getSecret(main::ClientContext* context) {

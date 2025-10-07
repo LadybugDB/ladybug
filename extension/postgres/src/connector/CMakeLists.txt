@@ -1,4 +1,4 @@
-add_library(kuzu_postgres_connector
+add_library(lbug_postgres_connector
         OBJECT
         ${PROJECT_SOURCE_DIR}/extension/duckdb/src/connector/duckdb_connector.cpp
         ${PROJECT_SOURCE_DIR}/extension/duckdb/src/connector/duckdb_result_converter.cpp
@@ -6,5 +6,5 @@ add_library(kuzu_postgres_connector
         postgres_connector.cpp)
 
 set(POSTGRES_EXTENSION_OBJECT_FILES
-        ${POSTGRES_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_postgres_connector>
+        ${POSTGRES_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:lbug_postgres_connector>
         PARENT_SCOPE)

@@ -8,8 +8,8 @@ namespace testing {
 TEST_F(ApiTest, PrepareVectorKTest) {
 #ifndef __STATIC_LINK_EXTENSION_TEST__
     ASSERT_TRUE(conn->query(common::stringFormat("LOAD EXTENSION '{}'",
-                                TestHelper::appendKuzuRootPath(
-                                    "extension/vector/build/libvector.kuzu_extension")))
+                                TestHelper::appendLbugRootPath(
+                                    "extension/vector/build/libvector.lbug_extension")))
                     ->isSuccess());
 #endif
     ASSERT_TRUE(conn->query("CREATE NODE TABLE Book (ID SERIAL, title STRING, published_year "

@@ -47,9 +47,9 @@ lbug_state lbug_prepared_statement_bind_bool(lbug_prepared_statement* prepared_s
         auto value_ptr = std::make_unique<Value>(value);
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -59,9 +59,9 @@ lbug_state lbug_prepared_statement_bind_int64(lbug_prepared_statement* prepared_
         auto value_ptr = std::make_unique<Value>(value);
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -71,9 +71,9 @@ lbug_state lbug_prepared_statement_bind_int32(lbug_prepared_statement* prepared_
         auto value_ptr = std::make_unique<Value>(value);
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -83,9 +83,9 @@ lbug_state lbug_prepared_statement_bind_int16(lbug_prepared_statement* prepared_
         auto value_ptr = std::make_unique<Value>(value);
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -95,9 +95,9 @@ lbug_state lbug_prepared_statement_bind_int8(lbug_prepared_statement* prepared_s
         auto value_ptr = std::make_unique<Value>(value);
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -107,9 +107,9 @@ lbug_state lbug_prepared_statement_bind_uint64(lbug_prepared_statement* prepared
         auto value_ptr = std::make_unique<Value>(value);
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -119,9 +119,9 @@ lbug_state lbug_prepared_statement_bind_uint32(lbug_prepared_statement* prepared
         auto value_ptr = std::make_unique<Value>(value);
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -131,9 +131,9 @@ lbug_state lbug_prepared_statement_bind_uint16(lbug_prepared_statement* prepared
         auto value_ptr = std::make_unique<Value>(value);
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -143,9 +143,9 @@ lbug_state lbug_prepared_statement_bind_uint8(lbug_prepared_statement* prepared_
         auto value_ptr = std::make_unique<Value>(value);
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -155,9 +155,9 @@ lbug_state lbug_prepared_statement_bind_double(lbug_prepared_statement* prepared
         auto value_ptr = std::make_unique<Value>(value);
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -167,9 +167,9 @@ lbug_state lbug_prepared_statement_bind_float(lbug_prepared_statement* prepared_
         auto value_ptr = std::make_unique<Value>(value);
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -179,9 +179,9 @@ lbug_state lbug_prepared_statement_bind_date(lbug_prepared_statement* prepared_s
         auto value_ptr = std::make_unique<Value>(date_t(value.days));
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -191,9 +191,9 @@ lbug_state lbug_prepared_statement_bind_timestamp_ns(lbug_prepared_statement* pr
         auto value_ptr = std::make_unique<Value>(timestamp_ns_t(value.value));
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -203,9 +203,9 @@ lbug_state lbug_prepared_statement_bind_timestamp_ms(lbug_prepared_statement* pr
         auto value_ptr = std::make_unique<Value>(timestamp_ms_t(value.value));
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -215,9 +215,9 @@ lbug_state lbug_prepared_statement_bind_timestamp_sec(lbug_prepared_statement* p
         auto value_ptr = std::make_unique<Value>(timestamp_sec_t(value.value));
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -227,9 +227,9 @@ lbug_state lbug_prepared_statement_bind_timestamp_tz(lbug_prepared_statement* pr
         auto value_ptr = std::make_unique<Value>(timestamp_tz_t(value.value));
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -239,9 +239,9 @@ lbug_state lbug_prepared_statement_bind_timestamp(lbug_prepared_statement* prepa
         auto value_ptr = std::make_unique<Value>(timestamp_t(value.value));
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -252,9 +252,9 @@ lbug_state lbug_prepared_statement_bind_interval(lbug_prepared_statement* prepar
             std::make_unique<Value>(interval_t(value.months, value.days, value.micros));
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -264,9 +264,9 @@ lbug_state lbug_prepared_statement_bind_string(lbug_prepared_statement* prepared
         auto value_ptr = std::make_unique<Value>(std::string(value));
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -276,8 +276,8 @@ lbug_state lbug_prepared_statement_bind_value(lbug_prepared_statement* prepared_
         auto value_ptr = std::make_unique<Value>(*static_cast<Value*>(value->_value));
         lbug_prepared_statement_bind_cpp_value(prepared_statement, param_name,
             std::move(value_ptr));
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }

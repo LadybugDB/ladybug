@@ -21,7 +21,7 @@ add_subdirectory(src/function)
 
 build_extension_lib(${BUILD_STATIC_EXTENSION} "sqlite")
 
-target_link_libraries(kuzu_${EXTENSION_LIB_NAME}_extension
+target_link_libraries(lbug_${EXTENSION_LIB_NAME}_extension
         PRIVATE
         ${DuckDB_LIBRARIES})
 

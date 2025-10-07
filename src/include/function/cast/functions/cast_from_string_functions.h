@@ -12,7 +12,7 @@ using namespace lbug::common;
 namespace lbug {
 namespace function {
 
-struct KUZU_API CastString {
+struct LBUG_API CastString {
     static void copyStringToVector(ValueVector* vector, uint64_t vectorPos, std::string_view strVal,
         const CSVOption* option);
 

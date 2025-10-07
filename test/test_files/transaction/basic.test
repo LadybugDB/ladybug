@@ -75,7 +75,7 @@ Timeout waiting for active transactions to leave the system before checkpointing
 -STATEMENT [conn1] BEGIN TRANSACTION READ ONLY;
 ---- ok
 -CREATE_CONNECTION conn2
--STATEMENT [conn2] COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv"
+-STATEMENT [conn2] COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv"
 ---- error
 Timeout waiting for active transactions to leave the system before checkpointing. If you have an open transaction, please close it and try again.
 -STATEMENT [conn1] MATCH (a:person) WHERE a.ID=100 RETURN a.age;

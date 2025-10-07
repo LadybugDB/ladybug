@@ -5,7 +5,7 @@
 namespace lbug {
 namespace main {
 const char* Version::getVersion() {
-    return KUZU_CMAKE_VERSION;
+    return LBUG_CMAKE_VERSION;
 }
 
 uint64_t Version::getStorageVersion() {

@@ -6,7 +6,7 @@ namespace lbug {
 namespace binder {
 
 // Collect all property expressions for a given statement.
-class KUZU_API PropertyCollector final : public BoundStatementVisitor {
+class LBUG_API PropertyCollector final : public BoundStatementVisitor {
 public:
     expression_vector getProperties() const;
 

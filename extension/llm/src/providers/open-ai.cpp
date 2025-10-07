@@ -27,7 +27,7 @@ httplib::Headers OpenAIEmbedding::getHeaders(const std::string& /*model*/,
     auto env_key = main::ClientContext::getEnvVariable(envVar);
     if (env_key.empty()) {
         throw(RuntimeException("Could not read environmental variable: " + envVar + '\n' +
-                               std::string(referenceKuzuDocs)));
+                               std::string(referenceLbugDocs)));
     }
     return httplib::Headers{{"Content-Type", "application/json"},
         {"Authorization", "Bearer " + env_key}};

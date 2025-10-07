@@ -4,7 +4,7 @@
  */
 "use strict";
 
-const KuzuWasm = require("./lbug.js");
+const LbugWasm = require("./lbug.js");
 
 class Database {
   /**
@@ -31,8 +31,8 @@ class Database {
     autoCheckpoint = true,
     checkpointThreshold = 16777216
   ) {
-    KuzuWasm.checkInit();
-    const lbug = KuzuWasm._lbug;
+    LbugWasm.checkInit();
+    const lbug = LbugWasm._lbug;
     if (!databasePath) {
       databasePath = ":memory:";
     }

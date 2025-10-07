@@ -3,7 +3,7 @@
 --
 
 -CASE CastToNestedTypes
--STATEMENT LOAD WITH HEADERS (list INT64[][], a struct(num INT64, str STRING), array INT16[3]) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/list/should_pass.csv"(null_strings=['null','Null','',"NULL","nUll","nuLl","nulL","nuLL","NUll","NuLl","NulL",' nuLL ',' null ',' null']) RETURN *;
+-STATEMENT LOAD WITH HEADERS (list INT64[][], a struct(num INT64, str STRING), array INT16[3]) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/list/should_pass.csv"(null_strings=['null','Null','',"NULL","nUll","nuLl","nulL","nuLL","NUll","NuLl","NulL",' nuLL ',' null ',' null']) RETURN *;
 ---- 10
 [[1,3,423,124,43242],[432]]|{num: -423432, str: this is a string []}|[255,254,43]
 [[1,3,423,124,43242],[432]]|{num: 3423423, str: this is a string}|[250,249,21]
@@ -15,26 +15,26 @@
 []||[111,0,0]
 ||[0,111,12]
 |{num: , str: }|[0,0,0]
--STATEMENT LOAD WITH HEADERS (list STRING[], str STRING, strct STRUCT(a STRUCT(b STRUCT(c INT64[])))) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/list/change_config.csv" (ESCAPE="~",NULL_STRINGS=['NULL']) RETURN * ;
+-STATEMENT LOAD WITH HEADERS (list STRING[], str STRING, strct STRUCT(a STRUCT(b STRUCT(c INT64[])))) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/list/change_config.csv" (ESCAPE="~",NULL_STRINGS=['NULL']) RETURN * ;
 ---- 3
 [escape,is escape success? ~]| ' [ ] do not need to escape sepeical | []|{a: {b: }}
 [this,is a word,normal not escape,' [ ] | , ~ ']|try escape ~|{a: {b: {c: [3432423,-43423,31231,]}}}
 [~ ' not work also this '""]|nu|{a: {b: {c: }}}
--STATEMENT LOAD WITH HEADERS (map MAP(STRING, MAP(STRING, INT16))) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map_correct.csv" RETURN *;
+-STATEMENT LOAD WITH HEADERS (map MAP(STRING, MAP(STRING, INT16))) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map_correct.csv" RETURN *;
 ---- 3
 {c={a=3423}, b={g=3421}}
 {d={}}
 {}
--STATEMENT LOAD WITH HEADERS (map MAP(INT32[], STRUCT(c STRING))) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/map/map_correct.csv" (DELIM=">", NULL_STRINGS=['NULL','']) RETURN *;
+-STATEMENT LOAD WITH HEADERS (map MAP(INT32[], STRUCT(c STRING))) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/map/map_correct.csv" (DELIM=">", NULL_STRINGS=['NULL','']) RETURN *;
 ---- error
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/map/map_correct.csv on line 7: Conversion exception: Map does not allow null as key. Line/record containing the error: '"{={c: '~~ have some , ,'}}"'
--STATEMENT LOAD WITH HEADERS (map MAP(MAP(INT64, INT64), MAP(STRING, STRING))) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map2.csv" RETURN *;
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/map/map_correct.csv on line 7: Conversion exception: Map does not allow null as key. Line/record containing the error: '"{={c: '~~ have some , ,'}}"'
+-STATEMENT LOAD WITH HEADERS (map MAP(MAP(INT64, INT64), MAP(STRING, STRING))) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map2.csv" RETURN *;
 ---- error
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map2.csv on line 1: Conversion exception: Map does not allow duplicate keys. Line/record containing the error: '"{{30099=30099, 1=0}={3mTEf=3mTEf, 3mTEf=3mTEf, 3mTEf=3mTEf}}"'
--STATEMENT LOAD WITH HEADERS (array INT32[92]) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/array/long_array2.csv" RETURN *;
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map2.csv on line 1: Conversion exception: Map does not allow duplicate keys. Line/record containing the error: '"{{30099=30099, 1=0}={3mTEf=3mTEf, 3mTEf=3mTEf, 3mTEf=3mTEf}}"'
+-STATEMENT LOAD WITH HEADERS (array INT32[92]) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/array/long_array2.csv" RETURN *;
 ---- 1
 [32131,0,0,43243,12313,432432,4324,1312,43241,432432,2342,13412,43242,23432,43242,43242,12313,32131,43243,12313,432432,4324,1312,43241,432432,2342,13412,43242,23432,43242,43242,12313,32131,43243,12313,432432,4324,1312,43241,432432,2342,13412,43242,23432,43242,43242,12313,32131,43243,12313,432432,4324,1312,43241,432432,2342,13412,43242,23432,43242,43242,12313,32131,43243,12313,432432,4324,1312,43241,432432,2342,13412,43242,23432,43242,43242,12313,32131,43243,12313,432432,4324,1312,43241,432432,2342,13412,43242,23432,43242,43242,12313]
--STATEMENT LOAD WITH HEADERS (array FLOAT[1], bool BOOLEAN, intv INTERVAL) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/array/array_correct.csv"(null_strings=['null','']) RETURN *;
+-STATEMENT LOAD WITH HEADERS (array FLOAT[1], bool BOOLEAN, intv INTERVAL) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/array/array_correct.csv"(null_strings=['null','']) RETURN *;
 ---- 6
 [23123.433594]|True|1 month 2 days
 [-4321312.500000]|True|1 year 3 days
@@ -42,15 +42,15 @@ Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/map/
 [43213123584.000000]|False|12 years 3 months 30 days
 [-4212.423340]|False|
 [-2.000000]|True|10 months
--STATEMENT LOAD WITH HEADERS (array INT64[3], date DATE, timestamp TIMESTAMP) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/array/array_int64.csv" RETURN *;
+-STATEMENT LOAD WITH HEADERS (array INT64[3], date DATE, timestamp TIMESTAMP) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/array/array_int64.csv" RETURN *;
 ---- 3
 [4234234,4234535,-3242342]|2022-06-06|2022-11-22 15:12:22
 [4234234,4234535,0]|2013-02-21|1970-01-01 10:00:00.004666
 [4234234,0,-3242342]|2019-12-30|1970-01-01 00:00:00.004666
--STATEMENT LOAD WITH HEADERS (array DOUBLE[83]) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/array/long_array.csv" RETURN *;
+-STATEMENT LOAD WITH HEADERS (array DOUBLE[83]) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/array/long_array.csv" RETURN *;
 ---- 1
 [4123.120000,0.000000,0.000000,42432.120000,435435.231000,432423.123340,43424.213400,4325245.130000,432423.123000,3242.123000,4123.120000,42432.120000,435435.231000,432423.123340,43424.213400,4325245.130000,432423.123000,3242.123000,4123.120000,42432.120000,435435.231000,432423.123340,43424.213400,4325245.130000,432423.123000,3242.123000,4123.120000,42432.120000,435435.231000,432423.123340,43424.213400,4325245.130000,432423.123000,3242.123000,4123.120000,42432.120000,435435.231000,432423.123340,43424.213400,4325245.130000,432423.123000,3242.123000,4123.120000,42432.120000,435435.231000,432423.123340,43424.213400,4325245.130000,432423.123000,3242.123000,4123.120000,42432.120000,435435.231000,432423.123340,43424.213400,4325245.130000,432423.123000,3242.123000,4123.120000,42432.120000,435435.231000,432423.123340,43424.213400,4325245.130000,432423.123000,3242.123000,4123.120000,42432.120000,435435.231000,432423.123340,43424.213400,4325245.130000,432423.123000,3242.123000,4123.120000,42432.120000,435435.231000,432423.123340,43424.213400,4325245.130000,432423.123000,3242.123000,543523442342.434326]
--STATEMENT LOAD WITH HEADERS (u UNION(v1 INT64, v2 BOOLEAN), u2 UNION(v1 UINT32, v2 INT32, v3 DATE), u3 UNION(v1 UINT8, v2 UINT16, v3 TIMESTAMP, v4 FLOAT), u4 UNION(v1 UINT64, v2 INT8, v3 INT16, v4 DOUBLE), u5 UNION(v1 STRING)) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/union/union_correct.csv"(null_strings=['null','',' Null ']) RETURN *;
+-STATEMENT LOAD WITH HEADERS (u UNION(v1 INT64, v2 BOOLEAN), u2 UNION(v1 UINT32, v2 INT32, v3 DATE), u3 UNION(v1 UINT8, v2 UINT16, v3 TIMESTAMP, v4 FLOAT), u4 UNION(v1 UINT64, v2 INT8, v3 INT16, v4 DOUBLE), u5 UNION(v1 STRING)) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/union/union_correct.csv"(null_strings=['null','',' Null ']) RETURN *;
 ---- 9
 False||255|18446744073709551615|fsdfa
 True|432|0|-1.432415|543fasf
@@ -90,7 +90,7 @@ False|-4325||18446744073709551616.000000|  dfsa
 # timestamp/date/... list
 
 -LOG CastToArray
--STATEMENT LOAD WITH HEADERS (array STRING, bool BOOLEAN, intv INTERVAL) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/array/array_correct.csv" RETURN cast(array, "FLOAT[1]");
+-STATEMENT LOAD WITH HEADERS (array STRING, bool BOOLEAN, intv INTERVAL) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/array/array_correct.csv" RETURN cast(array, "FLOAT[1]");
 ---- 6
 [23123.433594]
 [-4321312.500000]
@@ -98,10 +98,10 @@ False|-4325||18446744073709551616.000000|  dfsa
 [43213123584.000000]
 [-4212.423340]
 [-2.000000]
--STATEMENT LOAD WITH HEADERS (stockPrice STRING) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/array/array_with_null.csv" RETURN cast(stockPrice, "DOUBLE[3]");
+-STATEMENT LOAD WITH HEADERS (stockPrice STRING) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/array/array_with_null.csv" RETURN cast(stockPrice, "DOUBLE[3]");
 ---- error
 Conversion exception: Each array should have fixed number of elements. Expected: 3, Actual: 0.
--STATEMENT LOAD WITH HEADERS (stockPrice STRING) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/array/array_with_null.csv" where size(stockPrice) > 10 RETURN cast(stockPrice, "FLOAT[3]");
+-STATEMENT LOAD WITH HEADERS (stockPrice STRING) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/array/array_with_null.csv" where size(stockPrice) > 10 RETURN cast(stockPrice, "FLOAT[3]");
 ---- 2
 [3324.123047,342423.437500,432.122986]
 [1.000000,4231.000000,432.122986]
@@ -111,16 +111,16 @@ Conversion exception: Each array should have fixed number of elements. Expected:
 -STATEMENT Return cast(cast(-4324324, "int128"), "int64")
 ---- 1
 -4324324
--STATEMENT LOAD WITH HEADERS (array INT64[1]) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/array/array_null.csv" RETURN *;
+-STATEMENT LOAD WITH HEADERS (array INT64[1]) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/array/array_null.csv" RETURN *;
 ---- 1
 []
--STATEMENT LOAD WITH HEADERS (array INT64[2]) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/array/array_null2.csv" RETURN *;
+-STATEMENT LOAD WITH HEADERS (array INT64[2]) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/array/array_null2.csv" RETURN *;
 ---- 1
 [,432423]
--STATEMENT LOAD WITH HEADERS (a STRING[2]) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/array/array_string.csv" RETURN *;
+-STATEMENT LOAD WITH HEADERS (a STRING[2]) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/array/array_string.csv" RETURN *;
 ---- 1
 [fsdaf,sfadfwer]
--STATEMENT LOAD WITH HEADERS (array UINT8[1]) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/array/array_uint8.csv" RETURN *;
+-STATEMENT LOAD WITH HEADERS (array UINT8[1]) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/array/array_uint8.csv" RETURN *;
 ---- 1
 [4]
 
@@ -128,7 +128,7 @@ Conversion exception: Each array should have fixed number of elements. Expected:
 -STATEMENT RETURN cast(" { c= {a =  3423 },  b =  {  g = 3421 }  } ", "MAP(STRING, MAP(STRING, INT16))"), cast("{}", "MAP(STRING, MAP(STRING, INT16))"), cast("{d = {}}", "MAP(STRING, MAP(STRING, INT16))");
 ---- 1
 {c={a=3423}, b={g=3421}}|{}|{d={}}
--STATEMENT LOAD WITH HEADERS (map STRING) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map2.csv" RETURN cast(map, "MAP(MAP(INT64, INT64), MAP(STRING, STRING))");
+-STATEMENT LOAD WITH HEADERS (map STRING) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map2.csv" RETURN cast(map, "MAP(MAP(INT64, INT64), MAP(STRING, STRING))");
 ---- error
 Conversion exception: Map does not allow duplicate keys.
 -STATEMENT RETURN cast("{[432,24,12]={c: okay}, [90,11,43,54]={c: bad}, [0]={c: good}}", "MAP(INT32[], STRUCT(c STRING))"), cast("{[1000,143245,432,43241,-43214324,-432423,-4324324,-41412,-131242143,0,-4324324,0]={}}", "MAP(INT32[], STRUCT(c STRING))");
@@ -150,7 +150,7 @@ Conversion exception: Map does not allow null as key.
 -STATEMENT RETURN cast("324324", "UNION(uint64, int128, BOOLEAN)"), cast("-324324", "UNION(uint64, int128, BOOLEAN)"), cast("false", "UNION(uint64, int128, BOOLEAN)");
 ---- 1
 324324|-324324|False
--STATEMENT LOAD WITH HEADERS (u STRING, u2 STRING, u3 STRING, u4 STRING, u5 STRING) FROM "${KUZU_ROOT_DIRECTORY}/dataset/reader/union_correct.csv" RETURN cast(u, "UNION(v1 INT64, v2 BOOLEAN)"), cast(u2, "UNION(v1 UINT32, v2 INT32, v3 DATE)"), cast(u3, "UNION(v1 UINT8, v2 UINT16, v3 TIMESTAMP, v4 FLOAT)"), cast(u4, "UNION(v1 UINT64, v2 INT8, v3 INT16, v4 DOUBLE)"), cast(u5, "UNION(v1 STRING)");
+-STATEMENT LOAD WITH HEADERS (u STRING, u2 STRING, u3 STRING, u4 STRING, u5 STRING) FROM "${LBUG_ROOT_DIRECTORY}/dataset/reader/union_correct.csv" RETURN cast(u, "UNION(v1 INT64, v2 BOOLEAN)"), cast(u2, "UNION(v1 UINT32, v2 INT32, v3 DATE)"), cast(u3, "UNION(v1 UINT8, v2 UINT16, v3 TIMESTAMP, v4 FLOAT)"), cast(u4, "UNION(v1 UINT64, v2 INT8, v3 INT16, v4 DOUBLE)"), cast(u5, "UNION(v1 STRING)");
 ---- 9
 False|34|255|18446744073709551615|fsdfa
 True|432|0|-1.432415|543fasf
@@ -194,19 +194,19 @@ False|-4325|14|18446744073709551616.000000|  dfsa
 -STATEMENT RETURN cast(cast(" { 213=1, -3123=0 } ","MAP(INT32, STRING)"), "MAP(INT64, INT64)"), cast(cast(" { 213=1, -3123=0 } ","MAP(STRING, STRING)"), "MAP(INT32, UINT8)"), cast(cast(" { 213=1, -3123=0 } ","MAP(STRING, STRING)"), "MAP(INT16, UINT16)"), cast(cast(" { 213=1, -3123=0 } ","MAP(STRING, STRING)"), "MAP(INT128, UINT32)"), cast(cast(" { 213=1, -3123=0 } ","MAP(STRING, STRING)"), "MAP(DOUBLE, UINT64)"), cast(cast(" { 213=1, -3123=0 } ","MAP(INT128, INT128)"), "MAP(STRING, FLOAT)");
 ---- 1
 {213=1, -3123=0}|{213=1, -3123=0}|{213=1, -3123=0}|{213=1, -3123=0}|{213.000000=1, -3123.000000=0}|{213=1.000000, -3123=0.000000}
--STATEMENT LOAD WITH HEADERS (map MAP(INT8, INT8)) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/map/map_non_nested.csv" RETURN cast(map, "MAP(INT8, INT8)"), cast(map, "MAP(INT16, INT16)"), cast(map, "MAP(INT32, INT32)"), cast(map, "MAP(INT64, INT64)"), cast(map, "MAP(INT128, INT128)"), cast(map, "MAP(UINT8, UINT8)"), cast(map, "MAP(UINT16, UINT16)"), cast(map, "MAP(UINT32, UINT32)"), cast(map, "MAP(UINT64, UINT64)"), cast(map, "MAP(DOUBLE, DOUBLE)"), cast(map, "MAP(float, float)"), cast(cast(cast(cast(map, "MAP(STRING, STRING)"), "MAP(int32, int32)"), "MAP(float, float)"), "MAP(STRING, STRING)");
+-STATEMENT LOAD WITH HEADERS (map MAP(INT8, INT8)) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/map/map_non_nested.csv" RETURN cast(map, "MAP(INT8, INT8)"), cast(map, "MAP(INT16, INT16)"), cast(map, "MAP(INT32, INT32)"), cast(map, "MAP(INT64, INT64)"), cast(map, "MAP(INT128, INT128)"), cast(map, "MAP(UINT8, UINT8)"), cast(map, "MAP(UINT16, UINT16)"), cast(map, "MAP(UINT32, UINT32)"), cast(map, "MAP(UINT64, UINT64)"), cast(map, "MAP(DOUBLE, DOUBLE)"), cast(map, "MAP(float, float)"), cast(cast(cast(cast(map, "MAP(STRING, STRING)"), "MAP(int32, int32)"), "MAP(float, float)"), "MAP(STRING, STRING)");
 ---- error
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/map/map_non_nested.csv on line 2: Conversion exception: Map does not allow null as key. Line/record containing the error: '"{=}"'
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/map/map_non_nested.csv on line 2: Conversion exception: Map does not allow null as key. Line/record containing the error: '"{=}"'
 
 -LOG CastNestedMapToMap
--STATEMENT LOAD WITH HEADERS (map MAP(STRING, MAP(STRING, INT16))) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map_correct.csv" RETURN cast(map, "MAP(STRING, MAP(STRING, INT16))"), cast(map, "MAP(STRING, MAP(STRING, INT128))"), cast(map, "MAP(STRING, MAP(STRING, DOUBLE))");
+-STATEMENT LOAD WITH HEADERS (map MAP(STRING, MAP(STRING, INT16))) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map_correct.csv" RETURN cast(map, "MAP(STRING, MAP(STRING, INT16))"), cast(map, "MAP(STRING, MAP(STRING, INT128))"), cast(map, "MAP(STRING, MAP(STRING, DOUBLE))");
 ---- 3
 {c={a=3423}, b={g=3421}}|{c={a=3423}, b={g=3421}}|{c={a=3423.000000}, b={g=3421.000000}}
 {d={}}|{d={}}|{d={}}
 {}|{}|{}
--STATEMENT LOAD WITH HEADERS (map MAP(MAP(INT64, INT64), MAP(STRING, STRING))) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map2.csv" RETURN cast(map, "MAP(MAP(UINT64, UINT64), STRING)"), cast(cast(map, "MAP(MAP(FLOAT, INT64), MAP(STRING, STRING))"), "MAP(MAP(INT128, FLOAT), MAP(STRING, STRING))");
+-STATEMENT LOAD WITH HEADERS (map MAP(MAP(INT64, INT64), MAP(STRING, STRING))) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map2.csv" RETURN cast(map, "MAP(MAP(UINT64, UINT64), STRING)"), cast(cast(map, "MAP(MAP(FLOAT, INT64), MAP(STRING, STRING))"), "MAP(MAP(INT128, FLOAT), MAP(STRING, STRING))");
 ---- error
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map2.csv on line 1: Conversion exception: Map does not allow duplicate keys. Line/record containing the error: '"{{30099=30099, 1=0}={3mTEf=3mTEf, 3mTEf=3mTEf, 3mTEf=3mTEf}}"'
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/map/nested_map2.csv on line 1: Conversion exception: Map does not allow duplicate keys. Line/record containing the error: '"{{30099=30099, 1=0}={3mTEf=3mTEf, 3mTEf=3mTEf, 3mTEf=3mTEf}}"'
 -STATEMENT RETURN cast(cast(cast("{=, {NULL=NULL, NULL=1.1, {}=NULL, {}=1.12}={1.23={a=10}}, {{0=0, 1=, 0=NULL, =}=1.232}={1.321={}}, {{1=1,2=2}=1.232, {3=3}=1.432}={1.321={a=0}, 2={b=1}}, =}", "MAP(MAP(MAP(INT8, INT8), FLOAT), MAP(DOUBLE, MAP(STRING, UINT8)))"), "MAP(MAP(MAP(INT8, INT8), FLOAT), MAP(DOUBLE, MAP(STRING, UINT8)))"), "MAP(MAP(MAP(INT32, UINT8), DOUBLE), MAP(FLOAT, MAP(STRING, INT128)))"), cast(cast("{=, {NULL=NULL, NULL=1.1, {}=NULL, {}=1.12}={1.23={a=10}}, {{0=0, 1=, 0=NULL, =}=1.232}={1.321={}}, {{1=1,2=2}=1.232, {3=3}=1.432}={1.321={a=0}, 2={b=1}}, =}", "MAP(MAP(MAP(INT8, INT8), FLOAT), MAP(DOUBLE, MAP(STRING, UINT8)))"), "MAP(MAP(STRING, INT16), MAP(INT128, STRING))");
 ---- error
 Conversion exception: Map does not allow null as key.
@@ -214,7 +214,7 @@ Conversion exception: Map does not allow null as key.
 -STATEMENT RETURN cast(cast(cast("{a: 12, b: 0}", "STRUCT(a STRING, b STRING, c STRING)"), "STRUCT(a INT128, b INT128, c INT128)"), "STRUCT(a INT64, b INT64, c INT64)"), cast(cast(cast("{a: 15}", "STRUCT(a STRING, b STRING)"), "STRUCT(a INT32, b INT32)"), "STRUCT(a INT16, b INT16)"), cast(cast(cast("{b: 15}", "STRUCT(a STRING, b STRING)"), "STRUCT(a INT8, b INT8)"), "STRUCT(a UINT16, b UINT16)"), cast(cast(cast("{}", "STRUCT(a STRING, b STRING)"), "STRUCT(a UINT32, b UINT32)"), "STRUCT(a UINT64, b UINT64)"), cast(cast("{a: 12, b: 0}", "STRUCT(a STRING, b STRING)"), "STRUCT(a DOUBLE, b DOUBLE)"), cast(cast("{a: 12, b: 0}", "STRUCT(a STRING, b STRING)"), "STRUCT(a FLOAT, b FLOAT)");
 ---- 1
 {a: 12, b: 0, c: }|{a: 15, b: }|{a: , b: 15}|{a: , b: }|{a: 12.000000, b: 0.000000}|{a: 12.000000, b: 0.000000}
--STATEMENT LOAD WITH HEADERS (list INT64[][], a struct(num INT64, str STRING), array INT16[3]) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/list/should_pass.csv"(null_strings=['','null']) RETURN cast(a, "struct(num INT64, str STRING)"), cast(a, "struct(num INT128, str STRING)"), cast(a, "struct(num STRING, str STRING)"), cast(a, "struct(num DOUBLE, str STRING)"), cast(a, "struct(num FLOAT, str STRING)");
+-STATEMENT LOAD WITH HEADERS (list INT64[][], a struct(num INT64, str STRING), array INT16[3]) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/list/should_pass.csv"(null_strings=['','null']) RETURN cast(a, "struct(num INT64, str STRING)"), cast(a, "struct(num INT128, str STRING)"), cast(a, "struct(num STRING, str STRING)"), cast(a, "struct(num DOUBLE, str STRING)"), cast(a, "struct(num FLOAT, str STRING)");
 ---- 10
 {num: -423432, str: this is a string []}|{num: -423432, str: this is a string []}|{num: -423432, str: this is a string []}|{num: -423432.000000, str: this is a string []}|{num: -423432.000000, str: this is a string []}
 {num: 0, str: this is a string}|{num: 0, str: this is a string}|{num: 0, str: this is a string}|{num: 0.000000, str: this is a string}|{num: 0.000000, str: this is a string}
@@ -228,7 +228,7 @@ Conversion exception: Map does not allow null as key.
 ||||
 
 -LOG CastNestedStructToStruct
--STATEMENT LOAD WITH HEADERS (list STRING[], str STRING, strct STRUCT(a STRUCT(b STRUCT(c INT64[])))) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/list/change_config.csv" (ESCAPE="~") RETURN cast(strct, "STRUCT(a STRUCT(b STRUCT(c INT128[])))"), cast(strct, "STRUCT(a STRUCT(b STRUCT(c DOUBLE[])))"), cast(strct, "STRUCT(a STRUCT(b STRUCT(c STRING)))"), cast(strct, "STRUCT(a STRUCT(b STRING))"), cast(strct, "STRUCT(a STRING)");
+-STATEMENT LOAD WITH HEADERS (list STRING[], str STRING, strct STRUCT(a STRUCT(b STRUCT(c INT64[])))) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/list/change_config.csv" (ESCAPE="~") RETURN cast(strct, "STRUCT(a STRUCT(b STRUCT(c INT128[])))"), cast(strct, "STRUCT(a STRUCT(b STRUCT(c DOUBLE[])))"), cast(strct, "STRUCT(a STRUCT(b STRUCT(c STRING)))"), cast(strct, "STRUCT(a STRUCT(b STRING))"), cast(strct, "STRUCT(a STRING)");
 ---- 3
 {a: {b: {c: [3432423,-43423,31231,]}}}|{a: {b: {c: [3432423.000000,-43423.000000,31231.000000,]}}}|{a: {b: {c: [3432423,-43423,31231,]}}}|{a: {b: {c: [3432423,-43423,31231,]}}}|{a: {b: {c: [3432423,-43423,31231,]}}}
 {a: {b: {c: }}}|{a: {b: {c: }}}|{a: {b: {c: }}}|{a: {b: {c: }}}|{a: {b: {c: }}}
@@ -248,7 +248,7 @@ Conversion exception: Map does not allow null as key.
 -STATEMENT RETURN cast(cast("[1,2,3]", "INT64[3]"), "INT128[]"), cast(cast("[1,2,3]", "INT64[3]"), "INT64[]"), cast(cast("[1,2,3]", "INT64[3]"), "INT32[]"), cast(cast("[1,2,3]", "INT64[3]"), "INT16[]"), cast(cast("[1,2,3]", "INT64[3]"), "INT8[]"), cast(cast("[1,2,3]", "INT64[3]"), "UINT64[]"), cast(cast("[1,2,3]", "INT64[3]"), "UINT32[]"), cast(cast("[1,2,3]", "INT64[3]"), "UINT16[]"), cast(cast("[1,2,3]", "INT64[3]"), "UINT8[]"), cast(cast("[1,2,3]", "INT64[3]"), "DOUBLE[]"), cast(cast("[1,2,3]", "INT64[3]"), "STRING[]"), cast(cast("[1,2,3]", "INT64[3]"), "FLOAT[]");
 ---- 1
 [1,2,3]|[1,2,3]|[1,2,3]|[1,2,3]|[1,2,3]|[1,2,3]|[1,2,3]|[1,2,3]|[1,2,3]|[1.000000,2.000000,3.000000]|[1,2,3]|[1.000000,2.000000,3.000000]
--STATEMENT LOAD WITH HEADERS (list INT64[][], a struct(num INT64, str STRING), array INT16[3]) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/list/should_pass.csv" RETURN cast(cast(cast(array, "DOUBLE[]"), "STRING[]"), "FLOAT[]");
+-STATEMENT LOAD WITH HEADERS (list INT64[][], a struct(num INT64, str STRING), array INT16[3]) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/list/should_pass.csv" RETURN cast(cast(cast(array, "DOUBLE[]"), "STRING[]"), "FLOAT[]");
 ---- 10
 
 
@@ -270,7 +270,7 @@ Conversion exception: Map does not allow null as key.
 -STATEMENT RETURN cast([1], "INT64[1]"), cast([1], "INT32[1]"), cast([1], "INT16[1]"), cast([1], "DOUBLE[1]"), cast([1], "FLOAT[1]"), cast(NULL, "INT64[15]");
 ---- 1
 [1]|[1]|[1]|[1.000000]|[1.000000]|
--STATEMENT LOAD WITH HEADERS (list INT64[][], a struct(num INT64, str STRING), array STRING[]) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/list/should_pass.csv" RETURN cast(cast(cast(array, "INT16[3]"), "STRING[]"), "FLOAT[3]");
+-STATEMENT LOAD WITH HEADERS (list INT64[][], a struct(num INT64, str STRING), array STRING[]) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/list/should_pass.csv" RETURN cast(cast(cast(array, "INT16[3]"), "STRING[]"), "FLOAT[3]");
 ---- 10
 
 
@@ -282,7 +282,7 @@ Conversion exception: Map does not allow null as key.
 [250.000000,249.000000,21.000000]
 [255.000000,254.000000,43.000000]
 [29.000000,21.000000,1.000000]
--STATEMENT LOAD WITH HEADERS (stockPrice STRING[]) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/array/array_with_null.csv" RETURN cast(stockPrice, "DOUBLE[3]");
+-STATEMENT LOAD WITH HEADERS (stockPrice STRING[]) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/array/array_with_null.csv" RETURN cast(stockPrice, "DOUBLE[3]");
 ---- 3
 [3324.123000,342423.437500,432.123000]
 
@@ -298,7 +298,7 @@ Conversion exception: Map does not allow null as key.
 -STATEMENT RETURN cast([NULL, [1]], "INT64[1][]"), cast([NULL], "INT64[1][]") AS x, cast([[1], NULL], "INT64[1][]"), cast([NULL], "INT64[1][][]"), cast([[NULL]], "INT64[1][][]"), cast([[[2], NULL], [NULL, [1]]], "INT64[1][][]"), cast([NULL, [NULL, [1]]], "INT64[1][][]");
 ---- 1
 [,[1]]|[]|[[1],]|[]|[[]]|[[[2],],[,[1]]]|[,[,[1]]]
--STATEMENT LOAD WITH HEADERS (strct STRUCT(a INT64, b MAP(INT64[][][], STRING))) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/struct/struct_with_array.csv" where struct_extract(strct, 'a') > 0 RETURN cast(strct, "STRUCT(a INT64,b MAP(INT64[1][][], STRING))");
+-STATEMENT LOAD WITH HEADERS (strct STRUCT(a INT64, b MAP(INT64[][][], STRING))) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/struct/struct_with_array.csv" where struct_extract(strct, 'a') > 0 RETURN cast(strct, "STRUCT(a INT64,b MAP(INT64[1][][], STRING))");
 ---- 4
 {a: 1999, b: {[[[1],[2],[3]]]=true}}
 {a: 1999, b: {[[]]=true}}
@@ -312,7 +312,7 @@ Conversion exception: Map does not allow null as key.
 -STATEMENT Return cast(cast(cast(cast(Cast([0,-1,1], "INT32[3]"), "INT64[3]"), "INT16[3]"), "DOUBLE[3]"), "FLOAT[3]");
 ---- 1
 [0.000000,-1.000000,1.000000]
--STATEMENT LOAD WITH HEADERS (strct STRUCT(a INT64, b MAP(INT64[][][], STRING))) FROM "${KUZU_ROOT_DIRECTORY}/dataset/load-from-test/struct/struct_with_array.csv" where struct_extract(strct, 'a') > 0 RETURN cast(cast(strct, "STRUCT(a INT64,b MAP(DOUBLE[1][][], STRING))"), "STRUCT(a INT64,b MAP(INT16[1][][], STRING))");
+-STATEMENT LOAD WITH HEADERS (strct STRUCT(a INT64, b MAP(INT64[][][], STRING))) FROM "${LBUG_ROOT_DIRECTORY}/dataset/load-from-test/struct/struct_with_array.csv" where struct_extract(strct, 'a') > 0 RETURN cast(cast(strct, "STRUCT(a INT64,b MAP(DOUBLE[1][][], STRING))"), "STRUCT(a INT64,b MAP(INT16[1][][], STRING))");
 ---- 4
 {a: 1999, b: {[[[1],[2],[3]]]=true}}
 {a: 1999, b: {[[]]=true}}

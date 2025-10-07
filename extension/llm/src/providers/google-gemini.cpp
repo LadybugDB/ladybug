@@ -22,7 +22,7 @@ std::string GoogleGeminiEmbedding::getPath(const std::string& model) const {
     auto env_key = main::ClientContext::getEnvVariable(envVar);
     if (env_key.empty()) {
         throw(RuntimeException("Could not read environment variable: " + envVar + "\n" +
-                               std::string(referenceKuzuDocs)));
+                               std::string(referenceLbugDocs)));
     }
     return "/v1beta/models/" + model + ":embedContent?key=" + env_key;
 }

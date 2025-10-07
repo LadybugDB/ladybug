@@ -11,7 +11,7 @@
 -LOG ExplainCopy
 -STATEMENT create node table npytable (id INT64,i64 INT64, PRIMARY KEY(id));
 ---- ok
--STATEMENT EXPLAIN copy npytable from ("${KUZU_ROOT_DIRECTORY}/dataset/npy-20k/id_int64.npy", "${KUZU_ROOT_DIRECTORY}/dataset/npy-20k/id_int64.npy") BY COLUMN;
+-STATEMENT EXPLAIN copy npytable from ("${LBUG_ROOT_DIRECTORY}/dataset/npy-20k/id_int64.npy", "${LBUG_ROOT_DIRECTORY}/dataset/npy-20k/id_int64.npy") BY COLUMN;
 ---- ok
 
 -LOG ExplainCall
@@ -29,7 +29,7 @@
 -LOG ExplainLogicalCopy
 -STATEMENT create node table npytable1 (id INT64,i64 INT64, PRIMARY KEY(id));
 ---- ok
--STATEMENT EXPLAIN LOGICAL copy npytable1 from ("${KUZU_ROOT_DIRECTORY}/dataset/npy-20k/id_int64.npy", "${KUZU_ROOT_DIRECTORY}/dataset/npy-20k/id_int64.npy") BY COLUMN;
+-STATEMENT EXPLAIN LOGICAL copy npytable1 from ("${LBUG_ROOT_DIRECTORY}/dataset/npy-20k/id_int64.npy", "${LBUG_ROOT_DIRECTORY}/dataset/npy-20k/id_int64.npy") BY COLUMN;
 ---- ok
 
 -LOG ExplainLogicalMatch
@@ -55,7 +55,7 @@
 ---- ok
 
 -LOG ProfileCopy
--STATEMENT Profile copy npytable2 from ("${KUZU_ROOT_DIRECTORY}/dataset/npy-1d/one_dim_int64.npy", "${KUZU_ROOT_DIRECTORY}/dataset/npy-1d/one_dim_int32.npy") BY COLUMN;
+-STATEMENT Profile copy npytable2 from ("${LBUG_ROOT_DIRECTORY}/dataset/npy-1d/one_dim_int64.npy", "${LBUG_ROOT_DIRECTORY}/dataset/npy-1d/one_dim_int32.npy") BY COLUMN;
 ---- ok
 
 -LOG ProfileCall

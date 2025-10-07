@@ -13,7 +13,7 @@ namespace lbug {
 namespace main {
 
 void AttachedDatabase::invalidateCache() {
-    if (dbType != common::ATTACHED_KUZU_DB_TYPE) {
+    if (dbType != common::ATTACHED_LBUG_DB_TYPE) {
         auto catalogExtension = catalog->ptrCast<extension::CatalogExtension>();
         catalogExtension->invalidateCache();
     }
@@ -33,7 +33,7 @@ static void validateEmptyWAL(const std::string& path, ClientContext* context) {
     }
 }
 
-AttachedKuzuDatabase::AttachedKuzuDatabase(std::string dbPath, std::string dbName,
+AttachedLbugDatabase::AttachedLbugDatabase(std::string dbPath, std::string dbName,
     std::string dbType, ClientContext* clientContext)
     : AttachedDatabase{std::move(dbName), std::move(dbType), nullptr /* catalog */} {
     auto vfs = common::VirtualFileSystem::GetUnsafe(*clientContext);

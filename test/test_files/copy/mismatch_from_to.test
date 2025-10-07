@@ -16,10 +16,10 @@
 ---- ok
 -STATEMENT CREATE REL TABLE R2 (FROM N2 TO N2);
 ---- ok
--STATEMENT COPY R1 FROM '${KUZU_ROOT_DIRECTORY}/dataset/demo-db/parquet/follows.parquet'
+-STATEMENT COPY R1 FROM '${LBUG_ROOT_DIRECTORY}/dataset/demo-db/parquet/follows.parquet'
 ---- error
 Conversion exception: Cast failed. Could not convert "Adam" to INT64.
--STATEMENT COPY R2 FROM '${KUZU_ROOT_DIRECTORY}/dataset/demo-db/parquet/city.parquet'
+-STATEMENT COPY R2 FROM '${LBUG_ROOT_DIRECTORY}/dataset/demo-db/parquet/city.parquet'
 ---- ok
 -STATEMENT MATCH (a:N2)-[:R2]->(b:N2) RETURN a.id, b.id
 ---- 3

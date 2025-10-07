@@ -29,7 +29,7 @@ typedef void (*ext_install_func_t)(const std::string&, main::ClientContext&);
 
 std::string getPlatform();
 
-class KUZU_API Extension {
+class LBUG_API Extension {
 public:
     virtual ~Extension() = default;
 };
@@ -57,7 +57,7 @@ void addFunc(main::Database& database, std::string name, catalog::CatalogEntryTy
         T::getFunctionSet(), isInternal);
 }
 
-struct KUZU_API ExtensionUtils {
+struct LBUG_API ExtensionUtils {
     static constexpr const char* OFFICIAL_EXTENSION_REPO = "http://extension.lbugdb.com/";
     static constexpr const char* EXTENSION_FILE_SUFFIX = "lbug_extension";
 
@@ -151,7 +151,7 @@ struct KUZU_API ExtensionUtils {
     static void registerIndexType(main::Database& database, storage::IndexType type);
 };
 
-class KUZU_API ExtensionLibLoader {
+class LBUG_API ExtensionLibLoader {
 public:
     static constexpr const char* EXTENSION_LOAD_FUNC_NAME = "load";
 

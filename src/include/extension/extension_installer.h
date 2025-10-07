@@ -20,7 +20,7 @@ struct InstallExtensionInfo {
         : name{std::move(name)}, repo{std::move(repo)}, forceInstall{forceInstall} {}
 };
 
-class KUZU_API ExtensionInstaller {
+class LBUG_API ExtensionInstaller {
 public:
     ExtensionInstaller(const InstallExtensionInfo& info, main::ClientContext& context)
         : info{info}, context{context} {}

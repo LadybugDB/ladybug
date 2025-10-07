@@ -110,7 +110,7 @@ a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11
 -CASE ImplicitCastWithInsertion
 -STATEMENT CREATE NODE TABLE embeddings (id int64, vec FLOAT[8], PRIMARY KEY (id));
 ---- ok
--STATEMENT LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/embeddings/embeddings-8-1k.csv" (deLim=',') CREATE (:embeddings {id: column0, vec: column1});
+-STATEMENT LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/embeddings/embeddings-8-1k.csv" (deLim=',') CREATE (:embeddings {id: column0, vec: column1});
 ---- ok
 -STATEMENT MATCH (e:embeddings) RETURN count(e);
 ---- 1

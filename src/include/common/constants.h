@@ -10,7 +10,7 @@
 namespace lbug {
 namespace common {
 
-extern const char* KUZU_VERSION;
+extern const char* LBUG_VERSION;
 
 constexpr double DEFAULT_HT_LOAD_FACTOR = 1.5;
 
@@ -213,7 +213,7 @@ struct WarningConstants {
     static_assert(WARNING_TABLE_COLUMN_DATA_TYPES.size() == WARNING_TABLE_NUM_COLUMNS);
 };
 
-static constexpr char ATTACHED_KUZU_DB_TYPE[] = "LBUG";
+static constexpr char ATTACHED_LBUG_DB_TYPE[] = "LBUG";
 
 static constexpr char LOCAL_DB_NAME[] = "local(lbug)";
 

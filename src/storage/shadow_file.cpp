@@ -64,14 +64,14 @@ page_idx_t ShadowFile::getShadowPage(file_idx_t originalFile, page_idx_t origina
 }
 
 void ShadowFile::applyShadowPages(ClientContext& context) const {
-    const auto pageBuffer = std::make_unique<uint8_t[]>(KUZU_PAGE_SIZE);
+    const auto pageBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
     page_idx_t shadowPageIdx = 1; // Skip header page.
     auto dataFileInfo = StorageManager::Get(context)->getDataFH()->getFileInfo();
     KU_ASSERT(shadowingFH);
     for (const auto& record : shadowPageRecords) {
         shadowingFH->readPageFromDisk(pageBuffer.get(), shadowPageIdx++);
-        dataFileInfo->writeFile(pageBuffer.get(), KUZU_PAGE_SIZE,
-            record.originalPageIdx * KUZU_PAGE_SIZE);
+        dataFileInfo->writeFile(pageBuffer.get(), LBUG_PAGE_SIZE,
+            record.originalPageIdx * LBUG_PAGE_SIZE);
         // NOTE: We're not taking lock here, as we assume this is only called with a single thread.
         MemoryManager::Get(context)->getBufferManager()->updateFrameIfPageIsInFrameWithoutLock(
             record.originalFileIdx, pageBuffer.get(), record.originalPageIdx);
@@ -110,8 +110,8 @@ void ShadowFile::replayShadowPageRecords(ClientContext& context) {
     }
 
     ShadowFileHeader header;
-    const auto headerBuffer = std::make_unique<uint8_t[]>(KUZU_PAGE_SIZE);
-    shadowFileInfo->readFromFile(headerBuffer.get(), KUZU_PAGE_SIZE, 0);
+    const auto headerBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
+    shadowFileInfo->readFromFile(headerBuffer.get(), LBUG_PAGE_SIZE, 0);
     memcpy(&header, headerBuffer.get(), sizeof(ShadowFileHeader));
 
     // When replaying the shadow file we haven't read the database ID from the database
@@ -123,17 +123,17 @@ void ShadowFile::replayShadowPageRecords(ClientContext& context) {
     std::vector<ShadowPageRecord> shadowPageRecords;
     shadowPageRecords.reserve(header.numShadowPages);
     auto reader = std::make_unique<BufferedFileReader>(*shadowFileInfo);
-    reader->resetReadOffset((header.numShadowPages + 1) * KUZU_PAGE_SIZE);
+    reader->resetReadOffset((header.numShadowPages + 1) * LBUG_PAGE_SIZE);
     Deserializer deSer(std::move(reader));
     deSer.deserializeVector(shadowPageRecords);
 
-    const auto pageBuffer = std::make_unique<uint8_t[]>(KUZU_PAGE_SIZE);
+    const auto pageBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
     page_idx_t shadowPageIdx = 1;
     for (const auto& record : shadowPageRecords) {
-        shadowFileInfo->readFromFile(pageBuffer.get(), KUZU_PAGE_SIZE,
-            shadowPageIdx * KUZU_PAGE_SIZE);
-        dataFileInfo->writeFile(pageBuffer.get(), KUZU_PAGE_SIZE,
-            record.originalPageIdx * KUZU_PAGE_SIZE);
+        shadowFileInfo->readFromFile(pageBuffer.get(), LBUG_PAGE_SIZE,
+            shadowPageIdx * LBUG_PAGE_SIZE);
+        dataFileInfo->writeFile(pageBuffer.get(), LBUG_PAGE_SIZE,
+            record.originalPageIdx * LBUG_PAGE_SIZE);
         shadowPageIdx++;
     }
 }
@@ -143,7 +143,7 @@ void ShadowFile::flushAll(main::ClientContext& context) const {
     ShadowFileHeader header;
     header.numShadowPages = shadowPageRecords.size();
     header.databaseID = StorageManager::Get(context)->getOrInitDatabaseID(context);
-    const auto headerBuffer = std::make_unique<uint8_t[]>(KUZU_PAGE_SIZE);
+    const auto headerBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
     memcpy(headerBuffer.get(), &header, sizeof(ShadowFileHeader));
     KU_ASSERT(shadowingFH && !shadowingFH->isInMemoryMode());
     shadowingFH->writePageToFile(headerBuffer.get(), 0);
@@ -151,7 +151,7 @@ void ShadowFile::flushAll(main::ClientContext& context) const {
     shadowingFH->flushAllDirtyPagesInFrames();
     // Append shadow page records to the end of the file.
     const auto writer = std::make_shared<BufferedFileWriter>(*shadowingFH->getFileInfo());
-    writer->setFileOffset(shadowingFH->getNumPages() * KUZU_PAGE_SIZE);
+    writer->setFileOffset(shadowingFH->getNumPages() * LBUG_PAGE_SIZE);
     Serializer ser(writer);
     KU_ASSERT(shadowPageRecords.size() + 1 == shadowingFH->getNumPages());
     ser.serializeVector(shadowPageRecords);

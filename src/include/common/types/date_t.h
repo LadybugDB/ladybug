@@ -13,7 +13,7 @@ namespace common {
 struct timestamp_t;
 
 // System representation of dates as the number of days since 1970-01-01.
-struct KUZU_API date_t {
+struct LBUG_API date_t {
     int32_t days;
 
     date_t();
@@ -57,61 +57,61 @@ inline date_t operator+(int64_t i, const date_t date) {
 // functionality is needed, we should first consult these DuckDB links.
 class Date {
 public:
-    KUZU_API static const int32_t NORMAL_DAYS[13];
-    KUZU_API static const int32_t CUMULATIVE_DAYS[13];
-    KUZU_API static const int32_t LEAP_DAYS[13];
-    KUZU_API static const int32_t CUMULATIVE_LEAP_DAYS[13];
-    KUZU_API static const int32_t CUMULATIVE_YEAR_DAYS[401];
-    KUZU_API static const int8_t MONTH_PER_DAY_OF_YEAR[365];
-    KUZU_API static const int8_t LEAP_MONTH_PER_DAY_OF_YEAR[366];
+    LBUG_API static const int32_t NORMAL_DAYS[13];
+    LBUG_API static const int32_t CUMULATIVE_DAYS[13];
+    LBUG_API static const int32_t LEAP_DAYS[13];
+    LBUG_API static const int32_t CUMULATIVE_LEAP_DAYS[13];
+    LBUG_API static const int32_t CUMULATIVE_YEAR_DAYS[401];
+    LBUG_API static const int8_t MONTH_PER_DAY_OF_YEAR[365];
+    LBUG_API static const int8_t LEAP_MONTH_PER_DAY_OF_YEAR[366];
 
-    KUZU_API constexpr static const int32_t MIN_YEAR = -290307;
-    KUZU_API constexpr static const int32_t MAX_YEAR = 294247;
-    KUZU_API constexpr static const int32_t EPOCH_YEAR = 1970;
+    LBUG_API constexpr static const int32_t MIN_YEAR = -290307;
+    LBUG_API constexpr static const int32_t MAX_YEAR = 294247;
+    LBUG_API constexpr static const int32_t EPOCH_YEAR = 1970;
 
-    KUZU_API constexpr static const int32_t YEAR_INTERVAL = 400;
-    KUZU_API constexpr static const int32_t DAYS_PER_YEAR_INTERVAL = 146097;
+    LBUG_API constexpr static const int32_t YEAR_INTERVAL = 400;
+    LBUG_API constexpr static const int32_t DAYS_PER_YEAR_INTERVAL = 146097;
     constexpr static const char* BC_SUFFIX = " (BC)";
 
     // Convert a string in the format "YYYY-MM-DD" to a date object
-    KUZU_API static date_t fromCString(const char* str, uint64_t len);
+    LBUG_API static date_t fromCString(const char* str, uint64_t len);
     // Convert a date object to a string in the format "YYYY-MM-DD"
-    KUZU_API static std::string toString(date_t date);
+    LBUG_API static std::string toString(date_t date);
     // Try to convert text in a buffer to a date; returns true if parsing was successful
-    KUZU_API static bool tryConvertDate(const char* buf, uint64_t len, uint64_t& pos,
+    LBUG_API static bool tryConvertDate(const char* buf, uint64_t len, uint64_t& pos,
         date_t& result, bool allowTrailing = false);
 
     // private:
     // Returns true if (year) is a leap year, and false otherwise
-    KUZU_API static bool isLeapYear(int32_t year);
+    LBUG_API static bool isLeapYear(int32_t year);
     // Returns true if the specified (year, month, day) combination is a valid
     // date
-    KUZU_API static bool isValid(int32_t year, int32_t month, int32_t day);
+    LBUG_API static bool isValid(int32_t year, int32_t month, int32_t day);
     // Extract the year, month and day from a given date object
-    KUZU_API static void convert(date_t date, int32_t& out_year, int32_t& out_month,
+    LBUG_API static void convert(date_t date, int32_t& out_year, int32_t& out_month,
         int32_t& out_day);
     // Create a Date object from a specified (year, month, day) combination
-    KUZU_API static date_t fromDate(int32_t year, int32_t month, int32_t day);
+    LBUG_API static date_t fromDate(int32_t year, int32_t month, int32_t day);
 
     // Helper function to parse two digits from a string (e.g. "30" -> 30, "03" -> 3, "3" -> 3)
-    KUZU_API static bool parseDoubleDigit(const char* buf, uint64_t len, uint64_t& pos,
+    LBUG_API static bool parseDoubleDigit(const char* buf, uint64_t len, uint64_t& pos,
         int32_t& result);
 
-    KUZU_API static int32_t monthDays(int32_t year, int32_t month);
+    LBUG_API static int32_t monthDays(int32_t year, int32_t month);
 
-    KUZU_API static std::string getDayName(date_t date);
+    LBUG_API static std::string getDayName(date_t date);
 
-    KUZU_API static std::string getMonthName(date_t date);
+    LBUG_API static std::string getMonthName(date_t date);
 
-    KUZU_API static date_t getLastDay(date_t date);
+    LBUG_API static date_t getLastDay(date_t date);
 
-    KUZU_API static int32_t getDatePart(DatePartSpecifier specifier, date_t date);
+    LBUG_API static int32_t getDatePart(DatePartSpecifier specifier, date_t date);
 
-    KUZU_API static date_t trunc(DatePartSpecifier specifier, date_t date);
+    LBUG_API static date_t trunc(DatePartSpecifier specifier, date_t date);
 
-    KUZU_API static int64_t getEpochNanoSeconds(const date_t& date);
+    LBUG_API static int64_t getEpochNanoSeconds(const date_t& date);
 
-    KUZU_API static const regex::RE2& regexPattern();
+    LBUG_API static const regex::RE2& regexPattern();
 
 private:
     static void extractYearOffset(int32_t& n, int32_t& year, int32_t& year_offset);

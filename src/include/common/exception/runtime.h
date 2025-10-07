@@ -6,7 +6,7 @@
 namespace lbug {
 namespace common {
 
-class KUZU_API RuntimeException : public Exception {
+class LBUG_API RuntimeException : public Exception {
 public:
     explicit RuntimeException(const std::string& msg) : Exception("Runtime exception: " + msg){};
 };

@@ -10,7 +10,7 @@ If you have a question or need help, feel free to ask in the appropriate channel
 
 This project and everyone participating in it is governed by a [Code of Conduct](CODE_OF_CONDUCT.md).
 By participating, you are expected to uphold this code. 
-Please report unacceptable behavior to [contact@kuzudb.com](mailto:contact@kuzudb.com).
+Please report unacceptable behavior to [contact@lbugdb.com](mailto:contact@lbugdb.com).
 
 ## Agreeing to the Contributor Agreement
 When you contribute code, you affirm that the contribution is your original work and that you have read and agreed to the project's [Contributor Agreement (CLA) document  here](CLA.md). 

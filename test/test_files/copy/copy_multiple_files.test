@@ -33,34 +33,34 @@
 
 -CASE CopyMultipleFilesTest
 
--STATEMENT COPY person FROM ["${KUZU_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/vPerson1.csv",
-                             "${KUZU_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/vPerson2.csv",
-                             "${KUZU_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/vPerson3.csv"]
+-STATEMENT COPY person FROM ["${LBUG_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/vPerson1.csv",
+                             "${LBUG_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/vPerson2.csv",
+                             "${LBUG_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/vPerson3.csv"]
 ---- ok
 -INSERT_STATEMENT_BLOCK VALIDATE_PERSON_TABLE_AFTER_COPYING
 
--STATEMENT COPY knows FROM ["${KUZU_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/eKnows1.csv", 
-                            "${KUZU_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/eKnows2.csv"]
+-STATEMENT COPY knows FROM ["${LBUG_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/eKnows1.csv", 
+                            "${LBUG_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/eKnows2.csv"]
 ---- ok
 -INSERT_STATEMENT_BLOCK VALIDATE_KNOWS_TABLE_AFTER_COPYING
 
 
 -CASE CopyFilesWithWildcardPattern
 
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/vPerson?.csv"
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/vPerson?.csv"
 ---- ok
 -INSERT_STATEMENT_BLOCK VALIDATE_PERSON_TABLE_AFTER_COPYING
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/eK*"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/eK*"
 ---- ok
 -INSERT_STATEMENT_BLOCK VALIDATE_KNOWS_TABLE_AFTER_COPYING
 
 -CASE CopyFilesWithWrongPath
--STATEMENT COPY person FROM ["1.csv", "${KUZU_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/vPerson?.csv"]
+-STATEMENT COPY person FROM ["1.csv", "${LBUG_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/vPerson?.csv"]
 ---- error
 Binder exception: No file found that matches the pattern: 1.csv.
 
 -CASE CopyFilesWithSearchPath
--STATEMENT CALL file_search_path='${KUZU_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/person4,${KUZU_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/person5'
+-STATEMENT CALL file_search_path='${LBUG_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/person4,${LBUG_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/person5'
 ---- ok
 -STATEMENT COPY person FROM ["vPerson*.csv"]
 ---- ok
@@ -75,7 +75,7 @@ Binder exception: No file found that matches the pattern: 1.csv.
 
 -CASE CopyFilesWithHomeDir
 -SKIP_WASM
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/vPerson?.csv"
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-multiple-files-test/vPerson?.csv"
 ---- ok
 -STATEMENT COPY (match (p:person) return p.ID) TO "~/id.csv"
 ---- ok

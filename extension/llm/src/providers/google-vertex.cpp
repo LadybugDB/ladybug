@@ -22,7 +22,7 @@ std::string GoogleVertexEmbedding::getPath(const std::string& model) const {
     auto env_project_id = main::ClientContext::getEnvVariable(envVar);
     if (env_project_id.empty()) {
         throw(RuntimeException(
-            "Could not get project id from: " + envVar + '\n' + std::string(referenceKuzuDocs)));
+            "Could not get project id from: " + envVar + '\n' + std::string(referenceLbugDocs)));
     }
     return "/v1/projects/" + env_project_id + "/locations/" + region.value_or("") +
            "/publishers/google/models/" + model + ":predict";
@@ -34,7 +34,7 @@ httplib::Headers GoogleVertexEmbedding::getHeaders(const std::string& /*model*/,
     auto env_key = main::ClientContext::getEnvVariable(envVar);
     if (env_key.empty()) {
         throw(RuntimeException("Could not read environmental variable: " + envVar + '\n' +
-                               std::string(referenceKuzuDocs)));
+                               std::string(referenceLbugDocs)));
     }
     return httplib::Headers{{"Content-Type", "application/json"},
         {"Authorization", "Bearer " + env_key}};

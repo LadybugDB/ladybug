@@ -22,7 +22,7 @@ class FileHandle;
 class BufferManager;
 
 static constexpr uint64_t NUM_PAGE_IDXS_PER_PIP =
-    (common::KUZU_PAGE_SIZE - sizeof(common::page_idx_t)) / sizeof(common::page_idx_t);
+    (common::LBUG_PAGE_SIZE - sizeof(common::page_idx_t)) / sizeof(common::page_idx_t);
 
 struct DiskArrayHeader {
     DiskArrayHeader() : numElements{0}, firstPIPPageIdx{common::INVALID_PAGE_IDX} {}
@@ -55,7 +55,7 @@ struct PIP {
     common::page_idx_t nextPipPageIdx;
     common::page_idx_t pageIdxs[NUM_PAGE_IDXS_PER_PIP];
 };
-static_assert(sizeof(PIP) == common::KUZU_PAGE_SIZE);
+static_assert(sizeof(PIP) == common::LBUG_PAGE_SIZE);
 
 struct PIPWrapper {
     PIPWrapper(const FileHandle& fileHandle, common::page_idx_t pipPageIdx);
@@ -260,7 +260,7 @@ inline std::span<std::byte> getSpan(U& val) {
 
 template<typename U>
 class DiskArray {
-    static_assert(sizeof(U) <= common::KUZU_PAGE_SIZE);
+    static_assert(sizeof(U) <= common::LBUG_PAGE_SIZE);
 
 public:
     // If bypassWAL is set, the buffer manager is used to pages new to this transaction to the

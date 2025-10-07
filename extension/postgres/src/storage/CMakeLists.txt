@@ -1,4 +1,4 @@
-add_library(kuzu_postgres_storage
+add_library(lbug_postgres_storage
         OBJECT
         postgres_storage.cpp
         ${PROJECT_SOURCE_DIR}/extension/duckdb/src/catalog/duckdb_catalog.cpp
@@ -7,5 +7,5 @@ add_library(kuzu_postgres_storage
         ${PROJECT_SOURCE_DIR}/extension/duckdb/src/function/clear_cache.cpp)
 
 set(POSTGRES_EXTENSION_OBJECT_FILES
-        ${POSTGRES_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_postgres_storage>
+        ${POSTGRES_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:lbug_postgres_storage>
         PARENT_SCOPE)

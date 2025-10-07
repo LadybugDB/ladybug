@@ -23,7 +23,7 @@ using lock_t = std::unique_lock<std::mutex>;
  * finalize, users should save it somewhere that can be accessed in
  * finalize(). See ProcessorTask for an example of this.
  */
-class KUZU_API Task {
+class LBUG_API Task {
     friend class TaskScheduler;
 
 public:

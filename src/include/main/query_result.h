@@ -27,7 +27,7 @@ public:
     /**
      * @brief Used to create a QueryResult object for the failing query.
      */
-    KUZU_API QueryResult();
+    LBUG_API QueryResult();
     explicit QueryResult(QueryResultType type);
     QueryResult(QueryResultType type, std::vector<std::string> columnNames,
         std::vector<common::LogicalType> columnTypes);
@@ -35,64 +35,64 @@ public:
     /**
      * @brief Deconstructs the QueryResult object.
      */
-    KUZU_API virtual ~QueryResult() = 0;
+    LBUG_API virtual ~QueryResult() = 0;
     /**
      * @return if the query is executed successfully or not.
      */
-    KUZU_API bool isSuccess() const;
+    LBUG_API bool isSuccess() const;
     /**
      * @return error message of the query execution if the query fails.
      */
-    KUZU_API std::string getErrorMessage() const;
+    LBUG_API std::string getErrorMessage() const;
     /**
      * @return number of columns in query result.
      */
-    KUZU_API size_t getNumColumns() const;
+    LBUG_API size_t getNumColumns() const;
     /**
      * @return name of each column in the query result.
      */
-    KUZU_API std::vector<std::string> getColumnNames() const;
+    LBUG_API std::vector<std::string> getColumnNames() const;
     /**
      * @return dataType of each column in the query result.
      */
-    KUZU_API std::vector<common::LogicalType> getColumnDataTypes() const;
+    LBUG_API std::vector<common::LogicalType> getColumnDataTypes() const;
     /**
      * @return query summary which stores the execution time, compiling time, plan and query
      * options.
      */
-    KUZU_API QuerySummary* getQuerySummary() const;
+    LBUG_API QuerySummary* getQuerySummary() const;
     QuerySummary* getQuerySummaryUnsafe();
     /**
      * @return whether there are more query results to read.
      */
-    KUZU_API bool hasNextQueryResult() const;
+    LBUG_API bool hasNextQueryResult() const;
     /**
      * @return get the next query result to read (for multiple query statements).
      */
-    KUZU_API QueryResult* getNextQueryResult();
+    LBUG_API QueryResult* getNextQueryResult();
     /**
      * @return num of tuples in query result.
      */
-    KUZU_API virtual uint64_t getNumTuples() const = 0;
+    LBUG_API virtual uint64_t getNumTuples() const = 0;
     /**
      * @return whether there are more tuples to read.
      */
-    KUZU_API virtual bool hasNext() const = 0;
+    LBUG_API virtual bool hasNext() const = 0;
     /**
      * @return next flat tuple in the query result. Note that to reduce resource allocation, all
      * calls to getNext() reuse the same FlatTuple object. Since its contents will be overwritten,
      * please complete processing a FlatTuple or make a copy of its data before calling getNext()
      * again.
      */
-    KUZU_API virtual std::shared_ptr<processor::FlatTuple> getNext() = 0;
+    LBUG_API virtual std::shared_ptr<processor::FlatTuple> getNext() = 0;
     /**
      * @brief Resets the result tuple iterator.
      */
-    KUZU_API virtual void resetIterator() = 0;
+    LBUG_API virtual void resetIterator() = 0;
     /**
      * @return string of first query result.
      */
-    KUZU_API virtual std::string toString() const = 0;
+    LBUG_API virtual std::string toString() const = 0;
     /**
      * @brief Returns the arrow schema of the query result.
      * @return datatypes of the columns as an arrow schema
@@ -100,11 +100,11 @@ public:
      * It is the caller's responsibility to call the release function to release the underlying data
      * If converting to another arrow type, this is usually handled automatically.
      */
-    KUZU_API std::unique_ptr<ArrowSchema> getArrowSchema() const;
+    LBUG_API std::unique_ptr<ArrowSchema> getArrowSchema() const;
     /**
      * @return whether there are more arrow chunk to read.
      */
-    KUZU_API virtual bool hasNextArrowChunk() = 0;
+    LBUG_API virtual bool hasNextArrowChunk() = 0;
     /**
      * @brief Returns the next chunk of the query result as an arrow array.
      * @param chunkSize number of tuples to return in the chunk.
@@ -116,7 +116,7 @@ public:
      * It is the caller's responsibility to call the release function to release the underlying data
      * If converting to another arrow type, this is usually handled automatically.
      */
-    KUZU_API virtual std::unique_ptr<ArrowArray> getNextArrowChunk(int64_t chunkSize) = 0;
+    LBUG_API virtual std::unique_ptr<ArrowArray> getNextArrowChunk(int64_t chunkSize) = 0;
 
     QueryResultType getType() const { return type; }
 

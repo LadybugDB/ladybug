@@ -32,7 +32,7 @@ struct GraphRelInfo {
           relTableID{relTableID} {}
 };
 
-class KUZU_API NbrScanState {
+class LBUG_API NbrScanState {
 public:
     struct Chunk {
         friend class NbrScanState;
@@ -96,7 +96,7 @@ public:
         }
 
     private:
-        KUZU_API Chunk(std::span<const common::nodeID_t> nodeIDs,
+        LBUG_API Chunk(std::span<const common::nodeID_t> nodeIDs,
             std::span<const std::shared_ptr<common::ValueVector>> propertyVectors);
 
     private:

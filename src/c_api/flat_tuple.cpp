@@ -23,13 +23,13 @@ lbug_state lbug_flat_tuple_get_value(lbug_flat_tuple* flat_tuple, uint64_t index
     try {
         _value = flat_tuple_ptr->getValue(index);
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
     out_value->_value = _value;
     // We set the ownership of the value to C++, so it will not be deleted if the value is destroyed
     // in C.
     out_value->_is_owned_by_cpp = true;
-    return KuzuSuccess;
+    return LbugSuccess;
 }
 
 char* lbug_flat_tuple_to_string(lbug_flat_tuple* flat_tuple) {

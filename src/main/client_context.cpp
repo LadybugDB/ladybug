@@ -183,7 +183,7 @@ const main::ExtensionOption* ClientContext::getExtensionOption(std::string optio
 
 std::string ClientContext::getExtensionDir() const {
     return stringFormat("{}/.lbug/extension/{}/{}/", clientConfig.homeDirectory,
-        KUZU_EXTENSION_VERSION, extension::getPlatform());
+        LBUG_EXTENSION_VERSION, extension::getPlatform());
 }
 
 std::string ClientContext::getDatabasePath() const {
@@ -194,7 +194,7 @@ Database* ClientContext::getDatabase() const {
     return localDatabase;
 }
 
-AttachedKuzuDatabase* ClientContext::getAttachedDatabase() const {
+AttachedLbugDatabase* ClientContext::getAttachedDatabase() const {
     return remoteDatabase;
 }
 
@@ -231,7 +231,7 @@ std::string ClientContext::getUserHomeDir() {
 #endif
 }
 
-void ClientContext::setDefaultDatabase(AttachedKuzuDatabase* defaultDatabase_) {
+void ClientContext::setDefaultDatabase(AttachedLbugDatabase* defaultDatabase_) {
     remoteDatabase = defaultDatabase_;
 }
 
@@ -602,7 +602,7 @@ bool ClientContext::canExecuteWriteQuery() const {
     // remote lbug database can be attached.
     const auto dbManager = DatabaseManager::Get(*this);
     for (const auto& attachedDB : dbManager->getAttachedDatabases()) {
-        if (attachedDB->getDBType() == ATTACHED_KUZU_DB_TYPE) {
+        if (attachedDB->getDBType() == ATTACHED_LBUG_DB_TYPE) {
             return false;
         }
     }

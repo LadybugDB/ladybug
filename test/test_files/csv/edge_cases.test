@@ -93,21 +93,21 @@ ghi|jkl
 abc"def
 
 -CASE SpecialDoubleLiterals
--STATEMENT LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/all_types/inf_nan_null.csv" RETURN *
+-STATEMENT LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/all_types/inf_nan_null.csv" RETURN *
 ---- 1
 [42.000000,999.000000,inf,-inf,-42.000000]|[42.000000,nan,inf,-inf,,-42.000000]
 
 -CASE HeaderNumColumnsSmallerThanActual
 -STATEMENT create node table values(val1 int32, val2 int32, val3 string, val4 string, primary key(val1))
 ---- ok
--STATEMENT copy values from "${KUZU_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/header-num-columns-mismatch.csv"(delim = ' ')
+-STATEMENT copy values from "${LBUG_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/header-num-columns-mismatch.csv"(delim = ' ')
 ---- error
 Binder exception: Number of columns mismatch. Expected 4 but got 6.
 
 -CASE EscapedQuoteInList
 -STATEMENT create node table test(id int64 primary key, f string[])
 ---- ok
--STATEMENT copy test from "${KUZU_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/list-quote.csv"
+-STATEMENT copy test from "${LBUG_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/list-quote.csv"
 ---- ok
 -STATEMENT match (a:test) return a.f, size(a.f)
 ---- 15

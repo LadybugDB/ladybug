@@ -18,7 +18,7 @@ struct RegexpSplitToArray : BaseRegexpOperation {
         auto numBytesPerValue = resultDataVector->getNumBytesPerValue();
         common::ku_string_t kuString;
         for (const auto& match : matches) {
-            copyToKuzuString(match, kuString, *resultDataVector);
+            copyToLbugString(match, kuString, *resultDataVector);
             resultDataVector->copyFromVectorData(resultValues, resultDataVector,
                 reinterpret_cast<uint8_t*>(&kuString));
             resultValues += numBytesPerValue;

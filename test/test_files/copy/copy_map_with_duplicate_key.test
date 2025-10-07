@@ -4,7 +4,7 @@
 
 -CASE CopyDuplicateMapKey
 -SKIP
--STATEMENT COPY person FROM '${KUZU_ROOT_DIRECTORY}/dataset/copy-test/duplicate-map-key/duplicate-map-key.csv'
+-STATEMENT COPY person FROM '${LBUG_ROOT_DIRECTORY}/dataset/copy-test/duplicate-map-key/duplicate-map-key.csv'
 ---- ok
 -STATEMENT MATCH (m:person) RETURN m.*;
 ---- 2
@@ -14,11 +14,11 @@
 -CASE CopyDuplicateKeyError
 -STATEMENT CALL DISABLE_MAP_KEY_CHECK = FALSE
 ---- ok
--STATEMENT COPY person FROM '${KUZU_ROOT_DIRECTORY}/dataset/copy-test/map-copy-error/duplicate-map-key.csv'
+-STATEMENT COPY person FROM '${LBUG_ROOT_DIRECTORY}/dataset/copy-test/map-copy-error/duplicate-map-key.csv'
 ---- error
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/copy-test/map-copy-error/duplicate-map-key.csv on line 2: Conversion exception: Map does not allow duplicate keys. Line/record containing the error: '3,"{dan=52,carol=42,dan=53}"'
--STATEMENT COPY person FROM '${KUZU_ROOT_DIRECTORY}/dataset/copy-test/map-copy-error/null-map-key.csv'
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/copy-test/map-copy-error/duplicate-map-key.csv on line 2: Conversion exception: Map does not allow duplicate keys. Line/record containing the error: '3,"{dan=52,carol=42,dan=53}"'
+-STATEMENT COPY person FROM '${LBUG_ROOT_DIRECTORY}/dataset/copy-test/map-copy-error/null-map-key.csv'
 ---- error
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/copy-test/map-copy-error/null-map-key.csv on line 1: Conversion exception: Map does not allow null as key. Line/record containing the error: '1,"{=52,bob=42}"'
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/copy-test/map-copy-error/null-map-key.csv on line 1: Conversion exception: Map does not allow null as key. Line/record containing the error: '1,"{=52,bob=42}"'
 -STATEMENT MATCH (m:person) RETURN m.*;
 ---- 0

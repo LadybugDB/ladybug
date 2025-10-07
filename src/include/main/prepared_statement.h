@@ -48,19 +48,19 @@ class PreparedStatement {
     friend class ClientContext;
 
 public:
-    KUZU_API ~PreparedStatement();
+    LBUG_API ~PreparedStatement();
     /**
      * @return the query is prepared successfully or not.
      */
-    KUZU_API bool isSuccess() const;
+    LBUG_API bool isSuccess() const;
     /**
      * @return the error message if the query is not prepared successfully.
      */
-    KUZU_API std::string getErrorMessage() const;
+    LBUG_API std::string getErrorMessage() const;
     /**
      * @return the prepared statement is read-only or not.
      */
-    KUZU_API bool isReadOnly() const;
+    LBUG_API bool isReadOnly() const;
 
     const std::unordered_set<std::string>& getUnknownParameters() const {
         return unknownParameters;

@@ -5,7 +5,7 @@
 -CASE CopyLongListTest
 -STATEMENT CREATE NODE TABLE dog (id int64, counter int64[], primary key(id))
 ---- ok
--STATEMENT copy dog from "${KUZU_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/long-list.csv"
+-STATEMENT copy dog from "${LBUG_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/long-list.csv"
 ---- ok
 -STATEMENT match (d:dog) return d.*;
 ---- 1
@@ -14,7 +14,7 @@
 -CASE CopyLongStringTest
 -STATEMENT CREATE NODE TABLE cat (id int64, str string, primary key(id))
 ---- ok
--STATEMENT copy cat from "${KUZU_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/long-string.csv"
+-STATEMENT copy cat from "${LBUG_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/long-string.csv"
 ---- ok
 -STATEMENT match (c:cat) return c.*;
 ---- 1

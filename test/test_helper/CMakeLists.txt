@@ -20,4 +20,4 @@ target_include_directories(
         PUBLIC
         ../include/
 )
-target_link_libraries(api_test_helper PUBLIC kuzu_shared)
+target_link_libraries(api_test_helper PUBLIC lbug_shared)

@@ -5,9 +5,9 @@
 -CASE CopyInt64PK
 -STATEMENT create node table person (ID INT64, fName STRING, age INT64, PRIMARY KEY (ID));
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv";
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv";
 ---- error(regex)
 Copy exception: Found duplicated primary key value [0-9]+, which violates the uniqueness constraint of the primary key column.
 -STATEMENT MATCH (p:person) return p.*;
@@ -18,9 +18,9 @@ Copy exception: Found duplicated primary key value [0-9]+, which violates the un
 -CASE CopyStringPK
 -STATEMENT create node table person (ID STRING, fName STRING, age INT64, PRIMARY KEY (ID));
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv";
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv";
 ---- error(regex)
 Copy exception: Found duplicated primary key value [0-9]+, which violates the uniqueness constraint of the primary key column.
 -STATEMENT MATCH (p:person) return p.*;

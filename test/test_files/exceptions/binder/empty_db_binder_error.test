@@ -12,7 +12,7 @@ Binder exception: Macro INC already exists.
 -CASE WrongNumOfNumpyFiles
 -STATEMENT CREATE NODE TABLE temp(ID INT64, PRIMARY KEY(ID));
 ---- ok
--STATEMENT COPY temp FROM ("${KUZU_ROOT_DIRECTORY}/dataset/npy-20k/id_int64.npy", "${KUZU_ROOT_DIRECTORY}/dataset/npy-20k/two_dim_float.npy") BY COLUMN;
+-STATEMENT COPY temp FROM ("${LBUG_ROOT_DIRECTORY}/dataset/npy-20k/id_int64.npy", "${LBUG_ROOT_DIRECTORY}/dataset/npy-20k/two_dim_float.npy") BY COLUMN;
 ---- error
 Binder exception: Number of columns mismatch. Expected 1 but got 2.
 

@@ -5,7 +5,7 @@
 -CASE AddInt64PropertyWithoutDefault
 -STATEMENT create node table Comment (id int64, creationDate INT64, locationIP STRING, browserUsed STRING, content STRING, length INT32, PRIMARY KEY (id));
 ---- ok
--STATEMENT COPY Comment FROM "${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Comment.csv" ;
+-STATEMENT COPY Comment FROM "${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Comment.csv" ;
 ---- ok
 -STATEMENT ALTER TABLE comment ADD random INT64
 ---- ok
@@ -79,7 +79,7 @@
 ---- ok
 -STATEMENT ALTER TABLE User ADD age INT64;
 ---- ok
--STATEMENT COPY User FROM '${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv';
+-STATEMENT COPY User FROM '${LBUG_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv';
 ---- ok
 -STATEMENT MATCH (n:User) RETURN n.name, n.age;
 ---- 5
@@ -96,7 +96,7 @@ Noura|25
 ---- ok
 -STATEMENT ALTER TABLE Comment ADD size INT64;
 ---- ok
--STATEMENT COPY Comment FROM '${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Comment.csv';
+-STATEMENT COPY Comment FROM '${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Comment.csv';
 ---- ok
 -STATEMENT MATCH (n:Comment) WHERE n.id = 1030792151057 return n.size;
 ---- 1
@@ -107,7 +107,7 @@ Noura|25
 ---- ok
 -STATEMENT CREATE REL TABLE Follows(FROM User TO User, comment STRING);
 ---- ok
--STATEMENT COPY User FROM '${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv';
+-STATEMENT COPY User FROM '${LBUG_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv';
 ---- ok
 -STATEMENT MATCH (a:User {name: 'Zhang'}), (b:User {name: 'Adam'}) CREATE (a)-[:Follows {comment: 'platform is tiktok'}]->(b);
 ---- ok
@@ -115,7 +115,7 @@ Noura|25
 ---- ok
 -STATEMENT ALTER TABLE Follows ADD since INT64;
 ---- ok
--STATEMENT COPY Follows FROM '${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/follows.csv';
+-STATEMENT COPY Follows FROM '${LBUG_ROOT_DIRECTORY}/dataset/demo-db/csv/follows.csv';
 ---- ok
 -STATEMENT MATCH (a:User)-[e:Follows]->(b:User) RETURN a.name, e.since, b.name;
 ---- 5
@@ -130,13 +130,13 @@ Zhang||Adam
 ---- ok
 -STATEMENT CREATE REL TABLE Follows(FROM User TO User, comment STRING);
 ---- ok
--STATEMENT COPY User FROM '${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv';
+-STATEMENT COPY User FROM '${LBUG_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv';
 ---- ok
 -STATEMENT ALTER TABLE Follows DROP comment;
 ---- ok
 -STATEMENT ALTER TABLE Follows ADD since INT64;
 ---- ok
--STATEMENT COPY Follows FROM '${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/follows.csv';
+-STATEMENT COPY Follows FROM '${LBUG_ROOT_DIRECTORY}/dataset/demo-db/csv/follows.csv';
 ---- ok
 -STATEMENT MATCH (a:User)-[e:Follows]->(b:User) RETURN a.name, e.since, b.name;
 ---- 4

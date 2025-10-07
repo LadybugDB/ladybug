@@ -77,23 +77,23 @@ ifdef SKIP_SINGLE_FILE_HEADER
 endif
 
 ifdef PAGE_SIZE_LOG2
-	CMAKE_FLAGS += -DKUZU_PAGE_SIZE_LOG2=$(PAGE_SIZE_LOG2)
+	CMAKE_FLAGS += -DLBUG_PAGE_SIZE_LOG2=$(PAGE_SIZE_LOG2)
 endif
 
 ifdef DEFAULT_REL_STORAGE_DIRECTION
-	CMAKE_FLAGS += -DKUZU_DEFAULT_REL_STORAGE_DIRECTION=$(DEFAULT_REL_STORAGE_DIRECTION)
+	CMAKE_FLAGS += -DLBUG_DEFAULT_REL_STORAGE_DIRECTION=$(DEFAULT_REL_STORAGE_DIRECTION)
 endif
 
 ifdef VECTOR_CAPACITY_LOG2
-	CMAKE_FLAGS += -DKUZU_VECTOR_CAPACITY_LOG2=$(VECTOR_CAPACITY_LOG2)
+	CMAKE_FLAGS += -DLBUG_VECTOR_CAPACITY_LOG2=$(VECTOR_CAPACITY_LOG2)
 endif
 
 ifdef NODE_GROUP_SIZE_LOG2
-	CMAKE_FLAGS += -DKUZU_NODE_GROUP_SIZE_LOG2=$(NODE_GROUP_SIZE_LOG2)
+	CMAKE_FLAGS += -DLBUG_NODE_GROUP_SIZE_LOG2=$(NODE_GROUP_SIZE_LOG2)
 endif
 
 ifdef MAX_SEGMENT_SIZE_LOG2
-	CMAKE_FLAGS += -DKUZU_MAX_SEGMENT_SIZE_LOG2=$(MAX_SEGMENT_SIZE_LOG2)
+	CMAKE_FLAGS += -DLBUG_MAX_SEGMENT_SIZE_LOG2=$(MAX_SEGMENT_SIZE_LOG2)
 endif
 
 ifdef SINGLE_THREADED
@@ -166,7 +166,7 @@ lcov:
 
 # Required for clangd-related tools.
 java_native_header:
-	cmake --build build/$(call get-build-path,Release) --target kuzu_java
+	cmake --build build/$(call get-build-path,Release) --target lbug_java
 
 java:
 	$(call run-cmake-release, -DBUILD_JAVA=TRUE)
@@ -285,13 +285,13 @@ extension-lcov: extension-lcov-build
 extension-debug:
 	$(call run-cmake-debug, \
 		-DBUILD_EXTENSIONS="$(EXTENSION_LIST)" \
-		-DBUILD_KUZU=FALSE \
+		-DBUILD_LBUG=FALSE \
 	)
 
 extension-release:
 	$(call run-cmake-release, \
 		-DBUILD_EXTENSIONS="$(EXTENSION_LIST)" \
-		-DBUILD_KUZU=FALSE \
+		-DBUILD_LBUG=FALSE \
 	)
 
 # pytest expects a `Release` build path.

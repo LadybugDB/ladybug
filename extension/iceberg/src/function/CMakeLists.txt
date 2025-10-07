@@ -1,4 +1,4 @@
-add_library(kuzu_iceberg_functions
+add_library(lbug_iceberg_functions
         OBJECT
         iceberg_bindfunc.cpp
         iceberg_scan.cpp
@@ -10,5 +10,5 @@ add_library(kuzu_iceberg_functions
 )
 
 set(ICEBERG_EXTENSION_OBJECT_FILES
-        ${ICEBERG_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_iceberg_functions>
+        ${ICEBERG_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:lbug_iceberg_functions>
         PARENT_SCOPE)

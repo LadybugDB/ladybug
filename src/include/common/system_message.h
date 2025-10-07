@@ -23,7 +23,7 @@ inline std::string posixErrMessage() {
     // LCOV_EXCL_STOP
 }
 
-KUZU_API std::string dlErrMessage();
+LBUG_API std::string dlErrMessage();
 
 } // namespace common
 } // namespace lbug

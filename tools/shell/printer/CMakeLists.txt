@@ -11,6 +11,6 @@ add_library(lbug_shell_printer
         ${PROJECT_SOURCE_DIR}/extension/json/src/type/json_type.cpp
 )
 
-set(KUZU_SHELL_OBJECT_FILES
-        ${KUZU_SHELL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_shell_printer>
+set(LBUG_SHELL_OBJECT_FILES
+        ${LBUG_SHELL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_shell_printer>
         PARENT_SCOPE)

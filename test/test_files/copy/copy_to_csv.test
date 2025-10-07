@@ -147,7 +147,7 @@ INT64|INT64|INT64[]|INT64[]
 ---- 1
 100|lbug is # a |graph database
 
--STATEMENT COPY (load from "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"(header=true) where id = 2 return id, fname, Gender, workedHours) to "${DATABASE_PATH}/copy_to_with_filter.csv"
+-STATEMENT COPY (load from "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"(header=true) where id = 2 return id, fname, Gender, workedHours) to "${DATABASE_PATH}/copy_to_with_filter.csv"
 ---- ok
 -STATEMENT LOAD FROM "${DATABASE_PATH}/copy_to_with_filter.csv" RETURN *;
 ---- 1

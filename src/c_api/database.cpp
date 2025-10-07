@@ -18,9 +18,9 @@ lbug_state lbug_database_init(const char* database_path, lbug_system_config conf
         out_database->_database = new Database(database_path_str, systemConfig);
     } catch (Exception& e) {
         out_database->_database = nullptr;
-        return KuzuError;
+        return LbugError;
     }
-    return KuzuSuccess;
+    return LbugSuccess;
 }
 
 void lbug_database_destroy(lbug_database* database) {

@@ -1,1 +1,1 @@
-add_kuzu_test(binder_test binder_test.cpp)
+add_lbug_test(binder_test binder_test.cpp)

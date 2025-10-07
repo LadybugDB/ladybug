@@ -81,7 +81,7 @@ void TestRunner::testStatement(TestStatement& statement, Connection& conn,
     }
     spdlog::info("QUERY: {}", statement.query);
     StringUtils::replaceAll(statement.query, "${DATABASE_PATH}", getParentPath(databasePath));
-    StringUtils::replaceAll(statement.query, "${KUZU_ROOT_DIRECTORY}", KUZU_ROOT_DIRECTORY);
+    StringUtils::replaceAll(statement.query, "${LBUG_ROOT_DIRECTORY}", LBUG_ROOT_DIRECTORY);
     replaceEnv(statement.query, "AZURE_PUBLIC_CONTAINER");
     replaceEnv(statement.query, "AZURE_ACCOUNT_NAME");
     replaceEnv(statement.query, "UW_S3_ACCESS_KEY_ID");

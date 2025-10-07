@@ -4,7 +4,7 @@
 #include <memory>
 
 #include "rust/cxx.h"
-#ifdef KUZU_BUNDLED
+#ifdef LBUG_BUNDLED
 #include "common/type_utils.h"
 #include "common/types/int128_t.h"
 #include "common/types/types.h"

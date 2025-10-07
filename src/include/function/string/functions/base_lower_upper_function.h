@@ -9,7 +9,7 @@ namespace function {
 
 struct BaseLowerUpperFunction {
 
-    KUZU_API static void operation(common::ku_string_t& input, common::ku_string_t& result,
+    LBUG_API static void operation(common::ku_string_t& input, common::ku_string_t& result,
         common::ValueVector& resultValueVector, bool isUpper);
 
     static void convertCharCase(char* result, const char* input, int32_t charPos, bool toUpper,

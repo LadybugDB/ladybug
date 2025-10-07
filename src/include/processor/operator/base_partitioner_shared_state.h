@@ -16,7 +16,7 @@ class ClientContext;
 }
 namespace processor {
 
-struct KUZU_API PartitionerSharedState {
+struct LBUG_API PartitionerSharedState {
     storage::NodeTable* srcNodeTable;
     storage::NodeTable* dstNodeTable;
     storage::RelTable* relTable;

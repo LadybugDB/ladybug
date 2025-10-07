@@ -105,7 +105,7 @@ public:
     void resetFileInfo() { fileInfo.reset(); }
 
     uint64_t getPageSize() const {
-        return isLargePaged() ? common::TEMP_PAGE_SIZE : common::KUZU_PAGE_SIZE;
+        return isLargePaged() ? common::TEMP_PAGE_SIZE : common::LBUG_PAGE_SIZE;
     }
 
     PageManager* getPageManager() { return pageManager.get(); }

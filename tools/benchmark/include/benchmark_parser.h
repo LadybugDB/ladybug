@@ -30,7 +30,7 @@ private:
     void replaceVariables(std::string& str) const;
 
     std::unordered_map<std::string, std::string> variableMap = {
-        {"KUZU_ROOT_DIRECTORY", KUZU_ROOT_DIRECTORY}};
+        {"LBUG_ROOT_DIRECTORY", LBUG_ROOT_DIRECTORY}};
 };
 
 } // namespace benchmark

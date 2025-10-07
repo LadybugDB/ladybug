@@ -6,7 +6,7 @@
 namespace lbug {
 namespace common {
 
-class KUZU_API CopyException : public Exception {
+class LBUG_API CopyException : public Exception {
 public:
     explicit CopyException(const std::string& msg) : Exception("Copy exception: " + msg){};
 };

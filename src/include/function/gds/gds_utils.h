@@ -7,7 +7,7 @@
 namespace lbug {
 namespace function {
 
-class KUZU_API GDSUtils {
+class LBUG_API GDSUtils {
 public:
     // Run edge compute for graph algorithms
     static void runAlgorithmEdgeCompute(processor::ExecutionContext* context,

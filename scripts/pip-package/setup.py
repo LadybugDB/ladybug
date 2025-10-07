@@ -14,7 +14,7 @@ with open(os.path.join(base_dir, 'lbug-source', 'tools', 'python_api', 'requirem
     requirements = f.read().splitlines()
 
 
-def _get_kuzu_version():
+def _get_lbug_version():
     cmake_file = os.path.join(base_dir, 'lbug-source', 'CMakeLists.txt')
     with open(cmake_file) as f:
         for line in f:
@@ -29,8 +29,8 @@ def _get_kuzu_version():
                     version += ".dev%s" % dev_suffix
                     return version
 
-kuzu_version = _get_kuzu_version()
-print("The version of this build is %s" % kuzu_version)
+lbug_version = _get_lbug_version()
+print("The version of this build is %s" % lbug_version)
 
 
 class CMakeExtension(Extension):
@@ -105,7 +105,7 @@ class BuildExtFirst(_build_py):
 
 
 setup(name='lbug',
-      version=kuzu_version,
+      version=lbug_version,
       install_requires=[],
       ext_modules=[CMakeExtension(
           name="lbug", sourcedir=base_dir)],

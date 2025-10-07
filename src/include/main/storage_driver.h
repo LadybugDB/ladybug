@@ -10,7 +10,7 @@ class Table;
 namespace main {
 
 class ClientContext;
-class KUZU_API StorageDriver {
+class LBUG_API StorageDriver {
 public:
     explicit StorageDriver(Database* database);
 

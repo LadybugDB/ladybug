@@ -67,7 +67,7 @@ Binder exception: Cannot drop property abstract in table Book because it is used
 ---- ok
 -STATEMENT CREATE (b:Book {title: 'Alice wonderland', author: 'newton', abstract: 'machine'})
 ---- ok
--STATEMENT COPY Book FROM '${KUZU_ROOT_DIRECTORY}/dataset/fts-basic/Book.csv';
+-STATEMENT COPY Book FROM '${LBUG_ROOT_DIRECTORY}/dataset/fts-basic/Book.csv';
 ---- ok
 -STATEMENT CALL QUERY_FTS_INDEX('Book', 'book_index', 'a quantum machine') RETURN node.title, score;
 ---- 3

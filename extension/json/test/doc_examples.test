@@ -8,31 +8,31 @@
 
 -CASE LoadFromTest
 -LOAD_DYNAMIC_EXTENSION json
--STATEMENT LOAD FROM '${KUZU_ROOT_DIRECTORY}/dataset/doc-examples-json/people.json' RETURN * ORDER BY id DESC;
+-STATEMENT LOAD FROM '${LBUG_ROOT_DIRECTORY}/dataset/doc-examples-json/people.json' RETURN * ORDER BY id DESC;
 ---- 3
 0|Alice|{height: 1.680000, age: 45, previousUsernames: [obviouslyAlice,definitelyNotAlice]}|2024-07-31
 1|Bob|{height: 1.810000, age: 71, previousUsernames: [theBuilder,theMinion]}|
 2|Gregory||
 
--STATEMENT LOAD WITH HEADERS (id INT64, name STRING, registryDate DATE, info STRUCT(height DOUBLE, age INT64, previousUsernames STRING[])) FROM '${KUZU_ROOT_DIRECTORY}/dataset/doc-examples-json/people.json' RETURN * ORDER BY id DESC;
+-STATEMENT LOAD WITH HEADERS (id INT64, name STRING, registryDate DATE, info STRUCT(height DOUBLE, age INT64, previousUsernames STRING[])) FROM '${LBUG_ROOT_DIRECTORY}/dataset/doc-examples-json/people.json' RETURN * ORDER BY id DESC;
 ---- 3
 0|Alice|2024-07-31|{height: 1.680000, age: 45, previousUsernames: [obviouslyAlice,definitelyNotAlice]}
 1|Bob||{height: 1.810000, age: 71, previousUsernames: [theBuilder,theMinion]}
 2|Gregory||
 
--STATEMENT LOAD FROM '${KUZU_ROOT_DIRECTORY}/dataset/doc-examples-json/people-unstructured.json' (format='unstructured') RETURN * ORDER BY id DESC;
+-STATEMENT LOAD FROM '${LBUG_ROOT_DIRECTORY}/dataset/doc-examples-json/people-unstructured.json' (format='unstructured') RETURN * ORDER BY id DESC;
 ---- 3
 0|Alice|{height: 1.680000, age: 45, previousUsernames: [obviouslyAlice,definitelyNotAlice]}|2024-07-31
 1|Bob|{height: 1.810000, age: 71, previousUsernames: [theBuilder,theMinion]}|
 2|Gregory||
 
--STATEMENT LOAD FROM '${KUZU_ROOT_DIRECTORY}/dataset/doc-examples-json/people-unstructured.json' (format='unstructured', sample_size=1) RETURN * ORDER BY id DESC;
+-STATEMENT LOAD FROM '${LBUG_ROOT_DIRECTORY}/dataset/doc-examples-json/people-unstructured.json' (format='unstructured', sample_size=1) RETURN * ORDER BY id DESC;
 ---- 3
 2|Gregory
 1|Bob
 0|Alice
 
--STATEMENT LOAD FROM '${KUZU_ROOT_DIRECTORY}/dataset/doc-examples-json/people-unstructured.json' (format='unstructured', sample_size=2) RETURN *;
+-STATEMENT LOAD FROM '${LBUG_ROOT_DIRECTORY}/dataset/doc-examples-json/people-unstructured.json' (format='unstructured', sample_size=2) RETURN *;
 ---- 3
 2|Gregory|
 1|Bob|{height: 1.810000, age: 71}
@@ -43,7 +43,7 @@
 -LOAD_DYNAMIC_EXTENSION json
 -STATEMENT CREATE NODE TABLE Person (id SERIAL, name STRING, registryDate DATE, info STRUCT(height DOUBLE, age INT64, previousUsernames STRING[]), PRIMARY KEY(id));
 ---- ok
--STATEMENT COPY Person FROM '${KUZU_ROOT_DIRECTORY}/dataset/doc-examples-json/people.json';
+-STATEMENT COPY Person FROM '${LBUG_ROOT_DIRECTORY}/dataset/doc-examples-json/people.json';
 ---- ok
 -STATEMENT MATCH (p:Person) return p.* ORDER BY p.id DESC;
 ---- 3

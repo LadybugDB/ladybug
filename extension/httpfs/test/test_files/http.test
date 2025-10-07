@@ -36,7 +36,7 @@ Noura|25
 
 -CASE ScanFromHTTPS
 -LOAD_DYNAMIC_EXTENSION httpfs
--STATEMENT load from "https://extension.kuzudb.com/dataset/test/city.csv" return *;
+-STATEMENT load from "https://extension.lbugdb.com/dataset/test/city.csv" return *;
 ---- 3
 Waterloo|150000
 Kitchener|200000
@@ -148,8 +148,8 @@ Runtime exception: Cannot attach a remote Lbug database due to invalid path: htt
 ---- error
 Runtime exception: Cannot attach an external Lbug database with non-empty wal file. Try manually checkpointing the external database (i.e., run "CHECKPOINT;").
 
--CASE AttachKuzuWithRelativePath
--STATEMENT attach '${KUZU_ROOT_DIRECTORY}/dataset/databases/tinysnb/./' (dbtype lbug)
+-CASE AttachLbugWithRelativePath
+-STATEMENT attach '${LBUG_ROOT_DIRECTORY}/dataset/databases/tinysnb/./' (dbtype lbug)
 ---- error
 Binder exception: Attaching a lbug database without an alias is not allowed.
 

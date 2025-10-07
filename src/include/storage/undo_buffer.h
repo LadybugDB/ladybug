@@ -24,7 +24,7 @@ class VersionRecordHandler;
 
 class UndoMemoryBuffer {
 public:
-    static constexpr uint64_t UNDO_MEMORY_BUFFER_INIT_CAPACITY = common::KUZU_PAGE_SIZE;
+    static constexpr uint64_t UNDO_MEMORY_BUFFER_INIT_CAPACITY = common::LBUG_PAGE_SIZE;
 
     explicit UndoMemoryBuffer(std::unique_ptr<MemoryBuffer> buffer, uint64_t capacity)
         : buffer{std::move(buffer)}, capacity{capacity} {

@@ -7,7 +7,7 @@
 namespace lbug {
 namespace binder {
 
-class KUZU_API BoundMatchClause final : public BoundReadingClause {
+class LBUG_API BoundMatchClause final : public BoundReadingClause {
     static constexpr common::ClauseType clauseType_ = common::ClauseType::MATCH;
 
 public:

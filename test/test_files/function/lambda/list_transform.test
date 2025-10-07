@@ -72,7 +72,7 @@ Binder exception: The second argument of LIST_TRANSFORM should be a lambda expre
 [470,1190]
 -STATEMENT RETURN LIST_TRANSFORM(['LBUG', 'DUCKDB', 'NEO4J'], x-> concat(x, 'test'))
 ---- 1
-[KUZUtest,DUCKDBtest,NEO4Jtest]
+[LBUGtest,DUCKDBtest,NEO4Jtest]
 -STATEMENT RETURN LIST_TRANSFORM(['LBUG', 'DUCKDB', 'NEO4J'], x-> size(x))
 ---- 1
 [4,6,5]

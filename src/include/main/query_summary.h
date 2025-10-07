@@ -31,11 +31,11 @@ public:
     /**
      * @return query compiling time in milliseconds.
      */
-    KUZU_API double getCompilingTime() const;
+    LBUG_API double getCompilingTime() const;
     /**
      * @return query execution time in milliseconds.
      */
-    KUZU_API double getExecutionTime() const;
+    LBUG_API double getExecutionTime() const;
 
     void setExecutionTime(double time);
 

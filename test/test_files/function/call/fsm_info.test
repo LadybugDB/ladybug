@@ -45,16 +45,16 @@ True
 ---- ok
 -STATEMENT call threads=1
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv";
 ---- ok
 # second copy should trigger recompression + free some pages
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv";
 ---- ok
 -STATEMENT CALL fsm_info() return sum(num_pages) > 0
 ---- 1
 True
 # copy for new table should reuse most of the old pages
--STATEMENT COPY person1 FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv";
+-STATEMENT COPY person1 FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv";
 ---- ok
 # since the copy should reuse pages use start_page_idx to see if person1 has older pages than some pages in person
 -STATEMENT call storage_info('person1') with min(start_page_idx) as oldest_newly_allocated_page
@@ -70,9 +70,9 @@ True
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MAnY);
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv";
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv";
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv";
 ---- ok
 -STATEMENT commit
 ---- ok
@@ -90,22 +90,22 @@ True
 ---- ok
 -STATEMENT create rel table knows1 (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MAnY);
 ---- ok
--STATEMENT copy person from ["${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv", "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv"](ignore_errors=true);
+-STATEMENT copy person from ["${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv", "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv"](ignore_errors=true);
 ---- ok
 -STATEMENT commit
 ---- ok
 -STATEMENT call fsm_info() return *
 ---- 0
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv";
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv";
 ---- ok
 # second copy should trigger space reclaiming
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows_2.csv";
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows_2.csv";
 ---- ok
 -STATEMENT call fsm_info() return sum(num_pages) >= 10
 ---- 1
 True
 # copying the same initial data to a new table should reuse most of the pages so the db should not grow by much
--STATEMENT COPY knows1 FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv";
+-STATEMENT COPY knows1 FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv";
 ---- ok
 # allow margin equal to the largest page range for a column chunk in the table
 -STATEMENT CALL fsm_info() with sum(num_pages) as num_free_pages call storage_info('knows1') with num_free_pages, max(num_pages) as largest_range
@@ -116,30 +116,30 @@ True
 -CASE FSMDeleteFullNodeGroupRepeat
 -STATEMENT create node table Person (id INT64, firstName STRING, lastName STRING, gender STRING, birthday INT64, creationDate INT64, locationIP STRING, browserUsed STRING, PRIMARY KEY (id));
 ---- ok
--STATEMENT copy Person from '${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Person.csv'(header=true, delim='|')
+-STATEMENT copy Person from '${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Person.csv'(header=true, delim='|')
 ---- ok
 -STATEMENT match (p:Person) delete p
 ---- ok
 -STATEMENT checkpoint
 ---- ok
--STATEMENT copy Person from '${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Person.csv'(header=true, delim='|')
+-STATEMENT copy Person from '${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Person.csv'(header=true, delim='|')
 ---- ok
 
 -STATEMENT create node table Person1 (id INT64, firstName STRING, lastName STRING, gender STRING, birthday INT64, creationDate INT64, locationIP STRING, browserUsed STRING, PRIMARY KEY (id));
 ---- ok
--STATEMENT copy Person1 from '${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Person.csv'(header=true, delim='|')
+-STATEMENT copy Person1 from '${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Person.csv'(header=true, delim='|')
 ---- ok
 -STATEMENT match (p:Person1) delete p
 ---- ok
 -STATEMENT checkpoint
 ---- ok
--STATEMENT copy Person1 from '${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Person.csv'(header=true, delim='|')
+-STATEMENT copy Person1 from '${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Person.csv'(header=true, delim='|')
 ---- ok
 -STATEMENT match (p:Person1) delete p
 ---- ok
 -STATEMENT checkpoint
 ---- ok
--STATEMENT copy Person1 from '${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Person.csv'(header=true, delim='|')
+-STATEMENT copy Person1 from '${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Person.csv'(header=true, delim='|')
 ---- ok
 
 -STATEMENT match (p:Person) delete p
@@ -154,7 +154,7 @@ True
 # -STATEMENT call fsm_info() return count(*)
 # ---- 1
 # 2
--STATEMENT copy Person from '${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Person.csv'(header=true, delim='|')
+-STATEMENT copy Person from '${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Person.csv'(header=true, delim='|')
 ---- ok
 -STATEMENT call storage_info('Person') where start_page_idx = 0 return count (*)
 ---- 1
@@ -163,11 +163,11 @@ True
 -CASE NodeCopyRollback
 -STATEMENT create node table Comment (id int64, creationDate INT64, locationIP STRING, browserUsed STRING, content STRING, length INT32, PRIMARY KEY (id));
 ---- ok
--STATEMENT copy Comment from ["${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Comment.csv", "${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Comment.csv"](header=true, delim="|")
+-STATEMENT copy Comment from ["${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Comment.csv", "${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Comment.csv"](header=true, delim="|")
 ---- error(regex)
 Copy exception: Found duplicated primary key value \d+, which violates the uniqueness constraint of the primary key column.
 # Freed pages should be reused after another copy
--STATEMENT copy Comment from "${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Comment.csv"(header=true, delim="|")
+-STATEMENT copy Comment from "${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Comment.csv"(header=true, delim="|")
 ---- ok
 # If the first used page is small enough then we have probably successfully reused pages
 -STATEMENT call storage_info("Comment") with sum(num_pages) as num_pages_in_table, min(start_page_idx) as first_used_page

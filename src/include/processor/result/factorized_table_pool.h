@@ -11,7 +11,7 @@ namespace processor {
 // We implement a local ftable pool to avoid generate many small ftables when running GDS.
 // Alternative solutions are directly writing to global ftable with partition so conflict is
 // minimized. Or we optimize ftable to be more memory efficient when number of tuples is small.
-class KUZU_API FactorizedTablePool {
+class LBUG_API FactorizedTablePool {
 public:
     explicit FactorizedTablePool(std::shared_ptr<FactorizedTable> globalTable)
         : globalTable{std::move(globalTable)} {}

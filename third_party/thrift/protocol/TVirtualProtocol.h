@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#ifndef _KUZU_THRIFT_PROTOCOL_TVIRTUALPROTOCOL_H_
-#define _KUZU_THRIFT_PROTOCOL_TVIRTUALPROTOCOL_H_ 1
+#ifndef _LBUG_THRIFT_PROTOCOL_TVIRTUALPROTOCOL_H_
+#define _LBUG_THRIFT_PROTOCOL_TVIRTUALPROTOCOL_H_ 1
 
 #include "protocol/TProtocol.h"
 
@@ -510,4 +510,4 @@ protected:
 }
 } // lbug_apache::thrift::protocol
 
-#endif // #define _KUZU_THRIFT_PROTOCOL_TVIRTUALPROTOCOL_H_ 1
+#endif // #define _LBUG_THRIFT_PROTOCOL_TVIRTUALPROTOCOL_H_ 1

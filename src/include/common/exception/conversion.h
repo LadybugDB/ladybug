@@ -6,7 +6,7 @@
 namespace lbug {
 namespace common {
 
-class KUZU_API ConversionException : public Exception {
+class LBUG_API ConversionException : public Exception {
 public:
     explicit ConversionException(const std::string& msg)
         : Exception("Conversion exception: " + msg) {}

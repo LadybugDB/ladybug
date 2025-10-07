@@ -15,7 +15,7 @@
 -INSERT_STATEMENT_BLOCK GCS_SETUP
 -STATEMENT CALL HTTP_CACHE_FILE=FALSE
 ---- ok
--STATEMENT ATTACH 'gcs://kuzudb-test/tinysnb/db.kz' as tinysnb (dbtype lbug)
+-STATEMENT ATTACH 'gcs://lbugdb-test/tinysnb/db.kz' as tinysnb (dbtype lbug)
 ---- 1
 Attached database successfully.
 -STATEMENT match (p0:person) return p0.id

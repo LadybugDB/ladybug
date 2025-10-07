@@ -9,11 +9,11 @@
 ---- ok
 -STATEMENT create (n:test {v: [to_json({"x": 1.0})]});
 ---- ok
--STATEMENT export database '${KUZU_EXPORT_DB_DIRECTORY}_json_nested/list-json';
+-STATEMENT export database '${LBUG_EXPORT_DB_DIRECTORY}_json_nested/list-json';
 ---- 1
 Exported database successfully.
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_json_nested/list-json"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_json_nested/list-json"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_json_nested/list-json"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_json_nested/list-json"
 ---- 1
 Imported database successfully.
 -STATEMENT MATCH (u:test) return u.*
@@ -26,11 +26,11 @@ Imported database successfully.
 ---- ok
 -STATEMENT create (n:test {grids: [{type: "vertical",  display: False, params: to_json({"x": 12.56})}]});
 ---- ok
--STATEMENT export database '${KUZU_EXPORT_DB_DIRECTORY}_json_nested/struct-json';
+-STATEMENT export database '${LBUG_EXPORT_DB_DIRECTORY}_json_nested/struct-json';
 ---- 1
 Exported database successfully.
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_json_nested/struct-json"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_json_nested/struct-json"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_json_nested/struct-json"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_json_nested/struct-json"
 ---- 1
 Imported database successfully.
 -STATEMENT MATCH (u:test) return u.*
@@ -43,11 +43,11 @@ Imported database successfully.
 ---- ok
 -STATEMENT CREATE (n:test {m: map([1],[{m: "brr", x: [1.0, 2.0] }])});
 ---- ok
--STATEMENT export database '${KUZU_EXPORT_DB_DIRECTORY}_json_nested/map-json';
+-STATEMENT export database '${LBUG_EXPORT_DB_DIRECTORY}_json_nested/map-json';
 ---- 1
 Exported database successfully.
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_json_nested/map-json"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_json_nested/map-json"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_json_nested/map-json"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_json_nested/map-json"
 ---- 1
 Imported database successfully.
 -STATEMENT MATCH (u:test) return u.*

@@ -18,12 +18,12 @@ class Transaction;
 
 namespace storage {
 
-enum class KUZU_API IndexConstraintType : uint8_t {
+enum class LBUG_API IndexConstraintType : uint8_t {
     PRIMARY = 0,              // Primary key index
     SECONDARY_NON_UNIQUE = 1, // Secondary index that is not unique
 };
 
-enum class KUZU_API IndexDefinitionType : uint8_t {
+enum class LBUG_API IndexDefinitionType : uint8_t {
     BUILTIN = 0,
     EXTENSION = 1,
 };
@@ -33,7 +33,7 @@ struct IndexInfo;
 using index_load_func_t = std::function<std::unique_ptr<Index>(main::ClientContext* context,
     StorageManager* storageManager, IndexInfo, std::span<uint8_t>)>;
 
-struct KUZU_API IndexType {
+struct LBUG_API IndexType {
     std::string typeName;
     IndexConstraintType constraintType;
     IndexDefinitionType definitionType;
@@ -45,7 +45,7 @@ struct KUZU_API IndexType {
           definitionType{definitionType}, loadFunc{std::move(loadFunc)} {}
 };
 
-struct KUZU_API IndexInfo {
+struct LBUG_API IndexInfo {
     std::string name;
     std::string indexType;
     common::table_id_t tableID;
@@ -65,7 +65,7 @@ struct KUZU_API IndexInfo {
     static IndexInfo deserialize(common::Deserializer& deSer);
 };
 
-struct KUZU_API IndexStorageInfo {
+struct LBUG_API IndexStorageInfo {
     IndexStorageInfo() {}
     virtual ~IndexStorageInfo();
     DELETE_COPY_DEFAULT_MOVE(IndexStorageInfo);
@@ -83,7 +83,7 @@ struct KUZU_API IndexStorageInfo {
     }
 };
 
-class KUZU_API Index {
+class LBUG_API Index {
 public:
     struct InsertState {
         virtual ~InsertState();
@@ -196,7 +196,7 @@ public:
     bool isLoaded() const { return loaded; }
 
     void serialize(common::Serializer& ser) const;
-    KUZU_API void load(main::ClientContext* context, StorageManager* storageManager);
+    LBUG_API void load(main::ClientContext* context, StorageManager* storageManager);
     bool needCommitInsert() const { return index->needCommitInsert(); }
     // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
     void checkpoint(main::ClientContext* context, PageAllocator& pageAllocator) {

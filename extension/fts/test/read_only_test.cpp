@@ -12,8 +12,8 @@ TEST_F(ApiTest, ReadOnlyDBTest) {
     createDBAndConn();
 #ifndef __STATIC_LINK_EXTENSION_TEST__
     ASSERT_TRUE(conn->query(common::stringFormat("LOAD EXTENSION '{}'",
-                                TestHelper::appendKuzuRootPath(
-                                    "extension/fts/build/libfts.kuzu_extension")))
+                                TestHelper::appendLbugRootPath(
+                                    "extension/fts/build/libfts.lbug_extension")))
                     ->isSuccess());
 #endif
     ASSERT_TRUE(conn->query("CREATE NODE TABLE doc (NAME STRING, PRIMARY KEY(NAME))")->isSuccess());
@@ -24,8 +24,8 @@ TEST_F(ApiTest, ReadOnlyDBTest) {
     createDBAndConn();
 #ifndef __STATIC_LINK_EXTENSION_TEST__
     ASSERT_TRUE(conn->query(common::stringFormat("LOAD EXTENSION '{}'",
-                                TestHelper::appendKuzuRootPath(
-                                    "extension/fts/build/libfts.kuzu_extension")))
+                                TestHelper::appendLbugRootPath(
+                                    "extension/fts/build/libfts.lbug_extension")))
                     ->isSuccess());
 #endif
     ASSERT_STREQ("Connection exception: Cannot execute write operations in a read-only database!",

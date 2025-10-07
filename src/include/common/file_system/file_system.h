@@ -43,7 +43,7 @@ struct FileOpenFlags {
     explicit FileOpenFlags(int flags, FileLockType lockType) : flags{flags}, lockType{lockType} {}
 };
 
-class KUZU_API FileSystem {
+class LBUG_API FileSystem {
     friend struct FileInfo;
 
 public:

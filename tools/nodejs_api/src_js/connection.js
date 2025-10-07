@@ -1,6 +1,6 @@
 "use strict";
 
-const KuzuNative = require("./lbug_native.js");
+const LbugNative = require("./lbug_native.js");
 const QueryResult = require("./query_result.js");
 const PreparedStatement = require("./prepared_statement.js");
 
@@ -44,7 +44,7 @@ class Connection {
       if (!this._initPromise) {
         if (!this._connection) {
           const database = await this._database._getDatabase();
-          this._connection = new KuzuNative.NodeConnection(database);
+          this._connection = new LbugNative.NodeConnection(database);
         }
         this._initPromise = new Promise((resolve, reject) => {
           this._connection.initAsync((err) => {
@@ -85,7 +85,7 @@ class Connection {
     }
     if (!this._connection) {
       const database = this._database._getDatabaseSync();
-      this._connection = new KuzuNative.NodeConnection(database);
+      this._connection = new LbugNative.NodeConnection(database);
     }
     this._connection.initSync();
     this._isInitialized = true;
@@ -93,7 +93,7 @@ class Connection {
 
   /**
    * Internal function to get the underlying native connection object.
-   * @returns {KuzuNative.NodeConnection} the underlying native connection.
+   * @returns {LbugNative.NodeConnection} the underlying native connection.
    * @throws {Error} if the connection is closed.
    */
   async _getConnection() {
@@ -106,7 +106,7 @@ class Connection {
 
   /**
    * Internal function to get the underlying native connection object synchronously.
-   * @returns {KuzuNative.NodeConnection} the underlying native connection.
+   * @returns {LbugNative.NodeConnection} the underlying native connection.
    * @throws {Error} if the connection is closed.
    */
   _getConnectionSync() {
@@ -152,7 +152,7 @@ class Connection {
       }
       this._getConnection()
         .then((connection) => {
-          const nodeQueryResult = new KuzuNative.NodeQueryResult();
+          const nodeQueryResult = new LbugNative.NodeQueryResult();
           try {
             connection.executeAsync(
               preparedStatement._preparedStatement,
@@ -208,7 +208,7 @@ class Connection {
       paramArray.push([key, value]);
     }
     const connection = this._getConnectionSync();
-    const nodeQueryResult = new KuzuNative.NodeQueryResult();
+    const nodeQueryResult = new LbugNative.NodeQueryResult();
     connection.executeSync(preparedStatement._preparedStatement, nodeQueryResult, paramArray);
     return this._unwrapMultipleQueryResultsSync(nodeQueryResult);
   }
@@ -225,7 +225,7 @@ class Connection {
       }
       this._getConnection()
         .then((connection) => {
-          const preparedStatement = new KuzuNative.NodePreparedStatement(
+          const preparedStatement = new LbugNative.NodePreparedStatement(
             connection,
             statement
           );
@@ -253,7 +253,7 @@ class Connection {
       throw new Error("statement must be a string.");
     }
     const connection = this._getConnectionSync();
-    const preparedStatement = new KuzuNative.NodePreparedStatement(
+    const preparedStatement = new LbugNative.NodePreparedStatement(
       connection,
       statement
     );
@@ -277,7 +277,7 @@ class Connection {
       }
       this._getConnection()
         .then((connection) => {
-          const nodeQueryResult = new KuzuNative.NodeQueryResult();
+          const nodeQueryResult = new LbugNative.NodeQueryResult();
           try {
             connection.queryAsync(statement, nodeQueryResult, (err) => {
               if (err) {
@@ -315,19 +315,19 @@ class Connection {
       throw new Error("statement must be a string.");
     }
     const connection = this._getConnectionSync();
-    const nodeQueryResult = new KuzuNative.NodeQueryResult();
+    const nodeQueryResult = new LbugNative.NodeQueryResult();
     connection.querySync(statement, nodeQueryResult);
     return this._unwrapMultipleQueryResultsSync(nodeQueryResult);
   }
 
   /**
    * Internal function to get the next query result for multiple query results.
-   * @param {KuzuNative.NodeQueryResult} nodeQueryResult the current node query result.
+   * @param {LbugNative.NodeQueryResult} nodeQueryResult the current node query result.
    * @returns {Promise<lbug.QueryResult>} a promise that resolves to the next query result. The promise is rejected if there is an error.
    */
   _getNextQueryResult(nodeQueryResult) {
     return new Promise((resolve, reject) => {
-      const nextNodeQueryResult = new KuzuNative.NodeQueryResult();
+      const nextNodeQueryResult = new LbugNative.NodeQueryResult();
       nodeQueryResult.getNextQueryResultAsync(nextNodeQueryResult, (err) => {
         if (err) {
           return reject(err);
@@ -339,7 +339,7 @@ class Connection {
 
   /**
    * Internal function to unwrap multiple query results into an array of query results.
-   * @param {KuzuNative.NodeQueryResult} nodeQueryResult the node query result.
+   * @param {LbugNative.NodeQueryResult} nodeQueryResult the node query result.
    * @returns {Promise<Array<lbug.QueryResult>> | lbug.QueryResult} a promise that resolves to an array of query results. The promise is rejected if there is an error.
    */
   async _unwrapMultipleQueryResults(nodeQueryResult) {
@@ -358,7 +358,7 @@ class Connection {
 
   /**
    * Internal function to unwrap multiple query results into an array of query results synchronously.
-   * @param {KuzuNative.NodeQueryResult} nodeQueryResult the node query result.
+   * @param {LbugNative.NodeQueryResult} nodeQueryResult the node query result.
    * @returns {Array<lbug.QueryResult> | lbug.QueryResult} an array of query results.
    * @throws {Error} if there is an error.
    */
@@ -370,7 +370,7 @@ class Connection {
     const queryResults = [wrappedQueryResult];
     let currentQueryResult = nodeQueryResult;
     while (currentQueryResult.hasNextQueryResult()) {
-      const nextNodeQueryResult = new KuzuNative.NodeQueryResult();
+      const nextNodeQueryResult = new LbugNative.NodeQueryResult();
       currentQueryResult.getNextQueryResultSync(nextNodeQueryResult);
       const nextQueryResult = new QueryResult(this, nextNodeQueryResult);
       queryResults.push(nextQueryResult);

@@ -3,7 +3,7 @@
 --
 
 -CASE ZSTDDecompress
--STATEMENT LOAD FROM '${KUZU_ROOT_DIRECTORY}/dataset/reader/parquet/compression/zstd.parquet' RETURN *;
+-STATEMENT LOAD FROM '${LBUG_ROOT_DIRECTORY}/dataset/reader/parquet/compression/zstd.parquet' RETURN *;
 ---- 5
 3||[2,4,3]
 4|longstringstring|[1]
@@ -12,7 +12,7 @@
 4|abc|[3,,2]
 
 -CASE GZIPDecompress
--STATEMENT LOAD FROM '${KUZU_ROOT_DIRECTORY}/dataset/reader/parquet/compression/gzip.parquet' RETURN *;
+-STATEMENT LOAD FROM '${LBUG_ROOT_DIRECTORY}/dataset/reader/parquet/compression/gzip.parquet' RETURN *;
 ---- 5
 3||[2,4,3]
 4|longstringstring|[1]
@@ -21,7 +21,7 @@
 4|abc|[3,,2]
 
 -CASE BROTLIDecompress
--STATEMENT LOAD FROM '${KUZU_ROOT_DIRECTORY}/dataset/reader/parquet/compression/brotli.parquet' RETURN *;
+-STATEMENT LOAD FROM '${LBUG_ROOT_DIRECTORY}/dataset/reader/parquet/compression/brotli.parquet' RETURN *;
 ---- 5
 Alice|53
 Bob|47

@@ -16,7 +16,7 @@ struct BinaryData {
     uint64_t size = 0;
 };
 
-class KUZU_API BufferWriter : public Writer {
+class LBUG_API BufferWriter : public Writer {
 public:
     // Serializes to a buffer allocated by the serializer, will expand when
     // writing past the initial threshold.

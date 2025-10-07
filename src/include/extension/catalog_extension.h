@@ -5,7 +5,7 @@
 namespace lbug {
 namespace extension {
 
-class KUZU_API CatalogExtension : public catalog::Catalog {
+class LBUG_API CatalogExtension : public catalog::Catalog {
 public:
     CatalogExtension() : Catalog() {}
 

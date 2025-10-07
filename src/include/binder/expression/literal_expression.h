@@ -6,7 +6,7 @@
 namespace lbug {
 namespace binder {
 
-class KUZU_API LiteralExpression final : public Expression {
+class LBUG_API LiteralExpression final : public Expression {
     static constexpr common::ExpressionType type_ = common::ExpressionType::LITERAL;
 
 public:

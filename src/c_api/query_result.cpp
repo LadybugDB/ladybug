@@ -38,10 +38,10 @@ lbug_state lbug_query_result_get_column_name(lbug_query_result* query_result, ui
     char** out_column_name) {
     auto column_names = static_cast<QueryResult*>(query_result->_query_result)->getColumnNames();
     if (index >= column_names.size()) {
-        return KuzuError;
+        return LbugError;
     }
     *out_column_name = convertToOwnedCString(column_names[index]);
-    return KuzuSuccess;
+    return LbugSuccess;
 }
 
 lbug_state lbug_query_result_get_column_data_type(lbug_query_result* query_result, uint64_t index,
@@ -49,11 +49,11 @@ lbug_state lbug_query_result_get_column_data_type(lbug_query_result* query_resul
     auto column_data_types =
         static_cast<QueryResult*>(query_result->_query_result)->getColumnDataTypes();
     if (index >= column_data_types.size()) {
-        return KuzuError;
+        return LbugError;
     }
     const auto& column_data_type = column_data_types[index];
     out_column_data_type->_data_type = new LogicalType(column_data_type.copy());
-    return KuzuSuccess;
+    return LbugSuccess;
 }
 
 uint64_t lbug_query_result_get_num_tuples(lbug_query_result* query_result) {
@@ -63,11 +63,11 @@ uint64_t lbug_query_result_get_num_tuples(lbug_query_result* query_result) {
 lbug_state lbug_query_result_get_query_summary(lbug_query_result* query_result,
     lbug_query_summary* out_query_summary) {
     if (out_query_summary == nullptr) {
-        return KuzuError;
+        return LbugError;
     }
     auto query_summary = static_cast<QueryResult*>(query_result->_query_result)->getQuerySummary();
     out_query_summary->_query_summary = query_summary;
-    return KuzuSuccess;
+    return LbugSuccess;
 }
 
 bool lbug_query_result_has_next(lbug_query_result* query_result) {
@@ -81,16 +81,16 @@ bool lbug_query_result_has_next_query_result(lbug_query_result* query_result) {
 lbug_state lbug_query_result_get_next_query_result(lbug_query_result* query_result,
     lbug_query_result* out_query_result) {
     if (!lbug_query_result_has_next_query_result(query_result)) {
-        return KuzuError;
+        return LbugError;
     }
     auto next_query_result =
         static_cast<QueryResult*>(query_result->_query_result)->getNextQueryResult();
     if (next_query_result == nullptr) {
-        return KuzuError;
+        return LbugError;
     }
     out_query_result->_query_result = next_query_result;
     out_query_result->_is_owned_by_cpp = true;
-    return KuzuSuccess;
+    return LbugSuccess;
 }
 
 lbug_state lbug_query_result_get_next(lbug_query_result* query_result,
@@ -99,9 +99,9 @@ lbug_state lbug_query_result_get_next(lbug_query_result* query_result,
         auto flat_tuple = static_cast<QueryResult*>(query_result->_query_result)->getNext();
         out_flat_tuple->_flat_tuple = flat_tuple.get();
         out_flat_tuple->_is_owned_by_cpp = true;
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -118,9 +118,9 @@ lbug_state lbug_query_result_get_arrow_schema(lbug_query_result* query_result,
     ArrowSchema* out_schema) {
     try {
         *out_schema = *static_cast<QueryResult*>(query_result->_query_result)->getArrowSchema();
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }
 
@@ -129,8 +129,8 @@ lbug_state lbug_query_result_get_next_arrow_chunk(lbug_query_result* query_resul
     try {
         *out_arrow_array =
             *static_cast<QueryResult*>(query_result->_query_result)->getNextArrowChunk(chunk_size);
-        return KuzuSuccess;
+        return LbugSuccess;
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
 }

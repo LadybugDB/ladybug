@@ -7,9 +7,9 @@
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person);
 ---- ok
--STATEMENT copy knows from ("${KUZU_ROOT_DIRECTORY}/dataset/npy-20k/id_int64.npy") by column;
+-STATEMENT copy knows from ("${LBUG_ROOT_DIRECTORY}/dataset/npy-20k/id_int64.npy") by column;
 ---- error
 Binder exception: Copy by column is not supported for relationship table.
--STATEMENT copy person from ("${KUZU_ROOT_DIRECTORY}/dataset/read-list-tests/large-list/vPerson.csv") by column;
+-STATEMENT copy person from ("${LBUG_ROOT_DIRECTORY}/dataset/read-list-tests/large-list/vPerson.csv") by column;
 ---- error
 Binder exception: Copy by column with csv file type is not supported.

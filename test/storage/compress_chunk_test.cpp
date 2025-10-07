@@ -27,7 +27,7 @@ public:
     }
 
     std::string getInputDir() override {
-        return TestHelper::appendKuzuRootPath("dataset/tinysnb/");
+        return TestHelper::appendLbugRootPath("dataset/tinysnb/");
     }
 
     template<std::floating_point T>
@@ -144,7 +144,7 @@ void CompressChunkTest::testCompressChunk(const std::vector<T>& bufferToCompress
 
     SegmentState state;
     state.metadata = chunkMetadata;
-    state.numValuesPerPage = state.metadata.compMeta.numValues(KUZU_PAGE_SIZE, dataType);
+    state.numValuesPerPage = state.metadata.compMeta.numValues(LBUG_PAGE_SIZE, dataType);
     if (chunkMetadata.compMeta.compression == CompressionType::ALP) {
         state.alpExceptionChunk = std::make_unique<InMemoryExceptionChunk<T>>(state, dataFH, mm,
             &storageManager->getShadowFile());

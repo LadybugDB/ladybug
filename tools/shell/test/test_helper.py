@@ -3,13 +3,13 @@ import sys
 from enum import Enum
 from pathlib import Path
 
-KUZU_ROOT = Path(__file__).parent.parent.parent.parent
+LBUG_ROOT = Path(__file__).parent.parent.parent.parent
 if sys.platform == "win32":
     # \ in paths is not supported by lbug's parser
-    KUZU_ROOT = str(KUZU_ROOT).replace("\\", "/")
+    LBUG_ROOT = str(LBUG_ROOT).replace("\\", "/")
 
-KUZU_EXEC_PATH = os.path.join(
-    KUZU_ROOT,
+LBUG_EXEC_PATH = os.path.join(
+    LBUG_ROOT,
     "build",
     "release",
     "tools",
@@ -19,7 +19,7 @@ KUZU_EXEC_PATH = os.path.join(
 
 
 def _get_lbug_version():
-    cmake_file = os.path.join(KUZU_ROOT, "CMakeLists.txt")
+    cmake_file = os.path.join(LBUG_ROOT, "CMakeLists.txt")
     with open(cmake_file) as f:
         for line in f:
             if line.startswith("project(Lbug VERSION"):
@@ -27,7 +27,7 @@ def _get_lbug_version():
         return None
 
 
-KUZU_VERSION = _get_lbug_version()
+LBUG_VERSION = _get_lbug_version()
 
 
 class KEY_ACTION(Enum):

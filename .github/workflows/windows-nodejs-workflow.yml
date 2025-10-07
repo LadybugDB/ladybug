@@ -35,9 +35,9 @@ jobs:
 
       - name: Move Node.js native module
         working-directory: tools/nodejs_api/build
-        run: ren kuzujs.node kuzujs-win32-x64.node
+        run: ren lbugjs.node lbugjs-win32-x64.node
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-nodejs-module
-          path: tools/nodejs_api/build/kuzujs-win32-x64.node
+          path: tools/nodejs_api/build/lbugjs-win32-x64.node

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from type_aliases import ConnDB
 
-EXTENSION_CMAKE_PREFIX = 'add_definitions(-DKUZU_EXTENSION_VERSION="'
+EXTENSION_CMAKE_PREFIX = 'add_definitions(-DLBUG_EXTENSION_VERSION="'
 
 
 @pytest.fixture

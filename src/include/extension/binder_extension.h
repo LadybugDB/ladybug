@@ -6,7 +6,7 @@
 namespace lbug {
 namespace extension {
 
-class KUZU_API BinderExtension {
+class LBUG_API BinderExtension {
 public:
     BinderExtension() {}
 

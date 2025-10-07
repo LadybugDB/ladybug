@@ -15,7 +15,7 @@ class BufferWriter;
 namespace lbug {
 namespace catalog {
 
-struct KUZU_API IndexToCypherInfo : ToCypherInfo {
+struct LBUG_API IndexToCypherInfo : ToCypherInfo {
     const main::ClientContext* context;
     const common::FileScanInfo& exportFileInfo;
 
@@ -25,7 +25,7 @@ struct KUZU_API IndexToCypherInfo : ToCypherInfo {
 };
 
 class IndexCatalogEntry;
-struct KUZU_API IndexAuxInfo {
+struct LBUG_API IndexAuxInfo {
     virtual ~IndexAuxInfo() = default;
     virtual std::shared_ptr<common::BufferWriter> serialize() const;
 
@@ -48,7 +48,7 @@ struct KUZU_API IndexAuxInfo {
     }
 };
 
-class KUZU_API IndexCatalogEntry final : public CatalogEntry {
+class LBUG_API IndexCatalogEntry final : public CatalogEntry {
 public:
     static std::string getInternalIndexName(common::table_id_t tableID, std::string indexName) {
         return common::stringFormat("{}_{}", tableID, std::move(indexName));

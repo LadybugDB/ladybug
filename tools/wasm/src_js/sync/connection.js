@@ -4,7 +4,7 @@
  */
 "use strict";
 
-const KuzuWasm = require("./lbug.js");
+const LbugWasm = require("./lbug.js");
 const QueryResult = require("./query_result.js");
 const PreparedStatement = require("./prepared_statement.js");
 
@@ -17,8 +17,8 @@ class Connection {
    * execution.
    */
   constructor(database, numThreads = null) {
-    KuzuWasm.checkInit();
-    const lbug = KuzuWasm._lbug;
+    LbugWasm.checkInit();
+    const lbug = LbugWasm._lbug;
     if (!database || typeof database !== "object") {
       throw new Error("Database must be an object.");
     }
@@ -40,7 +40,7 @@ class Connection {
    * @private
    */
   _checkConnection() {
-    KuzuWasm.checkInit();
+    LbugWasm.checkInit();
     if (this._isClosed) {
       throw new Error("Connection is already closed.");
     }

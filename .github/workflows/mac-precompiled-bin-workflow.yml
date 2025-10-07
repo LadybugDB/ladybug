@@ -36,27 +36,27 @@ jobs:
         run: |
           mv install/include/lbug.h .
           mv install/include/lbug.hpp .
-          mv install/lib/libkuzu.dylib .
+          mv install/lib/liblbug.dylib .
           mv install/bin/lbug .
 
       - name: Verify binary information
         run: |
           file -b lbug
           otool -l lbug | grep minos
-          file -b libkuzu.dylib
-          otool -l libkuzu.dylib | grep minos
+          file -b liblbug.dylib
+          otool -l liblbug.dylib | grep minos
 
       - name: Create tarball
         run: |
-          tar -czvf libkuzu-osx-universal.tar.gz lbug.h lbug.hpp libkuzu.dylib
-          tar -czvf kuzu_cli-osx-universal.tar.gz lbug
+          tar -czvf liblbug-osx-universal.tar.gz lbug.h lbug.hpp liblbug.dylib
+          tar -czvf lbug_cli-osx-universal.tar.gz lbug
 
       - uses: actions/upload-artifact@v4
         with:
-          name: libkuzu-osx-universal
-          path: libkuzu-osx-universal.tar.gz
+          name: liblbug-osx-universal
+          path: liblbug-osx-universal.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
-          name: kuzu_cli-osx-universal
-          path: kuzu_cli-osx-universal.tar.gz
+          name: lbug_cli-osx-universal
+          path: lbug_cli-osx-universal.tar.gz

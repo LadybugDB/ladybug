@@ -12,11 +12,11 @@
                                 lastJobDuration interval, workedHours INT64[], usedNames STRING[],
                                 courseScoresPerTerm INT64[][], grades INT64[4], height float, u UUID, PRIMARY KEY (ID));
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv";
 ---- ok
 -STATEMENT CREATE REL TABLE sees(FROM person to person);
 ---- ok
--STATEMENT COPY sees() FROM (LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" RETURN column0, column1);
+-STATEMENT COPY sees() FROM (LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" RETURN column0, column1);
 ---- ok
 -STATEMENT MATCH ()-[e:sees]->() RETURN count(e)
 ---- 1
@@ -25,7 +25,7 @@
      validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[],
     transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
--STATEMENT COPY knows1 (date, meetTime, validInterval, comments, summary, notes, someMap) FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" ;
+-STATEMENT COPY knows1 (date, meetTime, validInterval, comments, summary, notes, someMap) FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" ;
 ---- ok
 -STATEMENT MATCH (p:person)-[e:knows1]->(:person) WHERE p.ID = 2 RETURN e.*;
 ---- 3
@@ -36,7 +36,7 @@
                 meetTime TIMESTAMP,nullDouble DOUBLE, date DATE, validInterval INTERVAL, comments STRING[],
                 summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
--STATEMENT COPY knows2 (date, meetTime, validInterval, comments, summary, notes, someMap) FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" ;
+-STATEMENT COPY knows2 (date, meetTime, validInterval, comments, summary, notes, someMap) FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" ;
 ---- ok
 -STATEMENT MATCH (p:person)-[e:knows2]->(:person) WHERE p.ID = 2 RETURN e.*;
 ---- 3
@@ -47,10 +47,10 @@ matthew perry|2012-12-11 20:07:22||1950-05-14|20 years 30 days 48:00:00|[fwh9y81
                 meetTime TIMESTAMP,nullDouble DOUBLE, date DATE, validInterval INTERVAL, comments STRING[],
                 summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), MANY_MANY);
 ---- ok
--STATEMENT COPY knows3 (meetTime, date, validInterval, comments, summary) FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" ;
+-STATEMENT COPY knows3 (meetTime, date, validInterval, comments, summary) FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" ;
 ---- error
 Binder exception: Number of columns mismatch. Expected 7 but got 9.
--STATEMENT COPY knows3 (meetTime, date, validInterval, comments, summary, dummy) FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" ;
+-STATEMENT COPY knows3 (meetTime, date, validInterval, comments, summary, dummy) FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" ;
 ---- error
 Binder exception: Table knows3 does not contain column dummy.
 
@@ -65,7 +65,7 @@ Binder exception: Table knows3 does not contain column dummy.
     nullTimestampColumn TIMESTAMP DEFAULT timestamp("1970-01-01 00:00:00.004666-10"),
     MANY_MANY);
 ---- ok
--STATEMENT COPY knows4 (date, meetTime, validInterval, comments, summary, notes, someMap) FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" ;
+-STATEMENT COPY knows4 (date, meetTime, validInterval, comments, summary, notes, someMap) FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" ;
 ---- ok
 -STATEMENT MATCH (p:person)-[e:knows4]->(:person) WHERE p.ID = 2 RETURN e.*;
 ---- 3
@@ -82,7 +82,7 @@ Binder exception: Table knows3 does not contain column dummy.
     someMap MAP(STRING, STRING), seqColumn INT64 DEFAULT nextval('seq'), serColumn SERIAL,
     MANY_MANY);
 ---- ok
--STATEMENT COPY knows5 (date, meetTime, validInterval, comments, summary, notes, someMap) FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" ;
+-STATEMENT COPY knows5 (date, meetTime, validInterval, comments, summary, notes, someMap) FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" ;
 ---- ok
 -STATEMENT MATCH (p:person)-[e:knows5]->(:person) RETURN sum(e.seqColumn), sum(e.serColumn);
 ---- 1
@@ -96,7 +96,7 @@ Binder exception: Table knows3 does not contain column dummy.
                                             PRIMARY KEY (id));
 ---- ok
 -STATEMENT COPY tableOfTypes2 (id, int64Column, doubleColumn, booleanColumn, dateColumn, timestampColumn, stringColumn,
-    listOfInt) FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
+    listOfInt) FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
 ---- ok
 -STATEMENT MATCH (row:tableOfTypes2) WHERE row.id >= 20 AND row.id <= 24 RETURN row.*;
 ---- 5
@@ -113,7 +113,7 @@ Binder exception: Table knows3 does not contain column dummy.
         nullStringColumn STRING, listOfInt INT64[], nullListOfInt INT64[], PRIMARY KEY (id));
 ---- ok
 -STATEMENT COPY tableOfTypes3 (id, int64Column, doubleColumn, booleanColumn, dateColumn, timestampColumn, stringColumn,
-      listOfInt) FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
+      listOfInt) FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
 ---- ok
 -STATEMENT MATCH (row:tableOfTypes3) WHERE row.id >= 20 AND row.id <= 24 RETURN row.*;
 ---- 5
@@ -132,7 +132,7 @@ Binder exception: Table knows3 does not contain column dummy.
                                             PRIMARY KEY (id));
 ---- ok
 -STATEMENT COPY tableOfTypes4 (id, int64Column, doubleColumn, booleanColumn, dateColumn, timestampColumn, stringColumn,
-    listOfInt) FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
+    listOfInt) FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
 ---- ok
 -STATEMENT MATCH (row:tableOfTypes4) WHERE row.id >= 20 AND row.id <= 24 RETURN row.*;
 ---- 5
@@ -149,7 +149,7 @@ Binder exception: Table knows3 does not contain column dummy.
                                             PRIMARY KEY (id));
 ---- ok
 -STATEMENT COPY tableOfTypes6 (id, int64Column, doubleColumn, dateColumn, timestampColumn, stringColumn,
-    listOfInt) FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
+    listOfInt) FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
 ---- error
 Binder exception: Number of columns mismatch. Expected 7 but got 8.
 
@@ -160,7 +160,7 @@ Binder exception: Number of columns mismatch. Expected 7 but got 8.
                                             PRIMARY KEY (id));
 ---- ok
 -STATEMENT COPY tableOfTypes7 (id, int64Column, doubleColumn, nonexistentColumn, dateColumn, timestampColumn,
-    stringColumn, listOfInt) FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
+    stringColumn, listOfInt) FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
 ---- error
 Binder exception: Table tableOfTypes7 does not contain column nonexistentColumn.
 
@@ -171,9 +171,9 @@ Binder exception: Table tableOfTypes7 does not contain column nonexistentColumn.
                                             PRIMARY KEY (id));
 ---- ok
 -STATEMENT COPY tableOfTypes8 (id, int64Column, doubleColumn, booleanColumn, dateColumn, timestampColumn, stringColumn,
-    listOfInt, extraColumn) FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
+    listOfInt, extraColumn) FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
 ---- error
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv on line 1: expected 9 values per row, but got 8. Line/record containing the error: 'id,column1,column2,column3,column4,column5,column6,"[94,70,35,36,73]"'
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv on line 1: expected 9 values per row, but got 8. Line/record containing the error: 'id,column1,column2,column3,column4,column5,column6,"[94,70,35,36,73]"'
 
 -LOG PartialCopyException4
 -STATEMENT CREATE NODE TABLE tableOfTypes9 (id INT64, int64Column INT64, doubleColumn DOUBLE, booleanColumn BOOLEAN,
@@ -182,7 +182,7 @@ Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/
                                             PRIMARY KEY (id));
 ---- ok
 -STATEMENT COPY tableOfTypes9 (id, int64Column, doubleColumn, booleanColumn, booleanColumn, dateColumn, timestampColumn,
-    stringColumn, listOfInt) FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
+    stringColumn, listOfInt) FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
 ---- error
 Binder exception: Detect duplicate column name booleanColumn during COPY.
 
@@ -193,7 +193,7 @@ Binder exception: Detect duplicate column name booleanColumn during COPY.
                                              PRIMARY KEY (serialPk));
 ---- ok
 -STATEMENT COPY tableOfTypes10 (id, int64Column, doubleColumn, booleanColumn, dateColumn, timestampColumn, stringColumn,
-    listOfInt) FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
+    listOfInt) FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
 ---- ok
 -STATEMENT MATCH (row:tableOfTypes10) WHERE row.id >= 20 AND row.id <= 24 RETURN
     row.id, row.int64Column, row.doubleColumn, row.booleanColumn, row.dateColumn, row.timestampColumn, row.stringColumn, row.listOfInt;
@@ -214,7 +214,7 @@ Binder exception: Detect duplicate column name booleanColumn during COPY.
                                              PRIMARY KEY (nullPk));
 ---- ok
 -STATEMENT COPY tableOfTypes11 (id, int64Column, doubleColumn, booleanColumn, dateColumn, timestampColumn, stringColumn,
-    listOfInt) FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
+    listOfInt) FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
 ---- error
 Copy exception: Found NULL, which violates the non-null constraint of the primary key column.
 
@@ -231,7 +231,7 @@ Copy exception: Found NULL, which violates the non-null constraint of the primar
 ---- ok
 -STATEMENT COPY tableOfTypes12 (id, int64Column, doubleColumn, booleanColumn, dateColumn, stringColumn, listOfInt64,
 listOfString, listOfListOfInt64, structColumn) FROM
-"${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/parquet/types_50k*.parquet";
+"${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/parquet/types_50k*.parquet";
 ---- ok
 -STATEMENT MATCH (row:tableOfTypes12) WHERE row.id >= 20 AND row.id <= 24 RETURN row.*;
 ---- 5
@@ -252,7 +252,7 @@ listOfString, listOfListOfInt64, structColumn) FROM
 ---- ok
 -STATEMENT COPY tableOfTypes12 (id, dateColumn, doubleColumn, booleanColumn, int64Column, stringColumn, listOfInt64,
 listOfString, listOfListOfInt64, structColumn) FROM
-"${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/parquet/types_50k*.parquet";
+"${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/parquet/types_50k*.parquet";
 ---- error
 Conversion exception: Unsupported casting function from DATE to INT64.
 
@@ -267,7 +267,7 @@ Conversion exception: Unsupported casting function from DATE to INT64.
                                             PRIMARY KEY (id));
 ---- ok
 -STATEMENT COPY tableOfTypes14 (id, int64Column, doubleColumn, booleanColumn, dateColumn, timestampColumn, stringColumn,
-    listOfInt) FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
+    listOfInt) FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
 ---- ok
 -STATEMENT MATCH (row:tableOfTypes14) WHERE row.id >= 20 AND row.id <= 24 RETURN row.*;
 ---- 5
@@ -286,7 +286,7 @@ Conversion exception: Unsupported casting function from DATE to INT64.
                                             PRIMARY KEY (id));
 ---- ok
 -STATEMENT COPY tableOfTypes15 (id, int64Column, doubleColumn, booleanColumn, dateColumn, timestampColumn, stringColumn,
-    listOfInt) FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
+    listOfInt) FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/csv/types_50k.csv";
 ---- ok
 -STATEMENT MATCH (row:tableOfTypes15) RETURN sum(row.seqColumn);
 ---- 1

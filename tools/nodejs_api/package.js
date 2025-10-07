@@ -3,12 +3,12 @@ const fs = require("fs/promises");
 const fsCallback = require("fs");
 const path = require("path");
 
-const KUZU_ROOT = path.resolve(path.join(__dirname, "..", ".."));
+const LBUG_ROOT = path.resolve(path.join(__dirname, "..", ".."));
 const CURRENT_DIR = path.resolve(__dirname);
 const ARCHIVE_PATH = path.resolve(path.join(__dirname, "lbug-source.tar"));
 const PREBUILT_DIR = path.join(CURRENT_DIR, "prebuilt");
 const ARCHIVE_DIR_PATH = path.join(CURRENT_DIR, "package");
-const KUZU_VERSION_TEXT = "Lbug VERSION";
+const LBUG_VERSION_TEXT = "Lbug VERSION";
 
 (async () => {
   console.log("Gathering Lbug source code...");
@@ -18,7 +18,7 @@ const KUZU_VERSION_TEXT = "Lbug VERSION";
       "git",
       ["archive", "--format=tar", "--output=" + ARCHIVE_PATH, "HEAD"],
       {
-        cwd: KUZU_ROOT,
+        cwd: LBUG_ROOT,
       },
       (err) => {
         if (err) {
@@ -89,13 +89,13 @@ const KUZU_VERSION_TEXT = "Lbug VERSION";
 
   // Copy LICENSE to archive
   await fs.copyFile(
-    path.join(KUZU_ROOT, "LICENSE"),
+    path.join(LBUG_ROOT, "LICENSE"),
     path.join(ARCHIVE_DIR_PATH, "LICENSE")
   );
 
   // Copy README.md to archive
   await fs.copyFile(
-    path.join(KUZU_ROOT, "README.md"),
+    path.join(LBUG_ROOT, "README.md"),
     path.join(ARCHIVE_DIR_PATH, "README.md")
   );
 
@@ -151,14 +151,14 @@ const KUZU_VERSION_TEXT = "Lbug VERSION";
   );
 
   const CMakeListsTxt = await fs.readFile(
-    path.join(KUZU_ROOT, "CMakeLists.txt"),
+    path.join(LBUG_ROOT, "CMakeLists.txt"),
     { encoding: "utf-8" }
   );
 
   // Get the version from CMakeLists.txt
   const lines = CMakeListsTxt.split("\n");
   for (const line of lines) {
-    if (line.includes(KUZU_VERSION_TEXT)) {
+    if (line.includes(LBUG_VERSION_TEXT)) {
       const versionSplit = line.split(" ")[2].trim().split(".");
       let version = versionSplit.slice(0, 3).join(".");
       if (versionSplit.length >= 4) {

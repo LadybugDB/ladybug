@@ -23,7 +23,7 @@ namespace catalog {
 
 class CatalogSet;
 class Catalog;
-class KUZU_API TableCatalogEntry : public CatalogEntry {
+class LBUG_API TableCatalogEntry : public CatalogEntry {
 public:
     TableCatalogEntry() = default;
     TableCatalogEntry(CatalogEntryType catalogType, std::string name)

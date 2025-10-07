@@ -8,7 +8,7 @@ namespace testing {
 class OptimizerTest : public DBTest {
 public:
     std::string getInputDir() override {
-        return TestHelper::appendKuzuRootPath("dataset/tinysnb/");
+        return TestHelper::appendLbugRootPath("dataset/tinysnb/");
     }
 
     std::string getEncodedPlan(const std::string& query) {

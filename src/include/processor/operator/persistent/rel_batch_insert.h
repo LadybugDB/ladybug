@@ -16,7 +16,7 @@ struct InMemChunkedCSRHeader;
 
 namespace processor {
 
-struct KUZU_API RelBatchInsertPrintInfo final : OPPrintInfo {
+struct LBUG_API RelBatchInsertPrintInfo final : OPPrintInfo {
     std::string tableName;
 
     explicit RelBatchInsertPrintInfo(std::string tableName) : tableName(std::move(tableName)) {}
@@ -32,14 +32,14 @@ private:
         : OPPrintInfo(other), tableName(other.tableName) {}
 };
 
-struct KUZU_API RelBatchInsertProgressSharedState {
+struct LBUG_API RelBatchInsertProgressSharedState {
     std::atomic<uint64_t> partitionsDone;
     uint64_t partitionsTotal;
 
     RelBatchInsertProgressSharedState() : partitionsDone{0}, partitionsTotal{0} {};
 };
 
-struct KUZU_API RelBatchInsertInfo final : BatchInsertInfo {
+struct LBUG_API RelBatchInsertInfo final : BatchInsertInfo {
     common::RelDataDirection direction;
     common::table_id_t fromTableID, toTableID;
     uint64_t partitioningIdx = UINT64_MAX;
@@ -60,12 +60,12 @@ struct KUZU_API RelBatchInsertInfo final : BatchInsertInfo {
     }
 };
 
-struct KUZU_API RelBatchInsertLocalState final : BatchInsertLocalState {
+struct LBUG_API RelBatchInsertLocalState final : BatchInsertLocalState {
     common::partition_idx_t nodeGroupIdx = common::INVALID_NODE_GROUP_IDX;
     std::unique_ptr<common::DataChunk> dummyAllNullDataChunk;
 };
 
-struct KUZU_API RelBatchInsertExecutionState {
+struct LBUG_API RelBatchInsertExecutionState {
     virtual ~RelBatchInsertExecutionState() = default;
 
     template<class TARGET>
@@ -102,7 +102,7 @@ struct KUZU_API RelBatchInsertExecutionState {
  * Generally, the source data to be copied from should be contained in the partitionerSharedState,
  * which can also be overridden.
  */
-class KUZU_API RelBatchInsertImpl {
+class LBUG_API RelBatchInsertImpl {
 public:
     virtual ~RelBatchInsertImpl() = default;
     virtual std::unique_ptr<RelBatchInsertImpl> copy() = 0;
@@ -119,7 +119,7 @@ public:
         BatchInsertSharedState& sharedState, const RelBatchInsertInfo& relInfo) = 0;
 };
 
-class KUZU_API RelBatchInsert : public BatchInsert {
+class LBUG_API RelBatchInsert : public BatchInsert {
 public:
     RelBatchInsert(std::unique_ptr<BatchInsertInfo> info,
         std::shared_ptr<PartitionerSharedState> partitionerSharedState,

@@ -38,7 +38,7 @@ void CSVConverter::createTableInfo(std::string schemaFile) {
     }
     // This implementation stays as a temporary solution to create copy statements for rel tables
     // We'll switch to use table_info once that function can provide everything needed
-    // table_info is mentioned in this issue https://github.com/kuzudb/lbug/issues/2991
+    // table_info is mentioned in this issue https://github.com/lbugdb/lbug/issues/2991
     std::string line;
     while (getline(file, line)) {
         auto tokens = StringUtils::split(line, " ");
@@ -121,7 +121,7 @@ void CSVConverter::readCopyCommandsFromCSVDataset() {
         auto tokens = StringUtils::split(line, " ");
         auto path = std::filesystem::path(extractPath(tokens[3], '"'));
         auto table = tableNameMap[tokens[1]];
-        table->csvFilePath = TestHelper::appendKuzuRootPath(path.string());
+        table->csvFilePath = TestHelper::appendLbugRootPath(path.string());
         auto outputFileName = path.stem().string() + fileExtension;
         table->outputFilePath = outputDatasetPath + "/" + outputFileName;
     }
@@ -138,8 +138,8 @@ void CSVConverter::createCopyFile() {
     }
     if (fileExtension == ".json") {
 #ifndef __STATIC_LINK_EXTENSION_TEST__
-        outfile << "load extension \"" + TestHelper::appendKuzuRootPath(
-                                             "extension/json/build/libjson.kuzu_extension\"\n");
+        outfile << "load extension \"" + TestHelper::appendLbugRootPath(
+                                             "extension/json/build/libjson.lbug_extension\"\n");
 #endif
     }
     for (auto table : tables) {
@@ -161,7 +161,7 @@ void CSVConverter::convertCSVFiles() {
     if (fileExtension == ".json") {
         auto result = tempConn->query(
             "load extension \"" +
-            TestHelper::appendKuzuRootPath("extension/json/build/libjson.kuzu_extension\""));
+            TestHelper::appendLbugRootPath("extension/json/build/libjson.lbug_extension\""));
         if (!result->isSuccess()) {
             spdlog::error(result->getErrorMessage());
         }

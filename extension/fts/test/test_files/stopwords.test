@@ -53,30 +53,30 @@ doc|docIdx|FTS|[content,author,name]|True|CALL CREATE_FTS_INDEX('doc', 'docIdx',
 
 -INSERT_STATEMENT_BLOCK VALIDATE_SHOW_INDEXES
 
--STATEMENT EXPORT DATABASE '${KUZU_EXPORT_DB_DIRECTORY}_fts/stopwords_export_test'
+-STATEMENT EXPORT DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_fts/stopwords_export_test'
 ---- ok
 -RELOADDB
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_fts/stopwords_export_test"
--STATEMENT IMPORT DATABASE '${KUZU_EXPORT_DB_DIRECTORY}_fts/stopwords_export_test'
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_fts/stopwords_export_test"
+-STATEMENT IMPORT DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_fts/stopwords_export_test'
 ---- ok
 -INSERT_STATEMENT_BLOCK VALIDATE_CITY_STOPWORDS_IDX
 
 -CASE CustomizedStopWordsFile
 -LOAD_DYNAMIC_EXTENSION fts
 -LOG CityStopWordsFile
--STATEMENT CALL CREATE_FTS_INDEX('doc', 'docIdx', ['content', 'author', 'name'], stopWords := '${KUZU_ROOT_DIRECTORY}/dataset/fts-small/city_stopwords.csv', stemmer := 'porter')
+-STATEMENT CALL CREATE_FTS_INDEX('doc', 'docIdx', ['content', 'author', 'name'], stopWords := '${LBUG_ROOT_DIRECTORY}/dataset/fts-small/city_stopwords.csv', stemmer := 'porter')
 ---- ok
 -INSERT_STATEMENT_BLOCK VALIDATE_CITY_STOPWORDS_IDX
 -LOG NameStopWordsFile
--STATEMENT CALL CREATE_FTS_INDEX('doc', 'docIdx1', ['content', 'author', 'name'], stopWords := '${KUZU_ROOT_DIRECTORY}/dataset/fts-small/name_stopwords.csv', stemmer := 'porter')
+-STATEMENT CALL CREATE_FTS_INDEX('doc', 'docIdx1', ['content', 'author', 'name'], stopWords := '${LBUG_ROOT_DIRECTORY}/dataset/fts-small/name_stopwords.csv', stemmer := 'porter')
 ---- ok
 -INSERT_STATEMENT_BLOCK VALIDATE_NAME_STOPWORDS_IDX
 
 -CASE CustomizedStopWordTableError
 -LOAD_DYNAMIC_EXTENSION fts
--STATEMENT CALL CREATE_FTS_INDEX('doc', 'docIdx', ['content', 'author', 'name'], stopWords := '${KUZU_ROOT_DIRECTORY}/dataset/fts-small/city_stopwords1.csv', stemmer := 'porter')
+-STATEMENT CALL CREATE_FTS_INDEX('doc', 'docIdx', ['content', 'author', 'name'], stopWords := '${LBUG_ROOT_DIRECTORY}/dataset/fts-small/city_stopwords1.csv', stemmer := 'porter')
 ---- error
-Binder exception: Given stopwords: '${KUZU_ROOT_DIRECTORY}/dataset/fts-small/city_stopwords1.csv' is not a node table name nor a valid file path.
+Binder exception: Given stopwords: '${LBUG_ROOT_DIRECTORY}/dataset/fts-small/city_stopwords1.csv' is not a node table name nor a valid file path.
 -STATEMENT CALL CREATE_FTS_INDEX('doc', 'docIdx', ['content', 'author', 'name'], stopWords := 'likes', stemmer := 'porter')
 ---- error
 Binder exception: The stop words table must be a node table.
@@ -96,7 +96,7 @@ Binder exception: Given stopwords: 'S3://lbug-test/test123' is not a node table 
 ---- ok
 -STATEMENT CREATE (d:doc {ID: 101, content: '有趣', author: '小红', name: '故事'})
 ---- ok
--STATEMENT CALL CREATE_FTS_INDEX('doc', 'docIdx', ['content', 'author', 'name'], stopWords := '${KUZU_ROOT_DIRECTORY}/dataset/fts-small/utf8_stopwords.csv', stemmer := 'porter')
+-STATEMENT CALL CREATE_FTS_INDEX('doc', 'docIdx', ['content', 'author', 'name'], stopWords := '${LBUG_ROOT_DIRECTORY}/dataset/fts-small/utf8_stopwords.csv', stemmer := 'porter')
 ---- ok
 -STATEMENT CALL QUERY_FTS_INDEX('doc', 'docIdx', '小明 有趣') RETURN node.author, score
 ---- 1

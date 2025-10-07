@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rust/cxx.h"
-#ifdef KUZU_BUNDLED
+#ifdef LBUG_BUNDLED
 #include "main/lbug.h"
 #else
 #include <lbug.hpp>

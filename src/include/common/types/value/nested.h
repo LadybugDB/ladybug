@@ -11,9 +11,9 @@ class Value;
 
 class NestedVal {
 public:
-    KUZU_API static uint32_t getChildrenSize(const Value* val);
+    LBUG_API static uint32_t getChildrenSize(const Value* val);
 
-    KUZU_API static Value* getChildVal(const Value* val, uint32_t idx);
+    LBUG_API static Value* getChildVal(const Value* val, uint32_t idx);
 };
 
 } // namespace common

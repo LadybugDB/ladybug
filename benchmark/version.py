@@ -2,7 +2,7 @@ import os
 
 base_dir = os.path.dirname(os.path.realpath(__file__))
 
-def _get_kuzu_version():
+def _get_lbug_version():
     cmake_file = os.path.join(base_dir, '..', 'CMakeLists.txt')
     with open(cmake_file) as f:
         for line in f:
@@ -11,4 +11,4 @@ def _get_kuzu_version():
     return "0"
 
 if __name__ == "__main__":
-    print(_get_kuzu_version())
+    print(_get_lbug_version())

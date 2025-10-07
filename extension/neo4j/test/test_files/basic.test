@@ -20,7 +20,7 @@
 
 -CASE MigrateFromNeo4jBaseCase
 
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.lbug_extension"
 ---- ok
 
 -STATEMENT CALL NEO4J_MIGRATE("http://localhost:7474", "neo4j", "czy990424", ["Student", "Teacher"], ["KNOWS"]);
@@ -135,7 +135,7 @@ unknown
 
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 0
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.lbug_extension"
 ---- ok
 -STATEMENT CALL NEO4J_MIGRATE("http://localhost:7474", "neo4j", "czy990424", [], []);
 ---- 0
@@ -144,14 +144,14 @@ unknown
 
 
 -CASE MigrateFromBothEmptyNodes
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.lbug_extension"
 ---- ok
 -STATEMENT CALL NEO4J_MIGRATE("http://localhost:7474", "neo4j", "czy990424", [], ["RELTOEMPTY2"]);
 ---- 0
 
 
 -CASE MigrateFromOneEmptyNodes
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.lbug_extension"
 ---- ok
 -STATEMENT CALL NEO4J_MIGRATE("http://localhost:7474", "neo4j", "czy990424", ["Node"], ["RELTOEMPTY2"]);
 ---- 0
@@ -161,7 +161,7 @@ Node
 
 
 -CASE MigrateWithTypesCustomPort
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.lbug_extension"
 ---- ok
 
 -STATEMENT CALL NEO4J_MIGRATE("http://localhost:7474", "neo4j", "czy990424", ["AllTypes"], []);

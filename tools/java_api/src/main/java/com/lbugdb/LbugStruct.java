@@ -3,7 +3,7 @@ package com.lbugdb;
 import java.util.HashMap;
 import java.util.Map;
 
-public class KuzuStruct implements AutoCloseable {
+public class LbugStruct implements AutoCloseable {
     private Value structVal;
 
     /**
@@ -18,7 +18,7 @@ public class KuzuStruct implements AutoCloseable {
      *
      * @param value the value to construct the struct from
      */
-    public KuzuStruct(Value value) {
+    public LbugStruct(Value value) {
         structVal = value;
     }
 
@@ -29,7 +29,7 @@ public class KuzuStruct implements AutoCloseable {
      * @param fields: The fields of the struct, with the keys representing the field
      *                names and the values representing the field values.
      */
-    public KuzuStruct(Map<String, Value> fields) {
+    public LbugStruct(Map<String, Value> fields) {
         if (fields.isEmpty()) {
             structVal = null;
             return;
@@ -55,7 +55,7 @@ public class KuzuStruct implements AutoCloseable {
      * @param fieldNames:  The name of the struct fields
      * @param fieldValues: The values of the struct fields
      */
-    public KuzuStruct(String[] fieldNames, Value[] fieldValues) {
+    public LbugStruct(String[] fieldNames, Value[] fieldValues) {
         if (fieldNames.length != fieldValues.length) {
             structVal = null;
             return;

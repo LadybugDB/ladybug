@@ -10,7 +10,7 @@ namespace storage {
 struct MergedColumnChunkStats;
 
 class ColumnPredicate;
-class KUZU_API ColumnPredicateSet {
+class LBUG_API ColumnPredicateSet {
 public:
     ColumnPredicateSet() = default;
     EXPLICIT_COPY_DEFAULT_MOVE(ColumnPredicateSet);
@@ -33,7 +33,7 @@ private:
     std::vector<std::unique_ptr<ColumnPredicate>> predicates;
 };
 
-class KUZU_API ColumnPredicate {
+class LBUG_API ColumnPredicate {
 public:
     ColumnPredicate(std::string columnName, common::ExpressionType expressionType)
         : columnName{std::move(columnName)}, expressionType(expressionType) {}
@@ -56,7 +56,7 @@ protected:
     common::ExpressionType expressionType;
 };
 
-struct KUZU_API ColumnPredicateUtil {
+struct LBUG_API ColumnPredicateUtil {
     static std::unique_ptr<ColumnPredicate> tryConvert(const binder::Expression& column,
         const binder::Expression& predicate);
 };

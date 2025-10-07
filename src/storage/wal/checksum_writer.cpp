@@ -7,7 +7,7 @@
 #include <bit>
 
 namespace lbug::storage {
-static constexpr uint64_t INITIAL_BUFFER_SIZE = common::KUZU_PAGE_SIZE;
+static constexpr uint64_t INITIAL_BUFFER_SIZE = common::LBUG_PAGE_SIZE;
 
 ChecksumWriter::ChecksumWriter(std::shared_ptr<common::Writer> outputWriter,
     MemoryManager& memoryManager)

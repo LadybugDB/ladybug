@@ -2,35 +2,35 @@
 
 // Helpers
 #if defined _WIN32 || defined __CYGWIN__
-#define KUZU_HELPER_DLL_IMPORT __declspec(dllimport)
-#define KUZU_HELPER_DLL_EXPORT __declspec(dllexport)
-#define KUZU_HELPER_DLL_LOCAL
-#define KUZU_HELPER_DEPRECATED __declspec(deprecated)
+#define LBUG_HELPER_DLL_IMPORT __declspec(dllimport)
+#define LBUG_HELPER_DLL_EXPORT __declspec(dllexport)
+#define LBUG_HELPER_DLL_LOCAL
+#define LBUG_HELPER_DEPRECATED __declspec(deprecated)
 #else
-#define KUZU_HELPER_DLL_IMPORT __attribute__((visibility("default")))
-#define KUZU_HELPER_DLL_EXPORT __attribute__((visibility("default")))
-#define KUZU_HELPER_DLL_LOCAL __attribute__((visibility("hidden")))
-#define KUZU_HELPER_DEPRECATED __attribute__((__deprecated__))
+#define LBUG_HELPER_DLL_IMPORT __attribute__((visibility("default")))
+#define LBUG_HELPER_DLL_EXPORT __attribute__((visibility("default")))
+#define LBUG_HELPER_DLL_LOCAL __attribute__((visibility("hidden")))
+#define LBUG_HELPER_DEPRECATED __attribute__((__deprecated__))
 #endif
 
-#ifdef KUZU_STATIC_DEFINE
-#define KUZU_API
+#ifdef LBUG_STATIC_DEFINE
+#define LBUG_API
 #else
-#ifndef KUZU_API
-#ifdef KUZU_EXPORTS
+#ifndef LBUG_API
+#ifdef LBUG_EXPORTS
 /* We are building this library */
-#define KUZU_API KUZU_HELPER_DLL_EXPORT
+#define LBUG_API LBUG_HELPER_DLL_EXPORT
 #else
 /* We are using this library */
-#define KUZU_API KUZU_HELPER_DLL_IMPORT
+#define LBUG_API LBUG_HELPER_DLL_IMPORT
 #endif
 #endif
 #endif
 
-#ifndef KUZU_DEPRECATED
-#define KUZU_DEPRECATED KUZU_HELPER_DEPRECATED
+#ifndef LBUG_DEPRECATED
+#define LBUG_DEPRECATED LBUG_HELPER_DEPRECATED
 #endif
 
-#ifndef KUZU_DEPRECATED_EXPORT
-#define KUZU_DEPRECATED_EXPORT KUZU_API KUZU_DEPRECATED
+#ifndef LBUG_DEPRECATED_EXPORT
+#define LBUG_DEPRECATED_EXPORT LBUG_API LBUG_DEPRECATED
 #endif

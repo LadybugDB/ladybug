@@ -6,7 +6,7 @@
 namespace lbug {
 namespace common {
 
-class KUZU_API NotImplementedException : public Exception {
+class LBUG_API NotImplementedException : public Exception {
 public:
     explicit NotImplementedException(const std::string& msg) : Exception(msg){};
 };

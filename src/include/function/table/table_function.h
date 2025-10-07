@@ -33,7 +33,7 @@ struct TableFuncBindInput;
 struct TableFuncBindData;
 
 // Shared state
-struct KUZU_API TableFuncSharedState {
+struct LBUG_API TableFuncSharedState {
     common::row_idx_t numRows = 0;
     // This for now is only used for QueryHNSWIndex.
     // TODO(Guodong): This is not a good way to pass semiMasks to QueryHNSWIndex function.
@@ -93,7 +93,7 @@ struct TableFuncOutput {
     void setOutputSize(common::offset_t size) const;
 };
 
-struct KUZU_API TableFuncInitSharedStateInput final {
+struct LBUG_API TableFuncInitSharedStateInput final {
     TableFuncBindData* bindData;
     processor::ExecutionContext* context;
 
@@ -146,7 +146,7 @@ using table_func_get_physical_plan_t = std::function<std::unique_ptr<processor::
 using table_func_infer_input_types =
     std::function<std::vector<common::LogicalType>(const binder::expression_vector&)>;
 
-struct KUZU_API TableFunction final : Function {
+struct LBUG_API TableFunction final : Function {
     table_func_t tableFunc = nullptr;
     table_func_bind_t bindFunc = nullptr;
     table_func_init_shared_t initSharedStateFunc = nullptr;

@@ -34,7 +34,7 @@ jobs:
       - name: Download nightly build
         uses: actions/download-artifact@v4
         with:
-          name: kuzu_cli-linux-x86_64
+          name: lbug_cli-linux-x86_64
 
       - name: Download extensions
         uses: actions/download-artifact@v4
@@ -43,7 +43,7 @@ jobs:
 
       - name: Extract artifacts
         run: |
-          tar xf kuzu_cli-linux-x86_64.tar.gz
+          tar xf lbug_cli-linux-x86_64.tar.gz
 
       - name: Test
         run: gdb --batch -x scripts/test-simsimd-dispatch.py --args ./lbug

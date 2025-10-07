@@ -26,7 +26,7 @@ class RelTable;
 class DiskArrayCollection;
 struct DatabaseHeader;
 
-class KUZU_API StorageManager {
+class LBUG_API StorageManager {
 public:
     StorageManager(const std::string& databasePath, bool readOnly, bool enableChecksums,
         MemoryManager& memoryManager, bool enableCompression, common::VirtualFileSystem* vfs);

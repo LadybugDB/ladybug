@@ -7,7 +7,7 @@
 namespace lbug {
 namespace binder {
 
-struct KUZU_API ExpressionUtil {
+struct LBUG_API ExpressionUtil {
     static expression_vector getExpressionsWithDataType(const expression_vector& expressions,
         common::LogicalTypeID dataTypeID);
 

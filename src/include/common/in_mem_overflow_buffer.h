@@ -15,7 +15,7 @@ class MemoryManager;
 
 namespace common {
 
-struct KUZU_API BufferBlock {
+struct LBUG_API BufferBlock {
 public:
     explicit BufferBlock(std::unique_ptr<storage::MemoryBuffer> block);
     ~BufferBlock();
@@ -30,7 +30,7 @@ public:
     void resetCurrentOffset() { currentOffset = 0; }
 };
 
-class KUZU_API InMemOverflowBuffer {
+class LBUG_API InMemOverflowBuffer {
 
 public:
     explicit InMemOverflowBuffer(storage::MemoryManager* memoryManager)

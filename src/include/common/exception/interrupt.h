@@ -6,7 +6,7 @@
 namespace lbug {
 namespace common {
 
-class KUZU_API InterruptException : public Exception {
+class LBUG_API InterruptException : public Exception {
 public:
     explicit InterruptException() : Exception("Interrupted."){};
 };

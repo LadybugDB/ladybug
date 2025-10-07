@@ -16,7 +16,7 @@ class ClientContext;
 
 namespace function {
 
-struct KUZU_API GDSConfig {
+struct LBUG_API GDSConfig {
     virtual ~GDSConfig() = default;
 
     template<class TARGET>
@@ -25,7 +25,7 @@ struct KUZU_API GDSConfig {
     }
 };
 
-struct KUZU_API GDSBindData : public TableFuncBindData {
+struct LBUG_API GDSBindData : public TableFuncBindData {
     graph::NativeGraphEntry graphEntry;
     binder::expression_vector output;
 
@@ -51,7 +51,7 @@ private:
     std::shared_ptr<processor::FactorizedTable> resultTable;
 };
 
-struct KUZU_API GDSFuncSharedState : public TableFuncSharedState {
+struct LBUG_API GDSFuncSharedState : public TableFuncSharedState {
     std::unique_ptr<graph::Graph> graph;
 
     GDSFuncSharedState(std::shared_ptr<processor::FactorizedTable> fTable,
@@ -69,7 +69,7 @@ private:
 };
 
 // Base class for every graph data science algorithm.
-class KUZU_API GDSFunction {
+class LBUG_API GDSFunction {
     static constexpr char NODE_COLUMN_NAME[] = "node";
     static constexpr char REL_COLUMN_NAME[] = "rel";
 

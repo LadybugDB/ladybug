@@ -5,22 +5,22 @@
 -DEFINE_STATEMENT_BLOCK CREATE_REL_AND_COPY_NODES [
 -STATEMENT create rel table follows (FROM person TO org)
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv";
 ---- ok
--STATEMENT COPY org FROM "${KUZU_ROOT_DIRECTORY}/dataset/primary-key-tests/vOrg.csv";
+-STATEMENT COPY org FROM "${LBUG_ROOT_DIRECTORY}/dataset/primary-key-tests/vOrg.csv";
 ---- ok
--STATEMENT COPY follows FROM "${KUZU_ROOT_DIRECTORY}/dataset/primary-key-tests/eFollows.csv";
+-STATEMENT COPY follows FROM "${LBUG_ROOT_DIRECTORY}/dataset/primary-key-tests/eFollows.csv";
 ---- ok
 ]
 
 -DEFINE_STATEMENT_BLOCK CREATE_REL_AND_COPY_NODES_AND_VALIDATE [
 -STATEMENT create rel table follows (FROM person TO org)
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv";
 ---- ok
--STATEMENT COPY org FROM "${KUZU_ROOT_DIRECTORY}/dataset/primary-key-tests/vOrg.csv";
+-STATEMENT COPY org FROM "${LBUG_ROOT_DIRECTORY}/dataset/primary-key-tests/vOrg.csv";
 ---- ok
--STATEMENT COPY follows FROM "${KUZU_ROOT_DIRECTORY}/dataset/primary-key-tests/eFollows.csv";
+-STATEMENT COPY follows FROM "${LBUG_ROOT_DIRECTORY}/dataset/primary-key-tests/eFollows.csv";
 ---- ok
 -STATEMENT MATCH (p:person)-[:follows]->(o:org) return p.fName, o.ID
 ---- 2

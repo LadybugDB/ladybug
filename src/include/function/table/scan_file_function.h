@@ -41,7 +41,7 @@ struct ScanFileWithProgressSharedState : ScanFileSharedState {
         : ScanFileSharedState{std::move(fileScanInfo), numRows}, context{context}, totalSize{0} {}
 };
 
-struct KUZU_API ScanFileBindData : public TableFuncBindData {
+struct LBUG_API ScanFileBindData : public TableFuncBindData {
     common::FileScanInfo fileScanInfo;
     main::ClientContext* context;
     common::column_id_t numWarningDataColumns = 0;

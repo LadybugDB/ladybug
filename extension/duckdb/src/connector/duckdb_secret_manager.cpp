@@ -5,13 +5,13 @@
 namespace lbug {
 namespace duckdb_extension {
 
-static std::string getDuckDBExtensionOptions(httpfs_extension::S3AuthParams kuzuOptions) {
+static std::string getDuckDBExtensionOptions(httpfs_extension::S3AuthParams lbugOptions) {
     std::string options = "";
-    options.append(common::stringFormat("KEY_ID '{}',", kuzuOptions.accessKeyID));
-    options.append(common::stringFormat("SECRET '{}',", kuzuOptions.secretAccessKey));
-    options.append(common::stringFormat("ENDPOINT '{}',", kuzuOptions.endpoint));
-    options.append(common::stringFormat("URL_STYLE '{}',", kuzuOptions.urlStyle));
-    options.append(common::stringFormat("REGION '{}',", kuzuOptions.region));
+    options.append(common::stringFormat("KEY_ID '{}',", lbugOptions.accessKeyID));
+    options.append(common::stringFormat("SECRET '{}',", lbugOptions.secretAccessKey));
+    options.append(common::stringFormat("ENDPOINT '{}',", lbugOptions.endpoint));
+    options.append(common::stringFormat("URL_STYLE '{}',", lbugOptions.urlStyle));
+    options.append(common::stringFormat("REGION '{}',", lbugOptions.region));
     return options;
 }
 

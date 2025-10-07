@@ -1,19 +1,19 @@
 <div align="center">
   <picture>
-    <source srcset="https://kuzudb.com/img/lbug-logo-dark.png" media="(prefers-color-scheme: dark)">
-    <img src="https://kuzudb.com/img/lbug-logo.png" height="100" alt="Ladybug Logo">
+    <source srcset="https://lbugdb.com/img/lbug-logo-dark.png" media="(prefers-color-scheme: dark)">
+    <img src="https://lbugdb.com/img/lbug-logo.png" height="100" alt="Ladybug Logo">
   </picture>
 </div>
 
 <br>
 
 <p align="center">
-  <a href="https://github.com/kuzudb/lbug/actions">
-    <img src="https://github.com/kuzudb/lbug/actions/workflows/ci-workflow.yml/badge.svg?branch=master" alt="Github Actions Badge"></a>
+  <a href="https://github.com/lbugdb/lbug/actions">
+    <img src="https://github.com/lbugdb/lbug/actions/workflows/ci-workflow.yml/badge.svg?branch=master" alt="Github Actions Badge"></a>
   <a href="https://discord.gg/VtX2gw9Rug">
     <img src="https://img.shields.io/discord/1196510116388806837?logo=discord" alt="discord" /></a>
-  <a href="https://twitter.com/kuzudb">
-    <img src="https://img.shields.io/badge/follow-@kuzudb-1DA1F2?logo=twitter" alt="twitter"></a>
+  <a href="https://twitter.com/lbugdb">
+    <img src="https://img.shields.io/badge/follow-@lbugdb-1DA1F2?logo=twitter" alt="twitter"></a>
 </p>
 
 # Ladybug
@@ -31,7 +31,7 @@ on very large databases and provides a set of retrieval features, such as a full
 - Serializable ACID transactions
 - Wasm (WebAssembly) bindings for fast, secure execution in the browser
 
-Ladybug is being developed by [Kùzu Inc.](https://kuzudb.com/) and 
+Ladybug is being developed by [Kùzu Inc.](https://lbugdb.com/) and 
 is available under a permissible license. So try it out and help us make it better! We welcome your feedback and feature requests.
 
 ## Installation
@@ -41,21 +41,21 @@ is available under a permissible license. So try it out and help us make it bett
 | Python   | `pip install lbug`                                                     |
 | NodeJS   | `npm install lbug`                                                     |
 | Rust     | `cargo add lbug`                                                       |
-| Go       | `go get github.com/kuzudb/go-lbug`                                     |
-| Swift    | [lbug-swift](https://github.com/kuzudb/lbug-swift)                     |
-| Java     | [Maven Central](https://central.sonatype.com/artifact/com.kuzudb/lbug) |
-| C/C++    | [precompiled binaries](https://github.com/kuzudb/lbug/releases/latest) |
-| CLI      | [precompiled binaries](https://github.com/kuzudb/lbug/releases/latest) |
+| Go       | `go get github.com/lbugdb/go-lbug`                                     |
+| Swift    | [lbug-swift](https://github.com/lbugdb/lbug-swift)                     |
+| Java     | [Maven Central](https://central.sonatype.com/artifact/com.lbugdb/lbug) |
+| C/C++    | [precompiled binaries](https://github.com/lbugdb/lbug/releases/latest) |
+| CLI      | [precompiled binaries](https://github.com/lbugdb/lbug/releases/latest) |
 
-To learn more about installation, see our [Installation](https://docs.kuzudb.com/installation) page.
+To learn more about installation, see our [Installation](https://docs.lbugdb.com/installation) page.
 
 ## Getting Started
 
-Refer to our [Getting Started](https://docs.kuzudb.com/get-started/) page for your first example.
+Refer to our [Getting Started](https://docs.lbugdb.com/get-started/) page for your first example.
 
 ## Build from Source
 
-You can build from source using the instructions provided in the [developer guide](https://docs.kuzudb.com/developer-guide).
+You can build from source using the instructions provided in the [developer guide](https://docs.lbugdb.com/developer-guide).
 
 ## Contributing
 We welcome contributions to Ladybug. If you are interested in contributing to Ladybug, please read our [Contributing Guide](CONTRIBUTING.md).
@@ -64,8 +64,8 @@ We welcome contributions to Ladybug. If you are interested in contributing to La
 By contributing to Ladybug, you agree that your contributions will be licensed under the [MIT License](LICENSE).
 
 ## Support 
-We provide professional support for using Ladybug, ensuring timely responses and flexible coverage. Please visit [here](https://kuzudb.com/#support) 
+We provide professional support for using Ladybug, ensuring timely responses and flexible coverage. Please visit [here](https://lbugdb.com/#support) 
 for more information.
 
 ## Contact
-You can contact us at [contact@kuzudb.com](mailto:contact@kuzudb.com) or [join our Discord community](https://discord.gg/VtX2gw9Rug).
+You can contact us at [contact@lbugdb.com](mailto:contact@lbugdb.com) or [join our Discord community](https://discord.gg/VtX2gw9Rug).

@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 from textwrap import dedent
 
-from test_helper import KUZU_ROOT
+from test_helper import LBUG_ROOT
 from conftest import get_db_file_path
 
 
@@ -36,7 +36,7 @@ def test_query_result_close(tmp_path: Path, build_dir: Path) -> None:
             u UUID,
             PRIMARY KEY (ID))
         ''')
-        conn.execute('COPY person FROM "{KUZU_ROOT}/dataset/tinysnb/vPerson.csv" (HEADER=true)')
+        conn.execute('COPY person FROM "{LBUG_ROOT}/dataset/tinysnb/vPerson.csv" (HEADER=true)')
         result = conn.execute("MATCH (a:person) WHERE a.ID = 0 RETURN a.isStudent;")
         # result.close()
     """)

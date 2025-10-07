@@ -36,7 +36,7 @@ target_include_directories(delta_connector PRIVATE
     ${PROJECT_SOURCE_DIR}/extension/httpfs/src/include
 )
 
-target_link_libraries(kuzu_${EXTENSION_LIB_NAME}_extension
+target_link_libraries(lbug_${EXTENSION_LIB_NAME}_extension
         PRIVATE
         ${DuckDB_LIBRARIES}
         delta_connector)

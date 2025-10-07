@@ -55,9 +55,9 @@ void DiskArrayCollection::checkpoint(page_idx_t firstHeaderPage, PageAllocator& 
             ShadowUtils::updatePage(*pageAllocator.getDataFH(), headerPage,
                 true /*writing full page*/, shadowFile, [&](auto* frame) {
                     memcpy(frame, headersForWriteTrx[indexInMemory].get(), sizeof(HeaderPage));
-                    if constexpr (sizeof(HeaderPage) < KUZU_PAGE_SIZE) {
+                    if constexpr (sizeof(HeaderPage) < LBUG_PAGE_SIZE) {
                         // Zero remaining data in the page
-                        std::fill(frame + sizeof(HeaderPage), frame + KUZU_PAGE_SIZE, 0);
+                        std::fill(frame + sizeof(HeaderPage), frame + LBUG_PAGE_SIZE, 0);
                     }
                 });
         }

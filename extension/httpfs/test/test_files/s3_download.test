@@ -13,11 +13,11 @@ random_key_id
 -STATEMENT call current_setting('s3_region') return *;
 ---- 1
 random_region
--STATEMENT CALL s3_access_key_id='kuzuS3keyid'
+-STATEMENT CALL s3_access_key_id='lbugS3keyid'
 ---- ok
 -STATEMENT call current_setting('s3_accesS_key_id') return *;
 ---- 1
-kuzuS3keyid
+lbugS3keyid
 -STATEMENT CALL s3_access_key_id='anotherkey'
 ---- ok
 -STATEMENT call current_setting('s3_access_Key_id') return *;

@@ -365,7 +365,7 @@ void ColumnChunkData::initializeScanState(SegmentState& state, const Column* col
     state.column = column;
     if (residencyState == ResidencyState::ON_DISK) {
         state.metadata = metadata;
-        state.numValuesPerPage = state.metadata.compMeta.numValues(KUZU_PAGE_SIZE, dataType);
+        state.numValuesPerPage = state.metadata.compMeta.numValues(LBUG_PAGE_SIZE, dataType);
 
         state.column->populateExtraChunkState(state);
     }
@@ -1028,7 +1028,7 @@ uint64_t ColumnChunkData::getSizeOnDisk() const {
     if (nullData) {
         nullSize = nullData->getSizeOnDisk();
     }
-    return metadata.getNumDataPages(dataType.getPhysicalType()) * common::KUZU_PAGE_SIZE + nullSize;
+    return metadata.getNumDataPages(dataType.getPhysicalType()) * common::LBUG_PAGE_SIZE + nullSize;
 }
 
 uint64_t ColumnChunkData::getSizeOnDiskInMemoryStats() const {
@@ -1041,7 +1041,7 @@ uint64_t ColumnChunkData::getSizeOnDiskInMemoryStats() const {
     }
     auto metadata = getMetadataFunction(buffer->getBuffer(), numValues,
         inMemoryStats.min.value_or(StorageValue{}), inMemoryStats.max.value_or(StorageValue{}));
-    return metadata.getNumDataPages(dataType.getPhysicalType()) * common::KUZU_PAGE_SIZE + nullSize;
+    return metadata.getNumDataPages(dataType.getPhysicalType()) * common::LBUG_PAGE_SIZE + nullSize;
 }
 
 std::vector<std::unique_ptr<ColumnChunkData>> ColumnChunkData::split(bool targetMaxSize) const {
@@ -1083,9 +1083,9 @@ ColumnChunkData::~ColumnChunkData() = default;
 
 uint64_t ColumnChunkData::getMinimumSizeOnDisk() const {
     if (hasNullData() && nullData->getSizeOnDisk() > 0) {
-        return 2 * KUZU_PAGE_SIZE;
+        return 2 * LBUG_PAGE_SIZE;
     }
-    return KUZU_PAGE_SIZE;
+    return LBUG_PAGE_SIZE;
 }
 
 } // namespace storage

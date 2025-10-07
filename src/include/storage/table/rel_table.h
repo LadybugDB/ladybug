@@ -91,7 +91,7 @@ struct LocalRelTableScanState final : RelTableScanState {
     }
 };
 
-struct KUZU_API RelTableInsertState : TableInsertState {
+struct LBUG_API RelTableInsertState : TableInsertState {
     common::ValueVector& srcNodeIDVector;
     common::ValueVector& dstNodeIDVector;
 
@@ -121,7 +121,7 @@ struct RelTableUpdateState final : TableUpdateState {
           dstNodeIDVector{dstNodeIDVector}, relIDVector{relIDVector} {}
 };
 
-struct KUZU_API RelTableDeleteState final : TableDeleteState {
+struct LBUG_API RelTableDeleteState final : TableDeleteState {
     common::ValueVector& srcNodeIDVector;
     common::ValueVector& dstNodeIDVector;
     common::ValueVector& relIDVector;
@@ -138,7 +138,7 @@ struct KUZU_API RelTableDeleteState final : TableDeleteState {
           relIDVector{relIDVector}, detachDeleteDirection{detachDeleteDirection} {}
 };
 
-class KUZU_API RelTable final : public Table {
+class LBUG_API RelTable final : public Table {
 public:
     using rel_multiplicity_constraint_throw_func_t =
         std::function<void(const std::string&, common::offset_t, common::RelDataDirection)>;

@@ -37,7 +37,7 @@ class Rel:  # noqa: D101
     edge_index: EdgeTensorType | None = None
 
 
-class KuzuGraphStore(GraphStore):  # type: ignore[misc]
+class LbugGraphStore(GraphStore):  # type: ignore[misc]
     """Graph store compatible with `torch_geometric`."""
 
     def __init__(self, db: Database, num_threads: int | None = None):

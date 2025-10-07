@@ -7,7 +7,7 @@
 # Using DATA B from neo4j.cypher
 
 -CASE MigrateFromNeo4jDocSample
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.lbug_extension"
 ---- ok
 -STATEMENT CALL NEO4J_MIGRATE("localhost", "neo4j", "czy990424", ["User", "City"], ["Follows", "LivesIn"]);
 ---- 5
@@ -28,7 +28,7 @@ Follows_User_User|since|INT64|["Long"]
 2022
 
 -CASE MigrateFromNeo4jDocSampleUsingKleeneStar
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.lbug_extension"
 ---- ok
 -STATEMENT CALL NEO4J_MIGRATE("localhost", "neo4j", "czy990424", ["*"], ["*"]);
 ---- 5

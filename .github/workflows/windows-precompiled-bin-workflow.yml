@@ -34,20 +34,20 @@ jobs:
         run: |
           move install\include\lbug.h
           move install\include\lbug.hpp
-          move install\bin\kuzu_shared.dll
-          move install\lib\kuzu_shared.lib
-          move install\bin\kuzu_shell.exe lbug.exe
+          move install\bin\lbug_shared.dll
+          move install\lib\lbug_shared.lib
+          move install\bin\lbug_shell.exe lbug.exe
 
       - uses: actions/upload-artifact@v4
         with:
-          name: libkuzu-windows-x86_64
+          name: liblbug-windows-x86_64
           path: |
             lbug.h
             lbug.hpp
-            kuzu_shared.dll
-            kuzu_shared.lib
+            lbug_shared.dll
+            lbug_shared.lib
 
       - uses: actions/upload-artifact@v4
         with:
-          name: kuzu_cli-windows-x86_64
+          name: lbug_cli-windows-x86_64
           path: lbug.exe

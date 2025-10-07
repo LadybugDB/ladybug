@@ -32,9 +32,9 @@ namespace testing {
 
 TestParser::TestParser(std::string path)
     : path(std::move(path)), testGroup(std::make_unique<TestGroup>()), currentToken() {
-    variableMap.insert({"KUZU_ROOT_DIRECTORY", Value(KUZU_ROOT_DIRECTORY)});
-    variableMap.insert({"KUZU_VERSION", Value(KUZU_VERSION)});
-    variableMap.insert({"KUZU_EXPORT_DB_DIRECTORY", Value(exportDBPath)});
+    variableMap.insert({"LBUG_ROOT_DIRECTORY", Value(LBUG_ROOT_DIRECTORY)});
+    variableMap.insert({"LBUG_VERSION", Value(LBUG_VERSION)});
+    variableMap.insert({"LBUG_EXPORT_DB_DIRECTORY", Value(exportDBPath)});
 }
 
 std::unique_ptr<TestGroup> TestParser::parseTestFile() {
@@ -50,7 +50,7 @@ std::unique_ptr<TestGroup> TestParser::parseTestFile() {
 
 void TestParser::genGroupName() const {
     const std::size_t subStart =
-        TestHelper::appendKuzuRootPath(std::string(TestHelper::E2E_TEST_FILES_DIRECTORY)).length() +
+        TestHelper::appendLbugRootPath(std::string(TestHelper::E2E_TEST_FILES_DIRECTORY)).length() +
         1;
     const std::size_t subEnd = path.find_last_of('.') - 1;
     std::string relPath = path.substr(subStart, subEnd - subStart + 1);
@@ -252,7 +252,7 @@ TestQueryResult TestParser::extractExpectedResultFromToken() {
         nextLine();
         if (line.starts_with("<FILE>:")) {
             queryResult.type = ResultType::CSV_FILE;
-            queryResult.expectedResult.push_back(TestHelper::appendKuzuRootPath(
+            queryResult.expectedResult.push_back(TestHelper::appendLbugRootPath(
                 (std::filesystem::path(TestHelper::TEST_ANSWERS_PATH) / line.substr(7)).string()));
         } else {
             queryResult.type = ResultType::TUPLES;
@@ -414,7 +414,7 @@ TestStatement TestParser::parseStatement(const std::string& testCaseName) {
         case TokenType::BATCH_STATEMENTS: {
             std::string query = paramsToString(1);
             extractConnName(query, statement);
-            statement.batchStatementsCSVFile = TestHelper::appendKuzuRootPath(
+            statement.batchStatementsCSVFile = TestHelper::appendLbugRootPath(
                 (std::filesystem::path(TestHelper::TEST_STATEMENTS_PATH) / query.substr(7))
                     .string());
         } break;
@@ -610,8 +610,8 @@ void TestParser::parseBody() {
             auto extensionName = currentToken.params[1];
             loadExtensionStatement.connName = TestHelper::DEFAULT_CONN_NAME;
             loadExtensionStatement.query =
-                stringFormat("LOAD EXTENSION '{}/extension/{}/build/lib{}.kuzu_extension'",
-                    KUZU_ROOT_DIRECTORY, extensionName, extensionName);
+                stringFormat("LOAD EXTENSION '{}/extension/{}/build/lib{}.lbug_extension'",
+                    LBUG_ROOT_DIRECTORY, extensionName, extensionName);
             loadExtensionStatement.logMessage = "Dynamic load extension: " + extensionName;
             loadExtensionStatement.testResultType = ResultType::OK;
             loadExtensionStatement.result.emplace_back(ResultType::OK, 0,

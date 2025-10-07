@@ -12,7 +12,7 @@ class QueryResult;
 }
 namespace processor {
 
-class KUZU_API Sink : public PhysicalOperator {
+class LBUG_API Sink : public PhysicalOperator {
 public:
     Sink(PhysicalOperatorType operatorType, physical_op_id id,
         std::unique_ptr<OPPrintInfo> printInfo)
@@ -64,7 +64,7 @@ protected:
     std::unique_ptr<ResultSetDescriptor> resultSetDescriptor;
 };
 
-class KUZU_API DummySink final : public Sink {
+class LBUG_API DummySink final : public Sink {
     static constexpr PhysicalOperatorType type_ = PhysicalOperatorType::DUMMY_SINK;
 
 public:

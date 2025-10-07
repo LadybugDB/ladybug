@@ -117,7 +117,7 @@ jobs:
         shell: bash
         run: |
           mkdir docs
-          cd docs && javadoc ../tools/java_api/src/main/java/com/kuzudb/*.java
+          cd docs && javadoc ../tools/java_api/src/main/java/com/lbugdb/*.java
 
       - name: Upload Java docs
         uses: actions/upload-artifact@v4
@@ -164,7 +164,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: kuzudb/api-docs
+          repository: lbugdb/api-docs
           token: ${{ secrets.DOC_PUSH_TOKEN }}
           path: api-docs
         
@@ -218,7 +218,7 @@ jobs:
         run: |
           git checkout -b "api-documentation-update-${{ github.sha }}"
           git config --global user.name "CI User"
-          git config --global user.email "ci@kuzudb.com"
+          git config --global user.email "ci@lbugdb.com"
           git add .
           git commit -m "Update API documentations"
           git push -u origin "api-documentation-update-${{ github.sha }}"

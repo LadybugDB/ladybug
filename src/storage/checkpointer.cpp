@@ -137,7 +137,7 @@ void Checkpointer::writeDatabaseHeader(const DatabaseHeader& header) {
     auto shadowHeader = ShadowUtils::createShadowVersionIfNecessaryAndPinPage(
         common::StorageConstants::DB_HEADER_PAGE_IDX, true /* skipReadingOriginalPage */, *dataFH,
         shadowFile);
-    memcpy(shadowHeader.frame, headerPage.data(), common::KUZU_PAGE_SIZE);
+    memcpy(shadowHeader.frame, headerPage.data(), common::LBUG_PAGE_SIZE);
     shadowFile.getShadowingFH().unpinPage(shadowHeader.shadowPage);
 
     // Update the in-memory database header with the new version
@@ -210,10 +210,10 @@ void Checkpointer::readCheckpoint(main::ClientContext* context, catalog::Catalog
     // database is empty.
     if (currentHeader->catalogPageRange.startPageIdx != common::INVALID_PAGE_IDX) {
         deSer.getReader()->cast<common::BufferedFileReader>()->resetReadOffset(
-            currentHeader->catalogPageRange.startPageIdx * common::KUZU_PAGE_SIZE);
+            currentHeader->catalogPageRange.startPageIdx * common::LBUG_PAGE_SIZE);
         catalog->deserialize(deSer);
         deSer.getReader()->cast<common::BufferedFileReader>()->resetReadOffset(
-            currentHeader->metadataPageRange.startPageIdx * common::KUZU_PAGE_SIZE);
+            currentHeader->metadataPageRange.startPageIdx * common::LBUG_PAGE_SIZE);
         storageManager->deserialize(context, catalog, deSer);
         storageManager->getDataFH()->getPageManager()->deserialize(deSer);
     }

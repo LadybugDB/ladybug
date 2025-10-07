@@ -8,7 +8,7 @@
 namespace lbug {
 namespace common {
 
-class KUZU_API Exception : public std::exception {
+class LBUG_API Exception : public std::exception {
 public:
     explicit Exception(std::string msg);
 

@@ -12,7 +12,7 @@ namespace common {
 
 class FileSystem;
 
-struct KUZU_API FileInfo {
+struct LBUG_API FileInfo {
     FileInfo(std::string path, FileSystem* fileSystem)
         : path{std::move(path)}, fileSystem{fileSystem} {}
 

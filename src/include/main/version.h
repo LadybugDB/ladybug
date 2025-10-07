@@ -11,13 +11,13 @@ public:
      * @brief Get the version of the Lbug library.
      * @return const char* The version of the Lbug library.
      */
-    KUZU_API static const char* getVersion();
+    LBUG_API static const char* getVersion();
 
     /**
      * @brief Get the storage version of the Lbug library.
      * @return uint64_t The storage version of the Lbug library.
      */
-    KUZU_API static uint64_t getStorageVersion();
+    LBUG_API static uint64_t getStorageVersion();
 };
 } // namespace main
 } // namespace lbug

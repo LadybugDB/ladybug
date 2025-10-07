@@ -7,7 +7,7 @@ class PreparedStatement {
    * Internal constructor. Use `Connection.prepare` to get a
    * `PreparedStatement` object.
    * @param {Connection} connection the connection object.
-   * @param {KuzuNative.NodePreparedStatement} preparedStatement the native prepared statement object.
+   * @param {LbugNative.NodePreparedStatement} preparedStatement the native prepared statement object.
    */
   constructor(connection, preparedStatement) {
     assert(

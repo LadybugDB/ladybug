@@ -27,7 +27,7 @@ struct RelTableCatalogInfo {
     static RelTableCatalogInfo deserialize(common::Deserializer& deser);
 };
 
-class KUZU_API RelGroupCatalogEntry final : public TableCatalogEntry {
+class LBUG_API RelGroupCatalogEntry final : public TableCatalogEntry {
     static constexpr CatalogEntryType type_ = CatalogEntryType::REL_GROUP_ENTRY;
 
 public:

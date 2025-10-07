@@ -1,4 +1,4 @@
-add_library(kuzu_delta_function
+add_library(lbug_delta_function
         OBJECT
         delta_scan.cpp
         ${PROJECT_SOURCE_DIR}/extension/duckdb/src/connector/duckdb_result_converter.cpp
@@ -6,5 +6,5 @@ add_library(kuzu_delta_function
         ${PROJECT_SOURCE_DIR}/extension/duckdb/src/function/duckdb_scan.cpp)
 
 set(DELTA_EXTENSION_OBJECT_FILES
-        ${DELTA_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_delta_function>
+        ${DELTA_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:lbug_delta_function>
         PARENT_SCOPE)

@@ -7,7 +7,7 @@ import sys
 
 import psutil
 
-from serializer import _get_kuzu_version
+from serializer import _get_lbug_version
 
 # Get the number of CPUs, try to use sched_getaffinity if available to account
 # for Docker CPU limits
@@ -125,7 +125,7 @@ def run_query(conn, query_spec):
     return execution_time, compiling_time, ram_change, result
 
 
-def run_kuzu(sf, serialized_graph_path, num_threads):
+def run_lbug(sf, serialized_graph_path, num_threads):
     db = lbug.Database(os.path.join(serialized_graph_path, "db.lbug"))
     conn = lbug.Connection(db, num_threads=num_threads)
     if timeout is not None:
@@ -149,7 +149,7 @@ def run_kuzu(sf, serialized_graph_path, num_threads):
                         "Query timed out after " + str(timeout / 1000) + " seconds"
                     )
                     results_file.write(
-                        f"KuzuDB\t{i}\t{num_threads} threads\t{sf}\tTimeout\tNA\tNA\t\n"
+                        f"LbugDB\t{i}\t{num_threads} threads\t{sf}\tTimeout\tNA\tNA\t\n"
                     )
                     results_file.flush()
                     continue
@@ -194,7 +194,7 @@ def run_kuzu(sf, serialized_graph_path, num_threads):
 
                 # Upload the result
                 results_file.write(
-                    f"KuzuDB\t{i}\t{num_threads} threads\t{sf}\t{execution_time / 1000:.4f}\t{memory / (1024 ** 3):.2f} GB\t{result[0]}\n"
+                    f"LbugDB\t{i}\t{num_threads} threads\t{sf}\t{execution_time / 1000:.4f}\t{memory / (1024 ** 3):.2f} GB\t{result[0]}\n"
                 )
                 results_file.flush()
 
@@ -211,7 +211,7 @@ if __name__ == "__main__":
         ],
     )
     logging.info("Running benchmark for scale factor %s", scale_factor)
-    logging.info("Database version: %s", _get_kuzu_version())
+    logging.info("Database version: %s", _get_lbug_version())
     logging.info("CPU cores: %d", cpu_count)
     logging.info("Using %s threads", threads)
     logging.info("Total memory: %d GiB", max_memory / 1024**3)
@@ -225,5 +225,5 @@ if __name__ == "__main__":
     serialize_dataset(dataset_name)
 
     logging.info("Running benchmark...")
-    run_kuzu(scale_factor, serialized_graphs_path[dataset_name], threads)
+    run_lbug(scale_factor, serialized_graphs_path[dataset_name], threads)
     logging.info("Benchmark finished")

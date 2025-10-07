@@ -54,7 +54,7 @@ private:
           hasParent{other.hasParent} {}
 };
 
-struct KUZU_API BoundExtraCreateTableInfo : BoundExtraCreateCatalogEntryInfo {
+struct LBUG_API BoundExtraCreateTableInfo : BoundExtraCreateCatalogEntryInfo {
     std::vector<PropertyDefinition> propertyDefinitions;
 
     explicit BoundExtraCreateTableInfo(std::vector<PropertyDefinition> propertyDefinitions)

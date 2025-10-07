@@ -6,11 +6,11 @@
 namespace lbug {
 namespace binder {
 
-struct KUZU_API AttachOption {
+struct LBUG_API AttachOption {
     common::case_insensitive_map_t<common::Value> options;
 };
 
-struct KUZU_API AttachInfo {
+struct LBUG_API AttachInfo {
     AttachInfo(std::string dbPath, std::string dbAlias, std::string dbType, AttachOption options)
         : dbPath{std::move(dbPath)}, dbAlias{std::move(dbAlias)}, dbType{std::move(dbType)},
           options{std::move(options)} {}

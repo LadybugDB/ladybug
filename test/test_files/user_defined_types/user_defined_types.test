@@ -72,7 +72,7 @@ Binder exception: Duplicated type name: DESCRIPTION.
 3
 -STATEMENT CREATE NODE TABLE PERSON (ID SMALLINT, AGE BIGINT, primary key(ID))
 ---- ok
--STATEMENT COPY PERSON FROM '${KUZU_ROOT_DIRECTORY}/dataset/udt/vPerson.csv'
+-STATEMENT COPY PERSON FROM '${LBUG_ROOT_DIRECTORY}/dataset/udt/vPerson.csv'
 ---- ok
 -STATEMENT MATCH (p:PERSON) return p.*;
 ---- 3
@@ -81,14 +81,14 @@ Binder exception: Duplicated type name: DESCRIPTION.
 8|100
 -STATEMENT CREATE TYPE HEIGHT AS STRING;
 ---- ok
--STATEMENT LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/udt/vMovies.csv" (header = true) RETURN size(height), preference
+-STATEMENT LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/udt/vMovies.csv" (header = true) RETURN size(height), preference
 ---- 3
 3|200
 2|55
 2|33
 -STATEMENT CREATE TYPE GENDER AS BOOL;
 ---- ok
--STATEMENT LOAD WITH HEADERS (height HEIGHT, gender GENDER) FROM "${KUZU_ROOT_DIRECTORY}/dataset/udt/no_header.csv" WHERE gender=true RETURN size(height)
+-STATEMENT LOAD WITH HEADERS (height HEIGHT, gender GENDER) FROM "${LBUG_ROOT_DIRECTORY}/dataset/udt/no_header.csv" WHERE gender=true RETURN size(height)
 ---- 2
 4
 2

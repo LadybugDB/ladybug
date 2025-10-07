@@ -6,7 +6,7 @@
 namespace lbug {
 namespace binder {
 
-class KUZU_API BoundReadingClause {
+class LBUG_API BoundReadingClause {
 public:
     explicit BoundReadingClause(common::ClauseType clauseType) : clauseType{clauseType} {}
     DELETE_COPY_DEFAULT_MOVE(BoundReadingClause);

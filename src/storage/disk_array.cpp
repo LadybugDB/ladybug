@@ -27,8 +27,8 @@ static PageCursor getAPIdxAndOffsetInAP(const PageStorageInfo& info, uint64_t id
 
 PageStorageInfo::PageStorageInfo(uint64_t elementSize)
     : alignedElementSize{std::bit_ceil(elementSize)},
-      numElementsPerPage{KUZU_PAGE_SIZE / alignedElementSize} {
-    KU_ASSERT(elementSize <= KUZU_PAGE_SIZE);
+      numElementsPerPage{LBUG_PAGE_SIZE / alignedElementSize} {
+    KU_ASSERT(elementSize <= LBUG_PAGE_SIZE);
 }
 
 PIPWrapper::PIPWrapper(const FileHandle& fileHandle, page_idx_t pipPageIdx)
@@ -389,7 +389,7 @@ void BlockVectorInternal::resize(uint64_t newNumElements,
     uint64_t newNumArrayPages = getNumArrayPagesNeededForElements(newNumElements);
     for (auto i = oldNumArrayPages; i < newNumArrayPages; ++i) {
         inMemArrayPages.emplace_back(
-            memoryManager.allocateBuffer(true /*initializeToZero*/, KUZU_PAGE_SIZE));
+            memoryManager.allocateBuffer(true /*initializeToZero*/, LBUG_PAGE_SIZE));
     }
     for (uint64_t i = 0; i < newNumElements - oldNumElements; i++) {
         auto* dest = operator[](oldNumElements + i);

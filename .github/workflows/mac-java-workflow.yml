@@ -33,7 +33,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: java-lib-osx-arm64
-          path: tools/java_api/build/libkuzu_java_native*
+          path: tools/java_api/build/liblbug_java_native*
 
   build-mac-java-x86:
     runs-on: self-hosted-mac-x64
@@ -57,4 +57,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: java-lib-osx-x86_64
-          path: tools/java_api/build/libkuzu_java_native*
+          path: tools/java_api/build/liblbug_java_native*

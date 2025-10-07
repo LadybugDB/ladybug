@@ -7,10 +7,10 @@
 199999|199999
 
 -CASE ExportLargeSerial
--STATEMENT EXPORT DATABASE '${KUZU_EXPORT_DB_DIRECTORY}_large-serial/serial' (format='parquet');
+-STATEMENT EXPORT DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_large-serial/serial' (format='parquet');
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_large-serial/serial"
--STATEMENT IMPORT DATABASE '${KUZU_EXPORT_DB_DIRECTORY}_large-serial/serial';
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_large-serial/serial"
+-STATEMENT IMPORT DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_large-serial/serial';
 ---- ok
 -STATEMENT match (s:serialtable) RETURN max(s.ID), max(s.ID2);
 ---- 1

@@ -3,11 +3,11 @@
 --
 
 -CASE InvalidUTF8
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-utf8/invalid-utf8.csv"
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-utf8/invalid-utf8.csv"
 ---- error(regex)
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-utf8/invalid-utf8\.csv on line 1: Invalid UTF8-encoded string\. Line/record containing the error: '.'
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-utf8/invalid-utf8\.csv on line 1: Invalid UTF8-encoded string\. Line/record containing the error: '.'
 
 -CASE InvalidUTF8IgnoreErrors
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-utf8/invalid-utf8.csv"(IGNORE_ERRORS=true)
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-utf8/invalid-utf8.csv"(IGNORE_ERRORS=true)
 ---- error(regex)
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-utf8/invalid-utf8\.csv on line 1: Invalid UTF8-encoded string\. Line/record containing the error: '.'
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-utf8/invalid-utf8\.csv on line 1: Invalid UTF8-encoded string\. Line/record containing the error: '.'

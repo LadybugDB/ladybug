@@ -6,13 +6,13 @@ import shutil
 import subprocess
 import sys
 
-from version import _get_kuzu_version
+from version import _get_lbug_version
 
 base_dir = os.path.dirname(os.path.realpath(__file__))
 
-def serialize(kuzu_exec_path, dataset_name, dataset_path, serialized_graph_path, benchmark_copy_log_dir,
+def serialize(lbug_exec_path, dataset_name, dataset_path, serialized_graph_path, benchmark_copy_log_dir,
               single_thread: bool = False):
-    bin_version = _get_kuzu_version()
+    bin_version = _get_lbug_version()
 
     if os.path.exists(os.path.join(serialized_graph_path, 'version.txt')):
         with open(os.path.join(serialized_graph_path, 'version.txt'), encoding="utf-8") as f:
@@ -57,7 +57,7 @@ def serialize(kuzu_exec_path, dataset_name, dataset_path, serialized_graph_path,
         # created for each query to avoid memory leaks.
         stdout = sys.stdout if create_match or not benchmark_copy_log_dir else subprocess.PIPE
         db_path = os.path.join(serialized_graph_path, 'db.kz')
-        process = subprocess.Popen([kuzu_exec_path, db_path],
+        process = subprocess.Popen([lbug_exec_path, db_path],
                                    stdin=subprocess.PIPE, stdout=stdout, encoding="utf-8")
         process.stdin.write(s)
         process.stdin.close()
@@ -96,18 +96,18 @@ if __name__ == '__main__':
                         help="If true, copy single threaded, which makes the results more reproducible",
                         action="store_true")
     if sys.platform == "win32":
-        default_kuzu_exec_path = os.path.join(
-            base_dir, '..', 'build', 'release', 'tools', 'shell', 'kuzu_shell')
+        default_lbug_exec_path = os.path.join(
+            base_dir, '..', 'build', 'release', 'tools', 'shell', 'lbug_shell')
     else:
-        default_kuzu_exec_path = os.path.join(
+        default_lbug_exec_path = os.path.join(
             base_dir, '..', 'build', 'release', 'tools', 'shell', 'lbug')
     parser.add_argument("--lbug-shell",
                         help="Path of the lbug shell executable. Defaults to the path as built in the default release build directory",
-                        default=default_kuzu_exec_path)
+                        default=default_lbug_exec_path)
     args = parser.parse_args()
 
     try:
-        serialize(args.kuzu_shell, args.dataset_name, args.dataset_path, args.serialized_graph_path,
+        serialize(args.lbug_shell, args.dataset_name, args.dataset_path, args.serialized_graph_path,
                   args.benchmark_copy_log_dir, args.single_thread)
     except Exception as e:
         logging.error(f'Error serializing dataset {args.dataset_name}')

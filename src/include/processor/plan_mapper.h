@@ -71,12 +71,12 @@ public:
     }
 
     // Assume scans all columns of table in the same order as given expressions.
-    KUZU_API std::unique_ptr<PhysicalOperator> createFTableScanAligned(
+    LBUG_API std::unique_ptr<PhysicalOperator> createFTableScanAligned(
         const binder::expression_vector& exprs, const planner::Schema* schema,
         std::shared_ptr<FactorizedTable> table, uint64_t maxMorselSize,
         physical_op_vector_t children);
 
-    KUZU_API std::unique_ptr<PhysicalOperator> mapOperator(
+    LBUG_API std::unique_ptr<PhysicalOperator> mapOperator(
         const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapAccumulate(
         const planner::LogicalOperator* logicalOperator);

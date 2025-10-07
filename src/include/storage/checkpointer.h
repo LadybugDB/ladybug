@@ -17,14 +17,14 @@ namespace testing {
 struct FSMLeakChecker;
 }
 namespace main {
-class AttachedKuzuDatabase;
+class AttachedLbugDatabase;
 } // namespace main
 
 namespace storage {
 class StorageManager;
 
 class Checkpointer {
-    friend class main::AttachedKuzuDatabase;
+    friend class main::AttachedLbugDatabase;
     friend struct testing::FSMLeakChecker;
 
 public:

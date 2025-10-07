@@ -4,11 +4,11 @@
 
 -CASE GCSOption
 -LOAD_DYNAMIC_EXTENSION httpfs
--STATEMENT CALL gcs_access_key_id='kuzuGCSkeyid'
+-STATEMENT CALL gcs_access_key_id='lbugGCSkeyid'
 ---- ok
 -STATEMENT call current_setting('gcs_accesS_key_id') return *;
 ---- 1
-kuzuGCSkeyid
+lbugGCSkeyid
 -STATEMENT CALL gcs_access_key_id='anotherkey'
 ---- ok
 -STATEMENT call current_setting('gcs_access_Key_id') return *;
@@ -32,13 +32,13 @@ Binder exception: Invalid option name: gcs_region.
 ---- ok
 -STATEMENT CALL gcs_secret_access_key='${GCS_SECRET_ACCESS_KEY}'
 ---- ok
--STATEMENT load from 'gs://kuzudb-test/user.csv' return *;
+-STATEMENT load from 'gs://lbugdb-test/user.csv' return *;
 ---- 4
 Adam|30
 Karissa|40
 Noura|25
 Zhang|50
--STATEMENT load from 'gs://kuzudb-test/follows.parquet' return *;
+-STATEMENT load from 'gs://lbugdb-test/follows.parquet' return *;
 ---- 4
 Adam|Karissa|2020
 Adam|Zhang|2020
@@ -49,13 +49,13 @@ Zhang|Noura|2022
 ---- ok
 -STATEMENT BEGIN TRANSACTION
 ---- ok
--STATEMENT load from 'gs://kuzudb-test/user.csv' return *;
+-STATEMENT load from 'gs://lbugdb-test/user.csv' return *;
 ---- 4
 Adam|30
 Karissa|40
 Noura|25
 Zhang|50
--STATEMENT load from 'gs://kuzudb-test/user.csv' return *;
+-STATEMENT load from 'gs://lbugdb-test/user.csv' return *;
 ---- 4
 Adam|30
 Karissa|40

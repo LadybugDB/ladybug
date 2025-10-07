@@ -4,7 +4,7 @@ The `shell_runner.cpp` file is the starting point for the shell program. This fi
 
 For the shell flags, we use this c++ [args](https://taywee.github.io/args/) library. This allows us to easily define different types of flags. The main types we use are `Positional`, `HelpFlag`, `ValueFlag` and `Flag`. 
 ```c++
-args::ArgumentParser  parser("KuzuDB Shell");
+args::ArgumentParser  parser("LbugDB Shell");
 args::Positional<std::string> inputDirFlag(parser, "databasePath",
 "Path to the database. If not given or set to \":memory:\", the database will be opened "
 "under in-memory mode.");

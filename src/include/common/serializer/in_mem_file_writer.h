@@ -37,7 +37,7 @@ public:
     void flush(Writer& writer) const;
 
     uint64_t getSize() const override {
-        uint64_t size = pages.size() > 1 ? KUZU_PAGE_SIZE * (pages.size() - 1) : 0;
+        uint64_t size = pages.size() > 1 ? LBUG_PAGE_SIZE * (pages.size() - 1) : 0;
         return size + pageOffset;
     }
 

@@ -475,7 +475,7 @@ public:
     }
     void reclaimStorage(PageAllocator& pageAllocator) const;
 
-    static KUZU_API std::unique_ptr<Index> load(main::ClientContext* context,
+    static LBUG_API std::unique_ptr<Index> load(main::ClientContext* context,
         StorageManager* storageManager, IndexInfo indexInfo, std::span<uint8_t> storageInfoBuffer);
 
     static IndexType getIndexType() {

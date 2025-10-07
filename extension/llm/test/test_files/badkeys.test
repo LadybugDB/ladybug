@@ -5,7 +5,7 @@
 #For this test, we should disable access to all required keys
 
 -CASE BadAmazonKeys
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/llm/build/libllm.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/llm/build/libllm.lbug_extension"
 ---- ok
 
 -STATEMENT return create_embedding('Hello World', 'amazon-bedrock', 'amazon.titan-embed-text-v1', 'us-east-1');
@@ -13,7 +13,7 @@
 ^Connection exception: Request failed with status \d{3}\n Body: \{[\s\S]+\}[\s\S]*
 
 -CASE BadGoogleGeminiKey
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/llm/build/libllm.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/llm/build/libllm.lbug_extension"
 ---- ok
 
 -STATEMENT return create_embedding('Hello World', 'google-gemini', 'gemini-embedding-exp-03-07');
@@ -21,7 +21,7 @@
 ^Connection exception: Request failed with status \d{3}\n Body: \{[\s\S]+\}[\s\S]*
 
 -CASE BadGoogleVertexKey
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/llm/build/libllm.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/llm/build/libllm.lbug_extension"
 ---- ok
 
 -STATEMENT return create_embedding('Hello World', 'google-vertex', 'gemini-embedding-001', 'us-central-1');
@@ -29,7 +29,7 @@
 ^Connection exception: Request failed with status \d{3}\n Body: \{[\s\S]+\}[\s\S]*
 
 -CASE BadOpenAIKey
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/llm/build/libllm.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/llm/build/libllm.lbug_extension"
 ---- ok
 
 -STATEMENT return create_embedding('Hello World', 'open-ai', 'text-embedding-3-small');
@@ -37,7 +37,7 @@
 ^Connection exception: Request failed with status \d{3}\n Body: \{[\s\S]+\}[\s\S]*
 
 -CASE BadVoyageAIKey
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/llm/build/libllm.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/llm/build/libllm.lbug_extension"
 ---- ok
 
 -STATEMENT return create_embedding('Hello World', 'voyage-ai', 'voyage-3-large');

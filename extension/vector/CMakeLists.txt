@@ -12,6 +12,6 @@ add_subdirectory(test)
 
 build_extension_lib(${BUILD_STATIC_EXTENSION} "vector")
 
-target_link_libraries(kuzu_${EXTENSION_LIB_NAME}_extension
+target_link_libraries(lbug_${EXTENSION_LIB_NAME}_extension
         PRIVATE
         simsimd)

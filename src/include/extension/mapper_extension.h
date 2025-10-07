@@ -6,7 +6,7 @@
 namespace lbug {
 namespace extension {
 
-class KUZU_API MapperExtension {
+class LBUG_API MapperExtension {
 public:
     MapperExtension() {}
 

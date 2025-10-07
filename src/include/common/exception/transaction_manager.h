@@ -6,7 +6,7 @@
 namespace lbug {
 namespace common {
 
-class KUZU_API TransactionManagerException : public Exception {
+class LBUG_API TransactionManagerException : public Exception {
 public:
     explicit TransactionManagerException(const std::string& msg) : Exception(msg){};
 };

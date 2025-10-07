@@ -6,4 +6,4 @@ for politeness and where a person you bumped into on the road will likely
 apologize to you even if it was your fault: so, again, we ask you to please be
 kind and respectful to everyone on this GitHub.
 If you prefer not to discuss something through open issues and discussions,
-you can always reach us through [email](mailto:contact@kuzudb.com).
+you can always reach us through [email](mailto:contact@lbugdb.com).

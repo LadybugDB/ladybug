@@ -12,7 +12,7 @@ using namespace lbug::common;
 class CApiVersionTest : public CApiTest {
 public:
     std::string getInputDir() override {
-        return TestHelper::appendKuzuRootPath("dataset/tinysnb/");
+        return TestHelper::appendLbugRootPath("dataset/tinysnb/");
     }
 
     void TearDown() override { APIDBTest::TearDown(); }
@@ -24,22 +24,22 @@ public:
 };
 
 TEST_F(EmptyCApiVersionTest, GetVersion) {
-    kuzu_connection_destroy(&connection);
-    kuzu_database_destroy(&_database);
-    auto version = kuzu_get_version();
+    lbug_connection_destroy(&connection);
+    lbug_database_destroy(&_database);
+    auto version = lbug_get_version();
     ASSERT_NE(version, nullptr);
-    ASSERT_STREQ(version, KUZU_CMAKE_VERSION);
-    kuzu_destroy_string(version);
+    ASSERT_STREQ(version, LBUG_CMAKE_VERSION);
+    lbug_destroy_string(version);
 }
 
 TEST_F(CApiVersionTest, GetStorageVersion) {
-    auto storageVersion = kuzu_get_storage_version();
+    auto storageVersion = lbug_get_storage_version();
     if (inMemMode) {
         GTEST_SKIP();
     }
     // Reset the database to ensure that the lock on db file is released.
-    kuzu_connection_destroy(&connection);
-    kuzu_database_destroy(&_database);
+    lbug_connection_destroy(&connection);
+    lbug_database_destroy(&_database);
     auto data = std::filesystem::path(databasePath);
     std::ifstream dbFile;
     dbFile.open(data, std::ios::binary);
@@ -55,13 +55,13 @@ TEST_F(CApiVersionTest, GetStorageVersion) {
 }
 
 TEST_F(EmptyCApiVersionTest, GetStorageVersion) {
-    auto storageVersion = kuzu_get_storage_version();
+    auto storageVersion = lbug_get_storage_version();
     if (inMemMode) {
         GTEST_SKIP();
     }
     // Reset the database to ensure that the lock on db file is released.
-    kuzu_connection_destroy(&connection);
-    kuzu_database_destroy(&_database);
+    lbug_connection_destroy(&connection);
+    lbug_database_destroy(&_database);
     auto data = std::filesystem::path(databasePath);
     std::ifstream dbFile;
     dbFile.open(data, std::ios::binary);

@@ -37,11 +37,11 @@ jobs:
 
       - name: Set checkout dir
         run: |
-          echo "KUZU_DIR=$(pwd)" >> $GITHUB_ENV
+          echo "LBUG_DIR=$(pwd)" >> $GITHUB_ENV
 
       - name: Set CSV dir
         run: |
-          echo "KUZU_CSV_DIR=$CSV_DIR/interactive-v1-dataset/social_network-sf${SCALE_FACTOR}-CsvComposite-LongDateFormatter/" >> $GITHUB_ENV
+          echo "LBUG_CSV_DIR=$CSV_DIR/interactive-v1-dataset/social_network-sf${SCALE_FACTOR}-CsvComposite-LongDateFormatter/" >> $GITHUB_ENV
 
       - uses: actions/checkout@v4
 
@@ -64,7 +64,7 @@ jobs:
       - name: Clone implementation
         uses: actions/checkout@v4
         with:
-          repository: kuzudb/ldbc_snb_interactive_v1_impl
+          repository: lbugdb/ldbc_snb_interactive_v1_impl
           token: ${{ secrets.DOC_PUSH_TOKEN }}
           path: ldbc_snb_interactive_v1_impl
 
@@ -72,7 +72,7 @@ jobs:
         working-directory: ldbc_snb_interactive_v1_impl
         run: |
           mkdir -p lbug/src/main/resources
-          ln -s $KUZU_DIR/tools/java_api/build/kuzu_java.jar lbug/src/main/resources/kuzu_java.jar
+          ln -s $LBUG_DIR/tools/java_api/build/lbug_java.jar lbug/src/main/resources/lbug_java.jar
           mvn clean package -DskipTests
 
       - name: Load database
@@ -83,7 +83,7 @@ jobs:
       - name: Run benchmark
         working-directory: ldbc_snb_interactive_v1_impl/lbug
         run: |
-          echo "ldbc.snb.interactive.updates_dir=${KUZU_CSV_DIR}" >> driver/benchmark.properties
+          echo "ldbc.snb.interactive.updates_dir=${LBUG_CSV_DIR}" >> driver/benchmark.properties
           echo "ldbc.snb.interactive.parameters_dir=$CSV_DIR/interactive-v1-dataset/substitution_parameters-sf${SCALE_FACTOR}/" >> driver/benchmark.properties
           driver/benchmark.sh | tee LDBC-SNB.log
 

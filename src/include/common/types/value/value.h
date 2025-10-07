@@ -35,172 +35,172 @@ public:
     /**
      * @return a NULL value of ANY type.
      */
-    KUZU_API static Value createNullValue();
+    LBUG_API static Value createNullValue();
     /**
      * @param dataType the type of the NULL value.
      * @return a NULL value of the given type.
      */
-    KUZU_API static Value createNullValue(const LogicalType& dataType);
+    LBUG_API static Value createNullValue(const LogicalType& dataType);
     /**
      * @param dataType the type of the non-NULL value.
      * @return a default non-NULL value of the given type.
      */
-    KUZU_API static Value createDefaultValue(const LogicalType& dataType);
+    LBUG_API static Value createDefaultValue(const LogicalType& dataType);
     /**
      * @param val_ the boolean value to set.
      */
-    KUZU_API explicit Value(bool val_);
+    LBUG_API explicit Value(bool val_);
     /**
      * @param val_ the int8_t value to set.
      */
-    KUZU_API explicit Value(int8_t val_);
+    LBUG_API explicit Value(int8_t val_);
     /**
      * @param val_ the int16_t value to set.
      */
-    KUZU_API explicit Value(int16_t val_);
+    LBUG_API explicit Value(int16_t val_);
     /**
      * @param val_ the int32_t value to set.
      */
-    KUZU_API explicit Value(int32_t val_);
+    LBUG_API explicit Value(int32_t val_);
     /**
      * @param val_ the int64_t value to set.
      */
-    KUZU_API explicit Value(int64_t val_);
+    LBUG_API explicit Value(int64_t val_);
     /**
      * @param val_ the uint8_t value to set.
      */
-    KUZU_API explicit Value(uint8_t val_);
+    LBUG_API explicit Value(uint8_t val_);
     /**
      * @param val_ the uint16_t value to set.
      */
-    KUZU_API explicit Value(uint16_t val_);
+    LBUG_API explicit Value(uint16_t val_);
     /**
      * @param val_ the uint32_t value to set.
      */
-    KUZU_API explicit Value(uint32_t val_);
+    LBUG_API explicit Value(uint32_t val_);
     /**
      * @param val_ the uint64_t value to set.
      */
-    KUZU_API explicit Value(uint64_t val_);
+    LBUG_API explicit Value(uint64_t val_);
     /**
      * @param val_ the int128_t value to set.
      */
-    KUZU_API explicit Value(int128_t val_);
+    LBUG_API explicit Value(int128_t val_);
     /**
      * @param val_ the UUID value to set.
      */
-    KUZU_API explicit Value(ku_uuid_t val_);
+    LBUG_API explicit Value(ku_uuid_t val_);
     /**
      * @param val_ the double value to set.
      */
-    KUZU_API explicit Value(double val_);
+    LBUG_API explicit Value(double val_);
     /**
      * @param val_ the float value to set.
      */
-    KUZU_API explicit Value(float val_);
+    LBUG_API explicit Value(float val_);
     /**
      * @param val_ the date value to set.
      */
-    KUZU_API explicit Value(date_t val_);
+    LBUG_API explicit Value(date_t val_);
     /**
      * @param val_ the timestamp_ns value to set.
      */
-    KUZU_API explicit Value(timestamp_ns_t val_);
+    LBUG_API explicit Value(timestamp_ns_t val_);
     /**
      * @param val_ the timestamp_ms value to set.
      */
-    KUZU_API explicit Value(timestamp_ms_t val_);
+    LBUG_API explicit Value(timestamp_ms_t val_);
     /**
      * @param val_ the timestamp_sec value to set.
      */
-    KUZU_API explicit Value(timestamp_sec_t val_);
+    LBUG_API explicit Value(timestamp_sec_t val_);
     /**
      * @param val_ the timestamp_tz value to set.
      */
-    KUZU_API explicit Value(timestamp_tz_t val_);
+    LBUG_API explicit Value(timestamp_tz_t val_);
     /**
      * @param val_ the timestamp value to set.
      */
-    KUZU_API explicit Value(timestamp_t val_);
+    LBUG_API explicit Value(timestamp_t val_);
     /**
      * @param val_ the interval value to set.
      */
-    KUZU_API explicit Value(interval_t val_);
+    LBUG_API explicit Value(interval_t val_);
     /**
      * @param val_ the internalID value to set.
      */
-    KUZU_API explicit Value(internalID_t val_);
+    LBUG_API explicit Value(internalID_t val_);
     /**
      * @param val_ the string value to set.
      */
-    KUZU_API explicit Value(const char* val_);
+    LBUG_API explicit Value(const char* val_);
     /**
      * @param val_ the string value to set.
      */
-    KUZU_API explicit Value(const std::string& val_);
+    LBUG_API explicit Value(const std::string& val_);
     /**
      * @param val_ the uint8_t* value to set.
      */
-    KUZU_API explicit Value(uint8_t* val_);
+    LBUG_API explicit Value(uint8_t* val_);
     /**
      * @param type the logical type of the value.
      * @param val_ the string value to set.
      */
-    KUZU_API explicit Value(LogicalType type, std::string val_);
+    LBUG_API explicit Value(LogicalType type, std::string val_);
     /**
      * @param dataType the logical type of the value.
      * @param children a vector of children values.
      */
-    KUZU_API explicit Value(LogicalType dataType, std::vector<std::unique_ptr<Value>> children);
+    LBUG_API explicit Value(LogicalType dataType, std::vector<std::unique_ptr<Value>> children);
     /**
      * @param other the value to copy from.
      */
-    KUZU_API Value(const Value& other);
+    LBUG_API Value(const Value& other);
 
     /**
      * @param other the value to move from.
      */
-    KUZU_API Value(Value&& other) = default;
-    KUZU_API Value& operator=(Value&& other) = default;
-    KUZU_API bool operator==(const Value& rhs) const;
+    LBUG_API Value(Value&& other) = default;
+    LBUG_API Value& operator=(Value&& other) = default;
+    LBUG_API bool operator==(const Value& rhs) const;
 
     /**
      * @brief Sets the data type of the Value.
      * @param dataType_ the data type to set to.
      */
-    KUZU_API void setDataType(const LogicalType& dataType_);
+    LBUG_API void setDataType(const LogicalType& dataType_);
     /**
      * @return the dataType of the value.
      */
-    KUZU_API const LogicalType& getDataType() const;
+    LBUG_API const LogicalType& getDataType() const;
     /**
      * @brief Sets the null flag of the Value.
      * @param flag null value flag to set.
      */
-    KUZU_API void setNull(bool flag);
+    LBUG_API void setNull(bool flag);
     /**
      * @brief Sets the null flag of the Value to true.
      */
-    KUZU_API void setNull();
+    LBUG_API void setNull();
     /**
      * @return whether the Value is null or not.
      */
-    KUZU_API bool isNull() const;
+    LBUG_API bool isNull() const;
     /**
      * @brief Copies from the row layout value.
      * @param value value to copy from.
      */
-    KUZU_API void copyFromRowLayout(const uint8_t* value);
+    LBUG_API void copyFromRowLayout(const uint8_t* value);
     /**
      * @brief Copies from the col layout value.
      * @param value value to copy from.
      */
-    KUZU_API void copyFromColLayout(const uint8_t* value, ValueVector* vec = nullptr);
+    LBUG_API void copyFromColLayout(const uint8_t* value, ValueVector* vec = nullptr);
     /**
      * @brief Copies from the other.
      * @param other value to copy from.
      */
-    KUZU_API void copyValueFrom(const Value& other);
+    LBUG_API void copyValueFrom(const Value& other);
     /**
      * @return the value of the given type.
      */
@@ -226,24 +226,24 @@ public:
     /**
      * @return a copy of the current value.
      */
-    KUZU_API std::unique_ptr<Value> copy() const;
+    LBUG_API std::unique_ptr<Value> copy() const;
     /**
      * @return the current value in string format.
      */
-    KUZU_API std::string toString() const;
+    LBUG_API std::string toString() const;
 
-    KUZU_API void serialize(Serializer& serializer) const;
+    LBUG_API void serialize(Serializer& serializer) const;
 
-    KUZU_API static std::unique_ptr<Value> deserialize(Deserializer& deserializer);
+    LBUG_API static std::unique_ptr<Value> deserialize(Deserializer& deserializer);
 
-    KUZU_API void validateType(common::LogicalTypeID targetTypeID) const;
+    LBUG_API void validateType(common::LogicalTypeID targetTypeID) const;
 
     bool hasNoneNullChildren() const;
     bool allowTypeChange() const;
 
     uint64_t computeHash() const;
 
-    KUZU_API uint32_t getChildrenSize() const { return childrenSize; }
+    LBUG_API uint32_t getChildrenSize() const { return childrenSize; }
 
 private:
     Value();
@@ -300,7 +300,7 @@ private:
  * @return boolean value.
  */
 template<>
-KUZU_API inline bool Value::getValue() const {
+LBUG_API inline bool Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::BOOL);
     return val.booleanVal;
 }
@@ -309,7 +309,7 @@ KUZU_API inline bool Value::getValue() const {
  * @return int8 value.
  */
 template<>
-KUZU_API inline int8_t Value::getValue() const {
+LBUG_API inline int8_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT8);
     return val.int8Val;
 }
@@ -318,7 +318,7 @@ KUZU_API inline int8_t Value::getValue() const {
  * @return int16 value.
  */
 template<>
-KUZU_API inline int16_t Value::getValue() const {
+LBUG_API inline int16_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT16);
     return val.int16Val;
 }
@@ -327,7 +327,7 @@ KUZU_API inline int16_t Value::getValue() const {
  * @return int32 value.
  */
 template<>
-KUZU_API inline int32_t Value::getValue() const {
+LBUG_API inline int32_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT32);
     return val.int32Val;
 }
@@ -336,7 +336,7 @@ KUZU_API inline int32_t Value::getValue() const {
  * @return int64 value.
  */
 template<>
-KUZU_API inline int64_t Value::getValue() const {
+LBUG_API inline int64_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT64);
     return val.int64Val;
 }
@@ -345,7 +345,7 @@ KUZU_API inline int64_t Value::getValue() const {
  * @return uint64 value.
  */
 template<>
-KUZU_API inline uint64_t Value::getValue() const {
+LBUG_API inline uint64_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT64);
     return val.uint64Val;
 }
@@ -354,7 +354,7 @@ KUZU_API inline uint64_t Value::getValue() const {
  * @return uint32 value.
  */
 template<>
-KUZU_API inline uint32_t Value::getValue() const {
+LBUG_API inline uint32_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT32);
     return val.uint32Val;
 }
@@ -363,7 +363,7 @@ KUZU_API inline uint32_t Value::getValue() const {
  * @return uint16 value.
  */
 template<>
-KUZU_API inline uint16_t Value::getValue() const {
+LBUG_API inline uint16_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT16);
     return val.uint16Val;
 }
@@ -372,7 +372,7 @@ KUZU_API inline uint16_t Value::getValue() const {
  * @return uint8 value.
  */
 template<>
-KUZU_API inline uint8_t Value::getValue() const {
+LBUG_API inline uint8_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT8);
     return val.uint8Val;
 }
@@ -381,7 +381,7 @@ KUZU_API inline uint8_t Value::getValue() const {
  * @return int128 value.
  */
 template<>
-KUZU_API inline int128_t Value::getValue() const {
+LBUG_API inline int128_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT128);
     return val.int128Val;
 }
@@ -390,7 +390,7 @@ KUZU_API inline int128_t Value::getValue() const {
  * @return float value.
  */
 template<>
-KUZU_API inline float Value::getValue() const {
+LBUG_API inline float Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::FLOAT);
     return val.floatVal;
 }
@@ -399,7 +399,7 @@ KUZU_API inline float Value::getValue() const {
  * @return double value.
  */
 template<>
-KUZU_API inline double Value::getValue() const {
+LBUG_API inline double Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::DOUBLE);
     return val.doubleVal;
 }
@@ -408,7 +408,7 @@ KUZU_API inline double Value::getValue() const {
  * @return date_t value.
  */
 template<>
-KUZU_API inline date_t Value::getValue() const {
+LBUG_API inline date_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::DATE);
     return date_t{val.int32Val};
 }
@@ -417,7 +417,7 @@ KUZU_API inline date_t Value::getValue() const {
  * @return timestamp_t value.
  */
 template<>
-KUZU_API inline timestamp_t Value::getValue() const {
+LBUG_API inline timestamp_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP);
     return timestamp_t{val.int64Val};
 }
@@ -426,7 +426,7 @@ KUZU_API inline timestamp_t Value::getValue() const {
  * @return timestamp_ns_t value.
  */
 template<>
-KUZU_API inline timestamp_ns_t Value::getValue() const {
+LBUG_API inline timestamp_ns_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_NS);
     return timestamp_ns_t{val.int64Val};
 }
@@ -435,7 +435,7 @@ KUZU_API inline timestamp_ns_t Value::getValue() const {
  * @return timestamp_ms_t value.
  */
 template<>
-KUZU_API inline timestamp_ms_t Value::getValue() const {
+LBUG_API inline timestamp_ms_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_MS);
     return timestamp_ms_t{val.int64Val};
 }
@@ -444,7 +444,7 @@ KUZU_API inline timestamp_ms_t Value::getValue() const {
  * @return timestamp_sec_t value.
  */
 template<>
-KUZU_API inline timestamp_sec_t Value::getValue() const {
+LBUG_API inline timestamp_sec_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_SEC);
     return timestamp_sec_t{val.int64Val};
 }
@@ -453,7 +453,7 @@ KUZU_API inline timestamp_sec_t Value::getValue() const {
  * @return timestamp_tz_t value.
  */
 template<>
-KUZU_API inline timestamp_tz_t Value::getValue() const {
+LBUG_API inline timestamp_tz_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_TZ);
     return timestamp_tz_t{val.int64Val};
 }
@@ -462,7 +462,7 @@ KUZU_API inline timestamp_tz_t Value::getValue() const {
  * @return interval_t value.
  */
 template<>
-KUZU_API inline interval_t Value::getValue() const {
+LBUG_API inline interval_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERVAL);
     return val.intervalVal;
 }
@@ -471,7 +471,7 @@ KUZU_API inline interval_t Value::getValue() const {
  * @return internal_t value.
  */
 template<>
-KUZU_API inline internalID_t Value::getValue() const {
+LBUG_API inline internalID_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID);
     return val.internalIDVal;
 }
@@ -480,7 +480,7 @@ KUZU_API inline internalID_t Value::getValue() const {
  * @return string value.
  */
 template<>
-KUZU_API inline std::string Value::getValue() const {
+LBUG_API inline std::string Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::STRING ||
               dataType.getLogicalTypeID() == LogicalTypeID::BLOB ||
               dataType.getLogicalTypeID() == LogicalTypeID::UUID);
@@ -491,7 +491,7 @@ KUZU_API inline std::string Value::getValue() const {
  * @return uint8_t* value.
  */
 template<>
-KUZU_API inline uint8_t* Value::getValue() const {
+LBUG_API inline uint8_t* Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::POINTER);
     return val.pointer;
 }
@@ -500,7 +500,7 @@ KUZU_API inline uint8_t* Value::getValue() const {
  * @return the reference to the boolean value.
  */
 template<>
-KUZU_API inline bool& Value::getValueReference() {
+LBUG_API inline bool& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::BOOL);
     return val.booleanVal;
 }
@@ -509,7 +509,7 @@ KUZU_API inline bool& Value::getValueReference() {
  * @return the reference to the int8 value.
  */
 template<>
-KUZU_API inline int8_t& Value::getValueReference() {
+LBUG_API inline int8_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT8);
     return val.int8Val;
 }
@@ -518,7 +518,7 @@ KUZU_API inline int8_t& Value::getValueReference() {
  * @return the reference to the int16 value.
  */
 template<>
-KUZU_API inline int16_t& Value::getValueReference() {
+LBUG_API inline int16_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT16);
     return val.int16Val;
 }
@@ -527,7 +527,7 @@ KUZU_API inline int16_t& Value::getValueReference() {
  * @return the reference to the int32 value.
  */
 template<>
-KUZU_API inline int32_t& Value::getValueReference() {
+LBUG_API inline int32_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT32);
     return val.int32Val;
 }
@@ -536,7 +536,7 @@ KUZU_API inline int32_t& Value::getValueReference() {
  * @return the reference to the int64 value.
  */
 template<>
-KUZU_API inline int64_t& Value::getValueReference() {
+LBUG_API inline int64_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT64);
     return val.int64Val;
 }
@@ -545,7 +545,7 @@ KUZU_API inline int64_t& Value::getValueReference() {
  * @return the reference to the uint8 value.
  */
 template<>
-KUZU_API inline uint8_t& Value::getValueReference() {
+LBUG_API inline uint8_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT8);
     return val.uint8Val;
 }
@@ -554,7 +554,7 @@ KUZU_API inline uint8_t& Value::getValueReference() {
  * @return the reference to the uint16 value.
  */
 template<>
-KUZU_API inline uint16_t& Value::getValueReference() {
+LBUG_API inline uint16_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT16);
     return val.uint16Val;
 }
@@ -563,7 +563,7 @@ KUZU_API inline uint16_t& Value::getValueReference() {
  * @return the reference to the uint32 value.
  */
 template<>
-KUZU_API inline uint32_t& Value::getValueReference() {
+LBUG_API inline uint32_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT32);
     return val.uint32Val;
 }
@@ -572,7 +572,7 @@ KUZU_API inline uint32_t& Value::getValueReference() {
  * @return the reference to the uint64 value.
  */
 template<>
-KUZU_API inline uint64_t& Value::getValueReference() {
+LBUG_API inline uint64_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT64);
     return val.uint64Val;
 }
@@ -581,7 +581,7 @@ KUZU_API inline uint64_t& Value::getValueReference() {
  * @return the reference to the int128 value.
  */
 template<>
-KUZU_API inline int128_t& Value::getValueReference() {
+LBUG_API inline int128_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT128);
     return val.int128Val;
 }
@@ -590,7 +590,7 @@ KUZU_API inline int128_t& Value::getValueReference() {
  * @return the reference to the float value.
  */
 template<>
-KUZU_API inline float& Value::getValueReference() {
+LBUG_API inline float& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::FLOAT);
     return val.floatVal;
 }
@@ -599,7 +599,7 @@ KUZU_API inline float& Value::getValueReference() {
  * @return the reference to the double value.
  */
 template<>
-KUZU_API inline double& Value::getValueReference() {
+LBUG_API inline double& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::DOUBLE);
     return val.doubleVal;
 }
@@ -608,7 +608,7 @@ KUZU_API inline double& Value::getValueReference() {
  * @return the reference to the date value.
  */
 template<>
-KUZU_API inline date_t& Value::getValueReference() {
+LBUG_API inline date_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::DATE);
     return *reinterpret_cast<date_t*>(&val.int32Val);
 }
@@ -617,7 +617,7 @@ KUZU_API inline date_t& Value::getValueReference() {
  * @return the reference to the timestamp value.
  */
 template<>
-KUZU_API inline timestamp_t& Value::getValueReference() {
+LBUG_API inline timestamp_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP);
     return *reinterpret_cast<timestamp_t*>(&val.int64Val);
 }
@@ -626,7 +626,7 @@ KUZU_API inline timestamp_t& Value::getValueReference() {
  * @return the reference to the timestamp_ms value.
  */
 template<>
-KUZU_API inline timestamp_ms_t& Value::getValueReference() {
+LBUG_API inline timestamp_ms_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_MS);
     return *reinterpret_cast<timestamp_ms_t*>(&val.int64Val);
 }
@@ -635,7 +635,7 @@ KUZU_API inline timestamp_ms_t& Value::getValueReference() {
  * @return the reference to the timestamp_ns value.
  */
 template<>
-KUZU_API inline timestamp_ns_t& Value::getValueReference() {
+LBUG_API inline timestamp_ns_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_NS);
     return *reinterpret_cast<timestamp_ns_t*>(&val.int64Val);
 }
@@ -644,7 +644,7 @@ KUZU_API inline timestamp_ns_t& Value::getValueReference() {
  * @return the reference to the timestamp_sec value.
  */
 template<>
-KUZU_API inline timestamp_sec_t& Value::getValueReference() {
+LBUG_API inline timestamp_sec_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_SEC);
     return *reinterpret_cast<timestamp_sec_t*>(&val.int64Val);
 }
@@ -653,7 +653,7 @@ KUZU_API inline timestamp_sec_t& Value::getValueReference() {
  * @return the reference to the timestamp_tz value.
  */
 template<>
-KUZU_API inline timestamp_tz_t& Value::getValueReference() {
+LBUG_API inline timestamp_tz_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_TZ);
     return *reinterpret_cast<timestamp_tz_t*>(&val.int64Val);
 }
@@ -662,7 +662,7 @@ KUZU_API inline timestamp_tz_t& Value::getValueReference() {
  * @return the reference to the interval value.
  */
 template<>
-KUZU_API inline interval_t& Value::getValueReference() {
+LBUG_API inline interval_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERVAL);
     return val.intervalVal;
 }
@@ -671,7 +671,7 @@ KUZU_API inline interval_t& Value::getValueReference() {
  * @return the reference to the internal_id value.
  */
 template<>
-KUZU_API inline nodeID_t& Value::getValueReference() {
+LBUG_API inline nodeID_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID);
     return val.internalIDVal;
 }
@@ -680,7 +680,7 @@ KUZU_API inline nodeID_t& Value::getValueReference() {
  * @return the reference to the string value.
  */
 template<>
-KUZU_API inline std::string& Value::getValueReference() {
+LBUG_API inline std::string& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::STRING);
     return strVal;
 }
@@ -689,7 +689,7 @@ KUZU_API inline std::string& Value::getValueReference() {
  * @return the reference to the uint8_t* value.
  */
 template<>
-KUZU_API inline uint8_t*& Value::getValueReference() {
+LBUG_API inline uint8_t*& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::POINTER);
     return val.pointer;
 }
@@ -699,12 +699,12 @@ KUZU_API inline uint8_t*& Value::getValueReference() {
  * @return a Value with BOOL type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(bool val) {
+LBUG_API inline Value Value::createValue(bool val) {
     return Value(val);
 }
 
 template<>
-KUZU_API inline Value Value::createValue(int8_t val) {
+LBUG_API inline Value Value::createValue(int8_t val) {
     return Value(val);
 }
 
@@ -713,7 +713,7 @@ KUZU_API inline Value Value::createValue(int8_t val) {
  * @return a Value with INT16 type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(int16_t val) {
+LBUG_API inline Value Value::createValue(int16_t val) {
     return Value(val);
 }
 
@@ -722,7 +722,7 @@ KUZU_API inline Value Value::createValue(int16_t val) {
  * @return a Value with INT32 type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(int32_t val) {
+LBUG_API inline Value Value::createValue(int32_t val) {
     return Value(val);
 }
 
@@ -731,7 +731,7 @@ KUZU_API inline Value Value::createValue(int32_t val) {
  * @return a Value with INT64 type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(int64_t val) {
+LBUG_API inline Value Value::createValue(int64_t val) {
     return Value(val);
 }
 
@@ -740,7 +740,7 @@ KUZU_API inline Value Value::createValue(int64_t val) {
  * @return a Value with UINT8 type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(uint8_t val) {
+LBUG_API inline Value Value::createValue(uint8_t val) {
     return Value(val);
 }
 
@@ -749,7 +749,7 @@ KUZU_API inline Value Value::createValue(uint8_t val) {
  * @return a Value with UINT16 type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(uint16_t val) {
+LBUG_API inline Value Value::createValue(uint16_t val) {
     return Value(val);
 }
 
@@ -758,7 +758,7 @@ KUZU_API inline Value Value::createValue(uint16_t val) {
  * @return a Value with UINT32 type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(uint32_t val) {
+LBUG_API inline Value Value::createValue(uint32_t val) {
     return Value(val);
 }
 
@@ -767,7 +767,7 @@ KUZU_API inline Value Value::createValue(uint32_t val) {
  * @return a Value with UINT64 type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(uint64_t val) {
+LBUG_API inline Value Value::createValue(uint64_t val) {
     return Value(val);
 }
 
@@ -776,7 +776,7 @@ KUZU_API inline Value Value::createValue(uint64_t val) {
  * @return a Value with INT128 type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(int128_t val) {
+LBUG_API inline Value Value::createValue(int128_t val) {
     return Value(val);
 }
 
@@ -785,7 +785,7 @@ KUZU_API inline Value Value::createValue(int128_t val) {
  * @return a Value with DOUBLE type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(double val) {
+LBUG_API inline Value Value::createValue(double val) {
     return Value(val);
 }
 
@@ -794,7 +794,7 @@ KUZU_API inline Value Value::createValue(double val) {
  * @return a Value with DATE type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(date_t val) {
+LBUG_API inline Value Value::createValue(date_t val) {
     return Value(val);
 }
 
@@ -803,7 +803,7 @@ KUZU_API inline Value Value::createValue(date_t val) {
  * @return a Value with TIMESTAMP type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(timestamp_t val) {
+LBUG_API inline Value Value::createValue(timestamp_t val) {
     return Value(val);
 }
 
@@ -812,7 +812,7 @@ KUZU_API inline Value Value::createValue(timestamp_t val) {
  * @return a Value with INTERVAL type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(interval_t val) {
+LBUG_API inline Value Value::createValue(interval_t val) {
     return Value(val);
 }
 
@@ -821,7 +821,7 @@ KUZU_API inline Value Value::createValue(interval_t val) {
  * @return a Value with NODE_ID type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(nodeID_t val) {
+LBUG_API inline Value Value::createValue(nodeID_t val) {
     return Value(val);
 }
 
@@ -830,7 +830,7 @@ KUZU_API inline Value Value::createValue(nodeID_t val) {
  * @return a Value with type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(std::string val) {
+LBUG_API inline Value Value::createValue(std::string val) {
     return Value(LogicalType::STRING(), std::move(val));
 }
 
@@ -839,7 +839,7 @@ KUZU_API inline Value Value::createValue(std::string val) {
  * @return a Value with STRING type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(const char* value) {
+LBUG_API inline Value Value::createValue(const char* value) {
     return Value(LogicalType::STRING(), std::string(value));
 }
 
@@ -848,7 +848,7 @@ KUZU_API inline Value Value::createValue(const char* value) {
  * @return a Value with POINTER type and val val.
  */
 template<>
-KUZU_API inline Value Value::createValue(uint8_t* val) {
+LBUG_API inline Value Value::createValue(uint8_t* val) {
     return Value(val);
 }
 
@@ -857,7 +857,7 @@ KUZU_API inline Value Value::createValue(uint8_t* val) {
  * @return a Value with UUID type and val val.
  */
 template<>
-KUZU_API inline Value Value::createValue(ku_uuid_t val) {
+LBUG_API inline Value Value::createValue(ku_uuid_t val) {
     return Value(val);
 }
 

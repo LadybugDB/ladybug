@@ -73,7 +73,7 @@ export interface RecursiveRelValue {
 /**
  * Union type representing all possible value types in Lbug.
  */
-export type KuzuValue =
+export type LbugValue =
     | null
     | boolean
     | number
@@ -83,8 +83,8 @@ export type KuzuValue =
     | NodeValue
     | RelValue
     | RecursiveRelValue
-    | KuzuValue[]
-    | { [key: string]: KuzuValue };
+    | LbugValue[]
+    | { [key: string]: LbugValue };
 
 /**
  * Configuration options for the database system.
@@ -220,7 +220,7 @@ export class Connection {
      */
     execute(
         preparedStatement: PreparedStatement,
-        params?: Record<string, KuzuValue>,
+        params?: Record<string, LbugValue>,
         progressCallback?: ProgressCallback
     ): Promise<QueryResult | QueryResult[]>;
 
@@ -232,7 +232,7 @@ export class Connection {
      */
     executeSync(
         preparedStatement: PreparedStatement,
-        params?: Record<string, KuzuValue>
+        params?: Record<string, LbugValue>
     ): QueryResult | QueryResult[];
 
     /**
@@ -312,13 +312,13 @@ export class QueryResult {
      * Get the next row.
      * @returns Promise that resolves to the next row or null if no more rows
      */
-    getNext(): Promise<Record<string, KuzuValue> | null>;
+    getNext(): Promise<Record<string, LbugValue> | null>;
 
     /**
      * Get the next row synchronously.
      * @returns The next row or null if no more rows
      */
-    getNextSync(): Record<string, KuzuValue> | null;
+    getNextSync(): Record<string, LbugValue> | null;
 
     /**
      * Iterate through the query result with callback functions.
@@ -327,7 +327,7 @@ export class QueryResult {
      * @param errorCallback Callback function called when there is an error
      */
     each(
-        resultCallback: (row: Record<string, KuzuValue>) => void,
+        resultCallback: (row: Record<string, LbugValue>) => void,
         doneCallback: () => void,
         errorCallback: (error: Error) => void
     ): void;
@@ -336,13 +336,13 @@ export class QueryResult {
      * Get all rows of the query result.
      * @returns Promise that resolves to all rows
      */
-    getAll(): Promise<Record<string, KuzuValue>[]>;
+    getAll(): Promise<Record<string, LbugValue>[]>;
 
     /**
      * Get all rows of the query result synchronously.
      * @returns All rows of the query result
      */
-    getAllSync(): Record<string, KuzuValue>[];
+    getAllSync(): Record<string, LbugValue>[];
 
     /**
      * Get all rows of the query result with callback functions.
@@ -350,7 +350,7 @@ export class QueryResult {
      * @param errorCallback Callback function called when there is an error
      */
     all(
-        resultCallback: (rows: Record<string, KuzuValue>[]) => void,
+        resultCallback: (rows: Record<string, LbugValue>[]) => void,
         errorCallback: (error: Error) => void
     ): void;
 

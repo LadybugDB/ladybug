@@ -173,13 +173,13 @@ Binder exception: Cannot drop property name in table STUDENT because it is used 
 
 -CASE CreateFTSSingleStatement
 -SKIP_STATIC_LINK
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/fts/build/libfts.kuzu_extension";CALL CREATE_FTS_INDEX('person', 'personIdx', ['fName']);
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/fts/build/libfts.lbug_extension";CALL CREATE_FTS_INDEX('person', 'personIdx', ['fName']);
 ---- error
 Parser exception: CREATE_FTS_INDEX must be called in a query which doesn't have other statements.
 
 -CASE DropFTSSingleStatement
 -SKIP_STATIC_LINK
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/fts/build/libfts.kuzu_extension";CALL DROP_FTS_INDEX('STUDENT', 'sIdx');
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/fts/build/libfts.lbug_extension";CALL DROP_FTS_INDEX('STUDENT', 'sIdx');
 ---- error
 Parser exception: DROP_FTS_INDEX must be called in a query which doesn't have other statements.
 

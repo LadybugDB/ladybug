@@ -47,4 +47,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/kuzudb/extension-repo:latest
+          tags: ghcr.io/lbugdb/extension-repo:latest

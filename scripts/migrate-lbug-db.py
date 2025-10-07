@@ -26,11 +26,11 @@ import argparse
 import os
 
 # Database file extensions
-KUZU_FILE_EXTENSIONS = ["", ".wal", ".shadow"]
+LBUG_FILE_EXTENSIONS = ["", ".wal", ".shadow"]
 
 
 # FIXME: Replace this with a Lbug query to get the mapping when available.
-kuzu_version_mapping = {
+lbug_version_mapping = {
     34: "0.7.0",
     35: "0.7.1",
     36: "0.8.2",
@@ -39,10 +39,10 @@ kuzu_version_mapping = {
     39: "0.11.0",
 }
 
-minimum_kuzu_migration_version = "0.11.0"
+minimum_lbug_migration_version = "0.11.0"
 
 
-def kuzu_version_comparison(version: str, target: str) -> bool:
+def lbug_version_comparison(version: str, target: str) -> bool:
     """Return True if Lbug *v* is greater or equal to target version"""
     # Transform version string to version tuple to use in version tuple comparison
     # NOTE: If version info contains non digit info (like dev release info 0.11.0.dev1) set the value of the non digit
@@ -52,46 +52,46 @@ def kuzu_version_comparison(version: str, target: str) -> bool:
     return current >= target
 
 
-def read_kuzu_storage_version(kuzu_db_path: str) -> int:
+def read_lbug_storage_version(lbug_db_path: str) -> int:
     """
     Reads the Lbug storage version.
 
-    :param kuzu_db_path: Path to the Lbug database file/directory.
+    :param lbug_db_path: Path to the Lbug database file/directory.
     :return: Storage version code as an integer.
     """
-    if os.path.isdir(kuzu_db_path):
-        kuzu_version_file_path = os.path.join(kuzu_db_path, "catalog.kz")
-        if not os.path.isfile(kuzu_version_file_path):
+    if os.path.isdir(lbug_db_path):
+        lbug_version_file_path = os.path.join(lbug_db_path, "catalog.kz")
+        if not os.path.isfile(lbug_version_file_path):
             raise FileNotFoundError("Lbug catalog.kz file does not exist")
     else:
-        kuzu_version_file_path = kuzu_db_path
+        lbug_version_file_path = lbug_db_path
 
-    with open(kuzu_version_file_path, "rb") as f:
+    with open(lbug_version_file_path, "rb") as f:
         f.seek(4)
         # Read the next 8 bytes as a little-endian unsigned 64-bit integer
         data = f.read(8)
         if len(data) < 8:
             raise ValueError(
-                f"File '{kuzu_version_file_path}' does not contain a storage version code."
+                f"File '{lbug_version_file_path}' does not contain a storage version code."
             )
         version_code = struct.unpack("<Q", data)[0]
 
-    if version_code in kuzu_version_mapping:
-        return kuzu_version_mapping[version_code]
+    if version_code in lbug_version_mapping:
+        return lbug_version_mapping[version_code]
     else:
         raise ValueError(f"Could not map version_code {version_code} to proper Lbug version.")
 
 
 def ensure_env(version: str, export_dir) -> str:
     """
-    Creates a venv at `{export_dir}/.kuzu_envs/{version}` and installs `lbug=={version}`
+    Creates a venv at `{export_dir}/.lbug_envs/{version}` and installs `lbug=={version}`
     Returns the venv's python executable path.
     """
     # Use temp directory to create venv
-    kuzu_envs_dir = os.path.join(export_dir, ".kuzu_envs")
+    lbug_envs_dir = os.path.join(export_dir, ".lbug_envs")
 
     # venv base under the script directory
-    base = os.path.join(kuzu_envs_dir, version)
+    base = os.path.join(lbug_envs_dir, version)
     py_bin = os.path.join(base, "bin", "python")
     # If environment already exists clean it
     if os.path.isdir(base):
@@ -123,7 +123,7 @@ conn.execute(r\"\"\"{cypher}\"\"\")
         sys.exit(proc.returncode)
 
 
-def kuzu_migration(
+def lbug_migration(
     new_db, old_db, new_version, old_version=None, overwrite=None, delete_old=None
 ):
     """
@@ -134,11 +134,11 @@ def kuzu_migration(
             "The new database path cannot be the same as the old database path. Please provide a different path for the new database."
         )
 
-    if not kuzu_version_comparison(
-        version=new_version, target=minimum_kuzu_migration_version
+    if not lbug_version_comparison(
+        version=new_version, target=minimum_lbug_migration_version
     ):
         raise ValueError(
-            f"New version for lbug is not supported, has to be equal or higher than version: {minimum_kuzu_migration_version}"
+            f"New version for lbug is not supported, has to be equal or higher than version: {minimum_lbug_migration_version}"
         )
 
     print(
@@ -149,7 +149,7 @@ def kuzu_migration(
 
     # If version of old lbug db is not provided try to determine it based on file info
     if not old_version:
-        old_version = read_kuzu_storage_version(old_db)
+        old_version = read_lbug_storage_version(old_db)
 
     # Check if old database exists
     if not os.path.exists(old_db):
@@ -173,7 +173,7 @@ def kuzu_migration(
         print(f"Setting up Lbug {new_version} environment...", file=sys.stderr)
         new_py = ensure_env(new_version, export_dir)
 
-        export_file = os.path.join(export_dir, "kuzu_export")
+        export_file = os.path.join(export_dir, "lbug_export")
         print(f"Exporting old DB → {export_dir}", file=sys.stderr)
         run_migration_step(old_py, old_db, f"EXPORT DATABASE '{export_file}'")
         print("Export complete.", file=sys.stderr)
@@ -216,7 +216,7 @@ def rename_databases(old_db: str, old_version: str, new_db: str, delete_old: boo
 
     if os.path.isfile(old_db):
         # File-based database: handle main file and accompanying lock/WAL
-        for ext in KUZU_FILE_EXTENSIONS:
+        for ext in LBUG_FILE_EXTENSIONS:
             src = old_db + ext
             dst = backup_base + ext
             if os.path.exists(src):
@@ -257,7 +257,7 @@ Examples:
   %(prog)s --old-version 0.9.0 --new-version 0.11.0 \\
     --old-db /path/to/old/db --new-db /path/to/new/db --overwrite
 
-Note: This script will create temporary virtual environments in .kuzu_envs/ directory
+Note: This script will create temporary virtual environments in .lbug_envs/ directory
 to isolate different Lbug versions.
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -294,7 +294,7 @@ to isolate different Lbug versions.
 
     args = p.parse_args()
 
-    kuzu_migration(
+    lbug_migration(
         new_db=args.new_db,
         old_db=args.old_db,
         new_version=args.new_version,

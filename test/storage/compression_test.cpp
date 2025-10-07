@@ -115,7 +115,7 @@ TEST(CompressionTests, IntegerBitpackingMetadataInvalidPhysicalType) {
     EXPECT_THROW(metadata.canUpdateInPlace(&data, 0, 1, PhysicalTypeID::ARRAY, localUpdateState),
         StorageException);
 
-    EXPECT_THROW(metadata.numValues(KUZU_PAGE_SIZE, LogicalType::STRING()), StorageException);
+    EXPECT_THROW(metadata.numValues(LBUG_PAGE_SIZE, LogicalType::STRING()), StorageException);
 
     EXPECT_THROW(metadata.toString(PhysicalTypeID::FLOAT), InternalException);
     EXPECT_THROW(metadata.toString(PhysicalTypeID::BOOL), InternalException);
@@ -138,7 +138,7 @@ TEST(CompressionTests, FloatCompressionMetadataInvalidPhysicalType) {
     EXPECT_THROW(metadata.canUpdateInPlace(&data, 0, 1, PhysicalTypeID::INT32, localUpdateState),
         StorageException);
 
-    EXPECT_THROW(metadata.numValues(KUZU_PAGE_SIZE, LogicalType::UINT64()), StorageException);
+    EXPECT_THROW(metadata.numValues(LBUG_PAGE_SIZE, LogicalType::UINT64()), StorageException);
 
     EXPECT_THROW(metadata.toString(PhysicalTypeID::STRUCT), InternalException);
 

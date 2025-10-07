@@ -22,33 +22,33 @@ public:
     /**
      * @return number of values in the FlatTuple.
      */
-    KUZU_API common::idx_t len() const;
+    LBUG_API common::idx_t len() const;
     /**
      * @brief Get a pointer to the value at the specified index.
      * @param idx The index of the value to retrieve.
      * @return A pointer to the Value at the specified index.
      */
-    KUZU_API common::Value* getValue(common::idx_t idx);
+    LBUG_API common::Value* getValue(common::idx_t idx);
 
     /**
      * @brief Access the value at the specified index by reference.
      * @param idx The index of the value to access.
      * @return A reference to the Value at the specified index.
      */
-    KUZU_API common::Value& operator[](common::idx_t idx);
+    LBUG_API common::Value& operator[](common::idx_t idx);
 
     /**
      * @brief Access the value at the specified index by const reference.
      * @param idx The index of the value to access.
      * @return A const reference to the Value at the specified index.
      */
-    KUZU_API const common::Value& operator[](common::idx_t idx) const;
+    LBUG_API const common::Value& operator[](common::idx_t idx) const;
 
     /**
      * @brief Convert the FlatTuple to a string representation.
      * @return A string representation of all values in the FlatTuple.
      */
-    KUZU_API std::string toString() const;
+    LBUG_API std::string toString() const;
 
     /**
      * @param colsWidth The length of each column
@@ -57,7 +57,7 @@ public:
      * characters of each column will be displayed.
      * @return all values in string format.
      */
-    KUZU_API std::string toString(const std::vector<uint32_t>& colsWidth,
+    LBUG_API std::string toString(const std::vector<uint32_t>& colsWidth,
         const std::string& delimiter = "|", uint32_t maxWidth = -1);
 
 private:

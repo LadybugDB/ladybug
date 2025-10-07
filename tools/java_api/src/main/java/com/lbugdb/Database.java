@@ -1,7 +1,7 @@
 package com.lbugdb;
 
 /**
- * The Database class is the main class of KuzuDB. It manages all database
+ * The Database class is the main class of LbugDB. It manages all database
  * components.
  */
 public class Database implements AutoCloseable {

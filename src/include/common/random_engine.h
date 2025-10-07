@@ -19,7 +19,7 @@ struct RandomState {
     RandomState() {}
 };
 
-class KUZU_API RandomEngine {
+class LBUG_API RandomEngine {
 public:
     RandomEngine();
     RandomEngine(uint64_t seed, uint64_t stream);

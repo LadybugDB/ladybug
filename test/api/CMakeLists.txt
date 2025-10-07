@@ -1,4 +1,4 @@
-add_kuzu_api_test(api_test
+add_lbug_api_test(api_test
         api_test.cpp
         system_config_test.cpp
         arrow_test.cpp

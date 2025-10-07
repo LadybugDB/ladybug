@@ -20,7 +20,7 @@ struct LinesPerBlock {
 
 class SharedFileErrorHandler;
 
-class KUZU_API SharedFileErrorHandler {
+class LBUG_API SharedFileErrorHandler {
 public:
     explicit SharedFileErrorHandler(common::idx_t fileIdx, std::mutex* sharedMtx,
         populate_func_t populateErrorFunc = {});
@@ -58,7 +58,7 @@ private:
     uint64_t headerNumRows;
 };
 
-class KUZU_API LocalFileErrorHandler {
+class LBUG_API LocalFileErrorHandler {
 public:
     ~LocalFileErrorHandler();
 

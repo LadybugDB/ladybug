@@ -7,7 +7,7 @@ namespace lbug {
 namespace evaluator {
 
 struct ExpressionEvaluatorUtils {
-    static KUZU_API common::Value evaluateConstantExpression(
+    static LBUG_API common::Value evaluateConstantExpression(
         std::shared_ptr<binder::Expression> expression, main::ClientContext* clientContext);
 };
 

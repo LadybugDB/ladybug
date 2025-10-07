@@ -64,7 +64,7 @@ private:
     std::unordered_map<std::string, binder::expression_vector> patternNameToProperties;
 };
 
-class KUZU_API Planner {
+class LBUG_API Planner {
 public:
     explicit Planner(main::ClientContext* clientContext);
     DELETE_COPY_AND_MOVE(Planner);

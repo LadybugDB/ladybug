@@ -9,10 +9,10 @@
 ---- ok
 -STATEMENT CREATE REL TABLE follows(FROM account TO account);
 ---- ok
--STATEMENT COPY account FROM "${KUZU_ROOT_DIRECTORY}/dataset/snap/twitter/csv/twitter-nodes.csv";
+-STATEMENT COPY account FROM "${LBUG_ROOT_DIRECTORY}/dataset/snap/twitter/csv/twitter-nodes.csv";
 ---- ok
 -STATEMENT CALL spill_to_disk=false;
 ---- ok
--STATEMENT COPY follows FROM "${KUZU_ROOT_DIRECTORY}/dataset/snap/twitter/csv/twitter-edges.csv" (DELIM=' ');
+-STATEMENT COPY follows FROM "${LBUG_ROOT_DIRECTORY}/dataset/snap/twitter/csv/twitter-edges.csv" (DELIM=' ');
 ---- error
 Buffer manager exception: Unable to allocate memory! The buffer pool is full and no memory could be freed!

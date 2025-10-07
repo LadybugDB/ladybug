@@ -9,7 +9,7 @@ namespace common {
 
 template<typename TO, typename FROM>
 TO ku_dynamic_cast(FROM* old) {
-#if defined(KUZU_RUNTIME_CHECKS) || !defined(NDEBUG)
+#if defined(LBUG_RUNTIME_CHECKS) || !defined(NDEBUG)
     static_assert(std::is_pointer<TO>());
     TO newVal = dynamic_cast<TO>(old);
     KU_ASSERT(newVal != nullptr);
@@ -21,7 +21,7 @@ TO ku_dynamic_cast(FROM* old) {
 
 template<typename TO, typename FROM>
 TO ku_dynamic_cast(FROM& old) {
-#if defined(KUZU_RUNTIME_CHECKS) || !defined(NDEBUG)
+#if defined(LBUG_RUNTIME_CHECKS) || !defined(NDEBUG)
     static_assert(std::is_reference<TO>());
     try {
         TO newVal = dynamic_cast<TO>(old);

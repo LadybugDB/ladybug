@@ -7,7 +7,7 @@ class ValueVector;
 namespace lbug::storage {
 class ColumnChunkData;
 
-struct KUZU_API ColumnChunkStats {
+struct LBUG_API ColumnChunkStats {
     std::optional<StorageValue> max;
     std::optional<StorageValue> min;
 

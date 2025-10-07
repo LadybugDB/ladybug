@@ -316,7 +316,7 @@ void Column::lookupInternal(const SegmentState& state, offset_t offsetInSegment,
     if (metadata.compMeta.compression == CompressionType::CONSTANT) {
         return metadata.getNumDataPages(dataType.getPhysicalType()) == 0;
     }
-    const auto numValuesPerPage = metadata.compMeta.numValues(KUZU_PAGE_SIZE, dataType);
+    const auto numValuesPerPage = metadata.compMeta.numValues(LBUG_PAGE_SIZE, dataType);
     if (numValuesPerPage == UINT64_MAX) {
         return metadata.getNumDataPages(dataType.getPhysicalType()) == 0;
     }
@@ -402,7 +402,7 @@ offset_t Column::appendValues(ColumnChunkData& persistentChunk, SegmentState& st
 bool Column::isEndOffsetOutOfPagesCapacity(const ColumnChunkMetadata& metadata,
     offset_t endOffset) const {
     if (metadata.compMeta.compression != CompressionType::CONSTANT &&
-        (metadata.compMeta.numValues(KUZU_PAGE_SIZE, dataType) *
+        (metadata.compMeta.numValues(LBUG_PAGE_SIZE, dataType) *
             metadata.getNumDataPages(dataType.getPhysicalType())) <= endOffset) {
         // Note that for constant compression, `metadata.numPages` will be equal to 0.
         // Thus, this function will always return true.

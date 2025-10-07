@@ -5,7 +5,7 @@
  */
 "use strict";
 
-const KuzuWasm = require("./lbug.js");
+const LbugWasm = require("./lbug.js");
 
 class PreparedStatement {
   /**
@@ -25,7 +25,7 @@ class PreparedStatement {
    * @private
    */
   _checkPreparedStatement() {
-    KuzuWasm.checkInit();
+    LbugWasm.checkInit();
     if (this._isClosed) {
       throw new Error("PreparedStatement is already closed.");
     }

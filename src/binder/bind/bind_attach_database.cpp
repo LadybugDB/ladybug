@@ -18,7 +18,7 @@ static AttachInfo bindAttachInfo(const parser::AttachInfo& attachInfo) {
         attachOption.options.emplace(name, std::move(val));
     }
 
-    if (common::StringUtils::getUpper(attachInfo.dbType) == common::ATTACHED_KUZU_DB_TYPE &&
+    if (common::StringUtils::getUpper(attachInfo.dbType) == common::ATTACHED_LBUG_DB_TYPE &&
         attachInfo.dbAlias.empty()) {
         throw common::BinderException{"Attaching a lbug database without an alias is not allowed."};
     }

@@ -415,28 +415,28 @@ std::unique_ptr<ValueVector> ValueVector::deSerialize(Deserializer& deSer,
     return result;
 }
 
-template KUZU_API void ValueVector::setValue<nodeID_t>(uint32_t pos, nodeID_t val);
-template KUZU_API void ValueVector::setValue<bool>(uint32_t pos, bool val);
-template KUZU_API void ValueVector::setValue<int64_t>(uint32_t pos, int64_t val);
-template KUZU_API void ValueVector::setValue<int32_t>(uint32_t pos, int32_t val);
-template KUZU_API void ValueVector::setValue<int16_t>(uint32_t pos, int16_t val);
-template KUZU_API void ValueVector::setValue<int8_t>(uint32_t pos, int8_t val);
-template KUZU_API void ValueVector::setValue<uint64_t>(uint32_t pos, uint64_t val);
-template KUZU_API void ValueVector::setValue<uint32_t>(uint32_t pos, uint32_t val);
-template KUZU_API void ValueVector::setValue<uint16_t>(uint32_t pos, uint16_t val);
-template KUZU_API void ValueVector::setValue<uint8_t>(uint32_t pos, uint8_t val);
-template KUZU_API void ValueVector::setValue<int128_t>(uint32_t pos, int128_t val);
-template KUZU_API void ValueVector::setValue<double>(uint32_t pos, double val);
-template KUZU_API void ValueVector::setValue<float>(uint32_t pos, float val);
-template KUZU_API void ValueVector::setValue<date_t>(uint32_t pos, date_t val);
-template KUZU_API void ValueVector::setValue<timestamp_t>(uint32_t pos, timestamp_t val);
-template KUZU_API void ValueVector::setValue<timestamp_ns_t>(uint32_t pos, timestamp_ns_t val);
-template KUZU_API void ValueVector::setValue<timestamp_ms_t>(uint32_t pos, timestamp_ms_t val);
-template KUZU_API void ValueVector::setValue<timestamp_sec_t>(uint32_t pos, timestamp_sec_t val);
-template KUZU_API void ValueVector::setValue<timestamp_tz_t>(uint32_t pos, timestamp_tz_t val);
-template KUZU_API void ValueVector::setValue<interval_t>(uint32_t pos, interval_t val);
-template KUZU_API void ValueVector::setValue<list_entry_t>(uint32_t pos, list_entry_t val);
-template KUZU_API void ValueVector::setValue<ku_uuid_t>(uint32_t pos, ku_uuid_t val);
+template LBUG_API void ValueVector::setValue<nodeID_t>(uint32_t pos, nodeID_t val);
+template LBUG_API void ValueVector::setValue<bool>(uint32_t pos, bool val);
+template LBUG_API void ValueVector::setValue<int64_t>(uint32_t pos, int64_t val);
+template LBUG_API void ValueVector::setValue<int32_t>(uint32_t pos, int32_t val);
+template LBUG_API void ValueVector::setValue<int16_t>(uint32_t pos, int16_t val);
+template LBUG_API void ValueVector::setValue<int8_t>(uint32_t pos, int8_t val);
+template LBUG_API void ValueVector::setValue<uint64_t>(uint32_t pos, uint64_t val);
+template LBUG_API void ValueVector::setValue<uint32_t>(uint32_t pos, uint32_t val);
+template LBUG_API void ValueVector::setValue<uint16_t>(uint32_t pos, uint16_t val);
+template LBUG_API void ValueVector::setValue<uint8_t>(uint32_t pos, uint8_t val);
+template LBUG_API void ValueVector::setValue<int128_t>(uint32_t pos, int128_t val);
+template LBUG_API void ValueVector::setValue<double>(uint32_t pos, double val);
+template LBUG_API void ValueVector::setValue<float>(uint32_t pos, float val);
+template LBUG_API void ValueVector::setValue<date_t>(uint32_t pos, date_t val);
+template LBUG_API void ValueVector::setValue<timestamp_t>(uint32_t pos, timestamp_t val);
+template LBUG_API void ValueVector::setValue<timestamp_ns_t>(uint32_t pos, timestamp_ns_t val);
+template LBUG_API void ValueVector::setValue<timestamp_ms_t>(uint32_t pos, timestamp_ms_t val);
+template LBUG_API void ValueVector::setValue<timestamp_sec_t>(uint32_t pos, timestamp_sec_t val);
+template LBUG_API void ValueVector::setValue<timestamp_tz_t>(uint32_t pos, timestamp_tz_t val);
+template LBUG_API void ValueVector::setValue<interval_t>(uint32_t pos, interval_t val);
+template LBUG_API void ValueVector::setValue<list_entry_t>(uint32_t pos, list_entry_t val);
+template LBUG_API void ValueVector::setValue<ku_uuid_t>(uint32_t pos, ku_uuid_t val);
 
 template<>
 void ValueVector::setValue(uint32_t pos, ku_string_t val) {

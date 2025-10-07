@@ -18,20 +18,20 @@
 -STATEMENT CALL s3_uploader_threads_limit=10
 ---- ok
 -LOG singlePartCSVUpload
--STATEMENT copy (match (f:Forum) return f) to 'gcs://kuzudb-test/forum.csv' (header=true)
+-STATEMENT copy (match (f:Forum) return f) to 'gcs://lbugdb-test/forum.csv' (header=true)
 ---- ok
--STATEMENT load from 'gcs://kuzudb-test/forum.csv'(header=true) return count(*)
+-STATEMENT load from 'gcs://lbugdb-test/forum.csv'(header=true) return count(*)
 ---- 1
 13750
 -LOG singlePartParquetUpload
--STATEMENT copy (match (p:Place) return p.*) to 'gcs://kuzudb-test/place.parquet'
+-STATEMENT copy (match (p:Place) return p.*) to 'gcs://lbugdb-test/place.parquet'
 ---- ok
--STATEMENT load from 'gcs://kuzudb-test/place.parquet' return count(*)
+-STATEMENT load from 'gcs://lbugdb-test/place.parquet' return count(*)
 ---- 1
 1460
 -LOG multiPartsUpload
--STATEMENT copy (match (c:Comment) return c) to 'gcs://kuzudb-test/comment.csv' (header=true)
+-STATEMENT copy (match (c:Comment) return c) to 'gcs://lbugdb-test/comment.csv' (header=true)
 ---- ok
--STATEMENT load from 'gcs://kuzudb-test/comment.csv'(header=true) return count(*)
+-STATEMENT load from 'gcs://lbugdb-test/comment.csv'(header=true) return count(*)
 ---- 1
 151043

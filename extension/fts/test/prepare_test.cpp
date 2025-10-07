@@ -8,8 +8,8 @@ namespace testing {
 TEST_F(ApiTest, PrepareFTSTest) {
 #ifndef __STATIC_LINK_EXTENSION_TEST__
     ASSERT_TRUE(conn->query(common::stringFormat("LOAD EXTENSION '{}'",
-                                TestHelper::appendKuzuRootPath(
-                                    "extension/fts/build/libfts.kuzu_extension")))
+                                TestHelper::appendLbugRootPath(
+                                    "extension/fts/build/libfts.lbug_extension")))
                     ->isSuccess());
 #endif
     ASSERT_TRUE(

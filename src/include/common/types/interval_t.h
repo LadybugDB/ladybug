@@ -16,7 +16,7 @@ namespace common {
 struct timestamp_t;
 struct date_t;
 
-enum class KUZU_API DatePartSpecifier : uint8_t {
+enum class LBUG_API DatePartSpecifier : uint8_t {
     YEAR,
     MONTH,
     DAY,
@@ -32,7 +32,7 @@ enum class KUZU_API DatePartSpecifier : uint8_t {
     WEEK,
 };
 
-struct KUZU_API interval_t {
+struct LBUG_API interval_t {
     int32_t months = 0;
     int32_t days = 0;
     int64_t micros = 0;
@@ -98,18 +98,18 @@ public:
     static constexpr const int64_t NANOS_PER_DAY = NANOS_PER_HOUR * HOURS_PER_DAY;
     static constexpr const int64_t NANOS_PER_WEEK = NANOS_PER_DAY * DAYS_PER_WEEK;
 
-    KUZU_API static void addition(interval_t& result, uint64_t number, std::string specifierStr);
-    KUZU_API static interval_t fromCString(const char* str, uint64_t len);
-    KUZU_API static std::string toString(interval_t interval);
-    KUZU_API static bool greaterThan(const interval_t& left, const interval_t& right);
-    KUZU_API static void normalizeIntervalEntries(interval_t input, int64_t& months, int64_t& days,
+    LBUG_API static void addition(interval_t& result, uint64_t number, std::string specifierStr);
+    LBUG_API static interval_t fromCString(const char* str, uint64_t len);
+    LBUG_API static std::string toString(interval_t interval);
+    LBUG_API static bool greaterThan(const interval_t& left, const interval_t& right);
+    LBUG_API static void normalizeIntervalEntries(interval_t input, int64_t& months, int64_t& days,
         int64_t& micros);
-    KUZU_API static void tryGetDatePartSpecifier(std::string specifier, DatePartSpecifier& result);
-    KUZU_API static int32_t getIntervalPart(DatePartSpecifier specifier, interval_t timestamp);
-    KUZU_API static int64_t getMicro(const interval_t& val);
-    KUZU_API static int64_t getNanoseconds(const interval_t& val);
-    KUZU_API static const regex::RE2& regexPattern1();
-    KUZU_API static const regex::RE2& regexPattern2();
+    LBUG_API static void tryGetDatePartSpecifier(std::string specifier, DatePartSpecifier& result);
+    LBUG_API static int32_t getIntervalPart(DatePartSpecifier specifier, interval_t timestamp);
+    LBUG_API static int64_t getMicro(const interval_t& val);
+    LBUG_API static int64_t getNanoseconds(const interval_t& val);
+    LBUG_API static const regex::RE2& regexPattern1();
+    LBUG_API static const regex::RE2& regexPattern2();
 };
 
 } // namespace common

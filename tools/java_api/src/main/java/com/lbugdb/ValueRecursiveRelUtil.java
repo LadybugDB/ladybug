@@ -13,7 +13,7 @@ public class ValueRecursiveRelUtil {
      *                                     destroyed.
      */
     public static Value getNodeList(Value value) {
-        return new KuzuStruct(value).getValueByIndex(0);
+        return new LbugStruct(value).getValueByIndex(0);
     }
 
     /**
@@ -25,6 +25,6 @@ public class ValueRecursiveRelUtil {
      *                                     destroyed.
      */
     public static Value getRelList(Value value) {
-        return new KuzuStruct(value).getValueByIndex(1);
+        return new LbugStruct(value).getValueByIndex(1);
     }
 }

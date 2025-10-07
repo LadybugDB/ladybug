@@ -43,7 +43,7 @@ httplib::Headers BedrockEmbedding::getHeaders(const std::string& model,
         if (envAWSSecretAccessKey.empty()) {
             errMsg += envVarAWSSecretAccessKey + '\n';
         }
-        throw(RuntimeException(errMsg + std::string(referenceKuzuDocs)));
+        throw(RuntimeException(errMsg + std::string(referenceLbugDocs)));
     }
     std::string service = "bedrock";
     std::string region = this->region.value_or("");

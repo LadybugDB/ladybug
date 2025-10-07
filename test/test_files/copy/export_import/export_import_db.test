@@ -11,11 +11,11 @@
 ---- ok
 -STATEMENT ALTER TABLE test DROP prop1;
 ---- ok
--STATEMENT EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/drop_column_test";
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/drop_column_test";
 ---- ok
 #EXPORT_IMPORT_TEST_SPLIT
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/drop_column_test"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/drop_column_test";
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/drop_column_test"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/drop_column_test";
 ---- ok
 -STATEMENT MATCH (t:test) RETURN t.id, t.prop2, t.prop3;
 ---- 1
@@ -32,11 +32,11 @@
 ---- ok
 -STATEMENT ALTER TABLE test ADD prop4 string default "default_value";
 ---- ok
--STATEMENT EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/drop_add_column_test";
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/drop_add_column_test";
 ---- ok
 #EXPORT_IMPORT_TEST_SPLIT
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/drop_add_column_test"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/drop_add_column_test";
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/drop_add_column_test"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/drop_add_column_test";
 ---- ok
 -STATEMENT MATCH (t:test) RETURN t.id, t.prop2, t.prop3, t.prop4;
 ---- 1
@@ -53,11 +53,11 @@
 ---- ok
 -STATEMENT ALTER TABLE test DROP d;
 ---- ok
--STATEMENT EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/drop_multiple_columns";
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/drop_multiple_columns";
 ---- ok
 #EXPORT_IMPORT_TEST_SPLIT
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/drop_multiple_columns"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/drop_multiple_columns";
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/drop_multiple_columns"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/drop_multiple_columns";
 ---- ok
 -STATEMENT MATCH (t:test) RETURN t.id, t.b, t.c;
 ---- 1
@@ -74,11 +74,11 @@
 ---- ok
 -STATEMENT CREATE (t:test{id:2, name:"New", tag:"custom"});
 ---- ok
--STATEMENT EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/add_col_insert";
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/add_col_insert";
 ---- ok
 #EXPORT_IMPORT_TEST_SPLIT
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/add_col_insert"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/add_col_insert";
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/add_col_insert"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/add_col_insert";
 ---- ok
 -STATEMENT MATCH (t:test) RETURN t.id, t.name, t.tag ORDER BY t.id;
 ---- 2
@@ -96,11 +96,11 @@
 ---- ok
 -STATEMENT ALTER TABLE test ADD score double default 99.9;
 ---- ok
--STATEMENT EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/drop_add_diff_type";
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/drop_add_diff_type";
 ---- ok
 #EXPORT_IMPORT_TEST_SPLIT
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/drop_add_diff_type"
--STATEMENT IMPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/drop_add_diff_type";
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/drop_add_diff_type"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/drop_add_diff_type";
 ---- ok
 -STATEMENT MATCH (t:test) RETURN t.id, t.name, t.score;
 -CHECK_ORDER

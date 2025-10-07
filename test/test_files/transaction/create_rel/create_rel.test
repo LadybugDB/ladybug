@@ -8,7 +8,7 @@
 -STATEMENT create rel table replyOf_Comment (FROM Comment TO Comment, MANY_ONE);
 ---- ok
 # copy single-threaded so we have better control over node offsets
--STATEMENT COPY Comment FROM "${KUZU_ROOT_DIRECTORY}/dataset/ldbc-sf01/Comment.csv"(parallel=false);
+-STATEMENT COPY Comment FROM "${LBUG_ROOT_DIRECTORY}/dataset/ldbc-sf01/Comment.csv"(parallel=false);
 ---- ok
 -STATEMENT MATCH (a:Comment), (b:Comment) WHERE a.id = 1030792523059 AND b.id = 962073046352 CREATE (a)-[:replyOf_Comment]->(b)
 ---- ok

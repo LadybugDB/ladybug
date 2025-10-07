@@ -7,11 +7,11 @@
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MAnY) WITH (storage_direction = 'fwd');
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv";
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv";
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv";
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv";
 ---- ok
 -STATEMENT MATCH (a:person)-[k:knows]->(b:person) HINT a JOIN (k JOIN b) RETURN COUNT(*)
 ---- error
@@ -29,7 +29,7 @@ fwd
 -LOG Both
 -STATEMENT create rel table meets (FROM person TO person, location FLOAT[2], times INT, data BYTEA, MANY_ONE);
 ---- ok
--STATEMENT COPY meets FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eMeets.csv";
+-STATEMENT COPY meets FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eMeets.csv";
 ---- ok
 -STATEMENT MATCH (a:person)-[k:meets]->(b:person) RETURN COUNT(*)
 ---- 1

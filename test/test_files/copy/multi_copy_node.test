@@ -4,15 +4,15 @@
 -CASE CopyLargeInt
 -STATEMENT create node table test(id int64, primary key(id));
 ---- ok
--STATEMENT COPY test from "${KUZU_ROOT_DIRECTORY}/dataset/large-serial/serialtable0.csv";
+-STATEMENT COPY test from "${LBUG_ROOT_DIRECTORY}/dataset/large-serial/serialtable0.csv";
 ---- ok
--STATEMENT COPY test from "${KUZU_ROOT_DIRECTORY}/dataset/large-serial/serialtable1.csv";
+-STATEMENT COPY test from "${LBUG_ROOT_DIRECTORY}/dataset/large-serial/serialtable1.csv";
 ---- ok
--STATEMENT COPY test from "${KUZU_ROOT_DIRECTORY}/dataset/large-serial/serialtable2.csv";
+-STATEMENT COPY test from "${LBUG_ROOT_DIRECTORY}/dataset/large-serial/serialtable2.csv";
 ---- ok
--STATEMENT COPY test from "${KUZU_ROOT_DIRECTORY}/dataset/large-serial/serialtable3.csv";
+-STATEMENT COPY test from "${LBUG_ROOT_DIRECTORY}/dataset/large-serial/serialtable3.csv";
 ---- ok
--STATEMENT COPY test from "${KUZU_ROOT_DIRECTORY}/dataset/large-serial/serialtable4.csv";
+-STATEMENT COPY test from "${LBUG_ROOT_DIRECTORY}/dataset/large-serial/serialtable4.csv";
 ---- ok
 -STATEMENT match (t:test) return count(*);
 ---- 1
@@ -21,7 +21,7 @@
 -CASE CopyLargeIntRandom
 -STATEMENT create node table test(id int64, primary key(id));
 ---- ok
--MULTI_COPY_RANDOM 5 test "${KUZU_ROOT_DIRECTORY}/dataset/large-serial/serialtable_merged.csv"
+-MULTI_COPY_RANDOM 5 test "${LBUG_ROOT_DIRECTORY}/dataset/large-serial/serialtable_merged.csv"
 -STATEMENT match (t:test) return count(*);
 ---- 1
 200000
@@ -29,7 +29,7 @@
 -CASE CopyLargeIntRandomSeeded
 -STATEMENT create node table test(id int64, primary key(id));
 ---- ok
--MULTI_COPY_RANDOM 5 test SEED 3024167388 2272459668 "${KUZU_ROOT_DIRECTORY}/dataset/large-serial/serialtable_merged.csv"
+-MULTI_COPY_RANDOM 5 test SEED 3024167388 2272459668 "${LBUG_ROOT_DIRECTORY}/dataset/large-serial/serialtable_merged.csv"
 -STATEMENT match (t:test) return count(*);
 ---- 1
 200000

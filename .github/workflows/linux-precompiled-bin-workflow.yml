@@ -38,23 +38,23 @@ jobs:
         run: |
           mv install/include/lbug.h .
           mv install/include/lbug.hpp .
-          mv install/lib64/libkuzu.so .
+          mv install/lib64/liblbug.so .
           mv install/bin/lbug .
 
       - name: Create tarball
         run: |
-          tar -czvf libkuzu-linux-x86_64.tar.gz lbug.h lbug.hpp libkuzu.so
-          tar -czvf kuzu_cli-linux-x86_64.tar.gz lbug
+          tar -czvf liblbug-linux-x86_64.tar.gz lbug.h lbug.hpp liblbug.so
+          tar -czvf lbug_cli-linux-x86_64.tar.gz lbug
 
       - uses: actions/upload-artifact@v4
         with:
-          name: libkuzu-linux-x86_64
-          path: libkuzu-linux-x86_64.tar.gz
+          name: liblbug-linux-x86_64
+          path: liblbug-linux-x86_64.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
-          name: kuzu_cli-linux-x86_64
-          path: kuzu_cli-linux-x86_64.tar.gz
+          name: lbug_cli-linux-x86_64
+          path: lbug_cli-linux-x86_64.tar.gz
 
   build-precompiled-bin-aarch64:
     if: ${{ inputs.x86_64Only != true }}
@@ -78,23 +78,23 @@ jobs:
         run: |
           mv install/include/lbug.h .
           mv install/include/lbug.hpp .
-          mv install/lib64/libkuzu.so .
+          mv install/lib64/liblbug.so .
           mv install/bin/lbug .
 
       - name: Create tarball
         run: |
-          tar -czvf libkuzu-linux-aarch64.tar.gz lbug.h lbug.hpp libkuzu.so
-          tar -czvf kuzu_cli-linux-aarch64.tar.gz lbug
+          tar -czvf liblbug-linux-aarch64.tar.gz lbug.h lbug.hpp liblbug.so
+          tar -czvf lbug_cli-linux-aarch64.tar.gz lbug
 
       - uses: actions/upload-artifact@v4
         with:
-          name: libkuzu-linux-aarch64
-          path: libkuzu-linux-aarch64.tar.gz
+          name: liblbug-linux-aarch64
+          path: liblbug-linux-aarch64.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
-          name: kuzu_cli-linux-aarch64
-          path: kuzu_cli-linux-aarch64.tar.gz
+          name: lbug_cli-linux-aarch64
+          path: lbug_cli-linux-aarch64.tar.gz
 
   build-precompiled-bin-android-armv8a:
     if: ${{ inputs.x86_64Only != true }}
@@ -122,20 +122,20 @@ jobs:
         run: |
           mv install/include/lbug.h .
           mv install/include/lbug.hpp .
-          mv install/lib/libkuzu.so .
+          mv install/lib/liblbug.so .
           mv install/bin/lbug .
         
       - name: Create tarball
         run: |
-          tar -czvf libkuzu-android-armv8a.tar.gz lbug.h lbug.hpp libkuzu.so
-          tar -czvf kuzu_cli-android-armv8a.tar.gz lbug
+          tar -czvf liblbug-android-armv8a.tar.gz lbug.h lbug.hpp liblbug.so
+          tar -czvf lbug_cli-android-armv8a.tar.gz lbug
         
       - uses: actions/upload-artifact@v4
         with:
-          name: libkuzu-android-armv8a
-          path: libkuzu-android-armv8a.tar.gz
+          name: liblbug-android-armv8a
+          path: liblbug-android-armv8a.tar.gz
         
       - uses: actions/upload-artifact@v4
         with:
-          name: kuzu_cli-android-armv8a
-          path: kuzu_cli-android-armv8a.tar.gz
+          name: lbug_cli-android-armv8a
+          path: lbug_cli-android-armv8a.tar.gz

@@ -181,7 +181,7 @@ TEST_F(CopyTest, NodeCopyBMExceptionRecoverySameConnection) {
             [](main::Connection* conn, int) {
                 const auto queryString = common::stringFormat(
                     "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
-                    KUZU_ROOT_DIRECTORY);
+                    LBUG_ROOT_DIRECTORY);
 
                 return conn->query(queryString);
             },
@@ -207,7 +207,7 @@ TEST_F(CopyTest, NodeCopyBMExceptionRecoverySameConnectionStringKey) {
             [](main::Connection* conn, int) {
                 const auto queryString = common::stringFormat(
                     "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
-                    KUZU_ROOT_DIRECTORY);
+                    LBUG_ROOT_DIRECTORY);
 
                 return conn->query(queryString);
             },
@@ -232,7 +232,7 @@ TEST_F(CopyTest, RelCopyBMExceptionRecoverySameConnection) {
                 conn->query("CREATE REL TABLE follows(FROM account TO account);");
                 ASSERT_TRUE(conn->query(common::stringFormat(
                     "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
-                    KUZU_ROOT_DIRECTORY)));
+                    LBUG_ROOT_DIRECTORY)));
             },
         .executeFunc =
             [this](main::Connection* conn, int i) {
@@ -248,7 +248,7 @@ TEST_F(CopyTest, RelCopyBMExceptionRecoverySameConnection) {
 
                 return conn->query(common::stringFormat(
                     "COPY follows FROM '{}/dataset/snap/twitter/csv/twitter-edges.csv' (DELIM=' ')",
-                    KUZU_ROOT_DIRECTORY));
+                    LBUG_ROOT_DIRECTORY));
             },
         .earlyExitOnFailureFunc =
             [this](main::QueryResult*) {
@@ -338,7 +338,7 @@ TEST_F(CopyTest, NodeCopyBMExceptionDuringCheckpointRecovery) {
             [](main::Connection* conn, int) {
                 return conn->query(common::stringFormat(
                     "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
-                    KUZU_ROOT_DIRECTORY));
+                    LBUG_ROOT_DIRECTORY));
             },
         .earlyExitOnFailureFunc =
             [this](main::QueryResult*) {
@@ -365,14 +365,14 @@ TEST_F(CopyTest, RelCopyCheckpointBMExceptionRecovery) {
                 conn->query("CREATE REL TABLE follows(FROM account TO account);");
                 ASSERT_TRUE(conn->query(common::stringFormat(
                     "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
-                    KUZU_ROOT_DIRECTORY)));
+                    LBUG_ROOT_DIRECTORY)));
                 failureFrequency = 1024;
             },
         .executeFunc =
             [](main::Connection* conn, int) {
                 return conn->query(common::stringFormat(
                     "COPY follows FROM '{}/dataset/snap/twitter/csv/twitter-edges.csv' (DELIM=' ')",
-                    KUZU_ROOT_DIRECTORY));
+                    LBUG_ROOT_DIRECTORY));
             },
         .earlyExitOnFailureFunc =
             [this](main::QueryResult*) {
@@ -434,7 +434,7 @@ TEST_F(CopyTest, GracefulBMExceptionHandlingManyThreads) {
             common::stringFormat("COPY Comment FROM ['{}/dataset/ldbc-sf01/Comment.csv', "
                                  "'{}/dataset/ldbc-sf01/Comment.csv'] (delim='|', header=true, "
                                  "parallel=false)",
-                KUZU_ROOT_DIRECTORY, KUZU_ROOT_DIRECTORY));
+                LBUG_ROOT_DIRECTORY, LBUG_ROOT_DIRECTORY));
         ASSERT_FALSE(result->isSuccess());
         conn->query("drop table Comment");
     }
@@ -456,12 +456,12 @@ TEST_F(CopyTest, OutOfMemoryRecovery) {
     {
         auto result = conn->query(common::stringFormat(
             "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
-            KUZU_ROOT_DIRECTORY));
+            LBUG_ROOT_DIRECTORY));
         ASSERT_TRUE(result->isSuccess()) << result->toString();
 
         result = conn->query(common::stringFormat(
             "COPY follows FROM '{}/dataset/snap/twitter/csv/twitter-edges.csv' (DELIM=' ')",
-            KUZU_ROOT_DIRECTORY));
+            LBUG_ROOT_DIRECTORY));
         ASSERT_FALSE(result->isSuccess());
         ASSERT_EQ(result->getErrorMessage(),
             "Buffer manager exception: Unable to allocate memory! The buffer pool is full and no "
@@ -474,7 +474,7 @@ TEST_F(CopyTest, OutOfMemoryRecovery) {
     {
         auto result = conn->query(common::stringFormat(
             "COPY follows FROM '{}/dataset/snap/twitter/csv/twitter-edges.csv' (DELIM=' ')",
-            KUZU_ROOT_DIRECTORY));
+            LBUG_ROOT_DIRECTORY));
         ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
         // Test that the table copied as expected after the query
         result = conn->query("MATCH (a:account)-[:follows]->(b:account) RETURN COUNT(*)");
@@ -496,11 +496,11 @@ TEST_F(CopyTest, OutOfMemoryRecoveryDropTable) {
     {
         auto result = conn->query(common::stringFormat(
             "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
-            KUZU_ROOT_DIRECTORY));
+            LBUG_ROOT_DIRECTORY));
         ASSERT_TRUE(result->isSuccess()) << result->toString();
         result = conn->query(common::stringFormat(
             "COPY follows FROM '{}/dataset/snap/twitter/csv/twitter-edges.csv' (DELIM=' ')",
-            KUZU_ROOT_DIRECTORY));
+            LBUG_ROOT_DIRECTORY));
         ASSERT_FALSE(result->isSuccess());
         ASSERT_EQ(result->getErrorMessage(), "Buffer manager exception: Unable to allocate "
                                              "memory! The buffer pool is full and no "
@@ -515,7 +515,7 @@ TEST_F(CopyTest, OutOfMemoryRecoveryDropTable) {
         ASSERT_TRUE(result->isSuccess()) << result->toString();
         result = conn->query(common::stringFormat(
             "COPY follows FROM '{}/dataset/snap/twitter/csv/twitter-edges.csv' (DELIM=' ')",
-            KUZU_ROOT_DIRECTORY));
+            LBUG_ROOT_DIRECTORY));
         ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
         // Test that the table copied as expected after the query
         result = conn->query("MATCH (a:account)-[:follows]->(b:account) RETURN COUNT(*)");

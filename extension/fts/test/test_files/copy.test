@@ -8,13 +8,13 @@
 ---- ok
 -STATEMENT CALL CREATE_FTS_INDEX('Book', 'book_index', ['abstract', 'author', 'title'], stemmer := 'porter');
 ---- ok
--STATEMENT COPY Book from '${KUZU_ROOT_DIRECTORY}/dataset/fts-basic/Book.csv'
+-STATEMENT COPY Book from '${LBUG_ROOT_DIRECTORY}/dataset/fts-basic/Book.csv'
 ---- ok
 -STATEMENT CALL QUERY_FTS_INDEX('Book', 'book_index', 'a quantum machine') RETURN node.title,score;
 ---- 2
 Learning Machines|0.827832
 The Quantum World|0.857996
--STATEMENT COPY Book from '${KUZU_ROOT_DIRECTORY}/dataset/fts-basic/Book.csv'
+-STATEMENT COPY Book from '${LBUG_ROOT_DIRECTORY}/dataset/fts-basic/Book.csv'
 ---- ok
 -STATEMENT CALL QUERY_FTS_INDEX('Book', 'book_index', 'a quantum machine') RETURN node.ID,score;
 ---- 4

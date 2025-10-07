@@ -118,7 +118,7 @@ Binder exception: Table knows does not exist.
 ---- ok
 -STATEMENT create node table Comment (id int64, PRIMARY KEY (id));
 ---- ok
--STATEMENT copy Comment from '${KUZU_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment.csv' (HEADER=true);
+-STATEMENT copy Comment from '${LBUG_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment.csv' (HEADER=true);
 ---- ok
 -STATEMENT alter table Comment add propx int64;
 ---- ok
@@ -171,7 +171,7 @@ Binder exception: Table knows does not exist.
 ---- ok
 -STATEMENT create node table Comment (id int64, PRIMARY KEY (id));
 ---- ok
--STATEMENT copy Comment from '${KUZU_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment.csv' (HEADER=true);
+-STATEMENT copy Comment from '${LBUG_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment.csv' (HEADER=true);
 ---- ok
 -STATEMENT alter table Comment add propx int64;
 ---- ok
@@ -188,9 +188,9 @@ Binder exception: Table knows does not exist.
 ---- ok
 -STATEMENT create rel table replyOf (FROM Comment TO Comment, MANY_ONE);
 ---- ok
--STATEMENT copy Comment from '${KUZU_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment.csv' (HEADER=true);
+-STATEMENT copy Comment from '${LBUG_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment.csv' (HEADER=true);
 ---- ok
--STATEMENT copy replyOf from '${KUZU_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment_replyOf_Comment.csv' (HEADER=true);
+-STATEMENT copy replyOf from '${LBUG_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment_replyOf_Comment.csv' (HEADER=true);
 ---- ok
 -STATEMENT alter table replyOf add propx int64;
 ---- ok
@@ -203,9 +203,9 @@ Binder exception: Table knows does not exist.
 ---- ok
 -STATEMENT create rel table replyOf (FROM Comment TO Comment, MANY_ONE);
 ---- ok
--STATEMENT copy Comment from '${KUZU_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment.csv' (HEADER=true);
+-STATEMENT copy Comment from '${LBUG_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment.csv' (HEADER=true);
 ---- ok
--STATEMENT copy replyOf from '${KUZU_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment_replyOf_Comment.csv' (HEADER=true);
+-STATEMENT copy replyOf from '${LBUG_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment_replyOf_Comment.csv' (HEADER=true);
 ---- ok
 -STATEMENT alter table replyOf add propx int64;
 ---- ok
@@ -611,14 +611,14 @@ Binder exception: Expression UPPER(abc) has data type STRING but expected INT64.
 Binder exception: Expression ABC has data type STRING but expected INT64[3]. Implicit cast is not supported.
 
 -CASE CreateNodeTableAs
--STATEMENT CREATE NODE TABLE Test AS LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" WHERE ISStudent = True RETURN id, Gender, fname;
+-STATEMENT CREATE NODE TABLE Test AS LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" WHERE ISStudent = True RETURN id, Gender, fname;
 ---- 1
 Table Test has been created.
 -STATEMENT MATCH (a:Test) RETURN a.*;
 ---- 2
 0|1|Alice
 2|2|Bob
--STATEMENT CREATE NODE TABLE IF NOT EXISTS Test AS LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" WHERE ISStudent = True RETURN id, Gender, fname;
+-STATEMENT CREATE NODE TABLE IF NOT EXISTS Test AS LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" WHERE ISStudent = True RETURN id, Gender, fname;
 ---- ok
 -STATEMENT CREATE NODE TABLE IF NOT EXISTS Test2 AS MATCH (a:TEST) RETURN a.id, a.fname;
 ---- ok
@@ -631,7 +631,7 @@ Table Test has been created.
 Binder exception: Invalid primary key column type NODE. Primary keys must be either STRING or a numeric type.
 
 -CASE CreateNodeTableAsDuplicateIntIDs
--STATEMENT CREATE NODE TABLE Foo AS LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-fault-tests/duplicate-ids/vPerson.csv" RETURN *;
+-STATEMENT CREATE NODE TABLE Foo AS LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/duplicate-ids/vPerson.csv" RETURN *;
 ---- error
 Copy exception: Found duplicated primary key value 10, which violates the uniqueness constraint of the primary key column.
 
@@ -644,14 +644,14 @@ Binder exception: RETURN or WITH * is not allowed when there are no variables in
 Binder exception: RETURN or WITH * is not allowed when there are no variables in scope.
 
 -CASE CreateRelTableAs
--STATEMENT CREATE NODE TABLE Person2 AS LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" RETURN *;
+-STATEMENT CREATE NODE TABLE Person2 AS LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" RETURN *;
 ---- 1
 Table Person2 has been created.
--STATEMENT COPY Person2 FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv";
+-STATEMENT COPY Person2 FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv";
 ---- ok
--STATEMENT CREATE REL TABLE Knows2 (FROM Person2 TO Person2) AS LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" RETURN *;
+-STATEMENT CREATE REL TABLE Knows2 (FROM Person2 TO Person2) AS LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" RETURN *;
 ---- ok
--STATEMENT CREATE REL TABLE IF NOT EXISTS Knows2 (FROM Person2 TO Person2) AS LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" RETURN *;
+-STATEMENT CREATE REL TABLE IF NOT EXISTS Knows2 (FROM Person2 TO Person2) AS LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" RETURN *;
 ---- ok
 -STATEMENT MATCH (a:Person2)-[k:Knows2]->(b:Person2) RETURN a.fname, b.fname;
 ---- 6
@@ -661,7 +661,7 @@ Alice|Bob
 Bob|Dan
 Bob|Carol
 Bob|Alice
--STATEMENT CREATE REL TABLE Knows2 (FROM Person2 TO Person2) AS LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" RETURN *;
+-STATEMENT CREATE REL TABLE Knows2 (FROM Person2 TO Person2) AS LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" RETURN *;
 ---- error
 Binder exception: Knows2 already exists in catalog.
 -STATEMENT CREATE REL TABLE Failure (FROM Person2 TO Person2, FROM Person TO Test2) AS MATCH (:Person2)-[e:Knows2]->(:Person2) RETURN *;
@@ -686,17 +686,17 @@ Bob|Dan
 ---- ok
 
 -CASE CreateTableAsExample
--STATEMENT CREATE NODE TABLE Person2 AS LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" RETURN *;
+-STATEMENT CREATE NODE TABLE Person2 AS LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" RETURN *;
 ---- ok
 -STATEMENT CREATE NODE TABLE YoungPerson AS MATCH (p:Person2) WHERE p.age < 25 RETURN p.*;
 ---- ok
--STATEMENT CREATE REL TABLE Knows2(FROM Person2 TO Person2) AS LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" RETURN *;
+-STATEMENT CREATE REL TABLE Knows2(FROM Person2 TO Person2) AS LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" RETURN *;
 ---- ok
 -STATEMENT CREATE REL TABLE KnowsSameCity(FROM Person2 TO Person2) AS MATCH (a:Person2)-[e:Knows]->(b:Person2) WHERE a.Gender = b.Gender RETURN a.id, b.id;
 ---- ok
--STATEMENT CREATE NODE TABLE IF NOT EXISTS Person2 AS LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" RETURN *;
+-STATEMENT CREATE NODE TABLE IF NOT EXISTS Person2 AS LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" RETURN *;
 ---- ok
--STATEMENT CREATE REL TABLE IF NOT EXISTS Knows2(FROM Person2 TO Person2) AS LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" RETURN *;
+-STATEMENT CREATE REL TABLE IF NOT EXISTS Knows2(FROM Person2 TO Person2) AS LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv" RETURN *;
 ---- ok
 
 -CASE EscapeInDataType

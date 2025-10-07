@@ -11,7 +11,7 @@
 namespace lbug {
 namespace common {
 
-class KUZU_API StringUtils {
+class LBUG_API StringUtils {
 public:
     static std::vector<std::string> splitComma(const std::string& input);
 

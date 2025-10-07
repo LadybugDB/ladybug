@@ -17,7 +17,7 @@ class BufferManager;
 };
 namespace common {
 
-class KUZU_API VirtualFileSystem final : public FileSystem {
+class LBUG_API VirtualFileSystem final : public FileSystem {
     friend class storage::BufferManager;
 
 public:

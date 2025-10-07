@@ -24,34 +24,34 @@ public:
      * @note this function copies all the properties into a vector, which is not efficient. use
      * `getPropertyName` and `getPropertyVal` instead if possible.
      */
-    KUZU_API static std::vector<std::pair<std::string, std::unique_ptr<Value>>> getProperties(
+    LBUG_API static std::vector<std::pair<std::string, std::unique_ptr<Value>>> getProperties(
         const Value* val);
     /**
      * @return number of properties of the RelVal.
      */
-    KUZU_API static uint64_t getNumProperties(const Value* val);
+    LBUG_API static uint64_t getNumProperties(const Value* val);
 
     /**
      * @return the name of the property at the given index.
      */
-    KUZU_API static std::string getPropertyName(const Value* val, uint64_t index);
+    LBUG_API static std::string getPropertyName(const Value* val, uint64_t index);
 
     /**
      * @return the value of the property at the given index.
      */
-    KUZU_API static Value* getPropertyVal(const Value* val, uint64_t index);
+    LBUG_API static Value* getPropertyVal(const Value* val, uint64_t index);
     /**
      * @return the nodeID as a Value.
      */
-    KUZU_API static Value* getNodeIDVal(const Value* val);
+    LBUG_API static Value* getNodeIDVal(const Value* val);
     /**
      * @return the name of the node as a Value.
      */
-    KUZU_API static Value* getLabelVal(const Value* val);
+    LBUG_API static Value* getLabelVal(const Value* val);
     /**
      * @return the current node values in string format.
      */
-    KUZU_API static std::string toString(const Value* val);
+    LBUG_API static std::string toString(const Value* val);
 
 private:
     static void throwIfNotNode(const Value* val);

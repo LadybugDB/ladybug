@@ -23,7 +23,7 @@ public:
     DELETE_COPY_DEFAULT_MOVE(CardinalityEstimator);
 
     void init(const binder::QueryGraph& queryGraph);
-    KUZU_API void init(const binder::NodeExpression& node);
+    LBUG_API void init(const binder::NodeExpression& node);
 
     void rectifyCardinality(const binder::Expression& nodeID, cardinality_t card);
 

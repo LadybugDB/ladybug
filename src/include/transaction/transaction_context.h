@@ -30,7 +30,7 @@ namespace transaction {
  */
 enum class TransactionMode : uint8_t { AUTO = 0, MANUAL = 1 };
 
-class KUZU_API TransactionContext {
+class LBUG_API TransactionContext {
 public:
     explicit TransactionContext(main::ClientContext& clientContext);
     ~TransactionContext();

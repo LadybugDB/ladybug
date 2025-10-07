@@ -25,7 +25,7 @@ struct LocalFileInfo final : FileInfo {
 #endif
 };
 
-class KUZU_API LocalFileSystem final : public FileSystem {
+class LBUG_API LocalFileSystem final : public FileSystem {
 public:
     explicit LocalFileSystem(std::string homeDir) : FileSystem(std::move(homeDir)) {}
 

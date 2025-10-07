@@ -36,7 +36,7 @@ class PageAllocator;
 
 enum class NodeGroupDataFormat : uint8_t { REGULAR = 0, CSR = 1 };
 
-class KUZU_API InMemChunkedNodeGroup {
+class LBUG_API InMemChunkedNodeGroup {
     friend class ChunkedNodeGroup;
 
 public:

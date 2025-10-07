@@ -5,7 +5,7 @@
 --
 
 -CASE IncorrectServerInfo
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.lbug_extension"
 ---- ok
 -STATEMENT CALL NEO4J_MIGRATE("http://incorrect-url-does-not-exist.com:7474", "neo4j", "czy990424", ["person", "student"], ["KNOWS"]);
 ---- error
@@ -18,7 +18,7 @@ Runtime exception: Failed to connect to neo4j. Server returned: 401, Response: {
 Runtime exception: Failed to connect to neo4j. Server returned: 401, Response: {"errors":[{"code":"Neo.ClientError.Security.Unauthorized","message":"Invalid credential."}]}.
 
 -CASE InvalidTableName
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.lbug_extension"
 ---- ok
 -STATEMENT CALL NEO4J_MIGRATE("http://localhost:7474", "neo4j", "czy990424", ["Person123", "Student"], ["KNOWS"]);
 ---- error
@@ -49,7 +49,7 @@ Runtime exception: Importing nodes with multi-labels is not supported right now.
 Runtime exception: Importing nodes with multi-labels is not supported right now. Found: [["TwoLabels1","TwoLabels2"]]
 
 -CASE KleeneStarWithOtherLabels
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/neo4j/build/libneo4j.lbug_extension"
 ---- ok
 -STATEMENT CALL NEO4J_MIGRATE("http://localhost:7474", "neo4j", "czy990424", ["*", "Student"], ["KNOWS"]);
 ---- error

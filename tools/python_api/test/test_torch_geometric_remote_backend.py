@@ -101,8 +101,8 @@ TINY_SNB_PERSON_IDS_GROUND_TRUTH = [0, 2, 3, 5, 7, 8, 9, 10]
 #     conn.execute(
 #         f"""
 #         COPY npy20k FROM (
-#           "{KUZU_ROOT}/dataset/npy-20k/id_int64.npy",
-#           "{KUZU_ROOT}/dataset/npy-20k/two_dim_float.npy") BY COLUMN;
+#           "{LBUG_ROOT}/dataset/npy-20k/id_int64.npy",
+#           "{LBUG_ROOT}/dataset/npy-20k/two_dim_float.npy") BY COLUMN;
 #         """
 #     )
 #     del conn

@@ -13,8 +13,8 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from torch_geometric.data.feature_store import IndexType
 
-    from .torch_geometric_feature_store import KuzuFeatureStore
-    from .torch_geometric_graph_store import KuzuGraphStore
+    from .torch_geometric_feature_store import LbugFeatureStore
+    from .torch_geometric_graph_store import LbugGraphStore
 
     if sys.version_info >= (3, 11):
         from typing import Self
@@ -180,7 +180,7 @@ class Database:
 
     def get_torch_geometric_remote_backend(
         self, num_threads: int | None = None
-    ) -> tuple[KuzuFeatureStore, KuzuGraphStore]:
+    ) -> tuple[LbugFeatureStore, LbugGraphStore]:
         """
         Use the database as the remote backend for torch_geometric.
 
@@ -217,18 +217,18 @@ class Database:
 
         Returns
         -------
-        feature_store : KuzuFeatureStore
+        feature_store : LbugFeatureStore
             Feature store compatible with torch_geometric.
-        graph_store : KuzuGraphStore
+        graph_store : LbugGraphStore
             Graph store compatible with torch_geometric.
         """
         self.check_for_database_close()
-        from .torch_geometric_feature_store import KuzuFeatureStore
-        from .torch_geometric_graph_store import KuzuGraphStore
+        from .torch_geometric_feature_store import LbugFeatureStore
+        from .torch_geometric_graph_store import LbugGraphStore
 
         return (
-            KuzuFeatureStore(self, num_threads),
-            KuzuGraphStore(self, num_threads),
+            LbugFeatureStore(self, num_threads),
+            LbugGraphStore(self, num_threads),
         )
 
     def _scan_node_table(

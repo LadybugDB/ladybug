@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#ifndef _KUZU_THRIFT_TLOGGING_H_
-#define _KUZU_THRIFT_TLOGGING_H_ 1
+#ifndef _LBUG_THRIFT_TLOGGING_H_
+#define _LBUG_THRIFT_TLOGGING_H_ 1
 
 #include "thrift-config.h"
 
@@ -142,4 +142,4 @@
 #define T_GENERIC_PROTOCOL(template_class, generic_prot, specific_prot)
 #endif
 
-#endif // #ifndef _KUZU_THRIFT_TLOGGING_H_
+#endif // #ifndef _LBUG_THRIFT_TLOGGING_H_

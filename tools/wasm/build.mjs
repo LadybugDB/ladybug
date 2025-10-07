@@ -6,7 +6,7 @@ import fs from 'fs';
 
 const SRC_PATH = path.resolve("..", "..");
 const THREADS = os.cpus().length;
-const KUZU_VERSION_TEXT = "Lbug VERSION";
+const LBUG_VERSION_TEXT = "Lbug VERSION";
 const ES_BUILD_CONFIG = {
   entryPoints: ['./build/sync/index.js', './build/index.js', 'build/lbug_wasm_worker.js'],
   bundle: true,
@@ -67,7 +67,7 @@ const packageJsonText = await fs.promises.readFile(path.resolve(".", 'package.js
 const packageJson = JSON.parse(packageJsonText);
 const lines = CMakeListsTxt.split("\n");
 for (const line of lines) {
-  if (line.includes(KUZU_VERSION_TEXT)) {
+  if (line.includes(LBUG_VERSION_TEXT)) {
     const versionSplit = line.split(" ")[2].trim().split(".");
     let version = versionSplit.slice(0, 3).join(".");
     if (versionSplit.length >= 4) {

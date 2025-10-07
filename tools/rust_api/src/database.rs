@@ -6,7 +6,7 @@ use std::path::Path;
 use crate::error::Error;
 use crate::ffi::ffi;
 
-/// The Database class is the main class of `KuzuDB`. It manages all database components.
+/// The Database class is the main class of `LbugDB`. It manages all database components.
 pub struct Database {
     pub(crate) db: UnsafeCell<UniquePtr<ffi::Database>>,
 }

@@ -11,7 +11,7 @@ class FileSystem;
 
 namespace function {
 
-struct KUZU_API TableFuncBindData {
+struct LBUG_API TableFuncBindData {
     binder::expression_vector columns;
     common::row_idx_t numRows;
     std::unique_ptr<OptionalParams> optionalParams = nullptr;

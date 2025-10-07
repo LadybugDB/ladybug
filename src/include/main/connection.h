@@ -24,37 +24,37 @@ public:
      * @brief Creates a connection to the database.
      * @param database A pointer to the database instance that this connection will be connected to.
      */
-    KUZU_API explicit Connection(Database* database);
+    LBUG_API explicit Connection(Database* database);
     /**
      * @brief Destructs the connection.
      */
-    KUZU_API ~Connection();
+    LBUG_API ~Connection();
     /**
      * @brief Sets the maximum number of threads to use for execution in the current connection.
      * @param numThreads The number of threads to use for execution in the current connection.
      */
-    KUZU_API void setMaxNumThreadForExec(uint64_t numThreads);
+    LBUG_API void setMaxNumThreadForExec(uint64_t numThreads);
     /**
      * @brief Returns the maximum number of threads to use for execution in the current connection.
      * @return the maximum number of threads to use for execution in the current connection.
      */
-    KUZU_API uint64_t getMaxNumThreadForExec();
+    LBUG_API uint64_t getMaxNumThreadForExec();
 
     /**
      * @brief Executes the given query and returns the result.
      * @param query The query to execute.
      * @return the result of the query.
      */
-    KUZU_API std::unique_ptr<QueryResult> query(std::string_view query);
+    LBUG_API std::unique_ptr<QueryResult> query(std::string_view query);
 
-    KUZU_API std::unique_ptr<QueryResult> queryAsArrow(std::string_view query, int64_t chunkSize);
+    LBUG_API std::unique_ptr<QueryResult> queryAsArrow(std::string_view query, int64_t chunkSize);
 
     /**
      * @brief Prepares the given query and returns the prepared statement.
      * @param query The query to prepare.
      * @return the prepared statement.
      */
-    KUZU_API std::unique_ptr<PreparedStatement> prepare(std::string_view query);
+    LBUG_API std::unique_ptr<PreparedStatement> prepare(std::string_view query);
 
     /**
      * @brief Prepares the given query and returns the prepared statement.
@@ -65,7 +65,7 @@ public:
      * parameters will either be ignored or will cause an error to be thrown.
      * @return the prepared statement.
      */
-    KUZU_API std::unique_ptr<PreparedStatement> prepareWithParams(std::string_view query,
+    LBUG_API std::unique_ptr<PreparedStatement> prepareWithParams(std::string_view query,
         std::unordered_map<std::string, std::unique_ptr<common::Value>> inputParams);
 
     /**
@@ -88,18 +88,18 @@ public:
      * being parameter name and second element being parameter value.
      * @return the result of the query.
      */
-    KUZU_API std::unique_ptr<QueryResult> executeWithParams(PreparedStatement* preparedStatement,
+    LBUG_API std::unique_ptr<QueryResult> executeWithParams(PreparedStatement* preparedStatement,
         std::unordered_map<std::string, std::unique_ptr<common::Value>> inputParams);
     /**
      * @brief interrupts all queries currently executing within this connection.
      */
-    KUZU_API void interrupt();
+    LBUG_API void interrupt();
 
     /**
      * @brief sets the query timeout value of the current connection. A value of zero (the default)
      * disables the timeout.
      */
-    KUZU_API void setQueryTimeOut(uint64_t timeoutInMS);
+    LBUG_API void setQueryTimeOut(uint64_t timeoutInMS);
 
     template<typename TR, typename... Args>
     void createScalarFunction(std::string name, TR (*udfFunc)(Args...)) {
@@ -142,8 +142,8 @@ private:
         return clientContext->executeWithParams(preparedStatement, std::move(params), arg, args...);
     }
 
-    KUZU_API void addScalarFunction(std::string name, function::function_set definitions);
-    KUZU_API void removeScalarFunction(std::string name);
+    LBUG_API void addScalarFunction(std::string name, function::function_set definitions);
+    LBUG_API void removeScalarFunction(std::string name);
 
     std::unique_ptr<QueryResult> queryWithID(std::string_view query, uint64_t queryID);
 

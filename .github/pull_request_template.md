@@ -8,4 +8,4 @@ Associated docs (issue or PR):
 
 # Contributor agreement
 
-- [ ] I have read and agree to the [Contributor Agreement](https://github.com/kuzudb/lbug/blob/master/CLA.md).
+- [ ] I have read and agree to the [Contributor Agreement](https://github.com/lbugdb/lbug/blob/master/CLA.md).

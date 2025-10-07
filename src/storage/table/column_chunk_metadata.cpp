@@ -55,7 +55,7 @@ ColumnChunkMetadata uncompressedGetMetadata(PhysicalTypeID dataType, uint64_t nu
     StorageValue min, StorageValue max) {
     auto numPages = 0;
     if (getDataTypeSizeInChunk(dataType) > 0) {
-        const auto numValuesPerPage = Uncompressed::numValues(KUZU_PAGE_SIZE, dataType);
+        const auto numValuesPerPage = Uncompressed::numValues(LBUG_PAGE_SIZE, dataType);
         numPages = ceilDiv(numValues, numValuesPerPage);
     }
     return ColumnChunkMetadata(INVALID_PAGE_IDX, numPages, numValues,
@@ -64,7 +64,7 @@ ColumnChunkMetadata uncompressedGetMetadata(PhysicalTypeID dataType, uint64_t nu
 
 ColumnChunkMetadata booleanGetMetadata(uint64_t numValues, StorageValue min, StorageValue max) {
     return ColumnChunkMetadata(INVALID_PAGE_IDX,
-        ceilDiv(ceilDiv(numValues, uint64_t{8}), KUZU_PAGE_SIZE), numValues,
+        ceilDiv(ceilDiv(numValues, uint64_t{8}), LBUG_PAGE_SIZE), numValues,
         CompressionMetadata(min, max, CompressionType::BOOLEAN_BITPACKING));
 }
 
@@ -119,7 +119,7 @@ ColumnChunkMetadata GetBitpackingMetadata::operator()(std::span<const uint8_t> /
             },
             [&](auto) {});
     }
-    const auto numValuesPerPage = compMeta.numValues(KUZU_PAGE_SIZE, dataType);
+    const auto numValuesPerPage = compMeta.numValues(LBUG_PAGE_SIZE, dataType);
     const auto numPages =
         numValuesPerPage == UINT64_MAX ?
             0 :
@@ -228,7 +228,7 @@ ColumnChunkMetadata GetFloatCompressionMetadata<T>::operator()(std::span<const u
         return uncompressedGetMetadata(physicalType, numValues, min, max);
     }
 
-    const auto numValuesPerPage = compMeta.numValues(KUZU_PAGE_SIZE, dataType);
+    const auto numValuesPerPage = compMeta.numValues(LBUG_PAGE_SIZE, dataType);
     const auto numPagesForEncoded = ceilDiv(numValues, numValuesPerPage);
     const auto numPagesForExceptions =
         EncodeException<T>::numPagesFromExceptions(floatMetadata->exceptionCapacity);

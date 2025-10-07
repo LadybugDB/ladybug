@@ -6,7 +6,7 @@
 namespace lbug {
 namespace catalog {
 
-class KUZU_API PropertyDefinitionCollection {
+class LBUG_API PropertyDefinitionCollection {
 public:
     PropertyDefinitionCollection() : nextColumnID{0}, nextPropertyID{0} {}
     explicit PropertyDefinitionCollection(common::column_id_t nextColumnID)

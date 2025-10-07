@@ -5,7 +5,7 @@
 
 -CASE BadParams
 
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/llm/build/libllm.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/llm/build/libllm.lbug_extension"
 ---- ok
 
 #When using an invalid region this provider seems to silently ignore the issue
@@ -20,7 +20,7 @@
 -STATEMENT return create_embedding('this better fail', 'google-vertex', 'gemini-embedding-001', -50, 'badRegion')
 ---- error
 Binder exception: Dimensions should be greater than 0. Got: -50.
-For more information, please refer to the official Lbug documentation: https://docs.kuzudb.com/extensions/llm/
+For more information, please refer to the official Lbug documentation: https://docs.lbugdb.com/extensions/llm/
 
 -STATEMENT return create_embedding('this better fail', 'google-vertex', 'gemini-embedding-001')
 ---- error
@@ -28,7 +28,7 @@ Binder exception: Function CREATE_EMBEDDING for google-vertex did not receive co
 Actual:   (STRING,STRING,STRING)
 Expected: (STRING,STRING,STRING,STRING) -> LIST
           (STRING,STRING,STRING,INT64,STRING) -> LIST
-For more information, please refer to the official Lbug documentation: https://docs.kuzudb.com/extensions/llm/
+For more information, please refer to the official Lbug documentation: https://docs.lbugdb.com/extensions/llm/
 
 -STATEMENT return create_embedding('this better fail', 'google-vertex', 'randomModel', 'us-central1')
 ---- error(regex)

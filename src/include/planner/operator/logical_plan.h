@@ -7,7 +7,7 @@ namespace planner {
 
 using cardinality_t = uint64_t;
 
-class KUZU_API LogicalPlan {
+class LBUG_API LogicalPlan {
     friend class CardinalityEstimator;
     friend class CostModel;
 

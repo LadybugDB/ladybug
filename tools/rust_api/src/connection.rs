@@ -372,9 +372,9 @@ Invalid input <MATCH (a:Person RETURN>: expected rule oC_SingleQuery (line: 1, o
                 let db = Database::new(temp_dir.path().join("testdb"), SYSTEM_CONFIG_FOR_TESTS)?;
                 let conn = Connection::new(&db)?;
                 let directory: String = if cfg!(windows) {
-                    std::env::var("KUZU_LOCAL_EXTENSIONS")?.replace("\\", "/")
+                    std::env::var("LBUG_LOCAL_EXTENSIONS")?.replace("\\", "/")
                 } else {
-                    std::env::var("KUZU_LOCAL_EXTENSIONS")?
+                    std::env::var("LBUG_LOCAL_EXTENSIONS")?
                 };
                 let name = stringify!($name);
                 conn.query(&format!("LOAD EXTENSION '{directory}/{name}/build/lib{name}.lbug_extension'"))?;

@@ -35,7 +35,7 @@ jobs:
 
       - name: Set checkout dir
         run: |
-          echo "KUZU_DIR=$(pwd)" >> $GITHUB_ENV
+          echo "LBUG_DIR=$(pwd)" >> $GITHUB_ENV
 
       - uses: actions/checkout@v4
 
@@ -48,15 +48,15 @@ jobs:
       - name: Clone implementation
         uses: actions/checkout@v4
         with:
-          repository: kuzudb/ldbc_finbench_transaction_impls
+          repository: lbugdb/ldbc_finbench_transaction_impls
           token: ${{ secrets.DOC_PUSH_TOKEN }}
           path: ldbc_finbench_transaction_impls
       
       - name: Update implementation
         working-directory: ldbc_finbench_transaction_impls
         run: |
-          ln -s $KUZU_DIR/tools/java_api/build/kuzu_java.jar lbug/src/main/resources/kuzu_java.jar
-          ln -s $KUZU_DIR/tools/python_api/build/lbug lbug/scripts/lbug
+          ln -s $LBUG_DIR/tools/java_api/build/lbug_java.jar lbug/src/main/resources/lbug_java.jar
+          ln -s $LBUG_DIR/tools/python_api/build/lbug lbug/scripts/lbug
           mkdir -p lbug/src/main/resources/data
           ln -s $CSV_DIR/finbench-datasets/sf${SCALE_FACTOR} lbug/src/main/resources/data/sf${SCALE_FACTOR}
           mvn clean package -DskipTests
@@ -68,7 +68,7 @@ jobs:
       - name: Run benchmark
         working-directory: ldbc_finbench_transaction_impls/lbug
         run:
-          java -cp target/lbug-0.1.0-alpha.jar:target/classes/kuzu_java.jar org.ldbcouncil.finbench.driver.driver.Driver -P sf${SCALE_FACTOR}_finbench_benchmark.properties | tee LDBC-FinBench.log
+          java -cp target/lbug-0.1.0-alpha.jar:target/classes/lbug_java.jar org.ldbcouncil.finbench.driver.driver.Driver -P sf${SCALE_FACTOR}_finbench_benchmark.properties | tee LDBC-FinBench.log
      
       - name: Upload results
         uses: actions/upload-artifact@v4

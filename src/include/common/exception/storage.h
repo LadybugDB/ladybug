@@ -6,7 +6,7 @@
 namespace lbug {
 namespace common {
 
-class KUZU_API StorageException : public Exception {
+class LBUG_API StorageException : public Exception {
 public:
     explicit StorageException(const std::string& msg) : Exception("Storage exception: " + msg){};
 };

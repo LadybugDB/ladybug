@@ -13,7 +13,7 @@ static offset_t internalTableFunc(const TableFuncMorsel& /*morsel*/,
     const TableFuncInput& /*input*/, DataChunk& output) {
     auto& outputVector = output.getValueVectorMutable(0);
     auto pos = output.state->getSelVector()[0];
-    outputVector.setValue(pos, std::string(KUZU_VERSION));
+    outputVector.setValue(pos, std::string(LBUG_VERSION));
     return 1;
 }
 

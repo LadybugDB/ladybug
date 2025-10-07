@@ -17,8 +17,8 @@ namespace function {
 
 bool isAnyType(std::string_view cpy);
 
-LogicalType KUZU_API inferMinimalTypeFromString(const std::string& str);
-LogicalType KUZU_API inferMinimalTypeFromString(std::string_view str);
+LogicalType LBUG_API inferMinimalTypeFromString(const std::string& str);
+LogicalType LBUG_API inferMinimalTypeFromString(std::string_view str);
 // Infer the type that the string represents.
 // Note: minimal integer width is int64
 // Used for sniffing
@@ -57,7 +57,7 @@ struct IntegerCastOperation {
 
 // cast string to bool
 bool tryCastToBool(const char* input, uint64_t len, bool& result);
-void KUZU_API castStringToBool(const char* input, uint64_t len, bool& result);
+void LBUG_API castStringToBool(const char* input, uint64_t len, bool& result);
 
 // cast to numerical values
 // TODO(Kebing): support exponent + decimal
@@ -186,7 +186,7 @@ inline void simpleInt128Cast(const char* input, uint64_t len, int128_t& result) 
 }
 
 template<typename T, bool IS_SIGNED = true>
-KUZU_API inline bool trySimpleIntegerCast(const char* input, uint64_t len, T& result) {
+LBUG_API inline bool trySimpleIntegerCast(const char* input, uint64_t len, T& result) {
     IntegerCastData<T> data{};
     data.result = 0;
     if (tryIntegerCast<IntegerCastData<T>, IS_SIGNED>(input, len, data)) {
@@ -197,7 +197,7 @@ KUZU_API inline bool trySimpleIntegerCast(const char* input, uint64_t len, T& re
 }
 
 template<class T, bool IS_SIGNED = true>
-KUZU_API inline void simpleIntegerCast(const char* input, uint64_t len, T& result,
+LBUG_API inline void simpleIntegerCast(const char* input, uint64_t len, T& result,
     LogicalTypeID typeID = LogicalTypeID::ANY) {
     if (!trySimpleIntegerCast<T, IS_SIGNED>(input, len, result)) {
         throw ConversionException(stringFormat("Cast failed. Could not convert \"{}\" to {}.",

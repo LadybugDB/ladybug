@@ -6,11 +6,11 @@
 ---- ok
 -STATEMENT CREATE NODE TABLE person (ID INT64, fName STRING, gender INT64, isStudent BOOLEAN, isWorker BOOLEAN, age INT64, eyeSight DOUBLE, birthdate DATE, registerTime TIMESTAMP, lastJobDuration INTERVAL, workedHours INT64[], usedNames STRING[], courseScoresPerTerm INT64[][], grades INT64[4], height float, u UUID, PRIMARY KEY (ID));
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
 ---- ok
 -STATEMENT COMMIT
 ---- ok
@@ -31,11 +31,11 @@
 ---- ok
 -STATEMENT CREATE NODE TABLE person (ID INT64, fName STRING, gender INT64, isStudent BOOLEAN, isWorker BOOLEAN, age INT64, eyeSight DOUBLE, birthdate DATE, registerTime TIMESTAMP, lastJobDuration INTERVAL, workedHours INT64[], usedNames STRING[], courseScoresPerTerm INT64[][], grades INT64[4], height float, u UUID, PRIMARY KEY (ID));
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
 ---- ok
 -STATEMENT COMMIT
 ---- ok
@@ -60,9 +60,9 @@
             usedNames STRING[], courseScoresPerTerm INT64[][], grades INT64[4], height float, u UUID,
             PRIMARY KEY (ID));
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" ;
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" ;
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv";
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv";
 ---- ok
 -STATEMENT CREATE REL TABLE knows
             (FROM person TO person, date DATE,
@@ -71,7 +71,7 @@
             notes UNION(firstmet DATE, type INT16, comment STRING),
             someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
 ---- ok
 -STATEMENT match (:person)-[e:knows]->(:person) return e.date
 ---- 6
@@ -91,7 +91,7 @@
 2021-06-30
 1950-05-14
 1950-05-14
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows_2.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows_2.csv"
 ---- ok
 -STATEMENT match (:person)-[e:knows]->(:person) return e.date
 ---- 14
@@ -150,13 +150,13 @@
 ---- ok
 -STATEMENT CREATE NODE TABLE person (ID INT64, fName STRING, gender INT64, isStudent BOOLEAN, isWorker BOOLEAN, age INT64, eyeSight DOUBLE, birthdate DATE, registerTime TIMESTAMP, lastJobDuration INTERVAL, workedHours INT64[], usedNames STRING[], courseScoresPerTerm INT64[][], grades INT64[4], height float, u UUID, PRIMARY KEY (ID));
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"
 ---- ok
 -STATEMENT CREATE REL TABLE knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
 -STATEMENT MATCH (p1:person) MATCH (p2:person) WHERE p1.fname='Bob' AND p2.fname='Alice' CREATE (p1)-[e:knows]->(p2);
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
 ---- ok
 -STATEMENT MATCH (:person)-[e:knows]->(:person) RETURN COUNT(e);
 ---- 1
@@ -178,13 +178,13 @@
 ---- ok
 -STATEMENT CREATE NODE TABLE person (ID INT64, fName STRING, gender INT64, isStudent BOOLEAN, isWorker BOOLEAN, age INT64, eyeSight DOUBLE, birthdate DATE, registerTime TIMESTAMP, lastJobDuration INTERVAL, workedHours INT64[], usedNames STRING[], courseScoresPerTerm INT64[][], grades INT64[4], height float, u UUID, PRIMARY KEY (ID));
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
 -STATEMENT MATCH (p1:person) MATCH (p2:person) WHERE p1.fname='Bob' AND p2.fname='Alice' CREATE (p1)-[e:knows]->(p2);
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
 ---- ok
 -STATEMENT MATCH (:person)-[e:knows]->(:person) RETURN COUNT(e);
 ---- 1
@@ -200,13 +200,13 @@
 ---- ok
 -STATEMENT CREATE NODE TABLE person (ID INT64, fName STRING, gender INT64, isStudent BOOLEAN, isWorker BOOLEAN, age INT64, eyeSight DOUBLE, birthdate DATE, registerTime TIMESTAMP, lastJobDuration INTERVAL, workedHours INT64[], usedNames STRING[], courseScoresPerTerm INT64[][], grades INT64[4], height float, u UUID, PRIMARY KEY (ID));
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
 -STATEMENT MATCH (p1:person) MATCH (p2:person) WHERE p1.fname='Bob' AND p2.fname='Alice' CREATE (p1)-[e:knows]->(p2);
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
 ---- ok
 -STATEMENT MATCH (:person)-[e:knows]->(:person) RETURN COUNT(e);
 ---- 1
@@ -238,13 +238,13 @@
 ---- ok
 -STATEMENT CREATE NODE TABLE person (ID INT64, fName STRING, gender INT64, isStudent BOOLEAN, isWorker BOOLEAN, age INT64, eyeSight DOUBLE, birthdate DATE, registerTime TIMESTAMP, lastJobDuration INTERVAL, workedHours INT64[], usedNames STRING[], courseScoresPerTerm INT64[][], grades INT64[4], height float, u UUID, PRIMARY KEY (ID));
 ---- ok
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
 -STATEMENT MATCH (p1:person) MATCH (p2:person) WHERE p1.fname='Bob' AND p2.fname='Alice' CREATE (p1)-[e:knows]->(p2);
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
 ---- ok
 -STATEMENT MATCH (:person)-[e:knows]->(:person) RETURN COUNT(e);
 ---- 1
@@ -276,7 +276,7 @@
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
 ---- ok
 -STATEMENT MATCH (:person)-[e:knows]->(:person) RETURN COUNT(e);
 ---- 1
@@ -309,7 +309,7 @@
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
 ---- ok
 -STATEMENT MATCH (:person)-[e:knows]->(:person) RETURN COUNT(e);
 ---- 1
@@ -351,7 +351,7 @@
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
 ---- ok
 -STATEMENT MATCH (:person)-[e:knows]->(:person) RETURN COUNT(e);
 ---- 1
@@ -379,7 +379,7 @@
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
--STATEMENT COPY knows FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
+-STATEMENT COPY knows FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv"
 ---- ok
 -STATEMENT MATCH (:person)-[e:knows]->(:person) RETURN COUNT(e);
 ---- 1

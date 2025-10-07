@@ -9,7 +9,7 @@
 #include <bit>
 
 namespace lbug::storage {
-static constexpr uint64_t INITIAL_BUFFER_SIZE = common::KUZU_PAGE_SIZE;
+static constexpr uint64_t INITIAL_BUFFER_SIZE = common::LBUG_PAGE_SIZE;
 
 ChecksumReader::ChecksumReader(common::FileInfo& fileInfo, MemoryManager& memoryManager,
     std::string_view checksumMismatchMessage)

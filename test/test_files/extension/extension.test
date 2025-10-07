@@ -54,10 +54,10 @@ Only official extensions can be uninstalled.
 ---- ok
 -STATEMENT FORCE INSTALL neo4j;
 ---- 1
-Extension: neo4j updated from the repo: http://extension.kuzudb.com/.
+Extension: neo4j updated from the repo: http://extension.lbugdb.com/.
 -STATEMENT UPDATE neo4j;
 ---- 1
-Extension: neo4j updated from the repo: http://extension.kuzudb.com/.
+Extension: neo4j updated from the repo: http://extension.lbugdb.com/.
 
 -CASE WASMExtensionTest
 -WASM_ONLY

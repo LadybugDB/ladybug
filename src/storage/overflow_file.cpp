@@ -79,7 +79,7 @@ uint8_t* OverflowFileHandle::addANewPage(PageAllocator* pageAllocator) {
     }
     pageWriteCache.emplace(newPageIdx,
         CachedPage{.buffer = overflowFile.memoryManager.allocateBuffer(true /*initializeToZero*/,
-                       KUZU_PAGE_SIZE),
+                       LBUG_PAGE_SIZE),
             .newPage = true});
     nextPosToWriteTo.elemPosInPage = 0;
     nextPosToWriteTo.pageIdx = newPageIdx;
@@ -103,8 +103,8 @@ void OverflowFileHandle::setStringOverflow(PageAllocator* pageAllocator, const c
             overflowFile.readFromDisk(TransactionType::CHECKPOINT, nextPosToWriteTo.pageIdx,
                 [&](auto* frame) {
                     auto page = overflowFile.memoryManager.allocateBuffer(
-                        false /*initializeToZero*/, KUZU_PAGE_SIZE);
-                    memcpy(page->getData(), frame, KUZU_PAGE_SIZE);
+                        false /*initializeToZero*/, LBUG_PAGE_SIZE);
+                    memcpy(page->getData(), frame, LBUG_PAGE_SIZE);
                     pageToWrite = page->getData();
                     pageWriteCache.emplace(nextPosToWriteTo.pageIdx,
                         CachedPage{.buffer = std::move(page), .newPage = false});
@@ -227,7 +227,7 @@ void OverflowFile::writePageToDisk(page_idx_t pageIdx, uint8_t* data, bool newPa
     } else {
         KU_ASSERT(shadowFile);
         ShadowUtils::updatePage(*fileHandle, pageIdx, true /* overwriting entire page*/,
-            *shadowFile, [&](auto* frame) { memcpy(frame, data, KUZU_PAGE_SIZE); });
+            *shadowFile, [&](auto* frame) { memcpy(frame, data, LBUG_PAGE_SIZE); });
     }
 }
 
@@ -245,10 +245,10 @@ void OverflowFile::checkpoint(PageAllocator& pageAllocator) {
         handle->checkpoint();
     }
     if (headerChanged) {
-        uint8_t page[KUZU_PAGE_SIZE];
+        uint8_t page[LBUG_PAGE_SIZE];
         memcpy(page, &header, sizeof(header));
         // Zero free space at the end of the header page
-        std::fill(page + sizeof(header), page + KUZU_PAGE_SIZE, 0);
+        std::fill(page + sizeof(header), page + LBUG_PAGE_SIZE, 0);
         writePageToDisk(headerPageIdx + HEADER_PAGE_IDX, page, false /*newPage*/);
     }
 }

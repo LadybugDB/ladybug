@@ -36,7 +36,7 @@ The Quantum World|0.634506
 -LOAD_DYNAMIC_EXTENSION fts
 -STATEMENT CREATE NODE TABLE doc (ID UINT64, content STRING, PRIMARY KEY (ID));
 ---- ok
--STATEMENT COPY doc FROM '${KUZU_ROOT_DIRECTORY}/dataset/ms-passage/vDoc.csv'
+-STATEMENT COPY doc FROM '${LBUG_ROOT_DIRECTORY}/dataset/ms-passage/vDoc.csv'
 ---- ok
 -STATEMENT CALL CREATE_FTS_INDEX('doc', 'contentIdx', ['content'])
 ---- ok

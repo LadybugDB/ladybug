@@ -10,7 +10,7 @@ namespace common {
 class ValueVector;
 
 // AuxiliaryBuffer holds data which is only used by the targeting dataType.
-class KUZU_API AuxiliaryBuffer {
+class LBUG_API AuxiliaryBuffer {
 public:
     virtual ~AuxiliaryBuffer() = default;
 
@@ -39,7 +39,7 @@ private:
     std::unique_ptr<InMemOverflowBuffer> inMemOverflowBuffer;
 };
 
-class KUZU_API StructAuxiliaryBuffer : public AuxiliaryBuffer {
+class LBUG_API StructAuxiliaryBuffer : public AuxiliaryBuffer {
 public:
     StructAuxiliaryBuffer(const LogicalType& type, storage::MemoryManager* memoryManager);
 
@@ -65,7 +65,7 @@ private:
 // 2. A data vector(called dataVector) to store the actual list elements: This vector holds the
 // actual elements of the lists in a flat, continuous storage. Each list would be represented as a
 // contiguous subsequence of elements in this vector.
-class KUZU_API ListAuxiliaryBuffer : public AuxiliaryBuffer {
+class LBUG_API ListAuxiliaryBuffer : public AuxiliaryBuffer {
     friend class ListVector;
 
 public:

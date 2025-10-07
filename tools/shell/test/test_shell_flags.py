@@ -3,7 +3,7 @@ import os
 import pytest
 
 from conftest import ShellTest
-from test_helper import KUZU_VERSION, deleteIfExists
+from test_helper import LBUG_VERSION, deleteIfExists
 
 
 def test_database_path(temp_db) -> None:
@@ -175,11 +175,11 @@ def test_version(temp_db, flag) -> None:
     # database path not needed
     test = ShellTest().add_argument(flag)
     result = test.run()
-    result.check_stdout(KUZU_VERSION)
+    result.check_stdout(LBUG_VERSION)
     # with database path
     test = ShellTest().add_argument(temp_db).add_argument(flag)
     result = test.run()
-    result.check_stdout(KUZU_VERSION)
+    result.check_stdout(LBUG_VERSION)
 
 
 @pytest.mark.parametrize(

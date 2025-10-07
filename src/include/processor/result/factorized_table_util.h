@@ -21,7 +21,7 @@ public:
         storage::MemoryManager* memoryManager);
     static std::shared_ptr<FactorizedTable> getFactorizedTableForOutputMsg(
         const std::string& outputMsg, storage::MemoryManager* memoryManager);
-    static KUZU_API std::shared_ptr<FactorizedTable> getSingleStringColumnFTable(
+    static LBUG_API std::shared_ptr<FactorizedTable> getSingleStringColumnFTable(
         storage::MemoryManager* mm);
 };
 

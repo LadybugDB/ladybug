@@ -11,11 +11,11 @@ namespace lbug {
 namespace common {
 
 struct CaseInsensitiveStringHashFunction {
-    KUZU_API uint64_t operator()(const std::string& str) const;
+    LBUG_API uint64_t operator()(const std::string& str) const;
 };
 
 struct CaseInsensitiveStringEquality {
-    KUZU_API bool operator()(const std::string& lhs, const std::string& rhs) const;
+    LBUG_API bool operator()(const std::string& lhs, const std::string& rhs) const;
 };
 
 template<typename T>

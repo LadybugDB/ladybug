@@ -100,7 +100,7 @@ DatabaseHeader DatabaseHeader::createInitialHeader(common::RandomEngine* randomE
 }
 
 std::optional<DatabaseHeader> DatabaseHeader::readDatabaseHeader(common::FileInfo& dataFileInfo) {
-    if (dataFileInfo.getFileSize() < common::KUZU_PAGE_SIZE) {
+    if (dataFileInfo.getFileSize() < common::LBUG_PAGE_SIZE) {
         // If the data file hasn't been written to there is no existing database header
         return std::nullopt;
     }

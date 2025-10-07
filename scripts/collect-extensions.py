@@ -16,7 +16,7 @@ def collect_exts():
         ext_dst_path = os.path.abspath(os.path.join(DST_DIR, ext))
         os.makedirs(ext_dst_path, exist_ok=True)
         for f in os.listdir(ext_build_path):
-            if not f.endswith(".kuzu_extension"):
+            if not f.endswith(".lbug_extension"):
                 continue
             ext_file_path = os.path.abspath(os.path.join(ext_build_path, f))
             shutil.copy(ext_file_path, ext_dst_path)

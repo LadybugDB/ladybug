@@ -33,7 +33,7 @@ struct WarningInfo {
 using populate_func_t = std::function<PopulatedCopyFromError(CopyFromFileError, common::idx_t)>;
 using get_file_idx_func_t = std::function<common::idx_t(const CopyFromFileError&)>;
 
-class KUZU_API WarningContext {
+class LBUG_API WarningContext {
 public:
     explicit WarningContext(main::ClientConfig* clientConfig);
 

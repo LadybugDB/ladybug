@@ -1,4 +1,4 @@
-add_library(kuzu_llm_providers
+add_library(lbug_llm_providers
         OBJECT
         open-ai.cpp
         ollama.cpp
@@ -9,5 +9,5 @@ add_library(kuzu_llm_providers
 )
 
 set(LLM_EXTENSION_OBJECT_FILES
-        ${LLM_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_llm_providers>
+        ${LLM_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:lbug_llm_providers>
         PARENT_SCOPE)

@@ -5,7 +5,7 @@
 -CASE CreateNodeFromFile
 -STATEMENT CREATE NODE TABLE User2(name STRING, age INT64, PRIMARY KEY (name));
 ---- ok
--STATEMENT LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv"
+-STATEMENT LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv"
         CREATE (:User2{name: column0, age: to_int64(column1)});
 ---- ok
 -STATEMENT MATCH (a:User2) RETURN *;

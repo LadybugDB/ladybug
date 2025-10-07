@@ -27,24 +27,24 @@
 //! If you want to instead link against a pre-built version of the library, the following environment
 //! variables can be used to configure the build process:
 //!
-//! - `KUZU_SHARED`: If set, link dynamically instead of statically
-//! - `KUZU_INCLUDE_DIR`: Directory of Lbug's headers
-//! - `KUZU_LIBRARY_DIR`: Directory containing Lbug's pre-built libraries.
+//! - `LBUG_SHARED`: If set, link dynamically instead of statically
+//! - `LBUG_INCLUDE_DIR`: Directory of Lbug's headers
+//! - `LBUG_LIBRARY_DIR`: Directory containing Lbug's pre-built libraries.
 //!
 //! Example:
 //! ```bash
 //! lbug_prebuilt_dir=/tmp/lbug # pre-built Lbug from https://docs.lbugdb.com/installation/#cc
 //! lbug_prebuilt_dir=/path_to_lbug_source/build/release/src # Lbug built from source
-//! export KUZU_LIBRARY_DIR="lbug_prebuilt_dir"
-//! export KUZU_INCLUDE_DIR="lbug_prebuilt_dir"
-//! export KUZU_SHARED=1
+//! export LBUG_LIBRARY_DIR="lbug_prebuilt_dir"
+//! export LBUG_INCLUDE_DIR="lbug_prebuilt_dir"
+//! export LBUG_SHARED=1
 //! ```
 //! On macOS:
 //! ```bash
 //! brew install lbug
-//! export KUZU_LIBRARY_DIR=/opt/homebrew/lib
-//! export KUZU_INCLUDE_DIR=/opt/homebrew/include
-//! export KUZU_SHARED=1
+//! export LBUG_LIBRARY_DIR=/opt/homebrew/lib
+//! export LBUG_INCLUDE_DIR=/opt/homebrew/include
+//! export LBUG_SHARED=1
 //! ```
 //!
 //! ## Using Extensions

@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (version) {
-        std::cout << "Lbug " << KUZU_CMAKE_VERSION << '\n';
+        std::cout << "Lbug " << LBUG_CMAKE_VERSION << '\n';
         return 0;
     }
 

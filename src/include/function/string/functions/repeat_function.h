@@ -11,7 +11,7 @@ namespace function {
 
 struct Repeat {
 public:
-    KUZU_API static void operation(common::ku_string_t& left, int64_t& right,
+    LBUG_API static void operation(common::ku_string_t& left, int64_t& right,
         common::ku_string_t& result, common::ValueVector& resultValueVector);
 
 private:

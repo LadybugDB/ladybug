@@ -11,7 +11,7 @@ import sys
 import psutil
 import requests
 
-from serializer import _get_kuzu_version
+from serializer import _get_lbug_version
 
 # Get the number of CPUs, try to use sched_getaffinity if available to account
 # for Docker CPU limits
@@ -53,8 +53,8 @@ serialized_base_dir = os.getenv('SERIALIZED_DIR')
 is_dry_run = os.getenv('DRY_RUN') == 'true'
 benchmark_files = os.path.join(base_dir, 'queries')
 
-kuzu_benchmark_tool = os.path.join(
-    base_dir, '..', 'build', 'release', 'tools', 'benchmark', 'kuzu_benchmark')
+lbug_benchmark_tool = os.path.join(
+    base_dir, '..', 'build', 'release', 'tools', 'benchmark', 'lbug_benchmark')
 
 if csv_base_dir is None:
     logging.error("CSV_DIR is not set, exiting...")
@@ -238,12 +238,12 @@ def serialize_dataset(dataset_name):
         sys.exit(1)
 
 
-def run_kuzu(serialized_graph_path):
+def run_lbug(serialized_graph_path):
     is_error = False
     for group, _ in benchmark_group.group_to_benchmarks.items():
         is_current_group_error = False
         benchmark_cmd = [
-            kuzu_benchmark_tool,
+            lbug_benchmark_tool,
             '--dataset=' + serialized_graph_path + '/db.kz',
             '--benchmark=' + benchmark_files + '/' + group,
             '--warmup=' + str(num_warmup),
@@ -401,7 +401,7 @@ if __name__ == '__main__':
 
     logging.getLogger().setLevel(logging.INFO)
     logging.info("Running benchmark for dataset %s", args.dataset)
-    logging.info("Database version: %s", _get_kuzu_version())
+    logging.info("Database version: %s", _get_lbug_version())
     logging.info("CPU cores: %d", cpu_count)
     logging.info("Using %s threads", args.thread)
     logging.info("Total memory: %d GiB", max_memory / 1024 ** 3)
@@ -424,7 +424,7 @@ if __name__ == '__main__':
 
     logging.info("Running benchmark...")
     serialized_graph_path = serialized_graphs_path[args.dataset + '-ku']
-    is_success = run_kuzu(serialized_graph_path)
+    is_success = run_lbug(serialized_graph_path)
     logging.info("Benchmark finished")
     logging.info("Benchmark result: %s", "success" if is_success else "fail")
 

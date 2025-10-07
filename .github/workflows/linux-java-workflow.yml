@@ -30,7 +30,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: java-lib-linux-x86_64
-          path: tools/java_api/build/libkuzu_java_native*
+          path: tools/java_api/build/liblbug_java_native*
 
   build-linux-java-aarch64:
     runs-on: lbug-self-hosted-linux-building-aarch64
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: java-lib-linux-aarch64
-          path: tools/java_api/build/libkuzu_java_native*
+          path: tools/java_api/build/liblbug_java_native*
 
   build-linux-java-armv8a:
     runs-on: lbug-self-hosted-testing
@@ -73,9 +73,9 @@ jobs:
     
       - name: Rename artifact
         run: |
-          mv tools/java_api/build/libkuzu_java_native.so_linux_arm64 tools/java_api/build/libkuzu_java_native.so_android_arm64
+          mv tools/java_api/build/liblbug_java_native.so_linux_arm64 tools/java_api/build/liblbug_java_native.so_android_arm64
       
       - uses: actions/upload-artifact@v4
         with:
           name: java-lib-android-armv8a
-          path: tools/java_api/build/libkuzu_java_native*
+          path: tools/java_api/build/liblbug_java_native*

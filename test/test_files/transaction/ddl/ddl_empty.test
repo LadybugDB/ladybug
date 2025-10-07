@@ -579,7 +579,7 @@ Binder exception: Cannot find property since for k.
 # preallocate storage for stats table
 -STATEMENT create (:stats)
 ---- ok
--STATEMENT COPY movies FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vMovies.csv";
+-STATEMENT COPY movies FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vMovies.csv";
 ---- ok
 -STATEMENT call file_info() with num_pages match (s:stats) where s.id = 0 set s.numPages = num_pages
 ---- ok
@@ -590,7 +590,7 @@ Binder exception: Cannot find property since for k.
 
 -STATEMENT create node table movies (name STRING, length INT32, note STRING, description STRUCT(rating DOUBLE, stars INT8, views INT64, release TIMESTAMP, release_ns TIMESTAMP_NS, release_ms TIMESTAMP_MS, release_sec TIMESTAMP_SEC, release_tz TIMESTAMP_TZ, film DATE, u8 UINT8, u16 UINT16, u32 UINT32, u64 UINT64, hugedata INT128), content BYTEA, audience MAP(STRING, INT64), grade union(credit boolean, grade1 double, grade2 int64), PRIMARY KEY (name));
 ---- ok
--STATEMENT COPY movies FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vMovies.csv";
+-STATEMENT COPY movies FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vMovies.csv";
 ---- ok
 -STATEMENT call file_info() with num_pages match (s:stats) where s.id = 0 return num_pages <= s.numPages
 ---- 1
@@ -623,7 +623,7 @@ Roma|298
 ---- ok
 -STATEMENT create node table movies (name STRING, length INT32, note STRING, description STRUCT(rating DOUBLE, stars INT8, views INT64, release TIMESTAMP, release_ns TIMESTAMP_NS, release_ms TIMESTAMP_MS, release_sec TIMESTAMP_SEC, release_tz TIMESTAMP_TZ, film DATE, u8 UINT8, u16 UINT16, u32 UINT32, u64 UINT64, hugedata INT128), content BYTEA, audience MAP(STRING, INT64), grade union(credit boolean, grade1 double, grade2 int64), PRIMARY KEY (name));
 ---- ok
--STATEMENT COPY movies FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vMovies.csv";
+-STATEMENT COPY movies FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vMovies.csv";
 ---- ok
 -STATEMENT commit
 ---- ok
@@ -668,9 +668,9 @@ True
 # preallocate storage for stats table
 -STATEMENT create (:stats)
 ---- ok
--STATEMENT copy person from ["${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv", "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv"](ignore_errors=true)
+-STATEMENT copy person from ["${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv", "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv"](ignore_errors=true)
 ---- ok
--STATEMENT COPY knows FROM ["${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv", "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows_2.csv"];
+-STATEMENT COPY knows FROM ["${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv", "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows_2.csv"];
 ---- ok
 -STATEMENT drop table knows
 ---- ok
@@ -683,7 +683,7 @@ Binder exception: Table knows does not exist.
 ---- ok
 -STATEMENT create rel table knows (FROM person TO person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MAnY);
 ---- ok
--STATEMENT COPY knows FROM ["${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv", "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eKnows_2.csv"];
+-STATEMENT COPY knows FROM ["${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows.csv", "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eKnows_2.csv"];
 ---- ok
 # The DB shouldn't grow after the recopy
 -STATEMENT CALL file_info() with num_pages match (s:stats) return num_pages <= s.numPages
@@ -700,11 +700,11 @@ True
 ---- ok
 -STATEMENT create rel table studyAt (FROM person TO organisation, year INT64, places STRING[], length INT16, level INT8, code UINT64, temperature UINT32, ulength UINT16, ulevel UINT8, hugedata INT128, MANY_ONe);
 ---- ok
--STATEMENT copy person from ["${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv", "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv"](ignore_errors=true)
+-STATEMENT copy person from ["${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv", "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson2.csv"](ignore_errors=true)
 ---- ok
--STATEMENT COPY organisation FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vOrganisation.csv";
+-STATEMENT COPY organisation FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vOrganisation.csv";
 ---- ok
--STATEMENT COPY studyAt FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/eStudyAt.csv";
+-STATEMENT COPY studyAt FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eStudyAt.csv";
 ---- ok
 -STATEMENT commit;
          checkpoint;

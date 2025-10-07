@@ -22,7 +22,7 @@ struct NativeGraphEntryTableInfo {
 
 // Organize projected graph similar to CatalogEntry. When we want to share projected graph across
 // statements, we need to migrate this class to catalog (or client context).
-struct KUZU_API NativeGraphEntry {
+struct LBUG_API NativeGraphEntry {
     std::vector<NativeGraphEntryTableInfo> nodeInfos;
     std::vector<NativeGraphEntryTableInfo> relInfos;
 

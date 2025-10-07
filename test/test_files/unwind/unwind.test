@@ -243,5 +243,5 @@ Aida|Alice|Bob|Dan
 -STATEMENT UNWIND [NULL] AS t RETURN t
 ---- 1
 
--STATEMENT LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/null-field.csv"(header=true) UNWIND col2 AS t RETURN t
+-STATEMENT LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/null-field.csv"(header=true) UNWIND col2 AS t RETURN t
 ---- 0

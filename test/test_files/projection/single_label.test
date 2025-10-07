@@ -643,7 +643,7 @@ Runtime exception: Found duplicate key: 3.670000 in map.
 Runtime exception: Found duplicate key: 23:00:00 in map.
 
 -LOG DuplicateMapStringKey
--STATEMENT RETURN map(['lbug', 'kuzuinc', 'kuzucorp', 'lbug'], [20, 34, 50, 32]);
+-STATEMENT RETURN map(['lbug', 'lbuginc', 'lbugcorp', 'lbug'], [20, 34, 50, 32]);
 ---- error
 Runtime exception: Found duplicate key: lbug in map.
 

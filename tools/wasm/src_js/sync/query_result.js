@@ -3,7 +3,7 @@
  */
 "use strict";
 
-const KuzuWasm = require("./lbug.js");
+const LbugWasm = require("./lbug.js");
 
 class QueryResult {
   /**
@@ -23,7 +23,7 @@ class QueryResult {
    * @private
    */
   _checkQueryResult() {
-    KuzuWasm.checkInit();
+    LbugWasm.checkInit();
     if (this._isClosed) {
       throw new Error("QueryResult is already closed.");
     }

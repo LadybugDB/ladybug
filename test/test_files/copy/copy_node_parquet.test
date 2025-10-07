@@ -55,12 +55,12 @@
 546
 
 -LOG CopyWithOptionsErrorTest
--STATEMENT COPY tableOfTypes FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/parquet/types_50k*.parquet" (HEADER=true);
+-STATEMENT COPY tableOfTypes FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/parquet/types_50k*.parquet" (HEADER=true);
 ---- error
 Binder exception: Copy from Parquet cannot have options other than IGNORE_ERRORS.
 
 -CASE IgnoreErrorsTest
--STATEMENT COPY person FROM "${KUZU_ROOT_DIRECTORY}/dataset/copy-test/node/parquet/invalid_pk_col.parquet" (IGNORE_ERRORS=true);
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/parquet/invalid_pk_col.parquet" (IGNORE_ERRORS=true);
 ---- ok
 -STATEMENT CALL show_warnings() RETURN message
 ---- 2

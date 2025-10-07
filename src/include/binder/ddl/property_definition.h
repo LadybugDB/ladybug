@@ -6,7 +6,7 @@
 namespace lbug {
 namespace binder {
 
-struct KUZU_API ColumnDefinition {
+struct LBUG_API ColumnDefinition {
     std::string name;
     common::LogicalType type;
 
@@ -19,7 +19,7 @@ private:
     ColumnDefinition(const ColumnDefinition& other) : name{other.name}, type{other.type.copy()} {}
 };
 
-struct KUZU_API PropertyDefinition {
+struct LBUG_API PropertyDefinition {
     ColumnDefinition columnDefinition;
     std::unique_ptr<parser::ParsedExpression> defaultExpr;
 

@@ -7,7 +7,7 @@
 -LOG LongStringSuccess
 -STATEMENT create node table person0 (ID SERIAL, fName STRING, PRIMARY KEY (ID));
 ---- ok
--STATEMENT copy person0 from '${KUZU_ROOT_DIRECTORY}/test/answers/long_string_valid.csv';
+-STATEMENT copy person0 from '${LBUG_ROOT_DIRECTORY}/test/answers/long_string_valid.csv';
 ---- ok
 -STATEMENT match (p:person0) return p.fName;
 ---- 1
@@ -16,7 +16,7 @@
 -LOG LongStringError
 -STATEMENT create node table person1 (ID SERIAL, fName STRING, PRIMARY KEY (ID));
 ---- ok
--STATEMENT copy person1 from '${KUZU_ROOT_DIRECTORY}/test/answers/long_string_invalid.csv';
+-STATEMENT copy person1 from '${LBUG_ROOT_DIRECTORY}/test/answers/long_string_invalid.csv';
 ---- ok
 -STATEMENT match (p:person1) return p.fName;
 ---- 2
@@ -27,7 +27,7 @@
 -LOG LongStringPKSuccess
 -STATEMENT create node table person0 (ID STRING, PRIMARY KEY (ID));
 ---- ok
--STATEMENT copy person0 from '${KUZU_ROOT_DIRECTORY}/test/answers/long_string_valid.csv';
+-STATEMENT copy person0 from '${LBUG_ROOT_DIRECTORY}/test/answers/long_string_valid.csv';
 ---- ok
 -STATEMENT match (p:person0) return p.ID;
 ---- 1
@@ -36,7 +36,7 @@
 -LOG LongStringPKError
 -STATEMENT create node table person1 (ID STRING, PRIMARY KEY (ID));
 ---- ok
--STATEMENT copy person1 from '${KUZU_ROOT_DIRECTORY}/test/answers/long_string_invalid.csv';
+-STATEMENT copy person1 from '${LBUG_ROOT_DIRECTORY}/test/answers/long_string_invalid.csv';
 ---- ok
 -STATEMENT match (p:person1) return p.ID;
 ---- 2

@@ -7,35 +7,35 @@
 -CASE ExplainEmptyExportSchemaOnly
 -SKIP_WASM
 -SKIP_IN_MEM
--STATEMENT PROFILE EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/explain_empty_export_schema_only" (SCHEMA_ONLY=true);
+-STATEMENT PROFILE EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/explain_empty_export_schema_only" (SCHEMA_ONLY=true);
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/explain_empty_export_schema_only"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/explain_empty_export_schema_only"
 
 -CASE ExplainEmptyExport
 -SKIP_WASM
 -SKIP_IN_MEM
--STATEMENT PROFILE EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/explain_empty_export"
+-STATEMENT PROFILE EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/explain_empty_export"
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/explain_empty_export"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/explain_empty_export"
 
 -CASE ExplainExportSchemaOnly
 -SKIP_WASM
 -SKIP_IN_MEM
 -STATEMENT CREATE NODE TABLE `mixed-newlines`(A STRING, B STRING, PRIMARY KEY(A));
 ---- ok
--STATEMENT COPY `mixed-newlines` FROM "${KUZU_ROOT_DIRECTORY}/dataset/csv-multiline-quote-tests/mixed-newlines.csv" (PARALLEL=FALSE);
+-STATEMENT COPY `mixed-newlines` FROM "${LBUG_ROOT_DIRECTORY}/dataset/csv-multiline-quote-tests/mixed-newlines.csv" (PARALLEL=FALSE);
 ---- ok
--STATEMENT PROFILE EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/explain_export_schema_only"(SCHEMA_ONLY=true);
+-STATEMENT PROFILE EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/explain_export_schema_only"(SCHEMA_ONLY=true);
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/explain_export_schema_only"
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/explain_export_schema_only"
 
 -CASE ExplainExport
 -SKIP_WASM
 -SKIP_IN_MEM
 -STATEMENT CREATE NODE TABLE `mixed-newlines`(A STRING, B STRING, PRIMARY KEY(A));
 ---- ok
--STATEMENT COPY `mixed-newlines` FROM "${KUZU_ROOT_DIRECTORY}/dataset/csv-multiline-quote-tests/mixed-newlines.csv" (PARALLEL=FALSE);
+-STATEMENT COPY `mixed-newlines` FROM "${LBUG_ROOT_DIRECTORY}/dataset/csv-multiline-quote-tests/mixed-newlines.csv" (PARALLEL=FALSE);
 ---- ok
--STATEMENT PROFILE EXPORT DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/explain_export";
+-STATEMENT PROFILE EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/explain_export";
 ---- ok
--IMPORT_DATABASE "${KUZU_EXPORT_DB_DIRECTORY}_special/explain_export";
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/explain_export";

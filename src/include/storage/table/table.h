@@ -18,7 +18,7 @@ class Table;
 
 enum class TableScanSource : uint8_t { COMMITTED = 0, UNCOMMITTED = 1, NONE = UINT8_MAX };
 
-struct KUZU_API TableScanState {
+struct LBUG_API TableScanState {
     Table* table;
     std::unique_ptr<common::ValueVector> rowIdxVector;
     // Node/Rel ID vector. We assume all output vectors are within the same DataChunk as this one.
@@ -83,7 +83,7 @@ struct KUZU_API TableScanState {
     }
 };
 
-struct KUZU_API TableInsertState {
+struct LBUG_API TableInsertState {
     std::vector<common::ValueVector*> propertyVectors;
     // TODO(Guodong): Remove this when we have a better way to skip WAL logging for FTS.
     bool logToWAL;
@@ -101,7 +101,7 @@ struct KUZU_API TableInsertState {
     }
 };
 
-struct KUZU_API TableUpdateState {
+struct LBUG_API TableUpdateState {
     common::column_id_t columnID;
     common::ValueVector& propertyVector;
     // TODO(Guodong): Remove this when we have a better way to skip WAL logging for FTS.
@@ -120,7 +120,7 @@ struct KUZU_API TableUpdateState {
     }
 };
 
-struct KUZU_API TableDeleteState {
+struct LBUG_API TableDeleteState {
     bool logToWAL;
 
     TableDeleteState();
@@ -149,7 +149,7 @@ struct TableAddColumnState final {
 
 class LocalTable;
 class StorageManager;
-class KUZU_API Table {
+class LBUG_API Table {
 public:
     Table(const catalog::TableCatalogEntry* tableEntry, const StorageManager* storageManager,
         MemoryManager* memoryManager);

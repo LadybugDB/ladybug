@@ -8,7 +8,7 @@ class ClientContext;
 }
 namespace processor {
 
-struct KUZU_API ExecutionContext {
+struct LBUG_API ExecutionContext {
     uint64_t queryID;
     common::Profiler* profiler;
     main::ClientContext* clientContext;

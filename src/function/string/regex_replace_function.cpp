@@ -33,7 +33,7 @@ struct RegexpReplace {
         std::string resultStr = value.getAsString();
         RE2 re2Pattern{pattern.getAsString()};
         bindData->replaceFunc(&resultStr, re2Pattern, replacement.getAsString());
-        BaseRegexpOperation::copyToKuzuString(resultStr, result, resultValueVector);
+        BaseRegexpOperation::copyToLbugString(resultStr, result, resultValueVector);
     }
 };
 
@@ -58,7 +58,7 @@ struct RegexpReplaceStaticPattern {
         auto bindData = reinterpret_cast<RegexReplaceBindDataStaticPattern*>(dataPtr);
         auto resultStr = value.getAsString();
         bindData->replaceFunc(&resultStr, bindData->pattern, replacement.getAsString());
-        BaseRegexpOperation::copyToKuzuString(resultStr, result, resultValueVector);
+        BaseRegexpOperation::copyToLbugString(resultStr, result, resultValueVector);
     }
 };
 

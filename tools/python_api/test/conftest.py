@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from test_helper import KUZU_ROOT
+from test_helper import LBUG_ROOT
 
 python_build_dir = Path(__file__).parent.parent / "build"
 try:
@@ -36,11 +36,11 @@ def init_npy(conn: lbug.Connection) -> None:
     conn.execute(
         f"""
         COPY npyoned from (
-          "{KUZU_ROOT}/dataset/npy-1d/one_dim_int64.npy",
-          "{KUZU_ROOT}/dataset/npy-1d/one_dim_int32.npy",
-          "{KUZU_ROOT}/dataset/npy-1d/one_dim_int16.npy",
-          "{KUZU_ROOT}/dataset/npy-1d/one_dim_double.npy",
-          "{KUZU_ROOT}/dataset/npy-1d/one_dim_float.npy") BY COLUMN;
+          "{LBUG_ROOT}/dataset/npy-1d/one_dim_int64.npy",
+          "{LBUG_ROOT}/dataset/npy-1d/one_dim_int32.npy",
+          "{LBUG_ROOT}/dataset/npy-1d/one_dim_int16.npy",
+          "{LBUG_ROOT}/dataset/npy-1d/one_dim_double.npy",
+          "{LBUG_ROOT}/dataset/npy-1d/one_dim_float.npy") BY COLUMN;
         """
     )
     conn.execute(
@@ -59,12 +59,12 @@ def init_npy(conn: lbug.Connection) -> None:
     conn.execute(
         f"""
         COPY npytwod FROM (
-          "{KUZU_ROOT}/dataset/npy-2d/id_int64.npy",
-          "{KUZU_ROOT}/dataset/npy-2d/two_dim_int64.npy",
-          "{KUZU_ROOT}/dataset/npy-2d/two_dim_int32.npy",
-          "{KUZU_ROOT}/dataset/npy-2d/two_dim_int16.npy",
-          "{KUZU_ROOT}/dataset/npy-2d/two_dim_double.npy",
-          "{KUZU_ROOT}/dataset/npy-2d/two_dim_float.npy") BY COLUMN;
+          "{LBUG_ROOT}/dataset/npy-2d/id_int64.npy",
+          "{LBUG_ROOT}/dataset/npy-2d/two_dim_int64.npy",
+          "{LBUG_ROOT}/dataset/npy-2d/two_dim_int32.npy",
+          "{LBUG_ROOT}/dataset/npy-2d/two_dim_int16.npy",
+          "{LBUG_ROOT}/dataset/npy-2d/two_dim_double.npy",
+          "{LBUG_ROOT}/dataset/npy-2d/two_dim_float.npy") BY COLUMN;
         """
     )
 
@@ -82,18 +82,18 @@ def init_tensor(conn: lbug.Connection) -> None:
         );
         """
     )
-    conn.execute(f'COPY tensor FROM "{KUZU_ROOT}/dataset/tensor-list/vTensor.csv" (HEADER=true)')
+    conn.execute(f'COPY tensor FROM "{LBUG_ROOT}/dataset/tensor-list/vTensor.csv" (HEADER=true)')
 
 
 def init_long_str(conn: lbug.Connection) -> None:
     conn.execute("CREATE NODE TABLE personLongString (name STRING, spouse STRING, PRIMARY KEY(name))")
-    conn.execute(f'COPY personLongString FROM "{KUZU_ROOT}/dataset/long-string-pk-tests/vPerson.csv"')
+    conn.execute(f'COPY personLongString FROM "{LBUG_ROOT}/dataset/long-string-pk-tests/vPerson.csv"')
     conn.execute("CREATE REL TABLE knowsLongString (FROM personLongString TO personLongString, MANY_MANY)")
-    conn.execute(f'COPY knowsLongString FROM "{KUZU_ROOT}/dataset/long-string-pk-tests/eKnows.csv"')
+    conn.execute(f'COPY knowsLongString FROM "{LBUG_ROOT}/dataset/long-string-pk-tests/eKnows.csv"')
 
 
 def init_tinysnb(conn: lbug.Connection) -> None:
-    tiny_snb_path = (Path(__file__).parent / f"{KUZU_ROOT}/dataset/tinysnb").resolve()
+    tiny_snb_path = (Path(__file__).parent / f"{LBUG_ROOT}/dataset/tinysnb").resolve()
     schema_path = tiny_snb_path / "schema.cypher"
     with schema_path.open(mode="r") as f:
         for line in f.readlines():
@@ -105,13 +105,13 @@ def init_tinysnb(conn: lbug.Connection) -> None:
     with copy_path.open(mode="r") as f:
         for line in f.readlines():
             line = line.strip()
-            line = line.replace("dataset/tinysnb", f"{KUZU_ROOT}/dataset/tinysnb")
+            line = line.replace("dataset/tinysnb", f"{LBUG_ROOT}/dataset/tinysnb")
             if line:
                 conn.execute(line)
 
 
 def init_demo(conn: lbug.Connection) -> None:
-    tiny_snb_path = (Path(__file__).parent / f"{KUZU_ROOT}/dataset/demo-db/csv").resolve()
+    tiny_snb_path = (Path(__file__).parent / f"{LBUG_ROOT}/dataset/demo-db/csv").resolve()
     schema_path = tiny_snb_path / "schema.cypher"
     with schema_path.open(mode="r") as f:
         for line in f.readlines():
@@ -123,7 +123,7 @@ def init_demo(conn: lbug.Connection) -> None:
     with copy_path.open(mode="r") as f:
         for line in f.readlines():
             line = line.strip()
-            line = line.replace("dataset/demo-db/csv", f"{KUZU_ROOT}/dataset/demo-db/csv")
+            line = line.replace("dataset/demo-db/csv", f"{LBUG_ROOT}/dataset/demo-db/csv")
             if line:
                 conn.execute(line)
 
@@ -139,7 +139,7 @@ def init_movie_serial(conn: lbug.Connection) -> None:
           PRIMARY KEY (ID)
         );"""
     )
-    conn.execute(f'COPY moviesSerial from "{KUZU_ROOT}/dataset/tinysnb-serial/vMovies.csv"')
+    conn.execute(f'COPY moviesSerial from "{LBUG_ROOT}/dataset/tinysnb-serial/vMovies.csv"')
 
 
 _POOL_SIZE_: int = 256 * 1024 * 1024

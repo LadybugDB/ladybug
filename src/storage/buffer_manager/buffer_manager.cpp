@@ -65,7 +65,7 @@ void EvictionQueue::clear(std::atomic<EvictionCandidate>& candidate) {
 
 BufferManager::BufferManager(const std::string& databasePath, const std::string& spillToDiskPath,
     uint64_t bufferPoolSize, uint64_t maxDBSize, VirtualFileSystem* vfs, bool readOnly)
-    : bufferPoolSize{bufferPoolSize}, evictionQueue{bufferPoolSize / KUZU_PAGE_SIZE},
+    : bufferPoolSize{bufferPoolSize}, evictionQueue{bufferPoolSize / LBUG_PAGE_SIZE},
       usedMemory{evictionQueue.getCapacity() * sizeof(EvictionCandidate)}, vfs{vfs} {
     verifySizeParams(bufferPoolSize, maxDBSize);
 #if !BM_MALLOC
@@ -86,15 +86,15 @@ BufferManager::BufferManager(const std::string& databasePath, const std::string&
 }
 
 void BufferManager::verifySizeParams(uint64_t bufferPoolSize, uint64_t maxDBSize) {
-    if (bufferPoolSize < KUZU_PAGE_SIZE) {
+    if (bufferPoolSize < LBUG_PAGE_SIZE) {
         throw BufferManagerException(stringFormat(
-            "The given buffer pool size should be at least {} bytes.", KUZU_PAGE_SIZE));
+            "The given buffer pool size should be at least {} bytes.", LBUG_PAGE_SIZE));
     }
     // We require at least two page groups, one for the main data file, and one for the shadow file.
-    if (maxDBSize < 2 * KUZU_PAGE_SIZE * StorageConstants::PAGE_GROUP_SIZE) {
+    if (maxDBSize < 2 * LBUG_PAGE_SIZE * StorageConstants::PAGE_GROUP_SIZE) {
         throw BufferManagerException(
             "The given max db size should be at least " +
-            std::to_string(2 * KUZU_PAGE_SIZE * StorageConstants::PAGE_GROUP_SIZE) + " bytes.");
+            std::to_string(2 * LBUG_PAGE_SIZE * StorageConstants::PAGE_GROUP_SIZE) + " bytes.");
     }
     if ((maxDBSize & (maxDBSize - 1)) != 0) {
         throw BufferManagerException("The given max db size should be a power of 2.");
@@ -469,7 +469,7 @@ void BufferManager::updateFrameIfPageIsInFrameWithoutLock(file_idx_t fileIdx,
     auto& fileHandle = *fileHandles[fileIdx];
     auto state = fileHandle.getPageState(pageIdx);
     if (state && state->getState() != PageState::EVICTED) {
-        memcpy(getFrame(fileHandle, pageIdx), newPage, KUZU_PAGE_SIZE);
+        memcpy(getFrame(fileHandle, pageIdx), newPage, LBUG_PAGE_SIZE);
     }
 }
 

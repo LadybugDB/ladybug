@@ -97,7 +97,7 @@ struct SegmentState {
 
 class Spiller;
 // Base data segment covers all fixed-sized data types.
-class KUZU_API ColumnChunkData {
+class LBUG_API ColumnChunkData {
 public:
     friend struct ColumnChunkFactory;
     // For spilling to disk, we need access to the underlying buffer
@@ -173,7 +173,7 @@ public:
         const ColumnChunkMetadata& metadata) const;
 
     static common::page_idx_t getNumPagesForBytes(uint64_t numBytes) {
-        return (numBytes + common::KUZU_PAGE_SIZE - 1) / common::KUZU_PAGE_SIZE;
+        return (numBytes + common::LBUG_PAGE_SIZE - 1) / common::LBUG_PAGE_SIZE;
     }
 
     uint64_t getNumBytesPerValue() const { return numBytesPerValue; }
@@ -238,7 +238,7 @@ public:
     // The minimum size is a function of the type's complexity and the page size
     // If the page size is large, or the type is very complex, this could be larger than the max
     // segment size (in which case we will treat the minimum size as the max segment size) E.g. if
-    // KUZU_PAGE_SIZE == MAX_SEGMENT_SIZE, even a normal column with non-constant-compressed nulls
+    // LBUG_PAGE_SIZE == MAX_SEGMENT_SIZE, even a normal column with non-constant-compressed nulls
     // would have two pages and be detected as needing to split, even if the pages are nowhere near
     // full.
     //
@@ -445,7 +445,7 @@ public:
     common::NullMask getNullMask() const;
 };
 
-class KUZU_API InternalIDChunkData final : public ColumnChunkData {
+class LBUG_API InternalIDChunkData final : public ColumnChunkData {
 public:
     // TODO(Guodong): Should make InternalIDChunkData has no NULL.
     // Physically, we only materialize offset of INTERNAL_ID, which is same as UINT64,

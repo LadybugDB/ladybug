@@ -17,8 +17,8 @@
  * under the License.
  */
 
-#ifndef _KUZU_THRIFT_THRIFT_H_
-#define _KUZU_THRIFT_THRIFT_H_ 1
+#ifndef _LBUG_THRIFT_THRIFT_H_
+#define _LBUG_THRIFT_THRIFT_H_ 1
 
 #include "transport/PlatformSocket.h"
 
@@ -136,4 +136,4 @@ void profile_write_pprof(FILE* gen_calls_f, FILE* virtual_calls_f);
 }
 } // lbug_apache::thrift
 
-#endif // #ifndef _KUZU_THRIFT_THRIFT_H_
+#endif // #ifndef _LBUG_THRIFT_THRIFT_H_

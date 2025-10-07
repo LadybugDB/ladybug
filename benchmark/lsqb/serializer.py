@@ -9,7 +9,7 @@ base_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(base_dir, '..', '..'))
 import tools.python_api.build.lbug as lbug
 
-def _get_kuzu_version():
+def _get_lbug_version():
     cmake_file = os.path.join(base_dir, '..', '..', 'CMakeLists.txt')
     with open(cmake_file) as f:
         for line in f:
@@ -137,7 +137,7 @@ def load_lsqb_dataset(conn, data_path):
 def serialize(dataset_name, dataset_path, serialized_graph_path):
     convert(dataset_path)
 
-    bin_version = _get_kuzu_version()
+    bin_version = _get_lbug_version()
     if check_updated_version(bin_version, dataset_name, serialized_graph_path):
         return
 

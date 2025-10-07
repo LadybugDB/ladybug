@@ -11,10 +11,10 @@
 ---- ok
 -STATEMENT CREATE (p:person {id: 8, description: to_json({"family": "anatidae", "species": [ "duck", "goose", "swan", null]})})
 ---- ok
--STATEMENT EXPORT DATABASE '${KUZU_EXPORT_DB_DIRECTORY}_json/export'
+-STATEMENT EXPORT DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_json/export'
 ---- ok
--IMPORT_DATABASE '${KUZU_EXPORT_DB_DIRECTORY}_json/export'
--STATEMENT IMPORT DATABASE '${KUZU_EXPORT_DB_DIRECTORY}_json/export';
+-IMPORT_DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_json/export'
+-STATEMENT IMPORT DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_json/export';
 ---- ok
 -STATEMENT MATCH (p:person) return p.*
 ---- 2

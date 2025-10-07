@@ -15,7 +15,7 @@ function(set_extension_properties target_name output_name extension_name)
             RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/extension/${extension_name}/build"
             OUTPUT_NAME ${output_name}
             PREFIX "lib"
-            SUFFIX ".kuzu_extension"
+            SUFFIX ".lbug_extension"
     )
 endfunction()
 
@@ -26,25 +26,25 @@ endfunction()
 function(build_extension_lib build_static ext_name)
     string(TOUPPER "${ext_name}" ext_name_upper_case)
     if (build_static)
-        add_library(kuzu_${ext_name}_static_extension
+        add_library(lbug_${ext_name}_static_extension
                 STATIC
                 ${${ext_name_upper_case}_EXTENSION_OBJECT_FILES})
         SET(EXTENSION_LIB_NAME "${ext_name}_static" PARENT_SCOPE)
         SET(EXTENSION_LIB_NAME "${ext_name}_static")
     else ()
-        add_library(kuzu_${ext_name}_extension
+        add_library(lbug_${ext_name}_extension
                 SHARED
                 ${${ext_name_upper_case}_EXTENSION_OBJECT_FILES})
         SET(EXTENSION_LIB_NAME "${ext_name}" PARENT_SCOPE)
         SET(EXTENSION_LIB_NAME "${ext_name}")
     endif ()
-    set_extension_properties(kuzu_${EXTENSION_LIB_NAME}_extension ${EXTENSION_LIB_NAME} ${ext_name})
+    set_extension_properties(lbug_${EXTENSION_LIB_NAME}_extension ${EXTENSION_LIB_NAME} ${ext_name})
     if (WIN32 OR build_static)
         # See comments in extension/httpfs/CMakeLists.txt.
-        target_link_libraries(kuzu_${EXTENSION_LIB_NAME}_extension PRIVATE lbug)
+        target_link_libraries(lbug_${EXTENSION_LIB_NAME}_extension PRIVATE lbug)
     endif ()
     if (APPLE AND NOT build_static)
-        set_apple_dynamic_lookup(kuzu_${EXTENSION_LIB_NAME}_extension)
+        set_apple_dynamic_lookup(lbug_${EXTENSION_LIB_NAME}_extension)
     endif ()
 endfunction()
 

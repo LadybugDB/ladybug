@@ -9,7 +9,7 @@
 namespace lbug {
 namespace common {
 
-struct KUZU_API ku_string_t {
+struct LBUG_API ku_string_t {
 
     static constexpr uint64_t PREFIX_LENGTH = 4;
     static constexpr uint64_t INLINED_SUFFIX_LENGTH = 8;

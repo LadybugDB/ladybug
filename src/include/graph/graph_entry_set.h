@@ -32,7 +32,7 @@ public:
         return nameToEntry;
     }
 
-    KUZU_API static GraphEntrySet* Get(const main::ClientContext& context);
+    LBUG_API static GraphEntrySet* Get(const main::ClientContext& context);
 
 private:
     std::unordered_map<std::string, std::unique_ptr<ParsedGraphEntry>> nameToEntry;

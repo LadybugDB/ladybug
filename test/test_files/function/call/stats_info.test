@@ -52,7 +52,7 @@ Binder exception: Stats from a non-node table knows is not supported yet!
 -CASE AddNodeProperty
 -STATEMENT create node table Comment (id int64, PRIMARY KEY (id));
 ---- ok
--STATEMENT copy Comment from '${KUZU_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment.csv' (HEADER=true);
+-STATEMENT copy Comment from '${LBUG_ROOT_DIRECTORY}/dataset/lsqb-sf01/Comment.csv' (HEADER=true);
 ---- ok
 -STATEMENT alter table Comment add propx int64;
 ---- ok

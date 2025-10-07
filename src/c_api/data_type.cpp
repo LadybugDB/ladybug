@@ -59,12 +59,12 @@ lbug_state lbug_data_type_get_num_elements_in_array(lbug_logical_type* data_type
     uint64_t* out_result) {
     auto parent_type = static_cast<LogicalType*>(data_type->_data_type);
     if (parent_type->getLogicalTypeID() != LogicalTypeID::ARRAY) {
-        return KuzuError;
+        return LbugError;
     }
     try {
         *out_result = ArrayType::getNumElements(*parent_type);
     } catch (Exception& e) {
-        return KuzuError;
+        return LbugError;
     }
-    return KuzuSuccess;
+    return LbugSuccess;
 }

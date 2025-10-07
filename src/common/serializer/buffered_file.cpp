@@ -10,7 +10,7 @@
 namespace lbug {
 namespace common {
 
-static constexpr uint64_t BUFFER_SIZE = KUZU_PAGE_SIZE;
+static constexpr uint64_t BUFFER_SIZE = LBUG_PAGE_SIZE;
 
 BufferedFileWriter::BufferedFileWriter(FileInfo& fileInfo)
     : buffer(std::make_unique<uint8_t[]>(BUFFER_SIZE)), fileOffset(0), bufferOffset(0),

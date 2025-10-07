@@ -6,7 +6,7 @@ import requests
 
 def extract_extension_version() -> str:
     import re
-    pattern = r'-DKUZU_EXTENSION_VERSION=(["\'])(.*?)\1'
+    pattern = r'-DLBUG_EXTENSION_VERSION=(["\'])(.*?)\1'
     with open('./CMakeLists.txt', 'r') as f:
         for line in f:
             match = re.search(pattern, line)
@@ -33,11 +33,11 @@ def get_arch() -> str:
 
 
 extension_repo_path = 'extension/repo'
-kuzu_version = 'v' + extract_extension_version()
+lbug_version = 'v' + extract_extension_version()
 arch_version = f"{get_os()}_{get_arch()}"
 shutil.rmtree(extension_repo_path, ignore_errors=True)
 os.mkdir(extension_repo_path)
-path = os.path.join(extension_repo_path, kuzu_version)
+path = os.path.join(extension_repo_path, lbug_version)
 os.mkdir(path)
 path = os.path.join(path, arch_version)
 os.mkdir(path)
@@ -55,7 +55,7 @@ if get_os() != "win":
         file_name += '.dylib'
     else:
         file_name += '.so'
-    official_repo = f"https://extension.kuzudb.com/{kuzu_version}/{arch_version}/common/{file_name}"
+    official_repo = f"https://extension.lbugdb.com/{lbug_version}/{arch_version}/common/{file_name}"
     response = requests.get(official_repo)
     if response.status_code == 200:
         with open(os.path.join(path, 'common', file_name), "wb") as f:

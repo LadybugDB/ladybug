@@ -39,12 +39,12 @@ jobs:
 
       - name: Move Node.js native module
         working-directory: tools/nodejs_api/package
-        run: mv kuzujs.node kuzujs-linux-x64.node
+        run: mv lbugjs.node lbugjs-linux-x64.node
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-nodejs-module-x86_64
-          path: tools/nodejs_api/package/kuzujs-linux-x64.node
+          path: tools/nodejs_api/package/lbugjs-linux-x64.node
 
   build-linux-nodejs-aarch64:
     runs-on: lbug-self-hosted-linux-building-aarch64
@@ -74,9 +74,9 @@ jobs:
 
       - name: Move Node.js native module
         working-directory: tools/nodejs_api/package
-        run: mv kuzujs.node kuzujs-linux-arm64.node
+        run: mv lbugjs.node lbugjs-linux-arm64.node
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-nodejs-module-aarch64
-          path: tools/nodejs_api/package/kuzujs-linux-arm64.node
+          path: tools/nodejs_api/package/lbugjs-linux-arm64.node

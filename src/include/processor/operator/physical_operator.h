@@ -78,7 +78,7 @@ enum class PhysicalOperatorType : uint8_t {
 class PhysicalOperator;
 struct PhysicalOperatorUtils {
     static std::string operatorToString(const PhysicalOperator* physicalOp);
-    KUZU_API static std::string operatorTypeToString(PhysicalOperatorType operatorType);
+    LBUG_API static std::string operatorTypeToString(PhysicalOperatorType operatorType);
 };
 
 struct OperatorMetrics {
@@ -91,7 +91,7 @@ struct OperatorMetrics {
 
 using physical_op_vector_t = std::vector<std::unique_ptr<PhysicalOperator>>;
 
-class KUZU_API PhysicalOperator {
+class LBUG_API PhysicalOperator {
 public:
     // Leaf operator
     PhysicalOperator(PhysicalOperatorType operatorType, physical_op_id id,

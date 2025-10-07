@@ -8,7 +8,7 @@
 -STATEMENT create node table person2 (ID INt64, fName StRING, gender INT64, PRIMARY KEY (ID));
 ---- ok
 
--STATEMENT copy person2 from '${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (header);
+-STATEMENT copy person2 from '${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (header);
 ---- ok
 
 -STATEMENT MATCH (a:person2) RETURN a.*;
@@ -24,7 +24,7 @@
 -STATEMENT create node table person3 (ID INt64, fName StRING, gender INT64, PRIMARY KEY (ID));
 ---- ok
 
--STATEMENT copy person3 from '${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (header true);
+-STATEMENT copy person3 from '${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (header true);
 ---- ok
 
 -STATEMENT MATCH (a:person3) RETURN a.*;
@@ -40,7 +40,7 @@
 -STATEMENT create node table person4 (ID INt64, fName StRING, gender INT64, PRIMARY KEY (ID));
 ---- ok
 
--STATEMENT copy person4 from '${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (header TrUe);
+-STATEMENT copy person4 from '${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (header TrUe);
 ---- ok
 
 -STATEMENT MATCH (a:person4) RETURN a.*;
@@ -56,7 +56,7 @@
 -STATEMENT create node table person5 (ID INt64, fName StRING, gender INT64, PRIMARY KEY (ID));
 ---- ok
 
--STATEMENT copy person5 from '${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (header 1);
+-STATEMENT copy person5 from '${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (header 1);
 ---- ok
 
 -STATEMENT MATCH (a:person5) RETURN a.*;
@@ -72,29 +72,29 @@
 -STATEMENT create node table person6 (ID INt64, fName StRING, gender INT64, PRIMARY KEY (ID));
 ---- ok
 
--STATEMENT copy person6 from '${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (header 0);
+-STATEMENT copy person6 from '${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (header 0);
 ---- error
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv on line 1: Conversion exception: Cast failed. Could not convert "id" to INT64. Line/record containing the error: 'id...'
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv on line 1: Conversion exception: Cast failed. Could not convert "id" to INT64. Line/record containing the error: 'id...'
 
 -CASE CopyUseFaLsEwithdifferentCases
 
 -STATEMENT create node table person7 (ID INt64, fName StRING, gender INT64, PRIMARY KEY (ID));
 ---- ok
 
--STATEMENT copy person7 from '${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (header FaLSe);
+-STATEMENT copy person7 from '${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (header FaLSe);
 ---- error
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv on line 1: Conversion exception: Cast failed. Could not convert "id" to INT64. Line/record containing the error: 'id...'
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv on line 1: Conversion exception: Cast failed. Could not convert "id" to INT64. Line/record containing the error: 'id...'
 
 -CASE NewKeyWordDELIMITER
 
 -STATEMENT create node table person8 (ID INt64, fName StRING, gender INT64, PRIMARY KEY (ID));
 ---- ok
 
--STATEMENT copy person8 from '${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (DELIMITER "|", header);
+-STATEMENT copy person8 from '${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (DELIMITER "|", header);
 ---- error
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv on line 1: expected 3 values per row, but got 1. Line/record containing the error: 'id,fname,Gender'
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv on line 1: expected 3 values per row, but got 1. Line/record containing the error: 'id,fname,Gender'
 
--STATEMENT copy person8 from '${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (DELIMITER ",", header);
+-STATEMENT copy person8 from '${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (DELIMITER ",", header);
 ---- ok
 
 -STATEMENT MATCH (a:person8) RETURN a.*;
@@ -110,11 +110,11 @@ Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_les
 -STATEMENT create node table person9 (ID INt64, fName StRING, gender INT64, PRIMARY KEY (ID));
 ---- ok
 
--STATEMENT copy person9 from '${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (DELIMITER       "|", header);
+-STATEMENT copy person9 from '${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (DELIMITER       "|", header);
 ---- error
-Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv on line 1: expected 3 values per row, but got 1. Line/record containing the error: 'id,fname,Gender'
+Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv on line 1: expected 3 values per row, but got 1. Line/record containing the error: 'id,fname,Gender'
 
--STATEMENT copy person9 from '${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (DELIMITER        ",", header);
+-STATEMENT copy person9 from '${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (DELIMITER        ",", header);
 ---- ok
 
 -STATEMENT MATCH (a:person9) RETURN a.*;
@@ -129,6 +129,6 @@ Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_les
 
 -STATEMENT create node table person10 (ID INt64, fName StRING, gender INT64, PRIMARY KEY (ID));
 ---- ok
--STATEMENT copy person10 from '${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (DELIMITER        ",', header =  '1");
+-STATEMENT copy person10 from '${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson_less_col.csv' (DELIMITER        ",', header =  '1");
 ---- error
 Binder exception: Copy csv option value must be a single character with an optional escape character.

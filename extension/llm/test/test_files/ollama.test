@@ -5,7 +5,7 @@
 
 -CASE CheckConnection
 
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/llm/build/libllm.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/llm/build/libllm.lbug_extension"
 ---- ok
 
 -STATEMENT return create_embedding('basic', 'ollama', 'nomic-embed-text')
@@ -13,7 +13,7 @@
 
 -CASE CreateEmbeddingFromNomicEmbedText
 
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/llm/build/libllm.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/llm/build/libllm.lbug_extension"
 ---- ok
 
 -STATEMENT MATCH (e:embedding) RETURN array_cosine_similarity(e.embedding, create_embedding(e.text, 'ollama', 'nomic-embed-text')) >= 0.9 AS similarity;
@@ -27,7 +27,7 @@ True
 
 -CASE SemanticDistanceCheck
 
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/llm/build/libllm.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/llm/build/libllm.lbug_extension"
 ---- ok
 
 -LOG Similar Text 1
@@ -52,9 +52,9 @@ False
 
 -CASE UseWithVectorExtension
 
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/llm/build/libllm.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/llm/build/libllm.lbug_extension"
 ---- ok
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/vector/build/libvector.kuzu_extension"
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/vector/build/libvector.lbug_extension"
 ---- ok
 
 -STATEMENT CREATE NODE TABLE Book(id SERIAL PRIMARY KEY, title STRING, title_embedding FLOAT[768], published_year INT64);
@@ -85,7 +85,7 @@ Learning Machines
 The Quantum World
 
 -CASE Example
--STATEMENT load extension "${KUZU_ROOT_DIRECTORY}/extension/llm/build/libllm.kuzu_extension";
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/llm/build/libllm.lbug_extension";
 ---- ok
 -STATEMENT RETURN CREATE_EMBEDDING("Hello world", "ollama", "nomic-embed-text");
 ---- ok

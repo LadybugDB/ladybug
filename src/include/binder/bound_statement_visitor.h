@@ -6,7 +6,7 @@
 namespace lbug {
 namespace binder {
 
-class KUZU_API BoundStatementVisitor {
+class LBUG_API BoundStatementVisitor {
 public:
     BoundStatementVisitor() = default;
     virtual ~BoundStatementVisitor() = default;

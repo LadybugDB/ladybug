@@ -1,6 +1,6 @@
 package com.lbugdb;
 
-public class KuzuMap implements AutoCloseable {
+public class LbugMap implements AutoCloseable {
     private Value mapVal;
 
     /**
@@ -15,7 +15,7 @@ public class KuzuMap implements AutoCloseable {
      *
      * @param value the value to construct the map from
      */
-    public KuzuMap(Value value) {
+    public LbugMap(Value value) {
         mapVal = value;
     }
 
@@ -26,7 +26,7 @@ public class KuzuMap implements AutoCloseable {
      * @param keys:   The keys in the map
      * @param values: The values in the map
      */
-    public KuzuMap(Value[] keys, Value[] values) {
+    public LbugMap(Value[] keys, Value[] values) {
         if (keys.length != values.length) {
             mapVal = null;
             return;
@@ -43,7 +43,7 @@ public class KuzuMap implements AutoCloseable {
             return null;
         }
         Value structValue = Native.lbugValueGetListElement(mapVal, index);
-        Value keyOrValue = new KuzuList(structValue).getListElement(isKey ? 0 : 1);
+        Value keyOrValue = new LbugList(structValue).getListElement(isKey ? 0 : 1);
         structValue.close();
         return keyOrValue;
     }

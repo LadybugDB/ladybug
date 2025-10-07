@@ -37,9 +37,9 @@ jobs:
     
       - name: Set environment variables
         run: |
-          echo "KUZU_CSV_DIR=$CSV_DIR/bi-dataset/bi-sf${SCALE_FACTOR}-composite-projected-fk/graphs/csv/bi/composite-projected-fk/" >> $GITHUB_ENV
-          echo "KUZU_DIR=$(pwd)" >> $GITHUB_ENV
-          echo "KUZU_BUILD_PATH=$(pwd)/tools/python_api/build" >> $GITHUB_ENV
+          echo "LBUG_CSV_DIR=$CSV_DIR/bi-dataset/bi-sf${SCALE_FACTOR}-composite-projected-fk/graphs/csv/bi/composite-projected-fk/" >> $GITHUB_ENV
+          echo "LBUG_DIR=$(pwd)" >> $GITHUB_ENV
+          echo "LBUG_BUILD_PATH=$(pwd)/tools/python_api/build" >> $GITHUB_ENV
 
       - uses: actions/checkout@v4
 
@@ -51,7 +51,7 @@ jobs:
       - name: Clone implementation
         uses: actions/checkout@v4
         with:
-          repository: kuzudb/ldbc_snb_bi
+          repository: lbugdb/ldbc_snb_bi
           path: ldbc_snb_bi
           token: ${{ secrets.DOC_PUSH_TOKEN }}
     

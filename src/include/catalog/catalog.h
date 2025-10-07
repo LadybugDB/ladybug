@@ -12,7 +12,7 @@ struct DBConfig;
 
 namespace lbug {
 namespace main {
-class AttachedKuzuDatabase;
+class AttachedLbugDatabase;
 } // namespace main
 
 namespace binder {
@@ -49,8 +49,8 @@ template<typename T>
 concept TableCatalogEntryType =
     std::is_same_v<T, NodeTableCatalogEntry> || std::is_same_v<T, RelGroupCatalogEntry>;
 
-class KUZU_API Catalog {
-    friend class main::AttachedKuzuDatabase;
+class LBUG_API Catalog {
+    friend class main::AttachedLbugDatabase;
 
 public:
     Catalog();

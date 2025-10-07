@@ -19,4 +19,4 @@ target_include_directories(
         PUBLIC
         ../include/
 )
-target_link_libraries(api_graph_test PUBLIC GTEST_LIB kuzu_shared)
+target_link_libraries(api_graph_test PUBLIC GTEST_LIB lbug_shared)

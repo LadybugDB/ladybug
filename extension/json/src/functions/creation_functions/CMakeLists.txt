@@ -1,4 +1,4 @@
-add_library(kuzu_json_creation_functions
+add_library(lbug_json_creation_functions
         OBJECT
         json_array.cpp
         json_merge_patch.cpp
@@ -6,7 +6,7 @@ add_library(kuzu_json_creation_functions
         to_json.cpp)
 
 set(JSON_EXTENSION_OBJECT_FILES
-        ${JSON_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:kuzu_json_creation_functions>
+        ${JSON_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:lbug_json_creation_functions>
         PARENT_SCOPE)
 
 

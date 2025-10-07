@@ -15,7 +15,7 @@ enum class TableType : uint8_t {
     FOREIGN = 5,
 };
 
-struct KUZU_API TableTypeUtils {
+struct LBUG_API TableTypeUtils {
     static std::string toString(TableType tableType);
 };
 

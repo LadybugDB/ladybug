@@ -2,7 +2,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 fn link_mode() -> &'static str {
-    if env::var("KUZU_SHARED").is_ok() {
+    if env::var("LBUG_SHARED").is_ok() {
         "dylib"
     } else {
         "static"
@@ -151,18 +151,18 @@ fn build_ffi(
     build.file(source_file);
 
     if bundled {
-        build.define("KUZU_BUNDLED", None);
+        build.define("LBUG_BUNDLED", None);
     }
     if get_target() == "debug" || get_target() == "relwithdebinfo" {
         build.define("ENABLE_RUNTIME_CHECKS", "1");
     }
     if link_mode() == "static" {
-        build.define("KUZU_STATIC_DEFINE", None);
+        build.define("LBUG_STATIC_DEFINE", None);
     }
 
     build.includes(include_paths);
 
-    println!("cargo:rerun-if-env-changed=KUZU_SHARED");
+    println!("cargo:rerun-if-env-changed=LBUG_SHARED");
 
     println!("cargo:rerun-if-changed=include/lbug_rs.h");
     println!("cargo:rerun-if-changed=src/lbug_rs.cpp");
@@ -195,7 +195,7 @@ fn main() {
         vec![Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("include")];
 
     if let (Ok(lbug_lib_dir), Ok(lbug_include)) =
-        (env::var("KUZU_LIBRARY_DIR"), env::var("KUZU_INCLUDE_DIR"))
+        (env::var("LBUG_LIBRARY_DIR"), env::var("LBUG_INCLUDE_DIR"))
     {
         println!("cargo:rustc-link-search=native={lbug_lib_dir}");
         println!("cargo:rustc-link-arg=-Wl,-rpath,{lbug_lib_dir}");

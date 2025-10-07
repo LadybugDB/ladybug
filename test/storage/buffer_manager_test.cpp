@@ -23,7 +23,7 @@ namespace testing {
 class BufferManagerTest : public DBTest {
 public:
     std::string getInputDir() override {
-        return TestHelper::appendKuzuRootPath("dataset/tinysnb/");
+        return TestHelper::appendLbugRootPath("dataset/tinysnb/");
     }
     void reserveAll() {
         auto* bm = getBufferManager(*database);
@@ -55,7 +55,7 @@ TEST_F(BufferManagerTest, TestBMUsageForIdenticalQueries) {
 class EmptyBufferManagerTest : public DBTest {
 public:
     std::string getInputDir() override {
-        return TestHelper::appendKuzuRootPath("dataset/empty-db/");
+        return TestHelper::appendLbugRootPath("dataset/empty-db/");
     }
 };
 

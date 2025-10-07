@@ -19,7 +19,7 @@ namespace common {
         void(0) :                                                                                  \
         lbug::common::kuAssertFailureInternal(#condition, __FILE__, __LINE__)
 
-#if defined(KUZU_RUNTIME_CHECKS) || !defined(NDEBUG)
+#if defined(LBUG_RUNTIME_CHECKS) || !defined(NDEBUG)
 #define RUNTIME_CHECK(code) code
 #define KU_ASSERT(condition) KU_ASSERT_UNCONDITIONAL(condition)
 #else
