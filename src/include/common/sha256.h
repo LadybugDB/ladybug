@@ -4,7 +4,7 @@
 
 #include "mbedtls/sha256.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class SHA256 {
@@ -26,4 +26,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

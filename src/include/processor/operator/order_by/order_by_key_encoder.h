@@ -7,7 +7,7 @@
 #include "order_by_data_info.h"
 #include "processor/result/factorized_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 #define BSWAP64(x)                                                                                 \
@@ -131,4 +131,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

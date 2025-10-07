@@ -2,7 +2,7 @@
 
 #include "binder/bound_statement_visitor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class ConfidentialStatementAnalyzer final : public BoundStatementVisitor {
@@ -17,4 +17,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

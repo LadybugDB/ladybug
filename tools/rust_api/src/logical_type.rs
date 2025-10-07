@@ -10,7 +10,7 @@ pub enum LogicalType {
     Any,
     /// Correponds to [`Value::Bool`](crate::value::Value::Bool)
     Bool,
-    /// Has no corresponding Value. Kuzu returns Serial values as [`Int64`](crate::Value::Int64).
+    /// Has no corresponding Value. Lbug returns Serial values as [`Int64`](crate::Value::Int64).
     Serial,
     /// Correponds to [`Value::Int64`](crate::value::Value::Int64)
     Int64,

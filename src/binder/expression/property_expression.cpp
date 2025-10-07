@@ -1,9 +1,9 @@
 #include "binder/expression/property_expression.h"
 
-using namespace kuzu::common;
-using namespace kuzu::catalog;
+using namespace lbug::common;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 bool PropertyExpression::isPrimaryKey() const {
@@ -28,4 +28,4 @@ bool PropertyExpression::hasProperty(table_id_t tableID) const {
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

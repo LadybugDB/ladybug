@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct MapCreationFunctions {
@@ -36,4 +36,4 @@ struct MapValuesFunctions {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

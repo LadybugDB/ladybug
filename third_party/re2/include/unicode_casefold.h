@@ -44,7 +44,7 @@
 #include "utf.h"
 #include "util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 enum {
@@ -75,5 +75,5 @@ extern const CaseFold* LookupCaseFold(const CaseFold*, int, Rune rune);
 extern Rune ApplyFold(const CaseFold* f, Rune r);
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug
 #endif // RE2_UNICODE_CASEFOLD_H_

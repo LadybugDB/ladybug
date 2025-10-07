@@ -6,7 +6,7 @@ const importTest = (name, path) => {
   });
 };
 
-describe("kuzu-wasm", function () {
+describe("lbug-wasm", function () {
   before(() => {
     return initTests();
   });

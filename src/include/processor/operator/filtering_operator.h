@@ -2,7 +2,7 @@
 
 #include "common/data_chunk/sel_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class DataChunkState;
 } // namespace common
@@ -27,4 +27,4 @@ protected:
     std::shared_ptr<common::SelectionVector> currentSelVector;
 };
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

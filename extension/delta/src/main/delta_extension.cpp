@@ -5,7 +5,7 @@
 #include "main/database.h"
 #include "main/duckdb_extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace delta_extension {
 
 void DeltaExtension::load(main::ClientContext* context) {
@@ -15,7 +15,7 @@ void DeltaExtension::load(main::ClientContext* context) {
 }
 
 } // namespace delta_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -26,12 +26,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::delta_extension::DeltaExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::delta_extension::DeltaExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::delta_extension::DeltaExtension::EXTENSION_NAME;
+    return lbug::delta_extension::DeltaExtension::EXTENSION_NAME;
 }
 }
 #endif

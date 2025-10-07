@@ -1,8 +1,8 @@
-#include "c_api/kuzu.h"
+#include "c_api/lbug.h"
 #include "common/types/types.h"
 #include "gtest/gtest.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 TEST(CApiDataTypeTest, Create) {
     kuzu_logical_type dataType;

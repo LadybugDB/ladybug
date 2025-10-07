@@ -25,7 +25,7 @@ class Connection:
 
     def __init__(self, database: Database, num_threads: int = 0):
         """
-        Initialise kuzu database connection.
+        Initialise lbug database connection.
 
         Parameters
         ----------

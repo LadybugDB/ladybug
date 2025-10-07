@@ -10,7 +10,7 @@
 #include <pthread/qos.h>
 #endif
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 #ifndef __SINGLE_THREADED__
@@ -227,4 +227,4 @@ TaskScheduler* TaskScheduler::Get(const main::ClientContext& context) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

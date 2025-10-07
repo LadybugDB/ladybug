@@ -41,7 +41,7 @@ function(build_extension_lib build_static ext_name)
     set_extension_properties(kuzu_${EXTENSION_LIB_NAME}_extension ${EXTENSION_LIB_NAME} ${ext_name})
     if (WIN32 OR build_static)
         # See comments in extension/httpfs/CMakeLists.txt.
-        target_link_libraries(kuzu_${EXTENSION_LIB_NAME}_extension PRIVATE kuzu)
+        target_link_libraries(kuzu_${EXTENSION_LIB_NAME}_extension PRIVATE lbug)
     endif ()
     if (APPLE AND NOT build_static)
         set_apple_dynamic_lookup(kuzu_${EXTENSION_LIB_NAME}_extension)

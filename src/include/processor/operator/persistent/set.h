@@ -3,7 +3,7 @@
 #include "processor/operator/physical_operator.h"
 #include "set_executor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct SetPropertyPrintInfo final : OPPrintInfo {
@@ -74,4 +74,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

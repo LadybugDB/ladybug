@@ -3,7 +3,7 @@
 #include "common/types/value/value.h"
 #include "expression_evaluator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace evaluator {
 
 class LiteralExpressionEvaluator : public ExpressionEvaluator {
@@ -35,4 +35,4 @@ private:
 };
 
 } // namespace evaluator
-} // namespace kuzu
+} // namespace lbug

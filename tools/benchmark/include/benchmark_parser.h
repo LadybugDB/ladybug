@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace kuzu {
+namespace lbug {
 namespace benchmark {
 
 struct ParsedBenchmark {
@@ -34,4 +34,4 @@ private:
 };
 
 } // namespace benchmark
-} // namespace kuzu
+} // namespace lbug

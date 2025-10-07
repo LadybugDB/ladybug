@@ -4,10 +4,10 @@
 #include "function/table/simple_table_function.h"
 #include "main/database_manager.h"
 
-using namespace kuzu::common;
-using namespace kuzu::catalog;
+using namespace lbug::common;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ShowAttachedDatabasesBindData final : TableFuncBindData {
@@ -63,4 +63,4 @@ function_set ShowAttachedDatabasesFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

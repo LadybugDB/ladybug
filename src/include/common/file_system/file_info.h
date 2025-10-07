@@ -7,7 +7,7 @@
 #include "common/cast.h"
 #include "function/table/table_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class FileSystem;
@@ -64,4 +64,4 @@ struct KUZU_API FileInfo {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

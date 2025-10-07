@@ -5,7 +5,7 @@
 
 #include "windows.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct WindowsUtils {
@@ -14,5 +14,5 @@ struct WindowsUtils {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug
 #endif

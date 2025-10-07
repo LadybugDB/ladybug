@@ -4,7 +4,7 @@
 #include "common/string_format.h"
 #include "resizable_buffer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 class ParquetDecodeUtils {
 
@@ -62,4 +62,4 @@ public:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

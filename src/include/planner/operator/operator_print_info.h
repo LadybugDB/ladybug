@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 
-namespace kuzu {
+namespace lbug {
 
 struct OPPrintInfo {
     OPPrintInfo() {}
@@ -16,4 +16,4 @@ struct OPPrintInfo {
     static std::unique_ptr<OPPrintInfo> EmptyInfo() { return std::make_unique<OPPrintInfo>(); }
 };
 
-} // namespace kuzu
+} // namespace lbug

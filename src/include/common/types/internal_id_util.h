@@ -3,7 +3,7 @@
 #include "common/types/types.h"
 #include "function/hash/hash_functions.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 using internal_id_set_t = std::unordered_set<internalID_t, function::InternalIDHasher>;
@@ -15,4 +15,4 @@ template<typename T>
 using node_id_map_t = internal_id_map_t<T>;
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

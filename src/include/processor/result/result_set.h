@@ -6,7 +6,7 @@
 #include "processor/data_pos.h"
 #include "result_set_descriptor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class ResultSet {
@@ -42,4 +42,4 @@ public:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

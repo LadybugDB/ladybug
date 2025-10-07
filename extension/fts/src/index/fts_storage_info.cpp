@@ -3,10 +3,10 @@
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
-using namespace kuzu::storage;
+using namespace lbug::storage;
 
 std::shared_ptr<common::BufferedSerializer> FTSStorageInfo::serialize() const {
     auto bufferWriter = std::make_shared<common::BufferedSerializer>();
@@ -27,4 +27,4 @@ std::unique_ptr<IndexStorageInfo> FTSStorageInfo::deserialize(
 }
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

@@ -5,10 +5,10 @@
 #include "storage/local_storage/local_node_table.h"
 #include "storage/local_storage/local_storage.h"
 
-using namespace kuzu::common;
-using namespace kuzu::storage;
+using namespace lbug::common;
+using namespace lbug::storage;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string ScanNodeTablePrintInfo::toString() const {
@@ -139,4 +139,4 @@ double ScanNodeTable::getProgress(ExecutionContext* /*context*/) const {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

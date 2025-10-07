@@ -6,7 +6,7 @@
 #include "common/assert.h"
 #include "parsed_graph_entry.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 }
@@ -39,4 +39,4 @@ private:
 };
 
 } // namespace graph
-} // namespace kuzu
+} // namespace lbug

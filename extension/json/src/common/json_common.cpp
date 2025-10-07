@@ -2,7 +2,7 @@
 
 #include "common/exception/runtime.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 yyjson_doc* JSONCommon::readDocument(uint8_t* data, uint64_t size, const yyjson_read_flag flg,
@@ -32,4 +32,4 @@ void JSONCommon::throwParseError(const char* data, size_t length, yyjson_read_er
 }
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

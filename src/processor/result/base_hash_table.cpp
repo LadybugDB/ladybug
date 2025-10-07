@@ -11,10 +11,10 @@
 #include "function/comparison/comparison_functions.h"
 #include "function/hash/vector_hash_functions.h"
 
-using namespace kuzu::common;
-using namespace kuzu::function;
+using namespace lbug::common;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 BaseHashTable::BaseHashTable(storage::MemoryManager& memoryManager, logical_type_vec_t keyTypes)
@@ -302,4 +302,4 @@ void BaseHashTable::initTmpHashVector() {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

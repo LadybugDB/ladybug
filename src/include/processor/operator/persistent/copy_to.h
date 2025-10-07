@@ -6,7 +6,7 @@
 #include "processor/operator/sink.h"
 #include "processor/result/result_set.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct CopyToInfo {
@@ -84,4 +84,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

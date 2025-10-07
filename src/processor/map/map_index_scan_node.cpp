@@ -6,9 +6,9 @@
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 
-using namespace kuzu::planner;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapIndexLookup(
@@ -38,4 +38,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapIndexLookup(
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

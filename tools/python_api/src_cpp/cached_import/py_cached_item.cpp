@@ -3,7 +3,7 @@
 #include "cached_import/py_cached_import.h"
 #include "common/exception/runtime.h"
 
-namespace kuzu {
+namespace lbug {
 
 py::handle PythonCachedItem::operator()() {
     assert((bool)PyGILState_Check());
@@ -20,4 +20,4 @@ py::handle PythonCachedItem::operator()() {
     return object;
 }
 
-} // namespace kuzu
+} // namespace lbug

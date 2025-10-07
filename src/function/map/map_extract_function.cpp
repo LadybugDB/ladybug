@@ -5,9 +5,9 @@
 #include "function/map/vector_map_functions.h"
 #include "function/scalar_function.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 static void validateKeyType(const std::shared_ptr<binder::Expression>& mapExpression,
@@ -39,4 +39,4 @@ function_set MapExtractFunctions::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -10,7 +10,7 @@ namespace duckdb {
 class MaterializedQueryResult;
 }
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class StorageManager;
 } // namespace storage
@@ -61,4 +61,4 @@ private:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

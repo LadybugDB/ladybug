@@ -3,7 +3,7 @@
 #include "common/enums/accumulate_type.h"
 #include "planner/operator/logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class LogicalAccumulate final : public LogicalOperator {
@@ -42,4 +42,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

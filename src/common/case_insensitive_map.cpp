@@ -2,7 +2,7 @@
 
 #include "common/string_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 uint64_t CaseInsensitiveStringHashFunction::operator()(const std::string& str) const {
@@ -15,4 +15,4 @@ bool CaseInsensitiveStringEquality::operator()(const std::string& lhs,
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

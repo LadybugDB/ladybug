@@ -28,11 +28,11 @@
 #include "pyparse.h"
 #include "storage/storage_utils.h"
 
-using namespace kuzu::common;
-using namespace kuzu::storage;
-using namespace kuzu::function;
+using namespace lbug::common;
+using namespace lbug::storage;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 NpyReader::NpyReader(const std::string& filePath)
@@ -353,4 +353,4 @@ function_set NpyScanFunction::getFunctionSet() {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

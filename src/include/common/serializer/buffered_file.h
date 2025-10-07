@@ -5,7 +5,7 @@
 #include "common/serializer/reader.h"
 #include "common/serializer/writer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct FileInfo;
@@ -67,4 +67,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -72,7 +72,7 @@
 //#pragma warning(disable: 4200)
 #endif
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 // The key insight behind this implementation is that the
@@ -568,4 +568,4 @@ fail:
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

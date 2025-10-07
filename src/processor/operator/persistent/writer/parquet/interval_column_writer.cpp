@@ -3,7 +3,7 @@
 #include "common/exception/runtime.h"
 #include "common/serializer/serializer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void IntervalColumnWriter::writeParquetInterval(common::interval_t input, uint8_t* result) {
@@ -36,4 +36,4 @@ void IntervalColumnWriter::writeVector(common::Serializer& bufferedSerializer,
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

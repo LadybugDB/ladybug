@@ -6,11 +6,11 @@
 #include "processor/operator/skip.h"
 #include "processor/plan_mapper.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::planner;
-using namespace kuzu::common;
+using namespace lbug::binder;
+using namespace lbug::planner;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapLimit(const LogicalOperator* logicalOperator) {
@@ -47,4 +47,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapLimit(const LogicalOperator* lo
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

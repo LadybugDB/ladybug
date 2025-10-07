@@ -4,7 +4,7 @@
 
 #include "common/types/int128_t.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct Modulo {
@@ -42,4 +42,4 @@ template<>
 void Modulo::operation(common::int128_t& left, common::int128_t& right, common::int128_t& result);
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

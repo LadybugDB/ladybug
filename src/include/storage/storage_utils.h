@@ -9,7 +9,7 @@
 #include "common/types/types.h"
 #include <concepts>
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 struct PageCursor {
@@ -88,4 +88,4 @@ public:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

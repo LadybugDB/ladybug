@@ -3,7 +3,7 @@
 #include "common/type_utils.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 using namespace common;
@@ -132,4 +132,4 @@ void DuckDBResultConverter::convertDuckDBResultToVector(duckdb::DataChunk& duckD
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

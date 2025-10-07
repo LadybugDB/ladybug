@@ -3,7 +3,7 @@
 #include "binder/expression/expression.h"
 #include "common/enums/clause_type.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class KUZU_API BoundReadingClause {
@@ -45,4 +45,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

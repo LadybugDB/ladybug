@@ -1,6 +1,6 @@
 #include "common/data_chunk/data_chunk.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 void DataChunk::insert(uint32_t pos, std::shared_ptr<ValueVector> valueVector) {
@@ -16,4 +16,4 @@ void DataChunk::resetAuxiliaryBuffer() {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

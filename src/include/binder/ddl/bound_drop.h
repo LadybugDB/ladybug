@@ -3,7 +3,7 @@
 #include "binder/bound_statement.h"
 #include "parser/ddl/drop_info.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class BoundDrop final : public BoundStatement {
@@ -21,4 +21,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

@@ -12,7 +12,7 @@
 #include "storage/page_manager.h"
 #include "storage/storage_version_info.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 static void validateStorageVersion(common::Deserializer& deSer) {
     std::string key;
     deSer.validateDebuggingInfo(key, "storage_version");
@@ -38,7 +38,7 @@ static void validateMagicBytes(common::Deserializer& deSer) {
     }
     if (memcmp(magicBytes, StorageVersionInfo::MAGIC_BYTES, numMagicBytes) != 0) {
         throw common::RuntimeException(
-            "Unable to open database. The file is not a valid Kuzu database file!");
+            "Unable to open database. The file is not a valid Lbug database file!");
     }
 }
 
@@ -114,4 +114,4 @@ std::optional<DatabaseHeader> DatabaseHeader::readDatabaseHeader(common::FileInf
         return std::nullopt;
     }
 }
-} // namespace kuzu::storage
+} // namespace lbug::storage

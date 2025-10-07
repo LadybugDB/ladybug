@@ -5,7 +5,7 @@
 #include "s3fs_config.h"
 #include "storage/duckdb_storage.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 void DuckdbExtension::load(main::ClientContext* context) {
@@ -15,7 +15,7 @@ void DuckdbExtension::load(main::ClientContext* context) {
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -26,12 +26,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::duckdb_extension::DuckdbExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::duckdb_extension::DuckdbExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::duckdb_extension::DuckdbExtension::EXTENSION_NAME;
+    return lbug::duckdb_extension::DuckdbExtension::EXTENSION_NAME;
 }
 }
 #endif

@@ -3,7 +3,7 @@
 #include "binder/bound_statement.h"
 #include "planner/planner.h"
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 class PlannerExtension {
@@ -18,4 +18,4 @@ public:
 };
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

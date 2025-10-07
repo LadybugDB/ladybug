@@ -3,7 +3,7 @@
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "function/table/table_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 class DuckDBTableCatalogEntry final : public TableCatalogEntry {
@@ -33,4 +33,4 @@ private:
 };
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

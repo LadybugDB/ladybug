@@ -6,9 +6,9 @@
 #include "main/client_context.h"
 #include "processor/execution_context.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 // LCOV_EXCL_START
 std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType operatorType) {
@@ -253,4 +253,4 @@ double PhysicalOperator::getProgress(ExecutionContext* /*context*/) const {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

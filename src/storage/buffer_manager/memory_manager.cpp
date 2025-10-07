@@ -10,9 +10,9 @@
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/file_handle.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 MemoryBuffer::MemoryBuffer(MemoryManager* mm, page_idx_t pageIdx, uint8_t* buffer, uint64_t size)
@@ -112,4 +112,4 @@ MemoryManager* MemoryManager::Get(const main::ClientContext& context) {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

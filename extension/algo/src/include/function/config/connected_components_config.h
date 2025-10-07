@@ -2,7 +2,7 @@
 
 #include "function/gds/gds.h"
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 
 struct CCConfig final : public function::GDSConfig {
@@ -14,4 +14,4 @@ struct CCConfig final : public function::GDSConfig {
 static constexpr char GROUP_ID_COLUMN_NAME[] = "group_id";
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug

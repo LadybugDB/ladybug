@@ -3,7 +3,7 @@
 #include "common/types/interval_t.h"
 #include "gtest/gtest.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 TEST(IntervalTests, FromCString) {
     interval_t result;

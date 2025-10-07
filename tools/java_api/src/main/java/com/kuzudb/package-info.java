@@ -1,8 +1,8 @@
 /**
- * Kuzu Java API.
+ * Lbug Java API.
  *
  * <p>
- * Kuzu is an in-process property graph database management system built for
+ * Lbug is an in-process property graph database management system built for
  * query speed and scalability.
  * </p>
  */

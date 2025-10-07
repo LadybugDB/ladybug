@@ -1,4 +1,4 @@
--DATASET KUZU binary-demo
+-DATASET LBUG binary-demo
 -SKIP_IN_MEM
 --
 

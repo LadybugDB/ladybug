@@ -30,7 +30,7 @@ pub struct PreparedStatement {
 /// [error](Error::FailedQuery) if another write query is in progress.
 ///
 /// ```
-/// # use kuzu::{Connection, Database, SystemConfig, Value, Error};
+/// # use lbug::{Connection, Database, SystemConfig, Value, Error};
 /// # fn main() -> anyhow::Result<()> {
 /// # let temp_dir = tempfile::tempdir()?;
 /// # let db = Database::new(temp_dir.path().join("testdb"), SystemConfig::default())?;
@@ -129,8 +129,8 @@ impl<'a> Connection<'a> {
     // should be generic.
     //
     // E.g.
-    // let result: QueryResult<kuzu::value::List<kuzu::value::String>> = conn.query("...")?;
-    // let result: QueryResult<kuzu::value::Int64> = conn.query("...")?;
+    // let result: QueryResult<lbug::value::List<lbug::value::String>> = conn.query("...")?;
+    // let result: QueryResult<lbug::value::Int64> = conn.query("...")?;
     //
     // But this would really just be syntactic sugar wrapping the current system
     pub fn query(&self, query: &str) -> Result<QueryResult<'a>, Error> {
@@ -150,7 +150,7 @@ impl<'a> Connection<'a> {
     /// # Arguments
     /// * `prepared_statement`: The prepared statement to execute
     ///```
-    /// # use kuzu::{Database, SystemConfig, Connection, Value};
+    /// # use lbug::{Database, SystemConfig, Connection, Value};
     /// # use anyhow::Error;
     /// #
     /// # fn main() -> Result<(), Error> {

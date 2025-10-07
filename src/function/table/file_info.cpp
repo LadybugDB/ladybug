@@ -4,7 +4,7 @@
 #include "main/client_context.h"
 #include "storage/storage_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct FileInfoBindData final : TableFuncBindData {
@@ -50,4 +50,4 @@ function_set FileInfoFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

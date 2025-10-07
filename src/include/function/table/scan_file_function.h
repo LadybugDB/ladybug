@@ -8,7 +8,7 @@
 #include "function/table/bind_data.h"
 #include "function/table/table_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class FileSystem;
 }
@@ -70,4 +70,4 @@ struct KUZU_API ScanFileBindData : public TableFuncBindData {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

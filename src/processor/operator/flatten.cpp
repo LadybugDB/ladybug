@@ -2,9 +2,9 @@
 
 #include "common/metric.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void Flatten::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* /*context*/) {
@@ -34,4 +34,4 @@ bool Flatten::getNextTuplesInternal(ExecutionContext* context) {
 void Flatten::resetCurrentSelVector(const SelectionVector&) {}
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

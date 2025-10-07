@@ -4,7 +4,7 @@
 
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 RandomEngine::RandomEngine() : randomState(RandomState()) {
@@ -35,4 +35,4 @@ RandomEngine* RandomEngine::Get(const main::ClientContext& context) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

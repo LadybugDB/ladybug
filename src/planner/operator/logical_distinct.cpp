@@ -3,7 +3,7 @@
 #include "binder/expression/expression_util.h"
 #include "planner/operator/factorization/flatten_resolver.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalDistinct::computeFactorizedSchema() {
@@ -39,4 +39,4 @@ binder::expression_vector LogicalDistinct::getKeysAndPayloads() const {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

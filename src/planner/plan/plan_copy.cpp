@@ -9,13 +9,13 @@
 #include "planner/planner.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::storage;
-using namespace kuzu::catalog;
-using namespace kuzu::common;
-using namespace kuzu::function;
+using namespace lbug::binder;
+using namespace lbug::storage;
+using namespace lbug::catalog;
+using namespace lbug::common;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 static void appendIndexScan(const ExtraBoundCopyRelInfo& extraInfo, LogicalPlan& plan) {
@@ -138,4 +138,4 @@ LogicalPlan Planner::planCopyTo(const BoundStatement& statement) {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

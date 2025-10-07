@@ -1,6 +1,6 @@
 #include "function/azure_scan.h"
 
-namespace kuzu {
+namespace lbug {
 namespace azure_extension {
 
 using namespace function;
@@ -71,4 +71,4 @@ function_set AzureScanFunction::getFunctionSet() {
 }
 
 } // namespace azure_extension
-} // namespace kuzu
+} // namespace lbug

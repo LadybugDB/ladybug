@@ -1,7 +1,7 @@
 #include <iostream>
 
-#include "kuzu.hpp"
-using namespace kuzu::main;
+#include "lbug.hpp"
+using namespace lbug::main;
 
 int main() {
     auto database = std::make_unique<Database>("" /* fill db path */);

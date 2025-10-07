@@ -5,7 +5,7 @@
 #include "processor/operator/order_by/radix_sort.h"
 #include "processor/result/factorized_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class SortSharedState {
@@ -89,4 +89,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

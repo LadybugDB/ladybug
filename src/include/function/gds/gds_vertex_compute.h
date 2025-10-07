@@ -3,7 +3,7 @@
 #include "function/gds/compute.h"
 #include "function/gds/gds.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 class GDSVertexCompute : public VertexCompute {
@@ -58,4 +58,4 @@ protected:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

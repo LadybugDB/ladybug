@@ -1,11 +1,11 @@
 #include "expression_evaluator/case_evaluator.h"
 
-using namespace kuzu::main;
-using namespace kuzu::common;
-using namespace kuzu::processor;
-using namespace kuzu::storage;
+using namespace lbug::main;
+using namespace lbug::common;
+using namespace lbug::processor;
+using namespace lbug::storage;
 
-namespace kuzu {
+namespace lbug {
 namespace evaluator {
 
 void CaseAlternativeEvaluator::init(const ResultSet& resultSet,
@@ -105,4 +105,4 @@ void CaseExpressionEvaluator::fillEntry(sel_t resultPos, ValueVector* srcVector)
 }
 
 } // namespace evaluator
-} // namespace kuzu
+} // namespace lbug

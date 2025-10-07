@@ -2,7 +2,7 @@
 
 #include "planner/operator/factorization/flatten_resolver.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 std::string LogicalCopyToPrintInfo::toString() const {
@@ -30,4 +30,4 @@ f_group_pos_set LogicalCopyTo::getGroupsPosToFlatten() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

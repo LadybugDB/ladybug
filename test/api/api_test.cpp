@@ -13,9 +13,9 @@
 #include "api_test/api_test.h"
 #include "common/exception/io.h"
 
-using namespace kuzu::common;
-using namespace kuzu::main;
-using namespace kuzu::testing;
+using namespace lbug::common;
+using namespace lbug::main;
+using namespace lbug::testing;
 
 static void assertMatchPersonCountStar(Connection* conn) {
     auto result = conn->query("MATCH (a:person) RETURN COUNT(*)");
@@ -527,7 +527,7 @@ TEST_F(ApiTest, InvalidDBFile) {
     std::filesystem::remove(databasePath);
     // Create a new database with an empty file.
     std::ofstream file(databasePath);
-    file << "This is not a valid Kuzu database file.";
+    file << "This is not a valid Lbug database file.";
     file.close();
     ASSERT_TRUE(std::filesystem::exists(databasePath));
     ASSERT_FALSE(std::filesystem::file_size(databasePath) == 0);
@@ -541,7 +541,7 @@ TEST_F(ApiTest, DBFileUnderNonExistingDir) {
     }
     database.reset();
     std::filesystem::remove(databasePath);
-    databasePath = databasePath + "/non_existing_dir/database.kuzu";
+    databasePath = databasePath + "/non_existing_dir/database.lbug";
     ASSERT_FALSE(std::filesystem::exists(databasePath));
     // Attempt to open the database with the empty file.
     ASSERT_THROW(std::make_unique<Database>(databasePath, *systemConfig), IOException);

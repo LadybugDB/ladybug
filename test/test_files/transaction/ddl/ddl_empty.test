@@ -15,9 +15,9 @@
 -RELOADDB
 -STATEMENT CALL show_tables() RETURN *;
 ---- 3
-0|N1|NODE|local(kuzu)|
-1|N2|NODE|local(kuzu)|
-4|R|REL|local(kuzu)|
+0|N1|NODE|local(lbug)|
+1|N2|NODE|local(lbug)|
+4|R|REL|local(lbug)|
 
 -CASE CreateDropNodeTableRecovery
 -STATEMENT BEGIN TRANSACTION;
@@ -29,7 +29,7 @@
 -RELOADDB
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 1
-0|test|NODE|local(kuzu)|
+0|test|NODE|local(lbug)|
 -STATEMENT BEGIN TRANSACTION;
 ---- ok
 -STATEMENT DROP TABLE test;
@@ -52,8 +52,8 @@
 -RELOADDB
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 2
-0|base|NODE|local(kuzu)|
-2|test|REL|local(kuzu)|
+0|base|NODE|local(lbug)|
+2|test|REL|local(lbug)|
 -STATEMENT BEGIN TRANSACTION;
 ---- ok
 -STATEMENT DROP TABLE test;
@@ -63,7 +63,7 @@
 -RELOADDB
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 1
-0|base|NODE|local(kuzu)|
+0|base|NODE|local(lbug)|
 
 -CASE CreateDropRelGroupRecovery
 -STATEMENT CREATE NODE TABLE base1(id SERIAL, primary key(id));
@@ -79,9 +79,9 @@
 -RELOADDB
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test|REL|local(kuzu)|
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test|REL|local(lbug)|
 -STATEMENT BEGIN TRANSACTION;
 ---- ok
 -STATEMENT DROP TABLE test;
@@ -91,8 +91,8 @@
 -RELOADDB
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 2
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
 
 -CASE InsertAndDropNodeColumnCheckpointRecovery
 -STATEMENT CREATE NODE TABLE test(id INT64, age INT64, name STRING, prop2 INT64, PRIMARY KEY(id));
@@ -174,9 +174,9 @@ Binder exception: Cannot find property since for k.
 ---- ok
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test1|REL|local(kuzu)|
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test1|REL|local(lbug)|
 
 -CASE RenameRelGroupRollback
 -STATEMENT CREATE NODE TABLE base1(id INT64, primary key(id));
@@ -193,9 +193,9 @@ Binder exception: Cannot find property since for k.
 ---- ok
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test|REL|local(kuzu)|
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test|REL|local(lbug)|
 
 -CASE RenameRelGroupCommitRecovery
 -STATEMENT CREATE NODE TABLE base1(id INT64, primary key(id));
@@ -212,15 +212,15 @@ Binder exception: Cannot find property since for k.
 ---- ok
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test1|REL|local(kuzu)|
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test1|REL|local(lbug)|
 -RELOADDB
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test1|REL|local(kuzu)|
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test1|REL|local(lbug)|
 
 -CASE RenameRelGroupRollbackRecovery
 -STATEMENT CREATE NODE TABLE base1(id INT64, primary key(id));
@@ -237,15 +237,15 @@ Binder exception: Cannot find property since for k.
 ---- ok
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test|REL|local(kuzu)|
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test|REL|local(lbug)|
 -RELOADDB
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test|REL|local(kuzu)|
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test|REL|local(lbug)|
 
 -CASE RenameRelGroupPropertyCommit
 -STATEMENT CREATE NODE TABLE base1(id INT64, primary key(id));
@@ -484,16 +484,16 @@ Binder exception: Cannot find property since for k.
 ---- ok
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test|REL|local(kuzu)|This is a test comment
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test|REL|local(lbug)|This is a test comment
 -STATEMENT COMMIT;
 ---- ok
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test|REL|local(kuzu)|This is a test comment
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test|REL|local(lbug)|This is a test comment
 
 -CASE CommentRelGroupRollback
 -STATEMENT CREATE NODE TABLE base1(id INT64, primary key(id));
@@ -508,16 +508,16 @@ Binder exception: Cannot find property since for k.
 ---- ok
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test|REL|local(kuzu)|This is a test comment
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test|REL|local(lbug)|This is a test comment
 -STATEMENT ROLLBACK;
 ---- ok
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test|REL|local(kuzu)|
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test|REL|local(lbug)|
 
 -CASE CommentRelGroupCommitRecovery
 -STATEMENT CREATE NODE TABLE base1(id INT64, primary key(id));
@@ -534,15 +534,15 @@ Binder exception: Cannot find property since for k.
 ---- ok
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test|REL|local(kuzu)|This is a test comment
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test|REL|local(lbug)|This is a test comment
 -RELOADDB
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test|REL|local(kuzu)|This is a test comment
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test|REL|local(lbug)|This is a test comment
 
 -CASE CommentRelGroupRollbackRecovery
 -STATEMENT CREATE NODE TABLE base1(id INT64, primary key(id));
@@ -559,15 +559,15 @@ Binder exception: Cannot find property since for k.
 ---- ok
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test|REL|local(kuzu)|
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test|REL|local(lbug)|
 -RELOADDB
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 3
-0|base1|NODE|local(kuzu)|
-1|base2|NODE|local(kuzu)|
-4|test|REL|local(kuzu)|
+0|base1|NODE|local(lbug)|
+1|base2|NODE|local(lbug)|
+4|test|REL|local(lbug)|
 
 -CASE DropNodeTableReclaim
 -SKIP_IN_MEM

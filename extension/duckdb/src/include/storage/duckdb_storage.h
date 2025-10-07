@@ -3,7 +3,7 @@
 #include "main/database.h"
 #include "storage/storage_extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 class DuckDBStorageExtension final : public storage::StorageExtension {
@@ -24,4 +24,4 @@ public:
 };
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

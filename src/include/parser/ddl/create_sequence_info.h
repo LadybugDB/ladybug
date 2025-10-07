@@ -5,7 +5,7 @@
 #include "common/copy_constructors.h"
 #include "common/enums/conflict_action.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 enum class SequenceInfoType {
@@ -38,4 +38,4 @@ private:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

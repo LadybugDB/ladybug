@@ -3,7 +3,7 @@
 #include "bound_statement.h"
 #include "transaction/transaction_action.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class BoundTransactionStatement final : public BoundStatement {
@@ -21,4 +21,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

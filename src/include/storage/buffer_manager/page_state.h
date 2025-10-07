@@ -10,7 +10,7 @@
 #include <memory>
 #endif
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 // Keeps the state information of a page in a file.
@@ -114,4 +114,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

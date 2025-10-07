@@ -3,7 +3,7 @@
 #include "decode_utils.h"
 #include "resizable_buffer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class RleBpDecoder {
@@ -115,4 +115,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

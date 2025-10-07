@@ -5,7 +5,7 @@
 #include "main/db_config.h"
 #include "processor/execution_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string StandaloneCallPrintInfo::toString() const {
@@ -36,4 +36,4 @@ bool StandaloneCall::getNextTuplesInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "bound_statement.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 // Perform semantic rewrite over bound statement.
@@ -12,4 +12,4 @@ public:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 #include "processor/operator/filtering_operator.h"
 #include "processor/operator/physical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct FilterPrintInfo final : OPPrintInfo {
@@ -90,4 +90,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -8,7 +8,7 @@
 #include "function/cast/functions/numeric_limits.h"
 #include "re2.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 bool tryCastToBool(const char* input, uint64_t len, bool& result) {
@@ -265,4 +265,4 @@ LogicalType inferMinimalTypeFromString(std::string_view str) {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

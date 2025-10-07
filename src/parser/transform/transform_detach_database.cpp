@@ -1,7 +1,7 @@
 #include "parser/detach_database.h"
 #include "parser/transformer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 std::unique_ptr<Statement> Transformer::transformDetachDatabase(
@@ -11,4 +11,4 @@ std::unique_ptr<Statement> Transformer::transformDetachDatabase(
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

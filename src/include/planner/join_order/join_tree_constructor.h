@@ -3,7 +3,7 @@
 #include "join_tree.h"
 #include "planner/planner.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class PropertyExprCollection;
@@ -41,4 +41,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

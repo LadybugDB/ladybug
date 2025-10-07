@@ -6,7 +6,7 @@
 #include "common/copy_constructors.h"
 #include "query_part.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class SingleQuery {
@@ -47,4 +47,4 @@ private:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

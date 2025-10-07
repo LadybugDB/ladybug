@@ -5,13 +5,13 @@
  */
 "use strict";
 
-const KuzuWasm = require("./kuzu.js");
+const KuzuWasm = require("./lbug.js");
 
 class PreparedStatement {
   /**
    * Internal constructor. Use `Connection.prepare` to get a
    * `PreparedStatement` object.
-   * @param {kuzu.sync.PreparedStatement} _preparedStatement the native prepared 
+   * @param {lbug.sync.PreparedStatement} _preparedStatement the native prepared 
    * statement object.
    */
   constructor(_preparedStatement) {

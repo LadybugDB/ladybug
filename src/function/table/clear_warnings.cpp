@@ -4,9 +4,9 @@
 #include "processor/execution_context.h"
 #include "processor/warning_context.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput&) {
@@ -34,4 +34,4 @@ function_set ClearWarningsFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

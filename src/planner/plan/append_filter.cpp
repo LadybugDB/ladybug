@@ -1,9 +1,9 @@
 #include "planner/operator/logical_filter.h"
 #include "planner/planner.h"
 
-using namespace kuzu::binder;
+using namespace lbug::binder;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void Planner::appendFilters(const expression_vector& predicates, LogicalPlan& plan) {
@@ -25,4 +25,4 @@ void Planner::appendFilter(const std::shared_ptr<Expression>& predicate, Logical
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

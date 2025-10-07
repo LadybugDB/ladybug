@@ -5,7 +5,7 @@
 #include "common/types/types.h"
 #include "disk_array.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 class FileHandle;
@@ -75,4 +75,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

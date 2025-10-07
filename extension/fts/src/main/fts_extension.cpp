@@ -11,7 +11,7 @@
 #include "main/client_context.h"
 #include "storage/storage_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 using namespace extension;
@@ -47,7 +47,7 @@ void FtsExtension::load(main::ClientContext* context) {
 }
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -58,12 +58,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::fts_extension::FtsExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::fts_extension::FtsExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::fts_extension::FtsExtension::EXTENSION_NAME;
+    return lbug::fts_extension::FtsExtension::EXTENSION_NAME;
 }
 }
 #endif

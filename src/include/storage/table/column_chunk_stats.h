@@ -4,7 +4,7 @@
 namespace common {
 class ValueVector;
 }
-namespace kuzu::storage {
+namespace lbug::storage {
 class ColumnChunkData;
 
 struct KUZU_API ColumnChunkStats {
@@ -33,4 +33,4 @@ struct MergedColumnChunkStats {
     void merge(const MergedColumnChunkStats& o, common::PhysicalTypeID dataType);
 };
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

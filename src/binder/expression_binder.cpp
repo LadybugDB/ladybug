@@ -12,11 +12,11 @@
 #include "parser/expression/parsed_expression_visitor.h"
 #include "parser/expression/parsed_parameter_expression.h"
 
-using namespace kuzu::common;
-using namespace kuzu::function;
-using namespace kuzu::parser;
+using namespace lbug::common;
+using namespace lbug::function;
+using namespace lbug::parser;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 std::shared_ptr<Expression> ExpressionBinder::bindExpression(
@@ -151,4 +151,4 @@ void ExpressionBinder::addParameter(const std::string& name, std::shared_ptr<Val
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

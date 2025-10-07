@@ -3,7 +3,7 @@
 #include "common/exception/internal.h"
 #include "common/string_format.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 [[noreturn]] inline void kuAssertFailureInternal(const char* condition_name, const char* file,
@@ -17,7 +17,7 @@ namespace common {
 #define KU_ASSERT_UNCONDITIONAL(condition)                                                         \
     static_cast<bool>(condition) ?                                                                 \
         void(0) :                                                                                  \
-        kuzu::common::kuAssertFailureInternal(#condition, __FILE__, __LINE__)
+        lbug::common::kuAssertFailureInternal(#condition, __FILE__, __LINE__)
 
 #if defined(KUZU_RUNTIME_CHECKS) || !defined(NDEBUG)
 #define RUNTIME_CHECK(code) code
@@ -28,9 +28,9 @@ namespace common {
 #endif
 
 #define KU_UNREACHABLE                                                                             \
-    /* LCOV_EXCL_START */ [[unlikely]] kuzu::common::kuAssertFailureInternal("KU_UNREACHABLE",     \
+    /* LCOV_EXCL_START */ [[unlikely]] lbug::common::kuAssertFailureInternal("KU_UNREACHABLE",     \
         __FILE__, __LINE__) /* LCOV_EXCL_STOP */
 #define KU_UNUSED(expr) (void)(expr)
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -14,10 +14,10 @@
 #include "parser/expression/parsed_variable_expression.h"
 #include "parser/transformer.h"
 
-using namespace kuzu::common;
-using namespace kuzu::function;
+using namespace lbug::common;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 std::unique_ptr<ParsedExpression> Transformer::transformExpression(
@@ -696,4 +696,4 @@ std::unique_ptr<ParsedExpression> Transformer::transformDoubleLiteral(
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

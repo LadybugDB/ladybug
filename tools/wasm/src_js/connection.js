@@ -14,7 +14,7 @@ class Connection {
    * lazily, so the connection is not initialized until the first query is
    * executed. To initialize the connection immediately, call the `init()`
    * function on the returned object.
-   * @param {kuzu.Database} database the database object to connect to.
+   * @param {lbug.Database} database the database object to connect to.
    * @param {Number} numThreads the maximum number of threads to use for query 
    * execution.
    */
@@ -110,7 +110,7 @@ class Connection {
   /**
    * Execute a query.
    * @param {String} statement the statement to execute.
-   * @returns {kuzu.QueryResult} the query result.
+   * @returns {lbug.QueryResult} the query result.
    */
   async query(statement) {
     const connectionId = await this._getConnectionObjectId();
@@ -127,7 +127,7 @@ class Connection {
   /**
    * Prepare a statement for execution.
    * @param {String} statement the statement to prepare.
-   * @returns {kuzu.PreparedStatement} the prepared statement.
+   * @returns {lbug.PreparedStatement} the prepared statement.
    */
   async prepare(statement) {
     const connectionId = await this._getConnectionObjectId();
@@ -143,10 +143,10 @@ class Connection {
 
   /**
    * Execute a prepared statement.
-   * @param {kuzu.sync.PreparedStatement} preparedStatement the prepared 
+   * @param {lbug.sync.PreparedStatement} preparedStatement the prepared 
    * statement to execute.
    * @param {Object} params a plain object mapping parameter names to values.
-   * @returns {kuzu.QueryResult} the query result.
+   * @returns {lbug.QueryResult} the query result.
    */
   async execute(preparedStatement, params = {}) {
     const connectionId = await this._getConnectionObjectId();

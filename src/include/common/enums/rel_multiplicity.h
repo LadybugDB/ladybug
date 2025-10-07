@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 enum class RelMultiplicity : uint8_t { MANY, ONE };
@@ -15,4 +15,4 @@ struct RelMultiplicityUtils {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

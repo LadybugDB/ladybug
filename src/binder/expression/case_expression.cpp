@@ -1,6 +1,6 @@
 #include "binder/expression/case_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 std::string CaseExpression::toStringInternal() const {
@@ -14,4 +14,4 @@ std::string CaseExpression::toStringInternal() const {
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

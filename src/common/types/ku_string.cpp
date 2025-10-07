@@ -1,6 +1,6 @@
 #include "common/types/ku_string.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 ku_string_t::ku_string_t(const char* value, uint64_t length) : len(length), prefix{} {
@@ -76,4 +76,4 @@ bool ku_string_t::operator>(const ku_string_t& rhs) const {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

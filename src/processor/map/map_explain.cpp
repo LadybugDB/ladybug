@@ -7,11 +7,11 @@
 #include "processor/result/factorized_table_util.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-using namespace kuzu::common;
-using namespace kuzu::planner;
-using namespace kuzu::binder;
+using namespace lbug::common;
+using namespace lbug::planner;
+using namespace lbug::binder;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapExplain(const LogicalOperator* logicalOperator) {
@@ -45,4 +45,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExplain(const LogicalOperator* 
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

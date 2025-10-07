@@ -1,7 +1,7 @@
 import asyncio
 import time
 
-import kuzu
+import lbug
 import pyarrow as pa
 import pytest
 
@@ -114,8 +114,8 @@ async def test_async_query_multiple_results(async_connection_readonly):
 
 @pytest.mark.asyncio
 async def test_async_connection_create_and_close():
-    db = kuzu.Database(":memory:", buffer_pool_size=2**28)
-    async_connection = kuzu.AsyncConnection(db)
+    db = lbug.Database(":memory:", buffer_pool_size=2**28)
+    async_connection = lbug.AsyncConnection(db)
     for _ in range(10):
         res = await async_connection.execute("RETURN 1;")
         assert res.has_next()

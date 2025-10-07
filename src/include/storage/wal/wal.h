@@ -2,7 +2,7 @@
 
 #include "storage/wal/wal_record.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class BufferedFileWriter;
 class VirtualFileSystem;
@@ -50,4 +50,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

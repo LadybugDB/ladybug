@@ -10,7 +10,7 @@
 #include "storage/index/hash_index_utils.h"
 #include "storage/storage_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 class OverflowFile;
@@ -153,4 +153,4 @@ public:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

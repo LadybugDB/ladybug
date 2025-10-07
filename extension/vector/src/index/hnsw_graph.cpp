@@ -7,9 +7,9 @@
 #include "storage/table/rel_table.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::storage;
+using namespace lbug::storage;
 
-namespace kuzu {
+namespace lbug {
 namespace vector_extension {
 
 EmbeddingHandle::EmbeddingHandle(common::offset_t offset, GetEmbeddingsScanState* lifetimeManager)
@@ -374,4 +374,4 @@ common::offset_t NodeToHNSWGraphOffsetMap::graphToNodeOffset(common::offset_t gr
 }
 
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug

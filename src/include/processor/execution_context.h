@@ -2,7 +2,7 @@
 
 #include "common/profiler.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 }
@@ -19,4 +19,4 @@ struct KUZU_API ExecutionContext {
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

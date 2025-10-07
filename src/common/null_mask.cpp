@@ -7,7 +7,7 @@
 #include "common/assert.h"
 #include <bit>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 void NullMask::setNull(uint64_t* nullEntries, uint32_t pos, bool isNull) {
@@ -288,4 +288,4 @@ uint64_t NullMask::countNulls() const {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

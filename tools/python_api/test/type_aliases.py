@@ -1,6 +1,6 @@
 import sys
 
-from kuzu import Connection, Database
+from lbug import Connection, Database
 
 if sys.version_info >= (3, 10):
     from typing import TypeAlias

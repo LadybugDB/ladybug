@@ -18,20 +18,20 @@
 -STATEMENT CALL s3_uploader_threads_limit=10
 ---- ok
 -LOG singlePartCSVUpload
--STATEMENT copy (match (f:Forum) return f) to 's3://kuzu-dataset-us/${RUN_ID}/forum.csv' (header=true)
+-STATEMENT copy (match (f:Forum) return f) to 's3://lbug-dataset-us/${RUN_ID}/forum.csv' (header=true)
 ---- ok
--STATEMENT load from 's3://kuzu-dataset-us/${RUN_ID}/forum.csv'(header=true) return count(*)
+-STATEMENT load from 's3://lbug-dataset-us/${RUN_ID}/forum.csv'(header=true) return count(*)
 ---- 1
 13750
 -LOG singlePartParquetUpload
--STATEMENT copy (match (p:Place) return p.*) to 's3://kuzu-dataset-us/${RUN_ID}/place.parquet'
+-STATEMENT copy (match (p:Place) return p.*) to 's3://lbug-dataset-us/${RUN_ID}/place.parquet'
 ---- ok
--STATEMENT load from 's3://kuzu-dataset-us/${RUN_ID}/place.parquet' return count(*)
+-STATEMENT load from 's3://lbug-dataset-us/${RUN_ID}/place.parquet' return count(*)
 ---- 1
 1460
 -LOG multiPartsUpload
--STATEMENT copy (match (c:Comment) return c) to 's3://kuzu-dataset-us/${RUN_ID}/comment.csv' (header=true)
+-STATEMENT copy (match (c:Comment) return c) to 's3://lbug-dataset-us/${RUN_ID}/comment.csv' (header=true)
 ---- ok
--STATEMENT load from 's3://kuzu-dataset-us/${RUN_ID}/comment.csv'(header=true) return count(*)
+-STATEMENT load from 's3://lbug-dataset-us/${RUN_ID}/comment.csv'(header=true) return count(*)
 ---- 1
 151043

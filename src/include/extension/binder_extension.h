@@ -3,7 +3,7 @@
 #include "binder/bound_statement.h"
 #include "parser/statement.h"
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 class KUZU_API BinderExtension {
@@ -16,4 +16,4 @@ public:
 };
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

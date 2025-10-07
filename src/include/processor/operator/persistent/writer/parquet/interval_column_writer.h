@@ -4,7 +4,7 @@
 #include "common/constants.h"
 #include "common/types/interval_t.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class IntervalColumnWriter : public BasicColumnWriter {
@@ -30,4 +30,4 @@ public:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

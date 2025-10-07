@@ -11,7 +11,7 @@
 #include "storage/compression/compression.h"
 #include "storage/compression/float_compression.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 using namespace common;
 
 ColumnChunkMetadata GetCompressionMetadata::operator()(std::span<const uint8_t> buffer,
@@ -238,4 +238,4 @@ ColumnChunkMetadata GetFloatCompressionMetadata<T>::operator()(std::span<const u
 
 template class GetFloatCompressionMetadata<float>;
 template class GetFloatCompressionMetadata<double>;
-} // namespace kuzu::storage
+} // namespace lbug::storage

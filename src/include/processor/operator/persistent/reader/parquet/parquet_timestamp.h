@@ -2,7 +2,7 @@
 
 #include "common/types/timestamp_t.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct Int96 {
@@ -24,4 +24,4 @@ struct ParquetTimeStampUtils {
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

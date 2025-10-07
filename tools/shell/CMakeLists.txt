@@ -14,14 +14,14 @@ add_executable(kuzu_shell
         shell_runner.cpp)
 
 if (NOT MSVC)
-    # On Windows, rename the executable to kuzu.exe will cause an error
-    # "multiple rules generate src/kuzu.lib", so we do not set the output
+    # On Windows, rename the executable to lbug.exe will cause an error
+    # "multiple rules generate src/lbug.lib", so we do not set the output
     # name for MSVC.
-    set_target_properties(kuzu_shell PROPERTIES OUTPUT_NAME kuzu)
+    set_target_properties(kuzu_shell PROPERTIES OUTPUT_NAME lbug)
 endif ()
 
 
-target_link_libraries(kuzu_shell kuzu)
+target_link_libraries(kuzu_shell lbug)
 if (ENABLE_BACKTRACES)
     target_link_libraries(kuzu_shell register_backtrace_signal_handler)
 endif ()

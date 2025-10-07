@@ -5,7 +5,7 @@
 #include "processor/result/pattern_creation_info_table.h"
 #include "set_executor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct MergeInfo {
@@ -120,4 +120,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

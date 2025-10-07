@@ -1,6 +1,6 @@
 add_library(kuzu_rs STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/kuzu_rs.cpp
-    ${KUZU_RS_BINDINGS_DIR}/sources/kuzu/src/lib.rs.cc
+    ${KUZU_RS_BINDINGS_DIR}/sources/lbug/src/lib.rs.cc
 )
 
 target_include_directories(kuzu_rs
@@ -11,4 +11,4 @@ target_include_directories(kuzu_rs
         ${KUZU_RS_BINDINGS_DIR}/sources
 )
 
-target_link_libraries(kuzu_rs kuzu)
+target_link_libraries(kuzu_rs lbug)

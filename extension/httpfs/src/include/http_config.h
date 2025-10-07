@@ -2,7 +2,7 @@
 
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace httpfs_extension {
 
 struct HTTPConfig {
@@ -22,4 +22,4 @@ struct HTTPConfigEnvProvider {
 };
 
 } // namespace httpfs_extension
-} // namespace kuzu
+} // namespace lbug

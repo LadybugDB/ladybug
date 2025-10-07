@@ -5,7 +5,7 @@
 #include "common/types/ku_string.h"
 #include "function/list/functions/list_len_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ArrayExtract {
@@ -32,7 +32,7 @@ struct ArrayExtract {
             copySubstr(str, idxPos, 1 /* length */, result, isAscii);
         } else {
             int64_t characterCount = 0, startBytePos = 0, endBytePos = 0;
-            kuzu::utf8proc::utf8proc_grapheme_callback(stringVal.c_str(), stringVal.size(),
+            lbug::utf8proc::utf8proc_grapheme_callback(stringVal.c_str(), stringVal.size(),
                 [&](int64_t gstart, int64_t /*gend*/) {
                     if (characterCount == startPos) {
                         startBytePos = gstart;
@@ -62,4 +62,4 @@ struct ArrayExtract {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

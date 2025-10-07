@@ -2,7 +2,7 @@
 
 #include "processor/operator/sink.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct DetatchDatabasePrintInfo final : OPPrintInfo {
@@ -41,4 +41,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

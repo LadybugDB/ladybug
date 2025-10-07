@@ -30,7 +30,7 @@ impl<'a> StringView<'a> {
 #[cxx::bridge]
 pub(crate) mod ffi {
     unsafe extern "C++" {
-        include!("kuzu/include/kuzu_rs.h");
+        include!("lbug/include/kuzu_rs.h");
         #[namespace = "std"]
         #[cxx_name = "string_view"]
         type StringView<'a> = crate::ffi::StringView<'a>;
@@ -41,7 +41,7 @@ pub(crate) mod ffi {
 
     // From types.h
     // Note: cxx will check if values change, but not if they are added.
-    #[namespace = "kuzu::common"]
+    #[namespace = "lbug::common"]
     #[repr(u8)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum LogicalTypeID {
@@ -90,7 +90,7 @@ pub(crate) mod ffi {
 
     // From types.h
     // Note: cxx will check if values change, but not if they are added.
-    #[namespace = "kuzu::common"]
+    #[namespace = "lbug::common"]
     #[repr(u8)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum PhysicalTypeID {
@@ -119,13 +119,13 @@ pub(crate) mod ffi {
         POINTER = 25,
     }
 
-    #[namespace = "kuzu::common"]
+    #[namespace = "lbug::common"]
     unsafe extern "C++" {
         type LogicalTypeID;
         type PhysicalTypeID;
     }
 
-    #[namespace = "kuzu::main"]
+    #[namespace = "lbug::main"]
     unsafe extern "C++" {
         type PreparedStatement;
         fn isSuccess(&self) -> bool;
@@ -148,7 +148,7 @@ pub(crate) mod ffi {
 
     #[namespace = "kuzu_rs"]
     unsafe extern "C++" {
-        #[namespace = "kuzu::main"]
+        #[namespace = "lbug::main"]
         type Database;
 
         #[allow(clippy::fn_params_excessive_bools)]
@@ -167,7 +167,7 @@ pub(crate) mod ffi {
 
     }
 
-    #[namespace = "kuzu::main"]
+    #[namespace = "lbug::main"]
     unsafe extern "C++" {
         // The C++ Connection class includes a pointer to the database.
         // We must not destroy a referenced database while a connection is open.
@@ -200,7 +200,7 @@ pub(crate) mod ffi {
         fn setQueryTimeOut(self: Pin<&mut Connection>, timeout_ms: u64);
     }
 
-    #[namespace = "kuzu::main"]
+    #[namespace = "lbug::main"]
     unsafe extern "C++" {
         // The C++ QueryResult class includes a pointer to part of the Database
         // (at minimum, the FactorizedTable references the MemoryManager)
@@ -229,7 +229,7 @@ pub(crate) mod ffi {
         fn query_result_column_names(query_result: &QueryResult) -> Vec<String>;
     }
 
-    #[namespace = "kuzu::processor"]
+    #[namespace = "lbug::processor"]
     unsafe extern "C++" {
         type FlatTuple;
 
@@ -240,10 +240,10 @@ pub(crate) mod ffi {
 
     #[namespace = "kuzu_rs"]
     unsafe extern "C++" {
-        #[namespace = "kuzu::common"]
+        #[namespace = "lbug::common"]
         type LogicalType;
 
-        #[namespace = "kuzu::common"]
+        #[namespace = "lbug::common"]
         fn getLogicalTypeID(&self) -> LogicalTypeID;
 
         fn create_logical_type(id: LogicalTypeID) -> UniquePtr<LogicalType>;
@@ -300,7 +300,7 @@ pub(crate) mod ffi {
 
     #[namespace = "kuzu_rs"]
     unsafe extern "C++" {
-        #[namespace = "kuzu::common"]
+        #[namespace = "lbug::common"]
         type Value;
 
         // only used by tests

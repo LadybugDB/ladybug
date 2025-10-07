@@ -10,7 +10,7 @@
 #include "common/types/uuid.h"
 #include "common/vector/value_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class Serializer;
 class Deserializer;
@@ -338,4 +338,4 @@ struct LoadExtensionRecord final : WALRecord {
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

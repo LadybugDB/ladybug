@@ -8,10 +8,10 @@
 #include "parser/ddl/drop_info.h"
 #include "parser/transformer.h"
 
-using namespace kuzu::common;
-using namespace kuzu::catalog;
+using namespace lbug::common;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 std::unique_ptr<Statement> Transformer::transformAlterTable(
@@ -392,4 +392,4 @@ std::string Transformer::transformPrimaryKey(CypherParser::KU_ColumnDefinitionCo
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

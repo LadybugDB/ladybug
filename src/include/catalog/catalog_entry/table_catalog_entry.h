@@ -10,7 +10,7 @@
 #include "common/types/types.h"
 #include "function/table/table_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 struct BoundExtraCreateCatalogEntryInfo;
 } // namespace binder
@@ -93,4 +93,4 @@ using table_catalog_entry_set_t =
     std::unordered_set<TableCatalogEntry*, TableCatalogEntryHasher, TableCatalogEntryEquality>;
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

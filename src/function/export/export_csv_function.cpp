@@ -6,7 +6,7 @@
 #include "main/client_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 using namespace common;
@@ -279,4 +279,4 @@ function_set ExportCSVFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "extension/extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace sqlite_extension {
 
 class SqliteExtension final : public extension::Extension {
@@ -14,4 +14,4 @@ public:
 };
 
 } // namespace sqlite_extension
-} // namespace kuzu
+} // namespace lbug

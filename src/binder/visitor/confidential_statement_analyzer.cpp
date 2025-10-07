@@ -3,9 +3,9 @@
 #include "binder/bound_standalone_call.h"
 #include "main/db_config.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 void ConfidentialStatementAnalyzer::visitStandaloneCall(const BoundStatement& boundStatement) {
@@ -14,4 +14,4 @@ void ConfidentialStatementAnalyzer::visitStandaloneCall(const BoundStatement& bo
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

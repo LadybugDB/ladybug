@@ -8,7 +8,7 @@
 
 #include "common/types/types.h"
 
-namespace kuzu::common {
+namespace lbug::common {
 
 hash_t checksum(uint64_t x) {
     return x * UINT64_C(0xbf58476d1ce4e5b9);
@@ -85,4 +85,4 @@ uint64_t checksum(uint8_t* buffer, size_t size) {
     return result;
 }
 
-} // namespace kuzu::common
+} // namespace lbug::common

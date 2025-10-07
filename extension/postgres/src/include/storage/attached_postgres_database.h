@@ -3,7 +3,7 @@
 #include "connector/postgres_connector.h"
 #include "storage/attached_duckdb_database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace postgres_extension {
 
 class AttachedPostgresDatabase final : public duckdb_extension::AttachedDuckDBDatabase {
@@ -27,4 +27,4 @@ private:
 };
 
 } // namespace postgres_extension
-} // namespace kuzu
+} // namespace lbug

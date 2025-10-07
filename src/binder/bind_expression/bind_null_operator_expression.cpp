@@ -2,11 +2,11 @@
 #include "binder/expression_binder.h"
 #include "function/null/vector_null_functions.h"
 
-using namespace kuzu::common;
-using namespace kuzu::parser;
-using namespace kuzu::function;
+using namespace lbug::common;
+using namespace lbug::parser;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 std::shared_ptr<Expression> ExpressionBinder::bindNullOperatorExpression(
@@ -45,4 +45,4 @@ std::shared_ptr<Expression> ExpressionBinder::bindNullOperatorExpression(
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

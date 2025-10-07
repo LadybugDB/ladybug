@@ -7,7 +7,7 @@
 
 #include "common/api.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct CaseInsensitiveStringHashFunction {
@@ -26,4 +26,4 @@ using case_insensitve_set_t = std::unordered_set<std::string, CaseInsensitiveStr
     CaseInsensitiveStringEquality>;
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "processor/result/result_set.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 class Expression;
 }
@@ -118,4 +118,4 @@ protected:
 };
 
 } // namespace evaluator
-} // namespace kuzu
+} // namespace lbug

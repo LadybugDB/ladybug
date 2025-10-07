@@ -21,11 +21,11 @@
 #include "processor/warning_context.h"
 #include "reader/buffered_json_reader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
-using namespace kuzu::function;
-using namespace kuzu::common;
+using namespace lbug::function;
+using namespace lbug::common;
 
 struct JsonScanBindData;
 
@@ -828,7 +828,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
     if (!scanInput->expectedColumnNames.empty() || !scanConfig.autoDetect) {
         if (scanInput->expectedColumnNames.empty()) {
             throw BinderException{
-                "When auto-detect is set to false, Kuzu requires the "
+                "When auto-detect is set to false, Lbug requires the "
                 "user to provide column names and types in the LOAD FROM clause."};
         }
         columnTypes = copyVector(scanInput->expectedColumnTypes);
@@ -970,4 +970,4 @@ function_set JsonScan::getFunctionSet() {
 }
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

@@ -17,11 +17,11 @@
 #include "storage/wal/wal_replayer.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
-using namespace kuzu::transaction;
+using namespace lbug::catalog;
+using namespace lbug::common;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 StorageManager::StorageManager(const std::string& databasePath, bool readOnly, bool enableChecksums,
@@ -315,4 +315,4 @@ StorageManager* StorageManager::Get(const main::ClientContext& context) {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

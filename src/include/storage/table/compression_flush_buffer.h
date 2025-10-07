@@ -3,7 +3,7 @@
 #include "storage/compression/compression.h"
 #include "storage/table/column_chunk_metadata.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 class FileHandle;
 
 class CompressedFlushBuffer {
@@ -42,4 +42,4 @@ public:
 ColumnChunkMetadata uncompressedFlushBuffer(std::span<const uint8_t> buffer, FileHandle* dataFH,
     const PageRange& entry, const ColumnChunkMetadata& metadata);
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

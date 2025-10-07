@@ -6,7 +6,7 @@
 #include "function/gds/gds_utils.h"
 #include "graph/graph.h"
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 
 using degree_t = uint64_t;
@@ -94,4 +94,4 @@ struct DegreesUtils {
 };
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug

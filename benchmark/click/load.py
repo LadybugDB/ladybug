@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-import kuzu
+import lbug
 import timeit
 import psutil
 
-db = kuzu.Database("mydb")
-con = kuzu.Connection(db)
+db = lbug.Database("mydb")
+con = lbug.Connection(db)
 
 start = timeit.default_timer()
 con.execute(open("create.cypher").read())

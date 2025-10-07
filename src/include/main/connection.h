@@ -4,7 +4,7 @@
 #include "database.h"
 #include "function/udf_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 
 /**
@@ -158,4 +158,4 @@ private:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

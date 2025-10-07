@@ -1,6 +1,6 @@
 #include "optimizer/schema_populator.h"
 
-namespace kuzu::optimizer {
+namespace lbug::optimizer {
 
 static void populateSchemaRecursive(planner::LogicalOperator* op) {
     for (auto i = 0u; i < op->getNumChildren(); ++i) {
@@ -12,4 +12,4 @@ static void populateSchemaRecursive(planner::LogicalOperator* op) {
 void SchemaPopulator::rewrite(planner::LogicalPlan* plan) {
     populateSchemaRecursive(plan->getLastOperator().get());
 }
-} // namespace kuzu::optimizer
+} // namespace lbug::optimizer

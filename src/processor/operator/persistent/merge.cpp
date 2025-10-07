@@ -3,7 +3,7 @@
 #include "binder/expression/expression_util.h"
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string MergePrintInfo::toString() const {
@@ -140,4 +140,4 @@ bool Merge::getNextTuplesInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

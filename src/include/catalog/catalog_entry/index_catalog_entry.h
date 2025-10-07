@@ -6,13 +6,13 @@
 #include "common/serializer/deserializer.h"
 #include "table_catalog_entry.h"
 
-namespace kuzu::common {
+namespace lbug::common {
 struct BufferReader;
 }
-namespace kuzu::common {
+namespace lbug::common {
 class BufferWriter;
 }
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 struct KUZU_API IndexToCypherInfo : ToCypherInfo {
@@ -113,4 +113,4 @@ protected:
 };
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

@@ -6,11 +6,11 @@ chai.config.includeStack = true;
 
 const TEST_INSTALLED = process.env.TEST_INSTALLED || false;
 if (TEST_INSTALLED) {
-  global.kuzu = require("kuzu");
-  global.kuzuPath = require.resolve("kuzu");
+  global.lbug = require("lbug");
+  global.kuzuPath = require.resolve("lbug");
   console.log("Testing installed version @", kuzuPath);
 } else {
-  global.kuzu = require("../build/");
+  global.lbug = require("../build/");
   global.kuzuPath = require.resolve("../build/");
   console.log("Testing locally built version @", kuzuPath);
 }
@@ -29,8 +29,8 @@ const initTests = async () => {
   });
 
   const dbPath = path.join(tmpPath, "db.kz");
-  const db = new kuzu.Database(dbPath, 1 << 28 /* 256MB */);
-  const conn = new kuzu.Connection(db, 4);
+  const db = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
+  const conn = new lbug.Connection(db, 4);
 
   const schema = (await fs.readFile("../../dataset/tinysnb/schema.cypher"))
     .toString()

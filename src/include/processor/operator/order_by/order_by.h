@@ -5,7 +5,7 @@
 #include "processor/result/result_set.h"
 #include "sort_state.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct OrderByPrintInfo final : OPPrintInfo {
@@ -65,4 +65,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

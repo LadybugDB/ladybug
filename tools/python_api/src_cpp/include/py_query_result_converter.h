@@ -1,10 +1,10 @@
 #pragma once
 
-#include "main/kuzu.h"
+#include "main/lbug.h"
 #include "pybind_include.h"
 
-using kuzu::common::LogicalType;
-using kuzu::common::Value;
+using lbug::common::LogicalType;
+using lbug::common::Value;
 
 struct NPArrayWrapper {
 
@@ -26,11 +26,11 @@ public:
 
 class QueryResultConverter {
 public:
-    explicit QueryResultConverter(kuzu::main::QueryResult* queryResult);
+    explicit QueryResultConverter(lbug::main::QueryResult* queryResult);
 
     py::object toDF();
 
 private:
-    kuzu::main::QueryResult* queryResult;
+    lbug::main::QueryResult* queryResult;
     std::vector<std::unique_ptr<NPArrayWrapper>> columns;
 };

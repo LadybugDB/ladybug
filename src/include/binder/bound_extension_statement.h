@@ -3,10 +3,10 @@
 #include "bound_statement.h"
 #include "extension/extension_action.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
-using namespace kuzu::extension;
+using namespace lbug::extension;
 
 class BoundExtensionStatement final : public BoundStatement {
     static constexpr common::StatementType type_ = common::StatementType::EXTENSION;
@@ -23,4 +23,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

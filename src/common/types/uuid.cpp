@@ -4,7 +4,7 @@
 #include "common/random_engine.h"
 #include "re2.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 void UUID::byteToHex(char byteVal, char* buf, uint64_t& pos) {
@@ -153,4 +153,4 @@ const regex::RE2& UUID::regexPattern() {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

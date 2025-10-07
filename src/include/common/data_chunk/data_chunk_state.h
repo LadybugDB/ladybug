@@ -2,7 +2,7 @@
 
 #include "common/data_chunk/sel_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 // F stands for Factorization
@@ -41,4 +41,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

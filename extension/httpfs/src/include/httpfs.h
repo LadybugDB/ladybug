@@ -10,7 +10,7 @@
 #define O_ACCMODE 0x0003
 #endif
 
-namespace kuzu {
+namespace lbug {
 namespace httpfs_extension {
 
 using HeaderMap = common::case_insensitive_map_t<std::string>;
@@ -124,4 +124,4 @@ private:
 };
 
 } // namespace httpfs_extension
-} // namespace kuzu
+} // namespace lbug

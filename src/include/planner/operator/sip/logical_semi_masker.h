@@ -5,7 +5,7 @@
 #include "planner/operator/logical_operator.h"
 #include "semi_mask_target_type.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 /*
@@ -114,4 +114,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

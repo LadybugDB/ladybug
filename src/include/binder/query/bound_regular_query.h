@@ -3,7 +3,7 @@
 #include "binder/bound_statement.h"
 #include "normalized_single_query.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class BoundRegularQuery final : public BoundStatement {
@@ -30,4 +30,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

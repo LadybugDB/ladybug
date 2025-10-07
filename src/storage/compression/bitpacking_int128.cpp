@@ -6,7 +6,7 @@
 #include "storage/compression/bitpacking_utils.h"
 #include "storage/compression/compression.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 
 //===--------------------------------------------------------------------===//
 // Unpacking
@@ -168,4 +168,4 @@ void Int128Packer::unpack(const uint32_t* __restrict in, common::int128_t* __res
     }
 }
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

@@ -4,7 +4,7 @@
 #include "parquet_reader.h"
 #include "templated_column_reader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 template<class PARQUET_PHYSICAL_TYPE, class KU_PHYSICAL_TYPE,
@@ -38,4 +38,4 @@ protected:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

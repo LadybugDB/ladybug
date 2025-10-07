@@ -3,9 +3,9 @@
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 void ParsedCaseAlternative::serialize(Serializer& serializer) const {
@@ -49,4 +49,4 @@ void ParsedCaseExpression::serializeInternal(Serializer& serializer) const {
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

@@ -8,7 +8,7 @@
 #include "common/serializer/deserializer.h"
 #include "transaction/transaction.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 void CatalogEntry::serialize(common::Serializer& serializer) const {
@@ -75,4 +75,4 @@ void CatalogEntry::copyFrom(const CatalogEntry& other) {
 }
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

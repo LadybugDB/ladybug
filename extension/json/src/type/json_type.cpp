@@ -3,7 +3,7 @@
 #include "common/exception/binder.h"
 #include "main/json_extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 common::LogicalType JsonType::getJsonType() {
@@ -22,4 +22,4 @@ bool JsonType::isJson(const common::LogicalType& type) {
 }
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

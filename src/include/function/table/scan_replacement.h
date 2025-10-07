@@ -3,7 +3,7 @@
 #include "function/table/bind_input.h"
 #include "function/table/table_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ScanReplacementData {
@@ -25,4 +25,4 @@ struct ScanReplacement {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

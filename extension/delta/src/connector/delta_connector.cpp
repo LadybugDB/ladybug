@@ -1,6 +1,6 @@
 #include "connector/delta_connector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace delta_extension {
 
 void DeltaConnector::connect(const std::string& /*dbPath*/, const std::string& /*catalogName*/,
@@ -17,4 +17,4 @@ void DeltaConnector::connect(const std::string& /*dbPath*/, const std::string& /
 }
 
 } // namespace delta_extension
-} // namespace kuzu
+} // namespace lbug

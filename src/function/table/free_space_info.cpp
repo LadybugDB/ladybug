@@ -4,7 +4,7 @@
 #include "main/client_context.h"
 #include "storage/page_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct FreeSpaceInfoBindData final : TableFuncBindData {
@@ -54,4 +54,4 @@ function_set FreeSpaceInfoFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

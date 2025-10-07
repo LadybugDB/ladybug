@@ -5,7 +5,7 @@
 #include "common/task_system/progress_bar_display.h"
 #include <napi.h>
 
-using namespace kuzu;
+using namespace lbug;
 using namespace common;
 
 /**

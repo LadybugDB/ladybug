@@ -1,7 +1,7 @@
 #include "parser/attach_database.h"
 #include "parser/transformer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 std::unique_ptr<Statement> Transformer::transformAttachDatabase(
@@ -16,4 +16,4 @@ std::unique_ptr<Statement> Transformer::transformAttachDatabase(
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

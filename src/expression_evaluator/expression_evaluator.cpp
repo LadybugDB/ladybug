@@ -4,9 +4,9 @@
 #include "main/client_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace evaluator {
 
 void ExpressionEvaluator::init(const processor::ResultSet& resultSet,
@@ -56,4 +56,4 @@ bool ExpressionEvaluator::select(common::SelectionVector& selVector,
 }
 
 } // namespace evaluator
-} // namespace kuzu
+} // namespace lbug

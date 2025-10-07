@@ -5,7 +5,7 @@ const { execSync } = require("child_process");
 const SRC_PATH = path.resolve(__dirname, "../..");
 const THREADS = require("os").cpus().length;
 
-console.log(`Using ${THREADS} threads to build Kuzu.`);
+console.log(`Using ${THREADS} threads to build Lbug.`);
 
 execSync("npm run clean", { stdio: "inherit" });
 execSync(`make nodejs NUM_THREADS=${THREADS}`, {

@@ -1,9 +1,9 @@
 #include "processor/operator/aggregate/base_aggregate_scan.h"
 
-using namespace kuzu::common;
-using namespace kuzu::function;
+using namespace lbug::common;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void BaseAggregateScan::initLocalStateInternal(ResultSet* resultSet,
@@ -15,4 +15,4 @@ void BaseAggregateScan::initLocalStateInternal(ResultSet* resultSet,
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

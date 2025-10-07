@@ -8,7 +8,7 @@
 #include "function/table/table_function.h"
 #include "processor/operator/persistent/reader/file_error_handler.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 //! ParallelCSVReader is a class that reads values from a stream in parallel.
@@ -61,4 +61,4 @@ struct ParallelCSVScan {
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

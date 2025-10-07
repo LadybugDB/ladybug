@@ -1,6 +1,6 @@
 #include "planner/join_order/join_order_util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 uint64_t JoinOrderUtil::getJoinKeysFlatCardinality(const binder::expression_vector& joinNodeIDs,
@@ -21,4 +21,4 @@ uint64_t JoinOrderUtil::getJoinKeysFlatCardinality(const binder::expression_vect
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 #include "storage/index/index.h"
 #include "storage/table/node_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 struct FTSUpdateVectors {
@@ -76,4 +76,4 @@ struct FTSUpdateState final : storage::Index::UpdateState {
 };
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

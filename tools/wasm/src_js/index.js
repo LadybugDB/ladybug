@@ -1,5 +1,5 @@
 /**
- * @file index.js is the root file for the Kuzu WebAssembly module.
+ * @file index.js is the root file for the Lbug WebAssembly module.
  * It exports the module's public interface.
  */
 "use strict";
@@ -12,23 +12,23 @@ const QueryResult = require("./query_result");
 const FS = require("./fs");
 
 /**
- * The default asynchronous version of Kuzu WebAssembly module.
- * @module kuzu-wasm
+ * The default asynchronous version of Lbug WebAssembly module.
+ * @module lbug-wasm
  */
 module.exports = {
   /**
-   * Initialize the Kuzu WebAssembly module. Calling this function is optional,
+   * Initialize the Lbug WebAssembly module. Calling this function is optional,
    * as the module is initialized automatically when the first query is executed.
-   * @memberof module:kuzu-wasm
+   * @memberof module:lbug-wasm
    */
   init: async () => {
     await dispatcher.init();
   },
 
   /**
-   * Get the version of the Kuzu WebAssembly module.
-   * @memberof module:kuzu-wasm
-   * @returns {String} the version of the Kuzu WebAssembly module.
+   * Get the version of the Lbug WebAssembly module.
+   * @memberof module:lbug-wasm
+   * @returns {String} the version of the Lbug WebAssembly module.
    */
   getVersion: async () => {
     const worker = await dispatcher.getWorker();
@@ -37,9 +37,9 @@ module.exports = {
   },
 
   /**
-   * Get the storage version of the Kuzu WebAssembly module.
-   * @memberof module:kuzu-wasm
-   * @returns {BigInt} the storage version of the Kuzu WebAssembly module.
+   * Get the storage version of the Lbug WebAssembly module.
+   * @memberof module:lbug-wasm
+   * @returns {BigInt} the storage version of the Lbug WebAssembly module.
    */
   getStorageVersion: async () => {
     const worker = await dispatcher.getWorker();
@@ -55,7 +55,7 @@ module.exports = {
    * called before any other function calls to the WebAssembly module. After the 
    * initialization is started, the worker script path cannot be changed and not 
    * finding the worker script will cause an error.
-   * @memberof module:kuzu-wasm
+   * @memberof module:lbug-wasm
    * @param {String} workerPath the path to the WebAssembly worker script.
    */
   setWorkerPath: (workerPath) => {
@@ -63,9 +63,9 @@ module.exports = {
   },
 
   /**
-   * Destroy the Kuzu WebAssembly module and kill the worker. This function
+   * Destroy the Lbug WebAssembly module and kill the worker. This function
    * should be called when the module is no longer needed to free up resources.
-   * @memberof module:kuzu-wasm
+   * @memberof module:lbug-wasm
    */
   close: async () => {
     await dispatcher.close();

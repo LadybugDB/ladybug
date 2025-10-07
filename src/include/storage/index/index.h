@@ -8,10 +8,10 @@
 #include "in_mem_hash_index.h"
 #include <span>
 
-namespace kuzu::storage {
+namespace lbug::storage {
 class StorageManager;
 }
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 class Transaction;
 } // namespace transaction
@@ -236,4 +236,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

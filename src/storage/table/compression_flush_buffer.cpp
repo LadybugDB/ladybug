@@ -8,7 +8,7 @@
 #include "storage/table/column_chunk_data.h"
 #include <concepts>
 
-namespace kuzu::storage {
+namespace lbug::storage {
 using namespace common;
 using namespace transaction;
 
@@ -170,4 +170,4 @@ ColumnChunkMetadata CompressedFloatFlushBuffer<T>::operator()(std::span<const ui
 template class CompressedFloatFlushBuffer<float>;
 template class CompressedFloatFlushBuffer<double>;
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

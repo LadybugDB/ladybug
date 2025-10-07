@@ -4,7 +4,7 @@
 
 #include "common/assert.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 template<typename TO, typename FROM>
@@ -35,4 +35,4 @@ TO ku_dynamic_cast(FROM& old) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -16,7 +16,7 @@
 #include "logging.h"
 #include "util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 class RE2;
@@ -127,6 +127,6 @@ private:
 };
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug
 
 #endif // RE2_PREFILTER_H_

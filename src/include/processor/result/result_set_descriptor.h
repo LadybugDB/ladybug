@@ -2,7 +2,7 @@
 
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 class Schema;
 } // namespace planner
@@ -41,4 +41,4 @@ struct KUZU_API ResultSetDescriptor {
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

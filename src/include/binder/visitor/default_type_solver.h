@@ -2,7 +2,7 @@
 
 #include "binder/bound_statement_visitor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 // Assign a default data type (STRING) for expressions with ANY data type for a given statement.
@@ -18,4 +18,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

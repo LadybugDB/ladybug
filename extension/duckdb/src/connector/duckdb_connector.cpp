@@ -1,6 +1,6 @@
 #include "connector/duckdb_connector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 std::unique_ptr<duckdb::MaterializedQueryResult> DuckDBConnector::executeQuery(
@@ -14,4 +14,4 @@ std::unique_ptr<duckdb::MaterializedQueryResult> DuckDBConnector::executeQuery(
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

@@ -9,13 +9,13 @@ from uuid import UUID
 import pytest
 
 import ground_truth
-import kuzu
+import lbug
 import polars as pl
 import pyarrow as pa
 import pytz
 from pandas import Timestamp
 from type_aliases import ConnDB
-from kuzu.constants import ID, LABEL, SRC, DST, NODES
+from lbug.constants import ID, LABEL, SRC, DST, NODES
 
 _expected_dtypes = {
     # ------------------------------------------------
@@ -84,7 +84,7 @@ _expected_dtypes = {
 }
 
 
-def get_result(query_result: kuzu.QueryResult, result_type: str, chunk_size: int | None) -> Any:
+def get_result(query_result: lbug.QueryResult, result_type: str, chunk_size: int | None) -> Any:
     sz = [] if (chunk_size is None or result_type == "pl") else [chunk_size]
     res = getattr(query_result, f"get_as_{result_type}")(*sz)
     if result_type == "arrow" and chunk_size:
@@ -110,7 +110,7 @@ def assert_col_names(data: Any, expected_col_names: list[str]) -> None:
 def test_to_arrow(conn_db_readonly: ConnDB) -> None:
     conn, _ = conn_db_readonly
 
-    def _test_person_table(_conn: kuzu.Connection, return_type: str, chunk_size: int | None = None) -> None:
+    def _test_person_table(_conn: lbug.Connection, return_type: str, chunk_size: int | None = None) -> None:
         query = "MATCH (a:person) RETURN a.* ORDER BY a.ID"
         data = get_result(_conn.execute(query), return_type, chunk_size)
         assert len(data.columns) == 16
@@ -294,7 +294,7 @@ def test_to_arrow(conn_db_readonly: ConnDB) -> None:
             ],
         )
 
-    def _test_movies_table(_conn: kuzu.Connection, return_type: str, chunk_size: int | None = None) -> None:
+    def _test_movies_table(_conn: lbug.Connection, return_type: str, chunk_size: int | None = None) -> None:
         query = "MATCH (a:movies) RETURN a.length, a.description ORDER BY a.length"
         data = get_result(_conn.execute(query), return_type, chunk_size)
 
@@ -368,7 +368,7 @@ def test_to_arrow(conn_db_readonly: ConnDB) -> None:
             ],
         )
 
-    def _test_utf8_string(_conn: kuzu.Connection, return_type: str, chunk_size: int | None = None) -> None:
+    def _test_utf8_string(_conn: lbug.Connection, return_type: str, chunk_size: int | None = None) -> None:
         query = "MATCH (m:movies) RETURN m.name"
         data = get_result(_conn.execute(query), return_type, chunk_size)
 
@@ -380,7 +380,7 @@ def test_to_arrow(conn_db_readonly: ConnDB) -> None:
             expected_values=["Sóló cón tu párejâ", "The 😂😃🧘🏻‍♂️🌍🌦️🍞🚗 movie", "Roma"],
         )
 
-    def _test_in_small_chunk_size(_conn: kuzu.Connection, return_type: str, chunk_size: int | None = None) -> None:
+    def _test_in_small_chunk_size(_conn: lbug.Connection, return_type: str, chunk_size: int | None = None) -> None:
         query = "MATCH (a:person) RETURN a.age, a.fName ORDER BY a.ID"
         data = get_result(_conn.execute(query), return_type, chunk_size)
 
@@ -408,7 +408,7 @@ def test_to_arrow(conn_db_readonly: ConnDB) -> None:
             ],
         )
 
-    def _test_with_nulls(_conn: kuzu.Connection, return_type: str, chunk_size: int | None = None) -> None:
+    def _test_with_nulls(_conn: lbug.Connection, return_type: str, chunk_size: int | None = None) -> None:
         query = "MATCH (a:person:organisation) RETURN label(a) AS `a.lbl`, a.fName, a.orgCode ORDER BY a.ID"
         data = get_result(_conn.execute(query), return_type, chunk_size)
 
@@ -514,7 +514,7 @@ def test_to_arrow_complex(conn_db_readonly: ConnDB) -> None:
             else:
                 assert srcStruct[key] == dstStruct[key]
 
-    def _test_node(_conn: kuzu.Connection) -> None:
+    def _test_node(_conn: lbug.Connection) -> None:
         query = "MATCH (p:person) RETURN p ORDER BY p.ID"
         query_result = _conn.execute(query)
         arrow_tbl = query_result.get_as_arrow()
@@ -535,7 +535,7 @@ def test_to_arrow_complex(conn_db_readonly: ConnDB) -> None:
         ):
             _test_node_helper(a, b)
 
-    def _test_node_rel(_conn: kuzu.Connection) -> None:
+    def _test_node_rel(_conn: lbug.Connection) -> None:
         query = "MATCH (a:person)-[e:workAt]->(b:organisation) RETURN a, e, b ORDER BY a.ID, b.ID"
         query_result = _conn.execute(query)
         arrow_tbl = query_result.get_as_arrow(3)
@@ -599,7 +599,7 @@ def test_to_arrow_complex(conn_db_readonly: ConnDB) -> None:
         ):
             _test_node_helper(a, b)
 
-    def _test_marries_table(_conn: kuzu.Connection) -> None:
+    def _test_marries_table(_conn: lbug.Connection) -> None:
         query = "MATCH (a:person)-[e:marries]->(b:person) RETURN e.* ORDER BY a.ID, b.ID"
         arrow_tbl = _conn.execute(query).get_as_arrow(0)
         assert arrow_tbl.num_columns == 3
@@ -619,7 +619,7 @@ def test_to_arrow_complex(conn_db_readonly: ConnDB) -> None:
         assert len(note_col) == 3
         assert note_col.to_pylist() == [None, "long long long string", "short str"]
 
-    def _test_recursive_rel(_conn: kuzu.Connection) -> None:
+    def _test_recursive_rel(_conn: lbug.Connection) -> None:
         query = "MATCH path=(a:person)-[e:knows*2..2]->(b:person) return path order by (nodes(path)[1]).ID, (nodes(path)[2]).ID, (nodes(path)[3]).ID"
         arrow_tbl = _conn.execute(query).get_as_arrow(0)
         # paths should be:
@@ -668,13 +668,13 @@ def test_to_arrow_complex(conn_db_readonly: ConnDB) -> None:
                 cur_ids += [node["ID"].as_py()]
             assert expected == cur_ids
 
-    def _test_serial(_conn: kuzu.Connection) -> None:
+    def _test_serial(_conn: lbug.Connection) -> None:
         arrow_tbl = _conn.execute("MATCH (a:moviesSerial) RETURN a.ID AS id").get_as_arrow(0)
         assert arrow_tbl.num_columns == 1
         assert len(arrow_tbl) == 3
         assert arrow_tbl["id"].to_pylist() == [0, 1, 2]
 
-    def _test_blob(_conn: kuzu.Connection) -> None:
+    def _test_blob(_conn: lbug.Connection) -> None:
         arrow_tbl = _conn.execute("RETURN BLOB('\\\\xBC\\\\xBD\\\\xBA\\\\xAA') as result").get_as_arrow(1)
         assert arrow_tbl.num_columns == 1
         assert len(arrow_tbl) == 1
@@ -687,7 +687,7 @@ def test_to_arrow_complex(conn_db_readonly: ConnDB) -> None:
     _test_serial(conn)
     _test_blob(conn)
 
-    def test_to_arrow1(conn: kuzu.Connection) -> None:
+    def test_to_arrow1(conn: lbug.Connection) -> None:
         query = "MATCH (a:person)-[e:knows]->(:person) RETURN e.summary"
         res = conn.execute(query)
         arrow_tbl = conn.execute(query).get_as_arrow(-1)  # what is a chunk size of -1 even supposed to mean?

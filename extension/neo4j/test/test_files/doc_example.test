@@ -19,10 +19,10 @@ Follows_User_User|since|INT64|["Long"]
 
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 4
-0|User|NODE|local(kuzu)|
-1|City|NODE|local(kuzu)|
-2|Follows|REL|local(kuzu)|
-3|LivesIn|REL|local(kuzu)|
+0|User|NODE|local(lbug)|
+1|City|NODE|local(lbug)|
+2|Follows|REL|local(lbug)|
+3|LivesIn|REL|local(lbug)|
 -STATEMENT match (u:User)-[f:Follows]->(u1:User) return max(f.since);
 ---- 1
 2022
@@ -40,14 +40,14 @@ Follows_User_User|since|INT64|["Long"]
 
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 8
-0|okLabel|NODE|local(kuzu)|
-3|badLabel|NODE|local(kuzu)|
-1|greatLabel|NODE|local(kuzu)|
-6|Follows|REL|local(kuzu)|
-4|User|NODE|local(kuzu)|
-2|City|NODE|local(kuzu)|
-5|LivesIn|REL|local(kuzu)|
-7|RANDOMREl|REL|local(kuzu)|
+0|okLabel|NODE|local(lbug)|
+3|badLabel|NODE|local(lbug)|
+1|greatLabel|NODE|local(lbug)|
+6|Follows|REL|local(lbug)|
+4|User|NODE|local(lbug)|
+2|City|NODE|local(lbug)|
+5|LivesIn|REL|local(lbug)|
+7|RANDOMREl|REL|local(lbug)|
 
 -STATEMENT match (u:User)-[f:Follows]->(u1:User) return max(f.since);
 ---- 1

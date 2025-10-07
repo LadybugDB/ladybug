@@ -8,7 +8,7 @@
 #include "function/function.h"
 #include "function/table/scan_file_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class NpyReader {
@@ -68,4 +68,4 @@ struct NpyScanFunction {
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

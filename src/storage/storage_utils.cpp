@@ -11,9 +11,9 @@
 #include "main/db_config.h"
 #include "main/settings.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 std::string StorageUtils::getColumnName(const std::string& propertyName, ColumnType type,
@@ -90,4 +90,4 @@ uint32_t StorageUtils::getDataTypeSize(const LogicalType& type) {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

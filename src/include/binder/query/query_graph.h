@@ -5,7 +5,7 @@
 
 #include "binder/expression/rel_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 constexpr static uint8_t MAX_NUM_QUERY_VARIABLES = 64;
@@ -175,4 +175,4 @@ struct BoundGraphPattern {
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

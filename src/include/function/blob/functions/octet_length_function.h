@@ -2,7 +2,7 @@
 
 #include "common/types/blob.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct OctetLength {
@@ -12,4 +12,4 @@ struct OctetLength {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

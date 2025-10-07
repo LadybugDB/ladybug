@@ -15,7 +15,7 @@
 #include <bit>
 #include <span>
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class PageAllocator;
 class FileHandle;
@@ -408,4 +408,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -69,7 +69,7 @@ jobs:
   generate-binary-datasets:
     name: generate binary dataset
     needs: [ sanity-checks, python-lint-check ]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       NUM_THREADS: 32
       GEN: Ninja
@@ -98,7 +98,7 @@ jobs:
           version_current="$(python3 benchmark/version.py)"
           echo "0" > version_s3.txt
           echo "0" > version_gcs.txt
-          s3cmd get --force s3://kuzu-test/tinysnb/version.txt version_s3.txt || true
+          s3cmd get --force s3://lbug-test/tinysnb/version.txt version_s3.txt || true
           s3cmd --access_key=${GCS_ACCESS_KEY_ID} --secret_key=${GCS_SECRET_ACCESS_KEY} --host=storage.googleapis.com --host-bucket="%(bucket)s.storage.googleapis.com" get --force s3://kuzudb-test/tinysnb/version.txt version_gcs.txt || true
           if [[ "$version_current" == "$(cat version_s3.txt)" ]] && [[ "$version_current" == "$(cat version_gcs.txt)" ]]; then
             echo "TinySNB dataset is up to date, skipping upload"
@@ -107,8 +107,8 @@ jobs:
           fi
           echo "TinySNB dataset is outdated, uploading..."
           bash scripts/generate_binary_tinysnb.sh
-          s3cmd del -r s3://kuzu-test/tinysnb/
-          s3cmd sync ./tinysnb s3://kuzu-test/
+          s3cmd del -r s3://lbug-test/tinysnb/
+          s3cmd sync ./tinysnb s3://lbug-test/
           # s3cmd del -r doesn't work on GCS so we individually delete each object in the directory
           for gcs_file in $(s3cmd --access_key=${GCS_ACCESS_KEY_ID} --secret_key=${GCS_SECRET_ACCESS_KEY} --host=storage.googleapis.com --host-bucket="%(bucket)s.storage.googleapis.com" ls s3://kuzudb-test/tinysnb/ | awk '{ print $4 }');
           do
@@ -121,7 +121,7 @@ jobs:
         run: |
           version_current="$(python3 benchmark/version.py)"
           echo "0" > version_s3.txt
-          s3cmd get --force s3://kuzu-test/ldbc01/version.txt version_s3.txt || true
+          s3cmd get --force s3://lbug-test/ldbc01/version.txt version_s3.txt || true
           if [[ "$version_current" == "$(cat version_s3.txt)" ]]; then
             echo "LDBC-SF01 dataset is up to date, skipping upload"
             rm -rf ldbc01 version_s3.txt
@@ -129,14 +129,14 @@ jobs:
           fi
           echo "LDBC-SF01 dataset is outdated, uploading..."
           bash scripts/generate_binary_ldbc-sf01.sh
-          s3cmd del -r s3://kuzu-test/ldbc01/
-          s3cmd sync ./ldbc01 s3://kuzu-test/
+          s3cmd del -r s3://lbug-test/ldbc01/
+          s3cmd sync ./ldbc01 s3://lbug-test/
           rm -rf ldbc01 version_s3.txt
 
   gcc-build-test:
     name: gcc build & test
     needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -229,7 +229,7 @@ jobs:
   gcc-build-test-vector-size:
     name: gcc build & test in-mem only with various vector size
     needs: [ gcc-build-test ]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -289,7 +289,7 @@ jobs:
 
   code-coverage:
     name: code coverage
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
     env:
       NUM_THREADS: 32
@@ -372,7 +372,7 @@ jobs:
   webassembly-build-test:
     name: webassembly build & test
     needs: [ sanity-checks, generate-binary-datasets ]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       WERROR: 0
       TEST_JOBS: 8
@@ -426,7 +426,7 @@ jobs:
 
   rust-build-test:
     name: rust build & test
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       # CARGO_BUILD_JOBS is set using this in the Makefile
       NUM_THREADS: 32
@@ -452,7 +452,7 @@ jobs:
   clang-build-test-with-tsan:
     name: clang build & test with tsan
     needs: [ clang-build-test, generate-binary-datasets ]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -482,7 +482,7 @@ jobs:
   gcc-build-test-with-asan:
     name: gcc build & test with asan
     needs: [ gcc-build-test, generate-binary-datasets ]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -521,7 +521,7 @@ jobs:
   clang-build-test:
     name: clang build & test
     needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -602,7 +602,7 @@ jobs:
         page_size_log2: [ 16, 18 ]
     name: clang build & test with page_size_log2=${{ matrix.page_size_log2 }}
     needs: [ clang-build-test ]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -639,7 +639,7 @@ jobs:
         node_group_size_log2: [ 4, 12, 19 ]
     name: clang build & test with node_group_size_log2=${{ matrix.node_group_size_log2 }}
     needs: [ clang-build-test ]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -684,7 +684,7 @@ jobs:
         max_segment_size_log2: [ 8, 16, 19 ]
     name: clang build & test with max_segment_size_log2=${{ matrix.max_segment_size_log2 }}
     needs: [ clang-build-test ]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -961,7 +961,7 @@ jobs:
   clang-tidy:
     name: clang tidy & clangd diagnostics check
     needs: [ sanity-checks ]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       GEN: Ninja
       NUM_THREADS: 32
@@ -1130,7 +1130,7 @@ jobs:
   linux-extension-test:
     name: linux extension test
     needs: [ gcc-build-test, clang-build-test ]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16

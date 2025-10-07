@@ -8,7 +8,7 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/local_cached_column.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 struct NodeTableScanState;
 }
@@ -302,4 +302,4 @@ private:
 };
 
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "common/exception/runtime.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 void FileDBIDUtils::verifyDatabaseID(const common::FileInfo& fileInfo,
     common::ku_uuid_t expectedDatabaseID, common::ku_uuid_t databaseID) {
     if (expectedDatabaseID.value != databaseID.value) {
@@ -17,4 +17,4 @@ void FileDBIDUtils::verifyDatabaseID(const common::FileInfo& fileInfo,
 void FileDBIDUtils::writeDatabaseID(common::Serializer& ser, common::ku_uuid_t databaseID) {
     ser.write(databaseID);
 }
-} // namespace kuzu::storage
+} // namespace lbug::storage

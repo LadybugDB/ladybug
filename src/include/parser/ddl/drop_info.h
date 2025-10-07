@@ -4,7 +4,7 @@
 #include "common/enums/conflict_action.h"
 #include "common/enums/drop_type.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 struct DropInfo {
@@ -14,4 +14,4 @@ struct DropInfo {
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 
 #include "parser/create_macro.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 using macro_parameter_value_map = std::unordered_map<std::string, parser::ParsedExpression*>;
@@ -39,4 +39,4 @@ struct ScalarMacroFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

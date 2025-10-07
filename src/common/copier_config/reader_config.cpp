@@ -2,7 +2,7 @@
 #include "common/copier_config/file_scan_info.h"
 #include "common/string_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 FileType FileTypeUtils::getFileTypeFromExtension(std::string_view extension) {
@@ -53,4 +53,4 @@ FileType FileTypeUtils::fromString(std::string fileType) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

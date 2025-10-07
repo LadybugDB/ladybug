@@ -21,13 +21,13 @@
 #include "processor/result/factorized_table_util.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
-using namespace kuzu::planner;
-using namespace kuzu::common;
-using namespace kuzu::storage;
-using namespace kuzu::extension;
+using namespace lbug::planner;
+using namespace lbug::common;
+using namespace lbug::storage;
+using namespace lbug::extension;
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapUseDatabase(
     const LogicalOperator* logicalOperator) {
@@ -148,4 +148,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtensionClause(
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

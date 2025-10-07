@@ -16,7 +16,7 @@
 #include "util.h"
 #include "walker-inl.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 enum {
@@ -345,4 +345,4 @@ static void AppendCCRange(std::string* t, Rune lo, Rune hi) {
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

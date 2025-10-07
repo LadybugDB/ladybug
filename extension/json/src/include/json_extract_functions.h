@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 struct JsonExtractFunction {
@@ -12,4 +12,4 @@ struct JsonExtractFunction {
 };
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

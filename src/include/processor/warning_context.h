@@ -8,7 +8,7 @@
 #include "common/types/types.h"
 #include "processor/operator/persistent/reader/copy_from_error.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class ValueVector;
 }
@@ -65,4 +65,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

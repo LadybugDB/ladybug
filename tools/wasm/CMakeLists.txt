@@ -14,13 +14,13 @@ add_executable(kuzu_wasm
 
 file(GLOB JS_SOURCE_FILES ./src_js/*)
 
-target_link_libraries(kuzu_wasm PRIVATE kuzu)
+target_link_libraries(kuzu_wasm PRIVATE lbug)
 
 set_target_properties(kuzu_wasm
     PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build/kuzu"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build/kuzu"
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build/kuzu"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build/lbug"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build/lbug"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build/lbug"
 )
 
 file(COPY ${JS_SOURCE_FILES} DESTINATION  "${CMAKE_CURRENT_SOURCE_DIR}/build")

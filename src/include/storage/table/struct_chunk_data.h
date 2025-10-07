@@ -4,7 +4,7 @@
 #include "common/types/types.h"
 #include "storage/table/column_chunk_data.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class MemoryManager;
 
@@ -93,4 +93,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

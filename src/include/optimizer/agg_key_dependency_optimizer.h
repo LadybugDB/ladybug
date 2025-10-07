@@ -3,7 +3,7 @@
 #include "logical_operator_visitor.h"
 #include "planner/operator/logical_plan.h"
 
-namespace kuzu {
+namespace lbug {
 namespace optimizer {
 
 // This optimizer analyzes the dependency between group by keys. If key2 depends on key1 (e.g. key1
@@ -23,4 +23,4 @@ private:
 };
 
 } // namespace optimizer
-} // namespace kuzu
+} // namespace lbug

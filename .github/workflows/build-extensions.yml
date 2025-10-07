@@ -12,7 +12,7 @@ on:
 
 jobs:
   build-linux-extensions-x86_64:
-    runs-on: kuzu-self-hosted-linux-building-x86_64
+    runs-on: lbug-self-hosted-linux-building-x86_64
     steps:
       - uses: actions/checkout@v4
 
@@ -25,12 +25,12 @@ jobs:
       - name: Upload built artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-extensions_linux-x86_64
+          name: lbug-extensions_linux-x86_64
           path: extension-artifacts
 
   build-linux-extensions-aarch64:
     if: ${{ inputs.x86_64LinuxOnly != true }}
-    runs-on: kuzu-self-hosted-linux-building-aarch64
+    runs-on: lbug-self-hosted-linux-building-aarch64
 
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
       - name: Upload built artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-extensions_linux-aarch64
+          name: lbug-extensions_linux-aarch64
           path: extension-artifacts
 
   build-mac-extensions-arm64:
@@ -65,7 +65,7 @@ jobs:
       - name: Upload built artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-extensions_osx-arm64
+          name: lbug-extensions_osx-arm64
           path: extension-artifacts
 
   build-mac-extensions-x86_64:
@@ -86,7 +86,7 @@ jobs:
       - name: Upload built artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-extensions_osx-x86_64
+          name: lbug-extensions_osx-x86_64
           path: extension-artifacts
 
   build-windows-extensions-x86_64:
@@ -109,5 +109,5 @@ jobs:
       - name: Upload built artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-extensions_win-x86_64
+          name: lbug-extensions_win-x86_64
           path: extension-artifacts

@@ -6,14 +6,14 @@
 #include "processor/plan_mapper.h"
 #include "storage/storage_manager.h"
 
-using namespace kuzu::evaluator;
-using namespace kuzu::planner;
-using namespace kuzu::storage;
-using namespace kuzu::catalog;
-using namespace kuzu::common;
-using namespace kuzu::binder;
+using namespace lbug::evaluator;
+using namespace lbug::planner;
+using namespace lbug::storage;
+using namespace lbug::catalog;
+using namespace lbug::common;
+using namespace lbug::binder;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 static std::vector<DataPos> populateReturnColumnsPos(const LogicalInsertInfo& info,
@@ -106,4 +106,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapInsert(const LogicalOperator* l
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

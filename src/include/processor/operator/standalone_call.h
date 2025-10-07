@@ -3,7 +3,7 @@
 #include "common/types/value/value.h"
 #include "processor/operator/physical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 struct Option;
 }
@@ -62,4 +62,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

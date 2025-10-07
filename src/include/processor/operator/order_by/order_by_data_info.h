@@ -3,7 +3,7 @@
 #include "processor/data_pos.h"
 #include "processor/result/factorized_table_schema.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct OrderByDataInfo {
@@ -35,4 +35,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

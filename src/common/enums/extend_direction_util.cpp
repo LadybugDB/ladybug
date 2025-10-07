@@ -3,7 +3,7 @@
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 ExtendDirection ExtendDirectionUtil::fromString(const std::string& str) {
@@ -33,4 +33,4 @@ std::string ExtendDirectionUtil::toString(ExtendDirection direction) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

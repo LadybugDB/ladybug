@@ -3,7 +3,7 @@
 #include "main/client_context.h"
 #include "storage/table/chunked_node_group.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 
 void VersionRecordHandler::rollbackInsert(main::ClientContext* context,
     common::node_group_idx_t nodeGroupIdx, common::row_idx_t startRow,
@@ -12,4 +12,4 @@ void VersionRecordHandler::rollbackInsert(main::ClientContext* context,
         transaction::Transaction::Get(*context)->getCommitTS());
 }
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

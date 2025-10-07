@@ -87,7 +87,7 @@ describe("Query result", function () {
 
 describe("Synchronous initialization", function () {
   it("should initialize a database synchronously", function () {
-    const database = new kuzu.Database(":memory:", 1 << 28 /* 256 MB */);
+    const database = new lbug.Database(":memory:", 1 << 28 /* 256 MB */);
     database.initSync();
     assert.isTrue(database._isInitialized);
     assert.isFalse(database._isClosed);
@@ -96,7 +96,7 @@ describe("Synchronous initialization", function () {
   });
 
   it("should initialize a connection synchronously", function () {
-    const connection = new kuzu.Connection(db);
+    const connection = new lbug.Connection(db);
     connection.initSync();
     assert.isTrue(connection._isInitialized);
     assert.isFalse(connection._isClosed);
@@ -105,8 +105,8 @@ describe("Synchronous initialization", function () {
   });
 
   it("should perform initialization automatically for lazily-constructed database and connection", function () {
-    const database = new kuzu.Database(":memory:", 1 << 28 /* 256 MB */);
-    const connection = new kuzu.Connection(database);
+    const database = new lbug.Database(":memory:", 1 << 28 /* 256 MB */);
+    const connection = new lbug.Connection(database);
     assert.isFalse(database._isInitialized);
     assert.isFalse(connection._isInitialized);
     const queryResult = connection.querySync(

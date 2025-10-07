@@ -5,7 +5,7 @@
 #include "common/vector/value_vector.h"
 #include "function/array/functions/array_squared_distance.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 // Euclidean distance between two arrays.
@@ -20,4 +20,4 @@ struct ArrayDistance {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

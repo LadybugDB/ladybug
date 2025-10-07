@@ -3,7 +3,7 @@
 #include "storage/table/node_table.h"
 #include "transaction/transaction.h"
 
-namespace kuzu::processor {
+namespace lbug::processor {
 void PartitionerSharedState::initialize(const common::logical_type_vec_t&,
     common::idx_t numPartitioners, const main::ClientContext* clientContext) {
     KU_ASSERT(numPartitioners >= 1 && numPartitioners <= DIRECTIONS);
@@ -34,4 +34,4 @@ common::partition_idx_t PartitionerSharedState::getNumPartitionsFromRows(common:
 void PartitionerSharedState::resetState(common::idx_t) {
     nextPartitionIdx = 0;
 }
-} // namespace kuzu::processor
+} // namespace lbug::processor

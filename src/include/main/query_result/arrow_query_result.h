@@ -3,7 +3,7 @@
 #include "main/query_result.h"
 #include "materialized_query_result.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 
 class ArrowQueryResult : public QueryResult {
@@ -40,4 +40,4 @@ private:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

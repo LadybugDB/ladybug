@@ -2,7 +2,7 @@
 #include "common/types/dtime_t.h"
 #include "gtest/gtest.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 TEST(TimeTests, FromTime) {
     // Hour out of range

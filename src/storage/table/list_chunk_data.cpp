@@ -11,9 +11,9 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/list_column.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 ListChunkData::ListChunkData(MemoryManager& memoryManager, LogicalType dataType, uint64_t capacity,
@@ -459,4 +459,4 @@ uint64_t ListChunkData::getSizeOnDiskInMemoryStats() const {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -1,6 +1,6 @@
 #include "common/roaring_mask.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 offset_vec_t Roaring32BitmapSemiMask::collectMaskedNodes(uint64_t size) const {
@@ -60,4 +60,4 @@ offset_vec_t Roaring64BitmapSemiMask::range(uint32_t start, uint32_t end) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

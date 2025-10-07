@@ -4,7 +4,7 @@
 #include "function/scalar_macro_function.h"
 #include "processor/operator/sink.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct CreateMacroInfo {
@@ -56,4 +56,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

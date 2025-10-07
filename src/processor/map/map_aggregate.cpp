@@ -9,12 +9,12 @@
 #include "processor/plan_mapper.h"
 #include "processor/result/result_set_descriptor.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::function;
-using namespace kuzu::planner;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::function;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 static std::vector<AggregateInfo> getAggregateInputInfos(const expression_vector& keys,
@@ -224,4 +224,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::createHashAggregate(const expressi
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 #include "common/types/value/value.h"
 #include "expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 struct KUZU_API ExpressionUtil {
@@ -81,4 +81,4 @@ struct KUZU_API ExpressionUtil {
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

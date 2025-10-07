@@ -7,7 +7,7 @@
 #include "connector/duckdb_type_converter.h"
 #include "function/table/table_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace azure_extension {
 
 struct AzureScanFunction {
@@ -43,4 +43,4 @@ common::offset_t tableFunc(const function::TableFuncInput& input,
     function::TableFuncOutput& output);
 
 } // namespace azure_extension
-} // namespace kuzu
+} // namespace lbug

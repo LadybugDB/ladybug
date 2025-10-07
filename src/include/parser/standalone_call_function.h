@@ -3,7 +3,7 @@
 #include "parser/expression/parsed_expression.h"
 #include "parser/statement.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class StandaloneCallFunction : public Statement {
@@ -19,4 +19,4 @@ private:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

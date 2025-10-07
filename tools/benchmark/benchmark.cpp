@@ -6,10 +6,10 @@
 #include "spdlog/spdlog.h"
 #include "test_helper.h"
 
-using namespace kuzu::common;
-using namespace kuzu::main;
+using namespace lbug::common;
+using namespace lbug::main;
 
-namespace kuzu {
+namespace lbug {
 namespace benchmark {
 
 Benchmark::Benchmark(const std::string& benchmarkPath, Database* database, BenchmarkConfig& config)
@@ -109,4 +109,4 @@ void Benchmark::verify(const std::vector<std::string>& actualOutput) const {
 }
 
 } // namespace benchmark
-} // namespace kuzu
+} // namespace lbug

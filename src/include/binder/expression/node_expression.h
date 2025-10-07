@@ -2,7 +2,7 @@
 
 #include "node_rel_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class KUZU_API NodeExpression final : public NodeOrRelExpression {
@@ -30,4 +30,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

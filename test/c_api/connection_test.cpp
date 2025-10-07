@@ -3,8 +3,8 @@
 #include "c_api_test/c_api_test.h"
 
 using ::testing::Test;
-using namespace kuzu::main;
-using namespace kuzu::testing;
+using namespace lbug::main;
+using namespace lbug::testing;
 
 class CApiConnectionTest : public CApiTest {
 public:

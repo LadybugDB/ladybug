@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace kuzu {
+namespace lbug {
 namespace httpfs_extension {
 
 typedef unsigned char hash_bytes[32];
@@ -17,4 +17,4 @@ void hmac256(std::string message, hash_bytes secret, hash_bytes& out);
 void hex256(hash_bytes& in, hash_str& out);
 
 } // namespace httpfs_extension
-} // namespace kuzu
+} // namespace lbug

@@ -9,11 +9,11 @@
 #include "processor/plan_mapper.h"
 #include "storage/storage_manager.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::planner;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapScanNodeTable(
@@ -91,4 +91,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapScanNodeTable(
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

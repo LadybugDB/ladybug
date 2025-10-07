@@ -10,7 +10,7 @@
 #include "processor/result/factorized_table.h"
 #include "protocol/TProtocol.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 }
@@ -91,4 +91,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

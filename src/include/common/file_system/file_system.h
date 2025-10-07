@@ -7,7 +7,7 @@
 #include "common/cast.h"
 #include "file_info.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 } // namespace main
@@ -131,4 +131,4 @@ protected:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

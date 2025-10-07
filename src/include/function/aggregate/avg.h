@@ -5,7 +5,7 @@
 #include "function/aggregate_function.h"
 #include "function/arithmetic/add.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 template<typename T>
@@ -95,4 +95,4 @@ struct AvgFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

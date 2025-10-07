@@ -6,11 +6,11 @@
 #include "planner/operator/logical_plan.h"
 #include "processor/physical_plan.h"
 
-using namespace kuzu::common;
-using namespace kuzu::planner;
-using namespace kuzu::processor;
+using namespace lbug::common;
+using namespace lbug::planner;
+using namespace lbug::processor;
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 
 OpProfileBox::OpProfileBox(std::string opName, const std::string& paramsName,
@@ -442,4 +442,4 @@ nlohmann::json PlanPrinter::toJson(const LogicalOperator* logicalOperator) {
 }
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

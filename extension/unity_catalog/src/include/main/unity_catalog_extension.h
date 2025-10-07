@@ -2,7 +2,7 @@
 
 #include "extension/extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace unity_catalog_extension {
 
 class UnityCatalogExtension final : public extension::Extension {
@@ -14,4 +14,4 @@ public:
 };
 
 } // namespace unity_catalog_extension
-} // namespace kuzu
+} // namespace lbug

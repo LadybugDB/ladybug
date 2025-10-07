@@ -4,7 +4,7 @@
 #include "processor/operator/persistent/reader/parquet/resizable_buffer.h"
 #include "templated_column_reader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct UUIDValueConversion {
@@ -36,4 +36,4 @@ protected:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

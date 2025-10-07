@@ -7,10 +7,10 @@
 #include "common/types/uuid.h"
 #include "py_objects.h"
 
-namespace kuzu {
+namespace lbug {
 
-using namespace kuzu::common;
-using kuzu::importCache;
+using namespace lbug::common;
+using lbug::importCache;
 
 PythonObjectType getPythonObjectType(py::handle& ele) {
     auto pandasNa = importCache->pandas.NA();
@@ -210,4 +210,4 @@ void transformPythonValue(common::ValueVector* outputVector, uint64_t pos, py::h
     }
 }
 
-} // namespace kuzu
+} // namespace lbug

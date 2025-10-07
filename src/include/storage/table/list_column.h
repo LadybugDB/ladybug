@@ -24,7 +24,7 @@
 // when the offsets are not sorted in ascending order and the size of data column chunk is larger
 // than half of its capacity.
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 struct ListOffsetSizeInfo {
@@ -102,4 +102,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

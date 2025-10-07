@@ -9,7 +9,7 @@
 
 struct ArrowSchema;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 class FlatTuple;
 }
@@ -87,4 +87,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -23,7 +23,7 @@
 #include "common/numeric_utils.h"
 #include "common/utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 template<typename T>
@@ -53,4 +53,4 @@ static void SignExtend(uint8_t* dst, uint8_t width) {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

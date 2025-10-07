@@ -28,7 +28,7 @@ jobs:
         run: |
           if exist wheelhouse rmdir /s /q wheelhouse
           mkdir wheelhouse
-          python.exe package_tar.py kuzu.tar.gz
+          python.exe package_tar.py lbug.tar.gz
 
       # Manually set up cibuildwheel instead of importing their
       # action since there seems to be an issue with quoting
@@ -52,7 +52,7 @@ jobs:
           call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 
           pipx run --spec cibuildwheel cibuildwheel
-          "kuzu.tar.gz"
+          "lbug.tar.gz"
           --output-dir "wheelhouse"
 
       - uses: actions/upload-artifact@v4

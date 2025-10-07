@@ -10,10 +10,10 @@
 #include "main/client_context.h"
 #include "main/database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
-using namespace kuzu::extension;
+using namespace lbug::extension;
 
 static void addJsonCreationFunction(main::Database& db) {
     ExtensionUtils::addScalarFunc<ToJsonFunction>(db);
@@ -51,7 +51,7 @@ void JsonExtension::load(main::ClientContext* context) {
 }
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -62,12 +62,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::json_extension::JsonExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::json_extension::JsonExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::json_extension::JsonExtension::EXTENSION_NAME;
+    return lbug::json_extension::JsonExtension::EXTENSION_NAME;
 }
 }
 #endif

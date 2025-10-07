@@ -6,7 +6,7 @@
 #include "column_chunk_data.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class ValueVector;
 } // namespace common
@@ -129,4 +129,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

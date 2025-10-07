@@ -3,7 +3,7 @@
 #include "common/string_utils.h"
 #include "gtest/gtest.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 TEST(StringTest, splitBySpace) {
     std::string str = " a b  c\td ";

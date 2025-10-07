@@ -4,9 +4,9 @@
 #include "common/string_format.h"
 #include "main/client_context.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace graph {
 
 void GraphEntrySet::validateGraphNotExist(const std::string& name) const {
@@ -26,4 +26,4 @@ GraphEntrySet* GraphEntrySet::Get(const main::ClientContext& context) {
 }
 
 } // namespace graph
-} // namespace kuzu
+} // namespace lbug

@@ -1,6 +1,6 @@
 #include "planner/join_order/join_tree.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 std::string TreeNodeTypeUtils::toString(TreeNodeType type) {
@@ -54,4 +54,4 @@ std::string JoinTreeNode::toString() const {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

@@ -8,7 +8,7 @@
 #include "graph/parsed_graph_entry.h"
 #include "processor/result/factorized_table_pool.h"
 
-namespace kuzu {
+namespace lbug {
 
 namespace main {
 class ClientContext;
@@ -101,4 +101,4 @@ public:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -3,7 +3,7 @@
 #include "common/string_utils.h"
 #include "parsed_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class ParsedFunctionExpression : public ParsedExpression {
@@ -68,10 +68,10 @@ private:
 private:
     bool isDistinct;
     std::string functionName;
-    // In Kuzu, function arguments must be either all required or all optional - mixing required and
+    // In Lbug, function arguments must be either all required or all optional - mixing required and
     // optional parameters in the same function is not allowed.
     std::vector<std::string> optionalArguments;
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

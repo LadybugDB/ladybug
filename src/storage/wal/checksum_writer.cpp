@@ -6,7 +6,7 @@
 #include "common/serializer/serializer.h"
 #include <bit>
 
-namespace kuzu::storage {
+namespace lbug::storage {
 static constexpr uint64_t INITIAL_BUFFER_SIZE = common::KUZU_PAGE_SIZE;
 
 ChecksumWriter::ChecksumWriter(std::shared_ptr<common::Writer> outputWriter,
@@ -63,4 +63,4 @@ void ChecksumWriter::sync() {
     outputSerializer.getWriter()->sync();
 }
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

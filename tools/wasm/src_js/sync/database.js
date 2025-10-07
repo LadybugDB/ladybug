@@ -1,10 +1,10 @@
 /**
  * @file database.js is the file for the Database class. Database class is the 
- * main class of Kuzu. It manages all database components.
+ * main class of Lbug. It manages all database components.
  */
 "use strict";
 
-const KuzuWasm = require("./kuzu.js");
+const KuzuWasm = require("./lbug.js");
 
 class Database {
   /**
@@ -32,7 +32,7 @@ class Database {
     checkpointThreshold = 16777216
   ) {
     KuzuWasm.checkInit();
-    const kuzu = KuzuWasm._kuzu;
+    const lbug = KuzuWasm._kuzu;
     if (!databasePath) {
       databasePath = ":memory:";
     }
@@ -49,8 +49,8 @@ class Database {
       throw new Error("Checkpoint threshold must be a positive integer.");
     }
     bufferPoolSize = Math.floor(bufferPoolSize);
-    const defaultSystemConfig = new kuzu.SystemConfig();
-    const systemConfig = new kuzu.SystemConfig(
+    const defaultSystemConfig = new lbug.SystemConfig();
+    const systemConfig = new lbug.SystemConfig(
       bufferPoolSize,
       maxNumThreads,
       !!enableCompression,
@@ -61,7 +61,7 @@ class Database {
     );
     defaultSystemConfig.delete();
     try {
-      this._database = new kuzu.Database(databasePath, systemConfig);
+      this._database = new lbug.Database(databasePath, systemConfig);
     } finally {
       systemConfig.delete();
     }

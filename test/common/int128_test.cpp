@@ -3,7 +3,7 @@
 #include "common/types/int128_t.h"
 #include "gtest/gtest.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 TEST(Int128Tests, LeftShiftTest) {
     {

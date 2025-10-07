@@ -6,7 +6,7 @@
 #include "common/assert.h"
 #include <span>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class ArrowNullMaskTree;
@@ -191,4 +191,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

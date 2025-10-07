@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct IsNull {
@@ -20,4 +20,4 @@ struct IsNotNull {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

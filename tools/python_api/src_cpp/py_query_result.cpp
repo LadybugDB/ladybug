@@ -14,8 +14,8 @@
 #include "datetime.h" // python lib
 #include "include/py_query_result_converter.h"
 
-using namespace kuzu::common;
-using kuzu::importCache;
+using namespace lbug::common;
+using lbug::importCache;
 
 #define PyDateTimeTZ_FromDateAndTime(year, month, day, hour, min, sec, usec, timezone)             \
     PyDateTimeAPI->DateTime_FromDateAndTime(year, month, day, hour, min, sec, usec, timezone,      \
@@ -131,8 +131,8 @@ py::object PyQueryResult::convertValueToPyObject(const Value& value) {
         return py::cast(value.getValue<uint64_t>());
     }
     case LogicalTypeID::INT128: {
-        kuzu::common::int128_t result = value.getValue<kuzu::common::int128_t>();
-        std::string int128_string = kuzu::common::Int128_t::ToString(result);
+        lbug::common::int128_t result = value.getValue<lbug::common::int128_t>();
+        std::string int128_string = lbug::common::Int128_t::ToString(result);
 
         auto Decimal = importCache->decimal.Decimal();
         py::object largeInt = Decimal(int128_string);
@@ -157,8 +157,8 @@ py::object PyQueryResult::convertValueToPyObject(const Value& value) {
         return py::bytes(blobBytesArray, blobStr.size());
     }
     case LogicalTypeID::UUID: {
-        kuzu::common::int128_t result = value.getValue<kuzu::common::int128_t>();
-        std::string uuidString = kuzu::common::UUID::toString(result);
+        lbug::common::int128_t result = value.getValue<lbug::common::int128_t>();
+        std::string uuidString = lbug::common::UUID::toString(result);
         auto UUID = importCache->uuid.UUID();
         return UUID(uuidString);
     }
@@ -317,7 +317,7 @@ py::object PyQueryResult::getArrowChunks(const std::vector<LogicalType>& types,
     return batches;
 }
 
-kuzu::pyarrow::Table PyQueryResult::getAsArrow(std::int64_t chunkSize,
+lbug::pyarrow::Table PyQueryResult::getAsArrow(std::int64_t chunkSize,
     bool fallbackExtensionTypes) {
     auto types = queryResult->getColumnDataTypes();
     auto names = queryResult->getColumnNames();
@@ -326,7 +326,7 @@ kuzu::pyarrow::Table PyQueryResult::getAsArrow(std::int64_t chunkSize,
     auto fromBatchesFunc = importCache->pyarrow.lib.Table.from_batches();
     auto schemaImportFunc = importCache->pyarrow.lib.Schema._import_from_c();
     auto schemaObj = schemaImportFunc((std::uint64_t)schema.get());
-    return py::cast<kuzu::pyarrow::Table>(fromBatchesFunc(batches, schemaObj));
+    return py::cast<lbug::pyarrow::Table>(fromBatchesFunc(batches, schemaObj));
 }
 
 py::list PyQueryResult::getColumnDataTypes() {

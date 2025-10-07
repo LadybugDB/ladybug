@@ -3,7 +3,7 @@
 #include "storage/compression/float_compression.h"
 #include "storage/table/column_reader_writer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 class Transaction;
 }
@@ -62,4 +62,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

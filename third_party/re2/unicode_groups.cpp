@@ -4,7 +4,7 @@
 
 #include "unicode_groups.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 static const URange16 Ps_range16[] = {
@@ -6054,4 +6054,4 @@ const UGroup unicode_groups[] = {
 const int num_unicode_groups = 184;
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

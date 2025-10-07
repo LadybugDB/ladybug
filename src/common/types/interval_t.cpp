@@ -12,7 +12,7 @@
 #include "function/cast/functions/cast_functions.h"
 #include "re2.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 interval_t::interval_t() = default;
@@ -480,4 +480,4 @@ const regex::RE2& Interval::regexPattern2() {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

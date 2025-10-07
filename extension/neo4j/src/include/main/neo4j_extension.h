@@ -2,7 +2,7 @@
 
 #include "extension/extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace neo4j_extension {
 
 class Neo4jExtension final : public extension::Extension {
@@ -14,4 +14,4 @@ public:
 };
 
 } // namespace neo4j_extension
-} // namespace kuzu
+} // namespace lbug

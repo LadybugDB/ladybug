@@ -3,7 +3,7 @@
 #include "function/gds/gds.h"
 #include "function/gds/gds_frontier.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 struct QueryFTSFunction {
@@ -13,4 +13,4 @@ struct QueryFTSFunction {
 };
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

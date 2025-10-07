@@ -15,7 +15,7 @@
 #include "storage/storage_manager.h"
 #include "transaction/transaction_context.h"
 
-namespace kuzu::testing {
+namespace lbug::testing {
 
 namespace {
 std::uint64_t getDbSizeInPagesImpl(main::Connection* conn) {
@@ -118,4 +118,4 @@ void FSMLeakChecker::checkForLeakedPages(main::Connection* conn) {
         numUsedPages);
 }
 
-} // namespace kuzu::testing
+} // namespace lbug::testing

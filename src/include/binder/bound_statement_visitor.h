@@ -3,7 +3,7 @@
 #include "binder/query/normalized_single_query.h"
 #include "bound_statement.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class KUZU_API BoundStatementVisitor {
@@ -62,4 +62,4 @@ protected:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

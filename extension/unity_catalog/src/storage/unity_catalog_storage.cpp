@@ -7,7 +7,7 @@
 #include "function/clear_cache.h"
 #include "storage/attached_duckdb_database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace unity_catalog_extension {
 
 std::unique_ptr<main::AttachedDatabase> attachUnityCatalog(std::string dbName, std::string dbPath,
@@ -37,4 +37,4 @@ bool UnityCatalogStorageExtension::canHandleDB(std::string dbType_) const {
 }
 
 } // namespace unity_catalog_extension
-} // namespace kuzu
+} // namespace lbug

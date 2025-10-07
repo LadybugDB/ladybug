@@ -1,4 +1,4 @@
-const kuzu = require("kuzu-wasm/nodejs");
+const lbug = require("lbug-wasm/nodejs");
 const fs = require("fs/promises");
 
 let db;
@@ -7,8 +7,8 @@ let conn;
 const initDatabase = async () => {
   console.log("Initializing database...");
   // Create a new database and connection
-  db = new kuzu.Database(":memory:", 1 << 30 /* 1GB */);
-  conn = new kuzu.Connection(db, 4);
+  db = new lbug.Database(":memory:", 1 << 30 /* 1GB */);
+  conn = new lbug.Connection(db, 4);
 
   // Load the schema from local dataset file
   const schema = (await fs.readFile("../../../../dataset/demo-db/csv/schema.cypher"))
@@ -72,7 +72,7 @@ const cleanup = async () => {
   console.log("Cleaning up...");
   await conn.close();
   await db.close();
-  await kuzu.close();
+  await lbug.close();
 };
 
 (async () => {

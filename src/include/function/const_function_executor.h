@@ -2,7 +2,7 @@
 
 #include "common/vector/value_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ConstFunctionExecutor {
@@ -18,4 +18,4 @@ struct ConstFunctionExecutor {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

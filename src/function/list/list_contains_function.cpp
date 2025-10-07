@@ -5,10 +5,10 @@
 #include "function/list/vector_list_functions.h"
 #include "function/scalar_function.h"
 
-using namespace kuzu::common;
-using namespace kuzu::binder;
+using namespace lbug::common;
+using namespace lbug::binder;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ListContains {
@@ -65,4 +65,4 @@ function_set ListContainsFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

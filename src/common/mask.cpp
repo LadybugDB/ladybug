@@ -2,7 +2,7 @@
 
 #include "common/roaring_mask.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 std::unique_ptr<SemiMask> SemiMaskUtil::createMask(offset_t maxOffset) {
@@ -21,4 +21,4 @@ offset_t NodeOffsetMaskMap::getNumMaskedNode() const {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

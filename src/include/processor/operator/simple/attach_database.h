@@ -3,7 +3,7 @@
 #include "binder/bound_attach_info.h"
 #include "processor/operator/sink.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct AttachDatabasePrintInfo final : OPPrintInfo {
@@ -44,4 +44,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

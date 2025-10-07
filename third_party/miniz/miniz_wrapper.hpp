@@ -5,7 +5,7 @@
 
 #include "miniz.hpp"
 
-namespace kuzu {
+namespace lbug {
 
 enum class MiniZStreamType : uint8_t { MINIZ_TYPE_NONE, MINIZ_TYPE_INFLATE, MINIZ_TYPE_DEFLATE };
 
@@ -129,4 +129,4 @@ private:
     MiniZStreamType type;
 };
 
-} // namespace kuzu
+} // namespace lbug

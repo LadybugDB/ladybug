@@ -6,7 +6,7 @@
 #include "common/types/types.h"
 #include "function/gds/gds.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 // The maximum number of phases in which the graph is clustered and then aggregated.
@@ -30,4 +30,4 @@ struct LouvainConfig final : public GDSConfig {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

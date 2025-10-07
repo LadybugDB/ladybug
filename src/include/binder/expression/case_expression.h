@@ -2,7 +2,7 @@
 
 #include "expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 struct CaseAlternative {
@@ -41,4 +41,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

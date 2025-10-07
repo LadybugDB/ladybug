@@ -4,7 +4,7 @@
 #include "storage/compression/compression.h"
 #include "storage/page_range.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 struct ColumnChunkMetadata {
     PageRange pageRange;
     uint64_t numValues;
@@ -78,4 +78,4 @@ ColumnChunkMetadata uncompressedGetMetadata(common::PhysicalTypeID dataType, uin
     StorageValue min, StorageValue max);
 
 ColumnChunkMetadata booleanGetMetadata(uint64_t numValues, StorageValue min, StorageValue max);
-} // namespace kuzu::storage
+} // namespace lbug::storage

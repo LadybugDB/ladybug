@@ -43,7 +43,7 @@
 #include "unicode/utypes.h"
 #endif
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 // Controls the maximum repeat count permitted by the parser.
@@ -2415,4 +2415,4 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags, RegexpStatu
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

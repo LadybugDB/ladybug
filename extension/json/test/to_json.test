@@ -39,11 +39,11 @@ false
 [[5],[2],[3]]
 []
 
--STATEMENT RETURN row_to_json('kuzu')
+-STATEMENT RETURN row_to_json('lbug')
 ---- 1
-"kuzu"
+"lbug"
 
--STATEMENT RETURN typeof(to_json('kuzu'));
+-STATEMENT RETURN typeof(to_json('lbug'));
 ---- 1
 json
 

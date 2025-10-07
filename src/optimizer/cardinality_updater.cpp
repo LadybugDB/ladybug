@@ -11,7 +11,7 @@
 #include "planner/operator/logical_limit.h"
 #include "planner/operator/logical_plan.h"
 
-namespace kuzu::optimizer {
+namespace lbug::optimizer {
 void CardinalityUpdater::rewrite(planner::LogicalPlan* plan) {
     visitOperator(plan->getLastOperator().get());
 }
@@ -134,4 +134,4 @@ void CardinalityUpdater::visitAggregate(planner::LogicalOperator* op) {
     aggregate.setCardinality(cardinalityEstimator.estimateAggregate(aggregate));
 }
 
-} // namespace kuzu::optimizer
+} // namespace lbug::optimizer

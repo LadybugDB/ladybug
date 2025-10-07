@@ -8,10 +8,10 @@
 #include "function/arithmetic/add.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
+using namespace lbug::binder;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 SequenceData SequenceCatalogEntry::getSequenceData() {
@@ -170,4 +170,4 @@ BoundCreateSequenceInfo SequenceCatalogEntry::getBoundCreateSequenceInfo(bool is
 }
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

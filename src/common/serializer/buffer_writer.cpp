@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 BufferWriter::BufferWriter(uint64_t maximumSize) : maximumSize(maximumSize) {
@@ -27,4 +27,4 @@ void BufferWriter::write(const uint8_t* buffer, uint64_t len) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

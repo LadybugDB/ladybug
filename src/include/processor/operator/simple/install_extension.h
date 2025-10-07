@@ -4,7 +4,7 @@
 #include "extension_print_info.h"
 #include "processor/operator/sink.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct InstallExtensionPrintInfo final : public ExtensionPrintInfo {
@@ -42,4 +42,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

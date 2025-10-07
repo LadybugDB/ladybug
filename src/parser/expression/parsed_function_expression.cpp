@@ -3,9 +3,9 @@
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 std::unique_ptr<ParsedFunctionExpression> ParsedFunctionExpression::deserialize(
@@ -28,4 +28,4 @@ void ParsedFunctionExpression::serializeInternal(Serializer& serializer) const {
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

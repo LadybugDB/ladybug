@@ -3,7 +3,7 @@
 #include "processor/operator/order_by/sort_state.h"
 #include "processor/operator/physical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct OrderByScanLocalState {
@@ -56,4 +56,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

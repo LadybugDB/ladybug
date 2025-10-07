@@ -3,7 +3,7 @@
 #include "common/types/ku_string.h"
 #include "function/string/functions/find_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct Contains {
@@ -16,4 +16,4 @@ struct Contains {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

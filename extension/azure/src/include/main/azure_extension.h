@@ -2,7 +2,7 @@
 
 #include "extension/extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace azure_extension {
 
 class AzureExtension final : public extension::Extension {
@@ -14,4 +14,4 @@ public:
 };
 
 } // namespace azure_extension
-} // namespace kuzu
+} // namespace lbug

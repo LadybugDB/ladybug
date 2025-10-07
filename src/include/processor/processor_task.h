@@ -3,7 +3,7 @@
 #include "common/task_system/task.h"
 #include "processor/operator/sink.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class ProcessorTask : public common::Task {
@@ -25,4 +25,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

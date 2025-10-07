@@ -3,10 +3,10 @@
 #include "function/rewrite_function.h"
 #include "function/schema/vector_node_rel_functions.h"
 
-using namespace kuzu::common;
-using namespace kuzu::binder;
+using namespace lbug::common;
+using namespace lbug::binder;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& input) {
@@ -30,4 +30,4 @@ function_set CostFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

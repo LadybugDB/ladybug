@@ -8,7 +8,7 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/storage_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 
 void ThreadsSetting::setContext(ClientContext* context, const common::Value& parameter) {
@@ -224,4 +224,4 @@ common::Value SpillToDiskSetting::getSetting(const ClientContext* context) {
 }
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

@@ -17,7 +17,7 @@
 ---- ok
 -STATEMENT create node table tableOfTypes (id INT64, int64Column INT64, doubleColumn DOUBLE, booleanColumn BOOLEAN, dateColumn DATE, stringColumn STRING, listOfInt64 INT64[], listOfString STRING[], listOfListOfInt64 INT64[][], structColumn STRUCT(ID int64, name STRING), PRIMARY KEY (id));
 ---- ok
--STATEMENT COPY tableOfTypes FROM "s3://kuzu-dataset-us/glob-test/types_50k_*.parquet"
+-STATEMENT COPY tableOfTypes FROM "s3://lbug-dataset-us/glob-test/types_50k_*.parquet"
 ---- ok
 -STATEMENT MATCH (t:tableOfTypes) RETURN count(t)
 ---- 1

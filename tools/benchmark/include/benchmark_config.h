@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-namespace kuzu {
+namespace lbug {
 namespace benchmark {
 
 /**
@@ -23,4 +23,4 @@ struct BenchmarkConfig {
 };
 
 } // namespace benchmark
-} // namespace kuzu
+} // namespace lbug

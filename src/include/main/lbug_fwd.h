@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 
 namespace testing {
 class BaseGraphTest;
@@ -59,4 +59,4 @@ class TransactionManager;
 class TransactionContext;
 } // namespace transaction
 
-} // namespace kuzu
+} // namespace lbug

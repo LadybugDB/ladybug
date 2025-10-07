@@ -5,7 +5,7 @@
 #include "planner/operator/logical_operator.h"
 #include "planner/operator/sip/side_way_info_passing.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class LogicalPathPropertyProbe : public LogicalOperator {
@@ -53,4 +53,4 @@ public:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

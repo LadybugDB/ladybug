@@ -16,10 +16,10 @@ SCRIPT_DIR = Path(__file__).parent
 HEADER_BASE_PATH = (SCRIPT_DIR / "../src/include").resolve()
 GENERATED_HEADERS_PATH = BUILD_DIR / "src/include"
 MAIN_HEADER_PATH = HEADER_BASE_PATH / "main"
-START_POINT = MAIN_HEADER_PATH / "kuzu.h"
+START_POINT = MAIN_HEADER_PATH / "lbug.h"
 JSON_HEADER_PATH = (SCRIPT_DIR / "../third_party/nlohmann_json/json_fwd.hpp").resolve()
 ALP_HEADERS_PATH = (SCRIPT_DIR / "../third_party/alp/include").resolve()
-OUTPUT_PATH = "kuzu.hpp"
+OUTPUT_PATH = "lbug.hpp"
 
 logging.debug("HEADER_BASE_PATH: %s", HEADER_BASE_PATH)
 logging.debug("MAIN_HEADER_PATH: %s", MAIN_HEADER_PATH)

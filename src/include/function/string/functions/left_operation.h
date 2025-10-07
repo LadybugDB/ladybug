@@ -4,7 +4,7 @@
 #include "function/list/functions/list_len_function.h"
 #include "substr_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct Left {
@@ -20,4 +20,4 @@ public:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

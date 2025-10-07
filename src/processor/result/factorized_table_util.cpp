@@ -1,11 +1,11 @@
 #include "processor/result/factorized_table_util.h"
 
-using namespace kuzu::storage;
-using namespace kuzu::common;
-using namespace kuzu::binder;
-using namespace kuzu::planner;
+using namespace lbug::storage;
+using namespace lbug::common;
+using namespace lbug::binder;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 FactorizedTableSchema FactorizedTableUtils::createFTableSchema(const expression_vector& exprs,
@@ -67,4 +67,4 @@ std::shared_ptr<FactorizedTable> FactorizedTableUtils::getSingleStringColumnFTab
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

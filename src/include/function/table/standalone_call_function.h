@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ClearWarningsFunction {
@@ -30,4 +30,4 @@ struct DropProjectedGraphFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

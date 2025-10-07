@@ -1,6 +1,6 @@
 #include "planner/operator/logical_table_function_call.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalTableFunctionCall::computeFlatSchema() {
@@ -20,4 +20,4 @@ void LogicalTableFunctionCall::computeFactorizedSchema() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

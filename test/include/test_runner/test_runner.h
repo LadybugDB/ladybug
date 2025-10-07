@@ -3,7 +3,7 @@
 #include "main/connection.h"
 #include "test_runner/test_group.h"
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 class TestRunner {
@@ -37,4 +37,4 @@ private:
 };
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

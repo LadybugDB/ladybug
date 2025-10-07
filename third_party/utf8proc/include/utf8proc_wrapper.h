@@ -5,7 +5,7 @@
 #include <cstring>
 #include <string>
 
-namespace kuzu {
+namespace lbug {
 namespace utf8proc {
 
 enum class UnicodeType { INVALID, ASCII, UNICODE };
@@ -32,4 +32,4 @@ public:
 };
 
 } // namespace utf8proc
-} // namespace kuzu
+} // namespace lbug

@@ -22,10 +22,10 @@
 #include "storage/storage_manager.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
-using namespace kuzu::transaction;
+using namespace lbug::common;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 template<typename T>
@@ -730,4 +730,4 @@ page_idx_t PrimaryKeyIndex::getFirstHeaderPage() const {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

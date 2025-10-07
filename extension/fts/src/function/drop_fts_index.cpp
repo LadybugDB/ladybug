@@ -10,12 +10,12 @@
 #include "storage/table/node_table.h"
 #include "utils/fts_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
-using namespace kuzu::common;
-using namespace kuzu::main;
-using namespace kuzu::function;
+using namespace lbug::common;
+using namespace lbug::main;
+using namespace lbug::function;
 
 static std::unique_ptr<TableFuncBindData> bindFunc(ClientContext* context,
     const TableFuncBindInput* input) {
@@ -83,4 +83,4 @@ function_set DropFTSFunction::getFunctionSet() {
 }
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

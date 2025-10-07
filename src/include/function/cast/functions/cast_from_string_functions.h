@@ -7,9 +7,9 @@
 #include "common/types/uuid.h"
 #include "common/vector/value_vector.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct KUZU_API CastString {
@@ -179,4 +179,4 @@ void CastString::operation(const ku_string_t& input, union_entry_t& result,
     ValueVector* resultVector, uint64_t rowToAdd, const CSVOption* option);
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

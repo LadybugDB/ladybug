@@ -3,7 +3,7 @@
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 struct FTSInternalTableInfo {
@@ -19,4 +19,4 @@ struct FTSInternalTableInfo {
 };
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

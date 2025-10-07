@@ -6,9 +6,9 @@
 #include "common/string_utils.h"
 #include "test_helper/test_helper.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 static std::unique_ptr<main::QueryResult> validateQuery(main::Connection& conn,
@@ -131,4 +131,4 @@ std::string InsertDatasetByRow::RelTableInfo::getLoadFromQuery() const {
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

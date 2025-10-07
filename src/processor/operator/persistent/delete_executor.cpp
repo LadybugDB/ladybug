@@ -8,11 +8,11 @@
 #include "processor/execution_context.h"
 #include "storage/table/rel_table.h"
 
-using namespace kuzu::common;
-using namespace kuzu::storage;
-using namespace kuzu::transaction;
+using namespace lbug::common;
+using namespace lbug::storage;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void NodeDeleteInfo::init(const ResultSet& resultSet) {
@@ -154,4 +154,4 @@ void MultiLabelRelDeleteExecutor::delete_(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

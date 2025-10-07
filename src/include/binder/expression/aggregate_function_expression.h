@@ -3,7 +3,7 @@
 #include "expression.h"
 #include "function/aggregate_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class AggregateFunctionExpression final : public Expression {
@@ -33,4 +33,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

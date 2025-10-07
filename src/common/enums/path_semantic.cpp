@@ -5,7 +5,7 @@
 #include "common/string_format.h"
 #include "common/string_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 PathSemantic PathSemanticUtils::fromString(const std::string& str) {
@@ -37,4 +37,4 @@ std::string PathSemanticUtils::toString(PathSemantic semantic) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

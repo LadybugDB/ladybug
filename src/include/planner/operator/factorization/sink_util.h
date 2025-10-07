@@ -2,7 +2,7 @@
 
 #include "planner/operator/schema.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 // This class contains the logic for re-computing factorization structure after sinking
@@ -25,4 +25,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

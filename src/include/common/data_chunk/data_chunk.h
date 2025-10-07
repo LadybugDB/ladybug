@@ -7,7 +7,7 @@
 #include "common/data_chunk/data_chunk_state.h"
 #include "common/vector/value_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 // A DataChunk represents tuples as a set of value vectors and a selector array.
@@ -46,4 +46,4 @@ public:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

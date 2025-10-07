@@ -6,7 +6,7 @@
 #include "common/api.h"
 #include "common/serializer/writer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 static constexpr uint64_t SERIALIZER_DEFAULT_SIZE = 1024;
@@ -62,4 +62,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

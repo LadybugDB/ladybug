@@ -3,7 +3,7 @@
 #include "planner/operator/logical_operator.h"
 #include "transaction/transaction_action.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class LogicalTransaction : public LogicalOperator {
@@ -29,4 +29,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

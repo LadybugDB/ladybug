@@ -5,7 +5,7 @@
 #include "storage/local_storage/local_table.h"
 #include "storage/table/node_group_collection.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 struct TableScanState;
@@ -60,4 +60,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

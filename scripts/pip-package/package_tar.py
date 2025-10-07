@@ -14,7 +14,7 @@ def _get_kuzu_version():
     cmake_file = os.path.abspath(os.path.join(base_dir, "..", "CMakeLists.txt"))
     with open(cmake_file) as f:
         for line in f:
-            if line.startswith("project(Kuzu VERSION"):
+            if line.startswith("project(Lbug VERSION"):
                 raw_version = line.split(" ")[2].strip()
                 version_nums = raw_version.split(".")
                 if len(version_nums) <= 3:
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         file_name = sys.argv[1]
     else:
-        file_name = "kuzu-%s.tar.gz" % _get_kuzu_version()
+        file_name = "lbug-%s.tar.gz" % _get_kuzu_version()
     print("Creating %s..." % file_name)
 
     with TemporaryDirectory() as tempdir:
@@ -41,27 +41,27 @@ if __name__ == "__main__":
                 "--format",
                 "tar",
                 "-o",
-                os.path.join(tempdir, "kuzu-source.tar"),
+                os.path.join(tempdir, "lbug-source.tar"),
                 "HEAD",
             ],
             cwd="../..",
         )
 
-        with tarfile.open(os.path.join(tempdir, "kuzu-source.tar")) as tar:
-            tar.extractall(path=os.path.join(tempdir, "kuzu-source"), filter=None)
+        with tarfile.open(os.path.join(tempdir, "lbug-source.tar")) as tar:
+            tar.extractall(path=os.path.join(tempdir, "lbug-source"), filter=None)
 
-        os.remove(os.path.join(tempdir, "kuzu-source.tar"))
+        os.remove(os.path.join(tempdir, "lbug-source.tar"))
 
         # Remove components that are not needed for the pip package
-        shutil.rmtree(os.path.join(tempdir, "kuzu-source/dataset"))
-        shutil.rmtree(os.path.join(tempdir, "kuzu-source/examples"))
-        shutil.rmtree(os.path.join(tempdir, "kuzu-source/benchmark"))
-        shutil.rmtree(os.path.join(tempdir, "kuzu-source/logo"))
-        shutil.rmtree(os.path.join(tempdir, "kuzu-source/extension"))
-        shutil.rmtree(os.path.join(tempdir, "kuzu-source/test"))
-        shutil.rmtree(os.path.join(tempdir, "kuzu-source/.github"))
+        shutil.rmtree(os.path.join(tempdir, "lbug-source/dataset"))
+        shutil.rmtree(os.path.join(tempdir, "lbug-source/examples"))
+        shutil.rmtree(os.path.join(tempdir, "lbug-source/benchmark"))
+        shutil.rmtree(os.path.join(tempdir, "lbug-source/logo"))
+        shutil.rmtree(os.path.join(tempdir, "lbug-source/extension"))
+        shutil.rmtree(os.path.join(tempdir, "lbug-source/test"))
+        shutil.rmtree(os.path.join(tempdir, "lbug-source/.github"))
 
-        os.makedirs(os.path.join(tempdir, "kuzu"))
+        os.makedirs(os.path.join(tempdir, "lbug"))
         for path in ["setup.py", "setup.cfg", "MANIFEST.in"]:
             shutil.copy2(path, os.path.join(tempdir, path))
         shutil.copy2("../../LICENSE", os.path.join(tempdir, "LICENSE"))
@@ -83,7 +83,7 @@ if __name__ == "__main__":
         shutil.copy2("README.md", os.path.join(tempdir, "README_PYTHON_BUILD.md"))
         subprocess.check_call([sys.executable, "setup.py", "egg_info"], cwd=tempdir)
         shutil.copy2(
-            os.path.join(tempdir, "kuzu.egg-info", "PKG-INFO"),
+            os.path.join(tempdir, "lbug.egg-info", "PKG-INFO"),
             os.path.join(tempdir, "PKG-INFO"),
         )
         with tarfile.open(file_name, "w:gz") as sdist:

@@ -1,5 +1,5 @@
-# Kuzu WebAssembly Node.js Example
-This example demonstrates how to use the Kuzu WebAssembly build in a Node.js environment. The example uses the asynchronous JavaScript API to interact with the WebAssembly module.
+# Ladybug WebAssembly Node.js Example
+This example demonstrates how to use the Ladybug WebAssembly build in a Node.js environment. The example uses the asynchronous JavaScript API to interact with the WebAssembly module.
 
 ## Usage
 ### Install Dependencies

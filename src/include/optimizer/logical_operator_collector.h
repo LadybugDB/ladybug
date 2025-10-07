@@ -2,7 +2,7 @@
 
 #include "logical_operator_visitor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace optimizer {
 
 class LogicalOperatorCollector : public LogicalOperatorVisitor {
@@ -45,4 +45,4 @@ protected:
 };
 
 } // namespace optimizer
-} // namespace kuzu
+} // namespace lbug

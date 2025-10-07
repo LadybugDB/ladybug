@@ -1,4 +1,4 @@
-# Kuzu implementation
+# Ladybug implementation
 
 To run the benchmark, execute the following commands:
 

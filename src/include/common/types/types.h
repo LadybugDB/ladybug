@@ -11,7 +11,7 @@
 #include "common/copy_constructors.h"
 #include "common/types/interval_t.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 }
@@ -367,7 +367,7 @@ public:
 private:
     friend struct CAPIHelper;
     friend struct JavaAPIHelper;
-    friend class kuzu::processor::ParquetReader;
+    friend class lbug::processor::ParquetReader;
     explicit LogicalType(LogicalTypeID typeID, std::unique_ptr<ExtraTypeInfo> extraTypeInfo);
 
 private:
@@ -664,4 +664,4 @@ private:
 enum class FileVersionType : uint8_t { ORIGINAL = 0, WAL_VERSION = 1 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

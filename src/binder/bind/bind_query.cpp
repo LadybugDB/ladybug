@@ -5,10 +5,10 @@
 #include "common/exception/binder.h"
 #include "parser/query/regular_query.h"
 
-using namespace kuzu::common;
-using namespace kuzu::parser;
+using namespace lbug::common;
+using namespace lbug::parser;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 void validateUnionColumnsOfTheSameType(
@@ -103,4 +103,4 @@ NormalizedQueryPart Binder::bindQueryPart(const QueryPart& queryPart) {
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

@@ -15,12 +15,12 @@
 #include "storage/table/node_table.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
-using namespace kuzu::storage;
-using namespace kuzu::transaction;
+using namespace lbug::catalog;
+using namespace lbug::common;
+using namespace lbug::storage;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string NodeBatchInsertPrintInfo::toString() const {
@@ -310,4 +310,4 @@ void NodeBatchInsert::finalizeInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 #include "httpfs.h"
 #include "httpfs_extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace httpfs_extension {
 
 using namespace common;
@@ -67,4 +67,4 @@ void CachedFileManager::downloadFile(HTTPFileInfo* fileToDownload, FileInfo* cac
 }
 
 } // namespace httpfs_extension
-} // namespace kuzu
+} // namespace lbug

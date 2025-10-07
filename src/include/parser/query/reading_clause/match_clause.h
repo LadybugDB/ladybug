@@ -4,7 +4,7 @@
 #include "parser/query/graph_pattern/pattern_element.h"
 #include "reading_clause.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class MatchClause : public ReadingClause {
@@ -31,4 +31,4 @@ private:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

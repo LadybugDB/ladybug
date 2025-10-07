@@ -4,7 +4,7 @@
 #include "mbedtls/md.h"
 #include "mbedtls/sha256.h"
 
-namespace kuzu {
+namespace lbug {
 namespace httpfs_extension {
 
 void sha256(const char* in, size_t inLen, hash_bytes& out) {
@@ -51,4 +51,4 @@ void hex256(hash_bytes& in, hash_str& out) {
 }
 
 } // namespace httpfs_extension
-} // namespace kuzu
+} // namespace lbug

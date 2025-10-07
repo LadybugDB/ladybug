@@ -100,9 +100,9 @@ def test_write(conn_db_readwrite: ConnDB) -> None:
                 break
 
     conn.execute("CREATE NODE TABLE uuid_table (id UUID, PRIMARY KEY(id));")
-    conn.execute("CREATE (:uuid_table {id: $1});", {"1": uuid.uuid5(uuid.NAMESPACE_DNS, "kuzu")})
+    conn.execute("CREATE (:uuid_table {id: $1});", {"1": uuid.uuid5(uuid.NAMESPACE_DNS, "lbug")})
     result = conn.execute("MATCH (n:uuid_table) RETURN n.id;")
-    assert result.get_next() == [uuid.uuid5(uuid.NAMESPACE_DNS, "kuzu")]
+    assert result.get_next() == [uuid.uuid5(uuid.NAMESPACE_DNS, "lbug")]
 
 
 def test_error(conn_db_readonly: ConnDB) -> None:

@@ -1,5 +1,5 @@
-# Kuzu WebAssembly In-Browser Example
-This example demonstrates how to use the Kuzu WebAssembly build in a web browser. The example uses the asynchronous JavaScript API to interact with the WebAssembly module.
+# Ladybug WebAssembly In-Browser Example
+This example demonstrates how to use the Ladybug WebAssembly build in a web browser. The example uses the asynchronous JavaScript API to interact with the WebAssembly module.
 
 ## Usage
 ### Install Dependencies
@@ -21,4 +21,4 @@ npm run serve
 Navigate to `http://localhost:3000` in your web browser.
 
 ## Source Code
-The source code for this example can be found in the `public/index.html` file. The file is a simple HTML file that includes the JavaScript code to interact with the WebAssembly module. Vanilla JavaScript is used and only kuzu-wasm is imported. No other dependencies are used.
+The source code for this example can be found in the `public/index.html` file. The file is a simple HTML file that includes the JavaScript code to interact with the WebAssembly module. Vanilla JavaScript is used and only lbug-wasm is imported. No other dependencies are used.

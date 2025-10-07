@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace llm_extension {
 
 struct CreateEmbedding {
@@ -12,4 +12,4 @@ struct CreateEmbedding {
 };
 
 } // namespace llm_extension
-} // namespace kuzu
+} // namespace lbug

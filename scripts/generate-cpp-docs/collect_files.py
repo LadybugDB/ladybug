@@ -12,7 +12,7 @@ HEADER_BASE_PATH = os.path.realpath(
 MAIN_HEADER_PATH = os.path.realpath(
     os.path.join(HEADER_BASE_PATH, 'main'))
 START_POINT = os.path.realpath(
-    os.path.join(MAIN_HEADER_PATH, 'kuzu.h')
+    os.path.join(MAIN_HEADER_PATH, 'lbug.h')
 )
 JSON_HEADER_PATH = os.path.realpath(
     os.path.join(os.path.dirname(__file__), '../../third_party/nlohmann_json/json_fwd.hpp'))

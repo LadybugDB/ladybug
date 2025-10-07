@@ -3,7 +3,7 @@
 #include "function/neo4j_migrate.h"
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace neo4j_extension {
 
 using namespace extension;
@@ -14,7 +14,7 @@ void Neo4jExtension::load(main::ClientContext* context) {
 }
 
 } // namespace neo4j_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -25,12 +25,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::neo4j_extension::Neo4jExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::neo4j_extension::Neo4jExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::neo4j_extension::Neo4jExtension::EXTENSION_NAME;
+    return lbug::neo4j_extension::Neo4jExtension::EXTENSION_NAME;
 }
 }
 #endif

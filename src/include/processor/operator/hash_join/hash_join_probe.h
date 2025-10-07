@@ -6,7 +6,7 @@
 #include "processor/operator/physical_operator.h"
 #include "processor/result/result_set.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct ProbeState {
@@ -120,4 +120,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

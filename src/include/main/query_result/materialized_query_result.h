@@ -2,7 +2,7 @@
 
 #include "main/query_result.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 class FactorizedTable;
 class FactorizedTableIterator;
@@ -43,4 +43,4 @@ private:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

@@ -3,7 +3,7 @@
 #include "httpfs.h"
 #include "s3fs_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace httpfs_extension {
 
 struct S3UploadParams {
@@ -173,4 +173,4 @@ struct AWSListObjectV2 {
 };
 
 } // namespace httpfs_extension
-} // namespace kuzu
+} // namespace lbug

@@ -18,10 +18,10 @@
 #include "storage/table/column_chunk_stats.h"
 #include "storage/table/in_memory_exception_chunk.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 class PageManager;
 }
-namespace kuzu {
+namespace lbug {
 namespace evaluator {
 class ExpressionEvaluator;
 } // namespace evaluator
@@ -506,4 +506,4 @@ struct ColumnChunkFactory {
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

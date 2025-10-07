@@ -111,7 +111,7 @@ Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv
 0aa|Alice
 -STATEMENT LOAD FROM  "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.tsv"  WITH * WHERE fname = 'Alice' RETURN concat(id, 'aa'), fname;
 ---- error
-Binder exception: Cannot load from file type tsv. If this file type is part of a kuzu extension please load the extension then try again.
+Binder exception: Cannot load from file type tsv. If this file type is part of a lbug extension please load the extension then try again.
 -STATEMENT LOAD FROM  "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.tsv" (file_format='csv')   WITH * WHERE fname = 'Alice' RETURN concat(id, 'aa'), fname;
 ---- 1
 0aa|Alice
@@ -186,7 +186,7 @@ Copy exception: Error in file ${KUZU_ROOT_DIRECTORY}/dataset/npy-1d/one_dim_doub
 -LOG LoadFromIncorrectFormat
 -STATEMENT LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/npy-1d/one_dim_double.npy" (file_format='npyd') RETURN *;
 ---- error
-Binder exception: Cannot load from file type npyd. If this file type is part of a kuzu extension please load the extension then try again.
+Binder exception: Cannot load from file type npyd. If this file type is part of a lbug extension please load the extension then try again.
 
 -STATEMENT LOAD FROM "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson*.csv" RETURN id;
 ---- error(regex)

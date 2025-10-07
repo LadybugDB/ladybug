@@ -7,7 +7,7 @@
 #include "function/string/functions/base_lower_upper_function.h"
 #include "utf8proc_wrapper.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 std::vector<std::string> StringUtils::splitComma(const std::string& input) {
@@ -278,4 +278,4 @@ std::string StringUtils::encodeURL(const std::string& input, bool encodeSlash) {
     return result;
 }
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

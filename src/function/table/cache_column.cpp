@@ -13,9 +13,9 @@
 #include "storage/table/table.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct CacheArrayColumnBindData final : TableFuncBindData {
@@ -206,4 +206,4 @@ function_set LocalCacheArrayColumnFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

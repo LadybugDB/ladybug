@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace neo4j_extension {
 
 struct Neo4jMigrateFunction {
@@ -12,4 +12,4 @@ struct Neo4jMigrateFunction {
 };
 
 } // namespace neo4j_extension
-} // namespace kuzu
+} // namespace lbug

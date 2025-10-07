@@ -1,9 +1,9 @@
 #include "function/aggregate/count_star.h"
 
-using namespace kuzu::common;
-using namespace kuzu::storage;
+using namespace lbug::common;
+using namespace lbug::storage;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 void CountStarFunction::updateAll(uint8_t* state_, ValueVector* input, uint64_t multiplicity,
@@ -32,4 +32,4 @@ function_set CountStarFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

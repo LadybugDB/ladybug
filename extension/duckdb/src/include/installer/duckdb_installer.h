@@ -2,7 +2,7 @@
 
 #include "extension/extension_installer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 class KUZU_API DuckDBInstaller final : public extension::ExtensionInstaller {
@@ -14,4 +14,4 @@ public:
 };
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

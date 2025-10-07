@@ -5,7 +5,7 @@
 #include "common/vector/value_vector.h"
 #include "storage/table/column_chunk_data.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 void ColumnChunkStats::update(const ColumnChunkData& data, uint64_t offset, uint64_t numValues,
@@ -59,4 +59,4 @@ void MergedColumnChunkStats::merge(const MergedColumnChunkStats& o,
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

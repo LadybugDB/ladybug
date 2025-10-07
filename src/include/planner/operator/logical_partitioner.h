@@ -3,7 +3,7 @@
 #include "binder/copy/bound_copy_from.h"
 #include "planner/operator/logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 struct LogicalPartitioningInfo {
@@ -70,4 +70,4 @@ public:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

@@ -4,9 +4,9 @@
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 TableScanState::~TableScanState() = default;
@@ -62,4 +62,4 @@ DataChunk Table::constructDataChunk(MemoryManager* mm, std::vector<LogicalType> 
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

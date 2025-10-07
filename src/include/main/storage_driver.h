@@ -2,7 +2,7 @@
 
 #include "database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class Table;
 }
@@ -32,4 +32,4 @@ private:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

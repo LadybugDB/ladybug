@@ -6,7 +6,7 @@ import fs from 'fs';
 
 const SRC_PATH = path.resolve("..", "..");
 const THREADS = os.cpus().length;
-const KUZU_VERSION_TEXT = "Kuzu VERSION";
+const KUZU_VERSION_TEXT = "Lbug VERSION";
 const ES_BUILD_CONFIG = {
   entryPoints: ['./build/sync/index.js', './build/index.js', 'build/kuzu_wasm_worker.js'],
   bundle: true,
@@ -19,10 +19,10 @@ const ES_BUILD_CONFIG = {
   }
 };
 
-console.log(`Using ${THREADS} threads to build Kuzu.`);
+console.log(`Using ${THREADS} threads to build Lbug.`);
 console.log('Cleaning up...');
 execSync("npm run clean", { stdio: "inherit" });
-console.log('Building single-threaded version of Kuzu WebAssembly module...')
+console.log('Building single-threaded version of Lbug WebAssembly module...')
 execSync(`make wasm NUM_THREADS=${THREADS} SINGLE_THREADED=true`, {
   cwd: SRC_PATH,
   stdio: "inherit",
@@ -33,7 +33,7 @@ await esbuild.build(ES_BUILD_CONFIG);
 
 console.log('Cleaning up...');
 execSync("npm run clean exclude-package", { stdio: "inherit" });
-console.log("Building multi-threaded version of Kuzu WebAssembly module...");
+console.log("Building multi-threaded version of Lbug WebAssembly module...");
 execSync(`make wasm NUM_THREADS=${THREADS} SINGLE_THREADED=false`, {
   cwd: SRC_PATH,
   stdio: "inherit",
@@ -45,7 +45,7 @@ await esbuild.build(ES_BUILD_CONFIG_MULTI);
 
 console.log('Cleaning up...');
 execSync("npm run clean exclude-package", { stdio: "inherit" });
-console.log("Building Node.js version of Kuzu WebAssembly module...");
+console.log("Building Node.js version of Lbug WebAssembly module...");
 execSync(`make wasm NUM_THREADS=${THREADS} SINGLE_THREADED=false WASM_NODEFS=true`, {
   cwd: SRC_PATH,
   stdio: "inherit",
@@ -89,6 +89,6 @@ console.log('Copying README.md...');
 await fs.promises.copyFile(path.resolve('.', 'README.md'), path.resolve(".", 'package', 'README.md'));
 
 console.log('Creating tarball...');
-execSync("tar -czf kuzu-wasm.tar.gz package", { cwd: path.resolve("."), stdio: "inherit" });
+execSync("tar -czf lbug-wasm.tar.gz package", { cwd: path.resolve("."), stdio: "inherit" });
 
 console.log('All done!');

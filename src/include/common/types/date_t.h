@@ -2,7 +2,7 @@
 
 #include "interval_t.h"
 
-namespace kuzu {
+namespace lbug {
 
 namespace regex {
 class RE2;
@@ -118,4 +118,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

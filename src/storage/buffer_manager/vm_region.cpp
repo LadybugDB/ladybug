@@ -14,9 +14,9 @@
 
 #include "common/exception/buffer_manager.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 VMRegion::VMRegion(PageSizeClass pageSizeClass, uint64_t maxRegionSize) : numFrameGroups{0} {
@@ -88,4 +88,4 @@ frame_group_idx_t VMRegion::addNewFrameGroup() {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

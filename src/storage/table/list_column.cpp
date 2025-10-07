@@ -14,9 +14,9 @@
 #include "storage/table/null_column.h"
 #include <bit>
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 offset_t ListOffsetSizeInfo::getListStartOffset(uint64_t pos) const {
@@ -432,4 +432,4 @@ std::vector<std::unique_ptr<ColumnChunkData>> ListColumn::checkpointSegment(
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

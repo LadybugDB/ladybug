@@ -19,7 +19,7 @@
 #include "storage/index/in_mem_hash_index.h"
 #include "storage/local_storage/local_hash_index.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class VirtualFileSystem;
 }
@@ -505,4 +505,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

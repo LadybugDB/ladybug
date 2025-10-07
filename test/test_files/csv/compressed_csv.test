@@ -64,7 +64,7 @@ IO exception: Writing to compressed files is not supported yet.
 -CASE ReadFromParquetError
 -STATEMENT load from "${KUZU_ROOT_DIRECTORY}/dataset/invalid-compressed-gz/user.parquet.gz" return *
 ---- error
-IO exception: Kuzu currently only supports reading from compressed csv files.
+IO exception: Lbug currently only supports reading from compressed csv files.
 
 -CASE ReadFromGZIPExtension
 -STATEMENT load from "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/city.csv.gzip" return *

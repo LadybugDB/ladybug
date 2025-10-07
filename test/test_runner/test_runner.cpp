@@ -12,10 +12,10 @@
 #include "spdlog/spdlog.h"
 #include "test_helper/test_helper.h"
 
-using namespace kuzu::main;
-using namespace kuzu::common;
+using namespace lbug::main;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 template<typename T>
@@ -369,4 +369,4 @@ std::unique_ptr<planner::LogicalPlan> TestRunner::getLogicalPlan(const std::stri
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "decode_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class DbpDecoder {
@@ -112,4 +112,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

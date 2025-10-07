@@ -4,12 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kuzu WebAssembly Example</title>
+    <title>Lbug WebAssembly Example</title>
 </head>
 
 <body>
-    <h1>Kuzu WebAssembly Example</h1>
-    <p>This example demonstrates how to use Kuzu WebAssembly in a web browser with the persistent IDBFS filesystem.</p>
+    <h1>Lbug WebAssembly Example</h1>
+    <p>This example demonstrates how to use Lbug WebAssembly in a web browser with the persistent IDBFS filesystem.</p>
     <p>The first run of the example will create a new database and load some data into it. The second run will query the
         database and display the results.</p>
     <p>After running the example for the first time, you can refresh the page to see the query results.</p>
@@ -19,8 +19,8 @@
         style="margin-top: 20px; padding: 10px; display: block; border: 1px solid #ccc; background-color: #f9f9f9; white-space: pre-wrap;"></code>
 
     <script type="module">
-        import kuzu from './index.js';
-        window.kuzu = kuzu;
+        import lbug from './index.js';
+        window.lbug = lbug;
         const appendOutput = (text) => {
             const output = document.getElementById("output");
             output.innerText += text + "\n";
@@ -45,19 +45,19 @@ Zhang,Noura,2022`;
 Karissa,Waterloo
 Zhang,Kitchener
 Noura,Guelph`;
-                await kuzu.FS.writeFile("/user.csv", userCSV);
-                await kuzu.FS.writeFile("/city.csv", cityCSV);
-                await kuzu.FS.writeFile("/follows.csv", followsCSV);
-                await kuzu.FS.writeFile("/lives-in.csv", livesInCSV);
+                await lbug.FS.writeFile("/user.csv", userCSV);
+                await lbug.FS.writeFile("/city.csv", cityCSV);
+                await lbug.FS.writeFile("/follows.csv", followsCSV);
+                await lbug.FS.writeFile("/lives-in.csv", livesInCSV);
 
                 // Make a persistent IDBFS directory
-                await kuzu.FS.mkdir("/database");
-                await kuzu.FS.mountIdbfs("/database");
+                await lbug.FS.mkdir("/database");
+                await lbug.FS.mountIdbfs("/database");
                 appendOutput("IDBFS mounted.");
 
                 // Create an empty database and connect to it
-                const db = new kuzu.Database("/database");
-                const conn = new kuzu.Connection(db);
+                const db = new lbug.Database("/database");
+                const conn = new lbug.Connection(db);
 
 
                 const queries = [
@@ -93,25 +93,25 @@ Noura,Guelph`;
                 appendOutput("Database closed.");
 
                 // Sync the filesystem
-                await kuzu.FS.syncfs(false);
+                await lbug.FS.syncfs(false);
                 appendOutput("Database persisted to IDBFS.");
-                await kuzu.FS.unmount("/database");
+                await lbug.FS.unmount("/database");
                 appendOutput("IDBFS unmounted.");
                 window.localStorage.setItem("isFirstRun", "false");
             } else {
                 appendOutput("Second or later run detected. Querying the database...");
                 // Make a persistent IDBFS directory
-                await kuzu.FS.mkdir("/database");
-                await kuzu.FS.mountIdbfs("/database");
+                await lbug.FS.mkdir("/database");
+                await lbug.FS.mountIdbfs("/database");
                 appendOutput("IDBFS mounted.");
 
                 // Sync the filesystem
-                await kuzu.FS.syncfs(true);
+                await lbug.FS.syncfs(true);
                 appendOutput("Database loaded from IDBFS.");
 
                 // Create a new database and connect to it
-                const db = new kuzu.Database("/database");
-                const conn = new kuzu.Connection(db);
+                const db = new lbug.Database("/database");
+                const conn = new lbug.Connection(db);
 
                 // Query the database
                 let queryString = "MATCH (u:User) -[f:Follows]-> (v:User) RETURN u.name, f.since, v.name";
@@ -149,7 +149,7 @@ Noura,Guelph`;
                 appendOutput("Database closed.");
 
                 // Unmount the IDBFS
-                await kuzu.FS.unmount("/database");
+                await lbug.FS.unmount("/database");
                 appendOutput("IDBFS unmounted.");
             }
         })();

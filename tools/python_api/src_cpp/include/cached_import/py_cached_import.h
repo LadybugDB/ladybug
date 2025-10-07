@@ -5,7 +5,7 @@
 
 #include "py_cached_modules.h"
 
-namespace kuzu {
+namespace lbug {
 
 class PythonCachedImport {
 public:
@@ -35,4 +35,4 @@ bool doesPyModuleExist(std::string moduleName);
 
 extern std::shared_ptr<PythonCachedImport> importCache;
 
-} // namespace kuzu
+} // namespace lbug

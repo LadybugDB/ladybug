@@ -6,7 +6,7 @@
 
 #include "common/types/int128_t.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 template<class T>
@@ -140,4 +140,4 @@ constexpr std::array<common::int128_t, NumericLimits<common::int128_t>::digits()
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

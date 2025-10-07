@@ -1,8 +1,8 @@
 #include "planner/join_order_enumerator_context.h"
 
-using namespace kuzu::binder;
+using namespace lbug::binder;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void JoinOrderEnumeratorContext::init(const QueryGraph* queryGraph_,
@@ -34,4 +34,4 @@ void JoinOrderEnumeratorContext::resetState() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

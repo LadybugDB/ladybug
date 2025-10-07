@@ -2,7 +2,7 @@
 #include "binder/bound_detach_database.h"
 #include "parser/detach_database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 std::unique_ptr<BoundStatement> Binder::bindDetachDatabase(const parser::Statement& statement) {
@@ -11,4 +11,4 @@ std::unique_ptr<BoundStatement> Binder::bindDetachDatabase(const parser::Stateme
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

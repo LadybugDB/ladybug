@@ -6,7 +6,7 @@
 #include "processor/execution_context.h"
 #include "processor/operator/persistent/reader/copy_from_error.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 struct BatchInsertCachedError {
     explicit BatchInsertCachedError(std::string message,
@@ -50,4 +50,4 @@ private:
     std::vector<BatchInsertCachedError> cachedErrors;
 };
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

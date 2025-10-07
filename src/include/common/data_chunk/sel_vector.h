@@ -7,7 +7,7 @@
 #include "common/types/types.h"
 #include <span>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class ValueVector;
@@ -171,4 +171,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

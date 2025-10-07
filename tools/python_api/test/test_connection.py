@@ -4,7 +4,7 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
-import kuzu
+import lbug
 import pytest
 from type_aliases import ConnDB
 
@@ -13,9 +13,9 @@ if TYPE_CHECKING:
 
 
 def test_connection_close(tmp_path: Path) -> None:
-    db_path = tmp_path / "test_connection_close.kuzu"
-    db = kuzu.Database(database_path=db_path, read_only=False)
-    conn = kuzu.Connection(db)
+    db_path = tmp_path / "test_connection_close.lbug"
+    db = lbug.Database(database_path=db_path, read_only=False)
+    conn = lbug.Connection(db)
     conn.close()
     assert conn.is_closed
     pytest.raises(RuntimeError, conn.execute, "RETURN 1")
@@ -23,9 +23,9 @@ def test_connection_close(tmp_path: Path) -> None:
 
 
 def test_connection_close_context_manager(tmp_path: Path) -> None:
-    db_path = tmp_path / "test_connection_close_context_manager.kuzu"
-    with kuzu.Database(database_path=db_path, read_only=False) as db:
-        with kuzu.Connection(db) as conn:
+    db_path = tmp_path / "test_connection_close_context_manager.lbug"
+    with lbug.Database(database_path=db_path, read_only=False) as db:
+        with lbug.Connection(db) as conn:
             pass
         assert conn.is_closed
         pytest.raises(RuntimeError, conn.execute, "RETURN 1")

@@ -10,10 +10,10 @@
 #include "storage/storage_utils.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::transaction;
-using namespace kuzu::common;
+using namespace lbug::transaction;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 std::string OverflowFileHandle::readString(TransactionType trxType, const ku_string_t& str) const {
@@ -279,4 +279,4 @@ void OverflowFile::reclaimStorage(PageAllocator& pageAllocator) const {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

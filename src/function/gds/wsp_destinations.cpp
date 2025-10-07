@@ -5,12 +5,12 @@
 #include "processor/execution_context.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::storage;
-using namespace kuzu::processor;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::storage;
+using namespace lbug::processor;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 class Costs {
@@ -337,4 +337,4 @@ std::unique_ptr<RJAlgorithm> WeightedSPDestinationsFunction::getAlgorithm() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

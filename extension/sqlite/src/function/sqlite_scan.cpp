@@ -2,7 +2,7 @@
 
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace sqlite_extension {
 
 using namespace duckdb_extension;
@@ -25,4 +25,4 @@ std::vector<common::LogicalType> SQLiteTableScanInfo::getColumnTypes(
 }
 
 } // namespace sqlite_extension
-} // namespace kuzu
+} // namespace lbug

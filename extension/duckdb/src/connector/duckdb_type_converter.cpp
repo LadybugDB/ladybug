@@ -3,10 +3,10 @@
 #include "common/exception/binder.h"
 #include "common/string_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 common::LogicalType DuckDBTypeConverter::convertDuckDBType(std::string typeStr) {
     typeStr = common::StringUtils::ltrim(typeStr);
@@ -151,4 +151,4 @@ std::vector<StructField> DuckDBTypeConverter::parseStructTypeInfo(
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

@@ -12,11 +12,11 @@
 #include "storage/table/node_table.h"
 #include "storage/table/string_chunk_data.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
-using namespace kuzu::common;
-using namespace kuzu::storage;
+using namespace lbug::common;
+using namespace lbug::storage;
 
 template<typename T>
 bool IndexBufferWithWarningData<T>::full() const {
@@ -207,4 +207,4 @@ bool IndexBuilder::checkNonNullConstraint(const ColumnChunkData& chunk,
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

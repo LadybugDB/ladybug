@@ -2,7 +2,7 @@
 
 #include "planner/operator/logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 struct JoinOrderUtil {
@@ -13,4 +13,4 @@ struct JoinOrderUtil {
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

@@ -6,7 +6,7 @@
 #include "common/enums/table_type.h"
 #include "index_look_up_info.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 struct ExtraBoundCopyFromInfo {
@@ -98,4 +98,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

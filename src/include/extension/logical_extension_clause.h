@@ -2,7 +2,7 @@
 
 #include "planner/operator/simple/logical_simple.h"
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 class LogicalExtensionClause : public planner::LogicalSimple {
@@ -23,4 +23,4 @@ private:
 };
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

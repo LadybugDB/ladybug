@@ -3,7 +3,7 @@
 #include "common/types/types.h"
 #include "pybind_include.h"
 
-namespace kuzu {
+namespace lbug {
 
 struct PyDictionary {
 public:
@@ -29,4 +29,4 @@ private:
     py::object dict;
 };
 
-} // namespace kuzu
+} // namespace lbug

@@ -2,10 +2,10 @@
 
 #include "storage/buffer_manager/memory_manager.h"
 
-using namespace kuzu::common;
-using namespace kuzu::transaction;
+using namespace lbug::common;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 void InMemChunkedNodeGroupCollection::append(MemoryManager& memoryManager,
@@ -48,4 +48,4 @@ void InMemChunkedNodeGroupCollection::merge(InMemChunkedNodeGroupCollection& oth
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -3,7 +3,7 @@
 #include "common/random_engine.h"
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 void GenRandomUUID::operation(common::ku_uuid_t& input, void* dataPtr) {
@@ -12,4 +12,4 @@ void GenRandomUUID::operation(common::ku_uuid_t& input, void* dataPtr) {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

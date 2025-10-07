@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 enum class SemiMaskTargetType : uint8_t {
@@ -14,4 +14,4 @@ enum class SemiMaskTargetType : uint8_t {
 };
 
 }
-} // namespace kuzu
+} // namespace lbug

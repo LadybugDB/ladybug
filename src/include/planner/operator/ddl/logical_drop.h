@@ -3,7 +3,7 @@
 #include "parser/ddl/drop_info.h"
 #include "planner/operator/simple/logical_simple.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 struct LogicalDropPrintInfo : OPPrintInfo {
@@ -38,4 +38,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

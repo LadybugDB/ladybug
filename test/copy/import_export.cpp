@@ -2,7 +2,7 @@
 #include "graph_test/base_graph_test.h"
 #include "graph_test/private_graph_test.h"
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 class ImportExportDBTest : public DBTest {
@@ -28,4 +28,4 @@ TEST_F(ImportExportDBTest, Test) {
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

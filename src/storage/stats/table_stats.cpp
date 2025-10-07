@@ -3,7 +3,7 @@
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 TableStats::TableStats(std::span<const common::LogicalType> dataTypes) : cardinality{0} {
@@ -61,4 +61,4 @@ TableStats TableStats::deserialize(common::Deserializer& deserializer) {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

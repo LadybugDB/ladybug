@@ -3,7 +3,7 @@
 #include "function/function.h"
 #include "function/list/vector_list_functions.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ArrayValueFunction {
@@ -103,4 +103,4 @@ struct ArraySliceFunction : public ListSliceFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

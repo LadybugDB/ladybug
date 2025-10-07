@@ -7,9 +7,9 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt;
 
 pub enum ConversionError {
-    /// Kuzu's internal date as the number of days since 1970-01-01
+    /// Lbug's internal date as the number of days since 1970-01-01
     Date(i32),
-    /// Kuzu's internal timestamp as the number of microseconds since 1970-01-01
+    /// Lbug's internal timestamp as the number of microseconds since 1970-01-01
     Timestamp(i64),
     TimestampTz(i64),
     TimestampNs(i64),
@@ -29,12 +29,12 @@ impl std::fmt::Debug for ConversionError {
             Date, Timestamp, TimestampMs, TimestampNs, TimestampSec, TimestampTz,
         };
         match self {
-            Date(days) => write!(f, "Could not convert Kuzu date offset of UNIX_EPOCH + {days} days to time::Date"),
-            Timestamp(us) => write!(f, "Could not convert Kuzu timestamp offset of UNIX_EPOCH + {us} microseconds to time::OffsetDateTime"),
-            TimestampTz(us) => write!(f, "Could not convert Kuzu timestamp_tz offset of UNIX_EPOCH + {us} microseconds to time::OffsetDateTime"),
-            TimestampNs(ns) => write!(f, "Could not convert Kuzu timestamp_ns offset of UNIX_EPOCH + {ns} nanoseconds to time::OffsetDateTime"),
-            TimestampMs(ms) => write!(f, "Could not convert Kuzu timestamp_ms offset of UNIX_EPOCH + {ms} milliseconds to time::OffsetDateTime"),
-            TimestampSec(sec) => write!(f, "Could not convert Kuzu timestamp_sec offset of UNIX_EPOCH + {sec} seconds to time::OffsetDateTime"),
+            Date(days) => write!(f, "Could not convert Lbug date offset of UNIX_EPOCH + {days} days to time::Date"),
+            Timestamp(us) => write!(f, "Could not convert Lbug timestamp offset of UNIX_EPOCH + {us} microseconds to time::OffsetDateTime"),
+            TimestampTz(us) => write!(f, "Could not convert Lbug timestamp_tz offset of UNIX_EPOCH + {us} microseconds to time::OffsetDateTime"),
+            TimestampNs(ns) => write!(f, "Could not convert Lbug timestamp_ns offset of UNIX_EPOCH + {ns} nanoseconds to time::OffsetDateTime"),
+            TimestampMs(ms) => write!(f, "Could not convert Lbug timestamp_ms offset of UNIX_EPOCH + {ms} milliseconds to time::OffsetDateTime"),
+            TimestampSec(sec) => write!(f, "Could not convert Lbug timestamp_sec offset of UNIX_EPOCH + {sec} seconds to time::OffsetDateTime"),
         }
     }
 }
@@ -195,7 +195,7 @@ impl From<(u64, u64)> for InternalID {
     }
 }
 
-/// Data types supported by Kuzu
+/// Data types supported by Lbug
 ///
 /// Also see <https://kuzudb.com/docusaurus/cypher/data-types/overview.html>
 #[derive(Clone, Debug, PartialEq)]
@@ -299,7 +299,7 @@ impl std::fmt::Display for Value {
             Value::Blob(x) => write!(f, "{x:x?}"),
             Value::Null(_) => write!(f, ""),
             Value::List(_, x) | Value::Array(_, x) => display_list(f, x),
-            // Note: These don't match kuzu's toString, but we probably don't want them to
+            // Note: These don't match lbug's toString, but we probably don't want them to
             Value::Interval(x) => write!(f, "{x}"),
             Value::Timestamp(x)
             | Value::TimestampTz(x)
@@ -463,7 +463,7 @@ impl TryFrom<&ffi::Value> for Value {
             )),
             LogicalTypeID::INTERVAL => Ok(Value::Interval(time::Duration::new(
                 ffi::value_get_interval_secs(value),
-                // Duration is constructed using nanoseconds, but kuzu stores microseconds
+                // Duration is constructed using nanoseconds, but lbug stores microseconds
                 ffi::value_get_interval_micros(value) * 1000,
             ))),
             LogicalTypeID::DATE => Ok(Value::Date(get_date_from_unix_days(
@@ -976,7 +976,7 @@ mod tests {
         ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
-            /// Tests that the values are correctly converted into `kuzu::common::Value` and back
+            /// Tests that the values are correctly converted into `lbug::common::Value` and back
             fn $name() -> Result<()> {
                 let rust_type: LogicalType = $value;
                 let typ: cxx::UniquePtr<ffi::LogicalType> = (&rust_type).try_into()?;
@@ -992,7 +992,7 @@ mod tests {
         ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
-            /// Tests that the values are correctly converted into `kuzu::common::Value` and back
+            /// Tests that the values are correctly converted into `lbug::common::Value` and back
             fn $name() -> Result<()> {
                 let rust_value: Value = $value;
                 let value: cxx::UniquePtr<ffi::Value> = rust_value.clone().try_into()?;
@@ -1173,7 +1173,7 @@ mod tests {
     }
 
     database_tests! {
-        // Passing these values as arguments is not yet implemented in kuzu:
+        // Passing these values as arguments is not yet implemented in lbug:
         // db_union: Value::Union {
         //    types: vec![("Num".to_string(), LogicalType::Int8), ("duration".to_string(), LogicalType::Interval)],
         //    value: Box::new(Value::Int8(-127))
@@ -1237,7 +1237,7 @@ mod tests {
     }
 
     #[test]
-    /// Test that the timestamp round-trips through kuzu's internal timestamp
+    /// Test that the timestamp round-trips through lbug's internal timestamp
     fn test_timestamp() -> Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let db = Database::new(temp_dir.path().join("test"), SYSTEM_CONFIG_FOR_TESTS)?;

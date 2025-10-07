@@ -3,11 +3,11 @@
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "index/hnsw_config.h"
 
-namespace kuzu::common {
+namespace lbug::common {
 struct BufferReader;
-} // namespace kuzu::common
+} // namespace lbug::common
 
-namespace kuzu {
+namespace lbug {
 namespace vector_extension {
 
 struct HNSWIndexAuxInfo final : catalog::IndexAuxInfo {
@@ -38,4 +38,4 @@ struct HNSWIndexCatalogEntry {
 };
 
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug

@@ -6,7 +6,7 @@
 #include "main/client_context.h"
 #include "yyjson.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 class JsonMutWrapper;
@@ -47,7 +47,7 @@ JsonWrapper jsonify(const common::ValueVector& vec, uint64_t pos);
 yyjson_mut_val* jsonify(JsonMutWrapper& wrapper, const common::ValueVector& vec, uint64_t pos);
 yyjson_mut_val* jsonifyAsString(JsonMutWrapper& wrapper, const common::ValueVector& vec,
     uint64_t pos);
-// Converts an internal Kuzu Value into json
+// Converts an internal Lbug Value into json
 
 std::vector<JsonWrapper> jsonifyQueryResult(
     const std::vector<std::shared_ptr<common::ValueVector>>& columns,
@@ -77,4 +77,4 @@ std::string jsonExtractToString(const JsonWrapper& wrapper, std::string path);
 uint32_t jsonArraySize(const JsonWrapper& wrapper);
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

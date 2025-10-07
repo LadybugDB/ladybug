@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 enum class JSONRecordType : uint8_t {
@@ -22,4 +22,4 @@ enum class JsonScanFormat : uint8_t {
 };
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

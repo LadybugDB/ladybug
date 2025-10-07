@@ -4,7 +4,7 @@ on: workflow_dispatch
 
 jobs:
   build-python-package:
-    runs-on: kuzu-self-hosted-linux-building-x86_64
+    runs-on: lbug-self-hosted-linux-building-x86_64
     env:
       PLATFORM: manylinux_2_28_x86_64
     steps:
@@ -14,13 +14,13 @@ jobs:
         working-directory: scripts/pip-package/
         run: |
           mkdir wheelhouse
-          /opt/python/cp310-cp310/bin/python package_tar.py kuzu.tar.gz
-          /opt/python/cp310-cp310/bin/pip wheel kuzu.tar.gz --no-deps -w wheelhouse/
-          auditwheel repair wheelhouse/kuzu-*.whl -w wheelhouse/
+          /opt/python/cp310-cp310/bin/python package_tar.py lbug.tar.gz
+          /opt/python/cp310-cp310/bin/pip wheel lbug.tar.gz --no-deps -w wheelhouse/
+          auditwheel repair wheelhouse/lbug-*.whl -w wheelhouse/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: kuzu-python-package
+          name: lbug-python-package
           path: scripts/pip-package/wheelhouse/*.manylinux_2_28_x86_64.whl
 
   generate-python-docs:
@@ -34,7 +34,7 @@ jobs:
       - name: Download Python package
         uses: actions/download-artifact@v4
         with:
-          name: kuzu-python-package
+          name: lbug-python-package
 
       - name: Install Python packages
         run: |
@@ -46,12 +46,12 @@ jobs:
       - name: Generate Python docs
         run: |
           mkdir docs
-          pdoc --docformat "numpy" -o docs kuzu
+          pdoc --docformat "numpy" -o docs lbug
 
       - name: Upload Python docs
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-python-docs
+          name: lbug-python-docs
           path: ./docs
 
   generate-nodejs-docs:
@@ -76,7 +76,7 @@ jobs:
       - name: Upload Node.js docs
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-nodejs-docs
+          name: lbug-nodejs-docs
           path: ./docs
   
   generate-wasm-docs:
@@ -103,7 +103,7 @@ jobs:
       - name: Upload Node.js docs
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-wasm-docs
+          name: lbug-wasm-docs
           path: ./docs
 
   generate-java-docs:
@@ -122,7 +122,7 @@ jobs:
       - name: Upload Java docs
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-java-docs
+          name: lbug-java-docs
           path: ./docs
 
   generate-cpp-docs:
@@ -143,13 +143,13 @@ jobs:
       - name: Upload C++ docs
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-cpp-docs
+          name: lbug-cpp-docs
           path: ./scripts/generate-cpp-docs/cpp/docs/html
       
       - name: Upload C docs
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-c-docs
+          name: lbug-c-docs
           path: ./scripts/generate-cpp-docs/c/docs/html
 
   update-docs:
@@ -180,37 +180,37 @@ jobs:
       - name: Download Python docs
         uses: actions/download-artifact@v4
         with:
-          name: kuzu-python-docs
+          name: lbug-python-docs
           path: api-docs/python
       
       - name: Download Node.js docs
         uses: actions/download-artifact@v4
         with:
-          name: kuzu-nodejs-docs
+          name: lbug-nodejs-docs
           path: api-docs/nodejs
 
       - name: Download WASM docs
         uses: actions/download-artifact@v4
         with:
-          name: kuzu-wasm-docs
+          name: lbug-wasm-docs
           path: api-docs/wasm
         
       - name: Download Java docs
         uses: actions/download-artifact@v4
         with:
-          name: kuzu-java-docs
+          name: lbug-java-docs
           path: api-docs/java
 
       - name: Download C++ docs
         uses: actions/download-artifact@v4
         with:
-          name: kuzu-cpp-docs
+          name: lbug-cpp-docs
           path: api-docs/cpp
         
       - name: Download C docs
         uses: actions/download-artifact@v4
         with:
-          name: kuzu-c-docs
+          name: lbug-c-docs
           path: api-docs/c
         
       - name: Push changes

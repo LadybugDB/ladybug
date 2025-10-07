@@ -2,7 +2,7 @@
 #include "planner/operator/logical_plan_util.h"
 #include "test_runner/test_runner.h"
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 class OptimizerTest : public DBTest {
@@ -212,4 +212,4 @@ TEST_F(OptimizerTest, SubqueryHint) {
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

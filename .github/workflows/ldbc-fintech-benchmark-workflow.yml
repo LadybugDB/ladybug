@@ -18,7 +18,7 @@ on:
 jobs:
   benchmark:
     name: ldbc-fintech-benchmark
-    runs-on: kuzu-self-hosted-benchmarking-xl
+    runs-on: lbug-self-hosted-benchmarking-xl
     env:
       NUM_THREADS: 128
       GEN: Ninja
@@ -39,7 +39,7 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Build kuzu
+      - name: Build lbug
         run: |
           pip3 install -r tools/python_api/requirements_dev.txt
           make python
@@ -55,34 +55,34 @@ jobs:
       - name: Update implementation
         working-directory: ldbc_finbench_transaction_impls
         run: |
-          ln -s $KUZU_DIR/tools/java_api/build/kuzu_java.jar kuzu/src/main/resources/kuzu_java.jar
-          ln -s $KUZU_DIR/tools/python_api/build/kuzu kuzu/scripts/kuzu
-          mkdir -p kuzu/src/main/resources/data
-          ln -s $CSV_DIR/finbench-datasets/sf${SCALE_FACTOR} kuzu/src/main/resources/data/sf${SCALE_FACTOR}
+          ln -s $KUZU_DIR/tools/java_api/build/kuzu_java.jar lbug/src/main/resources/kuzu_java.jar
+          ln -s $KUZU_DIR/tools/python_api/build/lbug lbug/scripts/lbug
+          mkdir -p lbug/src/main/resources/data
+          ln -s $CSV_DIR/finbench-datasets/sf${SCALE_FACTOR} lbug/src/main/resources/data/sf${SCALE_FACTOR}
           mvn clean package -DskipTests
 
       - name: Load data
         working-directory: ldbc_finbench_transaction_impls
-        run: python3 kuzu/scripts/import_data.py sf${SCALE_FACTOR}
+        run: python3 lbug/scripts/import_data.py sf${SCALE_FACTOR}
 
       - name: Run benchmark
-        working-directory: ldbc_finbench_transaction_impls/kuzu
+        working-directory: ldbc_finbench_transaction_impls/lbug
         run:
-          java -cp target/kuzu-0.1.0-alpha.jar:target/classes/kuzu_java.jar org.ldbcouncil.finbench.driver.driver.Driver -P sf${SCALE_FACTOR}_finbench_benchmark.properties | tee LDBC-FinBench.log
+          java -cp target/lbug-0.1.0-alpha.jar:target/classes/kuzu_java.jar org.ldbcouncil.finbench.driver.driver.Driver -P sf${SCALE_FACTOR}_finbench_benchmark.properties | tee LDBC-FinBench.log
      
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
           name: LDBC-FinBench-results
-          path: ldbc_finbench_transaction_impls/kuzu/results/LDBC-FinBench-results.json
+          path: ldbc_finbench_transaction_impls/lbug/results/LDBC-FinBench-results.json
 
       - name: Upload logs
         uses: actions/upload-artifact@v4
         with:
           name: LDBC-FinBench-logs
-          path: ldbc_finbench_transaction_impls/kuzu/LDBC-FinBench.log
+          path: ldbc_finbench_transaction_impls/lbug/LDBC-FinBench.log
     
       - name: Report result to server
         working-directory: ldbc_finbench_transaction_impls
         run: |
-          python3 kuzu/scripts/report_results.py
+          python3 lbug/scripts/report_results.py

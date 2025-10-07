@@ -3,7 +3,7 @@
 #include "parser/query/graph_pattern/pattern_element.h"
 #include "updating_clause.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class InsertClause final : public UpdatingClause {
@@ -21,4 +21,4 @@ private:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

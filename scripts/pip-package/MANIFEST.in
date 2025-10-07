@@ -1,2 +1,2 @@
-include kuzu/*.so
-include kuzu/*.pyd
+include lbug/*.so
+include lbug/*.pyd

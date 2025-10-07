@@ -4,7 +4,7 @@
 
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 class FrontierMorsel {
@@ -46,4 +46,4 @@ private:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

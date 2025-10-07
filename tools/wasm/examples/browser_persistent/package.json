@@ -1,5 +1,5 @@
 {
-  "name": "kuzu-wasm-example-browser",
+  "name": "lbug-wasm-example-browser",
   "version": "0.0.1",
   "main": "index.js",
   "scripts": {
@@ -11,6 +11,6 @@
   "description": "",
   "dependencies": {
     "express": "^4.21.2",
-    "kuzu-wasm": "^0.8.0"
+    "lbug-wasm": "^0.8.0"
   }
 }

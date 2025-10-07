@@ -6,7 +6,7 @@
 #include "common/vector/value_vector.h"
 #include "utf8proc.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct SubStr {
@@ -33,7 +33,7 @@ public:
             copySubstr(src, start, len, result, resultValueVector, true /* isAscii */);
         } else {
             int64_t characterCount = 0, startBytePos = 0, endBytePos = 0;
-            kuzu::utf8proc::utf8proc_grapheme_callback(srcStr.c_str(), srcStr.size(),
+            lbug::utf8proc::utf8proc_grapheme_callback(srcStr.c_str(), srcStr.size(),
                 [&](int64_t gstart, int64_t /*gend*/) {
                     if (characterCount == startPos) {
                         startBytePos = gstart;
@@ -70,4 +70,4 @@ public:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

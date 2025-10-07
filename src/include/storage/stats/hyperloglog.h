@@ -8,7 +8,7 @@
 
 #include "common/utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 class HyperLogLog {
@@ -52,4 +52,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

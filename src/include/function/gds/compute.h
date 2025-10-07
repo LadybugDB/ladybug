@@ -4,7 +4,7 @@
 #include "common/types/types.h"
 #include "graph/graph.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 /**
@@ -58,4 +58,4 @@ public:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

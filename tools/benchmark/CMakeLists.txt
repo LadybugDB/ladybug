@@ -8,4 +8,4 @@ add_executable(kuzu_benchmark
         benchmark_runner.cpp
         main.cpp)
 
-target_link_libraries(kuzu_benchmark kuzu test_helper)
+target_link_libraries(kuzu_benchmark lbug test_helper)

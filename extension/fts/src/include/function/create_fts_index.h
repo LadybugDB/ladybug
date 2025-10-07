@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 struct InternalCreateFTSFunction {
@@ -19,4 +19,4 @@ struct CreateFTSFunction {
 };
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

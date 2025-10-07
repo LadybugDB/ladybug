@@ -3,7 +3,7 @@
 #include "column_reader.h"
 #include "processor/operator/persistent/reader/parquet/templated_column_reader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct StringParquetValueConversion {
@@ -35,4 +35,4 @@ public:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

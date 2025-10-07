@@ -10,7 +10,7 @@
 #include "function/clear_cache.h"
 #include "storage/attached_postgres_database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace postgres_extension {
 
 std::string extractDBName(const std::string& connectionInfo) {
@@ -51,4 +51,4 @@ bool PostgresStorageExtension::canHandleDB(std::string dbType_) const {
 }
 
 } // namespace postgres_extension
-} // namespace kuzu
+} // namespace lbug

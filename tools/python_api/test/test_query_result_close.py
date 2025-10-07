@@ -13,9 +13,9 @@ def test_query_result_close(tmp_path: Path, build_dir: Path) -> None:
         import sys
         sys.path.append(r"{build_dir!s}")
 
-        import kuzu
-        db = kuzu.Database(r"{db_path!s}")
-        conn = kuzu.Connection(db)
+        import lbug
+        db = lbug.Database(r"{db_path!s}")
+        conn = lbug.Connection(db)
         conn.execute('''
           CREATE NODE TABLE person (
             ID INT64,

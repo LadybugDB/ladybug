@@ -4,7 +4,7 @@
 #include "main/database.h"
 #include "storage/sqlite_storage.h"
 
-namespace kuzu {
+namespace lbug {
 namespace sqlite_extension {
 
 void SqliteExtension::load(main::ClientContext* context) {
@@ -14,7 +14,7 @@ void SqliteExtension::load(main::ClientContext* context) {
 }
 
 } // namespace sqlite_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -25,12 +25,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::sqlite_extension::SqliteExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::sqlite_extension::SqliteExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::sqlite_extension::SqliteExtension::EXTENSION_NAME;
+    return lbug::sqlite_extension::SqliteExtension::EXTENSION_NAME;
 }
 }
 #endif

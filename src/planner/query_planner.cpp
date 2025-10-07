@@ -2,10 +2,10 @@
 #include "planner/operator/logical_union.h"
 #include "planner/planner.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
+using namespace lbug::binder;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 LogicalPlan Planner::planQuery(const BoundStatement& boundStatement) {
@@ -70,4 +70,4 @@ void Planner::exitPropertyExprCollection(PropertyExprCollection collection) {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

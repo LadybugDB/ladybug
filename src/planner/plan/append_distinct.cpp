@@ -1,9 +1,9 @@
 #include "planner/operator/logical_distinct.h"
 #include "planner/planner.h"
 
-using namespace kuzu::binder;
+using namespace lbug::binder;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void Planner::appendDistinct(const expression_vector& keys, LogicalPlan& plan) {
@@ -16,4 +16,4 @@ void Planner::appendDistinct(const expression_vector& keys, LogicalPlan& plan) {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

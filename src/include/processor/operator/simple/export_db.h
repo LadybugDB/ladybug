@@ -3,7 +3,7 @@
 #include "common/copier_config/file_scan_info.h"
 #include "processor/operator/sink.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct ExportDBSharedState final {
@@ -57,4 +57,4 @@ private:
     std::shared_ptr<ExportDBSharedState> sharedState = nullptr;
 };
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

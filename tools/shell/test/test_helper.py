@@ -5,7 +5,7 @@ from pathlib import Path
 
 KUZU_ROOT = Path(__file__).parent.parent.parent.parent
 if sys.platform == "win32":
-    # \ in paths is not supported by kuzu's parser
+    # \ in paths is not supported by lbug's parser
     KUZU_ROOT = str(KUZU_ROOT).replace("\\", "/")
 
 KUZU_EXEC_PATH = os.path.join(
@@ -14,7 +14,7 @@ KUZU_EXEC_PATH = os.path.join(
     "release",
     "tools",
     "shell",
-    "kuzu",
+    "lbug",
 )
 
 
@@ -22,7 +22,7 @@ def _get_kuzu_version():
     cmake_file = os.path.join(KUZU_ROOT, "CMakeLists.txt")
     with open(cmake_file) as f:
         for line in f:
-            if line.startswith("project(Kuzu VERSION"):
+            if line.startswith("project(Lbug VERSION"):
                 return line.split(" ")[2].strip()
         return None
 

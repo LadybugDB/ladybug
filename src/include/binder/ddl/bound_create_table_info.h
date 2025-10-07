@@ -7,7 +7,7 @@
 #include "common/enums/rel_multiplicity.h"
 #include "property_definition.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 enum class RelMultiplicity : uint8_t;
 }
@@ -109,4 +109,4 @@ struct BoundExtraCreateRelTableGroupInfo final : BoundExtraCreateTableInfo {
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

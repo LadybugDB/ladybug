@@ -2,11 +2,11 @@
 
 #include "common/types/value/value.h"
 
-using namespace kuzu::common;
-using namespace kuzu::storage;
-using namespace kuzu::main;
+using namespace lbug::common;
+using namespace lbug::storage;
+using namespace lbug::main;
 
-namespace kuzu {
+namespace lbug {
 namespace evaluator {
 
 void LiteralExpressionEvaluator::evaluate() {}
@@ -40,4 +40,4 @@ void LiteralExpressionEvaluator::resolveResultVector(const processor::ResultSet&
 }
 
 } // namespace evaluator
-} // namespace kuzu
+} // namespace lbug

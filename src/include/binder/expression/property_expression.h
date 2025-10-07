@@ -3,7 +3,7 @@
 #include "common/constants.h"
 #include "expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 class TableCatalogEntry;
 }
@@ -73,4 +73,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

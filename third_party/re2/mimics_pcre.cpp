@@ -27,7 +27,7 @@
 #include "util.h"
 #include "walker-inl.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 // Returns whether re might match an empty string.
@@ -195,4 +195,4 @@ static bool CanBeEmptyString(Regexp* re) {
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

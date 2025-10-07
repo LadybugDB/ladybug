@@ -4,7 +4,7 @@
 #include "parquet_types.h"
 #include "processor/operator/persistent/writer/parquet/basic_column_writer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct StringHash {
@@ -139,4 +139,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

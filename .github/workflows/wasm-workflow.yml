@@ -11,7 +11,7 @@ on:
 
 jobs:
   build-wasm:
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     steps:
       - uses: actions/checkout@v4
 
@@ -36,5 +36,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: kuzu-deploy-wasm
-          path: tools/wasm/kuzu-wasm.tar.gz
+          name: lbug-deploy-wasm
+          path: tools/wasm/lbug-wasm.tar.gz

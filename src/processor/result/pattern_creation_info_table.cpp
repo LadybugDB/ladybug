@@ -1,6 +1,6 @@
 #include "processor/result/pattern_creation_info_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void PatternCreationInfo::updateID(common::executor_id_t executorID,
@@ -54,4 +54,4 @@ uint64_t PatternCreationInfoTable::matchFTEntries(std::span<const common::ValueV
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

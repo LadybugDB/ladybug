@@ -8,7 +8,7 @@
 
 #include "common/api.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class Value;
@@ -66,4 +66,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

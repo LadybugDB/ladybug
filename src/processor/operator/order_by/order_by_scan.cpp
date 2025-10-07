@@ -2,9 +2,9 @@
 
 #include "common/metric.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void OrderByScanLocalState::init(std::vector<DataPos>& outVectorPos, SortSharedState& sharedState,
@@ -42,4 +42,4 @@ double OrderByScan::getProgress(ExecutionContext* /*context*/) const {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

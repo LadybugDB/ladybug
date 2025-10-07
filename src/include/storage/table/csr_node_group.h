@@ -9,7 +9,7 @@
 #include "storage/table/csr_chunked_node_group.h"
 #include "storage/table/node_group.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 class Transaction;
 }
@@ -288,4 +288,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

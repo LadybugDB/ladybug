@@ -6,7 +6,7 @@ const importTest = (name, path) => {
   });
 };
 
-describe("kuzu", () => {
+describe("lbug", () => {
   before(() => {
     return initTests();
   });

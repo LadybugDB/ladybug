@@ -1,8 +1,8 @@
 #include "processor/plan_mapper.h"
 
-using namespace kuzu::planner;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 static PhysicalOperator* getTableScan(const PhysicalOperator* joinRoot) {
@@ -21,4 +21,4 @@ void PlanMapper::mapSIPJoin(PhysicalOperator* joinRoot) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

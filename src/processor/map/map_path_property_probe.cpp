@@ -10,11 +10,11 @@
 #include "processor/operator/recursive_extend.h"
 #include "processor/plan_mapper.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::planner;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 static std::pair<std::vector<struct_field_idx_t>, std::vector<ft_col_idx_t>> getColIdxToScan(
@@ -167,4 +167,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapPathPropertyProbe(
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -7,7 +7,7 @@
 #include <bit>
 #include <concepts>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 namespace numeric_utils {
 
@@ -72,4 +72,4 @@ constexpr int bitWidth<int128_t>(int128_t x) {
 }
 } // namespace numeric_utils
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 #include "common/null_mask.h"
 #include "common/vector/value_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class ArrowNullMaskTree {
@@ -39,4 +39,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

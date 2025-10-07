@@ -3,9 +3,9 @@
 #include "common/assert.h"
 #include "function/gds/gds_function_collection.h"
 
-using namespace kuzu::function;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 PathSemantic QueryRelTypeUtils::getPathSemantic(QueryRelType queryRelType) {
@@ -50,4 +50,4 @@ std::unique_ptr<function::RJAlgorithm> QueryRelTypeUtils::getFunction(QueryRelTy
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -5,7 +5,7 @@
 #include "common/type_utils.h"
 #include "function/cast/functions/numeric_limits.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 // reference from duckDB multiply.cpp
@@ -227,4 +227,4 @@ void Multiply::operation(int64_t& left, int64_t& right, int64_t& result) {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

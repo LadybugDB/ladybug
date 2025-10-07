@@ -12,7 +12,7 @@ java {
 group = 'com.kuzudb'
 def projectRoot = projectDir.parentFile.parentFile
 def cmakeFile = new File(projectRoot, 'CMakeLists.txt').text
-def versionLine = cmakeFile.readLines().find { it.startsWith('project(Kuzu VERSION ') }
+def versionLine = cmakeFile.readLines().find { it.startsWith('project(Lbug VERSION ') }
 def cmakeVersion = versionLine.split(' ')[2]
 def versionParts = cmakeVersion.split('\\.')
 if (versionParts.length > 3) {
@@ -42,8 +42,8 @@ publishing {
     publications {
         mavenJava(MavenPublication) {
             pom {
-                name = 'kuzu'
-                description = 'Kuzu is an embedded graph database built for query speed and scalability.'
+                name = 'lbug'
+                description = 'Lbug is an embedded graph database built for query speed and scalability.'
                 url = 'http://kuzudb.com'
                 inceptionYear = '2020'
                 properties = [
@@ -56,7 +56,7 @@ publishing {
                 licenses {
                     license {
                         name = 'MIT License'
-                        url = 'https://github.com/kuzudb/kuzu/blob/master/LICENSE'
+                        url = 'https://github.com/kuzudb/lbug/blob/master/LICENSE'
                     }
                 }
                 developers {
@@ -67,9 +67,9 @@ publishing {
                     }
                 }
                 scm {
-                    connection = 'scm:git:git://github.com/kuzudb/kuzu.git'
-                    developerConnection = 'scm:git:ssh://github.com/kuzudb/kuzu.git'
-                    url = 'https://github.com/kuzudb/kuzu'
+                    connection = 'scm:git:git://github.com/kuzudb/lbug.git'
+                    developerConnection = 'scm:git:ssh://github.com/kuzudb/lbug.git'
+                    url = 'https://github.com/kuzudb/lbug'
                 }
             }
             from components.java
@@ -87,7 +87,7 @@ publishing {
         }
         maven {
             name = 'GitHubPackages'
-            url = uri('https://maven.pkg.github.com/kuzudb/kuzu')
+            url = uri('https://maven.pkg.github.com/kuzudb/lbug')
             credentials {
                 username = System.getenv('GITHUB_ACTOR')
                 password = System.getenv('GITHUB_TOKEN')

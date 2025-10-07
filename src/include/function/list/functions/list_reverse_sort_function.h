@@ -3,7 +3,7 @@
 #include "base_list_sort_function.h"
 #include "common/vector/value_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 template<typename T>
@@ -30,4 +30,4 @@ struct ListReverseSort : BaseListSortOperation {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

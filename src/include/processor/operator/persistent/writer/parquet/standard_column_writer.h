@@ -5,7 +5,7 @@
 #include "function/cast/functions/numeric_limits.h"
 #include "function/comparison/comparison_functions.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 template<class SRC, class T, class OP>
@@ -102,4 +102,4 @@ public:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

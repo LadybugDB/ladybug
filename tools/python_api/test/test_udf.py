@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta  # noqa: TC003
 import pandas as pd
 import pyarrow as pa
 import pytest
-from kuzu import Type
+from lbug import Type
 from type_aliases import ConnDB
 
 

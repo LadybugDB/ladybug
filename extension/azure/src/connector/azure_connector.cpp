@@ -4,7 +4,7 @@
 #include "connector/azure_config.h"
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace azure_extension {
 
 void AzureConnector::connect(const std::string& /*dbPath*/, const std::string& /*catalogName*/,
@@ -36,4 +36,4 @@ void AzureConnector::initRemoteAzureSecrets(main::ClientContext* context) const 
 }
 
 } // namespace azure_extension
-} // namespace kuzu
+} // namespace lbug

@@ -17,10 +17,10 @@
 #include "storage/table/null_column.h"
 #include "storage/table/string_chunk_data.h"
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
+using namespace lbug::catalog;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 using string_index_t = DictionaryChunk::string_index_t;
@@ -299,4 +299,4 @@ bool StringColumn::canIndexCommitInPlace(const SegmentState& state, uint64_t num
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

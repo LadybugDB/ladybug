@@ -15,7 +15,7 @@
 #define FWD_REL_STORAGE 1
 #define BWD_REL_STORAGE 2
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 #define VECTOR_CAPACITY_LOG_2 @KUZU_VECTOR_CAPACITY_LOG2@
@@ -68,7 +68,7 @@ struct CopyConfig {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug
 
 #undef BOTH_REL_STORAGE
 #undef FWD_REL_STORAGE

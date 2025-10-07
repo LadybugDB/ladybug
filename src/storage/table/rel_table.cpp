@@ -19,12 +19,12 @@
 #include "transaction/transaction.h"
 #include <ranges>
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
-using namespace kuzu::transaction;
-using namespace kuzu::evaluator;
+using namespace lbug::catalog;
+using namespace lbug::common;
+using namespace lbug::transaction;
+using namespace lbug::evaluator;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 void RelTableScanState::setToTable(const Transaction* transaction, Table* table_,
@@ -545,4 +545,4 @@ void RelTable::deserialize(main::ClientContext*, StorageManager*, Deserializer& 
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

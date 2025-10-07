@@ -6,7 +6,7 @@
 
 #include "common/api.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 using lock_t = std::unique_lock<std::mutex>;
@@ -104,4 +104,4 @@ protected:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

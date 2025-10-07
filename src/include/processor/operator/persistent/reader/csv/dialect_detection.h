@@ -4,7 +4,7 @@
 
 #include "common/copier_config/csv_reader_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct DialectOption {
@@ -24,4 +24,4 @@ struct DialectOption {
 std::vector<DialectOption> generateDialectOptions(const common::CSVOption& option);
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

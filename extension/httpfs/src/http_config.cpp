@@ -3,7 +3,7 @@
 #include "function/cast/functions/cast_from_string_functions.h"
 #include "main/db_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace httpfs_extension {
 
 HTTPConfig::HTTPConfig(main::ClientContext* context) {
@@ -29,4 +29,4 @@ void HTTPConfigEnvProvider::setOptionValue(main::ClientContext* context) {
 }
 
 } // namespace httpfs_extension
-} // namespace kuzu
+} // namespace lbug

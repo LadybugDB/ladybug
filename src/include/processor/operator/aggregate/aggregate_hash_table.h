@@ -13,7 +13,7 @@
 #include "processor/result/factorized_table.h"
 #include "processor/result/factorized_table_schema.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class InMemOverflowBuffer;
 }
@@ -339,4 +339,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

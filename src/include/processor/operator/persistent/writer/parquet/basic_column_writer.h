@@ -3,7 +3,7 @@
 #include "parquet_types.h"
 #include "processor/operator/persistent/writer/parquet/column_writer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class BasicColumnWriterState : public ColumnWriterState {
@@ -90,4 +90,4 @@ protected:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

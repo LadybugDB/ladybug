@@ -16,13 +16,13 @@
 #include "parser/expression/parsed_function_expression.h"
 #include "parser/scan_source.h"
 
-using namespace kuzu::parser;
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::function;
-using namespace kuzu::catalog;
+using namespace lbug::parser;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::function;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 FileTypeInfo bindSingleFileType(const main::ClientContext* context, const std::string& filePath) {
@@ -309,4 +309,4 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindTableFuncScanSource(
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

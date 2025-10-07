@@ -4,9 +4,9 @@
 #include "common/string_utils.h"
 
 using namespace antlr4;
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 void ParserErrorListener::syntaxError(Recognizer* recognizer, Token* offendingSymbol, size_t line,
@@ -33,4 +33,4 @@ std::string ParserErrorListener::formatUnderLineError(Recognizer& recognizer,
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

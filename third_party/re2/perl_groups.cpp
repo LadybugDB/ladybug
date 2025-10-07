@@ -3,7 +3,7 @@
 
 #include "unicode_groups.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 static const URange16 code1[] = {
@@ -135,4 +135,4 @@ const UGroup posix_groups[] = {
 const int num_posix_groups = 28;
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

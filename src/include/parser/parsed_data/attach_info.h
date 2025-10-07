@@ -4,7 +4,7 @@
 
 #include "parser/expression/parsed_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 struct AttachInfo {
@@ -17,4 +17,4 @@ struct AttachInfo {
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

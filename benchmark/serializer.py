@@ -53,7 +53,7 @@ def serialize(kuzu_exec_path, dataset_name, dataset_path, serialized_graph_path,
         logging.info('Executing query: %s', s)
         create_match = re.match(r'create\s+(.+?)\s+table\s+(.+?)\s*\(', s, re.IGNORECASE)
         copy_match = re.match(r'copy\s+(.+?)\s+from', s, re.IGNORECASE)
-        # Run kuzu shell one query at a time. This ensures a new process is
+        # Run lbug shell one query at a time. This ensures a new process is
         # created for each query to avoid memory leaks.
         stdout = sys.stdout if create_match or not benchmark_copy_log_dir else subprocess.PIPE
         db_path = os.path.join(serialized_graph_path, 'db.kz')
@@ -86,7 +86,7 @@ def serialize(kuzu_exec_path, dataset_name, dataset_path, serialized_graph_path,
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    parser = argparse.ArgumentParser(description='Serializes dataset to a kuzu database')
+    parser = argparse.ArgumentParser(description='Serializes dataset to a lbug database')
     parser.add_argument("dataset_name", help="Name of the dataset for display purposes")
     parser.add_argument("dataset_path", help="Input path of the dataset to serialize")
     parser.add_argument("serialized_graph_path",
@@ -100,9 +100,9 @@ if __name__ == '__main__':
             base_dir, '..', 'build', 'release', 'tools', 'shell', 'kuzu_shell')
     else:
         default_kuzu_exec_path = os.path.join(
-            base_dir, '..', 'build', 'release', 'tools', 'shell', 'kuzu')
-    parser.add_argument("--kuzu-shell",
-                        help="Path of the kuzu shell executable. Defaults to the path as built in the default release build directory",
+            base_dir, '..', 'build', 'release', 'tools', 'shell', 'lbug')
+    parser.add_argument("--lbug-shell",
+                        help="Path of the lbug shell executable. Defaults to the path as built in the default release build directory",
                         default=default_kuzu_exec_path)
     args = parser.parse_args()
 

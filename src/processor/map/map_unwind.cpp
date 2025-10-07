@@ -4,10 +4,10 @@
 #include "processor/operator/unwind.h"
 #include "processor/plan_mapper.h"
 
-using namespace kuzu::common;
-using namespace kuzu::planner;
+using namespace lbug::common;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapUnwind(const LogicalOperator* logicalOperator) {
@@ -28,4 +28,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapUnwind(const LogicalOperator* l
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

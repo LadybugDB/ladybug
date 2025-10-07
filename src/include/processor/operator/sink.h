@@ -6,7 +6,7 @@
 #include "processor/result/factorized_table.h"
 #include "processor/result/result_set_descriptor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class QueryResult;
 }
@@ -120,4 +120,4 @@ public:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

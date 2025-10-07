@@ -3,7 +3,7 @@
 #include "common/exception/conversion.h"
 #include "common/type_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 bool CastArrayHelper::checkCompatibleNestedTypes(LogicalTypeID sourceTypeID,
@@ -152,4 +152,4 @@ void CastArrayHelper::validateListEntry(ValueVector* inputVector, const LogicalT
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

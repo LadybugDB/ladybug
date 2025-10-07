@@ -2,10 +2,10 @@
 #include "function/arithmetic/vector_arithmetic_functions.h"
 #include "function/scalar_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 struct SetSeed {
     static void operation(double& seed, void* dataPtr) {
@@ -24,4 +24,4 @@ function_set SetSeedFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

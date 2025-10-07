@@ -2,7 +2,7 @@
 
 #include "storage/wal/wal_record.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 struct BoundAlterInfo;
 } // namespace binder
@@ -59,4 +59,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

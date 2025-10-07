@@ -5,7 +5,7 @@
 #include "common/assert.h"
 #include "pybind_include.h"
 
-namespace kuzu {
+namespace lbug {
 
 class PythonObjectContainer {
 public:
@@ -33,4 +33,4 @@ private:
     std::vector<py::object> pyObjects;
 };
 
-} // namespace kuzu
+} // namespace lbug

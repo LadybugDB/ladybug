@@ -5,7 +5,7 @@
 #include "common/utils.h"
 #include "gtest/gtest.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 TEST(NullMaskTests, TestRangeSingleEntry) {
     std::vector<uint64_t> data{NullMask::NO_NULL_ENTRY};
@@ -81,7 +81,7 @@ TEST(NullMaskTests, CopyNullMaskSmall) {
         EXPECT_EQ(src, dest) << "Failed copy for bit " << bit;
     }
     for (size_t bits = 0; bits < 64; bits++) {
-        src = kuzu::common::BitmaskUtils::all1sMaskForLeastSignificantBits<uint64_t>(bits);
+        src = lbug::common::BitmaskUtils::all1sMaskForLeastSignificantBits<uint64_t>(bits);
         uint64_t dest = 0;
         NullMask::copyNullMask(&src, 0, &dest, 0, bits);
         EXPECT_EQ(src, dest) << "Failed copy for first " << bits << " bits";

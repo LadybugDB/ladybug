@@ -122,9 +122,9 @@ def test_next_history_multiline(temp_db) -> None:
         test.shell_process.expect_exact(["\u2502 databases rule \u2502", pexpect.EOF])
         == 0
     )
-    test.send_finished_statement('RETURN "kuzu is cool"\r AS a;\r')
+    test.send_finished_statement('RETURN "lbug is cool"\r AS a;\r')
     assert (
-        test.shell_process.expect_exact(["\u2502 kuzu is cool \u2502", pexpect.EOF])
+        test.shell_process.expect_exact(["\u2502 lbug is cool \u2502", pexpect.EOF])
         == 0
     )
     test.send_statement("\x1b[A\x1b[A\x1b[A")
@@ -148,9 +148,9 @@ def test_next_history_multiline(temp_db) -> None:
         test.shell_process.expect_exact(["\u2502 databases rule \u2502", pexpect.EOF])
         == 0
     )
-    test.send_finished_statement('RETURN "kuzu is cool"\r AS a;\r')
+    test.send_finished_statement('RETURN "lbug is cool"\r AS a;\r')
     assert (
-        test.shell_process.expect_exact(["\u2502 kuzu is cool \u2502", pexpect.EOF])
+        test.shell_process.expect_exact(["\u2502 lbug is cool \u2502", pexpect.EOF])
         == 0
     )
     test.send_statement("\x1b[A\x1b[A\x1b[A")
@@ -163,9 +163,9 @@ def test_next_history_multiline(temp_db) -> None:
 
 @pytest.mark.parametrize("test", ["multiline", "singleline"], indirect=True)
 def test_prev_history_singleline(test) -> None:
-    test.send_finished_statement('RETURN "kuzu is cool" AS b;\r')
+    test.send_finished_statement('RETURN "lbug is cool" AS b;\r')
     assert (
-        test.shell_process.expect_exact(["\u2502 kuzu is cool \u2502", pexpect.EOF])
+        test.shell_process.expect_exact(["\u2502 lbug is cool \u2502", pexpect.EOF])
         == 0
     )
     test.send_finished_statement('RETURN "databases rule" AS a;\r')
@@ -186,9 +186,9 @@ def test_prev_history_singleline(test) -> None:
 @pytest.mark.parametrize("test", ["multiline", "singleline"], indirect=True)
 def test_prev_history_multiline(test) -> None:
     # multiline down arrow will move down if not on bottom line
-    test.send_finished_statement('RETURN "kuzu is cool"\r AS b;\r')
+    test.send_finished_statement('RETURN "lbug is cool"\r AS b;\r')
     assert (
-        test.shell_process.expect_exact(["\u2502 kuzu is cool \u2502", pexpect.EOF])
+        test.shell_process.expect_exact(["\u2502 lbug is cool \u2502", pexpect.EOF])
         == 0
     )
     test.send_finished_statement('RETURN "databases rule" AS a;\r')

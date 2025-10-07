@@ -11,7 +11,7 @@
 #include "function/scalar_function.h"
 #include "re2.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 using namespace function;
@@ -109,4 +109,4 @@ function::function_set TokenizeFunction::getFunctionSet() {
 }
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

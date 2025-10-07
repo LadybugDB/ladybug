@@ -1,7 +1,7 @@
 #include "c_api_test/c_api_test.h"
 
-using namespace kuzu::main;
-using namespace kuzu::testing;
+using namespace lbug::main;
+using namespace lbug::testing;
 
 class CApiPreparedStatementTest : public CApiTest {
 public:

@@ -5,7 +5,7 @@
 
 #include "common/api.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class KUZU_API Exception : public std::exception {
@@ -20,4 +20,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

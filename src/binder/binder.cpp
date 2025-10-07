@@ -15,13 +15,13 @@
 #include "processor/operator/persistent/reader/parquet/parquet_reader.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
-using namespace kuzu::function;
-using namespace kuzu::parser;
-using namespace kuzu::processor;
+using namespace lbug::catalog;
+using namespace lbug::common;
+using namespace lbug::function;
+using namespace lbug::parser;
+using namespace lbug::processor;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 std::unique_ptr<BoundStatement> Binder::bind(const Statement& statement) {
@@ -263,7 +263,7 @@ TableFunction Binder::getScanFunction(const FileTypeInfo& typeInfo,
                                       "set the file format explicitly by (file_format=<type>)."};
             }
             throw BinderException{
-                stringFormat("Cannot load from file type {}. If this file type is part of a kuzu "
+                stringFormat("Cannot load from file type {}. If this file type is part of a lbug "
                              "extension please load the extension then try again.",
                     typeInfo.fileTypeStr)};
         }
@@ -275,4 +275,4 @@ TableFunction Binder::getScanFunction(const FileTypeInfo& typeInfo,
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

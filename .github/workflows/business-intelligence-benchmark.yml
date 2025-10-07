@@ -20,7 +20,7 @@ on:
 jobs:
   benchmark:
     name: business-intelligence-benchmark
-    runs-on: kuzu-self-hosted-benchmarking-xl
+    runs-on: lbug-self-hosted-benchmarking-xl
     env:
       NUM_THREADS: 128
       GEN: Ninja
@@ -43,7 +43,7 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Build kuzu
+      - name: Build lbug
         run: |
           pip3 install -r tools/python_api/requirements_dev.txt
           make python
@@ -62,22 +62,22 @@ jobs:
           ln -s $CSV_DIR/bi-dataset/ldbc-snb-bi-parameters-sf1-to-sf30000 parameters
     
       - name: Load database
-        working-directory: ldbc_snb_bi/kuzu
+        working-directory: ldbc_snb_bi/lbug
         run: |
           workflow-scripts/decompress-gz.sh
           workflow-scripts/load-database.sh
     
       - name: Run benchmark
-        working-directory: ldbc_snb_bi/kuzu
+        working-directory: ldbc_snb_bi/lbug
         run: workflow-scripts/benchmark.sh
     
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
           name: LDBC-SNB-Business-Intelligence-results
-          path: ldbc_snb_bi/kuzu/output/
+          path: ldbc_snb_bi/lbug/output/
 
       - name: Report result to server
-        working-directory: ldbc_snb_bi/kuzu/
+        working-directory: ldbc_snb_bi/lbug/
         run: |
           python3 workflow-scripts/report_results.py

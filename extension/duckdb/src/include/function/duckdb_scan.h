@@ -6,7 +6,7 @@
 #include "function/table/bind_data.h"
 #include "function/table/scan_file_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 class DuckDBConnector;
@@ -74,4 +74,4 @@ struct DuckDBScanSharedState final : function::TableFuncSharedState {
 function::TableFunction getScanFunction(std::shared_ptr<DuckDBTableScanInfo> scanInfo);
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

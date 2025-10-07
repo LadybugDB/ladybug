@@ -8,7 +8,7 @@
 #include "common/types/types.h"
 #include "query_summary.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 class FlatTuple;
 }
@@ -191,4 +191,4 @@ protected:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

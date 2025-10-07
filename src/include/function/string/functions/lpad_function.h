@@ -3,7 +3,7 @@
 #include "base_pad_function.h"
 #include "common/types/ku_string.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct Lpad : BasePadOperation {
@@ -26,4 +26,4 @@ public:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -5,9 +5,9 @@
 #include "function/gds/frontier_morsel.h"
 #include "graph/graph.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 table_id_t FrontierTaskInfo::getBoundTableID() const {
@@ -148,4 +148,4 @@ void VertexComputeTask::runSparse() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

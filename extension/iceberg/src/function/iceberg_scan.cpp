@@ -1,6 +1,6 @@
 #include "function/iceberg_functions.h"
 
-namespace kuzu {
+namespace lbug {
 namespace iceberg_extension {
 
 using namespace function;
@@ -23,4 +23,4 @@ function_set IcebergScanFunction::getFunctionSet() {
 }
 
 } // namespace iceberg_extension
-} // namespace kuzu
+} // namespace lbug

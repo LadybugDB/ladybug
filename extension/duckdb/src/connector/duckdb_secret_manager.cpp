@@ -2,7 +2,7 @@
 
 #include "s3fs_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 static std::string getDuckDBExtensionOptions(httpfs_extension::S3AuthParams kuzuOptions) {
@@ -27,4 +27,4 @@ std::string DuckDBSecretManager::getRemoteS3FSSecret(main::ClientContext* contex
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

@@ -4,9 +4,9 @@
 #include "main/database.h"
 #include "main/settings.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 
 #define GET_CONFIGURATION(_PARAM)                                                                  \
@@ -54,4 +54,4 @@ bool DBConfig::isDBPathInMemory(const std::string& dbPath) {
 }
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

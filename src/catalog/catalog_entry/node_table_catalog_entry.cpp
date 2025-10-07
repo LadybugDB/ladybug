@@ -4,9 +4,9 @@
 #include "common/serializer/deserializer.h"
 #include "common/string_utils.h"
 
-using namespace kuzu::binder;
+using namespace lbug::binder;
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 void NodeTableCatalogEntry::renameProperty(const std::string& propertyName,
@@ -53,4 +53,4 @@ std::unique_ptr<BoundExtraCreateCatalogEntryInfo> NodeTableCatalogEntry::getBoun
 }
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

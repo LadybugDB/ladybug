@@ -12,9 +12,9 @@
 #include "processor/operator/persistent/reader/file_error_handler.h"
 #include "utf8proc_wrapper.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 // TODO(Royi) for performance reasons we may want to reduce the number of fields here since each
@@ -585,4 +585,4 @@ uint64_t BaseCSVReader::getFileOffset() const {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

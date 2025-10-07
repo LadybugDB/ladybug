@@ -2,11 +2,11 @@
 #include "binder/expression_binder.h"
 #include "function/boolean/vector_boolean_functions.h"
 
-using namespace kuzu::common;
-using namespace kuzu::parser;
-using namespace kuzu::function;
+using namespace lbug::common;
+using namespace lbug::parser;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 std::shared_ptr<Expression> ExpressionBinder::bindBooleanExpression(
@@ -54,4 +54,4 @@ std::shared_ptr<Expression> ExpressionBinder::combineBooleanExpressions(
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

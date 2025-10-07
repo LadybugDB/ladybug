@@ -71,7 +71,7 @@ The 😂😃🧘🏻‍♂️🌍🌦️🍞🚗 movie
 ---- 9
 0|movies|ATTACHED|pgscan(POSTGRES)|
 0|movies|ATTACHED|tinysnb(POSTGRES)|
-0|person_copy|NODE|local(kuzu)|
+0|person_copy|NODE|local(lbug)|
 1|organisation|ATTACHED|pgscan(POSTGRES)|
 1|organisation|ATTACHED|tinysnb(POSTGRES)|
 2|person|ATTACHED|pgscan(POSTGRES)|
@@ -96,7 +96,7 @@ The 😂😃🧘🏻‍♂️🌍🌦️🍞🚗 movie
 12|height|DOUBLE|NULL
 13|u|UUID|NULL
 -LOG AttachPGWithNonDefaultSchema
--STATEMENT ATTACH 'dbname=pgscan user=ci host=localhost' as ku (dbtype POSTGRES, SCHEMA = 'kuzu');
+-STATEMENT ATTACH 'dbname=pgscan user=ci host=localhost' as ku (dbtype POSTGRES, SCHEMA = 'lbug');
 ---- 1
 Attached database successfully.
 -STATEMENT LOAD FROM ku.user RETURN *;

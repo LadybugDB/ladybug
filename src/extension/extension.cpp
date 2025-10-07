@@ -18,7 +18,7 @@
 #include <dlfcn.h>
 #endif
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 std::string getOS() {
@@ -244,4 +244,4 @@ void dlclose(void* handle) {
 #endif
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

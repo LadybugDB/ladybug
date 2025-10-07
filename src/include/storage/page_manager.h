@@ -7,7 +7,7 @@
 #include "storage/page_allocator.h"
 #include "storage/page_range.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 enum class TransactionType : uint8_t;
 }
@@ -57,4 +57,4 @@ private:
     uint64_t version;
 };
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

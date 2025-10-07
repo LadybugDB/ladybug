@@ -2,10 +2,10 @@
 #include "function/scalar_function.h"
 #include "function/timestamp/vector_timestamp_functions.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 struct ToEpochMs {
     static void operation(common::timestamp_t& input, int64_t& result) {
@@ -23,4 +23,4 @@ function_set ToEpochMsFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

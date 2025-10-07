@@ -3,7 +3,7 @@
 #include "processor/operator/physical_operator.h"
 #include "transaction/transaction_action.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 class TransactionContext;
 } // namespace transaction
@@ -57,4 +57,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

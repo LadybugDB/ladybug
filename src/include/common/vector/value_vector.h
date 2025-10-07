@@ -11,7 +11,7 @@
 #include "common/types/ku_string.h"
 #include "common/vector/auxiliary_buffer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class Value;
@@ -171,7 +171,7 @@ public:
     static void addString(ValueVector* vector, ku_string_t& dstStr, ku_string_t& srcStr);
     static void addString(ValueVector* vector, ku_string_t& dstStr, const char* srcStr,
         uint64_t length);
-    static void addString(kuzu::common::ValueVector* vector, ku_string_t& dstStr,
+    static void addString(lbug::common::ValueVector* vector, ku_string_t& dstStr,
         const std::string& srcStr);
     static void copyToRowData(const ValueVector* vector, uint32_t pos, uint8_t* rowData,
         InMemOverflowBuffer* rowOverflowBuffer);
@@ -184,7 +184,7 @@ struct KUZU_API BlobVector {
     static void addBlob(ValueVector* vector, uint32_t pos, const uint8_t* data, uint64_t length) {
         StringVector::addString(vector, pos, reinterpret_cast<const char*>(data), length);
     }
-}; // namespace kuzu
+}; // namespace lbug
 
 // ListVector is used for both LIST and ARRAY physical type
 class KUZU_API ListVector {
@@ -349,4 +349,4 @@ public:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

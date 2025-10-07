@@ -3,9 +3,9 @@
 #include "binder/expression/expression_util.h"
 #include "processor/execution_context.h"
 
-using namespace kuzu::evaluator;
+using namespace lbug::evaluator;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string ProjectionPrintInfo::toString() const {
@@ -50,4 +50,4 @@ bool Projection::getNextTuplesInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

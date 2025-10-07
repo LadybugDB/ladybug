@@ -2,7 +2,7 @@
 
 #include "extension/extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 class FtsExtension final : public extension::Extension {
@@ -14,4 +14,4 @@ public:
 };
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

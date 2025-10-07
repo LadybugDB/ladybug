@@ -3,7 +3,7 @@
 #include "binder/bound_statement.h"
 #include "bound_alter_info.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class BoundAlter final : public BoundStatement {
@@ -21,4 +21,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

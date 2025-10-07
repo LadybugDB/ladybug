@@ -2,7 +2,7 @@
 
 #include "binder/bound_statement_visitor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 // Collect all property expressions for a given statement.
@@ -39,4 +39,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

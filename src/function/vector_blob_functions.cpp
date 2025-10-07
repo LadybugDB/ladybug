@@ -5,9 +5,9 @@
 #include "function/blob/functions/octet_length_function.h"
 #include "function/scalar_function.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 function_set OctetLengthFunctions::getFunctionSet() {
@@ -35,4 +35,4 @@ function_set DecodeFunctions::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

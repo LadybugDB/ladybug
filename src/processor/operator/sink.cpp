@@ -3,7 +3,7 @@
 #include "main/query_result/materialized_query_result.h"
 #include "processor/result/factorized_table_util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<ResultSet> Sink::getResultSet(storage::MemoryManager* memoryManager) {
@@ -23,4 +23,4 @@ void SimpleSink::appendMessage(const std::string& msg, storage::MemoryManager* m
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -1,4 +1,4 @@
-use kuzu::{Connection, Database, Error, SystemConfig};
+use lbug::{Connection, Database, Error, SystemConfig};
 
 fn main() -> Result<(), Error> {
     let db = Database::new(

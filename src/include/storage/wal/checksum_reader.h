@@ -7,7 +7,7 @@
 #include "common/serializer/reader.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class ChecksumReader : public common::Reader {
 public:
@@ -34,4 +34,4 @@ private:
     std::string_view checksumMismatchMessage;
 };
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

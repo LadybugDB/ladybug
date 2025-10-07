@@ -1,7 +1,7 @@
 #include "planner/operator/logical_limit.h"
 #include "planner/planner.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void Planner::appendLimit(std::shared_ptr<binder::Expression> skipNum,
@@ -14,4 +14,4 @@ void Planner::appendLimit(std::shared_ptr<binder::Expression> skipNum,
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

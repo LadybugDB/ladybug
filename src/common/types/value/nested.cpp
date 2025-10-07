@@ -3,7 +3,7 @@
 #include "common/exception/runtime.h"
 #include "common/types/value/value.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 uint32_t NestedVal::getChildrenSize(const Value* val) {
@@ -18,4 +18,4 @@ Value* NestedVal::getChildVal(const Value* val, uint32_t idx) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

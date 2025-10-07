@@ -7,10 +7,10 @@
 #include "storage/table/rel_table.h"
 #include "storage/table/table.h"
 
-using namespace kuzu::common;
-using namespace kuzu::transaction;
+using namespace lbug::common;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 LocalTable* LocalStorage::getOrCreateLocalTable(Table& table) {
@@ -92,4 +92,4 @@ void LocalStorage::rollback() {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

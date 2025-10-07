@@ -12,9 +12,9 @@
 #include "test_helper/test_helper.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 void CSVConverter::copySchemaFile() {
@@ -38,7 +38,7 @@ void CSVConverter::createTableInfo(std::string schemaFile) {
     }
     // This implementation stays as a temporary solution to create copy statements for rel tables
     // We'll switch to use table_info once that function can provide everything needed
-    // table_info is mentioned in this issue https://github.com/kuzudb/kuzu/issues/2991
+    // table_info is mentioned in this issue https://github.com/kuzudb/lbug/issues/2991
     std::string line;
     while (getline(file, line)) {
         auto tokens = StringUtils::split(line, " ");
@@ -233,4 +233,4 @@ std::string CSVConverter::RelTableInfo::getConverterQuery(main::ClientContext* c
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

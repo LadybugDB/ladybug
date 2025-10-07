@@ -5,7 +5,7 @@
 
 #include "storage/compression/compression.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 
 template<IntegerBitpackingType UncompressedType>
 struct BitpackingUtils {
@@ -20,4 +20,4 @@ struct BitpackingUtils {
         uint16_t bitWidth, size_t dstOffset);
 };
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

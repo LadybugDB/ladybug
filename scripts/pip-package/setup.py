@@ -10,15 +10,15 @@ from setuptools.command.build_py import build_py as _build_py
 
 base_dir = os.path.dirname(__file__)
 
-with open(os.path.join(base_dir, 'kuzu-source', 'tools', 'python_api', 'requirements_dev.txt')) as f:
+with open(os.path.join(base_dir, 'lbug-source', 'tools', 'python_api', 'requirements_dev.txt')) as f:
     requirements = f.read().splitlines()
 
 
 def _get_kuzu_version():
-    cmake_file = os.path.join(base_dir, 'kuzu-source', 'CMakeLists.txt')
+    cmake_file = os.path.join(base_dir, 'lbug-source', 'CMakeLists.txt')
     with open(cmake_file) as f:
         for line in f:
-            if line.startswith('project(Kuzu VERSION'):
+            if line.startswith('project(Lbug VERSION'):
                 raw_version = line.split(' ')[2].strip()
                 version_nums = raw_version.split('.')
                 if len(version_nums) <= 3:
@@ -73,7 +73,7 @@ class CMakeBuild(build_ext):
                               deploy_target)
                 env_vars['CMAKE_OSX_DEPLOYMENT_TARGET'] = deploy_target
 
-        build_dir = os.path.join(ext.sourcedir, 'kuzu-source')
+        build_dir = os.path.join(ext.sourcedir, 'lbug-source')
 
         # Clean the build directory.
         subprocess.run(['make', 'clean'], check=True, cwd=build_dir)
@@ -104,16 +104,16 @@ class BuildExtFirst(_build_py):
         return super().run()
 
 
-setup(name='kuzu',
+setup(name='lbug',
       version=kuzu_version,
       install_requires=[],
       ext_modules=[CMakeExtension(
-          name="kuzu", sourcedir=base_dir)],
+          name="lbug", sourcedir=base_dir)],
       description='An in-process property graph database management system built for query speed and scalability.',
       license='MIT',
       long_description=open(os.path.join(base_dir, "README.md"), 'r').read(),
       long_description_content_type="text/markdown",
-      packages=["kuzu"],
+      packages=["lbug"],
       zip_safe=True,
       include_package_data=True,
       cmdclass={

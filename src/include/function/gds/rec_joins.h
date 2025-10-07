@@ -8,7 +8,7 @@
 #include "processor/operator/recursive_extend_shared_state.h"
 #include "rj_output_writer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct RJBindData {
@@ -58,4 +58,4 @@ public:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

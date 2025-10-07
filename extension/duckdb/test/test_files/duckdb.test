@@ -113,10 +113,10 @@ Attached database successfully.
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 8
 0|movies|ATTACHED|tinysnb(DUCKDB)|
-0|person_copy|NODE|local(kuzu)|
+0|person_copy|NODE|local(lbug)|
 0|person|ATTACHED|Other1(DUCKDB)|
 1|organisation|ATTACHED|tinysnb(DUCKDB)|
-1|person_copy1|NODE|local(kuzu)|
+1|person_copy1|NODE|local(lbug)|
 2|person|ATTACHED|tinysnb(DUCKDB)|
 3|tableOfTypes|ATTACHED|tinysnb(DUCKDB)|
 4|tableOfTypes1|ATTACHED|tinysnb(DUCKDB)|
@@ -189,10 +189,10 @@ Catalog exception: personxx does not exist in catalog.
 ---- error
 Runtime exception: No database named tinysnbxx.
 -LOG AttachWithNonDefaultSchema
--STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as kuzu (dbtype duckdb, schema = 'kuzu');
+-STATEMENT ATTACH '${KUZU_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as lbug (dbtype duckdb, schema = 'lbug');
 ---- 1
 Attached database successfully.
--STATEMENT LOAD FROM kuzu.employee RETURN *;
+-STATEMENT LOAD FROM lbug.employee RETURN *;
 ---- 3
 0|alice|52
 2|carol|23
@@ -203,12 +203,12 @@ Attached database successfully.
 ---- ok
 -STATEMENT CALL show_tables() RETURN *;
 ---- 9
-0|employee|ATTACHED|kuzu(DUCKDB)|
+0|employee|ATTACHED|lbug(DUCKDB)|
 0|movies|ATTACHED|tinysnb(DUCKDB)|
-0|person_copy|NODE|local(kuzu)|
+0|person_copy|NODE|local(lbug)|
 0|person|ATTACHED|Other1(DUCKDB)|
 1|organisation|ATTACHED|tinysnb(DUCKDB)|
-1|person_copy1|NODE|local(kuzu)|
+1|person_copy1|NODE|local(lbug)|
 2|person|ATTACHED|tinysnb(DUCKDB)|
 3|tableOfTypes|ATTACHED|tinysnb(DUCKDB)|
 4|tableOfTypes1|ATTACHED|tinysnb(DUCKDB)|

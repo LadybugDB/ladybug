@@ -3,15 +3,15 @@
 #include <utility>
 
 #include "common/task_system/progress_bar.h"
-#include "main/kuzu.h"
+#include "main/lbug.h"
 #include "node_database.h"
 #include "node_prepared_statement.h"
 #include "node_progress_bar_display.h"
 #include "node_query_result.h"
 #include <napi.h>
 
-using namespace kuzu::main;
-using namespace kuzu::common;
+using namespace lbug::main;
+using namespace lbug::common;
 
 class NodeConnection : public Napi::ObjectWrap<NodeConnection> {
     friend class ConnectionInitAsyncWorker;
@@ -64,7 +64,7 @@ private:
     NodeConnection* nodeConnection;
 };
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 
 class ConnectionExecuteAsyncWorker : public Napi::AsyncWorker {
@@ -180,4 +180,4 @@ private:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

@@ -22,7 +22,7 @@ requirements: .venv
 	$(VENV_BIN)/python -m pip install -U uv \
 	&& $(VENV_BIN)/uv pip install pytest pexpect ruff
 
-# Create a history file for use in the tests. Otherwise test queries will be written to ~/.kuzu/history.txt
+# Create a history file for use in the tests. Otherwise test queries will be written to ~/.lbug/history.txt
 historyfile:
 	rm -f ./history.txt && touch ./history.txt
 

@@ -2,9 +2,9 @@
 #include "planner/operator/persistent/logical_set.h"
 #include "planner/planner.h"
 
-using namespace kuzu::binder;
+using namespace lbug::binder;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void Planner::appendSetProperty(const std::vector<BoundSetPropertyInfo>& infos, LogicalPlan& plan) {
@@ -19,4 +19,4 @@ void Planner::appendSetProperty(const std::vector<BoundSetPropertyInfo>& infos, 
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

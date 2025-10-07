@@ -1,6 +1,6 @@
 #include "connector/iceberg_connector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace iceberg_extension {
 
 void IcebergConnector::connect(const std::string& /*dbPath*/, const std::string& /*catalogName*/,
@@ -17,4 +17,4 @@ void IcebergConnector::connect(const std::string& /*dbPath*/, const std::string&
 }
 
 } // namespace iceberg_extension
-} // namespace kuzu
+} // namespace lbug

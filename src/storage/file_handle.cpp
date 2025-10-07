@@ -5,9 +5,9 @@
 #include "common/file_system/virtual_file_system.h"
 #include "storage/buffer_manager/buffer_manager.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 FileHandle::FileHandle(const std::string& path, uint8_t fhFlags, BufferManager* bm,
@@ -174,4 +174,4 @@ void FileHandle::writePagesToFile(const uint8_t* buffer, uint64_t size, page_idx
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

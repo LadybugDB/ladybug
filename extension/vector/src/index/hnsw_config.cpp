@@ -7,7 +7,7 @@
 #include "common/string_utils.h"
 #include "function/hnsw_index_functions.h"
 
-namespace kuzu {
+namespace lbug {
 namespace vector_extension {
 
 // The maximum allowed degree to be defined by users.
@@ -238,4 +238,4 @@ QueryHNSWConfig::QueryHNSWConfig(const function::optional_params_t& optionalPara
 }
 
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug

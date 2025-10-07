@@ -6,7 +6,7 @@
 #include "storage/page_allocator.h"
 #include "storage/table/table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class MemoryManager;
 class ChunkedNodeGroup;
@@ -118,4 +118,4 @@ protected:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -18,7 +18,7 @@ def test_sigint_two_consecutive(key, test) -> None:
     # test two consecutive signit required to exit shell
     test.send_control_statement(key)
     test.send_control_statement(key)
-    assert test.shell_process.expect_exact(["kuzu", pexpect.EOF]) == 1
+    assert test.shell_process.expect_exact(["lbug", pexpect.EOF]) == 1
 
 
 @pytest.mark.parametrize(
@@ -39,7 +39,7 @@ def test_sigint_line_interupts(key, test) -> None:
     )
     test.send_control_statement(key)
     test.send_control_statement(key)
-    assert test.shell_process.expect_exact(["kuzu", pexpect.EOF]) == 1
+    assert test.shell_process.expect_exact(["lbug", pexpect.EOF]) == 1
 
 
 @pytest.mark.parametrize(
@@ -83,7 +83,7 @@ def test_enter(temp_db, key, history_path, mode) -> None:
         test.shell_process.expect_exact(["\u2502 databases rule \u2502", pexpect.EOF])
         == 0
     )
-    assert test.shell_process.expect_exact(["kuzu", pexpect.EOF]) == 0
+    assert test.shell_process.expect_exact(["lbug", pexpect.EOF]) == 0
 
     with open(os.path.join(history_path, "history.txt")) as f:
         assert f.readline() == mode
@@ -98,7 +98,7 @@ def test_enter(temp_db, key, history_path, mode) -> None:
     test.send_finished_statement(mode)
     test.send_statement('RETURN "databases rule" AS a;\x1b[D\x1b[D\x1b[D')
     test.send_finished_statement(key)
-    assert test.shell_process.expect_exact(["kuzu", pexpect.EOF]) == 0
+    assert test.shell_process.expect_exact(["lbug", pexpect.EOF]) == 0
 
     with open(os.path.join(history_path, "history.txt")) as f:
         assert f.readline() == mode
@@ -128,7 +128,7 @@ def test_backspace(key, test) -> None:
 def test_ctrl_d_eof(test) -> None:
     # ctrl d acts as EOF when line is empty
     test.send_control_statement(KEY_ACTION.CTRL_D.value)
-    assert test.shell_process.expect_exact(["kuzu", pexpect.EOF]) == 1
+    assert test.shell_process.expect_exact(["lbug", pexpect.EOF]) == 1
 
 
 @pytest.mark.parametrize("test", ["multiline", "singleline"], indirect=True)
@@ -202,9 +202,9 @@ def test_ctrl_p(test) -> None:
 
 @pytest.mark.parametrize("test", ["multiline", "singleline"], indirect=True)
 def test_ctrl_n(test) -> None:
-    test.send_finished_statement('RETURN "kuzu is cool" AS b;\r')
+    test.send_finished_statement('RETURN "lbug is cool" AS b;\r')
     assert (
-        test.shell_process.expect_exact(["\u2502 kuzu is cool \u2502", pexpect.EOF])
+        test.shell_process.expect_exact(["\u2502 lbug is cool \u2502", pexpect.EOF])
         == 0
     )
     test.send_finished_statement('RETURN "databases rule" AS a;\r')
@@ -232,7 +232,7 @@ def test_ctrl_n(test) -> None:
 def test_search_opens(test, key, history_path) -> None:
     # test search opens
     test.send_control_statement(key)
-    assert test.shell_process.expect_exact(["kuzu", pexpect.EOF]) == 0
+    assert test.shell_process.expect_exact(["lbug", pexpect.EOF]) == 0
     assert test.shell_process.expect_exact(["bck-i-search: _", pexpect.EOF]) == 0
 
 
@@ -251,9 +251,9 @@ def test_search_good(test, key) -> None:
         test.shell_process.expect_exact(["\u2502 databases rule \u2502", pexpect.EOF])
         == 0
     )
-    test.send_finished_statement('RETURN "kuzu is cool" AS b;\r')
+    test.send_finished_statement('RETURN "lbug is cool" AS b;\r')
     assert (
-        test.shell_process.expect_exact(["\u2502 kuzu is cool \u2502", pexpect.EOF])
+        test.shell_process.expect_exact(["\u2502 lbug is cool \u2502", pexpect.EOF])
         == 0
     )
     test.send_control_statement(key)
@@ -285,9 +285,9 @@ def test_search_bad(mode, temp_db, key, history_path) -> None:
         test.shell_process.expect_exact(["\u2502 databases rule \u2502", pexpect.EOF])
         == 0
     )
-    test.send_finished_statement('RETURN "kuzu is cool" AS b;\r')
+    test.send_finished_statement('RETURN "lbug is cool" AS b;\r')
     assert (
-        test.shell_process.expect_exact(["\u2502 kuzu is cool \u2502", pexpect.EOF])
+        test.shell_process.expect_exact(["\u2502 lbug is cool \u2502", pexpect.EOF])
         == 0
     )
     test.send_control_statement(key)

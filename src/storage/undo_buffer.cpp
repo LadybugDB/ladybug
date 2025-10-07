@@ -9,11 +9,11 @@
 #include "storage/table/version_record_handler.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
-using namespace kuzu::main;
+using namespace lbug::catalog;
+using namespace lbug::common;
+using namespace lbug::main;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 struct UndoRecordHeader {
@@ -306,4 +306,4 @@ void UndoBuffer::rollbackVectorUpdateInfo(const uint8_t* record) {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

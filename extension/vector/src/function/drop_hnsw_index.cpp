@@ -9,9 +9,9 @@
 #include "storage/storage_manager.h"
 #include "transaction/transaction_context.h"
 
-using namespace kuzu::function;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace vector_extension {
 
 struct DropHNSWIndexBindData final : TableFuncBindData {
@@ -108,4 +108,4 @@ function_set DropVectorIndexFunction::getFunctionSet() {
 }
 
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug

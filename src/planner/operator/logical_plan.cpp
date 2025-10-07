@@ -2,7 +2,7 @@
 
 #include "planner/operator/logical_explain.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 bool LogicalPlan::isProfile() const {
@@ -16,4 +16,4 @@ bool LogicalPlan::hasUpdate() const {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

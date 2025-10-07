@@ -7,11 +7,11 @@
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_limit.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::planner;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace optimizer {
 
 void LimitPushDownOptimizer::rewrite(LogicalPlan* plan) {
@@ -82,4 +82,4 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op) {
 }
 
 } // namespace optimizer
-} // namespace kuzu
+} // namespace lbug

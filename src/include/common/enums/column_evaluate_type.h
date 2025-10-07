@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 enum class ColumnEvaluateType : uint8_t {
@@ -12,4 +12,4 @@ enum class ColumnEvaluateType : uint8_t {
 };
 
 }
-} // namespace kuzu
+} // namespace lbug

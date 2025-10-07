@@ -2,7 +2,7 @@
 
 #include "planner/operator/logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class LogicalDummySink final : public LogicalOperator {
@@ -22,4 +22,4 @@ public:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

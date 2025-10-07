@@ -6,7 +6,7 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/buffer_manager/mm_allocator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 // ObjectBlock represents a pre-allocated amount of memory that can hold up to maxElements objects
@@ -247,4 +247,4 @@ private:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -6,7 +6,7 @@
 #include "common/types/types.h"
 #include "function/table/bind_input.h"
 
-namespace kuzu {
+namespace lbug {
 namespace vector_extension {
 
 enum class MetricType : uint8_t { Cosine = 0, L2 = 1, L2_SQUARE = 2, DotProduct = 3 };
@@ -160,4 +160,4 @@ struct QueryHNSWConfig {
 };
 
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 enum class AlterType : uint8_t {
@@ -19,4 +19,4 @@ enum class AlterType : uint8_t {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

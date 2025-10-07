@@ -2,7 +2,7 @@
 
 #include "planner/operator/factorization/sink_util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalCrossProduct::computeFactorizedSchema() {
@@ -31,4 +31,4 @@ void LogicalCrossProduct::computeFlatSchema() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

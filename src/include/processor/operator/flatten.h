@@ -3,7 +3,7 @@
 #include "processor/operator/filtering_operator.h"
 #include "processor/operator/physical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct FlattenLocalState {
@@ -39,4 +39,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

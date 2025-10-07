@@ -12,7 +12,7 @@
 #include "storage/index/hash_index_utils.h"
 #include "storage/overflow_file.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 using visible_func = std::function<bool(common::offset_t)>;
@@ -313,4 +313,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

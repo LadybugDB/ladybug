@@ -18,7 +18,7 @@
 #include "storage/enums/page_read_policy.h"
 #include "storage/page_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 }
@@ -169,4 +169,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

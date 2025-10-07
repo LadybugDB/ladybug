@@ -2,7 +2,7 @@
 
 #include "planner/operator/schema.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class GroupDependencyAnalyzer;
@@ -57,4 +57,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

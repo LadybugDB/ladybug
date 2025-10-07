@@ -1,6 +1,6 @@
 #include "processor/operator/multiplicity_reducer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 bool MultiplicityReducer::getNextTuplesInternal(ExecutionContext* context) {
@@ -20,4 +20,4 @@ bool MultiplicityReducer::getNextTuplesInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

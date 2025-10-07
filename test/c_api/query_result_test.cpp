@@ -2,10 +2,10 @@
 
 #include "c_api_test/c_api_test.h"
 
-using namespace kuzu::main;
-using namespace kuzu::common;
-using namespace kuzu::processor;
-using namespace kuzu::testing;
+using namespace lbug::main;
+using namespace lbug::common;
+using namespace lbug::processor;
+using namespace lbug::testing;
 
 class CApiQueryResultTest : public CApiTest {
 public:

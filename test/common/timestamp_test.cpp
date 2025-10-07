@@ -3,7 +3,7 @@
 #include "common/types/timestamp_t.h"
 #include "gtest/gtest.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 TEST(TimestampTests, FromDatetime) {
     // day is out of range

@@ -3,7 +3,7 @@
 #include "common/api.h"
 #include "exception.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class KUZU_API ConversionException : public Exception {
@@ -13,4 +13,4 @@ public:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

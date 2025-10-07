@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 
 struct SCCFunction {
@@ -84,4 +84,4 @@ struct SpanningForestAliasFunction {
 };
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug

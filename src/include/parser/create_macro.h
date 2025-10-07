@@ -3,7 +3,7 @@
 #include "parser/expression/parsed_expression.h"
 #include "parser/statement.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 using default_macro_args = std::vector<std::pair<std::string, std::unique_ptr<ParsedExpression>>>;
@@ -34,4 +34,4 @@ public:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

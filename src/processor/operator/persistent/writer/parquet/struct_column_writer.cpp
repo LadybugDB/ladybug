@@ -3,11 +3,11 @@
 #include "common/constants.h"
 #include "common/vector/value_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 using namespace kuzu_parquet::format;
-using namespace kuzu::common;
+using namespace lbug::common;
 
 std::unique_ptr<ColumnWriterState> StructColumnWriter::initializeWriteState(
     kuzu_parquet::format::RowGroup& rowGroup) {
@@ -97,4 +97,4 @@ void StructColumnWriter::finalizeWrite(ColumnWriterState& state_p) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

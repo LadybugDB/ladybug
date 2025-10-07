@@ -5,7 +5,7 @@
 #include "common/types/types.h"
 #include "function/table/optional_params.h"
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 
 // The maximum number of iterations to run.
@@ -39,4 +39,4 @@ struct MaxIterationOptionalParams : public function::OptionalParams {
 };
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug

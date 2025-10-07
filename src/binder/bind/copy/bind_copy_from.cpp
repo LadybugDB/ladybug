@@ -10,13 +10,13 @@
 #include "parser/copy.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::catalog;
-using namespace kuzu::common;
-using namespace kuzu::parser;
-using namespace kuzu::function;
+using namespace lbug::binder;
+using namespace lbug::catalog;
+using namespace lbug::common;
+using namespace lbug::parser;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 static void throwTableNotExist(const std::string& tableName) {
@@ -341,4 +341,4 @@ void bindExpectedRelColumns(const RelGroupCatalogEntry& entry,
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

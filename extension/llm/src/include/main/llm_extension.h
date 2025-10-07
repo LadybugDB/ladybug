@@ -2,7 +2,7 @@
 
 #include "extension/extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace llm_extension {
 
 class LlmExtension final : public extension::Extension {
@@ -13,4 +13,4 @@ public:
     static void load(main::ClientContext* context);
 };
 } // namespace llm_extension
-} // namespace kuzu
+} // namespace lbug

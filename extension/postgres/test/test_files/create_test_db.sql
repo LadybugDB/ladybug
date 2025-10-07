@@ -17,13 +17,13 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: kuzu; Type: SCHEMA; Schema: -; Owner: ci
+-- Name: lbug; Type: SCHEMA; Schema: -; Owner: ci
 --
 
-CREATE SCHEMA kuzu;
+CREATE SCHEMA lbug;
 
 
-ALTER SCHEMA kuzu OWNER TO ci;
+ALTER SCHEMA lbug OWNER TO ci;
 
 --
 -- Name: audience_type; Type: TYPE; Schema: public; Owner: ci
@@ -103,17 +103,17 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: user; Type: TABLE; Schema: kuzu; Owner: ci
+-- Name: user; Type: TABLE; Schema: lbug; Owner: ci
 --
 
-CREATE TABLE kuzu."user" (
+CREATE TABLE lbug."user" (
     id integer,
     org character varying,
     rate integer
 );
 
 
-ALTER TABLE kuzu."user" OWNER TO ci;
+ALTER TABLE lbug."user" OWNER TO ci;
 
 --
 -- Name: movies; Type: TABLE; Schema: public; Owner: ci
@@ -188,10 +188,10 @@ CREATE TABLE public.persontest (
 ALTER TABLE public.persontest OWNER TO ci;
 
 --
--- Data for Name: user; Type: TABLE DATA; Schema: kuzu; Owner: ci
+-- Data for Name: user; Type: TABLE DATA; Schema: lbug; Owner: ci
 --
 
-COPY kuzu."user" (id, org, rate) FROM stdin;
+COPY lbug."user" (id, org, rate) FROM stdin;
 5	apple	4
 7	ms	5
 9	blackberry	7

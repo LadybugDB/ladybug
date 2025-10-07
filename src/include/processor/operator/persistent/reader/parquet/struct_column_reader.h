@@ -2,7 +2,7 @@
 
 #include "column_reader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class StructColumnReader : public ColumnReader {
@@ -32,4 +32,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

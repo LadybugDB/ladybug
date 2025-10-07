@@ -16,14 +16,14 @@
 ["Hubert Blaine Wolfeschlegelsteinhausenbergerdorff",10,["Ad","De","Hi","Kye","Orlan"]]
 
 -LOG JsonArrayWithNull
--STATEMENT RETURN JSON_ARRAY(5, 'kuzu', [2,5,1], null, [null])
+-STATEMENT RETURN JSON_ARRAY(5, 'lbug', [2,5,1], null, [null])
 ---- 1
-[5,"kuzu",[2,5,1],null,[null]]
+[5,"lbug",[2,5,1],null,[null]]
 
 -LOG NestedJsonArray
--STATEMENT RETURN JSON_ARRAY(JSON_ARRAY(2,4, 'TEST'), 'kuzu', [2,5,1], null, [null])
+-STATEMENT RETURN JSON_ARRAY(JSON_ARRAY(2,4, 'TEST'), 'lbug', [2,5,1], null, [null])
 ---- 1
-[[2,4,"TEST"],"kuzu",[2,5,1],null,[null]]
+[[2,4,"TEST"],"lbug",[2,5,1],null,[null]]
 
 -LOG UnflatFlatJsonArray
 -STATEMENT MATCH (p:person)-[e:knows]->(p1:person) RETURN JSON_ARRAY(p.fName, p.ID, p1.fName, 5)
@@ -43,7 +43,7 @@
 ["Elizabeth",7,"Farooq",5]
 ["Elizabeth",7,"Greg",5]
 
--STATEMENT RETURN typeof(json_array(42, 'kuzu', NULL));
+-STATEMENT RETURN typeof(json_array(42, 'lbug', NULL));
 ---- 1
 json
 

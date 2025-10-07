@@ -2,7 +2,7 @@
 
 #include "function/scalar_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 /**
@@ -185,4 +185,4 @@ struct CastAnyFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

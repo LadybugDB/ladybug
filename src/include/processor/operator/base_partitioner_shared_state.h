@@ -6,7 +6,7 @@
 #include "common/api.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class NodeTable;
 class RelTable;
@@ -58,4 +58,4 @@ struct KUZU_API PartitionerSharedState {
     static common::partition_idx_t getNumPartitionsFromRows(common::offset_t numRows);
 };
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

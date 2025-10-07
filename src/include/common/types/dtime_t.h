@@ -5,7 +5,7 @@
 
 #include "common/api.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 // Type used to represent time (microseconds)
@@ -64,4 +64,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

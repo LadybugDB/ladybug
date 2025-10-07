@@ -3,7 +3,7 @@
 #include "common/types/types.h"
 #include "transaction/transaction.h"
 
-namespace kuzu {
+namespace lbug {
 
 namespace storage {
 
@@ -26,4 +26,4 @@ public:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

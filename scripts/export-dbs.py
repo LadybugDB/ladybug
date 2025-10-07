@@ -38,14 +38,14 @@ def find_valid_dataset_dirs(dataset_root):
     return valid_dirs
 
 
-# Example scripts/export-dbs.py build/debug/tools/shell/kuzu dataset.
+# Example scripts/export-dbs.py build/debug/tools/shell/lbug dataset.
 def main():
     parser = argparse.ArgumentParser(
-        description="Export DBs with KUZU shell and dataset paths"
+        description="Export DBs with LBUG shell and dataset paths"
     )
 
     parser.add_argument(
-        "--executable", required=True, help="Path to the KUZU shell executable"
+        "--executable", required=True, help="Path to the LBUG shell executable"
     )
     parser.add_argument(
         "--dataset-dir", required=True, help="Path to the dataset directory"

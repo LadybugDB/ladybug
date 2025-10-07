@@ -13,7 +13,7 @@
 #include "common/string_utils.h"
 #include "common/system_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace benchmark {
 
 std::vector<std::unique_ptr<ParsedBenchmark>> BenchmarkParser::parseBenchmarkFile(
@@ -80,4 +80,4 @@ void BenchmarkParser::replaceVariables(std::string& str) const {
 }
 
 } // namespace benchmark
-} // namespace kuzu
+} // namespace lbug

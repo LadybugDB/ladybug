@@ -1,6 +1,6 @@
 #include "parser/create_macro.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 std::vector<std::pair<std::string, ParsedExpression*>> CreateMacro::getDefaultArgs() const {
@@ -12,4 +12,4 @@ std::vector<std::pair<std::string, ParsedExpression*>> CreateMacro::getDefaultAr
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

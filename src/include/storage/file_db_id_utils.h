@@ -3,7 +3,7 @@
 #include "common/file_system/file_info.h"
 #include "common/serializer/serializer.h"
 #include "common/types/uuid.h"
-namespace kuzu {
+namespace lbug {
 namespace storage {
 struct FileDBIDUtils {
     // For some temporary DB files such as the WAL and shadow file
@@ -15,4 +15,4 @@ struct FileDBIDUtils {
     static void writeDatabaseID(common::Serializer& ser, common::ku_uuid_t databaseID);
 };
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

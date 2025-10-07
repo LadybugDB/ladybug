@@ -4,7 +4,7 @@
 #include "common/enums/conflict_action.h"
 #include "common/enums/table_type.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 struct BoundInsertInfo {
@@ -26,4 +26,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

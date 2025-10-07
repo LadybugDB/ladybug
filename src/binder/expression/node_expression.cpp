@@ -1,6 +1,6 @@
 #include "binder/expression/node_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 NodeExpression::~NodeExpression() = default;
@@ -15,4 +15,4 @@ std::shared_ptr<Expression> NodeExpression::getPrimaryKey(common::table_id_t tab
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

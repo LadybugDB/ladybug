@@ -2,7 +2,7 @@
 
 #include "common/assert.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 static void varintEncode(uint32_t val, common::Serializer& ser) {
@@ -109,4 +109,4 @@ void RleBpEncoder::finishWrite(common::Serializer& writer) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

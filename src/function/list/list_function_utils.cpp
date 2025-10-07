@@ -2,9 +2,9 @@
 
 #include "binder/expression/expression_util.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 void ListTypeResolver<ListOp::Append>::anyEmpty(std::vector<common::LogicalType>& types,
@@ -103,4 +103,4 @@ void ListFunctionUtils::resolveTypes(const ScalarBindFuncInput& input,
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

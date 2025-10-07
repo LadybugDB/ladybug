@@ -7,7 +7,7 @@
 #include "function/cast/cast_union_bind_data.h"
 #include "function/cast/functions/numeric_cast.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct CastToString {
@@ -393,4 +393,4 @@ inline void CastBetweenTimestamp::operation(const common::timestamp_sec_t& input
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -27,12 +27,12 @@ jobs:
       - name: Create Node.js source distribution
         working-directory: tools/nodejs_api
         run: |
-          rm -rf kuzu-source.tar.gz package *.node
+          rm -rf lbug-source.tar.gz package *.node
           node package
 
       - name: Extract tarball
         working-directory: tools/nodejs_api
-        run: tar -xvzf kuzu-source.tar.gz
+        run: tar -xvzf lbug-source.tar.gz
 
       - name: Build Node.js native module for Apple Silicon
         working-directory: tools/nodejs_api/package
@@ -69,12 +69,12 @@ jobs:
       - name: Create Node.js source distribution
         working-directory: tools/nodejs_api
         run: |
-          rm -rf kuzu-source.tar.gz package *.node
+          rm -rf lbug-source.tar.gz package *.node
           node package
 
       - name: Extract tarball
         working-directory: tools/nodejs_api
-        run: tar -xvzf kuzu-source.tar.gz
+        run: tar -xvzf lbug-source.tar.gz
 
       - name: Build Node.js native module for Intel
         working-directory: tools/nodejs_api/package

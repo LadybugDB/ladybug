@@ -7,7 +7,7 @@
 #include "density_state.h"
 #include "gds_object_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 struct ExecutionContext;
 }
@@ -314,4 +314,4 @@ protected:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

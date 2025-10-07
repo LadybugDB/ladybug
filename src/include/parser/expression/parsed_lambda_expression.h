@@ -3,7 +3,7 @@
 #include "common/enums/expression_type.h"
 #include "parsed_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class ParsedLambdaExpression : public ParsedExpression {
@@ -29,4 +29,4 @@ private:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

@@ -35,7 +35,7 @@
 #include "utf.h"
 #include "util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 // Controls the maximum count permitted by GlobalReplace(); -1 is unlimited.
@@ -1355,4 +1355,4 @@ DEFINE_HOOK(DFASearchFailure, dfa_search_failure)
 
 } // namespace hooks
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

@@ -3,10 +3,10 @@
 #include "binder/expression_visitor.h"
 #include "common/exception/internal.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
+using namespace lbug::binder;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 f_group_pos Schema::createGroup() {
@@ -160,4 +160,4 @@ void SchemaUtils::validateNoUnFlatGroup(const std::unordered_set<f_group_pos>& g
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

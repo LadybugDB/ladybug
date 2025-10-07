@@ -2,7 +2,7 @@
 
 #include "common/string_format.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 std::string ExceptionMessage::duplicatePKException(const std::string& pkString) {
@@ -67,4 +67,4 @@ std::string ExceptionMessage::invalidSkipLimitParam(const std::string& exprName,
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

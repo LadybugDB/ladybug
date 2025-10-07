@@ -22,7 +22,7 @@ jobs:
   simsimd-dispatch-test:
     name: simsimd-dispatch-test
     needs: [build-precompiled-bin-linux, build-extensions-linux]
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       NUM_THREADS: 32
       GEN: Ninja
@@ -39,11 +39,11 @@ jobs:
       - name: Download extensions
         uses: actions/download-artifact@v4
         with:
-          name: kuzu-extensions_linux-x86_64
+          name: lbug-extensions_linux-x86_64
 
       - name: Extract artifacts
         run: |
           tar xf kuzu_cli-linux-x86_64.tar.gz
 
       - name: Test
-        run: gdb --batch -x scripts/test-simsimd-dispatch.py --args ./kuzu
+        run: gdb --batch -x scripts/test-simsimd-dispatch.py --args ./lbug

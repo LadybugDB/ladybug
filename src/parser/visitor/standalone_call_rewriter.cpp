@@ -10,7 +10,7 @@
 #include "transaction/transaction.h"
 #include "transaction/transaction_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 std::string StandaloneCallRewriter::getRewriteQuery(const Statement& statement) {
@@ -47,4 +47,4 @@ void StandaloneCallRewriter::visitStandaloneCallFunction(const Statement& statem
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

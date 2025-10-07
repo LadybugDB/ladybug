@@ -3,7 +3,7 @@
 #include "planner/operator/extend/base_logical_extend.h"
 #include "storage/predicate/column_predicate.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class LogicalExtend final : public BaseLogicalExtend {
@@ -44,4 +44,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

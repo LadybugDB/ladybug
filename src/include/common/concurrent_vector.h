@@ -8,7 +8,7 @@
 #include "common/assert.h"
 #include "common/system_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 template<typename T, uint64_t BLOCK_SIZE = DEFAULT_VECTOR_CAPACITY,
@@ -105,4 +105,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

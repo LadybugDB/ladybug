@@ -9,7 +9,7 @@ void bind(py::module& m) {
     PyConnection::initialize(m);
     PyPreparedStatement::initialize(m);
     PyQueryResult::initialize(m);
-    auto cleanImportCache = []() { kuzu::importCache.reset(); };
+    auto cleanImportCache = []() { lbug::importCache.reset(); };
     m.add_object("_clean_import_cache", py::capsule(cleanImportCache));
 }
 

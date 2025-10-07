@@ -4,7 +4,7 @@
 #include "common/type_utils.h"
 #include "storage/index/in_mem_hash_index.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 // NOTE: This is a dummy base class to hide the templation from LocalHashIndex, while allows casting
@@ -231,4 +231,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -3,7 +3,7 @@
 #include "bound_set_info.h"
 #include "bound_updating_clause.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class BoundSetClause final : public BoundUpdatingClause {
@@ -44,4 +44,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

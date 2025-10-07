@@ -3,7 +3,7 @@
 #include "binder/ddl/bound_create_sequence_info.h"
 #include "planner/operator/simple/logical_simple.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 struct LogicalCreateSequencePrintInfo final : OPPrintInfo {
@@ -48,4 +48,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

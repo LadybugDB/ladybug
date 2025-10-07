@@ -9,7 +9,7 @@
 #include "processor/result/factorized_table.h"
 #include "processor/result/factorized_table_schema.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 }
@@ -144,4 +144,4 @@ protected:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

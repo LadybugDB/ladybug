@@ -13,7 +13,7 @@
 #include "common/types/types.h"
 #include <span>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class ValueVector;
 class NullMask;
@@ -495,4 +495,4 @@ public:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

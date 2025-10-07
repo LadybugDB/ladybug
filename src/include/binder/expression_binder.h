@@ -4,7 +4,7 @@
 #include "common/types/value/value.h"
 #include "parser/expression/parsed_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 }
@@ -152,4 +152,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

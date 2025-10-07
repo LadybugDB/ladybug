@@ -7,7 +7,7 @@
 #include "common/types/types.h"
 #include "function/gds/gds.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct Variant {
@@ -37,4 +37,4 @@ struct SFConfig final : public GDSConfig {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

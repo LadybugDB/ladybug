@@ -1,8 +1,8 @@
 #include "processor/operator/aggregate/hash_aggregate_scan.h"
 
-using namespace kuzu::function;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void HashAggregateScan::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
@@ -49,4 +49,4 @@ double HashAggregateScan::getProgress(ExecutionContext* /*context*/) const {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

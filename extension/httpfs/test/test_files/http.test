@@ -47,19 +47,19 @@ Guelph|75000
 -LOG validateTableNotExists
 -STATEMENT CALL SHOW_TABLES() RETURN *
 ---- 0
--STATEMENT attach 'http://localhost/dataset/databases/tinysnb/db.kz' as test (dbtype kuzu)
+-STATEMENT attach 'http://localhost/dataset/databases/tinysnb/db.kz' as test (dbtype lbug)
 ---- ok
 -LOG validateTableExistsAfterAttach
 -STATEMENT CALL SHOW_TABLES() RETURN *
 ---- 8
-0|person|NODE|test(KUZU)|
-1|organisation|NODE|test(KUZU)|
-2|movies|NODE|test(KUZU)|
-4|knows|REL|test(KUZU)|
-6|studyAt|REL|test(KUZU)|
-8|workAt|REL|test(KUZU)|
-10|meets|REL|test(KUZU)|
-12|marries|REL|test(KUZU)|
+0|person|NODE|test(LBUG)|
+1|organisation|NODE|test(LBUG)|
+2|movies|NODE|test(LBUG)|
+4|knows|REL|test(LBUG)|
+6|studyAt|REL|test(LBUG)|
+8|workAt|REL|test(LBUG)|
+10|meets|REL|test(LBUG)|
+12|marries|REL|test(LBUG)|
 
 -LOG QueryRemoteNodeTable
 -STATEMENT match (p:person) return p.*
@@ -107,7 +107,7 @@ Binder exception: Table person does not exist.
 5
 -STATEMENT CALL HTTP_CACHE_FILE=FALSE
 -LOG AttachAgain
--STATEMENT attach 'http://localhost/dataset/databases/tinysnb/db.kz' as tinysnb (dbtype kuzu)
+-STATEMENT attach 'http://localhost/dataset/databases/tinysnb/db.kz' as tinysnb (dbtype lbug)
 ---- ok
 -LOG QueryRemoteNodeTable
 -STATEMENT match (p:person) return p.*
@@ -122,36 +122,36 @@ Binder exception: Table person does not exist.
 10|Hubert Blaine Wolfeschlegelsteinhausenbergerdorff|2|False|True|83|4.900000|1990-11-27|2023-02-21 13:25:30|3 years 2 days 13:02:00|[10,11,12,3,4,5,6,7]|[Ad,De,Hi,Kye,Orlan]|[[7],[10],[6,7]]|[77,64,100,54]|1.323000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18
 -STATEMENT call SHOW_ATTACHED_DATABASES() return *;
 ---- 1
-tinysnb|KUZU
+tinysnb|LBUG
 -STATEMENT detach tinysnb
 ---- ok
 -LOG AttachWithSlashStylePath
--STATEMENT attach 'http://localhost/dataset/databases/tinysnb/db.kz' as tinysnb1 (dbtype kuzu)
+-STATEMENT attach 'http://localhost/dataset/databases/tinysnb/db.kz' as tinysnb1 (dbtype lbug)
 ---- ok
 -STATEMENT call SHOW_ATTACHED_DATABASES() return *;
 ---- 1
-tinysnb1|KUZU
+tinysnb1|LBUG
 -STATEMENT detach tinysnb1
 ---- ok
 
 -CASE AttachNotExistPath
 -LOAD_DYNAMIC_EXTENSION httpfs
--STATEMENT attach 'http://localhost/dataset/databases/tinysnb1' as test (dbtype kuzu)
+-STATEMENT attach 'http://localhost/dataset/databases/tinysnb1' as test (dbtype lbug)
 ---- error
-Runtime exception: Cannot attach a remote Kuzu database due to invalid path: http://localhost/dataset/databases/tinysnb1.
+Runtime exception: Cannot attach a remote Lbug database due to invalid path: http://localhost/dataset/databases/tinysnb1.
 
 #TODO(Ziyi): figure out a way to automate upload if storage has changed.
 -CASE AttachDBWithNonEmptyWAL
 -SKIP
 -LOAD_DYNAMIC_EXTENSION httpfs
--STATEMENT attach 'http://localhost/dataset/databases/non-empty-wal' as test (dbtype kuzu)
+-STATEMENT attach 'http://localhost/dataset/databases/non-empty-wal' as test (dbtype lbug)
 ---- error
-Runtime exception: Cannot attach an external Kuzu database with non-empty wal file. Try manually checkpointing the external database (i.e., run "CHECKPOINT;").
+Runtime exception: Cannot attach an external Lbug database with non-empty wal file. Try manually checkpointing the external database (i.e., run "CHECKPOINT;").
 
 -CASE AttachKuzuWithRelativePath
--STATEMENT attach '${KUZU_ROOT_DIRECTORY}/dataset/databases/tinysnb/./' (dbtype kuzu)
+-STATEMENT attach '${KUZU_ROOT_DIRECTORY}/dataset/databases/tinysnb/./' (dbtype lbug)
 ---- error
-Binder exception: Attaching a kuzu database without an alias is not allowed.
+Binder exception: Attaching a lbug database without an alias is not allowed.
 
 -CASE InstallOfficialExtension
 -SKIP

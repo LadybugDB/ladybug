@@ -9,7 +9,7 @@
 #include "function/clear_cache.h"
 #include "storage/attached_duckdb_database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace sqlite_extension {
 
 static std::string getCatalogNameFromPath(const std::string& dbPath) {
@@ -45,4 +45,4 @@ bool SqliteStorageExtension::canHandleDB(std::string dbType_) const {
 }
 
 } // namespace sqlite_extension
-} // namespace kuzu
+} // namespace lbug

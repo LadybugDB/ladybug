@@ -19,7 +19,7 @@
 #include "util.h"
 #include "walker-inl.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 static const bool ExtraDebug = false;
@@ -691,4 +691,4 @@ Prefilter* Prefilter::FromRE2(const RE2* re2) {
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

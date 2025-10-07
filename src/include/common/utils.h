@@ -9,7 +9,7 @@
 #include "common/types/int128_t.h"
 #include <bit>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class BitmaskUtils {
@@ -100,4 +100,4 @@ struct CountZeros<int128_t> {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

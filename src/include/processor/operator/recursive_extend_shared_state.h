@@ -5,7 +5,7 @@
 #include "graph/graph.h"
 #include "processor/result/factorized_table_pool.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct RecursiveExtendSharedState {
@@ -47,4 +47,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

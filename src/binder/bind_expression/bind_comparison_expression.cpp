@@ -7,12 +7,12 @@
 #include "function/built_in_function_utils.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
-using namespace kuzu::catalog;
-using namespace kuzu::parser;
-using namespace kuzu::function;
+using namespace lbug::common;
+using namespace lbug::catalog;
+using namespace lbug::parser;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 std::shared_ptr<Expression> ExpressionBinder::bindComparisonExpression(
@@ -93,4 +93,4 @@ std::shared_ptr<Expression> ExpressionBinder::createEqualityComparisonExpression
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "table_catalog_entry.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 class Transaction;
 } // namespace transaction
@@ -47,4 +47,4 @@ private:
 };
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

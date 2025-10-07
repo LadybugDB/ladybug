@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 
 enum class TransactionAction : uint8_t {
@@ -20,4 +20,4 @@ public:
 };
 
 } // namespace transaction
-} // namespace kuzu
+} // namespace lbug

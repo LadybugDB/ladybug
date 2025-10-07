@@ -160,8 +160,8 @@ jobs:
       - name: Upload Java JAR
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-java-multiplatform-jar
-          path: tools/java_api/build/libs/kuzu*.jar
+          name: lbug-java-multiplatform-jar
+          path: tools/java_api/build/libs/lbug*.jar
 
       - name: Create Maven Central bundle
         working-directory: tools/java_api
@@ -169,14 +169,14 @@ jobs:
             ORIGINAL_PWD=$(pwd)
             ./gradlew publishMavenJavaToLocalRepo -i
             cd build/repo
-            zip -r kuzu-java-bundle.zip com
-            mv kuzu-java-bundle.zip $ORIGINAL_PWD
+            zip -r lbug-java-bundle.zip com
+            mv lbug-java-bundle.zip $ORIGINAL_PWD
       
       - name: Upload Maven Central bundle
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-java-multiplatform-bundle
-          path: tools/java_api/kuzu-java-bundle.zip
+          name: lbug-java-multiplatform-bundle
+          path: tools/java_api/lbug-java-bundle.zip
       
       - name: Deploy to Maven Central
         if: ${{ github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly != 'true' }}
@@ -185,7 +185,7 @@ jobs:
           curl --request POST \
           --verbose \
           --header 'Authorization: Bearer ${{ secrets.MAVEN_CENTRAL_PORTAL_TOKEN }}' \
-          --form bundle=@kuzu-java-bundle.zip \
+          --form bundle=@lbug-java-bundle.zip \
           https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC
         
       - name: Publish to GitHub Packages
@@ -269,28 +269,28 @@ jobs:
         working-directory: tools/nodejs_api
 
       - name: Show tarball contents
-        run: tar -tvf kuzu-source.tar.gz
+        run: tar -tvf lbug-source.tar.gz
         working-directory: tools/nodejs_api
 
       - name: Upload tarball
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-deploy-nodejs
-          path: tools/nodejs_api/kuzu-source.tar.gz
+          name: lbug-deploy-nodejs
+          path: tools/nodejs_api/lbug-source.tar.gz
 
       - name: Deploy to npm.js dry run
         if: ${{ github.event_name != 'schedule' && github.event.inputs.isDeploy != 'true' }}
-        run: npm publish kuzu-source.tar.gz --access public --dry-run
+        run: npm publish lbug-source.tar.gz --access public --dry-run
         working-directory: tools/nodejs_api
 
       - name: Deploy nightly to npm.js
         if: ${{ github.event_name == 'schedule' || (github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly == 'true') }}
-        run: npm publish kuzu-source.tar.gz --access public --tag next
+        run: npm publish lbug-source.tar.gz --access public --tag next
         working-directory: tools/nodejs_api
 
       - name: Deploy to npm.js
         if: ${{ github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly != 'true' }}
-        run: npm publish kuzu-source.tar.gz --access public --tag latest
+        run: npm publish lbug-source.tar.gz --access public --tag latest
         working-directory: tools/nodejs_api
   
   build-wasm:
@@ -311,7 +311,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: kuzu-deploy-wasm
+          name: lbug-deploy-wasm
           path: tools/wasm
 
       - uses: actions/setup-node@v3
@@ -320,22 +320,22 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Show tarball contents
-        run: tar -tvf kuzu-wasm.tar.gz
+        run: tar -tvf lbug-wasm.tar.gz
         working-directory: tools/wasm
 
       - name: Deploy to npm.js dry run
         if: ${{ github.event_name != 'schedule' && github.event.inputs.isDeploy != 'true' }}
-        run: npm publish kuzu-wasm.tar.gz --access public --dry-run
+        run: npm publish lbug-wasm.tar.gz --access public --dry-run
         working-directory: tools/wasm
 
       - name: Deploy nightly to npm.js
         if: ${{ github.event_name == 'schedule' || (github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly == 'true') }}
-        run: npm publish kuzu-wasm.tar.gz --access public --tag next
+        run: npm publish lbug-wasm.tar.gz --access public --tag next
         working-directory: tools/wasm
 
       - name: Deploy to npm.js
         if: ${{ github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly != 'true' }}
-        run: npm publish kuzu-wasm.tar.gz --access public --tag latest
+        run: npm publish lbug-wasm.tar.gz --access public --tag latest
         working-directory: tools/wasm
 
   build-wheel-mac:
@@ -432,7 +432,7 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-deploy-wheels
+          name: lbug-deploy-wheels
           path: dist/*
 
       - name: Deploy to PyPI test
@@ -447,7 +447,7 @@ jobs:
         
   deploy-rust:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipRust != 'true' }}
-    runs-on: kuzu-self-hosted-testing
+    runs-on: lbug-self-hosted-testing
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
@@ -477,7 +477,7 @@ jobs:
       - name: Upload crate
         uses: actions/upload-artifact@v4
         with:
-          name: kuzu-deploy-crate
+          name: lbug-deploy-crate
           path: tools/rust_api/target/package/*.crate
 
   build-precompiled-bin-mac:

@@ -23,7 +23,7 @@
 #include "utf.h"
 #include "util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 struct URange16 {
@@ -61,5 +61,5 @@ extern const UGroup perl_groups[];
 extern const int num_perl_groups;
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug
 #endif // RE2_UNICODE_GROUPS_H_

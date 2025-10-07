@@ -4,7 +4,7 @@
 #include "binder/copy/bound_copy_from.h"
 #include "bound_create_table_info.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class BoundCreateTable final : public BoundStatement {
@@ -29,4 +29,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

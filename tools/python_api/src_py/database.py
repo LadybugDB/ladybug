@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 class Database:
-    """Kuzu database instance."""
+    """Lbug database instance."""
 
     def __init__(
         self,
@@ -87,7 +87,7 @@ class Database:
 
         throw_on_wal_replay_failure: bool
             If true, any WAL replaying failure when loading the database will throw an error.
-            Otherwise, Kuzu will silently ignore the failure and replay up to where the error
+            Otherwise, Lbug will silently ignore the failure and replay up to where the error
             occured.
 
         enable_checksums: bool

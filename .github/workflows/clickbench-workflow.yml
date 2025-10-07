@@ -12,7 +12,7 @@ jobs:
     env:
       NUM_THREADS: 128
       GEN: Ninja
-    runs-on: kuzu-self-hosted-benchmarking-xl
+    runs-on: lbug-self-hosted-benchmarking-xl
     steps:
       - uses: actions/checkout@v4
 

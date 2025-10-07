@@ -5,7 +5,7 @@
 #include "binder/rewriter/with_clause_projection_rewriter.h"
 #include "binder/visitor/default_type_solver.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 void BoundStatementRewriter::rewrite(BoundStatement& boundStatement,
@@ -24,4 +24,4 @@ void BoundStatementRewriter::rewrite(BoundStatement& boundStatement,
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

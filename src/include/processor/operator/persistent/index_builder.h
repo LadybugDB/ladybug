@@ -13,7 +13,7 @@
 #include "storage/index/hash_index_utils.h"
 #include "storage/table/column_chunk_data.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 class Transaction;
 };
@@ -205,4 +205,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -3,9 +3,9 @@
 #include <thread>
 
 #include "include/node_util.h"
-#include "main/kuzu.h"
+#include "main/lbug.h"
 
-using namespace kuzu::main;
+using namespace lbug::main;
 
 Napi::Object NodeQueryResult::Init(Napi::Env env, Napi::Object exports) {
     Napi::HandleScope scope(env);

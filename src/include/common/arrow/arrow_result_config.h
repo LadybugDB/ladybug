@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct ArrowResultConfig {
@@ -16,4 +16,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

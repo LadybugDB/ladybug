@@ -3,9 +3,9 @@
 #include "processor/operator/projection.h"
 #include "processor/plan_mapper.h"
 
-using namespace kuzu::planner;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapProjection(
@@ -27,4 +27,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapProjection(
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

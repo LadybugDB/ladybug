@@ -4,7 +4,7 @@
 #include "storage/predicate/column_predicate.h"
 #include "storage/table/node_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct ScanNodeTableProgressSharedState {
@@ -123,4 +123,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

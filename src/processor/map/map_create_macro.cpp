@@ -4,9 +4,9 @@
 #include "processor/result/factorized_table_util.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-using namespace kuzu::planner;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapCreateMacro(
@@ -22,4 +22,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCreateMacro(
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

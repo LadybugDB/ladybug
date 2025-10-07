@@ -25,7 +25,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class MD5 {
@@ -94,4 +94,4 @@ public:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -3,7 +3,7 @@
 #include "binder/copy/index_look_up_info.h"
 #include "planner/operator/logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 // This operator is specifically used to transform primary key to offset during relationship copy.
@@ -34,4 +34,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

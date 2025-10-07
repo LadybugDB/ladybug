@@ -4,9 +4,9 @@
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string HashJoinProbePrintInfo::toString() const {
@@ -208,4 +208,4 @@ bool HashJoinProbe::getNextTuplesInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

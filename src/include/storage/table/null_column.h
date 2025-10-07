@@ -3,7 +3,7 @@
 #include "common/system_config.h"
 #include "storage/table/column.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 // Page size must be aligned to 8 byte chunks for the 64-bit NullMask algorithms to work
@@ -17,4 +17,4 @@ public:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -3,7 +3,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "transaction/transaction.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 class KUZU_API CachedColumn : public transaction::LocalCacheObject {
@@ -19,4 +19,4 @@ public:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

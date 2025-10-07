@@ -4,7 +4,7 @@
 
 #include "file_system.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct LocalFileInfo final : FileInfo {
@@ -71,4 +71,4 @@ protected:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -25,7 +25,7 @@
 
 #include "storage/storage_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 LocalFileInfo::~LocalFileInfo() {
@@ -548,4 +548,4 @@ uint64_t LocalFileSystem::getFileSize(const FileInfo& fileInfo) const {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

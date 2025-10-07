@@ -3,7 +3,7 @@
 #include "expression_evaluator/expression_evaluator.h"
 #include "processor/operator/scan/scan_node_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct PrimaryKeyScanPrintInfo final : OPPrintInfo {
@@ -70,4 +70,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

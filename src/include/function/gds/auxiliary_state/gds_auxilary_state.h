@@ -3,7 +3,7 @@
 #include "common/cast.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace graph {
 class Graph;
 }
@@ -45,4 +45,4 @@ public:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

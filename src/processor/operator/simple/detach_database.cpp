@@ -6,7 +6,7 @@
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string DetatchDatabasePrintInfo::toString() const {
@@ -25,4 +25,4 @@ void DetachDatabase::executeInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

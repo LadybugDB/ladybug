@@ -2,7 +2,7 @@
 
 #include "planner/operator/logical_plan.h"
 
-namespace kuzu {
+namespace lbug {
 namespace optimizer {
 
 class LimitPushDownOptimizer {
@@ -20,4 +20,4 @@ private:
 };
 
 } // namespace optimizer
-} // namespace kuzu
+} // namespace lbug

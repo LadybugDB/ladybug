@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 class DuckDBConnector;
@@ -14,4 +14,4 @@ public:
 };
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

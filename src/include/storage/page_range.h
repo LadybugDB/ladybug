@@ -2,7 +2,7 @@
 
 #include "common/types/types.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 
 struct PageRange {
     PageRange() : startPageIdx(common::INVALID_PAGE_IDX), numPages(0){};
@@ -17,4 +17,4 @@ struct PageRange {
     common::page_idx_t startPageIdx;
     common::page_idx_t numPages;
 };
-} // namespace kuzu::storage
+} // namespace lbug::storage

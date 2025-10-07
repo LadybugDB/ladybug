@@ -3,10 +3,10 @@
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 
-using namespace kuzu::common;
-using namespace kuzu::planner;
+using namespace lbug::common;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace optimizer {
 
 void RemoveUnnecessaryJoinOptimizer::rewrite(LogicalPlan* plan) {
@@ -55,4 +55,4 @@ std::shared_ptr<LogicalOperator> RemoveUnnecessaryJoinOptimizer::visitHashJoinRe
 }
 
 } // namespace optimizer
-} // namespace kuzu
+} // namespace lbug

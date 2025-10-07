@@ -21,9 +21,9 @@
 #include "storage/compression/float_compression.h"
 #include "transaction/transaction.h"
 
-using kuzu::function::BuiltInFunctionsUtils;
+using lbug::function::BuiltInFunctionsUtils;
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 internalID_t::internalID_t() : offset{INVALID_OFFSET}, tableID{INVALID_TABLE_ID} {}
@@ -80,7 +80,7 @@ std::string DecimalType::insertDecimalPoint(const std::string& value, uint32_t p
     return retval;
 }
 
-bool UDTTypeInfo::operator==(const kuzu::common::ExtraTypeInfo& other) const {
+bool UDTTypeInfo::operator==(const lbug::common::ExtraTypeInfo& other) const {
     return typeName == other.constPtrCast<UDTTypeInfo>()->typeName;
 }
 
@@ -110,7 +110,7 @@ uint32_t DecimalType::getScale(const LogicalType& type) {
     return decimalTypeInfo->getScale();
 }
 
-const LogicalType& ListType::getChildType(const kuzu::common::LogicalType& type) {
+const LogicalType& ListType::getChildType(const lbug::common::LogicalType& type) {
     KU_ASSERT(type.getPhysicalType() == PhysicalTypeID::LIST ||
               type.getPhysicalType() == PhysicalTypeID::ARRAY);
     auto listTypeInfo = type.extraTypeInfo->constPtrCast<ListTypeInfo>();
@@ -460,7 +460,7 @@ const StructField& StructTypeInfo::getStructField(const std::string& fieldName) 
     return fields[idx];
 }
 
-const LogicalType& StructTypeInfo::getChildType(kuzu::common::struct_field_idx_t idx) const {
+const LogicalType& StructTypeInfo::getChildType(lbug::common::struct_field_idx_t idx) const {
     return fields[idx].getType();
 }
 
@@ -1190,7 +1190,7 @@ bool LogicalTypeUtils::isNested(const LogicalType& dataType) {
     return isNested(dataType.typeID);
 }
 
-bool LogicalTypeUtils::isNested(kuzu::common::LogicalTypeID logicalTypeID) {
+bool LogicalTypeUtils::isNested(lbug::common::LogicalTypeID logicalTypeID) {
     switch (logicalTypeID) {
     case LogicalTypeID::STRUCT:
     case LogicalTypeID::LIST:
@@ -1945,4 +1945,4 @@ LogicalType LogicalTypeUtils::purgeAny(const LogicalType& type, const LogicalTyp
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

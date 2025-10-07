@@ -5,10 +5,10 @@
 #include "storage/compression/compression.h"
 #include "storage/storage_utils.h"
 
-using namespace kuzu::common;
-using namespace kuzu::transaction;
+using namespace lbug::common;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 struct NullColumnFunc {
@@ -38,4 +38,4 @@ NullColumn::NullColumn(const std::string& name, FileHandle* dataFH, MemoryManage
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

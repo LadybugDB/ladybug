@@ -5,7 +5,7 @@
 
 #include "common/enums/path_semantic.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 
 struct ClientConfigDefault {
@@ -60,4 +60,4 @@ struct ClientConfig {
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

@@ -5,9 +5,9 @@
 #include "storage/file_handle.h"
 #include "storage/shadow_utils.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 DiskArrayCollection::DiskArrayCollection(FileHandle& fileHandle, ShadowFile& shadowFile,
@@ -112,4 +112,4 @@ void DiskArrayCollection::reclaimStorage(PageAllocator& pageAllocator,
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

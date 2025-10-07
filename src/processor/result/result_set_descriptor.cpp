@@ -2,7 +2,7 @@
 
 #include "planner/operator/schema.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 ResultSetDescriptor::ResultSetDescriptor(planner::Schema* schema) {
@@ -27,4 +27,4 @@ std::unique_ptr<ResultSetDescriptor> ResultSetDescriptor::copy() const {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

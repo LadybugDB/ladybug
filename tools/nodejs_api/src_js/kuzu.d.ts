@@ -71,7 +71,7 @@ export interface RecursiveRelValue {
 }
 
 /**
- * Union type representing all possible value types in Kuzu.
+ * Union type representing all possible value types in Lbug.
  */
 export type KuzuValue =
     | null
@@ -105,7 +105,7 @@ export interface SystemConfig {
 }
 
 /**
- * Represents a Kuzu database instance.
+ * Represents a Lbug database instance.
  */
 export class Database {
     /**
@@ -154,20 +154,20 @@ export class Database {
     closeSync(): void;
 
     /**
-     * Get the version of the Kuzu library.
+     * Get the version of the Lbug library.
      * @returns The version string of the library
      */
     static getVersion(): string;
 
     /**
-     * Get the storage version of the Kuzu library.
+     * Get the storage version of the Lbug library.
      * @returns The storage version of the library
      */
     static getStorageVersion(): number;
 }
 
 /**
- * Represents a connection to a Kuzu database.
+ * Represents a connection to a Lbug database.
  */
 export class Connection {
     /**
@@ -385,9 +385,9 @@ export class QueryResult {
 }
 
 /**
- * Default export for the Kuzu module.
+ * Default export for the Lbug module.
  */
-declare const kuzu: {
+declare const lbug: {
     Database: typeof Database;
     Connection: typeof Connection;
     PreparedStatement: typeof PreparedStatement;
@@ -396,4 +396,4 @@ declare const kuzu: {
     STORAGE_VERSION: bigint;
 };
 
-export default kuzu;
+export default lbug;

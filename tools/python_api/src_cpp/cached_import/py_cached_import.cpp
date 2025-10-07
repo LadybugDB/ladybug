@@ -2,7 +2,7 @@
 
 #include "common/exception/runtime.h"
 
-namespace kuzu {
+namespace lbug {
 
 std::shared_ptr<PythonCachedImport> importCache;
 
@@ -28,4 +28,4 @@ bool doesPyModuleExist(std::string moduleName) {
     return find_spec(moduleName) != Py_None;
 }
 
-} // namespace kuzu
+} // namespace lbug

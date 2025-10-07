@@ -2,7 +2,7 @@
 
 #include "planner/operator/logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 // Serve as a dummy parent (usually root) for a set of children that doesn't have a well-defined
@@ -32,4 +32,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

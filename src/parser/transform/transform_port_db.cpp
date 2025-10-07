@@ -1,9 +1,9 @@
 #include "parser/port_db.h"
 #include "parser/transformer.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 std::unique_ptr<Statement> Transformer::transformExportDatabase(
@@ -23,4 +23,4 @@ std::unique_ptr<Statement> Transformer::transformImportDatabase(
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

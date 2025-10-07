@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 enum class StatementType : uint8_t {
@@ -29,4 +29,4 @@ enum class StatementType : uint8_t {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

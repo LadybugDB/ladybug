@@ -2,7 +2,7 @@
 
 #include "common/types/ku_string.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct blob_t {
@@ -49,4 +49,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

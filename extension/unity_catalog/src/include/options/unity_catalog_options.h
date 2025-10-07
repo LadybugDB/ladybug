@@ -2,7 +2,7 @@
 
 #include "common/types/value/value.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class Database;
 class ClientContext;
@@ -32,4 +32,4 @@ struct DuckDBUnityCatalogSecretManager {
 };
 
 } // namespace unity_catalog_extension
-} // namespace kuzu
+} // namespace lbug

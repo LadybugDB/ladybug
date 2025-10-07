@@ -3,9 +3,9 @@
 #include "catalog/catalog_entry/catalog_entry_type.h"
 #include "function.h"
 
-using namespace kuzu::catalog;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 using get_function_set_fun = std::function<function_set()>;
@@ -21,4 +21,4 @@ struct FunctionCollection {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

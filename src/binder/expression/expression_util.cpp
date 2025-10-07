@@ -11,9 +11,9 @@
 #include "common/type_utils.h"
 #include "common/types/value/nested.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 expression_vector ExpressionUtil::getExpressionsWithDataType(const expression_vector& expressions,
@@ -565,4 +565,4 @@ template KUZU_API uint64_t ExpressionUtil::evaluateLiteral<uint64_t>(main::Clien
     validate_param_func<uint64_t> validateParamFunc);
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

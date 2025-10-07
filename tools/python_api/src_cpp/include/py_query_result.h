@@ -5,10 +5,10 @@
 
 #include "arrow_array.h"
 #include "common/arrow/arrow.h"
-#include "main/kuzu.h"
+#include "main/lbug.h"
 #include "pybind_include.h"
 
-using namespace kuzu::main;
+using namespace lbug::main;
 
 class PyQueryResult {
     friend class PyConnection;
@@ -30,11 +30,11 @@ public:
 
     void close();
 
-    static py::object convertValueToPyObject(const kuzu::common::Value& value);
+    static py::object convertValueToPyObject(const lbug::common::Value& value);
 
     py::object getAsDF();
 
-    kuzu::pyarrow::Table getAsArrow(std::int64_t chunkSize, bool fallbackExtensionTypes);
+    lbug::pyarrow::Table getAsArrow(std::int64_t chunkSize, bool fallbackExtensionTypes);
 
     py::list getColumnDataTypes();
 
@@ -53,12 +53,12 @@ public:
     size_t getNumTuples();
 
 private:
-    static py::dict convertNodeIdToPyDict(const kuzu::common::nodeID_t& nodeId);
+    static py::dict convertNodeIdToPyDict(const lbug::common::nodeID_t& nodeId);
 
-    void getNextArrowChunk(const std::vector<kuzu::common::LogicalType>& types,
+    void getNextArrowChunk(const std::vector<lbug::common::LogicalType>& types,
         const std::vector<std::string>& names, py::list& batches, std::int64_t chunkSize,
         bool fallbackExtensionTypes);
-    py::object getArrowChunks(const std::vector<kuzu::common::LogicalType>& types,
+    py::object getArrowChunks(const std::vector<lbug::common::LogicalType>& types,
         const std::vector<std::string>& names, std::int64_t chunkSize, bool fallbackExtensionTypes);
 
 private:

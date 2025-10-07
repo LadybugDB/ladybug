@@ -5,7 +5,7 @@
 #include "common/vector/value_vector.h"
 #include "re2.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct RegexpExtractAll : BaseRegexpOperation {
@@ -73,4 +73,4 @@ struct RegexpExtractAll : BaseRegexpOperation {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

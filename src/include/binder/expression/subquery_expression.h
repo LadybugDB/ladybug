@@ -5,7 +5,7 @@
 #include "common/enums/subquery_type.h"
 #include "expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class SubqueryExpression final : public Expression {
@@ -52,4 +52,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

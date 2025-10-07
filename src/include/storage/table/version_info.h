@@ -3,7 +3,7 @@
 #include "common/data_chunk/sel_vector.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 class Transaction;
 } // namespace transaction
@@ -62,4 +62,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

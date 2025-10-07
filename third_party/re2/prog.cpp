@@ -26,7 +26,7 @@
 #include "strutil.h"
 #include "util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 // Constructors per Inst opcode
@@ -1148,4 +1148,4 @@ const void* Prog::PrefixAccel_FrontAndBack(const void* data, size_t size) {
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

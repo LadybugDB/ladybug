@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 struct JsonArrayLengthFunction {
@@ -48,4 +48,4 @@ struct MinifyJsonFunction {
 };
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

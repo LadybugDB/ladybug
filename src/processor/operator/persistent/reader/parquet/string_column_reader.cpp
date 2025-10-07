@@ -7,7 +7,7 @@
 
 using kuzu_parquet::format::Type;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 StringColumnReader::StringColumnReader(ParquetReader& reader, common::LogicalType type,
@@ -90,4 +90,4 @@ void StringParquetValueConversion::plainSkip(ByteBuffer& plainData, ColumnReader
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

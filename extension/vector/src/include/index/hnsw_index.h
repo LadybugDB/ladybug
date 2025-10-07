@@ -9,7 +9,7 @@
 #include "index/hnsw_index_utils.h"
 #include "storage/index/index.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 class IndexCatalogEntry;
 }
@@ -398,4 +398,4 @@ private:
 };
 
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug

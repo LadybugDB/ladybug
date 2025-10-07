@@ -10,7 +10,7 @@
 #pragma GCC diagnostic pop
 #include <optional>
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 using duckdb_conversion_func_t = std::function<void(duckdb::Vector& duckDBVector,
@@ -28,4 +28,4 @@ struct DuckDBResultConverter {
 };
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

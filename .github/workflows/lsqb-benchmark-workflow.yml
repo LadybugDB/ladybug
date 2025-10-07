@@ -30,7 +30,7 @@ jobs:
     env:
       NUM_THREADS: 30
       GEN: Ninja
-    runs-on: kuzu-self-hosted-benchmarking
+    runs-on: lbug-self-hosted-benchmarking
     steps:
       - name: Set env for scheduled run
         if: ${{ github.event_name == 'schedule' }}

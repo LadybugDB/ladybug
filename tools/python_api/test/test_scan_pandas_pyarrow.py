@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-import kuzu
+import lbug
 import pandas as pd
 import pyarrow as pa
 import pytest

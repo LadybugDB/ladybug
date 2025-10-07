@@ -3,7 +3,7 @@
 #include "binder/expression/scalar_function_expression.h"
 #include "expression_evaluator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace evaluator {
 
 class ListSliceInfo;
@@ -98,4 +98,4 @@ private:
 };
 
 } // namespace evaluator
-} // namespace kuzu
+} // namespace lbug

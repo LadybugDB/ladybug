@@ -5,9 +5,9 @@
 #include "common/data_chunk/data_chunk_state.h"
 #include "common/system_config.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 SelVectorOverWriter::SelVectorOverWriter() {
@@ -40,4 +40,4 @@ void SelVectorOverWriter::resetCurrentSelVector(const SelectionVector& selVector
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

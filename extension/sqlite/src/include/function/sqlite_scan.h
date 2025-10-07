@@ -2,7 +2,7 @@
 
 #include "function/duckdb_scan.h"
 
-namespace kuzu {
+namespace lbug {
 namespace sqlite_extension {
 
 class SQLiteTableScanInfo : public duckdb_extension::DuckDBTableScanInfo {
@@ -21,4 +21,4 @@ public:
 };
 
 } // namespace sqlite_extension
-} // namespace kuzu
+} // namespace lbug

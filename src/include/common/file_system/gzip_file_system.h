@@ -2,7 +2,7 @@
 
 #include "compressed_file_system.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class GZipFileSystem : public CompressedFileSystem {
@@ -37,4 +37,4 @@ struct GZIPFileInfo : public CompressedFileInfo {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

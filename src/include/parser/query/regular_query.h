@@ -4,7 +4,7 @@
 #include "parser/statement.h"
 #include "single_query.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class RegularQuery : public Statement {
@@ -34,4 +34,4 @@ private:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

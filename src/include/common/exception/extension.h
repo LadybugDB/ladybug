@@ -2,7 +2,7 @@
 
 #include "exception.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class KUZU_API ExtensionException : public Exception {
@@ -12,4 +12,4 @@ public:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 
 using namespace std;
 
-namespace kuzu {
+namespace lbug {
 namespace utf8proc {
 
 static void assignInvalidUtf8Reason(UnicodeInvalidReason* invalidReason, size_t* invalidPos,
@@ -119,8 +119,8 @@ int32_t Utf8Proc::utf8ToCodepoint(const char* c, int& size) {
 
 uint32_t Utf8Proc::renderWidth(const char* s, size_t pos) {
     int size;
-    auto codepoint = kuzu::utf8proc::utf8proc_codepoint(s + pos, size);
-    auto properties = kuzu::utf8proc::utf8proc_get_property(codepoint);
+    auto codepoint = lbug::utf8proc::utf8proc_codepoint(s + pos, size);
+    auto properties = lbug::utf8proc::utf8proc_get_property(codepoint);
     return properties->charwidth;
 }
 
@@ -133,4 +133,4 @@ bool Utf8Proc::codepointToUtf8(int cp, int &sz, char *c) {
 }
 
 } // namespace utf8proc
-} // namespace kuzu
+} // namespace lbug

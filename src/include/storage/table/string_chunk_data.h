@@ -6,7 +6,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/dictionary_chunk.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class MemoryManager;
 
@@ -108,4 +108,4 @@ template<>
 std::string_view StringChunkData::getValue<std::string_view>(common::offset_t pos) const;
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

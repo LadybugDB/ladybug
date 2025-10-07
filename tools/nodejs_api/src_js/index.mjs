@@ -1,10 +1,10 @@
-import kuzu from "./index.js";
+import lbug from "./index.js";
 
 // Re-export everything from the CommonJS module
-export const Database = kuzu.Database;
-export const Connection = kuzu.Connection;
-export const PreparedStatement = kuzu.PreparedStatement;
-export const QueryResult = kuzu.QueryResult;
-export const VERSION = kuzu.VERSION;
-export const STORAGE_VERSION = kuzu.STORAGE_VERSION;
-export default kuzu;
+export const Database = lbug.Database;
+export const Connection = lbug.Connection;
+export const PreparedStatement = lbug.PreparedStatement;
+export const QueryResult = lbug.QueryResult;
+export const VERSION = lbug.VERSION;
+export const STORAGE_VERSION = lbug.STORAGE_VERSION;
+export default lbug;

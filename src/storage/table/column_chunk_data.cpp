@@ -27,11 +27,11 @@
 #include "storage/table/string_chunk_data.h"
 #include "storage/table/struct_chunk_data.h"
 
-using namespace kuzu::common;
-using namespace kuzu::evaluator;
-using namespace kuzu::transaction;
+using namespace lbug::common;
+using namespace lbug::evaluator;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 void SegmentState::reclaimAllocatedPages(PageAllocator& pageAllocator) const {
@@ -1089,4 +1089,4 @@ uint64_t ColumnChunkData::getMinimumSizeOnDisk() const {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

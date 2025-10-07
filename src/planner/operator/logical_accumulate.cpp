@@ -3,7 +3,7 @@
 #include "planner/operator/factorization/flatten_resolver.h"
 #include "planner/operator/factorization/sink_util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalAccumulate::computeFactorizedSchema() {
@@ -31,4 +31,4 @@ f_group_pos_set LogicalAccumulate::getGroupPositionsToFlatten() const {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 struct JsonType {
@@ -11,4 +11,4 @@ struct JsonType {
 };
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

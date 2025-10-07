@@ -7,10 +7,10 @@
 #include "main/client_context.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
-using namespace kuzu::catalog;
+using namespace lbug::common;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct MacroInfo {
@@ -79,4 +79,4 @@ function_set ShowMacrosFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

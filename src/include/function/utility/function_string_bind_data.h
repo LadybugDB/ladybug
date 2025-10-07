@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct FunctionStringBindData : public FunctionBindData {
@@ -17,4 +17,4 @@ struct FunctionStringBindData : public FunctionBindData {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

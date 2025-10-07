@@ -2,10 +2,10 @@
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "planner/planner.h"
 
-using namespace kuzu::common;
-using namespace kuzu::binder;
+using namespace lbug::common;
+using namespace lbug::binder;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 static expression_vector removeInternalIDProperty(const expression_vector& expressions) {
@@ -30,4 +30,4 @@ void Planner::appendScanNodeTable(std::shared_ptr<Expression> nodeID,
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

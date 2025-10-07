@@ -1,9 +1,9 @@
 #include "processor/operator/multiplicity_reducer.h"
 #include "processor/plan_mapper.h"
 
-using namespace kuzu::planner;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapMultiplicityReducer(
@@ -15,4 +15,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapMultiplicityReducer(
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -3,14 +3,14 @@
 
 -CASE AzureExtensionNotLoaded
 -SKIP_STATIC_LINK
--STATEMENT LOAD FROM "az://kuzu-test/vPerson.csv" RETURN *;
+-STATEMENT LOAD FROM "az://lbug-test/vPerson.csv" RETURN *;
 ---- error(regex)
 ^IO exception: Cannot open file.+
 
 -CASE AzureScan
 -SKIP_STATIC_LINK
 -LOAD_DYNAMIC_EXTENSION azure
--STATEMENT LOAD FROM "az://kuzu-test/vPerson.csv" RETURN *;
+-STATEMENT LOAD FROM "az://lbug-test/vPerson.csv" RETURN *;
 ---- 5
 0|Alice|1|True|False|35|5.000000|1900-01-01|2011-08-20 11:25:30Z+00:00|3 years 2 days 13 hours 2 minutes|[10,5]|[Aida]|[[10,8],[6,7,8]]|[96,54,86,92]|1.731000|A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11
 2|Bob|2|True|False|30|5.100000|1900-01-01|2008-11-03 13:25:30.000526-02:00|10 years 5 months 13 hours 24 us|[12,8]|[Bobby]|[[8,9],[9,10]]|[98,42,93,88]|0.990000|{a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12}
@@ -20,7 +20,7 @@
 
 -STATEMENT CALL current_setting('AZURE_CONNECTION_STRING') return *;
 ---- ok
--STATEMENT CREATE NODE TABLE Person AS LOAD FROM "az://kuzu-test/vPerson.csv" RETURN *;
+-STATEMENT CREATE NODE TABLE Person AS LOAD FROM "az://lbug-test/vPerson.csv" RETURN *;
 ---- ok
 -STATEMENT MATCH (a:Person) RETURN a.fname, a.ISStudent, a.age;
 ---- 5
@@ -29,7 +29,7 @@ Bob|True|30
 Carol|False|45
 Dan|False|20
 Elizabeth|False|20
--STATEMENT COPY Person FROM (LOAD FROM "az://${AZURE_ACCOUNT_NAME}.blob.core.windows.net/kuzu-test/vPerson2.csv" RETURN *);
+-STATEMENT COPY Person FROM (LOAD FROM "az://${AZURE_ACCOUNT_NAME}.blob.core.windows.net/lbug-test/vPerson2.csv" RETURN *);
 ---- ok
 -STATEMENT MATCH (a:Person) RETURN a.fname, a.Gender, a.isWorker;
 ---- 8
@@ -43,7 +43,7 @@ Greg|2|False
 Hubert Blaine Wolfeschlegelsteinhausenbergerdorff|2|True
 -STATEMENT CREATE REL TABLE Knows (FROM Person TO Person, date DATE, meetTime TIMESTAMP, validInterval INTERVAL, comments STRING[], summary STRUCT(locations STRING[], transfer STRUCT(day DATE, amount INT64[])), notes UNION(firstmet DATE, type INT16, comment STRING), someMap MAP(STRING, STRING), MANY_MANY);
 ---- ok
--STATEMENT COPY Knows FROM (LOAD FROM "az://kuzu-test/eKnows.csv" RETURN *);
+-STATEMENT COPY Knows FROM (LOAD FROM "az://lbug-test/eKnows.csv" RETURN *);
 ---- ok
 -STATEMENT MATCH (a:Person)-[e:Knows]->(b:Person) RETURN a.fname, b.fname;
 ---- 6
@@ -53,7 +53,7 @@ Alice|Bob
 Bob|Dan
 Bob|Carol
 Bob|Alice
--STATEMENT COPY Knows FROM (LOAD FROM "abfss://${AZURE_ACCOUNT_NAME}.dfs.core.windows.net/kuzu-test/dirA/dirB/eKnows_2.csv" RETURN *);
+-STATEMENT COPY Knows FROM (LOAD FROM "abfss://${AZURE_ACCOUNT_NAME}.dfs.core.windows.net/lbug-test/dirA/dirB/eKnows_2.csv" RETURN *);
 ---- ok
 -STATEMENT MATCH (a:Person)-[e:Knows]->(b:Person) RETURN a.fname, b.fname;
 ---- 14
@@ -71,7 +71,7 @@ Dan|Bob
 Dan|Carol
 Elizabeth|Farooq
 Elizabeth|Greg
--STATEMENT LOAD FROM "abfss://kuzu-test/glob/glob*.csv" RETURN * ORDER BY id;
+-STATEMENT LOAD FROM "abfss://lbug-test/glob/glob*.csv" RETURN * ORDER BY id;
 ---- 16
 0|bob
 1|billy
@@ -89,15 +89,15 @@ Elizabeth|Greg
 13|bryan
 14|devin
 15|farquaad
--STATEMENT LOAD FROM "az://kuzu-test/glob/*glob.csv" RETURN *;
+-STATEMENT LOAD FROM "az://lbug-test/glob/*glob.csv" RETURN *;
 ---- 2
 20|abc
 21|xyz
--STATEMENT LOAD FROM "az://kuzu-test/glob/*glob*.csv" RETURN *;
+-STATEMENT LOAD FROM "az://lbug-test/glob/*glob*.csv" RETURN *;
 ---- error
 Invalid Input Error: Schema mismatch between globbed files.
-Main file schema: az://kuzu-test/glob/fglob.csv
-Current file: az://kuzu-test/glob/glob1.csv
+Main file schema: az://lbug-test/glob/fglob.csv
+Current file: az://lbug-test/glob/glob1.csv
 Column with name: "column0" is missing
 Column with name: "column1" is missing
 Potential Fix: Since your schema has a mismatch, consider setting union_by_name=true.
@@ -131,13 +131,13 @@ Elizabeth|1|True
 ---- ok
 -STATEMENT CALL AZURE_ACCOUNT_NAME = "";
 ---- ok
--STATEMENT LOAD FROM "az://kuzu-test/vPerson.csv" RETURN *;
+-STATEMENT LOAD FROM "az://lbug-test/vPerson.csv" RETURN *;
 ---- error
 Runtime exception: Azure authentication requires one of AZURE_CONNECTION_STRING or AZURE_ACCOUNT_NAME to be non-empty
 
 -CASE AttachAzureDB
 -SKIP_STATIC_LINK
 -LOAD_DYNAMIC_EXTENSION azure
--STATEMENT ATTACH "az://random/path" as test (dbtype kuzu);
+-STATEMENT ATTACH "az://random/path" as test (dbtype lbug);
 ---- error
 Runtime exception: This feature is not currently supported

@@ -10,7 +10,7 @@
 #include "common/api.h"
 #include "common/serializer/writer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class KUZU_API Serializer {
@@ -123,4 +123,4 @@ template<>
 void Serializer::serializeValue(const std::string& value);
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

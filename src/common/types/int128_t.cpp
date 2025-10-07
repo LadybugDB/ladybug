@@ -9,7 +9,7 @@
 #include "function/cast/functions/numeric_limits.h"
 #include "function/hash/hash_functions.h"
 
-namespace kuzu::common {
+namespace lbug::common {
 
 // NOLINTNEXTLINE(cert-err58-cpp): This initialization won't actually throw.
 const int128_t Int128_t::powerOf10[]{
@@ -819,11 +819,11 @@ int128_t::operator float() const {
     return result;
 }
 
-} // namespace kuzu::common
+} // namespace lbug::common
 
-std::size_t std::hash<kuzu::common::int128_t>::operator()(
-    const kuzu::common::int128_t& v) const noexcept {
-    kuzu::common::hash_t hash = 0;
-    kuzu::function::Hash::operation(v, hash);
+std::size_t std::hash<lbug::common::int128_t>::operator()(
+    const lbug::common::int128_t& v) const noexcept {
+    lbug::common::hash_t hash = 0;
+    lbug::function::Hash::operation(v, hash);
     return hash;
 }

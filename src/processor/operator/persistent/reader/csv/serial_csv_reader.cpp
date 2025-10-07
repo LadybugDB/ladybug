@@ -7,10 +7,10 @@
 #include "processor/operator/persistent/reader/csv/driver.h"
 #include "processor/operator/persistent/reader/reader_bind_utils.h"
 
-using namespace kuzu::common;
-using namespace kuzu::function;
+using namespace lbug::common;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 SerialCSVReader::SerialCSVReader(const std::string& filePath, idx_t fileIdx, CSVOption option,
@@ -469,4 +469,4 @@ bool SerialCSVReader::detectHeader(
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

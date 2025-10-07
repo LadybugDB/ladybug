@@ -25,7 +25,7 @@
 
 #include <cstring>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 void MD5::byteReverse(unsigned char* buf, unsigned longs) {
@@ -230,4 +230,4 @@ void MD5::DigestToBase16(const unsigned char* digest, char* zBuf) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

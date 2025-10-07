@@ -2,7 +2,7 @@
 
 #include "int128_t.h"
 
-namespace kuzu {
+namespace lbug {
 
 namespace regex {
 class RE2;
@@ -37,4 +37,4 @@ struct UUID {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

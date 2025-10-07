@@ -13,11 +13,11 @@
 #include "processor/result/factorized_table_schema.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-using namespace kuzu::common;
-using namespace kuzu::function;
-using namespace kuzu::storage;
+using namespace lbug::common;
+using namespace lbug::function;
+using namespace lbug::storage;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string HashAggregatePrintInfo::toString() const {
@@ -262,4 +262,4 @@ void HashAggregate::executeInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

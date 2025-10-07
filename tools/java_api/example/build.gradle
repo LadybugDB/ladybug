@@ -9,5 +9,5 @@ repositories {
     mavenCentral()
 }
 dependencies {
-    implementation 'com.kuzudb:kuzu:0.6.0'
+    implementation 'com.kuzudb:lbug:0.6.0'
 }

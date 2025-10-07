@@ -2,7 +2,7 @@
 
 #include "storage/table/column_chunk_stats.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 common::ZoneMapCheckResult ColumnNullPredicate::checkZoneMap(
     const MergedColumnChunkStats& mergedStats) const {
     const bool statToCheck = (expressionType == common::ExpressionType::IS_NULL) ?
@@ -12,4 +12,4 @@ common::ZoneMapCheckResult ColumnNullPredicate::checkZoneMap(
                          common::ZoneMapCheckResult::ALWAYS_SCAN;
 }
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

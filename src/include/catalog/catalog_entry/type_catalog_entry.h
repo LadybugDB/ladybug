@@ -2,7 +2,7 @@
 
 #include "catalog_entry.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 class TypeCatalogEntry : public CatalogEntry {
@@ -30,4 +30,4 @@ private:
 };
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

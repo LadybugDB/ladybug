@@ -3,7 +3,7 @@
 #include "function/internal_id/vector_internal_id_functions.h"
 #include "function/scalar_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 using namespace common;
@@ -34,4 +34,4 @@ function_set InternalIDCreationFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

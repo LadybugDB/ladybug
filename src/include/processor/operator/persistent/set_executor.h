@@ -6,7 +6,7 @@
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct NodeSetInfo {
@@ -190,4 +190,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

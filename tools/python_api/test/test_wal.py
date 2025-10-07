@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 from textwrap import dedent
 
-import kuzu
+import lbug
 
 from conftest import get_db_file_path
 
@@ -17,8 +17,8 @@ def run_query_in_new_process(tmp_path: Path, build_dir: Path, queries: str):
         import sys
         sys.path.append(r"{build_dir!s}")
 
-        import kuzu
-        db = kuzu.Database(r"{db_path!s}")
+        import lbug
+        db = lbug.Database(r"{db_path!s}")
         """
         )
         + queries
@@ -40,13 +40,13 @@ def run_query_then_kill(tmp_path: Path, build_dir: Path, queries: str):
 # When we reload the database we will replay from the WAL (which will be incomplete)
 def test_replay_after_kill(tmp_path: Path, build_dir: Path) -> None:
     queries = dedent("""
-    conn = kuzu.Connection(db)
+    conn = lbug.Connection(db)
     conn.execute("CREATE NODE TABLE tab (id INT64, PRIMARY KEY (id));")
     conn.execute("UNWIND RANGE(1,100000) AS x UNWIND RANGE(1, 100000) AS y CREATE (:tab {id: x * 100000 + y});")
     """)
     run_query_then_kill(tmp_path, build_dir, queries)
     db_path = get_db_file_path(tmp_path)
-    with kuzu.Database(db_path) as db, kuzu.Connection(db) as conn:
+    with lbug.Database(db_path) as db, lbug.Connection(db) as conn:
         # previously committed queries should be valid after replaying WAL
         result = conn.execute("CALL show_tables() RETURN *")
         assert result.has_next()
@@ -57,7 +57,7 @@ def test_replay_after_kill(tmp_path: Path, build_dir: Path) -> None:
 
 def test_replay_with_exception(tmp_path: Path, build_dir: Path) -> None:
     queries = dedent("""
-    conn = kuzu.Connection(db)
+    conn = lbug.Connection(db)
     conn.execute("CREATE NODE TABLE tab (id INT64, PRIMARY KEY (id));")
     # some of these queries will throw exceptions
     for i in range(10):
@@ -70,7 +70,7 @@ def test_replay_with_exception(tmp_path: Path, build_dir: Path) -> None:
     """)
     run_query_then_kill(tmp_path, build_dir, queries)
     db_path = get_db_file_path(tmp_path)
-    with kuzu.Database(db_path) as db, kuzu.Connection(db) as conn:
+    with lbug.Database(db_path) as db, lbug.Connection(db) as conn:
         # previously committed queries should be valid after replaying WAL
         result = conn.execute("match (t:tab) where t.id <= 5 return t.id")
         assert result.get_num_tuples() == 5

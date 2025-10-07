@@ -10,7 +10,7 @@
 #include "common/system_config.h"
 #include "graph_test/private_graph_test.h"
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 class MultiCopyTest : public EmptyDBTest {
@@ -144,7 +144,7 @@ TEST_F(MultiCopyTest, PartialFirstNodeGroup) {
 // Each thread should have ~3/4 of a node group in their
 // local node group, so the second one to write that to the shared group
 // will need to write twice before it can move its remaining nodes into the shared group
-// See https://github.com/kuzudb/kuzu/issues/3714
+// See https://github.com/kuzudb/lbug/issues/3714
 TEST_F(MultiCopyTest, SharedWriteToExistingNodeGroup) {
     copy(common::StorageConfig::NODE_GROUP_SIZE * 0.75);
     copy(common::StorageConfig::NODE_GROUP_SIZE * systemConfig->maxNumThreads * 0.75);
@@ -161,4 +161,4 @@ TEST_F(MultiCopyTest, MultipleNodeGroups) {
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

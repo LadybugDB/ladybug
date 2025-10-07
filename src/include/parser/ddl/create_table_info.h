@@ -9,7 +9,7 @@
 #include "common/enums/table_type.h"
 #include "parsed_property_definition.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 struct ExtraCreateTableInfo {
@@ -52,4 +52,4 @@ struct ExtraCreateRelTableGroupInfo final : ExtraCreateTableInfo {
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

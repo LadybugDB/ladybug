@@ -1,6 +1,6 @@
 #include "processor/operator/aggregate/simple_aggregate_scan.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void SimpleAggregateScan::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
@@ -33,4 +33,4 @@ bool SimpleAggregateScan::getNextTuplesInternal(ExecutionContext* /*context*/) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

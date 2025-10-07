@@ -10,7 +10,7 @@
 #include <set>
 
 #include "common/types/types.h"
-namespace kuzu::storage {
+namespace lbug::storage {
 
 class BufferManager;
 struct PageRange;
@@ -91,4 +91,4 @@ struct FreeEntryIterator {
     FreeSpaceManager::sorted_free_list_t::const_iterator freeListIt;
 };
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

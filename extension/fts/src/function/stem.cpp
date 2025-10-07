@@ -11,7 +11,7 @@
 #include "function/scalar_function.h"
 #include "libstemmer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 using namespace function;
@@ -162,4 +162,4 @@ void StemFunction::validateStemmer(const std::string& stemmer) {
 }
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

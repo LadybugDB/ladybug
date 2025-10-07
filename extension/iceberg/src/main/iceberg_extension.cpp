@@ -5,10 +5,10 @@
 #include "main/database.h"
 #include "main/duckdb_extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace iceberg_extension {
 
-using namespace kuzu::extension;
+using namespace lbug::extension;
 
 void IcebergExtension::load(main::ClientContext* context) {
     auto& db = *context->getDatabase();
@@ -19,7 +19,7 @@ void IcebergExtension::load(main::ClientContext* context) {
 }
 
 } // namespace iceberg_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -30,12 +30,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::iceberg_extension::IcebergExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::iceberg_extension::IcebergExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::iceberg_extension::IcebergExtension::EXTENSION_NAME;
+    return lbug::iceberg_extension::IcebergExtension::EXTENSION_NAME;
 }
 }
 #endif

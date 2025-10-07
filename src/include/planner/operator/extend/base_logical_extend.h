@@ -4,7 +4,7 @@
 #include "common/enums/extend_direction.h"
 #include "planner/operator/logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 struct BaseLogicalExtendPrintInfo : OPPrintInfo {
@@ -82,4 +82,4 @@ protected:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

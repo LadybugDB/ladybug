@@ -15,10 +15,10 @@
 #include <bit>
 #include <concepts>
 
-using namespace kuzu::common;
-using namespace kuzu::transaction;
+using namespace lbug::common;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 using string_index_t = DictionaryChunk::string_index_t;
@@ -263,4 +263,4 @@ bool DictionaryColumn::canOffsetCommitInPlace(const SegmentState& offsetState,
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

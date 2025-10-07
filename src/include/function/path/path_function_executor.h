@@ -4,7 +4,7 @@
 #include "common/vector/value_vector.h"
 #include "function/hash/hash_functions.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 static bool isAllInternalIDDistinct(common::ValueVector* dataVector, common::offset_t startOffset,
@@ -129,4 +129,4 @@ private:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

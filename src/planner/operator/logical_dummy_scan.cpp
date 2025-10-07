@@ -3,9 +3,9 @@
 #include "binder/expression/literal_expression.h"
 #include "common/constants.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalDummyScan::computeFactorizedSchema() {
@@ -24,4 +24,4 @@ std::shared_ptr<binder::Expression> LogicalDummyScan::getDummyExpression() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

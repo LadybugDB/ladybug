@@ -5,7 +5,7 @@
 #include "options/unity_catalog_options.h"
 #include "storage/unity_catalog_storage.h"
 
-namespace kuzu {
+namespace lbug {
 namespace unity_catalog_extension {
 
 void UnityCatalogExtension::load(main::ClientContext* context) {
@@ -16,7 +16,7 @@ void UnityCatalogExtension::load(main::ClientContext* context) {
 }
 
 } // namespace unity_catalog_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -27,12 +27,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::unity_catalog_extension::UnityCatalogExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::unity_catalog_extension::UnityCatalogExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::unity_catalog_extension::UnityCatalogExtension::EXTENSION_NAME;
+    return lbug::unity_catalog_extension::UnityCatalogExtension::EXTENSION_NAME;
 }
 }
 #endif

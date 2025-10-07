@@ -27,11 +27,11 @@
 #include "parser/expression/parsed_literal_expression.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
-using namespace kuzu::parser;
-using namespace kuzu::catalog;
+using namespace lbug::common;
+using namespace lbug::parser;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 static void validatePropertyName(const std::vector<PropertyDefinition>& definitions) {
@@ -488,4 +488,4 @@ std::unique_ptr<BoundStatement> Binder::bindAlterFromToConnection(
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

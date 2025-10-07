@@ -6,7 +6,7 @@
 
 #include "common/cast.h"
 
-namespace kuzu {
+namespace lbug {
 namespace graph {
 
 enum class GraphEntryType : uint8_t {
@@ -56,4 +56,4 @@ struct KUZU_API ParsedCypherGraphEntry : ParsedGraphEntry {
 };
 
 } // namespace graph
-} // namespace kuzu
+} // namespace lbug

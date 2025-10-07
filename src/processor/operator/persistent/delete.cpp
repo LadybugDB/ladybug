@@ -1,6 +1,6 @@
 #include "processor/operator/persistent/delete.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string DeleteNodePrintInfo::toString() const {
@@ -61,4 +61,4 @@ bool DeleteRel::getNextTuplesInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

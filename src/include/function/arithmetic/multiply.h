@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct Multiply {
@@ -37,4 +37,4 @@ template<>
 void Multiply::operation(int64_t& left, int64_t& right, int64_t& result);
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

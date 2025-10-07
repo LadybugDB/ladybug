@@ -3,10 +3,10 @@
 #include "binder/expression/expression_util.h"
 #include "processor/execution_context.h"
 
-using namespace kuzu::common;
-using namespace kuzu::function;
+using namespace lbug::common;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string TableFunctionCallPrintInfo::toString() const {
@@ -54,4 +54,4 @@ double TableFunctionCall::getProgress(ExecutionContext* /*context*/) const {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

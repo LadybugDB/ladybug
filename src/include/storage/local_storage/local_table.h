@@ -3,7 +3,7 @@
 #include "common/enums/table_type.h"
 #include "storage/table/table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 class Transaction;
 } // namespace transaction
@@ -54,4 +54,4 @@ protected:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

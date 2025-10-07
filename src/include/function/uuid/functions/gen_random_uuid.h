@@ -2,7 +2,7 @@
 
 #include "common/types/uuid.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct GenRandomUUID {
@@ -10,4 +10,4 @@ struct GenRandomUUID {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

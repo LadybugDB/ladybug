@@ -10,10 +10,10 @@
 
 #include "common/api.h"
 #include "common/database_lifecycle_manager.h"
-#include "kuzu_fwd.h"
+#include "lbug_fwd.h"
 #include "main/db_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class FileSystem;
 } // namespace common
@@ -58,7 +58,7 @@ struct KUZU_API SystemConfig {
      * WAL file exceeds this threshold, the database will checkpoint if autoCheckpoint is true.
      * @param forceCheckpointOnClose If true, the database will force checkpoint when closing.
      * @param throwOnWalReplayFailure If true, any WAL replaying failure when loading the database
-     * will throw an error. Otherwise, Kuzu will silently ignore the failure and replay up to where
+     * will throw an error. Otherwise, Lbug will silently ignore the failure and replay up to where
      * the error occured.
      * @param enableChecksums If true, the database will use checksums to detect corruption in the
      * WAL file.
@@ -90,7 +90,7 @@ struct KUZU_API SystemConfig {
 };
 
 /**
- * @brief Database class is the main class of Kuzu. It manages all database components.
+ * @brief Database class is the main class of Lbug. It manages all database components.
  */
 class Database {
     friend class EmbeddedShell;
@@ -201,4 +201,4 @@ private:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

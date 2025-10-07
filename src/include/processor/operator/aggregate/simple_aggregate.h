@@ -8,7 +8,7 @@
 #include "processor/operator/aggregate/aggregate_hash_table.h"
 #include "processor/operator/aggregate/base_aggregate.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 // NOLINTNEXTLINE(cppcoreguidelines-virtual-class-destructor): This is a final class.
@@ -153,4 +153,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

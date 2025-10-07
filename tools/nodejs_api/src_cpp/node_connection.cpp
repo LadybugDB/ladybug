@@ -5,7 +5,7 @@
 #include "include/node_database.h"
 #include "include/node_query_result.h"
 #include "include/node_util.h"
-#include "main/kuzu.h"
+#include "main/lbug.h"
 
 Napi::Object NodeConnection::Init(Napi::Env env, Napi::Object exports) {
     Napi::HandleScope scope(env);

@@ -5,7 +5,7 @@
 #include "binder/query/query_graph.h"
 #include "planner/operator/logical_plan.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 const uint64_t MAX_LEVEL_TO_PLAN_EXACTLY = 7;
@@ -102,4 +102,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

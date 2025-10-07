@@ -4,8 +4,8 @@
 #include "storage/local_storage/local_hash_index.h"
 #include "storage/overflow_file.h"
 
-using namespace kuzu::common;
-using namespace kuzu::storage;
+using namespace lbug::common;
+using namespace lbug::storage;
 
 bool isVisible(offset_t) {
     return true;

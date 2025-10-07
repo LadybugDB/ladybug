@@ -3,12 +3,12 @@
 #include "planner/operator/operator_print_info.h"
 #include "processor/result/result_set.h"
 
-namespace kuzu::common {
+namespace lbug::common {
 class Profiler;
 class NumericMetric;
 class TimeMetric;
-} // namespace kuzu::common
-namespace kuzu {
+} // namespace lbug::common
+namespace lbug {
 namespace processor {
 struct ExecutionContext;
 
@@ -177,4 +177,4 @@ protected:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

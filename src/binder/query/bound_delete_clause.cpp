@@ -1,8 +1,8 @@
 #include "binder/query/updating_clause/bound_delete_clause.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 bool BoundDeleteClause::hasInfo(const std::function<bool(const BoundDeleteInfo&)>& check) const {
@@ -26,4 +26,4 @@ std::vector<BoundDeleteInfo> BoundDeleteClause::getInfos(
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

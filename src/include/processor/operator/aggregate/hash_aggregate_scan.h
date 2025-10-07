@@ -3,7 +3,7 @@
 #include "processor/operator/aggregate/base_aggregate_scan.h"
 #include "processor/operator/aggregate/hash_aggregate.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class HashAggregateScan final : public BaseAggregateScan {
@@ -37,4 +37,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

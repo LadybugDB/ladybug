@@ -2,7 +2,7 @@
 #include "main/duckdb_extension.h"
 #include "s3fs_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 void DuckdbExtension::loadRemoteFSOptions(main::ClientContext* context) {
@@ -14,4 +14,4 @@ void DuckdbExtension::loadRemoteFSOptions(main::ClientContext* context) {
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

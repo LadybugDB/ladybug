@@ -10,7 +10,7 @@
 #include "storage/storage_extension.h"
 #include "storage/storage_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string AttachDatabasePrintInfo::toString() const {
@@ -61,4 +61,4 @@ void AttachDatabase::executeInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

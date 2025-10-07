@@ -27,7 +27,7 @@ def get_version(kuzu_root):
     cmake_file = os.path.join(kuzu_root, "CMakeLists.txt")
     with open(cmake_file) as f:
         for line in f:
-            if line.startswith("project(Kuzu VERSION"):
+            if line.startswith("project(Lbug VERSION"):
                 return line.split(" ")[2].strip()
     return "0"
 
@@ -88,7 +88,7 @@ def export_datasets_and_test(
         inprogress_path = f"{export_path}_inprogress" + os.sep
         export_script_path = os.path.join(kuzu_root, "scripts", "export-dbs.py")
         exec_path = os.path.join(
-            base_worktree, "build", "relwithdebinfo", "tools", "shell", "kuzu"
+            base_worktree, "build", "relwithdebinfo", "tools", "shell", "lbug"
         )
         run_command(
             f"""python3 {export_script_path} \
@@ -228,7 +228,7 @@ def run_export_specific_tests(
 ):
     # Split tests in test_dir
     split_files(test_dir, output_dir)
-    # Build base_worktree kuzu
+    # Build base_worktree lbug
     run_command("make test-build", cwd=base_worktree)
     # Run the export tests.
     run_command(
@@ -236,7 +236,7 @@ def run_export_specific_tests(
         cwd=kuzu_root,
         check=False,
     )
-    # Build test_worktree kuzu
+    # Build test_worktree lbug
     run_command("make test-build", cwd=test_worktree)
     # Run the import tests.
     run_command(

@@ -198,7 +198,7 @@
 #define REDIS_NOTUSED(V) ((void)V)
 #endif
 
-using namespace kuzu::utf8proc;
+using namespace lbug::utf8proc;
 
 #define LINENOISE_DEFAULT_HISTORY_MAX_LEN 1000
 #define LINENOISE_HISTORY_NEXT 0
@@ -2805,7 +2805,7 @@ static void performSearch(linenoiseState* l) {
         for (size_t i = history_len; i > 0; i--) {
             size_t history_index = i - 1;
             auto lhistory = std::string(history[history_index]);
-            kuzu::common::StringUtils::toLower(lhistory);
+            lbug::common::StringUtils::toLower(lhistory);
             if (matches.find(lhistory) != matches.end()) {
                 continue;
             }
@@ -2818,7 +2818,7 @@ static void performSearch(linenoiseState* l) {
         }
     } else {
         auto lsearch = l->search_buf;
-        kuzu::common::StringUtils::toLower(lsearch);
+        lbug::common::StringUtils::toLower(lsearch);
         for (size_t i = history_len; i > 0; i--) {
             size_t history_index = i - 1;
             auto lhistory = std::string(history[history_index]);
@@ -2829,7 +2829,7 @@ static void performSearch(linenoiseState* l) {
                 lhistory = std::regex_replace(lhistory, newline_regex, " ");
             }
 
-            kuzu::common::StringUtils::toLower(lhistory);
+            lbug::common::StringUtils::toLower(lhistory);
             if (matches.find(lhistory) != matches.end()) {
                 continue;
             }

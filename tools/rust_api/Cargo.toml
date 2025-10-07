@@ -1,11 +1,11 @@
 [package]
-name = "kuzu"
+name = "lbug"
 version = "0.11.1"
 description = "An in-process property graph database management system built for query speed and scalability"
 keywords = ["database", "graph", "ffi"]
-readme = "kuzu-src/README.md"
+readme = "lbug-src/README.md"
 homepage = "https://kuzudb.com/"
-repository = "https://github.com/kuzudb/kuzu"
+repository = "https://github.com/kuzudb/lbug"
 license = "MIT"
 categories = ["database"]
 
@@ -17,13 +17,13 @@ include = [
     "build.rs",
     "/src",
     "/include",
-    # If more files are added to kuzu-src, they should also be added to the rerun-if-changed
+    # If more files are added to lbug-src, they should also be added to the rerun-if-changed
     # instructions in build.rs so that rebuilds are detected properly
-    "/kuzu-src/src",
-    "/kuzu-src/cmake",
-    "/kuzu-src/third_party",
-    "/kuzu-src/CMakeLists.txt",
-    "/kuzu-src/tools/CMakeLists.txt",
+    "/lbug-src/src",
+    "/lbug-src/cmake",
+    "/lbug-src/third_party",
+    "/lbug-src/CMakeLists.txt",
+    "/lbug-src/tools/CMakeLists.txt",
 ]
 
 [dependencies]

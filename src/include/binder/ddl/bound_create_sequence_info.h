@@ -5,7 +5,7 @@
 #include "common/copy_constructors.h"
 #include "common/enums/conflict_action.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 struct BoundCreateSequenceInfo {
@@ -35,4 +35,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

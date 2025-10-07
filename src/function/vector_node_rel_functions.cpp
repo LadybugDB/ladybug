@@ -5,9 +5,9 @@
 #include "function/schema/offset_functions.h"
 #include "function/unary_function_executor.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& params,
@@ -26,4 +26,4 @@ function_set OffsetFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -50,18 +50,18 @@ Sequence test has been dropped.
 
 -STATEMENT CALL SHOW_SEQUENCES() RETURN * ORDER BY name;
 ---- 12
-a|local(kuzu)|1|1|1|9223372036854775807|False
-b|local(kuzu)|10|1|1|9223372036854775807|False
-c|local(kuzu)|20|1|1|9223372036854775807|False
-d|local(kuzu)|1|10|1|9223372036854775807|False
-e|local(kuzu)|-1|-5|-9223372036854775808|-1|False
-f|local(kuzu)|1|1|1|9223372036854775807|False
-g|local(kuzu)|1|1|1|9223372036854775807|False
-h|local(kuzu)|100|1|100|9223372036854775807|False
-i|local(kuzu)|1|1|1|100|False
-j|local(kuzu)|1|1|1|9223372036854775807|False
-k|local(kuzu)|1|1|1|9223372036854775807|True
-l|local(kuzu)|10|5|-100|100|True
+a|local(lbug)|1|1|1|9223372036854775807|False
+b|local(lbug)|10|1|1|9223372036854775807|False
+c|local(lbug)|20|1|1|9223372036854775807|False
+d|local(lbug)|1|10|1|9223372036854775807|False
+e|local(lbug)|-1|-5|-9223372036854775808|-1|False
+f|local(lbug)|1|1|1|9223372036854775807|False
+g|local(lbug)|1|1|1|9223372036854775807|False
+h|local(lbug)|100|1|100|9223372036854775807|False
+i|local(lbug)|1|1|1|100|False
+j|local(lbug)|1|1|1|9223372036854775807|False
+k|local(lbug)|1|1|1|9223372036854775807|True
+l|local(lbug)|10|5|-100|100|True
 
 -CASE ExpectedError
 -STATEMENT CREATE SEQUENCE err START 9223372036854775808;

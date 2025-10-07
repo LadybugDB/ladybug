@@ -5,7 +5,7 @@
 #include "common/copy_constructors.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 enum class TransactionType : uint8_t;
 } // namespace transaction
@@ -54,4 +54,4 @@ public:
         const std::function<void(uint8_t*)>& updateOp);
 };
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

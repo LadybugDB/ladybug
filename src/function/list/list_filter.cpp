@@ -4,10 +4,10 @@
 #include "function/list/vector_list_functions.h"
 #include "function/scalar_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
     if (input.arguments[1]->expressionType != ExpressionType::LAMBDA) {
@@ -131,4 +131,4 @@ function_set ListFilterFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

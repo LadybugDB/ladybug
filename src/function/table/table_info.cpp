@@ -11,10 +11,10 @@
 #include "main/client_context.h"
 #include "main/database_manager.h"
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
+using namespace lbug::catalog;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ExtraPropertyInfo {
@@ -221,4 +221,4 @@ function_set TableInfoFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

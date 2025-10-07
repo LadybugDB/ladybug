@@ -2,7 +2,7 @@
 
 #include "common/data_chunk/data_chunk.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 // TODO(Guodong): Should rework this to use ColumnChunk.
@@ -36,4 +36,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "hash_index_slot.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 struct HashIndexHeaderOnDisk {
@@ -65,4 +65,4 @@ public:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 #include "common/serializer/serializer.h"
 #include "common/types/uuid.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 static void writeParquetUUID(common::ku_uuid_t input, uint8_t* result) {
@@ -35,4 +35,4 @@ void UUIDColumnWriter::writeVector(common::Serializer& bufferedSerializer,
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

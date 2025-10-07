@@ -3,7 +3,7 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/file_handle.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class VirtualFileSystem;
 };
@@ -44,4 +44,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -1,8 +1,8 @@
 #include "processor/result/result_set.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 ResultSet::ResultSet(ResultSetDescriptor* resultSetDescriptor,
@@ -37,4 +37,4 @@ uint64_t ResultSet::getNumTuplesWithoutMultiplicity(
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

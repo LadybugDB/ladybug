@@ -6,10 +6,10 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/serializer/deserializer.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
+using namespace lbug::binder;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 std::unique_ptr<TableCatalogEntry> TableCatalogEntry::alter(transaction_t timestamp,
@@ -150,4 +150,4 @@ BoundCreateTableInfo TableCatalogEntry::getBoundCreateTableInfo(
 }
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

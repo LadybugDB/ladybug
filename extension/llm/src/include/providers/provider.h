@@ -3,14 +3,14 @@
 #include "httplib.h"
 #include "json.hpp"
 
-namespace kuzu {
+namespace lbug {
 namespace llm_extension {
 
 class EmbeddingProvider {
 public:
     // TODO(Tanvir) When docs are created validate the url in the string
     static constexpr const char* referenceKuzuDocs =
-        "For more information, please refer to the official Kuzu documentation: "
+        "For more information, please refer to the official Lbug documentation: "
         "https://docs.kuzudb.com/extensions/llm/\n";
     virtual ~EmbeddingProvider() = default;
     virtual std::string getClient() const = 0;
@@ -24,4 +24,4 @@ public:
 };
 
 } // namespace llm_extension
-} // namespace kuzu
+} // namespace lbug

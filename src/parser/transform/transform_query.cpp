@@ -1,7 +1,7 @@
 #include "parser/query/regular_query.h"
 #include "parser/transformer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 std::unique_ptr<Statement> Transformer::transformQuery(CypherParser::OC_QueryContext& ctx) {
@@ -57,4 +57,4 @@ QueryPart Transformer::transformQueryPart(CypherParser::KU_QueryPartContext& ctx
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

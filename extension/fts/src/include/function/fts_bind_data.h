@@ -3,7 +3,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "function/table/bind_data.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 struct FTSBindData : function::TableFuncBindData {
@@ -22,4 +22,4 @@ struct FTSBindData : function::TableFuncBindData {
 };
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

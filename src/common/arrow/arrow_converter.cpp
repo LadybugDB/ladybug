@@ -5,7 +5,7 @@
 #include "common/arrow/arrow_row_batch.h"
 #include "common/exception/runtime.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 static void releaseArrowSchema(ArrowSchema* schema) {
@@ -319,4 +319,4 @@ std::unique_ptr<ArrowSchema> ArrowConverter::toArrowSchema(
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

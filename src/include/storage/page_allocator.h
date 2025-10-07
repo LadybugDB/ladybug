@@ -2,7 +2,7 @@
 
 #include "storage/page_range.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 class FileHandle;
@@ -25,4 +25,4 @@ private:
     FileHandle* dataFH;
 };
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

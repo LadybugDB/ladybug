@@ -12,7 +12,7 @@
 #include "transaction/transaction.h"
 #include "utils/fts_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 void Stemmer::validate(const std::string& stemmer) {
@@ -222,4 +222,4 @@ void Tokenizer::validate(const std::string& tokenizer) {
 }
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

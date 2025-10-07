@@ -7,7 +7,7 @@
 #include "common/copy_constructors.h"
 #include "common/types/value/value.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 enum class FileType : uint8_t {
@@ -62,4 +62,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

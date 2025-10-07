@@ -4,7 +4,7 @@
 #include "common/string_format.h"
 #include "common/types/value/value.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 std::vector<std::pair<std::string, std::unique_ptr<Value>>> RelVal::getProperties(
@@ -83,4 +83,4 @@ void RelVal::throwIfNotRel(const Value* val) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

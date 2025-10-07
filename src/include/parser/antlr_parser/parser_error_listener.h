@@ -4,7 +4,7 @@
 
 #include "antlr4-runtime.h" // IWYU pragma: keep. This is the public header.
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class ParserErrorListener : public antlr4::BaseErrorListener {
@@ -19,4 +19,4 @@ private:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

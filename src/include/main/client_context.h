@@ -14,7 +14,7 @@
 #include "main/query_result.h"
 #include "prepared_statement.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class RandomEngine;
 class TaskScheduler;
@@ -253,4 +253,4 @@ private:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

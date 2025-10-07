@@ -13,11 +13,11 @@
 #include "processor/result/factorized_table_util.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::planner;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapCreateTable(
@@ -80,4 +80,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapAlter(const LogicalOperator* lo
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

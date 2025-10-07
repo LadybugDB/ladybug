@@ -3,7 +3,7 @@
 #include "statement.h"
 #include "transaction/transaction_action.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class TransactionStatement : public Statement {
@@ -20,4 +20,4 @@ private:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

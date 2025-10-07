@@ -1,13 +1,13 @@
 #include <filesystem>
 #include <fstream>
 
-#include "c_api/kuzu.h"
+#include "c_api/lbug.h"
 #include "c_api_test/c_api_test.h"
 #include "gtest/gtest.h"
 
-using namespace kuzu::main;
-using namespace kuzu::testing;
-using namespace kuzu::common;
+using namespace lbug::main;
+using namespace lbug::testing;
+using namespace lbug::common;
 
 class CApiVersionTest : public CApiTest {
 public:
@@ -47,7 +47,7 @@ TEST_F(CApiVersionTest, GetStorageVersion) {
     char magic[5];
     dbFile.read(magic, 4);
     magic[4] = '\0';
-    ASSERT_STREQ(magic, "KUZU");
+    ASSERT_STREQ(magic, "LBUG");
     uint64_t actualVersion;
     dbFile.read(reinterpret_cast<char*>(&actualVersion), sizeof(actualVersion));
     dbFile.close();
@@ -69,7 +69,7 @@ TEST_F(EmptyCApiVersionTest, GetStorageVersion) {
     char magic[5];
     dbFile.read(magic, 4);
     magic[4] = '\0';
-    ASSERT_STREQ(magic, "KUZU");
+    ASSERT_STREQ(magic, "LBUG");
     uint64_t actualVersion;
     dbFile.read(reinterpret_cast<char*>(&actualVersion), sizeof(actualVersion));
     dbFile.close();

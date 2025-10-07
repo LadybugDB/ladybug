@@ -2,7 +2,7 @@
 
 #include "common/serializer/deserializer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 void TypeCatalogEntry::serialize(common::Serializer& serializer) const {
@@ -21,4 +21,4 @@ std::unique_ptr<TypeCatalogEntry> TypeCatalogEntry::deserialize(
 }
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

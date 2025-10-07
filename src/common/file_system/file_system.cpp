@@ -2,7 +2,7 @@
 
 #include "common/string_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 void FileSystem::overwriteFile(const std::string& /*from*/, const std::string& /*to*/) {
@@ -69,4 +69,4 @@ bool FileSystem::isGZIPCompressed(const std::filesystem::path& path) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

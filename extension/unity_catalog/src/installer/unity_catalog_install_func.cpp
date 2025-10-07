@@ -8,9 +8,9 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void install(const std::string& repo, kuzu::main::ClientContext& context) {
-    kuzu::extension::InstallExtensionInfo info{"unity_catalog", repo, false /* falseInstall */};
-    kuzu::duckdb_extension::DuckDBInstaller installer{info, context};
+INIT_EXPORT void install(const std::string& repo, lbug::main::ClientContext& context) {
+    lbug::extension::InstallExtensionInfo info{"unity_catalog", repo, false /* falseInstall */};
+    lbug::duckdb_extension::DuckDBInstaller installer{info, context};
     installer.install();
 }
 }

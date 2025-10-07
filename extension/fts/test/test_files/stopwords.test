@@ -86,9 +86,9 @@ Binder exception: The stop words table must have exactly one string column.
 -STATEMENT CALL CREATE_FTS_INDEX('doc', 'docIdx', ['content', 'author', 'name'], stopWords := 'INVALID_STOPWORDS_COL_TYPE', stemmer := 'porter')
 ---- error
 Binder exception: The stop words table must have exactly one string column.
--STATEMENT CALL CREATE_FTS_INDEX('doc', 'docIdx', ['content', 'author', 'name'], stopWords := 'S3://kuzu-test/test123', stemmer := 'porter')
+-STATEMENT CALL CREATE_FTS_INDEX('doc', 'docIdx', ['content', 'author', 'name'], stopWords := 'S3://lbug-test/test123', stemmer := 'porter')
 ---- error
-Binder exception: Given stopwords: 'S3://kuzu-test/test123' is not a node table name nor a valid file path.
+Binder exception: Given stopwords: 'S3://lbug-test/test123' is not a node table name nor a valid file path.
 
 -CASE UTF8StopWords
 -LOAD_DYNAMIC_EXTENSION fts

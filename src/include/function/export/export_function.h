@@ -6,7 +6,7 @@
 #include "common/types/value/value.h"
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ExportFuncLocalState {
@@ -105,4 +105,4 @@ struct ExportParquetFunction : public ExportFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

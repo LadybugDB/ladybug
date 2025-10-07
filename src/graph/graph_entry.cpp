@@ -2,12 +2,12 @@
 
 #include "common/exception/runtime.h"
 
-using namespace kuzu::planner;
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::catalog;
+using namespace lbug::planner;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace graph {
 
 NativeGraphEntry::NativeGraphEntry(std::vector<TableCatalogEntry*> nodeEntries,
@@ -56,4 +56,4 @@ const NativeGraphEntryTableInfo& NativeGraphEntry::getRelInfo(table_id_t tableID
 }
 
 } // namespace graph
-} // namespace kuzu
+} // namespace lbug

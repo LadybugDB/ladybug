@@ -3,7 +3,7 @@
 #include "processor/operator/aggregate/base_aggregate_scan.h"
 #include "processor/operator/aggregate/simple_aggregate.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class SimpleAggregateScan final : public BaseAggregateScan {
@@ -27,4 +27,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

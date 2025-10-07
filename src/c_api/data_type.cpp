@@ -1,16 +1,16 @@
-#include "c_api/kuzu.h"
+#include "c_api/lbug.h"
 #include "common/types/types.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu::common {
+namespace lbug::common {
 struct CAPIHelper {
     static inline LogicalType* createLogicalType(LogicalTypeID typeID,
         std::unique_ptr<ExtraTypeInfo> extraTypeInfo) {
         return new LogicalType(typeID, std::move(extraTypeInfo));
     }
 };
-} // namespace kuzu::common
+} // namespace lbug::common
 
 void kuzu_data_type_create(kuzu_data_type_id id, kuzu_logical_type* child_type,
     uint64_t num_elements_in_array, kuzu_logical_type* out_data_type) {

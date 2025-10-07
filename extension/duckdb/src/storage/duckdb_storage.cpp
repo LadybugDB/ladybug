@@ -10,7 +10,7 @@
 #include "function/clear_cache.h"
 #include "storage/attached_duckdb_database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 static std::string getCatalogNameFromPath(const std::string& dbPath) {
@@ -47,4 +47,4 @@ bool DuckDBStorageExtension::canHandleDB(std::string dbType_) const {
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

@@ -7,7 +7,7 @@
 #include "processor/operator/result_collector.h"
 #include "processor/physical_plan.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 enum class RelDataDirection : uint8_t;
 class SemiMask;
@@ -255,4 +255,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

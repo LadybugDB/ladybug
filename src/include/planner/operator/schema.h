@@ -4,7 +4,7 @@
 
 #include "binder/expression/expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 using f_group_pos = uint32_t;
@@ -144,4 +144,4 @@ public:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

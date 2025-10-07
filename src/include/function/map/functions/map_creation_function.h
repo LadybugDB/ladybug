@@ -5,7 +5,7 @@
 #include "function/list/functions/list_unique_function.h"
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 static void duplicateValueHandler(const std::string& key) {
@@ -55,4 +55,4 @@ struct MapCreation {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -3,7 +3,7 @@
 #include "binder/bound_statement.h"
 #include "binder/expression/expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 struct Option;
 }
@@ -27,4 +27,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

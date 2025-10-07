@@ -2,7 +2,7 @@ const { assert } = require("chai");
 
 describe("Connection constructor", function () {
   it("should create a connection with a valid database object", async function () {
-    const connection = new kuzu.Connection(db);
+    const connection = new lbug.Connection(db);
     assert.exists(connection);
     assert.equal(connection.constructor.name, "Connection");
     await connection.init();
@@ -13,7 +13,7 @@ describe("Connection constructor", function () {
 
   it("should throw error if the database object is invalid", async function () {
     try {
-      const _ = new kuzu.Connection({});
+      const _ = new lbug.Connection({});
       assert.fail("No error thrown when the database object is invalid.");
     } catch (e) {
       assert.equal(e.message, "database must be a valid Database object.");
@@ -187,7 +187,7 @@ describe("Query", function () {
 describe("Timeout", function () {
   it("should abort a query if the timeout is reached", async function () {
     try {
-      const newConn = new kuzu.Connection(db);
+      const newConn = new lbug.Connection(db);
       await newConn.init();
       newConn.setQueryTimeout(1);
       await newConn.query(
@@ -201,7 +201,7 @@ describe("Timeout", function () {
 
   it("should allow setting a timeout before the connection is initialized", async function () {
     try {
-      const newConn = new kuzu.Connection(db);
+      const newConn = new lbug.Connection(db);
       newConn.setQueryTimeout(1);
       await newConn.init();
       await newConn.query(
@@ -216,7 +216,7 @@ describe("Timeout", function () {
 
 describe("Close", function () {
   it("should close the connection", async function () {
-    const newConn = new kuzu.Connection(db);
+    const newConn = new lbug.Connection(db);
     await newConn.init();
     await newConn.close();
     assert.isTrue(newConn._isClosed);

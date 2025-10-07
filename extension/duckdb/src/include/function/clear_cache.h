@@ -5,7 +5,7 @@
 #include "function/table/simple_table_function.h"
 #include "main/database_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 struct ClearCacheBindData final : function::TableFuncBindData {
@@ -27,4 +27,4 @@ struct ClearCacheFunction final {
 };
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

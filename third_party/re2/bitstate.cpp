@@ -29,7 +29,7 @@
 #include "prog.h"
 #include "regexp.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 struct Job {
@@ -371,4 +371,4 @@ bool Prog::SearchBitState(const StringPiece& text, const StringPiece& context, A
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

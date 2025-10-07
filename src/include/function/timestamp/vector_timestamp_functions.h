@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct CenturyFunction {
@@ -30,4 +30,4 @@ struct ToEpochMsFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

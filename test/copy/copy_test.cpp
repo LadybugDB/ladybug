@@ -9,7 +9,7 @@
 #include "test_runner/test_parser.h"
 #include "transaction/transaction_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 class CopyTestHelper {
@@ -525,4 +525,4 @@ TEST_F(CopyTest, OutOfMemoryRecoveryDropTable) {
     }
 }
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

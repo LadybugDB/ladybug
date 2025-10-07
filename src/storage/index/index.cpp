@@ -6,7 +6,7 @@
 #include "main/client_context.h"
 #include "storage/storage_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 IndexStorageInfo::~IndexStorageInfo() = default;
@@ -103,4 +103,4 @@ void IndexHolder::load(main::ClientContext* context, StorageManager* storageMana
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

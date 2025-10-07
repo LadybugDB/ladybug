@@ -11,7 +11,7 @@
 #include "storage/table/column_chunk_metadata.h"
 #include <concepts>
 
-namespace kuzu::storage {
+namespace lbug::storage {
 
 using namespace common;
 using namespace transaction;
@@ -454,4 +454,4 @@ PageCursor ColumnReadWriter::getPageCursorForOffsetInGroup(offset_t offsetInSegm
     return pageCursor;
 }
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

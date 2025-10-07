@@ -29,9 +29,9 @@
 #include <winnt.h>
 #endif
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 bool EvictionQueue::insert(uint32_t fileIndex, page_idx_t pageIndex) {
@@ -513,4 +513,4 @@ void BufferManager::resetSpiller(std::string spillPath) {
 BufferManager::~BufferManager() = default;
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

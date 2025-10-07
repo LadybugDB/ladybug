@@ -16,11 +16,11 @@
 #include "processor/result/factorized_table.h"
 #include "processor/result/factorized_table_schema.h"
 
-using namespace kuzu::common;
-using namespace kuzu::function;
-using namespace kuzu::storage;
+using namespace lbug::common;
+using namespace lbug::function;
+using namespace lbug::storage;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 AggregateHashTable::AggregateHashTable(MemoryManager& memoryManager,
@@ -878,4 +878,4 @@ void AggregateHashTable::clear() {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

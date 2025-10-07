@@ -3,10 +3,10 @@
 #include "function/table/bind_input.h"
 #include "function/table/simple_table_function.h"
 
-using namespace kuzu::common;
-using namespace kuzu::main;
+using namespace lbug::common;
+using namespace lbug::main;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 static offset_t internalTableFunc(const TableFuncMorsel& /*morsel*/,
@@ -41,4 +41,4 @@ function_set DBVersionFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

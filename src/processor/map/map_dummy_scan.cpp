@@ -3,10 +3,10 @@
 #include "processor/plan_mapper.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-using namespace kuzu::common;
-using namespace kuzu::planner;
+using namespace lbug::common;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapDummyScan(const LogicalOperator*) {
@@ -33,4 +33,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapDummyScan(const LogicalOperator
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -1,6 +1,6 @@
 #include "function/gds/gds_state.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 void GDSComputeState::initSource(common::nodeID_t sourceNodeID) const {
@@ -23,4 +23,4 @@ void GDSComputeState::switchToDense(processor::ExecutionContext* context,
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

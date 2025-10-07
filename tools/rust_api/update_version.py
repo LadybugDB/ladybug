@@ -12,7 +12,7 @@ def get_kuzu_version():
     cmake_file = KUZU_ROOT / "CMakeLists.txt"
     with open(cmake_file) as f:
         for line in f:
-            if line.startswith("project(Kuzu VERSION"):
+            if line.startswith("project(Lbug VERSION"):
                 version = line.split(" ")[2].strip()
                 # Make version semver-compatible
                 components = version.split(".")

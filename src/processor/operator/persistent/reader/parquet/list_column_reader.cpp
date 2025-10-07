@@ -1,6 +1,6 @@
 #include "processor/operator/persistent/reader/parquet/list_column_reader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 ListColumnReader::ListColumnReader(ParquetReader& reader, common::LogicalType type,
@@ -128,4 +128,4 @@ uint64_t ListColumnReader::read(uint64_t numValues, parquet_filter_t& /*filter*/
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

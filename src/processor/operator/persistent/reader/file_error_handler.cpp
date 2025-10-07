@@ -7,7 +7,7 @@
 #include "common/string_format.h"
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 using namespace common;
 namespace processor {
 
@@ -234,4 +234,4 @@ void LocalFileErrorHandler::flushCachedErrors(bool canThrowCachedError) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

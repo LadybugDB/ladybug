@@ -11,16 +11,16 @@ from test_helper import KUZU_ROOT
 
 python_build_dir = Path(__file__).parent.parent / "build"
 try:
-    import kuzu
+    import lbug
 except ModuleNotFoundError:
     sys.path.append(str(python_build_dir))
-    import kuzu
+    import lbug
 
 if TYPE_CHECKING:
     from type_aliases import ConnDB
 
 
-def init_npy(conn: kuzu.Connection) -> None:
+def init_npy(conn: lbug.Connection) -> None:
     conn.execute(
         """
         CREATE NODE TABLE npyoned (
@@ -69,7 +69,7 @@ def init_npy(conn: kuzu.Connection) -> None:
     )
 
 
-def init_tensor(conn: kuzu.Connection) -> None:
+def init_tensor(conn: lbug.Connection) -> None:
     conn.execute(
         """
         CREATE NODE TABLE tensor (
@@ -85,14 +85,14 @@ def init_tensor(conn: kuzu.Connection) -> None:
     conn.execute(f'COPY tensor FROM "{KUZU_ROOT}/dataset/tensor-list/vTensor.csv" (HEADER=true)')
 
 
-def init_long_str(conn: kuzu.Connection) -> None:
+def init_long_str(conn: lbug.Connection) -> None:
     conn.execute("CREATE NODE TABLE personLongString (name STRING, spouse STRING, PRIMARY KEY(name))")
     conn.execute(f'COPY personLongString FROM "{KUZU_ROOT}/dataset/long-string-pk-tests/vPerson.csv"')
     conn.execute("CREATE REL TABLE knowsLongString (FROM personLongString TO personLongString, MANY_MANY)")
     conn.execute(f'COPY knowsLongString FROM "{KUZU_ROOT}/dataset/long-string-pk-tests/eKnows.csv"')
 
 
-def init_tinysnb(conn: kuzu.Connection) -> None:
+def init_tinysnb(conn: lbug.Connection) -> None:
     tiny_snb_path = (Path(__file__).parent / f"{KUZU_ROOT}/dataset/tinysnb").resolve()
     schema_path = tiny_snb_path / "schema.cypher"
     with schema_path.open(mode="r") as f:
@@ -110,7 +110,7 @@ def init_tinysnb(conn: kuzu.Connection) -> None:
                 conn.execute(line)
 
 
-def init_demo(conn: kuzu.Connection) -> None:
+def init_demo(conn: lbug.Connection) -> None:
     tiny_snb_path = (Path(__file__).parent / f"{KUZU_ROOT}/dataset/demo-db/csv").resolve()
     schema_path = tiny_snb_path / "schema.cypher"
     with schema_path.open(mode="r") as f:
@@ -128,7 +128,7 @@ def init_demo(conn: kuzu.Connection) -> None:
                 conn.execute(line)
 
 
-def init_movie_serial(conn: kuzu.Connection) -> None:
+def init_movie_serial(conn: lbug.Connection) -> None:
     conn.execute(
         """
         CREATE NODE TABLE moviesSerial (
@@ -167,13 +167,13 @@ def init_db(path: Path) -> Path:
 
 
 _READONLY_CONN_DB_: ConnDB | None = None
-_READONLY_ASYNC_CONNECTION_: kuzu.AsyncConnection | None = None
+_READONLY_ASYNC_CONNECTION_: lbug.AsyncConnection | None = None
 
 
 def create_conn_db(path: Path, *, read_only: bool) -> ConnDB:
     """Return a new connection and database."""
-    db = kuzu.Database(path, buffer_pool_size=_POOL_SIZE_, read_only=read_only)
-    conn = kuzu.Connection(db, num_threads=4)
+    db = lbug.Database(path, buffer_pool_size=_POOL_SIZE_, read_only=read_only)
+    conn = lbug.Connection(db, num_threads=4)
     return conn, db
 
 
@@ -193,22 +193,22 @@ def conn_db_readwrite(tmp_path: Path) -> ConnDB:
 
 
 @pytest.fixture
-def async_connection_readonly(tmp_path: Path) -> kuzu.AsyncConnection:
+def async_connection_readonly(tmp_path: Path) -> lbug.AsyncConnection:
     """Return a cached read-only async connection."""
     global _READONLY_ASYNC_CONNECTION_
     if _READONLY_ASYNC_CONNECTION_ is None:
         conn, db = create_conn_db(init_db(tmp_path), read_only=True)
         conn.close()
-        _READONLY_ASYNC_CONNECTION_ = kuzu.AsyncConnection(db, max_threads_per_query=4)
+        _READONLY_ASYNC_CONNECTION_ = lbug.AsyncConnection(db, max_threads_per_query=4)
     return _READONLY_ASYNC_CONNECTION_
 
 
 @pytest.fixture
-def async_connection_readwrite(tmp_path: Path) -> kuzu.AsyncConnection:
+def async_connection_readwrite(tmp_path: Path) -> lbug.AsyncConnection:
     """Return a writeable async connection."""
     conn, db = create_conn_db(init_db(tmp_path), read_only=False)
     conn.close()
-    return kuzu.AsyncConnection(db, max_threads_per_query=4)
+    return lbug.AsyncConnection(db, max_threads_per_query=4)
 
 
 @pytest.fixture
@@ -220,8 +220,8 @@ def conn_db_empty(tmp_path: Path) -> ConnDB:
 @pytest.fixture
 def conn_db_in_mem() -> ConnDB:
     """Return a new in-memory connection and database."""
-    db = kuzu.Database(database_path=":memory:", buffer_pool_size=_POOL_SIZE_, read_only=False)
-    conn = kuzu.Connection(db, num_threads=4)
+    db = lbug.Database(database_path=":memory:", buffer_pool_size=_POOL_SIZE_, read_only=False)
+    conn = lbug.Connection(db, num_threads=4)
     return conn, db
 
 

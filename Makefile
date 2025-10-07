@@ -248,7 +248,7 @@ extension-test: extension-test-build
 		E2E_TEST_FILES_DIRECTORY=extension) \
     ctest --test-dir build/$(call get-build-path,RelWithDebInfo)/test/runner --output-on-failure -j ${TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
     ctest --test-dir build/$(call get-build-path,RelWithDebInfo)/extension --output-on-failure -j ${TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
-	aws s3 rm s3://kuzu-dataset-us/${RUN_ID}/ --recursive
+	aws s3 rm s3://lbug-dataset-us/${RUN_ID}/ --recursive
 
 extension-test-static-build:
 	$(call run-cmake-relwithdebinfo, \
@@ -264,7 +264,7 @@ extension-static-link-test: extension-test-static-build
 		E2E_TEST_FILES_DIRECTORY=extension) \
     ctest --test-dir build/$(call get-build-path,RelWithDebInfo)/test/runner --output-on-failure -j ${TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
     ctest --test-dir build/$(call get-build-path,RelWithDebInfo)/extension --output-on-failure -j ${TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
-	aws s3 rm s3://kuzu-dataset-us/${RUN_ID}/ --recursive
+	aws s3 rm s3://lbug-dataset-us/${RUN_ID}/ --recursive
 
 extension-lcov-build:
 	$(call run-cmake-release, \
@@ -280,7 +280,7 @@ extension-lcov: extension-lcov-build
 		E2E_TEST_FILES_DIRECTORY=extension) \
     ctest --test-dir build/$(call get-build-path,Release)/test/runner --output-on-failure -j ${TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
     ctest --test-dir build/$(call get-build-path,Release)/extension --output-on-failure -j ${TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
-	aws s3 rm s3://kuzu-dataset-us/${RUN_ID}/ --recursive
+	aws s3 rm s3://lbug-dataset-us/${RUN_ID}/ --recursive
 
 extension-debug:
 	$(call run-cmake-debug, \

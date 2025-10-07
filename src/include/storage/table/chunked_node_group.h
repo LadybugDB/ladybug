@@ -14,7 +14,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/version_info.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class SelectionVector;
 } // namespace common
@@ -257,4 +257,4 @@ protected:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

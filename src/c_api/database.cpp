@@ -1,8 +1,8 @@
-#include "c_api/kuzu.h"
+#include "c_api/lbug.h"
 #include "common/exception/exception.h"
-#include "main/kuzu.h"
-using namespace kuzu::main;
-using namespace kuzu::common;
+#include "main/lbug.h"
+using namespace lbug::main;
+using namespace lbug::common;
 
 kuzu_state kuzu_database_init(const char* database_path, kuzu_system_config config,
     kuzu_database* out_database) {

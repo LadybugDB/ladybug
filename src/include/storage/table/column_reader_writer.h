@@ -2,7 +2,7 @@
 
 #include "storage/compression/float_compression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 class Transaction;
 }
@@ -88,4 +88,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -5,7 +5,7 @@
 
 #include "common/utils.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 namespace {
 template<size_t compressed_field, std::integral CompressedType,
     IntegerBitpackingType UncompressedType>
@@ -137,4 +137,4 @@ template struct BitpackingUtils<uint64_t>;
 template struct BitpackingUtils<uint32_t>;
 template struct BitpackingUtils<uint16_t>;
 template struct BitpackingUtils<uint8_t>;
-} // namespace kuzu::storage
+} // namespace lbug::storage

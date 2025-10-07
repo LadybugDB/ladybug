@@ -21,11 +21,11 @@ fn link_libraries() {
     if cfg!(windows) && link_mode() == "dylib" {
         println!("cargo:rustc-link-lib=dylib=kuzu_shared");
     } else if link_mode() == "dylib" {
-        println!("cargo:rustc-link-lib={}=kuzu", link_mode());
+        println!("cargo:rustc-link-lib={}=lbug", link_mode());
     } else if rustversion::cfg!(since(1.82)) {
-        println!("cargo:rustc-link-lib=static:+whole-archive=kuzu");
+        println!("cargo:rustc-link-lib=static:+whole-archive=lbug");
     } else {
-        println!("cargo:rustc-link-lib=static=kuzu");
+        println!("cargo:rustc-link-lib=static=lbug");
     }
     if link_mode() == "static" {
         if cfg!(windows) {
@@ -67,7 +67,7 @@ fn link_libraries() {
 
 fn build_bundled_cmake() -> Vec<PathBuf> {
     let kuzu_root = {
-        let root = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("kuzu-src");
+        let root = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("lbug-src");
         if root.is_symlink() || root.is_dir() {
             root
         } else {
@@ -166,14 +166,14 @@ fn build_ffi(
 
     println!("cargo:rerun-if-changed=include/kuzu_rs.h");
     println!("cargo:rerun-if-changed=src/kuzu_rs.cpp");
-    // Note that this should match the kuzu-src/* entries in the package.include list in Cargo.toml
+    // Note that this should match the lbug-src/* entries in the package.include list in Cargo.toml
     // Unfortunately they appear to need to be specified individually since the symlink is
     // considered to be changed each time.
-    println!("cargo:rerun-if-changed=kuzu-src/src");
-    println!("cargo:rerun-if-changed=kuzu-src/cmake");
-    println!("cargo:rerun-if-changed=kuzu-src/third_party");
-    println!("cargo:rerun-if-changed=kuzu-src/CMakeLists.txt");
-    println!("cargo:rerun-if-changed=kuzu-src/tools/CMakeLists.txt");
+    println!("cargo:rerun-if-changed=lbug-src/src");
+    println!("cargo:rerun-if-changed=lbug-src/cmake");
+    println!("cargo:rerun-if-changed=lbug-src/third_party");
+    println!("cargo:rerun-if-changed=lbug-src/CMakeLists.txt");
+    println!("cargo:rerun-if-changed=lbug-src/tools/CMakeLists.txt");
 
     if cfg!(windows) {
         build.flag("/std:c++20");

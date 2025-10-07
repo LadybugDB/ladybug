@@ -63,7 +63,7 @@
 
 #include "pod_array.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 template<typename Value>
@@ -245,5 +245,5 @@ bool SparseSetT<Value>::less(int a, int b) {
 typedef SparseSetT<void> SparseSet;
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug
 #endif // UTIL_SPARSE_SET_H_

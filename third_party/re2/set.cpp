@@ -17,7 +17,7 @@
 #include "stringpiece.h"
 #include "util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 RE2::Set::Set(const RE2::Options& options, RE2::Anchor anchor) {
@@ -43,7 +43,7 @@ int RE2::Set::Add(const StringPiece& pattern, std::string* error) {
 
     Regexp::ParseFlags pf = static_cast<Regexp::ParseFlags>(options_.ParseFlags());
     RegexpStatus status;
-    kuzu::regex::Regexp* re = Regexp::Parse(pattern, pf, &status);
+    lbug::regex::Regexp* re = Regexp::Parse(pattern, pf, &status);
     if (re == NULL) {
         if (error != NULL)
             *error = status.Text();
@@ -54,20 +54,20 @@ int RE2::Set::Add(const StringPiece& pattern, std::string* error) {
 
     // Concatenate with match index and push on vector.
     int n = static_cast<int>(elem_.size());
-    kuzu::regex::Regexp* m = kuzu::regex::Regexp::HaveMatch(n, pf);
+    lbug::regex::Regexp* m = lbug::regex::Regexp::HaveMatch(n, pf);
     if (re->op() == kRegexpConcat) {
         int nsub = re->nsub();
-        PODArray<kuzu::regex::Regexp*> sub(nsub + 1);
+        PODArray<lbug::regex::Regexp*> sub(nsub + 1);
         for (int i = 0; i < nsub; i++)
             sub[i] = re->sub()[i]->Incref();
         sub[nsub] = m;
         re->Decref();
-        re = kuzu::regex::Regexp::Concat(sub.data(), nsub + 1, pf);
+        re = lbug::regex::Regexp::Concat(sub.data(), nsub + 1, pf);
     } else {
-        kuzu::regex::Regexp* sub[2];
+        lbug::regex::Regexp* sub[2];
         sub[0] = re;
         sub[1] = m;
-        re = kuzu::regex::Regexp::Concat(sub, 2, pf);
+        re = lbug::regex::Regexp::Concat(sub, 2, pf);
     }
     elem_.emplace_back(std::string(pattern), re);
     return n;
@@ -86,14 +86,14 @@ bool RE2::Set::Compile() {
     std::sort(elem_.begin(), elem_.end(),
         [](const Elem& a, const Elem& b) -> bool { return a.first < b.first; });
 
-    PODArray<kuzu::regex::Regexp*> sub(size_);
+    PODArray<lbug::regex::Regexp*> sub(size_);
     for (int i = 0; i < size_; i++)
         sub[i] = elem_[i].second;
     elem_.clear();
     elem_.shrink_to_fit();
 
     Regexp::ParseFlags pf = static_cast<Regexp::ParseFlags>(options_.ParseFlags());
-    kuzu::regex::Regexp* re = kuzu::regex::Regexp::Alternate(sub.data(), size_, pf);
+    lbug::regex::Regexp* re = lbug::regex::Regexp::Alternate(sub.data(), size_, pf);
 
     prog_ = Prog::CompileSet(re, anchor_, options_.max_mem());
     re->Decref();
@@ -148,4 +148,4 @@ bool RE2::Set::Match(const StringPiece& text, std::vector<int>* v, ErrorInfo* er
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

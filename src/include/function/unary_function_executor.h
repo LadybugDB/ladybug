@@ -3,7 +3,7 @@
 #include "common/vector/value_vector.h"
 #include "function/cast/cast_function_bind_data.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 /**
@@ -195,4 +195,4 @@ struct UnaryFunctionExecutor {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -6,12 +6,12 @@
 #include "parser/query/reading_clause/load_from.h"
 #include "parser/scan_source.h"
 
-using namespace kuzu::function;
-using namespace kuzu::common;
-using namespace kuzu::parser;
-using namespace kuzu::catalog;
+using namespace lbug::function;
+using namespace lbug::common;
+using namespace lbug::parser;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 std::unique_ptr<BoundReadingClause> Binder::bindLoadFrom(const ReadingClause& readingClause) {
@@ -61,4 +61,4 @@ std::unique_ptr<BoundReadingClause> Binder::bindLoadFrom(const ReadingClause& re
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

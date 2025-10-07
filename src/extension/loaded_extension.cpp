@@ -2,7 +2,7 @@
 
 #include "common/assert.h"
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 std::string LoadedExtension::toCypher() {
@@ -20,4 +20,4 @@ std::string LoadedExtension::toCypher() {
 }
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

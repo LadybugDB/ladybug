@@ -7,12 +7,12 @@
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 
-using namespace kuzu::common;
-using namespace kuzu::transaction;
-using namespace kuzu::storage;
-using namespace kuzu::catalog;
+using namespace lbug::common;
+using namespace lbug::transaction;
+using namespace lbug::storage;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 
 StorageDriver::StorageDriver(Database* database) {
@@ -177,4 +177,4 @@ void StorageDriver::scanColumn(Table* table, column_id_t columnID, const offset_
 }
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

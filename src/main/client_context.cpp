@@ -32,15 +32,15 @@
 #include "common/windows_utils.h"
 #endif
 
-using namespace kuzu::parser;
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::catalog;
-using namespace kuzu::planner;
-using namespace kuzu::processor;
-using namespace kuzu::transaction;
+using namespace lbug::parser;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::catalog;
+using namespace lbug::planner;
+using namespace lbug::processor;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 
 ActiveQuery::ActiveQuery() : interrupted{false} {}
@@ -182,7 +182,7 @@ const main::ExtensionOption* ClientContext::getExtensionOption(std::string optio
 }
 
 std::string ClientContext::getExtensionDir() const {
-    return stringFormat("{}/.kuzu/extension/{}/{}/", clientConfig.homeDirectory,
+    return stringFormat("{}/.lbug/extension/{}/{}/", clientConfig.homeDirectory,
         KUZU_EXTENSION_VERSION, extension::getPlatform());
 }
 
@@ -598,8 +598,8 @@ bool ClientContext::canExecuteWriteQuery() const {
     if (getDBConfig()->readOnly) {
         return false;
     }
-    // Note: we can only attach a remote kuzu database in read-only mode and only one
-    // remote kuzu database can be attached.
+    // Note: we can only attach a remote lbug database in read-only mode and only one
+    // remote lbug database can be attached.
     const auto dbManager = DatabaseManager::Get(*this);
     for (const auto& attachedDB : dbManager->getAttachedDatabases()) {
         if (attachedDB->getDBType() == ATTACHED_KUZU_DB_TYPE) {
@@ -610,4 +610,4 @@ bool ClientContext::canExecuteWriteQuery() const {
 }
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "planner/operator/logical_plan.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class CostModel {
@@ -21,4 +21,4 @@ public:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

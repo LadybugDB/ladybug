@@ -21,12 +21,12 @@
 #include "storage/table/struct_column.h"
 #include <concepts>
 
-using namespace kuzu::common;
-using namespace kuzu::catalog;
-using namespace kuzu::storage;
-using namespace kuzu::main;
+using namespace lbug::common;
+using namespace lbug::catalog;
+using namespace lbug::storage;
+using namespace lbug::main;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct StorageInfoLocalState final : TableFuncLocalState {
@@ -345,4 +345,4 @@ function_set StorageInfoFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

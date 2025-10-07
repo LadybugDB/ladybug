@@ -4,12 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kuzu WebAssembly Example</title>
+    <title>Lbug WebAssembly Example</title>
 </head>
 
 <body>
-    <h1>Kuzu WebAssembly Example</h1>
-    <p>This example demonstrates how to use Kuzu WebAssembly in a web browser. In this example, we will create a simple
+    <h1>Lbug WebAssembly Example</h1>
+    <p>This example demonstrates how to use Lbug WebAssembly in a web browser. In this example, we will create a simple
         social network database with the following schema:</p>
     <ul>
         <li>Node table <code>User</code> with columns <code>name</code> and <code>age</code></li>
@@ -19,17 +19,17 @@
         <li>Relationship table <code>LivesIn</code> with a relationship from <code>User</code> to <code>City</code></li>
     </ul>
 
-    <p>We will then load data into these tables and run some queries to demonstrate the capabilities of Kuzu
+    <p>We will then load data into these tables and run some queries to demonstrate the capabilities of Lbug
         WebAssembly.</p>
-    <p>In this example, all the queries are evaluated in browser using the WebAssembly version of Kuzu. No server-side
+    <p>In this example, all the queries are evaluated in browser using the WebAssembly version of Lbug. No server-side
         processing is involved.</p>
     <p>The output of the queries will be displayed below:</p>
 
     <code id="output" style="margin-top: 20px; padding: 10px; display: block; border: 1px solid #ccc; background-color: #f9f9f9; white-space: pre-wrap;"></code>
 
     <script type="module">
-        import kuzu from './index.js';
-        window.kuzu = kuzu;
+        import lbug from './index.js';
+        window.lbug = lbug;
         const appendOutput = (text) => {
             const output = document.getElementById("output");
             output.innerText += text + "\n";
@@ -51,14 +51,14 @@ Zhang,Noura,2022`;
 Karissa,Waterloo
 Zhang,Kitchener
 Noura,Guelph`;
-            await kuzu.FS.writeFile("/user.csv", userCSV);
-            await kuzu.FS.writeFile("/city.csv", cityCSV);
-            await kuzu.FS.writeFile("/follows.csv", followsCSV);
-            await kuzu.FS.writeFile("/lives-in.csv", livesInCSV);
+            await lbug.FS.writeFile("/user.csv", userCSV);
+            await lbug.FS.writeFile("/city.csv", cityCSV);
+            await lbug.FS.writeFile("/follows.csv", followsCSV);
+            await lbug.FS.writeFile("/lives-in.csv", livesInCSV);
 
             // Create an empty database and connect to it
-            const db = new kuzu.Database("");
-            const conn = new kuzu.Connection(db);
+            const db = new lbug.Database("");
+            const conn = new lbug.Connection(db);
 
 
             const queries = [

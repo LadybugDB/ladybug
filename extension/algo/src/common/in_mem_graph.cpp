@@ -1,6 +1,6 @@
 #include "common/in_mem_graph.h"
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 
 InMemGraph::InMemGraph(const common::offset_t numNodes, storage::MemoryManager* mm)
@@ -26,4 +26,4 @@ void InMemGraph::insertNbr(const common::offset_t to, const weight_t weight) {
 }
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug

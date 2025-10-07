@@ -5,7 +5,7 @@
 #include "common/types/types.h"
 #include "common/types/value/value.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 std::vector<std::pair<std::string, std::unique_ptr<Value>>> NodeVal::getProperties(
@@ -74,4 +74,4 @@ void NodeVal::throwIfNotNode(const Value* val) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

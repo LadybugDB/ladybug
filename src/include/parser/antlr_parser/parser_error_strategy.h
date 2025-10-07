@@ -2,7 +2,7 @@
 
 #include "antlr4-runtime.h" // IWYU pragma: keep; this is the public header.
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class ParserErrorStrategy : public antlr4::DefaultErrorStrategy {
@@ -13,4 +13,4 @@ protected:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

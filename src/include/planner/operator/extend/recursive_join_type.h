@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 enum class RecursiveJoinType : uint8_t {
@@ -11,4 +11,4 @@ enum class RecursiveJoinType : uint8_t {
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

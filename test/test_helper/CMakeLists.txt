@@ -8,7 +8,7 @@ target_include_directories(
         PUBLIC
         ../include/
 )
-target_link_libraries(test_helper PUBLIC kuzu)
+target_link_libraries(test_helper PUBLIC lbug)
 
 add_library(
         api_test_helper

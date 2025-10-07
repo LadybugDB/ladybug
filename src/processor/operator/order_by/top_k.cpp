@@ -9,9 +9,9 @@
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string TopKPrintInfo::toString() const {
@@ -286,4 +286,4 @@ void TopK::executeInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

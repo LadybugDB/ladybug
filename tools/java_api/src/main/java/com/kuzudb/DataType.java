@@ -1,7 +1,7 @@
 package com.kuzudb;
 
 /**
- * DataType is the kuzu internal representation of data types.
+ * DataType is the lbug internal representation of data types.
  */
 public class DataType implements AutoCloseable {
     long dt_ref;
@@ -10,7 +10,7 @@ public class DataType implements AutoCloseable {
     /**
      * Create a non-nested DataType object from its internal ID.
      *
-     * @param id: the kuzu internal representation of data type IDs.
+     * @param id: the lbug internal representation of data type IDs.
      */
     public DataType(DataTypeID id) {
         dt_ref = Native.kuzuDataTypeCreate(id, null, 0);

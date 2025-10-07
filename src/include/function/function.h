@@ -3,7 +3,7 @@
 #include "binder/expression/expression.h"
 #include "common/api.h"
 
-namespace kuzu {
+namespace lbug {
 
 namespace main {
 class ClientContext;
@@ -105,4 +105,4 @@ struct ScalarOrAggregateFunction : Function {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

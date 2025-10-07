@@ -2,7 +2,7 @@
 
 #include "connector/duckdb_connector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace iceberg_extension {
 
 class IcebergConnector : public duckdb_extension::DuckDBConnector {
@@ -12,4 +12,4 @@ public:
 };
 
 } // namespace iceberg_extension
-} // namespace kuzu
+} // namespace lbug

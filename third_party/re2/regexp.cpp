@@ -25,7 +25,7 @@
 #include "util.h"
 #include "walker-inl.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 // Constructor.  Allocates vectors as appropriate for operator.
@@ -979,4 +979,4 @@ CharClass* CharClassBuilder::GetCharClass() {
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

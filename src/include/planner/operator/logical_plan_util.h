@@ -2,7 +2,7 @@
 
 #include "planner/operator/logical_plan.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class LogicalPlanUtil {
@@ -23,4 +23,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

@@ -1,6 +1,6 @@
 #include "planner/operator/scan/logical_scan_node_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 LogicalScanNodeTable::LogicalScanNodeTable(const LogicalScanNodeTable& other)
@@ -44,4 +44,4 @@ std::unique_ptr<LogicalOperator> LogicalScanNodeTable::copy() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

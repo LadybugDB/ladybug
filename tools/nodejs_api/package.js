@@ -5,13 +5,13 @@ const path = require("path");
 
 const KUZU_ROOT = path.resolve(path.join(__dirname, "..", ".."));
 const CURRENT_DIR = path.resolve(__dirname);
-const ARCHIVE_PATH = path.resolve(path.join(__dirname, "kuzu-source.tar"));
+const ARCHIVE_PATH = path.resolve(path.join(__dirname, "lbug-source.tar"));
 const PREBUILT_DIR = path.join(CURRENT_DIR, "prebuilt");
 const ARCHIVE_DIR_PATH = path.join(CURRENT_DIR, "package");
-const KUZU_VERSION_TEXT = "Kuzu VERSION";
+const KUZU_VERSION_TEXT = "Lbug VERSION";
 
 (async () => {
-  console.log("Gathering Kuzu source code...");
+  console.log("Gathering Lbug source code...");
   // Create the git archive
   await new Promise((resolve, reject) => {
     childProcess.execFile(
@@ -30,21 +30,21 @@ const KUZU_VERSION_TEXT = "Kuzu VERSION";
     );
   });
 
-  // Remove the old kuzu-source directory
+  // Remove the old lbug-source directory
   try {
-    await fs.rm(path.join(CURRENT_DIR, "kuzu-source"), { recursive: true });
+    await fs.rm(path.join(CURRENT_DIR, "lbug-source"), { recursive: true });
   } catch (e) {
     // Ignore
   }
 
-  // Create the kuzu-source directory
-  await fs.mkdir(path.join(CURRENT_DIR, "kuzu-source"));
+  // Create the lbug-source directory
+  await fs.mkdir(path.join(CURRENT_DIR, "lbug-source"));
 
-  // Extract the archive to kuzu-source
+  // Extract the archive to lbug-source
   await new Promise((resolve, reject) => {
     childProcess.execFile(
       "tar",
-      ["-xf", ARCHIVE_PATH, "-C", "kuzu-source"],
+      ["-xf", ARCHIVE_PATH, "-C", "lbug-source"],
       { cwd: CURRENT_DIR },
       (err) => {
         if (err) {
@@ -69,10 +69,10 @@ const KUZU_VERSION_TEXT = "Kuzu VERSION";
   // Create the archive directory
   await fs.mkdir(ARCHIVE_DIR_PATH);
 
-  // Move kuzu-source to archive
+  // Move lbug-source to archive
   await fs.rename(
-    path.join(CURRENT_DIR, "kuzu-source"),
-    path.join(ARCHIVE_DIR_PATH, "kuzu-source")
+    path.join(CURRENT_DIR, "lbug-source"),
+    path.join(ARCHIVE_DIR_PATH, "lbug-source")
   );
 
   // Copy package.json to archive
@@ -181,7 +181,7 @@ const KUZU_VERSION_TEXT = "Kuzu VERSION";
   // There is a symlink in the rust_api directory, so we need to remove it.
   // Otherwise, the tarball will be rejected by npm.
   await fs.unlink(
-    path.join(ARCHIVE_DIR_PATH, "kuzu-source", "tools", "rust_api", "kuzu-src")
+    path.join(ARCHIVE_DIR_PATH, "lbug-source", "tools", "rust_api", "lbug-src")
   );
 
   console.log("Creating tarball...");
@@ -189,7 +189,7 @@ const KUZU_VERSION_TEXT = "Kuzu VERSION";
   await new Promise((resolve, reject) => {
     childProcess.execFile(
       "tar",
-      ["-czf", "kuzu-source.tar.gz", "package"],
+      ["-czf", "lbug-source.tar.gz", "package"],
       { cwd: CURRENT_DIR },
       (err) => {
         if (err) {

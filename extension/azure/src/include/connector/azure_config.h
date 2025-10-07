@@ -5,7 +5,7 @@
 #include "main/client_context.h"
 #include "main/database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace azure_extension {
 
 struct AzureConfig {
@@ -20,4 +20,4 @@ struct AzureConfig {
 };
 
 } // namespace azure_extension
-} // namespace kuzu
+} // namespace lbug

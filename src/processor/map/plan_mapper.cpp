@@ -7,12 +7,12 @@
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::planner;
-using namespace kuzu::storage;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::planner;
+using namespace lbug::storage;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 PlanMapper::PlanMapper(ExecutionContext* executionContext)
@@ -231,4 +231,4 @@ std::unique_ptr<SemiMask> PlanMapper::createSemiMask(table_id_t tableID) const {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

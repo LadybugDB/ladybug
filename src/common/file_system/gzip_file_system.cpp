@@ -3,7 +3,7 @@
 #include "common/exception/io.h"
 #include "miniz.hpp"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 std::unique_ptr<FileInfo> GZipFileSystem::openCompressedFile(std::unique_ptr<FileInfo> fileInfo) {
@@ -163,4 +163,4 @@ std::unique_ptr<StreamWrapper> GZipFileSystem::createStream() {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

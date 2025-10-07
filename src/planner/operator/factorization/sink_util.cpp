@@ -1,6 +1,6 @@
 #include "planner/operator/factorization/sink_util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void SinkOperatorUtil::mergeSchema(const Schema& inputSchema,
@@ -67,4 +67,4 @@ uint32_t SinkOperatorUtil::appendPayloadsToNewGroup(Schema& schema,
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

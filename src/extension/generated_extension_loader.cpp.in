@@ -1,7 +1,7 @@
 #include "extension/loaded_extension.h"
 #include "generated_extension_loader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 void loadLinkedExtensions([[maybe_unused]] main::ClientContext* context,
@@ -10,4 +10,4 @@ void loadLinkedExtensions([[maybe_unused]] main::ClientContext* context,
 }
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

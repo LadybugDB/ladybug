@@ -2,7 +2,7 @@
 #include "planner/operator/logical_plan_util.h"
 #include "test_runner/test_runner.h"
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 class CardinalityTest : public DBTest {
@@ -151,4 +151,4 @@ TEST_F(CardinalityTest, TestPopulatedAfterOptimizations) {
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

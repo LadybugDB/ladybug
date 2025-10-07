@@ -3,7 +3,7 @@
 #include "function/scalar_function.h"
 #include "interval_functions.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct IntervalFunction {
@@ -84,4 +84,4 @@ struct ToMicrosecondsFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

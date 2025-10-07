@@ -4,7 +4,7 @@
 
 #include "progress_bar_display.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 /**
@@ -30,4 +30,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

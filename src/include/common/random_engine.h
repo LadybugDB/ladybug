@@ -5,7 +5,7 @@
 #include "common/api.h"
 #include "pcg_random.hpp"
 
-namespace kuzu {
+namespace lbug {
 
 namespace main {
 class ClientContext;
@@ -37,4 +37,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

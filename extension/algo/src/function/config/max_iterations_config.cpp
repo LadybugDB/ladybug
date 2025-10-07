@@ -3,7 +3,7 @@
 #include "common/exception/binder.h"
 #include "common/string_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 
 using namespace function;
@@ -42,4 +42,4 @@ expression_vector MaxIterationOptionalParams::constructMaxIterationParam(
 }
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug

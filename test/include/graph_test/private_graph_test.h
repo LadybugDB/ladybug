@@ -9,7 +9,7 @@
 #include "test_runner/test_group.h"
 #include "transaction/transaction_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 // Graph test which uses private APIs
@@ -91,4 +91,4 @@ protected:
 };
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

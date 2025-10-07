@@ -3,9 +3,9 @@
 #include "common/vector/value_vector.h"
 #include "storage/table/column_chunk_data.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 template<DataSource T>
@@ -73,4 +73,4 @@ bool CopyFromFileError::operator<(const CopyFromFileError& o) const {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

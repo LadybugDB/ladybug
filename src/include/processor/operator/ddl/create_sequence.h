@@ -3,7 +3,7 @@
 #include "binder/ddl/bound_create_sequence_info.h"
 #include "processor/operator/sink.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct CreateSequencePrintInfo final : OPPrintInfo {
@@ -43,4 +43,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

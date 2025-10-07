@@ -5,15 +5,15 @@ import sys
 
 base_dir = os.path.dirname(os.path.realpath(__file__))
 
-# import kuzu Python API
+# import lbug Python API
 sys.path.append(os.path.join(base_dir, '..', '..'))
-import tools.python_api.build.kuzu as kuzu
+import tools.python_api.build.lbug as lbug
 
 def _get_kuzu_version():
     cmake_file = os.path.join(base_dir, '..', '..', 'CMakeLists.txt')
     with open(cmake_file) as f:
         for line in f:
-            if line.startswith('project(Kuzu VERSION'):
+            if line.startswith('project(Lbug VERSION'):
                 return line.split(' ')[2].strip()
             
             
@@ -144,8 +144,8 @@ def serialize(dataset_name, dataset_path, serialized_graph_path):
     shutil.rmtree(serialized_graph_path, ignore_errors=True)
     os.mkdir(serialized_graph_path)
 
-    db = kuzu.Database(os.path.join(serialized_graph_path, "db.kuzu"))
-    conn = kuzu.Connection(db)
+    db = lbug.Database(os.path.join(serialized_graph_path, "db.lbug"))
+    conn = lbug.Connection(db)
     logging.info("Successfully connected")
 
     load_lsqb_dataset(conn, dataset_path)

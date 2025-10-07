@@ -1,6 +1,6 @@
 #include "connector/azure_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace azure_extension {
 
 using namespace common;
@@ -25,4 +25,4 @@ void AzureConfig::initFromEnv(main::ClientContext* context) const {
 }
 
 } // namespace azure_extension
-} // namespace kuzu
+} // namespace lbug

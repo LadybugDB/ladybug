@@ -11,7 +11,7 @@ class Connection {
    * executed. To initialize the connection immediately, call the `init()`
    * function on the returned object.
    *
-   * @param {kuzu.Database} database the database object to connect to.
+   * @param {lbug.Database} database the database object to connect to.
    * @param {Number} numThreads the maximum number of threads to use for query execution.
    */
   constructor(database, numThreads = null) {
@@ -119,10 +119,10 @@ class Connection {
 
   /**
    * Execute a prepared statement with the given parameters.
-   * @param {kuzu.PreparedStatement} preparedStatement the prepared statement to execute.
+   * @param {lbug.PreparedStatement} preparedStatement the prepared statement to execute.
    * @param {Object} params a plain object mapping parameter names to values.
    * @param {Function} [progressCallback] - Optional callback function that is invoked with the progress of the query execution. The callback receives three arguments: pipelineProgress, numPipelinesFinished, and numPipelines.
-   * @returns {Promise<kuzu.QueryResult>} a promise that resolves to the query result. The promise is rejected if there is an error.
+   * @returns {Promise<lbug.QueryResult>} a promise that resolves to the query result. The promise is rejected if there is an error.
    */
   execute(preparedStatement, params = {}, progressCallback) {
     return new Promise((resolve, reject) => {
@@ -184,9 +184,9 @@ class Connection {
 
   /**
    * Execute a prepared statement with the given parameters synchronously. This function blocks the main thread for the duration of the query, so use it with caution.
-   * @param {kuzu.PreparedStatement} preparedStatement the prepared statement
+   * @param {lbug.PreparedStatement} preparedStatement the prepared statement
    * @param {Object} params a plain object mapping parameter names to values.
-   * @returns {Array<kuzu.QueryResult> | kuzu.QueryResult} an array of query results. If there is only one query result, the function returns the query result directly.
+   * @returns {Array<lbug.QueryResult> | lbug.QueryResult} an array of query results. If there is only one query result, the function returns the query result directly.
    * @throws {Error} if there is an error.
    */
   executeSync(preparedStatement, params = {}) {
@@ -216,7 +216,7 @@ class Connection {
   /**
    * Prepare a statement for execution.
    * @param {String} statement the statement to prepare.
-   * @returns {Promise<kuzu.PreparedStatement>} a promise that resolves to the prepared statement. The promise is rejected if there is an error.
+   * @returns {Promise<lbug.PreparedStatement>} a promise that resolves to the prepared statement. The promise is rejected if there is an error.
    */
   prepare(statement) {
     return new Promise((resolve, reject) => {
@@ -245,7 +245,7 @@ class Connection {
   /**
    * Prepare a statement for execution synchronously. This function blocks the main thread so use it with caution.
    * @param {String} statement the statement to prepare. 
-   * @returns {kuzu.PreparedStatement} the prepared statement.
+   * @returns {lbug.PreparedStatement} the prepared statement.
    * @throws {Error} if there is an error.
    */
   prepareSync(statement) {
@@ -265,7 +265,7 @@ class Connection {
    * Execute a query.
    * @param {String} statement the statement to execute.
    * @param {Function} [progressCallback] - Optional callback function that is invoked with the progress of the query execution. The callback receives three arguments: pipelineProgress, numPipelinesFinished, and numPipelines.
-   * @returns {Promise<kuzu.QueryResult>} a promise that resolves to the query result. The promise is rejected if there is an error.
+   * @returns {Promise<lbug.QueryResult>} a promise that resolves to the query result. The promise is rejected if there is an error.
    */
   query(statement, progressCallback) {
     return new Promise((resolve, reject) => {
@@ -305,7 +305,7 @@ class Connection {
   /**
    * Execute a query synchronously.
    * @param {String} statement the statement to execute. This function blocks the main thread for the duration of the query, so use it with caution.
-   * @returns {Array<kuzu.QueryResult> | kuzu.QueryResult} an array of query results. If there is only one query result, the function returns the query result directly.
+   * @returns {Array<lbug.QueryResult> | lbug.QueryResult} an array of query results. If there is only one query result, the function returns the query result directly.
    * @throws {Error} if there is an error.
    * @throws {Error} if the statement is not a string.
    * @throws {Error} if the connection is closed.
@@ -323,7 +323,7 @@ class Connection {
   /**
    * Internal function to get the next query result for multiple query results.
    * @param {KuzuNative.NodeQueryResult} nodeQueryResult the current node query result.
-   * @returns {Promise<kuzu.QueryResult>} a promise that resolves to the next query result. The promise is rejected if there is an error.
+   * @returns {Promise<lbug.QueryResult>} a promise that resolves to the next query result. The promise is rejected if there is an error.
    */
   _getNextQueryResult(nodeQueryResult) {
     return new Promise((resolve, reject) => {
@@ -340,7 +340,7 @@ class Connection {
   /**
    * Internal function to unwrap multiple query results into an array of query results.
    * @param {KuzuNative.NodeQueryResult} nodeQueryResult the node query result.
-   * @returns {Promise<Array<kuzu.QueryResult>> | kuzu.QueryResult} a promise that resolves to an array of query results. The promise is rejected if there is an error.
+   * @returns {Promise<Array<lbug.QueryResult>> | lbug.QueryResult} a promise that resolves to an array of query results. The promise is rejected if there is an error.
    */
   async _unwrapMultipleQueryResults(nodeQueryResult) {
     const wrappedQueryResult = new QueryResult(this, nodeQueryResult);
@@ -359,7 +359,7 @@ class Connection {
   /**
    * Internal function to unwrap multiple query results into an array of query results synchronously.
    * @param {KuzuNative.NodeQueryResult} nodeQueryResult the node query result.
-   * @returns {Array<kuzu.QueryResult> | kuzu.QueryResult} an array of query results.
+   * @returns {Array<lbug.QueryResult> | lbug.QueryResult} an array of query results.
    * @throws {Error} if there is an error.
    */
   _unwrapMultipleQueryResultsSync(nodeQueryResult) {

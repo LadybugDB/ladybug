@@ -1,7 +1,7 @@
 #include "common/types/value/value.h"
 
 #include "c_api/helpers.h"
-#include "c_api/kuzu.h"
+#include "c_api/lbug.h"
 #include "common/constants.h"
 #include "common/types/types.h"
 #include "common/types/value/nested.h"
@@ -10,7 +10,7 @@
 #include "common/types/value/rel.h"
 #include "function/cast/functions/cast_from_string_functions.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 kuzu_value* kuzu_value_create_null() {
     auto* c_value = (kuzu_value*)calloc(1, sizeof(kuzu_value));
@@ -544,7 +544,7 @@ kuzu_state kuzu_value_get_int128(kuzu_value* value, kuzu_int128_t* out_result) {
 kuzu_state kuzu_int128_t_from_string(const char* str, kuzu_int128_t* out_result) {
     int128_t int128_val = 0;
     try {
-        kuzu::function::CastString::operation(ku_string_t{str, strlen(str)}, int128_val);
+        lbug::function::CastString::operation(ku_string_t{str, strlen(str)}, int128_val);
         out_result->low = int128_val.low;
         out_result->high = int128_val.high;
     } catch (ConversionException& e) {

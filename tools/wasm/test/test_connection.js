@@ -2,7 +2,7 @@ const { assert } = require("chai");
 
 describe("Connection constructor", function () {
   it("should create a connection with a valid database object", async function () {
-    const connection = new kuzu.Connection(db);
+    const connection = new lbug.Connection(db);
     assert.exists(connection);
     assert.equal(connection.constructor.name, "Connection");
     await connection.init();
@@ -185,7 +185,7 @@ describe("Query", function () {
 
 describe("Close", function () {
   it("should close the connection", async function () {
-    const newConn = new kuzu.Connection(db);
+    const newConn = new lbug.Connection(db);
     await newConn.init();
     await newConn.close();
     assert.isTrue(newConn._isClosed);

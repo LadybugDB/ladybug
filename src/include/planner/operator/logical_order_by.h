@@ -2,7 +2,7 @@
 
 #include "planner/operator/logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class LogicalOrderBy final : public LogicalOperator {
@@ -45,4 +45,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

@@ -3,7 +3,7 @@
 #include "binder/expression/expression_util.h"
 #include "processor/operator/hash_join/hash_join_build.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct IntersectBuildPrintInfo final : OPPrintInfo {
@@ -54,4 +54,4 @@ public:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "common/system_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 DataChunkCollection::DataChunkCollection(storage::MemoryManager* mm) : mm{mm} {}
@@ -54,4 +54,4 @@ void DataChunkCollection::allocateChunk(const DataChunk& chunk) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

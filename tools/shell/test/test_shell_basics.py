@@ -80,11 +80,11 @@ def test_multi_queries_one_line(temp_db) -> None:
     test = (
         ShellTest()
         .add_argument(temp_db)
-        .statement('RETURN "databases rule" AS a; RETURN "kuzu is cool" AS b;')
+        .statement('RETURN "databases rule" AS a; RETURN "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout("\u2502 databases rule \u2502")
-    result.check_stdout("\u2502 kuzu is cool \u2502")
+    result.check_stdout("\u2502 lbug is cool \u2502")
 
     # one success one failure
     test = (

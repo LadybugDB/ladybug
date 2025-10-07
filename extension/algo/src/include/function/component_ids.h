@@ -3,7 +3,7 @@
 #include "function/gds/gds_object_manager.h"
 #include "function/gds/gds_vertex_compute.h"
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 
 static constexpr common::offset_t INVALID_COMPONENT_ID = common::INVALID_OFFSET;
@@ -127,4 +127,4 @@ private:
 };
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug

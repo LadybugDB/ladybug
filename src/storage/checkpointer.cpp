@@ -15,7 +15,7 @@
 #include "storage/storage_manager.h"
 #include "storage/wal/local_wal.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 Checkpointer::Checkpointer(main::ClientContext& clientContext)
@@ -221,4 +221,4 @@ void Checkpointer::readCheckpoint(main::ClientContext* context, catalog::Catalog
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

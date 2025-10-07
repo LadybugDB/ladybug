@@ -4,7 +4,7 @@
 #include "common/in_mem_overflow_buffer.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class ValueVector;
@@ -102,4 +102,4 @@ public:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

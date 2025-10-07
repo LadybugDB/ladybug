@@ -6,9 +6,9 @@
 #include "main/client_context.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct CurrVal {
@@ -56,4 +56,4 @@ function_set NextValFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

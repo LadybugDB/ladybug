@@ -5,9 +5,9 @@
 #include "common/file_system/file_system.h"
 #include "common/string_utils.h"
 #include "common/system_config.h"
-#include "main/kuzu.h"
+#include "main/lbug.h"
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 struct TestQueryConfig {
@@ -83,9 +83,9 @@ public:
     static std::filesystem::path getRootTempDir() {
         auto tempDir = std::getenv("RUNNER_TEMP");
         if (tempDir != nullptr) {
-            return std::filesystem::path(tempDir) / "kuzu";
+            return std::filesystem::path(tempDir) / "lbug";
         }
-        return std::filesystem::temp_directory_path() / "kuzu";
+        return std::filesystem::temp_directory_path() / "lbug";
     }
 
     static std::string getTempDir(const std::string& name) {
@@ -93,7 +93,7 @@ public:
         std::filesystem::create_directories(path);
         auto pathStr = path.string();
 #ifdef _WIN32
-        // kuzu still doesn't support backslashes in paths on windows
+        // lbug still doesn't support backslashes in paths on windows
         std::replace(pathStr.begin(), pathStr.end(), '\\', '/');
 #endif
         return pathStr;
@@ -105,7 +105,7 @@ public:
         path = path / TESTING_DB_FILE_NAME;
         auto pathStr = path.string();
 #ifdef _WIN32
-        // kuzu still doesn't support backslashes in paths on windows
+        // lbug still doesn't support backslashes in paths on windows
         std::replace(pathStr.begin(), pathStr.end(), '\\', '/');
 #endif
         return pathStr;
@@ -126,7 +126,7 @@ public:
     static std::string joinPath(const std::string& base, const std::string& part) {
         auto pathStr = common::FileSystem::joinPath(base, part);
 #ifdef _WIN32
-        // kuzu still doesn't support backslashes in paths on windows
+        // lbug still doesn't support backslashes in paths on windows
         std::replace(pathStr.begin(), pathStr.end(), '\\', '/');
 #endif
         return pathStr;
@@ -134,4 +134,4 @@ public:
 };
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

@@ -8,13 +8,13 @@
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
-using namespace kuzu::common;
-using namespace kuzu::storage;
-using namespace kuzu::transaction;
-using namespace kuzu::catalog;
+using namespace lbug::common;
+using namespace lbug::storage;
+using namespace lbug::transaction;
+using namespace lbug::catalog;
 
 void FTSUtils::normalizeQuery(std::string& query, const RE2& ignorePattern) {
     std::string replacePattern = " ";
@@ -100,4 +100,4 @@ std::vector<std::string> FTSUtils::tokenizeString(std::string& str, const FTSCon
 }
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class LogicalEmptyResult final : public LogicalOperator {
@@ -33,4 +33,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

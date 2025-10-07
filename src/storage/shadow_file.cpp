@@ -14,10 +14,10 @@
 #include "storage/file_handle.h"
 #include "storage/storage_manager.h"
 
-using namespace kuzu::common;
-using namespace kuzu::main;
+using namespace lbug::common;
+using namespace lbug::main;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 void ShadowPageRecord::serialize(Serializer& serializer) const {
@@ -192,4 +192,4 @@ FileHandle* ShadowFile::getOrCreateShadowingFH() {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

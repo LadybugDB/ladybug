@@ -3,7 +3,7 @@
 #include "join_tree.h"
 #include "planner/planner.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class JoinPlanSolver {
@@ -25,4 +25,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

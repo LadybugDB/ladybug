@@ -2,7 +2,7 @@
 
 #include "binder/expression/node_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 enum class TreeNodeType : uint8_t {
@@ -96,4 +96,4 @@ struct JoinTree {
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

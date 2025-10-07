@@ -3,7 +3,7 @@
 #include "optimizer/factorization_rewriter.h"
 #include "optimizer/remove_factorization_rewriter.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalPathPropertyProbe::computeFactorizedSchema() {
@@ -54,4 +54,4 @@ std::unique_ptr<LogicalOperator> LogicalPathPropertyProbe::copy() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

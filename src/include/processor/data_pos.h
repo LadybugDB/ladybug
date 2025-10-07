@@ -4,7 +4,7 @@
 
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 using data_chunk_pos_t = common::idx_t;
@@ -33,4 +33,4 @@ struct DataPos {
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

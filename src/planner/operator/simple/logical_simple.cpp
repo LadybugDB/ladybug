@@ -1,6 +1,6 @@
 #include "planner/operator/simple/logical_simple.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalSimple::computeFlatSchema() {
@@ -12,4 +12,4 @@ void LogicalSimple::computeFactorizedSchema() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

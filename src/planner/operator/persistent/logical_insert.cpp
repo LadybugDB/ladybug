@@ -4,10 +4,10 @@
 #include "common/cast.h"
 #include "planner/operator/factorization/flatten_resolver.h"
 
-using namespace kuzu::common;
-using namespace kuzu::binder;
+using namespace lbug::common;
+using namespace lbug::binder;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalInsert::computeFactorizedSchema() {
@@ -57,4 +57,4 @@ f_group_pos_set LogicalInsert::getGroupsPosToFlatten() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

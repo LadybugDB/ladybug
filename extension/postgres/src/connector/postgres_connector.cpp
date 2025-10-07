@@ -1,6 +1,6 @@
 #include "connector/postgres_connector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace postgres_extension {
 
 void PostgresConnector::connect(const std::string& dbPath, const std::string& catalogName,
@@ -15,4 +15,4 @@ void PostgresConnector::connect(const std::string& dbPath, const std::string& ca
 }
 
 } // namespace postgres_extension
-} // namespace kuzu
+} // namespace lbug

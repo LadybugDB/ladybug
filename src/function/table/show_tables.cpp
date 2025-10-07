@@ -6,10 +6,10 @@
 #include "main/client_context.h"
 #include "main/database_manager.h"
 
-using namespace kuzu::common;
-using namespace kuzu::catalog;
+using namespace lbug::common;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct TableInfo {
@@ -107,4 +107,4 @@ function_set ShowTablesFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

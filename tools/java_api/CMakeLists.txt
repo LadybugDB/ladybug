@@ -28,7 +28,7 @@ set (_stubDir "${CMAKE_CURRENT_BINARY_DIR}")
 
 include_directories(${JNI_INCLUDE_DIRS} ${_classDir} ${_stubDir})
 add_library(kuzu_java_native SHARED src/jni/kuzu_java.cpp)
-target_link_libraries(kuzu_java_native PRIVATE kuzu_native_header kuzu)
+target_link_libraries(kuzu_java_native PRIVATE kuzu_native_header lbug)
 
 message(STATUS "OS_NAME=${OS_NAME}")
 message(STATUS "OS_ARCH=${OS_ARCH}")

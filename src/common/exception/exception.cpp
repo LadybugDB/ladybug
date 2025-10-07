@@ -4,7 +4,7 @@
 #include <cpptrace/cpptrace.hpp>
 #endif
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 Exception::Exception(std::string msg) : exception(), exception_message_(std::move(msg)) {
@@ -14,4 +14,4 @@ Exception::Exception(std::string msg) : exception(), exception_message_(std::mov
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

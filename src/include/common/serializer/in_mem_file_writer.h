@@ -5,13 +5,13 @@
 #include "common/serializer/writer.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 struct PageRange;
 class ShadowFile;
 class PageAllocator;
-} // namespace kuzu::storage
+} // namespace lbug::storage
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class BufferedFileWriter;
 
@@ -63,4 +63,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

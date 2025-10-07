@@ -5,7 +5,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/string_chunk_data.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 class DictionaryColumn {
@@ -53,4 +53,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

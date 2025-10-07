@@ -1,6 +1,6 @@
 #include "processor/operator/persistent/reader/parquet/interval_column_reader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 common::interval_t IntervalValueConversion::readParquetInterval(const char* input) {
@@ -31,4 +31,4 @@ void IntervalColumnReader::dictionary(const std::shared_ptr<ResizeableBuffer>& d
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

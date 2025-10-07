@@ -5,7 +5,7 @@
 #include "processor/execution_context.h"
 #include "processor/operator/persistent/batch_insert_error_handler.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class NodeTable;
 }
@@ -58,4 +58,4 @@ private:
     BatchInsertErrorHandler baseErrorHandler;
 };
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

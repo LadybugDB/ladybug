@@ -1,6 +1,6 @@
 #include "storage/table/lazy_segment_scanner.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 void LazySegmentScanner::Iterator::advance(common::offset_t n) {
     segmentScanner.rangeSegments(*this, n,
         [this](auto& segmentData, auto, auto lengthInSegment, auto) {
@@ -44,4 +44,4 @@ void LazySegmentScanner::scanSegmentIfNeeded(LazySegmentData& segment) {
         segment.scanFunc(*segment.segmentData, segment.startOffsetInSegment, segment.length);
     }
 }
-} // namespace kuzu::storage
+} // namespace lbug::storage

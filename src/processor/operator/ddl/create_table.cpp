@@ -6,10 +6,10 @@
 #include "processor/execution_context.h"
 #include "storage/storage_manager.h"
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
+using namespace lbug::catalog;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void CreateTable::executeInternal(ExecutionContext* context) {
@@ -47,4 +47,4 @@ void CreateTable::executeInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

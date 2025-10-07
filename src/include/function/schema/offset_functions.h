@@ -2,7 +2,7 @@
 
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct Offset {
@@ -11,4 +11,4 @@ struct Offset {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

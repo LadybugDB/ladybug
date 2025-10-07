@@ -3,7 +3,7 @@
 #include "connector/duckdb_connector.h"
 #include "main/attached_database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 class AttachedDuckDBDatabase : public main::AttachedDatabase {
@@ -21,4 +21,4 @@ protected:
 };
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

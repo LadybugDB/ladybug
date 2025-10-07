@@ -3,7 +3,7 @@
 #include "common/exception/runtime.h"
 #include "common/vector/value_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 std::string TypeUtils::entryToString(const LogicalType& dataType, const uint8_t* value,
@@ -288,4 +288,4 @@ std::string TypeUtils::toString(const union_entry_t& val, void* valVector) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -34,9 +34,9 @@ except FileNotFoundError:
 bm_size = int((max_memory / 1024**2) * 0.9)
 base_dir = os.path.dirname(os.path.realpath(__file__))
 
-# import kuzu Python API
+# import lbug Python API
 sys.path.append(os.path.join(base_dir, "..", ".."))
-import tools.python_api.build.kuzu as kuzu
+import tools.python_api.build.lbug as lbug
 
 # dataset registration
 datasets = {"0.1", "0.3", "1", "3", "10", "30", "100"}
@@ -126,8 +126,8 @@ def run_query(conn, query_spec):
 
 
 def run_kuzu(sf, serialized_graph_path, num_threads):
-    db = kuzu.Database(os.path.join(serialized_graph_path, "db.kuzu"))
-    conn = kuzu.Connection(db, num_threads=num_threads)
+    db = lbug.Database(os.path.join(serialized_graph_path, "db.lbug"))
+    conn = lbug.Connection(db, num_threads=num_threads)
     if timeout is not None:
         conn.set_query_timeout(timeout)
 

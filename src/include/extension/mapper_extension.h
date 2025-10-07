@@ -3,7 +3,7 @@
 #include "planner/operator/logical_operator.h"
 #include "processor/operator/physical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 class KUZU_API MapperExtension {
@@ -18,4 +18,4 @@ public:
 };
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

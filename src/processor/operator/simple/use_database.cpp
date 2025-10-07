@@ -5,7 +5,7 @@
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void UseDatabase::executeInternal(ExecutionContext* context) {
@@ -22,4 +22,4 @@ std::string UseDatabasePrintInfo::toString() const {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

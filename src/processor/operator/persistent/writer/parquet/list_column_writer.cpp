@@ -3,7 +3,7 @@
 #include "common/constants.h"
 #include "common/exception/runtime.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 using namespace kuzu_parquet::format;
@@ -106,4 +106,4 @@ void ListColumnWriter::finalizeWrite(ColumnWriterState& writerState) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

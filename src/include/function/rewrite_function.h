@@ -2,7 +2,7 @@
 
 #include "function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 class ExpressionBinder;
 }
@@ -39,4 +39,4 @@ private:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

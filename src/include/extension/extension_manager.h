@@ -3,7 +3,7 @@
 #include "loaded_extension.h"
 #include "storage/storage_extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {}
 namespace extension {
 
@@ -47,4 +47,4 @@ private:
 };
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

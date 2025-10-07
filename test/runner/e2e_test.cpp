@@ -11,8 +11,8 @@
 #include "test_runner/test_parser.h"
 
 using ::testing::Test;
-using namespace kuzu::testing;
-using namespace kuzu::common;
+using namespace lbug::testing;
+using namespace lbug::common;
 
 class EndToEndTest final : public DBTest {
 public:
@@ -32,13 +32,13 @@ public:
         }
         bool generateBinaryDemo =
             !std::getenv("USE_EXISTING_BINARY_DATASET") && dataset.ends_with("binary-demo");
-        if (datasetType == TestGroup::DatasetType::KUZU && dataset != "empty" &&
+        if (datasetType == TestGroup::DatasetType::LBUG && dataset != "empty" &&
             !generateBinaryDemo) {
             std::filesystem::copy(dataset + "/" + TESTING_DB_FILE_NAME, databasePath);
         }
         createDB(checkpointWaitTimeout);
         createConns(connNames);
-        if (datasetType != TestGroup::DatasetType::KUZU && dataset != "empty") {
+        if (datasetType != TestGroup::DatasetType::LBUG && dataset != "empty") {
             initGraph();
         } else if (generateBinaryDemo && TestHelper::E2E_OVERRIDE_IMPORT_DIR.empty()) {
             initGraph(TestHelper::appendKuzuRootPath("dataset/demo-db/parquet/"));
@@ -66,7 +66,7 @@ public:
         } break;
         default: {
             // Determine the dataset root path. Uses `E2E_OVERRIDE_IMPORT_DIR` if set to test
-            // datasets exported from earlier Kuzu versions, otherwise the default path.
+            // datasets exported from earlier Lbug versions, otherwise the default path.
             std::string rootDir = TestHelper::E2E_OVERRIDE_IMPORT_DIR.empty() ?
                                       "dataset/" :
                                       TestHelper::E2E_OVERRIDE_IMPORT_DIR;

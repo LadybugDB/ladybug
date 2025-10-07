@@ -2,7 +2,7 @@
 
 #include "extension/extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 class JsonExtension final : public extension::Extension {
@@ -17,4 +17,4 @@ public:
 };
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

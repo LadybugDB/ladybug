@@ -9,7 +9,7 @@
 #include "common/types/value/value.h"
 #include "query_summary.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class LogicalType;
 }
@@ -87,4 +87,4 @@ private:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

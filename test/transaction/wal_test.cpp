@@ -6,9 +6,9 @@
 #include "gmock/gmock.h"
 #include "storage/storage_utils.h"
 
-using namespace kuzu::common;
-using namespace kuzu::testing;
-using namespace kuzu::transaction;
+using namespace lbug::common;
+using namespace lbug::testing;
+using namespace lbug::transaction;
 
 class WalTest : public ApiTest {
 protected:
@@ -30,7 +30,7 @@ TEST_F(WalTest, NoWALFile) {
     conn->query("BEGIN TRANSACTION;");
     conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
     conn->query("COMMIT;");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 0);
     std::filesystem::remove(walFilePath);
@@ -49,7 +49,7 @@ TEST_F(WalTest, EmptyWALFile) {
     conn->query("BEGIN TRANSACTION;");
     conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
     conn->query("COMMIT;");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 0);
     std::filesystem::resize_file(walFilePath, 0);
@@ -67,7 +67,7 @@ TEST_F(WalTest, NoWALAfterCheckpoint) {
     conn->query("BEGIN TRANSACTION;");
     conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
     conn->query("COMMIT;");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 0);
     // Checkpoint should remove the WAL file.
@@ -83,12 +83,12 @@ TEST_F(WalTest, ShadowFileExistsWithoutWAL) {
     conn->query("BEGIN TRANSACTION;");
     conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
     conn->query("COMMIT;");
-    auto shadowFilePath = kuzu::storage::StorageUtils::getShadowFilePath(databasePath);
+    auto shadowFilePath = lbug::storage::StorageUtils::getShadowFilePath(databasePath);
     // Create a shadow file that is corrupted.
     std::ofstream file(shadowFilePath);
-    file << "This is not a valid Kuzu database file.";
+    file << "This is not a valid Lbug database file.";
     file.close();
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 0);
     std::filesystem::remove(walFilePath);
@@ -110,12 +110,12 @@ TEST_F(WalTest, ShadowFileExistsWithEmptyWAL) {
     conn->query("BEGIN TRANSACTION;");
     conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
     conn->query("COMMIT;");
-    auto shadowFilePath = kuzu::storage::StorageUtils::getShadowFilePath(databasePath);
+    auto shadowFilePath = lbug::storage::StorageUtils::getShadowFilePath(databasePath);
     // Create a shadow file that is corrupted.
     std::ofstream file(shadowFilePath);
-    file << "This is not a valid Kuzu database file.";
+    file << "This is not a valid Lbug database file.";
     file.close();
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 0);
     std::filesystem::resize_file(walFilePath, 0);
@@ -137,7 +137,7 @@ void WalTest::setupChecksumMismatchTest(std::function<void(std::ofstream&)> corr
     conn->query("CREATE NODE TABLE test3(id INT64 PRIMARY KEY, name STRING);");
     conn->query("CREATE NODE TABLE test4(id INT64 PRIMARY KEY, name STRING);");
     conn->query("COMMIT;");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     // rewrite part of the wal
     std::ofstream file(walFilePath, std::ios_base::in | std::ios_base::out | std::ios_base::ate);
@@ -158,7 +158,7 @@ TEST_F(WalTest, CorruptedWALChecksumMismatchInHeader) {
         // 10 bytes in will be the database ID's checksum
         walFileToCorrupt << "abc";
     });
-    EXPECT_THROW(createDBAndConn();, kuzu::common::StorageException);
+    EXPECT_THROW(createDBAndConn();, lbug::common::StorageException);
 }
 
 TEST_F(WalTest, CorruptedWALChecksumMismatchInHeaderNoThrow) {
@@ -187,7 +187,7 @@ TEST_F(WalTest, CorruptedWALChecksumMismatchInBody) {
         walFileToCorrupt.seekp(30);
         walFileToCorrupt << "abc";
     });
-    EXPECT_THROW(createDBAndConn();, kuzu::common::StorageException);
+    EXPECT_THROW(createDBAndConn();, lbug::common::StorageException);
 }
 
 TEST_F(WalTest, CorruptedWALChecksumMismatchInBodyNoThrow) {
@@ -233,7 +233,7 @@ TEST_F(WalTest, WALChecksumConfigMismatch) {
                 throw;
             }
         },
-        kuzu::common::RuntimeException);
+        lbug::common::RuntimeException);
 }
 
 TEST_F(WalTest, WALChecksumConfigMismatchNoThrow) {
@@ -267,7 +267,7 @@ TEST_F(WalTest, CorruptedWALTailTruncated) {
     conn->query("CREATE NODE TABLE test3(id INT64 PRIMARY KEY, name STRING);");
     conn->query("CREATE NODE TABLE test4(id INT64 PRIMARY KEY, name STRING);");
     conn->query("COMMIT;");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 10);
     // Truncate the last 10 bytes of the WAL file.
@@ -292,7 +292,7 @@ TEST_F(WalTest, CorruptedWALTailTruncatedAndRecoverTwice) {
     conn->query("CREATE NODE TABLE test3(id INT64 PRIMARY KEY, name STRING);");
     conn->query("CREATE NODE TABLE test4(id INT64 PRIMARY KEY, name STRING);");
     conn->query("COMMIT;");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 10);
     // Truncate the last 10 bytes of the WAL file.
@@ -323,7 +323,7 @@ TEST_F(WalTest, CorruptedWALTailTruncated2) {
     conn->query("CREATE NODE TABLE test2(id INT64 PRIMARY KEY, name STRING);");
     conn->query("CREATE NODE TABLE test3(id INT64 PRIMARY KEY, name STRING);");
     conn->query("CREATE NODE TABLE test4(id INT64 PRIMARY KEY, name STRING);");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 10);
     // Truncate the last 10 bytes of the WAL file.
@@ -345,7 +345,7 @@ TEST_F(WalTest, WALFileLeftoverFromPreviousDBNewReadOnlyDB) {
     conn->query("CREATE NODE TABLE test4(id INT64 PRIMARY KEY, name STRING);");
 
     // Delete the DB file but keep the WAL
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     conn.reset();
     database.reset();
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
@@ -355,7 +355,7 @@ TEST_F(WalTest, WALFileLeftoverFromPreviousDBNewReadOnlyDB) {
     // Recreate the DB then close it
     ASSERT_FALSE(std::filesystem::exists(databasePath));
     auto createEmptyDB = [&]() {
-        database = std::make_unique<kuzu::main::Database>(databasePath, *systemConfig);
+        database = std::make_unique<lbug::main::Database>(databasePath, *systemConfig);
     };
     // When opening an empty read-only DB we don't write the header
     // This shouldn't cause any crashes when deserializing
@@ -380,7 +380,7 @@ void WalTest::testStrayWALFile(const std::function<void()>& setupNewDBFunc) {
     conn->query("CREATE NODE TABLE test4(id INT64 PRIMARY KEY, name STRING);");
 
     // Delete the DB file but keep the WAL
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     conn.reset();
     database.reset();
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
@@ -442,7 +442,7 @@ TEST_F(WalTest, CorruptedWALTailTruncated2RecoverTwice) {
     conn->query("CREATE NODE TABLE test2(id INT64 PRIMARY KEY, name STRING);");
     conn->query("CREATE NODE TABLE test3(id INT64 PRIMARY KEY, name STRING);");
     conn->query("CREATE NODE TABLE test4(id INT64 PRIMARY KEY, name STRING);");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 10);
     // Truncate the last 10 bytes of the WAL file.
@@ -471,7 +471,7 @@ TEST_F(WalTest, ReadOnlyRecoveryFromExistingWAL) {
     conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
     conn->query("CREATE (:test {id: 1, name: 'Alice'});");
     conn->query("CREATE (:test {id: 2, name: 'Bob'});");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 0);
 
@@ -494,7 +494,7 @@ TEST_F(WalTest, ReadOnlyRecoveryFromCorruptedWALTail) {
     conn->query("CREATE (:test {id: 1, name: 'Alice'});");
     conn->query("CREATE (:test {id: 2, name: 'Bob'});");
     conn->query("CREATE (:test {id: 3, name: 'Charlie'});");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 10);
 
@@ -520,8 +520,8 @@ TEST_F(WalTest, ReadOnlyRecoveryWithShadowFile) {
     conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
     conn->query("CREATE (:test {id: 1, name: 'Alice'});");
     conn->query("COMMIT;");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
-    auto shadowFilePath = kuzu::storage::StorageUtils::getShadowFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    auto shadowFilePath = lbug::storage::StorageUtils::getShadowFilePath(databasePath);
 
     // Create a shadow file (simulating checkpoint in progress)
     std::ofstream file(shadowFilePath);
@@ -548,7 +548,7 @@ TEST_F(WalTest, ReadOnlyRecoveryEmptyWALFile) {
     }
     conn->query("CALL force_checkpoint_on_close=false");
     conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 0);
 
@@ -571,7 +571,7 @@ TEST_F(WalTest, ReadOnlyRecoveryNoWALFile) {
     }
     conn->query("CALL force_checkpoint_on_close=false");
     conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
-    auto walFilePath = kuzu::storage::StorageUtils::getWALFilePath(databasePath);
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::file_size(walFilePath) > 0);
 

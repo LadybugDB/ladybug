@@ -2,7 +2,7 @@
 
 #include "common/types/interval_t.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ToYears {
@@ -62,4 +62,4 @@ struct ToMicroseconds {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

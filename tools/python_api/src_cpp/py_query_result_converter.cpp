@@ -4,8 +4,8 @@
 #include "common/types/value/value.h"
 #include "include/py_query_result.h"
 
-using namespace kuzu::common;
-using namespace kuzu;
+using namespace lbug::common;
+using namespace lbug;
 
 NPArrayWrapper::NPArrayWrapper(const LogicalType& type, uint64_t numFlatTuple)
     : type{type.copy()}, numElements{0} {

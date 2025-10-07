@@ -3,7 +3,7 @@
 #include "hnsw_config.h"
 #include "storage/table/list_chunk_data.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 class TableCatalogEntry;
 class NodeTableCatalogEntry;
@@ -62,4 +62,4 @@ private:
 };
 
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug

@@ -5,7 +5,7 @@
 
 #include "common/copy_constructors.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 template<typename T>
@@ -58,4 +58,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

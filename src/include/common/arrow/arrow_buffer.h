@@ -4,7 +4,7 @@
 
 struct ArrowSchema;
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct ArrowBuffer {
@@ -80,4 +80,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -5,7 +5,7 @@
 
 #include "common/api.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 enum class TableType : uint8_t {
@@ -20,4 +20,4 @@ struct KUZU_API TableTypeUtils {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

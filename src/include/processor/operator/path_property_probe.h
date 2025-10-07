@@ -4,7 +4,7 @@
 #include "processor/operator/hash_join/hash_join_build.h"
 #include "processor/operator/physical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct PathPropertyProbeSharedState {
@@ -119,4 +119,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

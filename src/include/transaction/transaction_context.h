@@ -4,7 +4,7 @@
 
 #include "transaction.h"
 
-namespace kuzu {
+namespace lbug {
 
 namespace main {
 class ClientContext;
@@ -65,4 +65,4 @@ private:
 };
 
 } // namespace transaction
-} // namespace kuzu
+} // namespace lbug

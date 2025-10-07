@@ -6,7 +6,7 @@
 #include "parser/query/graph_pattern/pattern_element.h"
 #include "parser/query/reading_clause/join_hint.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class ParsedSubqueryExpression : public ParsedExpression {
@@ -53,4 +53,4 @@ private:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

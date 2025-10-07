@@ -2,7 +2,7 @@
 
 #include "common/exception/binder.h"
 
-namespace kuzu {
+namespace lbug {
 using namespace common;
 
 namespace binder {
@@ -20,4 +20,4 @@ void ParameterExpression::cast(const LogicalType& type) {
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

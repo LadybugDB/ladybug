@@ -43,7 +43,7 @@
 
 #include "include/utf8proc_data.h"
 
-namespace kuzu {
+namespace lbug {
 namespace utf8proc {
 
 #ifndef SSIZE_MAX
@@ -917,4 +917,4 @@ UTF8PROC_DLLEXPORT utf8proc_uint8_t* utf8proc_NFKC_Casefold(
 }
 
 } // namespace utf8proc
-} // namespace kuzu
+} // namespace lbug

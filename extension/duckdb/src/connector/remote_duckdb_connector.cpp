@@ -4,7 +4,7 @@
 #include "main/client_context.h"
 #include "s3fs_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 void HTTPDuckDBConnector::connect(const std::string& dbPath, const std::string& catalogName,
@@ -29,4 +29,4 @@ void S3DuckDBConnector::connect(const std::string& dbPath, const std::string& ca
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

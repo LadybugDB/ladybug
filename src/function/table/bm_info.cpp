@@ -5,7 +5,7 @@
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct BMInfoBindData final : TableFuncBindData {
@@ -55,4 +55,4 @@ function_set BMInfoFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

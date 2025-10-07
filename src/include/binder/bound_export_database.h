@@ -4,7 +4,7 @@
 #include "binder/query/bound_regular_query.h"
 #include "common/copier_config/file_scan_info.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 struct ExportedTableData {
@@ -48,4 +48,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

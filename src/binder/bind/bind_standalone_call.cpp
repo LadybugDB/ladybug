@@ -8,9 +8,9 @@
 #include "main/db_config.h"
 #include "parser/standalone_call.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 std::unique_ptr<BoundStatement> Binder::bindStandaloneCall(const parser::Statement& statement) {
@@ -41,4 +41,4 @@ std::unique_ptr<BoundStatement> Binder::bindStandaloneCall(const parser::Stateme
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

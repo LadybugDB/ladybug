@@ -3,7 +3,7 @@
 #include "binder/query/updating_clause/bound_set_info.h"
 #include "planner/operator/logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class LogicalSetProperty final : public LogicalOperator {
@@ -34,4 +34,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

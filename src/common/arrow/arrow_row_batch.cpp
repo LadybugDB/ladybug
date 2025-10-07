@@ -9,7 +9,7 @@
 #include "processor/result/flat_tuple.h"
 #include "storage/storage_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 static void resizeVector(ArrowVector* vector, const LogicalType& type, int64_t capacity,
@@ -1019,4 +1019,4 @@ void ArrowRowBatch::append(const processor::FlatTuple& tuple) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

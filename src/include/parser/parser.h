@@ -7,7 +7,7 @@
 #include "extension/transformer_extension.h"
 #include "statement.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 }
@@ -21,4 +21,4 @@ public:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

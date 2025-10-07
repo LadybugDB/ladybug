@@ -4,7 +4,7 @@
 #include "common/enums/clause_type.h"
 #include "parser/expression/parsed_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class ReadingClause {
@@ -30,4 +30,4 @@ private:
     std::unique_ptr<ParsedExpression> wherePredicate;
 };
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

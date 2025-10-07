@@ -7,7 +7,7 @@
 #include "common/string_utils.h"
 #include "common/types/value/nested.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 static char bindParsingOptionValue(const std::string& value) {
@@ -167,4 +167,4 @@ CSVReaderConfig CSVReaderConfig::construct(const case_insensitive_map_t<Value>& 
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

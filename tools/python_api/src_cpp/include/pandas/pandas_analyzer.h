@@ -4,7 +4,7 @@
 #include "py_objects.h"
 #include "pybind_include.h"
 
-namespace kuzu {
+namespace lbug {
 
 struct PythonGILWrapper {
     py::gil_scoped_acquire acquire;
@@ -30,4 +30,4 @@ private:
     common::LogicalType analyzedType;
 };
 
-} // namespace kuzu
+} // namespace lbug

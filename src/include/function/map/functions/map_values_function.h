@@ -3,7 +3,7 @@
 #include "common/vector/value_vector.h"
 #include "function/map/functions/base_map_extract_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct MapValues : public BaseMapExtract {
@@ -17,4 +17,4 @@ struct MapValues : public BaseMapExtract {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

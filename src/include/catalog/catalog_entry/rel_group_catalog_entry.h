@@ -6,7 +6,7 @@
 #include "common/enums/rel_multiplicity.h"
 #include "node_table_id_pair.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 struct RelGroupToCypherInfo final : ToCypherInfo {
@@ -100,4 +100,4 @@ private:
 };
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

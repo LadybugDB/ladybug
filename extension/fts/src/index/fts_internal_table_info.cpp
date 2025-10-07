@@ -3,7 +3,7 @@
 #include "storage/storage_manager.h"
 #include "utils/fts_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 FTSInternalTableInfo::FTSInternalTableInfo(main::ClientContext* context, common::table_id_t tableID,
@@ -37,4 +37,4 @@ FTSInternalTableInfo::FTSInternalTableInfo(main::ClientContext* context, common:
 }
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

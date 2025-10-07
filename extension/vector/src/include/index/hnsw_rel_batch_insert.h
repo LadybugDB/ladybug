@@ -3,7 +3,7 @@
 #include "index/hnsw_index.h"
 #include "processor/operator/persistent/rel_batch_insert.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class CSRNodeGroup;
 struct ChunkedCSRHeader;
@@ -65,4 +65,4 @@ public:
 };
 
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug

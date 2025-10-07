@@ -4,7 +4,7 @@
 #include "common/copy_constructors.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 // TODO(Guodong/Ziyi): Move these typedef to common and unify them with the ones without `ft_`.
@@ -94,4 +94,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 #include "function/table/bind_data.h"
 #include "function/table/table_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace postgres_extension {
 
 struct SqlQueryFunction final {
@@ -14,4 +14,4 @@ struct SqlQueryFunction final {
 };
 
 } // namespace postgres_extension
-} // namespace kuzu
+} // namespace lbug

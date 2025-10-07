@@ -7,7 +7,7 @@
 #include "storage/wal/local_wal.h"
 #include "transaction/transaction_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 static void executeExtensionLoader(main::ClientContext* context, const std::string& extensionName) {
@@ -102,4 +102,4 @@ ExtensionManager* ExtensionManager::Get(const main::ClientContext& context) {
 }
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

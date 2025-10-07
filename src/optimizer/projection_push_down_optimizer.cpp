@@ -21,12 +21,12 @@
 #include "planner/operator/persistent/logical_merge.h"
 #include "planner/operator/persistent/logical_set.h"
 
-using namespace kuzu::common;
-using namespace kuzu::planner;
-using namespace kuzu::binder;
-using namespace kuzu::function;
+using namespace lbug::common;
+using namespace lbug::planner;
+using namespace lbug::binder;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace optimizer {
 
 void ProjectionPushDownOptimizer::rewrite(LogicalPlan* plan) {
@@ -365,4 +365,4 @@ void ProjectionPushDownOptimizer::preAppendProjection(LogicalOperator* op, idx_t
 }
 
 } // namespace optimizer
-} // namespace kuzu
+} // namespace lbug

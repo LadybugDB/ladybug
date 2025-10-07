@@ -5,7 +5,7 @@
 #include "storage/table/node_group_collection.h"
 #include "storage/table/table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace evaluator {
 class ExpressionEvaluator;
 } // namespace evaluator
@@ -227,4 +227,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -19,9 +19,9 @@
 #include "snappy.h"
 #include "zstd.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 using kuzu_parquet::format::CompressionCodec;
@@ -582,4 +582,4 @@ const uint64_t ParquetDecodeUtils::BITPACK_MASKS_SIZE =
 const uint8_t ParquetDecodeUtils::BITPACK_DLEN = 8;
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -8,7 +8,7 @@
 #include "common/serializer/serializer.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 } // namespace main
@@ -111,4 +111,4 @@ protected:
 };
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

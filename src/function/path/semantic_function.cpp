@@ -3,10 +3,10 @@
 #include "function/path/vector_path_functions.h"
 #include "function/scalar_function.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
+using namespace lbug::binder;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
@@ -56,4 +56,4 @@ function_set IsACyclicFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

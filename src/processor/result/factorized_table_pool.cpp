@@ -1,6 +1,6 @@
 #include "processor/result/factorized_table_pool.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 FactorizedTable* FactorizedTablePool::claimLocalTable(storage::MemoryManager* mm) {
@@ -28,4 +28,4 @@ void FactorizedTablePool::mergeLocalTables() {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

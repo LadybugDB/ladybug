@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 enum class PathSemantic : uint8_t {
@@ -18,4 +18,4 @@ struct PathSemanticUtils {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -7,7 +7,7 @@
 #include "transaction/transaction.h"
 #include "utils/fts_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 std::shared_ptr<common::BufferWriter> FTSIndexAuxInfo::serialize() const {
@@ -78,4 +78,4 @@ catalog::TableCatalogEntry* FTSIndexAuxInfo::getTableEntryToExport(
 }
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

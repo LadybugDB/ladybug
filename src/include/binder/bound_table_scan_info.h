@@ -3,7 +3,7 @@
 #include "function/table/bind_data.h"
 #include "function/table/table_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 struct BoundTableScanInfo {
@@ -21,4 +21,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

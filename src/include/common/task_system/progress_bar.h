@@ -6,7 +6,7 @@
 #include "common/api.h"
 #include "progress_bar_display.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 }
@@ -58,4 +58,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

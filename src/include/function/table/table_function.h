@@ -7,7 +7,7 @@
 #include "function/function.h"
 #include "processor/operator/physical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 class BoundReadingClause;
 }
@@ -198,4 +198,4 @@ struct KUZU_API TableFunction final : Function {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

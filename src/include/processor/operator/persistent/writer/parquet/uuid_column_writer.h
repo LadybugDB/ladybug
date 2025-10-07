@@ -3,7 +3,7 @@
 #include "basic_column_writer.h"
 #include "common/constants.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class UUIDColumnWriter : public BasicColumnWriter {
@@ -25,4 +25,4 @@ public:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

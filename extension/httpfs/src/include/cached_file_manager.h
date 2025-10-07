@@ -6,7 +6,7 @@
 #include "common/file_system/virtual_file_system.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace httpfs_extension {
 
 struct HTTPFileInfo;
@@ -48,4 +48,4 @@ private:
 };
 
 } // namespace httpfs_extension
-} // namespace kuzu
+} // namespace lbug

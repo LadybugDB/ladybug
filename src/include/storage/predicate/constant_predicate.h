@@ -4,7 +4,7 @@
 #include "common/enums/expression_type.h"
 #include "common/types/value/value.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 class ColumnConstantPredicate : public ColumnPredicate {
@@ -26,4 +26,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

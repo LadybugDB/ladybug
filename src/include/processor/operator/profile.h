@@ -2,7 +2,7 @@
 
 #include "processor/operator/sink.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 class PhysicalPlan;
 
@@ -31,4 +31,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

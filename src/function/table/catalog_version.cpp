@@ -5,7 +5,7 @@
 #include "main/client_context.h"
 #include "processor/execution_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 static common::offset_t internalTableFunc(const TableFuncMorsel& /*morsel*/,
@@ -40,4 +40,4 @@ function_set CatalogVersionFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

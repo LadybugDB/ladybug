@@ -4,7 +4,7 @@
 
 #include "parser/expression/parsed_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class NodePattern {
@@ -32,4 +32,4 @@ protected:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

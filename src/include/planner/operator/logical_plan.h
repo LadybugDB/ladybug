@@ -2,7 +2,7 @@
 
 #include "logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 using cardinality_t = uint64_t;
@@ -46,4 +46,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

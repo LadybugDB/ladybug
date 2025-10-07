@@ -8,7 +8,7 @@
 #include "function/string/functions/trim_function.h"
 #include "function/string/functions/upper_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct VectorStringFunction {
@@ -252,4 +252,4 @@ struct ConcatWSFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

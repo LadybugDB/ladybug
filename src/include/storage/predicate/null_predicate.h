@@ -3,7 +3,7 @@
 #include "column_predicate.h"
 #include "common/enums/expression_type.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 class ColumnNullPredicate : public ColumnPredicate {
@@ -22,4 +22,4 @@ public:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

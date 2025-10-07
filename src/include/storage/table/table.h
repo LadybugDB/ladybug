@@ -8,7 +8,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/node_group.h"
 
-namespace kuzu {
+namespace lbug {
 namespace evaluator {
 class ExpressionEvaluator;
 } // namespace evaluator
@@ -218,4 +218,4 @@ protected:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

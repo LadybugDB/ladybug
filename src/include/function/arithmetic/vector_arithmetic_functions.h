@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct AddFunction {
@@ -260,4 +260,4 @@ struct TanFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

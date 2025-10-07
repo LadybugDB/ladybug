@@ -1,10 +1,10 @@
 #pragma once
 
-#include "main/kuzu.h"
+#include "main/lbug.h"
 #include "main/storage_driver.h"
 #include "pybind_include.h" // IWYU pragma: keep (used for py:: namespace)
 #define PYBIND11_DETAILED_ERROR_MESSAGES
-using namespace kuzu::main;
+using namespace lbug::main;
 
 class PyDatabase {
     friend class PyConnection;

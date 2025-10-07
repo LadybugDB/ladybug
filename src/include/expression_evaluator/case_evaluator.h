@@ -6,7 +6,7 @@
 #include "common/system_config.h"
 #include "expression_evaluator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 }
@@ -76,4 +76,4 @@ private:
 };
 
 } // namespace evaluator
-} // namespace kuzu
+} // namespace lbug

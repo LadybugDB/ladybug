@@ -3,7 +3,7 @@
 #include "binder/bound_statement_result.h"
 #include "bound_projection_body.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class BoundReturnClause {
@@ -25,4 +25,4 @@ protected:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

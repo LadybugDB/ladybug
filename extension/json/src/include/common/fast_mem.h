@@ -17,7 +17,7 @@ inline void memSetFixed(void* ptr, int value) {
     memset(ptr, value, SIZE);
 }
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 // This templated memcpy is significantly faster than std::memcpy, but only when you are calling
@@ -1212,4 +1212,4 @@ inline void fastMemset(void* ptr, int value, size_t size) {
 }
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

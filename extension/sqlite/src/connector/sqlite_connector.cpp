@@ -4,7 +4,7 @@
 #include "function/sqlite_scan.h"
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace sqlite_extension {
 
 using namespace duckdb_extension;
@@ -28,4 +28,4 @@ std::shared_ptr<duckdb_extension::DuckDBTableScanInfo> SqliteConnector::getTable
 }
 
 } // namespace sqlite_extension
-} // namespace kuzu
+} // namespace lbug

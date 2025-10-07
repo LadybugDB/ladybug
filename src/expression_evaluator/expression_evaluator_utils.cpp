@@ -3,10 +3,10 @@
 #include "common/types/value/value.h"
 #include "processor/expression_mapper.h"
 
-using namespace kuzu::common;
-using namespace kuzu::processor;
+using namespace lbug::common;
+using namespace lbug::processor;
 
-namespace kuzu {
+namespace lbug {
 namespace evaluator {
 
 Value ExpressionEvaluatorUtils::evaluateConstantExpression(
@@ -22,4 +22,4 @@ Value ExpressionEvaluatorUtils::evaluateConstantExpression(
 }
 
 } // namespace evaluator
-} // namespace kuzu
+} // namespace lbug

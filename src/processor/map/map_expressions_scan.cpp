@@ -4,11 +4,11 @@
 #include "processor/operator/result_collector.h"
 #include "processor/plan_mapper.h"
 
-using namespace kuzu::common;
-using namespace kuzu::binder;
-using namespace kuzu::planner;
+using namespace lbug::common;
+using namespace lbug::binder;
+using namespace lbug::planner;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapExpressionsScan(
@@ -38,4 +38,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExpressionsScan(
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

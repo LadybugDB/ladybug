@@ -4,7 +4,7 @@
 #include "common/copy_constructors.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace graph {
 
 struct NativeGraphEntryTableInfo {
@@ -47,4 +47,4 @@ private:
 };
 
 } // namespace graph
-} // namespace kuzu
+} // namespace lbug

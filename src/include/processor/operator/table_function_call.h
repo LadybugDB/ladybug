@@ -4,7 +4,7 @@
 #include "function/table/table_function.h"
 #include "processor/operator/physical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct TableFunctionCallInfo {
@@ -79,4 +79,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

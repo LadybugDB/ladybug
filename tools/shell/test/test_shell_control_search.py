@@ -13,9 +13,9 @@ def set_up_search(test) -> None:
         test.shell_process.expect_exact(["\u2502 databases rule \u2502", pexpect.EOF])
         == 0
     )
-    test.send_finished_statement('RETURN "kuzu is cool" AS b;\r')
+    test.send_finished_statement('RETURN "lbug is cool" AS b;\r')
     assert (
-        test.shell_process.expect_exact(["\u2502 kuzu is cool \u2502", pexpect.EOF])
+        test.shell_process.expect_exact(["\u2502 lbug is cool \u2502", pexpect.EOF])
         == 0
     )
     test.send_finished_statement('RETURN "the shell is fun" AS c;\r')
@@ -123,9 +123,9 @@ def test_search_prev_once(test, key) -> None:
 @pytest.mark.parametrize("test", ["multiline", "singleline"], indirect=True)
 def test_search_prev_bottom(test, key) -> None:
     # test search prev until bottom of history
-    test.send_finished_statement('RETURN "kuzu is cool" AS b;\r')
+    test.send_finished_statement('RETURN "lbug is cool" AS b;\r')
     assert (
-        test.shell_process.expect_exact(["\u2502 kuzu is cool \u2502", pexpect.EOF])
+        test.shell_process.expect_exact(["\u2502 lbug is cool \u2502", pexpect.EOF])
         == 0
     )
     test.send_finished_statement('RETURN "the shell is fun" AS c;\r')
@@ -296,9 +296,9 @@ def test_ctrl_u_cleared(test) -> None:
     test.send_control_statement(KEY_ACTION.CTRL_R.value)
     test.send_statement("databases")
     test.send_control_statement(KEY_ACTION.CTRL_U.value)
-    test.send_finished_statement('RETURN "kuzu is cool" AS a;\r')
+    test.send_finished_statement('RETURN "lbug is cool" AS a;\r')
     assert (
-        test.shell_process.expect_exact(["\u2502 kuzu is cool \u2502", pexpect.EOF])
+        test.shell_process.expect_exact(["\u2502 lbug is cool \u2502", pexpect.EOF])
         == 0
     )
 
@@ -340,9 +340,9 @@ def test_ctrl_d_eof(test) -> None:
     test.send_control_statement(KEY_ACTION.CTRL_R.value)
     test.send_control_statement(KEY_ACTION.CTRL_D.value)
     # search gets accepted
-    assert test.shell_process.expect_exact(["kuzu", pexpect.EOF]) == 0
+    assert test.shell_process.expect_exact(["lbug", pexpect.EOF]) == 0
     # acts as EOF
-    assert test.shell_process.expect_exact(["kuzu", pexpect.EOF]) == 1
+    assert test.shell_process.expect_exact(["lbug", pexpect.EOF]) == 1
 
 
 @pytest.mark.parametrize("test", ["multiline", "singleline"], indirect=True)
@@ -414,9 +414,9 @@ def test_cancel_search_cleared(test, key) -> None:
     test.send_control_statement(KEY_ACTION.CTRL_R.value)
     test.send_statement("databases")
     test.send_control_statement(key)
-    test.send_finished_statement('RETURN "kuzu is cool" AS a;\r')
+    test.send_finished_statement('RETURN "lbug is cool" AS a;\r')
     assert (
-        test.shell_process.expect_exact(["\u2502 kuzu is cool \u2502", pexpect.EOF])
+        test.shell_process.expect_exact(["\u2502 lbug is cool \u2502", pexpect.EOF])
         == 0
     )
 

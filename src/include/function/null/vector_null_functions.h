@@ -3,7 +3,7 @@
 #include "function/scalar_function.h"
 #include "null_function_executor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 class VectorNullFunction {
@@ -34,4 +34,4 @@ private:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

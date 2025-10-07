@@ -5,7 +5,7 @@
 
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 enum class RelDataDirection : uint8_t { FWD = 0, BWD = 1, INVALID = 255 };
@@ -21,4 +21,4 @@ struct RelDirectionUtils {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

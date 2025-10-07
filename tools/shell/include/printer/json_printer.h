@@ -4,7 +4,7 @@
 #include "main/query_result.h"
 #include "printer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class MemoryManager;
 }
@@ -56,4 +56,4 @@ private:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

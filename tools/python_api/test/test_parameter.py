@@ -9,7 +9,7 @@ from type_aliases import ConnDB
 # required by python-lint
 if TYPE_CHECKING:
     from pathlib import Path
-import kuzu
+import lbug
 
 
 def test_struct_param_access(conn_db_readwrite: ConnDB) -> None:
@@ -290,7 +290,7 @@ def test_param_error4(conn_db_readonly: ConnDB) -> None:
     conn, _ = conn_db_readonly
     with pytest.raises(
         RuntimeError,
-        match="Runtime exception: Cannot convert Python object to Kuzu value : INT8  is incompatible with TIMESTAMP",
+        match="Runtime exception: Cannot convert Python object to Lbug value : INT8  is incompatible with TIMESTAMP",
     ):
         conn.execute(
             "MATCH (a:person {workedHours: $1}) RETURN COUNT(*);", {"1": [1, 2, datetime.datetime(2023, 3, 25)]}

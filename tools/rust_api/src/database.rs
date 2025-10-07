@@ -39,7 +39,7 @@ pub struct SystemConfig {
     auto_checkpoint: bool,
     /// The threshold of the WAL file size in bytes. When the size of the WAL file exceeds this threshold, the database will checkpoint if autoCheckpoint is true.
     checkpoint_threshold: i64,
-    /// If true, any WAL replaying failure when loading the database will throw an error. Otherwise, Kuzu will silently ignore the failure and replay up to where the error occured.
+    /// If true, any WAL replaying failure when loading the database will throw an error. Otherwise, Lbug will silently ignore the failure and replay up to where the error occured.
     throw_on_wal_replay_failure: bool,
     /// If true, the database will use checksums to detect corruption in the WAL file.
     enable_checksums: bool,
@@ -317,7 +317,7 @@ mod tests {
     fn test_database_in_memory() -> Result<()> {
         use crate::Value;
         let db = Database::in_memory(SYSTEM_CONFIG_FOR_TESTS)?;
-        // If the special name is ever changed (or removed) kuzu is likely to just create a db directory with that name
+        // If the special name is ever changed (or removed) lbug is likely to just create a db directory with that name
         assert!(!std::path::Path::new(crate::database::IN_MEMORY_DB_NAME).exists());
 
         let conn = Connection::new(&db)?;

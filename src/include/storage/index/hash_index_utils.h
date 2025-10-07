@@ -10,7 +10,7 @@
 #include "function/hash/hash_functions.h"
 #include "storage/index/hash_index_header.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 static constexpr uint64_t NUM_HASH_INDEXES = common::HashIndexConstants::NUM_HASH_INDEXES;
@@ -83,4 +83,4 @@ public:
     }
 };
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

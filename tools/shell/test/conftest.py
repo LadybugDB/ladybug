@@ -152,18 +152,18 @@ class ShellTest:
 
     def send_finished_statement(self, stmt: str) -> None:
         if self.shell_process:
-            assert self.shell_process.expect_exact(["kuzu", pexpect.EOF]) == 0
+            assert self.shell_process.expect_exact(["lbug", pexpect.EOF]) == 0
             self.shell_process.send(stmt)
-            assert self.shell_process.expect_exact(["kuzu", pexpect.EOF]) == 0
+            assert self.shell_process.expect_exact(["lbug", pexpect.EOF]) == 0
 
     def send_statement(self, stmt: str) -> None:
         if self.shell_process:
-            assert self.shell_process.expect_exact(["kuzu", pexpect.EOF]) == 0
+            assert self.shell_process.expect_exact(["lbug", pexpect.EOF]) == 0
             self.shell_process.send(stmt)
 
     def send_control_statement(self, stmt: str) -> None:
         if self.shell_process:
-            assert self.shell_process.expect_exact(["kuzu", pexpect.EOF]) == 0
+            assert self.shell_process.expect_exact(["lbug", pexpect.EOF]) == 0
             self.shell_process.sendcontrol(stmt)
 
 

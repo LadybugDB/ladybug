@@ -4,7 +4,7 @@
 #include "ltrim_function.h"
 #include "rtrim_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct Trim : BaseStrOperation {
@@ -21,4 +21,4 @@ private:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

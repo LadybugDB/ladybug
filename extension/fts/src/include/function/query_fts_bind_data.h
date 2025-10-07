@@ -5,7 +5,7 @@
 #include "function/fts_config.h"
 #include "function/gds/gds.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 struct QueryFTSOptionalParams : public function::OptionalParams {
@@ -62,4 +62,4 @@ struct QueryFTSBindData final : public function::GDSBindData {
 };
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

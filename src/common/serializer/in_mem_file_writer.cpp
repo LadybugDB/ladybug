@@ -4,7 +4,7 @@
 #include "storage/shadow_file.h"
 #include "storage/shadow_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 InMemFileWriter::InMemFileWriter(storage::MemoryManager& mm) : mm{mm}, pageOffset{0} {}
@@ -80,4 +80,4 @@ uint64_t InMemFileWriter::getPageSize() {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

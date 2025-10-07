@@ -8,7 +8,7 @@
 #include "index/hnsw_index.h"
 #include "index/hnsw_rel_batch_insert.h"
 
-namespace kuzu {
+namespace lbug {
 namespace vector_extension {
 
 struct CreateHNSWIndexBindData final : function::TableFuncBindData {
@@ -144,4 +144,4 @@ struct QueryVectorIndexFunction final {
 };
 
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug

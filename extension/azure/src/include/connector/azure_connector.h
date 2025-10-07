@@ -2,7 +2,7 @@
 
 #include "connector/duckdb_connector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace azure_extension {
 
 class AzureConnector : public duckdb_extension::DuckDBConnector {
@@ -14,4 +14,4 @@ public:
 };
 
 } // namespace azure_extension
-} // namespace kuzu
+} // namespace lbug

@@ -5,7 +5,7 @@
 #include "parser/query/updating_clause/set_clause.h"
 #include "parser/transformer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 std::unique_ptr<UpdatingClause> Transformer::transformUpdatingClause(
@@ -76,4 +76,4 @@ std::unique_ptr<UpdatingClause> Transformer::transformDelete(CypherParser::OC_De
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

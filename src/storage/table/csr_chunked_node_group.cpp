@@ -12,9 +12,9 @@
 #include "storage/table/csr_node_group.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 CSRRegion::CSRRegion(idx_t regionIdx, idx_t level) : regionIdx{regionIdx}, level{level} {
@@ -467,4 +467,4 @@ length_t InMemChunkedCSRHeader::computeGapFromLength(length_t length) {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

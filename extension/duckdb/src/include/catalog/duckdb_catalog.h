@@ -5,7 +5,7 @@
 #include "connector/duckdb_connector.h"
 #include "extension/catalog_extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 struct AttachOption;
 } // namespace binder
@@ -61,4 +61,4 @@ protected:
 };
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

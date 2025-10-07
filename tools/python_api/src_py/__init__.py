@@ -1,19 +1,19 @@
 """
-# Kuzu Python API bindings.
+# Lbug Python API bindings.
 
-This package provides a Python API for Kuzu graph database management system.
+This package provides a Python API for Lbug graph database management system.
 
 To install the package, run:
 ```
-python3 -m pip install kuzu
+python3 -m pip install lbug
 ```
 
 Example usage:
 ```python
-import kuzu
+import lbug
 
-db = kuzu.Database("./test")
-conn = kuzu.Connection(db)
+db = lbug.Database("./test")
+conn = lbug.Connection(db)
 
 # Define the schema
 conn.execute("CREATE NODE TABLE User(name STRING, age INT64, PRIMARY KEY (name))")
@@ -33,7 +33,7 @@ while results.has_next():
     print(results.get_next())
 ```
 
-The dataset used in this example can be found [here](https://github.com/kuzudb/kuzu/tree/master/dataset/demo-db/csv).
+The dataset used in this example can be found [here](https://github.com/kuzudb/lbug/tree/master/dataset/demo-db/csv).
 
 """
 

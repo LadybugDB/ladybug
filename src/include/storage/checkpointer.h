@@ -3,7 +3,7 @@
 #include "storage/database_header.h"
 #include "storage/page_range.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 class Transaction;
 }
@@ -59,4 +59,4 @@ protected:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

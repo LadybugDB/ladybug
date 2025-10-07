@@ -7,7 +7,7 @@
 #include "common/file_system/file_info.h"
 #include "transport/TVirtualTransport.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 // A ReadHead for prefetching data in a specific range
@@ -195,4 +195,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

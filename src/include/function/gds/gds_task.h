@@ -8,7 +8,7 @@
 #include "function/gds/gds_frontier.h"
 #include "graph/graph.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct FrontierTaskInfo {
@@ -103,4 +103,4 @@ private:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

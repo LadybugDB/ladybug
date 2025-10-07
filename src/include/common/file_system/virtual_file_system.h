@@ -7,7 +7,7 @@
 #include "compressed_file_system.h"
 #include "file_system.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class Database;
 }
@@ -83,4 +83,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

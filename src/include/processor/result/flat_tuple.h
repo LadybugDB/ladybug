@@ -7,7 +7,7 @@
 #include "common/api.h"
 #include "common/types/value/value.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 /**
@@ -65,4 +65,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

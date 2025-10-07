@@ -9,10 +9,10 @@
 #include "storage/table/rel_table.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
-using namespace kuzu::transaction;
+using namespace lbug::common;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 bool CSRNodeGroupScanState::tryScanCachedTuples(RelTableScanState& tableScanState) {
@@ -1207,4 +1207,4 @@ void CSRNodeGroup::finalizeCheckpoint(const UniqLock& lock) {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

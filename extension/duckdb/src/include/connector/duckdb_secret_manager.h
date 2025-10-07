@@ -2,7 +2,7 @@
 
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace httpfs_extension {
 struct S3FileSystemConfig;
 }
@@ -15,4 +15,4 @@ struct DuckDBSecretManager {
 };
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

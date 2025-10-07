@@ -41,7 +41,7 @@
 #include "sparse_set.h"
 #include "strutil.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 static const bool ExtraDebug = false;
@@ -698,4 +698,4 @@ void Prog::Fanout(SparseArray<int>* fanout) {
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

@@ -1,9 +1,9 @@
 /**
- * @file kuzu.js is the internal wrapper for the WebAssembly module.
+ * @file lbug.js is the internal wrapper for the WebAssembly module.
  */
-const kuzu_wasm = require("../kuzu/kuzu_wasm.js");
+const kuzu_wasm = require("../lbug/kuzu_wasm.js");
 
-class kuzu {
+class lbug {
   constructor() {
     this._kuzu = null;
   }
@@ -39,5 +39,5 @@ class kuzu {
   }
 }
 
-const kuzuInstance = new kuzu();
+const kuzuInstance = new lbug();
 module.exports = kuzuInstance;

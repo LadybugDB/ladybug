@@ -6,7 +6,7 @@
 
 #include "common/api.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 using storage_version_t = uint64_t;
@@ -24,8 +24,8 @@ struct StorageVersionInfo {
 
     static KUZU_API storage_version_t getStorageVersion();
 
-    static constexpr const char* MAGIC_BYTES = "KUZU";
+    static constexpr const char* MAGIC_BYTES = "LBUG";
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

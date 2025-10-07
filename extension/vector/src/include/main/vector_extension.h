@@ -2,7 +2,7 @@
 
 #include "extension/extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace vector_extension {
 
 class VectorExtension final : public extension::Extension {
@@ -13,4 +13,4 @@ public:
     static void load(main::ClientContext* context);
 };
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug

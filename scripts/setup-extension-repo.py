@@ -13,7 +13,7 @@ def extract_extension_version() -> str:
             if match:
                 version = match.group(2)
                 return version
-    raise Exception("Failed to infer KUZU extension version from CMAKE file.")
+    raise Exception("Failed to infer LBUG extension version from CMAKE file.")
 
 
 def get_os() -> str:

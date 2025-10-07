@@ -5,7 +5,7 @@
 #include "json.hpp"
 #include "provider.h"
 
-namespace kuzu {
+namespace lbug {
 namespace llm_extension {
 
 class BedrockEmbedding final : public EmbeddingProvider {
@@ -28,4 +28,4 @@ private:
 };
 
 } // namespace llm_extension
-} // namespace kuzu
+} // namespace lbug

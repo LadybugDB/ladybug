@@ -2,8 +2,8 @@
 #include "common/string_utils.h"
 #include "spdlog/spdlog.h"
 
-using namespace kuzu::benchmark;
-using namespace kuzu::common;
+using namespace lbug::benchmark;
+using namespace lbug::common;
 
 static std::string getArgumentValue(const std::string& arg) {
     auto splits = StringUtils::split(arg, "=");

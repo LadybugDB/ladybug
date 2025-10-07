@@ -5,7 +5,7 @@
 #include "common/vector/value_vector.h"
 #include <simsimd.h>
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ArrayCosineSimilarity {
@@ -28,4 +28,4 @@ struct ArrayCosineSimilarity {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

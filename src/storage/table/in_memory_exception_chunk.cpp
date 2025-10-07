@@ -10,7 +10,7 @@
 #include "storage/table/column_chunk_data.h"
 #include <concepts>
 
-namespace kuzu::storage {
+namespace lbug::storage {
 
 using namespace common;
 using namespace transaction;
@@ -157,4 +157,4 @@ size_t InMemoryExceptionChunk<T>::getExceptionCount() const {
 template class InMemoryExceptionChunk<float>;
 template class InMemoryExceptionChunk<double>;
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

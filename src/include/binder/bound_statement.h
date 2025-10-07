@@ -4,7 +4,7 @@
 #include "common/copy_constructors.h"
 #include "common/enums/statement_type.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class BoundStatement {
@@ -39,4 +39,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

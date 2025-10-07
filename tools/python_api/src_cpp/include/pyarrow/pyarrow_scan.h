@@ -9,7 +9,7 @@
 #include "function/table/table_function.h"
 #include "pybind_include.h"
 
-namespace kuzu {
+namespace lbug {
 
 struct PyArrowTableScanLocalState final : public function::TableFuncLocalState {
     ArrowArrayWrapper* arrowArray;
@@ -64,4 +64,4 @@ struct PyArrowTableScanFunction {
     static function::TableFunction getFunction();
 };
 
-} // namespace kuzu
+} // namespace lbug

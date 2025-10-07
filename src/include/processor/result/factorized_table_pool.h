@@ -5,7 +5,7 @@
 
 #include "processor/result/factorized_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 // We implement a local ftable pool to avoid generate many small ftables when running GDS.
@@ -33,4 +33,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

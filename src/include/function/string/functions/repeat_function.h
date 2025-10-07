@@ -6,7 +6,7 @@
 #include "common/types/ku_string.h"
 #include "common/vector/value_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct Repeat {
@@ -23,4 +23,4 @@ private:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 
 #include "common/cast.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class Reader {
@@ -23,4 +23,4 @@ public:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

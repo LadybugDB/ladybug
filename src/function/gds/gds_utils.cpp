@@ -10,13 +10,13 @@
 #include "main/client_context.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
-using namespace kuzu::catalog;
-using namespace kuzu::function;
-using namespace kuzu::processor;
-using namespace kuzu::graph;
+using namespace lbug::common;
+using namespace lbug::catalog;
+using namespace lbug::function;
+using namespace lbug::processor;
+using namespace lbug::graph;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 static std::shared_ptr<FrontierTask> getFrontierTask(const main::ClientContext* context,
@@ -170,4 +170,4 @@ void GDSUtils::runVertexCompute(ExecutionContext* context, GDSDensityState densi
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

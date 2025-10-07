@@ -5,7 +5,7 @@
 #include "common/utils.h"
 #include <ranges>
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 namespace {
@@ -245,4 +245,4 @@ template struct EncodeExceptionView<double>;
 template struct EncodeExceptionView<float>;
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -501,7 +501,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "kuzu"
+name = "lbug"
 version = "0.11.1"
 dependencies = [
  "arrow",
@@ -515,11 +515,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "kuzu-rust-example"
+name = "lbug-rust-example"
 version = "0.1.0"
 dependencies = [
  "arrow",
- "kuzu",
+ "lbug",
 ]
 
 [[package]]

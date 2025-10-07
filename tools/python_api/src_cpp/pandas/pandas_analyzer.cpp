@@ -4,7 +4,7 @@
 #include "function/built_in_function_utils.h"
 #include "py_conversion.h"
 
-namespace kuzu {
+namespace lbug {
 
 // NOTE: MOVES right to left
 static bool upgradeType(common::LogicalType& left, common::LogicalType& right) {
@@ -225,4 +225,4 @@ bool PandasAnalyzer::analyze(py::object column) {
     return canConvert;
 }
 
-} // namespace kuzu
+} // namespace lbug

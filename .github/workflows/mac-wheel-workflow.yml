@@ -27,9 +27,9 @@ jobs:
       - name: Create source distribution
         working-directory: ./scripts/pip-package/
         run: |
-          rm -rf wheelhouse kuzu.tar.gz
+          rm -rf wheelhouse lbug.tar.gz
           mkdir wheelhouse
-          python3 package_tar.py kuzu.tar.gz
+          python3 package_tar.py lbug.tar.gz
 
       - name: Build wheels for Apple Silicon
         uses: pypa/cibuildwheel@v2.22
@@ -39,7 +39,7 @@ jobs:
           CIBW_BUILD_VERBOSITY: 3
           MACOSX_DEPLOYMENT_TARGET: 11.0
         with:
-          package-dir: ./scripts/pip-package/kuzu.tar.gz
+          package-dir: ./scripts/pip-package/lbug.tar.gz
           output-dir: ./scripts/pip-package/wheelhouse
 
       - uses: actions/upload-artifact@v4
@@ -62,9 +62,9 @@ jobs:
       - name: Create source distribution
         working-directory: ./scripts/pip-package/
         run: |
-          rm -rf wheelhouse kuzu.tar.gz
+          rm -rf wheelhouse lbug.tar.gz
           mkdir wheelhouse
-          python3 package_tar.py kuzu.tar.gz
+          python3 package_tar.py lbug.tar.gz
 
       - name: Build wheels for Intel
         uses: pypa/cibuildwheel@v2.22
@@ -74,7 +74,7 @@ jobs:
           CIBW_BUILD_VERBOSITY: 3
           MACOSX_DEPLOYMENT_TARGET: 11.0
         with:
-          package-dir: ./scripts/pip-package/kuzu.tar.gz
+          package-dir: ./scripts/pip-package/lbug.tar.gz
           output-dir: ./scripts/pip-package/wheelhouse
 
       - uses: actions/upload-artifact@v4

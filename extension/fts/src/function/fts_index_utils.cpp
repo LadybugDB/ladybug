@@ -6,7 +6,7 @@
 #include "common/exception/binder.h"
 #include "transaction/transaction_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 void FTSIndexUtils::validateIndexExistence(const main::ClientContext& context,
@@ -54,4 +54,4 @@ void FTSIndexUtils::validateAutoTransaction(const main::ClientContext& context,
 }
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

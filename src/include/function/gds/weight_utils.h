@@ -4,7 +4,7 @@
 #include "common/type_utils.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct WeightUtils {
@@ -98,4 +98,4 @@ void WeightUtils::checkWeight(const std::string& fcn, T weight) {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

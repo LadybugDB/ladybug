@@ -5,7 +5,7 @@
 #include "common/types/types.h"
 #include "common/types/value/value.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 Value* RecursiveRelVal::getNodes(const Value* val) {
@@ -28,4 +28,4 @@ void RecursiveRelVal::throwIfNotRecursiveRel(const Value* val) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

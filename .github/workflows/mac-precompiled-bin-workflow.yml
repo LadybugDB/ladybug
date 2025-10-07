@@ -34,22 +34,22 @@ jobs:
 
       - name: Collect artifacts
         run: |
-          mv install/include/kuzu.h .
-          mv install/include/kuzu.hpp .
+          mv install/include/lbug.h .
+          mv install/include/lbug.hpp .
           mv install/lib/libkuzu.dylib .
-          mv install/bin/kuzu .
+          mv install/bin/lbug .
 
       - name: Verify binary information
         run: |
-          file -b kuzu
-          otool -l kuzu | grep minos
+          file -b lbug
+          otool -l lbug | grep minos
           file -b libkuzu.dylib
           otool -l libkuzu.dylib | grep minos
 
       - name: Create tarball
         run: |
-          tar -czvf libkuzu-osx-universal.tar.gz kuzu.h kuzu.hpp libkuzu.dylib
-          tar -czvf kuzu_cli-osx-universal.tar.gz kuzu
+          tar -czvf libkuzu-osx-universal.tar.gz lbug.h lbug.hpp libkuzu.dylib
+          tar -czvf kuzu_cli-osx-universal.tar.gz lbug
 
       - uses: actions/upload-artifact@v4
         with:

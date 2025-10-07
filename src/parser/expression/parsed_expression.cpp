@@ -10,9 +10,9 @@
 #include "parser/expression/parsed_subquery_expression.h"
 #include "parser/expression/parsed_variable_expression.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 ParsedExpression::ParsedExpression(ExpressionType type, std::unique_ptr<ParsedExpression> child,
@@ -79,4 +79,4 @@ std::unique_ptr<ParsedExpression> ParsedExpression::deserialize(Deserializer& de
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

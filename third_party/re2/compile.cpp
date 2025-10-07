@@ -22,7 +22,7 @@
 #include "utf.h"
 #include "walker-inl.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 // List of pointers to Inst* that need to be filled in (patched).
@@ -1243,4 +1243,4 @@ Prog* Prog::CompileSet(Regexp* re, RE2::Anchor anchor, int64_t max_mem) {
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

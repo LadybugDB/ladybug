@@ -3,7 +3,7 @@
 #include "storage/enums/residency_state.h"
 #include "storage/table/column_chunk_data.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class MemoryManager;
 
@@ -90,4 +90,4 @@ private:
     std::unordered_set<DictionaryEntry, StringOps /*hash*/, StringOps /*equals*/> indexTable;
 };
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

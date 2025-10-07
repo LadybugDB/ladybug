@@ -1,6 +1,6 @@
 #include "common/profiler.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 TimeMetric* Profiler::registerTimeMetric(const std::string& key) {
@@ -48,4 +48,4 @@ void Profiler::addMetric(const std::string& key, std::unique_ptr<Metric> metric)
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

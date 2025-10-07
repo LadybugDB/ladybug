@@ -9,10 +9,10 @@
 #include "spdlog/spdlog.h"
 #include "test_helper/test_helper.h"
 
-using namespace kuzu::common;
-using namespace kuzu::main;
+using namespace lbug::common;
+using namespace lbug::main;
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 void BaseGraphTest::createConns(const std::set<std::string>& connNames) {
@@ -52,7 +52,7 @@ void BaseGraphTest::initGraph(const std::string& datasetDir) const {
         return;
     }
 
-    // Run tests on datasets exported from a previous Kuzu version. Used to verify that exports and
+    // Run tests on datasets exported from a previous Lbug version. Used to verify that exports and
     // imports across versions work correctly. This skips importing the `empty` dataset.
     auto dirs = StringUtils::split(StringUtils::getLower(datasetDir), "/");
     if (std::find(dirs.begin(), dirs.end(), "empty") != dirs.end()) {
@@ -70,4 +70,4 @@ void BaseGraphTest::initGraph(const std::string& datasetDir) const {
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

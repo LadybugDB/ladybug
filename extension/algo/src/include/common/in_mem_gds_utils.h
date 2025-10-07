@@ -3,7 +3,7 @@
 #include "function/gds/gds.h"
 #include "function/gds/gds_task.h"
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 class InMemParallelCompute {
 public:
@@ -66,4 +66,4 @@ public:
 };
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug

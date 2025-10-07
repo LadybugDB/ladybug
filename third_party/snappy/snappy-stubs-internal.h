@@ -47,7 +47,7 @@
 #include <limits>
 #include <string>
 
-// kuzu - LNK: define here instead of in CMake
+// lbug - LNK: define here instead of in CMake
 #ifdef __GNUC__
 #define HAVE_BUILTIN_EXPECT 1
 #define HAVE_BUILTIN_CTZ 1
@@ -552,7 +552,7 @@ inline char* string_as_array(std::string* str) {
 #include <stdlib.h>
 #include <string.h>
 
-// kuzu - LNK: define here instead of in CMake
+// lbug - LNK: define here instead of in CMake
 #ifdef __GNUC__
 #define HAVE_BUILTIN_EXPECT
 #define HAVE_BUILTIN_CTZ

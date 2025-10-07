@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 enum class ScanSourceType : uint8_t {
@@ -21,4 +21,4 @@ public:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

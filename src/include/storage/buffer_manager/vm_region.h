@@ -5,7 +5,7 @@
 #include "common/constants.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 // A VMRegion holds a virtual memory region of a certain size allocated through mmap.
@@ -47,4 +47,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

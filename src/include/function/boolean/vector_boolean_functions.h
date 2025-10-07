@@ -3,7 +3,7 @@
 #include "boolean_function_executor.h"
 #include "function/scalar_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 class VectorBooleanFunction {
@@ -65,4 +65,4 @@ private:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

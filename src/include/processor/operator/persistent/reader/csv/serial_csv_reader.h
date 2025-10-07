@@ -7,7 +7,7 @@
 #include "processor/operator/persistent/reader/csv/dialect_detection.h"
 #include "processor/operator/persistent/reader/file_error_handler.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 //! Serial CSV reader is a class that reads values from a stream in a single thread.
@@ -64,4 +64,4 @@ struct SerialCSVScan {
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -9,11 +9,11 @@
 #include "protocol/TCompactProtocol.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 using namespace kuzu_parquet::format;
-using namespace kuzu::common;
+using namespace lbug::common;
 
 ParquetWriter::ParquetWriter(std::string fileName, std::vector<common::LogicalType> types,
     std::vector<std::string> columnNames, kuzu_parquet::format::CompressionCodec::type codec,
@@ -34,7 +34,7 @@ ParquetWriter::ParquetWriter(std::string fileName, std::vector<common::LogicalTy
     fileMetaData.version = 1;
 
     fileMetaData.__isset.created_by = true;
-    fileMetaData.created_by = "KUZU";
+    fileMetaData.created_by = "LBUG";
 
     fileMetaData.schema.resize(1);
 
@@ -301,4 +301,4 @@ void ParquetWriter::finalize() {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

@@ -3,7 +3,7 @@
 #include "binder/bound_statement.h"
 #include "common/enums/explain_type.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class BoundExplain final : public BoundStatement {
@@ -26,4 +26,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

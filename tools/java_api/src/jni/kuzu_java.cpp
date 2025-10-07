@@ -14,12 +14,12 @@
 #include "common/exception/exception.h"
 #include "common/exception/not_implemented.h"
 #include "function/cast/functions/cast_string_non_nested_functions.h"
-#include "main/kuzu.h"
+#include "main/lbug.h"
 #include <jni.h>
 
-using namespace kuzu::main;
-using namespace kuzu::common;
-using namespace kuzu::processor;
+using namespace lbug::main;
+using namespace lbug::common;
+using namespace lbug::processor;
 
 #ifdef __ANDROID__
 static jint JNI_VERSION = JNI_VERSION_1_6;
@@ -897,14 +897,14 @@ JNIEXPORT jstring JNICALL Java_com_kuzudb_Native_kuzuFlatTupleToString(JNIEnv* e
  * All DataType native functions
  */
 
-namespace kuzu::common {
+namespace lbug::common {
 struct JavaAPIHelper {
     static inline LogicalType* createLogicalType(LogicalTypeID typeID,
         std::unique_ptr<ExtraTypeInfo> extraTypeInfo) {
         return new LogicalType(typeID, std::move(extraTypeInfo));
     }
 };
-} // namespace kuzu::common
+} // namespace lbug::common
 
 JNIEXPORT jlong JNICALL Java_com_kuzudb_Native_kuzuDataTypeCreate(JNIEnv* env, jclass, jobject id,
     jobject childType, jlong numElementsInArray) {
@@ -1153,7 +1153,7 @@ JNIEXPORT jlong JNICALL Java_com_kuzudb_Native_kuzuValueCreateValue(JNIEnv* env,
             auto type = LogicalType::DECIMAL(precision, scale);
             auto tmp = Value::createDefaultValue(type);
             int128_t res = 0;
-            kuzu::function::decimalCast(str.c_str(), str.length(), res, type);
+            lbug::function::decimalCast(str.c_str(), str.length(), res, type);
             tmp.val.int128Val = res;
             v = new Value(tmp);
         } else if (env->IsInstanceOf(val, J_C_String)) {

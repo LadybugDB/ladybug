@@ -4,7 +4,7 @@
 #include "catalog/catalog_entry/catalog_entry_type.h"
 #include "function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 class Transaction;
 } // namespace transaction
@@ -97,4 +97,4 @@ private:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

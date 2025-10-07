@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 enum class ExtensionAction : uint8_t {
@@ -45,4 +45,4 @@ struct InstallExtensionAuxInfo : public ExtensionAuxInfo {
 };
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

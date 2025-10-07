@@ -9,7 +9,7 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/duckdb_storage.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 DuckDBCatalog::DuckDBCatalog(std::string dbPath, std::string catalogName,
@@ -158,4 +158,4 @@ std::unique_ptr<binder::BoundCreateTableInfo> DuckDBCatalog::bindCreateTableInfo
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

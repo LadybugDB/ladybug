@@ -11,10 +11,10 @@
 #include "storage/checkpointer.h"
 #include "storage/wal/local_wal.h"
 
-using namespace kuzu::common;
-using namespace kuzu::storage;
+using namespace lbug::common;
+using namespace lbug::storage;
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 
 Transaction* TransactionManager::beginTransaction(main::ClientContext& clientContext,
@@ -184,4 +184,4 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
 }
 
 } // namespace transaction
-} // namespace kuzu
+} // namespace lbug

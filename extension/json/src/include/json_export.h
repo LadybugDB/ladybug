@@ -3,7 +3,7 @@
 #include "function/function.h"
 #include "function/table/bind_data.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 struct JsonExportFunction {
@@ -13,4 +13,4 @@ struct JsonExportFunction {
 };
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

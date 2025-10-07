@@ -14,10 +14,10 @@
 #include "storage/table/chunked_node_group.h"
 #include "storage/table/column_chunk.h"
 
-using namespace kuzu::common;
-using namespace kuzu::storage;
+using namespace lbug::common;
+using namespace lbug::storage;
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 class BufferManagerTest : public DBTest {
@@ -161,4 +161,4 @@ TEST_F(BufferManagerTest, TestBMEvictionSlowRead) {
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

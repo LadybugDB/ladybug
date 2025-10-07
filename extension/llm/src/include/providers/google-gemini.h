@@ -5,7 +5,7 @@
 #include "json.hpp"
 #include "provider.h"
 
-namespace kuzu {
+namespace lbug {
 namespace llm_extension {
 
 class GoogleGeminiEmbedding final : public EmbeddingProvider {
@@ -25,4 +25,4 @@ public:
 };
 
 } // namespace llm_extension
-} // namespace kuzu
+} // namespace lbug

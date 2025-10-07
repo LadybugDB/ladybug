@@ -2,7 +2,7 @@
 
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 struct NodeTableIDPair {
@@ -35,4 +35,4 @@ using node_table_id_pair_set_t =
     std::unordered_set<NodeTableIDPair, NodeTableIDPairHash, NodeTableIDPairEqual>;
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

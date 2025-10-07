@@ -104,7 +104,7 @@
 
 #include "pod_array.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 template<typename Value>
@@ -365,5 +365,5 @@ bool SparseArray<Value>::less(const IndexValue& a, const IndexValue& b) {
     return a.index_ < b.index_;
 }
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug
 #endif // UTIL_SPARSE_ARRAY_H_

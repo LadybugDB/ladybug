@@ -8,7 +8,7 @@
 #include "processor/operator/persistent/reader/copy_from_error.h"
 #include "processor/warning_context.h"
 
-namespace kuzu::processor {
+namespace lbug::processor {
 
 class BaseCSVReader;
 class SerialCSVReader;
@@ -85,4 +85,4 @@ private:
     bool cacheIgnoredErrors;
 };
 
-} // namespace kuzu::processor
+} // namespace lbug::processor

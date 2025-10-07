@@ -3,7 +3,7 @@
 --
 
 -DEFINE_STATEMENT_BLOCK AWS_S3_TEST [
--STATEMENT load from 's3://kuzu-dataset-us/user.csv' return *;
+-STATEMENT load from 's3://lbug-dataset-us/user.csv' return *;
 ---- 4
 Adam|30
 Karissa|40
@@ -15,7 +15,7 @@ Zhang|50
 ---- ok
 -STATEMENT CREATE NODE TABLE City(name STRING, population INT64, PRIMARY KEY (name))
 ---- ok
--STATEMENT copy City from 's3://kuzu-dataset-eu/city.csv';
+-STATEMENT copy City from 's3://lbug-dataset-eu/city.csv';
 ---- ok
 -STATEMENT match (c:City) return c.name, c.population;
 ---- 3

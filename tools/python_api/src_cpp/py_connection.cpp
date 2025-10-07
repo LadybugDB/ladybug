@@ -18,8 +18,8 @@
 #include "processor/result/factorized_table.h"
 #include "pyarrow/pyarrow_scan.h"
 
-using namespace kuzu::common;
-using namespace kuzu;
+using namespace lbug::common;
+using namespace lbug;
 
 void PyConnection::initialize(py::handle& m) {
     py::class_<PyConnection>(m, "Connection")
@@ -125,7 +125,7 @@ static std::unique_ptr<function::ScanReplacementData> replacePythonObject(
 }
 
 PyConnection::PyConnection(PyDatabase* pyDatabase, uint64_t numThreads) {
-    storageDriver = std::make_unique<kuzu::main::StorageDriver>(pyDatabase->database.get());
+    storageDriver = std::make_unique<lbug::main::StorageDriver>(pyDatabase->database.get());
     conn = std::make_unique<Connection>(pyDatabase->database.get());
     conn->getClientContext()->addScanReplace(
         function::ScanReplacement(lookupPythonObject, replacePythonObject));
@@ -404,13 +404,13 @@ static LogicalType pyLogicalType(const py::handle& val) {
             LogicalType resultKey, resultValue;
             if (!LogicalTypeUtils::tryGetMaxLogicalType(childKeyType, curChildKeyType, resultKey)) {
                 throw RuntimeException(stringFormat(
-                    "Cannot convert Python object to Kuzu value : {}  is incompatible with {}",
+                    "Cannot convert Python object to Lbug value : {}  is incompatible with {}",
                     childKeyType.toString(), curChildKeyType.toString()));
             }
             if (!LogicalTypeUtils::tryGetMaxLogicalType(childValueType, curChildValueType,
                     resultValue)) {
                 throw RuntimeException(stringFormat(
-                    "Cannot convert Python object to Kuzu value : {}  is incompatible with {}",
+                    "Cannot convert Python object to Lbug value : {}  is incompatible with {}",
                     childValueType.toString(), curChildValueType.toString()));
             }
             childKeyType = std::move(resultKey);
@@ -425,7 +425,7 @@ static LogicalType pyLogicalType(const py::handle& val) {
             LogicalType result;
             if (!LogicalTypeUtils::tryGetMaxLogicalType(childType, curChildType, result)) {
                 throw RuntimeException(stringFormat(
-                    "Cannot convert Python object to Kuzu value : {}  is incompatible with {}",
+                    "Cannot convert Python object to Lbug value : {}  is incompatible with {}",
                     childType.toString(), curChildType.toString()));
             }
             childType = std::move(result);
@@ -521,7 +521,7 @@ static LogicalType pyLogicalTypeFromParameter(const py::handle& val) {
             LogicalType result;
             if (!LogicalTypeUtils::tryGetMaxLogicalType(childType, curChildType, result)) {
                 throw RuntimeException(stringFormat(
-                    "Cannot convert Python object to Kuzu value : {}  is incompatible with {}",
+                    "Cannot convert Python object to Lbug value : {}  is incompatible with {}",
                     childType.toString(), curChildType.toString()));
             }
             childType = std::move(result);

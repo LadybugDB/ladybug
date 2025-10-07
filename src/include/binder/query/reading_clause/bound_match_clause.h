@@ -4,7 +4,7 @@
 #include "bound_join_hint.h"
 #include "bound_reading_clause.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class KUZU_API BoundMatchClause final : public BoundReadingClause {
@@ -31,4 +31,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

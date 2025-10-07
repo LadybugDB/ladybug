@@ -1,7 +1,7 @@
 #include "planner/operator/sip/logical_semi_masker.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 LogicalSemiMasker::~LogicalSemiMasker() = default;
 }
-} // namespace kuzu
+} // namespace lbug

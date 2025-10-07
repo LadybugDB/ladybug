@@ -1,10 +1,10 @@
 #include "common/exception/binder.h"
 #include "function/string/vector_string_functions.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
     if (input.arguments.size() < 2) {
@@ -108,4 +108,4 @@ function_set ConcatWSFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

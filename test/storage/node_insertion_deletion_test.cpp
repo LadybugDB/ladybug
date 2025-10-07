@@ -2,10 +2,10 @@
 #include "common/system_config.h"
 #include "graph_test/private_graph_test.h"
 
-using namespace kuzu::common;
-using namespace kuzu::main;
-using namespace kuzu::storage;
-using namespace kuzu::testing;
+using namespace lbug::common;
+using namespace lbug::main;
+using namespace lbug::storage;
+using namespace lbug::testing;
 
 // Note: ID and nodeOffset in this test are equal for each node, so we use nodeID and nodeOffset
 // interchangeably.

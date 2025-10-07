@@ -3,7 +3,7 @@
 #include "common/cast.h"
 #include "common/enums/clause_type.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class BoundUpdatingClause {
@@ -27,4 +27,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

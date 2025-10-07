@@ -1,10 +1,10 @@
 #include "planner/operator/logical_accumulate.h"
 #include "planner/planner.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
+using namespace lbug::binder;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void Planner::tryAppendAccumulate(LogicalPlan& plan) {
@@ -37,4 +37,4 @@ void Planner::appendAccumulate(AccumulateType accumulateType, const expression_v
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

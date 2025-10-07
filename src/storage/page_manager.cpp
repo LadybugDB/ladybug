@@ -4,7 +4,7 @@
 #include "storage/file_handle.h"
 #include "storage/storage_manager.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 static constexpr bool ENABLE_FSM = true;
 
 PageRange PageManager::allocatePageRange(common::page_idx_t numPages) {
@@ -63,4 +63,4 @@ PageManager* PageManager::Get(const main::ClientContext& context) {
     return StorageManager::Get(context)->getDataFH()->getPageManager();
 }
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

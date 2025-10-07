@@ -8,7 +8,7 @@
 #include <unistd.h>
 #endif
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 uint64_t FileInfo::getFileSize() const {
@@ -48,4 +48,4 @@ bool FileInfo::canPerformSeek() const {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

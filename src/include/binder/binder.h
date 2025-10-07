@@ -9,7 +9,7 @@
 #include "parser/ddl/parsed_property_definition.h"
 #include "parser/query/graph_pattern/pattern_element.h"
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 class BinderExtension;
 }
@@ -329,4 +329,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

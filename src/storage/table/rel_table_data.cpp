@@ -10,11 +10,11 @@
 #include "storage/table/rel_table.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
-using namespace kuzu::transaction;
+using namespace lbug::catalog;
+using namespace lbug::common;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 PersistentVersionRecordHandler::PersistentVersionRecordHandler(RelTableData* relTableData)
@@ -289,4 +289,4 @@ void RelTableData::reclaimStorage(PageAllocator& pageAllocator) const {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

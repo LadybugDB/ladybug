@@ -2,7 +2,7 @@
 
 #include "common/serializer/serializer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void BooleanColumnWriter::writeVector(common::Serializer& temp_writer,
@@ -42,4 +42,4 @@ void BooleanColumnWriter::flushPageState(common::Serializer& temp_writer,
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

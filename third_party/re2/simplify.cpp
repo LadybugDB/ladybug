@@ -15,7 +15,7 @@
 #include "util.h"
 #include "walker-inl.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 // Parses the regexp src and then simplifies it and sets *dst to the
@@ -641,4 +641,4 @@ Regexp* SimplifyWalker::SimplifyCharClass(Regexp* re) {
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

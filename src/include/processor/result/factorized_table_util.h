@@ -3,7 +3,7 @@
 #include "factorized_table.h"
 #include "planner/operator/schema.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class FactorizedTableUtils {
@@ -26,4 +26,4 @@ public:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

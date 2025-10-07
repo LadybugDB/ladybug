@@ -3,7 +3,7 @@
 #include "common/types/types.h"
 #include "pybind_include.h"
 
-namespace kuzu {
+namespace lbug {
 
 // Pandas has two different sets of types
 // NumPy dtypes (e.g., bool, int8,...)
@@ -42,4 +42,4 @@ struct NumpyTypeUtils {
     static common::LogicalType numpyToLogicalType(const NumpyType& npType);
 };
 
-} // namespace kuzu
+} // namespace lbug

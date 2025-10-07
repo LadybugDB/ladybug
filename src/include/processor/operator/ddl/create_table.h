@@ -3,7 +3,7 @@
 #include "binder/ddl/bound_create_table_info.h"
 #include "processor/operator/sink.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct CreateTableSharedState {
@@ -39,4 +39,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

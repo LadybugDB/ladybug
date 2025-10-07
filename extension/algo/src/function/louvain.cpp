@@ -15,12 +15,12 @@
 #include "transaction/transaction.h"
 
 using namespace std;
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::processor;
-using namespace kuzu::storage;
-using namespace kuzu::graph;
-using namespace kuzu::function;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::processor;
+using namespace lbug::storage;
+using namespace lbug::graph;
+using namespace lbug::function;
 
 // Louvain method for community detection: https://en.wikipedia.org/wiki/Louvain_method.
 // For nodes in a graph grouped into `C` communities, the modularity of a graph is given as:
@@ -34,7 +34,7 @@ using namespace kuzu::function;
 
 // The parallel Louvain implementation here follows https://hpc.pnl.gov/people/hala/grappolo.html.
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 
 constexpr double THRESHOLD = 1e-6;
@@ -702,4 +702,4 @@ function_set LouvainFunction::getFunctionSet() {
 }
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug

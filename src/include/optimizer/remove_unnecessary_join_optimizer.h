@@ -3,7 +3,7 @@
 #include "logical_operator_visitor.h"
 #include "planner/operator/logical_plan.h"
 
-namespace kuzu {
+namespace lbug {
 namespace optimizer {
 
 /* Due to the nature of graph pattern, a (node)-[rel]-(node) is always interpreted as two joins.
@@ -30,4 +30,4 @@ private:
 };
 
 } // namespace optimizer
-} // namespace kuzu
+} // namespace lbug

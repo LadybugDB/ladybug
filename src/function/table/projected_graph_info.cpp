@@ -5,10 +5,10 @@
 #include "function/table/simple_table_function.h"
 #include "graph/graph_entry_set.h"
 
-using namespace kuzu::common;
-using namespace kuzu::main;
+using namespace lbug::common;
+using namespace lbug::main;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ProjectedGraphInfo {
@@ -167,4 +167,4 @@ function_set ProjectedGraphInfoFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

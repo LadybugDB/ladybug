@@ -11,7 +11,7 @@
 #include "function/duckdb_scan.h"
 #include "s3fs_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 }
@@ -51,4 +51,4 @@ protected:
 };
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

@@ -3,7 +3,7 @@
 #include "planner/operator/factorization/flatten_resolver.h"
 #include "planner/operator/factorization/sink_util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 f_group_pos_set LogicalUnion::getGroupsPosToFlatten(uint32_t childIdx) {
@@ -54,4 +54,4 @@ bool LogicalUnion::requireFlatExpression(uint32_t expressionIdx) {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

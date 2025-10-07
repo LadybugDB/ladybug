@@ -3,7 +3,7 @@
 #include "base_str_function.h"
 #include "common/types/ku_string.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct Rtrim {
@@ -24,4 +24,4 @@ struct Rtrim {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

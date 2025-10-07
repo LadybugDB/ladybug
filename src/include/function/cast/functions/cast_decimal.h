@@ -12,7 +12,7 @@
 #include "function/cast/functions/cast_string_non_nested_functions.h"
 #include "function/cast/functions/numeric_limits.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 template<typename A, typename B>
@@ -152,4 +152,4 @@ inline void CastToDecimal::operation(ku_string_t& input, common::int128_t& outpu
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

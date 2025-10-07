@@ -13,14 +13,14 @@
 #include "parser/query/regular_query.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::parser;
-using namespace kuzu::catalog;
-using namespace kuzu::transaction;
-using namespace kuzu::storage;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::parser;
+using namespace lbug::catalog;
+using namespace lbug::transaction;
+using namespace lbug::storage;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 FileTypeInfo getFileType(case_insensitive_map_t<Value>& options) {
@@ -166,4 +166,4 @@ std::unique_ptr<BoundStatement> Binder::bindExportDatabaseClause(const Statement
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

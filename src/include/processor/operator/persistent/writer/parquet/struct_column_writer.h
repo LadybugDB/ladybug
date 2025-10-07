@@ -2,7 +2,7 @@
 
 #include "processor/operator/persistent/writer/parquet/column_writer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class StructColumnWriter : public ColumnWriter {
@@ -41,4 +41,4 @@ public:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

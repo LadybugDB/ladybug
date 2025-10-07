@@ -1,6 +1,6 @@
 #include "processor/operator/empty_result.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 bool EmptyResult::getNextTuplesInternal(ExecutionContext*) {
@@ -8,4 +8,4 @@ bool EmptyResult::getNextTuplesInternal(ExecutionContext*) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

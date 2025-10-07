@@ -3,7 +3,7 @@
 #include "common/types/types.h"
 #include "parser/expression/parsed_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 struct KUZU_API ColumnDefinition {
@@ -44,4 +44,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

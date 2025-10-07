@@ -1,6 +1,6 @@
 #include "common/task_system/task.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 bool Task::registerThread() {
@@ -29,4 +29,4 @@ void Task::deRegisterThreadAndFinalizeTask() {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

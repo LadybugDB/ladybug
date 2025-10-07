@@ -3,7 +3,7 @@
 #include "function/algo_function.h"
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 
 using namespace extension;
@@ -26,7 +26,7 @@ void AlgoExtension::load(main::ClientContext* context) {
 }
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -37,12 +37,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::algo_extension::AlgoExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::algo_extension::AlgoExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::algo_extension::AlgoExtension::EXTENSION_NAME;
+    return lbug::algo_extension::AlgoExtension::EXTENSION_NAME;
 }
 }
 #endif

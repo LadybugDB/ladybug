@@ -6,7 +6,7 @@
 #include "catalog_entry/catalog_entry.h"
 #include "common/case_insensitive_map.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 struct BoundAlterInfo;
 } // namespace binder
@@ -89,4 +89,4 @@ private:
 };
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

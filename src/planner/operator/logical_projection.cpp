@@ -2,7 +2,7 @@
 
 #include "planner/operator/factorization/flatten_resolver.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalProjection::computeFactorizedSchema() {
@@ -57,4 +57,4 @@ std::unordered_set<uint32_t> LogicalProjection::getDiscardedGroupsPos() const {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

@@ -5,7 +5,7 @@
 #include "main/database.h"
 #include "storage/postgres_storage.h"
 
-namespace kuzu {
+namespace lbug {
 namespace postgres_extension {
 
 void PostgresExtension::load(main::ClientContext* context) {
@@ -15,7 +15,7 @@ void PostgresExtension::load(main::ClientContext* context) {
 }
 
 } // namespace postgres_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -26,12 +26,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::postgres_extension::PostgresExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::postgres_extension::PostgresExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::postgres_extension::PostgresExtension::EXTENSION_NAME;
+    return lbug::postgres_extension::PostgresExtension::EXTENSION_NAME;
 }
 }
 #endif

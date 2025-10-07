@@ -7,9 +7,9 @@
 #include "binder/expression_visitor.h"
 #include "binder/visitor/property_collector.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 static void rewrite(std::shared_ptr<Expression> expr, expression_vector& projectionList,
@@ -98,4 +98,4 @@ void WithClauseProjectionRewriter::visitSingleQueryUnsafe(NormalizedSingleQuery&
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

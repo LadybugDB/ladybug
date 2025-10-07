@@ -6,7 +6,7 @@
 #include "common/assert.h"
 #include "exception/exception.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class Timer {
@@ -45,4 +45,4 @@ private:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

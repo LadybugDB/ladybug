@@ -16,7 +16,7 @@
 #include "planner/operator/logical_explain.h"
 #include "transaction/transaction.h"
 
-namespace kuzu {
+namespace lbug {
 namespace optimizer {
 
 void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* context,
@@ -78,4 +78,4 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
 }
 
 } // namespace optimizer
-} // namespace kuzu
+} // namespace lbug

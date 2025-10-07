@@ -3,7 +3,7 @@
 #include "common/file_system/file_system.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct StreamData {
@@ -81,4 +81,4 @@ struct CompressedFileInfo : public FileInfo {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

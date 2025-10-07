@@ -10,7 +10,7 @@
 #include "common/types/types.h"
 #include <bit>
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 using entry_pos_t = uint8_t;
@@ -85,4 +85,4 @@ struct Slot {
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

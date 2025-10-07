@@ -5,11 +5,11 @@
 #include "function/table/simple_table_function.h"
 #include "main/client_context.h"
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
-using namespace kuzu::main;
+using namespace lbug::catalog;
+using namespace lbug::common;
+using namespace lbug::main;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct LoadedExtensionInfo {
@@ -88,4 +88,4 @@ function_set ShowLoadedExtensionsFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

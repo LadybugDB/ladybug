@@ -3,7 +3,7 @@
 #include "common/cast.h"
 #include "common/enums/statement_type.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class Statement {
@@ -52,4 +52,4 @@ private:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

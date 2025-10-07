@@ -3,7 +3,7 @@
 #include "common/data_chunk/data_chunk.h"
 #include "processor/data_pos.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct AggregateInfo {
@@ -36,4 +36,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

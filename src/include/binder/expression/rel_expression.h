@@ -6,7 +6,7 @@
 #include "function/gds/rec_joins.h"
 #include "node_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 enum class RelDirectionType : uint8_t {
@@ -120,4 +120,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

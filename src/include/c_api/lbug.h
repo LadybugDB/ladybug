@@ -182,14 +182,14 @@ typedef struct {
 } kuzu_flat_tuple;
 
 /**
- * @brief kuzu_logical_type is the kuzu internal representation of data types.
+ * @brief kuzu_logical_type is the lbug internal representation of data types.
  */
 typedef struct {
     void* _data_type;
 } kuzu_logical_type;
 
 /**
- * @brief kuzu_value is used to represent a value with any kuzu internal dataType.
+ * @brief kuzu_value is used to represent a value with any lbug internal dataType.
  */
 typedef struct {
     void* _value;
@@ -197,7 +197,7 @@ typedef struct {
 } kuzu_value;
 
 /**
- * @brief kuzu internal internal_id type which stores the table_id and offset of a node/rel.
+ * @brief lbug internal internal_id type which stores the table_id and offset of a node/rel.
  */
 typedef struct {
     uint64_t table_id;
@@ -205,7 +205,7 @@ typedef struct {
 } kuzu_internal_id_t;
 
 /**
- * @brief kuzu internal date type which stores the number of days since 1970-01-01 00:00:00 UTC.
+ * @brief lbug internal date type which stores the number of days since 1970-01-01 00:00:00 UTC.
  */
 typedef struct {
     // Days since 1970-01-01 00:00:00 UTC.
@@ -213,7 +213,7 @@ typedef struct {
 } kuzu_date_t;
 
 /**
- * @brief kuzu internal timestamp_ns type which stores the number of nanoseconds since 1970-01-01
+ * @brief lbug internal timestamp_ns type which stores the number of nanoseconds since 1970-01-01
  * 00:00:00 UTC.
  */
 typedef struct {
@@ -222,7 +222,7 @@ typedef struct {
 } kuzu_timestamp_ns_t;
 
 /**
- * @brief kuzu internal timestamp_ms type which stores the number of milliseconds since 1970-01-01
+ * @brief lbug internal timestamp_ms type which stores the number of milliseconds since 1970-01-01
  * 00:00:00 UTC.
  */
 typedef struct {
@@ -231,7 +231,7 @@ typedef struct {
 } kuzu_timestamp_ms_t;
 
 /**
- * @brief kuzu internal timestamp_sec_t type which stores the number of seconds since 1970-01-01
+ * @brief lbug internal timestamp_sec_t type which stores the number of seconds since 1970-01-01
  * 00:00:00 UTC.
  */
 typedef struct {
@@ -240,7 +240,7 @@ typedef struct {
 } kuzu_timestamp_sec_t;
 
 /**
- * @brief kuzu internal timestamp_tz type which stores the number of microseconds since 1970-01-01
+ * @brief lbug internal timestamp_tz type which stores the number of microseconds since 1970-01-01
  * with timezone 00:00:00 UTC.
  */
 typedef struct {
@@ -249,7 +249,7 @@ typedef struct {
 } kuzu_timestamp_tz_t;
 
 /**
- * @brief kuzu internal timestamp type which stores the number of microseconds since 1970-01-01
+ * @brief lbug internal timestamp type which stores the number of microseconds since 1970-01-01
  * 00:00:00 UTC.
  */
 typedef struct {
@@ -258,7 +258,7 @@ typedef struct {
 } kuzu_timestamp_t;
 
 /**
- * @brief kuzu internal interval type which stores the months, days and microseconds.
+ * @brief lbug internal interval type which stores the months, days and microseconds.
  */
 typedef struct {
     int32_t months;
@@ -280,7 +280,7 @@ typedef struct {
 } kuzu_int128_t;
 
 /**
- * @brief enum class for kuzu internal dataTypes.
+ * @brief enum class for lbug internal dataTypes.
  */
 typedef enum {
     KUZU_ANY = 0,
@@ -325,13 +325,13 @@ typedef enum {
 } kuzu_data_type_id;
 
 /**
- * @brief enum class for kuzu function return state.
+ * @brief enum class for lbug function return state.
  */
 typedef enum { KuzuSuccess = 0, KuzuError = 1 } kuzu_state;
 
 // Database
 /**
- * @brief Allocates memory and creates a kuzu database instance at database_path with
+ * @brief Allocates memory and creates a lbug database instance at database_path with
  * bufferPoolSize=buffer_pool_size. Caller is responsible for calling kuzu_database_destroy() to
  * release the allocated memory.
  * @param database_path The path to the database.
@@ -342,7 +342,7 @@ typedef enum { KuzuSuccess = 0, KuzuError = 1 } kuzu_state;
 KUZU_C_API kuzu_state kuzu_database_init(const char* database_path,
     kuzu_system_config system_config, kuzu_database* out_database);
 /**
- * @brief Destroys the kuzu database instance and frees the allocated memory.
+ * @brief Destroys the lbug database instance and frees the allocated memory.
  * @param database The database instance to destroy.
  */
 KUZU_C_API void kuzu_database_destroy(kuzu_database* database);
@@ -616,10 +616,10 @@ KUZU_C_API kuzu_state kuzu_prepared_statement_bind_interval(
 KUZU_C_API kuzu_state kuzu_prepared_statement_bind_string(
     kuzu_prepared_statement* prepared_statement, const char* param_name, const char* value);
 /**
- * @brief Binds the given kuzu value to the given parameter name in the prepared statement.
+ * @brief Binds the given lbug value to the given parameter name in the prepared statement.
  * @param prepared_statement The prepared statement instance to bind the value.
  * @param param_name The parameter name to bind the value.
- * @param value The kuzu value to bind.
+ * @param value The lbug value to bind.
  * @return The state indicating the success or failure of the operation.
  */
 KUZU_C_API kuzu_state kuzu_prepared_statement_bind_value(
@@ -1321,7 +1321,7 @@ KUZU_C_API kuzu_state kuzu_value_get_uuid(kuzu_value* value, char** out_result);
  */
 KUZU_C_API char* kuzu_value_to_string(kuzu_value* value);
 /**
- * @brief Returns the internal id value of the given node value as a kuzu value.
+ * @brief Returns the internal id value of the given node value as a lbug value.
  * @param node_val The node value to return.
  * @param[out] out_value The output parameter that will hold the internal id value.
  * @return The state indicating the success or failure of the operation.
@@ -1367,21 +1367,21 @@ KUZU_C_API kuzu_state kuzu_node_val_get_property_value_at(kuzu_value* node_val, 
  */
 KUZU_C_API kuzu_state kuzu_node_val_to_string(kuzu_value* node_val, char** out_result);
 /**
- * @brief Returns the internal id value of the rel value as a kuzu value.
+ * @brief Returns the internal id value of the rel value as a lbug value.
  * @param rel_val The rel value to return.
  * @param[out] out_value The output parameter that will hold the internal id value.
  * @return The state indicating the success or failure of the operation.
  */
 KUZU_C_API kuzu_state kuzu_rel_val_get_id_val(kuzu_value* rel_val, kuzu_value* out_value);
 /**
- * @brief Returns the internal id value of the source node of the given rel value as a kuzu value.
+ * @brief Returns the internal id value of the source node of the given rel value as a lbug value.
  * @param rel_val The rel value to return.
  * @param[out] out_value The output parameter that will hold the internal id value.
  * @return The state indicating the success or failure of the operation.
  */
 KUZU_C_API kuzu_state kuzu_rel_val_get_src_id_val(kuzu_value* rel_val, kuzu_value* out_value);
 /**
- * @brief Returns the internal id value of the destination node of the given rel value as a kuzu
+ * @brief Returns the internal id value of the destination node of the given rel value as a lbug
  * value.
  * @param rel_val The rel value to return.
  * @param[out] out_value The output parameter that will hold the internal id value.
@@ -1412,7 +1412,7 @@ KUZU_C_API kuzu_state kuzu_rel_val_get_property_size(kuzu_value* rel_val, uint64
 KUZU_C_API kuzu_state kuzu_rel_val_get_property_name_at(kuzu_value* rel_val, uint64_t index,
     char** out_result);
 /**
- * @brief Returns the property of the given rel value at the given index as kuzu value.
+ * @brief Returns the property of the given rel value at the given index as lbug value.
  * @param rel_val The rel value to return.
  * @param index The index of the property.
  * @param[out] out_value The output parameter that will hold the property value at index.
@@ -1428,7 +1428,7 @@ KUZU_C_API kuzu_state kuzu_rel_val_get_property_value_at(kuzu_value* rel_val, ui
  */
 KUZU_C_API kuzu_state kuzu_rel_val_to_string(kuzu_value* rel_val, char** out_result);
 /**
- * @brief Destroys any string created by the Kuzu C API, including both the error message and the
+ * @brief Destroys any string created by the Lbug C API, including both the error message and the
  * values returned by the API functions. This function is provided to avoid the inconsistency
  * between the memory allocation and deallocation across different libraries and is preferred over
  * using the standard C free function.
@@ -1436,7 +1436,7 @@ KUZU_C_API kuzu_state kuzu_rel_val_to_string(kuzu_value* rel_val, char** out_res
  */
 KUZU_C_API void kuzu_destroy_string(char* str);
 /**
- * @brief Destroys any blob created by the Kuzu C API. This function is provided to avoid the
+ * @brief Destroys any blob created by the Lbug C API. This function is provided to avoid the
  * inconsistency between the memory allocation and deallocation across different libraries and
  * is preferred over using the standard C free function.
  * @param blob The blob to destroy.
@@ -1575,12 +1575,12 @@ KUZU_C_API void kuzu_interval_from_difftime(double difftime, kuzu_interval_t* ou
 
 // Version
 /**
- * @brief Returns the version of the Kuzu library.
+ * @brief Returns the version of the Lbug library.
  */
 KUZU_C_API char* kuzu_get_version();
 
 /**
- * @brief Returns the storage version of the Kuzu library.
+ * @brief Returns the storage version of the Lbug library.
  */
 KUZU_C_API uint64_t kuzu_get_storage_version();
 #undef KUZU_C_API

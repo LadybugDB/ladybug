@@ -1,7 +1,7 @@
 #include "planner/operator/logical_empty_result.h"
 #include "planner/planner.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void Planner::appendEmptyResult(LogicalPlan& plan) {
@@ -11,4 +11,4 @@ void Planner::appendEmptyResult(LogicalPlan& plan) {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

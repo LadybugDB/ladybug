@@ -12,7 +12,7 @@
 #include "common/enums/expression_type.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class Expression;
@@ -129,4 +129,4 @@ struct ExpressionEquality {
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

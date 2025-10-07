@@ -56,4 +56,4 @@ set_target_properties(kuzujs
 if(APPLE)
   target_link_options(kuzujs PRIVATE -undefined dynamic_lookup)
 endif()
-target_link_libraries(kuzujs PRIVATE kuzu ${CMAKE_JS_LIB})
+target_link_libraries(kuzujs PRIVATE lbug ${CMAKE_JS_LIB})

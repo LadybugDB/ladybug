@@ -3,7 +3,7 @@
 #include <functional>
 
 #include "common/types/types.h"
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 class Transaction;
 }
@@ -24,4 +24,4 @@ struct ColumnChunkScanner {
     virtual uint64_t getNumValues() = 0;
 };
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

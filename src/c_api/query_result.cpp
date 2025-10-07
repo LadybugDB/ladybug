@@ -1,11 +1,11 @@
 #include "main/query_result.h"
 
 #include "c_api/helpers.h"
-#include "c_api/kuzu.h"
+#include "c_api/lbug.h"
 
-using namespace kuzu::main;
-using namespace kuzu::common;
-using namespace kuzu::processor;
+using namespace lbug::main;
+using namespace lbug::common;
+using namespace lbug::processor;
 
 void kuzu_query_result_destroy(kuzu_query_result* query_result) {
     if (query_result == nullptr) {

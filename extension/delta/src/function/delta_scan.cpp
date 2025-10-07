@@ -1,6 +1,6 @@
 #include "function/delta_scan.h"
 
-namespace kuzu {
+namespace lbug {
 namespace delta_extension {
 
 using namespace function;
@@ -72,4 +72,4 @@ function_set DeltaScanFunction::getFunctionSet() {
 }
 
 } // namespace delta_extension
-} // namespace kuzu
+} // namespace lbug

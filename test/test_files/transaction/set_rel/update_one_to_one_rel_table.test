@@ -3,7 +3,7 @@
 --
 
 -DEFINE_STATEMENT_BLOCK UPDATE_ONE_TO_ONE_REL_TABLE [
--STATEMENT MATCH (p1:animal)-[e:hasOwner]->(p2:person) WHERE p1.ID = 2 AND p2.ID = 52 SET e.place='kuzu'
+-STATEMENT MATCH (p1:animal)-[e:hasOwner]->(p2:person) WHERE p1.ID = 2 AND p2.ID = 52 SET e.place='lbug'
 ---- ok
 -STATEMENT MATCH (p1:animal)-[e:hasOwner]->(p2:person) WHERE p1.ID = 4 AND p2.ID = 54 SET e.place='db'
 ---- ok
@@ -30,7 +30,7 @@
 1997
 1999
 db
-kuzu
+lbug
 -STATEMENT COMMIT;
 ---- ok
 
@@ -58,7 +58,7 @@ kuzu
 1997
 1999
 db
-kuzu
+lbug
 -STATEMENT COMMIT;
 ---- ok
 

@@ -5,7 +5,7 @@
 #include "common/types/uuid.h"
 #include "storage/page_range.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class PageManager;
 
@@ -13,7 +13,7 @@ struct DatabaseHeader {
     PageRange catalogPageRange;
     PageRange metadataPageRange;
 
-    // An ID that is unique between kuzu databases
+    // An ID that is unique between lbug databases
     // Used to ensure that files such as the WAL match the current database
     common::ku_uuid_t databaseID{0};
 
@@ -29,4 +29,4 @@ struct DatabaseHeader {
     static std::optional<DatabaseHeader> readDatabaseHeader(common::FileInfo& dataFileInfo);
 };
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -1,10 +1,10 @@
 #include "planner/operator/logical_table_function_call.h"
 #include "processor/plan_mapper.h"
 
-using namespace kuzu::planner;
-using namespace kuzu::common;
+using namespace lbug::planner;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapTableFunctionCall(
@@ -18,4 +18,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapTableFunctionCall(
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

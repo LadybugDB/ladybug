@@ -127,7 +127,7 @@ public:
   uint32_t readSetEnd_virt() override { return protocol->readSetEnd(); }
 
   uint32_t readBool_virt(bool& value) override { return protocol->readBool(value); }
-  uint32_t readBool_virt(kuzu::vector<bool>::reference value) override {
+  uint32_t readBool_virt(lbug::vector<bool>::reference value) override {
     return protocol->readBool(value);
   }
 

@@ -9,7 +9,7 @@
 #include "factorized_table_schema.h"
 #include "flat_tuple.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class MemoryManager;
 }
@@ -319,4 +319,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

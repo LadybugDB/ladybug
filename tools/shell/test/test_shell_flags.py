@@ -26,11 +26,11 @@ def test_help(temp_db, flag) -> None:
     # database path not needed
     test = ShellTest().add_argument(flag)
     result = test.run()
-    result.check_stdout("Kuzu shell")
+    result.check_stdout("Lbug shell")
     # with database path
     test = ShellTest().add_argument(temp_db).add_argument(flag)
     result = test.run()
-    result.check_stdout("Kuzu shell")
+    result.check_stdout("Lbug shell")
 
 
 @pytest.mark.parametrize(
@@ -46,9 +46,9 @@ def test_default_bp_size(temp_db, flag) -> None:
     )
 
     # flag argument is not a number
-    test = ShellTest().add_argument(temp_db).add_argument(flag).add_argument("kuzu")
+    test = ShellTest().add_argument(temp_db).add_argument(flag).add_argument("lbug")
     result = test.run()
-    result.check_stderr("Argument '' received invalid value type 'kuzu'")
+    result.check_stderr("Argument '' received invalid value type 'lbug'")
 
     # successful flag
     test = ShellTest().add_argument(temp_db).add_argument(flag).add_argument("1000")
@@ -69,9 +69,9 @@ def test_max_db_size(temp_db, flag) -> None:
     )
 
     # flag argument is not a number
-    test = ShellTest().add_argument(temp_db).add_argument(flag).add_argument("kuzu")
+    test = ShellTest().add_argument(temp_db).add_argument(flag).add_argument("lbug")
     result = test.run()
-    result.check_stderr("Argument 'max_db_size' received invalid value type 'kuzu'")
+    result.check_stderr("Argument 'max_db_size' received invalid value type 'lbug'")
 
     # invalid flag
     test = ShellTest().add_argument(temp_db).add_argument(flag).add_argument("1000")
@@ -113,7 +113,7 @@ def test_read_only(temp_db, flag) -> None:
         .add_argument(flag)
         .statement('RETURN "databases rule" AS a;')
         .statement("CREATE NODE TABLE a(i STRING, PRIMARY KEY(i));")
-        .statement('RETURN "kuzu is cool" AS b;')
+        .statement('RETURN "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout(f"Opening the database at path: {temp_db} in read-only mode.")
@@ -121,7 +121,7 @@ def test_read_only(temp_db, flag) -> None:
     result.check_stdout(
         "Error: Connection exception: Cannot execute write operations in a read-only database!",
     )
-    result.check_stdout("kuzu is cool")
+    result.check_stdout("lbug is cool")
 
 
 def test_history_path(temp_db, history_path) -> None:
@@ -154,12 +154,12 @@ def test_history_path(temp_db, history_path) -> None:
         .add_argument(temp_db)
         .add_argument("-p")
         .add_argument(history_path)
-        .statement('RETURN "kuzu is cool" AS b;')
+        .statement('RETURN "lbug is cool" AS b;')
     )
     result = test.run()
     with open(os.path.join(history_path, "history.txt")) as f:
         assert f.readline() == 'RETURN "databases rule" AS a;\n'
-        assert f.readline() == 'RETURN "kuzu is cool" AS b;\n'
+        assert f.readline() == 'RETURN "lbug is cool" AS b;\n'
 
     deleteIfExists(os.path.join(history_path, "history.txt"))
 
@@ -194,11 +194,11 @@ def test_mode(temp_db, flag) -> None:
     test = (
         ShellTest()
         .add_argument(temp_db)
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout("\u2502 a              \u2502 b            \u2502")
-    result.check_stdout("\u2502 Databases Rule \u2502 kuzu is cool \u2502")
+    result.check_stdout("\u2502 Databases Rule \u2502 lbug is cool \u2502")
 
     # test column mode
     test = (
@@ -206,11 +206,11 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("column")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout("a                b")
-    result.check_stdout("Databases Rule   kuzu is cool")
+    result.check_stdout("Databases Rule   lbug is cool")
 
     # test csv mode
     test = (
@@ -218,11 +218,11 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("csv")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout("a,b")
-    result.check_stdout("Databases Rule,kuzu is cool")
+    result.check_stdout("Databases Rule,lbug is cool")
 
     # test csv escaping
     test = (
@@ -243,11 +243,11 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("box")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout("\u2502 a              \u2502 b            \u2502")
-    result.check_stdout("\u2502 Databases Rule \u2502 kuzu is cool \u2502")
+    result.check_stdout("\u2502 Databases Rule \u2502 lbug is cool \u2502")
 
     # test html mode
     test = (
@@ -255,7 +255,7 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("html")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout("<table>")
@@ -263,7 +263,7 @@ def test_mode(temp_db, flag) -> None:
     result.check_stdout("<th>a</th><th>b</th>")
     result.check_stdout("</tr>")
     result.check_stdout("<tr>")
-    result.check_stdout("<td>Databases Rule</td><td>kuzu is cool</td>")
+    result.check_stdout("<td>Databases Rule</td><td>lbug is cool</td>")
     result.check_stdout("</tr>")
     result.check_stdout("</table>")
 
@@ -295,10 +295,10 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("json")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
-    result.check_stdout('[\n{"a":"Databases Rule","b":"kuzu is cool"}\n]')
+    result.check_stdout('[\n{"a":"Databases Rule","b":"lbug is cool"}\n]')
 
     # test json escaping
     test = (
@@ -321,10 +321,10 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("jsonlines")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
-    result.check_stdout('{"a":"Databases Rule","b":"kuzu is cool"}')
+    result.check_stdout('{"a":"Databases Rule","b":"lbug is cool"}')
 
     # test jsonlines escaping
     test = (
@@ -347,14 +347,14 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("latex")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout("\\begin{tabular}{ll}")
     result.check_stdout("\\hline")
     result.check_stdout("a&b\\\\")
     result.check_stdout("\\hline")
-    result.check_stdout("Databases Rule&kuzu is cool\\\\")
+    result.check_stdout("Databases Rule&lbug is cool\\\\")
     result.check_stdout("\\hline")
     result.check_stdout("\\end{tabular}")
 
@@ -385,11 +385,11 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("line")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout("a = Databases Rule")
-    result.check_stdout("b = kuzu is cool")
+    result.check_stdout("b = lbug is cool")
 
     # test list mode
     test = (
@@ -397,11 +397,11 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("list")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout("a|b")
-    result.check_stdout("Databases Rule|kuzu is cool")
+    result.check_stdout("Databases Rule|lbug is cool")
 
     # test list escaping
     test = (
@@ -424,11 +424,11 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("markdown")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout("| a              | b            |")
-    result.check_stdout("| Databases Rule | kuzu is cool |")
+    result.check_stdout("| Databases Rule | lbug is cool |")
 
     # test table mode
     test = (
@@ -436,11 +436,11 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("table")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout("| a              | b            |")
-    result.check_stdout("| Databases Rule | kuzu is cool |")
+    result.check_stdout("| Databases Rule | lbug is cool |")
 
     # test tsv mode
     test = (
@@ -448,7 +448,7 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("tsv")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stdout("a\tb")
@@ -485,7 +485,7 @@ def test_mode(temp_db, flag) -> None:
         ShellTest()
         .add_argument(temp_db)
         .add_argument(flag)
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stderr(
@@ -498,7 +498,7 @@ def test_mode(temp_db, flag) -> None:
         .add_argument(temp_db)
         .add_argument(flag)
         .add_argument("invalid")
-        .statement('RETURN "Databases Rule" AS a, "kuzu is cool" AS b;')
+        .statement('RETURN "Databases Rule" AS a, "lbug is cool" AS b;')
     )
     result = test.run()
     result.check_stderr("Error: cannot parse output mode: invalid")

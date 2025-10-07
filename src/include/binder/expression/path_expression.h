@@ -2,7 +2,7 @@
 
 #include "binder/expression/expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class PathExpression final : public Expression {
@@ -27,4 +27,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

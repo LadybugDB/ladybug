@@ -2,7 +2,7 @@
 
 #include "common/system_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 DataChunkState::DataChunkState() : DataChunkState(DEFAULT_VECTOR_CAPACITY) {}
@@ -15,4 +15,4 @@ std::shared_ptr<DataChunkState> DataChunkState::getSingleValueDataChunkState() {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "binder/bound_statement.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class BoundDatabaseStatement : public BoundStatement {
@@ -18,4 +18,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

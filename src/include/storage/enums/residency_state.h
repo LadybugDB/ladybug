@@ -5,7 +5,7 @@
 
 #include "common/assert.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 enum class ResidencyState : uint8_t { IN_MEMORY = 0, ON_DISK = 1 };
@@ -27,4 +27,4 @@ struct ResidencyStateUtils {
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

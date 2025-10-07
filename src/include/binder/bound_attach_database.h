@@ -3,7 +3,7 @@
 #include "binder/bound_statement.h"
 #include "bound_attach_info.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class BoundAttachDatabase final : public BoundStatement {
@@ -20,4 +20,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

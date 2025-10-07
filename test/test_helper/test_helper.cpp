@@ -6,11 +6,11 @@
 
 #include "spdlog/spdlog.h"
 
-using namespace kuzu::common;
-using namespace kuzu::planner;
-using namespace kuzu::main;
+using namespace lbug::common;
+using namespace lbug::planner;
+using namespace lbug::main;
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 std::vector<std::string> TestHelper::convertResultToString(QueryResult& queryResult,
@@ -124,4 +124,4 @@ std::string TestHelper::getTempSuffix() {
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

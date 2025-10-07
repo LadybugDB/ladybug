@@ -3,9 +3,9 @@
 #include <string>
 #include <vector>
 
-#include "main/kuzu.h"
+#include "main/lbug.h"
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 // Insert a dataset row by row instead of batch insert (copy)
@@ -33,4 +33,4 @@ private:
 };
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

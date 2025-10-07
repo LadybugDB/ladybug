@@ -9,7 +9,7 @@
 #include "common/task_system/task.h"
 #include "processor/execution_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct ScheduledTask {
@@ -109,4 +109,4 @@ private:
 };
 #endif
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 #include "planner/operator/logical_plan.h"
 #include "storage/stats/table_stats.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 } // namespace main
@@ -60,4 +60,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

@@ -4,9 +4,9 @@
 #include "function/llm_functions.h"
 #include "main/client_context.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace llm_extension {
 
 std::shared_ptr<EmbeddingProvider> GoogleVertexEmbedding::getInstance() {
@@ -67,4 +67,4 @@ void GoogleVertexEmbedding::configure(const std::optional<uint64_t>& dimensions,
 }
 
 } // namespace llm_extension
-} // namespace kuzu
+} // namespace lbug

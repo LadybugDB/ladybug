@@ -6,7 +6,7 @@
 #include "parser/query/reading_clause/reading_clause.h"
 #include "parser/query/return_with_clause/with_clause.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 void StatementReadWriteAnalyzer::visitExtension(const Statement& /*statement*/) {
@@ -51,4 +51,4 @@ bool StatementReadWriteAnalyzer::isExprReadOnly(const ParsedExpression* expr) {
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

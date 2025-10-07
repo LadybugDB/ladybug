@@ -6,7 +6,7 @@
 #include "processor/operator/sink.h"
 #include "sort_state.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct TopKPrintInfo final : OPPrintInfo {
@@ -200,4 +200,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

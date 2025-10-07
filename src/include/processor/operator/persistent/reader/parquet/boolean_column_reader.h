@@ -3,7 +3,7 @@
 #include "column_reader.h"
 #include "templated_column_reader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct BooleanParquetValueConversion;
@@ -42,4 +42,4 @@ struct BooleanParquetValueConversion {
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

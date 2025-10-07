@@ -1,5 +1,5 @@
 {
-  "name": "kuzu-wasm-example-node",
+  "name": "lbug-wasm-example-node",
   "version": "0.0.1",
   "main": "index.js",
   "scripts": {
@@ -9,6 +9,6 @@
   "license": "MIT",
   "description": "",
   "dependencies": {
-    "kuzu-wasm": "^0.8.0"
+    "lbug-wasm": "^0.8.0"
   }
 }

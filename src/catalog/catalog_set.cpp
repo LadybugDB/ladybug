@@ -11,10 +11,10 @@
 #include "common/string_format.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
-using namespace kuzu::transaction;
+using namespace lbug::common;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 CatalogSet::CatalogSet(bool isInternal) {
@@ -299,4 +299,4 @@ void CatalogSet::validateNotExistNoLock(const Transaction* transaction,
 }
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

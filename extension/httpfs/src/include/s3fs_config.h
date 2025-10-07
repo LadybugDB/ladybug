@@ -8,7 +8,7 @@
 #include "common/types/value/value.h"
 #include <span>
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class Database;
 class ClientContext;
@@ -49,4 +49,4 @@ struct S3FileSystemConfig {
 };
 
 } // namespace httpfs_extension
-} // namespace kuzu
+} // namespace lbug

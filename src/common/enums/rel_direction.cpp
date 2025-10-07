@@ -4,7 +4,7 @@
 
 #include "common/assert.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 RelDataDirection RelDirectionUtils::getOppositeDirection(RelDataDirection direction) {
@@ -41,4 +41,4 @@ table_id_t RelDirectionUtils::getNbrTableID(RelDataDirection direction, table_id
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

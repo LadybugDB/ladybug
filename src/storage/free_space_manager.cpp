@@ -8,7 +8,7 @@
 #include "storage/file_handle.h"
 #include "storage/page_range.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 static FreeSpaceManager::sorted_free_list_t& getFreeList(
     std::vector<FreeSpaceManager::sorted_free_list_t>& freeLists, common::idx_t level) {
     if (level >= freeLists.size()) {
@@ -300,4 +300,4 @@ PageRange FreeEntryIterator::operator*() const {
     return *freeListIt;
 }
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

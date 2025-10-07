@@ -1,7 +1,7 @@
 #include "common/types/date_t.h"
 #include "gtest/gtest.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 TEST(DateTests, IsLeapYearTest) {
     EXPECT_TRUE(Date::isLeapYear(2000));

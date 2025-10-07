@@ -2,7 +2,7 @@
 
 #include "options/unity_catalog_options.h"
 
-namespace kuzu {
+namespace lbug {
 namespace unity_catalog_extension {
 
 void UnityCatalogConnector::connect(const std::string& dbPath, const std::string& catalogName,
@@ -21,4 +21,4 @@ void UnityCatalogConnector::connect(const std::string& dbPath, const std::string
 }
 
 } // namespace unity_catalog_extension
-} // namespace kuzu
+} // namespace lbug

@@ -6,13 +6,13 @@
 #include "cypher_parser.h"
 #pragma GCC diagnostic pop
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
-class KuzuCypherParser : public CypherParser {
+class LbugCypherParser : public CypherParser {
 
 public:
-    explicit KuzuCypherParser(antlr4::TokenStream* input) : CypherParser(input) {}
+    explicit LbugCypherParser(antlr4::TokenStream* input) : CypherParser(input) {}
 
     void notifyQueryNotConcludeWithReturn(antlr4::Token* startToken) override;
 
@@ -29,4 +29,4 @@ public:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

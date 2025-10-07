@@ -1,6 +1,6 @@
 #include "planner/operator/scan/logical_expressions_scan.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalExpressionsScan::computeSchema() {
@@ -12,4 +12,4 @@ void LogicalExpressionsScan::computeSchema() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

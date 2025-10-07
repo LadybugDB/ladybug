@@ -2,7 +2,7 @@
 
 #include "connector/duckdb_connector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace sqlite_extension {
 
 class SqliteConnector final : public duckdb_extension::DuckDBConnector {
@@ -16,4 +16,4 @@ public:
 };
 
 } // namespace sqlite_extension
-} // namespace kuzu
+} // namespace lbug

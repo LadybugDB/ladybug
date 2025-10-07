@@ -10,7 +10,7 @@
 #include "storage/buffer_manager/spill_result.h"
 #include <span>
 
-namespace kuzu {
+namespace lbug {
 
 namespace common {
 class VirtualFileSystem;
@@ -107,4 +107,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

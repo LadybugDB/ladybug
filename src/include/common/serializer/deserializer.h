@@ -11,7 +11,7 @@
 #include "common/assert.h"
 #include "common/serializer/reader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 class KUZU_API Deserializer {
@@ -145,4 +145,4 @@ template<>
 void Deserializer::deserializeValue(std::string& value);
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

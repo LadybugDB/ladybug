@@ -6,7 +6,7 @@
 #include "storage/local_storage/local_table.h"
 #include "storage/table/csr_node_group.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class MemoryManager;
 
@@ -94,4 +94,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

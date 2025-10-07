@@ -3,10 +3,10 @@
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "function/fts_config.h"
 
-namespace kuzu::common {
+namespace lbug::common {
 struct BufferReader;
 }
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 struct FTSIndexAuxInfo final : catalog::IndexAuxInfo {
@@ -38,4 +38,4 @@ struct FTSIndexCatalogEntry {
 };
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

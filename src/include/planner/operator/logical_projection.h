@@ -4,7 +4,7 @@
 #include "binder/expression/expression_util.h"
 #include "planner/operator/logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 class KUZU_API LogicalProjection : public LogicalOperator {
@@ -37,4 +37,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

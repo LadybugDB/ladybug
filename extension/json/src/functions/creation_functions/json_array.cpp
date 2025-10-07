@@ -3,7 +3,7 @@
 #include "json_type.h"
 #include "json_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 using namespace function;
@@ -52,4 +52,4 @@ function_set JsonArrayFunction::getFunctionSet() {
 }
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

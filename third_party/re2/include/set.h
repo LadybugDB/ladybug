@@ -11,14 +11,14 @@
 
 #include "re2.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 class Prog;
 class Regexp;
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 // An RE2::Set represents a collection of regexps that can
@@ -64,12 +64,12 @@ public:
     bool Match(const StringPiece& text, std::vector<int>* v, ErrorInfo* error_info) const;
 
 private:
-    typedef std::pair<std::string, kuzu::regex::Regexp*> Elem;
+    typedef std::pair<std::string, lbug::regex::Regexp*> Elem;
 
     RE2::Options options_;
     RE2::Anchor anchor_;
     std::vector<Elem> elem_;
-    kuzu::regex::Prog* prog_;
+    lbug::regex::Prog* prog_;
     bool compiled_;
     int size_;
 
@@ -78,6 +78,6 @@ private:
 };
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug
 
 #endif // RE2_SET_H_

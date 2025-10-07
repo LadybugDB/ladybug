@@ -4,7 +4,7 @@
 #include "common/types/types.h"
 #include "function/gds/gds_object_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 
 using weight_t = common::offset_t;
@@ -43,4 +43,4 @@ struct InMemGraph {
 };
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug

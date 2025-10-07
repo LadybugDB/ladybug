@@ -2,7 +2,7 @@
 
 #include "storage/page_manager.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 OptimisticAllocator::OptimisticAllocator(PageManager& pageManager)
     : PageAllocator(pageManager.getDataFH()), pageManager(pageManager) {}
 
@@ -28,4 +28,4 @@ void OptimisticAllocator::rollback() {
 void OptimisticAllocator::commit() {
     optimisticallyAllocatedPages.clear();
 }
-} // namespace kuzu::storage
+} // namespace lbug::storage

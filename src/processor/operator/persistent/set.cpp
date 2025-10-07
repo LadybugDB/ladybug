@@ -2,7 +2,7 @@
 
 #include "binder/expression/expression_util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void SetNodeProperty::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
@@ -43,4 +43,4 @@ std::string SetPropertyPrintInfo::toString() const {
     return result;
 }
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

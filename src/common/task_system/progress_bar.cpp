@@ -3,7 +3,7 @@
 #include "common/task_system/terminal_progress_bar_display.h"
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 ProgressBar::ProgressBar(bool enableProgressBar) {
@@ -76,4 +76,4 @@ ProgressBar* ProgressBar::Get(const main::ClientContext& context) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

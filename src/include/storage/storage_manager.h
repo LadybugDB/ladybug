@@ -7,7 +7,7 @@
 #include "storage/index/index.h"
 #include "storage/wal/wal.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class Database;
 } // namespace main
@@ -100,4 +100,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

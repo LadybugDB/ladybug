@@ -98,7 +98,7 @@
 #include "utf.h"
 #include "util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 // Keep in sync with string list kOpcodeNames[] in testing/dump.cc
@@ -681,6 +681,6 @@ inline Regexp::ParseFlags operator~(Regexp::ParseFlags a) {
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug
 
 #endif // RE2_REGEXP_H_

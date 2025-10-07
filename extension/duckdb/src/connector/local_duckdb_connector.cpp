@@ -4,7 +4,7 @@
 #include "common/file_system/virtual_file_system.h"
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 void LocalDuckDBConnector::connect(const std::string& dbPath, const std::string& /*catalogName*/,
@@ -19,4 +19,4 @@ void LocalDuckDBConnector::connect(const std::string& dbPath, const std::string&
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

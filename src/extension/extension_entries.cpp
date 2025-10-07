@@ -1,7 +1,7 @@
 #include "common/string_utils.h"
 #include "extension/extension_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 struct EntriesForExtension {
@@ -72,4 +72,4 @@ std::optional<ExtensionEntry> ExtensionManager::lookupExtensionsByTypeName(
 }
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

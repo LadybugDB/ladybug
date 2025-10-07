@@ -4,9 +4,9 @@
 #include "storage/shadow_file.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 ShadowPageAndFrame ShadowUtils::createShadowVersionIfNecessaryAndPinPage(page_idx_t originalPage,
@@ -85,4 +85,4 @@ void ShadowUtils::readShadowVersionOfPage(const FileHandle& fileHandle, page_idx
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

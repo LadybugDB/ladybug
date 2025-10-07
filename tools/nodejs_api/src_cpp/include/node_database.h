@@ -2,10 +2,10 @@
 
 #include <memory>
 
-#include "main/kuzu.h"
+#include "main/lbug.h"
 #include <napi.h>
 
-using namespace kuzu::main;
+using namespace lbug::main;
 
 class NodeDatabase : public Napi::ObjectWrap<NodeDatabase> {
     friend class NodeConnection;

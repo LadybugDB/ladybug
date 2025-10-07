@@ -2,7 +2,7 @@
 
 #include "function/hash/vector_hash_functions.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 ColumnStats::ColumnStats(const common::LogicalType& dataType) : hashes{nullptr} {
@@ -29,4 +29,4 @@ void ColumnStats::update(const common::ValueVector* vector) {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

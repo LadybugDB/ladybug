@@ -27,10 +27,10 @@
 #include "utf8proc.h"
 #include "utf8proc_wrapper.h"
 
-using namespace kuzu::common;
-using namespace kuzu::utf8proc;
+using namespace lbug::common;
+using namespace lbug::utf8proc;
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 
 #ifdef _WIN32
@@ -43,7 +43,7 @@ namespace main {
 #endif
 
 // prompt for user input
-const char* PROMPT = "kuzu> ";
+const char* PROMPT = "lbug> ";
 const char* ALTPROMPT = "..> ";
 const char* CONPROMPT = "\u00B7 ";
 const char* SCONPROMPT = "\u2023 ";
@@ -1562,4 +1562,4 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
 }
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

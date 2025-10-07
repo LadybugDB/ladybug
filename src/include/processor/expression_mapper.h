@@ -4,7 +4,7 @@
 #include "expression_evaluator/expression_evaluator.h"
 #include "processor/result/result_set_descriptor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class ExpressionMapper {
@@ -57,4 +57,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

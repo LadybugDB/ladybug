@@ -8,10 +8,10 @@
 #include "parser/expression/parsed_lambda_expression.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
-using namespace kuzu::catalog;
+using namespace lbug::common;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 void ParsedExpressionVisitor::visit(const ParsedExpression* expr) {
@@ -226,4 +226,4 @@ std::unique_ptr<ParsedExpression> MacroParameterReplacer::getReplace(const std::
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

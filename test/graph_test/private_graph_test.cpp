@@ -11,14 +11,14 @@
 #include "transaction/transaction_manager.h"
 
 using ::testing::Test;
-using namespace kuzu::binder;
-using namespace kuzu::catalog;
-using namespace kuzu::common;
-using namespace kuzu::planner;
-using namespace kuzu::storage;
-using namespace kuzu::transaction;
+using namespace lbug::binder;
+using namespace lbug::catalog;
+using namespace lbug::common;
+using namespace lbug::planner;
+using namespace lbug::storage;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 void DBTest::createDB(uint64_t checkpointWaitTimeout) {
@@ -186,4 +186,4 @@ void ConcurrentTestExecutor::runStatements() const {
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

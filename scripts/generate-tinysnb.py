@@ -19,7 +19,7 @@ if os.path.exists(f"{KUZU_ROOT}/dataset/databases/tinysnb"):
 if sys.platform == "win32":
     kuzu_shell_path = f"{KUZU_ROOT}/build/{build_type}/src/kuzu_shell"
 else:
-    kuzu_shell_path = f"{KUZU_ROOT}/build/{build_type}/tools/shell/kuzu"
+    kuzu_shell_path = f"{KUZU_ROOT}/build/{build_type}/tools/shell/lbug"
 subprocess.check_call(
     [
         "python3",
@@ -28,7 +28,7 @@ subprocess.check_call(
         f"{KUZU_ROOT}/dataset/tinysnb",
         f"{KUZU_ROOT}/dataset/databases/tinysnb",
         "--single-thread",
-        "--kuzu-shell",
+        "--lbug-shell",
         kuzu_shell_path,
     ]
 )

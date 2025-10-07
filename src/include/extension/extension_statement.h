@@ -2,7 +2,7 @@
 
 #include "parser/statement.h"
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 class ExtensionStatement : public parser::Statement {
@@ -19,4 +19,4 @@ private:
 };
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

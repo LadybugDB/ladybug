@@ -12,7 +12,7 @@
 #include "storage/table/chunked_node_group.h"
 #include "storage/table/column_chunk_data.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 Spiller::Spiller(std::string tmpFilePath, BufferManager& bufferManager,
@@ -112,4 +112,4 @@ void Spiller::clearFile() {
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -3,7 +3,7 @@
 #include "common/types/value/value.h"
 #include "expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class KUZU_API ParameterExpression final : public Expression {
@@ -28,4 +28,4 @@ private:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

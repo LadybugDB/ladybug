@@ -3,9 +3,9 @@
 #include "common/arrow/arrow_row_batch.h"
 #include "main/query_result/arrow_query_result.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 bool ArrowResultCollectorLocalState::advance() {
@@ -99,4 +99,4 @@ std::unique_ptr<main::QueryResult> ArrowResultCollector::getQueryResult() const 
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

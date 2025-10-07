@@ -2,7 +2,7 @@
 
 #include "processor/operator/physical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class MultiplicityReducer final : public PhysicalOperator {
@@ -31,4 +31,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

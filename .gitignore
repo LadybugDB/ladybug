@@ -59,7 +59,7 @@ tools/wasm/package/
 *.tar.gz
 scripts/pre-compiled-bins/headers
 scripts/pre-compiled-bins/lib*
-scripts/pre-compiled-bins/kuzu*
+scripts/pre-compiled-bins/lbug*
 
 # Java API
 tools/java_api/build
@@ -75,7 +75,7 @@ tools/java_api/example/.gradle
 tools/java_api/bin
 
 # Generated docs
-scripts/generate-cpp-docs/c/kuzu.h
+scripts/generate-cpp-docs/c/lbug.h
 scripts/generate-cpp-docs/cpp/headers
 scripts/generate-cpp-docs/cpp/docs
 scripts/generate-cpp-docs/c/docs

@@ -2,12 +2,12 @@
 
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
-using namespace kuzu::storage;
-using namespace kuzu::common;
-using namespace kuzu::transaction;
+using namespace lbug::storage;
+using namespace lbug::common;
+using namespace lbug::transaction;
 
 FTSUpdateVectors::FTSUpdateVectors(MemoryManager* mm)
     : mm{mm}, dataChunkState{DataChunkState::getSingleValueDataChunkState()},
@@ -91,4 +91,4 @@ FTSUpdateState::FTSUpdateState(main::ClientContext* context, FTSInternalTableInf
 }
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

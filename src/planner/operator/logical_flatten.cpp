@@ -1,8 +1,8 @@
 #include "planner/operator/logical_flatten.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalFlatten::computeFactorizedSchema() {
@@ -15,4 +15,4 @@ void LogicalFlatten::computeFlatSchema() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

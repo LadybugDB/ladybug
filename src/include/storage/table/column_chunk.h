@@ -10,7 +10,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/update_info.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class PageAllocator;
 class MemoryManager;
@@ -333,4 +333,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

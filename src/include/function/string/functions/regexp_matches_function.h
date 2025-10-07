@@ -4,7 +4,7 @@
 #include "function/string/functions/base_regexp_function.h"
 #include "re2.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct RegexpMatches : BaseRegexpOperation {
@@ -15,4 +15,4 @@ struct RegexpMatches : BaseRegexpOperation {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

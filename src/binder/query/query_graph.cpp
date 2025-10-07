@@ -2,7 +2,7 @@
 
 #include "binder/expression_visitor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 std::size_t SubqueryGraphHasher::operator()(const SubqueryGraph& key) const {
@@ -335,4 +335,4 @@ std::vector<std::shared_ptr<RelExpression>> QueryGraphCollection::getQueryRels()
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

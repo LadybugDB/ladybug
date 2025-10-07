@@ -3,7 +3,7 @@
 #include "catalog_entry.h"
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 class KUZU_API FunctionCatalogEntry : public CatalogEntry {
@@ -32,4 +32,4 @@ protected:
 };
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

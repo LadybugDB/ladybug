@@ -46,7 +46,7 @@ include_directories(
 
 add_library(kuzu_generated_extension_loader OBJECT ${GENERATED_CPP_FILE})
 
-# Both the kuzu source and httpfs extension includes the httplib which is a header
+# Both the lbug source and httpfs extension includes the httplib which is a header
 # only library. Httpfs requires the openssl function to be enabled in httplib, so
 # we also have to enable httplib there if httpfs is static linked.
 if ("httpfs" IN_LIST STATICALLY_LINKED_EXTENSIONS)

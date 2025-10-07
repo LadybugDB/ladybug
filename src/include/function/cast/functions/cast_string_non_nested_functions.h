@@ -10,9 +10,9 @@
 #include "fast_float.h"
 #include "function/cast/functions/numeric_limits.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 bool isAnyType(std::string_view cpy);
@@ -344,4 +344,4 @@ void decimalCast(const char* input, uint64_t len, T& result, const LogicalType& 
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct CurrValFunction {
@@ -18,4 +18,4 @@ struct NextValFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

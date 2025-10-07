@@ -7,7 +7,7 @@
 #include "s3fs.h"
 #include "s3fs_config.h"
 
-namespace kuzu {
+namespace lbug {
 namespace httpfs_extension {
 
 static void registerExtensionOptions(main::Database* db) {
@@ -42,7 +42,7 @@ void HttpfsExtension::load(main::ClientContext* context) {
 }
 
 } // namespace httpfs_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -53,12 +53,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::httpfs_extension::HttpfsExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::httpfs_extension::HttpfsExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::httpfs_extension::HttpfsExtension::EXTENSION_NAME;
+    return lbug::httpfs_extension::HttpfsExtension::EXTENSION_NAME;
 }
 }
 #endif

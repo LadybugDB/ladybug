@@ -4,11 +4,11 @@
 #include "main/database_manager.h"
 #include "storage/duckdb_storage.h"
 
-using namespace kuzu::function;
-using namespace kuzu::main;
-using namespace kuzu::common;
+using namespace lbug::function;
+using namespace lbug::main;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 static offset_t clearCacheTableFunc(const TableFuncInput& input,
@@ -36,4 +36,4 @@ function_set ClearCacheFunction::getFunctionSet() {
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

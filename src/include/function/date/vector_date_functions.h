@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct DatePartFunction {
@@ -78,4 +78,4 @@ struct CurrentTimestampFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 
 #include "common/types/int128_t.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct Abs {
@@ -34,4 +34,4 @@ template<>
 void Abs::operation(common::int128_t& input, common::int128_t& result);
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

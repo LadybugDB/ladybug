@@ -4,7 +4,7 @@
 #include "gds_object_manager.h"
 #include "graph/graph.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class MemoryManager;
 }
@@ -180,4 +180,4 @@ private:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

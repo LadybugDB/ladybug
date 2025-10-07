@@ -4,7 +4,7 @@
 #include "processor/operator/partitioner.h"
 #include "processor/operator/persistent/batch_insert.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 class RelGroupCatalogEntry;
 } // namespace catalog
@@ -168,4 +168,4 @@ protected:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

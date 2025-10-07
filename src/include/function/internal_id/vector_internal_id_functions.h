@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct InternalIDCreationFunction {
@@ -12,4 +12,4 @@ struct InternalIDCreationFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

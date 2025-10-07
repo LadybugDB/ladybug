@@ -1,6 +1,6 @@
 #include "utf8proc.h"
 
-using namespace kuzu::utf8proc;
+using namespace lbug::utf8proc;
 
 static const utf8proc_uint16_t utf8proc_sequences[] = {
     97,

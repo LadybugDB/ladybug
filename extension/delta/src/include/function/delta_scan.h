@@ -7,7 +7,7 @@
 #include "connector/duckdb_type_converter.h"
 #include "function/table/table_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace delta_extension {
 
 struct DeltaScanFunction {
@@ -43,4 +43,4 @@ common::offset_t tableFunc(const function::TableFuncInput& input,
     function::TableFuncOutput& output);
 
 } // namespace delta_extension
-} // namespace kuzu
+} // namespace lbug

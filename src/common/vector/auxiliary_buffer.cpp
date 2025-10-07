@@ -6,7 +6,7 @@
 #include "common/system_config.h"
 #include "common/vector/value_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 StructAuxiliaryBuffer::StructAuxiliaryBuffer(const LogicalType& type,
@@ -92,4 +92,4 @@ std::unique_ptr<AuxiliaryBuffer> AuxiliaryBufferFactory::getAuxiliaryBuffer(Logi
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

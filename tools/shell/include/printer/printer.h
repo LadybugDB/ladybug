@@ -6,7 +6,7 @@
 
 #include "common/cast.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 
 enum class PrinterType : uint8_t {
@@ -224,4 +224,4 @@ struct LinePrinter : public Printer {
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

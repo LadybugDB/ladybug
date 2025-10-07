@@ -15,7 +15,7 @@
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class MemoryManager;
 }
@@ -160,4 +160,4 @@ private:
 };
 
 } // namespace graph
-} // namespace kuzu
+} // namespace lbug

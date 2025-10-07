@@ -3,7 +3,7 @@
 #include "binder/expression/expression_util.h"
 #include "common/exception/runtime.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 static void validateSingleGroup(const Schema& schema) {
@@ -38,4 +38,4 @@ std::string LogicalPartitioner::getExpressionsForPrinting() const {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

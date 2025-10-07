@@ -12,7 +12,7 @@
 #define vsnprintf _vsnprintf
 #endif
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 // ----------------------------------------------------------------------
@@ -180,4 +180,4 @@ void StringAppendF(std::string* dst, const char* format, ...) {
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

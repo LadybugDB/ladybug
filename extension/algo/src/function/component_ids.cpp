@@ -1,8 +1,8 @@
 #include "function/component_ids.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 
 OffsetManager::OffsetManager(const table_id_map_t<offset_t>& maxOffsetMap) {
@@ -70,4 +70,4 @@ void ComponentIDsOutputVertexCompute::vertexCompute(offset_t startOffset, offset
 }
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug

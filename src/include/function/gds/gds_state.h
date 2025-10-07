@@ -3,7 +3,7 @@
 #include "auxiliary_state/gds_auxilary_state.h"
 #include "gds_frontier.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct GDSComputeState {
@@ -34,4 +34,4 @@ struct GDSComputeState {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

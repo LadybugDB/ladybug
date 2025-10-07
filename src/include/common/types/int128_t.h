@@ -11,7 +11,7 @@
 
 #include "common/api.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct KUZU_API int128_t;
@@ -220,9 +220,9 @@ bool Int128_t::tryCastTo(long double value, int128_t& result);
 // TODO: const char to int128
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug
 
 template<>
-struct std::hash<kuzu::common::int128_t> {
-    std::size_t operator()(const kuzu::common::int128_t& v) const noexcept;
+struct std::hash<lbug::common::int128_t> {
+    std::size_t operator()(const lbug::common::int128_t& v) const noexcept;
 };

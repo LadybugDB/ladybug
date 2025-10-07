@@ -2,7 +2,7 @@
 
 #include "main/attached_database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 struct AttachOption;
 }
@@ -30,4 +30,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

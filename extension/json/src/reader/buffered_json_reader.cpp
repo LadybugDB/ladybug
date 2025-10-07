@@ -3,7 +3,7 @@
 #include "common/file_system/virtual_file_system.h"
 #include "common/string_utils.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 using namespace common;
@@ -74,4 +74,4 @@ void BufferedJsonReader::throwParseError(const yyjson_read_err& err, bool comple
 }
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

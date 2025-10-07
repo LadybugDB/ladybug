@@ -1,6 +1,6 @@
 #include "processor/operator/persistent/reader/parquet/boolean_column_reader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 void BooleanColumnReader::initializeRead(uint64_t rowGroupIdx,
@@ -24,4 +24,4 @@ bool BooleanParquetValueConversion::plainRead(ByteBuffer& plainData, ColumnReade
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

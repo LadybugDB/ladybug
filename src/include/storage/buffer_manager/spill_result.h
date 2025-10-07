@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 struct SpillResult {
@@ -17,4 +17,4 @@ struct SpillResult {
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

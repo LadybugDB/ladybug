@@ -4,7 +4,7 @@
 #include "processor/operator/physical_operator.h"
 #include "storage/table/table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 struct ScanOpInfo {
@@ -109,4 +109,4 @@ protected:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

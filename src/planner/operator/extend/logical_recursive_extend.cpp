@@ -1,6 +1,6 @@
 #include "planner/operator/extend/logical_recursive_extend.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalRecursiveExtend::computeFlatSchema() {
@@ -20,4 +20,4 @@ void LogicalRecursiveExtend::computeFactorizedSchema() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

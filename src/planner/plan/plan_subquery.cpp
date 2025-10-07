@@ -4,10 +4,10 @@
 #include "planner/operator/factorization/flatten_resolver.h"
 #include "planner/planner.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
+using namespace lbug::binder;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 static expression_vector getDependentExprs(std::shared_ptr<Expression> expr, const Schema& schema) {
@@ -305,4 +305,4 @@ void Planner::planSubqueryIfNecessary(std::shared_ptr<Expression> expression, Lo
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

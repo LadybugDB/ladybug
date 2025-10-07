@@ -24,9 +24,9 @@
 -STATEMENT RETURN LIST_REDUCE([5,28,92], (x, y) -> x + y)
 ---- 1
 125
--STATEMENT RETURN LIST_REDUCE(['Kuzu ', 'is ', 'awesome:', 'long long string'], (x, y) -> upper(x) + upper(y))
+-STATEMENT RETURN LIST_REDUCE(['Lbug ', 'is ', 'awesome:', 'long long string'], (x, y) -> upper(x) + upper(y))
 ---- 1
-KUZU IS AWESOME:LONG LONG STRING
+LBUG IS AWESOME:LONG LONG STRING
 -STATEMENT MATCH (a:person) RETURN LIST_REDUCE(a.workedHours, (x, y) -> x - y)
 ---- 8
 5

@@ -12,9 +12,9 @@
 #include "storage/index/hash_index_utils.h"
 #include "storage/overflow_file.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 template<typename T>
@@ -285,4 +285,4 @@ template class InMemHashIndex<int128_t>;
 template class InMemHashIndex<ku_string_t>;
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

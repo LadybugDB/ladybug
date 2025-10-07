@@ -3,7 +3,7 @@
 #include "expression_evaluator.h"
 #include "function/scalar_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace evaluator {
 
 class FunctionExpressionEvaluator : public ExpressionEvaluator {
@@ -35,4 +35,4 @@ private:
 };
 
 } // namespace evaluator
-} // namespace kuzu
+} // namespace lbug

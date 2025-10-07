@@ -2,7 +2,7 @@
 
 #include "storage/storage_extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class Database;
 } // namespace main
@@ -21,4 +21,4 @@ public:
 };
 
 } // namespace postgres_extension
-} // namespace kuzu
+} // namespace lbug

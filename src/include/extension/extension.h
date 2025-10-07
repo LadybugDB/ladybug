@@ -12,10 +12,10 @@
 #define ADD_CONFIDENTIAL_EXTENSION_OPTION(OPTION)                                                  \
     db->addExtensionOption(OPTION::NAME, OPTION::TYPE, OPTION::getDefaultValue(), true)
 
-namespace kuzu::storage {
+namespace lbug::storage {
 struct IndexType;
 }
-namespace kuzu {
+namespace lbug {
 namespace function {
 struct TableFunction;
 } // namespace function
@@ -193,4 +193,4 @@ void dlclose(void* handle);
 #endif
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

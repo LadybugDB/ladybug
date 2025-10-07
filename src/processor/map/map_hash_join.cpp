@@ -5,11 +5,11 @@
 #include "processor/plan_mapper.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::planner;
-using namespace kuzu::common;
+using namespace lbug::binder;
+using namespace lbug::planner;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 HashJoinBuildInfo PlanMapper::createHashBuildInfo(const Schema& buildSideSchema,
@@ -122,4 +122,4 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapHashJoin(const LogicalOperator*
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

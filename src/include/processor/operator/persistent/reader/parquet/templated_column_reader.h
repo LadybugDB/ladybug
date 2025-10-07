@@ -3,7 +3,7 @@
 #include "column_reader.h"
 #include "resizable_buffer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 template<class VALUE_TYPE>
@@ -92,4 +92,4 @@ struct CallbackParquetValueConversion {
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

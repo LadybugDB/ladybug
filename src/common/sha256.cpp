@@ -2,7 +2,7 @@
 
 #include "common/exception/runtime.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 SHA256::SHA256() : shaContext{} {
@@ -49,4 +49,4 @@ void SHA256::toBase16(const char* in, char* out, size_t len) {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 #include "optional_params.h"
 #include "storage/predicate/column_predicate.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class FileSystem;
 }
@@ -66,4 +66,4 @@ protected:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -62,7 +62,7 @@ public class Database implements AutoCloseable {
      *                                  WAL file exceeds this threshold, the database will
      *                                  checkpoint if autoCheckpoint is true.
      * @param throwOnWalReplayFailure   If true, any WAL replaying failure when loading the database
-     *                                  will throw an error. Otherwise, Kuzu will silently ignore
+     *                                  will throw an error. Otherwise, Lbug will silently ignore
      *                                  the failure and replay up to where the error occured.
      * @param enableChecksums           If true, the database will use checksums to detect
      *                                  corruption in the WAL file.

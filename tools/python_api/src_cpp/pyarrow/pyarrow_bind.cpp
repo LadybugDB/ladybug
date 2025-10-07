@@ -4,7 +4,7 @@
 #include "common/arrow/arrow.h"
 #include "common/arrow/arrow_converter.h"
 
-namespace kuzu {
+namespace lbug {
 
 std::shared_ptr<ArrowSchemaWrapper> Pyarrow::bind(py::handle tableToBind,
     std::vector<common::LogicalType>& returnTypes, std::vector<std::string>& names) {
@@ -24,4 +24,4 @@ std::shared_ptr<ArrowSchemaWrapper> Pyarrow::bind(py::handle tableToBind,
     return schema;
 }
 
-} // namespace kuzu
+} // namespace lbug

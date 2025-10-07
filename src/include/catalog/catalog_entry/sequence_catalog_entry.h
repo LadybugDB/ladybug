@@ -6,7 +6,7 @@
 #include "catalog_entry.h"
 #include "common/vector/value_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class ValueVector;
 }
@@ -92,4 +92,4 @@ private:
 };
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

@@ -7,7 +7,7 @@
 #include "common/types/types.h"
 #include "common/vector/value_vector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 // NOLINTNEXTLINE(cert-err58-cpp): always evaluated at compile time, and even not it would not throw
@@ -45,4 +45,4 @@ std::vector<SelectionVector*> SelectionVector::fromValueVectors(
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "extension/extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace algo_extension {
 
 class AlgoExtension final : public extension::Extension {
@@ -14,4 +14,4 @@ public:
 };
 
 } // namespace algo_extension
-} // namespace kuzu
+} // namespace lbug

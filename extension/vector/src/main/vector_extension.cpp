@@ -6,7 +6,7 @@
 #include "main/database.h"
 #include "storage/storage_manager.h"
 
-namespace kuzu {
+namespace lbug {
 namespace vector_extension {
 
 static void initHNSWEntries(main::ClientContext* context) {
@@ -42,7 +42,7 @@ void VectorExtension::load(main::ClientContext* context) {
 }
 
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -53,12 +53,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::vector_extension::VectorExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::vector_extension::VectorExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::vector_extension::VectorExtension::EXTENSION_NAME;
+    return lbug::vector_extension::VectorExtension::EXTENSION_NAME;
 }
 }
 #endif

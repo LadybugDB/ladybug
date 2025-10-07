@@ -2,7 +2,7 @@
 
 #include "function/aggregate_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct BaseCountFunction {
@@ -33,4 +33,4 @@ struct BaseCountFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

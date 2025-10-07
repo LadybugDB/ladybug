@@ -2,7 +2,7 @@
 
 #include "types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct ku_list_t {
@@ -20,4 +20,4 @@ public:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

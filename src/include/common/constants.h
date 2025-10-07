@@ -7,7 +7,7 @@
 #include "common/array_utils.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 extern const char* KUZU_VERSION;
@@ -213,11 +213,11 @@ struct WarningConstants {
     static_assert(WARNING_TABLE_COLUMN_DATA_TYPES.size() == WARNING_TABLE_NUM_COLUMNS);
 };
 
-static constexpr char ATTACHED_KUZU_DB_TYPE[] = "KUZU";
+static constexpr char ATTACHED_KUZU_DB_TYPE[] = "LBUG";
 
-static constexpr char LOCAL_DB_NAME[] = "local(kuzu)";
+static constexpr char LOCAL_DB_NAME[] = "local(lbug)";
 
 constexpr auto DECIMAL_PRECISION_LIMIT = 38;
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

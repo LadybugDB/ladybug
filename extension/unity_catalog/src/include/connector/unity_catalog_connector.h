@@ -2,7 +2,7 @@
 
 #include "connector/duckdb_connector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace unity_catalog_extension {
 
 class UnityCatalogConnector : public duckdb_extension::DuckDBConnector {
@@ -12,4 +12,4 @@ public:
 };
 
 } // namespace unity_catalog_extension
-} // namespace kuzu
+} // namespace lbug

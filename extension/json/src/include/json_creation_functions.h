@@ -3,7 +3,7 @@
 #include "common/vector/value_vector.h"
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace json_extension {
 
 struct ToJsonFunction {
@@ -53,4 +53,4 @@ struct JsonMergePatchFunction {
 };
 
 } // namespace json_extension
-} // namespace kuzu
+} // namespace lbug

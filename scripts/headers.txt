@@ -61,8 +61,8 @@ src/include/main/client_context.h
 src/include/main/connection.h
 src/include/main/database.h
 src/include/main/db_config.h
-src/include/main/kuzu.h
-src/include/main/kuzu_fwd.h
+src/include/main/lbug.h
+src/include/main/lbug_fwd.h
 src/include/main/prepared_statement.h
 src/include/main/prepared_statement_manager.h
 src/include/main/query_result.h

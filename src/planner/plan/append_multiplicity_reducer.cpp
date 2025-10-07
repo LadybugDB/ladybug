@@ -1,7 +1,7 @@
 #include "planner/operator/logical_multiplcity_reducer.h"
 #include "planner/planner.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void Planner::appendMultiplicityReducer(LogicalPlan& plan) {
@@ -11,4 +11,4 @@ void Planner::appendMultiplicityReducer(LogicalPlan& plan) {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

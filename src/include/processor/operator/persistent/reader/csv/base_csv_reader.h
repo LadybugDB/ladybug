@@ -11,7 +11,7 @@
 #include "common/types/types.h"
 #include "processor/operator/persistent/reader/copy_from_error.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 struct FileScanInfo;
 }
@@ -151,4 +151,4 @@ protected:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

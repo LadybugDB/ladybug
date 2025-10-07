@@ -8,11 +8,11 @@
 #include "processor/execution_context.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::binder;
-using namespace kuzu::common;
-using namespace kuzu::processor;
+using namespace lbug::binder;
+using namespace lbug::common;
+using namespace lbug::processor;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 template<typename T>
@@ -181,4 +181,4 @@ std::unique_ptr<RJAlgorithm> AllWeightedSPPathsFunction::getAlgorithm() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

@@ -24,9 +24,9 @@
 #include "storage/table/column_chunk_data.h"
 #include <ranges>
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 template<typename T>
@@ -1246,4 +1246,4 @@ std::pair<std::optional<StorageValue>, std::optional<StorageValue>> getMinMaxSto
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

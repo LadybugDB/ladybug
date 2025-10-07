@@ -5,7 +5,7 @@
 
 #include "common/types/int128_t.h"
 
-namespace kuzu::storage {
+namespace lbug::storage {
 
 struct Int128Packer {
     static void pack(const common::int128_t* __restrict in, uint32_t* __restrict out,
@@ -14,4 +14,4 @@ struct Int128Packer {
         uint8_t width);
 };
 
-} // namespace kuzu::storage
+} // namespace lbug::storage

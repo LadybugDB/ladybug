@@ -6,10 +6,10 @@
 #include "function/schema/vector_node_rel_functions.h"
 #include "function/struct/vector_struct_functions.h"
 
-using namespace kuzu::common;
-using namespace kuzu::binder;
+using namespace lbug::common;
+using namespace lbug::binder;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& input) {
@@ -42,4 +42,4 @@ function_set IDFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

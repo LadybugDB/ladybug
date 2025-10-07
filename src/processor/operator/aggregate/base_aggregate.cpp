@@ -3,9 +3,9 @@
 #include "main/client_context.h"
 #include "processor/operator/aggregate/aggregate_hash_table.h"
 
-using namespace kuzu::function;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 size_t getNumPartitionsForParallelism(main::ClientContext* context) {
@@ -97,4 +97,4 @@ void BaseAggregateSharedState::HashTableQueue::mergeInto(AggregateHashTable& has
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

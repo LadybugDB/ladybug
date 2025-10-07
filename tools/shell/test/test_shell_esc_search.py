@@ -10,9 +10,9 @@ def set_up_search(test) -> None:
         test.shell_process.expect_exact(["\u2502 databases rule \u2502", pexpect.EOF])
         == 0
     )
-    test.send_finished_statement('RETURN "kuzu is cool" AS b;\r')
+    test.send_finished_statement('RETURN "lbug is cool" AS b;\r')
     assert (
-        test.shell_process.expect_exact(["\u2502 kuzu is cool \u2502", pexpect.EOF])
+        test.shell_process.expect_exact(["\u2502 lbug is cool \u2502", pexpect.EOF])
         == 0
     )
     test.send_finished_statement('RETURN "the shell is fun" AS c;\r')

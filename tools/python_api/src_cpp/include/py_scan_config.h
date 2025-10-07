@@ -3,7 +3,7 @@
 #include "common/case_insensitive_map.h"
 #include "common/types/value/value.h"
 
-namespace kuzu {
+namespace lbug {
 
 struct PyScanConfig {
     uint64_t skipNum;
@@ -13,4 +13,4 @@ struct PyScanConfig {
         uint64_t numRows);
 };
 
-} // namespace kuzu
+} // namespace lbug

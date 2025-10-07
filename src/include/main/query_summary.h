@@ -4,7 +4,7 @@
 
 #include "common/api.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 enum class StatementType : uint8_t;
 }
@@ -59,4 +59,4 @@ private:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

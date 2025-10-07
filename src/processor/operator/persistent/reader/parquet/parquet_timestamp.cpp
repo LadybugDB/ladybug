@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 common::timestamp_t ParquetTimeStampUtils::impalaTimestampToTimestamp(const Int96& rawTS) {
@@ -35,4 +35,4 @@ common::date_t ParquetTimeStampUtils::parquetIntToDate(const int32_t& raw_date) 
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

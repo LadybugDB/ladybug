@@ -2,7 +2,7 @@
 
 #include "binder/expression/expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 struct BoundJoinHintNode {
@@ -23,4 +23,4 @@ struct BoundJoinHintNode {
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

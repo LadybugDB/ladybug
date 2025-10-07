@@ -17,9 +17,9 @@ unsafe impl cxx::ExternType for ArrowSchema {
 #[cxx::bridge]
 pub(crate) mod ffi_arrow {
     unsafe extern "C++" {
-        include!("kuzu/include/kuzu_arrow.h");
+        include!("lbug/include/kuzu_arrow.h");
 
-        #[namespace = "kuzu::main"]
+        #[namespace = "lbug::main"]
         type QueryResult<'db> = crate::ffi::ffi::QueryResult<'db>;
     }
 

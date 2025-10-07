@@ -2,7 +2,7 @@
 
 #include "binder/expression/expression_util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 template<common::LogicalTypeID ID>
@@ -73,4 +73,4 @@ struct OptionalParams {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

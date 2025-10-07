@@ -4,7 +4,7 @@
 #include "py_object_container.h"
 #include "pybind_include.h"
 
-namespace kuzu {
+namespace lbug {
 
 namespace main {
 class ClientContext;
@@ -15,4 +15,4 @@ struct Pyarrow {
         std::vector<common::LogicalType>& returnTypes, std::vector<std::string>& names);
 };
 
-} // namespace kuzu
+} // namespace lbug

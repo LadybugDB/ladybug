@@ -4,7 +4,7 @@
 #include "function/table/table_function.h"
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace azure_extension {
 
 struct AzureFileInfo final : public common::FileInfo {
@@ -38,4 +38,4 @@ private:
 };
 
 } // namespace azure_extension
-} // namespace kuzu
+} // namespace lbug

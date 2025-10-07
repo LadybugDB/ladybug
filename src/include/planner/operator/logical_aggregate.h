@@ -2,7 +2,7 @@
 
 #include "planner/operator/logical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 struct LogicalAggregatePrintInfo final : OPPrintInfo {
@@ -76,4 +76,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

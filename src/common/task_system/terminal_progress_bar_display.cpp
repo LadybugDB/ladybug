@@ -2,7 +2,7 @@
 
 #include "common/assert.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 void TerminalProgressBarDisplay::updateProgress(uint64_t /*queryID*/, double newPipelineProgress,
@@ -63,4 +63,4 @@ void TerminalProgressBarDisplay::printProgressBar() {
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

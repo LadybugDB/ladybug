@@ -1,8 +1,8 @@
 #include "api_test/api_test.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 TEST_F(ApiTest, GDSPrepare) {
@@ -25,4 +25,4 @@ TEST_F(ApiTest, GDSPrepare) {
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

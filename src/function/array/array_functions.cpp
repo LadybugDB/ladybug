@@ -8,9 +8,9 @@
 #include "function/array/vector_array_functions.h"
 #include "function/scalar_function.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 static LogicalType interpretLogicalType(const binder::Expression* expr) {
@@ -202,4 +202,4 @@ function_set ArrayDotProductFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

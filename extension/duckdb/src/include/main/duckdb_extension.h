@@ -3,7 +3,7 @@
 #include "extension/extension.h"
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 class DuckDBConnector;
@@ -19,4 +19,4 @@ public:
 };
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

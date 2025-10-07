@@ -1,7 +1,7 @@
 #include "common/types/date_t.h"
 #include "graph_test/private_graph_test.h"
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 
 class CurrentTimeTest : public EmptyDBTest {
@@ -60,4 +60,4 @@ TEST_F(CurrentTimeTest, CurrentTimestamp) {
 }
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

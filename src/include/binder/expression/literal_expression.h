@@ -3,7 +3,7 @@
 #include "common/types/value/value.h"
 #include "expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 class KUZU_API LiteralExpression final : public Expression {
@@ -26,4 +26,4 @@ public:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

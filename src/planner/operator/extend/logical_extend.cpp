@@ -1,6 +1,6 @@
 #include "planner/operator/extend/logical_extend.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 void LogicalExtend::computeFactorizedSchema() {
@@ -40,4 +40,4 @@ std::unique_ptr<LogicalOperator> LogicalExtend::copy() {
 }
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

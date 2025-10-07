@@ -2,7 +2,7 @@
 
 #include "common/types/ku_string.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 // The string find algorithm is copied from duckdb. Source code:
@@ -38,4 +38,4 @@ private:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

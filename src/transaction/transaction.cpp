@@ -10,9 +10,9 @@
 #include "storage/wal/local_wal.h"
 #include "transaction/transaction_context.h"
 
-using namespace kuzu::catalog;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 
 bool LocalCacheManager::put(std::unique_ptr<LocalCacheObject> object) {
@@ -219,4 +219,4 @@ Transaction DUMMY_CHECKPOINT_TRANSACTION = Transaction(TransactionType::CHECKPOI
     Transaction::DUMMY_TRANSACTION_ID, Transaction::START_TRANSACTION_ID - 1);
 
 } // namespace transaction
-} // namespace kuzu
+} // namespace lbug

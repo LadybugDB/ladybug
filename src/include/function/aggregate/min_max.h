@@ -3,7 +3,7 @@
 #include "common/in_mem_overflow_buffer.h"
 #include "function/aggregate_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 template<typename T>
@@ -89,4 +89,4 @@ void MinMaxFunction<common::ku_string_t>::MinMaxState::setVal(const common::ku_s
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

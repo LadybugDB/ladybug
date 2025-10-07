@@ -7,7 +7,7 @@
 #include "pandas_bind.h"
 #include "py_scan_config.h"
 
-namespace kuzu {
+namespace lbug {
 
 struct PandasScanLocalState final : public function::TableFuncLocalState {
     PandasScanLocalState(uint64_t start, uint64_t end) : start{start}, end{end} {}
@@ -57,4 +57,4 @@ private:
 
 std::unique_ptr<function::ScanReplacementData> tryReplacePD(py::handle& entry);
 
-} // namespace kuzu
+} // namespace lbug

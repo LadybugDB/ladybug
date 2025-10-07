@@ -2,7 +2,7 @@
 
 #include "pybind_include.h"
 
-namespace kuzu {
+namespace lbug {
 namespace pyarrow {
 
 class Table : public py::object {
@@ -13,4 +13,4 @@ public:
     static bool check_(const py::handle& object) { return !py::none().is(object); }
 };
 } // namespace pyarrow
-} // namespace kuzu
+} // namespace lbug

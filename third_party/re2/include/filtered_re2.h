@@ -26,7 +26,7 @@
 
 #include "re2.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 class PrefilterTree;
@@ -101,6 +101,6 @@ private:
 };
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug
 
 #endif // RE2_FILTERED_RE2_H_

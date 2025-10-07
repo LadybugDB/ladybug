@@ -17,11 +17,11 @@
 
 using namespace kuzu_parquet::format;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
-using namespace kuzu::function;
-using namespace kuzu::common;
+using namespace lbug::function;
+using namespace lbug::common;
 
 ParquetReader::ParquetReader(std::string filePath, std::vector<bool> columnSkips,
     main::ClientContext* context)
@@ -753,4 +753,4 @@ function_set ParquetScanFunction::getFunctionSet() {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

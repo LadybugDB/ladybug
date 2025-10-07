@@ -9,11 +9,11 @@
 #include "parser/expression/parsed_subquery_expression.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::parser;
-using namespace kuzu::common;
-using namespace kuzu::function;
+using namespace lbug::parser;
+using namespace lbug::common;
+using namespace lbug::function;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 std::shared_ptr<Expression> ExpressionBinder::bindSubqueryExpression(
@@ -71,4 +71,4 @@ std::shared_ptr<Expression> ExpressionBinder::bindSubqueryExpression(
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

@@ -5,7 +5,7 @@
 #include "common/api.h"
 #include "extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class ClientContext;
 }
@@ -42,4 +42,4 @@ protected:
 };
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

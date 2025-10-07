@@ -1,7 +1,7 @@
 #include "parser/transformer.h"
 #include "parser/use_database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 std::unique_ptr<Statement> Transformer::transformUseDatabase(
@@ -11,4 +11,4 @@ std::unique_ptr<Statement> Transformer::transformUseDatabase(
 }
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

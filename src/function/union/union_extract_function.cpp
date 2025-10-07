@@ -2,9 +2,9 @@
 #include "function/struct/vector_struct_functions.h"
 #include "function/union/vector_union_functions.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 function_set UnionExtractFunction::getFunctionSet() {
@@ -19,4 +19,4 @@ function_set UnionExtractFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

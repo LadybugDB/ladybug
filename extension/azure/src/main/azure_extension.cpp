@@ -7,7 +7,7 @@
 #include "main/database.h"
 #include "main/duckdb_extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace azure_extension {
 
 void AzureExtension::load(main::ClientContext* context) {
@@ -20,7 +20,7 @@ void AzureExtension::load(main::ClientContext* context) {
 }
 
 } // namespace azure_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -31,12 +31,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::azure_extension::AzureExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::azure_extension::AzureExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::azure_extension::AzureExtension::EXTENSION_NAME;
+    return lbug::azure_extension::AzureExtension::EXTENSION_NAME;
 }
 }
 #endif

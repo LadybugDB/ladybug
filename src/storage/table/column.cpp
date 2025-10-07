@@ -24,11 +24,11 @@
 #include "storage/table/struct_column.h"
 #include <bit>
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
-using namespace kuzu::evaluator;
+using namespace lbug::catalog;
+using namespace lbug::common;
+using namespace lbug::evaluator;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 struct ReadInternalIDValuesToVector {
@@ -576,4 +576,4 @@ std::unique_ptr<Column> ColumnFactory::createColumn(std::string name, LogicalTyp
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

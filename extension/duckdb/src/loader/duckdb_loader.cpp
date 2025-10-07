@@ -2,7 +2,7 @@
 
 #include "main/duckdb_extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 void DuckDBLoader::loadDependency(main::ClientContext* context) {
@@ -15,7 +15,7 @@ void DuckDBLoader::loadDependency(main::ClientContext* context) {
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug
 
 extern "C" {
 // Because we link against the static library on windows, we implicitly inherit KUZU_STATIC_DEFINE,
@@ -25,8 +25,8 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void load(kuzu::main::ClientContext* context) {
-    kuzu::duckdb_extension::DuckDBLoader loader{"duckdb"};
+INIT_EXPORT void load(lbug::main::ClientContext* context) {
+    lbug::duckdb_extension::DuckDBLoader loader{"duckdb"};
     loader.loadDependency(context);
 }
 }

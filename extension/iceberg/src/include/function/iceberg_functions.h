@@ -4,7 +4,7 @@
 #include "function/delta_scan.h"
 #include "function/table/table_function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace iceberg_extension {
 
 using namespace function;
@@ -28,4 +28,4 @@ std::unique_ptr<TableFuncBindData> bindFuncHelper(main::ClientContext* context,
     const TableFuncBindInput* input, const std::string& tableType);
 
 } // namespace iceberg_extension
-} // namespace kuzu
+} // namespace lbug

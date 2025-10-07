@@ -5,7 +5,7 @@
 
 #include "common/api.h"
 
-namespace kuzu {
+namespace lbug {
 
 namespace regex {
 class RE2;
@@ -113,4 +113,4 @@ public:
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

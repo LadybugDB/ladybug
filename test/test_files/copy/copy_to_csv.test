@@ -141,11 +141,11 @@ INT64|INT64|INT64[]|INT64[]
 ---- 1
 100|a string with "quotes"|5.600000|","|,
 
--STATEMENT COPY (RETURN 100,'kuzu is # a |graph database') TO "${DATABASE_PATH}/copy_to_with_option.csv" (delim = '|', QUOTE='#', Escape = '!', header = false)
+-STATEMENT COPY (RETURN 100,'lbug is # a |graph database') TO "${DATABASE_PATH}/copy_to_with_option.csv" (delim = '|', QUOTE='#', Escape = '!', header = false)
 ---- ok
 -STATEMENT LOAD FROM '${DATABASE_PATH}/copy_to_with_option.csv' (delim = '|', QUOTE='#', Escape = '!', header=false) RETURN *
 ---- 1
-100|kuzu is # a |graph database
+100|lbug is # a |graph database
 
 -STATEMENT COPY (load from "${KUZU_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv"(header=true) where id = 2 return id, fname, Gender, workedHours) to "${DATABASE_PATH}/copy_to_with_filter.csv"
 ---- ok

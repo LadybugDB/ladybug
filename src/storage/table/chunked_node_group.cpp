@@ -15,10 +15,10 @@
 #include "storage/table/column_chunk_scanner.h"
 #include "storage/table/node_table.h"
 
-using namespace kuzu::common;
-using namespace kuzu::transaction;
+using namespace lbug::common;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 template<class Chunk>
@@ -720,4 +720,4 @@ InMemChunkedNodeGroup::InMemChunkedNodeGroup(InMemChunkedNodeGroup& base,
 }
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

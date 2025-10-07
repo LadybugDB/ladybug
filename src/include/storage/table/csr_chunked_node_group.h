@@ -6,7 +6,7 @@
 #include "storage/table/chunked_node_group.h"
 #include "storage/table/column_chunk.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class PageAllocator;
 class MemoryManager;
@@ -212,4 +212,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

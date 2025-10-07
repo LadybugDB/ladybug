@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import kuzu
+import lbug
 
 from type_aliases import ConnDB
 

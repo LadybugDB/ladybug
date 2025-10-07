@@ -9,10 +9,10 @@
 #include "storage/storage_utils.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
-using namespace kuzu::transaction;
+using namespace lbug::common;
+using namespace lbug::transaction;
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 
 // Header can be read or write since it just needs the sizes
@@ -398,4 +398,4 @@ void BlockVectorInternal::resize(uint64_t newNumElements,
     numElements = newNumElements;
 }
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

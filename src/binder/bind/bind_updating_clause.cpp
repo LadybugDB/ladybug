@@ -19,11 +19,11 @@
 #include "parser/query/updating_clause/set_clause.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::common;
-using namespace kuzu::parser;
-using namespace kuzu::catalog;
+using namespace lbug::common;
+using namespace lbug::parser;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 std::unique_ptr<BoundUpdatingClause> Binder::bindUpdatingClause(
@@ -384,4 +384,4 @@ std::unique_ptr<BoundUpdatingClause> Binder::bindDeleteClause(
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

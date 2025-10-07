@@ -2,7 +2,7 @@
 
 #include "common/serializer/serializer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class RleBpEncoder {
@@ -40,4 +40,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

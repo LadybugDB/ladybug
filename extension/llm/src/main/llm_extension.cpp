@@ -3,7 +3,7 @@
 #include "function/llm_functions.h"
 #include "main/client_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace llm_extension {
 
 // This extension provides an interface to retrieve text embeddings from supported LLM providers.
@@ -21,7 +21,7 @@ void LlmExtension::load(main::ClientContext* context) {
 }
 
 } // namespace llm_extension
-} // namespace kuzu
+} // namespace lbug
 
 #if defined(BUILD_DYNAMIC_LOAD)
 extern "C" {
@@ -32,12 +32,12 @@ extern "C" {
 #else
 #define INIT_EXPORT __attribute__((visibility("default")))
 #endif
-INIT_EXPORT void init(kuzu::main::ClientContext* context) {
-    kuzu::llm_extension::LlmExtension::load(context);
+INIT_EXPORT void init(lbug::main::ClientContext* context) {
+    lbug::llm_extension::LlmExtension::load(context);
 }
 
 INIT_EXPORT const char* name() {
-    return kuzu::llm_extension::LlmExtension::EXTENSION_NAME;
+    return lbug::llm_extension::LlmExtension::EXTENSION_NAME;
 }
 }
 #endif

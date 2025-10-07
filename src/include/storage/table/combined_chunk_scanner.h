@@ -3,7 +3,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/column_chunk_scanner.h"
 #include "storage/table/update_info.h"
-namespace kuzu {
+namespace lbug {
 namespace storage {
 // Scans all the segments into a single output chunk
 struct CombinedChunkScanner : public ColumnChunkScanner {
@@ -27,4 +27,4 @@ struct CombinedChunkScanner : public ColumnChunkScanner {
     common::offset_t numValuesBeforeScan;
 };
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

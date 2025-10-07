@@ -6,24 +6,24 @@
 #include "common/file_system/virtual_file_system.h"
 #include "gtest/gtest.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 TEST(VFSTests, VirtualFileSystemDeleteFiles) {
     std::string homeDir = "/tmp/dbHome";
-    kuzu::common::VirtualFileSystem vfs(homeDir);
+    lbug::common::VirtualFileSystem vfs(homeDir);
     std::filesystem::create_directories("/tmp/test1");
 
     // Attempt to delete files not within the list of db files (should error)
     try {
         vfs.removeFileIfExists("/tmp/test1");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Expected behavior
         EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/test1 is not within the allowed "
                                "list of files to be removed.");
     }
     try {
         vfs.removeFileIfExists("/tmp/dbHome");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Expected behavior
         EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/dbHome is not within the allowed "
                                "list of files to be removed.");
@@ -43,20 +43,20 @@ TEST(VFSTests, VirtualFileSystemDeleteFiles) {
 #ifndef __WASM__ // home directory is not available in WASM
 TEST(VFSTests, VirtualFileSystemDeleteFilesWithHome) {
     std::string homeDir = "~/tmp/dbHome";
-    kuzu::common::VirtualFileSystem vfs(homeDir);
+    lbug::common::VirtualFileSystem vfs(homeDir);
     std::filesystem::create_directories("~/tmp/test1");
 
     // Attempt to delete files outside the home directory (should error)
     try {
         vfs.removeFileIfExists("~/tmp/test1");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Expected behavior
         EXPECT_STREQ(e.what(), "IO exception: Error: Path ~/tmp/test1 is not within the allowed "
                                "list of files to be removed.");
     }
     try {
         vfs.removeFileIfExists("~/tmp/dbHome");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Expected behavior
         EXPECT_STREQ(e.what(), "IO exception: Error: Path ~/tmp/dbHome is not within the allowed "
                                "list of files to be removed.");
@@ -65,7 +65,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesWithHome) {
     // Attempt to delete files outside the home directory (should error)
     try {
         vfs.removeFileIfExists("~");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Expected behavior
         EXPECT_STREQ(e.what(),
             "IO exception: Error: Path ~ is not within the allowed list of files to be removed.");
@@ -85,7 +85,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesWithHome) {
 
 TEST(VFSTests, VirtualFileSystemDeleteFilesEdgeCases) {
     std::string homeDir = "/tmp/dbHome";
-    kuzu::common::VirtualFileSystem vfs(homeDir);
+    lbug::common::VirtualFileSystem vfs(homeDir);
     std::filesystem::create_directories("/tmp/dbHome/");
     std::filesystem::create_directories("/tmp/dbHome/../test2");
     std::filesystem::create_directories("/tmp");
@@ -94,7 +94,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesEdgeCases) {
     // Attempt to delete files outside the home directory (should error)
     try {
         vfs.removeFileIfExists("/tmp/dbHome/../test2");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Expected behavior
         EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/dbHome/../test2 is not within the "
                                "allowed list of files to be removed.");
@@ -102,7 +102,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesEdgeCases) {
 
     try {
         vfs.removeFileIfExists("/tmp");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Expected behavior
         EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp is not within the allowed list of "
                                "files to be removed.");
@@ -110,7 +110,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesEdgeCases) {
 
     try {
         vfs.removeFileIfExists("/tmp/");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Expected behavior
         EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/ is not within the allowed list of "
                                "files to be removed.");
@@ -118,7 +118,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesEdgeCases) {
 
     try {
         vfs.removeFileIfExists("/tmp//////////////////");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Expected behavior
         EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp////////////////// is not within the "
                                "allowed list of files to be removed.");
@@ -126,7 +126,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesEdgeCases) {
 
     try {
         vfs.removeFileIfExists("/tmp/./.././");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Expected behavior
         EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/./.././ is not within the allowed "
                                "list of files to be removed.");
@@ -134,7 +134,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesEdgeCases) {
 
     try {
         vfs.removeFileIfExists("/");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Expected behavior
         EXPECT_STREQ(e.what(),
             "IO exception: Error: Path / is not within the allowed list of files to be removed.");
@@ -142,7 +142,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesEdgeCases) {
 
     try {
         vfs.removeFileIfExists("/tmp/dbHome/test2");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Expected behavior
         EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/dbHome/test2 is not within the "
                                "allowed list of files to be removed.");
@@ -160,7 +160,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesEdgeCases) {
 TEST(VFSTests, VirtualFileSystemDeleteFilesWindowsPaths) {
     // Test Home Directory
     std::string homeDir = "C:\\Desktop\\dir";
-    kuzu::common::VirtualFileSystem vfs(homeDir);
+    lbug::common::VirtualFileSystem vfs(homeDir);
 
     // Setup directories for testing
     std::filesystem::create_directories("C:\\test1");
@@ -172,7 +172,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesWindowsPaths) {
     try {
         vfs.removeFileIfExists("C:\\test1");
         FAIL() << "Expected exception for path outside home directory.";
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         EXPECT_STREQ(e.what(), "IO exception: Error: Path C:\\test1 is not within the allowed list "
                                "of files to be removed.");
     }
@@ -180,7 +180,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesWindowsPaths) {
     // Attempt to delete file inside the home directory with mixed separators (should succeed)
     try {
         vfs.removeFileIfExists(mixedSeparatorPath);
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         EXPECT_STREQ(e.what(), "IO exception: Error: Path C:\\Desktop/dir/test1 is not within the "
                                "allowed list of files to be removed.");
     }
@@ -195,7 +195,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesWindowsPaths) {
 TEST(VFSTests, VirtualFileSystemDeleteFilesWildcardNoRemoval) {
     // Test Home Directory
     std::string homeDir = "/tmp/dbHome_wildcard/";
-    kuzu::common::VirtualFileSystem vfs(homeDir);
+    lbug::common::VirtualFileSystem vfs(homeDir);
 
     // Setup files and directories
     std::filesystem::create_directories("/tmp/dbHome_wildcard/test1_wildcard");
@@ -207,7 +207,7 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesWildcardNoRemoval) {
     // Attempt to remove files with wildcard pattern
     try {
         vfs.removeFileIfExists("/tmp/dbHome_wildcard/test*");
-    } catch (const kuzu::common::IOException& e) {
+    } catch (const lbug::common::IOException& e) {
         // Verify the exception is thrown for unsupported wildcard
         EXPECT_STREQ(e.what(), "Error: Wildcard patterns are not supported in paths.");
     }

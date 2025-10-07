@@ -8,7 +8,7 @@ namespace antlr4 {
 class ParserRuleContext;
 }
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 class KUZU_API TransformerExtension {
@@ -21,4 +21,4 @@ public:
 };
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

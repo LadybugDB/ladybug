@@ -3,7 +3,7 @@
 #include "common/exception/runtime.h"
 #include "common/serializer/buffer_writer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 
 std::shared_ptr<common::BufferWriter> IndexAuxInfo::serialize() const {
@@ -81,4 +81,4 @@ std::unique_ptr<common::BufferReader> IndexCatalogEntry::getAuxBufferReader() co
 }
 
 } // namespace catalog
-} // namespace kuzu
+} // namespace lbug

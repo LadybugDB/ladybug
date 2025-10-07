@@ -2,7 +2,7 @@
 
 #include "common/assert.h"
 
-namespace kuzu {
+namespace lbug {
 namespace transaction {
 
 std::string TransactionActionUtils::toString(TransactionAction action) {
@@ -28,4 +28,4 @@ std::string TransactionActionUtils::toString(TransactionAction action) {
 }
 
 } // namespace transaction
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 class Connection;
 } // namespace main
@@ -15,4 +15,4 @@ struct FSMLeakChecker {
 };
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

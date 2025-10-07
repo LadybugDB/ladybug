@@ -4,9 +4,9 @@
 
 #include "api_test/api_test.h"
 
-using namespace kuzu::testing;
-using namespace kuzu::common;
-using namespace kuzu::main;
+using namespace lbug::testing;
+using namespace lbug::common;
+using namespace lbug::main;
 
 class DBLockingTest : public ApiTest {
     void SetUp() override { BaseGraphTest::SetUp(); }

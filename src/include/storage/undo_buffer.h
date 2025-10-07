@@ -5,7 +5,7 @@
 #include "buffer_manager/memory_manager.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 class CatalogEntry;
 class CatalogSet;
@@ -126,4 +126,4 @@ private:
 };
 
 } // namespace storage
-} // namespace kuzu
+} // namespace lbug

@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace fts_extension {
 
 struct StemFunction {
@@ -14,4 +14,4 @@ struct StemFunction {
 };
 
 } // namespace fts_extension
-} // namespace kuzu
+} // namespace lbug

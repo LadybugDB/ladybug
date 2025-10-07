@@ -1,9 +1,9 @@
 #include "function/aggregate/avg.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 function_set AggregateAvgFunction::getFunctionSet() {
     function_set result;
@@ -14,4 +14,4 @@ function_set AggregateAvgFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

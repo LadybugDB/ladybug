@@ -2,7 +2,7 @@
 
 #include "processor/operator/persistent/writer/parquet/basic_column_writer.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 class BooleanStatisticsState : public ColumnWriterStatistics {
@@ -64,4 +64,4 @@ public:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

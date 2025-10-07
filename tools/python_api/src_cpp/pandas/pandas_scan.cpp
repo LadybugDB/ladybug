@@ -14,11 +14,11 @@
 #include "pyarrow/pyarrow_scan.h"
 #include "pybind11/pytypes.h"
 
-using namespace kuzu::function;
-using namespace kuzu::common;
-using namespace kuzu::catalog;
+using namespace lbug::function;
+using namespace lbug::common;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 
 std::unique_ptr<TableFuncBindData> bindFunc(ClientContext* /*context*/,
     const TableFuncBindInput* input) {
@@ -159,4 +159,4 @@ std::unique_ptr<ScanReplacementData> tryReplacePD(py::handle& entry) {
     }
 }
 
-} // namespace kuzu
+} // namespace lbug

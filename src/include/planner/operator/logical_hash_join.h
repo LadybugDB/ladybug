@@ -4,7 +4,7 @@
 #include "logical_operator.h"
 #include "planner/operator/sip/side_way_info_passing.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 // We only support equality comparison as join condition
@@ -66,4 +66,4 @@ private:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

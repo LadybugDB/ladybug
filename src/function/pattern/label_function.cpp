@@ -12,11 +12,11 @@
 #include "function/schema/vector_node_rel_functions.h"
 #include "function/struct/vector_struct_functions.h"
 
-using namespace kuzu::common;
-using namespace kuzu::binder;
-using namespace kuzu::catalog;
+using namespace lbug::common;
+using namespace lbug::binder;
+using namespace lbug::catalog;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct Label {
@@ -147,4 +147,4 @@ function_set LabelFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

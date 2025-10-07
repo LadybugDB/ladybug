@@ -6,7 +6,7 @@
 #include "planner/operator/operator_print_info.h"
 #include "planner/operator/schema.h"
 
-namespace kuzu {
+namespace lbug {
 namespace planner {
 
 // This ENUM is sorted by alphabetical order.
@@ -146,4 +146,4 @@ protected:
 };
 
 } // namespace planner
-} // namespace kuzu
+} // namespace lbug

@@ -10,7 +10,7 @@
 #include "common/enums/expression_type.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 
 namespace common {
 struct FileInfo;
@@ -97,4 +97,4 @@ protected:
 using options_t = std::unordered_map<std::string, std::unique_ptr<parser::ParsedExpression>>;
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

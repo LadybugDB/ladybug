@@ -2,7 +2,7 @@
 
 #include "function/function.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct UnionValueFunction {
@@ -24,4 +24,4 @@ struct UnionExtractFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

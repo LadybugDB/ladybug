@@ -8,7 +8,7 @@
 #include "test_helper/test_helper.h"
 #include "test_runner/test_group.h"
 
-namespace kuzu {
+namespace lbug {
 namespace testing {
 enum class TokenType {
     // header only
@@ -193,4 +193,4 @@ private:
 };
 
 } // namespace testing
-} // namespace kuzu
+} // namespace lbug

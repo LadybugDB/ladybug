@@ -3,7 +3,7 @@
 #include "common/exception/internal.h"
 #include "gtest/gtest.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 TEST(StringFormat, Basic) {
     ASSERT_EQ(stringFormat("Some formatted data: {} and {}", 'a', 423),

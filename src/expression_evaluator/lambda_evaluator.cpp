@@ -9,12 +9,12 @@
 #include "parser/expression/parsed_lambda_expression.h"
 #include "storage/buffer_manager/memory_manager.h"
 
-using namespace kuzu::common;
-using namespace kuzu::processor;
-using namespace kuzu::main;
-using namespace kuzu::storage;
+using namespace lbug::common;
+using namespace lbug::processor;
+using namespace lbug::main;
+using namespace lbug::storage;
 
-namespace kuzu {
+namespace lbug {
 namespace evaluator {
 
 void ListLambdaEvaluator::init(const ResultSet& resultSet, ClientContext* clientContext) {
@@ -117,4 +117,4 @@ ListLambdaType ListLambdaEvaluator::checkListLambdaTypeWithFunctionName(std::str
 }
 
 } // namespace evaluator
-} // namespace kuzu
+} // namespace lbug

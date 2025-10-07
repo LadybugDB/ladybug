@@ -3,7 +3,7 @@
 #include "common/exception/conversion.h"
 #include "common/string_format.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 const int HexFormatConstants::HEX_MAP[256] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -98,4 +98,4 @@ void Blob::validateHexCode(const uint8_t* blobStr, uint64_t length, uint64_t cur
 }
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

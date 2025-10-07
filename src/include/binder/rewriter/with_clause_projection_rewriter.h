@@ -2,7 +2,7 @@
 
 #include "binder/bound_statement_visitor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 // WithClauseProjectionRewriter first analyze the properties need to be scanned for each query. And
@@ -17,4 +17,4 @@ public:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

@@ -4,7 +4,7 @@
 #include "connector/local_duckdb_connector.h"
 #include "connector/remote_duckdb_connector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace duckdb_extension {
 
 static DuckDBConnectionType getConnectionType(const std::string& path) {
@@ -33,4 +33,4 @@ std::unique_ptr<DuckDBConnector> DuckDBConnectorFactory::getDuckDBConnector(
 }
 
 } // namespace duckdb_extension
-} // namespace kuzu
+} // namespace lbug

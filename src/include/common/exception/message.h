@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 // Add exception only if you need to throw it in multiple places.
@@ -31,4 +31,4 @@ struct ExceptionMessage {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

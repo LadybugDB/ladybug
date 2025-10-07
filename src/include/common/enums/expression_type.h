@@ -5,7 +5,7 @@
 
 #include "common/api.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 enum class ExpressionType : uint8_t {
@@ -71,4 +71,4 @@ struct ExpressionTypeUtil {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

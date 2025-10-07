@@ -5,9 +5,9 @@
 #include "binder/expression/expression_util.h"
 #include "common/metric.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string UnionAllScanPrintInfo::toString() const {
@@ -60,4 +60,4 @@ bool UnionAllScan::getNextTuplesInternal(ExecutionContext* /*context*/) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

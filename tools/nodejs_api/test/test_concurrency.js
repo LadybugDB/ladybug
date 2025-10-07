@@ -45,7 +45,7 @@ describe("Concurrent query execution across multiple connections", function () {
   it("should dispatch multiple queries concurrently on different connections", async function () {
     const connections = [];
     for (let i = 0; i < 5; i++) {
-      connections.push(new kuzu.Connection(db));
+      connections.push(new lbug.Connection(db));
     }
     const queryResults = await Promise.all([
       connections[0].query(

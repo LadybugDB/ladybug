@@ -3,7 +3,7 @@
 #include "binder/expression/expression.h"
 #include "common/types/value/value.h"
 
-namespace kuzu {
+namespace lbug {
 namespace evaluator {
 
 struct ExpressionEvaluatorUtils {
@@ -12,4 +12,4 @@ struct ExpressionEvaluatorUtils {
 };
 
 } // namespace evaluator
-} // namespace kuzu
+} // namespace lbug

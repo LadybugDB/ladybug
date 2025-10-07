@@ -1,8 +1,8 @@
 #include "binder/query/updating_clause/bound_insert_clause.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 bool BoundInsertClause::hasInfo(const std::function<bool(const BoundInsertInfo&)>& check) const {
@@ -26,4 +26,4 @@ std::vector<const BoundInsertInfo*> BoundInsertClause::getInfos(
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

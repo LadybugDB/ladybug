@@ -1,15 +1,15 @@
-#include "c_api/kuzu.h"
+#include "c_api/lbug.h"
 #include "common/exception/exception.h"
-#include "main/kuzu.h"
+#include "main/lbug.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 class Value;
 }
-} // namespace kuzu
+} // namespace lbug
 
-using namespace kuzu::common;
-using namespace kuzu::main;
+using namespace lbug::common;
+using namespace lbug::main;
 
 kuzu_state kuzu_connection_init(kuzu_database* database, kuzu_connection* out_connection) {
     if (database == nullptr || database->_database == nullptr) {

@@ -6,10 +6,10 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "transaction/transaction.h"
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
+using namespace lbug::catalog;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 std::string CreateSequencePrintInfo::toString() const {
@@ -37,4 +37,4 @@ void CreateSequence::executeInternal(ExecutionContext* context) {
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

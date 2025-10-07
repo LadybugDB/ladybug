@@ -4,7 +4,7 @@
 
 #include "common/serializer/reader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct BufferReader final : Reader {
@@ -23,4 +23,4 @@ struct BufferReader final : Reader {
 };
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug

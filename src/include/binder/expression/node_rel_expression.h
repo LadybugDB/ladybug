@@ -4,7 +4,7 @@
 #include "expression.h"
 #include "property_expression.h"
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 class TableCatalogEntry;
 }
@@ -92,4 +92,4 @@ protected:
 };
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

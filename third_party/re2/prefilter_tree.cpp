@@ -20,7 +20,7 @@
 #include "strutil.h"
 #include "util.h"
 
-namespace kuzu {
+namespace lbug {
 namespace regex {
 
 PrefilterTree::PrefilterTree() : compiled_(false), min_atom_len_(3) {}
@@ -384,4 +384,4 @@ std::string PrefilterTree::DebugNodeString(Prefilter* node) const {
 }
 
 } // namespace regex
-} // namespace kuzu
+} // namespace lbug

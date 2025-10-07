@@ -8,7 +8,7 @@
 #include "storage/stats/table_stats.h"
 #include "storage/table/chunked_node_group.h"
 
-namespace kuzu {
+namespace lbug {
 namespace storage {
 class MemoryManager;
 }
@@ -141,4 +141,4 @@ private:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

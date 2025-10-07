@@ -2,7 +2,7 @@
 
 #include "logical_operator_visitor.h"
 
-namespace kuzu {
+namespace lbug {
 namespace optimizer {
 
 class CorrelatedSubqueryUnnestSolver : public LogicalOperatorVisitor {
@@ -22,4 +22,4 @@ private:
 };
 
 } // namespace optimizer
-} // namespace kuzu
+} // namespace lbug

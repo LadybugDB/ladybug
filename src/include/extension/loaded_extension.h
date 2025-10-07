@@ -4,7 +4,7 @@
 
 #include "extension.h"
 
-namespace kuzu {
+namespace lbug {
 namespace extension {
 
 class LoadedExtension {
@@ -28,4 +28,4 @@ private:
 };
 
 } // namespace extension
-} // namespace kuzu
+} // namespace lbug

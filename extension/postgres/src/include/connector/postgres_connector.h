@@ -2,7 +2,7 @@
 
 #include "connector/duckdb_connector.h"
 
-namespace kuzu {
+namespace lbug {
 namespace postgres_extension {
 
 class PostgresConnector : public duckdb_extension::DuckDBConnector {
@@ -12,4 +12,4 @@ public:
 };
 
 } // namespace postgres_extension
-} // namespace kuzu
+} // namespace lbug

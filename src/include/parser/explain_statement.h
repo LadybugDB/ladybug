@@ -5,7 +5,7 @@
 #include "common/enums/explain_type.h"
 #include "parser/statement.h"
 
-namespace kuzu {
+namespace lbug {
 namespace parser {
 
 class ExplainStatement : public Statement {
@@ -24,4 +24,4 @@ private:
 };
 
 } // namespace parser
-} // namespace kuzu
+} // namespace lbug

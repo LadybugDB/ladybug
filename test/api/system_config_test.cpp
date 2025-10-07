@@ -2,9 +2,9 @@
 #include "common/exception/buffer_manager.h"
 #include "common/system_config.h"
 
-using namespace kuzu::common;
-using namespace kuzu::testing;
-using namespace kuzu::main;
+using namespace lbug::common;
+using namespace lbug::testing;
+using namespace lbug::main;
 
 class SystemConfigTest : public ApiTest {
     void SetUp() override { BaseGraphTest::SetUp(); }

@@ -9,7 +9,7 @@
 #include "common/vector/value_vector.h"
 #include <span>
 
-namespace kuzu {
+namespace lbug {
 namespace catalog {
 class TableCatalogEntry;
 } // namespace catalog
@@ -252,4 +252,4 @@ public:
 };
 
 } // namespace graph
-} // namespace kuzu
+} // namespace lbug

@@ -4,9 +4,9 @@
 #include "function/table/simple_table_function.h"
 #include "processor/warning_context.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct ShowWarningsBindData final : TableFuncBindData {
@@ -64,4 +64,4 @@ function_set ShowWarningsFunction::getFunctionSet() {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

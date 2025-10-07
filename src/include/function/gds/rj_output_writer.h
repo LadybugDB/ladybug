@@ -7,7 +7,7 @@
 #include "common/types/types.h"
 #include "processor/result/factorized_table.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 class RJOutputWriter {
@@ -132,4 +132,4 @@ public:
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

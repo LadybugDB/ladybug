@@ -2,7 +2,7 @@
 
 #include "function/gds/rec_joins.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 struct VarLenJoinsFunction {
@@ -54,4 +54,4 @@ struct AllWeightedSPPathsFunction {
 };
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

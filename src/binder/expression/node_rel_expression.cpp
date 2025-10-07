@@ -2,10 +2,10 @@
 
 #include "catalog/catalog_entry/table_catalog_entry.h"
 
-using namespace kuzu::catalog;
-using namespace kuzu::common;
+using namespace lbug::catalog;
+using namespace lbug::common;
 
-namespace kuzu {
+namespace lbug {
 namespace binder {
 
 table_id_vector_t NodeOrRelExpression::getTableIDs() const {
@@ -41,4 +41,4 @@ void NodeOrRelExpression::addPropertyExpression(std::shared_ptr<PropertyExpressi
 }
 
 } // namespace binder
-} // namespace kuzu
+} // namespace lbug

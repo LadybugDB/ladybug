@@ -2,7 +2,7 @@
 
 #include "attached_database.h"
 
-namespace kuzu {
+namespace lbug {
 namespace main {
 
 class DatabaseManager {
@@ -27,4 +27,4 @@ private:
 };
 
 } // namespace main
-} // namespace kuzu
+} // namespace lbug

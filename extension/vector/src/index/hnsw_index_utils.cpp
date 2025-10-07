@@ -8,7 +8,7 @@
 #include "simsimd.h"
 #include "transaction/transaction_context.h"
 
-namespace kuzu {
+namespace lbug {
 namespace vector_extension {
 
 bool HNSWIndexUtils::indexExists(const main::ClientContext& context,
@@ -146,4 +146,4 @@ void HNSWIndexUtils::validateColumnType(const common::LogicalType& type) {
 }
 
 } // namespace vector_extension
-} // namespace kuzu
+} // namespace lbug

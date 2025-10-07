@@ -1,6 +1,6 @@
 #include "processor/operator/persistent/reader/parquet/uuid_column_reader.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 common::ku_uuid_t UUIDValueConversion::ReadParquetUUID(const uint8_t* input) {
@@ -38,4 +38,4 @@ void UUIDColumnReader::dictionary(const std::shared_ptr<ResizeableBuffer>& dicti
 }
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug

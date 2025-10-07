@@ -5,7 +5,7 @@
 #include "common/type_utils.h"
 #include "function/cast/functions/numeric_limits.h"
 
-namespace kuzu {
+namespace lbug {
 namespace function {
 
 // reference from duckDB arithmetic.cpp
@@ -85,4 +85,4 @@ void Abs::operation(common::int128_t& input, common::int128_t& result) {
 }
 
 } // namespace function
-} // namespace kuzu
+} // namespace lbug

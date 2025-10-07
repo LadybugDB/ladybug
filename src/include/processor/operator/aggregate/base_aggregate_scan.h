@@ -3,7 +3,7 @@
 #include "function/aggregate_function.h"
 #include "processor/operator/physical_operator.h"
 
-namespace kuzu {
+namespace lbug {
 namespace processor {
 
 using move_agg_result_to_vector_func = std::function<void(common::ValueVector& vector, uint64_t pos,
@@ -41,4 +41,4 @@ protected:
 };
 
 } // namespace processor
-} // namespace kuzu
+} // namespace lbug
