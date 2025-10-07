@@ -837,7 +837,7 @@ void EmbeddedShell::printHelp() {
         TAB);
     printf("%s%s  timeout, and progress_bar using Cypher CALL statements.\n", TAB, TAB);
     printf("%s%s  e.g. CALL THREADS=5; or CALL current_setting('threads') return *;\n", TAB, TAB);
-    const char* url = "https://docs.lbugdb.com/cypher/configuration";
+    const char* url = "https://docs.ladybugdb.com/cypher/configuration";
     printf("%s%s  See: \x1B]8;;%s\x1B\\%s\x1B]8;;\x1B\\\n", TAB, TAB, url, url);
 }
 

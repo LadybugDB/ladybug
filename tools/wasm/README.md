@@ -23,7 +23,7 @@ We provide three versions of this example:
 - `browser_persistent`: This example demonstrates how to use Ladybug-Wasm in a web browser with a persistent IDBFS filesystem.
 - `nodejs`: This example demonstrates how to use Ladybug-Wasm in Node.js.
 
-The example can be found in [the examples directory](https://github.com/lbugdb/lbug/tree/master/tools/wasm/examples).
+The example can be found in [the examples directory](https://github.com/LadybugDB/ladybug/tree/master/tools/wasm/examples).
 
 ## Understanding the package
 

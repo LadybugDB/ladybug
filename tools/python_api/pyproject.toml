@@ -8,9 +8,9 @@ version = "0.0.1"
 
 [project.urls]
 Homepage = "https://lbugdb.com/"
-Documentation = "https://docs.lbugdb.com/"
+Documentation = "https://docs.ladybugdb.com/"
 Repository = "https://github.com/lbugdb/lbug"
-Changelog = "https://github.com/lbugdb/lbug/releases"
+Changelog = "https://github.com/LadybugDB/ladybug/releases"
 
 [tool.mypy]
 files = ["src_py", "test"]

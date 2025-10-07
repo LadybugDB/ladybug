@@ -8,8 +8,8 @@
 <br>
 
 <p align="center">
-  <a href="https://github.com/lbugdb/lbug/actions">
-    <img src="https://github.com/lbugdb/lbug/actions/workflows/ci-workflow.yml/badge.svg?branch=master" alt="Github Actions Badge"></a>
+  <a href="https://github.com/LadybugDB/ladybug/actions">
+    <img src="https://github.com/LadybugDB/ladybug/actions/workflows/ci-workflow.yml/badge.svg?branch=master" alt="Github Actions Badge"></a>
   <a href="https://discord.gg/VtX2gw9Rug">
     <img src="https://img.shields.io/discord/1196510116388806837?logo=discord" alt="discord" /></a>
   <a href="https://twitter.com/lbugdb">
@@ -17,7 +17,7 @@
 </p>
 
 # Ladybug
-Ladybug is an embedded graph database built for query speed and scalability. Ladybug is optimized for handling complex analytical workloads 
+Ladybug is an embedded graph database built for query speed and scalability. Ladybug is optimized for handling complex analytical workloads
 on very large databases and provides a set of retrieval features, such as a full text search and vector indices. Our core feature set includes:
 
 - Flexible Property Graph Data Model and Cypher query language
@@ -31,8 +31,10 @@ on very large databases and provides a set of retrieval features, such as a full
 - Serializable ACID transactions
 - Wasm (WebAssembly) bindings for fast, secure execution in the browser
 
-Ladybug is being developed by [Kùzu Inc.](https://lbugdb.com/) and 
+Ladybug is being developed by [LadbybugDB Developers](https://github.com/LadybugDB) and
 is available under a permissible license. So try it out and help us make it better! We welcome your feedback and feature requests.
+
+The database was formerly known as [Kuzu](https://github.com/kuzudb/kuzu).
 
 ## Installation
 
@@ -44,18 +46,18 @@ is available under a permissible license. So try it out and help us make it bett
 | Go       | `go get github.com/lbugdb/go-lbug`                                     |
 | Swift    | [lbug-swift](https://github.com/lbugdb/lbug-swift)                     |
 | Java     | [Maven Central](https://central.sonatype.com/artifact/com.lbugdb/lbug) |
-| C/C++    | [precompiled binaries](https://github.com/lbugdb/lbug/releases/latest) |
-| CLI      | [precompiled binaries](https://github.com/lbugdb/lbug/releases/latest) |
+| C/C++    | [precompiled binaries](https://github.com/LadybugDB/ladybug/releases/latest) |
+| CLI      | [precompiled binaries](https://github.com/LadybugDB/ladybug/releases/latest) |
 
-To learn more about installation, see our [Installation](https://docs.lbugdb.com/installation) page.
+To learn more about installation, see our [Installation](https://docs.ladybugdb.com/installation) page.
 
 ## Getting Started
 
-Refer to our [Getting Started](https://docs.lbugdb.com/get-started/) page for your first example.
+Refer to our [Getting Started](https://docs.ladybugdb.com/get-started/) page for your first example.
 
 ## Build from Source
 
-You can build from source using the instructions provided in the [developer guide](https://docs.lbugdb.com/developer-guide).
+You can build from source using the instructions provided in the [developer guide](https://docs.ladybugdb.com/developer-guide).
 
 ## Contributing
 We welcome contributions to Ladybug. If you are interested in contributing to Ladybug, please read our [Contributing Guide](CONTRIBUTING.md).
@@ -63,8 +65,8 @@ We welcome contributions to Ladybug. If you are interested in contributing to La
 ## License
 By contributing to Ladybug, you agree that your contributions will be licensed under the [MIT License](LICENSE).
 
-## Support 
-We provide professional support for using Ladybug, ensuring timely responses and flexible coverage. Please visit [here](https://lbugdb.com/#support) 
+## Support
+We provide professional support for using Ladybug, ensuring timely responses and flexible coverage. Please visit [here](https://lbugdb.com/#support)
 for more information.
 
 ## Contact

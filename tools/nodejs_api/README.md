@@ -60,7 +60,7 @@ const main = async () => {
 
 main().catch(console.error);
 ```
- ✅ The dataset used in this example can be found in the [official Ladybug repository](https://github.com/lbugdb/lbug/tree/master/dataset/demo-db/csv).
+ ✅ The dataset used in this example can be found in the [official Ladybug repository](https://github.com/LadybugDB/ladybug/tree/master/dataset/demo-db/csv).
 
 ---
 
@@ -145,5 +145,5 @@ Refer to the [npm documentation](https://docs.npmjs.com/cli/v9/commands/npm-publ
 ## 🔗 Resources
 
 * [Ladybug GitHub](https://github.com/lbugdb/lbug)
-* [Ladybug Documentation](https://docs.lbugdb.com)
-* [Issue Tracker](https://github.com/lbugdb/lbug/issues)
+* [Ladybug Documentation](https://docs.ladybugdb.com)
+* [Issue Tracker](https://github.com/kuzudb/kuzu/issues)

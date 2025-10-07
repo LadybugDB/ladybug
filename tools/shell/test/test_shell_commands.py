@@ -22,7 +22,7 @@ def test_help(temp_db) -> None:
             "    Note: you can change and see several system configurations, such as num-threads, ",
             "          timeout, and progress_bar using Cypher CALL statements.",
             "          e.g. CALL THREADS=5; or CALL current_setting('threads') return *;",
-            "          See: \x1b]8;;https://docs.lbugdb.com/cypher/configuration\x1b\\https://docs.lbugdb.com/cypher/configuration\x1b]8;;\x1b\\",
+            "          See: \x1b]8;;https://docs.ladybugdb.com/cypher/configuration\x1b\\https://docs.ladybugdb.com/cypher/configuration\x1b]8;;\x1b\\",
         ],
     )
 

@@ -123,7 +123,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         if (!rc) {
             throw IOException(
                 "Could not set lock on file : " + fullPath + "\n" +
-                "See the docs: https://docs.lbugdb.com/concurrency for more information.");
+                "See the docs: https://docs.ladybugdb.com/concurrency for more information.");
         }
     }
     return std::make_unique<LocalFileInfo>(fullPath, handle, this);
@@ -143,7 +143,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         if (rc == -1) {
             throw IOException(
                 "Could not set lock on file : " + fullPath + "\n" +
-                "See the docs: https://docs.lbugdb.com/concurrency for more information.");
+                "See the docs: https://docs.ladybugdb.com/concurrency for more information.");
         }
     }
     return std::make_unique<LocalFileInfo>(fullPath, fd, this);

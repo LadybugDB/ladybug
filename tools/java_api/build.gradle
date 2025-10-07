@@ -56,7 +56,7 @@ publishing {
                 licenses {
                     license {
                         name = 'MIT License'
-                        url = 'https://github.com/lbugdb/lbug/blob/master/LICENSE'
+                        url = 'https://github.com/LadybugDB/ladybug/blob/master/LICENSE'
                     }
                 }
                 developers {
