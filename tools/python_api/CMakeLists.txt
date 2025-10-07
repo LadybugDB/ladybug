@@ -1,14 +1,14 @@
 include(FetchContent)
-project(_kuzu)
+project(_lbug)
 
 set(CMAKE_CXX_STANDARD 20)
 
 file(GLOB SOURCE_PY
         "src_py/*")
 
-pybind11_add_module(_kuzu
+pybind11_add_module(_lbug
         SHARED
-        src_cpp/kuzu_binding.cpp
+        src_cpp/lbug_binding.cpp
         src_cpp/cached_import/py_cached_item.cpp
         src_cpp/cached_import/py_cached_import.cpp
         src_cpp/py_connection.cpp
@@ -27,21 +27,21 @@ pybind11_add_module(_kuzu
         src_cpp/numpy/numpy_type.cpp
         src_cpp/numpy/numpy_scan.cpp)
 
-set_target_properties(_kuzu
+set_target_properties(_lbug
         PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/lbug"
         RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/lbug"
         ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/lbug")
 
-target_link_libraries(_kuzu
+target_link_libraries(_lbug
         PRIVATE
         lbug)
 
 target_include_directories(
-        _kuzu
+        _lbug
         PUBLIC
         src_cpp/include)
 
-get_target_property(PYTHON_DEST _kuzu LIBRARY_OUTPUT_DIRECTORY)
+get_target_property(PYTHON_DEST _lbug LIBRARY_OUTPUT_DIRECTORY)
 
 file(COPY ${SOURCE_PY} DESTINATION ${PYTHON_DEST})
