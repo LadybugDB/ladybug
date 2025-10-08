@@ -221,10 +221,10 @@ bool Int128_t::tryCastTo(double value, int128_t& result);
 template<>
 bool Int128_t::tryCastTo(long double value, int128_t& result);
 
+} // namespace common
+} // namespace lbug
+
 template<>
 struct std::hash<lbug::common::int128_t> {
     std::size_t operator()(const lbug::common::int128_t& v) const noexcept;
 };
-
-} // namespace common
-} // namespace lbug

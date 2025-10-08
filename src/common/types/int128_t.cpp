@@ -768,12 +768,11 @@ int128_t::operator uint128_t() const {
     return result;
 }
 
+} // namespace lbug::common
+
 std::size_t std::hash<lbug::common::int128_t>::operator()(
     const lbug::common::int128_t& v) const noexcept {
     lbug::common::hash_t hash = 0;
     lbug::function::Hash::operation(v, hash);
     return hash;
 }
-
-} // namespace lbug::common
-
