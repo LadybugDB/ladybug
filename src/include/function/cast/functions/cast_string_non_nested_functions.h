@@ -186,7 +186,7 @@ struct IntegerCastOperation<uint128_t> {
 
 // cast string to bool
 bool tryCastToBool(const char* input, uint64_t len, bool& result);
-void KUZU_API castStringToBool(const char* input, uint64_t len, bool& result);
+void LBUG_API castStringToBool(const char* input, uint64_t len, bool& result);
 
 // cast to numerical values
 // TODO(Kebing): support exponent + decimal

@@ -7,12 +7,12 @@
 #include "common/exception/overflow.h"
 #include "common/types/types.h"
 
-namespace kuzu {
+namespace lbug {
 namespace common {
 
 struct int128_t;
 
-struct KUZU_API uint128_t {
+struct LBUG_API uint128_t {
     uint64_t low;
     uint64_t high;
 
@@ -59,25 +59,25 @@ struct KUZU_API uint128_t {
 };
 
 // arithmetic operators
-KUZU_API uint128_t operator+(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API uint128_t operator-(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API uint128_t operator*(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API uint128_t operator/(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API uint128_t operator%(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API uint128_t operator^(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API uint128_t operator&(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API uint128_t operator~(const uint128_t& val);
-KUZU_API uint128_t operator|(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API uint128_t operator<<(const uint128_t& lhs, int amount);
-KUZU_API uint128_t operator>>(const uint128_t& lhs, int amount);
+LBUG_API uint128_t operator+(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API uint128_t operator-(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API uint128_t operator*(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API uint128_t operator/(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API uint128_t operator%(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API uint128_t operator^(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API uint128_t operator&(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API uint128_t operator~(const uint128_t& val);
+LBUG_API uint128_t operator|(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API uint128_t operator<<(const uint128_t& lhs, int amount);
+LBUG_API uint128_t operator>>(const uint128_t& lhs, int amount);
 
 // comparison operators
-KUZU_API bool operator==(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API bool operator!=(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API bool operator>(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API bool operator>=(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API bool operator<(const uint128_t& lhs, const uint128_t& rhs);
-KUZU_API bool operator<=(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API bool operator==(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API bool operator!=(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API bool operator>(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API bool operator>=(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API bool operator<(const uint128_t& lhs, const uint128_t& rhs);
+LBUG_API bool operator<=(const uint128_t& lhs, const uint128_t& rhs);
 
 class UInt128_t {
 public:
@@ -213,9 +213,9 @@ template<>
 bool UInt128_t::tryCastTo(long double value, uint128_t& result);
 
 } // namespace common
-} // namespace kuzu
+} // namespace lbug
 
 template<>
-struct std::hash<kuzu::common::uint128_t> {
-    std::size_t operator()(const kuzu::common::uint128_t& v) const noexcept;
+struct std::hash<lbug::common::uint128_t> {
+    std::size_t operator()(const lbug::common::uint128_t& v) const noexcept;
 };

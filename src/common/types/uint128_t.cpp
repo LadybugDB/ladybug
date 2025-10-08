@@ -9,7 +9,7 @@
 #include "function/hash/hash_functions.h"
 #include <bit>
 
-namespace kuzu::common {
+namespace lbug::common {
 
 static uint8_t uint128BitsAmount(uint128_t input) {
     if (input.high) {
@@ -663,11 +663,11 @@ uint128_t::operator int128_t() const {
     return result;
 }
 
-} // namespace kuzu::common
+} // namespace lbug::common
 
-std::size_t std::hash<kuzu::common::uint128_t>::operator()(
-    const kuzu::common::uint128_t& v) const noexcept {
-    kuzu::common::hash_t hash = 0;
-    kuzu::function::Hash::operation(v, hash);
+std::size_t std::hash<lbug::common::uint128_t>::operator()(
+    const lbug::common::uint128_t& v) const noexcept {
+    lbug::common::hash_t hash = 0;
+    lbug::function::Hash::operation(v, hash);
     return hash;
 }

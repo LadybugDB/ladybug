@@ -132,7 +132,7 @@ py::object PyQueryResult::convertValueToPyObject(const Value& value) {
     }
     case LogicalTypeID::INT128: {
         lbug::common::int128_t result = value.getValue<lbug::common::int128_t>();
-        std::string int128_string = lbug::common::Int128_t::ToString(result);
+        std::string int128_string = lbug::common::Int128_t::toString(result);
 
         auto Decimal = importCache->decimal.Decimal();
         py::object largeInt = Decimal(int128_string);

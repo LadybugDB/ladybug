@@ -135,7 +135,7 @@ public:
     /**
      * @param val_ the uint128_t value to set.
      */
-    KUZU_API explicit Value(uint128_t val_);
+    LBUG_API explicit Value(uint128_t val_);
     /**
      * @param val_ the string value to set.
      */
@@ -487,7 +487,7 @@ LBUG_API inline internalID_t Value::getValue() const {
  * @return uint128 value.
  */
 template<>
-KUZU_API inline uint128_t Value::getValue() const {
+LBUG_API inline uint128_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT128);
     return val.uint128Val;
 }
@@ -687,7 +687,7 @@ LBUG_API inline interval_t& Value::getValueReference() {
  * @return the reference to the uint128 value.
  */
 template<>
-KUZU_API inline uint128_t& Value::getValueReference() {
+LBUG_API inline uint128_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT128);
     return val.uint128Val;
 }
@@ -846,7 +846,7 @@ LBUG_API inline Value Value::createValue(interval_t val) {
  * @return a Value with UINT128 type and val value.
  */
 template<>
-KUZU_API inline Value Value::createValue(uint128_t val) {
+LBUG_API inline Value Value::createValue(uint128_t val) {
     return Value(val);
 }
 
