@@ -13,6 +13,7 @@ env:
 jobs:
   build-mac-java-arm:
     runs-on: self-hosted-mac-arm64
+    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +38,7 @@ jobs:
 
   build-mac-java-x86:
     runs-on: self-hosted-mac-x64
+    if: false
     steps:
       - uses: actions/checkout@v4
 

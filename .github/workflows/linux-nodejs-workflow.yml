@@ -12,6 +12,7 @@ on:
 jobs:
   build-linux-nodejs-x86_64:
     runs-on: lbug-self-hosted-linux-building-x86_64
+    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -48,6 +49,7 @@ jobs:
 
   build-linux-nodejs-aarch64:
     runs-on: lbug-self-hosted-linux-building-aarch64
+    if: false
     steps:
       - uses: actions/checkout@v4
 

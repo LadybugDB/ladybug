@@ -19,6 +19,7 @@ env:
 jobs:
   build-precompiled-bin-x86_64:
     runs-on: lbug-self-hosted-linux-building-x86_64
+    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -57,7 +58,7 @@ jobs:
           path: lbug_cli-linux-x86_64.tar.gz
 
   build-precompiled-bin-aarch64:
-    if: ${{ inputs.x86_64Only != true }}
+    if: false
     runs-on: lbug-self-hosted-linux-building-aarch64
     steps:
       - uses: actions/checkout@v4
@@ -97,7 +98,7 @@ jobs:
           path: lbug_cli-linux-aarch64.tar.gz
 
   build-precompiled-bin-android-armv8a:
-    if: ${{ inputs.x86_64Only != true }}
+    if: false
     runs-on: lbug-self-hosted-testing
     steps:
       - uses: actions/checkout@v4

@@ -21,6 +21,7 @@ jobs:
   benchmark:
     name: business-intelligence-benchmark
     runs-on: lbug-self-hosted-benchmarking-xl
+    if: false
     env:
       NUM_THREADS: 128
       GEN: Ninja

@@ -31,6 +31,7 @@ jobs:
       NUM_THREADS: 30
       GEN: Ninja
     runs-on: lbug-self-hosted-benchmarking
+    if: false
     steps:
       - name: Set env for scheduled run
         if: ${{ github.event_name == 'schedule' }}

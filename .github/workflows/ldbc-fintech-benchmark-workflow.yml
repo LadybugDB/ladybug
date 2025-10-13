@@ -19,6 +19,7 @@ jobs:
   benchmark:
     name: ldbc-fintech-benchmark
     runs-on: lbug-self-hosted-benchmarking-xl
+    if: false
     env:
       NUM_THREADS: 128
       GEN: Ninja

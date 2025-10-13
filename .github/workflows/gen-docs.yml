@@ -5,6 +5,7 @@ on: workflow_dispatch
 jobs:
   build-python-package:
     runs-on: lbug-self-hosted-linux-building-x86_64
+    if: false
     env:
       PLATFORM: manylinux_2_28_x86_64
     steps:

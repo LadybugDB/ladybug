@@ -13,6 +13,7 @@ jobs:
       NUM_THREADS: 128
       GEN: Ninja
     runs-on: lbug-self-hosted-benchmarking-xl
+    if: false
     steps:
       - uses: actions/checkout@v4
 

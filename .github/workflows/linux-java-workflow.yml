@@ -13,6 +13,7 @@ env:
 jobs:
   build-linux-java-x86_64:
     runs-on: lbug-self-hosted-linux-building-x86_64
+    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -34,6 +35,7 @@ jobs:
 
   build-linux-java-aarch64:
     runs-on: lbug-self-hosted-linux-building-aarch64
+    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -54,6 +56,7 @@ jobs:
 
   build-linux-java-armv8a:
     runs-on: lbug-self-hosted-testing
+    if: false
     steps:
       - uses: actions/checkout@v4
 

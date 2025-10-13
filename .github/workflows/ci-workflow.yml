@@ -70,6 +70,7 @@ jobs:
     name: generate binary dataset
     needs: [ sanity-checks, python-lint-check ]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       NUM_THREADS: 32
       GEN: Ninja
@@ -137,6 +138,7 @@ jobs:
     name: gcc build & test
     needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -230,6 +232,7 @@ jobs:
     name: gcc build & test in-mem only with various vector size
     needs: [ gcc-build-test ]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -290,6 +293,7 @@ jobs:
   code-coverage:
     name: code coverage
     runs-on: lbug-self-hosted-testing
+    if: false
     needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
     env:
       NUM_THREADS: 32
@@ -373,6 +377,7 @@ jobs:
     name: webassembly build & test
     needs: [ sanity-checks, generate-binary-datasets ]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       WERROR: 0
       TEST_JOBS: 8
@@ -427,6 +432,7 @@ jobs:
   rust-build-test:
     name: rust build & test
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       # CARGO_BUILD_JOBS is set using this in the Makefile
       NUM_THREADS: 32
@@ -453,6 +459,7 @@ jobs:
     name: clang build & test with tsan
     needs: [ clang-build-test, generate-binary-datasets ]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -483,6 +490,7 @@ jobs:
     name: gcc build & test with asan
     needs: [ gcc-build-test, generate-binary-datasets ]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -522,6 +530,7 @@ jobs:
     name: clang build & test
     needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -603,6 +612,7 @@ jobs:
     name: clang build & test with page_size_log2=${{ matrix.page_size_log2 }}
     needs: [ clang-build-test ]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -640,6 +650,7 @@ jobs:
     name: clang build & test with node_group_size_log2=${{ matrix.node_group_size_log2 }}
     needs: [ clang-build-test ]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -685,6 +696,7 @@ jobs:
     name: clang build & test with max_segment_size_log2=${{ matrix.max_segment_size_log2 }}
     needs: [ clang-build-test ]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -718,6 +730,7 @@ jobs:
     name: msvc build & test
     needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
     runs-on: self-hosted-windows
+    if: false
     env:
       # Shorten build path as much as possible
       CARGO_TARGET_DIR: ${{ github.workspace }}/rs
@@ -962,6 +975,7 @@ jobs:
     name: clang tidy & clangd diagnostics check
     needs: [ sanity-checks ]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       GEN: Ninja
       NUM_THREADS: 32
@@ -988,6 +1002,7 @@ jobs:
     name: apple clang build & test
     needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
     runs-on: [ self-hosted, macOS ]
+    if: false
     env:
       TEST_JOBS: 16
       GEN: Ninja
@@ -1131,6 +1146,7 @@ jobs:
     name: linux extension test
     needs: [ gcc-build-test, clang-build-test ]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -1236,6 +1252,7 @@ jobs:
     name: macos extension test
     needs: [ macos-build-test ]
     runs-on: [ self-hosted, macOS ]
+    if: false
     env:
       TEST_JOBS: 16
       GEN: Ninja
@@ -1325,6 +1342,7 @@ jobs:
     name: windows extension test
     needs: [ msvc-build-test ]
     runs-on: self-hosted-windows
+    if: false
     env:
       # Shorten build path as much as possible
       CARGO_TARGET_DIR: ${{ github.workspace }}/rs
