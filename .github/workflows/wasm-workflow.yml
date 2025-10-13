@@ -12,6 +12,7 @@ on:
 jobs:
   build-wasm:
     runs-on: lbug-self-hosted-testing
+    if: false
     steps:
       - uses: actions/checkout@v4
 

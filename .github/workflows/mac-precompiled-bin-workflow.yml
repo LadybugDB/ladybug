@@ -14,6 +14,7 @@ env:
 jobs:
   build-precompiled-bin-universal:
     runs-on: self-hosted-mac-x64
+    if: false
     steps:
       - uses: actions/checkout@v4
       

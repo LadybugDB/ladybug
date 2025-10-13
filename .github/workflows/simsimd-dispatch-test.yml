@@ -23,6 +23,7 @@ jobs:
     name: simsimd-dispatch-test
     needs: [build-precompiled-bin-linux, build-extensions-linux]
     runs-on: lbug-self-hosted-testing
+    if: false
     env:
       NUM_THREADS: 32
       GEN: Ninja

@@ -12,6 +12,7 @@ on:
 jobs:
   build-precompiled-bin:
     runs-on: self-hosted-windows
+    if: false
     steps:
       - uses: actions/checkout@v4
 

@@ -21,6 +21,7 @@ jobs:
   benchmark:
     name: interactive-v1-benchmark
     runs-on: lbug-self-hosted-benchmarking-xl
+    if: false
     env:
       SCALE_FACTOR: ${{ github.event.inputs.scale_factor }}
       NUM_THREADS: 128

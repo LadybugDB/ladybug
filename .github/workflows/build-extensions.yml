@@ -13,6 +13,7 @@ on:
 jobs:
   build-linux-extensions-x86_64:
     runs-on: lbug-self-hosted-linux-building-x86_64
+    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +30,7 @@ jobs:
           path: extension-artifacts
 
   build-linux-extensions-aarch64:
-    if: ${{ inputs.x86_64LinuxOnly != true }}
+    if: ${{ inputs.x86_64LinuxOnly != true && false }}
     runs-on: lbug-self-hosted-linux-building-aarch64
 
     steps:
@@ -48,7 +49,7 @@ jobs:
           path: extension-artifacts
 
   build-mac-extensions-arm64:
-    if: ${{ inputs.x86_64LinuxOnly != true }}
+    if: ${{ inputs.x86_64LinuxOnly != true && false }}
     runs-on: self-hosted-mac-arm64
     steps:
       - uses: actions/checkout@v4
@@ -69,7 +70,7 @@ jobs:
           path: extension-artifacts
 
   build-mac-extensions-x86_64:
-    if: ${{ inputs.x86_64LinuxOnly != true }}
+    if: ${{ inputs.x86_64LinuxOnly != true && false }}
     runs-on: self-hosted-mac-x64
     steps:
       - uses: actions/checkout@v4
@@ -90,7 +91,7 @@ jobs:
           path: extension-artifacts
 
   build-windows-extensions-x86_64:
-    if: ${{ inputs.x86_64LinuxOnly != true }}
+    if: ${{ inputs.x86_64LinuxOnly != true && false }}
     runs-on: self-hosted-windows
     env:
       NUM_THREADS: 18

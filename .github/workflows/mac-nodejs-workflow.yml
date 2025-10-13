@@ -14,6 +14,7 @@ env:
 jobs:
   build-mac-nodejs-arm64:
     runs-on: self-hosted-mac-arm64
+    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -56,6 +57,7 @@ jobs:
 
   build-mac-nodejs-x86_64:
     runs-on: self-hosted-mac-x64
+    if: false
     steps:
       - uses: actions/checkout@v4
 

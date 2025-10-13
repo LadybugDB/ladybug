@@ -12,6 +12,7 @@ on:
 jobs:
   build-windows-nodejs:
     runs-on: self-hosted-windows
+    if: false
     steps:
       - uses: actions/checkout@v4
 
