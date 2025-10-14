@@ -1,7 +1,7 @@
 <div align="center">
   <picture>
-    <source srcset="https://lbugdb.com/img/lbug-logo-dark.png" media="(prefers-color-scheme: dark)">
-    <img src="https://lbugdb.com/img/lbug-logo.png" height="100" alt="Ladybug Logo">
+    <!-- <source srcset="https://ladybugdb.com/img/lbug-logo-dark.png" media="(prefers-color-scheme: dark)"> -->
+    <img src="https://ladybugdb.com/logo.png" height="100" alt="Ladybug Logo">
   </picture>
 </div>
 
