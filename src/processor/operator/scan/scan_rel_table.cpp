@@ -2,7 +2,9 @@
 
 #include "binder/expression/expression_util.h"
 #include "processor/execution_context.h"
+#include "storage/buffer_manager/memory_manager.h"
 #include "storage/local_storage/local_rel_table.h"
+#include "storage/table/parquet_rel_table.h"
 
 using namespace lbug::common;
 using namespace lbug::storage;
@@ -66,8 +68,16 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
     auto clientContext = context->clientContext;
     auto boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
-    scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
-        boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+    // Check if this is a ParquetRelTable and create appropriate scan state
+    auto* parquetTable = dynamic_cast<storage::ParquetRelTable*>(tableInfo.table);
+    if (parquetTable) {
+        scanState =
+            std::make_unique<storage::ParquetRelTableScanState>(*MemoryManager::Get(*clientContext),
+                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+    } else {
+        scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
+            boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+    }
     tableInfo.initScanState(*scanState, outVectors, clientContext);
 }
 

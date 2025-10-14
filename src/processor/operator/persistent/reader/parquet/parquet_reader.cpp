@@ -340,6 +340,10 @@ std::unique_ptr<ColumnReader> ParquetReader::createReader() {
         throw CopyException{"Root element of Parquet file must be a struct"};
     }
     // LCOV_EXCL_STOP
+    // Clear existing column metadata before populating (in case createReader is called multiple
+    // times)
+    columnNames.clear();
+    columnTypes.clear();
     for (auto& field : StructType::getFields(rootReader->getDataType())) {
         columnNames.push_back(field.getName());
         columnTypes.push_back(field.getType().copy());

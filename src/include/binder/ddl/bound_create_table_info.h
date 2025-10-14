@@ -71,14 +71,15 @@ struct LBUG_API BoundExtraCreateTableInfo : BoundExtraCreateCatalogEntryInfo {
 
 struct BoundExtraCreateNodeTableInfo final : BoundExtraCreateTableInfo {
     std::string primaryKeyName;
+    std::string storage;
 
     BoundExtraCreateNodeTableInfo(std::string primaryKeyName,
-        std::vector<PropertyDefinition> definitions)
+        std::vector<PropertyDefinition> definitions, std::string storage = "")
         : BoundExtraCreateTableInfo{std::move(definitions)},
-          primaryKeyName{std::move(primaryKeyName)} {}
+          primaryKeyName{std::move(primaryKeyName)}, storage{std::move(storage)} {}
     BoundExtraCreateNodeTableInfo(const BoundExtraCreateNodeTableInfo& other)
         : BoundExtraCreateTableInfo{copyVector(other.propertyDefinitions)},
-          primaryKeyName{other.primaryKeyName} {}
+          primaryKeyName{other.primaryKeyName}, storage{other.storage} {}
 
     std::unique_ptr<BoundExtraCreateCatalogEntryInfo> copy() const override {
         return std::make_unique<BoundExtraCreateNodeTableInfo>(*this);
@@ -90,18 +91,21 @@ struct BoundExtraCreateRelTableGroupInfo final : BoundExtraCreateTableInfo {
     common::RelMultiplicity dstMultiplicity;
     common::ExtendDirection storageDirection;
     std::vector<catalog::NodeTableIDPair> nodePairs;
+    std::string storage;
 
     explicit BoundExtraCreateRelTableGroupInfo(std::vector<PropertyDefinition> definitions,
         common::RelMultiplicity srcMultiplicity, common::RelMultiplicity dstMultiplicity,
-        common::ExtendDirection storageDirection, std::vector<catalog::NodeTableIDPair> nodePairs)
+        common::ExtendDirection storageDirection, std::vector<catalog::NodeTableIDPair> nodePairs,
+        std::string storage = "")
         : BoundExtraCreateTableInfo{std::move(definitions)}, srcMultiplicity{srcMultiplicity},
           dstMultiplicity{dstMultiplicity}, storageDirection{storageDirection},
-          nodePairs{std::move(nodePairs)} {}
+          nodePairs{std::move(nodePairs)}, storage{std::move(storage)} {}
 
     BoundExtraCreateRelTableGroupInfo(const BoundExtraCreateRelTableGroupInfo& other)
         : BoundExtraCreateTableInfo{copyVector(other.propertyDefinitions)},
           srcMultiplicity{other.srcMultiplicity}, dstMultiplicity{other.dstMultiplicity},
-          storageDirection{other.storageDirection}, nodePairs{other.nodePairs} {}
+          storageDirection{other.storageDirection}, nodePairs{other.nodePairs},
+          storage{other.storage} {}
 
     std::unique_ptr<BoundExtraCreateCatalogEntryInfo> copy() const override {
         return std::make_unique<BoundExtraCreateRelTableGroupInfo>(*this);

@@ -687,6 +687,8 @@ public:
     antlr4::tree::TerminalNode *AS();
     OC_QueryContext *oC_Query();
     KU_IfNotExistsContext *kU_IfNotExists();
+    antlr4::tree::TerminalNode *WITH();
+    KU_OptionsContext *kU_Options();
     KU_CreateNodeConstraintContext *kU_CreateNodeConstraint();
 
    

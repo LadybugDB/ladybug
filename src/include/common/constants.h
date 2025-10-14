@@ -83,6 +83,7 @@ struct StorageConstants {
 
 struct TableOptionConstants {
     static constexpr char REL_STORAGE_DIRECTION_OPTION[] = "STORAGE_DIRECTION";
+    static constexpr char REL_STORAGE_OPTION[] = "STORAGE";
 };
 
 // Hash Index Configurations

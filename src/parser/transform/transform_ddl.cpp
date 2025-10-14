@@ -81,7 +81,12 @@ std::unique_ptr<Statement> Transformer::transformCreateNodeTable(
     } else {
         createTableInfo.propertyDefinitions =
             transformPropertyDefinitions(*ctx.kU_PropertyDefinitions());
-        createTableInfo.extraInfo = std::make_unique<ExtraCreateNodeTableInfo>(getPKName(ctx));
+        options_t options;
+        if (ctx.kU_Options()) {
+            options = transformOptions(*ctx.kU_Options());
+        }
+        createTableInfo.extraInfo =
+            std::make_unique<ExtraCreateNodeTableInfo>(getPKName(ctx), std::move(options));
         return std::make_unique<CreateTable>(std::move(createTableInfo));
     }
 }

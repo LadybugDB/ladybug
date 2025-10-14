@@ -34,10 +34,10 @@ public:
     RelGroupCatalogEntry() = default;
     RelGroupCatalogEntry(std::string tableName, common::RelMultiplicity srcMultiplicity,
         common::RelMultiplicity dstMultiplicity, common::ExtendDirection storageDirection,
-        std::vector<RelTableCatalogInfo> relTableInfos)
+        std::vector<RelTableCatalogInfo> relTableInfos, std::string storage = "")
         : TableCatalogEntry{type_, std::move(tableName)}, srcMultiplicity{srcMultiplicity},
           dstMultiplicity{dstMultiplicity}, storageDirection{storageDirection},
-          relTableInfos{std::move(relTableInfos)} {
+          relTableInfos{std::move(relTableInfos)}, storage{std::move(storage)} {
         propertyCollection =
             PropertyDefinitionCollection{1}; // Skip NBR_NODE_ID column as the first one.
     }
@@ -53,6 +53,7 @@ public:
     }
 
     common::ExtendDirection getStorageDirection() const { return storageDirection; }
+    const std::string& getStorage() const { return storage; }
 
     common::idx_t getNumRelTables() const { return relTableInfos.size(); }
     const std::vector<RelTableCatalogInfo>& getRelEntryInfos() const { return relTableInfos; }
@@ -97,6 +98,7 @@ private:
     // TODO(Guodong): Avoid using extend direction for storage direction
     common::ExtendDirection storageDirection = common::ExtendDirection::BOTH;
     std::vector<RelTableCatalogInfo> relTableInfos;
+    std::string storage;
 };
 
 } // namespace catalog

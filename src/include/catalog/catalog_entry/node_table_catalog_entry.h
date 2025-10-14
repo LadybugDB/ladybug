@@ -15,9 +15,9 @@ class LBUG_API NodeTableCatalogEntry final : public TableCatalogEntry {
 
 public:
     NodeTableCatalogEntry() = default;
-    NodeTableCatalogEntry(std::string name, std::string primaryKeyName)
-        : TableCatalogEntry{entryType_, std::move(name)},
-          primaryKeyName{std::move(primaryKeyName)} {}
+    NodeTableCatalogEntry(std::string name, std::string primaryKeyName, std::string storage = "")
+        : TableCatalogEntry{entryType_, std::move(name)}, primaryKeyName{std::move(primaryKeyName)},
+          storage{std::move(storage)} {}
 
     bool isParent(common::table_id_t /*tableID*/) override { return false; }
     common::TableType getTableType() const override { return common::TableType::NODE; }
@@ -29,6 +29,7 @@ public:
     const binder::PropertyDefinition& getPrimaryKeyDefinition() const {
         return getProperty(primaryKeyName);
     }
+    const std::string& getStorage() const { return storage; }
 
     void renameProperty(const std::string& propertyName, const std::string& newName) override;
 
@@ -44,6 +45,7 @@ private:
 
 private:
     std::string primaryKeyName;
+    std::string storage;
 };
 
 } // namespace catalog

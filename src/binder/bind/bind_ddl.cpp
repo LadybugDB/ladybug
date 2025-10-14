@@ -136,16 +136,6 @@ BoundCreateTableInfo Binder::bindCreateTableInfo(const CreateTableInfo* info) {
     }
 }
 
-BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info) {
-    auto propertyDefinitions = bindPropertyDefinitions(info->propertyDefinitions, info->tableName);
-    auto& extraInfo = info->extraInfo->constCast<ExtraCreateNodeTableInfo>();
-    validatePrimaryKey(extraInfo.pKName, propertyDefinitions);
-    auto boundExtraInfo = std::make_unique<BoundExtraCreateNodeTableInfo>(extraInfo.pKName,
-        std::move(propertyDefinitions));
-    return BoundCreateTableInfo(CatalogEntryType::NODE_TABLE_ENTRY, info->tableName,
-        info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());
-}
-
 void Binder::validateNodeTableType(const TableCatalogEntry* entry) {
     if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
         throw BinderException(stringFormat("{} is not of type NODE.", entry->getName()));
@@ -168,12 +158,31 @@ void Binder::validateColumnExistence(const TableCatalogEntry* entry,
     }
 }
 
+static std::string getStorage(const case_insensitive_map_t<Value>& options) {
+    if (options.contains(TableOptionConstants::REL_STORAGE_OPTION)) {
+        return options.at(TableOptionConstants::REL_STORAGE_OPTION).toString();
+    }
+    return "";
+}
+
 static ExtendDirection getStorageDirection(const case_insensitive_map_t<Value>& options) {
     if (options.contains(TableOptionConstants::REL_STORAGE_DIRECTION_OPTION)) {
         return ExtendDirectionUtil::fromString(
             options.at(TableOptionConstants::REL_STORAGE_DIRECTION_OPTION).toString());
     }
     return DEFAULT_EXTEND_DIRECTION;
+}
+
+BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info) {
+    auto propertyDefinitions = bindPropertyDefinitions(info->propertyDefinitions, info->tableName);
+    auto& extraInfo = info->extraInfo->constCast<ExtraCreateNodeTableInfo>();
+    validatePrimaryKey(extraInfo.pKName, propertyDefinitions);
+    auto boundOptions = bindParsingOptions(extraInfo.options);
+    auto storage = getStorage(boundOptions);
+    auto boundExtraInfo = std::make_unique<BoundExtraCreateNodeTableInfo>(extraInfo.pKName,
+        std::move(propertyDefinitions), std::move(storage));
+    return BoundCreateTableInfo(CatalogEntryType::NODE_TABLE_ENTRY, info->tableName,
+        info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());
 }
 
 std::vector<PropertyDefinition> Binder::bindRelPropertyDefinitions(const CreateTableInfo& info) {
@@ -193,6 +202,7 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     auto dstMultiplicity = RelMultiplicityUtils::getBwd(extraInfo.relMultiplicity);
     auto boundOptions = bindParsingOptions(extraInfo.options);
     auto storageDirection = getStorageDirection(boundOptions);
+    auto storage = getStorage(boundOptions);
     // Bind from to pairs
     node_table_id_pair_set_t nodePairsSet;
     std::vector<NodeTableIDPair> nodePairs;
@@ -209,9 +219,9 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
         nodePairsSet.insert(pair);
         nodePairs.emplace_back(pair);
     }
-    auto boundExtraInfo =
-        std::make_unique<BoundExtraCreateRelTableGroupInfo>(std::move(propertyDefinitions),
-            srcMultiplicity, dstMultiplicity, storageDirection, std::move(nodePairs));
+    auto boundExtraInfo = std::make_unique<BoundExtraCreateRelTableGroupInfo>(
+        std::move(propertyDefinitions), srcMultiplicity, dstMultiplicity, storageDirection,
+        std::move(nodePairs), std::move(storage));
     return BoundCreateTableInfo(CatalogEntryType::REL_GROUP_ENTRY, info->tableName,
         info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());
 }

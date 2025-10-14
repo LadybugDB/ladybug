@@ -130,6 +130,8 @@ public:
         return getMinUncommittedNodeOffset(tableID) + localRowIdx;
     }
 
+    main::ClientContext* getClientContext() const { return clientContext; }
+
     void pushCreateDropCatalogEntry(catalog::CatalogSet& catalogSet,
         catalog::CatalogEntry& catalogEntry, bool isInternal, bool skipLoggingToWAL = false);
     void pushAlterCatalogEntry(catalog::CatalogSet& catalogSet, catalog::CatalogEntry& catalogEntry,

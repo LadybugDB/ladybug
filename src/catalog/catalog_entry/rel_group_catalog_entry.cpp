@@ -95,6 +95,8 @@ void RelGroupCatalogEntry::serialize(Serializer& serializer) const {
     serializer.serializeValue(dstMultiplicity);
     serializer.writeDebuggingInfo("storageDirection");
     serializer.serializeValue(storageDirection);
+    serializer.writeDebuggingInfo("storage");
+    serializer.serializeValue(storage);
     serializer.writeDebuggingInfo("relTableInfos");
     serializer.serializeVector(relTableInfos);
 }
@@ -105,6 +107,7 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     auto srcMultiplicity = RelMultiplicity::MANY;
     auto dstMultiplicity = RelMultiplicity::MANY;
     auto storageDirection = ExtendDirection::BOTH;
+    std::string storage;
     std::vector<RelTableCatalogInfo> relTableInfos;
     deserializer.validateDebuggingInfo(debuggingInfo, "srcMultiplicity");
     deserializer.deserializeValue(srcMultiplicity);
@@ -112,12 +115,15 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     deserializer.deserializeValue(dstMultiplicity);
     deserializer.validateDebuggingInfo(debuggingInfo, "storageDirection");
     deserializer.deserializeValue(storageDirection);
+    deserializer.validateDebuggingInfo(debuggingInfo, "storage");
+    deserializer.deserializeValue(storage);
     deserializer.validateDebuggingInfo(debuggingInfo, "relTableInfos");
     deserializer.deserializeVector(relTableInfos);
     auto relGroupEntry = std::make_unique<RelGroupCatalogEntry>();
     relGroupEntry->srcMultiplicity = srcMultiplicity;
     relGroupEntry->dstMultiplicity = dstMultiplicity;
     relGroupEntry->storageDirection = storageDirection;
+    relGroupEntry->storage = storage;
     relGroupEntry->relTableInfos = relTableInfos;
     return relGroupEntry;
 }
@@ -167,6 +173,7 @@ std::unique_ptr<TableCatalogEntry> RelGroupCatalogEntry::copy() const {
     other->srcMultiplicity = srcMultiplicity;
     other->dstMultiplicity = dstMultiplicity;
     other->storageDirection = storageDirection;
+    other->storage = storage;
     other->relTableInfos = relTableInfos;
     other->copyFrom(*this);
     return other;
