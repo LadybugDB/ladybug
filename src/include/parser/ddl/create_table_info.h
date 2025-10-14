@@ -36,8 +36,10 @@ struct CreateTableInfo {
 
 struct ExtraCreateNodeTableInfo final : ExtraCreateTableInfo {
     std::string pKName;
+    options_t options;
 
-    explicit ExtraCreateNodeTableInfo(std::string pKName) : pKName{std::move(pKName)} {}
+    explicit ExtraCreateNodeTableInfo(std::string pKName, options_t options = {})
+        : pKName{std::move(pKName)}, options{std::move(options)} {}
 };
 
 struct ExtraCreateRelTableGroupInfo final : ExtraCreateTableInfo {

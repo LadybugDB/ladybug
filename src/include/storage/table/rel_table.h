@@ -48,7 +48,7 @@ struct RelTableScanState : TableScanState {
         nodeGroupScanState = std::make_unique<CSRNodeGroupScanState>();
     }
 
-    void setToTable(const transaction::Transaction* transaction, Table* table_,
+    virtual void setToTable(const transaction::Transaction* transaction, Table* table_,
         std::vector<common::column_id_t> columnIDs_,
         std::vector<ColumnPredicateSet> columnPredicateSets_,
         common::RelDataDirection direction_) override;
@@ -138,7 +138,7 @@ struct LBUG_API RelTableDeleteState final : TableDeleteState {
           relIDVector{relIDVector}, detachDeleteDirection{detachDeleteDirection} {}
 };
 
-class LBUG_API RelTable final : public Table {
+class LBUG_API RelTable : public Table {
 public:
     using rel_multiplicity_constraint_throw_func_t =
         std::function<void(const std::string&, common::offset_t, common::RelDataDirection)>;

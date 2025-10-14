@@ -13,6 +13,8 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/checkpointer.h"
 #include "storage/table/node_table.h"
+#include "storage/table/parquet_node_table.h"
+#include "storage/table/parquet_rel_table.h"
 #include "storage/table/rel_table.h"
 #include "storage/wal/wal_replayer.h"
 #include "transaction/transaction.h"
@@ -77,15 +79,29 @@ void StorageManager::recover(main::ClientContext& clientContext, bool throwOnWal
 }
 
 void StorageManager::createNodeTable(NodeTableCatalogEntry* entry) {
-    tables[entry->getTableID()] = std::make_unique<NodeTable>(this, entry, &memoryManager);
+    if (!entry->getStorage().empty()) {
+        // Create parquet-backed node table
+        tables[entry->getTableID()] =
+            std::make_unique<ParquetNodeTable>(this, entry, &memoryManager);
+    } else {
+        // Create regular node table
+        tables[entry->getTableID()] = std::make_unique<NodeTable>(this, entry, &memoryManager);
+    }
 }
 
 // TODO(Guodong): This API is added since storageManager doesn't provide an API to add a single
 // rel table. We may have to refactor the existing StorageManager::createTable(TableCatalogEntry*
 // entry).
 void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCatalogInfo& info) {
-    tables[info.oid] = std::make_unique<RelTable>(entry, info.nodePair.srcTableID,
-        info.nodePair.dstTableID, this, &memoryManager);
+    if (!entry->getStorage().empty()) {
+        // Create parquet-backed rel table
+        tables[info.oid] = std::make_unique<ParquetRelTable>(entry, info.nodePair.srcTableID,
+            info.nodePair.dstTableID, this, &memoryManager);
+    } else {
+        // Create regular rel table
+        tables[info.oid] = std::make_unique<RelTable>(entry, info.nodePair.srcTableID,
+            info.nodePair.dstTableID, this, &memoryManager);
+    }
 }
 
 void StorageManager::createRelTableGroup(RelGroupCatalogEntry* entry) {
@@ -257,7 +273,13 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
         KU_ASSERT(!tables.contains(tableID));
         auto tableEntry = catalog->getTableCatalogEntry(&DUMMY_TRANSACTION, tableID)
                               ->ptrCast<NodeTableCatalogEntry>();
-        tables[tableID] = std::make_unique<NodeTable>(this, tableEntry, &memoryManager);
+        if (!tableEntry->getStorage().empty()) {
+            // Create parquet-backed node table
+            tables[tableID] = std::make_unique<ParquetNodeTable>(this, tableEntry, &memoryManager);
+        } else {
+            // Create regular node table
+            tables[tableID] = std::make_unique<NodeTable>(this, tableEntry, &memoryManager);
+        }
         tables[tableID]->deserialize(context, this, deSer);
     }
     deSer.validateDebuggingInfo(key, "num_rel_groups");
@@ -279,8 +301,15 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
         for (auto k = 0u; k < numInnerRelTables; k++) {
             RelTableCatalogInfo info = RelTableCatalogInfo::deserialize(deSer);
             KU_ASSERT(!tables.contains(info.oid));
-            tables[info.oid] = std::make_unique<RelTable>(relGroupEntry, info.nodePair.srcTableID,
-                info.nodePair.dstTableID, this, &memoryManager);
+            if (!relGroupEntry->getStorage().empty()) {
+                // Create parquet-backed rel table
+                tables[info.oid] = std::make_unique<ParquetRelTable>(relGroupEntry,
+                    info.nodePair.srcTableID, info.nodePair.dstTableID, this, &memoryManager);
+            } else {
+                // Create regular rel table
+                tables[info.oid] = std::make_unique<RelTable>(relGroupEntry,
+                    info.nodePair.srcTableID, info.nodePair.dstTableID, this, &memoryManager);
+            }
             tables.at(info.oid)->deserialize(context, this, deSer);
         }
     }

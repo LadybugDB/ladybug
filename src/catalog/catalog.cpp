@@ -184,24 +184,27 @@ void Catalog::alterTableEntry(Transaction* transaction, const BoundAlterInfo& in
 
 CatalogEntry* Catalog::createRelGroupEntry(Transaction* transaction,
     const BoundCreateTableInfo& info) {
-    const auto extraInfo = info.extraInfo->ptrCast<BoundExtraCreateRelTableGroupInfo>();
-    std::vector<RelTableCatalogInfo> relTableInfos;
-    KU_ASSERT(extraInfo->nodePairs.size() > 0);
-    for (auto& nodePair : extraInfo->nodePairs) {
-        relTableInfos.emplace_back(nodePair, tables->getNextOID());
-    }
-    auto relGroupEntry =
-        std::make_unique<RelGroupCatalogEntry>(info.tableName, extraInfo->srcMultiplicity,
-            extraInfo->dstMultiplicity, extraInfo->storageDirection, std::move(relTableInfos));
+    const auto extraInfo = info.extraInfo->constPtrCast<BoundExtraCreateRelTableGroupInfo>();
+    auto entry = std::make_unique<RelGroupCatalogEntry>(info.tableName, extraInfo->srcMultiplicity,
+        extraInfo->dstMultiplicity, extraInfo->storageDirection, std::vector<RelTableCatalogInfo>{},
+        extraInfo->storage);
     for (auto& definition : extraInfo->propertyDefinitions) {
-        relGroupEntry->addProperty(definition);
+        entry->addProperty(definition);
     }
-    KU_ASSERT(info.hasParent == false);
-    relGroupEntry->setHasParent(info.hasParent);
-    createSerialSequence(transaction, relGroupEntry.get(), info.isInternal);
+    entry->setHasParent(info.hasParent);
     auto catalogSet = info.isInternal ? internalTables.get() : tables.get();
-    catalogSet->createEntry(transaction, std::move(relGroupEntry));
-    return catalogSet->getEntry(transaction, info.tableName);
+    catalogSet->createEntry(transaction, std::move(entry));
+    auto relGroupEntry =
+        catalogSet->getEntry(transaction, info.tableName)->ptrCast<RelGroupCatalogEntry>();
+    // Create individual rel table entries
+    for (auto& nodePair : extraInfo->nodePairs) {
+        RelTableCatalogInfo relInfo{nodePair, INVALID_OID};
+        // Don't create separate catalog entries for individual rel tables
+        // Just assign an OID that will be used by the storage manager
+        relInfo.oid = catalogSet->getNextOID();
+        relGroupEntry->addFromToConnection(nodePair.srcTableID, nodePair.dstTableID, relInfo.oid);
+    }
+    return relGroupEntry;
 }
 
 bool Catalog::containsSequence(const Transaction* transaction, const std::string& name) const {
@@ -541,7 +544,8 @@ CatalogEntry* Catalog::createTableEntry(Transaction* transaction,
 CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
     const BoundCreateTableInfo& info) {
     const auto extraInfo = info.extraInfo->constPtrCast<BoundExtraCreateNodeTableInfo>();
-    auto entry = std::make_unique<NodeTableCatalogEntry>(info.tableName, extraInfo->primaryKeyName);
+    auto entry = std::make_unique<NodeTableCatalogEntry>(info.tableName, extraInfo->primaryKeyName,
+        extraInfo->storage);
     for (auto& definition : extraInfo->propertyDefinitions) {
         entry->addProperty(definition);
     }
