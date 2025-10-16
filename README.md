@@ -31,7 +31,7 @@ on very large databases and provides a set of retrieval features, such as a full
 - Serializable ACID transactions
 - Wasm (WebAssembly) bindings for fast, secure execution in the browser
 
-Ladybug is being developed by [LadbybugDB Developers](https://github.com/LadybugDB) and
+Ladybug is being developed by [LadybugDB Developers](https://github.com/LadybugDB) and
 is available under a permissible license. So try it out and help us make it better! We welcome your feedback and feature requests.
 
 The database was formerly known as [Kuzu](https://github.com/kuzudb/kuzu).
