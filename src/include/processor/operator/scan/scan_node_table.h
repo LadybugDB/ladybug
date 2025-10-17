@@ -24,7 +24,7 @@ public:
     void initialize(const transaction::Transaction* transaction, storage::NodeTable* table,
         ScanNodeTableProgressSharedState& progressSharedState);
 
-    void nextMorsel(storage::NodeTableScanState& scanState,
+    void nextMorsel(storage::TableScanState& scanState,
         ScanNodeTableProgressSharedState& progressSharedState);
 
     common::SemiMask* getSemiMask() const { return semiMask.get(); }
@@ -116,7 +116,7 @@ private:
 
 private:
     common::idx_t currentTableIdx;
-    std::unique_ptr<storage::NodeTableScanState> scanState;
+    std::unique_ptr<storage::TableScanState> scanState;
     std::vector<ScanNodeTableInfo> tableInfos;
     std::vector<std::shared_ptr<ScanNodeTableSharedState>> sharedStates;
     std::shared_ptr<ScanNodeTableProgressSharedState> progressSharedState;

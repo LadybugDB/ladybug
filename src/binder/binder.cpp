@@ -274,5 +274,28 @@ TableFunction Binder::getScanFunction(const FileTypeInfo& typeInfo,
     return *func->ptrCast<TableFunction>();
 }
 
+void Binder::validateTableExistence(const main::ClientContext& context,
+    const std::string& tableName) {
+    auto catalog = Catalog::Get(context);
+    auto transaction = transaction::Transaction::Get(context);
+    if (!catalog->containsTable(transaction, tableName)) {
+        throw BinderException(stringFormat("Table {} does not exist.", tableName));
+    }
+}
+
+void Binder::validateNodeTableType(const catalog::TableCatalogEntry* entry) {
+    if (entry->getType() != catalog::CatalogEntryType::NODE_TABLE_ENTRY) {
+        throw BinderException(stringFormat("Table {} is not a node table.", entry->getName()));
+    }
+}
+
+void Binder::validateColumnExistence(const catalog::TableCatalogEntry* entry,
+    const std::string& columnName) {
+    if (!entry->containsProperty(columnName)) {
+        throw BinderException(
+            stringFormat("Column {} does not exist in table {}.", columnName, entry->getName()));
+    }
+}
+
 } // namespace binder
 } // namespace lbug

@@ -2,8 +2,10 @@
 
 #include "binder/expression/expression_util.h"
 #include "processor/execution_context.h"
+#include "storage/buffer_manager/memory_manager.h"
 #include "storage/local_storage/local_node_table.h"
 #include "storage/local_storage/local_storage.h"
+#include "storage/table/parquet_node_table.h"
 
 using namespace lbug::common;
 using namespace lbug::storage;
@@ -35,7 +37,23 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
     this->table = table;
     this->currentCommittedGroupIdx = 0;
     this->currentUnCommittedGroupIdx = 0;
-    this->numCommittedNodeGroups = table->getNumCommittedNodeGroups();
+
+    // Initialize table-specific scan coordination (e.g., for ParquetNodeTable)
+    table->initializeScanCoordination(transaction);
+
+    if (const auto parquetTable = dynamic_cast<ParquetNodeTable*>(table)) {
+        // For parquet tables, set numCommittedNodeGroups to number of row groups
+        std::vector<bool> columnSkips;
+        try {
+            auto tempReader = std::make_unique<processor::ParquetReader>(
+                parquetTable->getParquetFilePath(), columnSkips, transaction->getClientContext());
+            this->numCommittedNodeGroups = tempReader->getNumRowsGroups();
+        } catch (const std::exception& e) {
+            this->numCommittedNodeGroups = 1;
+        }
+    } else {
+        this->numCommittedNodeGroups = table->getNumCommittedNodeGroups();
+    }
     if (transaction->isWriteTransaction()) {
         if (const auto localTable =
                 transaction->getLocalStorage()->getLocalTable(this->table->getTableID())) {
@@ -46,21 +64,23 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
     progressSharedState.numGroups += numCommittedNodeGroups;
 }
 
-void ScanNodeTableSharedState::nextMorsel(NodeTableScanState& scanState,
+void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
     ScanNodeTableProgressSharedState& progressSharedState) {
     std::unique_lock lck{mtx};
+    // Cast to NodeTableScanState since we know this is for node tables
+    auto& nodeScanState = scanState.cast<NodeTableScanState>();
     if (currentCommittedGroupIdx < numCommittedNodeGroups) {
-        scanState.nodeGroupIdx = currentCommittedGroupIdx++;
+        nodeScanState.nodeGroupIdx = currentCommittedGroupIdx++;
         progressSharedState.numGroupsScanned++;
-        scanState.source = TableScanSource::COMMITTED;
+        nodeScanState.source = TableScanSource::COMMITTED;
         return;
     }
     if (currentUnCommittedGroupIdx < numUnCommittedNodeGroups) {
-        scanState.nodeGroupIdx = currentUnCommittedGroupIdx++;
-        scanState.source = TableScanSource::UNCOMMITTED;
+        nodeScanState.nodeGroupIdx = currentUnCommittedGroupIdx++;
+        nodeScanState.source = TableScanSource::UNCOMMITTED;
         return;
     }
-    scanState.source = TableScanSource::NONE;
+    nodeScanState.source = TableScanSource::NONE;
 }
 
 table_id_map_t<SemiMask*> ScanNodeTable::getSemiMasks() const {
@@ -82,7 +102,18 @@ void ScanNodeTableInfo::initScanState(TableScanState& scanState,
 void ScanNodeTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     ScanTable::initLocalStateInternal(resultSet, context);
     auto nodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
-    scanState = std::make_unique<NodeTableScanState>(nodeIDVector, outVectors, nodeIDVector->state);
+
+    // Check if the first table is a ParquetNodeTable and create appropriate scan state
+    auto* parquetTable = dynamic_cast<ParquetNodeTable*>(tableInfos[0].table);
+    if (parquetTable) {
+        scanState = std::make_unique<ParquetNodeTableScanState>(
+            *MemoryManager::Get(*context->clientContext), nodeIDVector, outVectors,
+            nodeIDVector->state);
+    } else {
+        scanState =
+            std::make_unique<NodeTableScanState>(nodeIDVector, outVectors, nodeIDVector->state);
+    }
+
     currentTableIdx = 0;
     initCurrentTable(context);
 }
@@ -91,6 +122,11 @@ void ScanNodeTable::initCurrentTable(ExecutionContext* context) {
     auto& currentInfo = tableInfos[currentTableIdx];
     currentInfo.initScanState(*scanState, outVectors, context->clientContext);
     scanState->semiMask = sharedStates[currentTableIdx]->getSemiMask();
+    // Call table->initScanState for ParquetNodeTable
+    if (dynamic_cast<ParquetNodeTable*>(tableInfos[currentTableIdx].table)) {
+        auto transaction = transaction::Transaction::Get(*context->clientContext);
+        tableInfos[currentTableIdx].table->initScanState(transaction, *scanState);
+    }
 }
 
 void ScanNodeTable::initGlobalStateInternal(ExecutionContext* context) {

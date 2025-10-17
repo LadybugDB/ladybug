@@ -107,7 +107,7 @@ private:
 
 class StorageManager;
 
-class LBUG_API NodeTable final : public Table {
+class LBUG_API NodeTable : public Table {
 public:
     NodeTable(const StorageManager* storageManager,
         const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* mm);
@@ -118,6 +118,11 @@ public:
         bool resetCachedBoundNodeIDs = true) const override;
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,
         common::table_id_t tableID, common::offset_t startOffset) const;
+
+    // Virtual method for operator-level scan coordination initialization
+    // Called once per scan operation (not per scan state)
+    virtual void initializeScanCoordination(
+        [[maybe_unused]] const transaction::Transaction* transaction) {}
 
     bool scanInternal(transaction::Transaction* transaction, TableScanState& scanState) override;
     template<bool lock = true>
