@@ -38,6 +38,10 @@ The database was formerly known as [Kuzu](https://github.com/kuzudb/kuzu).
 
 ## Installation
 
+> [!WARNING]
+> Many of these binary installation methods are not functional yet. We need to work through package names, availability and convention issues.
+> For now, use the build from source method.
+
 | Language | Installation                                                           |
 | -------- |------------------------------------------------------------------------|
 | Python   | `pip install lbug`                                                     |
@@ -57,7 +61,7 @@ Refer to our [Getting Started](https://docs.ladybugdb.com/get-started/) page for
 
 ## Build from Source
 
-You can build from source using the instructions provided in the [developer guide](https://docs.ladybugdb.com/developer-guide).
+You can build from source using the instructions provided in the [developer guide](https://kuzudb.github.io/docs/developer-guide/).
 
 ## Contributing
 We welcome contributions to Ladybug. If you are interested in contributing to Ladybug, please read our [Contributing Guide](CONTRIBUTING.md).
@@ -65,9 +69,5 @@ We welcome contributions to Ladybug. If you are interested in contributing to La
 ## License
 By contributing to Ladybug, you agree that your contributions will be licensed under the [MIT License](LICENSE).
 
-## Support
-We provide professional support for using Ladybug, ensuring timely responses and flexible coverage. Please visit [here](https://lbugdb.com/#support)
-for more information.
-
 ## Contact
-You can contact us at [contact@lbugdb.com](mailto:contact@lbugdb.com) or [join our Discord community](https://discord.gg/VtX2gw9Rug).
+You can contact us at [social@ladybugdb.com](mailto:social@ladybugdb.com) or [join our Discord community](https://discord.com/invite/hXyHmvW3Vy).
