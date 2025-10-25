@@ -13,8 +13,7 @@ on:
 jobs:
   # Generate the binary db once to test that it can be read on all platforms.
   generate-binary-demo:
-    runs-on: lbug-self-hosted-testing
-    if: false
+    runs-on: ubuntu-24.04
     env:
       NUM_THREADS: 32
       GEN: Ninja
