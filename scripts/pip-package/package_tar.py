@@ -30,7 +30,7 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         file_name = sys.argv[1]
     else:
-        file_name = "lbug-%s.tar.gz" % _get_lbug_version()
+        file_name = "real_ladybug-%s.tar.gz" % _get_lbug_version()
     print("Creating %s..." % file_name)
 
     with TemporaryDirectory() as tempdir:
@@ -41,27 +41,27 @@ if __name__ == "__main__":
                 "--format",
                 "tar",
                 "-o",
-                os.path.join(tempdir, "lbug-source.tar"),
+                os.path.join(tempdir, "real_ladybug-source.tar"),
                 "HEAD",
             ],
             cwd="../..",
         )
 
-        with tarfile.open(os.path.join(tempdir, "lbug-source.tar")) as tar:
-            tar.extractall(path=os.path.join(tempdir, "lbug-source"), filter=None)
+        with tarfile.open(os.path.join(tempdir, "real_ladybug-source.tar")) as tar:
+            tar.extractall(path=os.path.join(tempdir, "real_ladybug-source"), filter=None)
 
-        os.remove(os.path.join(tempdir, "lbug-source.tar"))
+        os.remove(os.path.join(tempdir, "real_ladybug-source.tar"))
 
         # Remove components that are not needed for the pip package
-        shutil.rmtree(os.path.join(tempdir, "lbug-source/dataset"))
-        shutil.rmtree(os.path.join(tempdir, "lbug-source/examples"))
-        shutil.rmtree(os.path.join(tempdir, "lbug-source/benchmark"))
-        shutil.rmtree(os.path.join(tempdir, "lbug-source/logo"))
-        shutil.rmtree(os.path.join(tempdir, "lbug-source/extension"))
-        shutil.rmtree(os.path.join(tempdir, "lbug-source/test"))
-        shutil.rmtree(os.path.join(tempdir, "lbug-source/.github"))
+        shutil.rmtree(os.path.join(tempdir, "real_ladybug-source/dataset"))
+        shutil.rmtree(os.path.join(tempdir, "real_ladybug-source/examples"))
+        shutil.rmtree(os.path.join(tempdir, "real_ladybug-source/benchmark"))
+        shutil.rmtree(os.path.join(tempdir, "real_ladybug-source/logo"))
+        shutil.rmtree(os.path.join(tempdir, "real_ladybug-source/extension"))
+        shutil.rmtree(os.path.join(tempdir, "real_ladybug-source/test"))
+        shutil.rmtree(os.path.join(tempdir, "real_ladybug-source/.github"))
 
-        os.makedirs(os.path.join(tempdir, "lbug"))
+        os.makedirs(os.path.join(tempdir, "real_ladybug"))
         for path in ["setup.py", "setup.cfg", "MANIFEST.in"]:
             shutil.copy2(path, os.path.join(tempdir, path))
         shutil.copy2("../../LICENSE", os.path.join(tempdir, "LICENSE"))
@@ -83,7 +83,7 @@ if __name__ == "__main__":
         shutil.copy2("README.md", os.path.join(tempdir, "README_PYTHON_BUILD.md"))
         subprocess.check_call([sys.executable, "setup.py", "egg_info"], cwd=tempdir)
         shutil.copy2(
-            os.path.join(tempdir, "lbug.egg-info", "PKG-INFO"),
+            os.path.join(tempdir, "real_ladybug.egg-info", "PKG-INFO"),
             os.path.join(tempdir, "PKG-INFO"),
         )
         with tarfile.open(file_name, "w:gz") as sdist:
