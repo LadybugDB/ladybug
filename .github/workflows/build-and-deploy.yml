@@ -1,7 +1,7 @@
 name: Build and Deploy
 on:
   schedule:
-    - cron: "0 8 * * *"
+    - cron: "0 10 * * *"
 
   workflow_dispatch:
     inputs:
@@ -447,7 +447,7 @@ jobs:
         
   deploy-rust:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipRust != 'true' }}
-    runs-on: lbug-self-hosted-testing
+    runs-on: ubuntu-latest
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
