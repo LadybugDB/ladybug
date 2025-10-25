@@ -1,4 +1,4 @@
-PYPI_URL = "https://pypi.org/pypi/lbug/json"
+PYPI_URL = "https://pypi.org/pypi/real_ladybug/json"
 CMAKE_KEYWORD = "project(Lbug VERSION "
 CMAKE_SUFFIX = " LANGUAGES CXX C)\n"
 EXTENSION_KEYWORD = 'add_definitions(-DLBUG_EXTENSION_VERSION="'
@@ -6,6 +6,7 @@ EXTENSION_SUFFIX = '")\n'
 EXTENSION_DEV_VERSION = "dev"
 
 import urllib.request
+import urllib.error
 import json
 import os
 import sys
@@ -15,8 +16,14 @@ def main():
         from packaging.version import Version
     except ImportError:
         from distutils.version import LooseVersion as Version
-    with urllib.request.urlopen(PYPI_URL) as url:
-        data = json.loads(url.read().decode())
+    try:
+        with urllib.request.urlopen(PYPI_URL) as url:
+            data = json.loads(url.read().decode())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            data = {"releases": {}}
+        else:
+            raise
     releases = data["releases"]
     versions = list(releases.keys())
     versions.sort(key=Version)
