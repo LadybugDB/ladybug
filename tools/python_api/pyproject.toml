@@ -1,5 +1,5 @@
 [project]
-name = "lbug"
+name = "real_ladybug"
 description = "Highly scalable, extremely fast, easy-to-use embeddable graph database"
 readme = "README.md"
 license = { text = "MIT" }
@@ -90,6 +90,9 @@ strict = true
 
 [tool.ruff.format]
 docstring-code-format = true
+
+[tool.setuptools.packages.find]
+exclude = ["src_cpp*"]
 
 [build-system]
 requires = ["setuptools", "wheel"]

@@ -4,7 +4,7 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
-import lbug
+import real_ladybug as lb
 import pytest
 from type_aliases import ConnDB
 
@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 
 def test_connection_close(tmp_path: Path) -> None:
     db_path = tmp_path / "test_connection_close.lbug"
-    db = lbug.Database(database_path=db_path, read_only=False)
-    conn = lbug.Connection(db)
+    db = lb.Database(database_path=db_path, read_only=False)
+    conn = lb.Connection(db)
     conn.close()
     assert conn.is_closed
     pytest.raises(RuntimeError, conn.execute, "RETURN 1")
@@ -24,8 +24,8 @@ def test_connection_close(tmp_path: Path) -> None:
 
 def test_connection_close_context_manager(tmp_path: Path) -> None:
     db_path = tmp_path / "test_connection_close_context_manager.lbug"
-    with lbug.Database(database_path=db_path, read_only=False) as db:
-        with lbug.Connection(db) as conn:
+    with lb.Database(database_path=db_path, read_only=False) as db:
+        with lb.Connection(db) as conn:
             pass
         assert conn.is_closed
         pytest.raises(RuntimeError, conn.execute, "RETURN 1")

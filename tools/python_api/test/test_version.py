@@ -1,6 +1,6 @@
 def test_version() -> None:
-    import lbug
+    import real_ladybug as lb
 
-    assert lbug.version != ""
-    assert lbug.storage_version > 0
-    assert lbug.version == lbug.__version__
+    assert lb.version != ""
+    assert lb.storage_version > 0
+    assert lb.version == lb.__version__

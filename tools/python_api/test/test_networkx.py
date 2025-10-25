@@ -5,7 +5,7 @@ from typing import Any
 
 from pandas import Timedelta, Timestamp
 from type_aliases import ConnDB
-from lbug.constants import LABEL
+from real_ladybug.constants import LABEL
 
 
 def test_to_networkx_node(conn_db_readonly: ConnDB) -> None:

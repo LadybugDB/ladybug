@@ -13,11 +13,11 @@ try:
 except ImportError:
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 
-import lbug
-from lbug.constants import ID, LABEL
+import real_ladybug as lb
+from real_ladybug.constants import ID, LABEL
 
 
-def validate_scan_pandas_results(results: lbug.QueryResult) -> None:
+def validate_scan_pandas_results(results: lb.QueryResult) -> None:
     assert results.get_next() == [
         True,
         1,

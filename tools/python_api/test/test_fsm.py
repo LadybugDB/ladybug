@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import lbug
+import real_ladybug as lb
 import pytest
 from test_helper import LBUG_ROOT
 from conftest import get_db_file_path
@@ -68,8 +68,8 @@ def prevent_data_file_truncation(conn):
 
 @pytest.fixture
 def fsm_node_table_setup(tmp_path: Path):
-    db = lbug.Database(get_db_file_path(tmp_path))
-    conn = lbug.Connection(db)
+    db = lb.Database(get_db_file_path(tmp_path))
+    conn = lb.Connection(db)
     conn.execute("call threads=1")
     conn.execute("call auto_checkpoint=false")
     conn.execute(
@@ -95,8 +95,8 @@ def fsm_rel_table_setup(fsm_node_table_setup):
 
 @pytest.fixture
 def fsm_rel_group_setup(tmp_path: Path):
-    db = lbug.Database(get_db_file_path(tmp_path))
-    conn = lbug.Connection(db)
+    db = lb.Database(get_db_file_path(tmp_path))
+    conn = lb.Connection(db)
     conn.execute("call threads=1")
     conn.execute("call auto_checkpoint=false")
     conn.execute("create node table personA (ID INt64, fName StRING, PRIMARY KEY (ID));")

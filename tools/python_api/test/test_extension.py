@@ -52,7 +52,7 @@ def test_extension_install_httpfs(conn_db_readwrite: ConnDB, tmpdir: str, extens
     opener = urllib.request.build_opener()
     opener.addheaders = [("User-agent", "Lbug Test Suite")]
     urllib.request.install_opener(opener)
-    download_url = f"http://extension.lbugdb.com/v{extension_version}/{extension_extension_dir_prefix}/httpfs/libhttpfs.lbug_extension"
+    download_url = f"http://extension.ladybugdb.com/v{extension_version}/{extension_extension_dir_prefix}/httpfs/libhttpfs.lbug_extension"
     temp_path = Path(tmpdir) / "libhttpfs.lbug_extension"
     urllib.request.urlretrieve(download_url, temp_path)
 
