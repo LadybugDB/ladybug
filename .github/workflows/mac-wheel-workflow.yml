@@ -13,8 +13,7 @@ env:
 
 jobs:
   build-wheels-arm64:
-    runs-on: self-hosted-mac-x64
-    if: false
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 

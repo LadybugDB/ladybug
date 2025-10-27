@@ -80,6 +80,148 @@ jobs:
       isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
+  build-wheel-mac:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
+    uses: ./.github/workflows/mac-wheel-workflow.yml
+    with:
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
+    secrets: inherit
+
+  build-wheel-linux:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
+    uses: ./.github/workflows/linux-wheel-workflow.yml
+    with:
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
+    secrets: inherit
+
+  build-wheel-windows:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
+    uses: ./.github/workflows/windows-wheel-workflow.yml
+    with:
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
+    secrets: inherit
+
+  package-python-sdist:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update nightly version
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
+        run: |
+          pip3 install packaging
+          python3 update-nightly-build-version.py
+        working-directory: scripts
+
+      - name: Package Python sdist
+        run: python package_tar.py
+        working-directory: scripts/pip-package
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-sdist
+          path: scripts/pip-package/*.tar.gz
+
+  deploy-python:
+    permissions:
+      id-token: write
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
+    needs:
+      [
+        build-wheel-mac,
+        build-wheel-linux,
+        build-wheel-windows,
+        package-python-sdist,
+      ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-wheels-arm64
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-wheels-x86_64
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-wheels-x86_64
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-wheels-aarch64
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-wheels
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-sdist
+          path: dist
+
+      - name: List wheels
+        run: ls -l
+        working-directory: dist
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: lbug-deploy-wheels
+          path: dist/*
+
+      - name: Deploy to PyPI test
+        if: ${{ github.event_name != 'workflow_dispatch' && github.event.inputs.isDeploy != 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+      - name: Deploy to PyPI
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isDeploy == 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+  
+  deploy-rust:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipRust != 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update nightly version
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
+        run: |
+          pip3 install packaging
+          python3 update-nightly-build-version.py
+        working-directory: scripts
+
+      - name: Update Cargo.toml version
+        run: python3 update_version.py
+        working-directory: tools/rust_api
+
+      - name: Deploy crate to Crates.io
+        run: cargo publish --allow-dirty
+        if: ${{ github.event.inputs.isDeploy == 'true' }}
+        working-directory: tools/rust_api
+
+      - name: Test publishing crate
+        run: cargo publish --dry-run --allow-dirty
+        if: ${{ github.event.inputs.isDeploy != 'true' }}
+        working-directory: tools/rust_api
+
+      - name: Upload crate
+        uses: actions/upload-artifact@v4
+        with:
+          name: lbug-deploy-crate
+          path: tools/rust_api/target/package/*.crate
+
   build-java-mac:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipJava != 'true' }}
     uses: ./.github/workflows/mac-java-workflow.yml
@@ -337,148 +479,6 @@ jobs:
         if: ${{ github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly != 'true' }}
         run: npm publish lbug-wasm.tar.gz --access public --tag latest
         working-directory: tools/wasm
-
-  build-wheel-mac:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
-    uses: ./.github/workflows/mac-wheel-workflow.yml
-    with:
-      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
-    secrets: inherit
-
-  build-wheel-linux:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
-    uses: ./.github/workflows/linux-wheel-workflow.yml
-    with:
-      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
-    secrets: inherit
-
-  build-wheel-windows:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
-    uses: ./.github/workflows/windows-wheel-workflow.yml
-    with:
-      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
-    secrets: inherit
-
-  package-python-sdist:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Update nightly version
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
-        run: |
-          pip3 install packaging
-          python3 update-nightly-build-version.py
-        working-directory: scripts
-
-      - name: Package Python sdist
-        run: python package_tar.py
-        working-directory: scripts/pip-package
-
-      - name: Upload tarball
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-sdist
-          path: scripts/pip-package/*.tar.gz
-
-  deploy-python:
-    permissions:
-      id-token: write
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
-    needs:
-      [
-        build-wheel-mac,
-        build-wheel-linux,
-        build-wheel-windows,
-        package-python-sdist,
-      ]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: macos-wheels-arm64
-          path: dist
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: macos-wheels-x86_64
-          path: dist
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: linux-wheels-x86_64
-          path: dist
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: linux-wheels-aarch64
-          path: dist
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-wheels
-          path: dist
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: python-sdist
-          path: dist
-
-      - name: List wheels
-        run: ls -l
-        working-directory: dist
-
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: lbug-deploy-wheels
-          path: dist/*
-
-      - name: Deploy to PyPI test
-        if: ${{ github.event_name != 'workflow_dispatch' && github.event.inputs.isDeploy != 'true' }}
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-
-      - name: Deploy to PyPI
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isDeploy == 'true' }}
-        uses: pypa/gh-action-pypi-publish@release/v1
-        
-  deploy-rust:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipRust != 'true' }}
-    runs-on: ubuntu-latest
-    env:
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Update nightly version
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
-        run: |
-          pip3 install packaging
-          python3 update-nightly-build-version.py
-        working-directory: scripts
-
-      - name: Update Cargo.toml version
-        run: python3 update_version.py
-        working-directory: tools/rust_api
-
-      - name: Deploy crate to Crates.io
-        run: cargo publish --allow-dirty
-        if: ${{ github.event.inputs.isDeploy == 'true' }}
-        working-directory: tools/rust_api
-
-      - name: Test publishing crate
-        run: cargo publish --dry-run --allow-dirty
-        if: ${{ github.event.inputs.isDeploy != 'true' }}
-        working-directory: tools/rust_api
-
-      - name: Upload crate
-        uses: actions/upload-artifact@v4
-        with:
-          name: lbug-deploy-crate
-          path: tools/rust_api/target/package/*.crate
 
   build-precompiled-bin-mac:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipBinaries != 'true' }}

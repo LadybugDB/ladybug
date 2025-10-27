@@ -11,8 +11,7 @@ on:
 
 jobs:
   build-linux-wheels-x86_64:
-    runs-on: lbug-self-hosted-linux-building-x86_64
-    if: false
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -36,8 +35,7 @@ jobs:
 
   build-linux-wheels-aarch64:
     # Make sure this job runs on the larger self-hosted Linux ARM64 machine
-    runs-on: [lbug-self-hosted-linux-building-aarch64, ac8]
-    if: false
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
