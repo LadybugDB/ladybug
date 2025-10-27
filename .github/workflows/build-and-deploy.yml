@@ -56,7 +56,7 @@ env:
 jobs:
   get-nightly-version:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -74,35 +74,35 @@ jobs:
           path: scripts/version.txt
 
   build-extension:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipExtensions != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skipExtensions != 'true' }}
     uses: ./.github/workflows/build-and-deploy-extension.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   build-java-mac:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipJava != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipJava != 'true' }}
     uses: ./.github/workflows/mac-java-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   build-java-linux:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipJava != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipJava != 'true' }}
     uses: ./.github/workflows/linux-java-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   build-java-windows:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipJava != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipJava != 'true' }}
     uses: ./.github/workflows/windows-java-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   deploy-java:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipJava != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipJava != 'true' }}
     needs: [build-java-mac, build-java-linux, build-java-windows]
     env:
       GITHUB_TOKEN: ${{ github.token }}
@@ -116,7 +116,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Update nightly version
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
         run: |
           python3 -m pip install packaging
           python3 update-nightly-build-version.py
@@ -189,34 +189,34 @@ jobs:
           https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC
         
       - name: Publish to GitHub Packages
-        if: ${{ github.event.inputs.isDeploy == 'true' || github.event_name == 'schedule' }}
+        if: ${{ github.event.inputs.isDeploy == 'true' || github.event_name == 'workflow_dispatch' }}
         working-directory: tools/java_api
         run: |
           ./gradlew publish -i
 
   build-nodejs-mac:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipNodejs != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipNodejs != 'true' }}
     uses: ./.github/workflows/mac-nodejs-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   build-nodejs-linux:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipNodejs != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipNodejs != 'true' }}
     uses: ./.github/workflows/linux-nodejs-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   build-nodejs-windows:
-    if: ${{ github.event_name == 'schedule' ||  github.event.inputs.skipNodejs != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' ||  github.event.inputs.skipNodejs != 'true' }}
     uses: ./.github/workflows/windows-nodejs-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   deploy-nodejs:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipNodejs != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipNodejs != 'true' }}
     needs: [build-nodejs-mac, build-nodejs-linux, build-nodejs-windows]
     runs-on: ubuntu-latest
     env:
@@ -225,7 +225,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Update nightly version
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
         run: |
           pip3 install packaging
           python3 update-nightly-build-version.py
@@ -279,12 +279,12 @@ jobs:
           path: tools/nodejs_api/lbug-source.tar.gz
 
       - name: Deploy to npm.js dry run
-        if: ${{ github.event_name != 'schedule' && github.event.inputs.isDeploy != 'true' }}
+        if: ${{ github.event_name != 'workflow_dispatch' && github.event.inputs.isDeploy != 'true' }}
         run: npm publish lbug-source.tar.gz --access public --dry-run
         working-directory: tools/nodejs_api
 
       - name: Deploy nightly to npm.js
-        if: ${{ github.event_name == 'schedule' || (github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly == 'true') }}
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly == 'true') }}
         run: npm publish lbug-source.tar.gz --access public --tag next
         working-directory: tools/nodejs_api
 
@@ -294,14 +294,14 @@ jobs:
         working-directory: tools/nodejs_api
   
   build-wasm:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipWasm != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipWasm != 'true' }}
     uses: ./.github/workflows/wasm-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
   
   deploy-wasm:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipWasm != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipWasm != 'true' }}
     needs: [build-wasm]
     runs-on: ubuntu-latest
     env:
@@ -324,12 +324,12 @@ jobs:
         working-directory: tools/wasm
 
       - name: Deploy to npm.js dry run
-        if: ${{ github.event_name != 'schedule' && github.event.inputs.isDeploy != 'true' }}
+        if: ${{ github.event_name != 'workflow_dispatch' && github.event.inputs.isDeploy != 'true' }}
         run: npm publish lbug-wasm.tar.gz --access public --dry-run
         working-directory: tools/wasm
 
       - name: Deploy nightly to npm.js
-        if: ${{ github.event_name == 'schedule' || (github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly == 'true') }}
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly == 'true') }}
         run: npm publish lbug-wasm.tar.gz --access public --tag next
         working-directory: tools/wasm
 
@@ -339,34 +339,34 @@ jobs:
         working-directory: tools/wasm
 
   build-wheel-mac:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipPython != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
     uses: ./.github/workflows/mac-wheel-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   build-wheel-linux:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipPython != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
     uses: ./.github/workflows/linux-wheel-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   build-wheel-windows:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipPython != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
     uses: ./.github/workflows/windows-wheel-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   package-python-sdist:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipPython != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Update nightly version
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
         run: |
           pip3 install packaging
           python3 update-nightly-build-version.py
@@ -385,7 +385,7 @@ jobs:
   deploy-python:
     permissions:
       id-token: write
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipPython != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
     needs:
       [
         build-wheel-mac,
@@ -436,17 +436,17 @@ jobs:
           path: dist/*
 
       - name: Deploy to PyPI test
-        if: ${{ github.event_name != 'schedule' && github.event.inputs.isDeploy != 'true' }}
+        if: ${{ github.event_name != 'workflow_dispatch' && github.event.inputs.isDeploy != 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
 
       - name: Deploy to PyPI
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.isDeploy == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isDeploy == 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         
   deploy-rust:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipRust != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipRust != 'true' }}
     runs-on: ubuntu-latest
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -454,7 +454,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Update nightly version
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
         run: |
           pip3 install packaging
           python3 update-nightly-build-version.py
@@ -481,22 +481,22 @@ jobs:
           path: tools/rust_api/target/package/*.crate
 
   build-precompiled-bin-mac:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipBinaries != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipBinaries != 'true' }}
     uses: ./.github/workflows/mac-precompiled-bin-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   build-precompiled-bin-linux:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipBinaries != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipBinaries != 'true' }}
     uses: ./.github/workflows/linux-precompiled-bin-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   build-precompiled-bin-windows:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipBinaries != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipBinaries != 'true' }}
     uses: ./.github/workflows/windows-precompiled-bin-workflow.yml
     with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
