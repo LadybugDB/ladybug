@@ -390,3 +390,59 @@ embeddings|e_hnsw_index|HNSW|[vec]
 333
 444
 598
+
+-CASE UpdateAfterDropIndex
+-SKIP_IN_MEM
+-LOAD_DYNAMIC_EXTENSION vector
+-STATEMENT CREATE NODE TABLE Person(id STRING, name STRING, embeddings FLOAT[8], PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE (p:Person {id: "person-1", name: "Alice", embeddings: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]});
+---- ok
+-STATEMENT CALL CREATE_VECTOR_INDEX('Person', 'person_embeddings_idx', 'embeddings', metric := 'cosine');
+---- ok
+-STATEMENT CALL SHOW_INDEXES() RETURN table_name, index_name;
+---- 1
+Person|person_embeddings_idx
+-STATEMENT CALL DROP_VECTOR_INDEX('Person', 'person_embeddings_idx');
+---- ok
+-STATEMENT CALL SHOW_INDEXES() RETURN *;
+---- 0
+-STATEMENT MATCH (p:Person {id: "person-1"}) SET p.embeddings = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] RETURN p.id;
+---- 1
+person-1
+-STATEMENT MATCH (p:Person {id: "person-1"}) RETURN p.embeddings;
+---- 1
+[0.200000,0.300000,0.400000,0.500000,0.600000,0.700000,0.800000,0.900000]
+-RELOADDB
+-STATEMENT MATCH (p:Person {id: "person-1"}) SET p.embeddings = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0] RETURN p.id;
+---- 1
+person-1
+-STATEMENT MATCH (p:Person {id: "person-1"}) RETURN p.embeddings;
+---- 1
+[0.300000,0.400000,0.500000,0.600000,0.700000,0.800000,0.900000,1.000000]
+
+-CASE MergeAfterDropIndex
+-SKIP_IN_MEM
+-LOAD_DYNAMIC_EXTENSION vector
+-STATEMENT CREATE NODE TABLE Organization(id STRING, name STRING, embeddings FLOAT[8], PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE (o:Organization {id: "org-1", name: "Company", embeddings: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]});
+---- ok
+-STATEMENT CALL CREATE_VECTOR_INDEX('Organization', 'org_embeddings_idx', 'embeddings', metric := 'l2');
+---- ok
+-STATEMENT CALL DROP_VECTOR_INDEX('Organization', 'org_embeddings_idx');
+---- ok
+-STATEMENT MERGE (o:Organization {id: "org-1"}) SET o.embeddings = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2] RETURN o.id;
+---- 1
+org-1
+-STATEMENT MATCH (o:Organization {id: "org-1"}) RETURN o.embeddings;
+---- 1
+[0.500000,0.600000,0.700000,0.800000,0.900000,1.000000,1.100000,1.200000]
+-STATEMENT MERGE (o:Organization {id: "org-2"}) ON CREATE SET o.name = "NewOrg", o.embeddings = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] RETURN o.id;
+---- 1
+org-2
+-RELOADDB
+-STATEMENT MATCH (o:Organization) RETURN o.id, o.embeddings ORDER BY o.id;
+---- 2
+org-1|[0.500000,0.600000,0.700000,0.800000,0.900000,1.000000,1.100000,1.200000]
+org-2|[0.100000,0.200000,0.300000,0.400000,0.500000,0.600000,0.700000,0.800000]
