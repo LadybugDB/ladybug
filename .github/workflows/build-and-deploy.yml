@@ -19,17 +19,17 @@ on:
         description: "Skip building Java?"
         type: boolean
         required: true
-        default: false
+        default: true
       skipNodejs:
         description: "Skip building Node.js?"
         type: boolean
         required: true
-        default: false
+        default: true
       skipWasm:
         description: "Skip building WebAssembly?"
         type: boolean
         required: true
-        default: false
+        default: true
       skipPython:
         description: "Skip building Python?"
         type: boolean
@@ -44,7 +44,7 @@ on:
         description: "Skip building extensions?"
         type: boolean
         required: true
-        default: false
+        default: true
       isNightly:
         description: "Whether the build is a nightly build?"
         type: boolean
