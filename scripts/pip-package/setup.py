@@ -94,6 +94,13 @@ class CMakeBuild(build_ext):
         shutil.rmtree(dst, ignore_errors=True)
         shutil.copytree(os.path.join(build_dir, 'tools', 'python_api', 'build',
                                      ext.name), dst)
+        # Copy to build directory (for wheel packaging) - THIS IS CRITICAL
+        self.announce("Copying native extension to build directory...")
+        build_dst = os.path.join(self.build_lib, ext.name)
+        shutil.rmtree(build_dst, ignore_errors=True)
+        shutil.copytree(os.path.join(build_dir, 'tools', 'python_api', 'build',
+                                     ext.name), build_dst)
+
         self.announce("Done copying native extension.")
 
 
