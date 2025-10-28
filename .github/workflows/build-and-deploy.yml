@@ -101,29 +101,6 @@ jobs:
       isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
-  package-python-sdist:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Update nightly version
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
-        run: |
-          pip3 install packaging
-          python3 update-nightly-build-version.py
-        working-directory: scripts
-
-      - name: Package Python sdist
-        run: python package_tar.py
-        working-directory: scripts/pip-package
-
-      - name: Upload tarball
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-sdist
-          path: scripts/pip-package/*.tar.gz
-
   deploy-python:
     permissions:
       id-token: write
@@ -133,7 +110,6 @@ jobs:
         build-wheel-mac,
         build-wheel-linux,
         build-wheel-windows,
-        package-python-sdist,
       ]
     runs-on: ubuntu-latest
     steps:

@@ -10,7 +10,30 @@ on:
         default: false
 
 jobs:
+  package-python-sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update nightly version
+        if: ${{ inputs.isNightly == true }}
+        run: |
+          pip3 install packaging
+          python3 update-nightly-build-version.py
+        working-directory: scripts
+
+      - name: Package Python sdist
+        run: python package_tar.py
+        working-directory: scripts/pip-package
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-sdist
+          path: scripts/pip-package/*.tar.gz
+
   build-linux-wheels:
+    needs: package-python-sdist
     # The 'runs-on' key is now inside the matrix
     runs-on: ${{ matrix.runner }}
 
@@ -54,6 +77,10 @@ jobs:
           python -m pip install packaging
           python update-nightly-build-version.py
         working-directory: scripts
+
+      - name: Package Python sdist
+        run: python package_tar.py
+        working-directory: scripts/pip-package
 
       - name: Install cibuildwheel
         run: python -m pip install cibuildwheel
