@@ -10,49 +10,59 @@ on:
         default: false
 
 jobs:
-  build-linux-wheels-x86_64:
-    runs-on: ubuntu-latest
+  build-linux-wheels:
+    # The 'runs-on' key is now inside the matrix
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Job 1: Native x86_64 build
+          - platform: x86_64
+            runner: ubuntu-latest # This is the standard x86_64 runner
+            manylinux: _2_28
+
+          # Job 2: Native aarch64 build
+          - platform: aarch64
+            runner: ubuntu-22.04-arm # This is a native ARM64 runner
+            manylinux: _2_28
+
+    env:
+      CIBW_PLATFORM: linux
+      CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
+
+      # Let CIBW detect the arch from the runner
+      CIBW_ARCHS: auto
+
+      # Set the manylinux image based on the detected arch
+      CIBW_MANYLINUX_X86_64_IMAGE: manylinux${{ matrix.manylinux }}
+      CIBW_MANYLINUX_AARCH64_IMAGE: manylinux${{ matrix.manylinux }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         run: |
-          /opt/python/cp310-cp310/bin/python -m pip install packaging
-          /opt/python/cp310-cp310/bin/python update-nightly-build-version.py
+          python -m pip install packaging
+          python update-nightly-build-version.py
         working-directory: scripts
 
-      - name: Build wheels
-        working-directory: ./scripts/pip-package/
-        run: |
-          cp /home/runner/build_all_packages.sh .
-          ./build_all_packages.sh
+      - name: Install cibuildwheel
+        run: python -m pip install cibuildwheel
 
-      - uses: actions/upload-artifact@v4
+      - name: Build wheels on ${{ matrix.platform }}
+        run: python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse scripts/pip-package
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
         with:
-          name: linux-wheels-x86_64
-          path: ./scripts/pip-package/wheelhouse/*manylinux_2_28_x86_64.whl
-
-  build-linux-wheels-aarch64:
-    # Make sure this job runs on the larger self-hosted Linux ARM64 machine
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Update nightly version
-        if: ${{ inputs.isNightly == true }}
-        run: |
-          /opt/python/cp310-cp310/bin/python -m pip install packaging
-          /opt/python/cp310-cp310/bin/python update-nightly-build-version.py
-        working-directory: scripts
-
-      - name: Build wheels
-        working-directory: ./scripts/pip-package/
-        run: |
-          cp /home/runner/build_all_packages.sh .
-          ./build_all_packages.sh
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-wheels-aarch64
-          path: ./scripts/pip-package/wheelhouse/*manylinux_2_28_aarch64.whl
+          name: wheels-manylinux${{ matrix.manylinux }}-${{ matrix.platform }}
+          path: ./scripts/pip-package/wheelhouse/*.whl
