@@ -46,33 +46,40 @@ jobs:
             runner: ubuntu-latest # This is the standard x86_64 runner
             os: linux
             manylinux: _2_28
+            deployment-target: ''
 
           # Job 2: Native aarch64 build
           - platform: aarch64
             runner: ubuntu-22.04-arm # This is a native ARM64 runner
             os: linux
             manylinux: _2_28
+            deployment-target: ''
 
           # Job 3: macOS arm64 build
           - platform: arm64
             runner: macos-latest
             os: macos
+            deployment-target: '11.0'
 
           # Job 4: Windows amd64 build
           - platform: amd64
             runner: windows-latest
             os: windows
+            deployment-target: ''
 
     env:
-      CIBW_PLATFORM: ${{ matrix.os == 'linux' && 'linux' || matrix.os == 'macos' && 'macosx' || 'windows' }}
+      CIBW_PLATFORM: ${{ matrix.os }}
       CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
 
       # Let CIBW detect the arch from the runner
-      CIBW_ARCHS: auto
+      CIBW_ARCHS: ${{ matrix.os == 'windows' && 'AMD64' || 'auto' }}
 
       # Set the manylinux image based on the detected arch (Linux only)
       CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
       CIBW_MANYLINUX_AARCH64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
+
+      # Set deployment target for macOS
+      CIBW_ENVIRONMENT: ${{ matrix.os == 'macos' && format('MACOSX_DEPLOYMENT_TARGET={0}', matrix.deployment-target) || matrix.os == 'windows' && 'DISTUTILS_USE_SDK=1' || '' }}
 
     steps:
       - name: Check out repository
@@ -85,6 +92,7 @@ jobs:
           path: scripts/pip-package/
 
       - name: Find sdist file
+        shell: bash
         run: echo "SDIST_FILE=$(ls scripts/pip-package/*.tar.gz)" >> $GITHUB_ENV
 
       - name: Set up Python
@@ -102,8 +110,18 @@ jobs:
       - name: Install cibuildwheel
         run: python -m pip install cibuildwheel
 
-      - name: Build wheels on ${{ matrix.platform }}
-        run: python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse ${{ env.SDIST_FILE }}
+      - name: Build wheels on ${{ matrix.platform }} (Windows)
+        if: matrix.os == 'windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+          python -m cibuildwheel --output-dir scripts\pip-package\wheelhouse %SDIST_FILE%
+
+      - name: Build wheels on ${{ matrix.platform }} (Linux/macos)
+        if: matrix.os != 'windows'
+        shell: bash
+        run: |
+          python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse ${{ env.SDIST_FILE }}
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
