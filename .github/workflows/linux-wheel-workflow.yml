@@ -63,7 +63,7 @@ jobs:
 
           # Job 4: Windows amd64 build
           - platform: amd64
-            runner: windows-latest
+            runner: windows-2022
             os: windows
             deployment-target: ''
 
@@ -78,8 +78,9 @@ jobs:
       CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
       CIBW_MANYLINUX_AARCH64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
 
-      # Set deployment target for macOS
-      CIBW_ENVIRONMENT: ${{ matrix.os == 'macos' && format('MACOSX_DEPLOYMENT_TARGET={0}', matrix.deployment-target) || matrix.os == 'windows' && 'DISTUTILS_USE_SDK=1' || '' }}
+      # Set deployment target for macOS, and Windows MSVC setup
+      CIBW_ENVIRONMENT_WINDOWS: DISTUTILS_USE_SDK=1 MSSdk=1
+      CIBW_ENVIRONMENT_MACOS: ${{ matrix.os == 'macos' && format('MACOSX_DEPLOYMENT_TARGET={0}', matrix.deployment-target) || '' }}
 
     steps:
       - name: Check out repository
@@ -108,6 +109,7 @@ jobs:
         working-directory: scripts
 
       - name: Install cibuildwheel
+        if: matrix.os != 'windows'
         run: python -m pip install cibuildwheel
 
       - name: Build wheels on ${{ matrix.platform }} (Windows)
@@ -115,16 +117,17 @@ jobs:
         shell: cmd
         run: |
           call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-          python -m cibuildwheel --output-dir scripts\pip-package\wheelhouse %SDIST_FILE%
+          pipx run --spec cibuildwheel cibuildwheel %SDIST_FILE% --output-dir scripts\pip-package\wheelhouse
 
-      - name: Build wheels on ${{ matrix.platform }} (Linux/macos)
+      - name: Build wheels on ${{ matrix.platform }} (Linux/macOS)
         if: matrix.os != 'windows'
         shell: bash
         run: |
+          python -m pip install cibuildwheel
           python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse ${{ env.SDIST_FILE }}
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || matrix.os }}-${{ matrix.platform }}
+          name: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || matrix.os }}-wheels-${{ matrix.platform }}
           path: ./scripts/pip-package/wheelhouse/*.whl

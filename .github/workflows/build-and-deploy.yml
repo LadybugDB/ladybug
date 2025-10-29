@@ -101,22 +101,17 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: macos-wheels-x86_64
+          name: manylinux_2_28-wheels-x86_64
           path: dist
 
       - uses: actions/download-artifact@v4
         with:
-          name: linux-wheels-x86_64
+          name: manylinux_2_28-wheels-aarch64
           path: dist
 
       - uses: actions/download-artifact@v4
         with:
-          name: linux-wheels-aarch64
-          path: dist
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-wheels
+          name: windows-wheels-amd64
           path: dist
 
       - uses: actions/download-artifact@v4
