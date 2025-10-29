@@ -54,7 +54,6 @@ jobs:
     env:
       CIBW_PLATFORM: linux
       CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
-      CIBW_BEFORE_BUILD: "pip3 install setuptools && cd scripts/pip-package && [ -f *.tar.gz ] || python package_tar.py"
 
       # Let CIBW detect the arch from the runner
       CIBW_ARCHS: auto
@@ -66,6 +65,15 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Download sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: python-sdist
+          path: scripts/pip-package/
+
+      - name: Find sdist file
+        run: echo "SDIST_FILE=$(ls scripts/pip-package/*.tar.gz)" >> $GITHUB_ENV
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -83,7 +91,7 @@ jobs:
         run: python -m pip install cibuildwheel
 
       - name: Build wheels on ${{ matrix.platform }}
-        run: python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse scripts/pip-package/real_ladybug-0.0.1.dev1.tar.gz
+        run: python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse ${{ env.SDIST_FILE }}
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
