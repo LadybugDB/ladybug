@@ -13,6 +13,7 @@
 #include "common/windows_utils.h"
 #include <fileapi.h>
 #include <io.h>
+#include <sys/stat.h>
 #include <windows.h>
 #else
 #include "sys/stat.h"
@@ -328,7 +329,7 @@ bool LocalFileSystem::fileExists(const std::string& filename) {
     if (_waccess(wpath, 0) == 0) {
         struct _stati64 status = {};
         _wstati64(wpath, &status);
-        if (status.st_mode & S_IFREG) {
+        if (status.st_mode & _S_IFREG) {
             return true;
         }
     }
