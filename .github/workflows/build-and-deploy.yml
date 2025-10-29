@@ -80,23 +80,9 @@ jobs:
       isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
-  build-wheel-mac:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
-    uses: ./.github/workflows/mac-wheel-workflow.yml
-    with:
-      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
-    secrets: inherit
-
   build-wheel-linux:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
     uses: ./.github/workflows/linux-wheel-workflow.yml
-    with:
-      isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
-    secrets: inherit
-
-  build-wheel-windows:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
-    uses: ./.github/workflows/windows-wheel-workflow.yml
     with:
       isNightly: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
@@ -105,12 +91,7 @@ jobs:
     permissions:
       id-token: write
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
-    needs:
-      [
-        build-wheel-mac,
-        build-wheel-linux,
-        build-wheel-windows,
-      ]
+    needs: build-wheel-linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

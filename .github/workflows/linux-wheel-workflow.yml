@@ -44,23 +44,35 @@ jobs:
           # Job 1: Native x86_64 build
           - platform: x86_64
             runner: ubuntu-latest # This is the standard x86_64 runner
+            os: linux
             manylinux: _2_28
 
           # Job 2: Native aarch64 build
           - platform: aarch64
             runner: ubuntu-22.04-arm # This is a native ARM64 runner
+            os: linux
             manylinux: _2_28
 
+          # Job 3: macOS arm64 build
+          - platform: arm64
+            runner: macos-latest
+            os: macos
+
+          # Job 4: Windows amd64 build
+          - platform: amd64
+            runner: windows-latest
+            os: windows
+
     env:
-      CIBW_PLATFORM: linux
+      CIBW_PLATFORM: ${{ matrix.os == 'linux' && 'linux' || matrix.os == 'macos' && 'macosx' || 'windows' }}
       CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
 
       # Let CIBW detect the arch from the runner
       CIBW_ARCHS: auto
 
-      # Set the manylinux image based on the detected arch
-      CIBW_MANYLINUX_X86_64_IMAGE: manylinux${{ matrix.manylinux }}
-      CIBW_MANYLINUX_AARCH64_IMAGE: manylinux${{ matrix.manylinux }}
+      # Set the manylinux image based on the detected arch (Linux only)
+      CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
+      CIBW_MANYLINUX_AARCH64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
 
     steps:
       - name: Check out repository
@@ -96,5 +108,5 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-manylinux${{ matrix.manylinux }}-${{ matrix.platform }}
+          name: wheels-${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || matrix.os }}-${{ matrix.platform }}
           path: ./scripts/pip-package/wheelhouse/*.whl
