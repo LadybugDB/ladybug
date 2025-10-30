@@ -10,10 +10,11 @@
 #include "main/settings.h"
 
 #if defined(_WIN32)
+#include <sys/stat.h>
+
 #include "common/windows_utils.h"
 #include <fileapi.h>
 #include <io.h>
-#include <sys/stat.h>
 #include <windows.h>
 #else
 #include "sys/stat.h"
