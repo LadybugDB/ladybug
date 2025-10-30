@@ -90,6 +90,8 @@ jobs:
   deploy-python:
     permissions:
       id-token: write
+    environment:
+      name: pypi
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.skipPython != 'true' }}
     needs: build-wheel-linux
     runs-on: ubuntu-latest
