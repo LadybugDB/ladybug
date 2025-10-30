@@ -1,4 +1,4 @@
-name: Build Linux Wheels
+name: Build Python Wheels
 
 on:
   workflow_dispatch:

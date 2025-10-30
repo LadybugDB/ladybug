@@ -80,9 +80,9 @@ jobs:
       isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
-  build-wheel-linux:
+  build-wheels:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipPython != 'true' }}
-    uses: ./.github/workflows/linux-wheel-workflow.yml
+    uses: ./.github/workflows/python-wheel-workflow.yml
     with:
       isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
@@ -93,7 +93,7 @@ jobs:
     environment:
       name: pypi
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipPython != 'true' }}
-    needs: build-wheel-linux
+    needs: build-wheels
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
