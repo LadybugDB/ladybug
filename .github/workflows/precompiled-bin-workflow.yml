@@ -1,0 +1,138 @@
+name: Build Precompiled Binaries
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      isNightly:
+        type: boolean
+        required: true
+        default: false
+
+env:
+  PIP_BREAK_SYSTEM_PACKAGES: 1
+
+jobs:
+  build-precompiled-bin:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update nightly version
+        if: ${{ inputs.isNightly == true }}
+        run: |
+          python3 -m pip install packaging
+          python3 update-nightly-build-version.py
+        working-directory: scripts
+
+      - name: Build precompiled binaries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          make GEN=Ninja
+          make install
+
+      - name: Build precompiled binaries (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          make GEN=Ninja
+          make install
+        env:
+          MACOSX_DEPLOYMENT_TARGET: 11.0
+          CMAKE_OSX_ARCHITECTURES: "x86_64;arm64"
+
+      - name: Build precompiled binaries (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          make GEN=Ninja
+          make install
+
+      - name: Collect artifacts (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mv install/include/lbug.h .
+          mv install/include/lbug.hpp .
+          mv install/lib/liblbug.so .
+          mv install/bin/lbug .
+
+      - name: Collect artifacts (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mv install/include/lbug.h .
+          mv install/include/lbug.hpp .
+          mv install/lib/liblbug.dylib .
+          mv install/bin/lbug .
+
+      - name: Verify binary information (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          file -b lbug
+          otool -l lbug | grep minos
+          file -b liblbug.dylib
+          otool -l liblbug.dylib | grep minos
+
+      - name: Collect artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          move install\include\lbug.h
+          move install\include\lbug.hpp
+          move install\bin\lbug_shared.dll
+          move install\lib\lbug_shared.lib
+          move install\bin\lbug_shell.exe lbug.exe
+
+      - name: Create tarball (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          tar -czvf liblbug-linux-x86_64.tar.gz lbug.h lbug.hpp liblbug.so
+          tar -czvf lbug_cli-linux-x86_64.tar.gz lbug
+
+      - name: Create tarball (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          tar -czvf liblbug-osx-universal.tar.gz lbug.h lbug.hpp liblbug.dylib
+          tar -czvf lbug_cli-osx-universal.tar.gz lbug
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: liblbug-linux-x86_64
+          path: liblbug-linux-x86_64.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: lbug_cli-linux-x86_64
+          path: lbug_cli-linux-x86_64.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: liblbug-osx-universal
+          path: liblbug-osx-universal.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: lbug_cli-osx-universal
+          path: lbug_cli-osx-universal.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: liblbug-windows-x86_64
+          path: |
+            lbug.h
+            lbug.hpp
+            lbug_shared.dll
+            lbug_shared.lib
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: lbug_cli-windows-x86_64
+          path: lbug.exe

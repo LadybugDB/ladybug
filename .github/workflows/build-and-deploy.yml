@@ -434,23 +434,9 @@ jobs:
         run: npm publish lbug-wasm.tar.gz --access public --tag latest
         working-directory: tools/wasm
 
-  build-precompiled-bin-mac:
+  build-precompiled-bin:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipBinaries != 'true' }}
-    uses: ./.github/workflows/mac-precompiled-bin-workflow.yml
-    with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
-    secrets: inherit
-
-  build-precompiled-bin-linux:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipBinaries != 'true' }}
-    uses: ./.github/workflows/linux-precompiled-bin-workflow.yml
-    with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
-    secrets: inherit
-
-  build-precompiled-bin-windows:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipBinaries != 'true' }}
-    uses: ./.github/workflows/windows-precompiled-bin-workflow.yml
+    uses: ./.github/workflows/precompiled-bin-workflow.yml
     with:
       isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
