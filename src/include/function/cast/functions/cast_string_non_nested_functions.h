@@ -253,8 +253,7 @@ inline bool trySimpleIntegerCast(const char* input, uint64_t len, T& result) {
 }
 
 template<class T, bool IS_SIGNED = true>
-inline void simpleIntegerCast(const char* input, uint64_t len, T& result,
-    LogicalTypeID typeID) {
+inline void simpleIntegerCast(const char* input, uint64_t len, T& result, LogicalTypeID typeID) {
     if (!trySimpleIntegerCast<T, IS_SIGNED>(input, len, result)) {
         throw ConversionException(stringFormat("Cast failed. Could not convert \"{}\" to {}.",
             std::string{input, (size_t)len}, LogicalTypeUtils::toString(typeID)));
