@@ -12,16 +12,15 @@ env:
 
 jobs:
   build-linux-java-x86_64:
-    runs-on: lbug-self-hosted-linux-building-x86_64
-    if: false
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         run: |
-          /opt/python/cp310-cp310/bin/python -m pip install packaging
-          /opt/python/cp310-cp310/bin/python update-nightly-build-version.py
+          python3 -m pip install packaging
+          python3 update-nightly-build-version.py
         working-directory: scripts
 
       - name: Build Java lib for Linux
@@ -34,16 +33,15 @@ jobs:
           path: tools/java_api/build/liblbug_java_native*
 
   build-linux-java-aarch64:
-    runs-on: lbug-self-hosted-linux-building-aarch64
-    if: false
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         run: |
-          /opt/python/cp310-cp310/bin/python -m pip install packaging
-          /opt/python/cp310-cp310/bin/python update-nightly-build-version.py
+          python3 -m pip install packaging
+          python3 update-nightly-build-version.py
         working-directory: scripts
 
       - name: Build Java lib for Linux
