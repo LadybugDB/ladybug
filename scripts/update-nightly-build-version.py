@@ -36,7 +36,7 @@ def main():
     if latest_dev_version is None and latest_stable_version is None:
         print("No versions found. Defaulting to 0.0.1.dev1.")
         dev_version = "0.0.1.dev1"
-    elif latest_dev_version is None or Version(latest_dev_version) < Version(latest_stable_version):
+    elif latest_dev_version is None or latest_stable_version is not None and Version(latest_dev_version) < Version(latest_stable_version):
         print("The latest stable version is newer than dev version or no dev version exists. Bumping dev version from stable version.")
         latest_stable_version_split = latest_stable_version.split(".")
         latest_stable_version_split[-1] = str(int(latest_stable_version_split[-1]) + 1)
