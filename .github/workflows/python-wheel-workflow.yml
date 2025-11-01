@@ -86,6 +86,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Cache build
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: core-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'extension/**', 'tools/**') }}
+          restore-keys: |
+            core-build-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Download sdist
         uses: actions/download-artifact@v4
         with:
