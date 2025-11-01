@@ -272,7 +272,7 @@ class LogicalType {
     LBUG_API LogicalType(const LogicalType& other);
 
 public:
-    LBUG_API LogicalType() : typeID{LogicalTypeID::ANY}, extraTypeInfo{nullptr} {
+    LogicalType() : typeID{LogicalTypeID::ANY}, extraTypeInfo{nullptr} {
         physicalType = getPhysicalType(this->typeID);
     };
     explicit LBUG_API LogicalType(LogicalTypeID typeID, TypeCategory info = TypeCategory::INTERNAL);
@@ -285,11 +285,11 @@ public:
     static bool isBuiltInType(const std::string& str);
     static LogicalType convertFromString(const std::string& str, main::ClientContext* context);
 
-    LBUG_API LogicalTypeID getLogicalTypeID() const { return typeID; }
+    LogicalTypeID getLogicalTypeID() const { return typeID; }
     bool containsAny() const;
     bool isInternalType() const { return category == TypeCategory::INTERNAL; }
 
-    LBUG_API PhysicalTypeID getPhysicalType() const { return physicalType; }
+    PhysicalTypeID getPhysicalType() const { return physicalType; }
     LBUG_API static PhysicalTypeID getPhysicalType(LogicalTypeID logicalType,
         const std::unique_ptr<ExtraTypeInfo>& extraTypeInfo = nullptr);
 

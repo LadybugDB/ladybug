@@ -19,7 +19,7 @@ concept VectorElementType = std::is_floating_point_v<T>;
 using metric_func_t = std::function<double(const void*, const void*, uint32_t)>;
 
 struct HNSWIndexUtils {
-    enum class LBUG_API IndexOperation { CREATE, QUERY, DROP };
+    enum class IndexOperation { CREATE, QUERY, DROP };
 
     static bool indexExists(const main::ClientContext& context,
         const transaction::Transaction* transaction, const catalog::TableCatalogEntry* tableEntry,

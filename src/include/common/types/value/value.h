@@ -249,7 +249,7 @@ public:
 
     uint64_t computeHash() const;
 
-    LBUG_API uint32_t getChildrenSize() const { return childrenSize; }
+    uint32_t getChildrenSize() const { return childrenSize; }
 
 private:
     Value();
@@ -307,7 +307,7 @@ private:
  * @return boolean value.
  */
 template<>
-LBUG_API inline bool Value::getValue() const {
+inline bool Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::BOOL);
     return val.booleanVal;
 }
@@ -316,7 +316,7 @@ LBUG_API inline bool Value::getValue() const {
  * @return int8 value.
  */
 template<>
-LBUG_API inline int8_t Value::getValue() const {
+inline int8_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT8);
     return val.int8Val;
 }
@@ -325,7 +325,7 @@ LBUG_API inline int8_t Value::getValue() const {
  * @return int16 value.
  */
 template<>
-LBUG_API inline int16_t Value::getValue() const {
+inline int16_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT16);
     return val.int16Val;
 }
@@ -334,7 +334,7 @@ LBUG_API inline int16_t Value::getValue() const {
  * @return int32 value.
  */
 template<>
-LBUG_API inline int32_t Value::getValue() const {
+inline int32_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT32);
     return val.int32Val;
 }
@@ -343,7 +343,7 @@ LBUG_API inline int32_t Value::getValue() const {
  * @return int64 value.
  */
 template<>
-LBUG_API inline int64_t Value::getValue() const {
+inline int64_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT64);
     return val.int64Val;
 }
@@ -352,7 +352,7 @@ LBUG_API inline int64_t Value::getValue() const {
  * @return uint64 value.
  */
 template<>
-LBUG_API inline uint64_t Value::getValue() const {
+inline uint64_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT64);
     return val.uint64Val;
 }
@@ -361,7 +361,7 @@ LBUG_API inline uint64_t Value::getValue() const {
  * @return uint32 value.
  */
 template<>
-LBUG_API inline uint32_t Value::getValue() const {
+inline uint32_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT32);
     return val.uint32Val;
 }
@@ -370,7 +370,7 @@ LBUG_API inline uint32_t Value::getValue() const {
  * @return uint16 value.
  */
 template<>
-LBUG_API inline uint16_t Value::getValue() const {
+inline uint16_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT16);
     return val.uint16Val;
 }
@@ -379,7 +379,7 @@ LBUG_API inline uint16_t Value::getValue() const {
  * @return uint8 value.
  */
 template<>
-LBUG_API inline uint8_t Value::getValue() const {
+inline uint8_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT8);
     return val.uint8Val;
 }
@@ -388,7 +388,7 @@ LBUG_API inline uint8_t Value::getValue() const {
  * @return int128 value.
  */
 template<>
-LBUG_API inline int128_t Value::getValue() const {
+inline int128_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT128);
     return val.int128Val;
 }
@@ -397,7 +397,7 @@ LBUG_API inline int128_t Value::getValue() const {
  * @return float value.
  */
 template<>
-LBUG_API inline float Value::getValue() const {
+inline float Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::FLOAT);
     return val.floatVal;
 }
@@ -406,7 +406,7 @@ LBUG_API inline float Value::getValue() const {
  * @return double value.
  */
 template<>
-LBUG_API inline double Value::getValue() const {
+inline double Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::DOUBLE);
     return val.doubleVal;
 }
@@ -415,7 +415,7 @@ LBUG_API inline double Value::getValue() const {
  * @return date_t value.
  */
 template<>
-LBUG_API inline date_t Value::getValue() const {
+inline date_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::DATE);
     return date_t{val.int32Val};
 }
@@ -424,7 +424,7 @@ LBUG_API inline date_t Value::getValue() const {
  * @return timestamp_t value.
  */
 template<>
-LBUG_API inline timestamp_t Value::getValue() const {
+inline timestamp_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP);
     return timestamp_t{val.int64Val};
 }
@@ -433,7 +433,7 @@ LBUG_API inline timestamp_t Value::getValue() const {
  * @return timestamp_ns_t value.
  */
 template<>
-LBUG_API inline timestamp_ns_t Value::getValue() const {
+inline timestamp_ns_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_NS);
     return timestamp_ns_t{val.int64Val};
 }
@@ -442,7 +442,7 @@ LBUG_API inline timestamp_ns_t Value::getValue() const {
  * @return timestamp_ms_t value.
  */
 template<>
-LBUG_API inline timestamp_ms_t Value::getValue() const {
+inline timestamp_ms_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_MS);
     return timestamp_ms_t{val.int64Val};
 }
@@ -451,7 +451,7 @@ LBUG_API inline timestamp_ms_t Value::getValue() const {
  * @return timestamp_sec_t value.
  */
 template<>
-LBUG_API inline timestamp_sec_t Value::getValue() const {
+inline timestamp_sec_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_SEC);
     return timestamp_sec_t{val.int64Val};
 }
@@ -460,7 +460,7 @@ LBUG_API inline timestamp_sec_t Value::getValue() const {
  * @return timestamp_tz_t value.
  */
 template<>
-LBUG_API inline timestamp_tz_t Value::getValue() const {
+inline timestamp_tz_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_TZ);
     return timestamp_tz_t{val.int64Val};
 }
@@ -469,7 +469,7 @@ LBUG_API inline timestamp_tz_t Value::getValue() const {
  * @return interval_t value.
  */
 template<>
-LBUG_API inline interval_t Value::getValue() const {
+inline interval_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERVAL);
     return val.intervalVal;
 }
@@ -478,7 +478,7 @@ LBUG_API inline interval_t Value::getValue() const {
  * @return internal_t value.
  */
 template<>
-LBUG_API inline internalID_t Value::getValue() const {
+inline internalID_t Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID);
     return val.internalIDVal;
 }
@@ -487,7 +487,7 @@ LBUG_API inline internalID_t Value::getValue() const {
  * @return uint128 value.
  */
 template<>
-LBUG_API inline uint128_t Value::getValue() const {
+inline uint128_t Value::getValue() const {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT128);
     return val.uint128Val;
 }
@@ -496,7 +496,7 @@ LBUG_API inline uint128_t Value::getValue() const {
  * @return string value.
  */
 template<>
-LBUG_API inline std::string Value::getValue() const {
+inline std::string Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::STRING ||
               dataType.getLogicalTypeID() == LogicalTypeID::BLOB ||
               dataType.getLogicalTypeID() == LogicalTypeID::UUID);
@@ -507,7 +507,7 @@ LBUG_API inline std::string Value::getValue() const {
  * @return uint8_t* value.
  */
 template<>
-LBUG_API inline uint8_t* Value::getValue() const {
+inline uint8_t* Value::getValue() const {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::POINTER);
     return val.pointer;
 }
@@ -516,7 +516,7 @@ LBUG_API inline uint8_t* Value::getValue() const {
  * @return the reference to the boolean value.
  */
 template<>
-LBUG_API inline bool& Value::getValueReference() {
+inline bool& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::BOOL);
     return val.booleanVal;
 }
@@ -525,7 +525,7 @@ LBUG_API inline bool& Value::getValueReference() {
  * @return the reference to the int8 value.
  */
 template<>
-LBUG_API inline int8_t& Value::getValueReference() {
+inline int8_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT8);
     return val.int8Val;
 }
@@ -534,7 +534,7 @@ LBUG_API inline int8_t& Value::getValueReference() {
  * @return the reference to the int16 value.
  */
 template<>
-LBUG_API inline int16_t& Value::getValueReference() {
+inline int16_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT16);
     return val.int16Val;
 }
@@ -543,7 +543,7 @@ LBUG_API inline int16_t& Value::getValueReference() {
  * @return the reference to the int32 value.
  */
 template<>
-LBUG_API inline int32_t& Value::getValueReference() {
+inline int32_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT32);
     return val.int32Val;
 }
@@ -552,7 +552,7 @@ LBUG_API inline int32_t& Value::getValueReference() {
  * @return the reference to the int64 value.
  */
 template<>
-LBUG_API inline int64_t& Value::getValueReference() {
+inline int64_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT64);
     return val.int64Val;
 }
@@ -561,7 +561,7 @@ LBUG_API inline int64_t& Value::getValueReference() {
  * @return the reference to the uint8 value.
  */
 template<>
-LBUG_API inline uint8_t& Value::getValueReference() {
+inline uint8_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT8);
     return val.uint8Val;
 }
@@ -570,7 +570,7 @@ LBUG_API inline uint8_t& Value::getValueReference() {
  * @return the reference to the uint16 value.
  */
 template<>
-LBUG_API inline uint16_t& Value::getValueReference() {
+inline uint16_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT16);
     return val.uint16Val;
 }
@@ -579,7 +579,7 @@ LBUG_API inline uint16_t& Value::getValueReference() {
  * @return the reference to the uint32 value.
  */
 template<>
-LBUG_API inline uint32_t& Value::getValueReference() {
+inline uint32_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT32);
     return val.uint32Val;
 }
@@ -588,7 +588,7 @@ LBUG_API inline uint32_t& Value::getValueReference() {
  * @return the reference to the uint64 value.
  */
 template<>
-LBUG_API inline uint64_t& Value::getValueReference() {
+inline uint64_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT64);
     return val.uint64Val;
 }
@@ -597,7 +597,7 @@ LBUG_API inline uint64_t& Value::getValueReference() {
  * @return the reference to the int128 value.
  */
 template<>
-LBUG_API inline int128_t& Value::getValueReference() {
+inline int128_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT128);
     return val.int128Val;
 }
@@ -606,7 +606,7 @@ LBUG_API inline int128_t& Value::getValueReference() {
  * @return the reference to the float value.
  */
 template<>
-LBUG_API inline float& Value::getValueReference() {
+inline float& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::FLOAT);
     return val.floatVal;
 }
@@ -615,7 +615,7 @@ LBUG_API inline float& Value::getValueReference() {
  * @return the reference to the double value.
  */
 template<>
-LBUG_API inline double& Value::getValueReference() {
+inline double& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::DOUBLE);
     return val.doubleVal;
 }
@@ -624,7 +624,7 @@ LBUG_API inline double& Value::getValueReference() {
  * @return the reference to the date value.
  */
 template<>
-LBUG_API inline date_t& Value::getValueReference() {
+inline date_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::DATE);
     return *reinterpret_cast<date_t*>(&val.int32Val);
 }
@@ -633,7 +633,7 @@ LBUG_API inline date_t& Value::getValueReference() {
  * @return the reference to the timestamp value.
  */
 template<>
-LBUG_API inline timestamp_t& Value::getValueReference() {
+inline timestamp_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP);
     return *reinterpret_cast<timestamp_t*>(&val.int64Val);
 }
@@ -642,7 +642,7 @@ LBUG_API inline timestamp_t& Value::getValueReference() {
  * @return the reference to the timestamp_ms value.
  */
 template<>
-LBUG_API inline timestamp_ms_t& Value::getValueReference() {
+inline timestamp_ms_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_MS);
     return *reinterpret_cast<timestamp_ms_t*>(&val.int64Val);
 }
@@ -651,7 +651,7 @@ LBUG_API inline timestamp_ms_t& Value::getValueReference() {
  * @return the reference to the timestamp_ns value.
  */
 template<>
-LBUG_API inline timestamp_ns_t& Value::getValueReference() {
+inline timestamp_ns_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_NS);
     return *reinterpret_cast<timestamp_ns_t*>(&val.int64Val);
 }
@@ -660,7 +660,7 @@ LBUG_API inline timestamp_ns_t& Value::getValueReference() {
  * @return the reference to the timestamp_sec value.
  */
 template<>
-LBUG_API inline timestamp_sec_t& Value::getValueReference() {
+inline timestamp_sec_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_SEC);
     return *reinterpret_cast<timestamp_sec_t*>(&val.int64Val);
 }
@@ -669,7 +669,7 @@ LBUG_API inline timestamp_sec_t& Value::getValueReference() {
  * @return the reference to the timestamp_tz value.
  */
 template<>
-LBUG_API inline timestamp_tz_t& Value::getValueReference() {
+inline timestamp_tz_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_TZ);
     return *reinterpret_cast<timestamp_tz_t*>(&val.int64Val);
 }
@@ -678,7 +678,7 @@ LBUG_API inline timestamp_tz_t& Value::getValueReference() {
  * @return the reference to the interval value.
  */
 template<>
-LBUG_API inline interval_t& Value::getValueReference() {
+inline interval_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERVAL);
     return val.intervalVal;
 }
@@ -687,7 +687,7 @@ LBUG_API inline interval_t& Value::getValueReference() {
  * @return the reference to the uint128 value.
  */
 template<>
-LBUG_API inline uint128_t& Value::getValueReference() {
+inline uint128_t& Value::getValueReference() {
     KU_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT128);
     return val.uint128Val;
 }
@@ -696,7 +696,7 @@ LBUG_API inline uint128_t& Value::getValueReference() {
  * @return the reference to the internal_id value.
  */
 template<>
-LBUG_API inline nodeID_t& Value::getValueReference() {
+inline nodeID_t& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID);
     return val.internalIDVal;
 }
@@ -705,7 +705,7 @@ LBUG_API inline nodeID_t& Value::getValueReference() {
  * @return the reference to the string value.
  */
 template<>
-LBUG_API inline std::string& Value::getValueReference() {
+inline std::string& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::STRING);
     return strVal;
 }
@@ -714,7 +714,7 @@ LBUG_API inline std::string& Value::getValueReference() {
  * @return the reference to the uint8_t* value.
  */
 template<>
-LBUG_API inline uint8_t*& Value::getValueReference() {
+inline uint8_t*& Value::getValueReference() {
     KU_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::POINTER);
     return val.pointer;
 }
@@ -724,12 +724,12 @@ LBUG_API inline uint8_t*& Value::getValueReference() {
  * @return a Value with BOOL type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(bool val) {
+inline Value Value::createValue(bool val) {
     return Value(val);
 }
 
 template<>
-LBUG_API inline Value Value::createValue(int8_t val) {
+inline Value Value::createValue(int8_t val) {
     return Value(val);
 }
 
@@ -738,7 +738,7 @@ LBUG_API inline Value Value::createValue(int8_t val) {
  * @return a Value with INT16 type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(int16_t val) {
+inline Value Value::createValue(int16_t val) {
     return Value(val);
 }
 
@@ -747,7 +747,7 @@ LBUG_API inline Value Value::createValue(int16_t val) {
  * @return a Value with INT32 type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(int32_t val) {
+inline Value Value::createValue(int32_t val) {
     return Value(val);
 }
 
@@ -756,7 +756,7 @@ LBUG_API inline Value Value::createValue(int32_t val) {
  * @return a Value with INT64 type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(int64_t val) {
+inline Value Value::createValue(int64_t val) {
     return Value(val);
 }
 
@@ -765,7 +765,7 @@ LBUG_API inline Value Value::createValue(int64_t val) {
  * @return a Value with UINT8 type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(uint8_t val) {
+inline Value Value::createValue(uint8_t val) {
     return Value(val);
 }
 
@@ -774,7 +774,7 @@ LBUG_API inline Value Value::createValue(uint8_t val) {
  * @return a Value with UINT16 type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(uint16_t val) {
+inline Value Value::createValue(uint16_t val) {
     return Value(val);
 }
 
@@ -783,7 +783,7 @@ LBUG_API inline Value Value::createValue(uint16_t val) {
  * @return a Value with UINT32 type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(uint32_t val) {
+inline Value Value::createValue(uint32_t val) {
     return Value(val);
 }
 
@@ -792,7 +792,7 @@ LBUG_API inline Value Value::createValue(uint32_t val) {
  * @return a Value with UINT64 type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(uint64_t val) {
+inline Value Value::createValue(uint64_t val) {
     return Value(val);
 }
 
@@ -801,7 +801,7 @@ LBUG_API inline Value Value::createValue(uint64_t val) {
  * @return a Value with INT128 type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(int128_t val) {
+inline Value Value::createValue(int128_t val) {
     return Value(val);
 }
 
@@ -810,7 +810,7 @@ LBUG_API inline Value Value::createValue(int128_t val) {
  * @return a Value with DOUBLE type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(double val) {
+inline Value Value::createValue(double val) {
     return Value(val);
 }
 
@@ -819,7 +819,7 @@ LBUG_API inline Value Value::createValue(double val) {
  * @return a Value with DATE type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(date_t val) {
+inline Value Value::createValue(date_t val) {
     return Value(val);
 }
 
@@ -828,7 +828,7 @@ LBUG_API inline Value Value::createValue(date_t val) {
  * @return a Value with TIMESTAMP type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(timestamp_t val) {
+inline Value Value::createValue(timestamp_t val) {
     return Value(val);
 }
 
@@ -837,7 +837,7 @@ LBUG_API inline Value Value::createValue(timestamp_t val) {
  * @return a Value with INTERVAL type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(interval_t val) {
+inline Value Value::createValue(interval_t val) {
     return Value(val);
 }
 
@@ -846,7 +846,7 @@ LBUG_API inline Value Value::createValue(interval_t val) {
  * @return a Value with UINT128 type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(uint128_t val) {
+inline Value Value::createValue(uint128_t val) {
     return Value(val);
 }
 
@@ -855,7 +855,7 @@ LBUG_API inline Value Value::createValue(uint128_t val) {
  * @return a Value with NODE_ID type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(nodeID_t val) {
+inline Value Value::createValue(nodeID_t val) {
     return Value(val);
 }
 
@@ -864,7 +864,7 @@ LBUG_API inline Value Value::createValue(nodeID_t val) {
  * @return a Value with type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(std::string val) {
+inline Value Value::createValue(std::string val) {
     return Value(LogicalType::STRING(), std::move(val));
 }
 
@@ -873,7 +873,7 @@ LBUG_API inline Value Value::createValue(std::string val) {
  * @return a Value with STRING type and val value.
  */
 template<>
-LBUG_API inline Value Value::createValue(const char* value) {
+inline Value Value::createValue(const char* value) {
     return Value(LogicalType::STRING(), std::string(value));
 }
 
@@ -882,7 +882,7 @@ LBUG_API inline Value Value::createValue(const char* value) {
  * @return a Value with POINTER type and val val.
  */
 template<>
-LBUG_API inline Value Value::createValue(uint8_t* val) {
+inline Value Value::createValue(uint8_t* val) {
     return Value(val);
 }
 
@@ -891,7 +891,7 @@ LBUG_API inline Value Value::createValue(uint8_t* val) {
  * @return a Value with UUID type and val val.
  */
 template<>
-LBUG_API inline Value Value::createValue(ku_uuid_t val) {
+inline Value Value::createValue(ku_uuid_t val) {
     return Value(val);
 }
 

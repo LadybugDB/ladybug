@@ -139,7 +139,7 @@ public:
 
     std::vector<extension::MapperExtension*> getMapperExtensions();
 
-    LBUG_API catalog::Catalog* getCatalog() { return catalog.get(); }
+    catalog::Catalog* getCatalog() { return catalog.get(); }
 
     const DBConfig& getConfig() const { return dbConfig; }
 

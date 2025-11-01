@@ -242,7 +242,7 @@ inline bool tryIntegerCast(const char* input, uint64_t& len, IntegerCastData<T>&
 }
 
 template<typename T, bool IS_SIGNED = true>
-LBUG_API inline bool trySimpleIntegerCast(const char* input, uint64_t len, T& result) {
+inline bool trySimpleIntegerCast(const char* input, uint64_t len, T& result) {
     IntegerCastData<T> data{};
     data.result = 0;
     if (tryIntegerCast<T, IS_SIGNED>(input, len, data)) {
@@ -253,7 +253,7 @@ LBUG_API inline bool trySimpleIntegerCast(const char* input, uint64_t len, T& re
 }
 
 template<class T, bool IS_SIGNED = true>
-LBUG_API inline void simpleIntegerCast(const char* input, uint64_t len, T& result,
+inline void simpleIntegerCast(const char* input, uint64_t len, T& result,
     LogicalTypeID typeID) {
     if (!trySimpleIntegerCast<T, IS_SIGNED>(input, len, result)) {
         throw ConversionException(stringFormat("Cast failed. Could not convert \"{}\" to {}.",

@@ -18,12 +18,12 @@ class Transaction;
 
 namespace storage {
 
-enum class LBUG_API IndexConstraintType : uint8_t {
+enum class IndexConstraintType : uint8_t {
     PRIMARY = 0,              // Primary key index
     SECONDARY_NON_UNIQUE = 1, // Secondary index that is not unique
 };
 
-enum class LBUG_API IndexDefinitionType : uint8_t {
+enum class IndexDefinitionType : uint8_t {
     BUILTIN = 0,
     EXTENSION = 1,
 };

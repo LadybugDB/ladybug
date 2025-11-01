@@ -16,7 +16,7 @@ namespace common {
 struct timestamp_t;
 struct date_t;
 
-enum class LBUG_API DatePartSpecifier : uint8_t {
+enum class DatePartSpecifier : uint8_t {
     YEAR,
     MONTH,
     DAY,
