@@ -1,4 +1,4 @@
-package com.lbugdb;
+package com.ladybugdb;
 
 import java.io.BufferedReader;
 import java.io.FileReader;

@@ -1,4 +1,4 @@
-package com.lbugdb;
+package com.ladybugdb;
 
 /**
  * FlatTuple stores a vector of values.

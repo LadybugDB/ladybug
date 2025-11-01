@@ -1,4 +1,4 @@
-package com.lbugdb;
+package com.ladybugdb;
 
 /**
  * QuerySummary stores the execution time, plan, compiling time and query options of a query.

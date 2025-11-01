@@ -7,4 +7,4 @@
  * </p>
  */
 
-package com.lbugdb;
+package com.ladybugdb;

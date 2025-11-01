@@ -1,4 +1,4 @@
-package com.lbugdb;
+package com.ladybugdb;
 
 public class LbugMap implements AutoCloseable {
     private Value mapVal;

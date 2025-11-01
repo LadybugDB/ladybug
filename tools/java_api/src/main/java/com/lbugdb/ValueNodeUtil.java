@@ -1,4 +1,4 @@
-package com.lbugdb;
+package com.ladybugdb;
 
 /**
  * Utility functions for Value of node type.

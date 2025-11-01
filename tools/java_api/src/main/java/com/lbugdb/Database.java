@@ -1,4 +1,4 @@
-package com.lbugdb;
+package com.ladybugdb;
 
 /**
  * The Database class is the main class of LbugDB. It manages all database

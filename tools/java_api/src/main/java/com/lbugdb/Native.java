@@ -1,4 +1,4 @@
-package com.lbugdb;
+package com.ladybugdb;
 
 import java.util.Map;
 import java.io.File;

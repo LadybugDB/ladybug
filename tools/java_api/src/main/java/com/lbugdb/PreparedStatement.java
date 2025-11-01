@@ -1,4 +1,4 @@
-package com.lbugdb;
+package com.ladybugdb;
 
 /**
  * PreparedStatement is a parameterized query which can avoid planning the same query for repeated execution.

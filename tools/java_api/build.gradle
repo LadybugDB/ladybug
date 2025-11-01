@@ -9,7 +9,7 @@ java {
     withJavadocJar()
 }
 
-group = 'com.lbugdb'
+group = 'com.ladybugdb'
 def projectRoot = projectDir.parentFile.parentFile
 def cmakeFile = new File(projectRoot, 'CMakeLists.txt').text
 def versionLine = cmakeFile.readLines().find { it.startsWith('project(Lbug VERSION ') }
@@ -44,7 +44,7 @@ publishing {
             pom {
                 name = 'lbug'
                 description = 'Lbug is an embedded graph database built for query speed and scalability.'
-                url = 'http://lbugdb.com'
+                url = 'http://ladybugdb.com'
                 inceptionYear = '2020'
                 properties = [
                         'project.build.sourceEncoding'    : 'UTF-8',
@@ -61,15 +61,15 @@ publishing {
                 }
                 developers {
                     developer {
-                        id = 'lbugdb'
-                        name = 'Kùzu Inc.'
-                        email = 'contact@lbugdb.com'
+                        id = 'ladybugdb'
+                        name = 'LadybugDB'
+                        email = 'social@ladybugdb.com'
                     }
                 }
                 scm {
-                    connection = 'scm:git:git://github.com/lbugdb/lbug.git'
-                    developerConnection = 'scm:git:ssh://github.com/lbugdb/lbug.git'
-                    url = 'https://github.com/lbugdb/lbug'
+                    connection = 'scm:git:git://github.com/LadybugDB/ladybug.git'
+                    developerConnection = 'scm:git:ssh://github.com/LadybugDB/ladybug.git'
+                    url = 'https://github.com/LadybugDB/ladybug'
                 }
             }
             from components.java
@@ -87,7 +87,7 @@ publishing {
         }
         maven {
             name = 'GitHubPackages'
-            url = uri('https://maven.pkg.github.com/lbugdb/lbug')
+            url = uri('https://maven.pkg.github.com/LadybugDB/ladybug')
             credentials {
                 username = System.getenv('GITHUB_ACTOR')
                 password = System.getenv('GITHUB_TOKEN')

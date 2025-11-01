@@ -15,7 +15,7 @@ else()
 endif()
 include(UseJava)
 
-file(GLOB JAVA_SRC_FILES src/main/java/com/lbugdb/*.java)
+file(GLOB JAVA_SRC_FILES src/main/java/com/ladybugdb/*.java)
 
 set(CMAKE_JAVA_COMPILE_FLAGS -source 1.8 -target 1.8 -encoding utf-8)
 add_jar(lbug_java ${JAVA_SRC_FILES}

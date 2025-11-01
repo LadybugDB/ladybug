@@ -1,4 +1,4 @@
-package com.lbugdb;
+package com.ladybugdb;
 
 public class LbugList implements AutoCloseable {
     private Value listVal;

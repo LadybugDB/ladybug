@@ -1,4 +1,4 @@
-import com.lbugdb.*;
+import com.ladybugdb.*;
 
 public class Main {
     public static void main(String[] args) {
