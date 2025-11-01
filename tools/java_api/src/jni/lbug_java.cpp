@@ -413,7 +413,8 @@ JNIEXPORT void JNICALL Java_com_ladybugdb_Native_lbugDatabaseDestroy(JNIEnv* env
  * All Connection native functions
  */
 
-JNIEXPORT jlong JNICALL Java_com_ladybugdb_Native_lbugConnectionInit(JNIEnv* env, jclass, jobject db) {
+JNIEXPORT jlong JNICALL Java_com_ladybugdb_Native_lbugConnectionInit(JNIEnv* env, jclass,
+    jobject db) {
 
     try {
         Database* conn_db = getDatabase(env, db);
@@ -589,8 +590,8 @@ JNIEXPORT jboolean JNICALL Java_com_ladybugdb_Native_lbugPreparedStatementIsSucc
     return jboolean();
 }
 
-JNIEXPORT jstring JNICALL Java_com_ladybugdb_Native_lbugPreparedStatementGetErrorMessage(JNIEnv* env,
-    jclass, jobject thisPS) {
+JNIEXPORT jstring JNICALL Java_com_ladybugdb_Native_lbugPreparedStatementGetErrorMessage(
+    JNIEnv* env, jclass, jobject thisPS) {
     try {
         PreparedStatement* ps = getPreparedStatement(env, thisPS);
         std::string errorMessage = ps->getErrorMessage();
@@ -633,8 +634,8 @@ JNIEXPORT jboolean JNICALL Java_com_ladybugdb_Native_lbugQueryResultIsSuccess(JN
     return jboolean();
 }
 
-JNIEXPORT jstring JNICALL Java_com_ladybugdb_Native_lbugQueryResultGetErrorMessage(JNIEnv* env, jclass,
-    jobject thisQR) {
+JNIEXPORT jstring JNICALL Java_com_ladybugdb_Native_lbugQueryResultGetErrorMessage(JNIEnv* env,
+    jclass, jobject thisQR) {
     try {
         QueryResult* qr = getQueryResult(env, thisQR);
         std::string errorMessage = qr->getErrorMessage();
@@ -661,8 +662,8 @@ JNIEXPORT jlong JNICALL Java_com_ladybugdb_Native_lbugQueryResultGetNumColumns(J
     return jlong();
 }
 
-JNIEXPORT jstring JNICALL Java_com_ladybugdb_Native_lbugQueryResultGetColumnName(JNIEnv* env, jclass,
-    jobject thisQR, jlong index) {
+JNIEXPORT jstring JNICALL Java_com_ladybugdb_Native_lbugQueryResultGetColumnName(JNIEnv* env,
+    jclass, jobject thisQR, jlong index) {
     try {
         QueryResult* qr = getQueryResult(env, thisQR);
         auto columnNames = qr->getColumnNames();
@@ -720,8 +721,8 @@ JNIEXPORT jlong JNICALL Java_com_ladybugdb_Native_lbugQueryResultGetNumTuples(JN
     return jlong();
 }
 
-JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugQueryResultGetQuerySummary(JNIEnv* env, jclass,
-    jobject thisQR) {
+JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugQueryResultGetQuerySummary(JNIEnv* env,
+    jclass, jobject thisQR) {
     try {
         QueryResult* qr = getQueryResult(env, thisQR);
         auto querySummary = qr->getQuerySummary();
@@ -906,8 +907,8 @@ struct JavaAPIHelper {
 };
 } // namespace lbug::common
 
-JNIEXPORT jlong JNICALL Java_com_ladybugdb_Native_lbugDataTypeCreate(JNIEnv* env, jclass, jobject id,
-    jobject childType, jlong numElementsInArray) {
+JNIEXPORT jlong JNICALL Java_com_ladybugdb_Native_lbugDataTypeCreate(JNIEnv* env, jclass,
+    jobject id, jobject childType, jlong numElementsInArray) {
     try {
         jint fieldValue = env->GetIntField(id, J_C_DataTypeID_F_value);
 
@@ -1078,8 +1079,8 @@ JNIEXPORT jboolean JNICALL Java_com_ladybugdb_Native_lbugValueIsNull(JNIEnv* env
     return jboolean();
 }
 
-JNIEXPORT void JNICALL Java_com_ladybugdb_Native_lbugValueSetNull(JNIEnv* env, jclass, jobject thisV,
-    jboolean isNull) {
+JNIEXPORT void JNICALL Java_com_ladybugdb_Native_lbugValueSetNull(JNIEnv* env, jclass,
+    jobject thisV, jboolean isNull) {
     try {
         Value* v = getValue(env, thisV);
         v->setNull(static_cast<bool>(isNull));
@@ -1216,8 +1217,8 @@ JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugValueClone(JNIEnv* env, 
     return jobject();
 }
 
-JNIEXPORT void JNICALL Java_com_ladybugdb_Native_lbugValueCopy(JNIEnv* env, jclass, jobject thisValue,
-    jobject otherValue) {
+JNIEXPORT void JNICALL Java_com_ladybugdb_Native_lbugValueCopy(JNIEnv* env, jclass,
+    jobject thisValue, jobject otherValue) {
     try {
         Value* thisV = getValue(env, thisValue);
         Value* otherV = getValue(env, otherValue);
@@ -1241,8 +1242,8 @@ JNIEXPORT void JNICALL Java_com_ladybugdb_Native_lbugValueDestroy(JNIEnv* env, j
     }
 }
 
-JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugCreateList___3Lcom_ladybugdb_Value_2(JNIEnv* env,
-    jclass, jobjectArray listValues) {
+JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugCreateList___3Lcom_ladybugdb_Value_2(
+    JNIEnv* env, jclass, jobjectArray listValues) {
     try {
         jsize len = env->GetArrayLength(listValues);
         if (len == 0) {
@@ -1567,8 +1568,8 @@ JNIEXPORT jlong JNICALL Java_com_ladybugdb_Native_lbugNodeValGetPropertySize(JNI
     return jlong();
 }
 
-JNIEXPORT jstring JNICALL Java_com_ladybugdb_Native_lbugNodeValGetPropertyNameAt(JNIEnv* env, jclass,
-    jobject thisNV, jlong index) {
+JNIEXPORT jstring JNICALL Java_com_ladybugdb_Native_lbugNodeValGetPropertyNameAt(JNIEnv* env,
+    jclass, jobject thisNV, jlong index) {
     try {
         auto* nv = getValue(env, thisNV);
         std::string propertyName = NodeVal::getPropertyName(nv, index);
@@ -1581,8 +1582,8 @@ JNIEXPORT jstring JNICALL Java_com_ladybugdb_Native_lbugNodeValGetPropertyNameAt
     return jstring();
 }
 
-JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugNodeValGetPropertyValueAt(JNIEnv* env, jclass,
-    jobject thisNV, jlong index) {
+JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugNodeValGetPropertyValueAt(JNIEnv* env,
+    jclass, jobject thisNV, jlong index) {
     try {
         auto* nv = getValue(env, thisNV);
         auto propertyValue = NodeVal::getPropertyVal(nv, index);
@@ -1715,8 +1716,8 @@ JNIEXPORT jstring JNICALL Java_com_ladybugdb_Native_lbugRelValGetPropertyNameAt(
     return jstring();
 }
 
-JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugRelValGetPropertyValueAt(JNIEnv* env, jclass,
-    jobject thisRV, jlong index) {
+JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugRelValGetPropertyValueAt(JNIEnv* env,
+    jclass, jobject thisRV, jlong index) {
     try {
         auto* rv = getValue(env, thisRV);
         uint64_t idx = static_cast<uint64_t>(index);
