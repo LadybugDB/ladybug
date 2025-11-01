@@ -1,4 +1,4 @@
-name: Build Linux Java Lib
+name: Build Java Lib
 on:
   workflow_dispatch:
   workflow_call:
@@ -25,7 +25,7 @@ jobs:
 
       - name: Build Java lib for Linux
         run: |
-          make java NUM_THREADS=$(nproc)
+          make GEN=Ninja java
 
       - uses: actions/upload-artifact@v4
         with:
@@ -45,7 +45,7 @@ jobs:
         working-directory: scripts
 
       - name: Build Java lib for Linux
-        run: make java NUM_THREADS=$(nproc)
+        run: make GEN=Ninja java
 
       - uses: actions/upload-artifact@v4
         with:
@@ -79,4 +79,51 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: java-lib-android-armv8a
+          path: tools/java_api/build/liblbug_java_native*
+
+  build-mac-java-arm:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update nightly version
+        if: ${{ inputs.isNightly == true }}
+        run: |
+          pip3 install packaging
+          python3 update-nightly-build-version.py
+        working-directory: scripts
+
+      - name: Build Java lib for Apple Silicon
+        run: |
+          arch -arm64 env JAVA_HOME=$(/usr/libexec/java_home) make GEN=Ninja java
+        env:
+          MACOSX_DEPLOYMENT_TARGET: 11.0
+          ARCHFLAGS: "-arch arm64"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: java-lib-osx-arm64
+          path: tools/java_api/build/liblbug_java_native*
+
+  build-windows-java:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update nightly version
+        if: ${{ inputs.isNightly == true }}
+        run: |
+          pip3 install packaging
+          python3 update-nightly-build-version.py
+        working-directory: ./scripts
+
+      - name: Build Java lib for Windows
+        shell: cmd
+        run: |
+          call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+          make GEN=Ninja java
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: java-lib-win-x86_64
           path: tools/java_api/build/liblbug_java_native*

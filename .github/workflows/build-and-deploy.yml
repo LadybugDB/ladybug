@@ -176,30 +176,16 @@ jobs:
           name: lbug-deploy-crate
           path: tools/rust_api/target/package/*.crate
 
-  build-java-mac:
+  build-java:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipJava != 'true' }}
-    uses: ./.github/workflows/mac-java-workflow.yml
-    with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
-    secrets: inherit
-
-  build-java-linux:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipJava != 'true' }}
-    uses: ./.github/workflows/linux-java-workflow.yml
-    with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
-    secrets: inherit
-
-  build-java-windows:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipJava != 'true' }}
-    uses: ./.github/workflows/windows-java-workflow.yml
+    uses: ./.github/workflows/java-workflow.yml
     with:
       isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   deploy-java:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipJava != 'true' }}
-    needs: [build-java-mac, build-java-linux, build-java-windows]
+    needs: [build-java]
     env:
       GITHUB_TOKEN: ${{ github.token }}
       GITHUB_ACTOR: ${{ github.actor }}
