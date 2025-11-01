@@ -1153,13 +1153,18 @@ jobs:
 
   shell-test:
     name: shell test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     needs: [ sanity-checks ]
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: shell-test-${{ runner.os }}
+
       - name: Build
-        run: make release NUM_THREADS=$(nproc) USE_STD_FORMAT=1
+        run: make GEN=Ninja release USE_STD_FORMAT=1
 
       - name: Test
         run: |
