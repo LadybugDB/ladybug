@@ -19,7 +19,7 @@ on:
         description: "Skip building Java?"
         type: boolean
         required: true
-        default: true
+        default: false
       skipNodejs:
         description: "Skip building Node.js?"
         type: boolean
