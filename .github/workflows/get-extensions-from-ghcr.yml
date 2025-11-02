@@ -19,8 +19,8 @@ jobs:
           
       - name: Pull ghcr extensions and run container
         run: |
-          docker pull ghcr.io/lbugdb/extension-repo:latest
-          docker run --rm -d --name lbug-extensions ghcr.io/lbugdb/extension-repo:latest tail -f /dev/null
+          docker pull ghcr.io/LadybugDB/extension-repo:latest
+          docker run --rm -d --name lbug-extensions ghcr.io/LadybugDB/extension-repo:latest tail -f /dev/null
       
       - name: Copy ghcr extensions
         run: |
