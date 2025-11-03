@@ -7,7 +7,7 @@ keywords = ["graph", "database"]
 version = "0.0.1"
 
 [project.urls]
-Homepage = "https://lbugdb.com/"
+Homepage = "https://ladybugdb.com/"
 Documentation = "https://docs.ladybugdb.com/"
 Repository = "https://github.com/lbugdb/lbug"
 Changelog = "https://github.com/LadybugDB/ladybug/releases"

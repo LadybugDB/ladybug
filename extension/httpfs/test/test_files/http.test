@@ -36,7 +36,7 @@ Noura|25
 
 -CASE ScanFromHTTPS
 -LOAD_DYNAMIC_EXTENSION httpfs
--STATEMENT load from "https://extension.lbugdb.com/dataset/test/city.csv" return *;
+-STATEMENT load from "https://extension.ladybugdb.com/dataset/test/city.csv" return *;
 ---- 3
 Waterloo|150000
 Kitchener|200000

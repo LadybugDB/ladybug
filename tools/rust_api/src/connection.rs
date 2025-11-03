@@ -106,7 +106,7 @@ impl<'a> Connection<'a> {
     /// using [`Connection::execute`]
     ///
     /// # Arguments
-    /// * `query`: The query to prepare. See <https://lbugdb.com/docs/cypher> for details on the
+    /// * `query`: The query to prepare. See <https://ladybugdb.com/docs/cypher> for details on the
     ///   query format.
     pub fn prepare(&self, query: &str) -> Result<PreparedStatement, Error> {
         let statement =
@@ -123,7 +123,7 @@ impl<'a> Connection<'a> {
     /// Executes the given query and returns the result.
     ///
     /// # Arguments
-    /// * `query`: The query to execute. See <https://lbugdb.com/docs/cypher> for details on the
+    /// * `query`: The query to execute. See <https://ladybugdb.com/docs/cypher> for details on the
     ///   query format.
     // TODO(bmwinger): Instead of having a Value enum in the results, perhaps QueryResult, and thus query
     // should be generic.

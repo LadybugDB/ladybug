@@ -197,7 +197,7 @@ impl From<(u64, u64)> for InternalID {
 
 /// Data types supported by Lbug
 ///
-/// Also see <https://lbugdb.com/docusaurus/cypher/data-types/overview.html>
+/// Also see <https://ladybugdb.com/docusaurus/cypher/data-types/overview.html>
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Null(LogicalType),
@@ -216,37 +216,37 @@ pub enum Value {
     /// Stored internally as the number of days since 1970-01-01 as a 32-bit signed integer, which
     /// allows for a wider range of dates to be stored than can be represented by `time::Date`
     ///
-    /// <https://lbugdb.com/docusaurus/cypher/data-types/date.html>
+    /// <https://ladybugdb.com/docusaurus/cypher/data-types/date.html>
     Date(time::Date),
     /// May be signed or unsigned.
     ///
     /// Nanosecond precision of `time::Duration` (if available) will not be preserved when passed to
     /// queries, and results will always have at most microsecond precision.
     ///
-    /// <https://lbugdb.com/docusaurus/cypher/data-types/interval.html>
+    /// <https://ladybugdb.com/docusaurus/cypher/data-types/interval.html>
     Interval(time::Duration),
     /// Stored internally as the number of microseconds since 1970-01-01
     /// Nanosecond precision of `SystemTime` (if available) will not be preserved when used.
     ///
-    /// <https://lbugdb.com/docusaurus/cypher/data-types/timestamp.html>
+    /// <https://ladybugdb.com/docusaurus/cypher/data-types/timestamp.html>
     Timestamp(time::OffsetDateTime),
     TimestampTz(time::OffsetDateTime),
     TimestampNs(time::OffsetDateTime),
     TimestampMs(time::OffsetDateTime),
     TimestampSec(time::OffsetDateTime),
     InternalID(InternalID),
-    /// <https://lbugdb.com/docusaurus/cypher/data-types/string.html>
+    /// <https://ladybugdb.com/docusaurus/cypher/data-types/string.html>
     String(String),
     Blob(Vec<u8>),
     // TODO: Enforce type of contents
     // LogicalType is necessary so that we can pass the correct type to the C++ API if the list is empty.
     /// These must contain elements which are all the given type.
-    /// <https://lbugdb.com/docusaurus/cypher/data-types/list.html>
+    /// <https://ladybugdb.com/docusaurus/cypher/data-types/list.html>
     List(LogicalType, Vec<Value>),
     /// These must contain elements which are all the same type.
-    /// <https://lbugdb.com/docusaurus/cypher/data-types/list.html>
+    /// <https://ladybugdb.com/docusaurus/cypher/data-types/list.html>
     Array(LogicalType, Vec<Value>),
-    /// <https://lbugdb.com/docusaurus/cypher/data-types/struct.html>
+    /// <https://ladybugdb.com/docusaurus/cypher/data-types/struct.html>
     Struct(Vec<(String, Value)>),
     Node(NodeVal),
     Rel(RelVal),
@@ -258,9 +258,9 @@ pub enum Value {
         /// Sequence of Rels which make up the `RecursiveRel`
         rels: Vec<RelVal>,
     },
-    /// <https://lbugdb.com/docusaurus/cypher/data-types/map>
+    /// <https://ladybugdb.com/docusaurus/cypher/data-types/map>
     Map((LogicalType, LogicalType), Vec<(Value, Value)>),
-    /// <https://lbugdb.com/docusaurus/cypher/data-types/union>
+    /// <https://ladybugdb.com/docusaurus/cypher/data-types/union>
     Union {
         types: Vec<(String, LogicalType)>,
         value: Box<Value>,

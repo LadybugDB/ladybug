@@ -1,7 +1,7 @@
 # Ladybug-Wasm
 Ladybug-Wasm is the official WebAssembly build of Ladybug in-process property graph database management system. 
 Ladybug is an embeddable property graph database management system built for query speed and scalability. 
-Please visit [Ladybug website](https://lbugdb.com) for more information. Ladybug-Wasm enables the following:
+Please visit [Ladybug website](https://ladybugdb.com) for more information. Ladybug-Wasm enables the following:
 
 - Fast, in-browser graph analysis without ever sending data to a server
 - Strong data privacy guarantees, as the data never leaves the browser
@@ -54,9 +54,9 @@ For the Node.js variant, the worker script can be resolved automatically and you
 ## API documentation
 The API documentation can be found here:
 
-**Synchronous** version: [API documentation](https://lbugdb.com/api-docs/wasm/sync/)
+**Synchronous** version: [API documentation](https://ladybugdb.com/api-docs/wasm/sync/)
 
-**Asynchronous** version: [API documentation](https://lbugdb.com/api-docs/wasm/async/)
+**Asynchronous** version: [API documentation](https://ladybugdb.com/api-docs/wasm/async/)
 
 ## Local development
 

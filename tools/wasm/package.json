@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "description": "Official WebAssembly build of Lbug in-process property graph database management system.",
   "main": "index.js",
-  "homepage": "https://lbugdb.com/",
+  "homepage": "https://ladybugdb.com/",
   "repository": {
     "type": "git",
     "url": "https://github.com/lbugdb/lbug.git"

@@ -68,7 +68,7 @@ def main():
         cmake_lists_file.writelines(cmake_lists)
     print("Committing changes...")
     sys.stdout.flush()
-    os.system("git config user.email ci@lbugdb.com")
+    os.system("git config user.email ci@ladybugdb.com")
     os.system("git config user.name \"Lbug CI\"")
     os.system("git add %s" % cmake_lists_path)
     os.system("git commit -m \"Update CMake version to %s and change extension version to dev.\"" % cmake_version)

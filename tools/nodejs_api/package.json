@@ -13,7 +13,7 @@
     }
   },
   "type": "commonjs",
-  "homepage": "https://lbugdb.com/",
+  "homepage": "https://ladybugdb.com/",
   "repository": {
     "type": "git",
     "url": "https://github.com/lbugdb/lbug.git"
