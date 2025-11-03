@@ -6,7 +6,7 @@
 #include "common/types/uint128_t.h"
 #include "gtest/gtest.h"
 
-using namespace kuzu::common;
+using namespace lbug::common;
 
 TEST(Uint128Tests, Casting) {
     { // conversion from int32_t

@@ -61,7 +61,7 @@ Refer to our [Getting Started](https://docs.ladybugdb.com/get-started/) page for
 
 ## Build from Source
 
-You can build from source using the instructions provided in the [developer guide](https://kuzudb.github.io/docs/developer-guide/).
+You can build from source using the instructions provided in the [developer guide](https://docs.ladybugdb.com/developer-guide/).
 
 ## Contributing
 We welcome contributions to Ladybug. If you are interested in contributing to Ladybug, please read our [Contributing Guide](CONTRIBUTING.md).

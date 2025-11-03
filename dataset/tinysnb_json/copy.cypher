@@ -1,4 +1,4 @@
-load extension "extension/json/build/libjson.kuzu_extension";
+load extension "extension/json/build/libjson.lbug_extension";
 copy person from "dataset/tinysnb_json/vPerson.json";
 copy person from "dataset/tinysnb_json/vPerson2.json" (format="unstructured")
 copy organisation from "dataset/tinysnb_json/vOrganisation.json";
