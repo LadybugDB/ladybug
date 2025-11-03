@@ -1166,6 +1166,9 @@ jobs:
       - name: Build
         run: make GEN=Ninja release USE_STD_FORMAT=1
 
+      - name: Generate datasets
+        run: bash scripts/generate_binary_demo.sh
+
       - name: Test
         run: |
           pip3 install pytest pexpect
