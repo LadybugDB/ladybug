@@ -1151,8 +1151,8 @@ jobs:
           source /Users/runner/.cargo/env
           cargo build --locked --all-features
 
-  shell-test:
-    name: shell test
+  minimal-test:
+    name: minimal test
     runs-on: ubuntu-latest
     needs: [ sanity-checks ]
     steps:
@@ -1161,7 +1161,7 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: shell-test-${{ runner.os }}
+          key: minimal-test-${{ runner.os }}
 
       - name: Build
         run: make GEN=Ninja release USE_STD_FORMAT=1
@@ -1169,7 +1169,7 @@ jobs:
       - name: Test
         run: |
           pip3 install pytest pexpect
-          make shell-test
+          make shell-test test
 
   linux-extension-test:
     name: linux extension test
