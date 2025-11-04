@@ -1299,13 +1299,14 @@ LBUG_C_API lbug_state lbug_value_get_decimal_as_string(lbug_value* value, char**
  */
 LBUG_C_API lbug_state lbug_value_get_string(lbug_value* value, char** out_result);
 /**
- * @brief Returns the blob value of the given value. The returned buffer is null-terminated similar
- * to a string. The value must be of type BLOB.
+ * @brief Returns the blob value of the given value. The value must be of type BLOB.
  * @param value The value to return.
  * @param[out] out_result The output parameter that will hold the blob value.
+ * @param[out] out_length The output parameter that will hold the length of the blob.
  * @return The state indicating the success or failure of the operation.
+ * @note The caller is responsible for freeing the returned memory using `lbug_destroy_blob`.
  */
-LBUG_C_API lbug_state lbug_value_get_blob(lbug_value* value, uint8_t** out_result);
+LBUG_C_API lbug_state lbug_value_get_blob(lbug_value* value, uint8_t** out_result, uint64_t* out_length);
 /**
  * @brief Returns the uuid value of the given value.
  * to a string. The value must be of type UUID.

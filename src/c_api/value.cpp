@@ -732,14 +732,17 @@ lbug_state lbug_value_get_string(lbug_value* value, char** out_result) {
     return LbugSuccess;
 }
 
-lbug_state lbug_value_get_blob(lbug_value* value, uint8_t** out_result) {
+lbug_state lbug_value_get_blob(lbug_value* value, uint8_t** out_result, uint64_t* out_length) {
     auto logical_type_id = static_cast<Value*>(value->_value)->getDataType().getLogicalTypeID();
     if (logical_type_id != LogicalTypeID::BLOB) {
         return LbugError;
     }
     try {
         auto blob = static_cast<Value*>(value->_value)->getValue<std::string>();
-        *out_result = (uint8_t*)convertToOwnedCString(blob);
+        *out_length = blob.size();
+        auto* buffer = (uint8_t*)malloc(sizeof(uint8_t) * blob.size());
+        memcpy(buffer, blob.data(), blob.size());
+        *out_result = buffer;
     } catch (Exception& e) {
         return LbugError;
     }

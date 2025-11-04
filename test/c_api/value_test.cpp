@@ -1764,19 +1764,20 @@ TEST_F(CApiValueTest, GetBlob) {
     ASSERT_TRUE(value._is_owned_by_cpp);
     ASSERT_FALSE(lbug_value_is_null(&value));
     uint8_t* blob;
-    ASSERT_EQ(lbug_value_get_blob(&value, &blob), LbugSuccess);
+    uint64_t length;
+    ASSERT_EQ(lbug_value_get_blob(&value, &blob, &length), LbugSuccess);
+    ASSERT_EQ(length, 4);
     ASSERT_EQ(blob[0], 0xAA);
     ASSERT_EQ(blob[1], 0xBB);
     ASSERT_EQ(blob[2], 0xCD);
     ASSERT_EQ(blob[3], 0x1A);
-    ASSERT_EQ(blob[4], 0x00);
     lbug_destroy_blob(blob);
     lbug_value_destroy(&value);
     lbug_flat_tuple_destroy(&flatTuple);
     lbug_query_result_destroy(&result);
 
     lbug_value* badValue = lbug_value_create_string((char*)"abcdefg");
-    ASSERT_EQ(lbug_value_get_blob(badValue, &blob), LbugError);
+    ASSERT_EQ(lbug_value_get_blob(badValue, &blob, &length), LbugError);
     lbug_value_destroy(badValue);
 }
 
