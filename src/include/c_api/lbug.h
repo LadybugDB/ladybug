@@ -1306,7 +1306,8 @@ LBUG_C_API lbug_state lbug_value_get_string(lbug_value* value, char** out_result
  * @return The state indicating the success or failure of the operation.
  * @note The caller is responsible for freeing the returned memory using `lbug_destroy_blob`.
  */
-LBUG_C_API lbug_state lbug_value_get_blob(lbug_value* value, uint8_t** out_result, uint64_t* out_length);
+LBUG_C_API lbug_state lbug_value_get_blob(lbug_value* value, uint8_t** out_result,
+    uint64_t* out_length);
 /**
  * @brief Returns the uuid value of the given value.
  * to a string. The value must be of type UUID.
