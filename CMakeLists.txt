@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(Lbug VERSION 0.11.2.2 LANGUAGES CXX C)
+project(Lbug VERSION 0.12.0 LANGUAGES CXX C)
 
 option(SINGLE_THREADED "Single-threaded mode" FALSE)
 if(SINGLE_THREADED)
@@ -414,7 +414,7 @@ add_subdirectory(third_party)
 
 add_definitions(-DLBUG_ROOT_DIRECTORY="${PROJECT_SOURCE_DIR}")
 add_definitions(-DLBUG_CMAKE_VERSION="${CMAKE_PROJECT_VERSION}")
-add_definitions(-DLBUG_EXTENSION_VERSION="0.11.1")
+add_definitions(-DLBUG_EXTENSION_VERSION="0.12.0")
 
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extension/CMakeLists.txt")
     add_subdirectory(extension)
