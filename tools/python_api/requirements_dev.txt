@@ -14,7 +14,7 @@ ruff==0.11.12
 mypy==1.16.0
 
 # cpu version of torch
---find-links https://data.pyg.org/whl/torch-2.2.0+cpu.html
+--find-links https://data.pyg.org/whl/torch-2.5.0+cpu.html
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch
-torch-geometric~=2.3.0
+torch~=2.5.0
+torch-geometric~=2.5.0
