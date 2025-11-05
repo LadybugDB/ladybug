@@ -24,7 +24,7 @@ on:
         description: "Skip building Node.js?"
         type: boolean
         required: true
-        default: true
+        default: false
       skipWasm:
         description: "Skip building WebAssembly?"
         type: boolean
