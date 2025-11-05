@@ -2,113 +2,155 @@ name: Build Extensions
 
 on:
   workflow_dispatch:
-
   workflow_call:
-    inputs:
-      x86_64LinuxOnly:
-          type: boolean
-          required: false
-          default: false
 
 jobs:
-  build-linux-extensions-x86_64:
-    runs-on: lbug-self-hosted-linux-building-x86_64
-    if: false
+  build-extensions:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            os_name: linux
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            os_name: linux
+            arch: aarch64
+          - os: macos-latest
+            os_name: osx
+            arch: arm64
+          - os: windows-latest
+            os_name: win
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build precompiled extensions
-        run: make extension-release NUM_THREADS=$(nproc)
+      - name: Install DuckDB (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          if [ "${{ runner.arch }}" = "X64" ]; then
+            wget https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-amd64.zip
+            unzip libduckdb-linux-amd64.zip -d duckdb
+          else
+            wget https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-arm64.zip
+            unzip libduckdb-linux-arm64.zip -d duckdb
+          fi
+          sudo cp duckdb/duckdb.h /usr/local/include/
+          sudo cp duckdb/duckdb.hpp /usr/local/include/
+          sudo cp duckdb/libduckdb.so /usr/local/lib/
+          sudo ldconfig
+          # Create CMake config files
+          sudo mkdir -p /usr/local/lib/cmake/DuckDB
+          sudo tee /usr/local/lib/cmake/DuckDB/DuckDBConfig.cmake > /dev/null << 'EOF'
+          # DuckDB CMake configuration file
 
-      - name: Collect built artifacts
-        run: /opt/python/cp310-cp310/bin/python scripts/collect-extensions.py
+          if(NOT TARGET DuckDB::duckdb)
+            add_library(DuckDB::duckdb SHARED IMPORTED)
+            set_target_properties(DuckDB::duckdb PROPERTIES
+              INTERFACE_INCLUDE_DIRECTORIES "/usr/local/include"
+              IMPORTED_LOCATION "/usr/local/lib/libduckdb.so"
+            )
+          endif()
 
-      - name: Upload built artifacts
-        uses: actions/upload-artifact@v4
+          set(DuckDB_LIBRARIES DuckDB::duckdb)
+          set(DuckDB_INCLUDE_DIRS "/usr/local/include")
+          set(DuckDB_FOUND TRUE)
+          EOF
+
+      - name: Install DuckDB (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          wget https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-osx-universal.zip
+          unzip libduckdb-osx-universal.zip -d duckdb
+          sudo mkdir -p /usr/local/include
+          sudo mkdir -p /usr/local/lib
+          sudo cp duckdb/duckdb.h /usr/local/include/
+          sudo cp duckdb/duckdb.hpp /usr/local/include/
+          sudo cp duckdb/libduckdb.dylib /usr/local/lib/
+          # Create CMake config files
+          sudo mkdir -p /usr/local/lib/cmake/DuckDB
+          sudo tee /usr/local/lib/cmake/DuckDB/DuckDBConfig.cmake > /dev/null << 'EOF'
+          # DuckDB CMake configuration file
+
+          if(NOT TARGET DuckDB::duckdb)
+            add_library(DuckDB::duckdb SHARED IMPORTED)
+            set_target_properties(DuckDB::duckdb PROPERTIES
+              INTERFACE_INCLUDE_DIRECTORIES "/usr/local/include"
+              IMPORTED_LOCATION "/usr/local/lib/libduckdb.dylib"
+            )
+          endif()
+
+          set(DuckDB_LIBRARIES DuckDB::duckdb)
+          set(DuckDB_INCLUDE_DIRS "/usr/local/include")
+          set(DuckDB_FOUND TRUE)
+          EOF
+
+      - name: Install DuckDB (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          curl -L -o libduckdb-windows-amd64.zip https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-windows-amd64.zip
+          powershell -Command "Expand-Archive -Path libduckdb-windows-amd64.zip -DestinationPath duckdb"
+          if not exist "C:\local" mkdir "C:\local"
+          if not exist "C:\local\include" mkdir "C:\local\include"
+          if not exist "C:\local\lib" mkdir "C:\local\lib"
+          copy duckdb\duckdb.h C:\local\include\
+          copy duckdb\duckdb.hpp C:\local\include\
+          copy duckdb\duckdb.dll C:\local\lib\
+          copy duckdb\duckdb.lib C:\local\lib\
+          REM Create CMake config files
+          if not exist "C:\local\lib\cmake" mkdir "C:\local\lib\cmake"
+          if not exist "C:\local\lib\cmake\DuckDB" mkdir "C:\local\lib\cmake\DuckDB"
+          (
+          echo # DuckDB CMake configuration file
+          echo.
+          echo if^(NOT TARGET DuckDB::duckdb^)
+          echo   add_library^(DuckDB::duckdb SHARED IMPORTED^)
+          echo   set_target_properties^(DuckDB::duckdb PROPERTIES
+          echo     INTERFACE_INCLUDE_DIRECTORIES "C:/local/include"
+          echo     IMPORTED_LOCATION "C:/local/lib/duckdb.dll"
+          echo     IMPORTED_IMPLIB "C:/local/lib/duckdb.lib"
+          echo   ^)
+          echo endif^(^)
+          echo.
+          echo set^(DuckDB_LIBRARIES DuckDB::duckdb^)
+          echo set^(DuckDB_INCLUDE_DIRS "C:/local/include"^)
+          echo set^(DuckDB_FOUND TRUE^)
+          ) > C:\local\lib\cmake\DuckDB\DuckDBConfig.cmake
+
+      - name: Cache build
+        uses: actions/cache@v4
         with:
-          name: lbug-extensions_linux-x86_64
-          path: extension-artifacts
+          path: build
+          key: core-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt', 'src/**', 'extension/**', 'tools/**') }}
+          restore-keys: |
+            core-build-${{ runner.os }}-${{ runner.arch }}-
 
-  build-linux-extensions-aarch64:
-    if: ${{ inputs.x86_64LinuxOnly != true && false }}
-    runs-on: lbug-self-hosted-linux-building-aarch64
+      - name: Build precompiled extensions (Linux)
+        if: runner.os == 'Linux'
+        run: make extension-release
 
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build precompiled extensions
-        run: make extension-release NUM_THREADS=$(nproc)
-
-      - name: Collect built artifacts
-        run: /opt/python/cp310-cp310/bin/python scripts/collect-extensions.py
-
-      - name: Upload built artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: lbug-extensions_linux-aarch64
-          path: extension-artifacts
-
-  build-mac-extensions-arm64:
-    if: ${{ inputs.x86_64LinuxOnly != true && false }}
-    runs-on: self-hosted-mac-arm64
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build precompiled extensions
-        run: make extension-release NUM_THREADS=$(sysctl -n hw.logicalcpu)
+      - name: Build precompiled extensions (macOS)
+        if: runner.os == 'macOS'
+        run: make extension-release
         env:
           MACOSX_DEPLOYMENT_TARGET: 11.0
           CMAKE_OSX_ARCHITECTURES: "arm64"
 
-      - name: Collect built artifacts
-        run: python3 scripts/collect-extensions.py
-
-      - name: Upload built artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: lbug-extensions_osx-arm64
-          path: extension-artifacts
-
-  build-mac-extensions-x86_64:
-    if: ${{ inputs.x86_64LinuxOnly != true && false }}
-    runs-on: self-hosted-mac-x64
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build precompiled extensions
-        run: make extension-release NUM_THREADS=$(sysctl -n hw.logicalcpu)
-        env:
-          MACOSX_DEPLOYMENT_TARGET: 11.0
-          CMAKE_OSX_ARCHITECTURES: "x86_64"
-
-      - name: Collect built artifacts
-        run: python3 scripts/collect-extensions.py
-
-      - name: Upload built artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: lbug-extensions_osx-x86_64
-          path: extension-artifacts
-
-  build-windows-extensions-x86_64:
-    if: ${{ inputs.x86_64LinuxOnly != true && false }}
-    runs-on: self-hosted-windows
-    env:
-      NUM_THREADS: 18
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build precompiled extensions
+      - name: Build precompiled extensions (Windows)
+        if: runner.os == 'Windows'
         shell: cmd
         run: |
-          call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           make extension-release
+        env:
+          CMAKE_PREFIX_PATH: C:\local
 
       - name: Collect built artifacts
-        run: python scripts/collect-extensions.py
+        run: python3 scripts/collect-extensions.py
 
       - name: Upload built artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lbug-extensions_win-x86_64
+          name: lbug-extensions-${{ matrix.os_name }}-${{ matrix.arch }}
           path: extension-artifacts
