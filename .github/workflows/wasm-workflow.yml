@@ -11,8 +11,7 @@ on:
 
 jobs:
   build-wasm:
-    runs-on: lbug-self-hosted-testing
-    if: false
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -28,11 +27,18 @@ jobs:
       - name: Install dependencies
         working-directory: tools/wasm
         run: npm i
-      
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 'latest'
+
+      - name: Verify Emscripten
+        run: emcc -v
+
       - name: Build WebAssembly package
         working-directory: tools/wasm
         run: |
-          source /home/runner/emsdk/emsdk_env.sh
           npm run build
 
       - uses: actions/upload-artifact@v4
