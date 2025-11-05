@@ -29,7 +29,7 @@ on:
         description: "Skip building WebAssembly?"
         type: boolean
         required: true
-        default: true
+        default: false
       skipPython:
         description: "Skip building Python?"
         type: boolean

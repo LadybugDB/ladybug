@@ -1,0 +1,106 @@
+name: Build Node.js Module
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      isNightly:
+        type: boolean
+        required: true
+        default: false
+
+jobs:
+  build-nodejs:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x64
+            platform: linux
+            artifact_name: linux-nodejs-module-x86_64
+            node_name: lbugjs-linux-x64.node
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            platform: linux
+            artifact_name: linux-nodejs-module-aarch64
+            node_name: lbugjs-linux-arm64.node
+          - os: macos-latest
+            arch: arm64
+            platform: darwin
+            artifact_name: mac-nodejs-module-arm64
+            node_name: lbugjs-darwin-arm64.node
+            mac_env: true
+          - os: windows-latest
+            arch: x64
+            platform: win32
+            artifact_name: windows-nodejs-module
+            node_name: lbugjs-win32-x64.node
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update nightly version
+        if: ${{ inputs.isNightly == true }}
+        run: |
+          pip3 install packaging
+          python3 update-nightly-build-version.py
+        working-directory: scripts
+        shell: bash
+
+      - name: Create Node.js source distribution
+        if: ${{ matrix.platform != 'win32' }}
+        working-directory: tools/nodejs_api
+        run: |
+          rm -rf lbug-source.tar.gz package *.node
+          node package
+
+      - name: Extract tarball
+        if: ${{ matrix.platform != 'win32' }}
+        working-directory: tools/nodejs_api
+        run: tar -xvzf lbug-source.tar.gz
+
+      - name: Install Node.js dependencies (non-Windows)
+        if: ${{ matrix.platform != 'win32' }}
+        working-directory: tools/nodejs_api/package
+        run: npm i
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.mac_env && '11.0' || '' }}
+          ARCHFLAGS: ${{ matrix.mac_env && format('-arch {0}', matrix.arch) || '' }}
+
+      - name: Install Node.js dependencies (Windows)
+        if: ${{ matrix.platform == 'win32' }}
+        working-directory: tools/nodejs_api
+        run: npm i
+
+      - name: Build Node.js native module (Windows)
+        if: ${{ matrix.platform == 'win32' }}
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          make GEN=Ninja nodejs
+
+      - name: Move Node.js native module (Linux)
+        if: ${{ matrix.platform == 'linux' }}
+        working-directory: tools/nodejs_api/package
+        run: mv lbugjs.node ${{ matrix.node_name }}
+
+      - name: Move Node.js native module (Mac)
+        if: ${{ matrix.platform == 'darwin' }}
+        working-directory: tools/nodejs_api
+        run: mv package/lbugjs.node ${{ matrix.node_name }}
+
+      - name: Move Node.js native module (Windows)
+        if: ${{ matrix.platform == 'win32' }}
+        working-directory: tools/nodejs_api/build
+        run: ren lbugjs.node ${{ matrix.node_name }}
+        shell: cmd
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: tools/nodejs_api/${{ matrix.platform == 'linux' && 'package/' || matrix.platform == 'win32' && 'build/' || '' }}${{ matrix.node_name }}
+
+      - name: Clean up
+        if: ${{ matrix.platform == 'darwin' }}
+        working-directory: tools/nodejs_api/
+        run: rm -rf package
