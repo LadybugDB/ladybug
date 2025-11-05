@@ -110,6 +110,13 @@ jobs:
           tar -czvf liblbug-osx-universal.tar.gz lbug.h lbug.hpp liblbug.dylib
           tar -czvf lbug_cli-osx-universal.tar.gz lbug
 
+      - name: Create zip files (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          powershell -Command "Compress-Archive -Path lbug.h, lbug.hpp, lbug_shared.dll, lbug_shared.lib -DestinationPath liblbug-windows-x86_64.zip"
+          powershell -Command "Compress-Archive -Path lbug.exe -DestinationPath lbug_cli-windows-x86_64.zip"
+
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Linux'
         with:
@@ -138,14 +145,10 @@ jobs:
         if: runner.os == 'Windows'
         with:
           name: liblbug-windows-x86_64
-          path: |
-            lbug.h
-            lbug.hpp
-            lbug_shared.dll
-            lbug_shared.lib
+          path: liblbug-windows-x86_64.zip
 
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
           name: lbug_cli-windows-x86_64
-          path: lbug.exe
+          path: lbug_cli-windows-x86_64.zip
