@@ -9,6 +9,10 @@ on:
         description: 'Tag/Release to upload to'
         required: true
         type: string
+      run_id:
+        description: 'Run ID of the precompiled-bin workflow to download artifacts from'
+        required: true
+        type: string
 
 jobs:
   release:
@@ -20,6 +24,8 @@ jobs:
           pattern: 'liblbug*'
           path: artifacts
           merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.run_id }}
 
       - name: Download lbug_cli artifacts
         uses: actions/download-artifact@v4
@@ -27,6 +33,8 @@ jobs:
           pattern: 'lbug_cli*'
           path: artifacts
           merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.run_id }}
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
