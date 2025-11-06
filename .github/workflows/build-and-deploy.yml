@@ -266,30 +266,16 @@ jobs:
         run: |
           ./gradlew publish -i
 
-  build-nodejs-mac:
+  build-nodejs:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipNodejs != 'true' }}
-    uses: ./.github/workflows/mac-nodejs-workflow.yml
-    with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
-    secrets: inherit
-
-  build-nodejs-linux:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipNodejs != 'true' }}
-    uses: ./.github/workflows/linux-nodejs-workflow.yml
-    with:
-      isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
-    secrets: inherit
-
-  build-nodejs-windows:
-    if: ${{ github.event_name == 'schedule' ||  github.event.inputs.skipNodejs != 'true' }}
-    uses: ./.github/workflows/windows-nodejs-workflow.yml
+    uses: ./.github/workflows/nodejs-workflow.yml
     with:
       isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
 
   deploy-nodejs:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipNodejs != 'true' }}
-    needs: [build-nodejs-mac, build-nodejs-linux, build-nodejs-windows]
+    needs: [build-nodejs]
     runs-on: ubuntu-latest
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_JS_TOKEN }}
@@ -309,11 +295,6 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: mac-nodejs-module-arm64
-          path: tools/nodejs_api/prebuilt
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: mac-nodejs-module-x86_64
           path: tools/nodejs_api/prebuilt
 
       - uses: actions/download-artifact@v4
