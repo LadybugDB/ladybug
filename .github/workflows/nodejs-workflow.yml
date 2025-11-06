@@ -46,6 +46,8 @@ jobs:
           python3 update-nightly-build-version.py
         working-directory: scripts
         shell: bash
+        env:
+          PIP_BREAK_SYSTEM_PACKAGES: ${{ matrix.mac_env && '1' || '' }}
 
       - name: Create Node.js source distribution
         if: ${{ matrix.platform != 'win32' }}
