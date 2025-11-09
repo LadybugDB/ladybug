@@ -9,7 +9,7 @@ jobs:
     
   purge-extensions:
     needs: get-ghcr-extensions
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - name: Free disk space on Ubuntu runner
         uses: kfir4444/free-disk-space@main
