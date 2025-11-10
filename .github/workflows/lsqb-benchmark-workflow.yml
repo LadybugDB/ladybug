@@ -8,7 +8,7 @@ on:
       scale_factor:
         description: 'Scale factor'
         required: true
-        default: "30"
+        default: "1"
         type: choice
         options:
           - "0.1"
@@ -28,16 +28,14 @@ jobs:
   benchmark:
     name: benchmark
     env:
-      NUM_THREADS: 30
       GEN: Ninja
-    runs-on: lbug-self-hosted-benchmarking
-    if: false
+    runs-on: ubuntu-latest
     steps:
       - name: Set env for scheduled run
         if: ${{ github.event_name == 'schedule' }}
         run: |
             echo "TIMEOUT=600000" >> $GITHUB_ENV
-            echo "SCALE_FACTOR=100" >> $GITHUB_ENV
+            echo "SCALE_FACTOR=1" >> $GITHUB_ENV
 
       - name: Set env for workflow dispatch
         if: ${{ github.event_name == 'workflow_dispatch' }}
