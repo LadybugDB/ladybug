@@ -24,7 +24,7 @@
     "clean-all": "node clean.js all",
     "build": "node build.js"
   },
-  "author": "Kùzu Team",
+  "author": "Ladybug Team",
   "license": "MIT",
   "devDependencies": {
     "chai": "^4.4.1",

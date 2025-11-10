@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node index.js"
   },
-  "author": "Kùzu Team",
+  "author": "Ladybug Team",
   "license": "MIT",
   "description": "",
   "dependencies": {

@@ -18,7 +18,7 @@ npm install lbug
 ### Example (ES Modules)
 
 ```js
-// Import the Kùzu module (ESM)
+// Import the Ladybug module (ESM)
 import { Database, Connection } from "lbug";
 
 const main = async () => {
@@ -146,4 +146,4 @@ Refer to the [npm documentation](https://docs.npmjs.com/cli/v9/commands/npm-publ
 
 * [Ladybug GitHub](https://github.com/lbugdb/lbug)
 * [Ladybug Documentation](https://docs.ladybugdb.com)
-* [Issue Tracker](https://github.com/kuzudb/kuzu/issues)
+* [Issue Tracker](https://github.com/LadybugDB/ladybug/issues)
