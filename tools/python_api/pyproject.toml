@@ -23,11 +23,15 @@ dev = [
     "pytest",
     "pytest-asyncio~=1.0",
     "setuptools~=80.9",
-    "ruff==0.11.12",
-    "mypy==1.16.0",
-    "torch~=2.5.0",
-    "torch-geometric~=2.5.0",
+    "ruff~=0.14.4",
+    "mypy~=1.18.2",
+    "torch>=2.5.0",
+    "torch-geometric>=2.5.0",
 ]
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
@@ -35,11 +39,13 @@ url = "https://download.pytorch.org/whl/cpu"
 
 [[tool.uv.index]]
 name = "torch-geometric"
-url = "https://data.pyg.org/whl/torch-2.5.0+cpu.html"
+url = "https://data.pyg.org/whl/torch-2.5.0+cpu/"
 
 [tool.uv.sources]
-torch-geometric = { index = "torch-geometric" }
 torch = { index = "pytorch-cpu" }
+
+[tool.uv]
+index-strategy = "unsafe-best-match"
 
 [tool.mypy]
 files = ["src_py", "test"]
