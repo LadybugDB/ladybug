@@ -57,8 +57,8 @@ jobs:
         run: |
           uv venv
           source .venv/bin/activate
-          uv pip install --prerelease=allow -e tools/python_api/[dev]
           make python
+          uv pip install --prerelease=allow -e tools/python_api/[dev]
 
       - name: Benchmark
         run: uv run benchmark/lsqb/benchmark_runner.py
