@@ -416,16 +416,18 @@ add_definitions(-DLBUG_ROOT_DIRECTORY="${PROJECT_SOURCE_DIR}")
 add_definitions(-DLBUG_CMAKE_VERSION="${CMAKE_PROJECT_VERSION}")
 add_definitions(-DLBUG_EXTENSION_VERSION="0.12.0")
 
+if(BUILD_LBUG)
+include_directories(
+    src/include
+    ${CMAKE_CURRENT_BINARY_DIR}/src/include
+)
+endif()
+
 if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extension/CMakeLists.txt")
     add_subdirectory(extension)
 endif ()
 
 if(BUILD_LBUG)
-
-include_directories(
-    src/include
-    ${CMAKE_CURRENT_BINARY_DIR}/src/include
-)
 
 add_subdirectory(src)
 
