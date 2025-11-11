@@ -29,11 +29,16 @@ dev = [
     "torch-geometric~=2.5.0",
 ]
 
-[tool.uv.index]
-pytorch-cpu = { url = "https://download.pytorch.org/whl/cpu" }
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+
+[[tool.uv.index]]
+name = "torch-geometric"
+url = "https://data.pyg.org/whl/torch-2.5.0+cpu.html"
 
 [tool.uv.sources]
-torch-geometric = { url = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }
+torch-geometric = { index = "torch-geometric" }
 torch = { index = "pytorch-cpu" }
 
 [tool.mypy]
