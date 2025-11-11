@@ -23,8 +23,8 @@ dev = [
     "pytest",
     "pytest-asyncio~=1.0",
     "setuptools~=80.9",
-    "ruff~=0.14.4",
-    "mypy~=1.18.2",
+    "ruff==0.11.12",
+    "mypy==1.16.0",
     "torch>=2.5.0",
     "torch-geometric>=2.5.0",
 ]
