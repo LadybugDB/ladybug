@@ -920,6 +920,9 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
 
+      - name: Install uv
+        run: pip3 install uv
+
       - name: Install clang-format
         run: |
           sudo apt-get update
@@ -964,6 +967,9 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: pip3 install uv
 
       - name: Setup Python
         uses: actions/setup-python@v5
