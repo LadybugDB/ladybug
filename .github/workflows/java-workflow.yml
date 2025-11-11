@@ -167,9 +167,14 @@ jobs:
 
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
+        shell: bash
         run: |
           uv venv
-          source .venv/bin/activate
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            source .venv/Scripts/activate
+          else
+            source .venv/bin/activate
+          fi
           uv pip install packaging
           python3 update-nightly-build-version.py
         working-directory: ./scripts
