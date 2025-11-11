@@ -35,8 +35,7 @@ bm_size = int((max_memory / 1024**2) * 0.9)
 base_dir = os.path.dirname(os.path.realpath(__file__))
 
 # import lbug Python API
-sys.path.append(os.path.join(base_dir, "..", ".."))
-import tools.python_api.build.lbug as lbug
+import real_ladybug as lbug
 
 # dataset registration
 datasets = {"0.1", "0.3", "1", "3", "10", "30", "100"}

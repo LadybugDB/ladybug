@@ -6,8 +6,7 @@ import sys
 base_dir = os.path.dirname(os.path.realpath(__file__))
 
 # import lbug Python API
-sys.path.append(os.path.join(base_dir, '..', '..'))
-import tools.python_api.build.lbug as lbug
+import real_ladybug as lbug
 
 def _get_lbug_version():
     cmake_file = os.path.join(base_dir, '..', '..', 'CMakeLists.txt')

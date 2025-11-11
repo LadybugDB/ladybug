@@ -127,6 +127,7 @@ strict = true
 docstring-code-format = true
 
 [tool.setuptools.packages.find]
+where = ["src_py", "build"]
 exclude = ["src_cpp*"]
 
 [build-system]
