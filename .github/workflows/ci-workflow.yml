@@ -600,7 +600,7 @@ jobs:
         run: |
           uv venv
           source .venv/bin/activate
-          uv pip install --user -e tools/python_api/[dev]
+          uv pip install --prerelease=allow --user -e tools/python_api/[dev]
 
       - name: Python test
         run: make pytest
@@ -838,7 +838,7 @@ jobs:
         run: |
           uv venv
           call .venv\Scripts\activate.bat
-          uv pip install --user -e tools/python_api/[dev]
+          uv pip install --prerelease=allow --user -e tools/python_api/[dev]
 
       - name: Python test
         shell: cmd
@@ -1114,7 +1114,7 @@ jobs:
         run: |
           uv venv
           source .venv/bin/activate
-          uv pip install --user -e tools/python_api/[dev]
+          uv pip install --prerelease=allow --user -e tools/python_api/[dev]
 
       - name: Python test
         env:

@@ -64,7 +64,7 @@ jobs:
           uv pip install *.whl
           uv pip install pdoc
           uv pip install torch~=2.5.0 --extra-index-url https://download.pytorch.org/whl/cpu
-          uv pip install -e tools/python_api/[dev]
+          uv pip install --prerelease=allow -e tools/python_api/[dev]
 
       - name: Generate Python docs
         run: |
@@ -101,7 +101,7 @@ jobs:
         with:
           name: lbug-nodejs-docs
           path: ./docs
-  
+
   generate-wasm-docs:
     runs-on: macos-latest
     steps:
@@ -172,7 +172,7 @@ jobs:
         with:
           name: lbug-cpp-docs
           path: ./scripts/generate-cpp-docs/cpp/docs/html
-      
+
       - name: Upload C docs
         uses: actions/upload-artifact@v4
         with:
@@ -194,7 +194,7 @@ jobs:
           repository: LadybugDB/api-docs
           token: ${{ secrets.DOC_PUSH_TOKEN }}
           path: api-docs
-        
+
       - name: Remove old documentations
         run: |
           rm -rf api-docs/python
@@ -209,7 +209,7 @@ jobs:
         with:
           name: lbug-python-docs
           path: api-docs/python
-      
+
       - name: Download Node.js docs
         uses: actions/download-artifact@v4
         with:
@@ -221,7 +221,7 @@ jobs:
         with:
           name: lbug-wasm-docs
           path: api-docs/wasm
-        
+
       - name: Download Java docs
         uses: actions/download-artifact@v4
         with:
@@ -233,13 +233,13 @@ jobs:
         with:
           name: lbug-cpp-docs
           path: api-docs/cpp
-        
+
       - name: Download C docs
         uses: actions/download-artifact@v4
         with:
           name: lbug-c-docs
           path: api-docs/c
-        
+
       - name: Push changes
         working-directory: api-docs
         run: |
@@ -249,7 +249,7 @@ jobs:
           git add .
           git commit -m "Update API documentations"
           git push -u origin "api-documentation-update-${{ github.sha }}"
-      
+
       - name: Create pull request
         working-directory: api-docs
         run: |
