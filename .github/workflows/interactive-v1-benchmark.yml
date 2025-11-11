@@ -46,6 +46,11 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: benchmark-${{ runner.os }}
+
       - name: Build lbug
         run: |
           pip3 install -e tools/python_api/[dev]

@@ -48,6 +48,11 @@ jobs:
       - name: Install uv
         run: pip install uv
 
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: benchmark-${{ runner.os }}
+
       - name: Build
         run: |
           uv pip install -e tools/python_api/[dev] 
