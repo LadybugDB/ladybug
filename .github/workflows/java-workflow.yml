@@ -24,10 +24,13 @@ jobs:
           restore-keys: |
             core-build-${{ runner.os }}-${{ runner.arch }}-
 
+      - name: Install uv
+        run: python3 -m pip install uv
+
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         run: |
-          python3 -m pip install packaging
+          uv pip install packaging
           python3 update-nightly-build-version.py
         working-directory: scripts
 
@@ -53,10 +56,13 @@ jobs:
           restore-keys: |
             core-build-${{ runner.os }}-${{ runner.arch }}-
 
+      - name: Install uv
+        run: python3 -m pip install uv
+
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         run: |
-          python3 -m pip install packaging
+          uv pip install packaging
           python3 update-nightly-build-version.py
         working-directory: scripts
 
@@ -74,10 +80,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        run: python3 -m pip install uv
+
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         run: |
-          python3 -m pip install packaging
+          uv pip install packaging
           python3 update-nightly-build-version.py
         working-directory: scripts
 
@@ -110,10 +119,13 @@ jobs:
           restore-keys: |
             core-build-${{ runner.os }}-${{ runner.arch }}-
 
+      - name: Install uv
+        run: pip3 install uv
+
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         run: |
-          pip3 install packaging
+          uv pip install packaging
           python3 update-nightly-build-version.py
         working-directory: scripts
 
@@ -142,10 +154,13 @@ jobs:
           restore-keys: |
             core-build-${{ runner.os }}-${{ runner.arch }}-
 
+      - name: Install uv
+        run: pip3 install uv
+
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         run: |
-          pip3 install packaging
+          uv pip install packaging
           python3 update-nightly-build-version.py
         working-directory: ./scripts
 

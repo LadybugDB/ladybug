@@ -10,9 +10,6 @@ from setuptools.command.build_py import build_py as _build_py
 
 base_dir = os.path.dirname(__file__)
 
-with open(os.path.join(base_dir, 'real_ladybug-source', 'tools', 'python_api', 'requirements_dev.txt')) as f:
-    requirements = f.read().splitlines()
-
 
 def _get_lbug_version():
     cmake_file = os.path.join(base_dir, 'real_ladybug-source', 'CMakeLists.txt')

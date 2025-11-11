@@ -45,13 +45,16 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - name: Install uv
+        run: pip install uv
+
       - name: Build
         run: |
-          pip install -r tools/python_api/requirements_dev.txt 
+          uv pip install -e tools/python_api/[dev] 
           make python
 
       - name: Benchmark
-        run: python3 benchmark/lsqb/benchmark_runner.py
+        run: uv run benchmark/lsqb/benchmark_runner.py
 
       - name: Upload result csv
         uses: actions/upload-artifact@v4

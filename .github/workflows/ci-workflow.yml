@@ -211,9 +211,6 @@ jobs:
         run: |
           make test
 
-      - name: Ensure Python dependencies
-        run: pip install --user -r tools/python_api/requirements_dev.txt
-
       - name: Python test
         run: make pytest
 
@@ -596,8 +593,11 @@ jobs:
         run: |
           make test
 
+      - name: Install uv
+        run: pip install uv
+
       - name: Ensure Python dependencies
-        run: pip install --user -r tools/python_api/requirements_dev.txt
+        run: uv pip install --user -e tools/python_api/[dev]
 
       - name: Python test
         run: make pytest
@@ -828,8 +828,11 @@ jobs:
           call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
           make test
 
+      - name: Install uv
+        run: pip install uv
+
       - name: Ensure Python dependencies
-        run: pip install --user -r tools/python_api/requirements_dev.txt
+        run: uv pip install --user -e tools/python_api/[dev]
 
       - name: Python test
         shell: cmd
@@ -1098,8 +1101,11 @@ jobs:
           ulimit -n 10240
           make example
 
+      - name: Install uv
+        run: pip3 install uv
+
       - name: Ensure Python dependencies
-        run: pip3 install --user -r tools/python_api/requirements_dev.txt
+        run: uv pip install --user -e tools/python_api/[dev]
 
       - name: Python test
         env:
@@ -1169,9 +1175,12 @@ jobs:
       - name: Generate datasets
         run: bash scripts/generate_binary_demo.sh
 
+      - name: Install uv
+        run: pip3 install uv
+
       - name: Test
         run: |
-          pip3 install pytest pexpect
+          uv pip install pytest pexpect
           make shell-test test
 
   linux-extension-test:
@@ -1215,8 +1224,11 @@ jobs:
           node -e 'fs=require("fs");fs.readFile(process.env.PG_FNAME,"utf8",(err,data)=>{if(err!=null)throw err;fs.writeFile(process.env.PG_FNAME,data.replaceAll(process.env.FIND,process.env.PG_HOST),"utf8",e=>{if(e!=null)throw e;});});'
           node -e 'fs=require("fs");fs.readFile(process.env.SQL_FNAME,"utf8",(err,data)=>{if(err!=null)throw err;fs.writeFile(process.env.SQL_FNAME,data.replaceAll(process.env.FIND,process.env.PG_HOST),"utf8",e=>{if(e!=null)throw e;});});'
 
+      - name: Install uv
+        run: pip install uv
+
       - name: Install dependencies
-        run: pip install rangehttpserver requests
+        run: uv pip install rangehttpserver requests
 
       # shell needs to be built first to generate the dataset provided by the server
       - name: Extension test build
@@ -1324,8 +1336,11 @@ jobs:
           node -e 'fs=require("fs");fs.readFile(process.env.PG_TEST_FNAME,"utf8",(err,data)=>{if(err!=null)throw err;fs.writeFile(process.env.PG_TEST_FNAME,data.replaceAll(process.env.FIND,process.env.PG_HOST),"utf8",e=>{if(e!=null)throw e;});});'
           node -e 'fs=require("fs");fs.readFile(process.env.SQL_TEST_FNAME,"utf8",(err,data)=>{if(err!=null)throw err;fs.writeFile(process.env.SQL_TEST_FNAME,data.replaceAll(process.env.FIND,process.env.PG_HOST),"utf8",e=>{if(e!=null)throw e;});});'
 
+      - name: Install uv
+        run: pip3 install uv
+
       - name: Install dependencies
-        run: pip3 install rangehttpserver requests
+        run: uv pip install rangehttpserver requests
 
       # shell needs to be built first to generate the dataset provided by the server
       - name: Extension test build
@@ -1398,8 +1413,10 @@ jobs:
       WERROR: 0
     steps:
       - uses: actions/checkout@v4
+      - name: Install uv
+        run: pip install uv
       - name: Install dependencies
-        run: pip install rangehttpserver requests
+        run: uv pip install rangehttpserver requests
 
       - name: Update PostgreSQL host
         working-directory: extension/postgres/test/test_files

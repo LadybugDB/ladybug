@@ -19,7 +19,7 @@ jobs:
         continue-on-error: true
         run: |
           set +e
-          python3 benchmark/benchmark_runner.py --dataset ldbc-sf10
+          uv run benchmark/benchmark_runner.py --dataset ldbc-sf10
           echo $? > benchmark/exit_code
 
       - name: Upload benchmark logs

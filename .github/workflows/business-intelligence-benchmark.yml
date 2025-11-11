@@ -46,7 +46,7 @@ jobs:
 
       - name: Build lbug
         run: |
-          pip3 install -r tools/python_api/requirements_dev.txt
+          pip3 install -e tools/python_api/[dev]
           make python
     
       - name: Clone implementation

@@ -17,11 +17,11 @@ else
 endif
 
 .venv:  ## Set up a Python virtual environment and install dev packages
-	python3 -m venv $(VENV)
+	uv venv $(VENV)
 
 requirements: .venv ## Install/update Python dev packages
 	@unset CONDA_PREFIX \
-	&& $(VENV_BIN)/pip install --upgrade -r requirements_dev.txt
+	&& uv pip install -e .[dev]
 
 pytest: requirements
 ifeq ($(OS),Windows_NT)
