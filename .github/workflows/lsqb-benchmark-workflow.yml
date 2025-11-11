@@ -55,6 +55,8 @@ jobs:
 
       - name: Build
         run: |
+          uv venv
+          source .venv/bin/activate
           uv pip install -e tools/python_api/[dev] 
           make python
 

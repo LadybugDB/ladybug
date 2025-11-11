@@ -597,7 +597,10 @@ jobs:
         run: pip install uv
 
       - name: Ensure Python dependencies
-        run: uv pip install --user -e tools/python_api/[dev]
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install --user -e tools/python_api/[dev]
 
       - name: Python test
         run: make pytest
@@ -832,7 +835,10 @@ jobs:
         run: pip install uv
 
       - name: Ensure Python dependencies
-        run: uv pip install --user -e tools/python_api/[dev]
+        run: |
+          uv venv
+          call .venv\Scripts\activate.bat
+          uv pip install --user -e tools/python_api/[dev]
 
       - name: Python test
         shell: cmd
@@ -1105,7 +1111,10 @@ jobs:
         run: pip3 install uv
 
       - name: Ensure Python dependencies
-        run: uv pip install --user -e tools/python_api/[dev]
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install --user -e tools/python_api/[dev]
 
       - name: Python test
         env:
@@ -1180,6 +1189,8 @@ jobs:
 
       - name: Test
         run: |
+          uv venv
+          source .venv/bin/activate
           uv pip install pytest pexpect
           make shell-test test
 
@@ -1228,7 +1239,10 @@ jobs:
         run: pip install uv
 
       - name: Install dependencies
-        run: uv pip install rangehttpserver requests
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install rangehttpserver requests
 
       # shell needs to be built first to generate the dataset provided by the server
       - name: Extension test build
@@ -1340,7 +1354,10 @@ jobs:
         run: pip3 install uv
 
       - name: Install dependencies
-        run: uv pip install rangehttpserver requests
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install rangehttpserver requests
 
       # shell needs to be built first to generate the dataset provided by the server
       - name: Extension test build
@@ -1416,7 +1433,10 @@ jobs:
       - name: Install uv
         run: pip install uv
       - name: Install dependencies
-        run: uv pip install rangehttpserver requests
+        run: |
+          uv venv
+          call .venv\Scripts\activate.bat
+          uv pip install rangehttpserver requests
 
       - name: Update PostgreSQL host
         working-directory: extension/postgres/test/test_files

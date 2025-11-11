@@ -65,6 +65,8 @@ jobs:
 
       - name: Update nightly version
         run: |
+          uv venv
+          source .venv/bin/activate
           uv pip install packaging
           python3 update-nightly-build-version.py | grep "New Python dev version:" | awk -F'New Python dev version: ' '{print $2}' | sed 's/\.$//' > version.txt
           cat version.txt
@@ -158,6 +160,8 @@ jobs:
       - name: Update nightly version
         if: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
         run: |
+          uv venv
+          source .venv/bin/activate
           uv pip install packaging
           python3 update-nightly-build-version.py
         working-directory: scripts
@@ -209,6 +213,8 @@ jobs:
       - name: Update nightly version
         if: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
         run: |
+          uv venv
+          source .venv/bin/activate
           uv pip install packaging
           python3 update-nightly-build-version.py
         working-directory: scripts
@@ -297,6 +303,8 @@ jobs:
       - name: Update nightly version
         if: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
         run: |
+          uv venv
+          source .venv/bin/activate
           uv pip install packaging
           python3 update-nightly-build-version.py
         working-directory: scripts

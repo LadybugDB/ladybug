@@ -59,6 +59,8 @@ jobs:
 
       - name: Install Python packages
         run: |
+          uv venv
+          source .venv/bin/activate
           uv pip install *.whl
           uv pip install pdoc
           uv pip install torch~=2.5.0 --extra-index-url https://download.pytorch.org/whl/cpu

@@ -21,6 +21,8 @@ jobs:
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         run: |
+          uv venv
+          source .venv/bin/activate
           uv pip install packaging
           python3 update-nightly-build-version.py
         working-directory: scripts
@@ -118,13 +120,18 @@ jobs:
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         run: |
+          uv venv
+          source .venv/bin/activate
           uv pip install packaging
           python update-nightly-build-version.py
         working-directory: scripts
 
       - name: Install cibuildwheel
         if: matrix.os != 'windows'
-        run: uv pip install cibuildwheel
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install cibuildwheel
 
       - name: Build wheels on ${{ matrix.platform }} (Windows)
         if: matrix.os == 'windows'
@@ -137,6 +144,8 @@ jobs:
         if: matrix.os != 'windows'
         shell: bash
         run: |
+          uv venv
+          source .venv/bin/activate
           uv pip install cibuildwheel
           python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse ${{ env.SDIST_FILE }}
 
