@@ -98,23 +98,21 @@ static std::unique_ptr<TableFuncBindData> bindFunc(ClientContext* context,
         std::move(createFTSConfig));
 }
 
-static std::string createStopWordsTable(const ClientContext& context,
+static std::string createStopWordsTable([[maybe_unused]] const ClientContext& context,
     const StopWordsTableInfo& info) {
     std::string query = "";
-    auto catalog = catalog::Catalog::Get(context);
     switch (info.source) {
     case StopWordsSource::DEFAULT: {
-        if (catalog->containsTable(transaction::Transaction::Get(context), info.tableName)) {
-            return query;
-        }
+        // Always generate CREATE TABLE IF NOT EXISTS and MERGE statements.
+        // They are idempotent and safe to execute multiple times during import.
         query +=
-            stringFormat("CREATE NODE TABLE `{}` (sw STRING, PRIMARY KEY(sw));", info.tableName);
+            stringFormat("CREATE NODE TABLE IF NOT EXISTS `{}` (sw STRING, PRIMARY KEY(sw));", info.tableName);
         std::string stopWordList = "[";
         for (auto& stopWord : StopWords::getDefaultStopWords()) {
             stopWordList += stringFormat("\"{}\",", stopWord);
         }
         stopWordList.back() = ']';
-        query += stringFormat("UNWIND {} AS word CREATE (s:`{}` {sw: word});", stopWordList,
+        query += stringFormat("UNWIND {} AS word MERGE (s:`{}` {sw: word});", stopWordList,
             info.tableName);
     } break;
     case StopWordsSource::TABLE: {
