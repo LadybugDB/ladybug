@@ -1,4 +1,5 @@
 PYPI_URL = "https://pypi.org/pypi/real_ladybug/json"
+TEST_PYPI_URL = "https://test.pypi.org/pypi/real_ladybug/json"
 CMAKE_KEYWORD = "project(Lbug VERSION "
 CMAKE_SUFFIX = " LANGUAGES CXX C)\n"
 EXTENSION_KEYWORD = 'add_definitions(-DLBUG_EXTENSION_VERSION="'
@@ -16,6 +17,8 @@ def main():
         from packaging.version import Version
     except ImportError:
         from distutils.version import LooseVersion as Version
+
+    # Fetch releases from production PyPI
     try:
         with urllib.request.urlopen(PYPI_URL) as url:
             data = json.loads(url.read().decode())
@@ -25,6 +28,18 @@ def main():
         else:
             raise
     releases = data["releases"]
+
+    # Fetch releases from test PyPI for dev versions
+    try:
+        with urllib.request.urlopen(TEST_PYPI_URL) as url:
+            test_data = json.loads(url.read().decode())
+            # Merge test.pypi.org releases into releases dict
+            releases.update(test_data["releases"])
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            pass  # No releases on test PyPI
+        else:
+            raise
     versions = list(releases.keys())
     versions.sort(key=Version)
     dev_versions = [v for v in versions if "dev" in v]
