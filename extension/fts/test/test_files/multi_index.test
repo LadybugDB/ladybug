@@ -40,4 +40,5 @@ Exported database successfully.
 ---- ok
 -STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}/fts-db"
 ---- 1
-Imported database successfully.%
+Imported database successfully.
+
