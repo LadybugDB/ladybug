@@ -1,0 +1,43 @@
+-DATASET CSV fts-small
+
+--
+
+# These ground truth numbers were obtained from DuckDB and we double checked that
+# our results and DuckDB's results is within three decimal places.
+-CASE MultiFTSIndex
+-LOAD_DYNAMIC_EXTENSION fts
+-STATEMENT CALL CREATE_FTS_INDEX('doc', 'AuthorIdx', ['author'])
+---- ok
+-STATEMENT CALL CREATE_FTS_INDEX('doc', 'NameIdx', ['name'])
+---- ok
+-LOG SimpleQuery
+-STATEMENT CALL QUERY_FTS_INDEX('doc', 'AuthorIdx', 'Alice') RETURN node.ID, score
+---- 2
+0|0.204120
+3|0.204120
+-STATEMENT Export Database "${LBUG_EXPORT_DB_DIRECTORY}/fts-db"
+---- 1
+Exported database successfully.
+-STATEMENT CALL DROP_FTS_INDEX('doc', 'AuthorIdx')
+---- ok
+-STATEMENT CALL DROP_FTS_INDEX('doc', 'NameIdx')
+---- ok
+-STATEMENT DROP TABLE likes
+---- ok
+-STATEMENT DROP TABLE doc
+---- ok
+-STATEMENT DROP TABLE city_stopwords
+---- ok
+-STATEMENT DROP TABLE name_stopwords
+---- ok
+-STATEMENT DROP TABLE INVALID_STOPWORDS
+---- ok
+-STATEMENT DROP TABLE INVALID_STOPWORDS_COL_TYPE
+---- ok
+-STATEMENT DROP MACRO `0_AUTHORIDX_TOKENIZE`
+---- ok
+-STATEMENT DROP MACRO `0_NAMEIDX_TOKENIZE`
+---- ok
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}/fts-db"
+---- 1
+Imported database successfully.% 
