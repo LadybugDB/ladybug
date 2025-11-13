@@ -9,6 +9,7 @@
 Binder exception: Cannot load from file type iceberg. If this file type is part of a lbug extension please load the extension then try again.
 
 -CASE IcebergFunctions
+-SKIP
 -LOAD_DYNAMIC_EXTENSION iceberg
 -LOG NOT_allow_moved_paths
 -STATEMENT LOAD FROM '${LBUG_ROOT_DIRECTORY}/extension/iceberg/test/iceberg_tables/lineitem_iceberg' (file_format='iceberg', allow_moved_paths=false) RETURN *

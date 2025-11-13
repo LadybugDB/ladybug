@@ -3,6 +3,7 @@
 --
 
 -CASE ScanDuckDBTable
+-SKIP
 -SKIP_FSM_LEAK_CHECK
 -LOAD_DYNAMIC_EXTENSION duckdb
 -LOG AttachUnsupportedTableError

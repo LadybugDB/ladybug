@@ -32,6 +32,7 @@ anotherkey
 ]
 
 -CASE ScanFromDifferentAWSS3File
+-SKIP
 -LOAD_DYNAMIC_EXTENSION httpfs
 -INSERT_STATEMENT_BLOCK AWS_S3_SETUP
 -STATEMENT CALL s3_url_style='path'

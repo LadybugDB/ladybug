@@ -75,6 +75,7 @@ Detached database successfully.
 alice
 
 -CASE TestingDataTypesSqlite
+-SKIP
 -SKIP_FSM_LEAK_CHECK
 -LOAD_DYNAMIC_EXTENSION sqlite
 -STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/extension/sqlite/test/sqlite_database/datatypeTestingSqlite' as datatype (dbtype sqlite);

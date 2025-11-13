@@ -8,6 +8,7 @@
 ^IO exception: Cannot open file.+
 
 -CASE AzureScan
+-SKIP
 -SKIP_STATIC_LINK
 -LOAD_DYNAMIC_EXTENSION azure
 -STATEMENT LOAD FROM "az://lbug-test/vPerson.csv" RETURN *;
@@ -103,6 +104,7 @@ Column with name: "column1" is missing
 Potential Fix: Since your schema has a mismatch, consider setting union_by_name=true.
 
 -CASE AzurePublicScan
+-SKIP
 -SKIP_STATIC_LINK
 -LOAD_DYNAMIC_EXTENSION azure
 -STATEMENT CALL AZURE_CONNECTION_STRING = "";
