@@ -105,8 +105,8 @@ static std::string createStopWordsTable([[maybe_unused]] const ClientContext& co
     case StopWordsSource::DEFAULT: {
         // Always generate CREATE TABLE IF NOT EXISTS and MERGE statements.
         // They are idempotent and safe to execute multiple times during import.
-        query +=
-            stringFormat("CREATE NODE TABLE IF NOT EXISTS `{}` (sw STRING, PRIMARY KEY(sw));", info.tableName);
+        query += stringFormat("CREATE NODE TABLE IF NOT EXISTS `{}` (sw STRING, PRIMARY KEY(sw));",
+            info.tableName);
         std::string stopWordList = "[";
         for (auto& stopWord : StopWords::getDefaultStopWords()) {
             stopWordList += stringFormat("\"{}\",", stopWord);
