@@ -53,6 +53,11 @@ on:
 env:
   PIP_BREAK_SYSTEM_PACKAGES: 1
 
+permissions:
+  id-token: write  # Required for OIDC
+  contents: read
+  packages: write  # Required by extension deployment
+
 jobs:
   get-nightly-version:
     runs-on: ubuntu-latest
