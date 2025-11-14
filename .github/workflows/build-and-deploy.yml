@@ -292,8 +292,6 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipNodejs != 'true' }}
     needs: [build-nodejs]
     runs-on: ubuntu-latest
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_JS_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -332,10 +330,13 @@ jobs:
           name: windows-nodejs-module
           path: tools/nodejs_api/prebuilt
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
-          node-version: "16"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Package Node.js API with prebuilt binaries
         run: node package
