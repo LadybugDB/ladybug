@@ -1196,6 +1196,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free disk space on Ubuntu runner
+        uses: kfir4444/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
