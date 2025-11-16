@@ -488,6 +488,24 @@ TEST_F(ApiTest, CloseDatabaseBeforeQueryResultWithMultipleStatements) {
     inMemoryDatabase.reset();
 }
 
+TEST_F(ApiTest, ToStringDoesNotModifyIterator) {
+    auto result = conn->query("MATCH (p:person) RETURN p.ID ORDER BY p.ID");
+    ASSERT_TRUE(result->isSuccess());
+    ASSERT_TRUE(result->hasNext()); // Iterator should be at the beginning
+    auto str = result->toString();  // This should not modify the iterator
+    ASSERT_TRUE(result->hasNext()); // Iterator should still be at the beginning
+    // Now iterate through the results
+    std::vector<int64_t> ids;
+    while (result->hasNext()) {
+        auto tuple = result->getNext();
+        ids.push_back(tuple->getValue(0)->getValue<int64_t>());
+    }
+    ASSERT_EQ(ids.size(), 8u); // Assuming 8 persons in the test data
+    ASSERT_EQ(ids[0], 0);
+    ASSERT_EQ(ids[1], 2);
+    // etc., but just check the count for now
+}
+
 TEST_F(ApiTest, EmptyDBFile) {
     if (inMemMode) {
         GTEST_SKIP();
