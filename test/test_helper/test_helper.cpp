@@ -32,6 +32,7 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
         std::cout << "cypherScript: " << cypherScript << " doesn't exist. Skipping..." << std::endl;
         return;
     }
+    auto cypherDir = std::filesystem::path(cypherScript).parent_path();
     std::ifstream file(cypherScript);
     if (!file.is_open()) {
         throw Exception(stringFormat("Error opening file: {}, errno: {}.", cypherScript, errno));
@@ -68,7 +69,14 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
             index = end + 1;
         }
         for (auto& csvFilePath : csvFilePaths) {
-            auto fullPath = appendLbugRootPath(csvFilePath);
+            std::string fullPath = csvFilePath;
+            if (std::filesystem::path(csvFilePath).is_relative()) {
+                if (std::filesystem::path(csvFilePath).parent_path().empty()) {
+                    fullPath = (cypherDir / csvFilePath).string();
+                } else {
+                    fullPath = appendLbugRootPath(csvFilePath);
+                }
+            }
             line.replace(line.find(csvFilePath), csvFilePath.length(), fullPath);
         }
         // Also handle storage = 'path' for parquet tables
