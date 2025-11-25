@@ -17,7 +17,14 @@
 
 #include "binder/binder.h"
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/catalog_entry.h"
+#include "catalog/catalog_entry/index_catalog_entry.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "catalog/catalog_entry/scalar_macro_catalog_entry.h"
+#include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "common/exception/parser.h"
+#include "extension/extension_manager.h"
 #include "keywords.h"
 #include "parser/parser.h"
 #include "printer/json_printer.h"
@@ -62,8 +69,9 @@ struct ShellCommand {
     const char* HIGHLIGHT = ":highlight";
     const char* ERRORS = ":render_errors";
     const char* COMPLETE = ":render_completion";
-    const std::array<const char*, 12> commandList = {HELP, CLEAR, QUIT, MAX_ROWS, MAX_WIDTH, MODE,
-        STATS, MULTI, SINGLE, HIGHLIGHT, ERRORS, COMPLETE};
+    const char* SCHEMA = ":schema";
+    const std::array<const char*, 13> commandList = {HELP, CLEAR, QUIT, MAX_ROWS, MAX_WIDTH, MODE,
+        STATS, MULTI, SINGLE, HIGHLIGHT, ERRORS, COMPLETE, SCHEMA};
 } shellCommand;
 
 const char* TAB = "    ";
@@ -413,6 +421,8 @@ int EmbeddedShell::processShellCommands(std::string lineStr) {
         setErrors(arg);
     } else if (command == shellCommand.COMPLETE) {
         setComplete(arg);
+    } else if (command == shellCommand.SCHEMA) {
+        printSchema();
     } else {
         printf("Error: Unknown command: \"%s\". Enter \":help\" for help\n", lineStr.c_str());
         printf("Did you mean: \"%s\"?\n", findClosestCommand(lineStr).c_str());
@@ -811,7 +821,6 @@ void EmbeddedShell::setComplete(const std::string& completeString) {
     } else {
         printf("Cannot parse '%s' to toggle completion highlighting. Expect 'on' or 'off'.\n",
             completeStringLower.c_str());
-        return;
     }
 }
 
@@ -832,6 +841,7 @@ void EmbeddedShell::printHelp() {
     printf("%s%s [on|off] %stoggle error highlighting on or off\n", TAB, shellCommand.ERRORS, TAB);
     printf("%s%s [on|off] %stoggle completion highlighting on or off\n", TAB, shellCommand.COMPLETE,
         TAB);
+    printf("%s%s %sprint database schema\n", TAB, shellCommand.SCHEMA, TAB);
     printf("\n");
     printf("%sNote: you can change and see several system configurations, such as num-threads, \n",
         TAB);
@@ -1559,6 +1569,44 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
         printf("Time: %.2fms (compiling), %.2fms (executing)\n", querySummary->getCompilingTime(),
             querySummary->getExecutionTime());
     }
+}
+
+void EmbeddedShell::printSchema() {
+    std::stringstream ss;
+    auto clientContext = conn->getClientContext();
+    bool transactionStarted = false;
+    if (transaction::Transaction::Get(*clientContext) == NULL) {
+        transaction::TransactionContext::Get(*clientContext)
+            ->beginReadTransaction(); // start transaction to get schema
+        transactionStarted = true;
+    }
+    auto extensionCypher = extension::ExtensionManager::Get(*clientContext)->toCypher();
+    if (!extensionCypher.empty()) {
+        ss << extensionCypher << std::endl;
+    }
+    const auto catalog = catalog::Catalog::Get(*clientContext);
+    auto transaction = transaction::Transaction::Get(*clientContext);
+    catalog::ToCypherInfo toCypherInfo;
+    for (const auto& nodeTableEntry :
+        catalog->getNodeTableEntries(transaction, false /* useInternal */)) {
+        ss << nodeTableEntry->toCypher(toCypherInfo) << std::endl;
+    }
+    catalog::RelGroupToCypherInfo relTableToCypherInfo(clientContext);
+    for (const auto& entry : catalog->getRelGroupEntries(transaction, false /* useInternal */)) {
+        ss << entry->toCypher(relTableToCypherInfo) << std::endl;
+    }
+    catalog::RelGroupToCypherInfo relGroupToCypherInfo(clientContext);
+    for (const auto sequenceEntry : catalog->getSequenceEntries(transaction)) {
+        ss << sequenceEntry->toCypher(relGroupToCypherInfo) << std::endl;
+    }
+    for (auto macroName : catalog->getMacroNames(transaction)) {
+        ss << catalog->getScalarMacroFunction(transaction, macroName)->toCypher(macroName)
+           << std::endl;
+    }
+    if (transactionStarted) {
+        transaction::TransactionContext::Get(*clientContext)->commit();
+    }
+    printf("%s", ss.str().c_str());
 }
 
 } // namespace main

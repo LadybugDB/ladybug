@@ -18,6 +18,7 @@ def test_help(temp_db) -> None:
             "    :highlight [on|off]     toggle syntax highlighting on or off",
             "    :render_errors [on|off]     toggle error highlighting on or off",
             "    :render_completion [on|off]     toggle completion highlighting on or off",
+            "    :schema     print database schema",
             "",
             "    Note: you can change and see several system configurations, such as num-threads, ",
             "          timeout, and progress_bar using Cypher CALL statements.",
@@ -634,6 +635,24 @@ def test_completion_highlighting(temp_db) -> None:
     result.check_stdout(
         "Cannot parse 'o' to toggle completion highlighting. Expect 'on' or 'off'."
     )
+
+
+def test_schema_with_tables(temp_db) -> None:
+    test = (
+        ShellTest()
+        .add_argument(temp_db)
+        .statement("CREATE NODE TABLE User(name STRING, age INT64, PRIMARY KEY (name));")
+        .statement("CREATE NODE TABLE City(name STRING, population INT64, PRIMARY KEY (name));")
+        .statement("CREATE REL TABLE Follows(FROM User TO User, since INT64);")
+        .statement("CREATE REL TABLE LivesIn(FROM User TO City);")
+        .statement(":schema")
+    )
+    result = test.run()
+    # Check that the schema output includes the created tables
+    result.check_stdout("CREATE NODE TABLE `User` (`name` STRING,`age` INT64, PRIMARY KEY(`name`));")
+    result.check_stdout("CREATE NODE TABLE `City` (`name` STRING,`population` INT64, PRIMARY KEY(`name`));")
+    result.check_stdout("CREATE REL TABLE `Follows` (FROM `User` TO `User`, `since` INT64,MANY_MANY);")
+    result.check_stdout("CREATE REL TABLE `LivesIn` (FROM `User` TO `City`, MANY_MANY);")
 
 
 def test_bad_command(temp_db) -> None:
