@@ -1152,6 +1152,9 @@ jobs:
     name: minimal test
     runs-on: ubuntu-latest
     needs: [ sanity-checks ]
+    env:
+      GEN: Ninja
+      USE_STD_FORMAT: 1
     steps:
       - uses: actions/checkout@v4
 
@@ -1161,7 +1164,7 @@ jobs:
           key: minimal-test-${{ runner.os }}
 
       - name: Build
-        run: make GEN=Ninja release USE_STD_FORMAT=1
+        run: make relwithdebinfo
 
       - name: Generate datasets
         run: bash scripts/generate_binary_demo.sh
