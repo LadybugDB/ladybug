@@ -56,6 +56,8 @@ private:
     common::ValueVector* nodeIDVector;
     common::ValueVector* countVector;
     std::unique_ptr<storage::RelTableScanState> scanState;
+    // Dedicated output state for rel table scanning (separate from nodeIDVector's state)
+    std::shared_ptr<common::DataChunkState> relScanOutState;
     bool hasExecuted;
     common::row_idx_t totalCount;
 };
