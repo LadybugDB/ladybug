@@ -6,6 +6,8 @@ namespace planner {
 void LogicalCountRelTable::computeFactorizedSchema() {
     createEmptySchema();
     auto groupPos = schema->createGroup();
+    // Add bound node's internal ID for the child scan
+    schema->insertToGroupAndScope(boundNode->getInternalID(), groupPos);
     schema->insertToGroupAndScope(countExpr, groupPos);
     schema->setGroupAsSingleState(groupPos);
 }
@@ -13,6 +15,8 @@ void LogicalCountRelTable::computeFactorizedSchema() {
 void LogicalCountRelTable::computeFlatSchema() {
     createEmptySchema();
     schema->createGroup();
+    // Add bound node's internal ID for the child scan
+    schema->insertToGroupAndScope(boundNode->getInternalID(), 0 /* groupPos */);
     schema->insertToGroupAndScope(countExpr, 0 /* groupPos */);
 }
 

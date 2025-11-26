@@ -1,6 +1,8 @@
 #include "optimizer/count_rel_table_optimizer.h"
 
 #include "binder/expression/aggregate_function_expression.h"
+#include "binder/expression/node_expression.h"
+#include "catalog/catalog_entry/node_table_id_pair.h"
 #include "function/aggregate/count_star.h"
 #include "main/client_context.h"
 #include "planner/operator/extend/logical_extend.h"
@@ -146,24 +148,59 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
     KU_ASSERT(current->getOperatorType() == LogicalOperatorType::EXTEND);
     auto& extend = current->constCast<LogicalExtend>();
     auto rel = extend.getRel();
+    auto boundNode = extend.getBoundNode();
+    auto nbrNode = extend.getNbrNode();
 
     // Get the rel group entry
     KU_ASSERT(rel->getNumEntries() == 1);
     auto* relGroupEntry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
 
-    // Get all rel table IDs
+    // Determine the source and destination node table IDs based on extend direction.
+    // If extendFromSource is true, then boundNode is the source and nbrNode is the destination.
+    // If extendFromSource is false, then boundNode is the destination and nbrNode is the source.
+    auto boundNodeTableIDs = boundNode->getTableIDsSet();
+    auto nbrNodeTableIDs = nbrNode->getTableIDsSet();
+
+    // Get only the rel table IDs that match the specific node table ID pairs in the query.
+    // A rel table connects a specific (srcTableID, dstTableID) pair.
     std::vector<table_id_t> relTableIDs;
     for (auto& info : relGroupEntry->getRelEntryInfos()) {
-        relTableIDs.push_back(info.oid);
+        table_id_t srcTableID = info.nodePair.srcTableID;
+        table_id_t dstTableID = info.nodePair.dstTableID;
+
+        bool matches = false;
+        if (extend.extendFromSourceNode()) {
+            // boundNode is src, nbrNode is dst
+            matches =
+                boundNodeTableIDs.contains(srcTableID) && nbrNodeTableIDs.contains(dstTableID);
+        } else {
+            // boundNode is dst, nbrNode is src
+            matches =
+                boundNodeTableIDs.contains(dstTableID) && nbrNodeTableIDs.contains(srcTableID);
+        }
+
+        if (matches) {
+            relTableIDs.push_back(info.oid);
+        }
+    }
+
+    // If no matching rel tables, don't optimize (shouldn't happen for valid queries)
+    if (relTableIDs.empty()) {
+        return op;
     }
 
     // Get the count expression from the original aggregate
     auto& aggregate = op->constCast<LogicalAggregate>();
     auto countExpr = aggregate.getAggregates()[0];
 
-    // Create the new COUNT_REL_TABLE operator
+    // Get the bound node table IDs as a vector
+    std::vector<table_id_t> boundNodeTableIDsVec(boundNodeTableIDs.begin(),
+        boundNodeTableIDs.end());
+
+    // Create the new COUNT_REL_TABLE operator with all necessary information for scanning
     auto countRelTable =
-        std::make_shared<LogicalCountRelTable>(relGroupEntry, std::move(relTableIDs), countExpr);
+        std::make_shared<LogicalCountRelTable>(relGroupEntry, std::move(relTableIDs),
+            std::move(boundNodeTableIDsVec), boundNode, extend.getDirection(), countExpr);
     countRelTable->computeFlatSchema();
 
     return countRelTable;
