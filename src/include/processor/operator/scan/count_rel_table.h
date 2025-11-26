@@ -2,6 +2,7 @@
 
 #include "common/enums/rel_direction.h"
 #include "processor/operator/physical_operator.h"
+#include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
 
 namespace lbug {
@@ -21,22 +22,21 @@ struct CountRelTablePrintInfo final : OPPrintInfo {
 };
 
 /**
- * CountRelTable is a physical operator that counts the rows in a rel table
- * by scanning through bound nodes and counting edges.
- * It has a SCAN_NODE_TABLE child that provides the bound node IDs.
+ * CountRelTable is a source operator that counts edges in a rel table
+ * by scanning through all bound nodes and counting their edges.
+ * It creates its own internal vectors for node scanning (not exposed in ResultSet).
  */
 class CountRelTable final : public PhysicalOperator {
     static constexpr PhysicalOperatorType type_ = PhysicalOperatorType::COUNT_REL_TABLE;
 
 public:
-    CountRelTable(std::vector<storage::RelTable*> relTables, common::RelDataDirection direction,
-        DataPos nodeIDPos, DataPos countOutputPos, std::unique_ptr<PhysicalOperator> child,
-        physical_op_id id, std::unique_ptr<OPPrintInfo> printInfo)
-        : PhysicalOperator{type_, std::move(child), id, std::move(printInfo)},
-          relTables{std::move(relTables)}, direction{direction}, nodeIDPos{nodeIDPos},
-          countOutputPos{countOutputPos} {}
+    CountRelTable(std::vector<storage::NodeTable*> nodeTables,
+        std::vector<storage::RelTable*> relTables, common::RelDataDirection direction,
+        DataPos countOutputPos, physical_op_id id, std::unique_ptr<OPPrintInfo> printInfo)
+        : PhysicalOperator{type_, id, std::move(printInfo)}, nodeTables{std::move(nodeTables)},
+          relTables{std::move(relTables)}, direction{direction}, countOutputPos{countOutputPos} {}
 
-    bool isSource() const override { return false; }
+    bool isSource() const override { return true; }
     bool isParallel() const override { return false; }
 
     void initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) override;
@@ -44,19 +44,20 @@ public:
     bool getNextTuplesInternal(ExecutionContext* context) override;
 
     std::unique_ptr<PhysicalOperator> copy() override {
-        return std::make_unique<CountRelTable>(relTables, direction, nodeIDPos, countOutputPos,
-            children[0]->copy(), id, printInfo->copy());
+        return std::make_unique<CountRelTable>(nodeTables, relTables, direction, countOutputPos, id,
+            printInfo->copy());
     }
 
 private:
+    std::vector<storage::NodeTable*> nodeTables;
     std::vector<storage::RelTable*> relTables;
     common::RelDataDirection direction;
-    DataPos nodeIDPos;
     DataPos countOutputPos;
-    common::ValueVector* nodeIDVector;
     common::ValueVector* countVector;
-    std::unique_ptr<storage::RelTableScanState> scanState;
-    // Dedicated output state for rel table scanning (separate from nodeIDVector's state)
+    // Internal vectors for node scanning (not in ResultSet)
+    std::unique_ptr<common::ValueVector> internalNodeIDVector;
+    std::unique_ptr<storage::NodeTableScanState> nodeScanState;
+    std::unique_ptr<storage::RelTableScanState> relScanState;
     std::shared_ptr<common::DataChunkState> relScanOutState;
     bool hasExecuted;
     common::row_idx_t totalCount;

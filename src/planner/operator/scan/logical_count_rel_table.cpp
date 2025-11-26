@@ -5,21 +5,18 @@ namespace planner {
 
 void LogicalCountRelTable::computeFactorizedSchema() {
     createEmptySchema();
-    // The bound node needs a full-capacity group for scanning (not single state)
-    auto boundNodeGroupPos = schema->createGroup();
-    schema->insertToGroupAndScope(boundNode->getInternalID(), boundNodeGroupPos);
-    // The count expression goes in its own single-state group
-    auto countGroupPos = schema->createGroup();
-    schema->insertToGroupAndScope(countExpr, countGroupPos);
-    schema->setGroupAsSingleState(countGroupPos);
+    // Only output the count expression in a single-state group.
+    // This operator is a source - it has no child in the logical plan.
+    // The bound node is used internally for scanning but not exposed.
+    auto groupPos = schema->createGroup();
+    schema->insertToGroupAndScope(countExpr, groupPos);
+    schema->setGroupAsSingleState(groupPos);
 }
 
 void LogicalCountRelTable::computeFlatSchema() {
     createEmptySchema();
-    // For flat schema, put everything in group 0 (required by LogicalProjection::computeFlatSchema
-    // which hardcodes groupPos=0 when calling insertToScopeMayRepeat after copyChildSchema)
+    // For flat schema, create a single group with the count expression.
     auto groupPos = schema->createGroup();
-    schema->insertToGroupAndScope(boundNode->getInternalID(), groupPos);
     schema->insertToGroupAndScope(countExpr, groupPos);
 }
 

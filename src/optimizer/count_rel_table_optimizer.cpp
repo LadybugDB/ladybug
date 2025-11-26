@@ -103,6 +103,13 @@ bool CountRelTableOptimizer::canOptimize(LogicalOperator* aggregate) const {
     }
     auto& extend = current->constCast<LogicalExtend>();
 
+    // Don't optimize for undirected edges (BOTH direction) - the query pattern
+    // (a)-[e]-(b) generates a plan that scans both directions, and optimizing
+    // this would require special handling to avoid double counting.
+    if (extend.getDirection() == ExtendDirection::BOTH) {
+        return false;
+    }
+
     // The rel should be a single table (not multi-labeled)
     auto rel = extend.getRel();
     if (rel->isMultiLabeled()) {

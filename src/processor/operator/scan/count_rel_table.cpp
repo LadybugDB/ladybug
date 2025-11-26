@@ -2,6 +2,8 @@
 
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include "storage/local_storage/local_node_table.h"
+#include "storage/local_storage/local_storage.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -12,20 +14,24 @@ namespace lbug {
 namespace processor {
 
 void CountRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
-    nodeIDVector = resultSet->getValueVector(nodeIDPos).get();
     countVector = resultSet->getValueVector(countOutputPos).get();
     hasExecuted = false;
     totalCount = 0;
 
-    // Create a dedicated output state for rel table scanning.
-    // This MUST be separate from nodeIDVector->state because:
-    // 1. The child ScanNodeTable modifies nodeIDVector->state during its scan
-    // 2. The rel table scan also needs to modify the output state's selection vector
-    // Using the same state would cause conflicts and assertion failures.
-    relScanOutState = std::make_shared<DataChunkState>();
     auto& mm = *MemoryManager::Get(*context->clientContext);
-    scanState = std::make_unique<RelTableScanState>(mm, nodeIDVector, std::vector<ValueVector*>{},
-        relScanOutState);
+
+    // Create internal node ID vector for scanning (not in ResultSet)
+    internalNodeIDVector = std::make_unique<ValueVector>(LogicalType::INTERNAL_ID(), &mm);
+    internalNodeIDVector->state = std::make_shared<DataChunkState>();
+
+    // Create node scan state - just scanning node IDs, no properties
+    nodeScanState = std::make_unique<NodeTableScanState>(internalNodeIDVector.get(),
+        std::vector<ValueVector*>{}, internalNodeIDVector->state);
+
+    // Create rel scan state with dedicated output state
+    relScanOutState = std::make_shared<DataChunkState>();
+    relScanState = std::make_unique<RelTableScanState>(mm, internalNodeIDVector.get(),
+        std::vector<ValueVector*>{}, relScanOutState);
 }
 
 bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
@@ -35,40 +41,73 @@ bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
 
     auto transaction = Transaction::Get(*context->clientContext);
 
-    // For each rel table, scan all bound nodes and count edges.
-    // Follow the ScanRelTable pattern closely:
-    // 1. setToTable once per table (sets up local table scan state for uncommitted data)
-    // 2. Loop: scan until empty, then get next batch of bound nodes from child
-    for (auto* relTable : relTables) {
-        // Set up scan state - no columns needed since we're just counting
-        std::vector<column_id_t> columnIDs;
-        std::vector<ColumnPredicateSet> predicates;
-        scanState->setToTable(transaction, relTable, std::move(columnIDs), std::move(predicates),
-            direction);
+    // For each node table, scan all nodes and count their edges in the rel tables
+    for (auto* nodeTable : nodeTables) {
+        // Initialize for scanning this table - just set up with no columns
+        std::vector<column_id_t> nodeColumnIDs;
+        std::vector<ColumnPredicateSet> nodePredicates;
+        nodeScanState->setToTable(transaction, nodeTable, std::move(nodeColumnIDs),
+            std::move(nodePredicates));
 
-        // Get first batch of bound nodes
-        if (!children[0]->getNextTuple(context)) {
-            continue;
+        // Scan committed node groups
+        auto numNodeGroups = nodeTable->getNumCommittedNodeGroups();
+        nodeScanState->source = TableScanSource::COMMITTED;
+
+        for (node_group_idx_t nodeGroupIdx = 0; nodeGroupIdx < numNodeGroups; nodeGroupIdx++) {
+            nodeScanState->nodeGroupIdx = nodeGroupIdx;
+            nodeTable->initScanState(transaction, *nodeScanState);
+
+            while (nodeTable->scan(transaction, *nodeScanState)) {
+                // For each batch of nodes, scan all rel tables
+                for (auto* relTable : relTables) {
+                    std::vector<column_id_t> columnIDs;
+                    std::vector<ColumnPredicateSet> predicates;
+                    relScanState->setToTable(transaction, relTable, std::move(columnIDs),
+                        std::move(predicates), direction);
+                    relTable->initScanState(transaction, *relScanState);
+
+                    while (relTable->scan(transaction, *relScanState)) {
+                        totalCount += relScanState->outState->getSelVector().getSelSize();
+                    }
+                }
+            }
         }
-        relTable->initScanState(transaction, *scanState);
 
-        while (true) {
-            // Scan edges for current batch of bound nodes
-            while (relTable->scan(transaction, *scanState)) {
-                totalCount += scanState->outState->getSelVector().getSelSize();
+        // Also scan uncommitted node groups
+        node_group_idx_t numUncommittedNodeGroups = 0;
+        if (transaction->isWriteTransaction()) {
+            if (const auto localTable =
+                    transaction->getLocalStorage()->getLocalTable(nodeTable->getTableID())) {
+                auto& localNodeTable = localTable->cast<LocalNodeTable>();
+                numUncommittedNodeGroups = localNodeTable.getNumNodeGroups();
             }
+        }
+        nodeScanState->source = TableScanSource::UNCOMMITTED;
 
-            // Get next batch of bound nodes from child
-            if (!children[0]->getNextTuple(context)) {
-                break;
+        for (node_group_idx_t nodeGroupIdx = 0; nodeGroupIdx < numUncommittedNodeGroups;
+             nodeGroupIdx++) {
+            nodeScanState->nodeGroupIdx = nodeGroupIdx;
+            nodeTable->initScanState(transaction, *nodeScanState);
+
+            while (nodeTable->scan(transaction, *nodeScanState)) {
+                for (auto* relTable : relTables) {
+                    std::vector<column_id_t> columnIDs;
+                    std::vector<ColumnPredicateSet> predicates;
+                    relScanState->setToTable(transaction, relTable, std::move(columnIDs),
+                        std::move(predicates), direction);
+                    relTable->initScanState(transaction, *relScanState);
+
+                    while (relTable->scan(transaction, *relScanState)) {
+                        totalCount += relScanState->outState->getSelVector().getSelSize();
+                    }
+                }
             }
-            relTable->initScanState(transaction, *scanState);
         }
     }
 
     hasExecuted = true;
 
-    // Write the count to the output vector
+    // Write the count to the output vector (single value)
     countVector->state->getSelVectorUnsafe().setToUnfiltered(1);
     countVector->setValue<int64_t>(0, static_cast<int64_t>(totalCount));
 
