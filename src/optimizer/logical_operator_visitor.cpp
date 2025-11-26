@@ -19,6 +19,9 @@ void LogicalOperatorVisitor::visitOperatorSwitch(LogicalOperator* op) {
     case LogicalOperatorType::COPY_TO: {
         visitCopyTo(op);
     } break;
+    case LogicalOperatorType::COUNT_REL_TABLE: {
+        visitCountRelTable(op);
+    } break;
     case LogicalOperatorType::DELETE: {
         visitDelete(op);
     } break;
@@ -107,6 +110,9 @@ std::shared_ptr<LogicalOperator> LogicalOperatorVisitor::visitOperatorReplaceSwi
     }
     case LogicalOperatorType::COPY_TO: {
         return visitCopyToReplace(op);
+    }
+    case LogicalOperatorType::COUNT_REL_TABLE: {
+        return visitCountRelTableReplace(op);
     }
     case LogicalOperatorType::DELETE: {
         return visitDeleteReplace(op);

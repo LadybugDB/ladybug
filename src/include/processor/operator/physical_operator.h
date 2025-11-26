@@ -22,6 +22,7 @@ enum class PhysicalOperatorType : uint8_t {
     ATTACH_DATABASE,
     BATCH_INSERT,
     COPY_TO,
+    COUNT_REL_TABLE,
     CREATE_MACRO,
     CREATE_SEQUENCE,
     CREATE_TABLE,

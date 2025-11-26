@@ -27,6 +27,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "BATCH_INSERT";
     case PhysicalOperatorType::COPY_TO:
         return "COPY_TO";
+    case PhysicalOperatorType::COUNT_REL_TABLE:
+        return "COUNT_REL_TABLE";
     case PhysicalOperatorType::CREATE_MACRO:
         return "CREATE_MACRO";
     case PhysicalOperatorType::CREATE_SEQUENCE:

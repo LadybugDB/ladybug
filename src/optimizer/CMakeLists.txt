@@ -4,6 +4,7 @@ add_library(lbug_optimizer
         agg_key_dependency_optimizer.cpp
         cardinality_updater.cpp
         correlated_subquery_unnest_solver.cpp
+        count_rel_table_optimizer.cpp
         factorization_rewriter.cpp
         filter_push_down_optimizer.cpp
         logical_operator_collector.cpp

@@ -17,6 +17,7 @@ enum class LogicalOperatorType : uint8_t {
     ATTACH_DATABASE,
     COPY_FROM,
     COPY_TO,
+    COUNT_REL_TABLE,
     CREATE_MACRO,
     CREATE_SEQUENCE,
     CREATE_TABLE,

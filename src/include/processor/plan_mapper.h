@@ -90,6 +90,8 @@ public:
     std::unique_ptr<PhysicalOperator> mapCopyRelFrom(
         const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapCopyTo(const planner::LogicalOperator* logicalOperator);
+    std::unique_ptr<PhysicalOperator> mapCountRelTable(
+        const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapCreateMacro(
         const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapCreateSequence(

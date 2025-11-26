@@ -5,6 +5,7 @@
 #include "optimizer/agg_key_dependency_optimizer.h"
 #include "optimizer/cardinality_updater.h"
 #include "optimizer/correlated_subquery_unnest_solver.h"
+#include "optimizer/count_rel_table_optimizer.h"
 #include "optimizer/factorization_rewriter.h"
 #include "optimizer/filter_push_down_optimizer.h"
 #include "optimizer/limit_push_down_optimizer.h"
@@ -31,6 +32,11 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
 
         auto removeUnnecessaryJoinOptimizer = RemoveUnnecessaryJoinOptimizer();
         removeUnnecessaryJoinOptimizer.rewrite(plan);
+
+        // CountRelTableOptimizer should be applied early before other optimizations
+        // that might change the plan structure.
+        auto countRelTableOptimizer = CountRelTableOptimizer(context);
+        countRelTableOptimizer.rewrite(plan);
 
         auto filterPushDownOptimizer = FilterPushDownOptimizer(context);
         filterPushDownOptimizer.rewrite(plan);

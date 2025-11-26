@@ -1,5 +1,6 @@
 #include "graph_test/private_graph_test.h"
 #include "planner/operator/logical_plan_util.h"
+#include "planner/operator/scan/logical_count_rel_table.h"
 #include "test_runner/test_runner.h"
 
 namespace lbug {
@@ -16,6 +17,19 @@ public:
     }
     std::unique_ptr<planner::LogicalPlan> getRoot(const std::string& query) {
         return TestRunner::getLogicalPlan(query, *conn);
+    }
+
+    // Helper to check if a specific operator type exists in the plan
+    static bool hasOperatorType(planner::LogicalOperator* op, planner::LogicalOperatorType type) {
+        if (op->getOperatorType() == type) {
+            return true;
+        }
+        for (auto i = 0u; i < op->getNumChildren(); ++i) {
+            if (hasOperatorType(op->getChild(i).get(), type)) {
+                return true;
+            }
+        }
+        return false;
     }
 };
 
@@ -209,6 +223,38 @@ TEST_F(OptimizerTest, SubqueryHint) {
     auto q6 = "MATCH (a:person) WHERE EXISTS { MATCH (a)-[e:knows]->(b:person) WHERE b.ID > 0 HINT "
               "a JOIN (e JOIN b) } RETURN *;";
     ASSERT_STREQ(getEncodedPlan(q6).c_str(), "Filter()HJ(a._ID){S(a)}{E(a)Filter()S(b)}");
+}
+
+TEST_F(OptimizerTest, CountRelTableOptimizer) {
+    // Test that COUNT(*) over a single rel table is optimized to COUNT_REL_TABLE
+    auto q1 = "MATCH (a:person)-[e:knows]->(b:person) RETURN COUNT(*);";
+    auto plan1 = getRoot(q1);
+    ASSERT_TRUE(hasOperatorType(plan1->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+    // Verify the query returns the correct result
+    auto result1 = conn->query(q1);
+    ASSERT_TRUE(result1->isSuccess());
+    ASSERT_EQ(result1->getNumTuples(), 1);
+    auto tuple1 = result1->getNext();
+    ASSERT_EQ(tuple1->getValue(0)->getValue<int64_t>(), 14);
+
+    // Test that COUNT(*) with GROUP BY is NOT optimized (has keys)
+    auto q2 = "MATCH (a:person)-[e:knows]->(b:person) RETURN a.fName, COUNT(*);";
+    auto plan2 = getRoot(q2);
+    ASSERT_FALSE(hasOperatorType(plan2->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+
+    // Test that COUNT(*) with WHERE clause is NOT optimized (has filter)
+    auto q3 = "MATCH (a:person)-[e:knows]->(b:person) WHERE a.ID > 0 RETURN COUNT(*);";
+    auto plan3 = getRoot(q3);
+    ASSERT_FALSE(hasOperatorType(plan3->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+
+    // Test that COUNT(DISTINCT ...) is NOT optimized
+    auto q4 = "MATCH (a:person)-[e:knows]->(b:person) RETURN COUNT(DISTINCT a);";
+    auto plan4 = getRoot(q4);
+    ASSERT_FALSE(hasOperatorType(plan4->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
 }
 
 } // namespace testing

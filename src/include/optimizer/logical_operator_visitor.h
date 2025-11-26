@@ -39,6 +39,12 @@ protected:
         return op;
     }
 
+    virtual void visitCountRelTable(planner::LogicalOperator* /*op*/) {}
+    virtual std::shared_ptr<planner::LogicalOperator> visitCountRelTableReplace(
+        std::shared_ptr<planner::LogicalOperator> op) {
+        return op;
+    }
+
     virtual void visitDelete(planner::LogicalOperator* /*op*/) {}
     virtual std::shared_ptr<planner::LogicalOperator> visitDeleteReplace(
         std::shared_ptr<planner::LogicalOperator> op) {

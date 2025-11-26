@@ -7,6 +7,7 @@ add_library(lbug_processor_mapper
         map_acc_hash_join.cpp
         map_accumulate.cpp
         map_aggregate.cpp
+        map_count_rel_table.cpp
         map_standalone_call.cpp
         map_table_function_call.cpp
         map_copy_to.cpp

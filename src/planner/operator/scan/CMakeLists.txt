@@ -1,5 +1,6 @@
 add_library(lbug_planner_scan
         OBJECT
+        logical_count_rel_table.cpp
         logical_expressions_scan.cpp
         logical_index_look_up.cpp
         logical_scan_node_table.cpp)

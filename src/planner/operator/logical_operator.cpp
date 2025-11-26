@@ -22,6 +22,8 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
         return "COPY_FROM";
     case LogicalOperatorType::COPY_TO:
         return "COPY_TO";
+    case LogicalOperatorType::COUNT_REL_TABLE:
+        return "COUNT_REL_TABLE";
     case LogicalOperatorType::CREATE_MACRO:
         return "CREATE_MACRO";
     case LogicalOperatorType::CREATE_SEQUENCE:
