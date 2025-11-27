@@ -1,0 +1,5 @@
+-NAME count_rel_table
+-PRERUN CREATE NODE TABLE account(ID INT64 PRIMARY KEY); CREATE REL TABLE follows(FROM account TO account); COPY account FROM "dataset/snap/amazon0601/parquet/amazon-nodes.parquet"; COPY follows FROM "dataset/snap/amazon0601/parquet/amazon-edges.parquet";
+-QUERY MATCH ()-[r:follows]->() RETURN COUNT(*)
+---- 1
+3387388
