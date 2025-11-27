@@ -1167,7 +1167,7 @@ jobs:
         run: make relwithdebinfo
 
       - name: Generate datasets
-        run: bash scripts/generate_binary_demo.sh
+        run: bash scripts/generate_binary_demo.sh --lbug-shell-mode relwithdebinfo
 
       - name: Install uv
         run: pip3 install uv

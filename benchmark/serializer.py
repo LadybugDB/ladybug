@@ -95,16 +95,27 @@ if __name__ == '__main__':
     parser.add_argument("--single-thread",
                         help="If true, copy single threaded, which makes the results more reproducible",
                         action="store_true")
+    parser.add_argument("--lbug-shell-mode",
+                        help="debug, release or relwithdebinfo",
+                        default="release")
+    default_mode = "release"
     if sys.platform == "win32":
         default_lbug_exec_path = os.path.join(
-            base_dir, '..', 'build', 'release', 'tools', 'shell', 'lbug_shell')
+            base_dir, '..', 'build', default_mode, 'tools', 'shell', 'lbug_shell')
     else:
         default_lbug_exec_path = os.path.join(
-            base_dir, '..', 'build', 'release', 'tools', 'shell', 'lbug')
+            base_dir, '..', 'build', default_mode, 'tools', 'shell', 'lbug')
     parser.add_argument("--lbug-shell",
                         help="Path of the lbug shell executable. Defaults to the path as built in the default release build directory",
                         default=default_lbug_exec_path)
     args = parser.parse_args()
+
+    if args.lbug_shell == default_lbug_exec_path:
+        mode = args.lbug_shell_mode
+        if sys.platform == "win32":
+            args.lbug_shell = os.path.join(base_dir, '..', 'build', mode, 'tools', 'shell', 'lbug_shell')
+        else:
+            args.lbug_shell = os.path.join(base_dir, '..', 'build', mode, 'tools', 'shell', 'lbug')
 
     try:
         serialize(args.lbug_shell, args.dataset_name, args.dataset_path, args.serialized_graph_path,
