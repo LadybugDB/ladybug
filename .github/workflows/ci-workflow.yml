@@ -1162,6 +1162,8 @@ jobs:
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: minimal-test-${{ runner.os }}
+          max-size: 2G
+          restore-keys: minimal-test-
 
       - name: Build
         run: make relwithdebinfo
@@ -1213,6 +1215,8 @@ jobs:
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: minimal-extension-test-${{ runner.os }}
+          max-size: 2G
+          restore-keys: minimal-extension-test-
 
       - name: Update PostgreSQL host
         working-directory: extension/postgres/test/test_files
