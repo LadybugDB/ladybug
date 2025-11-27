@@ -11,7 +11,7 @@ if sys.platform == "win32":
 LBUG_EXEC_PATH = os.path.join(
     LBUG_ROOT,
     "build",
-    "release",
+    "relwithdebinfo",
     "tools",
     "shell",
     "lbug",
