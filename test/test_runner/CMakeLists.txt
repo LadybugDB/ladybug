@@ -15,4 +15,4 @@ target_include_directories(
         ../include/
 )
 
-target_link_libraries(test_runner PUBLIC GTEST_LIB lbug)
+target_link_libraries(test_runner PUBLIC GTEST_LIB lbug_shared)

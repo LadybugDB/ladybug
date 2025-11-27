@@ -8,7 +8,7 @@ target_include_directories(
         PUBLIC
         ../include/
 )
-target_link_libraries(graph_test PUBLIC GTEST_LIB lbug)
+target_link_libraries(graph_test PUBLIC GTEST_LIB lbug_shared)
 
 add_library(
         api_graph_test
