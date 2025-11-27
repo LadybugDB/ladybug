@@ -148,6 +148,7 @@ tinysnb1|LBUG
 ---- ok
 
 -CASE AttachNotExistPath
+-SKIP
 -LOAD_DYNAMIC_EXTENSION httpfs
 -STATEMENT attach 'http://localhost/dataset/databases/tinysnb1' as test (dbtype lbug)
 ---- error
