@@ -294,9 +294,8 @@ extension-release:
 		-DBUILD_LBUG=FALSE \
 	)
 
-# pytest expects a `Release` build path.
 shell-test:
-	$(call run-cmake-release, \
+	$(call run-cmake-relwithdebinfo, \
 		-DBUILD_SHELL=TRUE \
 	)
 	$(MAKE) -C tools/shell/test test
