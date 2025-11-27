@@ -138,7 +138,8 @@ static void insertNodes(uint64_t startID, uint64_t num, lbug::main::Database& da
     auto conn = std::make_unique<lbug::main::Connection>(&database);
     for (uint64_t i = 0; i < num; ++i) {
         auto id = startID + i;
-        auto res = conn->query(stringFormat("CREATE (:test {id: {}, name: 'Person{}'});", id, id));
+        auto res =
+            conn->query(stringFormat("CREATE (:test {{id: {}, name: 'Person{}'}});", id, id));
         ASSERT_TRUE(res->isSuccess())
             << "Failed to insert test" << id << ": " << res->getErrorMessage();
     }
@@ -181,7 +182,7 @@ static void insertNodesWithMixedTypes(uint64_t startID, uint64_t num,
         auto score = 95.5 + (id % 10);
         auto isActive = (id % 2 == 0) ? "true" : "false";
         auto res = conn->query(
-            stringFormat("CREATE (:mixed_test {id: {}, score: {}, active: {}, name: 'User{}'});",
+            stringFormat("CREATE (:mixed_test {{id: {}, score: {}, active: {}, name: 'User{}'}});",
                 id, score, isActive, id));
         ASSERT_TRUE(res->isSuccess())
             << "Failed to insert mixed_test" << id << ": " << res->getErrorMessage();
@@ -227,7 +228,7 @@ static void insertRelationships(uint64_t startID, uint64_t num, lbug::main::Data
         auto toID = (startID + i + 1) % (num * 4);
         auto weight = 1.0 + (i % 10) * 0.1;
         auto res = conn->query(stringFormat("MATCH (a:person), (b:person) WHERE a.id = {} AND b.id "
-                                            "= {} CREATE (a)-[:knows {weight: {}}]->(b);",
+                                            "= {} CREATE (a)-[:knows {{weight: {}}}]->(b);",
             fromID, toID, weight));
         ASSERT_TRUE(res->isSuccess()) << "Failed to insert relationship from " << fromID << " to "
                                       << toID << ": " << res->getErrorMessage();
@@ -248,7 +249,8 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipInsertions) {
 
     conn->query("BEGIN TRANSACTION;");
     for (auto i = 0; i < numTotalInsertions; ++i) {
-        auto res = conn->query(stringFormat("CREATE (:person {id: {}, name: 'Person{}'});", i, i));
+        auto res =
+            conn->query(stringFormat("CREATE (:person {{id: {}, name: 'Person{}'}});", i, i));
         ASSERT_TRUE(res->isSuccess());
     }
     conn->query("COMMIT;");
@@ -286,7 +288,7 @@ static void insertComplexRelationships(uint64_t startID, uint64_t num,
         auto isVerified = (i % 3 == 0) ? "true" : "false";
         auto res =
             conn->query(stringFormat("MATCH (u:user), (p:product) WHERE u.id = {} AND p.id = {} "
-                                     "CREATE (u)-[:rates {rating: {}, verified: {}}]->(p);",
+                                     "CREATE (u)-[:rates {{rating: {}, verified: {}}}]->(p);",
                 userID, productID, rating, isVerified));
         ASSERT_TRUE(res->isSuccess())
             << "Failed to insert rating from user " << userID << " to product " << productID << ": "
@@ -309,12 +311,12 @@ TEST_F(EmptyDBTransactionTest, ConcurrentComplexRelationshipInsertions) {
 
     conn->query("BEGIN TRANSACTION;");
     for (auto i = 0; i < numTotalInsertions; ++i) {
-        auto res = conn->query(stringFormat("CREATE (:user {id: {}, name: 'User{}'});", i, i));
+        auto res = conn->query(stringFormat("CREATE (:user {{id: {}, name: 'User{}'}});", i, i));
         ASSERT_TRUE(res->isSuccess());
     }
     for (auto i = 0; i < numTotalInsertions * 2; ++i) {
         auto res =
-            conn->query(stringFormat("CREATE (:product {id: {}, title: 'Product{}'});", i, i));
+            conn->query(stringFormat("CREATE (:product {{id: {}, title: 'Product{}'}});", i, i));
         ASSERT_TRUE(res->isSuccess());
     }
     conn->query("COMMIT;");
@@ -367,7 +369,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeUpdates) {
 
     // First insert all nodes
     for (auto i = 0; i < numTotalNodes; ++i) {
-        auto res = conn->query(stringFormat("CREATE (:test {id: {}, name: 'Person{}'});", i, i));
+        auto res = conn->query(stringFormat("CREATE (:test {{id: {}, name: 'Person{}'}});", i, i));
         ASSERT_TRUE(res->isSuccess());
     }
 
@@ -429,8 +431,8 @@ TEST_F(EmptyDBTransactionTest, ConcurrentMixedTypeUpdates) {
         auto score = 95.5 + (i % 10);
         auto isActive = (i % 2 == 0) ? "true" : "false";
         auto res = conn->query(
-            stringFormat("CREATE (:mixed_test {id: {}, score: {}, active: {}, name: 'User{}'});", i,
-                score, isActive, i));
+            stringFormat("CREATE (:mixed_test {{id: {}, score: {}, active: {}, name: 'User{}'}});",
+                i, score, isActive, i));
         ASSERT_TRUE(res->isSuccess());
     }
 
@@ -503,7 +505,8 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdates) {
 
     // Create nodes
     for (auto i = 0; i < numTotalUpdates; ++i) {
-        auto res = conn->query(stringFormat("CREATE (:person {id: {}, name: 'Person{}'});", i, i));
+        auto res =
+            conn->query(stringFormat("CREATE (:person {{id: {}, name: 'Person{}'}});", i, i));
         ASSERT_TRUE(res->isSuccess());
     }
 
@@ -513,7 +516,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdates) {
         auto toID = (i + 1) % numTotalUpdates;
         auto weight = 1.0 + (i % 10) * 0.1;
         auto res = conn->query(stringFormat("MATCH (a:person), (b:person) WHERE a.id = {} AND b.id "
-                                            "= {} CREATE (a)-[:knows {weight: {}}]->(b);",
+                                            "= {} CREATE (a)-[:knows {{weight: {}}}]->(b);",
             fromID, toID, weight));
         ASSERT_TRUE(res->isSuccess());
     }
@@ -577,7 +580,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeUpdatesWithMixedTransactions) {
 
     // Insert initial nodes
     for (auto i = 0; i < numTotalNodes; ++i) {
-        auto res = conn->query(stringFormat("CREATE (:test {id: {}, name: 'Person{}'});", i, i));
+        auto res = conn->query(stringFormat("CREATE (:test {{id: {}, name: 'Person{}'}});", i, i));
         ASSERT_TRUE(res->isSuccess());
     }
 
@@ -650,7 +653,8 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdatesWithMixedTransaction
 
     // Create nodes
     for (auto i = 0; i < numTotalUpdates; ++i) {
-        auto res = conn->query(stringFormat("CREATE (:person {id: {}, name: 'Person{}'});", i, i));
+        auto res =
+            conn->query(stringFormat("CREATE (:person {{id: {}, name: 'Person{}'}});", i, i));
         ASSERT_TRUE(res->isSuccess());
     }
 
@@ -660,7 +664,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdatesWithMixedTransaction
         auto toID = i;
         auto weight = 20.0;
         auto res = conn->query(stringFormat("MATCH (a:person), (b:person) WHERE a.id = {} AND b.id "
-                                            "= {} CREATE (a)-[:knows {weight: {}}]->(b);",
+                                            "= {} CREATE (a)-[:knows {{weight: {}}}]->(b);",
             fromID, toID, weight));
         ASSERT_TRUE(res->isSuccess());
     }

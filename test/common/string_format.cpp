@@ -10,6 +10,7 @@ TEST(StringFormat, Basic) {
         "Some formatted data: a and 423");
 }
 
+#if !USE_STD_FORMAT
 TEST(StringFormat, Escape) {
     ASSERT_EQ(stringFormat("Escape this {{}} but not this {{ }}"),
         "Escape this {} but not this {{ }}");
@@ -29,6 +30,7 @@ TEST(StringFormat, TooManyArguments) {
 TEST(StringFormat, TooFewArguments) {
     ASSERT_THROW(stringFormat("Format with arguments {}"), InternalException);
 }
+#endif
 
 TEST(StringFormat, Format8BitTypes) {
     enum TestEnum : uint8_t {
@@ -38,7 +40,9 @@ TEST(StringFormat, Format8BitTypes) {
     char literal_character = 'a';
     TestEnum enum_val = TestEnum::NO;
     int8_t signed_int8 = 4;
-    ASSERT_EQ(stringFormat("{} {} {}", literal_character, enum_val, signed_int8), "a 1 4");
+    ASSERT_EQ(
+        stringFormat("{} {} {}", literal_character, static_cast<uint8_t>(enum_val), signed_int8),
+        "a 1 4");
 }
 
 TEST(StringFormat, FormatString) {

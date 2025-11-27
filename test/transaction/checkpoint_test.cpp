@@ -37,7 +37,7 @@ public:
         conn->query("CALL auto_checkpoint=false");
         conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
         for (auto i = 0; i < 5000; i++) {
-            conn->query(stringFormat("CREATE (a:test {id: {}, name: 'name_{}'});", i, i));
+            conn->query(stringFormat("CREATE (a:test {{id: {}, name: 'name_{}'}});", i, i));
         }
         auto context = getClientContext(*conn);
         flakyCheckpointer.setCheckpointer(*context);
