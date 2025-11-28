@@ -54,11 +54,6 @@ private:
     common::RelDataDirection direction;
     DataPos countOutputPos;
     common::ValueVector* countVector;
-    // Internal vectors for node scanning (not in ResultSet)
-    std::unique_ptr<common::ValueVector> internalNodeIDVector;
-    std::unique_ptr<storage::NodeTableScanState> nodeScanState;
-    std::unique_ptr<storage::RelTableScanState> relScanState;
-    std::shared_ptr<common::DataChunkState> relScanOutState;
     bool hasExecuted;
     common::row_idx_t totalCount;
 };
