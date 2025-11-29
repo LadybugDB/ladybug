@@ -3306,7 +3306,7 @@ bool cypherComplete(const char* z) {
         /* Token:           */
         /* State:       **  SEMI  WS  OTHER */
         /* 0 INVALID: */ {
-            1,
+            2,
             0,
             2,
         },

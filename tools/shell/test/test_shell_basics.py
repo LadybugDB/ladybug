@@ -289,6 +289,18 @@ def test_shell_auto_completion(temp_db) -> None:
     assert test.shell_process.expect_exact(["(0 tuples)", pexpect.EOF]) == 0
 
 
+def test_double_semicolon(temp_db) -> None:
+    test = (
+        ShellTest()
+        .add_argument(temp_db)
+        .statement("CREATE NODE TABLE User(name STRING, PRIMARY KEY(name));")
+        .statement("CREATE REL TABLE Follows(FROM User TO User, since INT64);")
+        .statement('MATCH (a:User)-[f:Follows]->(b:User) RETURN a.name, b.name, f.since;;')
+    )
+    result = test.run()
+    result.check_stdout("(0 tuples)")
+
+
 def test_shell_unicode_input(temp_db) -> None:
     test = (
         ShellTest()

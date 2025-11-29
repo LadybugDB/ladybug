@@ -543,6 +543,17 @@ std::vector<std::unique_ptr<QueryResult>> EmbeddedShell::processInput(std::strin
         historyLine = input;
         return queryResults;
     }
+    // Normalize trailing semicolons
+    if (!unicodeInput.empty() && unicodeInput.back() == ';') {
+        // trim trailing ;
+        while (!unicodeInput.empty() && unicodeInput.back() == ';') {
+            unicodeInput.pop_back();
+        }
+        if (unicodeInput.empty()) {
+            return queryResults;
+        }
+        unicodeInput += ';';
+    }
     // process shell commands
     if (!continueLine && unicodeInput[0] == ':') {
         processShellCommands(unicodeInput);
