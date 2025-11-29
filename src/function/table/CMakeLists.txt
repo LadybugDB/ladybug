@@ -8,6 +8,7 @@ add_library(lbug_table_function
         clear_warnings.cpp
         current_setting.cpp
         db_version.cpp
+        disk_size_info.cpp
         drop_project_graph.cpp
         file_info.cpp
         free_space_info.cpp

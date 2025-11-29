@@ -134,6 +134,12 @@ struct FileInfoFunction final {
     static function_set getFunctionSet();
 };
 
+struct DiskSizeInfoFunction final {
+    static constexpr const char* name = "DISK_SIZE_INFO";
+
+    static function_set getFunctionSet();
+};
+
 struct ShowAttachedDatabasesFunction final {
     static constexpr const char* name = "SHOW_ATTACHED_DATABASES";
 
