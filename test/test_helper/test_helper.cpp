@@ -71,6 +71,30 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
             auto fullPath = appendLbugRootPath(csvFilePath);
             line.replace(line.find(csvFilePath), csvFilePath.length(), fullPath);
         }
+        // Also handle storage = 'path' for parquet tables
+        std::vector<std::string> storagePaths;
+        size_t storageIndex = 0;
+        while (true) {
+            size_t start = line.find("storage = '", storageIndex);
+            if (start == std::string::npos) {
+                break;
+            }
+            start += 11; // length of "storage = '"
+            size_t end = line.find("'", start);
+            if (end == std::string::npos) {
+                break;
+            }
+            std::string storagePath = line.substr(start, end - start);
+            storagePaths.push_back(storagePath);
+            storageIndex = end + 1;
+        }
+        for (auto& storagePath : storagePaths) {
+            auto fullPath = appendLbugRootPath(storagePath);
+            size_t pos = line.find(storagePath);
+            if (pos != std::string::npos) {
+                line.replace(pos, storagePath.length(), fullPath);
+            }
+        }
 #ifdef __STATIC_LINK_EXTENSION_TEST__
         if (line.starts_with("load extension")) {
             continue;
