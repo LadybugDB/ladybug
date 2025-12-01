@@ -41,7 +41,8 @@ public:
         if (datasetType == TestGroup::DatasetType::GRAPH_STD) {
             // For GRAPH_STD, only run schema.cypher (which contains WITH storage = ... clauses)
             // No copy.cypher needed as data is in external parquet files
-            lbug::main::Connection* connection = conn ? conn.get() : (connMap.begin()->second).get();
+            lbug::main::Connection* connection =
+                conn ? conn.get() : (connMap.begin()->second).get();
             TestHelper::executeScript(dataset + "/" + TestHelper::SCHEMA_FILE_NAME, *connection);
         } else if (datasetType != TestGroup::DatasetType::LBUG && dataset != "empty") {
             initGraph();
