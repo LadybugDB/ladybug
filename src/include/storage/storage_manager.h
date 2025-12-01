@@ -97,6 +97,7 @@ private:
     bool enableCompression;
     bool inMemory;
     std::vector<IndexType> registeredIndexTypes;
+    std::unordered_map<common::table_id_t, std::string> tableNameCache;
 };
 
 } // namespace storage

@@ -79,6 +79,7 @@ void StorageManager::recover(main::ClientContext& clientContext, bool throwOnWal
 }
 
 void StorageManager::createNodeTable(NodeTableCatalogEntry* entry) {
+    tableNameCache[entry->getTableID()] = entry->getName();
     if (!entry->getStorage().empty()) {
         // Create parquet-backed node table
         tables[entry->getTableID()] =
@@ -95,8 +96,9 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry) {
 void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCatalogInfo& info) {
     if (!entry->getStorage().empty()) {
         // Create parquet-backed rel table
+        std::string fromNodeTableName = tableNameCache.at(info.nodePair.srcTableID);
         tables[info.oid] = std::make_unique<ParquetRelTable>(entry, info.nodePair.srcTableID,
-            info.nodePair.dstTableID, this, &memoryManager);
+            info.nodePair.dstTableID, this, &memoryManager, fromNodeTableName);
     } else {
         // Create regular rel table
         tables[info.oid] = std::make_unique<RelTable>(entry, info.nodePair.srcTableID,
@@ -273,6 +275,7 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
         KU_ASSERT(!tables.contains(tableID));
         auto tableEntry = catalog->getTableCatalogEntry(&DUMMY_TRANSACTION, tableID)
                               ->ptrCast<NodeTableCatalogEntry>();
+        tableNameCache[tableID] = tableEntry->getName();
         if (!tableEntry->getStorage().empty()) {
             // Create parquet-backed node table
             tables[tableID] = std::make_unique<ParquetNodeTable>(this, tableEntry, &memoryManager);
@@ -303,8 +306,10 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
             KU_ASSERT(!tables.contains(info.oid));
             if (!relGroupEntry->getStorage().empty()) {
                 // Create parquet-backed rel table
-                tables[info.oid] = std::make_unique<ParquetRelTable>(relGroupEntry,
-                    info.nodePair.srcTableID, info.nodePair.dstTableID, this, &memoryManager);
+                std::string fromNodeTableName = tableNameCache.at(info.nodePair.srcTableID);
+                tables[info.oid] =
+                    std::make_unique<ParquetRelTable>(relGroupEntry, info.nodePair.srcTableID,
+                        info.nodePair.dstTableID, this, &memoryManager, fromNodeTableName);
             } else {
                 // Create regular rel table
                 tables[info.oid] = std::make_unique<RelTable>(relGroupEntry,

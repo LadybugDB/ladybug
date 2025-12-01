@@ -42,7 +42,8 @@ void ParquetRelTableScanState::setToTable(const Transaction* transaction, Table*
 }
 
 ParquetRelTable::ParquetRelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
-    table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager)
+    table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager,
+    std::string fromNodeTableName)
     : RelTable{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
       relGroupEntry{relGroupEntry} {
     std::string storage = relGroupEntry->getStorage();
@@ -57,7 +58,7 @@ ParquetRelTable::ParquetRelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t
     // prefix_indices_{relName}.parquet, prefix_indptr_{relName}.parquet,
     // prefix_metadata_{relName}.parquet
     std::string prefix = storage;
-    nodeMappingFilePath = prefix + "_metadata_" + relName + ".parquet";
+    nodeMappingFilePath = prefix + "_mapping_" + fromNodeTableName + ".parquet";
     indicesFilePath = prefix + "_indices_" + relName + ".parquet";
     indptrFilePath = prefix + "_indptr_" + relName + ".parquet";
 }

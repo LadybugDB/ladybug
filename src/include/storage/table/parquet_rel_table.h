@@ -42,7 +42,7 @@ class ParquetRelTable final : public RelTable {
 public:
     ParquetRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, common::table_id_t fromTableID,
         common::table_id_t toTableID, const StorageManager* storageManager,
-        MemoryManager* memoryManager);
+        MemoryManager* memoryManager, std::string fromNodeTableName);
 
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,
         bool resetCachedBoundNodeSelVec = true) const override;
