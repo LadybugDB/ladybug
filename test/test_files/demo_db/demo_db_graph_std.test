@@ -1,0 +1,43 @@
+-DATASET GRAPH-STD demo-db/graph-std
+
+--
+
+-CASE DemoDBGraphStdTest
+
+-LOG MatchUserLivesInCity
+-STATEMENT MATCH (u:user)-[l:livesin]->(c:city) RETURN u.name, u.age, c.name;
+---- 4
+Adam|30|Waterloo
+Karissa|40|Waterloo
+Zhang|50|Kitchener
+Noura|25|Guelph
+
+-LOG MatchSingleNodeLabel
+-STATEMENT MATCH (a:user) RETURN a.name, a.age;
+---- 4
+Adam|30
+Karissa|40
+Zhang|50
+Noura|25
+
+-LOG MatchCityNodes
+-STATEMENT MATCH (c:city) RETURN c.name, c.population;
+---- 3
+Waterloo|150000
+Kitchener|200000
+Guelph|75000
+
+-LOG MatchFollowsRel
+-STATEMENT MATCH (a:user)-[e:follows]->(b:user) RETURN a.name, b.name, e.since;
+---- 4
+Adam|Karissa|2020
+Adam|Zhang|2020
+Karissa|Zhang|2021
+Zhang|Noura|2022
+
+-LOG CountLivesIn
+-STATEMENT MATCH (u:user)-[:livesin]->(c:city) RETURN c.name, COUNT(*);
+---- 3
+Guelph|1
+Kitchener|1
+Waterloo|2
