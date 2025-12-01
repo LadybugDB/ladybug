@@ -42,8 +42,7 @@ void ParquetRelTableScanState::setToTable(const Transaction* transaction, Table*
 }
 
 ParquetRelTable::ParquetRelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
-    table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager,
-    std::string fromNodeTableName)
+    table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager)
     : RelTable{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
       relGroupEntry{relGroupEntry} {
     std::string storage = relGroupEntry->getStorage();
@@ -58,7 +57,6 @@ ParquetRelTable::ParquetRelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t
     // prefix_indices_{relName}.parquet, prefix_indptr_{relName}.parquet,
     // prefix_metadata_{relName}.parquet
     std::string prefix = storage;
-    nodeMappingFilePath = prefix + "_mapping_" + fromNodeTableName + ".parquet";
     indicesFilePath = prefix + "_indices_" + relName + ".parquet";
     indptrFilePath = prefix + "_indptr_" + relName + ".parquet";
 }
@@ -75,12 +73,6 @@ void ParquetRelTable::initScanState(Transaction* transaction, TableScanState& sc
     auto& parquetRelScanState = static_cast<ParquetRelTableScanState&>(relScanState);
 
     // Initialize readers if not already done for this scan state
-    if (!parquetRelScanState.nodeMappingReader) {
-        std::vector<bool> columnSkips; // Read all columns
-        auto context = transaction->getClientContext();
-        parquetRelScanState.nodeMappingReader =
-            std::make_unique<ParquetReader>(nodeMappingFilePath, columnSkips, context);
-    }
     if (!parquetRelScanState.indicesReader) {
         std::vector<bool> columnSkips; // Read all columns
         auto context = transaction->getClientContext();
@@ -94,8 +86,7 @@ void ParquetRelTable::initScanState(Transaction* transaction, TableScanState& sc
             std::make_unique<ParquetReader>(indptrFilePath, columnSkips, context);
     }
 
-    // Load shared data (node mapping and indptr) - these are thread-safe to read
-    loadNodeMappingData(transaction);
+    // Load shared indptr data - thread-safe to read
     if (!indptrFilePath.empty()) {
         loadIndptrData(transaction);
     }
@@ -127,14 +118,8 @@ void ParquetRelTable::initScanState(Transaction* transaction, TableScanState& sc
 }
 
 void ParquetRelTable::initializeParquetReaders(Transaction* transaction) const {
-    if (!nodeMappingReader || !indicesReader) {
+    if (!indicesReader) {
         std::lock_guard lock(parquetReaderMutex);
-        if (!nodeMappingReader) {
-            std::vector<bool> columnSkips; // Read all columns
-            auto context = transaction->getClientContext();
-            nodeMappingReader =
-                std::make_unique<ParquetReader>(nodeMappingFilePath, columnSkips, context);
-        }
         if (!indicesReader) {
             std::vector<bool> columnSkips; // Read all columns
             auto context = transaction->getClientContext();
@@ -150,71 +135,6 @@ void ParquetRelTable::initializeIndptrReader(Transaction* transaction) const {
             std::vector<bool> columnSkips; // Read all columns
             auto context = transaction->getClientContext();
             indptrReader = std::make_unique<ParquetReader>(indptrFilePath, columnSkips, context);
-        }
-    }
-}
-
-void ParquetRelTable::loadNodeMappingData(Transaction* transaction) const {
-    if (nodeMapping.empty() && !nodeMappingFilePath.empty()) {
-        std::lock_guard lock(parquetReaderMutex);
-        if (nodeMapping.empty()) {
-            // Initialize node mapping reader if not already done
-            if (!nodeMappingReader) {
-                std::vector<bool> columnSkips; // Read all columns
-                auto context = transaction->getClientContext();
-                nodeMappingReader =
-                    std::make_unique<ParquetReader>(nodeMappingFilePath, columnSkips, context);
-            }
-
-            // Initialize scan to populate column types
-            auto context = transaction->getClientContext();
-            auto vfs = VirtualFileSystem::GetUnsafe(*context);
-            std::vector<uint64_t> groupsToRead;
-            for (uint64_t i = 0; i < nodeMappingReader->getNumRowsGroups(); ++i) {
-                groupsToRead.push_back(i);
-            }
-
-            ParquetReaderScanState scanState;
-            nodeMappingReader->initializeScan(scanState, groupsToRead, vfs);
-
-            // Check if the node mapping file has columns
-            auto numColumns = nodeMappingReader->getNumColumns();
-            if (numColumns < 2) {
-                throw RuntimeException("Node mapping parquet file must have at least 2 columns");
-            }
-
-            // Validate column types for node mapping
-            const auto& csrNodeIdType = nodeMappingReader->getColumnType(0);
-            const auto& nodeTableIdType = nodeMappingReader->getColumnType(1);
-            if (!LogicalTypeUtils::isIntegral(csrNodeIdType.getLogicalTypeID()) ||
-                !LogicalTypeUtils::isIntegral(nodeTableIdType.getLogicalTypeID())) {
-                throw RuntimeException(
-                    "Node mapping parquet file columns must be integer types (columns 0 and 1)");
-            }
-
-            // Read the node mapping data
-            DataChunk dataChunk(2);
-
-            // Get column types
-            for (uint32_t i = 0; i < 2 && i < numColumns; ++i) {
-                const auto& columnTypeRef = nodeMappingReader->getColumnType(i);
-                auto columnType = columnTypeRef.copy();
-                auto vector = std::make_shared<ValueVector>(std::move(columnType));
-                dataChunk.insert(i, vector);
-            }
-
-            // Read all node mapping values
-            while (nodeMappingReader->scanInternal(scanState, dataChunk)) {
-                auto selSize = dataChunk.state->getSelVector().getSelSize();
-                for (size_t i = 0; i < selSize; ++i) {
-                    auto csrNodeId = dataChunk.getValueVector(0).getValue<common::offset_t>(i);
-                    auto nodeTableId = dataChunk.getValueVector(1).getValue<common::offset_t>(i);
-                    nodeMapping[common::internalID_t(nodeTableId, getFromNodeTableID())] =
-                        csrNodeId;
-                    // Also create reverse mapping for destination node lookups
-                    csrToNodeTableIdMap[csrNodeId] = nodeTableId;
-                }
-            }
         }
     }
 }
@@ -278,9 +198,7 @@ bool ParquetRelTable::scanInternal(Transaction* transaction, TableScanState& sca
     // Get the ParquetRelTableScanState
     auto& parquetRelScanState = static_cast<ParquetRelTableScanState&>(relScanState);
 
-    // Readers are now initialized per scan state in initScanState
-    // Load shared data (node mapping and indptr) - these are thread-safe to read
-    loadNodeMappingData(transaction);
+    // Load shared indptr data - thread-safe to read
     if (!indptrFilePath.empty()) {
         loadIndptrData(transaction);
     }

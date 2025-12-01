@@ -34,3 +34,44 @@ Adam|Karissa|2020
 Adam|Zhang|2020
 Karissa|Zhang|2021
 Zhang|Noura|2022
+
+-LOG MatchLivesInWithCityPopulation
+-STATEMENT MATCH (u:user)-[l:livesin]->(c:city) RETURN u.name, c.name, c.population ORDER BY c.population DESC;
+---- 4
+Zhang|Kitchener|200000
+Adam|Waterloo|150000
+Karissa|Waterloo|150000
+Noura|Guelph|75000
+
+-LOG MatchLivesInFilterByCity
+-STATEMENT MATCH (u:user)-[l:livesin]->(c:city) WHERE c.name = 'Waterloo' RETURN u.name, u.age;
+---- 2
+Adam|30
+Karissa|40
+
+-LOG MatchLivesInFilterByCityPopulation
+-STATEMENT MATCH (u:user)-[l:livesin]->(c:city) WHERE c.population > 100000 RETURN u.name, c.name ORDER BY u.name;
+---- 3
+Adam|Waterloo
+Karissa|Waterloo
+Zhang|Kitchener
+
+-LOG CountUsersPerCity
+-STATEMENT MATCH (u:user)-[l:livesin]->(c:city) RETURN c.name, COUNT(*) AS num_users ORDER BY num_users DESC;
+---- 3
+Waterloo|2
+Guelph|1
+Kitchener|1
+
+-LOG MatchFollowsWithDestinationAge
+-STATEMENT MATCH (a:user)-[e:follows]->(b:user) WHERE b.age > 30 RETURN a.name, b.name, b.age ORDER BY b.age DESC;
+---- 3
+Adam|Zhang|50
+Karissa|Zhang|50
+Adam|Karissa|40
+
+-LOG MatchFollowsFilterBySourceAndDest
+-STATEMENT MATCH (a:user)-[e:follows]->(b:user) WHERE a.age < 40 AND b.age >= 40 RETURN a.name, b.name;
+---- 2
+Adam|Karissa
+Adam|Zhang

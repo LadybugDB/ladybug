@@ -21,7 +21,6 @@ struct ParquetRelTableScanState final : RelTableScanState {
     uint64_t currentRowGroup = 0;
 
     // Per-scan-state readers for thread safety
-    std::unique_ptr<processor::ParquetReader> nodeMappingReader;
     std::unique_ptr<processor::ParquetReader> indicesReader;
     std::unique_ptr<processor::ParquetReader> indptrReader;
 
@@ -42,7 +41,7 @@ class ParquetRelTable final : public RelTable {
 public:
     ParquetRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, common::table_id_t fromTableID,
         common::table_id_t toTableID, const StorageManager* storageManager,
-        MemoryManager* memoryManager, std::string fromNodeTableName);
+        MemoryManager* memoryManager);
 
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,
         bool resetCachedBoundNodeSelVec = true) const override;
@@ -68,24 +67,17 @@ public:
 
 private:
     catalog::RelGroupCatalogEntry* relGroupEntry; // Store reference to table schema
-    std::string nodeMappingFilePath;
     std::string indicesFilePath;
     std::string indptrFilePath;
-    mutable std::unique_ptr<processor::ParquetReader> nodeMappingReader;
     mutable std::unique_ptr<processor::ParquetReader> indicesReader;
     mutable std::unique_ptr<processor::ParquetReader> indptrReader;
     mutable std::mutex parquetReaderMutex;
     mutable std::mutex indptrDataMutex;
     mutable std::vector<common::offset_t> indptrData; // Cached indptr data for CSR format
-    mutable common::internal_id_map_t<common::offset_t>
-        nodeMapping; // Maps node IDs to CSR node IDs
-    mutable std::unordered_map<common::offset_t, common::offset_t>
-        csrToNodeTableIdMap; // Reverse mapping: CSR node ID to node table ID
 
     void initializeParquetReaders(transaction::Transaction* transaction) const;
     void initializeIndptrReader(transaction::Transaction* transaction) const;
     void loadIndptrData(transaction::Transaction* transaction) const;
-    void loadNodeMappingData(transaction::Transaction* transaction) const;
     bool scanInternalByRowGroups(transaction::Transaction* transaction,
         ParquetRelTableScanState& parquetRelScanState);
     bool scanRowGroupForBoundNodes(transaction::Transaction* transaction,
