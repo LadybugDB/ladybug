@@ -87,6 +87,9 @@ void TestParser::extractDataset() {
             testGroup->datasetType = TestGroup::DatasetType::JSON;
             testGroup->dataset = currentToken.params[2];
         }
+    } else if (datasetType == "GRAPH-STD") {
+        testGroup->datasetType = TestGroup::DatasetType::GRAPH_STD;
+        testGroup->dataset = currentToken.params[2];
     } else {
         throw TestException(
             "Invalid dataset type `" + currentToken.params[1] + "` [" + path + ":" + line + "].");

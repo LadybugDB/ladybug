@@ -38,7 +38,12 @@ public:
         }
         createDB(checkpointWaitTimeout);
         createConns(connNames);
-        if (datasetType != TestGroup::DatasetType::LBUG && dataset != "empty") {
+        if (datasetType == TestGroup::DatasetType::GRAPH_STD) {
+            // For GRAPH_STD, only run schema.cypher (which contains WITH storage = ... clauses)
+            // No copy.cypher needed as data is in external parquet files
+            lbug::main::Connection* connection = conn ? conn.get() : (connMap.begin()->second).get();
+            TestHelper::executeScript(dataset + "/" + TestHelper::SCHEMA_FILE_NAME, *connection);
+        } else if (datasetType != TestGroup::DatasetType::LBUG && dataset != "empty") {
             initGraph();
         } else if (generateBinaryDemo && TestHelper::E2E_OVERRIDE_IMPORT_DIR.empty()) {
             initGraph(TestHelper::appendLbugRootPath("dataset/demo-db/parquet/"));
