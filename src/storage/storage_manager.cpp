@@ -305,9 +305,8 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
             KU_ASSERT(!tables.contains(info.oid));
             if (!relGroupEntry->getStorage().empty()) {
                 // Create parquet-backed rel table
-                tables[info.oid] =
-                    std::make_unique<ParquetRelTable>(relGroupEntry, info.nodePair.srcTableID,
-                        info.nodePair.dstTableID, this, &memoryManager);
+                tables[info.oid] = std::make_unique<ParquetRelTable>(relGroupEntry,
+                    info.nodePair.srcTableID, info.nodePair.dstTableID, this, &memoryManager);
             } else {
                 // Create regular rel table
                 tables[info.oid] = std::make_unique<RelTable>(relGroupEntry,
