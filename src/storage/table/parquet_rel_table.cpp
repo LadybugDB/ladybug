@@ -50,12 +50,15 @@ ParquetRelTable::ParquetRelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t
         throw RuntimeException("Parquet file path is empty for parquet-backed rel table");
     }
 
-    // New prefix format: "prefix" which expands to:
-    // prefix_node_mapping.parquet, prefix_indices.parquet, prefix_indptr.parquet
+    // Get the relationship name for multi-table directory support
+    std::string relName = relGroupEntry->getName();
+
+    // New prefix format with relationship name: "prefix" which expands to:
+    // prefix_indices_{relName}.parquet, prefix_indptr_{relName}.parquet, prefix_metadata_{relName}.parquet
     std::string prefix = storage;
-    nodeMappingFilePath = prefix + "_node_mapping.parquet";
-    indicesFilePath = prefix + "_indices.parquet";
-    indptrFilePath = prefix + "_indptr.parquet";
+    nodeMappingFilePath = prefix + "_metadata_" + relName + ".parquet";
+    indicesFilePath = prefix + "_indices_" + relName + ".parquet";
+    indptrFilePath = prefix + "_indptr_" + relName + ".parquet";
 }
 
 void ParquetRelTable::initScanState(Transaction* transaction, TableScanState& scanState,

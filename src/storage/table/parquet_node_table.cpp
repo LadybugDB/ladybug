@@ -32,8 +32,12 @@ ParquetNodeTable::ParquetNodeTable(const StorageManager* storageManager,
         throw RuntimeException("Parquet file prefix is empty for parquet-backed node table");
     }
 
-    // For node tables, the storage field contains the parquet file path directly
-    parquetFilePath = prefix + "_nodes.parquet";
+    // Get the table name for multi-table directory support
+    std::string tableName = nodeTableEntry->getName();
+
+    // For node tables with multi-table support:
+    // prefix_nodes_{tableName}.parquet (e.g., demo_nodes_city.parquet)
+    parquetFilePath = prefix + "_nodes_" + tableName + ".parquet";
     sharedState = std::make_unique<ParquetNodeTableSharedState>();
 }
 
