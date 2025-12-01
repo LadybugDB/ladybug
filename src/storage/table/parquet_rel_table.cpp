@@ -54,7 +54,8 @@ ParquetRelTable::ParquetRelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t
     std::string relName = relGroupEntry->getName();
 
     // New prefix format with relationship name: "prefix" which expands to:
-    // prefix_indices_{relName}.parquet, prefix_indptr_{relName}.parquet, prefix_metadata_{relName}.parquet
+    // prefix_indices_{relName}.parquet, prefix_indptr_{relName}.parquet,
+    // prefix_metadata_{relName}.parquet
     std::string prefix = storage;
     nodeMappingFilePath = prefix + "_metadata_" + relName + ".parquet";
     indicesFilePath = prefix + "_indices_" + relName + ".parquet";

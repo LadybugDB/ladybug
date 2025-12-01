@@ -2,6 +2,7 @@
 
 #include "processor/execution_context.h"
 #include "storage/local_storage/local_storage.h"
+#include "storage/table/parquet_rel_table.h"
 
 using namespace lbug::common;
 using namespace lbug::storage;
@@ -54,8 +55,29 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
     auto clientContext = context->clientContext;
     boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
-    scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
-        boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+
+    // Check if any table in any scanner is a ParquetRelTable
+    bool hasParquetTable = false;
+    for (auto& [_, scanner] : scanners) {
+        for (auto& relInfo : scanner.relInfos) {
+            if (dynamic_cast<storage::ParquetRelTable*>(relInfo.table) != nullptr) {
+                hasParquetTable = true;
+                break;
+            }
+        }
+        if (hasParquetTable)
+            break;
+    }
+
+    // Create appropriate scan state type
+    if (hasParquetTable) {
+        scanState =
+            std::make_unique<storage::ParquetRelTableScanState>(*MemoryManager::Get(*clientContext),
+                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+    } else {
+        scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
+            boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+    }
     for (auto& [_, scanner] : scanners) {
         for (auto& relInfo : scanner.relInfos) {
             if (directionInfo.directionPos.isValid()) {
