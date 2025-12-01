@@ -6,14 +6,11 @@
 
 -LOG MatchUserLivesInCity
 -STATEMENT MATCH (u:user)-[l:livesin]->(c:city) RETURN u.name, u.age, c.name;
----- 7
-Adam|30|Guelph
-Adam|30|Guelph
+---- 4
+Adam|30|Waterloo
 Karissa|40|Waterloo
-Noura|25|Kitchener
-Noura|25|Waterloo
-Noura|25|Waterloo
 Zhang|50|Kitchener
+Noura|25|Guelph
 
 -LOG MatchSingleNodeLabel
 -STATEMENT MATCH (a:user) RETURN a.name, a.age;
@@ -32,12 +29,8 @@ Guelph|75000
 
 -LOG MatchFollowsRel
 -STATEMENT MATCH (a:user)-[e:follows]->(b:user) RETURN a.name, b.name, e.since;
----- 8
-Adam|Zhang|2022
-Karissa|Noura|2020
-Karissa|Zhang|2020
-Noura|Karissa|2020
-Noura|Zhang|2021
-Zhang|Adam|2022
-Zhang|Karissa|2020
-Zhang|Noura|2021
+---- 4
+Adam|Karissa|2020
+Adam|Zhang|2020
+Karissa|Zhang|2021
+Zhang|Noura|2022
