@@ -271,6 +271,22 @@ void completion(const char* buffer, linenoiseCompletions* lc) {
         return;
     }
 
+    // RETURN *; completion for MATCH and CALL queries.
+    // Trigger when buffer ends with ')' or ') ' after a MATCH pattern or CALL function.
+    if (regex_search(buf, std::regex(R"(\)\s*$)"))) {
+        // Check for MATCH pattern: MATCH(var:Table) or MATCH (var:Table)
+        bool isMatchQuery =
+            regex_search(buf, std::regex(R"(^\s*MATCH\s*\()", std::regex_constants::icase));
+        // Check for CALL function: CALL func_name(...) or CALL func_name (...)
+        bool isCallFunction =
+            regex_search(buf, std::regex(R"(^\s*CALL\s+\w+\s*\()", std::regex_constants::icase));
+        if (isMatchQuery || isCallFunction) {
+            std::string suffix = buf.back() == ')' ? " RETURN *;" : "RETURN *;";
+            linenoiseAddCompletion(lc, (buf + suffix).c_str());
+            return;
+        }
+    }
+
     // Node table name completion. Match patterns that include an open bracket `(` with no closing
     // bracket `)`, and a colon `:` sometime after the open bracket.
     if (regex_search(buf, std::regex("^[^]*\\([^\\)]*:[^\\)]*$"))) {
