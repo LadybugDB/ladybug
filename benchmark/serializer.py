@@ -39,7 +39,17 @@ def serialize(lbug_exec_path, dataset_name, dataset_path, serialized_graph_path,
         with open(os.path.join(dataset_path, 'schema.cypher'), 'r') as f:
             serialize_queries += f.readlines()
         with open(os.path.join(dataset_path, 'copy.cypher'), 'r') as f:
-            serialize_queries += f.readlines()
+            copy_lines = f.readlines()
+        # Fix relative paths in copy.cypher
+        for line in copy_lines:
+            # Replace quoted paths with absolute paths
+            def replace_path(match):
+                path = match.group(1)
+                if not os.path.isabs(path):
+                    return '"' + os.path.join(dataset_path, path) + '"'
+                return match.group(0)
+            fixed_line = re.sub(r'"([^"]*)"', replace_path, line)
+            serialize_queries.append(fixed_line.strip())
     else:
         with open(os.path.join(base_dir, 'serialize.cypher'), 'r') as f:
             serialize_queries += f.readlines()
