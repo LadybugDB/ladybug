@@ -28,7 +28,6 @@ std::optional<WarningSourceData> getWarningSourceData(
     return ret;
 }
 
-// TODO(Guodong): Add short path for unfiltered case.
 bool checkNullKey(ValueVector* keyVector, offset_t vectorOffset,
     BatchInsertErrorHandler* errorHandler, const std::vector<ValueVector*>& warningDataVectors) {
     bool isNull = keyVector->isNull(vectorOffset);
@@ -71,27 +70,17 @@ struct OffsetVectorManager {
     offset_t insertOffset;
 };
 
-// TODO(Guodong): Add short path for unfiltered case.
 template<bool hasNoNullsGuarantee>
-void fillOffsetArraysFromVector(transaction::Transaction* transaction, const IndexLookupInfo& info,
-    ValueVector* keyVector, ValueVector* resultVector,
-    const std::vector<ValueVector*>& warningDataVectors, BatchInsertErrorHandler* errorHandler) {
-    KU_ASSERT(resultVector->dataType.getPhysicalType() == PhysicalTypeID::INT64);
+void fillOffsetArraysFromVectorInternal(transaction::Transaction* transaction,
+    const IndexLookupInfo& info, ValueVector* keyVector, ValueVector* resultVector,
+    const std::vector<ValueVector*>& warningDataVectors, BatchInsertErrorHandler* errorHandler,
+    const sel_t* selVector, sel_t numKeys) {
     TypeUtils::visit(
         keyVector->dataType.getPhysicalType(),
         [&]<IndexHashable T>(T) {
-            auto numKeys = keyVector->state->getSelVector().getSelSize();
-
-            // fetch all the selection pos at the start
-            // since we may modify the selection vector in the middle of the lookup
-            std::vector<sel_t> lookupPos(numKeys);
-            for (idx_t i = 0; i < numKeys; ++i) {
-                lookupPos[i] = (keyVector->state->getSelVector()[i]);
-            }
-
             OffsetVectorManager resultManager{resultVector, errorHandler};
-            for (auto i = 0u; i < numKeys; i++) {
-                auto pos = lookupPos[i];
+            for (sel_t i = 0u; i < numKeys; i++) {
+                auto pos = selVector ? selVector[i] : i;
                 if constexpr (!hasNoNullsGuarantee) {
                     if (!checkNullKey(keyVector, pos, errorHandler, warningDataVectors)) {
                         continue;
@@ -108,6 +97,28 @@ void fillOffsetArraysFromVector(transaction::Transaction* transaction, const Ind
             }
         },
         [&](auto) { KU_UNREACHABLE; });
+}
+
+template<bool hasNoNullsGuarantee>
+void fillOffsetArraysFromVector(transaction::Transaction* transaction, const IndexLookupInfo& info,
+    ValueVector* keyVector, ValueVector* resultVector,
+    const std::vector<ValueVector*>& warningDataVectors, BatchInsertErrorHandler* errorHandler) {
+    KU_ASSERT(resultVector->dataType.getPhysicalType() == PhysicalTypeID::INT64);
+    auto& selVector = keyVector->state->getSelVector();
+    auto numKeys = selVector.getSelSize();
+    if (selVector.isUnfiltered()) {
+        // Fast path: selection vector is unfiltered - pass a null selection vector
+        fillOffsetArraysFromVectorInternal<hasNoNullsGuarantee>(transaction, info, keyVector,
+            resultVector, warningDataVectors, errorHandler, nullptr /* selVector */, numKeys);
+    } else {
+        // Filtered case: copy selection positions since we may modify the selection vector
+        std::vector<sel_t> lookupPos(numKeys);
+        for (idx_t i = 0; i < numKeys; ++i) {
+            lookupPos[i] = selVector[i];
+        }
+        fillOffsetArraysFromVectorInternal<hasNoNullsGuarantee>(transaction, info, keyVector,
+            resultVector, warningDataVectors, errorHandler, lookupPos.data(), numKeys);
+    }
 }
 } // namespace
 
