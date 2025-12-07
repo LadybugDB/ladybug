@@ -20,12 +20,16 @@ std::string DuckDBScanBindData::getColumnsToSelect() const {
     if (getNumColumns() == numSkippedColumns) {
         columnNames = columnNamesInDuckDB[0];
     }
+    bool first = true;
     for (auto i = 0u; i < getNumColumns(); i++) {
         if (columnSkips[i]) {
             continue;
         }
+        if (!first) {
+            columnNames += ",";
+        }
         columnNames += columnNamesInDuckDB[i];
-        columnNames += (i == getNumColumns() - 1) ? "" : ",";
+        first = false;
     }
     return columnNames;
 }

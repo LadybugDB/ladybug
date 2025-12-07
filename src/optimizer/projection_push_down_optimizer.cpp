@@ -261,7 +261,10 @@ void ProjectionPushDownOptimizer::visitTableFunctionCall(LogicalOperator* op) {
     auto& tableFunctionCall = op->cast<LogicalTableFunctionCall>();
     std::vector<bool> columnSkips;
     for (auto& column : tableFunctionCall.getBindData()->columns) {
-        columnSkips.push_back(!variablesInUse.contains(column));
+        // Check both variablesInUse and propertiesInUse since foreign table columns
+        // may be referenced as properties in the query (e.g., a.id) but represented
+        // as variables in the table function bind data
+        columnSkips.push_back(!variablesInUse.contains(column) && !propertiesInUse.contains(column));
     }
     tableFunctionCall.setColumnSkips(std::move(columnSkips));
 }
