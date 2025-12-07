@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "binder/bound_scan_source.h"
 #include "binder/ddl/bound_alter_info.h"
 #include "binder/ddl/bound_create_table_info.h"
 #include "catalog/catalog_entry/catalog_entry.h"
@@ -42,6 +43,11 @@ public:
     void setComment(std::string newComment) { comment = std::move(newComment); }
 
     virtual function::TableFunction getScanFunction() { KU_UNREACHABLE; }
+
+    virtual std::unique_ptr<binder::BoundTableScanInfo> getBoundScanInfo(
+        [[maybe_unused]] main::ClientContext* context) {
+        return nullptr;
+    }
 
     common::column_id_t getMaxColumnID() const;
     void vacuumColumnIDs(common::column_id_t nextColumnID);

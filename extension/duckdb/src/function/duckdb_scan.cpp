@@ -66,7 +66,12 @@ std::unique_ptr<TableFuncSharedState> DuckDBScanFunction::initSharedState(
             predicatesString += stringFormat(" AND {}", predicates.toString());
         }
     }
-    auto finalQuery = stringFormat(scanBindData->query, columnNames) + predicatesString;
+    std::string finalQuery = scanBindData->query;
+    size_t pos = finalQuery.find("{}");
+    if (pos != std::string::npos) {
+        finalQuery.replace(pos, 2, columnNames);
+    }
+    finalQuery += predicatesString;
     auto result = scanBindData->connector.executeQuery(finalQuery);
     if (result->HasError()) {
         throw RuntimeException(

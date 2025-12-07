@@ -1,8 +1,10 @@
 #include <cmath>
 
+#include "binder/bound_scan_source.h"
 #include "binder/expression_visitor.h"
 #include "common/enums/join_type.h"
 #include "common/enums/rel_direction.h"
+#include "common/enums/table_type.h"
 #include "common/utils.h"
 #include "planner/join_order/cost_model.h"
 #include "planner/join_order/join_plan_solver.h"
@@ -246,7 +248,17 @@ void Planner::planNodeScan(uint32_t nodePos) {
     newSubgraph.addQueryNode(nodePos);
     auto plan = LogicalPlan();
     auto properties = getProperties(*node);
-    appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan);
+    if (node->getEntries().size() == 1) {
+        auto boundScanInfo = node->getEntries()[0]->getBoundScanInfo(clientContext);
+        if (boundScanInfo != nullptr) {
+            // Use table function call for foreign tables
+            appendTableFunctionCall(*boundScanInfo, plan);
+        } else {
+            appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan);
+        }
+    } else {
+        appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan);
+    }
     auto predicates = getNewlyMatchedExprs(context.getEmptySubqueryGraph(), newSubgraph,
         context.getWhereExpressions());
     appendFilters(predicates, plan);

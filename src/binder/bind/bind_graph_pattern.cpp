@@ -8,6 +8,7 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/enums/rel_direction.h"
 #include "common/exception/binder.h"
+#include "main/database_manager.h"
 #include "common/string_format.h"
 #include "common/utils.h"
 #include "function/cast/functions/cast_from_string_functions.h"
@@ -644,7 +645,8 @@ std::vector<TableCatalogEntry*> Binder::bindNodeTableEntries(
     } else {
         for (auto& name : tableNames) {
             auto entry = bindNodeTableEntry(name);
-            if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
+            if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY &&
+                entry->getType() != CatalogEntryType::FOREIGN_TABLE_ENTRY) {
                 throw BinderException(
                     stringFormat("Cannot bind {} as a node pattern label.", entry->getName()));
             }
@@ -658,10 +660,41 @@ TableCatalogEntry* Binder::bindNodeTableEntry(const std::string& name) const {
     auto transaction = transaction::Transaction::Get(*clientContext);
     auto catalog = Catalog::Get(*clientContext);
     auto useInternal = clientContext->useInternalCatalogEntry();
-    if (!catalog->containsTable(transaction, name, useInternal)) {
+
+    std::string dbName;
+    std::string tableName = name;
+    auto dotPos = name.find('.');
+    if (dotPos != std::string::npos) {
+        dbName = name.substr(0, dotPos);
+        tableName = name.substr(dotPos + 1);
+    }
+
+    if (!dbName.empty()) {
+        // Qualified name: db.table
+        auto attachedDB = main::DatabaseManager::Get(*clientContext)->getAttachedDatabase(dbName);
+        if (!attachedDB) {
+            throw BinderException(stringFormat("Attached database {} does not exist.", dbName));
+        }
+        auto attachedCatalog = attachedDB->getCatalog();
+        if (!attachedCatalog->containsTable(transaction, tableName, useInternal)) {
+            throw BinderException(stringFormat("Table {} does not exist in attached database {}.",
+                tableName, dbName));
+        }
+        return attachedCatalog->getTableCatalogEntry(transaction, tableName, useInternal);
+    } else {
+        // Unqualified name: try main catalog first
+        if (catalog->containsTable(transaction, name, useInternal)) {
+            return catalog->getTableCatalogEntry(transaction, name, useInternal);
+        }
+        // Then try attached catalogs
+        for (auto attachedDB : main::DatabaseManager::Get(*clientContext)->getAttachedDatabases()) {
+            auto attachedCatalog = attachedDB->getCatalog();
+            if (attachedCatalog->containsTable(transaction, name, useInternal)) {
+                return attachedCatalog->getTableCatalogEntry(transaction, name, useInternal);
+            }
+        }
         throw BinderException(stringFormat("Table {} does not exist.", name));
     }
-    return catalog->getTableCatalogEntry(transaction, name, useInternal);
 }
 
 std::vector<TableCatalogEntry*> Binder::bindRelGroupEntries(
