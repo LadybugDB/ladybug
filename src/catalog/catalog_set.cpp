@@ -246,6 +246,7 @@ void CatalogSet::serialize(Serializer serializer) const {
         case CatalogEntryType::COPY_FUNCTION_ENTRY:
         case CatalogEntryType::TABLE_FUNCTION_ENTRY:
         case CatalogEntryType::STANDALONE_TABLE_FUNCTION_ENTRY:
+        case CatalogEntryType::FOREIGN_TABLE_ENTRY:
             continue;
         default: {
             auto committedEntry = getCommittedEntryNoLock(entry.get());

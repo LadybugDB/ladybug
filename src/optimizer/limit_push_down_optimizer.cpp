@@ -6,6 +6,7 @@
 #include "planner/operator/logical_distinct.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_limit.h"
+#include "planner/operator/logical_table_function_call.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -34,8 +35,17 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op) {
     case LogicalOperatorType::MULTIPLICITY_REDUCER:
     case LogicalOperatorType::EXPLAIN:
     case LogicalOperatorType::ACCUMULATE:
+    case LogicalOperatorType::FILTER:
     case LogicalOperatorType::PROJECTION: {
         visitOperator(op->getChild(0).get());
+        return;
+    }
+    case LogicalOperatorType::TABLE_FUNCTION_CALL: {
+        if (limitNumber == INVALID_LIMIT && skipNumber == 0) {
+            return;
+        }
+        auto& tableFuncCall = op->cast<LogicalTableFunctionCall>();
+        tableFuncCall.setLimitNum(skipNumber + limitNumber);
         return;
     }
     case LogicalOperatorType::DISTINCT: {

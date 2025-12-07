@@ -118,6 +118,7 @@ DuckDBResultConverter::DuckDBResultConverter(const std::vector<LogicalType>& typ
 void DuckDBResultConverter::convertDuckDBResultToVector(duckdb::DataChunk& duckDBResult,
     DataChunk& result, std::optional<std::vector<bool>> columnSkips) const {
     auto duckdbResultColIdx = 0u;
+    auto resultColIdx = 0u;
     for (auto i = 0u; i < conversionFunctions.size(); i++) {
         result.state->getSelVectorUnsafe().setSelSize(duckDBResult.size());
         if (columnSkips && columnSkips.value()[i]) {
@@ -126,8 +127,9 @@ void DuckDBResultConverter::convertDuckDBResultToVector(duckdb::DataChunk& duckD
         KU_ASSERT(duckDBResult.data[duckdbResultColIdx].GetVectorType() ==
                   duckdb::VectorType::FLAT_VECTOR);
         conversionFunctions[i](duckDBResult.data[duckdbResultColIdx],
-            result.getValueVectorMutable(i), result.state->getSelVector().getSelSize());
+            result.getValueVectorMutable(resultColIdx), result.state->getSelVector().getSelSize());
         duckdbResultColIdx++;
+        resultColIdx++;
     }
 }
 

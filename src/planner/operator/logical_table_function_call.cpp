@@ -19,5 +19,9 @@ void LogicalTableFunctionCall::computeFactorizedSchema() {
     }
 }
 
+std::unique_ptr<OPPrintInfo> LogicalTableFunctionCall::getPrintInfo() const {
+    return std::make_unique<LogicalTableFunctionCallPrintInfo>(getExpressionsForPrinting());
+}
+
 } // namespace planner
 } // namespace lbug

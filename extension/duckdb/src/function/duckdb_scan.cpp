@@ -34,6 +34,31 @@ std::string DuckDBScanBindData::getColumnsToSelect() const {
     return columnNames;
 }
 
+std::string DuckDBScanBindData::getDescription() const {
+    auto columns = getColumnsToSelect();
+    std::string predicatesString = "";
+    for (auto& predicates : getColumnPredicates()) {
+        if (predicates.isEmpty()) {
+            continue;
+        }
+        if (predicatesString.empty()) {
+            predicatesString = " WHERE " + predicates.toString();
+        } else {
+            predicatesString += common::stringFormat(" AND {}", predicates.toString());
+        }
+    }
+    std::string q = query;
+    size_t pos = q.find("{}");
+    if (pos != std::string::npos) {
+        q.replace(pos, 2, columns);
+    }
+    q += predicatesString;
+    if (getLimitNum() != common::INVALID_ROW_IDX) {
+        q += common::stringFormat(" LIMIT {}", getLimitNum());
+    }
+    return q;
+}
+
 DuckDBScanSharedState::DuckDBScanSharedState(
     std::shared_ptr<duckdb::MaterializedQueryResult> queryResult)
     : function::TableFuncSharedState{queryResult->RowCount()}, queryResult{std::move(queryResult)} {
@@ -76,6 +101,9 @@ std::unique_ptr<TableFuncSharedState> DuckDBScanFunction::initSharedState(
         finalQuery.replace(pos, 2, columnNames);
     }
     finalQuery += predicatesString;
+    if (scanBindData->getLimitNum() != INVALID_ROW_IDX) {
+        finalQuery += stringFormat(" LIMIT {}", scanBindData->getLimitNum());
+    }
     auto result = scanBindData->connector.executeQuery(finalQuery);
     if (result->HasError()) {
         throw RuntimeException(

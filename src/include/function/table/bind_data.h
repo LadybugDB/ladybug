@@ -25,7 +25,8 @@ struct LBUG_API TableFuncBindData {
     TableFuncBindData(const TableFuncBindData& other)
         : columns{other.columns}, numRows{other.numRows},
           optionalParams{other.optionalParams == nullptr ? nullptr : other.optionalParams->copy()},
-          columnSkips{other.columnSkips}, columnPredicates{copyVector(other.columnPredicates)} {}
+          columnSkips{other.columnSkips}, columnPredicates{copyVector(other.columnPredicates)},
+          limitNum{other.limitNum} {}
     TableFuncBindData& operator=(const TableFuncBindData& other) = delete;
     virtual ~TableFuncBindData() = default;
 
@@ -46,9 +47,14 @@ struct LBUG_API TableFuncBindData {
         return columnPredicates;
     }
 
+    void setLimitNum(common::row_idx_t limit) { limitNum = limit; }
+    common::row_idx_t getLimitNum() const { return limitNum; }
+
     virtual bool getIgnoreErrorsOption() const;
 
     virtual std::unique_ptr<TableFuncBindData> copy() const;
+
+    virtual std::string getDescription() const { return ""; }
 
     template<class TARGET>
     const TARGET* constPtrCast() const {
@@ -63,6 +69,7 @@ struct LBUG_API TableFuncBindData {
 protected:
     std::vector<bool> columnSkips;
     std::vector<storage::ColumnPredicateSet> columnPredicates;
+    common::row_idx_t limitNum = common::INVALID_ROW_IDX;
 };
 
 } // namespace function

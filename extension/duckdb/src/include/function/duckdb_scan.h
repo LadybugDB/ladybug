@@ -60,6 +60,8 @@ struct DuckDBScanBindData : function::TableFuncBindData {
 
     std::string getColumnsToSelect() const;
 
+    std::string getDescription() const override;
+
     std::unique_ptr<TableFuncBindData> copy() const override {
         return std::make_unique<DuckDBScanBindData>(*this);
     }

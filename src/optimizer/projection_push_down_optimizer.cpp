@@ -264,7 +264,8 @@ void ProjectionPushDownOptimizer::visitTableFunctionCall(LogicalOperator* op) {
         // Check both variablesInUse and propertiesInUse since foreign table columns
         // may be referenced as properties in the query (e.g., a.id) but represented
         // as variables in the table function bind data
-        columnSkips.push_back(!variablesInUse.contains(column) && !propertiesInUse.contains(column));
+        columnSkips.push_back(
+            !variablesInUse.contains(column) && !propertiesInUse.contains(column));
     }
     tableFunctionCall.setColumnSkips(std::move(columnSkips));
 }
