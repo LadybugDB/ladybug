@@ -2,6 +2,7 @@
 
 #include "binder/bound_scan_source.h"
 #include "binder/expression_visitor.h"
+#include "catalog/catalog_entry/catalog_entry_type.h"
 #include "common/enums/join_type.h"
 #include "common/enums/rel_direction.h"
 #include "common/enums/table_type.h"
@@ -248,8 +249,10 @@ void Planner::planNodeScan(uint32_t nodePos) {
     newSubgraph.addQueryNode(nodePos);
     auto plan = LogicalPlan();
     auto properties = getProperties(*node);
-    if (node->getEntries().size() == 1) {
-        auto boundScanInfo = node->getEntries()[0]->getBoundScanInfo(clientContext);
+    if (node->getEntries().size() == 1 &&
+        node->getEntries()[0]->getType() == catalog::CatalogEntryType::FOREIGN_TABLE_ENTRY) {
+        auto boundScanInfo =
+            node->getEntries()[0]->getBoundScanInfo(clientContext, node->getUniqueName());
         if (boundScanInfo != nullptr) {
             // Use table function call for foreign tables
             appendTableFunctionCall(*boundScanInfo, plan);

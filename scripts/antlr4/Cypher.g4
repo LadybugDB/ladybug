@@ -699,7 +699,7 @@ oC_UpperBound
     : DecimalInteger ;
 
 oC_LabelName
-    : oC_SchemaName ;
+    : oC_SchemaName ( '.' oC_SchemaName )? ;
 
 oC_RelTypeName
     : oC_SchemaName ;

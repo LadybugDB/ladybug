@@ -20,8 +20,8 @@ public:
     //===--------------------------------------------------------------------===//
     common::TableType getTableType() const override;
     function::TableFunction getScanFunction() override { return scanFunction; }
-    std::unique_ptr<binder::BoundTableScanInfo> getBoundScanInfo(
-        main::ClientContext* context) override;
+    std::unique_ptr<binder::BoundTableScanInfo> getBoundScanInfo(main::ClientContext* context,
+        const std::string& nodeUniqueName = "") override;
 
     //===--------------------------------------------------------------------===//
     // serialization & deserialization

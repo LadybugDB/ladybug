@@ -45,7 +45,8 @@ public:
     virtual function::TableFunction getScanFunction() { KU_UNREACHABLE; }
 
     virtual std::unique_ptr<binder::BoundTableScanInfo> getBoundScanInfo(
-        [[maybe_unused]] main::ClientContext* context) {
+        [[maybe_unused]] main::ClientContext* context,
+        [[maybe_unused]] const std::string& nodeUniqueName = "") {
         return nullptr;
     }
 

@@ -2,6 +2,7 @@
 
 #include "binder/bound_scan_source.h"
 #include "binder/expression/variable_expression.h"
+#include "common/constants.h"
 #include "function/duckdb_scan.h"
 
 namespace lbug {
@@ -18,17 +19,37 @@ common::TableType DuckDBTableCatalogEntry::getTableType() const {
 }
 
 std::unique_ptr<binder::BoundTableScanInfo> DuckDBTableCatalogEntry::getBoundScanInfo(
-    main::ClientContext* context) {
+    main::ClientContext* context, const std::string& nodeUniqueName) {
     auto columnNames = scanInfo->getColumnNames();
     auto columnTypes = scanInfo->getColumnTypes(*context);
     binder::expression_vector columns;
-    for (auto i = 0u; i < columnNames.size(); i++) {
-        columns.push_back(std::make_shared<binder::VariableExpression>(std::move(columnTypes[i]),
-            columnNames[i], columnNames[i]));
+
+    // Add rowid as _ID (internal ID) if nodeUniqueName is provided
+    if (!nodeUniqueName.empty()) {
+        auto idUniqueName = nodeUniqueName + "." + std::string(common::InternalKeyword::ID);
+        columns.push_back(std::make_shared<binder::VariableExpression>(common::LogicalType::INT64(),
+            idUniqueName, "rowid"));
     }
+
+    for (auto i = 0u; i < columnNames.size(); i++) {
+        std::string uniqueName = columnNames[i];
+        if (!nodeUniqueName.empty()) {
+            uniqueName = nodeUniqueName + "." + columnNames[i];
+        }
+        columns.push_back(std::make_shared<binder::VariableExpression>(std::move(columnTypes[i]),
+            uniqueName, columnNames[i]));
+    }
+
+    // Build column names for DuckDB query - include rowid if needed
+    std::vector<std::string> duckdbColumnNames;
+    if (!nodeUniqueName.empty()) {
+        duckdbColumnNames.push_back("rowid");
+    }
+    duckdbColumnNames.insert(duckdbColumnNames.end(), columnNames.begin(), columnNames.end());
+
     auto bindData =
         std::make_unique<duckdb_extension::DuckDBScanBindData>(scanInfo->getTemplateQuery(*context),
-            columnNames, scanInfo->getConnector(), std::move(columns));
+            duckdbColumnNames, scanInfo->getConnector(), std::move(columns));
     return std::make_unique<binder::BoundTableScanInfo>(scanFunction, std::move(bindData));
 }
 

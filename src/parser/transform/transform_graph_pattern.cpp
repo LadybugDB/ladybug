@@ -202,7 +202,12 @@ std::vector<std::string> Transformer::transformNodeLabels(CypherParser::OC_NodeL
 }
 
 std::string Transformer::transformLabelName(CypherParser::OC_LabelNameContext& ctx) {
-    return transformSchemaName(*ctx.oC_SchemaName());
+    auto schemaNames = ctx.oC_SchemaName();
+    if (schemaNames.size() == 1) {
+        return transformSchemaName(*schemaNames[0]);
+    }
+    // Qualified name: db.table
+    return transformSchemaName(*schemaNames[0]) + "." + transformSchemaName(*schemaNames[1]);
 }
 
 std::string Transformer::transformRelTypeName(CypherParser::OC_RelTypeNameContext& ctx) {

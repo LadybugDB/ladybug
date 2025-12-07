@@ -8,7 +8,6 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/enums/rel_direction.h"
 #include "common/exception/binder.h"
-#include "main/database_manager.h"
 #include "common/string_format.h"
 #include "common/utils.h"
 #include "function/cast/functions/cast_from_string_functions.h"
@@ -16,6 +15,7 @@
 #include "function/rewrite_function.h"
 #include "function/schema/vector_node_rel_functions.h"
 #include "main/client_context.h"
+#include "main/database_manager.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -682,16 +682,10 @@ TableCatalogEntry* Binder::bindNodeTableEntry(const std::string& name) const {
         }
         return attachedCatalog->getTableCatalogEntry(transaction, tableName, useInternal);
     } else {
-        // Unqualified name: try main catalog first
+        // Unqualified name: only search main catalog
+        // Foreign tables require qualified names (db.table) to avoid ambiguity
         if (catalog->containsTable(transaction, name, useInternal)) {
             return catalog->getTableCatalogEntry(transaction, name, useInternal);
-        }
-        // Then try attached catalogs
-        for (auto attachedDB : main::DatabaseManager::Get(*clientContext)->getAttachedDatabases()) {
-            auto attachedCatalog = attachedDB->getCatalog();
-            if (attachedCatalog->containsTable(transaction, name, useInternal)) {
-                return attachedCatalog->getTableCatalogEntry(transaction, name, useInternal);
-            }
         }
         throw BinderException(stringFormat("Table {} does not exist.", name));
     }

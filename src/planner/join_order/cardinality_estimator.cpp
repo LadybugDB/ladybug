@@ -1,6 +1,7 @@
 #include "planner/join_order/cardinality_estimator.h"
 
 #include "binder/expression/property_expression.h"
+#include "catalog/catalog_entry/table_catalog_entry.h"
 #include "main/client_context.h"
 #include "planner/join_order/join_order_util.h"
 #include "planner/operator/logical_aggregate.h"
@@ -39,7 +40,12 @@ void CardinalityEstimator::init(const NodeExpression& node) {
     cardinality_t numNodes = 0u;
     auto storageManager = storage::StorageManager::Get(*context);
     auto transaction = transaction::Transaction::Get(*context);
-    for (auto tableID : node.getTableIDs()) {
+    for (auto entry : node.getEntries()) {
+        // Skip foreign tables - they don't have storage in the local database
+        if (entry->getType() == catalog::CatalogEntryType::FOREIGN_TABLE_ENTRY) {
+            continue;
+        }
+        auto tableID = entry->getTableID();
         auto stats =
             storageManager->getTable(tableID)->cast<storage::NodeTable>().getStats(transaction);
         numNodes += stats.getTableCard();
@@ -195,7 +201,10 @@ uint64_t CardinalityEstimator::getNumNodes(const Transaction*,
     const std::vector<table_id_t>& tableIDs) const {
     cardinality_t numNodes = 0u;
     for (auto& tableID : tableIDs) {
-        KU_ASSERT(nodeTableStats.contains(tableID));
+        // Skip foreign tables - they won't be in nodeTableStats
+        if (!nodeTableStats.contains(tableID)) {
+            continue;
+        }
         numNodes += nodeTableStats.at(tableID).getTableCard();
     }
     return atLeastOne(numNodes);
