@@ -14,8 +14,8 @@ namespace common {
 #if USE_STD_FORMAT
 
 template<typename... Args>
-inline std::string stringFormat(std::format_string<Args...> format, Args&&... args) {
-    return std::format(format, std::forward<Args>(args)...);
+inline std::string stringFormat(std::string_view format, Args&&... args) {
+    return std::vformat(format, std::make_format_args(args...));
 }
 
 #else
