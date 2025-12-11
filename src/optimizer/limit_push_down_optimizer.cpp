@@ -36,8 +36,7 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op) {
     case LogicalOperatorType::EXPLAIN:
     case LogicalOperatorType::ACCUMULATE:
     case LogicalOperatorType::FILTER:
-    case LogicalOperatorType::PROJECTION:
-    case LogicalOperatorType::ORDER_BY: {
+    case LogicalOperatorType::PROJECTION: {
         visitOperator(op->getChild(0).get());
         return;
     }
@@ -46,7 +45,9 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op) {
             return;
         }
         auto& tableFuncCall = op->cast<LogicalTableFunctionCall>();
-        tableFuncCall.setLimitNum(skipNumber + limitNumber);
+        if (tableFuncCall.getTableFunc().supportsPushDownFunc()) {
+            tableFuncCall.setLimitNum(skipNumber + limitNumber);
+        }
         return;
     }
     case LogicalOperatorType::DISTINCT: {

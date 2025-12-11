@@ -161,6 +161,7 @@ TableFunction getScanFunction(std::shared_ptr<DuckDBTableScanInfo> scanInfo) {
         std::placeholders::_2);
     function.initSharedStateFunc = DuckDBScanFunction::initSharedState;
     function.initLocalStateFunc = DuckDBScanFunction::initLocalState;
+    function.supportsPushDownFunc = [] { return true; };
     return function;
 }
 

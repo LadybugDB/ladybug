@@ -15,6 +15,29 @@ using namespace lbug::planner;
 namespace lbug {
 namespace optimizer {
 
+// This ensures that ORDER BY can be pushed down only through operators that support it.
+// It should not be pushed down for things like RECURSIVE_EXTEND etc.
+bool isPushDownSupported(LogicalOperator* op) {
+    switch (op->getOperatorType()) {
+    case LogicalOperatorType::TABLE_FUNCTION_CALL: {
+        return op->cast<LogicalTableFunctionCall>().getTableFunc().supportsPushDownFunc();
+    }
+    case LogicalOperatorType::MULTIPLICITY_REDUCER:
+    case LogicalOperatorType::EXPLAIN:
+    case LogicalOperatorType::ACCUMULATE:
+    case LogicalOperatorType::FILTER:
+    case LogicalOperatorType::PROJECTION:
+    case LogicalOperatorType::LIMIT: {
+        if (op->getNumChildren() == 0) {
+            return false;
+        }
+        return isPushDownSupported(op->getChild(0).get());
+    }
+    default:
+        return false;
+    }
+}
+
 void OrderByPushDownOptimizer::rewrite(LogicalPlan* plan) {
     plan->setLastOperator(visitOperator(plan->getLastOperator()));
 }
@@ -31,14 +54,11 @@ std::shared_ptr<LogicalOperator> OrderByPushDownOptimizer::visitOperator(
         newOrderBy +=
             buildOrderByString(orderBy.getExpressionsToOrderBy(), orderBy.getIsAscOrders());
         auto newChild = visitOperator(orderBy.getChild(0), newOrderBy);
-        if (newChild->getOperatorType() == LogicalOperatorType::TABLE_FUNCTION_CALL) {
-            auto& tableFunc = newChild->cast<LogicalTableFunctionCall>();
-            tableFunc.setOrderBy(newOrderBy);
+        if (isPushDownSupported(newChild.get())) {
             return newChild;
-        } else {
-            return std::make_shared<LogicalOrderBy>(orderBy.getExpressionsToOrderBy(),
-                orderBy.getIsAscOrders(), newChild);
         }
+        return std::make_shared<LogicalOrderBy>(orderBy.getExpressionsToOrderBy(),
+            orderBy.getIsAscOrders(), newChild);
     }
     case LogicalOperatorType::MULTIPLICITY_REDUCER:
     case LogicalOperatorType::EXPLAIN:
@@ -54,7 +74,9 @@ std::shared_ptr<LogicalOperator> OrderByPushDownOptimizer::visitOperator(
     case LogicalOperatorType::TABLE_FUNCTION_CALL: {
         if (!currentOrderBy.empty()) {
             auto& tableFunc = op->cast<LogicalTableFunctionCall>();
-            tableFunc.setOrderBy(currentOrderBy);
+            if (tableFunc.getTableFunc().supportsPushDownFunc()) {
+                tableFunc.setOrderBy(currentOrderBy);
+            }
         }
         return op;
     }

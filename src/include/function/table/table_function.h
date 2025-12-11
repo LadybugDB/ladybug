@@ -133,6 +133,7 @@ using table_func_init_local_t =
 using table_func_init_output_t =
     std::function<std::unique_ptr<TableFuncOutput>(const TableFuncInitOutputInput&)>;
 using table_func_can_parallel_t = std::function<bool()>;
+using table_func_supports_push_down_t = std::function<bool()>;
 using table_func_progress_t = std::function<double(TableFuncSharedState* sharedState)>;
 using table_func_finalize_t =
     std::function<void(const processor::ExecutionContext*, TableFuncSharedState*)>;
@@ -153,6 +154,7 @@ struct LBUG_API TableFunction final : Function {
     table_func_init_local_t initLocalStateFunc = nullptr;
     table_func_init_output_t initOutputFunc = nullptr;
     table_func_can_parallel_t canParallelFunc = [] { return true; };
+    table_func_supports_push_down_t supportsPushDownFunc = [] { return false; };
     table_func_progress_t progressFunc = [](TableFuncSharedState*) { return 0.0; };
     table_func_finalize_t finalizeFunc = [](auto, auto) {};
     table_func_rewrite_t rewriteFunc = nullptr;
