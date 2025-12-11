@@ -25,7 +25,8 @@ std::string DuckDBScanBindData::getColumnsToSelect() const {
     for (auto i = 0u; i < getNumColumns(); i++) {
         // Always include rowid (first column) even if marked as skipped.
         // This ensures consistent column ordering between DuckDB results and the converter.
-        bool isRowid = (i == 0 && !columnNamesInDuckDB.empty() && columnNamesInDuckDB[0] == "rowid");
+        bool isRowid =
+            (i == 0 && !columnNamesInDuckDB.empty() && columnNamesInDuckDB[0] == "rowid");
         if (columnSkips[i] && !isRowid) {
             continue;
         }
@@ -106,6 +107,7 @@ std::unique_ptr<TableFuncSharedState> DuckDBScanFunction::initSharedState(
         finalQuery.replace(pos, 2, columnNames);
     }
     finalQuery += predicatesString;
+    finalQuery += scanBindData->getOrderBy();
     if (scanBindData->getLimitNum() != INVALID_ROW_IDX) {
         finalQuery += stringFormat(" LIMIT {}", scanBindData->getLimitNum());
     }

@@ -10,7 +10,7 @@ public:
     void rewrite(planner::LogicalPlan* plan);
 
 private:
-    std::shared_ptr<planner::LogicalOperator> rewriteOperator(
+    std::shared_ptr<planner::LogicalOperator> visitOperator(
         std::shared_ptr<planner::LogicalOperator> op, std::string currentOrderBy = "");
 
     static std::string buildOrderByString(const binder::expression_vector& expressions,

@@ -36,7 +36,8 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op) {
     case LogicalOperatorType::EXPLAIN:
     case LogicalOperatorType::ACCUMULATE:
     case LogicalOperatorType::FILTER:
-    case LogicalOperatorType::PROJECTION: {
+    case LogicalOperatorType::PROJECTION:
+    case LogicalOperatorType::ORDER_BY: {
         visitOperator(op->getChild(0).get());
         return;
     }
