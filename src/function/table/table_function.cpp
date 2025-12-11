@@ -100,8 +100,17 @@ std::unique_ptr<PhysicalOperator> TableFunction::getPhysicalPlan(PlanMapper* pla
     auto initInput =
         TableFuncInitSharedStateInput(info.bindData.get(), planMapper->executionContext);
     auto sharedState = info.function.initSharedStateFunc(initInput);
-    auto printInfo = std::make_unique<TableFunctionCallPrintInfo>(call.getTableFunc().name,
-        call.getBindData()->columns);
+    // Filter columns for print info based on column skips
+    binder::expression_vector printExprs;
+    auto columnSkips = call.getBindData()->getColumnSkips();
+    for (auto i = 0u; i < call.getBindData()->columns.size(); ++i) {
+        if (columnSkips.empty() || !columnSkips[i]) {
+            printExprs.push_back(call.getBindData()->columns[i]);
+        }
+    }
+    auto desc = call.getBindData()->getDescription();
+    auto printInfo = std::make_unique<TableFunctionCallPrintInfo>(
+        desc.empty() ? call.getTableFunc().name : desc, printExprs);
     return std::make_unique<TableFunctionCall>(std::move(info), sharedState,
         planMapper->getOperatorID(), std::move(printInfo));
 }

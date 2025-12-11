@@ -28,6 +28,7 @@ public:
         bindData->setColumnPredicates(std::move(predicates));
     }
     void setLimitNum(common::row_idx_t limit) { bindData->setLimitNum(limit); }
+    void setOrderBy(std::string orderBy) { bindData->setOrderBy(orderBy); }
 
     void computeFlatSchema() override;
     void computeFactorizedSchema() override;

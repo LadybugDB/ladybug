@@ -26,7 +26,7 @@ struct LBUG_API TableFuncBindData {
         : columns{other.columns}, numRows{other.numRows},
           optionalParams{other.optionalParams == nullptr ? nullptr : other.optionalParams->copy()},
           columnSkips{other.columnSkips}, columnPredicates{copyVector(other.columnPredicates)},
-          limitNum{other.limitNum} {}
+          limitNum{other.limitNum}, orderBy{other.orderBy} {}
     TableFuncBindData& operator=(const TableFuncBindData& other) = delete;
     virtual ~TableFuncBindData() = default;
 
@@ -50,6 +50,9 @@ struct LBUG_API TableFuncBindData {
     void setLimitNum(common::row_idx_t limit) { limitNum = limit; }
     common::row_idx_t getLimitNum() const { return limitNum; }
 
+    void setOrderBy(std::string orderBy) { this->orderBy = orderBy; }
+    std::string getOrderBy() const { return orderBy; }
+
     virtual bool getIgnoreErrorsOption() const;
 
     virtual std::unique_ptr<TableFuncBindData> copy() const;
@@ -70,6 +73,7 @@ protected:
     std::vector<bool> columnSkips;
     std::vector<storage::ColumnPredicateSet> columnPredicates;
     common::row_idx_t limitNum = common::INVALID_ROW_IDX;
+    std::string orderBy;
 };
 
 } // namespace function

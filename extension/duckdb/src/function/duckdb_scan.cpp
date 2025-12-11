@@ -57,6 +57,7 @@ std::string DuckDBScanBindData::getDescription() const {
         q.replace(pos, 2, columns);
     }
     q += predicatesString;
+    q += getOrderBy();
     if (getLimitNum() != common::INVALID_ROW_IDX) {
         q += common::stringFormat(" LIMIT {}", getLimitNum());
     }
