@@ -69,10 +69,8 @@ std::string OrderByPushDownOptimizer::buildOrderByString(
         return "";
     }
     std::string result = " ORDER BY ";
+    bool first = true;
     for (size_t i = 0; i < expressions.size(); ++i) {
-        if (i > 0) {
-            result += ", ";
-        }
         auto& expr = expressions[i];
         std::string colName;
         if (expr->expressionType == common::ExpressionType::VARIABLE) {
@@ -82,12 +80,19 @@ std::string OrderByPushDownOptimizer::buildOrderByString(
             auto& prop = expr->constCast<binder::PropertyExpression>();
             colName = prop.getPropertyName();
         } else {
-            // For now, assume variables or properties. Could extend for more complex expressions.
-            throw RuntimeException(
-                "ORDER BY push down only supports variable and property expressions.");
+            // Skip expressions that cannot be pushed down
+            continue;
+        }
+        if (!first) {
+            result += ", ";
         }
         result += colName;
         result += isAscOrders[i] ? " ASC" : " DESC";
+        first = false;
+    }
+    if (first) {
+        // No expressions could be pushed down
+        return "";
     }
     return result;
 }
