@@ -118,18 +118,22 @@ DuckDBResultConverter::DuckDBResultConverter(const std::vector<LogicalType>& typ
 void DuckDBResultConverter::convertDuckDBResultToVector(duckdb::DataChunk& duckDBResult,
     DataChunk& result, std::optional<std::vector<bool>> columnSkips) const {
     auto duckdbResultColIdx = 0u;
-    auto resultColIdx = 0u;
     for (auto i = 0u; i < conversionFunctions.size(); i++) {
         result.state->getSelVectorUnsafe().setSelSize(duckDBResult.size());
         if (columnSkips && columnSkips.value()[i]) {
+            // For rowid (first column), we always fetch it from DuckDB but skip writing to output.
+            // This keeps DuckDB result columns aligned with our expected order.
+            if (i == 0) {
+                duckdbResultColIdx++;
+            }
             continue;
         }
         KU_ASSERT(duckDBResult.data[duckdbResultColIdx].GetVectorType() ==
                   duckdb::VectorType::FLAT_VECTOR);
+        // Write to output vector at position i (the original column index)
         conversionFunctions[i](duckDBResult.data[duckdbResultColIdx],
-            result.getValueVectorMutable(resultColIdx), result.state->getSelVector().getSelSize());
+            result.getValueVectorMutable(i), result.state->getSelVector().getSelSize());
         duckdbResultColIdx++;
-        resultColIdx++;
     }
 }
 

@@ -15,14 +15,18 @@ namespace duckdb_extension {
 
 std::string DuckDBScanBindData::getColumnsToSelect() const {
     std::string columnNames = "";
+    auto columnSkips = getColumnSkips();
     auto numSkippedColumns =
         std::count_if(columnSkips.begin(), columnSkips.end(), [](auto item) { return item; });
     if (getNumColumns() == numSkippedColumns) {
-        columnNames = columnNamesInDuckDB[0];
+        return columnNamesInDuckDB[0];
     }
     bool first = true;
     for (auto i = 0u; i < getNumColumns(); i++) {
-        if (columnSkips[i]) {
+        // Always include rowid (first column) even if marked as skipped.
+        // This ensures consistent column ordering between DuckDB results and the converter.
+        bool isRowid = (i == 0 && !columnNamesInDuckDB.empty() && columnNamesInDuckDB[0] == "rowid");
+        if (columnSkips[i] && !isRowid) {
             continue;
         }
         if (!first) {
