@@ -14,7 +14,7 @@
 	benchmark example \
 	extension-test-build extension-test extension-json-test-build extension-json-test \
 	extension-debug extension-release \
-	shell-test \
+	shell shell-debug shell-test \
 	tidy tidy-analyzer clangd-diagnostics \
 	install \
 	clean-extension clean-python-api clean-java clean
@@ -292,6 +292,18 @@ extension-release:
 	$(call run-cmake-release, \
 		-DBUILD_EXTENSIONS="$(EXTENSION_LIST)" \
 		-DBUILD_LBUG=FALSE \
+	)
+
+shell:
+	BM_MALLOC=1 $(call run-cmake-release, \
+		-DBUILD_SHELL=TRUE \
+		-DEXTENSION_STATIC_LINK_LIST=duckdb \
+	)
+
+shell-debug:
+	BM_MALLOC=1 $(call run-cmake-debug, \
+		-DBUILD_SHELL=TRUE \
+		-DEXTENSION_STATIC_LINK_LIST=duckdb \
 	)
 
 shell-test:
