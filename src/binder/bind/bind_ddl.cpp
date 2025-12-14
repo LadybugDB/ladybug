@@ -218,12 +218,16 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
             std::string tableName = storage.substr(dotPos + 1);
             auto transaction = transaction::Transaction::Get(*clientContext);
             if (!dbName.empty()) {
-                auto attachedDB = main::DatabaseManager::Get(*clientContext)->getAttachedDatabase(dbName);
-                if (attachedDB && attachedDB->getCatalog()->containsTable(transaction, tableName, clientContext->useInternalCatalogEntry())) {
-                    auto tableEntry = attachedDB->getCatalog()->getTableCatalogEntry(transaction, tableName, clientContext->useInternalCatalogEntry());
+                auto attachedDB =
+                    main::DatabaseManager::Get(*clientContext)->getAttachedDatabase(dbName);
+                if (attachedDB && attachedDB->getCatalog()->containsTable(transaction, tableName,
+                                      clientContext->useInternalCatalogEntry())) {
+                    auto tableEntry = attachedDB->getCatalog()->getTableCatalogEntry(transaction,
+                        tableName, clientContext->useInternalCatalogEntry());
                     if (tableEntry->getType() == CatalogEntryType::FOREIGN_TABLE_ENTRY) {
                         scanFunction = tableEntry->getScanFunction();
-                        auto boundScanInfo = tableEntry->getBoundScanInfo(clientContext, "" /* nodeUniqueName */);
+                        auto boundScanInfo =
+                            tableEntry->getBoundScanInfo(clientContext, "" /* nodeUniqueName */);
                         scanBindData = std::move(boundScanInfo->bindData);
                     }
                 }
@@ -233,12 +237,52 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     // Bind from to pairs
     node_table_id_pair_set_t nodePairsSet;
     std::vector<NodeTableIDPair> nodePairs;
+    std::string foreignDatabaseName;
+    std::string foreignDatabaseType;
     for (auto& [srcTableName, dstTableName] : extraInfo.srcDstTablePairs) {
         auto srcEntry = bindNodeTableEntry(srcTableName);
         validateNodeTableType(srcEntry);
         auto dstEntry = bindNodeTableEntry(dstTableName);
         validateNodeTableType(dstEntry);
-        NodeTableIDPair pair{srcEntry->getTableID(), dstEntry->getTableID()};
+
+        // For foreign-backed rel tables, validate that FROM and TO are from same database
+        if (scanFunction.has_value()) {
+            // Both must be foreign tables
+            if (srcEntry->getType() != CatalogEntryType::FOREIGN_TABLE_ENTRY ||
+                dstEntry->getType() != CatalogEntryType::FOREIGN_TABLE_ENTRY) {
+                throw BinderException("Foreign-backed rel tables require both FROM and TO tables "
+                                      "to be foreign tables.");
+            }
+            // Extract database names from qualified table names
+            auto srcDotPos = srcTableName.find('.');
+            auto dstDotPos = dstTableName.find('.');
+            if (srcDotPos == std::string::npos || dstDotPos == std::string::npos) {
+                throw BinderException(
+                    "Foreign-backed rel tables require qualified table names (database.table).");
+            }
+            auto srcDbName = srcTableName.substr(0, srcDotPos);
+            auto dstDbName = dstTableName.substr(0, dstDotPos);
+            if (srcDbName != dstDbName) {
+                throw BinderException(
+                    stringFormat("Cannot create rel table with FROM and TO tables from different "
+                                 "databases. FROM is from '{}', TO is from '{}'.",
+                        srcDbName, dstDbName));
+            }
+            // Get database type for display
+            auto attachedDB =
+                main::DatabaseManager::Get(*clientContext)->getAttachedDatabase(srcDbName);
+            if (attachedDB) {
+                foreignDatabaseName = stringFormat("{}({})", srcDbName, attachedDB->getDBType());
+            }
+        }
+
+        // For foreign-backed rel tables, use FOREIGN_TABLE_ID since we don't reference local node
+        // tables
+        auto srcTableID =
+            scanFunction.has_value() ? common::FOREIGN_TABLE_ID : srcEntry->getTableID();
+        auto dstTableID =
+            scanFunction.has_value() ? common::FOREIGN_TABLE_ID : dstEntry->getTableID();
+        NodeTableIDPair pair{srcTableID, dstTableID};
         if (nodePairsSet.contains(pair)) {
             throw BinderException(
                 stringFormat("Found duplicate FROM-TO {}-{} pairs.", srcTableName, dstTableName));
@@ -248,7 +292,8 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     }
     auto boundExtraInfo = std::make_unique<BoundExtraCreateRelTableGroupInfo>(
         std::move(propertyDefinitions), srcMultiplicity, dstMultiplicity, storageDirection,
-        std::move(nodePairs), std::move(storage), std::move(scanFunction), std::move(scanBindData));
+        std::move(nodePairs), std::move(storage), std::move(scanFunction), std::move(scanBindData),
+        std::move(foreignDatabaseName));
     return BoundCreateTableInfo(CatalogEntryType::REL_GROUP_ENTRY, info->tableName,
         info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());
 }

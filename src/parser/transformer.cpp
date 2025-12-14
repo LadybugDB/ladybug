@@ -93,7 +93,8 @@ std::string Transformer::transformSchemaName(CypherParser::OC_SchemaNameContext&
         return transformSymbolicName(*symbolicNames[0]);
     }
     // Qualified name: db.table
-    return transformSymbolicName(*symbolicNames[0]) + "." + transformSymbolicName(*symbolicNames[1]);
+    return transformSymbolicName(*symbolicNames[0]) + "." +
+           transformSymbolicName(*symbolicNames[1]);
 }
 
 std::string Transformer::transformStringLiteral(antlr4::tree::TerminalNode& stringLiteral) {

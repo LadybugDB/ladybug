@@ -74,7 +74,10 @@ const RelTableCatalogInfo* RelGroupCatalogEntry::getRelEntryInfo(table_id_t srcT
 std::unordered_set<table_id_t> RelGroupCatalogEntry::getSrcNodeTableIDSet() const {
     std::unordered_set<table_id_t> result;
     for (auto& info : relTableInfos) {
-        result.insert(info.nodePair.srcTableID);
+        // Skip FOREIGN_TABLE_ID for foreign-backed rel tables
+        if (info.nodePair.srcTableID != FOREIGN_TABLE_ID) {
+            result.insert(info.nodePair.srcTableID);
+        }
     }
     return result;
 }
@@ -82,7 +85,10 @@ std::unordered_set<table_id_t> RelGroupCatalogEntry::getSrcNodeTableIDSet() cons
 std::unordered_set<table_id_t> RelGroupCatalogEntry::getDstNodeTableIDSet() const {
     std::unordered_set<table_id_t> result;
     for (auto& info : relTableInfos) {
-        result.insert(info.nodePair.dstTableID);
+        // Skip FOREIGN_TABLE_ID for foreign-backed rel tables
+        if (info.nodePair.dstTableID != FOREIGN_TABLE_ID) {
+            result.insert(info.nodePair.dstTableID);
+        }
     }
     return result;
 }
@@ -142,9 +148,18 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
 }
 
 static std::string getFromToStr(const NodeTableIDPair& pair, const Catalog* catalog,
-    const transaction::Transaction* transaction) {
-    auto srcTableName = catalog->getTableCatalogEntry(transaction, pair.srcTableID)->getName();
-    auto dstTableName = catalog->getTableCatalogEntry(transaction, pair.dstTableID)->getName();
+    const transaction::Transaction* transaction, const std::string& storage) {
+    std::string srcTableName, dstTableName;
+    // For foreign-backed rel tables, node table IDs are FOREIGN_TABLE_ID
+    if (pair.srcTableID == common::FOREIGN_TABLE_ID && !storage.empty()) {
+        auto dotPos = storage.find('.');
+        srcTableName =
+            dotPos != std::string::npos ? storage.substr(0, dotPos) + ".nodes" : "foreign_table";
+        dstTableName = srcTableName;
+    } else {
+        srcTableName = catalog->getTableCatalogEntry(transaction, pair.srcTableID)->getName();
+        dstTableName = catalog->getTableCatalogEntry(transaction, pair.dstTableID)->getName();
+    }
     return stringFormat("FROM `{}` TO `{}`", srcTableName, dstTableName);
 }
 
@@ -155,9 +170,10 @@ std::string RelGroupCatalogEntry::toCypher(const ToCypherInfo& info) const {
     std::stringstream ss;
     ss << stringFormat("CREATE REL TABLE `{}` (", getName());
     KU_ASSERT(!relTableInfos.empty());
-    ss << getFromToStr(relTableInfos[0].nodePair, catalog, transaction);
+    ss << getFromToStr(relTableInfos[0].nodePair, catalog, transaction, storage);
     for (auto i = 1u; i < relTableInfos.size(); ++i) {
-        ss << stringFormat(", {}", getFromToStr(relTableInfos[i].nodePair, catalog, transaction));
+        ss << stringFormat(", {}",
+            getFromToStr(relTableInfos[i].nodePair, catalog, transaction, storage));
     }
     ss << ", " << propertyCollection.toCypher() << RelMultiplicityUtils::toString(srcMultiplicity)
        << "_" << RelMultiplicityUtils::toString(dstMultiplicity) << ");";
@@ -189,6 +205,7 @@ std::unique_ptr<TableCatalogEntry> RelGroupCatalogEntry::copy() const {
     other->storage = storage;
     other->scanFunction = scanFunction;
     other->scanBindData = std::nullopt; // TODO: implement copy for bindData if needed
+    other->foreignDatabaseName = foreignDatabaseName;
     other->relTableInfos = relTableInfos;
     other->copyFrom(*this);
     return other;

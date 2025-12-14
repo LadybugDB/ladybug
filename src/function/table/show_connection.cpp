@@ -71,7 +71,12 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
         if (entry->getType() != catalog::CatalogEntryType::REL_GROUP_ENTRY) {
             throw BinderException{"Show connection can only be called on a rel table!"};
         }
-        for (auto& info : entry->ptrCast<RelGroupCatalogEntry>()->getRelEntryInfos()) {
+        for (auto& info : entry->ptrCast<RelGroupCatalogEntry>()
+                              ->getRelEntryInfos()) { // Skip foreign-backed rel tables (they have
+                                                      // FOREIGN_TABLE_ID)
+            if (info.nodePair.srcTableID == common::FOREIGN_TABLE_ID) {
+                continue;
+            }
             auto srcEntry = catalog->getTableCatalogEntry(transaction, info.nodePair.srcTableID)
                                 ->ptrCast<NodeTableCatalogEntry>();
             auto dstEntry = catalog->getTableCatalogEntry(transaction, info.nodePair.dstTableID)

@@ -40,10 +40,13 @@ public:
         common::RelMultiplicity dstMultiplicity, common::ExtendDirection storageDirection,
         std::vector<RelTableCatalogInfo> relTableInfos, std::string storage = "",
         std::optional<function::TableFunction> scanFunction = std::nullopt,
-        std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData = std::nullopt)
+        std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData = std::nullopt,
+        std::string foreignDatabaseName = "")
         : TableCatalogEntry{type_, std::move(tableName)}, srcMultiplicity{srcMultiplicity},
           dstMultiplicity{dstMultiplicity}, storageDirection{storageDirection},
-          relTableInfos{std::move(relTableInfos)}, storage{std::move(storage)}, scanFunction{std::move(scanFunction)}, scanBindData{std::move(scanBindData)} {
+          relTableInfos{std::move(relTableInfos)}, storage{std::move(storage)},
+          scanFunction{std::move(scanFunction)}, scanBindData{std::move(scanBindData)},
+          foreignDatabaseName{std::move(foreignDatabaseName)} {
         propertyCollection =
             PropertyDefinitionCollection{1}; // Skip NBR_NODE_ID column as the first one.
     }
@@ -61,7 +64,10 @@ public:
     common::ExtendDirection getStorageDirection() const { return storageDirection; }
     const std::string& getStorage() const { return storage; }
     const std::optional<function::TableFunction>& getScanFunction() const { return scanFunction; }
-    const std::optional<std::shared_ptr<function::TableFuncBindData>>& getScanBindData() const { return scanBindData; }
+    const std::optional<std::shared_ptr<function::TableFuncBindData>>& getScanBindData() const {
+        return scanBindData;
+    }
+    const std::string& getForeignDatabaseName() const { return foreignDatabaseName; }
 
     common::idx_t getNumRelTables() const { return relTableInfos.size(); }
     const std::vector<RelTableCatalogInfo>& getRelEntryInfos() const { return relTableInfos; }
@@ -109,6 +115,7 @@ private:
     std::string storage;
     std::optional<function::TableFunction> scanFunction;
     std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData;
+    std::string foreignDatabaseName; // Database name for foreign-backed rel tables
 };
 
 } // namespace catalog

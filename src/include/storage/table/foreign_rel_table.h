@@ -2,8 +2,8 @@
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/runtime.h"
-#include "storage/table/rel_table.h"
 #include "function/table/table_function.h"
+#include "storage/table/rel_table.h"
 
 namespace lbug {
 namespace storage {

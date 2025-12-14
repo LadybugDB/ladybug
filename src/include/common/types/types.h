@@ -75,6 +75,7 @@ using table_id_set_t = std::unordered_set<table_id_t>;
 template<typename T>
 using table_id_map_t = std::unordered_map<table_id_t, T>;
 constexpr table_id_t INVALID_TABLE_ID = INVALID_OID;
+constexpr table_id_t FOREIGN_TABLE_ID = INVALID_OID - 1;
 // offset type alias
 using offset_t = uint64_t;
 constexpr offset_t INVALID_OFFSET = UINT64_MAX;

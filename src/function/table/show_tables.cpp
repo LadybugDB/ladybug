@@ -1,5 +1,6 @@
 #include "binder/binder.h"
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "function/table/bind_data.h"
 #include "function/table/simple_table_function.h"
@@ -72,9 +73,16 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
         auto catalog = Catalog::Get(*context);
         for (auto& entry :
             catalog->getTableEntries(transaction, context->useInternalCatalogEntry())) {
+            std::string dbName = LOCAL_DB_NAME;
+            // For foreign-backed rel tables, use the foreign database name
+            if (entry->getType() == CatalogEntryType::REL_GROUP_ENTRY) {
+                auto relEntry = entry->constPtrCast<RelGroupCatalogEntry>();
+                if (!relEntry->getForeignDatabaseName().empty()) {
+                    dbName = relEntry->getForeignDatabaseName();
+                }
+            }
             tableInfos.emplace_back(entry->getName(), entry->getTableID(),
-                TableTypeUtils::toString(entry->getTableType()), LOCAL_DB_NAME,
-                entry->getComment());
+                TableTypeUtils::toString(entry->getTableType()), dbName, entry->getComment());
         }
     }
 

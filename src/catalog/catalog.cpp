@@ -192,7 +192,8 @@ CatalogEntry* Catalog::createRelGroupEntry(Transaction* transaction,
     }
     auto relGroupEntry = std::make_unique<RelGroupCatalogEntry>(info.tableName,
         extraInfo->srcMultiplicity, extraInfo->dstMultiplicity, extraInfo->storageDirection,
-        std::move(relTableInfos), extraInfo->storage, extraInfo->scanFunction, std::move(extraInfo->scanBindData));
+        std::move(relTableInfos), extraInfo->storage, extraInfo->scanFunction,
+        std::move(extraInfo->scanBindData), extraInfo->foreignDatabaseName);
     for (auto& definition : extraInfo->propertyDefinitions) {
         relGroupEntry->addProperty(definition);
     }

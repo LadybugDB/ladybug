@@ -98,21 +98,27 @@ struct BoundExtraCreateRelTableGroupInfo final : BoundExtraCreateTableInfo {
     std::string storage;
     std::optional<function::TableFunction> scanFunction;
     std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData;
+    std::string foreignDatabaseName;
 
     explicit BoundExtraCreateRelTableGroupInfo(std::vector<PropertyDefinition> definitions,
         common::RelMultiplicity srcMultiplicity, common::RelMultiplicity dstMultiplicity,
         common::ExtendDirection storageDirection, std::vector<catalog::NodeTableIDPair> nodePairs,
-        std::string storage = "", std::optional<function::TableFunction> scanFunction = std::nullopt,
-        std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData = std::nullopt)
+        std::string storage = "",
+        std::optional<function::TableFunction> scanFunction = std::nullopt,
+        std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData = std::nullopt,
+        std::string foreignDatabaseName = "")
         : BoundExtraCreateTableInfo{std::move(definitions)}, srcMultiplicity{srcMultiplicity},
           dstMultiplicity{dstMultiplicity}, storageDirection{storageDirection},
-          nodePairs{std::move(nodePairs)}, storage{std::move(storage)}, scanFunction{std::move(scanFunction)}, scanBindData{std::move(scanBindData)} {}
+          nodePairs{std::move(nodePairs)}, storage{std::move(storage)},
+          scanFunction{std::move(scanFunction)}, scanBindData{std::move(scanBindData)},
+          foreignDatabaseName{std::move(foreignDatabaseName)} {}
 
     BoundExtraCreateRelTableGroupInfo(const BoundExtraCreateRelTableGroupInfo& other)
         : BoundExtraCreateTableInfo{copyVector(other.propertyDefinitions)},
           srcMultiplicity{other.srcMultiplicity}, dstMultiplicity{other.dstMultiplicity},
           storageDirection{other.storageDirection}, nodePairs{other.nodePairs},
-          storage{other.storage}, scanFunction{other.scanFunction}, scanBindData{other.scanBindData} {}
+          storage{other.storage}, scanFunction{other.scanFunction},
+          scanBindData{other.scanBindData}, foreignDatabaseName{other.foreignDatabaseName} {}
 
     std::unique_ptr<BoundExtraCreateCatalogEntryInfo> copy() const override {
         return std::make_unique<BoundExtraCreateRelTableGroupInfo>(*this);

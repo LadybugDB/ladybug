@@ -8,11 +8,11 @@
 #include "main/attached_database.h"
 #include "main/client_context.h"
 #include "main/database.h"
-#include "storage/table/foreign_rel_table.h"
 #include "main/db_config.h"
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/checkpointer.h"
+#include "storage/table/foreign_rel_table.h"
 #include "storage/table/node_table.h"
 #include "storage/table/parquet_node_table.h"
 #include "storage/table/parquet_rel_table.h"
@@ -98,7 +98,8 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
     if (entry->getScanFunction().has_value()) {
         // Create foreign-backed rel table
         tables[info.oid] = std::make_unique<ForeignRelTable>(entry, info.nodePair.srcTableID,
-            info.nodePair.dstTableID, this, &memoryManager, *entry->getScanFunction(), std::move(entry->getScanBindData().value()));
+            info.nodePair.dstTableID, this, &memoryManager, *entry->getScanFunction(),
+            std::move(entry->getScanBindData().value()));
     } else if (!entry->getStorage().empty()) {
         // Create parquet-backed rel table
         tables[info.oid] = std::make_unique<ParquetRelTable>(entry, info.nodePair.srcTableID,
