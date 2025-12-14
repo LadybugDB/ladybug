@@ -1,9 +1,13 @@
 #pragma once
 
+#include <optional>
+
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/enums/extend_direction.h"
 #include "common/enums/rel_direction.h"
 #include "common/enums/rel_multiplicity.h"
+#include "function/table/bind_data.h"
+#include "function/table/table_function.h"
 #include "node_table_id_pair.h"
 
 namespace lbug {
@@ -34,10 +38,12 @@ public:
     RelGroupCatalogEntry() = default;
     RelGroupCatalogEntry(std::string tableName, common::RelMultiplicity srcMultiplicity,
         common::RelMultiplicity dstMultiplicity, common::ExtendDirection storageDirection,
-        std::vector<RelTableCatalogInfo> relTableInfos, std::string storage = "")
+        std::vector<RelTableCatalogInfo> relTableInfos, std::string storage = "",
+        std::optional<function::TableFunction> scanFunction = std::nullopt,
+        std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData = std::nullopt)
         : TableCatalogEntry{type_, std::move(tableName)}, srcMultiplicity{srcMultiplicity},
           dstMultiplicity{dstMultiplicity}, storageDirection{storageDirection},
-          relTableInfos{std::move(relTableInfos)}, storage{std::move(storage)} {
+          relTableInfos{std::move(relTableInfos)}, storage{std::move(storage)}, scanFunction{std::move(scanFunction)}, scanBindData{std::move(scanBindData)} {
         propertyCollection =
             PropertyDefinitionCollection{1}; // Skip NBR_NODE_ID column as the first one.
     }
@@ -54,6 +60,8 @@ public:
 
     common::ExtendDirection getStorageDirection() const { return storageDirection; }
     const std::string& getStorage() const { return storage; }
+    const std::optional<function::TableFunction>& getScanFunction() const { return scanFunction; }
+    const std::optional<std::shared_ptr<function::TableFuncBindData>>& getScanBindData() const { return scanBindData; }
 
     common::idx_t getNumRelTables() const { return relTableInfos.size(); }
     const std::vector<RelTableCatalogInfo>& getRelEntryInfos() const { return relTableInfos; }
@@ -99,6 +107,8 @@ private:
     common::ExtendDirection storageDirection = common::ExtendDirection::BOTH;
     std::vector<RelTableCatalogInfo> relTableInfos;
     std::string storage;
+    std::optional<function::TableFunction> scanFunction;
+    std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData;
 };
 
 } // namespace catalog

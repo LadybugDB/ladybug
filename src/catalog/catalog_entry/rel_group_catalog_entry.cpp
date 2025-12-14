@@ -97,6 +97,11 @@ void RelGroupCatalogEntry::serialize(Serializer& serializer) const {
     serializer.serializeValue(storageDirection);
     serializer.writeDebuggingInfo("storage");
     serializer.serializeValue(storage);
+    serializer.writeDebuggingInfo("scanFunction");
+    serializer.serializeValue(scanFunction.has_value());
+    if (scanFunction.has_value()) {
+        // TODO: serialize TableFunction
+    }
     serializer.writeDebuggingInfo("relTableInfos");
     serializer.serializeVector(relTableInfos);
 }
@@ -117,6 +122,13 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     deserializer.deserializeValue(storageDirection);
     deserializer.validateDebuggingInfo(debuggingInfo, "storage");
     deserializer.deserializeValue(storage);
+    deserializer.validateDebuggingInfo(debuggingInfo, "scanFunction");
+    bool hasScanFunction;
+    deserializer.deserializeValue(hasScanFunction);
+    std::optional<function::TableFunction> scanFunction = std::nullopt;
+    if (hasScanFunction) {
+        // TODO: deserialize TableFunction
+    }
     deserializer.validateDebuggingInfo(debuggingInfo, "relTableInfos");
     deserializer.deserializeVector(relTableInfos);
     auto relGroupEntry = std::make_unique<RelGroupCatalogEntry>();
@@ -124,6 +136,7 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     relGroupEntry->dstMultiplicity = dstMultiplicity;
     relGroupEntry->storageDirection = storageDirection;
     relGroupEntry->storage = storage;
+    relGroupEntry->scanFunction = scanFunction;
     relGroupEntry->relTableInfos = relTableInfos;
     return relGroupEntry;
 }
@@ -174,6 +187,8 @@ std::unique_ptr<TableCatalogEntry> RelGroupCatalogEntry::copy() const {
     other->dstMultiplicity = dstMultiplicity;
     other->storageDirection = storageDirection;
     other->storage = storage;
+    other->scanFunction = scanFunction;
+    other->scanBindData = std::nullopt; // TODO: implement copy for bindData if needed
     other->relTableInfos = relTableInfos;
     other->copyFrom(*this);
     return other;

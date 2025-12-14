@@ -1,3 +1,5 @@
+#include <optional>
+
 #include "binder/binder.h"
 #include "binder/ddl/bound_alter.h"
 #include "binder/ddl/bound_create_sequence.h"
@@ -16,7 +18,9 @@
 #include "common/types/types.h"
 #include "function/cast/functions/cast_from_string_functions.h"
 #include "function/sequence/sequence_functions.h"
+#include "function/table/table_function.h"
 #include "main/client_context.h"
+#include "main/database_manager.h"
 #include "parser/ddl/alter.h"
 #include "parser/ddl/create_sequence.h"
 #include "parser/ddl/create_table.h"
@@ -204,6 +208,28 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     auto boundOptions = bindParsingOptions(extraInfo.options);
     auto storageDirection = getStorageDirection(boundOptions);
     auto storage = getStorage(boundOptions);
+    std::optional<function::TableFunction> scanFunction = std::nullopt;
+    std::optional<std::unique_ptr<function::TableFuncBindData>> scanBindData = std::nullopt;
+    if (!storage.empty()) {
+        auto dotPos = storage.find('.');
+        if (dotPos != std::string::npos) {
+            // schema.table format, check if it's a foreign table
+            std::string dbName = storage.substr(0, dotPos);
+            std::string tableName = storage.substr(dotPos + 1);
+            auto transaction = transaction::Transaction::Get(*clientContext);
+            if (!dbName.empty()) {
+                auto attachedDB = main::DatabaseManager::Get(*clientContext)->getAttachedDatabase(dbName);
+                if (attachedDB && attachedDB->getCatalog()->containsTable(transaction, tableName, clientContext->useInternalCatalogEntry())) {
+                    auto tableEntry = attachedDB->getCatalog()->getTableCatalogEntry(transaction, tableName, clientContext->useInternalCatalogEntry());
+                    if (tableEntry->getType() == CatalogEntryType::FOREIGN_TABLE_ENTRY) {
+                        scanFunction = tableEntry->getScanFunction();
+                        auto boundScanInfo = tableEntry->getBoundScanInfo(clientContext, "" /* nodeUniqueName */);
+                        scanBindData = std::move(boundScanInfo->bindData);
+                    }
+                }
+            }
+        }
+    }
     // Bind from to pairs
     node_table_id_pair_set_t nodePairsSet;
     std::vector<NodeTableIDPair> nodePairs;
@@ -222,7 +248,7 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     }
     auto boundExtraInfo = std::make_unique<BoundExtraCreateRelTableGroupInfo>(
         std::move(propertyDefinitions), srcMultiplicity, dstMultiplicity, storageDirection,
-        std::move(nodePairs), std::move(storage));
+        std::move(nodePairs), std::move(storage), std::move(scanFunction), std::move(scanBindData));
     return BoundCreateTableInfo(CatalogEntryType::REL_GROUP_ENTRY, info->tableName,
         info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());
 }
