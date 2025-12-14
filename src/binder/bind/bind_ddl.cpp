@@ -137,7 +137,8 @@ BoundCreateTableInfo Binder::bindCreateTableInfo(const CreateTableInfo* info) {
 }
 
 void Binder::validateNodeTableType(const TableCatalogEntry* entry) {
-    if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
+    if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY &&
+        entry->getType() != CatalogEntryType::FOREIGN_TABLE_ENTRY) {
         throw BinderException(stringFormat("{} is not of type NODE.", entry->getName()));
     }
 }

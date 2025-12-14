@@ -88,7 +88,12 @@ std::unique_ptr<ParsedExpression> Transformer::transformWhere(CypherParser::OC_W
 }
 
 std::string Transformer::transformSchemaName(CypherParser::OC_SchemaNameContext& ctx) {
-    return transformSymbolicName(*ctx.oC_SymbolicName());
+    auto symbolicNames = ctx.oC_SymbolicName();
+    if (symbolicNames.size() == 1) {
+        return transformSymbolicName(*symbolicNames[0]);
+    }
+    // Qualified name: db.table
+    return transformSymbolicName(*symbolicNames[0]) + "." + transformSymbolicName(*symbolicNames[1]);
 }
 
 std::string Transformer::transformStringLiteral(antlr4::tree::TerminalNode& stringLiteral) {

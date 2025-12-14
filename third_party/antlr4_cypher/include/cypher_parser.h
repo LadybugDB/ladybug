@@ -2919,7 +2919,8 @@ public:
   public:
     OC_SchemaNameContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    OC_SymbolicNameContext *oC_SymbolicName();
+    std::vector<OC_SymbolicNameContext *> oC_SymbolicName();
+    OC_SymbolicNameContext* oC_SymbolicName(size_t i);
 
    
   };

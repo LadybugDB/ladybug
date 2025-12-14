@@ -709,7 +709,7 @@ RegularDecimalReal
     : ( Digit )* '.' ( Digit )+ ;
 
 oC_SchemaName
-    : oC_SymbolicName ;
+    : oC_SymbolicName ( '.' oC_SymbolicName )? ;
 
 oC_SymbolicName
     : UnescapedSymbolicName
