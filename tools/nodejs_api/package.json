@@ -12,17 +12,19 @@
       "types": "./lbug.d.ts"
     }
   },
+  "files": ["index.js", "index.mjs", "lbug.d.ts", "lbugjs.node"],
   "type": "commonjs",
   "homepage": "https://ladybugdb.com/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/LadybugDB/ladybug"
+    "url": "git+https://github.com/LadybugDB/ladybug.git"
   },
   "scripts": {
     "test": "mocha test --timeout 20000",
     "clean": "node clean.js",
     "clean-all": "node clean.js all",
-    "build": "node build.js"
+    "build": "node build.js",
+    "prepublishOnly": "npm run build"
   },
   "author": "Ladybug Team",
   "license": "MIT",
