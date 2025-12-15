@@ -663,7 +663,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformProperty(
 }
 
 std::string Transformer::transformPropertyKeyName(CypherParser::OC_PropertyKeyNameContext& ctx) {
-    return transformSchemaName(*ctx.oC_SchemaName());
+    return transformSymbolicName(*ctx.oC_SymbolicName());
 }
 
 std::unique_ptr<ParsedExpression> Transformer::transformIntegerLiteral(

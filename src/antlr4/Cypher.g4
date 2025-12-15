@@ -649,7 +649,7 @@ oC_PropertyExpression
     : oC_Atom SP? oC_PropertyLookup ;
 
 oC_PropertyKeyName
-    : oC_SchemaName ;
+    : oC_SymbolicName ;
 
 oC_IntegerLiteral
     : DecimalInteger ;

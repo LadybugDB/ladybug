@@ -2885,7 +2885,7 @@ public:
   public:
     OC_PropertyKeyNameContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    OC_SchemaNameContext *oC_SchemaName();
+    OC_SymbolicNameContext *oC_SymbolicName();
 
    
   };

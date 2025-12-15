@@ -1274,7 +1274,7 @@ void cypherParserInitialize() {
   	2893,335,1,0,0,0,2894,2897,5,25,0,0,2895,2898,3,348,174,0,2896,2898,5,
   	170,0,0,2897,2895,1,0,0,0,2897,2896,1,0,0,0,2898,337,1,0,0,0,2899,2901,
   	3,290,145,0,2900,2902,5,183,0,0,2901,2900,1,0,0,0,2901,2902,1,0,0,0,2902,
-  	2903,1,0,0,0,2903,2904,3,326,163,0,2904,339,1,0,0,0,2905,2906,3,346,173,
+  	2903,1,0,0,0,2903,2904,3,326,163,0,2904,339,1,0,0,0,2905,2906,3,348,174,
   	0,2906,341,1,0,0,0,2907,2908,5,170,0,0,2908,343,1,0,0,0,2909,2910,7,9,
   	0,0,2910,345,1,0,0,0,2911,2914,3,348,174,0,2912,2913,5,5,0,0,2913,2915,
   	3,348,174,0,2914,2912,1,0,0,0,2914,2915,1,0,0,0,2915,347,1,0,0,0,2916,
@@ -18680,8 +18680,8 @@ CypherParser::OC_PropertyKeyNameContext::OC_PropertyKeyNameContext(ParserRuleCon
   : ParserRuleContext(parent, invokingState) {
 }
 
-CypherParser::OC_SchemaNameContext* CypherParser::OC_PropertyKeyNameContext::oC_SchemaName() {
-  return getRuleContext<CypherParser::OC_SchemaNameContext>(0);
+CypherParser::OC_SymbolicNameContext* CypherParser::OC_PropertyKeyNameContext::oC_SymbolicName() {
+  return getRuleContext<CypherParser::OC_SymbolicNameContext>(0);
 }
 
 
@@ -18704,7 +18704,7 @@ CypherParser::OC_PropertyKeyNameContext* CypherParser::oC_PropertyKeyName() {
   try {
     enterOuterAlt(_localctx, 1);
     setState(2905);
-    oC_SchemaName();
+    oC_SymbolicName();
    
   }
   catch (RecognitionException &e) {
