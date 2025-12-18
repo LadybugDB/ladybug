@@ -272,7 +272,7 @@ Runtime exception: Duplicate attached database name: dbfilewithoutext. Attached 
 -LOG AttachSameDBError
 -STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/dbfilewithoutext' (dbtype duckdb);
 ---- error
-Runtime exception: Duplicate attached database name: dbfilewithoutext. Attached database name must be unique.
+Catalog exception: persons already exists in catalog.
 -LOG DetachExistDB
 -STATEMENT DETACH dbfilewithoutext;
 ---- ok

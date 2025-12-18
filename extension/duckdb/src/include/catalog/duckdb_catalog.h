@@ -58,6 +58,7 @@ protected:
     common::ValueVector tableNamesVector;
     bool skipUnsupportedTable;
     const DuckDBConnector& connector;
+    main::ClientContext* context_;
 };
 
 } // namespace duckdb_extension

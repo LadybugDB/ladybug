@@ -74,10 +74,7 @@ const RelTableCatalogInfo* RelGroupCatalogEntry::getRelEntryInfo(table_id_t srcT
 std::unordered_set<table_id_t> RelGroupCatalogEntry::getSrcNodeTableIDSet() const {
     std::unordered_set<table_id_t> result;
     for (auto& info : relTableInfos) {
-        // Skip FOREIGN_TABLE_ID for foreign-backed rel tables
-        if (info.nodePair.srcTableID != FOREIGN_TABLE_ID) {
-            result.insert(info.nodePair.srcTableID);
-        }
+        result.insert(info.nodePair.srcTableID);
     }
     return result;
 }
@@ -85,10 +82,7 @@ std::unordered_set<table_id_t> RelGroupCatalogEntry::getSrcNodeTableIDSet() cons
 std::unordered_set<table_id_t> RelGroupCatalogEntry::getDstNodeTableIDSet() const {
     std::unordered_set<table_id_t> result;
     for (auto& info : relTableInfos) {
-        // Skip FOREIGN_TABLE_ID for foreign-backed rel tables
-        if (info.nodePair.dstTableID != FOREIGN_TABLE_ID) {
-            result.insert(info.nodePair.dstTableID);
-        }
+        result.insert(info.nodePair.dstTableID);
     }
     return result;
 }

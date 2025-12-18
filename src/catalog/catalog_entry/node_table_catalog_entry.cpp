@@ -45,10 +45,32 @@ std::string NodeTableCatalogEntry::toCypher(const ToCypherInfo& /*info*/) const 
         propertyCollection.toCypher(), primaryKeyName);
 }
 
+function::TableFunction NodeTableCatalogEntry::getScanFunction() {
+    if (scanFunction.has_value()) {
+        return *scanFunction;
+    }
+    return TableCatalogEntry::getScanFunction();
+}
+
+std::unique_ptr<binder::BoundTableScanInfo> NodeTableCatalogEntry::getBoundScanInfo(
+    main::ClientContext* context, [[maybe_unused]] const std::string& nodeUniqueName) {
+    if (scanFunction.has_value()) {
+        // Foreign table - call the extension's bind data function
+        auto bindData = createBindDataFunc(context);
+        return std::make_unique<binder::BoundTableScanInfo>(*scanFunction, std::move(bindData));
+    } else {
+        // Local table - for now, return nullptr as ForeignNodeTable handles the binding
+        return nullptr;
+    }
+}
+
 std::unique_ptr<TableCatalogEntry> NodeTableCatalogEntry::copy() const {
     auto other = std::make_unique<NodeTableCatalogEntry>();
     other->primaryKeyName = primaryKeyName;
     other->storage = storage;
+    other->scanFunction = scanFunction;
+    other->createBindDataFunc = createBindDataFunc;
+    other->foreignDatabaseName = foreignDatabaseName;
     other->copyFrom(*this);
     return other;
 }

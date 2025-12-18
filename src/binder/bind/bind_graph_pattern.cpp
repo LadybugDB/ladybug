@@ -642,6 +642,15 @@ std::vector<TableCatalogEntry*> Binder::bindNodeTableEntries(
         for (auto entry : catalog->getNodeTableEntries(transaction, useInternal)) {
             entrySet.insert(entry);
         }
+        auto dbManager = main::DatabaseManager::Get(*clientContext);
+        for (auto attachedDB : dbManager->getAttachedDatabases()) {
+            auto attachedCatalog = attachedDB->getCatalog();
+            for (auto entry : attachedCatalog->getTableEntries(transaction, useInternal)) {
+                if (entry->getType() == CatalogEntryType::FOREIGN_TABLE_ENTRY) {
+                    entrySet.insert(entry);
+                }
+            }
+        }
     } else {
         for (auto& name : tableNames) {
             auto entry = bindNodeTableEntry(name);
@@ -700,6 +709,13 @@ std::vector<TableCatalogEntry*> Binder::bindRelGroupEntries(
     if (tableNames.empty()) { // Rewrite as all rel groups in database.
         for (auto entry : catalog->getRelGroupEntries(transaction, useInternal)) {
             entrySet.insert(entry);
+        }
+        auto dbManager = main::DatabaseManager::Get(*clientContext);
+        for (auto attachedDB : dbManager->getAttachedDatabases()) {
+            auto attachedCatalog = attachedDB->getCatalog();
+            for (auto entry : attachedCatalog->getRelGroupEntries(transaction, useInternal)) {
+                entrySet.insert(entry);
+            }
         }
     } else {
         for (auto& name : tableNames) {

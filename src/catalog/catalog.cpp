@@ -182,6 +182,10 @@ void Catalog::alterTableEntry(Transaction* transaction, const BoundAlterInfo& in
     tables->alterTableEntry(transaction, info);
 }
 
+void Catalog::addTableEntry(std::unique_ptr<TableCatalogEntry> entry) {
+    tables->createEntry(&transaction::DUMMY_TRANSACTION, std::move(entry));
+}
+
 CatalogEntry* Catalog::createRelGroupEntry(Transaction* transaction,
     const BoundCreateTableInfo& info) {
     const auto extraInfo = info.extraInfo->ptrCast<BoundExtraCreateRelTableGroupInfo>();

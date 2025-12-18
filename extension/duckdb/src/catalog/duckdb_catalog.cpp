@@ -1,6 +1,7 @@
 #include "catalog/duckdb_catalog.h"
 
 #include "binder/bound_attach_info.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/duckdb_table_catalog_entry.h"
 #include "common/exception/binder.h"
 #include "common/exception/runtime.h"
@@ -8,6 +9,7 @@
 #include "function/duckdb_scan.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/duckdb_storage.h"
+#include "storage/storage_manager.h"
 
 namespace lbug {
 namespace duckdb_extension {
@@ -18,7 +20,7 @@ DuckDBCatalog::DuckDBCatalog(std::string dbPath, std::string catalogName,
     : CatalogExtension{}, dbPath{std::move(dbPath)}, catalogName{std::move(catalogName)},
       defaultSchemaName{std::move(defaultSchemaName)},
       tableNamesVector{common::LogicalType::STRING(), storage::MemoryManager::Get(*context)},
-      connector{connector} {
+      connector{connector}, context_{context} {
     skipUnsupportedTable = DuckDBStorageExtension::SKIP_UNSUPPORTED_TABLE_DEFAULT_VAL;
     auto& options = attachOption.options;
     if (options.contains(DuckDBStorageExtension::SKIP_UNSUPPORTED_TABLE_KEY)) {
@@ -96,6 +98,23 @@ void DuckDBCatalog::createForeignTable(const std::string& tableName) {
         tableEntry->addProperty(definition);
     }
     tables->createEntry(&transaction::DUMMY_TRANSACTION, std::move(tableEntry));
+    auto attachedEntry = tableEntry.get();
+    // Create another for main catalog for traversal support
+    auto primaryKeyName = extraInfo->propertyDefinitions[0].getName();
+
+    // Create DuckDB scan function for SQL pushdown
+    auto scanFunction = getScanFunction(duckdbTableInfo);
+    auto foreignDatabaseName = common::stringFormat("{}.{}", catalogName, tableName);
+    auto mainTableEntry = std::make_unique<catalog::NodeTableCatalogEntry>(info->tableName,
+        primaryKeyName, foreignDatabaseName, catalog::ShadowTag{});
+    for (auto& definition : extraInfo->propertyDefinitions) {
+        mainTableEntry->addProperty(definition);
+    }
+    mainTableEntry->setReferencedEntry(attachedEntry);
+    context_->getDatabase()->getCatalog()->addTableEntry(std::move(mainTableEntry));
+    auto mainEntry = context_->getDatabase()->getCatalog()->getTableCatalogEntry(
+        &transaction::DUMMY_TRANSACTION, info->tableName);
+    lbug::storage::StorageManager::Get(*context_)->createTable(mainEntry);
 }
 
 static bool getTableInfo(const DuckDBConnector& connector, const std::string& tableName,

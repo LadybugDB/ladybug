@@ -93,6 +93,9 @@ public:
     // Alter table entry.
     void alterTableEntry(transaction::Transaction* transaction, const binder::BoundAlterInfo& info);
 
+    // Add table entry (for extensions).
+    void addTableEntry(std::unique_ptr<TableCatalogEntry> entry);
+
     // ----------------------------- Sequences ----------------------------
 
     // Check if sequence entry exists.

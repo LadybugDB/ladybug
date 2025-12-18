@@ -218,6 +218,8 @@ static constexpr char ATTACHED_LBUG_DB_TYPE[] = "LBUG";
 
 static constexpr char LOCAL_DB_NAME[] = "local(lbug)";
 
+static constexpr char SHADOW_DB_NAME[] = "shadow(lbug)";
+
 constexpr auto DECIMAL_PRECISION_LIMIT = 38;
 
 } // namespace common

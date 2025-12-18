@@ -210,42 +210,59 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     auto storage = getStorage(boundOptions);
     std::optional<function::TableFunction> scanFunction = std::nullopt;
     std::optional<std::unique_ptr<function::TableFuncBindData>> scanBindData = std::nullopt;
+    std::string foreignDatabaseName;
     if (!storage.empty()) {
         auto dotPos = storage.find('.');
+        // Check if storage is database.table format by verifying the attached database exists
+        // Otherwise, treat as file path (e.g., "dataset/demo-db/graph-std/demo" or "data.parquet")
         if (dotPos != std::string::npos) {
-            // schema.table format, check if it's a foreign table
             std::string dbName = storage.substr(0, dotPos);
             std::string tableName = storage.substr(dotPos + 1);
-            auto transaction = transaction::Transaction::Get(*clientContext);
             if (!dbName.empty()) {
+                auto transaction = transaction::Transaction::Get(*clientContext);
                 auto attachedDB =
                     main::DatabaseManager::Get(*clientContext)->getAttachedDatabase(dbName);
-                if (attachedDB && attachedDB->getCatalog()->containsTable(transaction, tableName,
-                                      clientContext->useInternalCatalogEntry())) {
+                // Only process as database.table if the database is actually attached
+                if (attachedDB) {
+                    if (!attachedDB->getCatalog()->containsTable(transaction, tableName,
+                            clientContext->useInternalCatalogEntry())) {
+                        throw BinderException(
+                            stringFormat("Table '{}' does not exist in attached database '{}'.",
+                                tableName, dbName));
+                    }
                     auto tableEntry = attachedDB->getCatalog()->getTableCatalogEntry(transaction,
                         tableName, clientContext->useInternalCatalogEntry());
-                    if (tableEntry->getType() == CatalogEntryType::FOREIGN_TABLE_ENTRY) {
-                        scanFunction = tableEntry->getScanFunction();
-                        auto boundScanInfo =
-                            tableEntry->getBoundScanInfo(clientContext, "" /* nodeUniqueName */);
-                        scanBindData = std::move(boundScanInfo->bindData);
+                    auto nodeTableEntry = tableEntry->ptrCast<NodeTableCatalogEntry>();
+                    if (nodeTableEntry->getNumProperties() == 0) {
+                        throw BinderException(stringFormat(
+                            "Storage table '{}' must have at least one column.", tableName));
                     }
+                    scanFunction = tableEntry->getScanFunction();
+                    auto boundScanInfo =
+                        tableEntry->getBoundScanInfo(clientContext, storage /* nodeUniqueName */);
+                    if (!boundScanInfo && nodeTableEntry->getReferencedEntry()) {
+                        // Try the referenced entry (real entry for shadow tables)
+                        boundScanInfo = nodeTableEntry->getReferencedEntry()->getBoundScanInfo(
+                            clientContext, storage);
+                    }
+                    scanBindData = std::move(boundScanInfo->bindData);
+                    // Set foreign database name for attached databases
+                    foreignDatabaseName = stringFormat("{}({})", dbName, attachedDB->getDBType());
                 }
+                // else: attachedDB doesn't exist, so treat storage as a file path
             }
         }
     }
     // Bind from to pairs
     node_table_id_pair_set_t nodePairsSet;
     std::vector<NodeTableIDPair> nodePairs;
-    std::string foreignDatabaseName;
-    std::string foreignDatabaseType;
     for (auto& [srcTableName, dstTableName] : extraInfo.srcDstTablePairs) {
         auto srcEntry = bindNodeTableEntry(srcTableName);
         validateNodeTableType(srcEntry);
         auto dstEntry = bindNodeTableEntry(dstTableName);
         validateNodeTableType(dstEntry);
 
-        // For foreign-backed rel tables, validate that FROM and TO are from same database
+        // For foreign-backed rel tables, validate that FROM and TO are foreign tables
         if (scanFunction.has_value()) {
             // Both must be foreign tables
             if (srcEntry->getType() != CatalogEntryType::FOREIGN_TABLE_ENTRY ||
@@ -268,20 +285,12 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
                                  "databases. FROM is from '{}', TO is from '{}'.",
                         srcDbName, dstDbName));
             }
-            // Get database type for display
-            auto attachedDB =
-                main::DatabaseManager::Get(*clientContext)->getAttachedDatabase(srcDbName);
-            if (attachedDB) {
-                foreignDatabaseName = stringFormat("{}({})", srcDbName, attachedDB->getDBType());
-            }
         }
 
-        // For foreign-backed rel tables, use FOREIGN_TABLE_ID since we don't reference local node
-        // tables
-        auto srcTableID =
-            scanFunction.has_value() ? common::FOREIGN_TABLE_ID : srcEntry->getTableID();
-        auto dstTableID =
-            scanFunction.has_value() ? common::FOREIGN_TABLE_ID : dstEntry->getTableID();
+        // Use the actual shadow table IDs, not FOREIGN_TABLE_ID
+        // The shadow tables allow the query planner to distinguish between different node tables
+        auto srcTableID = srcEntry->getTableID();
+        auto dstTableID = dstEntry->getTableID();
         NodeTableIDPair pair{srcTableID, dstTableID};
         if (nodePairsSet.contains(pair)) {
             throw BinderException(

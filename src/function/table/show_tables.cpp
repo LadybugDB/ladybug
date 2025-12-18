@@ -1,5 +1,6 @@
 #include "binder/binder.h"
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "function/table/bind_data.h"
@@ -79,6 +80,13 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
                 auto relEntry = entry->constPtrCast<RelGroupCatalogEntry>();
                 if (!relEntry->getForeignDatabaseName().empty()) {
                     dbName = relEntry->getForeignDatabaseName();
+                }
+            }
+            // For shadow node tables, use shadow db name
+            if (entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY) {
+                auto nodeEntry = entry->constPtrCast<NodeTableCatalogEntry>();
+                if (!nodeEntry->getForeignDatabaseName().empty()) {
+                    dbName = SHADOW_DB_NAME;
                 }
             }
             tableInfos.emplace_back(entry->getName(), entry->getTableID(),
