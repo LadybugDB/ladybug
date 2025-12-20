@@ -5,6 +5,8 @@ add_library(lbug_storage_store
         column_chunk.cpp
         column_chunk_data.cpp
         column_chunk_stats.cpp
+        columnar_node_table_base.cpp
+        columnar_rel_table_base.cpp
         csr_chunked_node_group.cpp
         csr_node_group.cpp
         column_reader_writer.cpp

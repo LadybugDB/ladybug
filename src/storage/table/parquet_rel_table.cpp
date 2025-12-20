@@ -43,22 +43,16 @@ void ParquetRelTableScanState::setToTable(const Transaction* transaction, Table*
 
 ParquetRelTable::ParquetRelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
     table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager)
-    : RelTable{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
-      relGroupEntry{relGroupEntry} {
+    : ColumnarRelTableBase{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager} {
     std::string storage = relGroupEntry->getStorage();
     if (storage.empty()) {
         throw RuntimeException("Parquet file path is empty for parquet-backed rel table");
     }
 
-    // Get the relationship name for multi-table directory support
-    std::string relName = relGroupEntry->getName();
-
-    // New prefix format with relationship name: "prefix" which expands to:
-    // prefix_indices_{relName}.parquet, prefix_indptr_{relName}.parquet,
-    // prefix_metadata_{relName}.parquet
-    std::string prefix = storage;
-    indicesFilePath = prefix + "_indices_" + relName + ".parquet";
-    indptrFilePath = prefix + "_indptr_" + relName + ".parquet";
+    // Use base class helper to construct CSR file paths
+    auto paths = constructCSRPaths(storage, ".parquet");
+    indicesFilePath = paths.indices;
+    indptrFilePath = paths.indptr;
 }
 
 void ParquetRelTable::initScanState(Transaction* transaction, TableScanState& scanState,
@@ -243,32 +237,8 @@ bool ParquetRelTable::scanInternalByRowGroups(Transaction* transaction,
 }
 
 common::offset_t ParquetRelTable::findSourceNodeForRow(common::offset_t globalRowIdx) const {
-    // Binary search in indptrData to find which source node this row belongs to
-    // indptrData[i] gives the starting row index for source node i
-    // indptrData[i+1] gives the ending row index for source node i
-
-    if (indptrData.empty()) {
-        return common::INVALID_OFFSET;
-    }
-
-    // Binary search to find the source node
-    size_t left = 0;
-    size_t right = indptrData.size() - 2; // -2 because we compare with i+1
-
-    while (left <= right) {
-        size_t mid = left + (right - left) / 2;
-        if (globalRowIdx >= indptrData[mid] && globalRowIdx < indptrData[mid + 1]) {
-            return mid; // Found the source node
-        } else if (globalRowIdx < indptrData[mid]) {
-            if (mid == 0)
-                break;
-            right = mid - 1;
-        } else {
-            left = mid + 1;
-        }
-    }
-
-    return common::INVALID_OFFSET; // Row not found in any range
+    // Use base class helper for binary search
+    return findSourceNodeForRowInternal(globalRowIdx, indptrData);
 }
 
 bool ParquetRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
@@ -375,8 +345,8 @@ bool ParquetRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
     }
 }
 
-row_idx_t ParquetRelTable::getNumTotalRows(const transaction::Transaction* transaction) {
-    initializeParquetReaders(const_cast<transaction::Transaction*>(transaction));
+row_idx_t ParquetRelTable::getTotalRowCount(const Transaction* transaction) const {
+    initializeParquetReaders(const_cast<Transaction*>(transaction));
     if (!indicesReader) {
         return 0;
     }

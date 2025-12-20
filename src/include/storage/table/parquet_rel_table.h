@@ -4,7 +4,7 @@
 #include "common/exception/runtime.h"
 #include "common/types/internal_id_util.h"
 #include "processor/operator/persistent/reader/parquet/parquet_reader.h"
-#include "storage/table/rel_table.h"
+#include "storage/table/columnar_rel_table_base.h"
 #include "transaction/transaction.h"
 
 namespace lbug {
@@ -37,7 +37,7 @@ struct ParquetRelTableScanState final : RelTableScanState {
         common::RelDataDirection direction_) override;
 };
 
-class ParquetRelTable final : public RelTable {
+class ParquetRelTable final : public ColumnarRelTableBase {
 public:
     ParquetRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, common::table_id_t fromTableID,
         common::table_id_t toTableID, const StorageManager* storageManager,
@@ -48,25 +48,12 @@ public:
 
     bool scanInternal(transaction::Transaction* transaction, TableScanState& scanState) override;
 
-    // For parquet-backed tables, we don't support modifications
-    void insert([[maybe_unused]] transaction::Transaction* transaction,
-        [[maybe_unused]] TableInsertState& insertState) override {
-        throw common::RuntimeException("Cannot insert into parquet-backed rel table");
-    }
-    void update([[maybe_unused]] transaction::Transaction* transaction,
-        [[maybe_unused]] TableUpdateState& updateState) override {
-        throw common::RuntimeException("Cannot update parquet-backed rel table");
-    }
-    bool delete_([[maybe_unused]] transaction::Transaction* transaction,
-        [[maybe_unused]] TableDeleteState& deleteState) override {
-        throw common::RuntimeException("Cannot delete from parquet-backed rel table");
-        return false;
-    }
-
-    common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) override;
+protected:
+    // Implement ColumnarRelTableBase interface
+    std::string getColumnarFormatName() const override { return "Parquet"; }
+    common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
 
 private:
-    catalog::RelGroupCatalogEntry* relGroupEntry; // Store reference to table schema
     std::string indicesFilePath;
     std::string indptrFilePath;
     mutable std::unique_ptr<processor::ParquetReader> indicesReader;

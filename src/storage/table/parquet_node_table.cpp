@@ -25,20 +25,14 @@ namespace storage {
 
 ParquetNodeTable::ParquetNodeTable(const StorageManager* storageManager,
     const NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager)
-    : NodeTable{storageManager, nodeTableEntry, memoryManager},
-      nodeTableCatalogEntry{nodeTableEntry} {
+    : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager} {
     std::string prefix = nodeTableEntry->getStorage();
     if (prefix.empty()) {
         throw RuntimeException("Parquet file prefix is empty for parquet-backed node table");
     }
 
-    // Get the table name for multi-table directory support
-    std::string tableName = nodeTableEntry->getName();
-
-    // For node tables with multi-table support:
-    // prefix_nodes_{tableName}.parquet (e.g., demo_nodes_city.parquet)
-    parquetFilePath = prefix + "_nodes_" + tableName + ".parquet";
-    sharedState = std::make_unique<ParquetNodeTableSharedState>();
+    // Use base class helper to construct storage path
+    parquetFilePath = constructStoragePath(prefix, ".parquet");
 }
 
 void ParquetNodeTable::initScanState(Transaction* transaction, TableScanState& scanState,
@@ -78,30 +72,25 @@ void ParquetNodeTable::initScanState(Transaction* transaction, TableScanState& s
         }
     }
 
-    // Set nodeGroupIdx to invalid initially - will be assigned by getNextRowGroup
+    // Set nodeGroupIdx to invalid initially - will be assigned by getNextBatch
     parquetNodeScanState.nodeGroupIdx = INVALID_NODE_GROUP_IDX;
 
     // Initialize scan state for the current row group (assigned via shared state)
     initParquetScanForRowGroup(transaction, parquetNodeScanState);
 }
 
-void ParquetNodeTable::initializeScanCoordination(const Transaction* transaction) {
-    // Reset shared state at the start of each scan operation
-    // This is called once per scan operation by the ScanNodeTable operator
-    // Create a temporary reader to get the number of row groups
+common::node_group_idx_t ParquetNodeTable::getNumBatches(const Transaction* transaction) const {
     auto context = transaction->getClientContext();
     if (!context) {
-        return;
+        return 1;
     }
 
     std::vector<bool> columnSkips;
     try {
         auto tempReader = std::make_unique<ParquetReader>(parquetFilePath, columnSkips, context);
-        auto numRowGroups = tempReader->getNumRowsGroups();
-        sharedState->reset(numRowGroups);
+        return tempReader->getNumRowsGroups();
     } catch (const std::exception& e) {
-        // If we can't read the file, set to 1 row group as fallback
-        sharedState->reset(1);
+        return 1; // Fallback
     }
 }
 
@@ -132,7 +121,7 @@ void ParquetNodeTable::initParquetScanForRowGroup(Transaction* transaction,
     // Use shared state to get the next available row group for this scan state
     if (scanState.nodeGroupIdx == INVALID_NODE_GROUP_IDX) {
         common::node_group_idx_t assignedRowGroup;
-        if (sharedState->getNextRowGroup(assignedRowGroup)) {
+        if (sharedState->getNextBatch(assignedRowGroup)) {
             scanState.nodeGroupIdx = assignedRowGroup;
             groupsToRead.push_back(assignedRowGroup);
         } else {
@@ -312,7 +301,7 @@ bool ParquetNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
     return true;
 }
 
-row_idx_t ParquetNodeTable::getNumTotalRows(const transaction::Transaction* transaction) {
+row_idx_t ParquetNodeTable::getTotalRowCount(const Transaction* transaction) const {
     // Create a temporary reader to get metadata
     auto context = transaction->getClientContext();
     if (!context) {
