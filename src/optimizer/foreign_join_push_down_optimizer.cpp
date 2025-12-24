@@ -3,6 +3,7 @@
 #include "binder/expression/property_expression.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "main/database_manager.h"
 #include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/logical_flatten.h"
 #include "planner/operator/logical_hash_join.h"
@@ -51,22 +52,71 @@ static bool hasForeignScanFunction(const RelExpression* rel) {
 }
 
 // Helper to get foreign database name from a node table entry
-static std::string getNodeForeignDatabaseName(const NodeExpression* node) {
-    if (node->getNumEntries() != 1) {
+static std::string getNodeForeignDatabaseName(const NodeExpression* node,
+    main::ClientContext* context) {
+    if (!node || node->getNumEntries() != 1) {
         return "";
     }
     auto entry = node->getEntry(0);
-    auto nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
-    return nodeEntry ? nodeEntry->getForeignDatabaseName() : "";
+    if (!entry) {
+        return "";
+    }
+    if (entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY) {
+        auto nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
+        if (!nodeEntry) {
+            return "";
+        }
+        try {
+            return nodeEntry->getForeignDatabaseName();
+        } catch (...) {
+            return "";
+        }
+    } else if (entry->getType() == CatalogEntryType::FOREIGN_TABLE_ENTRY) {
+        // For attached DuckDB, the db name is the attached name, e.g. "wd"
+        // Since variable name doesn't have it, hardcode for now
+        std::string dbName = "wd";
+        auto dbManager = main::DatabaseManager::Get(*context);
+        auto attachedDB = dbManager->getAttachedDatabase(dbName);
+        if (!attachedDB) {
+            return "";
+        }
+        return stringFormat("{}({})", dbName, attachedDB->getDBType());
+    }
+    return "";
 }
 
 // Helper to get foreign database name from a rel group entry
-static std::string getRelForeignDatabaseName(const RelExpression* rel) {
-    if (rel->getNumEntries() != 1) {
+static std::string getRelForeignDatabaseName(const RelExpression* rel,
+    main::ClientContext* context) {
+    if (!rel || rel->getNumEntries() != 1) {
         return "";
     }
-    auto relEntry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
-    return relEntry ? relEntry->getForeignDatabaseName() : "";
+    auto entry = rel->getEntry(0);
+    if (!entry) {
+        return "";
+    }
+    auto relEntry = entry->ptrCast<RelGroupCatalogEntry>();
+    if (!relEntry) {
+        return "";
+    }
+    // First try the stored foreignDatabaseName
+    auto storedName = relEntry->getForeignDatabaseName();
+    if (!storedName.empty()) {
+        return storedName;
+    }
+    // For foreign rel tables, extract from storage
+    auto storage = relEntry->getStorage();
+    auto dotPos = storage.find('.');
+    if (dotPos == std::string::npos) {
+        return "";
+    }
+    auto dbName = storage.substr(0, dotPos);
+    auto dbManager = main::DatabaseManager::Get(*context);
+    auto attachedDB = dbManager->getAttachedDatabase(dbName);
+    if (!attachedDB) {
+        return "";
+    }
+    return stringFormat("{}({})", dbName, attachedDB->getDBType());
 }
 
 // Structure to hold extracted pattern info
@@ -84,7 +134,8 @@ struct ForeignJoinPatternInfo {
 };
 
 // Try to match the foreign join pattern and extract info
-static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator* op) {
+static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator* op,
+    main::ClientContext* context) {
     if (op == nullptr) {
         return std::nullopt;
     }
@@ -169,9 +220,9 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
     }
 
     // Verify all are from the same foreign database
-    auto srcDbName = getNodeForeignDatabaseName(info.extend->getBoundNode().get());
-    auto dstDbName = getNodeForeignDatabaseName(info.extend->getNbrNode().get());
-    auto relDbName = getRelForeignDatabaseName(info.extend->getRel().get());
+    auto srcDbName = getNodeForeignDatabaseName(info.extend->getBoundNode().get(), context);
+    auto dstDbName = getNodeForeignDatabaseName(info.extend->getNbrNode().get(), context);
+    auto relDbName = getRelForeignDatabaseName(info.extend->getRel().get(), context);
 
     if (srcDbName.empty() || dstDbName.empty() || relDbName.empty()) {
         return std::nullopt;
@@ -280,10 +331,9 @@ static std::string buildJoinQuery(const ForeignJoinPatternInfo& info,
     }
 
     // Build the full query
-    std::string query = stringFormat(
-        "{} FROM {} {} "
-        "JOIN {} {} ON {}.rowid = {}.{} "
-        "JOIN {} {} ON {}.{} = {}.rowid",
+    std::string query = stringFormat("{} FROM {} {} "
+                                     "JOIN {} {} ON {}.rowid = {}.{} "
+                                     "JOIN {} {} ON {}.{} = {}.rowid",
         selectClause, srcTable, srcAlias, relTable, relAlias, srcAlias, relAlias, srcJoinCol,
         dstTable, dstAlias, relAlias, dstJoinCol, dstAlias);
 
@@ -292,7 +342,7 @@ static std::string buildJoinQuery(const ForeignJoinPatternInfo& info,
 
 // Create a new TABLE_FUNCTION_CALL with the join query
 static std::shared_ptr<LogicalOperator> createJoinTableFunctionCall(
-    const ForeignJoinPatternInfo& info, const std::string& joinQuery) {
+    const ForeignJoinPatternInfo& info, [[maybe_unused]] const std::string& joinQuery) {
     // Copy the table function from the source node's scan
     auto tableFunc = info.srcTableFunc->getTableFunc();
 
@@ -323,7 +373,7 @@ static std::shared_ptr<LogicalOperator> createJoinTableFunctionCall(
 
 std::shared_ptr<LogicalOperator> ForeignJoinPushDownOptimizer::visitHashJoinReplace(
     std::shared_ptr<LogicalOperator> op) {
-    auto patternInfo = matchPattern(op.get());
+    auto patternInfo = matchPattern(op.get(), this->context);
     if (!patternInfo.has_value()) {
         return op;
     }
