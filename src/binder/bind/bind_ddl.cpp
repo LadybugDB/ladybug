@@ -232,15 +232,16 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
                     }
                     auto tableEntry = attachedDB->getCatalog()->getTableCatalogEntry(transaction,
                         tableName, clientContext->useInternalCatalogEntry());
-                    auto nodeTableEntry = tableEntry->ptrCast<NodeTableCatalogEntry>();
-                    if (nodeTableEntry->getNumProperties() == 0) {
+                    if (tableEntry->getNumProperties() == 0) {
                         throw BinderException(stringFormat(
                             "Storage table '{}' must have at least one column.", tableName));
                     }
                     scanFunction = tableEntry->getScanFunction();
                     auto boundScanInfo =
                         tableEntry->getBoundScanInfo(clientContext, storage /* nodeUniqueName */);
-                    if (!boundScanInfo && nodeTableEntry->getReferencedEntry()) {
+                    if (!boundScanInfo &&
+                        tableEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY) {
+                        auto nodeTableEntry = tableEntry->ptrCast<NodeTableCatalogEntry>();
                         // Try the referenced entry (real entry for shadow tables)
                         boundScanInfo = nodeTableEntry->getReferencedEntry()->getBoundScanInfo(
                             clientContext, storage);
