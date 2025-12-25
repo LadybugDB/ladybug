@@ -13,7 +13,17 @@ void LogicalProjection::computeFactorizedSchema() {
         auto groupPos = INVALID_F_GROUP_POS;
         if (childSchema->isExpressionInScope(*expression)) { // expression to reference
             groupPos = childSchema->getGroupPos(*expression);
-            schema->insertToScopeMayRepeat(expression, groupPos);
+            // Use the expression from child schema, not the original
+            // This handles when child operators replace PropertyExpressions with
+            // VariableExpressions
+            auto childExpr = expression;
+            for (auto& exprInScope : childSchema->getExpressionsInScope()) {
+                if (exprInScope->getUniqueName() == expression->getUniqueName()) {
+                    childExpr = exprInScope;
+                    break;
+                }
+            }
+            schema->insertToScopeMayRepeat(childExpr, groupPos);
         } else { // expression to evaluate
             auto analyzer = GroupDependencyAnalyzer(false, *childSchema);
             analyzer.visit(expression);
@@ -36,7 +46,17 @@ void LogicalProjection::computeFlatSchema() {
     schema->clearExpressionsInScope();
     for (auto& expression : expressions) {
         if (childSchema->isExpressionInScope(*expression)) {
-            schema->insertToScopeMayRepeat(expression, 0);
+            // Use the expression from child schema, not the original
+            // This handles when child operators replace PropertyExpressions with
+            // VariableExpressions
+            auto childExpr = expression;
+            for (auto& exprInScope : childSchema->getExpressionsInScope()) {
+                if (exprInScope->getUniqueName() == expression->getUniqueName()) {
+                    childExpr = exprInScope;
+                    break;
+                }
+            }
+            schema->insertToScopeMayRepeat(childExpr, 0);
         } else {
             schema->insertToGroupAndScopeMayRepeat(expression, 0);
         }
