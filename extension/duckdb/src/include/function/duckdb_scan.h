@@ -65,6 +65,13 @@ struct DuckDBScanBindData : function::TableFuncBindData {
     std::unique_ptr<TableFuncBindData> copy() const override {
         return std::make_unique<DuckDBScanBindData>(*this);
     }
+
+    std::unique_ptr<TableFuncBindData> copyWithQuery(const std::string& newQuery,
+        binder::expression_vector columns,
+        const std::vector<std::string>& columnNamesInResult) const override {
+        return std::make_unique<DuckDBScanBindData>(newQuery, columnNamesInResult, connector,
+            std::move(columns));
+    }
 };
 
 struct DuckDBScanSharedState final : function::TableFuncSharedState {

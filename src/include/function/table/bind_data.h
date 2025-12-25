@@ -57,6 +57,18 @@ struct LBUG_API TableFuncBindData {
 
     virtual std::unique_ptr<TableFuncBindData> copy() const;
 
+    // Create a copy of this bind data with a modified SQL query and output columns.
+    // This is used by the foreign join push down optimizer to rewrite queries.
+    // Returns nullptr if the bind data doesn't support query modification.
+    virtual std::unique_ptr<TableFuncBindData> copyWithQuery(const std::string& query,
+        binder::expression_vector columns,
+        const std::vector<std::string>& columnNamesInResult) const {
+        (void)query;
+        (void)columns;
+        (void)columnNamesInResult;
+        return nullptr;
+    }
+
     virtual std::string getDescription() const { return ""; }
 
     template<class TARGET>

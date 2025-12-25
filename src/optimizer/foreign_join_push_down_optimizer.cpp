@@ -1,5 +1,7 @@
 #include "optimizer/foreign_join_push_down_optimizer.h"
 
+#include <algorithm>
+
 #include "binder/expression/property_expression.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
@@ -131,6 +133,10 @@ struct ForeignJoinPatternInfo {
     const LogicalHashJoin* innerHashJoin = nullptr;
     // Original output schema
     const Schema* outputSchema = nullptr;
+    // Table names extracted from bind data
+    std::string srcTable;
+    std::string dstTable;
+    std::string relTable;
 };
 
 // Try to match the foreign join pattern and extract info
@@ -231,28 +237,7 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
         return std::nullopt;
     }
 
-    return info;
-}
-
-// Build the SQL join query string
-static std::string buildJoinQuery(const ForeignJoinPatternInfo& info,
-    const expression_vector& outputColumns) {
-    auto extend = info.extend;
-    auto srcNode = extend->getBoundNode();
-    auto dstNode = extend->getNbrNode();
-    auto rel = extend->getRel();
-
-    // Get aliases
-    std::string srcAlias = srcNode->getVariableName();
-    std::string dstAlias = dstNode->getVariableName();
-    std::string relAlias = rel->getVariableName();
-
-    // Get table names from bind data descriptions
-    // The description contains the SQL query, we need to extract table names
-    auto srcDesc = info.srcTableFunc->getBindData()->getDescription();
-    auto dstDesc = info.dstTableFunc->getBindData()->getDescription();
-
-    // Extract table name from "SELECT {} FROM tablename" pattern
+    // Extract table names from bind data descriptions
     auto extractTableName = [](const std::string& desc) -> std::string {
         auto fromPos = desc.find("FROM ");
         if (fromPos == std::string::npos) {
@@ -267,30 +252,56 @@ static std::string buildJoinQuery(const ForeignJoinPatternInfo& info,
         return tableName;
     };
 
-    std::string srcTable = extractTableName(srcDesc);
-    std::string dstTable = extractTableName(dstDesc);
+    auto srcDesc = info.srcTableFunc->getBindData()->getDescription();
+    auto dstDesc = info.dstTableFunc->getBindData()->getDescription();
+    info.srcTable = extractTableName(srcDesc);
+    info.dstTable = extractTableName(dstDesc);
+
+    if (info.srcTable.empty() || info.dstTable.empty()) {
+        return std::nullopt;
+    }
 
     // Get rel table from storage
+    auto rel = info.extend->getRel();
     auto relEntry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
     std::string relStorage = relEntry->getStorage();
 
     // Parse storage format "db.table" to get full table reference
-    std::string relTable;
     auto dotPos = relStorage.find('.');
     if (dotPos != std::string::npos) {
         // Format: "dbname.tablename" -> need to construct proper SQL table reference
         // The source table gives us the pattern to follow
-        auto srcDotPos = srcTable.find('.');
+        auto srcDotPos = info.srcTable.find('.');
         if (srcDotPos != std::string::npos) {
             // Copy the database/schema part from src and append rel table name
-            auto dbSchema = srcTable.substr(0, srcTable.rfind('.') + 1);
-            relTable = dbSchema + relStorage.substr(dotPos + 1);
+            auto dbSchema = info.srcTable.substr(0, info.srcTable.rfind('.') + 1);
+            info.relTable = dbSchema + relStorage.substr(dotPos + 1);
         } else {
-            relTable = relStorage.substr(dotPos + 1);
+            info.relTable = relStorage.substr(dotPos + 1);
         }
     } else {
-        relTable = relStorage;
+        info.relTable = relStorage;
     }
+
+    if (info.relTable.empty()) {
+        return std::nullopt;
+    }
+
+    return info;
+}
+
+// Build the SQL join query string and collect column names for result mapping
+static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
+    const ForeignJoinPatternInfo& info, const expression_vector& outputColumns) {
+    auto extend = info.extend;
+    auto srcNode = extend->getBoundNode();
+    auto dstNode = extend->getNbrNode();
+    auto rel = extend->getRel();
+
+    // Get raw variable names (user-facing, like 'a', 'b', 'c')
+    std::string srcAlias = srcNode->getVariableName();
+    std::string dstAlias = dstNode->getVariableName();
+    std::string relAlias = rel->getVariableName();
 
     // Determine join columns based on direction
     std::string srcJoinCol, dstJoinCol;
@@ -302,8 +313,9 @@ static std::string buildJoinQuery(const ForeignJoinPatternInfo& info,
         dstJoinCol = "head_id";
     }
 
-    // Build SELECT clause from output columns
+    // Build SELECT clause from output columns and collect column names
     std::string selectClause = "SELECT ";
+    std::vector<std::string> columnNames;
     bool first = true;
 
     for (auto& col : outputColumns) {
@@ -312,60 +324,69 @@ static std::string buildJoinQuery(const ForeignJoinPatternInfo& info,
         }
         first = false;
 
+        std::string colExpr;
+        std::string colName;
+
         // Determine which table the column comes from based on variable name
         if (col->expressionType == ExpressionType::PROPERTY) {
             auto& prop = col->constCast<PropertyExpression>();
-            auto varName = prop.getVariableName();
+            // Use raw variable name for SQL query (e.g., 'a' instead of '_0_a')
+            auto rawVarName = prop.getRawVariableName();
             auto propName = prop.getPropertyName();
 
             if (propName == InternalKeyword::ID) {
                 // Internal ID maps to rowid
-                selectClause += stringFormat("{}.rowid", varName);
+                colExpr = stringFormat("{}.rowid", rawVarName);
+                colName = stringFormat("{}_rowid", rawVarName);
             } else {
-                selectClause += stringFormat("{}.{}", varName, propName);
+                colExpr = stringFormat("{}.{}", rawVarName, propName);
+                colName = stringFormat("{}_{}", rawVarName, propName);
             }
         } else {
-            // For non-property expressions, use the unique name
-            selectClause += col->getUniqueName();
+            // For non-property expressions, use a sanitized unique name
+            auto uniqueName = col->getUniqueName();
+            // Replace dots with underscores for valid SQL identifiers
+            std::replace(uniqueName.begin(), uniqueName.end(), '.', '_');
+            colExpr = uniqueName;
+            colName = uniqueName;
         }
+
+        // Ensure column name is valid SQL (replace dots with underscores)
+        std::replace(colName.begin(), colName.end(), '.', '_');
+
+        // Add AS clause to ensure consistent column naming
+        selectClause += stringFormat("{} AS {}", colExpr, colName);
+        columnNames.push_back(colName);
     }
 
-    // Build the full query
+    // Build the full query with proper JOIN syntax
     std::string query = stringFormat("{} FROM {} {} "
                                      "JOIN {} {} ON {}.rowid = {}.{} "
                                      "JOIN {} {} ON {}.{} = {}.rowid",
-        selectClause, srcTable, srcAlias, relTable, relAlias, srcAlias, relAlias, srcJoinCol,
-        dstTable, dstAlias, relAlias, dstJoinCol, dstAlias);
+        selectClause, info.srcTable, srcAlias, info.relTable, relAlias, srcAlias, relAlias,
+        srcJoinCol, info.dstTable, dstAlias, relAlias, dstJoinCol, dstAlias);
 
-    return query;
+    return {query, columnNames};
 }
 
 // Create a new TABLE_FUNCTION_CALL with the join query
 static std::shared_ptr<LogicalOperator> createJoinTableFunctionCall(
-    const ForeignJoinPatternInfo& info, [[maybe_unused]] const std::string& joinQuery) {
+    const ForeignJoinPatternInfo& info, const std::string& joinQuery,
+    const std::vector<std::string>& columnNames, const expression_vector& outputColumns) {
     // Copy the table function from the source node's scan
     auto tableFunc = info.srcTableFunc->getTableFunc();
 
-    // Create new bind data with the join query
-    // We need to clone the original bind data and update its query
+    // Create new bind data with the join query using the extension's copyWithQuery
     auto originalBindData = info.srcTableFunc->getBindData();
-    auto newBindData = originalBindData->copy();
+    auto newBindData = originalBindData->copyWithQuery(joinQuery, outputColumns, columnNames);
 
-    // Get output columns from the schema
-    auto outputColumns = info.outputSchema->getExpressionsInScope();
-    newBindData->columns = outputColumns;
-
-    // The new bind data needs column names for the result converter
-    // For now, we set the columns and let the description show the join query
-    // TODO: Set proper column skip flags based on what's actually needed
+    if (!newBindData) {
+        // Extension doesn't support query modification, return nullptr to indicate failure
+        return nullptr;
+    }
 
     auto tableFuncCall =
         std::make_shared<LogicalTableFunctionCall>(std::move(tableFunc), std::move(newBindData));
-
-    // The join query will be used as description/printed info
-    // The actual query execution will use the columns from the original bind data
-    // This is a simplified approach - a full implementation would need to properly
-    // construct bind data that generates the join query
 
     tableFuncCall->computeFlatSchema();
     return tableFuncCall;
@@ -380,19 +401,18 @@ std::shared_ptr<LogicalOperator> ForeignJoinPushDownOptimizer::visitHashJoinRepl
 
     auto& info = patternInfo.value();
 
-    // Build the SQL join query
+    // Build the SQL join query and get column names
     auto outputColumns = info.outputSchema->getExpressionsInScope();
-    auto joinQuery = buildJoinQuery(info, outputColumns);
+    auto [joinQuery, columnNames] = buildJoinQuery(info, outputColumns);
 
-    // For now, log the detection and return original operator
-    // The full implementation requires more work to properly wire up
-    // the query execution path through the table function
-    // TODO: Complete the createJoinTableFunctionCall implementation
+    // Create the optimized table function call
+    auto result = createJoinTableFunctionCall(info, joinQuery, columnNames, outputColumns);
+    if (!result) {
+        // Extension doesn't support query modification, return original
+        return op;
+    }
 
-    // Uncomment to enable the rewrite once fully implemented:
-    // return createJoinTableFunctionCall(info, joinQuery);
-
-    return op;
+    return result;
 }
 
 } // namespace optimizer
