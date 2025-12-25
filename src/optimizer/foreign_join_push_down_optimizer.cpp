@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "binder/expression/property_expression.h"
+#include "binder/expression/variable_expression.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "main/database_manager.h"
@@ -335,20 +336,43 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
             auto propName = prop.getPropertyName();
 
             if (propName == InternalKeyword::ID) {
-                // Internal ID maps to rowid
-                colExpr = stringFormat("{}.rowid", rawVarName);
-                colName = stringFormat("{}_rowid", rawVarName);
+                // Internal ID maps to id column in external table
+                colExpr = stringFormat("{}.id", rawVarName);
+                colName = stringFormat("{}_id", rawVarName);
             } else {
                 colExpr = stringFormat("{}.{}", rawVarName, propName);
                 colName = stringFormat("{}_{}", rawVarName, propName);
             }
         } else {
-            // For non-property expressions, use a sanitized unique name
+            // For non-property expressions, parse the unique name to extract table alias and column
             auto uniqueName = col->getUniqueName();
-            // Replace dots with underscores for valid SQL identifiers
-            std::replace(uniqueName.begin(), uniqueName.end(), '.', '_');
-            colExpr = uniqueName;
-            colName = uniqueName;
+
+            // Parse format: "_N_varname.columnname" -> "varname.columnname AS
+            // _N_varname_columnname"
+            auto dotPos = uniqueName.find('.');
+            if (dotPos != std::string::npos) {
+                auto prefix = uniqueName.substr(0, dotPos);       // "_N_varname"
+                auto colNamePart = uniqueName.substr(dotPos + 1); // "columnname"
+
+                // Extract raw variable name by removing the "_N_" prefix
+                // Format is typically "_0_a", "_2_c", etc.
+                auto underscorePos = prefix.find('_', 1); // Find second underscore
+                if (underscorePos != std::string::npos) {
+                    auto rawVar = prefix.substr(underscorePos + 1); // "a", "c", etc.
+                    colExpr = stringFormat("{}.{}", rawVar, colNamePart);
+                } else {
+                    // Fallback: use the whole prefix
+                    colExpr = stringFormat("{}.{}", prefix, colNamePart);
+                }
+
+                // Column name is the sanitized unique name
+                colName = uniqueName;
+                std::replace(colName.begin(), colName.end(), '.', '_');
+            } else {
+                // No dot, use as-is
+                colExpr = uniqueName;
+                colName = uniqueName;
+            }
         }
 
         // Ensure column name is valid SQL (replace dots with underscores)
@@ -360,9 +384,10 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
     }
 
     // Build the full query with proper JOIN syntax
+    // Join on id columns: srcNode.id = rel.head_id/tail_id and rel.tail_id/head_id = dstNode.id
     std::string query = stringFormat("{} FROM {} {} "
-                                     "JOIN {} {} ON {}.rowid = {}.{} "
-                                     "JOIN {} {} ON {}.{} = {}.rowid",
+                                     "JOIN {} {} ON {}.id = {}.{} "
+                                     "JOIN {} {} ON {}.{} = {}.id",
         selectClause, info.srcTable, srcAlias, info.relTable, relAlias, srcAlias, relAlias,
         srcJoinCol, info.dstTable, dstAlias, relAlias, dstJoinCol, dstAlias);
 
@@ -376,14 +401,51 @@ static std::shared_ptr<LogicalOperator> createJoinTableFunctionCall(
     // Copy the table function from the source node's scan
     auto tableFunc = info.srcTableFunc->getTableFunc();
 
+    // Create VariableExpressions for the result columns
+    // The table function expects VariableExpressions, not PropertyExpressions
+    expression_vector resultColumns;
+    for (size_t i = 0; i < outputColumns.size(); i++) {
+        auto& col = outputColumns[i];
+        auto dataType = col->getDataType().copy();
+
+        // The uniqueName needs to match the PropertyExpression's uniqueName format
+        // PropertyExpression uses format like "_0_a.id" (lowercase for user-facing names)
+        // even though internally it stores as "_ID"
+        std::string uniqueName;
+        if (col->expressionType == ExpressionType::PROPERTY) {
+            auto& prop = col->constCast<PropertyExpression>();
+            auto rawVar = prop.getRawVariableName();
+            auto propName = prop.getPropertyName();
+            auto varName = prop.getVariableName();
+
+            // Use lowercase "id" for the ID property to match user-facing format
+            if (propName == InternalKeyword::ID) {
+                uniqueName = stringFormat("{}.id", varName);
+            } else {
+                uniqueName = stringFormat("{}.{}", varName, propName);
+            }
+        } else {
+            uniqueName = col->getUniqueName();
+        }
+
+        auto alias = columnNames[i];
+
+        resultColumns.push_back(
+            std::make_shared<VariableExpression>(std::move(dataType), uniqueName, alias));
+    }
+
     // Create new bind data with the join query using the extension's copyWithQuery
     auto originalBindData = info.srcTableFunc->getBindData();
-    auto newBindData = originalBindData->copyWithQuery(joinQuery, outputColumns, columnNames);
+    auto newBindData = originalBindData->copyWithQuery(joinQuery, resultColumns, columnNames);
 
     if (!newBindData) {
         // Extension doesn't support query modification, return nullptr to indicate failure
         return nullptr;
     }
+
+    // Clear column predicates since they were for single-table scans and don't apply to joins
+    // The join conditions are already built into the query
+    newBindData->setColumnPredicates({});
 
     auto tableFuncCall =
         std::make_shared<LogicalTableFunctionCall>(std::move(tableFunc), std::move(newBindData));
@@ -402,7 +464,15 @@ std::shared_ptr<LogicalOperator> ForeignJoinPushDownOptimizer::visitHashJoinRepl
     auto& info = patternInfo.value();
 
     // Build the SQL join query and get column names
-    auto outputColumns = info.outputSchema->getExpressionsInScope();
+    // Only include PropertyExpressions (explicitly referenced columns), not all columns in scope
+    auto allColumns = info.outputSchema->getExpressionsInScope();
+    expression_vector outputColumns;
+    for (auto& col : allColumns) {
+        if (col->expressionType == ExpressionType::PROPERTY) {
+            outputColumns.push_back(col);
+        }
+    }
+
     auto [joinQuery, columnNames] = buildJoinQuery(info, outputColumns);
 
     // Create the optimized table function call

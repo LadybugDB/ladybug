@@ -232,10 +232,32 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
                     }
                     auto tableEntry = attachedDB->getCatalog()->getTableCatalogEntry(transaction,
                         tableName, clientContext->useInternalCatalogEntry());
-                    if (tableEntry->getNumProperties() == 0) {
-                        throw BinderException(stringFormat(
-                            "Storage table '{}' must have at least one column.", tableName));
+
+                    // For external storage, derive property definitions from the external table's
+                    // schema Get column information from the table properties
+                    auto tableProperties = tableEntry->getProperties();
+                    propertyDefinitions.clear();
+                    propertyDefinitions.emplace_back(
+                        ColumnDefinition(InternalKeyword::ID, LogicalType::INTERNAL_ID()));
+
+                    // Add properties from external table columns (excluding head_id and tail_id)
+                    for (auto& property : tableProperties) {
+                        auto columnName = property.getName();
+                        // Skip structural columns that map to head_id/tail_id
+                        if (columnName == "head_id" || columnName == "tail_id") {
+                            continue;
+                        }
+                        propertyDefinitions.emplace_back(
+                            ColumnDefinition(columnName, property.getType().copy()));
                     }
+
+                    if (propertyDefinitions.size() == 1) { // Only has ID column
+                        throw BinderException(
+                            stringFormat("Storage table '{}' must have at least one property "
+                                         "column besides head_id/tail_id.",
+                                tableName));
+                    }
+
                     scanFunction = tableEntry->getScanFunction();
                     auto boundScanInfo =
                         tableEntry->getBoundScanInfo(clientContext, storage /* nodeUniqueName */);
