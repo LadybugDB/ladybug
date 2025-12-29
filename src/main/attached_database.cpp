@@ -19,6 +19,18 @@ void AttachedDatabase::invalidateCache() {
     }
 }
 
+std::unique_ptr<duckdb::MaterializedQueryResult> AttachedDatabase::executeQuery(
+    [[maybe_unused]] const std::string& query) const {
+    throw common::RuntimeException("executeQuery not implemented for this database type");
+}
+
+std::vector<std::string> AttachedDatabase::getTableColumnNames(
+    [[maybe_unused]] const std::string& tableName) const {
+    // Default implementation returns empty vector
+    // Subclasses should override to provide actual implementation
+    return {};
+}
+
 static void validateEmptyWAL(const std::string& path, ClientContext* context) {
     auto vfs = common::VirtualFileSystem::GetUnsafe(*context);
     auto walFilePath = storage::StorageUtils::getWALFilePath(path);

@@ -6,6 +6,7 @@
 #include "binder/expression/variable_expression.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "common/exception/runtime.h"
 #include "main/database_manager.h"
 #include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/logical_flatten.h"
@@ -138,6 +139,7 @@ struct ForeignJoinPatternInfo {
     std::string srcTable;
     std::string dstTable;
     std::string relTable;
+    std::string dbName; // Foreign database name
 };
 
 // Try to match the foreign join pattern and extract info
@@ -238,6 +240,14 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
         return std::nullopt;
     }
 
+    // Extract just the database name (without type suffix like "(DUCKDB)")
+    auto parenPos = srcDbName.find('(');
+    if (parenPos != std::string::npos) {
+        info.dbName = srcDbName.substr(0, parenPos);
+    } else {
+        info.dbName = srcDbName;
+    }
+
     // Extract table names from bind data descriptions
     auto extractTableName = [](const std::string& desc) -> std::string {
         auto fromPos = desc.find("FROM ");
@@ -249,6 +259,11 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
         auto spacePos = tableName.find(' ');
         if (spacePos != std::string::npos) {
             tableName = tableName.substr(0, spacePos);
+        }
+        // Strip the db prefix for foreign tables
+        auto dotPos = tableName.find('.');
+        if (dotPos != std::string::npos) {
+            tableName = tableName.substr(dotPos + 1);
         }
         return tableName;
     };
@@ -284,6 +299,12 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
         info.relTable = relStorage;
     }
 
+    // Strip the db prefix from relTable for query execution in attached db context
+    auto relDotPos = info.relTable.find('.');
+    if (relDotPos != std::string::npos) {
+        info.relTable = info.relTable.substr(relDotPos + 1);
+    }
+
     if (info.relTable.empty()) {
         return std::nullopt;
     }
@@ -291,9 +312,21 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
     return info;
 }
 
+// Helper to get column names from a foreign table
+static std::vector<std::string> getForeignTableColumnNames(const std::string& dbName,
+    const std::string& tableName, main::ClientContext* context) {
+    auto dbManager = main::DatabaseManager::Get(*context);
+    auto attachedDB = dbManager->getAttachedDatabase(dbName);
+    if (!attachedDB) {
+        return {};
+    }
+    return attachedDB->getTableColumnNames(tableName);
+}
+
 // Build the SQL join query string and collect column names for result mapping
 static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
-    const ForeignJoinPatternInfo& info, const expression_vector& outputColumns) {
+    const ForeignJoinPatternInfo& info, const expression_vector& outputColumns,
+    main::ClientContext* context) {
     auto extend = info.extend;
     auto srcNode = extend->getBoundNode();
     auto dstNode = extend->getNbrNode();
@@ -304,14 +337,24 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
     std::string dstAlias = dstNode->getVariableName();
     std::string relAlias = rel->getVariableName();
 
-    // Determine join columns based on direction
+    // Determine join columns based on direction and foreign table schema
     std::string srcJoinCol, dstJoinCol;
+    auto tableColumnNames = getForeignTableColumnNames(info.dbName, info.relTable, context);
+    if (tableColumnNames.size() < 2) {
+        throw RuntimeException(stringFormat(
+            "Foreign join push down optimizer: unable to retrieve column names for table '{}.{}', "
+            "got {} columns but need at least 2 for join",
+            info.dbName, info.relTable, tableColumnNames.size()));
+    }
+
+    std::string firstCol = tableColumnNames[0];
+    std::string secondCol = tableColumnNames[1];
     if (extend->getDirection() == ExtendDirection::FWD) {
-        srcJoinCol = "head_id";
-        dstJoinCol = "tail_id";
+        srcJoinCol = firstCol;
+        dstJoinCol = secondCol;
     } else {
-        srcJoinCol = "tail_id";
-        dstJoinCol = "head_id";
+        srcJoinCol = secondCol;
+        dstJoinCol = firstCol;
     }
 
     // Build SELECT clause from output columns and collect column names
@@ -384,7 +427,8 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
     }
 
     // Build the full query with proper JOIN syntax
-    // Join on id columns: srcNode.id = rel.head_id/tail_id and rel.tail_id/head_id = dstNode.id
+    // Join on id columns: srcNode.id = rel.first/second column and rel.second/first column =
+    // dstNode.id
     std::string query = stringFormat("{} FROM {} {} "
                                      "JOIN {} {} ON {}.id = {}.{} "
                                      "JOIN {} {} ON {}.{} = {}.id",
@@ -473,7 +517,7 @@ std::shared_ptr<LogicalOperator> ForeignJoinPushDownOptimizer::visitHashJoinRepl
         }
     }
 
-    auto [joinQuery, columnNames] = buildJoinQuery(info, outputColumns);
+    auto [joinQuery, columnNames] = buildJoinQuery(info, outputColumns, this->context);
 
     // Create the optimized table function call
     auto result = createJoinTableFunctionCall(info, joinQuery, columnNames, outputColumns);

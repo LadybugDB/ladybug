@@ -31,7 +31,12 @@ public:
 
     catalog::Catalog* getCatalog() { return catalog.get(); }
 
-    std::unique_ptr<duckdb::MaterializedQueryResult> executeQuery(const std::string& query);
+    virtual std::unique_ptr<duckdb::MaterializedQueryResult> executeQuery(
+        const std::string& query) const;
+
+    // Get column names for a table in the attached database
+    // Returns empty vector if table doesn't exist or on error
+    virtual std::vector<std::string> getTableColumnNames(const std::string& tableName) const;
 
     void invalidateCache();
 

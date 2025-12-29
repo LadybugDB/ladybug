@@ -6,6 +6,7 @@ add_library(lbug_unity_catalog_storage
         ${PROJECT_SOURCE_DIR}/extension/duckdb/src/function/clear_cache.cpp
         ${PROJECT_SOURCE_DIR}/extension/duckdb/src/connector/duckdb_type_converter.cpp
         ${PROJECT_SOURCE_DIR}/extension/duckdb/src/catalog/duckdb_table_catalog_entry.cpp
+        ${PROJECT_SOURCE_DIR}/extension/duckdb/src/storage/attached_duckdb_database.cpp
 )
 
 set(UNITY_CATALOG_EXTENSION_OBJECT_FILES

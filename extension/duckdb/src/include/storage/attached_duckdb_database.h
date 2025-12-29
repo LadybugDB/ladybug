@@ -16,6 +16,13 @@ public:
 
     const DuckDBConnector& getConnector() const { return *connector; }
 
+    std::unique_ptr<duckdb::MaterializedQueryResult> executeQuery(
+        const std::string& query) const override {
+        return connector->executeQuery(query);
+    }
+
+    std::vector<std::string> getTableColumnNames(const std::string& tableName) const override;
+
 protected:
     std::unique_ptr<DuckDBConnector> connector;
 };
