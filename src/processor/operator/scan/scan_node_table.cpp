@@ -5,6 +5,7 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/local_storage/local_node_table.h"
 #include "storage/local_storage/local_storage.h"
+#include "storage/table/arrow_node_table.h"
 #include "storage/table/parquet_node_table.h"
 
 using namespace lbug::common;
@@ -51,6 +52,9 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
         } catch (const std::exception& e) {
             this->numCommittedNodeGroups = 1;
         }
+    } else if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(table)) {
+        // For Arrow tables, set numCommittedNodeGroups to number of batches
+        this->numCommittedNodeGroups = arrowTable->getNumBatches(transaction);
     } else {
         this->numCommittedNodeGroups = table->getNumCommittedNodeGroups();
     }
@@ -103,12 +107,18 @@ void ScanNodeTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContex
     ScanTable::initLocalStateInternal(resultSet, context);
     auto nodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
 
-    // Check if the first table is a ParquetNodeTable and create appropriate scan state
+    // Check if the first table is a ParquetNodeTable or ArrowNodeTable and create appropriate scan
+    // state
     auto* parquetTable = dynamic_cast<ParquetNodeTable*>(tableInfos[0].table);
+    auto* arrowTable = dynamic_cast<ArrowNodeTable*>(tableInfos[0].table);
     if (parquetTable) {
         scanState = std::make_unique<ParquetNodeTableScanState>(
             *MemoryManager::Get(*context->clientContext), nodeIDVector, outVectors,
             nodeIDVector->state);
+    } else if (arrowTable) {
+        scanState =
+            std::make_unique<ArrowNodeTableScanState>(*MemoryManager::Get(*context->clientContext),
+                nodeIDVector, outVectors, nodeIDVector->state);
     } else {
         scanState =
             std::make_unique<NodeTableScanState>(nodeIDVector, outVectors, nodeIDVector->state);
@@ -122,8 +132,9 @@ void ScanNodeTable::initCurrentTable(ExecutionContext* context) {
     auto& currentInfo = tableInfos[currentTableIdx];
     currentInfo.initScanState(*scanState, outVectors, context->clientContext);
     scanState->semiMask = sharedStates[currentTableIdx]->getSemiMask();
-    // Call table->initScanState for ParquetNodeTable
-    if (dynamic_cast<ParquetNodeTable*>(tableInfos[currentTableIdx].table)) {
+    // Call table->initScanState for ParquetNodeTable or ArrowNodeTable
+    if (dynamic_cast<ParquetNodeTable*>(tableInfos[currentTableIdx].table) ||
+        dynamic_cast<ArrowNodeTable*>(tableInfos[currentTableIdx].table)) {
         auto transaction = transaction::Transaction::Get(*context->clientContext);
         tableInfos[currentTableIdx].table->initScanState(transaction, *scanState);
     }

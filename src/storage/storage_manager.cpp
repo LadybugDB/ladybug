@@ -2,6 +2,7 @@
 
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "common/arrow/arrow.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/random_engine.h"
 #include "common/serializer/in_mem_file_writer.h"
@@ -12,6 +13,8 @@
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/checkpointer.h"
+#include "storage/table/arrow_node_table.h"
+#include "storage/table/arrow_table_support.h"
 #include "storage/table/foreign_rel_table.h"
 #include "storage/table/node_table.h"
 #include "storage/table/parquet_node_table.h"
@@ -82,9 +85,36 @@ void StorageManager::recover(main::ClientContext& clientContext, bool throwOnWal
 void StorageManager::createNodeTable(NodeTableCatalogEntry* entry) {
     tableNameCache[entry->getTableID()] = entry->getName();
     if (!entry->getStorage().empty()) {
-        // Create parquet-backed node table
-        tables[entry->getTableID()] =
-            std::make_unique<ParquetNodeTable>(this, entry, &memoryManager);
+        // Check if storage is Arrow backed
+        if (entry->getStorage().substr(0, 8) == "arrow://") {
+            // Extract Arrow ID from storage string
+            std::string arrowId = entry->getStorage().substr(8);
+
+            // Retrieve Arrow data from registry (as pointers to registry data)
+            ArrowSchemaWrapper* schema = nullptr;
+            std::vector<ArrowArrayWrapper>* arrays = nullptr;
+            if (!ArrowTableSupport::getArrowData(arrowId, schema, arrays)) {
+                throw common::RuntimeException("Failed to retrieve Arrow data for ID: " + arrowId);
+            }
+
+            // Create wrappers that reference the registry data (make shallow copies since
+            // ArrowNodeTable expects ownership but we don't want to take ownership from the
+            // registry)
+            ArrowSchemaWrapper schemaCopy = createShallowCopy(*schema);
+
+            std::vector<ArrowArrayWrapper> arraysCopy;
+            for (const auto& arr : *arrays) {
+                arraysCopy.push_back(createShallowCopy(arr));
+            }
+
+            // Create Arrow-backed node table
+            tables[entry->getTableID()] = std::make_unique<ArrowNodeTable>(this, entry,
+                &memoryManager, std::move(schemaCopy), std::move(arraysCopy), arrowId);
+        } else {
+            // Create parquet-backed node table
+            tables[entry->getTableID()] =
+                std::make_unique<ParquetNodeTable>(this, entry, &memoryManager);
+        }
     } else {
         // Create regular node table
         tables[entry->getTableID()] = std::make_unique<NodeTable>(this, entry, &memoryManager);

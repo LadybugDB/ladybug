@@ -1,5 +1,7 @@
 add_library(lbug_storage_store
         OBJECT
+        arrow_node_table.cpp
+        arrow_table_support.cpp
         chunked_node_group.cpp
         column.cpp
         column_chunk.cpp
