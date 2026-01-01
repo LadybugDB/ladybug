@@ -263,6 +263,27 @@ class StructTypeInfo;
 
 enum class TypeCategory : uint8_t { INTERNAL = 0, UDT = 1 };
 
+class LBUG_API ExtraTypeInfo {
+public:
+    virtual ~ExtraTypeInfo() = default;
+
+    void serialize(Serializer& serializer) const { serializeInternal(serializer); }
+
+    virtual bool containsAny() const = 0;
+
+    virtual bool operator==(const ExtraTypeInfo& other) const = 0;
+
+    virtual std::unique_ptr<ExtraTypeInfo> copy() const = 0;
+
+    template<class TARGET>
+    const TARGET* constPtrCast() const {
+        return common::ku_dynamic_cast<const TARGET*>(this);
+    }
+
+protected:
+    virtual void serializeInternal(Serializer& serializer) const = 0;
+};
+
 class LogicalType {
     friend struct LogicalTypeUtils;
     friend struct DecimalType;
@@ -386,27 +407,6 @@ private:
     PhysicalTypeID physicalType;
     std::unique_ptr<ExtraTypeInfo> extraTypeInfo;
     TypeCategory category = TypeCategory::INTERNAL;
-};
-
-class LBUG_API ExtraTypeInfo {
-public:
-    virtual ~ExtraTypeInfo() = default;
-
-    void serialize(Serializer& serializer) const { serializeInternal(serializer); }
-
-    virtual bool containsAny() const = 0;
-
-    virtual bool operator==(const ExtraTypeInfo& other) const = 0;
-
-    virtual std::unique_ptr<ExtraTypeInfo> copy() const = 0;
-
-    template<class TARGET>
-    const TARGET* constPtrCast() const {
-        return common::ku_dynamic_cast<const TARGET*>(this);
-    }
-
-protected:
-    virtual void serializeInternal(Serializer& serializer) const = 0;
 };
 
 class LBUG_API UDTTypeInfo : public ExtraTypeInfo {
