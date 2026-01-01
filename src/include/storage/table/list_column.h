@@ -3,6 +3,7 @@
 #include <cstddef>
 
 #include "column.h"
+#include "column_chunk_data.h"
 #include "common/types/types.h"
 
 // List is a nested data type which is stored as three chunks:

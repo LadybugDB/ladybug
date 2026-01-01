@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/serializer/buffer_writer.h"
+#include "common/serializer/serializer.h"
 #include "common/types/types.h"
 #include "common/vector/value_vector.h"
 #include "parquet_types.h"

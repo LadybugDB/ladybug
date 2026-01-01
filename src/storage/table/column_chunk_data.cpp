@@ -1081,6 +1081,14 @@ std::vector<std::unique_ptr<ColumnChunkData>> ColumnChunkData::split(bool target
     return newSegments;
 }
 
+void ColumnChunkData::setNullData(std::unique_ptr<NullChunkData> nullData_) {
+    nullData = std::move(nullData_);
+}
+
+std::unique_ptr<NullChunkData> ColumnChunkData::moveNullData() {
+    return std::move(nullData);
+}
+
 ColumnChunkData::~ColumnChunkData() = default;
 
 uint64_t ColumnChunkData::getMinimumSizeOnDisk() const {

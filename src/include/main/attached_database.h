@@ -4,6 +4,7 @@
 #include <string>
 
 #include "extension/catalog_extension.h"
+#include "storage/storage_manager.h"
 #include "transaction/transaction_manager.h"
 
 namespace duckdb {
@@ -11,10 +12,6 @@ class MaterializedQueryResult;
 }
 
 namespace lbug {
-namespace storage {
-class StorageManager;
-} // namespace storage
-
 namespace main {
 
 class AttachedDatabase {

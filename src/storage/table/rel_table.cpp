@@ -27,6 +27,24 @@ using namespace lbug::evaluator;
 namespace lbug {
 namespace storage {
 
+RelTableScanState::RelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
+    std::vector<common::ValueVector*> outputVectors,
+    std::shared_ptr<common::DataChunkState> outChunkState, bool randomLookup)
+    : TableScanState{nodeIDVector, std::move(outputVectors), std::move(outChunkState)},
+      direction{common::RelDataDirection::INVALID}, currBoundNodeIdx{0}, csrOffsetColumn{nullptr},
+      csrLengthColumn{nullptr}, randomLookup{randomLookup}, localTableScanState{nullptr} {
+    nodeGroupScanState = std::make_unique<CSRNodeGroupScanState>(mm, randomLookup);
+}
+
+RelTableScanState::RelTableScanState(common::ValueVector* nodeIDVector,
+    std::vector<common::ValueVector*> outputVectors,
+    std::shared_ptr<common::DataChunkState> outChunkState)
+    : TableScanState{nodeIDVector, std::move(outputVectors), std::move(outChunkState)},
+      direction{common::RelDataDirection::INVALID}, currBoundNodeIdx{0}, csrOffsetColumn{nullptr},
+      csrLengthColumn{nullptr}, randomLookup{false}, localTableScanState{nullptr} {
+    nodeGroupScanState = std::make_unique<CSRNodeGroupScanState>();
+}
+
 void RelTableScanState::setToTable(const Transaction* transaction, Table* table_,
     std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
     RelDataDirection direction_) {

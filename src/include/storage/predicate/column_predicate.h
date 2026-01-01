@@ -9,30 +9,6 @@ namespace storage {
 
 struct MergedColumnChunkStats;
 
-class ColumnPredicate;
-class LBUG_API ColumnPredicateSet {
-public:
-    ColumnPredicateSet() = default;
-    EXPLICIT_COPY_DEFAULT_MOVE(ColumnPredicateSet);
-
-    void addPredicate(std::unique_ptr<ColumnPredicate> predicate) {
-        predicates.push_back(std::move(predicate));
-    }
-    void tryAddPredicate(const binder::Expression& column, const binder::Expression& predicate);
-    bool isEmpty() const { return predicates.empty(); }
-
-    common::ZoneMapCheckResult checkZoneMap(const MergedColumnChunkStats& stats) const;
-
-    std::string toString() const;
-
-private:
-    ColumnPredicateSet(const ColumnPredicateSet& other)
-        : predicates{copyVector(other.predicates)} {}
-
-private:
-    std::vector<std::unique_ptr<ColumnPredicate>> predicates;
-};
-
 class LBUG_API ColumnPredicate {
 public:
     ColumnPredicate(std::string columnName, common::ExpressionType expressionType)
@@ -54,6 +30,29 @@ public:
 protected:
     std::string columnName;
     common::ExpressionType expressionType;
+};
+
+class LBUG_API ColumnPredicateSet {
+public:
+    ColumnPredicateSet() = default;
+    EXPLICIT_COPY_DEFAULT_MOVE(ColumnPredicateSet);
+
+    void addPredicate(std::unique_ptr<ColumnPredicate> predicate) {
+        predicates.push_back(std::move(predicate));
+    }
+    void tryAddPredicate(const binder::Expression& column, const binder::Expression& predicate);
+    bool isEmpty() const { return predicates.empty(); }
+
+    common::ZoneMapCheckResult checkZoneMap(const MergedColumnChunkStats& stats) const;
+
+    std::string toString() const;
+
+private:
+    ColumnPredicateSet(const ColumnPredicateSet& other)
+        : predicates{copyVector(other.predicates)} {}
+
+private:
+    std::vector<std::unique_ptr<ColumnPredicate>> predicates;
 };
 
 struct LBUG_API ColumnPredicateUtil {

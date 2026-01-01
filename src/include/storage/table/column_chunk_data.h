@@ -132,12 +132,12 @@ public:
     }
 
     virtual bool isNull(common::offset_t pos) const;
-    void setNullData(std::unique_ptr<NullChunkData> nullData_) { nullData = std::move(nullData_); }
+    void setNullData(std::unique_ptr<NullChunkData> nullData_);
     bool hasNullData() const { return nullData != nullptr; }
     NullChunkData* getNullData() { return nullData.get(); }
     const NullChunkData* getNullData() const { return nullData.get(); }
     std::optional<common::NullMask> getNullMask() const;
-    std::unique_ptr<NullChunkData> moveNullData() { return std::move(nullData); }
+    std::unique_ptr<NullChunkData> moveNullData();
 
     common::LogicalType& getDataType() { return dataType; }
     const common::LogicalType& getDataType() const { return dataType; }

@@ -29,24 +29,10 @@ struct RelTableScanState : TableScanState {
 
     RelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
-        std::shared_ptr<common::DataChunkState> outChunkState, bool randomLookup = false)
-        : TableScanState{nodeIDVector, std::move(outputVectors), std::move(outChunkState)},
-          direction{common::RelDataDirection::INVALID}, currBoundNodeIdx{0},
-          csrOffsetColumn{nullptr}, csrLengthColumn{nullptr}, randomLookup{randomLookup},
-          localTableScanState{nullptr} {
-        nodeGroupScanState = std::make_unique<CSRNodeGroupScanState>(mm, randomLookup);
-    }
-
-    // This is for local table scan state.
+        std::shared_ptr<common::DataChunkState> outChunkState, bool randomLookup = false);
     RelTableScanState(common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
-        std::shared_ptr<common::DataChunkState> outChunkState)
-        : TableScanState{nodeIDVector, std::move(outputVectors), std::move(outChunkState)},
-          direction{common::RelDataDirection::INVALID}, currBoundNodeIdx{0},
-          csrOffsetColumn{nullptr}, csrLengthColumn{nullptr}, randomLookup{false},
-          localTableScanState{nullptr} {
-        nodeGroupScanState = std::make_unique<CSRNodeGroupScanState>();
-    }
+        std::shared_ptr<common::DataChunkState> outChunkState);
 
     virtual void setToTable(const transaction::Transaction* transaction, Table* table_,
         std::vector<common::column_id_t> columnIDs_,
@@ -199,7 +185,7 @@ public:
         LocalTable* localTable) override;
     bool checkpoint(main::ClientContext*, catalog::TableCatalogEntry* tableEntry,
         PageAllocator& pageAllocator) override;
-    void rollbackCheckpoint() override {};
+    void rollbackCheckpoint() override{};
     void reclaimStorage(PageAllocator& pageAllocator) const override;
 
     common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) override;
