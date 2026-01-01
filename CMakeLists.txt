@@ -306,6 +306,7 @@ endif()
 
 option(AUTO_UPDATE_GRAMMAR "Automatically regenerate C++ grammar files on change." TRUE)
 option(BUILD_BENCHMARK "Build benchmarks." FALSE)
+option(BUILD_WAL_DUMP "Build WAL dump tool." FALSE)
 option(BUILD_EXTENSIONS "Semicolon-separated list of extensions to build." "")
 option(BUILD_EXAMPLES "Build examples." FALSE)
 option(BUILD_JAVA "Build Java API." FALSE)
