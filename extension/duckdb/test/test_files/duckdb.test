@@ -352,7 +352,7 @@ Attached database successfully.
 
 -CASE DuckDBRelTablePushdown
 -LOAD_DYNAMIC_EXTENSION duckdb
--STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb_with_knows.db' as ts (dbtype duckdb, skip_unsupported_table = true);
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb.db' as ts (dbtype duckdb, skip_unsupported_table = true);
 ---- 1
 Attached database successfully.
 -STATEMENT CREATE REL TABLE knows_rel (FROM ts.person TO ts.person) WITH (storage = 'ts.knows');
