@@ -1,5 +1,8 @@
 #pragma once
 
+#include <unordered_map>
+#include <utility>
+
 #include "binder/binder_scope.h"
 #include "binder/expression_binder.h"
 #include "binder/query/bound_regular_query.h"
@@ -285,14 +288,17 @@ public:
         QueryGraph& queryGraph);
     std::shared_ptr<NodeExpression> createQueryNode(const parser::NodePattern& nodePattern);
     LBUG_API std::shared_ptr<NodeExpression> createQueryNode(const std::string& parsedName,
-        const std::vector<catalog::TableCatalogEntry*>& entries);
+        const std::vector<catalog::TableCatalogEntry*>& entries,
+        const std::unordered_map<catalog::TableCatalogEntry*, std::string>& dbNames = {});
 
     /*** bind table entries ***/
-    std::vector<catalog::TableCatalogEntry*> bindNodeTableEntries(
-        const std::vector<std::string>& tableNames) const;
+    std::pair<std::vector<catalog::TableCatalogEntry*>,
+        std::unordered_map<catalog::TableCatalogEntry*, std::string>>
+    bindNodeTableEntries(const std::vector<std::string>& tableNames) const;
     std::vector<catalog::TableCatalogEntry*> bindRelGroupEntries(
         const std::vector<std::string>& tableNames) const;
-    catalog::TableCatalogEntry* bindNodeTableEntry(const std::string& name) const;
+    std::pair<catalog::TableCatalogEntry*, std::string> bindNodeTableEntry(
+        const std::string& name) const;
     std::vector<PropertyDefinition> bindRelPropertyDefinitions(const parser::CreateTableInfo& info);
 
     /*** validations ***/

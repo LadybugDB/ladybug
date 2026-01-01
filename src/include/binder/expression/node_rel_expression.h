@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_map>
+
 #include "common/case_insensitive_map.h"
 #include "expression.h"
 #include "property_expression.h"
@@ -75,6 +77,15 @@ public:
         return propertyDataExprs.at(propertyName);
     }
 
+    // Database names for attached databases
+    void setDbName(catalog::TableCatalogEntry* entry, std::string dbName) {
+        dbNames[entry] = std::move(dbName);
+    }
+    std::string getDbName(catalog::TableCatalogEntry* entry) const {
+        auto it = dbNames.find(entry);
+        return it != dbNames.end() ? it->second : "";
+    }
+
     std::string toStringInternal() const final { return variableName; }
 
 protected:
@@ -89,6 +100,8 @@ protected:
     std::shared_ptr<Expression> labelExpression;
     // Property data expressions specified by user in the form of "{propertyName : data}"
     common::case_insensitive_map_t<std::shared_ptr<Expression>> propertyDataExprs;
+    // Database names for table entries from attached databases
+    std::unordered_map<catalog::TableCatalogEntry*, std::string> dbNames;
 };
 
 } // namespace binder

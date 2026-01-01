@@ -366,13 +366,13 @@ std::shared_ptr<RelExpression> Binder::createRecursiveQueryRel(const parser::Rel
     auto prevScope = saveScope();
     scope.clear();
     // Bind intermediate node.
-    auto node = createQueryNode(recursivePatternInfo->nodeName, nodeEntries);
+    auto node = createQueryNode(recursivePatternInfo->nodeName, nodeEntries, {});
     addToScope(node->toString(), node);
     auto nodeFields = getBaseNodeStructFields();
     auto nodeProjectionList = bindRecursivePatternNodeProjectionList(*recursivePatternInfo, *node);
     bindProjectionListAsStructField(nodeProjectionList, nodeFields);
     node->setDataType(LogicalType::NODE(std::move(nodeFields)));
-    auto nodeCopy = createQueryNode(recursivePatternInfo->nodeName, nodeEntries);
+    auto nodeCopy = createQueryNode(recursivePatternInfo->nodeName, nodeEntries, {});
     // Bind intermediate rel
     auto rel = createNonRecursiveQueryRel(recursivePatternInfo->relName, entries,
         nullptr /* srcNode */, nullptr /* dstNode */, directionType);
@@ -571,7 +571,7 @@ std::shared_ptr<NodeExpression> Binder::bindQueryNode(const NodePattern& nodePat
             // We bind to a single node with both labels
             if (!nodePattern.getTableNames().empty()) {
                 auto otherNodeEntries = bindNodeTableEntries(nodePattern.getTableNames());
-                queryNode->addEntries(otherNodeEntries);
+                queryNode->addEntries(otherNodeEntries.first);
             }
         }
     } else {
@@ -592,11 +592,14 @@ std::shared_ptr<NodeExpression> Binder::bindQueryNode(const NodePattern& nodePat
 
 std::shared_ptr<NodeExpression> Binder::createQueryNode(const NodePattern& nodePattern) {
     auto parsedName = nodePattern.getVariableName();
-    return createQueryNode(parsedName, bindNodeTableEntries(nodePattern.getTableNames()));
+    auto [entries, dbNames] = bindNodeTableEntries(nodePattern.getTableNames());
+    auto node = createQueryNode(parsedName, entries, dbNames);
+    return node;
 }
 
 std::shared_ptr<NodeExpression> Binder::createQueryNode(const std::string& parsedName,
-    const std::vector<TableCatalogEntry*>& entries) {
+    const std::vector<TableCatalogEntry*>& entries,
+    const std::unordered_map<TableCatalogEntry*, std::string>& dbNames) {
     auto uniqueName = getUniqueExpressionName(parsedName);
     // Bind properties.
     auto structFields = getBaseNodeStructFields();
@@ -611,6 +614,9 @@ std::shared_ptr<NodeExpression> Binder::createQueryNode(const std::string& parse
     queryNode->setAlias(parsedName);
     for (auto& property : propertyExpressions) {
         queryNode->addPropertyExpression(property);
+    }
+    for (auto& [entry, dbName] : dbNames) {
+        queryNode->setDbName(entry, dbName);
     }
     // Bind internal expressions
     queryNode->setInternalID(
@@ -632,12 +638,13 @@ static std::vector<TableCatalogEntry*> sortEntries(const table_catalog_entry_set
     return entries;
 }
 
-std::vector<TableCatalogEntry*> Binder::bindNodeTableEntries(
-    const std::vector<std::string>& tableNames) const {
+std::pair<std::vector<TableCatalogEntry*>, std::unordered_map<TableCatalogEntry*, std::string>>
+Binder::bindNodeTableEntries(const std::vector<std::string>& tableNames) const {
     auto transaction = transaction::Transaction::Get(*clientContext);
     auto catalog = Catalog::Get(*clientContext);
     auto useInternal = clientContext->useInternalCatalogEntry();
     table_catalog_entry_set_t entrySet;
+    std::unordered_map<TableCatalogEntry*, std::string> dbNames;
     if (tableNames.empty()) { // Rewrite as all node tables in database.
         for (auto entry : catalog->getNodeTableEntries(transaction, useInternal)) {
             entrySet.insert(entry);
@@ -648,24 +655,29 @@ std::vector<TableCatalogEntry*> Binder::bindNodeTableEntries(
             for (auto entry : attachedCatalog->getTableEntries(transaction, useInternal)) {
                 if (entry->getType() == CatalogEntryType::FOREIGN_TABLE_ENTRY) {
                     entrySet.insert(entry);
+                    dbNames[entry] = attachedDB->getDBName();
                 }
             }
         }
     } else {
         for (auto& name : tableNames) {
-            auto entry = bindNodeTableEntry(name);
+            auto [entry, dbName] = bindNodeTableEntry(name);
             if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY &&
                 entry->getType() != CatalogEntryType::FOREIGN_TABLE_ENTRY) {
                 throw BinderException(
                     stringFormat("Cannot bind {} as a node pattern label.", entry->getName()));
             }
             entrySet.insert(entry);
+            if (!dbName.empty()) {
+                dbNames[entry] = dbName;
+            }
         }
     }
-    return sortEntries(entrySet);
+    return {sortEntries(entrySet), std::move(dbNames)};
 }
 
-TableCatalogEntry* Binder::bindNodeTableEntry(const std::string& name) const {
+std::pair<TableCatalogEntry*, std::string> Binder::bindNodeTableEntry(
+    const std::string& name) const {
     auto transaction = transaction::Transaction::Get(*clientContext);
     auto catalog = Catalog::Get(*clientContext);
     auto useInternal = clientContext->useInternalCatalogEntry();
@@ -689,12 +701,12 @@ TableCatalogEntry* Binder::bindNodeTableEntry(const std::string& name) const {
             throw BinderException(stringFormat("Table {} does not exist in attached database {}.",
                 tableName, dbName));
         }
-        return attachedCatalog->getTableCatalogEntry(transaction, tableName, useInternal);
+        return {attachedCatalog->getTableCatalogEntry(transaction, tableName, useInternal), dbName};
     } else {
         // Unqualified name: only search main catalog
         // Foreign tables require qualified names (db.table) to avoid ambiguity
         if (catalog->containsTable(transaction, name, useInternal)) {
-            return catalog->getTableCatalogEntry(transaction, name, useInternal);
+            return {catalog->getTableCatalogEntry(transaction, name, useInternal), ""};
         }
         throw BinderException(stringFormat("Table {} does not exist.", name));
     }

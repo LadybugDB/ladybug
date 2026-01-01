@@ -280,9 +280,9 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     node_table_id_pair_set_t nodePairsSet;
     std::vector<NodeTableIDPair> nodePairs;
     for (auto& [srcTableName, dstTableName] : extraInfo.srcDstTablePairs) {
-        auto srcEntry = bindNodeTableEntry(srcTableName);
+        auto [srcEntry, srcDbName] = bindNodeTableEntry(srcTableName);
         validateNodeTableType(srcEntry);
-        auto dstEntry = bindNodeTableEntry(dstTableName);
+        auto [dstEntry, dstDbName] = bindNodeTableEntry(dstTableName);
         validateNodeTableType(dstEntry);
 
         // For foreign-backed rel tables, validate that FROM and TO are foreign tables
@@ -592,8 +592,8 @@ std::unique_ptr<BoundStatement> Binder::bindAlterFromToConnection(
     auto info = alter.getInfo();
     auto extraInfo = info->extraInfo->constPtrCast<ExtraAddFromToConnection>();
     auto tableName = info->tableName;
-    auto srcTableEntry = bindNodeTableEntry(extraInfo->srcTableName);
-    auto dstTableEntry = bindNodeTableEntry(extraInfo->dstTableName);
+    auto [srcTableEntry, srcDbName] = bindNodeTableEntry(extraInfo->srcTableName);
+    auto [dstTableEntry, dstDbName] = bindNodeTableEntry(extraInfo->dstTableName);
     auto srcTableID = srcTableEntry->getTableID();
     auto dstTableID = dstTableEntry->getTableID();
     auto boundExtraInfo = std::make_unique<BoundExtraAlterFromToConnection>(srcTableID, dstTableID);

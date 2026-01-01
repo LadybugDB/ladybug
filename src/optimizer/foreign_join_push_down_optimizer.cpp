@@ -65,28 +65,25 @@ static std::string getNodeForeignDatabaseName(const NodeExpression* node,
     if (!entry) {
         return "";
     }
+    std::string dbName;
     if (entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY) {
         auto nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
         if (!nodeEntry) {
             return "";
         }
-        try {
-            return nodeEntry->getForeignDatabaseName();
-        } catch (...) {
-            return "";
-        }
+        dbName = nodeEntry->getForeignDatabaseName();
     } else if (entry->getType() == CatalogEntryType::FOREIGN_TABLE_ENTRY) {
-        // For attached DuckDB, the db name is the attached name, e.g. "wd"
-        // Since variable name doesn't have it, hardcode for now
-        std::string dbName = "wd";
-        auto dbManager = main::DatabaseManager::Get(*context);
-        auto attachedDB = dbManager->getAttachedDatabase(dbName);
-        if (!attachedDB) {
-            return "";
-        }
-        return stringFormat("{}({})", dbName, attachedDB->getDBType());
+        dbName = node->getDbName(entry);
     }
-    return "";
+    if (dbName.empty()) {
+        return "";
+    }
+    auto dbManager = main::DatabaseManager::Get(*context);
+    auto attachedDB = dbManager->getAttachedDatabase(dbName);
+    if (!attachedDB) {
+        return "";
+    }
+    return stringFormat("{}({})", dbName, attachedDB->getDBType());
 }
 
 // Helper to get foreign database name from a rel group entry
