@@ -45,11 +45,8 @@ std::string NodeTableCatalogEntry::toCypher(const ToCypherInfo& /*info*/) const 
         propertyCollection.toCypher(), primaryKeyName);
 }
 
-function::TableFunction NodeTableCatalogEntry::getScanFunction() {
-    if (scanFunction.has_value()) {
-        return *scanFunction;
-    }
-    return TableCatalogEntry::getScanFunction();
+std::optional<function::TableFunction> NodeTableCatalogEntry::getScanFunction() const {
+    return scanFunction;
 }
 
 std::unique_ptr<binder::BoundTableScanInfo> NodeTableCatalogEntry::getBoundScanInfo(

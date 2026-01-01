@@ -192,7 +192,9 @@ static TableFunction getObjectScanFunc(const std::string& dbName, const std::str
     auto attachedCatalog = attachedDB->getCatalog();
     auto entry = attachedCatalog->getTableCatalogEntry(
         transaction::Transaction::Get(*clientContext), tableName);
-    return entry->ptrCast<TableCatalogEntry>()->getScanFunction();
+    auto scanFunc = entry->ptrCast<TableCatalogEntry>()->getScanFunction();
+    KU_ASSERT(scanFunc.has_value());
+    return *scanFunc;
 }
 
 BoundTableScanInfo bindTableScanSourceInfo(Binder& binder, TableFunction func,
@@ -303,7 +305,8 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindTableFuncScanSource(
     auto boundTableFunc = bindTableFunc(parsedFuncExpression.getFunctionName(),
         *tableFuncScanSource->functionExpression, {} /* yieldVariables */);
     auto& tableFunc = boundTableFunc.func;
-    auto info = bindTableScanSourceInfo(*this, tableFunc, tableFunc.name,
+    KU_ASSERT(tableFunc.has_value());
+    auto info = bindTableScanSourceInfo(*this, *tableFunc, tableFunc->name,
         std::move(boundTableFunc.bindData), columnNames, columnTypes);
     return std::make_unique<BoundTableScanSource>(ScanSourceType::OBJECT, std::move(info));
 }

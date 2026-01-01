@@ -7,10 +7,10 @@ namespace lbug {
 namespace binder {
 
 struct BoundTableScanInfo {
-    function::TableFunction func;
+    std::optional<function::TableFunction> func;
     std::unique_ptr<function::TableFuncBindData> bindData;
 
-    BoundTableScanInfo(function::TableFunction func,
+    BoundTableScanInfo(std::optional<function::TableFunction> func,
         std::unique_ptr<function::TableFuncBindData> bindData)
         : func{std::move(func)}, bindData{std::move(bindData)} {}
     EXPLICIT_COPY_DEFAULT_MOVE(BoundTableScanInfo);

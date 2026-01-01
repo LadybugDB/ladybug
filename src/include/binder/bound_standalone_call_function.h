@@ -15,7 +15,10 @@ public:
         : BoundStatement{statementType, BoundStatementResult::createEmptyResult()},
           info{std::move(info)} {}
 
-    const function::TableFunction& getTableFunction() const { return info.func; }
+    const function::TableFunction& getTableFunction() const {
+        KU_ASSERT(info.func.has_value());
+        return *info.func;
+    }
 
     const function::TableFuncBindData* getBindData() const { return info.bindData.get(); }
 

@@ -63,7 +63,7 @@ public:
 
     common::ExtendDirection getStorageDirection() const { return storageDirection; }
     const std::string& getStorage() const { return storage; }
-    const std::optional<function::TableFunction>& getScanFunction() const { return scanFunction; }
+    std::optional<function::TableFunction> getScanFunction() const override { return scanFunction; }
     const std::optional<std::shared_ptr<function::TableFuncBindData>>& getScanBindData() const {
         return scanBindData;
     }

@@ -42,7 +42,7 @@ public:
     std::string getComment() const { return comment; }
     void setComment(std::string newComment) { comment = std::move(newComment); }
 
-    virtual function::TableFunction getScanFunction() { KU_UNREACHABLE; }
+    virtual std::optional<function::TableFunction> getScanFunction() const { KU_UNREACHABLE; }
 
     virtual std::unique_ptr<binder::BoundTableScanInfo> getBoundScanInfo(
         [[maybe_unused]] main::ClientContext* context,

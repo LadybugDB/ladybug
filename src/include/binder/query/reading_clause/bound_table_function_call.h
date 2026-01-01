@@ -14,7 +14,10 @@ public:
     explicit BoundTableFunctionCall(BoundTableScanInfo info)
         : BoundReadingClause{clauseType_}, info{std::move(info)} {}
 
-    const function::TableFunction& getTableFunc() const { return info.func; }
+    const function::TableFunction& getTableFunc() const {
+        KU_ASSERT(info.func.has_value());
+        return *info.func;
+    }
     const function::TableFuncBindData* getBindData() const { return info.bindData.get(); }
 
 private:

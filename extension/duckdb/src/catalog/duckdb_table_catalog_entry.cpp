@@ -9,7 +9,7 @@ namespace lbug {
 namespace catalog {
 
 DuckDBTableCatalogEntry::DuckDBTableCatalogEntry(std::string name,
-    function::TableFunction scanFunction,
+    std::optional<function::TableFunction> scanFunction,
     std::shared_ptr<duckdb_extension::DuckDBTableScanInfo> scanInfo)
     : TableCatalogEntry{CatalogEntryType::FOREIGN_TABLE_ENTRY, std::move(name)},
       scanFunction{std::move(scanFunction)}, scanInfo{std::move(scanInfo)} {}

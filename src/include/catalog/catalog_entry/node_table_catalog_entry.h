@@ -56,9 +56,7 @@ public:
         return getProperty(primaryKeyName);
     }
     const std::string& getStorage() const { return storage; }
-    const std::optional<function::TableFunction>& getScanFunctionOpt() const {
-        return scanFunction;
-    }
+    std::optional<function::TableFunction> getScanFunction() const override;
     const CreateBindDataFunc& getCreateBindDataFunc() const { return createBindDataFunc; }
     const std::string& getForeignDatabaseName() const { return foreignDatabaseName; }
 
@@ -66,7 +64,6 @@ public:
     TableCatalogEntry* getReferencedEntry() const { return referencedEntry; }
     void setForeignDatabaseName(std::string s) { foreignDatabaseName = std::move(s); }
 
-    function::TableFunction getScanFunction() override;
     std::unique_ptr<binder::BoundTableScanInfo> getBoundScanInfo(main::ClientContext* context,
         const std::string& nodeUniqueName = "") override;
 
