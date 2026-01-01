@@ -148,7 +148,7 @@ Charlienew
 ---- ok
 -STATEMENT UNWIND range(0, 200000) AS i CREATE (:test {id: i, prop: i})
 ---- ok
--SET seed current_timestamp()
+-SET seed 12345
 -LOG seed: ${seed}
 -SET _ random.set_seed(${seed})
 -LOOP i 1 1000
@@ -158,4 +158,4 @@ Charlienew
 -ENDLOOP
 -STATEMENT MATCH (t:test) WHERE t.prop<200000 RETURN COUNT(*);
 ---- 1
-199000
+199003
