@@ -349,3 +349,19 @@ Attached database successfully.
 3
 -STATEMENT DETACH ts;
 ---- ok
+
+-CASE DuckDBRelTablePushdown
+-LOAD_DYNAMIC_EXTENSION duckdb
+-STATEMENT ATTACH '${LBUG_ROOT_DIRECTORY}/dataset/databases/duckdb_database/tinysnb_with_knows.db' as ts (dbtype duckdb, skip_unsupported_table = true);
+---- 1
+Attached database successfully.
+-STATEMENT CREATE REL TABLE knows_rel (FROM ts.person TO ts.person) WITH (storage = 'ts.knows');
+---- 1
+Table knows_rel has been created.
+-STATEMENT EXPLAIN MATCH (a:ts.person)-[b:knows_rel]->(c:ts.person) RETURN count(*);
+---- ok
+-STATEMENT MATCH (a:ts.person)-[b:knows_rel]->(c:ts.person) RETURN count(*);
+---- 1
+6
+-STATEMENT DETACH ts;
+---- ok
