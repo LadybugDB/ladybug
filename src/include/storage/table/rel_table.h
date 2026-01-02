@@ -185,7 +185,7 @@ public:
         LocalTable* localTable) override;
     bool checkpoint(main::ClientContext*, catalog::TableCatalogEntry* tableEntry,
         PageAllocator& pageAllocator) override;
-    void rollbackCheckpoint() override{};
+    void rollbackCheckpoint() override {};
     void reclaimStorage(PageAllocator& pageAllocator) const override;
 
     common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) override;
