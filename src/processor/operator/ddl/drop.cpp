@@ -5,7 +5,10 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/binder.h"
 #include "common/string_format.h"
+#include "common/string_utils.h"
 #include "main/client_context.h"
+#include "main/database.h"
+#include "main/database_manager.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "transaction/transaction.h"
@@ -27,6 +30,9 @@ void Drop::executeInternal(ExecutionContext* context) {
     } break;
     case DropType::MACRO: {
         dropMacro(clientContext);
+    } break;
+    case DropType::GRAPH: {
+        dropGraph(clientContext);
     } break;
     default:
         KU_UNREACHABLE;
@@ -108,6 +114,37 @@ void Drop::dropMacro(const main::ClientContext* context) {
     handleMacroExistence(context);
     catalog->dropMacro(transaction, dropInfo.name);
     appendMessage(stringFormat("Macro {} has been dropped.", dropInfo.name), memoryManager);
+}
+
+void Drop::dropGraph(const main::ClientContext* context) {
+    auto dbManager = main::DatabaseManager::Get(*context);
+    auto transaction = transaction::Transaction::Get(*context);
+    auto memoryManager = storage::MemoryManager::Get(*context);
+
+    if (!dbManager->hasGraph(dropInfo.name)) {
+        auto message = stringFormat("Graph {} does not exist.", dropInfo.name);
+        switch (dropInfo.conflictAction) {
+        case ConflictAction::ON_CONFLICT_DO_NOTHING: {
+            appendMessage(message, memoryManager);
+            return;
+        }
+        case ConflictAction::ON_CONFLICT_THROW: {
+            throw BinderException(message);
+        }
+        default:
+            KU_UNREACHABLE;
+        }
+    }
+
+    // Check if graph is the default graph
+    if (dbManager->hasDefaultGraph() && StringUtils::getUpper(dbManager->getDefaultGraphName()) ==
+                                            StringUtils::getUpper(dropInfo.name)) {
+        throw BinderException(
+            stringFormat("Cannot drop graph {} because it is currently in use.", dropInfo.name));
+    }
+
+    dbManager->dropGraph(dropInfo.name);
+    appendMessage(stringFormat("Graph {} has been dropped.", dropInfo.name), memoryManager);
 }
 
 void Drop::handleMacroExistence(const main::ClientContext* context) {

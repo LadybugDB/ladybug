@@ -199,6 +199,8 @@ DropType transformDropType(CypherParser::KU_DropContext& ctx) {
         return DropType::SEQUENCE;
     } else if (ctx.MACRO()) {
         return DropType::MACRO;
+    } else if (ctx.GRAPH()) {
+        return DropType::GRAPH;
     } else {
         KU_UNREACHABLE;
     }

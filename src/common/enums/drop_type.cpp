@@ -11,6 +11,10 @@ std::string DropTypeUtils::toString(DropType type) {
         return "Table";
     case DropType::SEQUENCE:
         return "Sequence";
+    case DropType::MACRO:
+        return "Macro";
+    case DropType::GRAPH:
+        return "Graph";
     default:
         KU_UNREACHABLE;
     }

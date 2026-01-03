@@ -19,7 +19,9 @@ public:
     std::vector<AttachedDatabase*> getAttachedDatabases() const;
 
     void createGraph(const std::string& graphName);
+    void dropGraph(const std::string& graphName);
     void setDefaultGraph(const std::string& graphName);
+    void clearDefaultGraph();
     bool hasGraph(const std::string& graphName);
     catalog::Catalog* getGraphCatalog(const std::string& graphName);
     catalog::Catalog* getDefaultGraphCatalog() const;

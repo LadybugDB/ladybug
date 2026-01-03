@@ -983,6 +983,7 @@ public:
     antlr4::tree::TerminalNode *TABLE();
     antlr4::tree::TerminalNode *SEQUENCE();
     antlr4::tree::TerminalNode *MACRO();
+    antlr4::tree::TerminalNode *GRAPH();
     KU_IfExistsContext *kU_IfExists();
 
    

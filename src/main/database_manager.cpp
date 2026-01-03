@@ -1,6 +1,7 @@
 #include "main/database_manager.h"
 
 #include "catalog/catalog.h"
+#include "common/exception/binder.h"
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
 #include "main/client_context.h"
@@ -101,6 +102,22 @@ void DatabaseManager::createGraph(const std::string& graphName) {
     }
 }
 
+void DatabaseManager::dropGraph(const std::string& graphName) {
+    auto upperCaseName = StringUtils::getUpper(graphName);
+    for (auto it = graphs.begin(); it != graphs.end(); ++it) {
+        auto graphNameUpper = StringUtils::getUpper((*it)->getCatalogName());
+        if (graphNameUpper == upperCaseName) {
+            // Check if this is the default graph
+            if (defaultGraph != "" && StringUtils::getUpper(defaultGraph) == upperCaseName) {
+                defaultGraph = "";
+            }
+            graphs.erase(it);
+            return;
+        }
+    }
+    throw RuntimeException{stringFormat("No graph named {}.", graphName)};
+}
+
 void DatabaseManager::setDefaultGraph(const std::string& graphName) {
     auto upperCaseName = StringUtils::getUpper(graphName);
     for (auto& graph : graphs) {
@@ -110,7 +127,7 @@ void DatabaseManager::setDefaultGraph(const std::string& graphName) {
             return;
         }
     }
-    throw RuntimeException{stringFormat("No graph named {}.", graphName)};
+    throw BinderException{stringFormat("No graph named {}.", graphName)};
 }
 
 bool DatabaseManager::hasGraph(const std::string& graphName) {
@@ -132,7 +149,7 @@ catalog::Catalog* DatabaseManager::getGraphCatalog(const std::string& graphName)
             return graph.get();
         }
     }
-    throw RuntimeException{stringFormat("No graph named {}.", graphName)};
+    throw BinderException{stringFormat("No graph named {}.", graphName)};
 }
 
 catalog::Catalog* DatabaseManager::getDefaultGraphCatalog() const {

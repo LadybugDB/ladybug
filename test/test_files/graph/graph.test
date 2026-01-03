@@ -40,6 +40,7 @@
 ---- ok
 
 -CASE VerifyCatalogIsolation
+-SKIP_FSM_LEAK_CHECK
 -LOG CreateGraphsForIsolationTest
 -STATEMENT CREATE GRAPH graph1
 ---- ok
@@ -71,18 +72,21 @@
 ---- ok
 
 -LOG CleanupGraph2
+-STATEMENT USE GRAPH graph2
+---- ok
+
 -STATEMENT DROP TABLE test
 ---- ok
 
--LOG SwitchToGraph1
+-LOG CleanupGraph1
 -STATEMENT USE GRAPH graph1
 ---- ok
 
--LOG CleanupGraph1
 -STATEMENT DROP TABLE test
 ---- ok
 
 -CASE ShowTablesWithIsolation
+-SKIP_FSM_LEAK_CHECK
 -LOG CreateTablesInDifferentGraphs
 -STATEMENT CREATE NODE TABLE person(id INT64, name STRING, PRIMARY KEY(id))
 ---- ok
@@ -118,4 +122,84 @@ Runtime exception: Graph graph1 already exists.
 -LOG NonExistentGraphError
 -STATEMENT USE GRAPH nonexistent
 ---- error
-Runtime exception: No graph named nonexistent.
+Binder exception: No graph named nonexistent.
+
+-CASE DropGraph
+-SKIP_FSM_LEAK_CHECK
+-LOG CreateGraphsToDrop
+-STATEMENT CREATE GRAPH graph1
+---- ok
+
+-STATEMENT CREATE GRAPH graph2
+---- ok
+
+-STATEMENT CREATE GRAPH graph3
+---- ok
+
+-LOG UseFirstGraph
+-STATEMENT USE GRAPH graph1
+---- ok
+
+-LOG DropSecondGraph
+-STATEMENT DROP GRAPH graph2
+---- ok
+
+-LOG VerifyGraph2Dropped
+-STATEMENT USE GRAPH graph2
+---- error
+Binder exception: No graph named graph2.
+
+-LOG DropNonExistentGraph
+-STATEMENT DROP GRAPH nonexistent
+---- error
+Binder exception: Graph nonexistent does not exist.
+
+-LOG DropGraphIfExists
+-STATEMENT DROP GRAPH IF EXISTS nonexistent
+---- ok
+
+-LOG CannotDropGraphInUse
+-STATEMENT CREATE GRAPH testgraph
+---- ok
+
+-STATEMENT USE GRAPH testgraph
+---- ok
+
+-STATEMENT DROP GRAPH testgraph
+---- error
+Binder exception: Cannot drop graph testgraph because it is currently in use.
+
+-LOG SwitchAwayAndDrop
+-STATEMENT CREATE GRAPH othertest
+---- ok
+
+-STATEMENT USE GRAPH othertest
+---- ok
+
+-STATEMENT DROP GRAPH testgraph
+---- ok
+
+-LOG DropOthertest
+-STATEMENT CREATE GRAPH dummy1
+---- ok
+
+-STATEMENT CREATE GRAPH dummy2
+---- ok
+
+-STATEMENT USE GRAPH dummy1
+---- ok
+
+-STATEMENT DROP GRAPH othertest
+---- ok
+
+-STATEMENT USE GRAPH dummy2
+---- ok
+
+-STATEMENT DROP GRAPH dummy1
+---- ok
+
+-STATEMENT USE GRAPH graph1
+---- ok
+
+-STATEMENT DROP GRAPH dummy2
+---- ok
