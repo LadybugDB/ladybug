@@ -136,11 +136,9 @@ void Drop::dropGraph(const main::ClientContext* context) {
         }
     }
 
-    // Check if graph is the default graph
     if (dbManager->hasDefaultGraph() && StringUtils::getUpper(dbManager->getDefaultGraphName()) ==
                                             StringUtils::getUpper(dropInfo.name)) {
-        throw BinderException(
-            stringFormat("Cannot drop graph {} because it is currently in use.", dropInfo.name));
+        dbManager->clearDefaultGraph();
     }
 
     dbManager->dropGraph(dropInfo.name);

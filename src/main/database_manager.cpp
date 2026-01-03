@@ -130,6 +130,10 @@ void DatabaseManager::setDefaultGraph(const std::string& graphName) {
     throw BinderException{stringFormat("No graph named {}.", graphName)};
 }
 
+void DatabaseManager::clearDefaultGraph() {
+    defaultGraph = "local";
+}
+
 bool DatabaseManager::hasGraph(const std::string& graphName) {
     auto upperCaseName = StringUtils::getUpper(graphName);
     for (auto& graph : graphs) {
