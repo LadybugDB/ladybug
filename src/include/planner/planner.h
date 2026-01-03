@@ -86,6 +86,8 @@ public:
     LogicalPlan planAttachDatabase(const binder::BoundStatement& statement);
     LogicalPlan planDetachDatabase(const binder::BoundStatement& statement);
     LogicalPlan planUseDatabase(const binder::BoundStatement& statement);
+    LogicalPlan planCreateGraph(const binder::BoundStatement& statement);
+    LogicalPlan planUseGraph(const binder::BoundStatement& statement);
     LogicalPlan planExtensionClause(const binder::BoundStatement& statement);
 
     // Plan copy.

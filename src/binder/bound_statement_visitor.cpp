@@ -67,6 +67,12 @@ void BoundStatementVisitor::visit(const BoundStatement& statement) {
     case StatementType::USE_DATABASE: {
         visitUseDatabase(statement);
     } break;
+    case StatementType::CREATE_GRAPH: {
+        visitCreateGraph(statement);
+    } break;
+    case StatementType::USE_GRAPH: {
+        visitUseGraph(statement);
+    } break;
     case StatementType::STANDALONE_CALL_FUNCTION: {
         visitStandaloneCallFunction(statement);
     } break;

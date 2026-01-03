@@ -150,6 +150,8 @@ public:
     static std::unique_ptr<BoundStatement> bindAttachDatabase(const parser::Statement& statement);
     static std::unique_ptr<BoundStatement> bindDetachDatabase(const parser::Statement& statement);
     static std::unique_ptr<BoundStatement> bindUseDatabase(const parser::Statement& statement);
+    static std::unique_ptr<BoundStatement> bindCreateGraph(const parser::Statement& statement);
+    std::unique_ptr<BoundStatement> bindUseGraph(const parser::Statement& statement);
     std::unique_ptr<BoundStatement> bindExtensionClause(const parser::Statement& statement);
 
     /*** bind scan source ***/

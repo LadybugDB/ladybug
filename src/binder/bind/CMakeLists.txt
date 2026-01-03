@@ -12,6 +12,7 @@ add_library(
         bind_explain.cpp
         bind_extension_clause.cpp
         bind_file_scan.cpp
+        bind_graph.cpp
         bind_graph_pattern.cpp
         bind_projection_clause.cpp
         bind_query.cpp

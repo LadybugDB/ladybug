@@ -26,6 +26,8 @@ enum class StatementType : uint8_t {
     CREATE_SEQUENCE = 37,
     CREATE_TYPE = 39,
     EXTENSION_CLAUSE = 40,
+    CREATE_GRAPH = 41,
+    USE_GRAPH = 42,
 };
 
 } // namespace common

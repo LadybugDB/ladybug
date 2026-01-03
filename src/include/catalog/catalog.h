@@ -206,6 +206,9 @@ public:
     bool changedSinceLastCheckpoint() const { return version != 0; }
     void resetVersion() { version = 0; }
 
+    void setCatalogName(const std::string& name) { catalogName = name; }
+    std::string getCatalogName() const { return catalogName; }
+
     void serialize(common::Serializer& ser) const;
     void deserialize(common::Deserializer& deSer);
 
@@ -247,6 +250,7 @@ private:
     // incremented whenever a change is made to the catalog
     // reset to 0 at the end of each checkpoint
     uint64_t version;
+    std::string catalogName;
 };
 
 } // namespace catalog

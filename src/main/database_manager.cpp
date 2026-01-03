@@ -1,5 +1,6 @@
 #include "main/database_manager.h"
 
+#include "catalog/catalog.h"
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
 #include "main/client_context.h"
@@ -82,6 +83,70 @@ void DatabaseManager::invalidateCache() {
 
 DatabaseManager* DatabaseManager::Get(const ClientContext& context) {
     return context.getDatabase()->getDatabaseManager();
+}
+
+void DatabaseManager::createGraph(const std::string& graphName) {
+    auto upperCaseName = StringUtils::getUpper(graphName);
+    for (auto& graph : graphs) {
+        auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
+        if (graphNameUpper == upperCaseName) {
+            throw RuntimeException{stringFormat("Graph {} already exists.", graphName)};
+        }
+    }
+    auto catalog = std::make_unique<catalog::Catalog>();
+    catalog->setCatalogName(graphName);
+    graphs.push_back(std::move(catalog));
+    if (defaultGraph == "") {
+        defaultGraph = graphName;
+    }
+}
+
+void DatabaseManager::setDefaultGraph(const std::string& graphName) {
+    auto upperCaseName = StringUtils::getUpper(graphName);
+    for (auto& graph : graphs) {
+        auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
+        if (graphNameUpper == upperCaseName) {
+            defaultGraph = graphName;
+            return;
+        }
+    }
+    throw RuntimeException{stringFormat("No graph named {}.", graphName)};
+}
+
+bool DatabaseManager::hasGraph(const std::string& graphName) {
+    auto upperCaseName = StringUtils::getUpper(graphName);
+    for (auto& graph : graphs) {
+        auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
+        if (graphNameUpper == upperCaseName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+catalog::Catalog* DatabaseManager::getGraphCatalog(const std::string& graphName) {
+    auto upperCaseName = StringUtils::getUpper(graphName);
+    for (auto& graph : graphs) {
+        auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
+        if (graphNameUpper == upperCaseName) {
+            return graph.get();
+        }
+    }
+    throw RuntimeException{stringFormat("No graph named {}.", graphName)};
+}
+
+catalog::Catalog* DatabaseManager::getDefaultGraphCatalog() const {
+    if (defaultGraph == "") {
+        return nullptr;
+    }
+    auto upperCaseName = StringUtils::getUpper(defaultGraph);
+    for (auto& graph : graphs) {
+        auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
+        if (graphNameUpper == upperCaseName) {
+            return graph.get();
+        }
+    }
+    return nullptr;
 }
 
 } // namespace main

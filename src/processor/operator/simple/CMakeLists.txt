@@ -7,6 +7,7 @@ add_library(lbug_processor_operator_simple
         import_db.cpp
         export_db.cpp
         use_database.cpp
+        use_graph.cpp
         uninstall_extension.cpp)
 
 set(ALL_OBJECT_FILES

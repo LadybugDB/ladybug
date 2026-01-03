@@ -6,6 +6,7 @@
 #include "common/exception/parser.h"
 #include "extension/transformer_extension.h"
 #include "parser/explain_statement.h"
+#include "parser/graph_statement.h"
 #include "parser/query/regular_query.h" // IWYU pragma: keep (fixes a forward declaration error)
 
 using namespace lbug::common;
@@ -78,6 +79,10 @@ std::unique_ptr<Statement> Transformer::transformStatement(CypherParser::OC_Stat
         return transformDetachDatabase(*ctx.kU_DetachDatabase());
     } else if (ctx.kU_UseDatabase()) {
         return transformUseDatabase(*ctx.kU_UseDatabase());
+    } else if (ctx.kU_CreateGraph()) {
+        return transformCreateGraph(*ctx.kU_CreateGraph());
+    } else if (ctx.kU_UseGraph()) {
+        return transformUseGraph(*ctx.kU_UseGraph());
     } else {
         KU_UNREACHABLE;
     }

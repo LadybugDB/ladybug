@@ -274,7 +274,9 @@ oC_Statement
         | kU_ImportDatabase
         | kU_AttachDatabase
         | kU_DetachDatabase
-        | kU_UseDatabase;
+        | kU_UseDatabase
+        | kU_CreateGraph
+        | kU_UseGraph;
 
 kU_CopyFrom
     : COPY SP oC_SchemaName kU_ColumnNames? SP FROM SP kU_ScanSource ( SP? '(' SP? kU_Options SP? ')' )? ;
@@ -316,6 +318,12 @@ kU_DetachDatabase
 
 kU_UseDatabase
     : USE SP oC_SchemaName;
+
+kU_CreateGraph
+    : CREATE SP GRAPH SP oC_SchemaName;
+
+kU_UseGraph
+    : USE SP GRAPH SP oC_SchemaName;
 
 kU_StandaloneCall
     : CALL SP oC_SymbolicName SP? '=' SP? oC_Expression

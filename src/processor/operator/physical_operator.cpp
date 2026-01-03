@@ -127,6 +127,10 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "UNWIND";
     case PhysicalOperatorType::USE_DATABASE:
         return "USE_DATABASE";
+    case PhysicalOperatorType::CREATE_GRAPH:
+        return "CREATE_GRAPH";
+    case PhysicalOperatorType::USE_GRAPH:
+        return "USE_GRAPH";
     case PhysicalOperatorType::UNINSTALL_EXTENSION:
         return "UNINSTALL_EXTENSION";
     default:

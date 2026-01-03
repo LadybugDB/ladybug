@@ -3,6 +3,7 @@ add_library(lbug_parser_transform
         transform_copy.cpp
         transform_ddl.cpp
         transform_expression.cpp
+        transform_graph.cpp
         transform_graph_pattern.cpp
         transform_macro.cpp
         transform_projection.cpp

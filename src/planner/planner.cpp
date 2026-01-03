@@ -117,6 +117,12 @@ LogicalPlan Planner::planStatement(const BoundStatement& statement) {
     case StatementType::USE_DATABASE: {
         return planUseDatabase(statement);
     }
+    case StatementType::CREATE_GRAPH: {
+        return planCreateGraph(statement);
+    }
+    case StatementType::USE_GRAPH: {
+        return planUseGraph(statement);
+    }
     case StatementType::EXTENSION_CLAUSE: {
         return planExtensionClause(statement);
     }

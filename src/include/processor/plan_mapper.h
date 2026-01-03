@@ -166,6 +166,9 @@ public:
     std::unique_ptr<PhysicalOperator> mapUnwind(const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapUseDatabase(
         const planner::LogicalOperator* logicalOperator);
+    std::unique_ptr<PhysicalOperator> mapCreateGraph(
+        const planner::LogicalOperator* logicalOperator);
+    std::unique_ptr<PhysicalOperator> mapUseGraph(const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapExtensionClause(
         const planner::LogicalOperator* logicalOperator);
 

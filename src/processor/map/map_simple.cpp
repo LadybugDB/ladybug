@@ -6,6 +6,7 @@
 #include "planner/operator/simple/logical_detach_database.h"
 #include "planner/operator/simple/logical_export_db.h"
 #include "planner/operator/simple/logical_extension.h"
+#include "planner/operator/simple/logical_graph.h"
 #include "planner/operator/simple/logical_import_db.h"
 #include "planner/operator/simple/logical_use_database.h"
 #include "processor/operator/persistent/copy_to.h"
@@ -17,6 +18,7 @@
 #include "processor/operator/simple/load_extension.h"
 #include "processor/operator/simple/uninstall_extension.h"
 #include "processor/operator/simple/use_database.h"
+#include "processor/operator/simple/use_graph.h"
 #include "processor/plan_mapper.h"
 #include "processor/result/factorized_table_util.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -145,6 +147,25 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtensionClause(
         }
     }
     KU_UNREACHABLE;
+}
+
+std::unique_ptr<PhysicalOperator> PlanMapper::mapCreateGraph(
+    const LogicalOperator* logicalOperator) {
+    auto createGraph = logicalOperator->constPtrCast<LogicalCreateGraph>();
+    auto printInfo = std::make_unique<OPPrintInfo>();
+    auto messageTable =
+        FactorizedTableUtils::getSingleStringColumnFTable(MemoryManager::Get(*clientContext));
+    return std::make_unique<CreateGraph>(createGraph->getGraphName(), std::move(messageTable),
+        getOperatorID(), std::move(printInfo));
+}
+
+std::unique_ptr<PhysicalOperator> PlanMapper::mapUseGraph(const LogicalOperator* logicalOperator) {
+    auto useGraph = logicalOperator->constPtrCast<LogicalUseGraph>();
+    auto printInfo = std::make_unique<UseGraphPrintInfo>(useGraph->getGraphName());
+    auto messageTable =
+        FactorizedTableUtils::getSingleStringColumnFTable(MemoryManager::Get(*clientContext));
+    return std::make_unique<UseGraph>(useGraph->getGraphName(), std::move(messageTable),
+        getOperatorID(), std::move(printInfo));
 }
 
 } // namespace processor

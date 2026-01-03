@@ -18,6 +18,7 @@ enum class LogicalOperatorType : uint8_t {
     COPY_FROM,
     COPY_TO,
     COUNT_REL_TABLE,
+    CREATE_GRAPH,
     CREATE_MACRO,
     CREATE_SEQUENCE,
     CREATE_TABLE,
@@ -61,6 +62,7 @@ enum class LogicalOperatorType : uint8_t {
     UNION_ALL,
     UNWIND,
     USE_DATABASE,
+    USE_GRAPH,
     EXTENSION_CLAUSE,
 };
 

@@ -108,6 +108,10 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
         return "UNWIND";
     case LogicalOperatorType::USE_DATABASE:
         return "USE_DATABASE";
+    case LogicalOperatorType::CREATE_GRAPH:
+        return "CREATE_GRAPH";
+    case LogicalOperatorType::USE_GRAPH:
+        return "USE_GRAPH";
     case LogicalOperatorType::CREATE_TYPE:
         return "CREATE_TYPE";
     case LogicalOperatorType::EXTENSION_CLAUSE:

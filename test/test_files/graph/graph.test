@@ -1,0 +1,73 @@
+-DATASET CSV empty
+
+--
+
+-CASE CreateGraphAndUseGraph
+-LOG CreateGraph
+-STATEMENT CREATE GRAPH graph1
+---- ok
+
+-LOG UseGraph
+-STATEMENT USE GRAPH graph1
+---- ok
+
+-LOG CreateTableInGraph1
+-STATEMENT CREATE NODE TABLE test(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+
+-LOG CreateSecondGraph
+-STATEMENT CREATE GRAPH graph2
+---- ok
+
+-LOG UseSecondGraph
+-STATEMENT USE GRAPH graph2
+---- ok
+
+-LOG CreateTableInGraph2
+-STATEMENT CREATE NODE TABLE test(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+
+-CASE VerifyCatalogIsolation
+-LOG CreateGraphsForIsolationTest
+-STATEMENT CREATE GRAPH graph1
+---- ok
+
+-STATEMENT CREATE GRAPH graph2
+---- ok
+
+-LOG VerifyTablesInDifferentCatalogs
+-STATEMENT USE GRAPH graph1
+---- ok
+
+-STATEMENT CREATE NODE TABLE test(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+
+-STATEMENT USE GRAPH graph2
+---- ok
+
+-STATEMENT CREATE NODE TABLE test(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+
+-LOG VerifySwitchingWorks
+-STATEMENT USE GRAPH graph1
+---- ok
+
+-STATEMENT USE GRAPH graph2
+---- ok
+
+-STATEMENT USE GRAPH graph1
+---- ok
+
+-CASE ErrorCases
+-LOG DuplicateGraphError
+-STATEMENT CREATE GRAPH graph1
+---- ok
+
+-STATEMENT CREATE GRAPH graph1
+---- error
+Runtime exception: Graph graph1 already exists.
+
+-LOG NonExistentGraphError
+-STATEMENT USE GRAPH nonexistent
+---- error
+Runtime exception: No graph named nonexistent.

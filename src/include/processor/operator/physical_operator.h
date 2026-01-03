@@ -23,6 +23,7 @@ enum class PhysicalOperatorType : uint8_t {
     BATCH_INSERT,
     COPY_TO,
     COUNT_REL_TABLE,
+    CREATE_GRAPH,
     CREATE_MACRO,
     CREATE_SEQUENCE,
     CREATE_TABLE,
@@ -73,6 +74,7 @@ enum class PhysicalOperatorType : uint8_t {
     UNION_ALL_SCAN,
     UNWIND,
     USE_DATABASE,
+    USE_GRAPH,
     UNINSTALL_EXTENSION,
 };
 

@@ -194,6 +194,12 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapOperator(const LogicalOperator*
     case LogicalOperatorType::USE_DATABASE: {
         physicalOperator = mapUseDatabase(logicalOperator);
     } break;
+    case LogicalOperatorType::CREATE_GRAPH: {
+        physicalOperator = mapCreateGraph(logicalOperator);
+    } break;
+    case LogicalOperatorType::USE_GRAPH: {
+        physicalOperator = mapUseGraph(logicalOperator);
+    } break;
     case LogicalOperatorType::EXTENSION_CLAUSE: {
         physicalOperator = mapExtensionClause(logicalOperator);
     } break;

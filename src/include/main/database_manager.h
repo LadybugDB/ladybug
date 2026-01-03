@@ -17,6 +17,15 @@ public:
     bool hasDefaultDatabase() const { return defaultDatabase != ""; }
     void setDefaultDatabase(const std::string& databaseName);
     std::vector<AttachedDatabase*> getAttachedDatabases() const;
+
+    void createGraph(const std::string& graphName);
+    void setDefaultGraph(const std::string& graphName);
+    bool hasGraph(const std::string& graphName);
+    catalog::Catalog* getGraphCatalog(const std::string& graphName);
+    catalog::Catalog* getDefaultGraphCatalog() const;
+    bool hasDefaultGraph() const { return defaultGraph != ""; }
+    std::string getDefaultGraphName() const { return defaultGraph; }
+
     LBUG_API void invalidateCache();
 
     LBUG_API static DatabaseManager* Get(const ClientContext& context);
@@ -24,6 +33,8 @@ public:
 private:
     std::vector<std::unique_ptr<AttachedDatabase>> attachedDatabases;
     std::string defaultDatabase;
+    std::vector<std::unique_ptr<catalog::Catalog>> graphs;
+    std::string defaultGraph;
 };
 
 } // namespace main

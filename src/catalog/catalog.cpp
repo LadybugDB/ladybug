@@ -17,6 +17,7 @@
 #include "extension/extension_manager.h"
 #include "function/function_collection.h"
 #include "main/client_context.h"
+#include "main/database_manager.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::binder;
@@ -35,9 +36,15 @@ Catalog::Catalog() : version{0} {
 Catalog* Catalog::Get(const main::ClientContext& context) {
     if (context.getAttachedDatabase()) {
         return context.getAttachedDatabase()->getCatalog();
-    } else {
-        return context.getDatabase()->getCatalog();
     }
+    auto dbManager = main::DatabaseManager::Get(context);
+    if (dbManager->hasDefaultGraph()) {
+        auto graphCatalog = dbManager->getDefaultGraphCatalog();
+        if (graphCatalog != nullptr) {
+            return graphCatalog;
+        }
+    }
+    return context.getDatabase()->getCatalog();
 }
 
 void Catalog::initCatalogSets() {

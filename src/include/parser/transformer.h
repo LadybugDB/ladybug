@@ -250,6 +250,10 @@ public:
     std::unique_ptr<Statement> transformDetachDatabase(CypherParser::KU_DetachDatabaseContext& ctx);
     std::unique_ptr<Statement> transformUseDatabase(CypherParser::KU_UseDatabaseContext& ctx);
 
+    // Transform create/use graph.
+    std::unique_ptr<Statement> transformCreateGraph(CypherParser::KU_CreateGraphContext& ctx);
+    std::unique_ptr<Statement> transformUseGraph(CypherParser::KU_UseGraphContext& ctx);
+
     std::unique_ptr<Statement> transformExtensionStatement(antlr4::ParserRuleContext* ctx);
 
 private:
