@@ -132,6 +132,10 @@ Runtime exception: Graph graph1 already exists.
 ---- error
 Binder exception: No graph named nonexistent.
 
+-LOG UseLocal
+-STATEMENT USE GRAPH local
+---- ok
+
 -LOG Cleanup
 -STATEMENT DROP GRAPH graph1
 ---- ok
