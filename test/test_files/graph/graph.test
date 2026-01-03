@@ -27,6 +27,18 @@
 -STATEMENT CREATE NODE TABLE test(id INT64, name STRING, PRIMARY KEY(id))
 ---- ok
 
+-LOG CleanupGraph2
+-STATEMENT DROP TABLE test
+---- ok
+
+-LOG SwitchToGraph1
+-STATEMENT USE GRAPH graph1
+---- ok
+
+-LOG CleanupGraph1
+-STATEMENT DROP TABLE test
+---- ok
+
 -CASE VerifyCatalogIsolation
 -LOG CreateGraphsForIsolationTest
 -STATEMENT CREATE GRAPH graph1
@@ -56,6 +68,42 @@
 ---- ok
 
 -STATEMENT USE GRAPH graph1
+---- ok
+
+-LOG CleanupGraph2
+-STATEMENT DROP TABLE test
+---- ok
+
+-LOG SwitchToGraph1
+-STATEMENT USE GRAPH graph1
+---- ok
+
+-LOG CleanupGraph1
+-STATEMENT DROP TABLE test
+---- ok
+
+-CASE ShowTablesWithIsolation
+-LOG CreateTablesInDifferentGraphs
+-STATEMENT CREATE NODE TABLE person(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+
+-STATEMENT CREATE GRAPH foo1
+---- ok
+
+-STATEMENT USE GRAPH foo1
+---- ok
+
+-STATEMENT CREATE NODE TABLE person(id INT64, name STRING, PRIMARY KEY(id))
+---- ok
+
+-LOG VerifyShowTables
+-STATEMENT CALL show_tables() RETURN name, `database name`
+---- 2
+person|local(lbug)
+person|foo1(graph)
+
+-LOG CleanupFoo1
+-STATEMENT DROP TABLE person
 ---- ok
 
 -CASE ErrorCases

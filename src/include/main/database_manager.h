@@ -25,6 +25,7 @@ public:
     catalog::Catalog* getDefaultGraphCatalog() const;
     bool hasDefaultGraph() const { return defaultGraph != ""; }
     std::string getDefaultGraphName() const { return defaultGraph; }
+    std::vector<catalog::Catalog*> getGraphs() const;
 
     LBUG_API void invalidateCache();
 

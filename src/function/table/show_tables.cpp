@@ -6,6 +6,7 @@
 #include "function/table/bind_data.h"
 #include "function/table/simple_table_function.h"
 #include "main/client_context.h"
+#include "main/database.h"
 #include "main/database_manager.h"
 
 using namespace lbug::common;
@@ -70,8 +71,11 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
     columnTypes.emplace_back(LogicalType::STRING());
     std::vector<TableInfo> tableInfos;
     auto transaction = transaction::Transaction::Get(*context);
+    auto dbManager = main::DatabaseManager::Get(*context);
+
+    // Show tables from the main database (local) - always show these separately from graphs
     if (!context->hasDefaultDatabase()) {
-        auto catalog = Catalog::Get(*context);
+        auto catalog = context->getDatabase()->getCatalog();
         for (auto& entry :
             catalog->getTableEntries(transaction, context->useInternalCatalogEntry())) {
             std::string dbName = LOCAL_DB_NAME;
@@ -94,7 +98,19 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
         }
     }
 
-    for (auto attachedDatabase : main::DatabaseManager::Get(*context)->getAttachedDatabases()) {
+    // Show tables from all graphs
+    for (auto& graph : dbManager->getGraphs()) {
+        auto graphName = graph->getCatalogName();
+        for (auto& entry :
+            graph->getTableEntries(transaction, context->useInternalCatalogEntry())) {
+            tableInfos.emplace_back(entry->getName(), entry->getTableID(),
+                TableTypeUtils::toString(entry->getTableType()),
+                stringFormat("{}(graph)", graphName), entry->getComment());
+        }
+    }
+
+    // Show tables from attached databases
+    for (auto attachedDatabase : dbManager->getAttachedDatabases()) {
         auto databaseName = attachedDatabase->getDBName();
         auto databaseType = attachedDatabase->getDBType();
         for (auto& entry : attachedDatabase->getCatalog()->getTableEntries(transaction,

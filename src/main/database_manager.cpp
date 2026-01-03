@@ -149,5 +149,13 @@ catalog::Catalog* DatabaseManager::getDefaultGraphCatalog() const {
     return nullptr;
 }
 
+std::vector<catalog::Catalog*> DatabaseManager::getGraphs() const {
+    std::vector<catalog::Catalog*> result;
+    for (auto& graph : graphs) {
+        result.push_back(graph.get());
+    }
+    return result;
+}
+
 } // namespace main
 } // namespace lbug
