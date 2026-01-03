@@ -120,8 +120,8 @@ void DatabaseManager::dropGraph(const std::string& graphName) {
 
 void DatabaseManager::setDefaultGraph(const std::string& graphName) {
     auto upperCaseName = StringUtils::getUpper(graphName);
-    if (upperCaseName == "LOCAL") {
-        defaultGraph = "local";
+    if (upperCaseName == "MAIN") {
+        defaultGraph = "main";
         return;
     }
     for (auto& graph : graphs) {
@@ -135,7 +135,7 @@ void DatabaseManager::setDefaultGraph(const std::string& graphName) {
 }
 
 void DatabaseManager::clearDefaultGraph() {
-    defaultGraph = "local";
+    defaultGraph = "main";
 }
 
 bool DatabaseManager::hasGraph(const std::string& graphName) {

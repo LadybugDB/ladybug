@@ -108,7 +108,7 @@
 -LOG VerifyShowTables
 -STATEMENT CALL show_tables() RETURN name, `database name`
 ---- 2
-person|local(lbug)
+person|main(graph)
 person|foo1(graph)
 
 -LOG CleanupFoo1
@@ -133,7 +133,7 @@ Runtime exception: Graph graph1 already exists.
 Binder exception: No graph named nonexistent.
 
 -LOG UseLocal
--STATEMENT USE GRAPH local
+-STATEMENT USE GRAPH main
 ---- ok
 
 -LOG Cleanup
