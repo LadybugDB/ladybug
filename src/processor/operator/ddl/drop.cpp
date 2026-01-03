@@ -118,7 +118,6 @@ void Drop::dropMacro(const main::ClientContext* context) {
 
 void Drop::dropGraph(const main::ClientContext* context) {
     auto dbManager = main::DatabaseManager::Get(*context);
-    auto transaction = transaction::Transaction::Get(*context);
     auto memoryManager = storage::MemoryManager::Get(*context);
 
     if (!dbManager->hasGraph(dropInfo.name)) {
