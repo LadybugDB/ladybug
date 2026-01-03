@@ -1,5 +1,6 @@
 #include "processor/operator/persistent/node_batch_insert.h"
 
+#include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/cast.h"
 #include "common/finally_wrapper.h"

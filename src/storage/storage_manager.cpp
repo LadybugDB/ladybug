@@ -1,5 +1,6 @@
 #include "storage/storage_manager.h"
 
+#include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/arrow/arrow.h"
@@ -9,6 +10,7 @@
 #include "main/attached_database.h"
 #include "main/client_context.h"
 #include "main/database.h"
+#include "main/database_manager.h"
 #include "main/db_config.h"
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -376,9 +378,13 @@ void StorageManager::setDatabaseHeader(std::unique_ptr<storage::DatabaseHeader> 
 StorageManager* StorageManager::Get(const main::ClientContext& context) {
     if (context.getAttachedDatabase()) {
         return context.getAttachedDatabase()->getStorageManager();
-    } else {
-        return context.getDatabase()->getStorageManager();
     }
+    auto dbManager = main::DatabaseManager::Get(context);
+    auto graphStorageManager = dbManager->getDefaultGraphStorageManager();
+    if (graphStorageManager != nullptr) {
+        return graphStorageManager;
+    }
+    return context.getDatabase()->getStorageManager();
 }
 
 } // namespace storage

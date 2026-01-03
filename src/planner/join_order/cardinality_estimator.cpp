@@ -1,6 +1,7 @@
 #include "planner/join_order/cardinality_estimator.h"
 
 #include "binder/expression/property_expression.h"
+#include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "main/client_context.h"
 #include "planner/join_order/join_order_util.h"

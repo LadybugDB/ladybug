@@ -2,7 +2,6 @@
 
 #include <mutex>
 
-#include "catalog/catalog.h"
 #include "shadow_file.h"
 #include "storage/index/index.h"
 #include "storage/wal/wal.h"
@@ -14,6 +13,8 @@ class Database;
 
 namespace catalog {
 class CatalogEntry;
+class Catalog;
+class TableCatalogEntry;
 class NodeTableCatalogEntry;
 class RelGroupCatalogEntry;
 struct RelTableCatalogInfo;

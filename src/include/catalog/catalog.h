@@ -5,6 +5,7 @@
 #include "catalog/catalog_set.h"
 #include "common/cast.h"
 #include "function/function.h"
+#include "storage/storage_manager.h"
 
 namespace lbug::main {
 struct DBConfig;
@@ -209,6 +210,11 @@ public:
     void setCatalogName(const std::string& name) { catalogName = name; }
     std::string getCatalogName() const { return catalogName; }
 
+    storage::StorageManager* getStorageManager() const { return storageManager.get(); }
+    void setStorageManager(std::unique_ptr<storage::StorageManager> sm) {
+        storageManager = std::move(sm);
+    }
+
     void serialize(common::Serializer& ser) const;
     void deserialize(common::Deserializer& deSer);
 
@@ -251,6 +257,7 @@ private:
     // reset to 0 at the end of each checkpoint
     uint64_t version;
     std::string catalogName;
+    std::unique_ptr<storage::StorageManager> storageManager;
 };
 
 } // namespace catalog

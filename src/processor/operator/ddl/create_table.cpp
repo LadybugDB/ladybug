@@ -1,5 +1,6 @@
 #include "processor/operator/ddl/create_table.h"
 
+#include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/exception/binder.h"
 #include "common/string_format.h"

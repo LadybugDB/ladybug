@@ -2,6 +2,7 @@
 
 #include <thread>
 
+#include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "main/client_context.h"
 #include "storage/storage_manager.h"

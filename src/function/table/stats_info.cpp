@@ -1,4 +1,5 @@
 #include "binder/binder.h"
+#include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/exception/binder.h"
 #include "function/table/bind_data.h"

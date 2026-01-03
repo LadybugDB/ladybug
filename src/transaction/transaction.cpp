@@ -1,5 +1,6 @@
 #include "transaction/transaction.h"
 
+#include "catalog/catalog.h"
 #include "common/exception/runtime.h"
 #include "main/client_context.h"
 #include "main/db_config.h"

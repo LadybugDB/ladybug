@@ -3,9 +3,11 @@
 #include "catalog/catalog.h"
 #include "common/exception/binder.h"
 #include "common/exception/runtime.h"
+#include "common/file_system/virtual_file_system.h"
 #include "common/string_utils.h"
 #include "main/client_context.h"
 #include "main/database.h"
+#include "storage/storage_manager.h"
 
 using namespace lbug::common;
 
@@ -86,7 +88,8 @@ DatabaseManager* DatabaseManager::Get(const ClientContext& context) {
     return context.getDatabase()->getDatabaseManager();
 }
 
-void DatabaseManager::createGraph(const std::string& graphName) {
+void DatabaseManager::createGraph(const std::string& graphName,
+    storage::MemoryManager* memoryManager, main::ClientContext* clientContext) {
     auto upperCaseName = StringUtils::getUpper(graphName);
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
@@ -96,6 +99,11 @@ void DatabaseManager::createGraph(const std::string& graphName) {
     }
     auto catalog = std::make_unique<catalog::Catalog>();
     catalog->setCatalogName(graphName);
+    auto storageManager = std::make_unique<storage::StorageManager>(":" + graphName, false, false,
+        *memoryManager, false, nullptr);
+    storageManager->initDataFileHandle(common::VirtualFileSystem::GetUnsafe(*clientContext),
+        clientContext);
+    catalog->setStorageManager(std::move(storageManager));
     graphs.push_back(std::move(catalog));
     if (defaultGraph == "") {
         defaultGraph = graphName;
@@ -161,7 +169,7 @@ catalog::Catalog* DatabaseManager::getGraphCatalog(const std::string& graphName)
 }
 
 catalog::Catalog* DatabaseManager::getDefaultGraphCatalog() const {
-    if (defaultGraph == "") {
+    if (defaultGraph == "" || defaultGraph == "main") {
         return nullptr;
     }
     auto upperCaseName = StringUtils::getUpper(defaultGraph);
@@ -170,6 +178,14 @@ catalog::Catalog* DatabaseManager::getDefaultGraphCatalog() const {
         if (graphNameUpper == upperCaseName) {
             return graph.get();
         }
+    }
+    return nullptr;
+}
+
+storage::StorageManager* DatabaseManager::getDefaultGraphStorageManager() const {
+    auto graphCatalog = getDefaultGraphCatalog();
+    if (graphCatalog != nullptr) {
+        return graphCatalog->getStorageManager();
     }
     return nullptr;
 }

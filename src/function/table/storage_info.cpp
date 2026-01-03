@@ -1,4 +1,5 @@
 #include "binder/binder.h"
+#include "catalog/catalog.h"
 #include "common/data_chunk/data_chunk_collection.h"
 #include "common/exception/binder.h"
 #include "common/type_utils.h"

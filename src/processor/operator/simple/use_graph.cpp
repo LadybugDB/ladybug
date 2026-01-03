@@ -16,9 +16,9 @@ void UseGraph::executeInternal(ExecutionContext* context) {
 
 void CreateGraph::executeInternal(ExecutionContext* context) {
     auto dbManager = main::DatabaseManager::Get(*context->clientContext);
-    dbManager->createGraph(graphName);
-    appendMessage("Created graph successfully.",
-        storage::MemoryManager::Get(*context->clientContext));
+    auto memoryManager = storage::MemoryManager::Get(*context->clientContext);
+    dbManager->createGraph(graphName, memoryManager, context->clientContext);
+    appendMessage("Created graph successfully.", memoryManager);
 }
 
 } // namespace processor

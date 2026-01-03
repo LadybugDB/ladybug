@@ -1,6 +1,7 @@
 #include "binder/binder.h"
 #include "binder/expression/property_expression.h"
 #include "binder/expression_binder.h"
+#include "catalog/catalog.h"
 #include "common/mask.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "processor/expression_mapper.h"
