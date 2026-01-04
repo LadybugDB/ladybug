@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <filesystem>
 #include <string>
 #include <type_traits>
 
@@ -74,6 +75,12 @@ public:
     }
     static std::string getTmpFilePath(const std::string& path) {
         return common::stringFormat("{}.{}", path, common::StorageConstants::TEMP_FILE_SUFFIX);
+    }
+    static std::string getGraphPath(const std::string& dbPath, const std::string& graphName) {
+        auto path = std::filesystem::path(dbPath);
+        auto base = path.stem().string();
+        auto ext = path.extension().string();
+        return base + "." + graphName + ext;
     }
 
     static std::string expandPath(const main::ClientContext* context, const std::string& path);

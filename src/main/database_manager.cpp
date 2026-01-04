@@ -7,7 +7,9 @@
 #include "common/string_utils.h"
 #include "main/client_context.h"
 #include "main/database.h"
+#include "main/db_config.h"
 #include "storage/storage_manager.h"
+#include "storage/storage_utils.h"
 
 using namespace lbug::common;
 
@@ -99,8 +101,12 @@ void DatabaseManager::createGraph(const std::string& graphName,
     }
     auto catalog = std::make_unique<catalog::Catalog>();
     catalog->setCatalogName(graphName);
-    auto storageManager = std::make_unique<storage::StorageManager>(":" + graphName, false, false,
-        *memoryManager, false, nullptr);
+    auto dbPath = clientContext->getDatabasePath();
+    auto graphPath = DBConfig::isDBPathInMemory(dbPath) ?
+                         ":" + graphName :
+                         storage::StorageUtils::getGraphPath(dbPath, graphName);
+    auto storageManager = std::make_unique<storage::StorageManager>(graphPath, false, false,
+        *memoryManager, false, common::VirtualFileSystem::GetUnsafe(*clientContext));
     storageManager->initDataFileHandle(common::VirtualFileSystem::GetUnsafe(*clientContext),
         clientContext);
     catalog->setStorageManager(std::move(storageManager));

@@ -20,7 +20,8 @@ namespace storage {
 
 Checkpointer::Checkpointer(main::ClientContext& clientContext)
     : clientContext{clientContext},
-      isInMemory{main::DBConfig::isDBPathInMemory(clientContext.getDatabasePath())} {}
+      isInMemory{main::DBConfig::isDBPathInMemory(clientContext.getDatabasePath())},
+      mainStorageManager{clientContext.getDatabase()->getStorageManager()} {}
 
 Checkpointer::~Checkpointer() = default;
 
@@ -67,8 +68,7 @@ void Checkpointer::writeCheckpoint() {
         return;
     }
 
-    auto databaseHeader =
-        *StorageManager::Get(clientContext)->getOrInitDatabaseHeader(clientContext);
+    auto databaseHeader = *mainStorageManager->getOrInitDatabaseHeader(clientContext);
     // Checkpoint storage. Note that we first checkpoint storage before serializing the catalog, as
     // checkpointing storage may overwrite columnIDs in the catalog.
     bool hasStorageChanges = checkpointStorage();
@@ -79,8 +79,7 @@ void Checkpointer::writeCheckpoint() {
     // This function will evict all pages that were freed during this checkpoint
     // It must be called before we remove all evicted candidates from the BM
     // Or else the evicted pages may end up appearing multiple times in the eviction queue
-    auto storageManager = StorageManager::Get(clientContext);
-    storageManager->finalizeCheckpoint();
+    mainStorageManager->finalizeCheckpoint();
     // When a page is freed by the FSM, it evicts it from the BM. However, if the page is freed,
     // then reused over and over, it can be appended to the eviction queue multiple times. To
     // prevent multiple entries of the same page from existing in the eviction queue, at the end of
@@ -89,29 +88,27 @@ void Checkpointer::writeCheckpoint() {
     bufferManager->removeEvictedCandidates();
 
     catalog::Catalog::Get(clientContext)->resetVersion();
-    auto* dataFH = storageManager->getDataFH();
+    auto* dataFH = mainStorageManager->getDataFH();
     dataFH->getPageManager()->resetVersion();
-    storageManager->getWAL().reset();
-    storageManager->getShadowFile().reset();
+    mainStorageManager->getWAL().reset();
+    mainStorageManager->getShadowFile().reset();
 }
 
 bool Checkpointer::checkpointStorage() {
-    const auto storageManager = StorageManager::Get(clientContext);
-    auto pageAllocator = storageManager->getDataFH()->getPageManager();
-    return storageManager->checkpoint(&clientContext, *pageAllocator);
+    auto pageAllocator = mainStorageManager->getDataFH()->getPageManager();
+    return mainStorageManager->checkpoint(&clientContext, *pageAllocator);
 }
 
 void Checkpointer::serializeCatalogAndMetadata(DatabaseHeader& databaseHeader,
     bool hasStorageChanges) {
-    const auto storageManager = StorageManager::Get(clientContext);
     const auto catalog = catalog::Catalog::Get(clientContext);
-    auto* dataFH = storageManager->getDataFH();
+    auto* dataFH = mainStorageManager->getDataFH();
 
     // Serialize the catalog if there are changes
     if (databaseHeader.catalogPageRange.startPageIdx == common::INVALID_PAGE_IDX ||
         catalog->changedSinceLastCheckpoint()) {
         databaseHeader.updateCatalogPageRange(*dataFH->getPageManager(),
-            serializeCatalog(*catalog, *storageManager));
+            serializeCatalog(*catalog, *mainStorageManager));
     }
     // Serialize the storage metadata if there are changes
     if (databaseHeader.metadataPageRange.startPageIdx == common::INVALID_PAGE_IDX ||
@@ -120,7 +117,7 @@ void Checkpointer::serializeCatalogAndMetadata(DatabaseHeader& databaseHeader,
         // We must free the existing metadata page range before serializing
         // So that the freed pages are serialized by the FSM
         databaseHeader.freeMetadataPageRange(*dataFH->getPageManager());
-        databaseHeader.metadataPageRange = serializeMetadata(*catalog, *storageManager);
+        databaseHeader.metadataPageRange = serializeMetadata(*catalog, *mainStorageManager);
     }
 }
 
@@ -131,9 +128,8 @@ void Checkpointer::writeDatabaseHeader(const DatabaseHeader& header) {
     header.serialize(headerSerializer);
     auto headerPage = headerWriter->getPage(0);
 
-    const auto storageManager = StorageManager::Get(clientContext);
-    auto dataFH = storageManager->getDataFH();
-    auto& shadowFile = storageManager->getShadowFile();
+    auto dataFH = mainStorageManager->getDataFH();
+    auto& shadowFile = mainStorageManager->getShadowFile();
     auto shadowHeader = ShadowUtils::createShadowVersionIfNecessaryAndPinPage(
         common::StorageConstants::DB_HEADER_PAGE_IDX, true /* skipReadingOriginalPage */, *dataFH,
         shadowFile);
@@ -141,12 +137,11 @@ void Checkpointer::writeDatabaseHeader(const DatabaseHeader& header) {
     shadowFile.getShadowingFH().unpinPage(shadowHeader.shadowPage);
 
     // Update the in-memory database header with the new version
-    StorageManager::Get(clientContext)->setDatabaseHeader(std::make_unique<DatabaseHeader>(header));
+    mainStorageManager->setDatabaseHeader(std::make_unique<DatabaseHeader>(header));
 }
 
 void Checkpointer::logCheckpointAndApplyShadowPages() {
-    const auto storageManager = StorageManager::Get(clientContext);
-    auto& shadowFile = storageManager->getShadowFile();
+    auto& shadowFile = mainStorageManager->getShadowFile();
     // Flush the shadow file.
     shadowFile.flushAll(clientContext);
     auto wal = WAL::Get(clientContext);
@@ -167,10 +162,9 @@ void Checkpointer::rollback() {
     if (isInMemory) {
         return;
     }
-    const auto storageManager = StorageManager::Get(clientContext);
     auto catalog = catalog::Catalog::Get(clientContext);
     // Any pages freed during the checkpoint are no longer freed
-    storageManager->rollbackCheckpoint(*catalog);
+    mainStorageManager->rollbackCheckpoint(*catalog);
 }
 
 bool Checkpointer::canAutoCheckpoint(const main::ClientContext& clientContext,

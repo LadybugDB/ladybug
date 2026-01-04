@@ -56,6 +56,7 @@ private:
 protected:
     main::ClientContext& clientContext;
     bool isInMemory;
+    StorageManager* mainStorageManager;
 };
 
 } // namespace storage
