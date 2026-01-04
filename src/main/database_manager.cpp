@@ -121,9 +121,15 @@ void DatabaseManager::dropGraph(const std::string& graphName) {
     for (auto it = graphs.begin(); it != graphs.end(); ++it) {
         auto graphNameUpper = StringUtils::getUpper((*it)->getCatalogName());
         if (graphNameUpper == upperCaseName) {
-            // Check if this is the default graph
             if (defaultGraph != "" && StringUtils::getUpper(defaultGraph) == upperCaseName) {
                 defaultGraph = "";
+            }
+            auto storageManager = (*it)->getStorageManager();
+            if (storageManager != nullptr) {
+                storageManager->closeFileHandle();
+            }
+            if (hasAttachedDatabase(graphName)) {
+                detachDatabase(graphName);
             }
             graphs.erase(it);
             return;

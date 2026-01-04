@@ -68,6 +68,8 @@ public:
 
     void initDataFileHandle(common::VirtualFileSystem* vfs, main::ClientContext* context);
 
+    void closeFileHandle();
+
     // If the database header hasn't been created yet, calling these methods will create + return
     // the header
     common::ku_uuid_t getOrInitDatabaseID(const main::ClientContext& clientContext);

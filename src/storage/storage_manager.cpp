@@ -72,6 +72,12 @@ void StorageManager::initDataFileHandle(VirtualFileSystem* vfs, main::ClientCont
     }
 }
 
+void StorageManager::closeFileHandle() {
+    if (dataFH != nullptr) {
+        dataFH->resetFileInfo();
+    }
+}
+
 Table* StorageManager::getTable(table_id_t tableID) {
     std::lock_guard lck{mtx};
     KU_ASSERT(tables.contains(tableID));
