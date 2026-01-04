@@ -178,14 +178,14 @@
 ---- ok
 -STATEMENT CALL show_tables() return *;
 ---- 1
-0|embeddings|NODE|local(lbug)|
+0|embeddings|NODE|main(graph)|
 -STATEMENT CALL ENABLE_INTERNAL_CATALOG=true;
 ---- ok
 -STATEMENT CALL show_tables() return *;
 ---- 3
-0|embeddings|NODE|local(lbug)|
-9223372036854775808|_0_e_hnsw_index_UPPER|REL|local(lbug)|
-9223372036854775809|_0_e_hnsw_index_LOWER|REL|local(lbug)|
+0|embeddings|NODE|main(graph)|
+9223372036854775808|_0_e_hnsw_index_UPPER|REL|main(graph)|
+9223372036854775809|_0_e_hnsw_index_LOWER|REL|main(graph)|
 -STATEMENT MATCH (t1:embeddings)-[r:_0_e_hnsw_index_UPPER]->(t2:embeddings) HINT (t1 JOIN r) JOIN t2 WITH t1.id as id, count(*) as cnt RETURN max(cnt);
 ---- 1
 30
@@ -211,14 +211,14 @@
 ---- ok
 -STATEMENT CALL show_tables() return *;
 ---- 1
-0|embeddings|NODE|local(lbug)|
+0|embeddings|NODE|main(graph)|
 -STATEMENT CALL ENABLE_INTERNAL_CATALOG=true;
 ---- ok
 -STATEMENT CALL show_tables() return *;
 ---- 3
-0|embeddings|NODE|local(lbug)|
-9223372036854775808|_0_e_hnsw_index_UPPER|REL|local(lbug)|
-9223372036854775809|_0_e_hnsw_index_LOWER|REL|local(lbug)|
+0|embeddings|NODE|main(graph)|
+9223372036854775808|_0_e_hnsw_index_UPPER|REL|main(graph)|
+9223372036854775809|_0_e_hnsw_index_LOWER|REL|main(graph)|
 -STATEMENT MATCH (t1:embeddings)-[r:_0_e_hnsw_index_UPPER]->(t2:embeddings) HINT (t1 JOIN r) JOIN t2 WITH t1.id as id, count(*) as cnt RETURN max(cnt);
 ---- 1
 30
@@ -362,7 +362,7 @@ Binder exception: _0_e_hnsw_index_UPPER already exists in catalog.
 Binder exception: _0_e_hnsw_index_LOWER already exists in catalog.
 -STATEMENT CALL show_tables() RETURN *
 ---- 1
-0|embeddings|NODE|local(lbug)|
+0|embeddings|NODE|main(graph)|
 -STATEMENT EXPORT DATABASE '${LBUG_EXPORT_DB_DIRECTORY}_hnsw/small'
 ---- ok
 -IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_hnsw/small"

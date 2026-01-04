@@ -110,4 +110,4 @@
 16|propA|INT64|False
 -STATEMENT CALL show_tables() where name='person' return *;
 ---- 1
-person|NODE|local(lbug)|person information
+person|NODE|main(graph)|person information

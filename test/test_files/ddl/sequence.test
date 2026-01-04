@@ -50,18 +50,18 @@ Sequence test has been dropped.
 
 -STATEMENT CALL SHOW_SEQUENCES() RETURN * ORDER BY name;
 ---- 12
-a|local(lbug)|1|1|1|9223372036854775807|False
-b|local(lbug)|10|1|1|9223372036854775807|False
-c|local(lbug)|20|1|1|9223372036854775807|False
-d|local(lbug)|1|10|1|9223372036854775807|False
-e|local(lbug)|-1|-5|-9223372036854775808|-1|False
-f|local(lbug)|1|1|1|9223372036854775807|False
-g|local(lbug)|1|1|1|9223372036854775807|False
-h|local(lbug)|100|1|100|9223372036854775807|False
-i|local(lbug)|1|1|1|100|False
-j|local(lbug)|1|1|1|9223372036854775807|False
-k|local(lbug)|1|1|1|9223372036854775807|True
-l|local(lbug)|10|5|-100|100|True
+a|main(graph)|1|1|1|9223372036854775807|False
+b|main(graph)|10|1|1|9223372036854775807|False
+c|main(graph)|20|1|1|9223372036854775807|False
+d|main(graph)|1|10|1|9223372036854775807|False
+e|main(graph)|-1|-5|-9223372036854775808|-1|False
+f|main(graph)|1|1|1|9223372036854775807|False
+g|main(graph)|1|1|1|9223372036854775807|False
+h|main(graph)|100|1|100|9223372036854775807|False
+i|main(graph)|1|1|1|100|False
+j|main(graph)|1|1|1|9223372036854775807|False
+k|main(graph)|1|1|1|9223372036854775807|True
+l|main(graph)|10|5|-100|100|True
 
 -CASE ExpectedError
 -STATEMENT CREATE SEQUENCE err START 9223372036854775808;

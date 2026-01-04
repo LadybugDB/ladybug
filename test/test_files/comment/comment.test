@@ -11,24 +11,24 @@ Comment added to table person.
 Comment added to table knows.
 -STATEMENT CALL show_tables() RETURN *
 ---- 8
-0|person|NODE|local(lbug)|A test comment
-1|organisation|NODE|local(lbug)|
-2|movies|NODE|local(lbug)|
-4|knows|REL|local(lbug)|Another test comment
-6|studyAt|REL|local(lbug)|
-8|workAt|REL|local(lbug)|
-10|meets|REL|local(lbug)|
-12|marries|REL|local(lbug)|
+0|person|NODE|main(graph)|A test comment
+1|organisation|NODE|main(graph)|
+2|movies|NODE|main(graph)|
+4|knows|REL|main(graph)|Another test comment
+6|studyAt|REL|main(graph)|
+8|workAt|REL|main(graph)|
+10|meets|REL|main(graph)|
+12|marries|REL|main(graph)|
 -STATEMENT CALL show_tables() RETURN *
 ---- 8
-0|person|NODE|local(lbug)|A test comment
-1|organisation|NODE|local(lbug)|
-2|movies|NODE|local(lbug)|
-4|knows|REL|local(lbug)|Another test comment
-6|studyAt|REL|local(lbug)|
-8|workAt|REL|local(lbug)|
-10|meets|REL|local(lbug)|
-12|marries|REL|local(lbug)|
+0|person|NODE|main(graph)|A test comment
+1|organisation|NODE|main(graph)|
+2|movies|NODE|main(graph)|
+4|knows|REL|main(graph)|Another test comment
+6|studyAt|REL|main(graph)|
+8|workAt|REL|main(graph)|
+10|meets|REL|main(graph)|
+12|marries|REL|main(graph)|
 
 -CASE CommentOnRelGroup
 -STATEMENT CREATE NODE TABLE PersonA (id INT64 PRIMARY KEY);
@@ -41,14 +41,14 @@ Comment added to table knows.
 ---- ok
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 11
-0|person|NODE|local(lbug)|
-1|organisation|NODE|local(lbug)|
-2|movies|NODE|local(lbug)|
-4|knows|REL|local(lbug)|
-6|studyAt|REL|local(lbug)|
-8|workAt|REL|local(lbug)|
-10|meets|REL|local(lbug)|
-12|marries|REL|local(lbug)|
-13|PersonA|NODE|local(lbug)|
-14|PersonB|NODE|local(lbug)|
-17|Rel|REL|local(lbug)|This should appear
+0|person|NODE|main(graph)|
+1|organisation|NODE|main(graph)|
+2|movies|NODE|main(graph)|
+4|knows|REL|main(graph)|
+6|studyAt|REL|main(graph)|
+8|workAt|REL|main(graph)|
+10|meets|REL|main(graph)|
+12|marries|REL|main(graph)|
+13|PersonA|NODE|main(graph)|
+14|PersonB|NODE|main(graph)|
+17|Rel|REL|main(graph)|This should appear

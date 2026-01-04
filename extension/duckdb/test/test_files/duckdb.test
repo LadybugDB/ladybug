@@ -114,10 +114,10 @@ Attached database successfully.
 -STATEMENT CALL SHOW_TABLES() RETURN *;
 ---- 8
 0|movies|ATTACHED|tinysnb(DUCKDB)|
-0|person_copy|NODE|local(lbug)|
+0|person_copy|NODE|main(graph)|
 0|person|ATTACHED|Other1(DUCKDB)|
 1|organisation|ATTACHED|tinysnb(DUCKDB)|
-1|person_copy1|NODE|local(lbug)|
+1|person_copy1|NODE|main(graph)|
 2|person|ATTACHED|tinysnb(DUCKDB)|
 3|tableOfTypes|ATTACHED|tinysnb(DUCKDB)|
 4|tableOfTypes1|ATTACHED|tinysnb(DUCKDB)|
@@ -206,10 +206,10 @@ Attached database successfully.
 ---- 9
 0|employee|ATTACHED|lbug(DUCKDB)|
 0|movies|ATTACHED|tinysnb(DUCKDB)|
-0|person_copy|NODE|local(lbug)|
+0|person_copy|NODE|main(graph)|
 0|person|ATTACHED|Other1(DUCKDB)|
 1|organisation|ATTACHED|tinysnb(DUCKDB)|
-1|person_copy1|NODE|local(lbug)|
+1|person_copy1|NODE|main(graph)|
 2|person|ATTACHED|tinysnb(DUCKDB)|
 3|tableOfTypes|ATTACHED|tinysnb(DUCKDB)|
 4|tableOfTypes1|ATTACHED|tinysnb(DUCKDB)|

@@ -121,7 +121,7 @@ Binder exception: CREATE_VECTOR_INDEX is only supported in auto transaction mode
 -RELOADDB
 -STATEMENT CALL show_tables() RETURN *;
 ---- 1
-0|embeddings|NODE|local(lbug)|
+0|embeddings|NODE|main(graph)|
 -STATEMENT CALL show_indexes() RETURN *;
 ---- 0
 

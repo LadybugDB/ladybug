@@ -251,12 +251,12 @@ name_stopwords
 Binder exception: Table 0_docIdx_docs does not exist.
 -STATEMENT call show_tables() return *
 ---- 6
-0|doc|NODE|local(lbug)|
-1|city_stopwords|NODE|local(lbug)|
-2|name_stopwords|NODE|local(lbug)|
-4|likes|REL|local(lbug)|
-5|INVALID_STOPWORDS|NODE|local(lbug)|
-6|INVALID_STOPWORDS_COL_TYPE|NODE|local(lbug)|
+0|doc|NODE|main(graph)|
+1|city_stopwords|NODE|main(graph)|
+2|name_stopwords|NODE|main(graph)|
+4|likes|REL|main(graph)|
+5|INVALID_STOPWORDS|NODE|main(graph)|
+6|INVALID_STOPWORDS_COL_TYPE|NODE|main(graph)|
 -STATEMENT DROP TABLE `0_docIdx_docs`
 ---- error
 Binder exception: Table 0_docIdx_docs does not exist.

@@ -34,11 +34,11 @@ likes|personA|2|Bob
 -CASE Drop
 -STATEMENT CALL show_tables() RETURN *;
 ---- 5
-0|personA|NODE|local(lbug)|
-1|personB|NODE|local(lbug)|
-2|personC|NODE|local(lbug)|
-6|knows|REL|local(lbug)|
-9|likes|REL|local(lbug)|
+0|personA|NODE|main(graph)|
+1|personB|NODE|main(graph)|
+2|personC|NODE|main(graph)|
+6|knows|REL|main(graph)|
+9|likes|REL|main(graph)|
 -STATEMENT DROP TABLE knows_personA_personB;
 ---- error
 Binder exception: Table knows_personA_personB does not exist.
@@ -46,10 +46,10 @@ Binder exception: Table knows_personA_personB does not exist.
 ---- ok
 -STATEMENT CALL show_tables() RETURN *;
 ---- 4
-0|personA|NODE|local(lbug)|
-1|personB|NODE|local(lbug)|
-2|personC|NODE|local(lbug)|
-9|likes|REL|local(lbug)|
+0|personA|NODE|main(graph)|
+1|personB|NODE|main(graph)|
+2|personC|NODE|main(graph)|
+9|likes|REL|main(graph)|
 -STATEMENT MATCH (a:personA)-[e:knows]->(b) RETURN COUNT(*)
 ---- error
 Binder exception: Table knows does not exist.
@@ -73,11 +73,11 @@ True
 ---- ok
 -STATEMENT CALL show_tables() RETURN *;
 ---- 5
-0|personA|NODE|local(lbug)|
-1|personB|NODE|local(lbug)|
-2|personC|NODE|local(lbug)|
-6|knows|REL|local(lbug)|
-9|hates|REL|local(lbug)|
+0|personA|NODE|main(graph)|
+1|personB|NODE|main(graph)|
+2|personC|NODE|main(graph)|
+6|knows|REL|main(graph)|
+9|hates|REL|main(graph)|
 -STATEMENT MATCH (a:personA)-[e:hates]->(b:personB) WHERE a.ID = 0 RETURN label(e), label(b), b.*
 ---- 3
 hates|personB|2|Bob
@@ -106,11 +106,11 @@ Binder exception: Cannot find property s for e.
 ---- ok
 -STATEMENT CALL show_tables() RETURN *;
 ---- 5
-0|personA|NODE|local(lbug)|
-1|personB|NODE|local(lbug)|
-2|personC|NODE|local(lbug)|
-6|knows|REL|local(lbug)|
-9|likes|REL|local(lbug)|
+0|personA|NODE|main(graph)|
+1|personB|NODE|main(graph)|
+2|personC|NODE|main(graph)|
+6|knows|REL|main(graph)|
+9|likes|REL|main(graph)|
 -STATEMENT MATCH (a:personA)-[e:likes]->(b:personB) WHERE a.ID = 0 RETURN label(e), label(b), b.*
 ---- 3
 likes|personB|2|Bob
