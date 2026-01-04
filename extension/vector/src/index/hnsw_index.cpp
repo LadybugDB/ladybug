@@ -1,5 +1,6 @@
 #include "index/hnsw_index.h"
 
+#include "catalog/catalog.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/hnsw_index_catalog_entry.h"
 #include "function/hnsw_index_functions.h"

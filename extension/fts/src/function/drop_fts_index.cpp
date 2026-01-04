@@ -1,5 +1,6 @@
 #include "function/drop_fts_index.h"
 
+#include "catalog/catalog.h"
 #include "function/fts_bind_data.h"
 #include "function/fts_index_utils.h"
 #include "function/table/bind_data.h"

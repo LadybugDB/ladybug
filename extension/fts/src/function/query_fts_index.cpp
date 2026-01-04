@@ -6,6 +6,7 @@
 #include "binder/expression/expression_util.h"
 #include "binder/expression/literal_expression.h"
 #include "binder/query/reading_clause/bound_table_function_call.h"
+#include "catalog/catalog.h"
 #include "catalog/fts_index_catalog_entry.h"
 #include "common/exception/binder.h"
 #include "common/types/internal_id_util.h"

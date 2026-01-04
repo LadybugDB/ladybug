@@ -1,5 +1,6 @@
 #include "index/fts_internal_table_info.h"
 
+#include "catalog/catalog.h"
 #include "storage/storage_manager.h"
 #include "utils/fts_utils.h"
 

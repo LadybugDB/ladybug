@@ -2,6 +2,7 @@
 
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
+#include "catalog/catalog.h"
 #include "catalog/fts_index_catalog_entry.h"
 #include "common/exception/binder.h"
 #include "common/string_utils.h"
