@@ -221,3 +221,49 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesWildcardNoRemoval) {
     // Cleanup
     std::filesystem::remove_all("/tmp/dbHome_wildcard");
 }
+
+TEST(VFSTests, VirtualFileSystemDeleteFilesPatternValidation) {
+    std::string dbPath = "/tmp/foo.db";
+    lbug::common::VirtualFileSystem vfs(dbPath);
+
+    std::filesystem::create_directories("/tmp/foo.db");
+
+    ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/foo.db.wal"));
+    ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/foo.db.shadow"));
+    ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/foo.db.tmp"));
+
+    ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/foo.db.graph1.wal"));
+    ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/foo.db.graph1.shadow"));
+    ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/foo.db.graph1.tmp"));
+    ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/foo.db.graph1.db"));
+
+    ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/foo.db"));
+
+    try {
+        vfs.removeFileIfExists("/tmp/bar.db");
+        FAIL() << "Expected exception for bar.db when dbPath is foo.db";
+    } catch (const lbug::common::IOException& e) {
+        EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/bar.db is not within the allowed "
+                               "list of files to be removed.");
+    }
+
+    try {
+        vfs.removeFileIfExists("/tmp/foo.wal");
+        FAIL() << "Expected exception for foo.wal (stem doesn't match foo.db)";
+    } catch (const lbug::common::IOException& e) {
+        EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/foo.wal is not within the allowed "
+                               "list of files to be removed.");
+    }
+
+    try {
+        vfs.removeFileIfExists("/tmp/foo.db.arbitrary");
+        FAIL() << "Expected exception for foo.db.arbitrary (arbitrary extension)";
+    } catch (const lbug::common::IOException& e) {
+        EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/foo.db.arbitrary is not within the "
+                               "allowed list of files to be removed.");
+    }
+
+    ASSERT_TRUE(std::filesystem::exists("/tmp/foo.db"));
+
+    std::filesystem::remove_all("/tmp/foo.db");
+}

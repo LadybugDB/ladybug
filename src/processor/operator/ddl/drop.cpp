@@ -140,7 +140,7 @@ void Drop::dropGraph(const main::ClientContext* context) {
         dbManager->clearDefaultGraph();
     }
 
-    dbManager->dropGraph(dropInfo.name);
+    dbManager->dropGraph(dropInfo.name, const_cast<main::ClientContext*>(context));
     appendMessage(stringFormat("Graph {} has been dropped.", dropInfo.name), memoryManager);
 }
 

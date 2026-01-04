@@ -259,12 +259,25 @@ void LocalFileSystem::createDir(const std::string& dir) const {
     }
 }
 
-static std::unordered_set<std::string> getDatabaseFileSet(const std::string& path) {
-    std::unordered_set<std::string> result;
-    result.insert(storage::StorageUtils::getWALFilePath(path));
-    result.insert(storage::StorageUtils::getShadowFilePath(path));
-    result.insert(storage::StorageUtils::getTmpFilePath(path));
-    return result;
+static bool isAllowedDeletionPath(const std::string& path, const std::string& dbPath) {
+    std::filesystem::path p(path);
+    std::string extension = p.extension().string();
+    std::string stemWithoutExt = p.stem().string();
+
+    std::filesystem::path dbPathP(dbPath);
+    std::string dbBase = dbPathP.stem().string();
+    std::string dbExt = dbPathP.extension().string();
+    std::string dbPrefix = dbBase + dbExt;
+
+    if (extension == ".wal" || extension == ".shadow" || extension == ".tmp") {
+        return stemWithoutExt.starts_with(dbPrefix + ".") || stemWithoutExt == dbPrefix;
+    }
+
+    if (extension == dbExt) {
+        return stemWithoutExt.starts_with(dbBase + ".");
+    }
+
+    return false;
 }
 
 static bool isExtensionFile(const main::ClientContext* context, const std::string& path) {
@@ -286,7 +299,7 @@ void LocalFileSystem::removeFileIfExists(const std::string& path,
     if (!fileOrPathExists(path)) {
         return;
     }
-    if (!getDatabaseFileSet(dbPath).contains(path) && !isExtensionFile(context, path)) {
+    if (!isAllowedDeletionPath(path, dbPath) && !isExtensionFile(context, path)) {
         throw IOException(stringFormat(
             "Error: Path {} is not within the allowed list of files to be removed.", path));
     }

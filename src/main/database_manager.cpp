@@ -116,7 +116,7 @@ void DatabaseManager::createGraph(const std::string& graphName,
     }
 }
 
-void DatabaseManager::dropGraph(const std::string& graphName) {
+void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContext* clientContext) {
     auto upperCaseName = StringUtils::getUpper(graphName);
     for (auto it = graphs.begin(); it != graphs.end(); ++it) {
         auto graphNameUpper = StringUtils::getUpper((*it)->getCatalogName());
@@ -125,13 +125,27 @@ void DatabaseManager::dropGraph(const std::string& graphName) {
                 defaultGraph = "";
             }
             auto storageManager = (*it)->getStorageManager();
+            std::string graphPath;
             if (storageManager != nullptr) {
+                graphPath = storageManager->getDatabasePath();
                 storageManager->closeFileHandle();
             }
             if (hasAttachedDatabase(graphName)) {
                 detachDatabase(graphName);
             }
             graphs.erase(it);
+
+            // Delete the physical graph files
+            if (!graphPath.empty() && !DBConfig::isDBPathInMemory(graphPath)) {
+                auto vfs = common::VirtualFileSystem::GetUnsafe(*clientContext);
+                vfs->removeFileIfExists(graphPath, clientContext);
+                vfs->removeFileIfExists(storage::StorageUtils::getWALFilePath(graphPath),
+                    clientContext);
+                vfs->removeFileIfExists(storage::StorageUtils::getShadowFilePath(graphPath),
+                    clientContext);
+                vfs->removeFileIfExists(storage::StorageUtils::getTmpFilePath(graphPath),
+                    clientContext);
+            }
             return;
         }
     }
