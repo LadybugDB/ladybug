@@ -269,7 +269,8 @@ static bool isAllowedDeletionPath(const std::string& path, const std::string& db
     std::string dbExt = dbPathP.extension().string();
     std::string dbPrefix = dbBase + dbExt;
 
-    if (extension == ".wal" || extension == ".shadow" || extension == ".tmp") {
+    if (extension == ".wal" || extension == ".shadow" || extension == ".tmp" ||
+        extension == ".lock") {
         return stemWithoutExt.starts_with(dbPrefix + ".") || stemWithoutExt == dbPrefix;
     }
 
