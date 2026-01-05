@@ -19,6 +19,8 @@ public:
         return connector->executeQuery(query);
     }
 
+    std::vector<std::string> getTableColumnNames(const std::string& tableName) const override;
+
 public:
     std::string getAttachedCatalogNameInDuckDB() const { return attachedCatalogNameInDuckDB; }
 
