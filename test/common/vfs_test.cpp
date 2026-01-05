@@ -209,7 +209,8 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesWildcardNoRemoval) {
         vfs.removeFileIfExists("/tmp/dbHome_wildcard/test*");
     } catch (const lbug::common::IOException& e) {
         // Verify the exception is thrown for unsupported wildcard
-        EXPECT_STREQ(e.what(), "Error: Wildcard patterns are not supported in paths.");
+        EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/dbHome_wildcard/test* is not within "
+                               "the allowed list of files to be removed.");
     }
 
     // Verify files and directories still exist
