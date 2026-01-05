@@ -11,11 +11,11 @@
 -LOG per-graph storage managers.
 
 -LOG CreateGraph
--STATEMENT CREATE GRAPH graph1
+-STATEMENT CREATE GRAPH graph1_cgu
 ---- ok
 
 -LOG UseGraph
--STATEMENT USE GRAPH graph1
+-STATEMENT USE GRAPH graph1_cgu
 ---- ok
 
 -LOG CreateTableInGraph1
@@ -23,11 +23,11 @@
 ---- ok
 
 -LOG CreateSecondGraph
--STATEMENT CREATE GRAPH graph2
+-STATEMENT CREATE GRAPH graph2_cgu
 ---- ok
 
 -LOG UseSecondGraph
--STATEMENT USE GRAPH graph2
+-STATEMENT USE GRAPH graph2_cgu
 ---- ok
 
 -LOG CreateTableInGraph2
@@ -39,7 +39,7 @@
 ---- ok
 
 -LOG SwitchToGraph1
--STATEMENT USE GRAPH graph1
+-STATEMENT USE GRAPH graph1_cgu
 ---- ok
 
 -LOG CleanupGraph1
@@ -48,54 +48,54 @@
 
 -CASE VerifyCatalogIsolation
 -LOG CreateGraphsForIsolationTest
--STATEMENT CREATE GRAPH graph1
+-STATEMENT CREATE GRAPH graph1_vci
 ---- ok
 
--STATEMENT CREATE GRAPH graph2
+-STATEMENT CREATE GRAPH graph2_vci
 ---- ok
 
 -LOG VerifyTablesInDifferentCatalogs
--STATEMENT USE GRAPH graph1
+-STATEMENT USE GRAPH graph1_vci
 ---- ok
 
 -STATEMENT CREATE NODE TABLE test(id INT64, name STRING, PRIMARY KEY(id))
 ---- ok
 
--STATEMENT USE GRAPH graph2
+-STATEMENT USE GRAPH graph2_vci
 ---- ok
 
 -STATEMENT CREATE NODE TABLE test(id INT64, name STRING, PRIMARY KEY(id))
 ---- ok
 
 -LOG VerifySwitchingWorks
--STATEMENT USE GRAPH graph1
+-STATEMENT USE GRAPH graph1_vci
 ---- ok
 
--STATEMENT USE GRAPH graph2
+-STATEMENT USE GRAPH graph2_vci
 ---- ok
 
--STATEMENT USE GRAPH graph1
+-STATEMENT USE GRAPH graph1_vci
 ---- ok
 
 -LOG CleanupGraph2
--STATEMENT USE GRAPH graph2
+-STATEMENT USE GRAPH graph2_vci
 ---- ok
 
 -STATEMENT DROP TABLE test
 ---- ok
 
 -LOG CleanupGraph1
--STATEMENT USE GRAPH graph1
+-STATEMENT USE GRAPH graph1_vci
 ---- ok
 
 -STATEMENT DROP TABLE test
 ---- ok
 
 -LOG CleanupAllGraphs
--STATEMENT DROP GRAPH graph2
+-STATEMENT DROP GRAPH graph2_vci
 ---- ok
 
--STATEMENT DROP GRAPH graph1
+-STATEMENT DROP GRAPH graph1_vci
 ---- ok
 
 -CASE ShowTablesWithIsolation
@@ -127,12 +127,12 @@ person|foo1(graph)
 
 -CASE ErrorCases
 -LOG DuplicateGraphError
--STATEMENT CREATE GRAPH graph1
+-STATEMENT CREATE GRAPH graph1_ec
 ---- ok
 
--STATEMENT CREATE GRAPH graph1
+-STATEMENT CREATE GRAPH graph1_ec
 ---- error
-Runtime exception: Graph graph1 already exists.
+Runtime exception: Graph graph1_ec already exists.
 
 -LOG NonExistentGraphError
 -STATEMENT USE GRAPH nonexistent
@@ -144,32 +144,32 @@ Binder exception: No graph named nonexistent.
 ---- ok
 
 -LOG Cleanup
--STATEMENT DROP GRAPH graph1
+-STATEMENT DROP GRAPH graph1_ec
 ---- ok
 
 -CASE DropGraph
 -LOG CreateGraphsToDrop
--STATEMENT CREATE GRAPH graph1
+-STATEMENT CREATE GRAPH graph1_dg
 ---- ok
 
--STATEMENT CREATE GRAPH graph2
+-STATEMENT CREATE GRAPH graph2_dg
 ---- ok
 
--STATEMENT CREATE GRAPH graph3
+-STATEMENT CREATE GRAPH graph3_dg
 ---- ok
 
 -LOG UseFirstGraph
--STATEMENT USE GRAPH graph1
+-STATEMENT USE GRAPH graph1_dg
 ---- ok
 
 -LOG DropSecondGraph
--STATEMENT DROP GRAPH graph2
+-STATEMENT DROP GRAPH graph2_dg
 ---- ok
 
 -LOG VerifyGraph2Dropped
--STATEMENT USE GRAPH graph2
+-STATEMENT USE GRAPH graph2_dg
 ---- error
-Binder exception: No graph named graph2.
+Binder exception: No graph named graph2_dg.
 
 -LOG DropNonExistentGraph
 -STATEMENT DROP GRAPH nonexistent
@@ -181,35 +181,35 @@ Binder exception: Graph nonexistent does not exist.
 ---- ok
 
 -LOG DropGraphInUse
--STATEMENT CREATE GRAPH testgraph
+-STATEMENT CREATE GRAPH testgraph_dg
 ---- ok
 
--STATEMENT USE GRAPH testgraph
+-STATEMENT USE GRAPH testgraph_dg
 ---- ok
 
--STATEMENT DROP GRAPH testgraph
+-STATEMENT DROP GRAPH testgraph_dg
 ---- ok
 
 -LOG VerifySwitchedToLocal
--STATEMENT USE GRAPH testgraph
+-STATEMENT USE GRAPH testgraph_dg
 ---- error
-Binder exception: No graph named testgraph.
+Binder exception: No graph named testgraph_dg.
 
 -LOG DropOthertest
--STATEMENT CREATE GRAPH dummy1
+-STATEMENT CREATE GRAPH dummy1_dg
 ---- ok
 
--STATEMENT CREATE GRAPH dummy2
+-STATEMENT CREATE GRAPH dummy2_dg
 ---- ok
 
--STATEMENT USE GRAPH dummy1
+-STATEMENT USE GRAPH dummy1_dg
 ---- ok
 
--STATEMENT DROP GRAPH dummy2
+-STATEMENT DROP GRAPH dummy2_dg
 ---- ok
 
--STATEMENT USE GRAPH dummy1
+-STATEMENT USE GRAPH dummy1_dg
 ---- ok
 
--STATEMENT DROP GRAPH dummy1
+-STATEMENT DROP GRAPH dummy1_dg
 ---- ok
