@@ -52,7 +52,21 @@ bool PostgresStorageExtension::canHandleDB(std::string dbType_) const {
 
 std::vector<std::string> AttachedPostgresDatabase::getTableColumnNames(
     const std::string& tableName) const {
-    return AttachedDuckDBDatabase::getTableColumnNames(tableName);
+    std::string query =
+        common::stringFormat("SELECT column_name FROM information_schema.columns WHERE "
+                             "table_name = '{}' ORDER BY ordinal_position",
+            tableName);
+
+    auto result = connector->executeQuery(query);
+    if (!result || result->RowCount() == 0) {
+        return {};
+    }
+
+    std::vector<std::string> columnNames;
+    for (auto i = 0u; i < result->RowCount(); i++) {
+        columnNames.push_back(result->GetValue(0, i).GetValue<std::string>());
+    }
+    return columnNames;
 }
 
 } // namespace postgres_extension
