@@ -6,7 +6,6 @@
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
 #include "connector/postgres_connector.h"
-#include "duckdb.hpp"
 #include "extension/extension.h"
 #include "function/clear_cache.h"
 #include "storage/attached_postgres_database.h"
@@ -49,25 +48,6 @@ PostgresStorageExtension::PostgresStorageExtension(main::Database& database)
 bool PostgresStorageExtension::canHandleDB(std::string dbType_) const {
     common::StringUtils::toUpper(dbType_);
     return dbType_ == DB_TYPE;
-}
-
-std::vector<std::string> AttachedPostgresDatabase::getTableColumnNames(
-    const std::string& tableName) const {
-    std::string query =
-        common::stringFormat("SELECT column_name FROM information_schema.columns WHERE "
-                             "table_name = '{}' ORDER BY ordinal_position",
-            tableName);
-
-    auto result = connector->executeQuery(query);
-    if (!result || result->RowCount() == 0) {
-        return {};
-    }
-
-    std::vector<std::string> columnNames;
-    for (auto i = 0u; i < result->RowCount(); i++) {
-        columnNames.push_back(result->GetValue(0, i).GetValue<std::string>());
-    }
-    return columnNames;
 }
 
 } // namespace postgres_extension
