@@ -9,19 +9,21 @@ class LogicalCreateGraph final : public LogicalSimple {
     static constexpr LogicalOperatorType type_ = LogicalOperatorType::CREATE_GRAPH;
 
 public:
-    explicit LogicalCreateGraph(std::string graphName)
-        : LogicalSimple{type_}, graphName{std::move(graphName)} {}
+    explicit LogicalCreateGraph(std::string graphName, bool isAny = false)
+        : LogicalSimple{type_}, graphName{std::move(graphName)}, isAny{isAny} {}
 
     std::string getGraphName() const { return graphName; }
+    bool isAnyGraph() const { return isAny; }
 
     std::string getExpressionsForPrinting() const override { return graphName; }
 
     std::unique_ptr<LogicalOperator> copy() override {
-        return std::make_unique<LogicalCreateGraph>(graphName);
+        return std::make_unique<LogicalCreateGraph>(graphName, isAny);
     }
 
 private:
     std::string graphName;
+    bool isAny = false;
 };
 
 class LogicalUseGraph final : public LogicalSimple {

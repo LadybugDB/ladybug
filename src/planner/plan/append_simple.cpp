@@ -170,7 +170,8 @@ LogicalPlan Planner::planExtensionClause(const BoundStatement& statement) {
 
 LogicalPlan Planner::planCreateGraph(const BoundStatement& statement) {
     auto& boundCreateGraph = statement.constCast<BoundCreateGraph>();
-    auto op = std::make_shared<LogicalCreateGraph>(boundCreateGraph.getGraphName());
+    auto op = std::make_shared<LogicalCreateGraph>(boundCreateGraph.getGraphName(),
+        boundCreateGraph.isAnyGraph());
     return getSimplePlan(std::move(op));
 }
 

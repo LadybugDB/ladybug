@@ -1,15 +1,26 @@
 #include "main/database_manager.h"
 
+#include "binder/ddl/bound_create_table_info.h"
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/exception/binder.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
+#include "common/serializer/in_mem_file_writer.h"
+#include "common/serializer/serializer.h"
 #include "common/string_utils.h"
 #include "main/client_context.h"
 #include "main/database.h"
 #include "main/db_config.h"
+#include "storage/buffer_manager/memory_manager.h"
+#include "storage/checkpointer.h"
+#include "storage/database_header.h"
+#include "storage/shadow_utils.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
+#include "transaction/transaction.h"
+#include "transaction/transaction_context.h"
+
 #include <format>
 
 using namespace lbug::common;
@@ -92,7 +103,7 @@ DatabaseManager* DatabaseManager::Get(const ClientContext& context) {
 }
 
 void DatabaseManager::createGraph(const std::string& graphName,
-    storage::MemoryManager* memoryManager, main::ClientContext* clientContext) {
+    storage::MemoryManager* memoryManager, main::ClientContext* clientContext, bool isAnyGraph) {
     auto upperCaseName = StringUtils::getUpper(graphName);
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
@@ -111,6 +122,51 @@ void DatabaseManager::createGraph(const std::string& graphName,
     storageManager->initDataFileHandle(common::VirtualFileSystem::GetUnsafe(*clientContext),
         clientContext);
     catalog->setStorageManager(std::move(storageManager));
+
+    if (isAnyGraph) {
+        // Use DUMMY_CHECKPOINT_TRANSACTION to create tables
+        auto* transaction = &transaction::DUMMY_CHECKPOINT_TRANSACTION;
+
+        std::vector<binder::PropertyDefinition> nodeProperties;
+        nodeProperties.emplace_back(binder::ColumnDefinition("id", common::LogicalType::SERIAL()));
+        nodeProperties.emplace_back(
+            binder::ColumnDefinition("label", common::LogicalType::STRING()));
+        nodeProperties.emplace_back(
+            binder::ColumnDefinition("data", common::LogicalType::STRING()));
+
+        auto nodeExtraInfo = std::make_unique<binder::BoundExtraCreateNodeTableInfo>("id",
+            std::move(nodeProperties), "");
+        auto nodeTableInfo =
+            binder::BoundCreateTableInfo(catalog::CatalogEntryType::NODE_TABLE_ENTRY, "_nodes",
+                common::ConflictAction::ON_CONFLICT_THROW, std::move(nodeExtraInfo), false);
+        auto* nodeEntry = catalog->createTableEntry(transaction, nodeTableInfo);
+        // Mark entry as committed so it's visible to all transactions
+        nodeEntry->setTimestamp(0);
+        catalog->getStorageManager()->createTable(nodeEntry->ptrCast<catalog::TableCatalogEntry>());
+        auto nodeTableID = nodeEntry->ptrCast<catalog::TableCatalogEntry>()->getTableID();
+
+        std::vector<binder::PropertyDefinition> relProperties;
+        relProperties.emplace_back(
+            binder::ColumnDefinition("_id", common::LogicalType::INTERNAL_ID()));
+        relProperties.emplace_back(
+            binder::ColumnDefinition("label", common::LogicalType::STRING()));
+        relProperties.emplace_back(binder::ColumnDefinition("data", common::LogicalType::STRING()));
+
+        std::vector<catalog::NodeTableIDPair> nodePairs;
+        nodePairs.emplace_back(catalog::NodeTableIDPair(nodeTableID, nodeTableID));
+
+        auto relExtraInfo = std::unique_ptr<binder::BoundExtraCreateRelTableGroupInfo>(
+            new binder::BoundExtraCreateRelTableGroupInfo(std::move(relProperties),
+                common::RelMultiplicity::MANY, common::RelMultiplicity::MANY,
+                common::ExtendDirection::BOTH, std::move(nodePairs), std::string("")));
+        auto relTableInfo = binder::BoundCreateTableInfo(catalog::CatalogEntryType::REL_GROUP_ENTRY,
+            "_edges", common::ConflictAction::ON_CONFLICT_THROW, std::move(relExtraInfo), false);
+        auto* relEntry = catalog->createTableEntry(transaction, relTableInfo);
+        // Mark entry as committed so it's visible to all transactions
+        relEntry->setTimestamp(0);
+        catalog->getStorageManager()->createTable(relEntry->ptrCast<catalog::TableCatalogEntry>());
+    }
+
     graphs.push_back(std::move(catalog));
     if (defaultGraph == "") {
         defaultGraph = graphName;

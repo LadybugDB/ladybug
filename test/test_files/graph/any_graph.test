@@ -1,0 +1,35 @@
+-DATASET CSV empty
+
+--
+
+-CASE CreateAnyGraph
+-SKIP_FSM_LEAK_CHECK
+
+-LOG CreateGraph
+-STATEMENT CREATE GRAPH mygraph ANY
+---- ok
+
+-LOG UseGraph
+-STATEMENT USE GRAPH mygraph
+---- ok
+
+-LOG VerifyInternalTables
+-STATEMENT CALL SHOW_TABLES() RETURN name
+---- 2
+_edges
+_nodes
+
+-LOG CreateNodeTable
+-STATEMENT CREATE NODE TABLE test_node(id INT64, PRIMARY KEY(id))
+---- ok
+
+-LOG CreateRelTable
+-STATEMENT CREATE REL TABLE test_rel(FROM test_node TO test_node)
+---- ok
+
+-LOG Cleanup
+-STATEMENT USE GRAPH main
+---- ok
+
+-STATEMENT DROP GRAPH mygraph
+---- ok

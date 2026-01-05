@@ -7,7 +7,7 @@ namespace binder {
 
 std::unique_ptr<BoundStatement> Binder::bindCreateGraph(const parser::Statement& statement) {
     auto createGraph = statement.constCast<parser::CreateGraph>();
-    return std::make_unique<BoundCreateGraph>(createGraph.getGraphName());
+    return std::make_unique<BoundCreateGraph>(createGraph.getGraphName(), createGraph.isAnyGraph());
 }
 
 std::unique_ptr<BoundStatement> Binder::bindUseGraph(const parser::Statement& statement) {

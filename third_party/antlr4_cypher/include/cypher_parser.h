@@ -574,6 +574,7 @@ public:
     antlr4::tree::TerminalNode* SP(size_t i);
     antlr4::tree::TerminalNode *GRAPH();
     OC_SchemaNameContext *oC_SchemaName();
+    antlr4::tree::TerminalNode *ANY();
 
    
   };

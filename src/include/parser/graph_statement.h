@@ -18,8 +18,12 @@ private:
 
 class CreateGraph final : public GraphStatement {
 public:
-    explicit CreateGraph(std::string graphName)
-        : GraphStatement{common::StatementType::CREATE_GRAPH, std::move(graphName)} {}
+    explicit CreateGraph(std::string graphName, bool isAny = false)
+        : GraphStatement{common::StatementType::CREATE_GRAPH, std::move(graphName)}, isAny{isAny} {}
+    bool isAnyGraph() const { return isAny; }
+
+private:
+    bool isAny = false;
 };
 
 class UseGraph final : public GraphStatement {

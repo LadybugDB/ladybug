@@ -156,8 +156,8 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCreateGraph(
     auto printInfo = std::make_unique<OPPrintInfo>();
     auto messageTable =
         FactorizedTableUtils::getSingleStringColumnFTable(MemoryManager::Get(*clientContext));
-    return std::make_unique<CreateGraph>(createGraph->getGraphName(), std::move(messageTable),
-        getOperatorID(), std::move(printInfo));
+    return std::make_unique<CreateGraph>(createGraph->getGraphName(), createGraph->isAnyGraph(),
+        std::move(messageTable), getOperatorID(), std::move(printInfo));
 }
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapUseGraph(const LogicalOperator* logicalOperator) {

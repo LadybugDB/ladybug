@@ -708,6 +708,11 @@ std::pair<TableCatalogEntry*, std::string> Binder::bindNodeTableEntry(
         if (catalog->containsTable(transaction, name, useInternal)) {
             return {catalog->getTableCatalogEntry(transaction, name, useInternal), ""};
         }
+        // Check if this is an ANY graph (has _nodes table)
+        // In ANY graphs, labels are stored dynamically in the _nodes table
+        if (catalog->containsTable(transaction, "_nodes", useInternal)) {
+            return {catalog->getTableCatalogEntry(transaction, "_nodes", useInternal), ""};
+        }
         throw BinderException(std::format("Table {} does not exist.", name));
     }
 }
@@ -739,7 +744,14 @@ std::vector<TableCatalogEntry*> Binder::bindRelGroupEntries(
                 }
                 entrySet.insert(entry);
             } else {
-                throw BinderException(std::format("Table {} does not exist.", name));
+                // Check if this is an ANY graph (has _edges table)
+                // In ANY graphs, labels are stored dynamically in the _edges table
+                if (catalog->containsTable(transaction, "_edges", useInternal)) {
+                    auto entry = catalog->getTableCatalogEntry(transaction, "_edges", useInternal);
+                    entrySet.insert(entry);
+                } else {
+                    throw BinderException(std::format("Table {} does not exist.", name));
+                }
             }
         }
     }

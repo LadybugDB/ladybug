@@ -17,7 +17,7 @@ void UseGraph::executeInternal(ExecutionContext* context) {
 void CreateGraph::executeInternal(ExecutionContext* context) {
     auto dbManager = main::DatabaseManager::Get(*context->clientContext);
     auto memoryManager = storage::MemoryManager::Get(*context->clientContext);
-    dbManager->createGraph(graphName, memoryManager, context->clientContext);
+    dbManager->createGraph(graphName, memoryManager, context->clientContext, isAnyGraph());
     appendMessage("Created graph successfully.", memoryManager);
 }
 

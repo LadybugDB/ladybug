@@ -73,7 +73,7 @@ kU_UseDatabase
     : USE SP oC_SchemaName;
 
 kU_CreateGraph
-    : CREATE SP GRAPH SP oC_SchemaName;
+    : CREATE SP GRAPH SP oC_SchemaName (SP ANY)?;
 
 kU_UseGraph
     : USE SP GRAPH SP oC_SchemaName;

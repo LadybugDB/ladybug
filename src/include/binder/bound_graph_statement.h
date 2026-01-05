@@ -21,8 +21,12 @@ class BoundCreateGraph final : public BoundGraphStatement {
     static constexpr common::StatementType type_ = common::StatementType::CREATE_GRAPH;
 
 public:
-    explicit BoundCreateGraph(std::string graphName)
-        : BoundGraphStatement{type_, std::move(graphName)} {}
+    explicit BoundCreateGraph(std::string graphName, bool isAny = false)
+        : BoundGraphStatement{type_, std::move(graphName)}, isAny{isAny} {}
+    bool isAnyGraph() const { return isAny; }
+
+private:
+    bool isAny = false;
 };
 
 class BoundUseGraph final : public BoundGraphStatement {
