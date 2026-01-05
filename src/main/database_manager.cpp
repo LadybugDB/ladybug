@@ -146,6 +146,15 @@ void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContex
                 vfs->removeFileIfExists(storage::StorageUtils::getTmpFilePath(graphPath),
                     clientContext);
             }
+
+            auto dbStorageManager = clientContext->getDatabase()->getStorageManager();
+            auto databaseHeader = dbStorageManager->getOrInitDatabaseHeader(*clientContext);
+            auto newHeader = std::make_unique<storage::DatabaseHeader>(*databaseHeader);
+            newHeader->catalogPageRange.startPageIdx = common::INVALID_PAGE_IDX;
+            newHeader->catalogPageRange.numPages = 0;
+            newHeader->metadataPageRange.startPageIdx = common::INVALID_PAGE_IDX;
+            newHeader->metadataPageRange.numPages = 0;
+            dbStorageManager->setDatabaseHeader(std::move(newHeader));
             return;
         }
     }
