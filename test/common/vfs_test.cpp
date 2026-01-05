@@ -237,7 +237,13 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesPatternValidation) {
     ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/foo.db.graph1.tmp"));
     ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/foo.db.graph1.db"));
 
-    ASSERT_NO_THROW(vfs.removeFileIfExists("/tmp/foo.db"));
+    try {
+        vfs.removeFileIfExists("/tmp/foo.db");
+        FAIL() << "Expected exception for foo.db (dbPath itself)";
+    } catch (const lbug::common::IOException& e) {
+        EXPECT_STREQ(e.what(), "IO exception: Error: Path /tmp/foo.db is not within the allowed "
+                               "list of files to be removed.");
+    }
 
     try {
         vfs.removeFileIfExists("/tmp/bar.db");

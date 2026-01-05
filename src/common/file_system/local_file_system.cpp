@@ -296,12 +296,12 @@ static bool isExtensionFile(const main::ClientContext* context, const std::strin
 
 void LocalFileSystem::removeFileIfExists(const std::string& path,
     const main::ClientContext* context) {
-    if (!fileOrPathExists(path)) {
-        return;
-    }
     if (!isAllowedDeletionPath(path, dbPath) && !isExtensionFile(context, path)) {
         throw IOException(stringFormat(
             "Error: Path {} is not within the allowed list of files to be removed.", path));
+    }
+    if (!fileOrPathExists(path)) {
+        return;
     }
     std::error_code errCode;
     bool success = false;
