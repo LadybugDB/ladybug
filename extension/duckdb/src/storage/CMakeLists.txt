@@ -1,6 +1,5 @@
 add_library(lbug_duckdb_storage
         OBJECT
-        attached_duckdb_database.cpp
         duckdb_storage.cpp)
 
 set(DUCKDB_EXTENSION_OBJECT_FILES
