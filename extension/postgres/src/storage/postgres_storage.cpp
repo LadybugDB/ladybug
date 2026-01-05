@@ -50,5 +50,10 @@ bool PostgresStorageExtension::canHandleDB(std::string dbType_) const {
     return dbType_ == DB_TYPE;
 }
 
+std::vector<std::string> AttachedPostgresDatabase::getTableColumnNames(
+    const std::string& tableName) const {
+    return AttachedDuckDBDatabase::getTableColumnNames(tableName);
+}
+
 } // namespace postgres_extension
 } // namespace lbug
