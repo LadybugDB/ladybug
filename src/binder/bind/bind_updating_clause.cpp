@@ -191,7 +191,6 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
     insertInfo.columnDataExprs =
         bindInsertColumnDataExprs(node->getPropertyDataExprRef(), entry->getProperties());
 
-    // Check if this is an ANY graph (_nodes table) - skip primary key validation for SERIAL
     auto transaction = transaction::Transaction::Get(*clientContext);
     auto useInternal = clientContext->useInternalCatalogEntry();
     auto dbManager = main::DatabaseManager::Get(*clientContext);
@@ -202,7 +201,43 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
             defaultGraphCatalog->getTableCatalogEntry(transaction, "_nodes", useInternal)
                 ->getTableID();
 
-    if (!isAnyGraph) {
+    if (isAnyGraph) {
+        // For ANY graphs, the _nodes table has columns: id (SERIAL), label (STRING), data (STRING)
+        // The id is auto-populated by the serial default
+        // We need to ensure label and data expressions are at the correct positions
+
+        // Get the original label from the node's original labels
+        std::shared_ptr<Expression> boundLabelExpr;
+        auto originalLabels = node->getOriginalLabels();
+        if (!originalLabels.empty()) {
+            // Use the first original label
+            boundLabelExpr = expressionBinder.createLiteralExpression(originalLabels[0]);
+        } else {
+            // Fallback to entry name if no original labels
+            boundLabelExpr = expressionBinder.createLiteralExpression(entry->getName());
+        }
+
+        // The _nodes table properties are: id, label, data
+        // We need to ensure columnDataExprs has label at index 1 and data at index 2
+        if (insertInfo.columnDataExprs.size() >= 1) {
+            // Replace or add label at position 1
+            if (insertInfo.columnDataExprs.size() == 1) {
+                insertInfo.columnDataExprs.push_back(boundLabelExpr);
+            } else {
+                insertInfo.columnDataExprs[1] = boundLabelExpr;
+            }
+        }
+        if (insertInfo.columnDataExprs.size() >= 2) {
+            // Replace or add data at position 2
+            // For now, use an empty JSON object as placeholder
+            auto dataExpr = expressionBinder.createLiteralExpression(std::string("{}"));
+            if (insertInfo.columnDataExprs.size() == 2) {
+                insertInfo.columnDataExprs.push_back(dataExpr);
+            } else {
+                insertInfo.columnDataExprs[2] = dataExpr;
+            }
+        }
+    } else {
         auto nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
         validatePrimaryKeyExistence(nodeEntry, *node, insertInfo.columnDataExprs);
     }
@@ -271,6 +306,47 @@ void Binder::bindInsertRel(std::shared_ptr<RelExpression> rel,
     }
     insertInfo.columnDataExprs =
         bindInsertColumnDataExprs(rel->getPropertyDataExprRef(), entry->getProperties());
+
+    // Check if this is an ANY graph (_edges table)
+    auto transaction = transaction::Transaction::Get(*clientContext);
+    auto useInternal = clientContext->useInternalCatalogEntry();
+    auto dbManager = main::DatabaseManager::Get(*clientContext);
+    auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
+    bool isAnyGraph =
+        defaultGraphCatalog != nullptr &&
+        entry->getTableID() ==
+            defaultGraphCatalog->getTableCatalogEntry(transaction, "_edges", useInternal)
+                ->getTableID();
+
+    if (isAnyGraph) {
+        // For ANY graphs, add label and data expressions for the _edges table
+        // The _edges table has columns: _id (INTERNAL_ID), label (STRING), data (STRING)
+        // The _id is auto-populated during insert
+        // We need to add label and data expressions at the correct positions
+
+        // Get the original label from the rel's original labels
+        std::shared_ptr<Expression> boundLabelExpr;
+        auto originalLabels = rel->getOriginalLabels();
+        if (!originalLabels.empty()) {
+            // Use the first original label
+            boundLabelExpr = expressionBinder.createLiteralExpression(originalLabels[0]);
+        } else {
+            // Fallback to entry name if no original labels
+            boundLabelExpr = expressionBinder.createLiteralExpression(entry->getName());
+        }
+
+        // Insert label and data at the correct positions (after _id)
+        // The properties are: _id, label, data
+        // We already have _id in columnDataExprs, now add label and data
+        if (insertInfo.columnDataExprs.size() == 1) {
+            // Only _id is present, add label and data
+            insertInfo.columnDataExprs.push_back(boundLabelExpr);
+            // Use empty JSON object for data
+            auto dataExpr = expressionBinder.createLiteralExpression(std::string("{}"));
+            insertInfo.columnDataExprs.push_back(dataExpr);
+        }
+    }
+
     infos.push_back(std::move(insertInfo));
 }
 

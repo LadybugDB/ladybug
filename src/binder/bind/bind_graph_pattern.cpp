@@ -226,7 +226,7 @@ std::shared_ptr<RelExpression> Binder::bindQueryRel(const RelPattern& relPattern
         queryRel = createRecursiveQueryRel(relPattern, entries, srcNode, dstNode, directionType);
     } else {
         queryRel = createNonRecursiveQueryRel(relPattern.getVariableName(), entries, srcNode,
-            dstNode, directionType);
+            dstNode, directionType, relPattern.getTableNames());
         for (auto& [propertyName, rhs] : relPattern.getPropertyKeyVals()) {
             auto boundLhs =
                 expressionBinder.bindNodeOrRelPropertyExpression(*queryRel, propertyName);
@@ -279,7 +279,8 @@ static std::shared_ptr<PropertyExpression> construct(LogicalType type,
 
 std::shared_ptr<RelExpression> Binder::createNonRecursiveQueryRel(const std::string& parsedName,
     const std::vector<TableCatalogEntry*>& entries, std::shared_ptr<NodeExpression> srcNode,
-    std::shared_ptr<NodeExpression> dstNode, RelDirectionType directionType) {
+    std::shared_ptr<NodeExpression> dstNode, RelDirectionType directionType,
+    const std::vector<std::string>& originalLabels) {
     auto uniqueName = getUniqueExpressionName(parsedName);
     // Bind properties
     auto structFields = getBaseRelStructFields();
@@ -312,6 +313,10 @@ std::shared_ptr<RelExpression> Binder::createNonRecursiveQueryRel(const std::str
     }
     auto input = function::RewriteFunctionBindInput(clientContext, &expressionBinder, {queryRel});
     queryRel->setLabelExpression(function::LabelFunction::rewriteFunc(input));
+    // Store original labels for ANY graphs
+    if (!originalLabels.empty()) {
+        queryRel->setOriginalLabels(originalLabels);
+    }
     return queryRel;
 }
 
@@ -367,16 +372,16 @@ std::shared_ptr<RelExpression> Binder::createRecursiveQueryRel(const parser::Rel
     auto prevScope = saveScope();
     scope.clear();
     // Bind intermediate node.
-    auto node = createQueryNode(recursivePatternInfo->nodeName, nodeEntries, {});
+    auto node = createQueryNode(recursivePatternInfo->nodeName, nodeEntries, {}, {});
     addToScope(node->toString(), node);
     auto nodeFields = getBaseNodeStructFields();
     auto nodeProjectionList = bindRecursivePatternNodeProjectionList(*recursivePatternInfo, *node);
     bindProjectionListAsStructField(nodeProjectionList, nodeFields);
     node->setDataType(LogicalType::NODE(std::move(nodeFields)));
-    auto nodeCopy = createQueryNode(recursivePatternInfo->nodeName, nodeEntries, {});
+    auto nodeCopy = createQueryNode(recursivePatternInfo->nodeName, nodeEntries, {}, {});
     // Bind intermediate rel
     auto rel = createNonRecursiveQueryRel(recursivePatternInfo->relName, entries,
-        nullptr /* srcNode */, nullptr /* dstNode */, directionType);
+        nullptr /* srcNode */, nullptr /* dstNode */, directionType, {});
     addToScope(rel->toString(), rel);
     auto relProjectionList = bindRecursivePatternRelProjectionList(*recursivePatternInfo, *rel);
     auto relFields = getBaseRelStructFields();
@@ -598,13 +603,16 @@ std::shared_ptr<NodeExpression> Binder::bindQueryNode(const NodePattern& nodePat
 std::shared_ptr<NodeExpression> Binder::createQueryNode(const NodePattern& nodePattern) {
     auto parsedName = nodePattern.getVariableName();
     auto [entries, dbNames] = bindNodeTableEntries(nodePattern.getTableNames());
-    auto node = createQueryNode(parsedName, entries, dbNames);
+    // Store original labels before they might be replaced by _nodes for ANY graphs
+    std::vector<std::string> originalLabels = nodePattern.getTableNames();
+    auto node = createQueryNode(parsedName, entries, dbNames, originalLabels);
     return node;
 }
 
 std::shared_ptr<NodeExpression> Binder::createQueryNode(const std::string& parsedName,
     const std::vector<TableCatalogEntry*>& entries,
-    const std::unordered_map<TableCatalogEntry*, std::string>& dbNames) {
+    const std::unordered_map<TableCatalogEntry*, std::string>& dbNames,
+    const std::vector<std::string>& originalLabels) {
     auto uniqueName = getUniqueExpressionName(parsedName);
     // Bind properties.
     auto structFields = getBaseNodeStructFields();
@@ -622,6 +630,10 @@ std::shared_ptr<NodeExpression> Binder::createQueryNode(const std::string& parse
     }
     for (auto& [entry, dbName] : dbNames) {
         queryNode->setDbName(entry, dbName);
+    }
+    // Store original labels for ANY graphs
+    if (!originalLabels.empty()) {
+        queryNode->setOriginalLabels(originalLabels);
     }
     // Bind internal expressions
     queryNode->setInternalID(

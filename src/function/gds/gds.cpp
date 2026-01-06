@@ -153,7 +153,7 @@ std::shared_ptr<binder::Expression> GDSFunction::bindRelOutput(const TableFuncBi
             bindColumnName(bindInput.yieldVariables[yieldVariableIdx.value_or(0)], relColumnName);
     }
     auto rel = bindInput.binder->createNonRecursiveQueryRel(relColumnName, relEntries, srcNode,
-        dstNode, RelDirectionType::SINGLE);
+        dstNode, RelDirectionType::SINGLE, {});
     bindInput.binder->addToScope(REL_COLUMN_NAME, rel);
     return rel;
 }

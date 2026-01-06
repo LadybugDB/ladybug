@@ -275,7 +275,7 @@ public:
     std::shared_ptr<RelExpression> createNonRecursiveQueryRel(const std::string& parsedName,
         const std::vector<catalog::TableCatalogEntry*>& entries,
         std::shared_ptr<NodeExpression> srcNode, std::shared_ptr<NodeExpression> dstNode,
-        RelDirectionType directionType);
+        RelDirectionType directionType, const std::vector<std::string>& originalLabels);
     std::shared_ptr<RelExpression> createRecursiveQueryRel(const parser::RelPattern& relPattern,
         const std::vector<catalog::TableCatalogEntry*>& entries,
         std::shared_ptr<NodeExpression> srcNode, std::shared_ptr<NodeExpression> dstNode,
@@ -291,7 +291,8 @@ public:
     std::shared_ptr<NodeExpression> createQueryNode(const parser::NodePattern& nodePattern);
     LBUG_API std::shared_ptr<NodeExpression> createQueryNode(const std::string& parsedName,
         const std::vector<catalog::TableCatalogEntry*>& entries,
-        const std::unordered_map<catalog::TableCatalogEntry*, std::string>& dbNames = {});
+        const std::unordered_map<catalog::TableCatalogEntry*, std::string>& dbNames = {},
+        const std::vector<std::string>& originalLabels = {});
 
     /*** bind table entries ***/
     std::pair<std::vector<catalog::TableCatalogEntry*>,

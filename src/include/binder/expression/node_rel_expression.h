@@ -86,6 +86,10 @@ public:
         return it != dbNames.end() ? it->second : "";
     }
 
+    // Original labels from the node/rel pattern (for ANY graphs)
+    void setOriginalLabels(std::vector<std::string> labels) { originalLabels = std::move(labels); }
+    std::vector<std::string> getOriginalLabels() const { return originalLabels; }
+
     std::string toStringInternal() const final { return variableName; }
 
 protected:
@@ -102,6 +106,8 @@ protected:
     common::case_insensitive_map_t<std::shared_ptr<Expression>> propertyDataExprs;
     // Database names for table entries from attached databases
     std::unordered_map<catalog::TableCatalogEntry*, std::string> dbNames;
+    // Original labels from the node/rel pattern (for ANY graphs)
+    std::vector<std::string> originalLabels;
 };
 
 } // namespace binder
