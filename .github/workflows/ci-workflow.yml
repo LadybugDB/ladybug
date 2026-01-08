@@ -1270,7 +1270,19 @@ jobs:
 
       # shell needs to be built first to generate the dataset provided by the server
       - name: Extension test build
-        run: make extension-test-build
+        run: |
+          make relwithdebinfo
+          cp build/relwithdebinfo/tools/shell/lbug lbug.prod
+          make extension-test-build
+          cp lbug.prod build/relwithdebinfo/tools/shell/lbug
+
+      - name: Test dynamic extension loading
+        run: |
+          cd tools/shell/test
+          uv venv
+          source .venv/bin/activate
+          uv pip install pytest pexpect
+          pytest test_dynamic_extension_loading.py -v
 
       - name: Extension test
         run: |
