@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 
+#include "common/api.h"
 #include "extension/catalog_extension.h"
 #include "storage/storage_manager.h"
 #include "transaction/transaction_manager.h"
@@ -14,7 +15,7 @@ class MaterializedQueryResult;
 namespace lbug {
 namespace main {
 
-class AttachedDatabase {
+class LBUG_API AttachedDatabase {
 public:
     AttachedDatabase(std::string dbName, std::string dbType,
         std::unique_ptr<extension::CatalogExtension> catalog)
