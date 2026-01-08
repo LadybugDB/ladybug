@@ -263,10 +263,11 @@ bool ParquetRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
     DataChunk indicesChunk(numIndicesColumns);
 
     // Insert value vectors for all columns in the parquet file
+    auto memoryManager = MemoryManager::Get(*context);
     for (uint32_t colIdx = 0; colIdx < numIndicesColumns; ++colIdx) {
         const auto& columnTypeRef = parquetRelScanState.indicesReader->getColumnType(colIdx);
         auto columnType = columnTypeRef.copy();
-        auto vector = std::make_shared<ValueVector>(std::move(columnType));
+        auto vector = std::make_shared<ValueVector>(std::move(columnType), memoryManager);
         indicesChunk.insert(colIdx, vector);
     }
 
