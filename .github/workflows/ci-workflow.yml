@@ -758,6 +758,12 @@ jobs:
         shell: cmd
         run: powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
 
+      - name: Enable long paths (Windows)
+        run: |
+          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+          git config --system core.longpaths true
+        shell: pwsh
+
       - name: Install ccache
         run: choco install ccache -y
         shell: cmd
@@ -1540,6 +1546,12 @@ jobs:
       - name: Disable Windows Defender scanning for build directories
         shell: cmd
         run: powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
+
+      - name: Enable long paths (Windows)
+        run: |
+          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+          git config --system core.longpaths true
+        shell: pwsh
 
       - name: Install ccache
         run: choco install ccache -y

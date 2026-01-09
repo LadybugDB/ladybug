@@ -74,6 +74,13 @@ jobs:
         working-directory: tools/nodejs_api
         run: npm i
 
+      - name: Enable long paths (Windows)
+        if: ${{ matrix.platform == 'win32' }}
+        run: |
+          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+          git config --system core.longpaths true
+        shell: pwsh
+
       - name: Build Node.js native module (Windows)
         if: ${{ matrix.platform == 'win32' }}
         shell: cmd

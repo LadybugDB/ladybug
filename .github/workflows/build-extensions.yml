@@ -129,6 +129,13 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: 13.3
           CMAKE_OSX_ARCHITECTURES: "arm64"
 
+      - name: Enable long paths (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+          git config --system core.longpaths true
+        shell: pwsh
+
       - name: Install ccache (Windows)
         if: runner.os == 'Windows'
         run: choco install ccache -y
