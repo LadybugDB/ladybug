@@ -113,6 +113,11 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          name: macos-wheels-x86_64
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
           name: manylinux_2_28-wheels-x86_64
           path: dist
 
@@ -124,6 +129,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: windows-wheels-amd64
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-wheels-arm64
           path: dist
 
       - uses: actions/download-artifact@v4

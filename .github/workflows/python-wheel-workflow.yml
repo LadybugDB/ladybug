@@ -66,9 +66,21 @@ jobs:
             os: macos
             deployment-target: '11.0'
 
-          # Job 4: Windows amd64 build
+          # Job 4: macOS x86_64 build
+          - platform: x86_64
+            runner: macos-15-intel
+            os: macos
+            deployment-target: '10.15'
+
+          # Job 5: Windows amd64 build
           - platform: amd64
             runner: windows-2022
+            os: windows
+            deployment-target: ''
+
+          # Job 6: Windows arm64 build
+          - platform: arm64
+            runner: windows-11-arm
             os: windows
             deployment-target: ''
 
