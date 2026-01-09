@@ -78,9 +78,34 @@ jobs:
         if: ${{ matrix.platform == 'win32' }}
         shell: cmd
         run: |
+          choco install ccache -y
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          ccache --set-config=max_size=2G
+          ccache --set-config=compression=true
+          ccache --set-config=cache_dir=D:\ccache
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+
+      - name: Cache ccache directory (Windows)
+        if: ${{ matrix.platform == 'win32' }}
+        uses: actions/cache@v4
+        with:
+          path: D:\ccache
+          key: ${{ runner.os }}-ccache-node-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h', 'tools/nodejs_api/**') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-node-
+
+      - name: Build Node.js native module with ccache (Windows)
+        if: ${{ matrix.platform == 'win32' }}
+        shell: cmd
+        run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          ccache -s
           make GEN=Ninja nodejs
+          ccache -s
 
       - name: Move Node.js native module (Linux)
         if: ${{ matrix.platform == 'linux' }}

@@ -129,6 +129,35 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: 13.3
           CMAKE_OSX_ARCHITECTURES: "arm64"
 
+      - name: Install ccache (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ccache -y
+        shell: cmd
+
+      - name: Setup ccache (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          ccache --set-config=max_size=2G
+          ccache --set-config=compression=true
+          ccache --set-config=cache_dir=D:\ccache
+        shell: bash
+
+      - name: Cache ccache directory (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: D:\ccache
+          key: ${{ runner.os }}-ccache-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-
+
+      - name: Show ccache stats (before) (Windows)
+        if: runner.os == 'Windows'
+        run: ccache -s
+        shell: bash
+
       - name: Build precompiled extensions (Windows)
         if: runner.os == 'Windows'
         shell: cmd
@@ -138,6 +167,11 @@ jobs:
           make extension-release
         env:
           CMAKE_PREFIX_PATH: C:\local
+
+      - name: Show ccache stats (after) (Windows)
+        if: runner.os == 'Windows'
+        run: ccache -s
+        shell: bash
 
       - name: Collect built artifacts
         run: python3 scripts/collect-extensions.py

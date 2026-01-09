@@ -53,6 +53,35 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: 13.3
           CMAKE_OSX_ARCHITECTURES: "x86_64;arm64"
 
+      - name: Install ccache (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ccache -y
+        shell: cmd
+
+      - name: Setup ccache (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          ccache --set-config=max_size=2G
+          ccache --set-config=compression=true
+          ccache --set-config=cache_dir=D:\ccache
+        shell: bash
+
+      - name: Cache ccache directory (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: D:\ccache
+          key: ${{ runner.os }}-ccache-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-
+
+      - name: Show ccache stats (before) (Windows)
+        if: runner.os == 'Windows'
+        run: ccache -s
+        shell: bash
+
       - name: Build precompiled binaries (Windows)
         if: runner.os == 'Windows'
         shell: cmd
@@ -61,6 +90,11 @@ jobs:
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           make GEN=Ninja
           make install
+
+      - name: Show ccache stats (after) (Windows)
+        if: runner.os == 'Windows'
+        run: ccache -s
+        shell: bash
 
       - name: Collect artifacts (Linux)
         if: runner.os == 'Linux'

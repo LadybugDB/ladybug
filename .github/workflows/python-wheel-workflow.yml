@@ -142,13 +142,35 @@ jobs:
           source .venv/bin/activate
           uv pip install cibuildwheel
 
+      - name: Setup ccache for Windows wheel build
+        if: matrix.os == 'windows'
+        shell: cmd
+        run: |
+          choco install ccache -y
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          ccache --set-config=max_size=2G
+          ccache --set-config=compression=true
+          ccache --set-config=cache_dir=D:\ccache
+
+      - name: Cache ccache directory (Windows)
+        if: matrix.os == 'windows'
+        uses: actions/cache@v4
+        with:
+          path: D:\ccache
+          key: ${{ runner.os }}-ccache-wheel-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-wheel-
+
       - name: Build wheels on ${{ matrix.platform }} (Windows)
         if: matrix.os == 'windows'
         shell: cmd
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          ccache -s
           pipx run --spec cibuildwheel cibuildwheel %SDIST_FILE% --output-dir scripts\pip-package\wheelhouse
+          ccache -s
 
       - name: Build wheels on ${{ matrix.platform }} (Linux/macOS)
         if: matrix.os != 'windows'

@@ -758,6 +758,31 @@ jobs:
         shell: cmd
         run: powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
 
+      - name: Install ccache
+        run: choco install ccache -y
+        shell: cmd
+
+      - name: Setup ccache for MSVC
+        run: |
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          ccache --set-config=max_size=2G
+          ccache --set-config=compression=true
+          ccache --set-config=cache_dir=D:\ccache
+        shell: bash
+
+      - name: Cache ccache directory
+        uses: actions/cache@v4
+        with:
+          path: D:\ccache
+          key: ${{ runner.os }}-ccache-msvc-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-msvc-
+
+      - name: Show ccache stats (before)
+        run: ccache -s
+        shell: bash
+
       - name: Download binary-demo
         uses: actions/download-artifact@v4
         with:
@@ -770,6 +795,10 @@ jobs:
           call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
           make all GEN="Visual Studio 17 2022"
           make clean
+
+      - name: Show ccache stats (after)
+        run: ccache -s
+        shell: bash
 
       - name: Test
         shell: cmd
@@ -1512,6 +1541,31 @@ jobs:
         shell: cmd
         run: powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
 
+      - name: Install ccache
+        run: choco install ccache -y
+        shell: cmd
+
+      - name: Setup ccache for MSVC
+        run: |
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          ccache --set-config=max_size=2G
+          ccache --set-config=compression=true
+          ccache --set-config=cache_dir=D:\ccache
+        shell: bash
+
+      - name: Cache ccache directory
+        uses: actions/cache@v4
+        with:
+          path: D:\ccache
+          key: ${{ runner.os }}-ccache-ext-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h', 'extension/**/CMakeLists.txt', 'extension/**/*.cpp', 'extension/**/*.hpp') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-ext-
+
+      - name: Show ccache stats (before)
+        run: ccache -s
+        shell: bash
+
       - name: Install uv
         run: pip install uv
       - name: Install dependencies
@@ -1545,6 +1599,10 @@ jobs:
         run: |
           call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
           make extension-test-build
+
+      - name: Show ccache stats (after build)
+        run: ccache -s
+        shell: bash
 
       - name: Extension test
         shell: cmd

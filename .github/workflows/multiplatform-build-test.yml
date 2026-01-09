@@ -189,8 +189,30 @@ jobs:
           name: binary-demo
           path: ${{ github.workspace }}/dataset/binary-demo
 
-      - uses: ilammy/msvc-dev-cmd@v1
-        continue-on-error: true
+      - name: Install ccache
+        run: choco install ccache -y
+        shell: cmd
+
+      - name: Setup ccache
+        run: |
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          ccache --set-config=max_size=2G
+          ccache --set-config=compression=true
+          ccache --set-config=cache_dir=D:\ccache
+        shell: bash
+
+      - name: Cache ccache directory
+        uses: actions/cache@v4
+        with:
+          path: D:\ccache
+          key: ${{ runner.os }}-ccache-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-
+
+      - name: Show ccache stats (before)
+        run: ccache -s
+        shell: bash
 
       - uses: actions/setup-python@v4
         continue-on-error: true
@@ -220,6 +242,10 @@ jobs:
         run: |
           make release
           echo Build,%ERRORLEVEL% >> status.txt
+
+      - name: Show ccache stats (after)
+        run: ccache -s
+        shell: bash
 
       - name: C and C++ examples
         continue-on-error: true
