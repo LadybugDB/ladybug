@@ -3,7 +3,6 @@
 #include "common/exception/runtime.h"
 #include "function/llm_functions.h"
 #include "main/client_context.h"
-#include "yyjson.h"
 
 using namespace lbug::common;
 
@@ -30,7 +29,7 @@ std::string GoogleVertexEmbedding::getPath(const std::string& model) const {
 }
 
 httplib::Headers GoogleVertexEmbedding::getHeaders(const std::string& /*model*/,
-    const std::string& /*payload*/) const {
+    const JsonMutDoc& /*payload*/) const {
     static const std::string envVar = "GOOGLE_VERTEX_ACCESS_KEY";
     auto env_key = main::ClientContext::getEnvVariable(envVar);
     if (env_key.empty()) {
@@ -41,42 +40,32 @@ httplib::Headers GoogleVertexEmbedding::getHeaders(const std::string& /*model*/,
         {"Authorization", "Bearer " + env_key}};
 }
 
-std::string GoogleVertexEmbedding::getPayload(const std::string& /*model*/,
+JsonMutDoc GoogleVertexEmbedding::getPayload(const std::string& /*model*/,
     const std::string& text) const {
-    auto doc = yyjson_mut_doc_new(nullptr);
-    auto root = yyjson_mut_obj(doc);
-    yyjson_mut_doc_set_root(doc, root);
-    auto instancesArr = yyjson_mut_arr(doc);
-    yyjson_mut_obj_add_val(doc, root, "instances", instancesArr);
-    auto instanceObj = yyjson_mut_obj(doc);
-    yyjson_mut_arr_add_val(doc, instancesArr, instanceObj);
-    yyjson_mut_obj_add_str(doc, instanceObj, "content", text.c_str());
-    yyjson_mut_obj_add_str(doc, instanceObj, "task_type", "RETRIEVAL_DOCUMENT");
+    JsonMutDoc doc;
+    auto root = doc.addRoot();
+    auto instancesArr = root.addArr(doc.doc_, "instances");
+    auto instanceObj = instancesArr.addObj(doc.doc_, "");
+    instanceObj.addStr(doc.doc_, "content", text.c_str());
+    instanceObj.addStr(doc.doc_, "task_type", "RETRIEVAL_DOCUMENT");
     if (dimensions.has_value()) {
-        auto paramsObj = yyjson_mut_obj(doc);
-        yyjson_mut_obj_add_sint(doc, paramsObj, "outputDimensionality", dimensions.value());
-        yyjson_mut_obj_add_val(doc, root, "parameters", paramsObj);
+        auto paramsObj = root.addObj(doc.doc_, "parameters");
+        paramsObj.addSint(doc.doc_, "outputDimensionality", dimensions.value());
     }
-    char* jsonStr = yyjson_mut_write(doc, 0, nullptr);
-    std::string result(jsonStr);
-    free(jsonStr);
-    yyjson_mut_doc_free(doc);
-    return result;
+    return doc;
 }
 
 std::vector<float> GoogleVertexEmbedding::parseResponse(const httplib::Result& res) const {
-    auto doc = yyjson_read(res->body.c_str(), res->body.size(), 0);
-    auto predictionsArr = yyjson_obj_get(doc, "predictions");
-    auto pred0 = yyjson_arr_get(predictionsArr, 0);
-    auto embeddingsObj = yyjson_obj_get(pred0, "embeddings");
-    auto valuesArr = yyjson_obj_get(embeddingsObj, "values");
+    auto doc = parseJson(res->body);
+    auto root = doc.getRoot();
+    auto predictionsArr = root.getObjKey("predictions");
+    auto pred0 = predictionsArr.getArr(0);
+    auto embeddingsObj = pred0.getObjKey("embeddings");
+    auto valuesArr = embeddingsObj.getObjKey("values");
     std::vector<float> result;
-    size_t idx, max;
-    yyjson_val* val;
-    yyjson_arr_foreach(valuesArr, idx, max, val) {
-        result.push_back(yyjson_get_real(val));
+    for (size_t i = 0; i < valuesArr.getArrSize(); i++) {
+        result.push_back(valuesArr.getArr(i).getReal());
     }
-    yyjson_doc_free(doc);
     return result;
 }
 

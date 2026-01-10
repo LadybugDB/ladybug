@@ -14,7 +14,6 @@
 #include "providers/open-ai.h"
 #include "providers/provider.h"
 #include "providers/voyage-ai.h"
-#include "yyjson.h"
 
 using namespace lbug::common;
 using namespace lbug::binder;
@@ -81,9 +80,9 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
     result.resetAuxiliaryBuffer();
     for (auto selectedPos = 0u; selectedPos < resultSelVector->getSelSize(); ++selectedPos) {
         auto text = parameters[0]->getValue<ku_string_t>(selectedPos).getAsString();
-        std::string payload = provider->getPayload(model, text);
+        JsonMutDoc payload = provider->getPayload(model, text);
         httplib::Headers headers = provider->getHeaders(model, payload);
-        auto res = client.Post(path, headers, payload, "application/json");
+        auto res = client.Post(path, headers, payload.toString(), "application/json");
         if (!res) {
             throw ConnectionException("Request failed: Could not connect to server <" +
                                       provider->getClient() + "> \n" +

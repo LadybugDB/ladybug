@@ -3,7 +3,6 @@
 #include "common/exception/runtime.h"
 #include "function/llm_functions.h"
 #include "main/client_context.h"
-#include "yyjson.h"
 
 using namespace lbug::common;
 
@@ -23,7 +22,7 @@ std::string OpenAIEmbedding::getPath(const std::string& /*model*/) const {
 }
 
 httplib::Headers OpenAIEmbedding::getHeaders(const std::string& /*model*/,
-    const std::string& /*payload*/) const {
+    const JsonMutDoc& /*payload*/) const {
     static const std::string envVar = "OPENAI_API_KEY";
     auto env_key = main::ClientContext::getEnvVariable(envVar);
     if (env_key.empty()) {
@@ -34,34 +33,27 @@ httplib::Headers OpenAIEmbedding::getHeaders(const std::string& /*model*/,
         {"Authorization", "Bearer " + env_key}};
 }
 
-std::string OpenAIEmbedding::getPayload(const std::string& model, const std::string& text) const {
-    auto doc = yyjson_mut_doc_new(nullptr);
-    auto root = yyjson_mut_obj(doc);
-    yyjson_mut_doc_set_root(doc, root);
-    yyjson_mut_obj_add_str(doc, root, "model", model.c_str());
-    yyjson_mut_obj_add_str(doc, root, "input", text.c_str());
+JsonMutDoc OpenAIEmbedding::getPayload(const std::string& model, const std::string& text) const {
+    JsonMutDoc doc;
+    auto root = doc.addRoot();
+    root.addStr(doc.doc_, "model", model.c_str());
+    root.addStr(doc.doc_, "input", text.c_str());
     if (dimensions.has_value()) {
-        yyjson_mut_obj_add_sint(doc, root, "dimensions", dimensions.value());
+        root.addSint(doc.doc_, "dimensions", dimensions.value());
     }
-    char* jsonStr = yyjson_mut_write(doc, 0, nullptr);
-    std::string result(jsonStr);
-    free(jsonStr);
-    yyjson_mut_doc_free(doc);
-    return result;
+    return doc;
 }
 
 std::vector<float> OpenAIEmbedding::parseResponse(const httplib::Result& res) const {
-    auto doc = yyjson_read(res->body.c_str(), res->body.size(), 0);
-    auto dataArr = yyjson_obj_get(doc, "data");
-    auto embeddingArr = yyjson_arr_get(dataArr, 0);
-    auto embeddingVal = yyjson_obj_get(embeddingArr, "embedding");
+    auto doc = parseJson(res->body);
+    auto root = doc.getRoot();
+    auto dataArr = root.getObjKey("data");
+    auto embeddingArr = dataArr.getArr(0);
+    auto embeddingVal = embeddingArr.getObjKey("embedding");
     std::vector<float> result;
-    size_t idx, max;
-    yyjson_val* val;
-    yyjson_arr_foreach(embeddingVal, idx, max, val) {
-        result.push_back(yyjson_get_real(val));
+    for (size_t i = 0; i < embeddingVal.getArrSize(); i++) {
+        result.push_back(embeddingVal.getArr(i).getReal());
     }
-    yyjson_doc_free(doc);
     return result;
 }
 

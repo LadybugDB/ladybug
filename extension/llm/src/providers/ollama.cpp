@@ -2,7 +2,6 @@
 
 #include "function/llm_functions.h"
 #include "main/client_context.h"
-#include "yyjson.h"
 
 using namespace lbug::common;
 
@@ -22,33 +21,26 @@ std::string OllamaEmbedding::getPath(const std::string& /*model*/) const {
 }
 
 httplib::Headers OllamaEmbedding::getHeaders(const std::string& /*model*/,
-    const std::string& /*payload*/) const {
+    const JsonMutDoc& /*payload*/) const {
     return httplib::Headers{{"Content-Type", "application/json"}};
 }
 
-std::string OllamaEmbedding::getPayload(const std::string& model, const std::string& text) const {
-    auto doc = yyjson_mut_doc_new(nullptr);
-    auto root = yyjson_mut_obj(doc);
-    yyjson_mut_doc_set_root(doc, root);
-    yyjson_mut_obj_add_str(doc, root, "model", model.c_str());
-    yyjson_mut_obj_add_str(doc, root, "prompt", text.c_str());
-    char* jsonStr = yyjson_mut_write(doc, 0, nullptr);
-    std::string result(jsonStr);
-    free(jsonStr);
-    yyjson_mut_doc_free(doc);
-    return result;
+JsonMutDoc OllamaEmbedding::getPayload(const std::string& model, const std::string& text) const {
+    JsonMutDoc doc;
+    auto root = doc.addRoot();
+    root.addStr(doc.doc_, "model", model.c_str());
+    root.addStr(doc.doc_, "prompt", text.c_str());
+    return doc;
 }
 
 std::vector<float> OllamaEmbedding::parseResponse(const httplib::Result& res) const {
-    auto doc = yyjson_read(res->body.c_str(), res->body.size(), 0);
-    auto embeddingArr = yyjson_obj_get(doc, "embedding");
+    auto doc = parseJson(res->body);
+    auto root = doc.getRoot();
+    auto embeddingArr = root.getObjKey("embedding");
     std::vector<float> result;
-    size_t idx, max;
-    yyjson_val* val;
-    yyjson_arr_foreach(embeddingArr, idx, max, val) {
-        result.push_back(yyjson_get_real(val));
+    for (size_t i = 0; i < embeddingArr.getArrSize(); i++) {
+        result.push_back(embeddingArr.getArr(i).getReal());
     }
-    yyjson_doc_free(doc);
     return result;
 }
 
