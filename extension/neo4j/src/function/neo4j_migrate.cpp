@@ -67,7 +67,7 @@ static std::string executeNeo4jQuery(httplib::Client& cli, std::string neo4jQuer
         throw common::RuntimeException{"Neo4j returned multiple results."};
     }
     auto firstResult = yyjson_arr_get(resultsArr, 0);
-    auto dataArr = yyjson_obj_get(firstResult, "data");
+    yyjson_obj_get(firstResult, "data");
     char* jsonStr = yyjson_write(doc, 0, nullptr);
     std::string result(jsonStr);
     free(jsonStr);

@@ -67,10 +67,10 @@ public:
     JsonMutValue addObj(yyjson_mut_doc* doc, const char* key) {
         return JsonMutValue(yyjson_mut_obj_add_obj(doc, val_, key));
     }
-    JsonMutValue addArr(yyjson_mut_doc* doc, const char* key) {
+    JsonMutValue addArr(yyjson_mut_doc* doc, const char*) {
         return JsonMutValue(yyjson_mut_arr_add_obj(doc, val_));
     }
-    JsonMutValue addArrStr(yyjson_mut_doc* doc, const char* key) {
+    JsonMutValue addArrStr(yyjson_mut_doc* doc, const char*) {
         return JsonMutValue(yyjson_mut_arr_add_arr(doc, val_));
     }
 

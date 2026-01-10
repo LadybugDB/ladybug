@@ -59,12 +59,12 @@ std::vector<float> VoyageAIEmbedding::parseResponse(const httplib::Result& res) 
 
 void VoyageAIEmbedding::configure(const std::optional<uint64_t>& dimensions,
     const std::optional<std::string>& region) {
+    (void)dimensions;
     if (region.has_value()) {
         static const auto functionSignatures = CreateEmbedding::getFunctionSet();
         throw(functionSignatures[0]->signatureToString() + '\n' +
               functionSignatures[2]->signatureToString());
     }
-    this;
 }
 
 } // namespace llm_extension
