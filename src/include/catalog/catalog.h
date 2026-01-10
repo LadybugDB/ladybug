@@ -226,6 +226,7 @@ public:
 private:
     void initCatalogSets();
     void registerBuiltInFunctions();
+    void registerBuiltInTypes();
 
     CatalogEntry* createNodeTableEntry(transaction::Transaction* transaction,
         const binder::BoundCreateTableInfo& info);

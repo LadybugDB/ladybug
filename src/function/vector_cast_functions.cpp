@@ -570,6 +570,10 @@ static std::unique_ptr<ScalarFunction> bindCastToStringFunction(const std::strin
         func = ScalarFunction::UnaryCastExecFunction<union_entry_t, ku_string_t, CastToString,
             EXECUTOR>;
     } break;
+    case LogicalTypeID::JSON: {
+        func =
+            ScalarFunction::UnaryCastExecFunction<ku_string_t, ku_string_t, CastToString, EXECUTOR>;
+    } break;
     default:
         KU_UNREACHABLE;
     }

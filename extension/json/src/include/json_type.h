@@ -1,14 +1,11 @@
 #pragma once
 
-#include "common/types/types.h"
+#include "common/types/json_type.h"
 
 namespace lbug {
 namespace json_extension {
 
-struct JsonType {
-    static common::LogicalType getJsonType();
-    static bool isJson(const common::LogicalType& type);
-};
+using JsonType = common::JsonType;
 
 } // namespace json_extension
 } // namespace lbug

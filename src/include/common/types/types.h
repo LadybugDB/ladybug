@@ -226,6 +226,8 @@ enum class LogicalTypeID : uint8_t {
 
     UUID = 59,
 
+    JSON = 60,
+
 };
 
 enum class PhysicalTypeID : uint8_t {
@@ -366,6 +368,7 @@ public:
     static LogicalType STRING() { return LogicalType(LogicalTypeID::STRING); }
     static LogicalType BLOB() { return LogicalType(LogicalTypeID::BLOB); }
     static LogicalType UUID() { return LogicalType(LogicalTypeID::UUID); }
+    static LogicalType JSON() { return LogicalType(LogicalTypeID::JSON); }
     static LogicalType POINTER() { return LogicalType(LogicalTypeID::POINTER); }
     static LBUG_API LogicalType STRUCT(std::vector<StructField>&& fields);
 

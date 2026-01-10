@@ -31,6 +31,7 @@ namespace catalog {
 Catalog::Catalog() : version{0} {
     initCatalogSets();
     registerBuiltInFunctions();
+    registerBuiltInTypes();
 }
 
 Catalog* Catalog::Get(const main::ClientContext& context) {
@@ -534,6 +535,11 @@ void Catalog::registerBuiltInFunctions() {
             std::make_unique<FunctionCatalogEntry>(f.catalogEntryType, f.name,
                 std::move(functionSet)));
     }
+}
+
+void Catalog::registerBuiltInTypes() {
+    types->createEntry(&DUMMY_TRANSACTION,
+        std::make_unique<TypeCatalogEntry>("JSON", common::LogicalType::JSON()));
 }
 
 CatalogEntry* Catalog::createTableEntry(Transaction* transaction,

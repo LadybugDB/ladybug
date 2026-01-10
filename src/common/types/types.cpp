@@ -669,6 +669,7 @@ std::string LogicalType::toString() const {
     case LogicalTypeID::UUID:
     case LogicalTypeID::STRING:
     case LogicalTypeID::SERIAL:
+    case LogicalTypeID::JSON:
         return LogicalTypeUtils::toString(typeID);
     default:
         KU_UNREACHABLE;
@@ -887,7 +888,8 @@ PhysicalTypeID LogicalType::getPhysicalType(LogicalTypeID typeID,
         return PhysicalTypeID::UINT128;
     }
     case LogicalTypeID::BLOB:
-    case LogicalTypeID::STRING: {
+    case LogicalTypeID::STRING:
+    case LogicalTypeID::JSON: {
         return PhysicalTypeID::STRING;
     }
     case LogicalTypeID::MAP:
@@ -966,6 +968,8 @@ bool tryGetIDFromString(const std::string& str, LogicalTypeID& id) {
         id = LogicalTypeID::INTERVAL;
     } else if ("SERIAL" == upperStr) {
         id = LogicalTypeID::SERIAL;
+    } else if ("JSON" == upperStr) {
+        id = LogicalTypeID::JSON;
     } else {
         return false;
     }
@@ -1041,6 +1045,8 @@ std::string LogicalTypeUtils::toString(LogicalTypeID dataTypeID) {
         return "STRUCT";
     case LogicalTypeID::SERIAL:
         return "SERIAL";
+    case LogicalTypeID::JSON:
+        return "JSON";
     case LogicalTypeID::MAP:
         return "MAP";
     case LogicalTypeID::UNION:
@@ -1256,12 +1262,12 @@ std::vector<LogicalTypeID> LogicalTypeUtils::getAllValidLogicTypeIDs() {
         LogicalTypeID::INT64, LogicalTypeID::INT32, LogicalTypeID::INT16, LogicalTypeID::INT8,
         LogicalTypeID::UINT64, LogicalTypeID::UINT32, LogicalTypeID::UINT16, LogicalTypeID::UINT8,
         LogicalTypeID::INT128, LogicalTypeID::UINT128, LogicalTypeID::DOUBLE, LogicalTypeID::STRING,
-        LogicalTypeID::BLOB, LogicalTypeID::UUID, LogicalTypeID::DATE, LogicalTypeID::TIMESTAMP,
-        LogicalTypeID::TIMESTAMP_NS, LogicalTypeID::TIMESTAMP_MS, LogicalTypeID::TIMESTAMP_SEC,
-        LogicalTypeID::TIMESTAMP_TZ, LogicalTypeID::INTERVAL, LogicalTypeID::LIST,
-        LogicalTypeID::ARRAY, LogicalTypeID::MAP, LogicalTypeID::FLOAT, LogicalTypeID::SERIAL,
-        LogicalTypeID::NODE, LogicalTypeID::REL, LogicalTypeID::RECURSIVE_REL,
-        LogicalTypeID::STRUCT, LogicalTypeID::UNION};
+        LogicalTypeID::BLOB, LogicalTypeID::UUID, LogicalTypeID::JSON, LogicalTypeID::DATE,
+        LogicalTypeID::TIMESTAMP, LogicalTypeID::TIMESTAMP_NS, LogicalTypeID::TIMESTAMP_MS,
+        LogicalTypeID::TIMESTAMP_SEC, LogicalTypeID::TIMESTAMP_TZ, LogicalTypeID::INTERVAL,
+        LogicalTypeID::LIST, LogicalTypeID::ARRAY, LogicalTypeID::MAP, LogicalTypeID::FLOAT,
+        LogicalTypeID::SERIAL, LogicalTypeID::NODE, LogicalTypeID::REL,
+        LogicalTypeID::RECURSIVE_REL, LogicalTypeID::STRUCT, LogicalTypeID::UNION};
 }
 
 std::vector<LogicalType> LogicalTypeUtils::getAllValidLogicTypes() {
@@ -1282,6 +1288,7 @@ std::vector<LogicalType> LogicalTypeUtils::getAllValidLogicTypes() {
     typeVec.push_back(LogicalType::STRING());
     typeVec.push_back(LogicalType::BLOB());
     typeVec.push_back(LogicalType::UUID());
+    typeVec.push_back(LogicalType::JSON());
     typeVec.push_back(LogicalType::DATE());
     typeVec.push_back(LogicalType::TIMESTAMP());
     typeVec.push_back(LogicalType::TIMESTAMP_NS());
