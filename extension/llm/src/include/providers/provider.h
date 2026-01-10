@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "common/json.h"
 #include "httplib.h"
 

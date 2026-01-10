@@ -10,7 +10,7 @@ namespace llm_extension {
 class GoogleVertexEmbedding final : public EmbeddingProvider {
 public:
     GoogleVertexEmbedding() = default;
-    DELETE_COPY_AND_MOVE(GoogleVertexEmbedding);
+    DELETE_COPY_DEFAULT_MOVE(GoogleVertexEmbedding);
     ~GoogleVertexEmbedding() override = default;
     static std::shared_ptr<EmbeddingProvider> getInstance();
     std::string getClient() const override;

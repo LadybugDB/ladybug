@@ -10,7 +10,7 @@ namespace llm_extension {
 class OpenAIEmbedding final : public EmbeddingProvider {
 public:
     OpenAIEmbedding() = default;
-    DELETE_COPY_AND_MOVE(OpenAIEmbedding);
+    DELETE_COPY_DEFAULT_MOVE(OpenAIEmbedding);
     ~OpenAIEmbedding() override = default;
     static std::shared_ptr<EmbeddingProvider> getInstance();
     std::string getClient() const override;

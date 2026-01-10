@@ -68,10 +68,10 @@ public:
         return JsonMutValue(yyjson_mut_obj_add_obj(doc, val_, key));
     }
     JsonMutValue addArr(yyjson_mut_doc* doc, const char* key) {
-        return JsonMutValue(yyjson_mut_arr_add_obj(doc, val_, key));
+        return JsonMutValue(yyjson_mut_arr_add_obj(doc, val_));
     }
     JsonMutValue addArrStr(yyjson_mut_doc* doc, const char* key) {
-        return JsonMutValue(yyjson_mut_arr_add_arr(doc, val_, key));
+        return JsonMutValue(yyjson_mut_arr_add_arr(doc, val_));
     }
 
     yyjson_mut_val* val_;
@@ -84,6 +84,15 @@ public:
 
     JsonMutDoc(const JsonMutDoc&) = delete;
     JsonMutDoc& operator=(const JsonMutDoc&) = delete;
+    JsonMutDoc(JsonMutDoc&& other) noexcept : doc_{other.doc_} { other.doc_ = nullptr; }
+    JsonMutDoc& operator=(JsonMutDoc&& other) noexcept {
+        if (this != &other) {
+            yyjson_mut_doc_free(doc_);
+            doc_ = other.doc_;
+            other.doc_ = nullptr;
+        }
+        return *this;
+    }
 
     JsonMutValue addRoot() {
         auto root = yyjson_mut_obj(doc_);
@@ -120,12 +129,12 @@ public:
     std::shared_ptr<char[]> buffer_;
 };
 
-JsonDoc parseJson(const std::string& str) {
+inline JsonDoc parseJson(const std::string& str) {
     auto doc = yyjson_read(str.c_str(), str.size(), 0);
     return JsonDoc(doc);
 }
 
-JsonDoc parseJsonNoError(const std::string& str) {
+inline JsonDoc parseJsonNoError(const std::string& str) {
     auto doc = yyjson_read(str.c_str(), str.size(), YYJSON_READ_NOFLAG);
     return JsonDoc(doc);
 }

@@ -10,7 +10,7 @@ namespace llm_extension {
 class GoogleGeminiEmbedding final : public EmbeddingProvider {
 public:
     GoogleGeminiEmbedding() = default;
-    DELETE_COPY_AND_MOVE(GoogleGeminiEmbedding);
+    DELETE_COPY_DEFAULT_MOVE(GoogleGeminiEmbedding);
     ~GoogleGeminiEmbedding() override = default;
     static std::shared_ptr<EmbeddingProvider> getInstance();
     std::string getClient() const override;

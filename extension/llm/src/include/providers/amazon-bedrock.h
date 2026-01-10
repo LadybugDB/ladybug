@@ -10,7 +10,7 @@ namespace llm_extension {
 class BedrockEmbedding final : public EmbeddingProvider {
 public:
     BedrockEmbedding() = default;
-    DELETE_COPY_AND_MOVE(BedrockEmbedding);
+    DELETE_COPY_DEFAULT_MOVE(BedrockEmbedding);
     ~BedrockEmbedding() override = default;
     static std::shared_ptr<EmbeddingProvider> getInstance();
     std::string getClient() const override;

@@ -54,7 +54,7 @@ static std::string executeNeo4jQuery(httplib::Client& cli, std::string neo4jQuer
                 res->status, res->body)};
     }
     auto doc = yyjson_read(res->body.c_str(), res->body.size(), 0);
-    auto errorsArr = yyjson_obj_get(doc, "errors");
+    auto errorsArr = yyjson_obj_get(yyjson_doc_get_root(doc), "errors");
     if (yyjson_arr_size(errorsArr) > 0) {
         auto errorObj = yyjson_arr_get(errorsArr, 0);
         auto message = yyjson_obj_get(errorObj, "message");
@@ -62,7 +62,7 @@ static std::string executeNeo4jQuery(httplib::Client& cli, std::string neo4jQuer
             common::stringFormat("Failed to execute query '{}' in Neo4j. Error: {}.", neo4jQuery,
                 yyjson_get_str(message))};
     }
-    auto resultsArr = yyjson_obj_get(doc, "results");
+    auto resultsArr = yyjson_obj_get(yyjson_doc_get_root(doc), "results");
     if (yyjson_arr_size(resultsArr) != 1) {
         throw common::RuntimeException{"Neo4j returned multiple results."};
     }
@@ -95,7 +95,7 @@ static std::unordered_set<std::string> getLabelsInNeo4j(httplib::Client& cli,
     }
     auto jsonStr = executeNeo4jQuery(cli, query);
     auto doc = yyjson_read(jsonStr.c_str(), jsonStr.size(), 0);
-    auto resultsArr = yyjson_obj_get(doc, "results");
+    auto resultsArr = yyjson_obj_get(yyjson_doc_get_root(doc), "results");
     auto firstResult = yyjson_arr_get(resultsArr, 0);
     auto dataArr = yyjson_obj_get(firstResult, "data");
     size_t dataIdx, dataMax;
@@ -119,7 +119,7 @@ static void addLabel(httplib::Client& cli, common::TableType tableType, std::str
         auto resStr = executeNeo4jQuery(cli,
             stringFormat("match (n:{}) where size(labels(n)) > 1 return labels(n) limit 1", label));
         auto doc = yyjson_read(resStr.c_str(), resStr.size(), 0);
-        auto resultsArr = yyjson_obj_get(doc, "results");
+        auto resultsArr = yyjson_obj_get(yyjson_doc_get_root(doc), "results");
         auto firstResult = yyjson_arr_get(resultsArr, 0);
         auto dataArr = yyjson_obj_get(firstResult, "data");
         if (yyjson_arr_size(dataArr) > 0) {
@@ -247,7 +247,7 @@ std::pair<std::string, std::string> getCreateNodeTableQuery(httplib::Client& cli
         nodeName);
     auto jsonStr = executeNeo4jQuery(cli, neo4jQuery);
     auto doc = yyjson_read(jsonStr.c_str(), jsonStr.size(), 0);
-    auto resultsArr = yyjson_obj_get(doc, "results");
+    auto resultsArr = yyjson_obj_get(yyjson_doc_get_root(doc), "results");
     auto firstResult = yyjson_arr_get(resultsArr, 0);
     auto dataArr = yyjson_obj_get(firstResult, "data");
     std::vector<binder::ColumnDefinition> propertyDefinitions;
@@ -299,7 +299,7 @@ std::vector<std::string> getRelProperties(httplib::Client& cli, std::string srcL
             srcLabel, relLabel, dstLabel);
     auto jsonStr = executeNeo4jQuery(cli, neo4jQuery);
     auto doc = yyjson_read(jsonStr.c_str(), jsonStr.size(), 0);
-    auto resultsArr = yyjson_obj_get(doc, "results");
+    auto resultsArr = yyjson_obj_get(yyjson_doc_get_root(doc), "results");
     auto firstResult = yyjson_arr_get(resultsArr, 0);
     auto dataArr = yyjson_obj_get(firstResult, "data");
     std::vector<std::string> relProperties;
@@ -332,7 +332,7 @@ std::string getCreateRelTableQuery(httplib::Client& cli, const std::string& relN
     std::unordered_map<std::string, std::string> propertyTypes;
     std::unordered_map<std::string, std::string> originalTypes;
     std::vector<binder::ColumnDefinition> propertyDefinitions;
-    auto resultsArr = yyjson_obj_get(doc, "results");
+    auto resultsArr = yyjson_obj_get(yyjson_doc_get_root(doc), "results");
     auto firstResult = yyjson_arr_get(resultsArr, 0);
     auto dataArr = yyjson_obj_get(firstResult, "data");
     size_t dataIdx, dataMax;
@@ -363,7 +363,7 @@ std::string getCreateRelTableQuery(httplib::Client& cli, const std::string& relN
         common::stringFormat("MATCH (a)-[:{}]->(b) RETURN distinct labels(a), labels(b);", relName);
     jsonStr = executeNeo4jQuery(cli, neo4jQuery);
     doc = yyjson_read(jsonStr.c_str(), jsonStr.size(), 0);
-    resultsArr = yyjson_obj_get(doc, "results");
+    resultsArr = yyjson_obj_get(yyjson_doc_get_root(doc), "results");
     firstResult = yyjson_arr_get(resultsArr, 0);
     dataArr = yyjson_obj_get(firstResult, "data");
     std::vector<std::pair<std::string, std::string>> nodePairs;

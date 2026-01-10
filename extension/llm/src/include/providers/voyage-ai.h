@@ -10,7 +10,7 @@ namespace llm_extension {
 class VoyageAIEmbedding final : public EmbeddingProvider {
 public:
     VoyageAIEmbedding() = default;
-    DELETE_COPY_AND_MOVE(VoyageAIEmbedding);
+    DELETE_COPY_DEFAULT_MOVE(VoyageAIEmbedding);
     ~VoyageAIEmbedding() override = default;
     static std::shared_ptr<EmbeddingProvider> getInstance();
     std::string getClient() const override;

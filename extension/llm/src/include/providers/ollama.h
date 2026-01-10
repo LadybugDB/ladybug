@@ -10,7 +10,7 @@ namespace llm_extension {
 class OllamaEmbedding final : public EmbeddingProvider {
 public:
     OllamaEmbedding() = default;
-    DELETE_COPY_AND_MOVE(OllamaEmbedding);
+    DELETE_COPY_DEFAULT_MOVE(OllamaEmbedding);
     ~OllamaEmbedding() override = default;
     static std::shared_ptr<EmbeddingProvider> getInstance();
     std::string getClient() const override;
