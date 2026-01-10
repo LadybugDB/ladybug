@@ -2,9 +2,9 @@
 
 #include <sstream>
 
-#include "json.hpp"
 #include "planner/operator/logical_plan.h"
 #include "processor/physical_plan.h"
+#include "yyjson.h"
 
 using namespace lbug::common;
 using namespace lbug::planner;
@@ -385,7 +385,7 @@ uint32_t OpProfileTree::calculateRowHeight(uint32_t rowIdx) const {
     return height + 2;
 }
 
-nlohmann::json PlanPrinter::printPlanToJson(const PhysicalPlan* physicalPlan, Profiler* profiler) {
+std::string PlanPrinter::printPlanToJson(const PhysicalPlan* physicalPlan, Profiler* profiler) {
     return toJson(physicalPlan->lastOperator.get(), *profiler);
 }
 
@@ -394,7 +394,7 @@ std::ostringstream PlanPrinter::printPlanToOstream(const PhysicalPlan* physicalP
     return OpProfileTree(physicalPlan->lastOperator.get(), *profiler).printPlanToOstream();
 }
 
-nlohmann::json PlanPrinter::printPlanToJson(const LogicalPlan* logicalPlan) {
+std::string PlanPrinter::printPlanToJson(const LogicalPlan* logicalPlan) {
     return toJson(logicalPlan->getLastOperator().get());
 }
 
@@ -418,27 +418,59 @@ std::string PlanPrinter::getOperatorParams(const LogicalOperator* logicalOperato
     return logicalOperator->getPrintInfo()->toString();
 }
 
-nlohmann::json PlanPrinter::toJson(const PhysicalOperator* physicalOperator, Profiler& profiler_) {
-    auto json = nlohmann::json();
-    json["Name"] = getOperatorName(physicalOperator);
+static std::string opToJson(yyjson_mut_doc* doc, yyjson_mut_val* parent,
+    const PhysicalOperator* physicalOperator, Profiler& profiler_) {
+    yyjson_mut_obj_add_str(doc, parent, "Name",
+        PlanPrinter::getOperatorName(physicalOperator).c_str());
     if (profiler_.enabled) {
         for (auto& [key, val] : physicalOperator->getProfilerKeyValAttributes(profiler_)) {
-            json[key] = val;
+            yyjson_mut_obj_add_str(doc, parent, key.c_str(), val.c_str());
         }
     }
     for (auto i = 0u; i < physicalOperator->getNumChildren(); ++i) {
-        json["Child" + std::to_string(i)] = toJson(physicalOperator->getChild(i), profiler_);
+        auto childKey = yyjson_mut_strcpy(doc, ("Child" + std::to_string(i)).c_str());
+        auto childVal = yyjson_mut_obj(doc);
+        yyjson_mut_obj_add(parent, childKey, childVal);
+        opToJson(doc, childVal, physicalOperator->getChild(i), profiler_);
     }
-    return json;
+    return "";
 }
 
-nlohmann::json PlanPrinter::toJson(const LogicalOperator* logicalOperator) {
-    auto json = nlohmann::json();
-    json["Name"] = getOperatorName(logicalOperator);
+std::string PlanPrinter::toJson(const PhysicalOperator* physicalOperator, Profiler& profiler_) {
+    auto doc = yyjson_mut_doc_new(nullptr);
+    auto root = yyjson_mut_obj(doc);
+    yyjson_mut_doc_set_root(doc, root);
+    opToJson(doc, root, physicalOperator, profiler_);
+    char* jsonStr = yyjson_mut_write(doc, 0, nullptr);
+    std::string result(jsonStr);
+    free(jsonStr);
+    yyjson_mut_doc_free(doc);
+    return result;
+}
+
+static std::string logicalOpToJson(yyjson_mut_doc* doc, yyjson_mut_val* parent,
+    const LogicalOperator* logicalOperator) {
+    yyjson_mut_obj_add_str(doc, parent, "Name",
+        PlanPrinter::getOperatorName(logicalOperator).c_str());
     for (auto i = 0u; i < logicalOperator->getNumChildren(); ++i) {
-        json["Child" + std::to_string(i)] = toJson(logicalOperator->getChild(i).get());
+        auto childKey = yyjson_mut_strcpy(doc, ("Child" + std::to_string(i)).c_str());
+        auto childVal = yyjson_mut_obj(doc);
+        yyjson_mut_obj_add(parent, childKey, childVal);
+        logicalOpToJson(doc, childVal, logicalOperator->getChild(i).get());
     }
-    return json;
+    return "";
+}
+
+std::string PlanPrinter::toJson(const LogicalOperator* logicalOperator) {
+    auto doc = yyjson_mut_doc_new(nullptr);
+    auto root = yyjson_mut_obj(doc);
+    yyjson_mut_doc_set_root(doc, root);
+    logicalOpToJson(doc, root, logicalOperator);
+    char* jsonStr = yyjson_mut_write(doc, 0, nullptr);
+    std::string result(jsonStr);
+    free(jsonStr);
+    yyjson_mut_doc_free(doc);
+    return result;
 }
 
 } // namespace main
