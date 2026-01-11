@@ -433,6 +433,10 @@ static std::unique_ptr<ScalarFunction> bindCastFromStringFunction(const std::str
         execFunc = ScalarFunction::UnaryCastStringExecFunction<ku_string_t, union_entry_t,
             CastString, EXECUTOR>;
     } break;
+    case LogicalTypeID::JSON: {
+        execFunc =
+            ScalarFunction::UnaryCastExecFunction<ku_string_t, ku_string_t, CastToString, EXECUTOR>;
+    } break;
     default:
         throw ConversionException{
             stringFormat("Unsupported casting function from STRING to {}.", targetType.toString())};
@@ -838,7 +842,7 @@ std::unique_ptr<ScalarFunction> CastFunction::bindCastFunction(const std::string
     const LogicalType& sourceType, const LogicalType& targetType) {
     auto sourceTypeID = sourceType.getLogicalTypeID();
     auto targetTypeID = targetType.getLogicalTypeID();
-    if (sourceTypeID == LogicalTypeID::STRING) {
+    if (sourceTypeID == LogicalTypeID::STRING || sourceTypeID == LogicalTypeID::JSON) {
         return bindCastFromStringFunction<EXECUTOR>(functionName, targetType);
     }
     switch (targetTypeID) {
@@ -940,6 +944,10 @@ std::unique_ptr<ScalarFunction> CastFunction::bindCastFunction(const std::string
     case LogicalTypeID::MAP:
     case LogicalTypeID::STRUCT: {
         return bindCastBetweenNested(functionName, sourceType, targetType);
+    }
+    case LogicalTypeID::JSON: {
+        return CastFunction::bindCastFunction<EXECUTOR>(functionName, sourceType,
+            LogicalType::STRING());
     }
     default: {
         throw ConversionException(stringFormat("Unsupported casting function from {} to {}.",

@@ -92,7 +92,8 @@ void StringChunkData::append(const ColumnChunkData* other, offset_t startPosInOt
     nullData->append(otherChunk.getNullData(), startPosInOtherChunk, numValuesToAppend);
     switch (dataType.getLogicalTypeID()) {
     case LogicalTypeID::BLOB:
-    case LogicalTypeID::STRING: {
+    case LogicalTypeID::STRING:
+    case LogicalTypeID::JSON: {
         appendStringColumnChunk(&otherChunk, startPosInOtherChunk, numValuesToAppend);
     } break;
     default: {
