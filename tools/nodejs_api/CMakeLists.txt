@@ -55,5 +55,7 @@ set_target_properties(lbugjs
   ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build")
 if(APPLE)
   target_link_options(lbugjs PRIVATE -undefined dynamic_lookup)
+else()
+  target_link_options(lbugjs PRIVATE -Wl,--export-dynamic)
 endif()
 target_link_libraries(lbugjs PRIVATE lbug ${CMAKE_JS_LIB})
