@@ -25,7 +25,7 @@ namespace optimizer {
  */
 class CountRelTableOptimizer : public LogicalOperatorVisitor {
 public:
-    explicit CountRelTableOptimizer(main::ClientContext* context) : context{context} {}
+    explicit CountRelTableOptimizer(main::ClientContext* context) : _context{context} {}
 
     void rewrite(planner::LogicalPlan* plan);
 
@@ -42,7 +42,7 @@ private:
     // Check if the plan below aggregate matches the pattern for optimization
     bool canOptimize(planner::LogicalOperator* aggregate) const;
 
-    main::ClientContext* context;
+    [[maybe_unused]] main::ClientContext* _context;
 };
 
 } // namespace optimizer
