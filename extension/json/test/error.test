@@ -53,21 +53,21 @@ Binder exception: Invalid primary key column type JSON. Primary keys must be eit
 -STATEMENT CREATE NODE TABLE PERSON (ID INT64, NAME JSON, description STRING, PRIMARY KEY(ID));
 ---- ok
 -STATEMENT CREATE (p:PERSON {ID: 52, NAME: 'LBUG', DESCRIPTION: 'good'});
----- error
-Conversion exception: Unsupported casting function from STRING to JSON.
+---- ok
 -STATEMENT CREATE (p:PERSON {ID: 52, NAME: '', DESCRIPTION: 'good'});
 ---- error
-Conversion exception: Unsupported casting function from STRING to JSON.
+Runtime exception: Found duplicated primary key value 52, which violates the uniqueness constraint of the primary key column.
 -STATEMENT CREATE (p:PERSON {ID: 22, NAME: 'neo', DESCRIPTION: 'ok'});
----- error
-Conversion exception: Unsupported casting function from STRING to JSON.
+---- ok
 -STATEMENT CALL TABLE_INFO('person') RETURN *;
 ---- 3
 0|ID|INT64|NULL|True
 1|NAME|JSON|NULL|False
 2|description|STRING|NULL|False
 -STATEMENT MATCH (p:person) RETURN p.*;
----- 0
+---- 2
+52|LBUG|good
+22|neo|ok
 -RELOADDB
 -STATEMENT CALL TABLE_INFO('person') RETURN *;
 ---- 3
@@ -75,4 +75,6 @@ Conversion exception: Unsupported casting function from STRING to JSON.
 1|NAME|JSON|NULL|False
 2|description|STRING|NULL|False
 -STATEMENT MATCH (p:person) RETURN p.*;
----- 0
+---- 2
+52|LBUG|good
+22|neo|ok

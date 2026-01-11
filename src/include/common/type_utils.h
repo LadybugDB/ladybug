@@ -25,7 +25,7 @@ struct overload : Funcs... {
     using Funcs::operator()...;
 };
 
-class TypeUtils {
+class LBUG_API TypeUtils {
 public:
     template<typename Func, typename... Types, size_t... indices>
     static void paramPackForEachHelper(const Func& func, std::index_sequence<indices...>,

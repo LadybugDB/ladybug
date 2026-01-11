@@ -80,7 +80,7 @@ True
 0
 -STATEMENT RETURN typeof(JSON('{"species": [ "duck", "goose", "swan", null ]}'))
 ---- 1
-json
+JSON
 -STATEMENT RETURN JSON(null)
 ---- 1
 

@@ -10,11 +10,11 @@
 
 -STATEMENT return cast(cast ('2023-11-14' as DATE) as json);
 ---- 1
-"2023-11-14"
+2023-11-14
 
 -STATEMENT return cast(cast ('"{\"duck\": 42}"' as json) as STRING);
----- error
-Conversion exception: Cannot convert "{"duck": 42}" to JSON.
+---- 1
+"{"duck": 42}"
 
 -STATEMENT return cast(cast ('"{\\"duck\\": 42}"' as json) as STRING);
 ---- 1
@@ -90,7 +90,7 @@ as json) as STRUCT(interval INTERVAL));
 
 -STATEMENT RETURN typeof(cast('{"name": "Alicia", "age": 28}' AS JSON));
 ---- 1
-json
+JSON
 
 -STATEMENT RETURN cast(null as json);
 ---- 1

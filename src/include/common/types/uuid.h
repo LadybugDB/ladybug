@@ -17,7 +17,7 @@ struct ku_uuid_t {
     int128_t value;
 };
 
-struct UUID {
+struct LBUG_API UUID {
     static constexpr const uint8_t UUID_STRING_LENGTH = 36;
     static constexpr const char HEX_DIGITS[] = "0123456789abcdef";
     static void byteToHex(char byteVal, char* buf, uint64_t& pos);

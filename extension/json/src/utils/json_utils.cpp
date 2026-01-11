@@ -5,6 +5,11 @@
 #include "common/exception/not_implemented.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
+#include "common/type_utils.h"
+#include "common/types/date_t.h"
+#include "common/types/interval_t.h"
+#include "common/types/timestamp_t.h"
+#include "common/types/uuid.h"
 #include "function/cast/functions/cast_decimal.h"
 #include "function/cast/functions/cast_from_string_functions.h"
 #include "function/cast/functions/cast_string_non_nested_functions.h"
@@ -99,6 +104,46 @@ yyjson_mut_val* jsonify(JsonMutWrapper& wrapper, const common::ValueVector& vec,
         case LogicalTypeID::STRING: {
             auto strVal = vec.getValue<ku_string_t>(pos);
             result = yyjson_mut_strncpy(wrapper.ptr, (const char*)strVal.getData(), strVal.len);
+        } break;
+        case LogicalTypeID::DATE: {
+            auto dateVal = vec.getValue<date_t>(pos);
+            auto str = Date::toString(dateVal);
+            result = yyjson_mut_strcpy(wrapper.ptr, str.c_str());
+        } break;
+        case LogicalTypeID::TIMESTAMP: {
+            auto tsVal = vec.getValue<timestamp_t>(pos);
+            auto str = Timestamp::toString(tsVal);
+            result = yyjson_mut_strcpy(wrapper.ptr, str.c_str());
+        } break;
+        case LogicalTypeID::TIMESTAMP_NS: {
+            auto tsVal = vec.getValue<timestamp_ns_t>(pos);
+            auto str = TypeUtils::toString(tsVal);
+            result = yyjson_mut_strcpy(wrapper.ptr, str.c_str());
+        } break;
+        case LogicalTypeID::TIMESTAMP_MS: {
+            auto tsVal = vec.getValue<timestamp_ms_t>(pos);
+            auto str = TypeUtils::toString(tsVal);
+            result = yyjson_mut_strcpy(wrapper.ptr, str.c_str());
+        } break;
+        case LogicalTypeID::TIMESTAMP_SEC: {
+            auto tsVal = vec.getValue<timestamp_sec_t>(pos);
+            auto str = TypeUtils::toString(tsVal);
+            result = yyjson_mut_strcpy(wrapper.ptr, str.c_str());
+        } break;
+        case LogicalTypeID::TIMESTAMP_TZ: {
+            auto tsVal = vec.getValue<timestamp_tz_t>(pos);
+            auto str = TypeUtils::toString(tsVal);
+            result = yyjson_mut_strcpy(wrapper.ptr, str.c_str());
+        } break;
+        case LogicalTypeID::INTERVAL: {
+            auto intervalVal = vec.getValue<interval_t>(pos);
+            auto str = Interval::toString(intervalVal);
+            result = yyjson_mut_strcpy(wrapper.ptr, str.c_str());
+        } break;
+        case LogicalTypeID::UUID: {
+            auto uuidVal = vec.getValue<ku_uuid_t>(pos);
+            auto str = UUID::toString(uuidVal);
+            result = yyjson_mut_strcpy(wrapper.ptr, str.c_str());
         } break;
         case LogicalTypeID::LIST:
         case LogicalTypeID::ARRAY: {
@@ -292,6 +337,10 @@ static void readFromJsonArr(yyjson_val* val, common::ValueVector& vec, uint64_t 
     const auto& outputType = vec.dataType;
     vec.setNull(pos, false);
     switch (outputType.getLogicalTypeID()) {
+    case LogicalTypeID::JSON: {
+        auto str = jsonToString(val);
+        StringVector::addString(&vec, pos, str);
+    } break;
     case LogicalTypeID::ARRAY:
     case LogicalTypeID::LIST: {
         if (outputType.getLogicalTypeID() == LogicalTypeID::ARRAY) {
@@ -346,6 +395,10 @@ static void readFromJsonObj(yyjson_val* val, common::ValueVector& vec, uint64_t 
     const auto& outputType = vec.dataType;
     vec.setNull(pos, false);
     switch (outputType.getLogicalTypeID()) {
+    case LogicalTypeID::JSON: {
+        auto str = jsonToString(val);
+        StringVector::addString(&vec, pos, str);
+    } break;
     case LogicalTypeID::STRUCT: {
         vec.setValue<int64_t>(pos, pos);
         auto names = StructType::getFieldNames(outputType);
@@ -408,6 +461,10 @@ static void readFromJsonBool(bool val, common::ValueVector& vec, uint64_t pos) {
     const auto& outputType = vec.dataType;
     vec.setNull(pos, false);
     switch (outputType.getLogicalTypeID()) {
+    case LogicalTypeID::JSON: {
+        auto str = val ? "true" : "false";
+        StringVector::addString(&vec, pos, str);
+    } break;
     case LogicalTypeID::BOOL:
         vec.setValue<bool>(pos, val);
         break;
@@ -497,6 +554,10 @@ static void readFromJsonNum(NUM_TYPE val, common::ValueVector& vec, uint64_t pos
             KU_UNREACHABLE;
         }
         break;
+    case LogicalTypeID::JSON: {
+        auto str = std::to_string(val);
+        StringVector::addString(&vec, pos, str);
+    } break;
     case LogicalTypeID::STRING: {
         auto str = std::to_string(val);
         StringVector::addString(&vec, pos, str);
@@ -527,8 +588,8 @@ static void readFromJsonNum(NUM_TYPE val, common::ValueVector& vec, uint64_t pos
 
 static void readFromJsonStr(std::string_view val, common::ValueVector& vec, uint64_t pos) {
     vec.setNull(pos, false);
-    if (vec.dataType.getLogicalTypeID() == LogicalTypeID::STRING) {
-        // casting produces undesired behaviour when the dest requires no cast
+    if (vec.dataType.getLogicalTypeID() == LogicalTypeID::STRING ||
+        vec.dataType.getLogicalTypeID() == LogicalTypeID::JSON) {
         StringVector::addString(&vec, pos, val);
         return;
     }
