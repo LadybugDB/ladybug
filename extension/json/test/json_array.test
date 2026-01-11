@@ -45,7 +45,7 @@
 
 -STATEMENT RETURN typeof(json_array(42, 'lbug', NULL));
 ---- 1
-json
+JSON
 
 -STATEMENT RETURN json_array(NULL, NULL);
 ---- 1

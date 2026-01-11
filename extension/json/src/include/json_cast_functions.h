@@ -6,7 +6,7 @@ namespace lbug {
 namespace json_extension {
 
 struct CastToJsonFunction {
-    static constexpr const char* name = "cast_to_json";
+    static constexpr const char* name = "CAST_TO_JSON";
 
     static function::function_set getFunctionSet();
 };

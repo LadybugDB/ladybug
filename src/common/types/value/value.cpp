@@ -155,7 +155,8 @@ Value Value::createDefaultValue(const LogicalType& dataType) {
     case LogicalTypeID::UUID:
         return Value(LogicalType::UUID(), std::string(""));
     case LogicalTypeID::STRING:
-        return Value(LogicalType::STRING(), std::string(""));
+    case LogicalTypeID::JSON:
+        return Value(dataType.copy(), std::string(""));
     case LogicalTypeID::FLOAT:
         return Value((float)0);
     case LogicalTypeID::DECIMAL: {
@@ -422,6 +423,7 @@ void Value::copyFromRowLayout(const uint8_t* value) {
         val.int128Val = ((ku_uuid_t*)value)->value;
         strVal = UUID::toString(*((ku_uuid_t*)value));
     } break;
+    case LogicalTypeID::JSON:
     case LogicalTypeID::STRING: {
         strVal = ((ku_string_t*)value)->getAsString();
     } break;
@@ -638,6 +640,7 @@ std::string Value::toString() const {
         return Blob::toString(reinterpret_cast<const uint8_t*>(strVal.c_str()), strVal.length());
     case LogicalTypeID::UUID:
         return UUID::toString(val.int128Val);
+    case LogicalTypeID::JSON:
     case LogicalTypeID::STRING:
         return strVal;
     case LogicalTypeID::MAP: {

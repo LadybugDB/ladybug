@@ -45,7 +45,7 @@
 
 -STATEMENT RETURN typeof(json_object("name","Alicia"));
 ---- 1
-json
+JSON
 
 -STATEMENT RETURN json_object(NULL, NULL);
 ---- 1

@@ -41,8 +41,7 @@ static void addJsonScalarFunction(main::Database& db) {
 
 void JsonExtension::load(main::ClientContext* context) {
     auto& db = *context->getDatabase();
-    db.getCatalog()->createType(&transaction::DUMMY_TRANSACTION, common::JsonType::JSON_TYPE_NAME,
-        JsonType::getJsonType());
+    // JSON type is now a built-in type in core, no need to register it
     addJsonCreationFunction(db);
     addJsonExtractFunction(db);
     addJsonScalarFunction(db);

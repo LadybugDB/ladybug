@@ -47,11 +47,11 @@ function_set CastToJsonFunction::getFunctionSet() {
     function_set result;
     auto function =
         std::make_unique<ScalarFunction>(name, std::vector<LogicalTypeID>{LogicalTypeID::ANY},
-            LogicalTypeID::STRING, ToJsonFunction::execFunc);
+            LogicalTypeID::JSON, ToJsonFunction::execFunc);
     function->bindFunc = bindFunc;
     result.push_back(function->copy());
     function = std::make_unique<ScalarFunction>(name,
-        std::vector<LogicalTypeID>{LogicalTypeID::STRING}, LogicalTypeID::STRING, execFunc);
+        std::vector<LogicalTypeID>{LogicalTypeID::STRING}, LogicalTypeID::JSON, execFunc);
     result.push_back(std::move(function));
     return result;
 }

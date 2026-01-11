@@ -44,7 +44,7 @@ static std::unique_ptr<FunctionBindData> bindFunc(ScalarBindFuncInput input) {
 function_set JsonArrayFunction::getFunctionSet() {
     function_set result;
     auto function = std::make_unique<ScalarFunction>(name,
-        std::vector<LogicalTypeID>{LogicalTypeID::ANY}, LogicalTypeID::STRING, execFunc);
+        std::vector<LogicalTypeID>{LogicalTypeID::ANY}, LogicalTypeID::JSON, execFunc);
     function->bindFunc = bindFunc;
     function->isVarLength = true;
     result.push_back(std::move(function));

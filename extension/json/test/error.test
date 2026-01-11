@@ -6,9 +6,8 @@
 -CASE DidNotLoadExtension
 -SKIP_STATIC_LINK
 -STATEMENT create node table person (id INT64, description json, primary key(id));
----- error
-Catalog exception: JSON is neither an internal type nor a user defined type. This type exists in the JSON extension. You can install and load the extension by running 'INSTALL JSON; LOAD EXTENSION JSON;'.
--STATEMENT create node table person (id INT64, description STRING, primary key(id))
+---- ok
+-STATEMENT create node table person2 (id INT64, description STRING, primary key(id))
 ---- ok
 -STATEMENT CREATE (p:person {id: 8, description: to_json({"family": "anatidae", "species": [ "duck", "goose", "swan", null]})})
 ---- error
@@ -50,22 +49,22 @@ Try setting format='auto' or format='newline_delimited'.
 -LOAD_DYNAMIC_EXTENSION json
 -STATEMENT CREATE NODE TABLE PERSON (ID INT64, NAME JSON, PRIMARY KEY(NAME));
 ---- error
-Binder exception: Invalid primary key column type json. Primary keys must be either STRING or a numeric type.
+Binder exception: Invalid primary key column type JSON. Primary keys must be either STRING or a numeric type.
 -STATEMENT CREATE NODE TABLE PERSON (ID INT64, NAME JSON, description STRING, PRIMARY KEY(ID));
 ---- ok
 -STATEMENT CREATE (p:PERSON {ID: 52, NAME: 'LBUG', DESCRIPTION: 'good'});
 ---- error
-Conversion exception: Cannot convert LBUG to JSON.
+Conversion exception: Unsupported casting function from STRING to JSON.
 -STATEMENT CREATE (p:PERSON {ID: 52, NAME: '', DESCRIPTION: 'good'});
 ---- error
-Conversion exception: Cannot convert  to JSON.
+Conversion exception: Unsupported casting function from STRING to JSON.
 -STATEMENT CREATE (p:PERSON {ID: 22, NAME: 'neo', DESCRIPTION: 'ok'});
 ---- error
-Conversion exception: Cannot convert neo to JSON.
+Conversion exception: Unsupported casting function from STRING to JSON.
 -STATEMENT CALL TABLE_INFO('person') RETURN *;
 ---- 3
 0|ID|INT64|NULL|True
-1|NAME|json|NULL|False
+1|NAME|JSON|NULL|False
 2|description|STRING|NULL|False
 -STATEMENT MATCH (p:person) RETURN p.*;
 ---- 0
@@ -73,7 +72,7 @@ Conversion exception: Cannot convert neo to JSON.
 -STATEMENT CALL TABLE_INFO('person') RETURN *;
 ---- 3
 0|ID|INT64|NULL|True
-1|NAME|json|NULL|False
+1|NAME|JSON|NULL|False
 2|description|STRING|NULL|False
 -STATEMENT MATCH (p:person) RETURN p.*;
 ---- 0

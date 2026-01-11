@@ -106,6 +106,9 @@ static void validatePrimaryKey(const std::string& pkColName,
     if (!pkType.isInternalType()) {
         throw BinderException(ExceptionMessage::invalidPKType(pkType.toString()));
     }
+    if (pkType.getLogicalTypeID() == LogicalTypeID::JSON) {
+        throw BinderException(ExceptionMessage::invalidPKType(pkType.toString()));
+    }
     switch (pkType.getPhysicalType()) {
     case PhysicalTypeID::UINT8:
     case PhysicalTypeID::UINT16:

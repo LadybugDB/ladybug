@@ -45,11 +45,11 @@ false
 
 -STATEMENT RETURN typeof(to_json('lbug'));
 ---- 1
-json
+JSON
 
 -STATEMENT RETURN typeof(cast('{"name": "Alicia", "age": 28}' AS JSON));
 ---- 1
-json
+JSON
 
 -STATEMENT RETURN row_to_json(NULL)
 ---- 1

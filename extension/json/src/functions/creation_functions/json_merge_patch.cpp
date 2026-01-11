@@ -43,7 +43,7 @@ function_set JsonMergePatchFunction::getFunctionSet() {
     function_set result;
     auto func = std::make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::STRING},
-        LogicalTypeID::STRING, execFunc);
+        LogicalTypeID::JSON, execFunc);
     func->bindFunc = bindFunc;
     result.push_back(std::move(func));
     return result;
