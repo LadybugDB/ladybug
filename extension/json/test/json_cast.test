@@ -95,3 +95,7 @@ JSON
 -STATEMENT RETURN cast(null as json);
 ---- 1
 
+-STATEMENT RETURN typeof(cast(['abc', 'def', 'ghi'] AS JSON));
+---- 1
+JSON
+

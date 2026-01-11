@@ -176,9 +176,3 @@ abc|{l: 5, h: 32}
 {age: 21, name: Bob}
 {age: 32, name: Carol}
 {age: 5, name: alice}
-
--CASE UDTInvalidCast
--SKIP_WASM
--STATEMENT RETURN CAST(['abc', 'def', 'ghi'] AS JSON[])
----- error
-Conversion exception: Unsupported casting function from STRING to JSON.
