@@ -5,7 +5,7 @@
 namespace lbug {
 namespace common {
 
-struct JsonType {
+struct LBUG_API JsonType {
     static constexpr char JSON_TYPE_NAME[] = "json";
 
     static LogicalType getJsonType();
