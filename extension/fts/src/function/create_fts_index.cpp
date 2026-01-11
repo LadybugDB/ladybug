@@ -1,3 +1,4 @@
+#include <format>
 #include "function/create_fts_index.h"
 
 #include "binder/expression/literal_expression.h"
@@ -50,7 +51,7 @@ static std::vector<property_id_t> bindProperties(const catalog::NodeTableCatalog
     for (auto i = 0u; i < propertyValue.getChildrenSize(); i++) {
         auto propertyName = NestedVal::getChildVal(&propertyValue, i)->toString();
         if (!entry.containsProperty(propertyName)) {
-            throw BinderException{stringFormat("Property: {} does not exist in table {}.",
+            throw BinderException{std::format("Property: {} does not exist in table {}.",
                 propertyName, entry.getName())};
         }
         if (entry.getProperty(entry.getPropertyID(propertyName)).getType() !=
@@ -66,7 +67,7 @@ static void validateInternalTableNotExist(const std::string& tableName,
     const catalog::Catalog& catalog, const transaction::Transaction* transaction) {
     if (catalog.containsTable(transaction, tableName)) {
         throw BinderException{
-            stringFormat("Table: {} already exists. Please drop or rename the table before "
+            std::format("Table: {} already exists. Please drop or rename the table before "
                          "creating a full text search index.",
                 tableName)};
     }
@@ -105,26 +106,26 @@ static std::string createStopWordsTable([[maybe_unused]] const ClientContext& co
     case StopWordsSource::DEFAULT: {
         // Always generate CREATE TABLE IF NOT EXISTS and MERGE statements.
         // They are idempotent and safe to execute multiple times during import.
-        query += stringFormat("CREATE NODE TABLE IF NOT EXISTS `{}` (sw STRING, PRIMARY KEY(sw));",
+        query += std::format("CREATE NODE TABLE IF NOT EXISTS `{}` (sw STRING, PRIMARY KEY(sw));",
             info.tableName);
         std::string stopWordList = "[";
         for (auto& stopWord : StopWords::getDefaultStopWords()) {
-            stopWordList += stringFormat("\"{}\",", stopWord);
+            stopWordList += std::format("\"{}\",", stopWord);
         }
         stopWordList.back() = ']';
-        query += stringFormat("UNWIND {} AS word MERGE (s:`{}` {sw: word});", stopWordList,
+        query += std::format("UNWIND {} AS word MERGE (s:`{}` {{sw: word}});", stopWordList,
             info.tableName);
     } break;
     case StopWordsSource::TABLE: {
         query +=
-            stringFormat("CREATE NODE TABLE `{}` (sw STRING, PRIMARY KEY(sw));", info.tableName);
-        query += stringFormat("COPY `{}` FROM (MATCH (c:`{}`) RETURN c.*);", info.tableName,
+            std::format("CREATE NODE TABLE `{}` (sw STRING, PRIMARY KEY(sw));", info.tableName);
+        query += std::format("COPY `{}` FROM (MATCH (c:`{}`) RETURN c.*);", info.tableName,
             info.stopWords);
     } break;
     case StopWordsSource::FILE: {
         query +=
-            stringFormat("CREATE NODE TABLE `{}` (sw STRING, PRIMARY KEY(sw));", info.tableName);
-        query += stringFormat("COPY `{}` FROM '{}';", info.tableName, info.stopWords);
+            std::format("CREATE NODE TABLE `{}` (sw STRING, PRIMARY KEY(sw));", info.tableName);
+        query += std::format("COPY `{}` FROM '{}';", info.tableName, info.stopWords);
     } break;
     default:
         KU_UNREACHABLE;
@@ -157,7 +158,7 @@ std::string createFTSIndexQuery(ClientContext& context, const TableFuncBindData&
     if (!catalog::Catalog::Get(context)->containsMacro(transaction::Transaction::Get(context),
             FTSUtils::getTokenizeMacroName(tableID, indexName))) {
         // TOKENIZE(text, tokenizer, extra_param)
-        query += common::stringFormat(R"(CREATE MACRO `{}`(query) AS
+        query += std::format(R"(CREATE MACRO `{}`(query) AS
                             TOKENIZE(lower(regexp_replace(CAST(query as STRING), '{}', ' ', 'g')), '{}', '{}');)",
             FTSUtils::getTokenizeMacroName(tableID, indexName),
             formatStrInCypher(ftsBindData->createFTSConfig.ignorePattern),
@@ -172,7 +173,7 @@ std::string createFTSIndexQuery(ClientContext& context, const TableFuncBindData&
     // Create the terms_in_doc table which servers as a temporary table to store the
     // relationship between terms and docs.
     auto appearsInfoTableName = FTSUtils::getAppearsInfoTableName(tableID, indexName);
-    query += stringFormat("CREATE NODE TABLE `{}` (ID SERIAL, term string, docID INT64, primary "
+    query += std::format("CREATE NODE TABLE `{}` (ID SERIAL, term string, docID INT64, primary "
                           "key(ID));",
         appearsInfoTableName);
     auto tableName = ftsBindData->tableName;
@@ -180,13 +181,13 @@ std::string createFTSIndexQuery(ClientContext& context, const TableFuncBindData&
         transaction::Transaction::Get(context), tableName);
     for (auto& property : ftsBindData->propertyIDs) {
         auto propertyName = tableEntry->getProperty(property).getName();
-        query += stringFormat("COPY `{}` FROM "
+        query += std::format("COPY `{}` FROM "
                               "(MATCH (b:`{}`) "
                               "WITH `{}`(b.{}) AS tk, OFFSET(ID(b)) AS id "
                               "UNWIND tk AS t "
                               "WITH t AS t1, id AS id1 "
                               "WHERE t1 is NOT NULL AND SIZE(t1) > 0 AND "
-                              "NOT EXISTS {MATCH (s:`{}` {sw: t1})} "
+                              "NOT EXISTS {{MATCH (s:`{}` {{sw: t1}})}} "
                               "RETURN STEM(t1, '{}'), id1);",
             appearsInfoTableName, tableName, FTSUtils::getTokenizeMacroName(tableID, indexName),
             propertyName, ftsBindData->createFTSConfig.stopWordsTableInfo.tableName,
@@ -195,18 +196,18 @@ std::string createFTSIndexQuery(ClientContext& context, const TableFuncBindData&
 
     auto docsTableName = FTSUtils::getDocsTableName(tableID, indexName);
     // Create the docs table which records the number of words in each document.
-    query += stringFormat("CREATE NODE TABLE `{}` (docID INT64, len UINT64, primary key(docID));",
+    query += std::format("CREATE NODE TABLE `{}` (docID INT64, len UINT64, primary key(docID));",
         docsTableName);
-    query += stringFormat("COPY `{}` FROM "
+    query += std::format("COPY `{}` FROM "
                           "(MATCH (t:`{}`) "
                           "RETURN t.docID, CAST(count(t) AS UINT64)); ",
         docsTableName, appearsInfoTableName);
 
     auto termsTableName = FTSUtils::getTermsTableName(tableID, indexName);
     // Create the dic table which records all distinct terms and their document frequency.
-    query += stringFormat("CREATE NODE TABLE `{}` (term STRING, df UINT64, PRIMARY KEY(term));",
+    query += std::format("CREATE NODE TABLE `{}` (term STRING, df UINT64, PRIMARY KEY(term));",
         termsTableName);
-    query += stringFormat("COPY `{}` FROM "
+    query += std::format("COPY `{}` FROM "
                           "(MATCH (t:`{}`) "
                           "RETURN t.term, CAST(count(distinct t.docID) AS UINT64));",
         termsTableName, appearsInfoTableName);
@@ -214,31 +215,31 @@ std::string createFTSIndexQuery(ClientContext& context, const TableFuncBindData&
     auto appearsInTableName = FTSUtils::getAppearsInTableName(tableID, indexName);
     // Finally, create a terms table that records the documents in which the terms appear, along
     // with the frequency of each term.
-    query += stringFormat("CREATE REL TABLE `{}` (FROM `{}` TO `{}`, tf UINT64);",
+    query += std::format("CREATE REL TABLE `{}` (FROM `{}` TO `{}`, tf UINT64);",
         appearsInTableName, termsTableName, docsTableName);
-    query += stringFormat("COPY `{}` FROM ("
+    query += std::format("COPY `{}` FROM ("
                           "MATCH (b:`{}`) "
                           "RETURN b.term, b.docID, CAST(count(*) as UINT64));",
         appearsInTableName, appearsInfoTableName);
 
     // Drop the intermediate terms_in_doc table.
-    query += stringFormat("DROP TABLE `{}`;", appearsInfoTableName);
+    query += std::format("DROP TABLE `{}`;", appearsInfoTableName);
     std::string properties = "[";
     for (auto i = 0u; i < ftsBindData->propertyIDs.size(); i++) {
         properties +=
-            stringFormat("'{}'", tableEntry->getProperty(ftsBindData->propertyIDs[i]).getName());
+            std::format("'{}'", tableEntry->getProperty(ftsBindData->propertyIDs[i]).getName());
         if (i != ftsBindData->propertyIDs.size() - 1) {
             properties += ", ";
         }
     }
     properties += "]";
     std::string params;
-    params += stringFormat("stemmer := '{}', ", ftsBindData->createFTSConfig.stemmer);
-    params += stringFormat("stopWords := '{}'",
+    params += std::format("stemmer := '{}', ", ftsBindData->createFTSConfig.stemmer);
+    params += std::format("stopWords := '{}'",
         ftsBindData->createFTSConfig.stopWordsTableInfo.stopWords);
-    query += stringFormat("CALL _CREATE_FTS_INDEX('{}', '{}', {}, {});", tableName, indexName,
+    query += std::format("CALL _CREATE_FTS_INDEX('{}', '{}', {}, {});", tableName, indexName,
         properties, params);
-    query += stringFormat("RETURN 'Index {} has been created.' as result;", ftsBindData->indexName);
+    query += std::format("RETURN 'Index {} has been created.' as result;", ftsBindData->indexName);
     return query;
 }
 

@@ -1,4 +1,5 @@
 #pragma once
+#include <format>
 
 #include "common/exception/runtime.h"
 #include "common/vector/value_vector.h"
@@ -9,7 +10,7 @@ namespace lbug {
 namespace function {
 
 static void duplicateValueHandler(const std::string& key) {
-    throw common::RuntimeException{common::stringFormat("Found duplicate key: {} in map.", key)};
+    throw common::RuntimeException{std::format("Found duplicate key: {} in map.", key)};
 }
 
 static void nullValueHandler() {

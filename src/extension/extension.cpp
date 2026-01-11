@@ -1,7 +1,6 @@
 #include "extension/extension.h"
 
 #include "common/exception/io.h"
-#include "common/string_format.h"
 #include "common/string_utils.h"
 #include "common/system_message.h"
 #include "main/client_context.h"
@@ -16,6 +15,7 @@
 
 #else
 #include <dlfcn.h>
+#include <format>
 #endif
 
 namespace lbug {
@@ -74,7 +74,7 @@ std::string ExtensionSourceUtils::toString(ExtensionSource source) {
 
 static ExtensionRepoInfo getExtensionFilePath(const std::string& extensionName,
     const std::string& extensionRepo, const std::string& fileName) {
-    auto extensionURL = common::stringFormat(ExtensionUtils::EXTENSION_FILE_REPO_PATH,
+    auto extensionURL = std::format(ExtensionUtils::EXTENSION_FILE_REPO_PATH,
         extensionRepo, LBUG_EXTENSION_VERSION, getPlatform(), extensionName, fileName);
     return getExtensionRepoInfo(extensionURL);
 }
@@ -98,37 +98,37 @@ ExtensionRepoInfo ExtensionUtils::getExtensionInstallerRepoInfo(const std::strin
 
 ExtensionRepoInfo ExtensionUtils::getSharedLibRepoInfo(const std::string& fileName,
     const std::string& extensionRepo) {
-    auto extensionURL = common::stringFormat(SHARED_LIB_REPO, extensionRepo, LBUG_EXTENSION_VERSION,
-        getPlatform(), fileName);
+    auto extensionURL = std::format(SHARED_LIB_REPO,
+        extensionRepo, LBUG_EXTENSION_VERSION, getPlatform(), fileName);
     return getExtensionRepoInfo(extensionURL);
 }
 
 std::string ExtensionUtils::getExtensionFileName(const std::string& name) {
-    return common::stringFormat(EXTENSION_FILE_NAME, common::StringUtils::getLower(name),
-        EXTENSION_FILE_SUFFIX);
+    return std::format(EXTENSION_FILE_NAME,
+        common::StringUtils::getLower(name), EXTENSION_FILE_SUFFIX);
 }
 
 std::string ExtensionUtils::getLocalPathForExtensionLib(main::ClientContext* context,
     const std::string& extensionName) {
-    return common::stringFormat("{}/{}", getLocalDirForExtension(context, extensionName),
+    return std::format("{}/{}", getLocalDirForExtension(context, extensionName),
         getExtensionFileName(extensionName));
 }
 
 std::string ExtensionUtils::getLocalPathForExtensionLoader(main::ClientContext* context,
     const std::string& extensionName) {
-    return common::stringFormat("{}/{}", getLocalDirForExtension(context, extensionName),
+    return std::format("{}/{}", getLocalDirForExtension(context, extensionName),
         getExtensionFileName(extensionName + EXTENSION_LOADER_SUFFIX));
 }
 
 std::string ExtensionUtils::getLocalPathForExtensionInstaller(main::ClientContext* context,
     const std::string& extensionName) {
-    return common::stringFormat("{}/{}", getLocalDirForExtension(context, extensionName),
+    return std::format("{}/{}", getLocalDirForExtension(context, extensionName),
         getExtensionFileName(extensionName + EXTENSION_INSTALLER_SUFFIX));
 }
 
 std::string ExtensionUtils::getLocalDirForExtension(main::ClientContext* context,
     const std::string& extensionName) {
-    return common::stringFormat("{}{}", context->getExtensionDir(), extensionName);
+    return std::format("{}{}", context->getExtensionDir(), extensionName);
 }
 
 std::string ExtensionUtils::appendLibSuffix(const std::string& libName) {
@@ -141,16 +141,16 @@ std::string ExtensionUtils::appendLibSuffix(const std::string& libName) {
     } else {
         KU_UNREACHABLE;
     }
-    return common::stringFormat("{}.{}", libName, suffix);
+    return std::format("{}.{}", libName, suffix);
 }
 
 std::string ExtensionUtils::getLocalPathForSharedLib(main::ClientContext* context,
     const std::string& libName) {
-    return common::stringFormat("{}common/{}", context->getExtensionDir(), libName);
+    return std::format("{}common/{}", context->getExtensionDir(), libName);
 }
 
 std::string ExtensionUtils::getLocalPathForSharedLib(main::ClientContext* context) {
-    return common::stringFormat("{}common/", context->getExtensionDir());
+    return std::format("{}common/", context->getExtensionDir());
 }
 
 bool ExtensionUtils::isOfficialExtension(const std::string& extension) {
@@ -171,7 +171,7 @@ ExtensionLibLoader::ExtensionLibLoader(const std::string& extensionName, const s
     : extensionName{extensionName} {
     libHdl = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
     if (libHdl == nullptr) {
-        throw common::IOException(common::stringFormat(
+        throw common::IOException(std::format(
             "Failed to load library: {} which is needed by extension: {}.\nError: {}.", path,
             extensionName, common::dlErrMessage()));
     }
@@ -204,7 +204,7 @@ void* ExtensionLibLoader::getDynamicLibFunc(const std::string& funcName) {
     auto sym = dlsym(libHdl, funcName.c_str());
     if (sym == nullptr) {
         throw common::IOException(
-            common::stringFormat("Failed to load {} function in extension {}.\nError: {}", funcName,
+            std::format("Failed to load {} function in extension {}.\nError: {}", funcName,
                 extensionName, common::dlErrMessage()));
     }
     return sym;

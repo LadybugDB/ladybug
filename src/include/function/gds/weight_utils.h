@@ -1,4 +1,5 @@
 #pragma once
+#include <format>
 
 #include "common/exception/runtime.h"
 #include "common/type_utils.h"
@@ -49,7 +50,7 @@ auto WeightUtils::visit(const std::string& fcn, const common::LogicalType& dataT
     }
     // LCOV_EXCL_START
     throw common::RuntimeException(
-        common::stringFormat("{} weight type is not supported for {}.", dataType.toString(), fcn));
+        std::format("{} weight type is not supported for {}.", dataType.toString(), fcn));
     // LCOV_EXCL_STOP
 }
 
@@ -84,7 +85,7 @@ auto WeightUtils::visit(const std::string& fcn, const common::LogicalTypeID& dat
         break;
     }
     // LCOV_EXCL_START
-    throw common::RuntimeException(common::stringFormat("{} weight type is not supported for {}.",
+    throw common::RuntimeException(std::format("{} weight type is not supported for {}.",
         common::LogicalType(dataType).toString(), fcn));
     // LCOV_EXCL_STOP
 }
@@ -92,7 +93,7 @@ auto WeightUtils::visit(const std::string& fcn, const common::LogicalTypeID& dat
 template<typename T>
 void WeightUtils::checkWeight(const std::string& fcn, T weight) {
     if (weight < 0) {
-        [[unlikely]] throw common::RuntimeException(common::stringFormat(
+        [[unlikely]] throw common::RuntimeException(std::format(
             "Found negative weight {}. This is not a supported weight for {}", weight, fcn));
     }
 }

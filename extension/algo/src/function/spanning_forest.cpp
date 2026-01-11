@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "binder/expression/expression.h"
 #include "binder/query/reading_clause/bound_table_function_call.h"
@@ -5,7 +6,6 @@
 #include "common/exception/binder.h"
 #include "common/exception/runtime.h"
 #include "common/in_mem_gds_utils.h"
-#include "common/string_format.h"
 #include "common/string_utils.h"
 #include "common/types/types.h"
 #include "function/algo_function.h"
@@ -99,7 +99,7 @@ SFOptionalParams::SFOptionalParams(const expression_vector& optionalParams)
             variant = function::OptionalParam<Variant>(optionalParam);
         } else {
             throw RuntimeException{
-                stringFormat("Unknown optional argument: {}", optionalParam->getAlias())};
+                std::format("Unknown optional argument: {}", optionalParam->getAlias())};
         }
     }
 }
@@ -305,7 +305,7 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput&) {
     if (!config.weightProperty.getParamVal().empty() &&
         !nbrInfo.relGroupEntry->containsProperty(config.weightProperty.getParamVal())) {
         throw RuntimeException{
-            stringFormat("Cannot find property: {}", config.weightProperty.getParamVal())};
+            std::format("Cannot find property: {}", config.weightProperty.getParamVal())};
     }
     const auto& propertyType =
         (config.weightProperty.getParamVal().empty() ?
@@ -315,7 +315,7 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput&) {
                     .getLogicalTypeID());
     if (!config.weightProperty.getParamVal().empty() &&
         !LogicalTypeUtils::isNumerical(propertyType)) {
-        throw RuntimeException{stringFormat("Provided weight property is not numerical: {}",
+        throw RuntimeException{std::format("Provided weight property is not numerical: {}",
             config.weightProperty.getParamVal())};
     }
     std::vector<std::string> relProps = {InternalKeyword::ID};

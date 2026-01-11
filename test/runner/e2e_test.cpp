@@ -2,6 +2,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <format>
 
 #include "common/string_utils.h"
 #include "graph_test/private_graph_test.h"
@@ -220,7 +221,7 @@ private:
                 // If any of the existing output tuples contain a variable, retain the output,
                 // as `statement.newOutput` will replace such variables with their actual value.
                 if (hasVariable) {
-                    newFile += stringFormat("---- {}\n", linesToSkip);
+                    newFile += std::format("---- {}\n", linesToSkip);
                     newFile += skippedLines;
                 } else {
                     newFile += statement.newOutput;

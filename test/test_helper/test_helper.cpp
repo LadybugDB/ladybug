@@ -3,6 +3,7 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <format>
 
 #include "spdlog/spdlog.h"
 
@@ -35,7 +36,7 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
     auto cypherDir = std::filesystem::path(cypherScript).parent_path();
     std::ifstream file(cypherScript);
     if (!file.is_open()) {
-        throw Exception(stringFormat("Error opening file: {}, errno: {}.", cypherScript, errno));
+        throw Exception(std::format("Error opening file: {}, errno: {}.", cypherScript, errno));
     }
     std::string line;
     while (getline(file, line)) {
@@ -112,7 +113,7 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
         auto result = conn.query(line);
         std::cout << "Executed query: " << line << std::endl;
         if (!result->isSuccess()) {
-            throw Exception(stringFormat("Failed to execute statement: {}.\nError: {}", line,
+            throw Exception(std::format("Failed to execute statement: {}.\nError: {}", line,
                 result->getErrorMessage()));
         }
     }

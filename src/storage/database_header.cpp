@@ -1,6 +1,7 @@
 #include "storage/database_header.h"
 
 #include <cstring>
+#include <format>
 
 #include "common/exception/runtime.h"
 #include "common/file_system/file_info.h"
@@ -22,7 +23,7 @@ static void validateStorageVersion(common::Deserializer& deSer) {
     if (savedStorageVersion != storageVersion) {
         // TODO(Guodong): Add a test case for this.
         throw common::RuntimeException(
-            common::stringFormat("Trying to read a database file with a different version. "
+            std::format("Trying to read a database file with a different version. "
                                  "Database file version: {}, Current build storage version: {}",
                 savedStorageVersion, storageVersion));
     }

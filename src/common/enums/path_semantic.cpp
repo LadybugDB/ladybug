@@ -1,8 +1,8 @@
+#include <format>
 #include "common/enums/path_semantic.h"
 
 #include "common/assert.h"
 #include "common/exception/binder.h"
-#include "common/string_format.h"
 #include "common/string_utils.h"
 
 namespace lbug {
@@ -19,7 +19,7 @@ PathSemantic PathSemanticUtils::fromString(const std::string& str) {
     if (normalizedStr == "ACYCLIC") {
         return PathSemantic::ACYCLIC;
     }
-    throw BinderException(stringFormat(
+    throw BinderException(std::format(
         "Cannot parse {} as a path semantic. Supported inputs are [WALK, TRAIL, ACYCLIC]", str));
 }
 

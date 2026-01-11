@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "binder/query/reading_clause/bound_table_function_call.h"
 #include "catalog/catalog.h"
@@ -32,7 +33,7 @@ std::unique_ptr<BoundReadingClause> Binder::bindInQueryCall(const ReadingClause&
     } break;
     default:
         throw BinderException(
-            stringFormat("{} is not a table or algorithm function.", functionName));
+            std::format("{} is not a table or algorithm function.", functionName));
     }
     if (call.hasWherePredicate()) {
         auto wherePredicate = bindWhereExpression(*call.getWherePredicate());

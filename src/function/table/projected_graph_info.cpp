@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "common/exception/binder.h"
 #include "function/table/bind_data.h"
@@ -104,7 +105,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
     auto graphName = input->getValue(0).toString();
     auto graphEntrySet = graph::GraphEntrySet::Get(*context);
     if (!graphEntrySet->hasGraph(graphName)) {
-        throw BinderException(stringFormat("Graph {} does not exist.", graphName));
+        throw BinderException(std::format("Graph {} does not exist.", graphName));
     }
     auto graphEntry = graphEntrySet->getEntry(graphName);
     switch (graphEntry->type) {

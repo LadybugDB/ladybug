@@ -1,7 +1,7 @@
+#include <format>
 #include "function/cast/functions/cast_from_string_functions.h"
 
 #include "common/exception/parser.h"
-#include "common/string_format.h"
 #include "common/types/blob.h"
 #include "function/list/functions/list_unique_function.h"
 #include "utf8proc_wrapper.h"
@@ -377,7 +377,7 @@ static inline void startListCast(const char* input, uint64_t len, T split, const
 static void validateNumElementsInArray(uint64_t numElementsRead, const LogicalType& type) {
     auto numElementsInArray = ArrayType::getNumElements(type);
     if (numElementsRead != numElementsInArray) {
-        throw ConversionException(stringFormat(
+        throw ConversionException(std::format(
             "Each array should have fixed number of elements. Expected: {}, Actual: {}.",
             numElementsInArray, numElementsRead));
     }
@@ -842,7 +842,7 @@ void CastStringHelper::cast(const char* input, uint64_t len, union_entry_t& /*re
     }
 
     if (selectedFieldIdx == INVALID_STRUCT_FIELD_IDX) {
-        throw ConversionException{stringFormat("Could not convert to union type {}: {}.",
+        throw ConversionException{std::format("Could not convert to union type {}: {}.",
             type.toString(), std::string{input, (size_t)len})};
     }
     StructVector::getFieldVector(vector, UnionType::TAG_FIELD_IDX)

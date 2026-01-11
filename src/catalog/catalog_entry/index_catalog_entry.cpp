@@ -1,3 +1,4 @@
+#include <format>
 #include "catalog/catalog_entry/index_catalog_entry.h"
 
 #include "common/exception/runtime.h"
@@ -74,7 +75,7 @@ std::unique_ptr<common::BufferReader> IndexCatalogEntry::getAuxBufferReader() co
     // LCOV_EXCL_START
     if (!auxBuffer) {
         throw common::RuntimeException(
-            common::stringFormat("Auxiliary buffer for index \"{}\" is not set.", indexName));
+            std::format("Auxiliary buffer for index \"{}\" is not set.", indexName));
     }
     // LCOV_EXCL_STOP
     return std::make_unique<common::BufferReader>(auxBuffer.get(), auxBufferSize);

@@ -1,3 +1,4 @@
+#include <format>
 #include "processor/operator/persistent/writer/parquet/basic_column_writer.h"
 
 #include "common/constants.h"
@@ -216,7 +217,7 @@ void BasicColumnWriter::flushPage(BasicColumnWriterState& state) {
 
     // now that we have finished writing the data we know the uncompressed size
     if (bufferedWriter.getSize() > uint64_t(function::NumericLimits<int32_t>::maximum())) {
-        throw common::RuntimeException{common::stringFormat(
+        throw common::RuntimeException{std::format(
             "Parquet writer: %d uncompressed page size out of range for type integer",
             bufferedWriter.getSize())};
     }

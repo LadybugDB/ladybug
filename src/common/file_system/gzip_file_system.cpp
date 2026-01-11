@@ -1,3 +1,4 @@
+#include <format>
 #include "common/file_system/gzip_file_system.h"
 
 #include "common/exception/io.h"
@@ -135,7 +136,7 @@ bool MiniZStreamWrapper::read(StreamData& sd) {
     // LCOV_EXCL_START
     if (ret != miniz::MZ_OK && ret != miniz::MZ_STREAM_END) {
         throw IOException(
-            common::stringFormat("Failed to decode gzip stream: {}", miniz::mz_error(ret)));
+            std::format("Failed to decode gzip stream: {}", miniz::mz_error(ret)));
     }
     // LCOV_EXCL_STOP
     sd.inputBufStart = (uint8_t*)mzStreamPtr->next_in;

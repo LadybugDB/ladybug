@@ -1,3 +1,4 @@
+#include <format>
 #include "processor/operator/ddl/alter.h"
 
 #include "catalog/catalog.h"
@@ -53,7 +54,7 @@ static void validate(ConflictAction action, const on_conflict_throw_action& thro
 
 static std::string propertyNotInTableMessage(const std::string& tableName,
     const std::string& propertyName) {
-    return stringFormat("{} table does not have property {}.", tableName, propertyName);
+    return std::format("{} table does not have property {}.", tableName, propertyName);
 }
 
 static void validatePropertyExist(ConflictAction action, const TableCatalogEntry& tableEntry,
@@ -67,7 +68,7 @@ static void validatePropertyExist(ConflictAction action, const TableCatalogEntry
 
 static std::string propertyInTableMessage(const std::string& tableName,
     const std::string& propertyName) {
-    return stringFormat("{} table already has property {}.", tableName, propertyName);
+    return std::format("{} table already has property {}.", tableName, propertyName);
 }
 
 static void validatePropertyNotExist(ConflictAction action, const TableCatalogEntry& tableEntry,
@@ -121,7 +122,7 @@ static bool checkDropPropertyConflicts(const TableCatalogEntry& tableEntry,
         // Check primary key constraint
         if (tableEntry.getTableType() == TableType::NODE &&
             tableEntry.constCast<NodeTableCatalogEntry>().getPrimaryKeyID() == propertyID) {
-            throw BinderException(stringFormat(
+            throw BinderException(std::format(
                 "Cannot drop property {} in table {} because it is used as primary key.",
                 propertyName, tableEntry.getName()));
         }
@@ -129,7 +130,7 @@ static bool checkDropPropertyConflicts(const TableCatalogEntry& tableEntry,
         auto catalog = Catalog::Get(context);
         auto transaction = transaction::Transaction::Get(context);
         if (catalog->containsIndex(transaction, tableEntry.getTableID(), propertyID)) {
-            throw BinderException(stringFormat(
+            throw BinderException(std::format(
                 "Cannot drop property {} in table {} because it is used in one or more indexes. "
                 "Please remove the associated indexes before attempting to drop this property.",
                 propertyName, tableEntry.getName()));
@@ -159,7 +160,7 @@ static bool checkRenameTableConflicts(const BoundAlterInfo& info, main::ClientCo
 
 static std::string fromToInTableMessage(const std::string& relGroupName,
     const std::string& fromTableName, const std::string& toTableName) {
-    return stringFormat("{}->{} already exists in {} table.", fromTableName, toTableName,
+    return std::format("{}->{} already exists in {} table.", fromTableName, toTableName,
         relGroupName);
 }
 
@@ -186,7 +187,7 @@ static bool checkAddFromToConflicts(const TableCatalogEntry& tableEntry, const B
 
 static std::string fromToNotInTableMessage(const std::string& relGroupName,
     const std::string& fromTableName, const std::string& toTableName) {
-    return stringFormat("{}->{} does not exist in {} table.", fromTableName, toTableName,
+    return std::format("{}->{} does not exist in {} table.", fromTableName, toTableName,
         relGroupName);
 }
 
@@ -225,7 +226,7 @@ void Alter::alterTable(main::ClientContext* clientContext, const TableCatalogEnt
             appendMessage(propertyInTableMessage(tableName, propertyName), memoryManager);
             return;
         }
-        appendMessage(stringFormat("Property {} added to table {}.", propertyName, tableName),
+        appendMessage(std::format("Property {} added to table {}.", propertyName, tableName),
             memoryManager);
     } break;
     case AlterType::DROP_PROPERTY: {
@@ -236,7 +237,7 @@ void Alter::alterTable(main::ClientContext* clientContext, const TableCatalogEnt
             return;
         }
         appendMessage(
-            stringFormat("Property {} has been dropped from table {}.", propertyName, tableName),
+            std::format("Property {} has been dropped from table {}.", propertyName, tableName),
             memoryManager);
     } break;
     case AlterType::RENAME_PROPERTY: {
@@ -244,14 +245,14 @@ void Alter::alterTable(main::ClientContext* clientContext, const TableCatalogEnt
         checkRenamePropertyConflicts(entry, info);
         auto& extraInfo = info.extraInfo->constCast<BoundExtraRenamePropertyInfo>();
         appendMessage(
-            stringFormat("Property {} renamed to {}.", extraInfo.oldName, extraInfo.newName),
+            std::format("Property {} renamed to {}.", extraInfo.oldName, extraInfo.newName),
             memoryManager);
     } break;
     case AlterType::RENAME: {
         // Rename table does not have IF EXISTS
         checkRenameTableConflicts(info, *clientContext);
         auto& extraInfo = info.extraInfo->constCast<BoundExtraRenameTableInfo>();
-        appendMessage(stringFormat("Table {} renamed to {}.", tableName, extraInfo.newName),
+        appendMessage(std::format("Table {} renamed to {}.", tableName, extraInfo.newName),
             memoryManager);
     } break;
     case AlterType::ADD_FROM_TO_CONNECTION: {
@@ -266,7 +267,7 @@ void Alter::alterTable(main::ClientContext* clientContext, const TableCatalogEnt
             return;
         }
         appendMessage(
-            stringFormat("{}->{} added to table {}.", fromTableName, toTableName, tableName),
+            std::format("{}->{} added to table {}.", fromTableName, toTableName, tableName),
             memoryManager);
     } break;
     case AlterType::DROP_FROM_TO_CONNECTION: {
@@ -280,12 +281,12 @@ void Alter::alterTable(main::ClientContext* clientContext, const TableCatalogEnt
                 memoryManager);
             return;
         }
-        appendMessage(stringFormat("{}->{} has been dropped from table {}.", fromTableName,
+        appendMessage(std::format("{}->{} has been dropped from table {}.", fromTableName,
                           toTableName, tableName),
             memoryManager);
     } break;
     case AlterType::COMMENT: {
-        appendMessage(stringFormat("Comment added to table {}.", tableName), memoryManager);
+        appendMessage(std::format("Comment added to table {}.", tableName), memoryManager);
     } break;
     default:
         KU_UNREACHABLE;

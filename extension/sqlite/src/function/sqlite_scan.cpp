@@ -1,3 +1,4 @@
+#include <format>
 #include "function/sqlite_scan.h"
 
 #include "main/client_context.h"
@@ -8,7 +9,7 @@ namespace sqlite_extension {
 using namespace duckdb_extension;
 
 std::string SQLiteTableScanInfo::getTemplateQuery(const main::ClientContext& context) const {
-    auto setStringQueryResult = common::stringFormat("set sqlite_all_varchar={};",
+    auto setStringQueryResult = std::format("set sqlite_all_varchar={};",
         context.getCurrentSetting("sqlite_all_varchar").getValue<bool>());
     return setStringQueryResult + DuckDBTableScanInfo::getTemplateQuery(context);
 }

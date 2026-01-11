@@ -1,3 +1,4 @@
+#include <format>
 #include "main/database_manager.h"
 
 #include "catalog/catalog.h"
@@ -23,7 +24,7 @@ void DatabaseManager::registerAttachedDatabase(std::unique_ptr<AttachedDatabase>
         defaultDatabase = attachedDatabase->getDBName();
     }
     if (hasAttachedDatabase(attachedDatabase->getDBName())) {
-        throw RuntimeException{stringFormat(
+        throw RuntimeException{std::format(
             "Duplicate attached database name: {}. Attached database name must be unique.",
             attachedDatabase->getDBName())};
     }
@@ -49,7 +50,7 @@ AttachedDatabase* DatabaseManager::getAttachedDatabase(const std::string& name) 
             return attachedDatabase.get();
         }
     }
-    throw RuntimeException{stringFormat("No database named {}.", name)};
+    throw RuntimeException{std::format("No database named {}.", name)};
 }
 
 void DatabaseManager::detachDatabase(const std::string& databaseName) {
@@ -62,12 +63,12 @@ void DatabaseManager::detachDatabase(const std::string& databaseName) {
             return;
         }
     }
-    throw RuntimeException{stringFormat("Database: {} doesn't exist.", databaseName)};
+    throw RuntimeException{std::format("Database: {} doesn't exist.", databaseName)};
 }
 
 void DatabaseManager::setDefaultDatabase(const std::string& databaseName) {
     if (getAttachedDatabase(databaseName) == nullptr) {
-        throw RuntimeException{stringFormat("No database named {}.", databaseName)};
+        throw RuntimeException{std::format("No database named {}.", databaseName)};
     }
     defaultDatabase = databaseName;
 }
@@ -96,7 +97,7 @@ void DatabaseManager::createGraph(const std::string& graphName,
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
         if (graphNameUpper == upperCaseName) {
-            throw RuntimeException{stringFormat("Graph {} already exists.", graphName)};
+            throw RuntimeException{std::format("Graph {} already exists.", graphName)};
         }
     }
     auto catalog = std::make_unique<catalog::Catalog>();
@@ -158,7 +159,7 @@ void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContex
             return;
         }
     }
-    throw RuntimeException{stringFormat("No graph named {}.", graphName)};
+    throw RuntimeException{std::format("No graph named {}.", graphName)};
 }
 
 void DatabaseManager::setDefaultGraph(const std::string& graphName) {
@@ -174,7 +175,7 @@ void DatabaseManager::setDefaultGraph(const std::string& graphName) {
             return;
         }
     }
-    throw BinderException{stringFormat("No graph named {}.", graphName)};
+    throw BinderException{std::format("No graph named {}.", graphName)};
 }
 
 void DatabaseManager::clearDefaultGraph() {
@@ -200,7 +201,7 @@ catalog::Catalog* DatabaseManager::getGraphCatalog(const std::string& graphName)
             return graph.get();
         }
     }
-    throw BinderException{stringFormat("No graph named {}.", graphName)};
+    throw BinderException{std::format("No graph named {}.", graphName)};
 }
 
 catalog::Catalog* DatabaseManager::getDefaultGraphCatalog() const {

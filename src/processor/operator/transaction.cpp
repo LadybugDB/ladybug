@@ -1,3 +1,4 @@
+#include <format>
 #include "processor/operator/transaction.h"
 
 #include "common/exception/transaction_manager.h"
@@ -62,13 +63,13 @@ void Transaction::validateActiveTransaction(const TransactionContext& context) c
     case TransactionAction::COMMIT:
     case TransactionAction::ROLLBACK: {
         if (!context.hasActiveTransaction()) {
-            throw TransactionManagerException(stringFormat("No active transaction for {}.",
+            throw TransactionManagerException(std::format("No active transaction for {}.",
                 TransactionActionUtils::toString(transactionAction)));
         }
     } break;
     case TransactionAction::CHECKPOINT: {
         if (context.hasActiveTransaction()) {
-            throw TransactionManagerException(stringFormat("Found active transaction for {}.",
+            throw TransactionManagerException(std::format("Found active transaction for {}.",
                 TransactionActionUtils::toString(transactionAction)));
         }
     } break;

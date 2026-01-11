@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/bound_export_database.h"
 #include "binder/bound_import_database.h"
 #include "catalog/catalog.h"
@@ -27,7 +28,7 @@ std::vector<std::shared_ptr<LogicalOperator>> Planner::planExportTableData(
     StringUtils::toLower(fileTypeStr);
     // TODO(Ziyi): Shouldn't these be done in Binder?
     std::string name =
-        stringFormat("COPY_{}", FileTypeUtils::toString(boundExportDatabase.getFileType()));
+        std::format("COPY_{}", FileTypeUtils::toString(boundExportDatabase.getFileType()));
     auto entry =
         Catalog::Get(*clientContext)->getFunctionEntry(Transaction::Get(*clientContext), name);
     auto func = function::BuiltInFunctionsUtils::matchFunction(name,

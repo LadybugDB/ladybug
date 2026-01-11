@@ -1,7 +1,7 @@
 #pragma once
+#include <format>
 
 #include "common/exception/internal.h"
-#include "common/string_format.h"
 
 namespace lbug {
 namespace common {
@@ -9,7 +9,7 @@ namespace common {
 [[noreturn]] inline void kuAssertFailureInternal(const char* condition_name, const char* file,
     int linenr) {
     // LCOV_EXCL_START
-    throw InternalException(stringFormat("Assertion failed in file \"{}\" on line {}: {}", file,
+    throw InternalException(std::format("Assertion failed in file \"{}\" on line {}: {}", file,
         linenr, condition_name));
     // LCOV_EXCL_STOP
 }

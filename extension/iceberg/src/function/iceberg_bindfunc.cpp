@@ -1,3 +1,4 @@
+#include <format>
 #include "common/exception/runtime.h"
 #include "connector/iceberg_connector.h"
 #include "function/iceberg_functions.h"
@@ -19,11 +20,11 @@ static std::string generateQueryOptions(const TableFuncBindInput* input,
                 // check data type of allow_moved_paths
                 if (value.getDataType().getLogicalTypeID() != LogicalTypeID::BOOL) {
                     throw RuntimeException{
-                        common::stringFormat("Invalid allow_moved_paths value for {}", valueStr)};
+                        std::format("Invalid allow_moved_paths value for {}", valueStr)};
                 }
-                query_options += common::stringFormat(", {} = {}", lowerCaseName, valueStr);
+                query_options += std::format(", {} = {}", lowerCaseName, valueStr);
             } else {
-                query_options += common::stringFormat(", {} = '{}'", lowerCaseName, valueStr);
+                query_options += std::format(", {} = '{}'", lowerCaseName, valueStr);
             }
         }
     };
@@ -44,7 +45,7 @@ std::unique_ptr<TableFuncBindData> bindFuncHelper(main::ClientContext* context,
         context);
 
     std::string query_options = generateQueryOptions(input, functionName);
-    std::string query = stringFormat("SELECT * FROM {}('{}'{})", functionName,
+    std::string query = std::format("SELECT * FROM {}('{}'{})", functionName,
         input->getLiteralVal<std::string>(0), query_options);
     auto result = connector->executeQuery(query + " LIMIT 1");
 

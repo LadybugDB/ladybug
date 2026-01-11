@@ -1,7 +1,7 @@
+#include <format>
 #include "function/arithmetic/abs.h"
 
 #include "common/exception/overflow.h"
-#include "common/string_format.h"
 #include "common/type_utils.h"
 #include "function/cast/functions/numeric_limits.h"
 
@@ -47,7 +47,7 @@ template<>
 void Abs::operation(int8_t& input, int8_t& result) {
     if (!AbsInPlace::operation(input, result)) {
         throw common::OverflowException{
-            common::stringFormat("Cannot take the absolute value of {} within INT8 range.",
+            std::format("Cannot take the absolute value of {} within INT8 range.",
                 common::TypeUtils::toString(input))};
     }
 }
@@ -56,7 +56,7 @@ template<>
 void Abs::operation(int16_t& input, int16_t& result) {
     if (!AbsInPlace::operation(input, result)) {
         throw common::OverflowException{
-            common::stringFormat("Cannot take the absolute value of {} within INT16 range.",
+            std::format("Cannot take the absolute value of {} within INT16 range.",
                 common::TypeUtils::toString(input))};
     }
 }
@@ -65,7 +65,7 @@ template<>
 void Abs::operation(int32_t& input, int32_t& result) {
     if (!AbsInPlace::operation(input, result)) {
         throw common::OverflowException{
-            common::stringFormat("Cannot take the absolute value of {} within INT32 range.",
+            std::format("Cannot take the absolute value of {} within INT32 range.",
                 common::TypeUtils::toString(input))};
     }
 }
@@ -74,7 +74,7 @@ template<>
 void Abs::operation(int64_t& input, int64_t& result) {
     if (!AbsInPlace::operation(input, result)) {
         throw common::OverflowException{
-            common::stringFormat("Cannot take the absolute value of {} within INT64 range.",
+            std::format("Cannot take the absolute value of {} within INT64 range.",
                 common::TypeUtils::toString(input))};
     }
 }

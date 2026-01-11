@@ -2,9 +2,9 @@
 
 #include <cstdint>
 #include <cstring>
+#include <format>
 
 #include "common/exception/runtime.h"
-#include "common/string_format.h"
 #include "common/utils.h"
 #include "storage/storage_utils.h"
 
@@ -30,7 +30,7 @@ OrderByKeyEncoder::OrderByKeyEncoder(const OrderByDataInfo& orderByDataInfo,
     maxNumTuplesPerBlock = DATA_BLOCK_SIZE / numBytesPerTuple;
     if (maxNumTuplesPerBlock <= 0) {
         throw RuntimeException(
-            stringFormat("TupleSize({} bytes) is larger than the LARGE_PAGE_SIZE({} bytes)",
+            std::format("TupleSize({} bytes) is larger than the LARGE_PAGE_SIZE({} bytes)",
                 numBytesPerTuple, DATA_BLOCK_SIZE));
     }
     encodeFunctions.reserve(orderByDataInfo.keysPos.size());

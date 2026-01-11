@@ -1,3 +1,4 @@
+#include <format>
 #include "processor/operator/simple/load_extension.h"
 
 #include "extension/extension_manager.h"
@@ -19,7 +20,7 @@ std::string LoadExtensionPrintInfo::toString() const {
 void LoadExtension::executeInternal(ExecutionContext* context) {
     auto clientContext = context->clientContext;
     ExtensionManager::Get(*clientContext)->loadExtension(path, clientContext);
-    appendMessage(stringFormat("Extension: {} has been loaded.", path),
+    appendMessage(std::format("Extension: {} has been loaded.", path),
         storage::MemoryManager::Get(*clientContext));
 }
 

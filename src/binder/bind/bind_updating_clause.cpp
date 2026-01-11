@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/property_expression.h"
@@ -12,7 +13,6 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/assert.h"
 #include "common/exception/binder.h"
-#include "common/string_format.h"
 #include "parser/query/updating_clause/delete_clause.h"
 #include "parser/query/updating_clause/insert_clause.h"
 #include "parser/query/updating_clause/merge_clause.h"
@@ -162,7 +162,7 @@ static void validatePrimaryKeyExistence(const NodeTableCatalogEntry* nodeTableEn
     auto pkeyDefaultExpr = defaultExprs.at(nodeTableEntry->getPrimaryKeyID());
     if (!node.hasPropertyDataExpr(primaryKeyName) &&
         ExpressionUtil::isNullLiteral(*pkeyDefaultExpr)) {
-        throw BinderException(stringFormat("Create node {} expects primary key {} as input.",
+        throw BinderException(std::format("Create node {} expects primary key {} as input.",
             node.toString(), primaryKeyName));
     }
 }
@@ -195,7 +195,7 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
     auto transaction = transaction::Transaction::Get(*clientContext);
     for (auto indexEntry : catalog->getIndexEntries(transaction, nodeEntry->getTableID())) {
         if (!indexEntry->isLoaded()) {
-            throw BinderException(stringFormat(
+            throw BinderException(std::format(
                 "Trying to insert into an index on table {} but its extension is not loaded.",
                 nodeEntry->getName()));
         }
@@ -214,12 +214,12 @@ static TableCatalogEntry* tryPruneMultiLabeled(const RelExpression& rel,
         }
     }
     if (candidates.size() > 1) {
-        throw BinderException(stringFormat(
+        throw BinderException(std::format(
             "Create rel {} with multiple rel labels is not supported.", rel.toString()));
     }
     if (candidates.size() == 0) {
         throw BinderException(
-            stringFormat("Cannot find a valid label in {} that connects {} and {}.", rel.toString(),
+            std::format("Cannot find a valid label in {} that connects {} and {}.", rel.toString(),
                 srcEntry.getName(), dstEntry.getName()));
     }
     return candidates[0];
@@ -228,15 +228,15 @@ static TableCatalogEntry* tryPruneMultiLabeled(const RelExpression& rel,
 void Binder::bindInsertRel(std::shared_ptr<RelExpression> rel,
     std::vector<BoundInsertInfo>& infos) {
     if (rel->isBoundByMultiLabeledNode()) {
-        throw BinderException(stringFormat(
+        throw BinderException(std::format(
             "Create rel {} bound by multiple node labels is not supported.", rel->toString()));
     }
     if (rel->getDirectionType() == RelDirectionType::BOTH) {
-        throw BinderException(stringFormat("Create undirected relationship is not supported. "
+        throw BinderException(std::format("Create undirected relationship is not supported. "
                                            "Try create 2 directed relationships instead."));
     }
     if (ExpressionUtil::isRecursiveRelPattern(*rel)) {
-        throw BinderException(stringFormat("Cannot create recursive rel {}.", rel->toString()));
+        throw BinderException(std::format("Cannot create recursive rel {}.", rel->toString()));
     }
     TableCatalogEntry* entry = nullptr;
     if (!rel->isMultiLabeled()) {
@@ -291,7 +291,7 @@ BoundSetPropertyInfo Binder::bindSetPropertyInfo(const ParsedExpression* column,
     auto isRel = ExpressionUtil::isRelPattern(*expr);
     if (!isNode && !isRel) {
         throw BinderException(
-            stringFormat("Cannot set expression {} with type {}. Expect node or rel pattern.",
+            std::format("Cannot set expression {} with type {}. Expect node or rel pattern.",
                 expr->toString(), ExpressionTypeUtil::toString(expr->expressionType)));
     }
     auto boundSetItem = bindSetItem(column, columnData);
@@ -310,7 +310,7 @@ BoundSetPropertyInfo Binder::bindSetPropertyInfo(const ParsedExpression* column,
         auto propertyID = entry->getPropertyID(property.getPropertyName());
         if (catalog->containsUnloadedIndex(transaction, entry->getTableID(), propertyID)) {
             throw BinderException(
-                stringFormat("Cannot set property {} in table {} because it is used in one or more "
+                std::format("Cannot set property {} in table {} because it is used in one or more "
                              "indexes which is unloaded.",
                     property.getPropertyName(), entry->getName()));
         }
@@ -320,7 +320,7 @@ BoundSetPropertyInfo Binder::bindSetPropertyInfo(const ParsedExpression* column,
         for (auto entry : nodeOrRel.getEntries()) {
             if (property.isPrimaryKey(entry->getTableID())) {
                 throw BinderException(
-                    stringFormat("Cannot set property {} in table {} because it is used as primary "
+                    std::format("Cannot set property {} in table {} because it is used as primary "
                                  "key. Try delete and then insert.",
                         property.getPropertyName(), entry->getName()));
             }
@@ -355,7 +355,7 @@ std::unique_ptr<BoundUpdatingClause> Binder::bindDeleteClause(
                 for (auto index : catalog->getIndexEntries(transaction, entry->getTableID())) {
                     if (!index->isLoaded()) {
                         throw BinderException(
-                            stringFormat("Trying to delete from an index on table {} but its "
+                            std::format("Trying to delete from an index on table {} but its "
                                          "extension is not loaded.",
                                 entry->getName()));
                     }
@@ -375,7 +375,7 @@ std::unique_ptr<BoundUpdatingClause> Binder::bindDeleteClause(
             auto deleteRel = BoundDeleteInfo(deleteType, TableType::REL, pattern);
             boundDeleteClause->addInfo(std::move(deleteRel));
         } else {
-            throw BinderException(stringFormat(
+            throw BinderException(std::format(
                 "Cannot delete expression {} with type {}. Expect node or rel pattern.",
                 pattern->toString(), ExpressionTypeUtil::toString(pattern->expressionType)));
         }

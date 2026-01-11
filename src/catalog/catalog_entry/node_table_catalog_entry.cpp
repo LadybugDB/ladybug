@@ -1,3 +1,4 @@
+#include <format>
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 
 #include "binder/ddl/bound_create_table_info.h"
@@ -41,7 +42,7 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
 }
 
 std::string NodeTableCatalogEntry::toCypher(const ToCypherInfo& /*info*/) const {
-    return common::stringFormat("CREATE NODE TABLE `{}` ({} PRIMARY KEY(`{}`));", getName(),
+    return std::format("CREATE NODE TABLE `{}` ({} PRIMARY KEY(`{}`));", getName(),
         propertyCollection.toCypher(), primaryKeyName);
 }
 

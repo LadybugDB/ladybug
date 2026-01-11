@@ -1,6 +1,7 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 
 #include <sstream>
+#include <format>
 
 #include "binder/ddl/bound_create_table_info.h"
 #include "catalog/catalog.h"
@@ -154,7 +155,7 @@ static std::string getFromToStr(const NodeTableIDPair& pair, const Catalog* cata
         srcTableName = catalog->getTableCatalogEntry(transaction, pair.srcTableID)->getName();
         dstTableName = catalog->getTableCatalogEntry(transaction, pair.dstTableID)->getName();
     }
-    return stringFormat("FROM `{}` TO `{}`", srcTableName, dstTableName);
+    return std::format("FROM `{}` TO `{}`", srcTableName, dstTableName);
 }
 
 std::string RelGroupCatalogEntry::toCypher(const ToCypherInfo& info) const {
@@ -162,11 +163,11 @@ std::string RelGroupCatalogEntry::toCypher(const ToCypherInfo& info) const {
     auto catalog = Catalog::Get(*relGroupInfo.context);
     auto transaction = transaction::Transaction::Get(*relGroupInfo.context);
     std::stringstream ss;
-    ss << stringFormat("CREATE REL TABLE `{}` (", getName());
+    ss << std::format("CREATE REL TABLE `{}` (", getName());
     KU_ASSERT(!relTableInfos.empty());
     ss << getFromToStr(relTableInfos[0].nodePair, catalog, transaction, storage);
     for (auto i = 1u; i < relTableInfos.size(); ++i) {
-        ss << stringFormat(", {}",
+        ss << std::format(", {}",
             getFromToStr(relTableInfos[i].nodePair, catalog, transaction, storage));
     }
     ss << ", " << propertyCollection.toCypher() << RelMultiplicityUtils::toString(srcMultiplicity)

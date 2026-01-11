@@ -1,3 +1,4 @@
+#include <format>
 #include "py_conversion.h"
 
 #include "cached_import/py_cached_import.h"
@@ -41,7 +42,7 @@ PythonObjectType getPythonObjectType(py::handle& ele) {
     } else if (py::isinstance<py::dict>(ele)) {
         return PythonObjectType::Dict;
     } else {
-        throw NotImplementedException(stringFormat("Scanning of type {} has not been implemented",
+        throw NotImplementedException(std::format("Scanning of type {} has not been implemented",
             py::str(py::type::of(ele)).cast<std::string>()));
     }
 }
@@ -51,7 +52,7 @@ void tryTransformPythonNumeric(common::ValueVector* outputVector, uint64_t pos, 
     int64_t value = PyLong_AsLongLongAndOverflow(ele.ptr(), &overflow);
     if (overflow != 0) {
         PyErr_Clear();
-        throw common::ConversionException(common::stringFormat(
+        throw common::ConversionException(std::format(
             "Failed to cast value: Python value '{}' to INT64", std::string(pybind11::str(ele))));
     }
     outputVector->setNull(pos, false /* isNull */);
@@ -84,7 +85,7 @@ void transformDictionaryToStruct(common::ValueVector* outputVector, uint64_t pos
     auto structKeys = transformStructKeys(dict.keys, dict.len);
     if (StructType::getNumFields(outputVector->dataType) != dict.len) {
         throw common::ConversionException(
-            common::stringFormat("Failed to convert python dictionary: {} to target type {}",
+            std::format("Failed to convert python dictionary: {} to target type {}",
                 dict.toString(), outputVector->dataType.toString()));
     }
 

@@ -1,3 +1,4 @@
+#include <format>
 #include "processor/operator/simple/attach_database.h"
 
 #include "common/exception/runtime.h"
@@ -48,7 +49,7 @@ void AttachDatabase::executeInternal(ExecutionContext* context) {
             return;
         }
     }
-    auto errMsg = common::stringFormat("No loaded extension can handle database type: {}.",
+    auto errMsg = std::format("No loaded extension can handle database type: {}.",
         attachInfo.dbType);
     if (attachInfo.dbType == "duckdb") {
         errMsg += "\nDid you forget to load duckdb extension?\nYou can load it by: load "

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <filesystem>
+#include <format>
 
-#include "common/string_format.h"
 #include "gtest/gtest.h"
 #include "main/lbug.h"
 #include "test_helper/test_helper.h"
@@ -21,7 +21,7 @@ static void removeDir(const std::string& dbPath) {
         return;
     }
     if (!std::filesystem::remove_all(dbPath, removeErrorCode)) {
-        throw common::Exception(common::stringFormat(
+        throw common::Exception(std::format(
             "Error removing directory {}.  Error Message: {}", dbPath, removeErrorCode.message()));
     }
 }

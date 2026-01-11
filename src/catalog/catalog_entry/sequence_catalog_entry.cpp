@@ -1,3 +1,4 @@
+#include <format>
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 
 #include "binder/ddl/bound_create_sequence_info.h"
@@ -155,7 +156,7 @@ std::unique_ptr<SequenceCatalogEntry> SequenceCatalogEntry::deserialize(
 }
 
 std::string SequenceCatalogEntry::toCypher(const ToCypherInfo& /* info */) const {
-    return stringFormat("DROP SEQUENCE IF EXISTS `{}`;\n"
+    return std::format("DROP SEQUENCE IF EXISTS `{}`;\n"
                         "CREATE SEQUENCE IF NOT EXISTS `{}` START {} INCREMENT {} MINVALUE {} "
                         "MAXVALUE {} {} CYCLE;\n"
                         "RETURN nextval('{}');",

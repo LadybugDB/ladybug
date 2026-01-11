@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/expression/literal_expression.h"
 
 #include "common/exception/binder.h"
@@ -12,7 +13,7 @@ void LiteralExpression::cast(const LogicalType& type) {
     if (!value.allowTypeChange()) {
         // LCOV_EXCL_START
         throw BinderException(
-            stringFormat("Cannot change literal expression data type from {} to {}.",
+            std::format("Cannot change literal expression data type from {} to {}.",
                 dataType.toString(), type.toString()));
         // LCOV_EXCL_STOP
     }

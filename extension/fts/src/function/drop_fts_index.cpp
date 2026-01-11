@@ -1,3 +1,4 @@
+#include <format>
 #include "function/drop_fts_index.h"
 
 #include "catalog/catalog.h"
@@ -31,13 +32,13 @@ static std::unique_ptr<TableFuncBindData> bindFunc(ClientContext* context,
 std::string dropFTSIndexQuery(ClientContext& context, const TableFuncBindData& bindData) {
     context.setUseInternalCatalogEntry(true /* useInternalCatalogEntry */);
     auto ftsBindData = bindData.constPtrCast<FTSBindData>();
-    auto query = stringFormat("CALL _DROP_FTS_INDEX('{}', '{}');", ftsBindData->tableName,
+    auto query = std::format("CALL _DROP_FTS_INDEX('{}', '{}');", ftsBindData->tableName,
         ftsBindData->indexName);
-    query += stringFormat("DROP TABLE `{}`;",
+    query += std::format("DROP TABLE `{}`;",
         FTSUtils::getAppearsInTableName(ftsBindData->tableID, ftsBindData->indexName));
-    query += stringFormat("DROP TABLE `{}`;",
+    query += std::format("DROP TABLE `{}`;",
         FTSUtils::getDocsTableName(ftsBindData->tableID, ftsBindData->indexName));
-    query += stringFormat("DROP TABLE `{}`;",
+    query += std::format("DROP TABLE `{}`;",
         FTSUtils::getTermsTableName(ftsBindData->tableID, ftsBindData->indexName));
     return query;
 }

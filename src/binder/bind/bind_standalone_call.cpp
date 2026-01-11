@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "binder/bound_standalone_call.h"
 #include "binder/expression/expression_util.h"
@@ -26,7 +27,7 @@ std::unique_ptr<BoundStatement> Binder::bindStandaloneCall(const parser::Stateme
     ExpressionUtil::validateExpressionType(*optionValue, ExpressionType::LITERAL);
     if (LogicalTypeUtils::isFloatingPoint(optionValue->dataType.getLogicalTypeID()) &&
         LogicalTypeUtils::isIntegral(LogicalType(option->parameterType))) {
-        throw BinderException{stringFormat(
+        throw BinderException{std::format(
             "Expression {} has data type {} but expected {}. Implicit cast is not supported.",
             optionValue->toString(),
             LogicalTypeUtils::toString(optionValue->dataType.getLogicalTypeID()),

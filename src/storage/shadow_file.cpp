@@ -1,3 +1,4 @@
+#include <format>
 #include "storage/shadow_file.h"
 
 #include "common/exception/io.h"
@@ -102,7 +103,7 @@ void ShadowFile::replayShadowPageRecords(ClientContext& context) {
         dataFileInfo = vfs->openFile(context.getDatabasePath(),
             FileOpenFlags{FileFlags::WRITE | FileFlags::READ_ONLY, FileLockType::WRITE_LOCK});
     } catch (IOException& e) {
-        throw RuntimeException(stringFormat(
+        throw RuntimeException(std::format(
             "Found shadow file {} but no corresponding database file. This file "
             "may have been left behind from a previous database with the same name. If it is safe "
             "to do so, please delete this file and restart the database.",

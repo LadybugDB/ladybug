@@ -1,4 +1,5 @@
 #pragma once
+#include <format>
 
 #include "common/exception/runtime.h"
 #include "common/type_utils.h"
@@ -22,7 +23,7 @@ public:
         }
         if ((pos > 0 && pos > listEntry.size) || (pos < 0 && pos < -(int64_t)listEntry.size)) {
             throw common::RuntimeException(
-                common::stringFormat("list_extract(list, index): index={} is out of range.",
+                std::format("list_extract(list, index): index={} is out of range.",
                     common::TypeUtils::toString(pos)));
         }
         if (pos > 0) {

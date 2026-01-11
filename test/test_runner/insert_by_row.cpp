@@ -1,6 +1,7 @@
 #include "test_runner/insert_by_row.h"
 
 #include <fstream>
+#include <format>
 
 #include "common/exception/test.h"
 #include "common/string_utils.h"
@@ -15,7 +16,7 @@ static std::unique_ptr<main::QueryResult> validateQuery(main::Connection& conn,
     std::string& query) {
     auto result = conn.query(query);
     if (!result->isSuccess()) {
-        throw Exception(stringFormat("Failed to execute statement: {}.\nError: {}", query,
+        throw Exception(std::format("Failed to execute statement: {}.\nError: {}", query,
             result->getErrorMessage()));
     }
     return result;
@@ -26,7 +27,7 @@ void InsertDatasetByRow::init() {
     copyFile = TestHelper::appendLbugRootPath(copyFile);
     std::ifstream file(copyFile);
     if (!file.is_open()) {
-        throw TestException(stringFormat("Error opening file: {}, errno: {}.", copyFile, errno));
+        throw TestException(std::format("Error opening file: {}, errno: {}.", copyFile, errno));
     }
     std::string line;
     while (getline(file, line)) {
@@ -35,12 +36,12 @@ void InsertDatasetByRow::init() {
         auto tableName = tokens[1];
         StringUtils::toLower(copyStatement);
         if (copyStatement != "copy") {
-            throw TestException(stringFormat("Invalid COPY statement: {}", line));
+            throw TestException(std::format("Invalid COPY statement: {}", line));
         }
-        auto query = stringFormat("call show_tables() where name='{}' return type;", tableName);
+        auto query = std::format("call show_tables() where name='{}' return type;", tableName);
         auto result = validateQuery(connection, query);
         auto tableType = result->getNext()->getValue(0)->toString();
-        query = stringFormat("call table_info('{}') return name, type order by `property id`;",
+        query = std::format("call table_info('{}') return name, type order by `property id`;",
             tableName);
         result = validateQuery(connection, query);
         std::vector<std::pair<std::string, std::string>> properties;
@@ -51,7 +52,7 @@ void InsertDatasetByRow::init() {
         size_t start = line.find('"', 0);
         size_t end = line.find('"', start + 1);
         if (start == std::string::npos || end == std::string::npos) {
-            throw TestException(stringFormat("Invalid file from copy {}.", line));
+            throw TestException(std::format("Invalid file from copy {}.", line));
         }
         std::string filePath = line.substr(start + 1, end - start - 1);
         auto fullPath = TestHelper::appendLbugRootPath(filePath);
@@ -62,7 +63,7 @@ void InsertDatasetByRow::init() {
             tables.push_back(std::make_unique<NodeTableInfo>(std::move(tableName),
                 std::move(datasetFilePath), std::move(properties)));
         } else if (tableType == "REL") {
-            query = stringFormat("call show_connection('{}') return *;", tableName);
+            query = std::format("call show_connection('{}') return *;", tableName);
             result = validateQuery(connection, query);
             auto tuple = result->getNext();
             RelConnection from;
@@ -71,7 +72,7 @@ void InsertDatasetByRow::init() {
             from.property = tuple->getValue(2)->toString();
             to.name = tuple->getValue(1)->toString();
             to.property = tuple->getValue(3)->toString();
-            query = stringFormat("call table_info('{}') where name='{}' return type;"
+            query = std::format("call table_info('{}') where name='{}' return type;"
                                  "call table_info('{}') where name='{}' return type;",
                 from.name, from.property, to.name, to.property);
             result = validateQuery(connection, query);
@@ -81,7 +82,7 @@ void InsertDatasetByRow::init() {
             tables.push_back(std::make_unique<RelTableInfo>(std::move(tableName),
                 std::move(datasetFilePath), std::move(properties), std::move(from), std::move(to)));
         } else {
-            throw Exception(stringFormat("Unsupported table type {} for insert by row", tableName,
+            throw Exception(std::format("Unsupported table type {} for insert by row", tableName,
                 result->getErrorMessage()));
         }
     }
@@ -113,16 +114,16 @@ std::string InsertDatasetByRow::TableInfo::getBodyForLoad() const {
 std::string InsertDatasetByRow::NodeTableInfo::getLoadFromQuery() const {
     const auto header = getHeaderForLoad();
     const auto body = getBodyForLoad();
-    return stringFormat("LOAD WITH HEADERS ({}) FROM {} CREATE (:{} {{{}}});", header, filePath,
+    return std::format("LOAD WITH HEADERS ({}) FROM {} CREATE (:{} {{{}}});", header, filePath,
         name, body);
 }
 
 std::string InsertDatasetByRow::RelTableInfo::getLoadFromQuery() const {
-    auto header = stringFormat("aid_ {},bid_ {}", from.type, to.type);
+    auto header = std::format("aid_ {},bid_ {}", from.type, to.type);
     auto headerRest = getHeaderForLoad();
     header += headerRest.length() == 0 ? "" : "," + getHeaderForLoad();
     const auto body = getBodyForLoad();
-    return stringFormat("LOAD WITH HEADERS ({}) FROM {} "
+    return std::format("LOAD WITH HEADERS ({}) FROM {} "
                         "MATCH (a:{}), (b:{}) WHERE a.{} = aid_ AND b.{} = bid_ "
                         "CREATE (a)-[:{} {{{}}}]->(b);",
         header, filePath, from.name, to.name, from.property, to.property, name, body);

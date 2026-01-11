@@ -1,4 +1,5 @@
 #pragma once
+#include <format>
 
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "function/fts_config.h"
@@ -22,40 +23,40 @@ struct FTSUtils {
         transaction::Transaction* tx, bool isConjunctive, bool isQuery);
 
     static std::string getDefaultStopWordsTableName() {
-        return common::stringFormat("default_english_stopwords");
+        return std::format("default_english_stopwords");
     }
 
     static std::string getInternalTablePrefix(common::table_id_t tableID,
         const std::string& indexName) {
-        return common::stringFormat("{}_{}", tableID, indexName);
+        return std::format("{}_{}", tableID, indexName);
     }
 
     static std::string getNonDefaultStopWordsTableName(common::table_id_t tableID,
         const std::string& indexName) {
-        return common::stringFormat("{}_stopwords", getInternalTablePrefix(tableID, indexName));
+        return std::format("{}_stopwords", getInternalTablePrefix(tableID, indexName));
     }
 
     static std::string getDocsTableName(common::table_id_t tableID, const std::string& indexName) {
-        return common::stringFormat("{}_docs", getInternalTablePrefix(tableID, indexName));
+        return std::format("{}_docs", getInternalTablePrefix(tableID, indexName));
     }
 
     static std::string getAppearsInfoTableName(common::table_id_t tableID,
         const std::string& indexName) {
-        return common::stringFormat("{}_appears_info", getInternalTablePrefix(tableID, indexName));
+        return std::format("{}_appears_info", getInternalTablePrefix(tableID, indexName));
     }
 
     static std::string getTermsTableName(common::table_id_t tableID, const std::string& indexName) {
-        return common::stringFormat("{}_terms", getInternalTablePrefix(tableID, indexName));
+        return std::format("{}_terms", getInternalTablePrefix(tableID, indexName));
     }
 
     static std::string getAppearsInTableName(common::table_id_t tableID,
         const std::string& indexName) {
-        return common::stringFormat("{}_appears_in", getInternalTablePrefix(tableID, indexName));
+        return std::format("{}_appears_in", getInternalTablePrefix(tableID, indexName));
     }
 
     static std::string getTokenizeMacroName(common::table_id_t tableID,
         const std::string& indexName) {
-        return common::stringFormat("{}_tokenize", getInternalTablePrefix(tableID, indexName));
+        return std::format("{}_tokenize", getInternalTablePrefix(tableID, indexName));
     }
 
     static std::vector<std::string> tokenizeString(std::string& str, const FTSConfig& tokenizer);

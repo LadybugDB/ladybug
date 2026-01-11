@@ -1,3 +1,4 @@
+#include <format>
 #include "connector/duckdb_type_converter.h"
 
 #include "common/exception/binder.h"
@@ -97,7 +98,7 @@ common::LogicalType DuckDBTypeConverter::convertDuckDBType(std::string typeStr) 
             nullptr /* endPtr */, 0);
         return LogicalType::DECIMAL(width, scale);
     }
-    throw BinderException{stringFormat("Unsupported duckdb type: {}.", typeStr)};
+    throw BinderException{std::format("Unsupported duckdb type: {}.", typeStr)};
 }
 
 std::vector<std::string> DuckDBTypeConverter::parseStructFields(const std::string& structTypeStr) {

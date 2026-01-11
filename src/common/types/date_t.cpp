@@ -1,8 +1,8 @@
+#include <format>
 #include "common/types/date_t.h"
 
 #include "common/assert.h"
 #include "common/exception/conversion.h"
-#include "common/string_format.h"
 #include "common/string_utils.h"
 #include "common/types/cast_helpers.h"
 #include "common/types/timestamp_t.h"
@@ -232,7 +232,7 @@ void Date::convert(date_t date, int32_t& out_year, int32_t& out_month, int32_t& 
 date_t Date::fromDate(int32_t year, int32_t month, int32_t day) {
     int32_t n = 0;
     if (!Date::isValid(year, month, day)) {
-        throw ConversionException(stringFormat("Date out of range: {}-{}-{}.", year, month, day));
+        throw ConversionException(std::format("Date out of range: {}-{}-{}.", year, month, day));
     }
     while (year < 1970) {
         year += Date::YEAR_INTERVAL;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <format>
 
 #include "common/types/types.h"
 #include "function/table/bind_input.h"
@@ -65,7 +66,7 @@ struct Tokenizer {
 struct TokenizerInfo {
     std::string tokenizer = Tokenizer::DEFAULT_VALUE;
     std::string jiebaDictDir =
-        common::stringFormat("{}/extension/fts/build/dict", LBUG_ROOT_DIRECTORY);
+        std::format("{}/extension/fts/build/dict", LBUG_ROOT_DIRECTORY);
 
     TokenizerInfo() = default;
 };

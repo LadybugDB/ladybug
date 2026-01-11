@@ -1,3 +1,4 @@
+#include <format>
 #include "catalog/fts_index_catalog_entry.h"
 
 #include "catalog/catalog.h"
@@ -33,7 +34,7 @@ std::string FTSIndexAuxInfo::getStopWordsName(const common::FileScanInfo& export
     case common::FileType::CSV:
     case common::FileType::PARQUET: {
         if (config.stopWordsTableName != FTSUtils::getDefaultStopWordsTableName()) {
-            stopWordsName = common::stringFormat("{}/{}.{}", exportFileInfo.filePaths[0],
+            stopWordsName = std::format("{}/{}.{}", exportFileInfo.filePaths[0],
                 config.stopWordsTableName,
                 common::StringUtils::getLower(exportFileInfo.fileTypeInfo.fileTypeStr));
         }
@@ -56,11 +57,11 @@ std::string FTSIndexAuxInfo::toCypher(const catalog::IndexCatalogEntry& indexEnt
     auto propertyIDs = indexEntry.getPropertyIDs();
     for (auto i = 0u; i < propertyIDs.size(); i++) {
         propertyStr +=
-            common::stringFormat("'{}'{}", tableCatalogEntry->getProperty(propertyIDs[i]).getName(),
+            std::format("'{}'{}", tableCatalogEntry->getProperty(propertyIDs[i]).getName(),
                 i == propertyIDs.size() - 1 ? "" : ", ");
     }
 
-    cypher += common::stringFormat("CALL CREATE_FTS_INDEX('{}', '{}', [{}], stemmer := '{}', "
+    cypher += std::format("CALL CREATE_FTS_INDEX('{}', '{}', [{}], stemmer := '{}', "
                                    "stopWords := '{}');",
         tableName, indexEntry.getIndexName(), std::move(propertyStr), config.stemmer,
         getStopWordsName(indexToCypherInfo.exportFileInfo));

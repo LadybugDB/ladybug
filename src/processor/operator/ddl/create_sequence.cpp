@@ -1,7 +1,7 @@
+#include <format>
 #include "processor/operator/ddl/create_sequence.h"
 
 #include "catalog/catalog.h"
-#include "common/string_format.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "transaction/transaction.h"
@@ -24,7 +24,7 @@ void CreateSequence::executeInternal(ExecutionContext* context) {
     if (catalog->containsSequence(transaction, info.sequenceName)) {
         switch (info.onConflict) {
         case ConflictAction::ON_CONFLICT_DO_NOTHING: {
-            appendMessage(stringFormat("Sequence {} already exists.", info.sequenceName),
+            appendMessage(std::format("Sequence {} already exists.", info.sequenceName),
                 memoryManager);
             return;
         }
@@ -33,7 +33,7 @@ void CreateSequence::executeInternal(ExecutionContext* context) {
         }
     }
     catalog->createSequence(transaction, info);
-    appendMessage(stringFormat("Sequence {} has been created.", info.sequenceName), memoryManager);
+    appendMessage(std::format("Sequence {} has been created.", info.sequenceName), memoryManager);
 }
 
 } // namespace processor

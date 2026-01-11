@@ -1,5 +1,5 @@
+#include <format>
 #include "common/file_system/virtual_file_system.h"
-#include "common/string_format.h"
 #include "graph_test/base_graph_test.h"
 #include "main/database.h"
 #include "storage/buffer_manager/buffer_manager.h"
@@ -179,7 +179,7 @@ TEST_F(CopyTest, NodeCopyBMExceptionRecoverySameConnection) {
             },
         .executeFunc =
             [](main::Connection* conn, int) {
-                const auto queryString = common::stringFormat(
+                const auto queryString = std::format(
                     "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
                     LBUG_ROOT_DIRECTORY);
 
@@ -205,7 +205,7 @@ TEST_F(CopyTest, NodeCopyBMExceptionRecoverySameConnectionStringKey) {
             },
         .executeFunc =
             [](main::Connection* conn, int) {
-                const auto queryString = common::stringFormat(
+                const auto queryString = std::format(
                     "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
                     LBUG_ROOT_DIRECTORY);
 
@@ -230,7 +230,7 @@ TEST_F(CopyTest, RelCopyBMExceptionRecoverySameConnection) {
             [](main::Connection* conn) {
                 conn->query("CREATE NODE TABLE account(ID INT64, PRIMARY KEY(ID))");
                 conn->query("CREATE REL TABLE follows(FROM account TO account);");
-                ASSERT_TRUE(conn->query(common::stringFormat(
+                ASSERT_TRUE(conn->query(std::format(
                     "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
                     LBUG_ROOT_DIRECTORY)));
             },
@@ -246,7 +246,7 @@ TEST_F(CopyTest, RelCopyBMExceptionRecoverySameConnection) {
                                   (1 << 10));
                 failureFrequency = failureFrequencyMultiplier * (i + 15);
 
-                return conn->query(common::stringFormat(
+                return conn->query(std::format(
                     "COPY follows FROM '{}/dataset/snap/twitter/csv/twitter-edges.csv' (DELIM=' ')",
                     LBUG_ROOT_DIRECTORY));
             },
@@ -279,7 +279,7 @@ TEST_F(CopyTest, NodeInsertBMExceptionDuringCommitRecovery) {
             },
         .executeFunc =
             [](main::Connection* conn, int) {
-                const auto queryString = common::stringFormat(
+                const auto queryString = std::format(
                     "UNWIND RANGE(1,{}) AS i CREATE (a:account {{ID:i}})", numValues);
                 return conn->query(queryString);
             },
@@ -299,14 +299,14 @@ TEST_F(CopyTest, RelInsertBMExceptionDuringCommitRecovery) {
             [this](main::Connection* conn) {
                 conn->query("CREATE NODE TABLE account(ID INT64, PRIMARY KEY(ID))");
                 conn->query("CREATE REL TABLE follows(FROM account TO account);");
-                const auto queryString = common::stringFormat(
+                const auto queryString = std::format(
                     "UNWIND RANGE(1,{}) AS i CREATE (a:account {{ID:i}})", numNodes);
                 ASSERT_TRUE(conn->query(queryString)->isSuccess());
                 failureFrequency = 32;
             },
         .executeFunc =
             [](main::Connection* conn, int) {
-                return conn->query(common::stringFormat(
+                return conn->query(std::format(
                     "UNWIND RANGE(1,{}) AS i MATCH (a:account), (b:account) WHERE a.ID = i AND "
                     "b.ID = i + 1 CREATE (a)-[f:follows]->(b)",
                     numNodes - 1));
@@ -336,7 +336,7 @@ TEST_F(CopyTest, NodeCopyBMExceptionDuringCheckpointRecovery) {
             },
         .executeFunc =
             [](main::Connection* conn, int) {
-                return conn->query(common::stringFormat(
+                return conn->query(std::format(
                     "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
                     LBUG_ROOT_DIRECTORY));
             },
@@ -363,14 +363,14 @@ TEST_F(CopyTest, RelCopyCheckpointBMExceptionRecovery) {
             [this](main::Connection* conn) {
                 conn->query("CREATE NODE TABLE account(ID INT64, PRIMARY KEY(ID))");
                 conn->query("CREATE REL TABLE follows(FROM account TO account);");
-                ASSERT_TRUE(conn->query(common::stringFormat(
+                ASSERT_TRUE(conn->query(std::format(
                     "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
                     LBUG_ROOT_DIRECTORY)));
                 failureFrequency = 1024;
             },
         .executeFunc =
             [](main::Connection* conn, int) {
-                return conn->query(common::stringFormat(
+                return conn->query(std::format(
                     "COPY follows FROM '{}/dataset/snap/twitter/csv/twitter-edges.csv' (DELIM=' ')",
                     LBUG_ROOT_DIRECTORY));
             },
@@ -406,7 +406,7 @@ TEST_F(CopyTest, NodeInsertBMExceptionDuringCheckpointRecovery) {
             },
         .executeFunc =
             [](main::Connection* conn, int) {
-                return conn->query(common::stringFormat(
+                return conn->query(std::format(
                     "UNWIND RANGE(1,{}) AS i CREATE (a:account {{ID:i}})", numValues));
             },
         .earlyExitOnFailureFunc = [](main::QueryResult*) { return true; },
@@ -431,7 +431,7 @@ TEST_F(CopyTest, GracefulBMExceptionHandlingManyThreads) {
         conn->query("create node table Comment (id int64, creationDate INT64, locationIP STRING, "
                     "browserUsed STRING, content STRING, length INT32, PRIMARY KEY (id))");
         auto result = conn->query(
-            common::stringFormat("COPY Comment FROM ['{}/dataset/ldbc-sf01/Comment.csv', "
+            std::format("COPY Comment FROM ['{}/dataset/ldbc-sf01/Comment.csv', "
                                  "'{}/dataset/ldbc-sf01/Comment.csv'] (delim='|', header=true, "
                                  "parallel=false)",
                 LBUG_ROOT_DIRECTORY, LBUG_ROOT_DIRECTORY));
@@ -454,12 +454,12 @@ TEST_F(CopyTest, OutOfMemoryRecovery) {
     conn->query("CREATE NODE TABLE account(ID INT64, PRIMARY KEY(ID))");
     conn->query("CREATE REL TABLE follows(FROM account TO account);");
     {
-        auto result = conn->query(common::stringFormat(
+        auto result = conn->query(std::format(
             "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
             LBUG_ROOT_DIRECTORY));
         ASSERT_TRUE(result->isSuccess()) << result->toString();
 
-        result = conn->query(common::stringFormat(
+        result = conn->query(std::format(
             "COPY follows FROM '{}/dataset/snap/twitter/csv/twitter-edges.csv' (DELIM=' ')",
             LBUG_ROOT_DIRECTORY));
         ASSERT_FALSE(result->isSuccess());
@@ -472,7 +472,7 @@ TEST_F(CopyTest, OutOfMemoryRecovery) {
     // Try again with a larger buffer pool size
     resetDB(256 * 1024 * 1024 + TestHelper::HASH_INDEX_MEM);
     {
-        auto result = conn->query(common::stringFormat(
+        auto result = conn->query(std::format(
             "COPY follows FROM '{}/dataset/snap/twitter/csv/twitter-edges.csv' (DELIM=' ')",
             LBUG_ROOT_DIRECTORY));
         ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
@@ -494,11 +494,11 @@ TEST_F(CopyTest, OutOfMemoryRecoveryDropTable) {
     conn->query("CREATE NODE TABLE account(ID INT64, PRIMARY KEY(ID))");
     conn->query("CREATE REL TABLE follows(FROM account TO account);");
     {
-        auto result = conn->query(common::stringFormat(
+        auto result = conn->query(std::format(
             "COPY account FROM \"{}/dataset/snap/twitter/csv/twitter-nodes.csv\"",
             LBUG_ROOT_DIRECTORY));
         ASSERT_TRUE(result->isSuccess()) << result->toString();
-        result = conn->query(common::stringFormat(
+        result = conn->query(std::format(
             "COPY follows FROM '{}/dataset/snap/twitter/csv/twitter-edges.csv' (DELIM=' ')",
             LBUG_ROOT_DIRECTORY));
         ASSERT_FALSE(result->isSuccess());
@@ -513,7 +513,7 @@ TEST_F(CopyTest, OutOfMemoryRecoveryDropTable) {
         ASSERT_TRUE(result->isSuccess()) << result->toString();
         result = conn->query("CREATE REL TABLE follows(FROM account TO account);");
         ASSERT_TRUE(result->isSuccess()) << result->toString();
-        result = conn->query(common::stringFormat(
+        result = conn->query(std::format(
             "COPY follows FROM '{}/dataset/snap/twitter/csv/twitter-edges.csv' (DELIM=' ')",
             LBUG_ROOT_DIRECTORY));
         ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();

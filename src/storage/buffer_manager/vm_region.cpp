@@ -1,6 +1,5 @@
 #include "storage/buffer_manager/vm_region.h"
 
-#include "common/string_format.h"
 #include "common/system_config.h"
 #include "common/system_message.h"
 
@@ -10,6 +9,7 @@
 #include <memoryapi.h>
 #else
 #include <sys/mman.h>
+#include <format>
 #endif
 
 #include "common/exception/buffer_manager.h"
@@ -29,7 +29,7 @@ VMRegion::VMRegion(PageSizeClass pageSizeClass, uint64_t maxRegionSize) : numFra
 #ifdef _WIN32
     region = (uint8_t*)VirtualAlloc(NULL, getMaxRegionSize(), MEM_RESERVE, PAGE_READWRITE);
     if (region == NULL) {
-        throw BufferManagerException(stringFormat(
+        throw BufferManagerException(std::format(
             "VirtualAlloc for size {} failed with error code {}: {}.", getMaxRegionSize(),
             GetLastError(), std::system_category().message(GetLastError())));
     }
@@ -60,7 +60,7 @@ void VMRegion::releaseFrame(frame_idx_t frameIdx) const {
     // Not sure what the differences are
     if (!VirtualFree(getFrame(frameIdx), frameSize, MEM_DECOMMIT)) {
         auto code = GetLastError();
-        throw BufferManagerException(stringFormat(
+        throw BufferManagerException(std::format(
             "Releasing physical memory associated with a frame failed with error code {}: {}.",
             code, systemErrMessage(code)));
     }
@@ -69,7 +69,7 @@ void VMRegion::releaseFrame(frame_idx_t frameIdx) const {
     int error = madvise(getFrame(frameIdx), frameSize, MADV_DONTNEED);
     if (error != 0) {
         // LCOV_EXCL_START
-        throw BufferManagerException(stringFormat(
+        throw BufferManagerException(std::format(
             "Releasing physical memory associated with a frame failed with error code {}: {}.",
             error, posixErrMessage()));
         // LCOV_EXCL_STOP

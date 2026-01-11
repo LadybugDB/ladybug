@@ -1,9 +1,9 @@
 #include "processor/operator/persistent/reader/csv/base_csv_reader.h"
 
 #include <vector>
+#include <format>
 
 #include "common/file_system/virtual_file_system.h"
-#include "common/string_format.h"
 #include "common/string_utils.h"
 #include "common/system_message.h"
 #include "common/utils.h"
@@ -181,7 +181,7 @@ bool BaseCSVReader::readBuffer(uint64_t* start) {
     if (readCount == -1) {
         // LCOV_EXCL_START
         lineContext.setEndOfLine(getFileOffset());
-        handleCopyException(stringFormat("Could not read from file: {}", posixErrMessage()), true);
+        handleCopyException(std::format("Could not read from file: {}", posixErrMessage()), true);
         // LCOV_EXCL_STOP
     }
 

@@ -1,3 +1,4 @@
+#include <format>
 #include "transaction/transaction.h"
 
 #include "catalog/catalog.h"
@@ -146,7 +147,7 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
         case CatalogEntryType::TYPE_ENTRY:
         default: {
             throw common::RuntimeException(
-                common::stringFormat("Not supported catalog entry type {} yet.",
+                std::format("Not supported catalog entry type {} yet.",
                     CatalogEntryTypeUtils::toString(catalogEntry.getType())));
         }
         }
@@ -158,7 +159,7 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
     } break;
     default: {
         throw common::RuntimeException(
-            common::stringFormat("Not supported catalog entry type {} yet.",
+            std::format("Not supported catalog entry type {} yet.",
                 CatalogEntryTypeUtils::toString(catalogEntry.getType())));
     }
     }

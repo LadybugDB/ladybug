@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/path_expression.h"
@@ -8,7 +9,6 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/enums/rel_direction.h"
 #include "common/exception/binder.h"
-#include "common/string_format.h"
 #include "common/utils.h"
 #include "function/cast/functions/cast_from_string_functions.h"
 #include "function/gds/rec_joins.h"
@@ -161,7 +161,7 @@ static void checkRelDirectionTypeAgainstStorageDirection(const RelExpression* re
     case RelDirectionType::SINGLE:
         // Directed pattern is in the fwd direction
         if (!containsValue(rel->getExtendDirections(), ExtendDirection::FWD)) {
-            throw BinderException(stringFormat("Querying table matched in rel pattern '{}' with "
+            throw BinderException(std::format("Querying table matched in rel pattern '{}' with "
                                                "bwd-only storage direction isn't supported.",
                 rel->toString()));
         }
@@ -169,7 +169,7 @@ static void checkRelDirectionTypeAgainstStorageDirection(const RelExpression* re
     case RelDirectionType::BOTH:
         if (rel->getExtendDirections().size() < NUM_REL_DIRECTIONS) {
             throw BinderException(
-                stringFormat("Undirected rel pattern '{}' has at least one matched rel table with "
+                std::format("Undirected rel pattern '{}' has at least one matched rel table with "
                              "storage type 'fwd' or 'bwd'. Undirected rel patterns are only "
                              "supported if every matched rel table has storage type 'both'.",
                     rel->toString()));
@@ -318,7 +318,7 @@ static void bindProjectionListAsStructField(const expression_vector& projectionL
     std::vector<StructField>& fields) {
     for (auto& expression : projectionList) {
         if (expression->expressionType != ExpressionType::PROPERTY) {
-            throw BinderException(stringFormat("Unsupported projection item {} on recursive rel.",
+            throw BinderException(std::format("Unsupported projection item {} on recursive rel.",
                 expression->toString()));
         }
         auto& property = expression->constCast<PropertyExpression>();
@@ -342,7 +342,7 @@ static void checkWeightedShortestPathSupportedType(const LogicalType& type) {
     default:
         break;
     }
-    throw BinderException(stringFormat(
+    throw BinderException(std::format(
         "{} weight type is not supported for weighted shortest path.", type.toString()));
 }
 
@@ -407,7 +407,7 @@ std::shared_ptr<RelExpression> Binder::createRecursiveQueryRel(const parser::Rel
             auto dependOnRel = dependentVariableNames.contains(rel->getUniqueName());
             if (dependOnNode && dependOnRel) {
                 throw BinderException(
-                    stringFormat("Cannot evaluate {} because it depends on both {} and {}.",
+                    std::format("Cannot evaluate {} because it depends on both {} and {}.",
                         predicate->toString(), node->toString(), rel->toString()));
             } else if (dependOnNode) {
                 nodePredicate = expressionBinder.combineBooleanExpressions(ExpressionType::AND,
@@ -417,7 +417,7 @@ std::shared_ptr<RelExpression> Binder::createRecursiveQueryRel(const parser::Rel
                     relPredicate, predicate);
             } else {
                 if (!ExpressionUtil::isBoolLiteral(*predicate)) {
-                    throw BinderException(stringFormat(
+                    throw BinderException(std::format(
                         "Cannot evaluate {} because it does not depend on {} or {}. Treating it as "
                         "a node or relationship predicate is ambiguous.",
                         predicate->toString(), node->toString(), rel->toString()));
@@ -538,11 +538,11 @@ std::pair<uint64_t, uint64_t> Binder::bindVariableLengthRelBound(const RelPatter
             upperBound);
     }
     if (lowerBound > upperBound) {
-        throw BinderException(stringFormat("Lower bound of rel {} is greater than upperBound.",
+        throw BinderException(std::format("Lower bound of rel {} is greater than upperBound.",
             relPattern.getVariableName()));
     }
     if (upperBound > maxDepth) {
-        throw BinderException(stringFormat("Upper bound of rel {} exceeds maximum: {}.",
+        throw BinderException(std::format("Upper bound of rel {} exceeds maximum: {}.",
             relPattern.getVariableName(), std::to_string(maxDepth)));
     }
     if ((relPattern.getRelType() == QueryRelType::ALL_SHORTEST ||
@@ -561,7 +561,7 @@ std::shared_ptr<NodeExpression> Binder::bindQueryNode(const NodePattern& nodePat
         auto prevVariable = scope.getExpression(parsedName);
         if (!ExpressionUtil::isNodePattern(*prevVariable)) {
             if (!scope.hasNodeReplacement(parsedName)) {
-                throw BinderException(stringFormat("Cannot bind {} as node pattern.", parsedName));
+                throw BinderException(std::format("Cannot bind {} as node pattern.", parsedName));
             }
             queryNode = scope.getNodeReplacement(parsedName);
             queryNode->addPropertyDataExpr(InternalKeyword::ID, queryNode->getInternalID());
@@ -665,7 +665,7 @@ Binder::bindNodeTableEntries(const std::vector<std::string>& tableNames) const {
             if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY &&
                 entry->getType() != CatalogEntryType::FOREIGN_TABLE_ENTRY) {
                 throw BinderException(
-                    stringFormat("Cannot bind {} as a node pattern label.", entry->getName()));
+                    std::format("Cannot bind {} as a node pattern label.", entry->getName()));
             }
             entrySet.insert(entry);
             if (!dbName.empty()) {
@@ -694,11 +694,11 @@ std::pair<TableCatalogEntry*, std::string> Binder::bindNodeTableEntry(
         // Qualified name: db.table
         auto attachedDB = main::DatabaseManager::Get(*clientContext)->getAttachedDatabase(dbName);
         if (!attachedDB) {
-            throw BinderException(stringFormat("Attached database {} does not exist.", dbName));
+            throw BinderException(std::format("Attached database {} does not exist.", dbName));
         }
         auto attachedCatalog = attachedDB->getCatalog();
         if (!attachedCatalog->containsTable(transaction, tableName, useInternal)) {
-            throw BinderException(stringFormat("Table {} does not exist in attached database {}.",
+            throw BinderException(std::format("Table {} does not exist in attached database {}.",
                 tableName, dbName));
         }
         return {attachedCatalog->getTableCatalogEntry(transaction, tableName, useInternal), dbName};
@@ -708,7 +708,7 @@ std::pair<TableCatalogEntry*, std::string> Binder::bindNodeTableEntry(
         if (catalog->containsTable(transaction, name, useInternal)) {
             return {catalog->getTableCatalogEntry(transaction, name, useInternal), ""};
         }
-        throw BinderException(stringFormat("Table {} does not exist.", name));
+        throw BinderException(std::format("Table {} does not exist.", name));
     }
 }
 
@@ -734,12 +734,12 @@ std::vector<TableCatalogEntry*> Binder::bindRelGroupEntries(
             if (catalog->containsTable(transaction, name)) {
                 auto entry = catalog->getTableCatalogEntry(transaction, name, useInternal);
                 if (entry->getType() != CatalogEntryType::REL_GROUP_ENTRY) {
-                    throw BinderException(stringFormat(
+                    throw BinderException(std::format(
                         "Cannot bind {} as a relationship pattern label.", entry->getName()));
                 }
                 entrySet.insert(entry);
             } else {
-                throw BinderException(stringFormat("Table {} does not exist.", name));
+                throw BinderException(std::format("Table {} does not exist.", name));
             }
         }
     }

@@ -1,3 +1,4 @@
+#include <format>
 #include "s3fs.h"
 
 #include "common/exception/io.h"
@@ -342,7 +343,7 @@ static std::string getPrefix(std::string url, std::span<const std::string_view> 
         }
     }
     throw common::IOException(
-        stringFormat("URL needs to start with {}.", StringUtils::join(supportedPrefixes, " or ")));
+        std::format("URL needs to start with {}.", StringUtils::join(supportedPrefixes, " or ")));
 }
 
 bool S3FileSystem::canHandleFile(const std::string_view path) const {
@@ -490,7 +491,7 @@ std::stringstream getFinalizeUploadQueryBody(S3FileInfo* fileInfo) {
 static void verifyUploadResult(const std::string& result, const HTTPResponse& response) {
     auto openUploadResultTagPos = result.find("<CompleteMultipartUploadResult", 0);
     if (openUploadResultTagPos == std::string::npos) {
-        throw IOException(common::stringFormat(
+        throw IOException(std::format(
             "Unexpected response during S3 multipart upload finalization: {}\n\n{}", response.code,
             result));
     }
@@ -671,7 +672,7 @@ void S3FileSystem::uploadBuffer(S3FileInfo* fileInfo,
         res = s3FileSystem->putRequest(fileInfo, fileInfo->path, {} /* headerMap */,
             bufferToUpload->getData(), bufferToUpload->numBytesWritten, queryParam);
         if (res->code != 200) {
-            throw IOException(stringFormat("Unable to connect to URL {} {} (HTTP code {})",
+            throw IOException(std::format("Unable to connect to URL {} {} (HTTP code {})",
                 res->url, res->error, std::to_string(res->code)));
         }
         etagIter = res->headers.find("ETag");
@@ -755,7 +756,7 @@ std::string AWSListObjectV2::request(const S3FileSystem& fs, std::string& path,
         listObjectV2URL.c_str(), *headers,
         [&](const httplib::Response& response) {
             if (response.status >= 400) {
-                throw IOException{common::stringFormat("HTTP GET error on '{}' (HTTP {})",
+                throw IOException{std::format("HTTP GET error on '{}' (HTTP {})",
                     listObjectV2URL, response.status)};
             }
             return true;

@@ -1,4 +1,5 @@
 #include <optional>
+#include <format>
 
 #include "binder/binder.h"
 #include "binder/ddl/bound_alter.h"
@@ -13,7 +14,6 @@
 #include "common/enums/extend_direction_util.h"
 #include "common/exception/binder.h"
 #include "common/exception/message.h"
-#include "common/string_format.h"
 #include "common/system_config.h"
 #include "common/types/types.h"
 #include "function/cast/functions/cast_from_string_functions.h"
@@ -42,12 +42,12 @@ static void validatePropertyName(const std::vector<PropertyDefinition>& definiti
     case_insensitve_set_t nameSet;
     for (auto& definition : definitions) {
         if (nameSet.contains(definition.getName())) {
-            throw BinderException(stringFormat(
+            throw BinderException(std::format(
                 "Duplicated column name: {}, column name must be unique.", definition.getName()));
         }
         if (Binder::reservedInColumnName(definition.getName())) {
             throw BinderException(
-                stringFormat("{} is a reserved property name.", definition.getName()));
+                std::format("{} is a reserved property name.", definition.getName()));
         }
         nameSet.insert(definition.getName());
     }
@@ -146,7 +146,7 @@ BoundCreateTableInfo Binder::bindCreateTableInfo(const CreateTableInfo* info) {
 void Binder::validateNodeTableType(const TableCatalogEntry* entry) {
     if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY &&
         entry->getType() != CatalogEntryType::FOREIGN_TABLE_ENTRY) {
-        throw BinderException(stringFormat("{} is not of type NODE.", entry->getName()));
+        throw BinderException(std::format("{} is not of type NODE.", entry->getName()));
     }
 }
 
@@ -154,7 +154,7 @@ void Binder::validateTableExistence(const main::ClientContext& context,
     const std::string& tableName) {
     auto transaction = transaction::Transaction::Get(context);
     if (!Catalog::Get(context)->containsTable(transaction, tableName)) {
-        throw BinderException{stringFormat("Table {} does not exist.", tableName)};
+        throw BinderException{std::format("Table {} does not exist.", tableName)};
     }
 }
 
@@ -162,7 +162,7 @@ void Binder::validateColumnExistence(const TableCatalogEntry* entry,
     const std::string& columnName) {
     if (!entry->containsProperty(columnName)) {
         throw BinderException{
-            stringFormat("Column {} does not exist in table {}.", columnName, entry->getName())};
+            std::format("Column {} does not exist in table {}.", columnName, entry->getName())};
     }
 }
 
@@ -230,7 +230,7 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
                     if (!attachedDB->getCatalog()->containsTable(transaction, tableName,
                             clientContext->useInternalCatalogEntry())) {
                         throw BinderException(
-                            stringFormat("Table '{}' does not exist in attached database '{}'.",
+                            std::format("Table '{}' does not exist in attached database '{}'.",
                                 tableName, dbName));
                     }
                     auto tableEntry = attachedDB->getCatalog()->getTableCatalogEntry(transaction,
@@ -252,7 +252,7 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
 
                     if (propertyDefinitions.size() == 1) { // Only has ID column
                         throw BinderException(
-                            stringFormat("Storage table '{}' must have at least one property "
+                            std::format("Storage table '{}' must have at least one property "
                                          "column.",
                                 tableName));
                     }
@@ -269,7 +269,7 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
                     }
                     scanBindData = std::move(boundScanInfo->bindData);
                     // Set foreign database name for attached databases
-                    foreignDatabaseName = stringFormat("{}({})", dbName, attachedDB->getDBType());
+                    foreignDatabaseName = std::format("{}({})", dbName, attachedDB->getDBType());
                 }
                 // else: attachedDB doesn't exist, so treat storage as a file path
             }
@@ -303,7 +303,7 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
             auto dstDbName = dstTableName.substr(0, dstDotPos);
             if (srcDbName != dstDbName) {
                 throw BinderException(
-                    stringFormat("Cannot create rel table with FROM and TO tables from different "
+                    std::format("Cannot create rel table with FROM and TO tables from different "
                                  "databases. FROM is from '{}', TO is from '{}'.",
                         srcDbName, dstDbName));
             }
@@ -316,7 +316,7 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
         NodeTableIDPair pair{srcTableID, dstTableID};
         if (nodePairsSet.contains(pair)) {
             throw BinderException(
-                stringFormat("Found duplicate FROM-TO {}-{} pairs.", srcTableName, dstTableName));
+                std::format("Found duplicate FROM-TO {}-{} pairs.", srcTableName, dstTableName));
         }
         nodePairsSet.insert(pair);
         nodePairs.emplace_back(pair);
@@ -411,7 +411,7 @@ std::unique_ptr<BoundStatement> Binder::bindCreateType(const Statement& statemen
     LogicalType type = LogicalType::convertFromString(createType->getDataType(), clientContext);
     auto transaction = transaction::Transaction::Get(*clientContext);
     if (Catalog::Get(*clientContext)->containsType(transaction, name)) {
-        throw BinderException{stringFormat("Duplicated type name: {}.", name)};
+        throw BinderException{std::format("Duplicated type name: {}.", name)};
     }
     return std::make_unique<BoundCreateType>(std::move(name), std::move(type));
 }

@@ -1,3 +1,4 @@
+#include <format>
 #include "expression_evaluator/expression_evaluator.h"
 
 #include "common/exception/runtime.h"
@@ -40,7 +41,7 @@ void ExpressionEvaluator::resolveResultStateFromChildren(
 
 void ExpressionEvaluator::evaluate(common::sel_t) {
     // LCOV_EXCL_START
-    throw RuntimeException(stringFormat("Cannot evaluate expression {} with count. This should "
+    throw RuntimeException(std::format("Cannot evaluate expression {} with count. This should "
                                         "never happen.",
         expression->toString()));
     // LCOV_EXCL_STOP

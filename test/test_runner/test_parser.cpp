@@ -20,6 +20,7 @@
 
 #include <filesystem>
 #include <sstream>
+#include <format>
 
 #include "common/string_utils.h"
 #include "common/types/timestamp_t.h"
@@ -613,7 +614,7 @@ void TestParser::parseBody() {
             auto extensionName = currentToken.params[1];
             loadExtensionStatement.connName = TestHelper::DEFAULT_CONN_NAME;
             loadExtensionStatement.query =
-                stringFormat("LOAD EXTENSION '{}/extension/{}/build/lib{}.lbug_extension'",
+                std::format("LOAD EXTENSION '{}/extension/{}/build/lib{}.lbug_extension'",
                     LBUG_ROOT_DIRECTORY, extensionName, extensionName);
             loadExtensionStatement.logMessage = "Dynamic load extension: " + extensionName;
             loadExtensionStatement.testResultType = ResultType::OK;

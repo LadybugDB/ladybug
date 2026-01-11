@@ -1,7 +1,7 @@
+#include <format>
 #include "common/types/value/rel.h"
 
 #include "common/constants.h"
-#include "common/string_format.h"
 #include "common/types/value/value.h"
 
 namespace lbug {
@@ -77,7 +77,7 @@ void RelVal::throwIfNotRel(const Value* val) {
     // LCOV_EXCL_START
     if (val->dataType.getLogicalTypeID() != LogicalTypeID::REL) {
         throw Exception(
-            stringFormat("Expected REL type, but got {} type", val->dataType.toString()));
+            std::format("Expected REL type, but got {} type", val->dataType.toString()));
     }
     // LCOV_EXCL_STOP
 }

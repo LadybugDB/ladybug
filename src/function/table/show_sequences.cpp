@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
@@ -92,7 +93,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
     //     {
     //         auto sequenceData = entry->getSequenceData();
     //         auto sequenceInfo =
-    //             SequenceInfo{entry->getName(), stringFormat("{}({})", databaseName,
+    //             SequenceInfo{entry->getName(), std::format("{}({})", databaseName,
     //             databaseType),
     //                 sequenceData.startValue, sequenceData.increment, sequenceData.minValue,
     //                 sequenceData.maxValue, sequenceData.cycle};

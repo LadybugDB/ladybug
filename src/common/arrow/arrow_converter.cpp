@@ -1,6 +1,7 @@
 #include "common/arrow/arrow_converter.h"
 
 #include <cstring>
+#include <format>
 
 #include "common/arrow/arrow_row_batch.h"
 #include "common/exception/runtime.h"
@@ -281,7 +282,7 @@ void ArrowConverter::setArrowFormat(ArrowSchemaHolder& rootHolder, ArrowSchema& 
         break;
     default:
         throw RuntimeException(
-            stringFormat("{} cannot be exported to arrow.", dataType.toString()));
+            std::format("{} cannot be exported to arrow.", dataType.toString()));
     }
 }
 

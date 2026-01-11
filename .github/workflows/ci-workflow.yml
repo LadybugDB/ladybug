@@ -1154,7 +1154,6 @@ jobs:
     needs: [ sanity-checks ]
     env:
       GEN: Ninja
-      USE_STD_FORMAT: 1
     steps:
       - uses: actions/checkout@v4
 

@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/expression/rel_expression.h"
 #include "common/exception/binder.h"
 #include "function/rewrite_function.h"
@@ -16,7 +17,7 @@ static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& i
     auto recursiveInfo = param->ptrCast<RelExpression>()->getRecursiveInfo();
     if (recursiveInfo->bindData->weightOutputExpr == nullptr) {
         throw BinderException(
-            stringFormat("Cost function is not defined for {}", param->toString()));
+            std::format("Cost function is not defined for {}", param->toString()));
     }
     return recursiveInfo->bindData->weightOutputExpr;
 }

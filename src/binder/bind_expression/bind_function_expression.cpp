@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "binder/expression/aggregate_function_expression.h"
 #include "binder/expression/scalar_function_expression.h"
@@ -37,7 +38,7 @@ std::shared_ptr<Expression> ExpressionBinder::bindFunctionExpression(const Parse
         return bindMacroExpression(expr, functionName);
     default:
         throw BinderException(
-            stringFormat("{} is a {}. Scalar function, aggregate function or macro was expected. ",
+            std::format("{} is a {}. Scalar function, aggregate function or macro was expected. ",
                 functionName, CatalogEntryTypeUtils::toString(entry->getType())));
     }
 }
@@ -79,7 +80,7 @@ std::shared_ptr<Expression> ExpressionBinder::bindScalarFunctionExpression(
                         ->copy();
     if (children.size() == 2 && children[1]->expressionType == ExpressionType::LAMBDA) {
         if (!function->isListLambda) {
-            throw BinderException(stringFormat("{} does not support lambda input.", functionName));
+            throw BinderException(std::format("{} does not support lambda input.", functionName));
         }
         bindLambdaExpression(*children[0], *children[1]);
     }

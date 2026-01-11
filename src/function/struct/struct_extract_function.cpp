@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/expression/expression_util.h"
 #include "binder/expression/literal_expression.h"
 #include "common/exception/binder.h"
@@ -20,7 +21,7 @@ std::unique_ptr<FunctionBindData> StructExtractFunctions::bindFunc(
         input.arguments[1]->constPtrCast<LiteralExpression>()->getValue().getValue<std::string>();
     auto fieldIdx = StructType::getFieldIdx(structType, key);
     if (fieldIdx == INVALID_STRUCT_FIELD_IDX) {
-        throw BinderException(stringFormat("Invalid struct field name: {}.", key));
+        throw BinderException(std::format("Invalid struct field name: {}.", key));
     }
     auto paramTypes = ExpressionUtil::getDataTypes(input.arguments);
     auto resultType = StructType::getField(structType, fieldIdx).getType().copy();

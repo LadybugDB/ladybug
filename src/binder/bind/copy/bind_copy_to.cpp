@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "binder/copy/bound_copy_to.h"
 #include "catalog/catalog.h"
@@ -22,13 +23,13 @@ std::unique_ptr<BoundStatement> Binder::bindCopyToClause(const Statement& statem
     auto query = bindQuery(*parsedQuery);
     auto columns = query->getStatementResult()->getColumns();
     auto fileTypeStr = fileTypeInfo.fileTypeStr;
-    auto name = stringFormat("COPY_{}", fileTypeStr);
+    auto name = std::format("COPY_{}", fileTypeStr);
     catalog::CatalogEntry* entry = nullptr;
     try {
         entry = catalog::Catalog::Get(*clientContext)
                     ->getFunctionEntry(transaction::Transaction::Get(*clientContext), name);
     } catch (CatalogException& exception) {
-        throw RuntimeException{common::stringFormat(
+        throw RuntimeException{std::format(
             "Exporting query result to the '{}' file is currently not supported.", fileTypeStr)};
     }
     auto exportFunc = function::BuiltInFunctionsUtils::matchFunction(name,

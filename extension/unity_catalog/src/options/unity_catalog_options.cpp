@@ -1,3 +1,4 @@
+#include <format>
 #include "options/unity_catalog_options.h"
 
 #include "extension/extension.h"
@@ -30,7 +31,7 @@ static std::string getUnityCatalogOptions(main::ClientContext* context, std::str
         {UnityCatalogToken::NAME, "TOKEN"}, {UnityCatalogEndPoint::NAME, "ENDPOINT"}};
     auto optionNameInDuckDB = UNITY_CATALOG_OPTIONS.at(optionName);
     auto optionValueInLbug = context->getCurrentSetting(optionName).toString();
-    return common::stringFormat("{} '{}',", optionNameInDuckDB, optionValueInLbug);
+    return std::format("{} '{}',", optionNameInDuckDB, optionValueInLbug);
 }
 
 std::string DuckDBUnityCatalogSecretManager::getSecret(main::ClientContext* context) {
@@ -41,7 +42,7 @@ std::string DuckDBUnityCatalogSecretManager::getSecret(main::ClientContext* cont
     std::string options = "";
     options += getUnityCatalogOptions(context, UnityCatalogToken::NAME);
     options += getUnityCatalogOptions(context, UnityCatalogEndPoint::NAME);
-    return common::stringFormat(templateQuery, options);
+    return std::vformat(templateQuery, std::make_format_args(options));
 }
 
 } // namespace unity_catalog_extension

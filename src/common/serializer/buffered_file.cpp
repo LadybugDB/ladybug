@@ -1,6 +1,7 @@
 #include "common/serializer/buffered_file.h"
 
 #include <cstring>
+#include <format>
 
 #include "common/assert.h"
 #include "common/exception/runtime.h"
@@ -101,7 +102,7 @@ bool BufferedFileReader::finished() {
 void BufferedFileReader::readNextPage() {
     if (fileSize <= fileOffset) {
         throw RuntimeException(
-            stringFormat("Reading past the end of the file {} with size {} at offset {}",
+            std::format("Reading past the end of the file {} with size {} at offset {}",
                 fileInfo.path, fileSize, fileOffset));
     }
     bufferSize = std::min(fileSize - fileOffset, BUFFER_SIZE);

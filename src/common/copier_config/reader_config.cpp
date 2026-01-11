@@ -1,3 +1,4 @@
+#include <format>
 #include "common/assert.h"
 #include "common/copier_config/file_scan_info.h"
 #include "common/string_utils.h"
@@ -48,7 +49,7 @@ FileType FileTypeUtils::fromString(std::string fileType) {
         return FileType::NPY;
     } else {
         return FileType::UNKNOWN;
-        // throw BinderException(stringFormat("Unsupported file type: {}.", fileType));
+        // throw BinderException(std::format("Unsupported file type: {}.", fileType));
     }
 }
 

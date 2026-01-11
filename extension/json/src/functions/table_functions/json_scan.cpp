@@ -3,6 +3,7 @@
 #include <climits>
 #include <cstdint>
 #include <string_view>
+#include <format>
 
 #include "binder/binder.h"
 #include "common/case_insensitive_map.h"
@@ -94,7 +95,7 @@ JsonScanConfig::JsonScanConfig(const case_insensitive_map_t<Value>& options) {
             }
             autoDetect = i.second.val.booleanVal;
         } else {
-            throw BinderException(stringFormat("Unrecognized parameter: {}", i.first));
+            throw BinderException(std::format("Unrecognized parameter: {}", i.first));
         }
     }
 }
@@ -240,7 +241,7 @@ void JSONScanLocalState::skipOverArrayStart() {
         return; // Empty file
     }
     if (bufferPtr[bufferOffset] != '[') {
-        throw Exception(stringFormat(
+        throw Exception(std::format(
             "Expected top-level JSON array with format='array', but first character is '{}' in "
             "file \"{}\"."
             "\nTry setting format='auto' or format='newline_delimited'.",
@@ -248,14 +249,14 @@ void JSONScanLocalState::skipOverArrayStart() {
     }
     skipWhitespace(bufferPtr, ++bufferOffset, bufferSize, &lineCountInBuffer);
     if (bufferOffset >= bufferSize) {
-        throw Exception(stringFormat(
+        throw Exception(std::format(
             "Missing closing brace ']' in JSON array with format='array' in file \"{}\"",
             currentReader->getFileName()));
     }
     if (bufferPtr[bufferOffset] == ']') {
         skipWhitespace(bufferPtr, ++bufferOffset, bufferSize, &lineCountInBuffer);
         if (bufferOffset != bufferSize) {
-            throw Exception(stringFormat("Empty array with trailing data when parsing JSON "
+            throw Exception(std::format("Empty array with trailing data when parsing JSON "
                                          "array with format='array' in file \"{}\"",
                 currentReader->getFileName()));
         }
@@ -643,7 +644,7 @@ bool JSONScanLocalState::reconstructFirstObject() {
         auto lineEnd = nextNewLine(bufferPtr, bufferSize);
         if (lineEnd == nullptr) {
             // TODO(Ziyi): We should make the maximum object size as a configurable option.
-            throw RuntimeException{stringFormat("Json object exceeds the maximum object size.")};
+            throw RuntimeException{std::format("Json object exceeds the maximum object size.")};
         } else {
             lineEnd++;
         }

@@ -1,3 +1,4 @@
+#include <format>
 #include "common/exception/binder.h"
 #include "expression_evaluator/lambda_evaluator.h"
 #include "expression_evaluator/list_slice_info.h"
@@ -11,7 +12,7 @@ using namespace lbug::common;
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
     if (input.arguments[1]->expressionType != ExpressionType::LAMBDA) {
-        throw BinderException(stringFormat(
+        throw BinderException(std::format(
             "The second argument of LIST_FILTER should be a lambda expression but got {}.",
             ExpressionTypeUtil::toString(input.arguments[1]->expressionType)));
     }
@@ -19,7 +20,7 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
     paramTypes.push_back(input.arguments[0]->getDataType().copy());
     paramTypes.push_back(input.arguments[1]->getDataType().copy());
     if (input.arguments[1]->getDataType() != LogicalType::BOOL()) {
-        throw BinderException(stringFormat(
+        throw BinderException(std::format(
             "{} requires the result type of lambda expression be BOOL.", ListFilterFunction::name));
     }
     return std::make_unique<FunctionBindData>(std::move(paramTypes),

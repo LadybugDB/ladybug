@@ -1,3 +1,4 @@
+#include <format>
 #include "common/enums/extend_direction_util.h"
 
 #include "common/exception/runtime.h"
@@ -15,7 +16,7 @@ ExtendDirection ExtendDirectionUtil::fromString(const std::string& str) {
     } else if (normalizedString == "BOTH") {
         return ExtendDirection::BOTH;
     } else {
-        throw RuntimeException(stringFormat("Cannot parse {} as ExtendDirection.", str));
+        throw RuntimeException(std::format("Cannot parse {} as ExtendDirection.", str));
     }
 }
 

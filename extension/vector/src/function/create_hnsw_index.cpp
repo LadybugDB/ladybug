@@ -1,3 +1,4 @@
+#include <format>
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/function_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
@@ -341,28 +342,28 @@ static std::string rewriteCreateHNSWQuery(main::ClientContext& context,
     auto indexName = hnswBindData->indexName;
     auto tableName = hnswBindData->tableEntry->getName();
     auto tableID = hnswBindData->tableEntry->getTableID();
-    query += stringFormat("CREATE REL TABLE {} (FROM {} TO {}) WITH (storage_direction='fwd');",
+    query += std::format("CREATE REL TABLE {} (FROM {} TO {}) WITH (storage_direction='fwd');",
         HNSWIndexUtils::getUpperGraphTableName(tableID, indexName), tableName, tableName);
-    query += stringFormat("CREATE REL TABLE {} (FROM {} TO {}) WITH (storage_direction='fwd');",
+    query += std::format("CREATE REL TABLE {} (FROM {} TO {}) WITH (storage_direction='fwd');",
         HNSWIndexUtils::getLowerGraphTableName(tableID, indexName), tableName, tableName);
     std::string params;
     auto& config = hnswBindData->config;
-    params += stringFormat("mu := {}, ", config.mu);
-    params += stringFormat("ml := {}, ", config.ml);
-    params += stringFormat("efc := {}, ", config.efc);
-    params += stringFormat("metric := '{}', ", HNSWIndexConfig::metricToString(config.metric));
-    params += stringFormat("alpha := {}, ", config.alpha);
-    params += stringFormat("pu := {}, ", config.pu);
+    params += std::format("mu := {}, ", config.mu);
+    params += std::format("ml := {}, ", config.ml);
+    params += std::format("efc := {}, ", config.efc);
+    params += std::format("metric := '{}', ", HNSWIndexConfig::metricToString(config.metric));
+    params += std::format("alpha := {}, ", config.alpha);
+    params += std::format("pu := {}, ", config.pu);
     params +=
-        stringFormat("cache_embeddings := {}", config.cacheEmbeddingsColumn ? "true" : "false");
+        std::format("cache_embeddings := {}", config.cacheEmbeddingsColumn ? "true" : "false");
     auto columnName = hnswBindData->tableEntry->getProperty(hnswBindData->propertyID).getName();
     if (config.cacheEmbeddingsColumn) {
         query +=
-            stringFormat("CALL _CACHE_ARRAY_COLUMN_LOCALLY('{}', '{}');", tableName, columnName);
+            std::format("CALL _CACHE_ARRAY_COLUMN_LOCALLY('{}', '{}');", tableName, columnName);
     }
-    query += stringFormat("CALL _CREATE_HNSW_INDEX('{}', '{}', '{}', {});", tableName, indexName,
+    query += std::format("CALL _CREATE_HNSW_INDEX('{}', '{}', '{}', {});", tableName, indexName,
         columnName, params);
-    query += stringFormat("RETURN 'Index {} has been created.' as result;", indexName);
+    query += std::format("RETURN 'Index {} has been created.' as result;", indexName);
     query += "COMMIT;";
     return query;
 }

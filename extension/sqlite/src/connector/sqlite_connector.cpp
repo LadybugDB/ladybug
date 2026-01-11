@@ -1,3 +1,4 @@
+#include <format>
 #include "connector/sqlite_connector.h"
 
 #include "extension/extension.h"
@@ -17,7 +18,7 @@ void SqliteConnector::connect(const std::string& dbPath, const std::string& cata
     executeQuery("install sqlite;");
     executeQuery("load sqlite;");
     executeQuery(
-        common::stringFormat("attach '{}' as {} (TYPE sqlite, read_only)", dbPath, catalogName));
+        std::format("attach '{}' as {} (TYPE sqlite, read_only)", dbPath, catalogName));
 }
 
 std::shared_ptr<duckdb_extension::DuckDBTableScanInfo> SqliteConnector::getTableScanInfo(

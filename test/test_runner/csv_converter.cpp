@@ -1,6 +1,7 @@
 #include "test_runner/csv_converter.h"
 
 #include <fstream>
+#include <format>
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
@@ -34,7 +35,7 @@ void CSVConverter::copySchemaFile() {
 void CSVConverter::createTableInfo(std::string schemaFile) {
     std::ifstream file(schemaFile);
     if (!file.is_open()) {
-        throw TestException(stringFormat("Error opening file: {}, errno: {}.", schemaFile, errno));
+        throw TestException(std::format("Error opening file: {}, errno: {}.", schemaFile, errno));
     }
     // This implementation stays as a temporary solution to create copy statements for rel tables
     // We'll switch to use table_info once that function can provide everything needed
@@ -48,7 +49,7 @@ void CSVConverter::createTableInfo(std::string schemaFile) {
         std::transform(tokens[2].begin(), tokens[2].end(), tokens[2].begin(),
             [](unsigned char c) { return std::tolower(c); });
         if (tokens[0] != "create" || tokens[2] != "table") {
-            throw TestException(stringFormat("Invalid CREATE statement: {}", line));
+            throw TestException(std::format("Invalid CREATE statement: {}", line));
         }
 
         auto tableType = tokens[1];
@@ -70,11 +71,11 @@ void CSVConverter::createTableInfo(std::string schemaFile) {
                     table = nodeTable;
                 } else {
                     throw TestException(
-                        stringFormat("PRIMARY KEY is not defined in node table: {}", line));
+                        std::format("PRIMARY KEY is not defined in node table: {}", line));
                 }
             } else {
                 throw TestException(
-                    stringFormat("PRIMARY KEY is not defined in node table: {}", line));
+                    std::format("PRIMARY KEY is not defined in node table: {}", line));
             }
         } else {
             auto relTable = std::make_shared<RelTableInfo>();
@@ -89,12 +90,12 @@ void CSVConverter::createTableInfo(std::string schemaFile) {
                         std::dynamic_pointer_cast<NodeTableInfo>(tableNameMap[tmp[3]]);
                     table = relTable;
                 } else {
-                    throw TestException(stringFormat(
+                    throw TestException(std::format(
                         "FROM node and TO node are not defined in rel table: {}", line));
                 }
             } else {
                 throw TestException(
-                    stringFormat("FROM node and TO node are not defined in rel table: {}", line));
+                    std::format("FROM node and TO node are not defined in rel table: {}", line));
             }
         }
         table->name = tableName;
@@ -114,7 +115,7 @@ void CSVConverter::readCopyCommandsFromCSVDataset() {
         LocalFileSystem::joinPath(csvDatasetPath, std::string(TestHelper::COPY_FILE_NAME));
     std::ifstream file(csvCopyFile);
     if (!file.is_open()) {
-        throw TestException(stringFormat("Error opening file: {}, errno: {}.", csvCopyFile, errno));
+        throw TestException(std::format("Error opening file: {}, errno: {}.", csvCopyFile, errno));
     }
     std::string line;
     while (getline(file, line)) {
@@ -134,7 +135,7 @@ void CSVConverter::createCopyFile() {
     std::ofstream outfile(outputCopyFile);
     if (!outfile.is_open()) {
         throw TestException(
-            stringFormat("Error opening file: {}, errno: {}.", outputCopyFile, errno));
+            std::format("Error opening file: {}, errno: {}.", outputCopyFile, errno));
     }
     if (fileExtension == ".json") {
 #ifndef __STATIC_LINK_EXTENSION_TEST__
@@ -143,7 +144,7 @@ void CSVConverter::createCopyFile() {
 #endif
     }
     for (auto table : tables) {
-        auto cmd = stringFormat("COPY {} FROM \"{}\";", table->name, table->outputFilePath);
+        auto cmd = std::format("COPY {} FROM \"{}\";", table->name, table->outputFilePath);
         outfile << cmd << '\n';
     }
 }
@@ -211,7 +212,7 @@ static std::string getColumnAlias(main::ClientContext* context, const std::strin
         if (property.getName() == "_ID") {
             continue;
         }
-        alias += common::stringFormat(", e.{} as {}", property.getName(), property.getName());
+        alias += std::format(", e.{} as {}", property.getName(), property.getName());
     }
     return alias;
 }
@@ -221,13 +222,13 @@ std::string CSVConverter::NodeTableInfo::getConverterQuery(main::ClientContext* 
     if (alias.size() > 1) {
         alias = alias.substr(1);
     }
-    return stringFormat("COPY (MATCH (e:{}) WITH {} RETURN *) TO \"{}\";", name, alias,
+    return std::format("COPY (MATCH (e:{}) WITH {} RETURN *) TO \"{}\";", name, alias,
         outputFilePath);
 }
 
 std::string CSVConverter::RelTableInfo::getConverterQuery(main::ClientContext* context) const {
     auto alias = getColumnAlias(context, name);
-    return stringFormat(
+    return std::format(
         "COPY (MATCH (a)-[e:{}]->(b) WITH a.{} AS `from`, b.{} AS `to`{} RETURN *) TO \"{}\";",
         name, fromTable->primaryKey, toTable->primaryKey, alias, outputFilePath);
 }

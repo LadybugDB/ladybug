@@ -1,3 +1,4 @@
+#include <format>
 #include "cached_file_manager.h"
 
 #include "common/string_utils.h"
@@ -11,7 +12,7 @@ using namespace common;
 
 CachedFileManager::CachedFileManager(main::ClientContext* context)
     : vfs{VirtualFileSystem::GetUnsafe(*context)} {
-    cacheDir = common::stringFormat("{}/{}",
+    cacheDir = std::format("{}/{}",
         extension::ExtensionUtils::getLocalDirForExtension(context,
             StringUtils::getLower(HttpfsExtension::EXTENSION_NAME)),
         ".cached_files");
@@ -46,11 +47,11 @@ void CachedFileManager::cleanUP(main::ClientContext* context) {
 
 std::string CachedFileManager::getCachedFilePath(const std::string& originalFileName,
     common::transaction_t transactionID) {
-    return common::stringFormat("{}/{}/{}", cacheDir, transactionID, originalFileName);
+    return std::format("{}/{}/{}", cacheDir, transactionID, originalFileName);
 }
 
 std::string CachedFileManager::getCachedDirForTrx(common::transaction_t transactionID) {
-    return common::stringFormat("{}/{}", cacheDir, transactionID);
+    return std::format("{}/{}", cacheDir, transactionID);
 }
 
 void CachedFileManager::downloadFile(HTTPFileInfo* fileToDownload, FileInfo* cacheFileInfo) {

@@ -1,3 +1,4 @@
+#include <format>
 #include "s3fs_config.h"
 
 #include "extension/extension.h"
@@ -44,7 +45,7 @@ std::span<const S3FileSystemConfig> S3FileSystemConfig::getAvailableConfigs() {
 }
 
 std::string getFSOptionName(const S3FileSystemConfig& config, std::string_view originalOption) {
-    return stringFormat("{}_{}", config.fsName, originalOption);
+    return std::format("{}_{}", config.fsName, originalOption);
 }
 
 static std::string getAuthParam(const S3FileSystemConfig& config, const S3AuthOption& entry,

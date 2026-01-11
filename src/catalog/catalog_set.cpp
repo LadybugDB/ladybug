@@ -1,6 +1,7 @@
 #include "catalog/catalog_set.h"
 
 #include <mutex>
+#include <format>
 
 #include "binder/ddl/bound_alter_info.h"
 #include "catalog/catalog_entry/dummy_catalog_entry.h"
@@ -8,7 +9,6 @@
 #include "common/assert.h"
 #include "common/exception/catalog.h"
 #include "common/serializer/deserializer.h"
-#include "common/string_format.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -87,12 +87,12 @@ CatalogEntry* CatalogSet::createEntryNoLock(const Transaction* transaction,
     if (entries.contains(entry->getName())) {
         const auto existingEntry = entries.at(entry->getName()).get();
         if (checkWWConflict(transaction, existingEntry)) {
-            throw CatalogException(stringFormat(
+            throw CatalogException(std::format(
                 "Write-write conflict on creating catalog entry with name {}.", entry->getName()));
         }
         if (!existingEntry->isDeleted()) {
             throw CatalogException(
-                stringFormat("Catalog entry with name {} already exists.", entry->getName()));
+                std::format("Catalog entry with name {} already exists.", entry->getName()));
         }
     }
     auto dummyEntry = createDummyEntryNoLock(entry->getName(), entry->getOID());
@@ -288,14 +288,14 @@ std::unique_ptr<CatalogSet> CatalogSet::deserialize(Deserializer& deserializer) 
 void CatalogSet::validateExistNoLock(const Transaction* transaction,
     const std::string& name) const {
     if (!containsEntryNoLock(transaction, name)) {
-        throw CatalogException(stringFormat("{} does not exist in catalog.", name));
+        throw CatalogException(std::format("{} does not exist in catalog.", name));
     }
 }
 
 void CatalogSet::validateNotExistNoLock(const Transaction* transaction,
     const std::string& name) const {
     if (containsEntryNoLock(transaction, name)) {
-        throw CatalogException(stringFormat("{} already exists in catalog.", name));
+        throw CatalogException(std::format("{} already exists in catalog.", name));
     }
 }
 

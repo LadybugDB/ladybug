@@ -1,10 +1,10 @@
 #include "processor/operator/persistent/reader/file_error_handler.h"
 
 #include <algorithm>
+#include <format>
 
 #include "common/assert.h"
 #include "common/exception/copy.h"
-#include "common/string_format.h"
 #include "main/client_context.h"
 
 namespace lbug {
@@ -79,25 +79,25 @@ namespace {
 std::string getFilePathMessage(std::string_view filePath) {
     static constexpr std::string_view invalidFilePath = "";
     return filePath == invalidFilePath ? std::string{} :
-                                         common::stringFormat(" in file {}", filePath);
+                                         std::format(" in file {}", filePath);
 }
 
 std::string getLineNumberMessage(uint64_t lineNumber) {
     static constexpr uint64_t invalidLineNumber = 0;
     return lineNumber == invalidLineNumber ? std::string{} :
-                                             common::stringFormat(" on line {}", lineNumber);
+                                             std::format(" on line {}", lineNumber);
 }
 
 std::string getSkippedLineMessage(std::string_view skippedLineOrRecord) {
     static constexpr std::string_view emptySkippedLine = "";
     return skippedLineOrRecord == emptySkippedLine ?
                std::string{} :
-               common::stringFormat(" Line/record containing the error: '{}'", skippedLineOrRecord);
+               std::format(" Line/record containing the error: '{}'", skippedLineOrRecord);
 }
 } // namespace
 
 std::string SharedFileErrorHandler::getErrorMessage(PopulatedCopyFromError populatedError) const {
-    return common::stringFormat("Error{}{}: {}{}", getFilePathMessage(populatedError.filePath),
+    return std::format("Error{}{}: {}{}", getFilePathMessage(populatedError.filePath),
         getLineNumberMessage(populatedError.lineNumber), populatedError.message,
         getSkippedLineMessage(populatedError.skippedLineOrRecord));
 }

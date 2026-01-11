@@ -1,6 +1,6 @@
+#include <format>
 #include "processor/operator/macro/create_macro.h"
 
-#include "common/string_format.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "transaction/transaction.h"
@@ -19,7 +19,7 @@ void CreateMacro::executeInternal(ExecutionContext* context) {
     auto catalog = catalog::Catalog::Get(*clientContext);
     auto transaction = transaction::Transaction::Get(*clientContext);
     catalog->addScalarMacroFunction(transaction, info.macroName, info.macro->copy());
-    appendMessage(stringFormat("Macro: {} has been created.", info.macroName),
+    appendMessage(std::format("Macro: {} has been created.", info.macroName),
         storage::MemoryManager::Get(*clientContext));
 }
 

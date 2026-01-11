@@ -1,3 +1,4 @@
+#include <format>
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
 #include "common/system_config.h"
@@ -24,7 +25,7 @@ struct ParquetOptions {
                 setCompression(value);
             } else {
                 throw common::RuntimeException{
-                    common::stringFormat("Unrecognized parquet option: {}.", name)};
+                    std::format("Unrecognized parquet option: {}.", name)};
             }
         }
     }
@@ -32,7 +33,7 @@ struct ParquetOptions {
     void setCompression(common::Value& value) {
         if (value.getDataType().getLogicalTypeID() != LogicalTypeID::STRING) {
             throw common::RuntimeException{
-                common::stringFormat("Parquet compression option expects a string value, got: {}.",
+                std::format("Parquet compression option expects a string value, got: {}.",
                     value.getDataType().toString())};
         }
         auto strVal = common::StringUtils::getUpper(value.getValue<std::string>());
@@ -47,7 +48,7 @@ struct ParquetOptions {
         } else if (strVal == "LZ4_RAW") {
             codec = lbug_parquet::format::CompressionCodec::LZ4_RAW;
         } else {
-            throw common::RuntimeException{common::stringFormat(
+            throw common::RuntimeException{std::format(
                 "Unrecognized parquet compression option: {}.", value.toString())};
         }
     }

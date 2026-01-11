@@ -1,6 +1,7 @@
 #include "function/built_in_function_utils.h"
 
 #include <sstream>
+#include <format>
 
 #include "catalog/catalog_entry/function_catalog_entry.h"
 #include "common/exception/binder.h"
@@ -556,10 +557,10 @@ static std::string alignedString(const std::string& input) {
 std::string BuiltInFunctionsUtils::getFunctionMatchFailureMsg(const std::string name,
     const std::vector<LogicalType>& inputTypes, const std::string& supportedInputs,
     bool isDistinct) {
-    std::string result = stringFormat("Function {} did not receive correct arguments:\n", name);
-    result += stringFormat("Actual:   {}{}\n", isDistinct ? "DISTINCT " : "",
+    std::string result = std::format("Function {} did not receive correct arguments:\n", name);
+    result += std::format("Actual:   {}{}\n", isDistinct ? "DISTINCT " : "",
         inputTypes.empty() ? "()" : LogicalTypeUtils::toString(inputTypes));
-    result += stringFormat("Expected: {}\n",
+    result += std::format("Expected: {}\n",
         supportedInputs.empty() ? "()" : alignedString(supportedInputs));
     return result;
 }

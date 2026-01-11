@@ -1,3 +1,4 @@
+#include <format>
 #include "common/exception/binder.h"
 #include "function/string/vector_string_functions.h"
 
@@ -8,7 +9,7 @@ using namespace lbug::common;
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
     if (input.arguments.size() < 2) {
-        throw BinderException{stringFormat("concat_ws expects at least two parameters. Got: {}.",
+        throw BinderException{std::format("concat_ws expects at least two parameters. Got: {}.",
             input.arguments.size())};
     }
     for (auto i = 0u; i < input.arguments.size(); i++) {
@@ -17,7 +18,7 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
             argument->cast(LogicalType::STRING());
         }
         if (argument->getDataType() != LogicalType::STRING()) {
-            throw BinderException{stringFormat("concat_ws expects all string parameters. Got: {}.",
+            throw BinderException{std::format("concat_ws expects all string parameters. Got: {}.",
                 argument->getDataType().toString())};
         }
     }

@@ -1,3 +1,4 @@
+#include <format>
 #include "storage/storage_manager.h"
 
 #include "catalog/catalog.h"
@@ -224,7 +225,7 @@ bool StorageManager::checkpoint(main::ClientContext* context, PageAllocator& pag
 
     for (const auto entry : nodeTableEntries) {
         if (!tables.contains(entry->getTableID())) {
-            throw RuntimeException(stringFormat(
+            throw RuntimeException(std::format(
                 "Checkpoint failed: table {} not found in storage manager.", entry->getName()));
         }
         hasChanges =
@@ -233,7 +234,7 @@ bool StorageManager::checkpoint(main::ClientContext* context, PageAllocator& pag
     for (const auto entry : relGroupEntries) {
         for (auto& info : entry->getRelEntryInfos()) {
             if (!tables.contains(info.oid)) {
-                throw RuntimeException(stringFormat(
+                throw RuntimeException(std::format(
                     "Checkpoint failed: table {} not found in storage manager.", entry->getName()));
             }
             hasChanges =
@@ -313,7 +314,7 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
         deSer.deserializeValue<table_id_t>(tableID);
         if (!catalog->containsTable(&DUMMY_TRANSACTION, tableID)) {
             throw RuntimeException(
-                stringFormat("Load table failed: table {} doesn't exist in catalog.", tableID));
+                std::format("Load table failed: table {} doesn't exist in catalog.", tableID));
         }
         KU_ASSERT(!tables.contains(tableID));
         auto tableEntry = catalog->getTableCatalogEntry(&DUMMY_TRANSACTION, tableID)
@@ -337,7 +338,7 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
         deSer.deserializeValue<table_id_t>(relGroupID);
         if (!catalog->containsTable(&DUMMY_TRANSACTION, relGroupID)) {
             throw RuntimeException(
-                stringFormat("Load table failed: table {} doesn't exist in catalog.", relGroupID));
+                std::format("Load table failed: table {} doesn't exist in catalog.", relGroupID));
         }
         deSer.validateDebuggingInfo(key, "num_inner_rel_tables");
         uint64_t numInnerRelTables = 0;

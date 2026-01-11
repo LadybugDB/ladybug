@@ -1,9 +1,9 @@
+#include <format>
 #include "binder/query/query_graph_label_analyzer.h"
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/binder.h"
-#include "common/string_format.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -119,7 +119,7 @@ void QueryGraphLabelAnalyzer::pruneNode(const QueryGraph& graph, NodeExpression&
         if (prunedEntries.empty()) {
             if (throwOnViolate) {
                 throw BinderException(
-                    stringFormat("Query node {} violates schema. Expected labels are {}.",
+                    std::format("Query node {} violates schema. Expected labels are {}.",
                         node.toString(), candidates.toString()));
             }
         }
@@ -214,7 +214,7 @@ void QueryGraphLabelAnalyzer::pruneRel(RelExpression& rel) const {
     // LCOV_EXCL_START
     if (prunedEntries.empty()) {
         if (throwOnViolate) {
-            throw BinderException(stringFormat("Cannot find a label for relationship {} that "
+            throw BinderException(std::format("Cannot find a label for relationship {} that "
                                                "connects to all of its neighbour nodes.",
                 rel.toString()));
         }

@@ -1,9 +1,9 @@
 #include "processor/result/flat_tuple.h"
 
 #include <sstream>
+#include <format>
 
 #include "common/exception/runtime.h"
-#include "common/string_format.h"
 #include "common/types/value/value.h"
 #include "utf8proc.h"
 #include "utf8proc_wrapper.h"
@@ -26,7 +26,7 @@ uint32_t FlatTuple::len() const {
 
 static void checkOutOfRange(idx_t idx, idx_t size) {
     if (idx >= size) {
-        throw RuntimeException(stringFormat(
+        throw RuntimeException(std::format(
             "ValIdx is out of range. Number of values in flatTuple: {}, valIdx: {}.", size, idx));
     }
 }

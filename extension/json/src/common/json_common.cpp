@@ -1,3 +1,4 @@
+#include <format>
 #include "common/json_common.h"
 
 #include "common/exception/runtime.h"
@@ -23,11 +24,11 @@ yyjson_doc* JSONCommon::readDocument(const std::string& str, const yyjson_read_f
 void JSONCommon::throwParseError(const char* data, size_t length, yyjson_read_err& err) {
     size_t line = 0, col = 0, chr = 0;
     if (yyjson_locate_pos(data, length, err.pos, &line, &col, &chr)) {
-        throw common::RuntimeException(common::stringFormat(
+        throw common::RuntimeException(std::format(
             "Error {} at line {}, column {}, character index {}", err.msg, line, col, chr));
     } else {
         throw common::RuntimeException(
-            common::stringFormat("Error {} at byte {}", err.msg, err.pos));
+            std::format("Error {} at byte {}", err.msg, err.pos));
     }
 }
 

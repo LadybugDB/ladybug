@@ -16,6 +16,7 @@
 #include "function/cast/functions/cast_string_non_nested_functions.h"
 #include "main/lbug.h"
 #include <jni.h>
+#include <format>
 
 using namespace lbug::main;
 using namespace lbug::common;
@@ -1147,7 +1148,7 @@ JNIEXPORT jlong JNICALL Java_com_ladybugdb_Native_lbugValueCreateValue(JNIEnv* e
             auto scale = static_cast<int32_t>(env->CallIntMethod(val, J_C_BigDecimal_M_scale));
             if (precision > DECIMAL_PRECISION_LIMIT) {
                 throw NotImplementedException(
-                    stringFormat("Decimal precision cannot be greater than {}"
+                    std::format("Decimal precision cannot be greater than {}"
                                  "Note: positive exponents contribute to precision",
                         DECIMAL_PRECISION_LIMIT));
             }

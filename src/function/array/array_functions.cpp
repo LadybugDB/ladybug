@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/expression/literal_expression.h"
 #include "common/exception/binder.h"
 #include "function/array/functions/array_cosine_similarity.h"
@@ -28,7 +29,7 @@ std::unique_ptr<FunctionBindData> ArrayCrossProductBindFunc(const ScalarBindFunc
     auto rightType = interpretLogicalType(input.arguments[1].get());
     if (leftType != rightType) {
         throw BinderException(
-            stringFormat("{} requires both arrays to have the same element type and size of 3",
+            std::format("{} requires both arrays to have the same element type and size of 3",
                 ArrayCrossProductFunction::name));
     }
     scalar_func_exec_t execFunc;
@@ -63,7 +64,7 @@ std::unique_ptr<FunctionBindData> ArrayCrossProductBindFunc(const ScalarBindFunc
         break;
     default:
         throw BinderException{
-            stringFormat("{} can only be applied on array of floating points or signed integers",
+            std::format("{} can only be applied on array of floating points or signed integers",
                 ArrayCrossProductFunction::name)};
     }
     input.definition->ptrCast<ScalarFunction>()->execFunc = execFunc;
@@ -93,7 +94,7 @@ static LogicalType getChildType(const LogicalType& type) {
         return ListType::getChildType(type).copy();
         // LCOV_EXCL_START
     default:
-        throw BinderException(stringFormat(
+        throw BinderException(std::format(
             "Cannot retrieve child type of type {}. LIST or ARRAY is expected.", type.toString()));
         // LCOV_EXCL_STOP
     }
@@ -106,7 +107,7 @@ static void validateChildType(const LogicalType& type, const std::string& functi
         return;
     default:
         throw BinderException(
-            stringFormat("{} requires argument type to be FLOAT[] or DOUBLE[].", functionName));
+            std::format("{} requires argument type to be FLOAT[] or DOUBLE[].", functionName));
     }
 }
 
@@ -122,7 +123,7 @@ static LogicalType validateArrayFunctionParameters(const LogicalType& leftType,
         return rightType.copy();
     }
     throw BinderException(
-        stringFormat("{} requires at least one argument to be ARRAY but all parameters are LIST.",
+        std::format("{} requires at least one argument to be ARRAY but all parameters are LIST.",
             functionName));
 }
 

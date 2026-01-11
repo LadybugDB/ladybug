@@ -1,3 +1,4 @@
+#include <format>
 #include "function/neo4j_migrate.h"
 
 #include "binder/ddl/property_definition.h"
@@ -36,8 +37,7 @@ struct Neo4jMigrateBindData final : TableFuncBindData {
 };
 
 static std::string executeNeo4jQuery(httplib::Client& cli, std::string neo4jQuery) {
-    std::string requestBody = R"({"statements":[{"statement":"{}"}]})";
-    requestBody = common::stringFormat(requestBody, neo4jQuery);
+    std::string requestBody = ("{{\"statements\":[{{\"statement\":\"{}\"}}]}}", neo4jQuery);
     httplib::Request req;
     req.method = "POST";
     req.path = "/db/neo4j/tx/commit";
@@ -50,7 +50,7 @@ static std::string executeNeo4jQuery(httplib::Client& cli, std::string neo4jQuer
     }
     if (res->status != 200) {
         throw common::RuntimeException{
-            common::stringFormat("Failed to connect to neo4j. Server returned: {}, Response: {}.",
+            std::format("Failed to connect to neo4j. Server returned: {}, Response: {}.",
                 res->status, res->body)};
     }
     auto doc = yyjson_read(res->body.c_str(), res->body.size(), 0);
@@ -59,7 +59,7 @@ static std::string executeNeo4jQuery(httplib::Client& cli, std::string neo4jQuer
         auto errorObj = yyjson_arr_get(errorsArr, 0);
         auto message = yyjson_obj_get(errorObj, "message");
         throw common::RuntimeException{
-            common::stringFormat("Failed to execute query '{}' in Neo4j. Error: {}.", neo4jQuery,
+            std::format("Failed to execute query '{}' in Neo4j. Error: {}.", neo4jQuery,
                 yyjson_get_str(message))};
     }
     auto resultsArr = yyjson_obj_get(yyjson_doc_get_root(doc), "results");
@@ -117,14 +117,14 @@ static void addLabel(httplib::Client& cli, common::TableType tableType, std::str
 
     if (tableType == common::TableType::NODE) {
         auto resStr = executeNeo4jQuery(cli,
-            stringFormat("match (n:{}) where size(labels(n)) > 1 return labels(n) limit 1", label));
+            std::format("match (n:{}) where size(labels(n)) > 1 return labels(n) limit 1", label));
         auto doc = yyjson_read(resStr.c_str(), resStr.size(), 0);
         auto resultsArr = yyjson_obj_get(yyjson_doc_get_root(doc), "results");
         auto firstResult = yyjson_arr_get(resultsArr, 0);
         auto dataArr = yyjson_obj_get(firstResult, "data");
         if (yyjson_arr_size(dataArr) > 0) {
             auto rowArr = yyjson_arr_get(dataArr, 0);
-            throw common::RuntimeException{common::stringFormat(
+            throw common::RuntimeException{std::format(
                 "Importing nodes with multi-labels is not supported right now. Found: {}",
                 yyjson_get_str(yyjson_arr_get(rowArr, 0)))};
         }
@@ -152,7 +152,7 @@ static std::vector<std::string> getNodeOrRels(httplib::Client& cli, common::Tabl
         if (label == "*") {
             throw common::RuntimeException{"* cannot be specified with other labels"};
         } else if (!labelsInNeo4j.contains(label)) {
-            throw common::RuntimeException{common::stringFormat("{} '{}' does not exist in neo4j.",
+            throw common::RuntimeException{std::format("{} '{}' does not exist in neo4j.",
                 TableTypeUtils::toString(tableType), label)};
         }
         addLabel(cli, tableType, label, labels);
@@ -177,7 +177,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(ClientContext* /*context*/,
 }
 
 void exportNeo4jNodeToCSV(std::string nodeName, httplib::Client& cli) {
-    auto query = common::stringFormat("MATCH (p:{}) "
+    auto query = std::format("MATCH (p:{}) "
                                       "with collect(p) as n "
                                       "CALL apoc.export.csv.data(n, [], \\\"/tmp/{}.csv\\\", null) "
                                       "YIELD file, source, format, nodes, relationships, "
@@ -191,7 +191,7 @@ void exportNeo4jNodeToCSV(std::string nodeName, httplib::Client& cli) {
 void exportNeo4jRelToCSV(std::string relName, std::pair<std::string, std::string> nodePairs,
     httplib::Client& cli) {
     auto query =
-        common::stringFormat("MATCH (:{})-[e:{}]->(:{}) "
+        std::format("MATCH (:{})-[e:{}]->(:{}) "
                              "with collect(e) as rels "
                              "CALL apoc.export.csv.data([], rels, \\\"/tmp/{}_{}_{}.csv\\\", null) "
                              "YIELD file, source, format, nodes, relationships, "
@@ -241,7 +241,7 @@ static LogicalType inferLbugType(yyjson_val* typesArr) {
 
 std::pair<std::string, std::string> getCreateNodeTableQuery(httplib::Client& cli,
     const std::string& nodeName, std::vector<std::string>& outputTables) {
-    auto neo4jQuery = common::stringFormat(
+    auto neo4jQuery = std::format(
         "call db.schema.nodeTypeProperties() yield nodeType, propertyName,propertyTypes where "
         "nodeType = ':`{}`' return propertyName,propertyTypes",
         nodeName);
@@ -264,7 +264,7 @@ std::pair<std::string, std::string> getCreateNodeTableQuery(httplib::Client& cli
         auto kuType = inferLbugType(typesArr);
 
         char* typesJsonStr = yyjson_val_write(typesArr, 0, nullptr);
-        auto newNode = stringFormat("['{}','{}','{}','{}']", nodeName, property, kuType.toString(),
+        auto newNode = std::format("['{}','{}','{}','{}']", nodeName, property, kuType.toString(),
             typesJsonStr);
         free(typesJsonStr);
         outputTables.emplace_back(std::move(newNode));
@@ -283,9 +283,9 @@ std::pair<std::string, std::string> getCreateNodeTableQuery(httplib::Client& cli
         ddlProperties += (" " + propertyDefinition.type.toString() + ",");
         propertiesToCopy += ", " + propertyDefinition.name;
     }
-    return {common::stringFormat("CREATE NODE TABLE `{}` (`_id_` int64, {} PRIMARY KEY(_id_));",
+    return {std::format("CREATE NODE TABLE `{}` (`_id_` int64, {} PRIMARY KEY(_id_));",
                 nodeName, ddlProperties),
-        common::stringFormat(
+        std::format(
             "COPY `{}` FROM (LOAD WITH HEADERS(_id STRING, _labels STRING, {} _start STRING, "
             "_end STRING, _type STRING) FROM '/tmp/{}.csv'(sample_size "
             "= 0, header=true) RETURN _id{});",
@@ -295,7 +295,7 @@ std::pair<std::string, std::string> getCreateNodeTableQuery(httplib::Client& cli
 std::vector<std::string> getRelProperties(httplib::Client& cli, std::string srcLabel,
     std::string dstLabel, std::string relLabel) {
     auto neo4jQuery =
-        common::stringFormat("MATCH (:{})-[e:{}]->(:{}) UNWIND keys(e) AS key return distinct key",
+        std::format("MATCH (:{})-[e:{}]->(:{}) UNWIND keys(e) AS key return distinct key",
             srcLabel, relLabel, dstLabel);
     auto jsonStr = executeNeo4jQuery(cli, neo4jQuery);
     auto doc = yyjson_read(jsonStr.c_str(), jsonStr.size(), 0);
@@ -321,7 +321,7 @@ std::vector<std::string> getRelProperties(httplib::Client& cli, std::string srcL
 
 std::string getCreateRelTableQuery(httplib::Client& cli, const std::string& relName,
     const std::vector<std::string>& nodeLabelsToImport, std::vector<std::string>& outputTables) {
-    auto neo4jQuery = common::stringFormat(
+    auto neo4jQuery = std::format(
         "call db.schema.relTypeProperties() yield relType, propertyName,propertyTypes where "
         "relType = ':`{}`' and propertyName is not null and  propertyTypes is not null return "
         "propertyName,propertyTypes",
@@ -359,8 +359,7 @@ std::string getCreateRelTableQuery(httplib::Client& cli, const std::string& relN
         ddlProperties += (" " + propertyDefinition.type.toString() + ",");
     }
 
-    neo4jQuery =
-        common::stringFormat("MATCH (a)-[:{}]->(b) RETURN distinct labels(a), labels(b);", relName);
+    neo4jQuery = std::format("MATCH (a)-[:{}]->(b) RETURN distinct labels(a), labels(b);", relName);
     jsonStr = executeNeo4jQuery(cli, neo4jQuery);
     doc = yyjson_read(jsonStr.c_str(), jsonStr.size(), 0);
     resultsArr = yyjson_obj_get(yyjson_doc_get_root(doc), "results");
@@ -384,18 +383,18 @@ std::string getCreateRelTableQuery(httplib::Client& cli, const std::string& relN
         dstLabel = yyjson_get_str(yyjson_arr_get(secondElem, 0));
         if (std::find(nodeLabelsToImport.begin(), nodeLabelsToImport.end(), srcLabel) ==
             nodeLabelsToImport.end()) {
-            throw common::RuntimeException{common::stringFormat(
+            throw common::RuntimeException{std::format(
                 "The source node label '{}' of '{}' must be present in the nodes import list.",
                 srcLabel, relName)};
         }
         if (std::find(nodeLabelsToImport.begin(), nodeLabelsToImport.end(), dstLabel) ==
             nodeLabelsToImport.end()) {
-            throw common::RuntimeException{common::stringFormat(
+            throw common::RuntimeException{std::format(
                 "The destination node label '{}' of '{}' must be present in the nodes import list.",
                 dstLabel, relName)};
         }
         nodePairs.emplace_back(srcLabel, dstLabel);
-        nodePairsString += common::stringFormat("FROM {} TO {},", srcLabel, dstLabel);
+        nodePairsString += std::format("FROM {} TO {},", srcLabel, dstLabel);
         exportNeo4jRelToCSV(relName, {srcLabel, dstLabel}, cli);
         auto relProperties = getRelProperties(cli, srcLabel, dstLabel, relName);
 
@@ -403,18 +402,18 @@ std::string getCreateRelTableQuery(httplib::Client& cli, const std::string& relN
         std::string loadFromHeaders = "";
         for (auto i = 0u; i < relProperties.size(); i++) {
             propertiesToCopy += relProperties[i];
-            loadFromHeaders += common::stringFormat(", {} {}", relProperties[i],
+            loadFromHeaders += std::format(", {} {}", relProperties[i],
                 propertyTypes.at(relProperties[i]));
             if (i != relProperties.size() - 1) {
                 propertiesToCopy += ",";
             }
-            auto newRel = stringFormat("['{}_{}_{}','{}','{}','{}']", relName, srcLabel, dstLabel,
+            auto newRel = std::format("['{}_{}_{}','{}','{}','{}']", relName, srcLabel, dstLabel,
                 relProperties[i], propertyTypes.at(relProperties[i]),
                 originalTypes.at(relProperties[i]));
             outputTables.emplace_back(std::move(newRel));
         }
         copyQuery +=
-            common::stringFormat("COPY `{}`({}) FROM (LOAD WITH HEADERS(_id STRING, _labels "
+            std::format("COPY `{}`({}) FROM (LOAD WITH HEADERS(_id STRING, _labels "
                                  "STRING, _start INT64, _end INT64, _type STRING{}) FROM "
                                  "'/tmp/{}_{}_{}.csv'(sample_size=0, header=true) "
                                  "RETURN `_start`, `_end`{} {}) (from = \"{}\", to = \"{}\");",
@@ -425,7 +424,7 @@ std::string getCreateRelTableQuery(httplib::Client& cli, const std::string& relN
     if (nodePairsString.empty()) {
         return "";
     }
-    return common::stringFormat("CREATE REL TABLE `{}` ({} {});", relName,
+    return std::format("CREATE REL TABLE `{}` ({} {});", relName,
                nodePairsString.substr(0, nodePairsString.size() - 1),
                ddlProperties.substr(0, ddlProperties.length() - 1)) +
            copyQuery;

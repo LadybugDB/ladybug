@@ -1,3 +1,4 @@
+#include <format>
 #include "common/enums/expression_type.h"
 
 #include "common/assert.h"
@@ -126,7 +127,7 @@ std::string ExpressionTypeUtil::toParsableString(ExpressionType type) {
     case ExpressionType::IS_NOT_NULL:
         return "IS NOT NULL";
     default:
-        throw RuntimeException(stringFormat(
+        throw RuntimeException(std::format(
             "ExpressionTypeUtil::toParsableString not implemented for {}", toString(type)));
     }
 }

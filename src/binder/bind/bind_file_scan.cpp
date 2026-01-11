@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "binder/bound_scan_source.h"
 #include "binder/expression/literal_expression.h"
@@ -7,7 +8,6 @@
 #include "common/exception/message.h"
 #include "common/file_system/local_file_system.h"
 #include "common/file_system/virtual_file_system.h"
-#include "common/string_format.h"
 #include "common/string_utils.h"
 #include "extension/extension_manager.h"
 #include "function/table/bind_input.h"
@@ -65,7 +65,7 @@ std::vector<std::string> Binder::bindFilePaths(const std::vector<std::string>& f
             VirtualFileSystem::GetUnsafe(*clientContext)->glob(clientContext, filePath);
         if (globbedFilePaths.empty()) {
             throw BinderException{
-                stringFormat("No file found that matches the pattern: {}.", filePath)};
+                std::format("No file found that matches the pattern: {}.", filePath)};
         }
         for (auto& globbedPath : globbedFilePaths) {
             boundFilePaths.push_back(globbedPath);
@@ -139,7 +139,7 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindFileScanSource(const BaseScanSo
     if (fileTypeInfo.fileType != FileType::UNKNOWN) {
         for (const auto& filePath : filePaths) {
             if (!LocalFileSystem::fileExists(filePath) && LocalFileSystem::isLocalPath(filePath)) {
-                throw BinderException{stringFormat("Provided path is not a file: {}.", filePath)};
+                throw BinderException{std::format("Provided path is not a file: {}.", filePath)};
             }
         }
     }
@@ -175,7 +175,7 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindQueryScanSource(const BaseScanS
     auto boundStatement = bind(*querySource->statement);
     auto columns = boundStatement->getStatementResult()->getColumns();
     if (columns.size() != columnNames.size()) {
-        throw BinderException(stringFormat("Query returns {} columns but {} columns were expected.",
+        throw BinderException(std::format("Query returns {} columns but {} columns were expected.",
             columns.size(), columnNames.size()));
     }
     for (auto i = 0u; i < columns.size(); ++i) {
@@ -204,7 +204,7 @@ BoundTableScanInfo bindTableScanSourceInfo(Binder& binder, TableFunction func,
     if (columnTypes.empty()) {
     } else {
         if (bindData->getNumColumns() != columnTypes.size()) {
-            throw BinderException(stringFormat("{} has {} columns but {} columns were expected.",
+            throw BinderException(std::format("{} has {} columns but {} columns were expected.",
                 sourceName, bindData->getNumColumns(), columnTypes.size()));
         }
         for (auto i = 0u; i < bindData->getNumColumns(); ++i) {
@@ -226,7 +226,7 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindParameterScanSource(
     auto paramExpr = expressionBinder.bindParameterExpression(*paramSource->paramExpression);
     auto scanSourceValue = paramExpr->constCast<ParameterExpression>().getValue();
     if (scanSourceValue.getDataType().getLogicalTypeID() != LogicalTypeID::POINTER) {
-        throw BinderException(stringFormat(
+        throw BinderException(std::format(
             "Trying to scan from unsupported data type {}. The only parameter types that can be "
             "scanned from are pandas/polars dataframes and pyarrow tables.",
             scanSourceValue.getDataType().toString()));
@@ -284,7 +284,7 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindObjectScanSource(const BaseScan
         bindData = func.bindFunc(clientContext, &bindInput);
     } else {
         // LCOV_EXCL_START
-        throw BinderException(stringFormat("Cannot find object {}.",
+        throw BinderException(std::format("Cannot find object {}.",
             StringUtils::join(objectSource->objectNames, ",")));
         // LCOV_EXCL_STOP
     }

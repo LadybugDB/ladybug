@@ -1,3 +1,4 @@
+#include <format>
 #include "processor/operator/persistent/writer/parquet/parquet_writer.h"
 
 #include "common/constants.h"
@@ -87,7 +88,7 @@ Type::type ParquetWriter::convertToParquetType(const LogicalType& type) {
         return Type::FIXED_LEN_BYTE_ARRAY;
     default:
         throw RuntimeException{
-            stringFormat("Writing a column with type: {} to parquet is not supported.",
+            std::format("Writing a column with type: {} to parquet is not supported.",
                 LogicalTypeUtils::toString(type.getLogicalTypeID()))};
     }
 }

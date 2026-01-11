@@ -1,3 +1,4 @@
+#include <format>
 #include "main/query_result/arrow_query_result.h"
 
 #include "common/arrow/arrow_row_batch.h"
@@ -72,7 +73,7 @@ bool ArrowQueryResult::hasNextArrowChunk() {
 std::unique_ptr<ArrowArray> ArrowQueryResult::getNextArrowChunk(int64_t chunkSize) {
     if (chunkSize != chunkSize_) {
         throw RuntimeException(
-            stringFormat("Chunk size does not match expected value {}.", chunkSize_));
+            std::format("Chunk size does not match expected value {}.", chunkSize_));
     }
     return std::make_unique<ArrowArray>(arrays[cursor++]);
 }

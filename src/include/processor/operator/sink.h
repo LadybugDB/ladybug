@@ -1,4 +1,5 @@
 #pragma once
+#include <format>
 
 #include "common/exception/internal.h"
 #include "common/metric.h"
@@ -38,12 +39,12 @@ public:
 
     virtual std::unique_ptr<main::QueryResult> getQueryResult() const {
         throw common::InternalException(
-            common::stringFormat("{} operator does not implement getQueryResult.",
+            std::format("{} operator does not implement getQueryResult.",
                 PhysicalOperatorUtils::operatorTypeToString(operatorType)));
     }
 
     virtual std::shared_ptr<FactorizedTable> getResultFTable() const {
-        throw common::InternalException(common::stringFormat(
+        throw common::InternalException(std::format(
             "Trying to get result table from {} operator which doesn't have one.",
             PhysicalOperatorUtils::operatorTypeToString(operatorType)));
     }

@@ -1,3 +1,4 @@
+#include <format>
 #include "function/fts_config.h"
 
 #include "catalog/catalog.h"
@@ -92,7 +93,7 @@ void IgnorePattern::validate(const std::string& ignorePattern) {
     const RE2 regexPattern(ignorePattern);
     if (!regexPattern.ok()) {
         throw common::BinderException{
-            common::stringFormat("An error occurred while compiling the regex: \"{}\"."
+            std::format("An error occurred while compiling the regex: \"{}\"."
                                  "\nError: \"{}\".",
                 ignorePattern, regexPattern.error())};
     }
@@ -120,7 +121,7 @@ StopWordsTableInfo StopWords::bind(main::ClientContext& context, common::table_i
             FTSUtils::getNonDefaultStopWordsTableName(tableID, indexName), StopWordsSource::TABLE};
     } else {
         if (!common::VirtualFileSystem::GetUnsafe(context)->fileOrPathExists(stopWords, &context)) {
-            throw common::BinderException{common::stringFormat(
+            throw common::BinderException{std::format(
                 "Given stopwords: '{}' is not a node table name nor a valid file path.",
                 stopWords)};
         }

@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/lambda_expression.h"
@@ -178,7 +179,7 @@ static void validateNestedAggregate(const Expression& expr, const BinderScope& s
     for (auto& childAgg : collector.exprs) {
         if (!scope.contains(childAgg->getAlias())) {
             throw BinderException(
-                stringFormat("Expression {} contains nested aggregation.", expr.toString()));
+                std::format("Expression {} contains nested aggregation.", expr.toString()));
         }
     }
 }
@@ -286,7 +287,7 @@ expression_vector Binder::bindOrderByExpressions(
     for (auto& parsedExpr : parsedExprs) {
         auto expr = expressionBinder.bindExpression(*parsedExpr);
         if (!isOrderByKeyTypeSupported(expr->dataType)) {
-            throw BinderException(stringFormat("Cannot order by {}. Order by {} is not supported.",
+            throw BinderException(std::format("Cannot order by {}. Order by {} is not supported.",
                 expr->toString(), expr->dataType.toString()));
         }
         exprs.push_back(std::move(expr));

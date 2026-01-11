@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/bound_export_database.h"
 #include "binder/query/bound_regular_query.h"
 #include "catalog/catalog.h"
@@ -57,12 +58,12 @@ void bindExportTableData(ExportedTableData& tableData, const std::string& query,
 }
 
 static std::string getExportNodeTableDataQuery(const TableCatalogEntry& entry) {
-    return stringFormat("match (a:`{}`) return a.*", entry.getName());
+    return std::format("match (a:`{}`) return a.*", entry.getName());
 }
 
 static std::string getExportRelTableDataQuery(const TableCatalogEntry& relGroupEntry,
     const NodeTableCatalogEntry& srcEntry, const NodeTableCatalogEntry& dstEntry) {
-    return stringFormat("match (a:`{}`)-[r:`{}`]->(b:`{}`) return a.{},b.{},r.*;",
+    return std::format("match (a:`{}`)-[r:`{}`]->(b:`{}`) return a.{},b.{},r.*;",
         srcEntry.getName(), relGroupEntry.getName(), dstEntry.getName(),
         srcEntry.getPrimaryKeyName(), dstEntry.getPrimaryKeyName());
 }
@@ -92,7 +93,7 @@ static std::vector<ExportedTableData> getExportInfo(const Catalog& catalog,
                                  ->constCast<NodeTableCatalogEntry>();
             tableData.tableName = entry->getName();
             tableData.fileName =
-                stringFormat("{}_{}_{}.{}", relGroupEntry.getName(), srcEntry.getName(),
+                std::format("{}_{}_{}.{}", relGroupEntry.getName(), srcEntry.getName(),
                     dstEntry.getName(), StringUtils::getLower(fileTypeInfo.fileTypeStr));
             auto query = getExportRelTableDataQuery(relGroupEntry, srcEntry, dstEntry);
             bindExportTableData(tableData, query, context, binder);
@@ -125,7 +126,7 @@ static bool schemaOnly(case_insensitive_map_t<Value>& parsedOptions,
             return false;
         }
         if (option.second.getDataType() != LogicalType::BOOL()) {
-            throw common::BinderException{common::stringFormat(
+            throw common::BinderException{std::format(
                 "The '{}' option must have a BOOL value.", PortDBConstants::SCHEMA_ONLY_OPTION)};
         }
         return option.second.getValue<bool>();
@@ -134,7 +135,7 @@ static bool schemaOnly(case_insensitive_map_t<Value>& parsedOptions,
         std::count_if(parsedOptions.begin(), parsedOptions.end(), isSchemaOnlyOption) != 0;
     if (exportSchemaOnly && exportDB.getParsingOptionsRef().size() != 1) {
         throw common::BinderException{
-            common::stringFormat("When '{}' option is set to true in export "
+            std::format("When '{}' option is set to true in export "
                                  "database, no other options are allowed.",
                 PortDBConstants::SCHEMA_ONLY_OPTION)};
     }

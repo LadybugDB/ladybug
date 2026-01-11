@@ -1,8 +1,8 @@
+#include <format>
 #include "function/scalar_macro_function.h"
 
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
-#include "common/string_format.h"
 #include "common/string_utils.h"
 
 using namespace lbug::common;
@@ -65,7 +65,7 @@ std::string ScalarMacroFunction::toCypher(const std::string& name) const {
     for (auto& defaultParam : defaultArgs) {
         paramStrings.push_back(defaultParam.first + ":=" + defaultParam.second->toString());
     }
-    return stringFormat("CREATE MACRO `{}` ({}) AS {};", name, StringUtils::join(paramStrings, ","),
+    return std::format("CREATE MACRO `{}` ({}) AS {};", name, StringUtils::join(paramStrings, ","),
         expression->toString());
 }
 } // namespace function

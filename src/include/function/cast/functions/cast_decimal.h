@@ -2,9 +2,9 @@
 
 #include <string>
 #include <type_traits>
+#include <format>
 
 #include "common/exception/overflow.h"
-#include "common/string_format.h"
 #include "common/type_utils.h"
 #include "common/types/int128_t.h"
 #include "common/types/types.h"
@@ -37,7 +37,7 @@ struct CastDecimalTo {
             auto roundconst = (input < 0 ? -5 : 5);
             auto tmp = ((scale > 0 ? pow10s[scale - 1] * roundconst : 0) + input) / pow10s[scale];
             if (tmp < NumericLimits<DST>::minimum() || tmp > NumericLimits<DST>::maximum()) {
-                throw OverflowException(stringFormat("Cast Failed: {} is not in {} range",
+                throw OverflowException(std::format("Cast Failed: {} is not in {} range",
                     DecimalType::insertDecimalPoint(TypeUtils::toString(input), scale),
                     outputVec.dataType.toString()));
             }
@@ -60,7 +60,7 @@ struct CastToDecimal {
             output = (DST)(pow10s[scale] * input);
         }
         if (output <= -pow10s[precision] || output >= pow10s[precision]) {
-            throw OverflowException(stringFormat("To Decimal Cast Failed: {} is not in {} range",
+            throw OverflowException(std::format("To Decimal Cast Failed: {} is not in {} range",
                 TypeUtils::toString(input), outputVec.dataType.toString()));
         }
     }
@@ -85,7 +85,7 @@ struct CastBetweenDecimal {
                            pow10s[inputScale - outputScale]);
         }
         if (pow10s[outputPrecision] <= output || -pow10s[outputPrecision] >= output) {
-            throw OverflowException(stringFormat(
+            throw OverflowException(std::format(
                 "Decimal Cast Failed: input {} is not in range of {}",
                 DecimalType::insertDecimalPoint(TypeUtils::toString(input, nullptr), inputScale),
                 outputVec.dataType.toString()));

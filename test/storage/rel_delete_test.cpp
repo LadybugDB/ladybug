@@ -1,3 +1,4 @@
+#include <format>
 #include "api_test/private_api_test.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
@@ -40,7 +41,7 @@ void RelDeleteTest::detachDeleteNode(std::string_view nodeTable, std::string_vie
     common::internalID_t nodeID;
     {
         auto result = conn->query(
-            common::stringFormat("match (p:{}) where p.id = {} return id(p)", nodeTable, idOfNode));
+            std::format("match (p:{}) where p.id = {} return id(p)", nodeTable, idOfNode));
         ASSERT_EQ(1, result->getNumColumns());
         ASSERT_EQ(1, result->getNumTuples());
         nodeID = result->getNext()->getValue(0)->getValue<common::internalID_t>();

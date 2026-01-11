@@ -1,3 +1,4 @@
+#include <format>
 #include "storage/table/node_table.h"
 
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
@@ -806,7 +807,7 @@ std::optional<Index*> NodeTable::getIndex(const std::string& name) const {
             if (index.isLoaded()) {
                 return index.getIndex();
             }
-            throw RuntimeException(stringFormat(
+            throw RuntimeException(std::format(
                 "Index {} is not loaded yet. Please load the index before accessing it.", name));
         }
     }

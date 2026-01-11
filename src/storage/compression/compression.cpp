@@ -23,6 +23,7 @@
 #include "storage/storage_utils.h"
 #include "storage/table/column_chunk_data.h"
 #include <ranges>
+#include <format>
 
 using namespace lbug::common;
 
@@ -448,7 +449,7 @@ std::string CompressionMetadata::toString(const PhysicalTypeID physicalType) con
                     .bitWidth;
             },
             [](auto) -> uint8_t { KU_UNREACHABLE; });
-        return stringFormat("FLOAT_COMPRESSION[{}], {} Exceptions", bitWidth,
+        return std::format("FLOAT_COMPRESSION[{}], {} Exceptions", bitWidth,
             floatMetadata()->exceptionCount);
     }
     case CompressionType::INTEGER_BITPACKING: {
@@ -461,7 +462,7 @@ std::string CompressionMetadata::toString(const PhysicalTypeID physicalType) con
             [&]<numeric_utils::IsIntegral T>(
                 T) { return IntegerBitpacking<T>::getPackingInfo(*this).bitWidth; },
             [](auto) -> uint8_t { KU_UNREACHABLE; });
-        return stringFormat("INTEGER_BITPACKING[{}]", bitWidth);
+        return std::format("INTEGER_BITPACKING[{}]", bitWidth);
     }
     case CompressionType::BOOLEAN_BITPACKING: {
         return "BOOLEAN_BITPACKING";

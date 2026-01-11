@@ -1,3 +1,4 @@
+#include <format>
 #include "processor/expression_mapper.h"
 
 #include "binder/expression/case_expression.h"
@@ -9,7 +10,6 @@
 #include "binder/expression/rel_expression.h"
 #include "binder/expression_visitor.h" // IWYU pragma: keep (used in assert)
 #include "common/exception/not_implemented.h"
-#include "common/string_format.h"
 #include "expression_evaluator/case_evaluator.h"
 #include "expression_evaluator/function_evaluator.h"
 #include "expression_evaluator/lambda_evaluator.h"
@@ -74,7 +74,7 @@ std::unique_ptr<ExpressionEvaluator> ExpressionMapper::getEvaluator(
         return getLambdaParamEvaluator(std::move(expression));
     } else {
         // LCOV_EXCL_START
-        throw NotImplementedException(stringFormat("Cannot evaluate expression with type {}.",
+        throw NotImplementedException(std::format("Cannot evaluate expression with type {}.",
             ExpressionTypeUtil::toString(expressionType)));
         // LCOV_EXCL_STOP
     }
@@ -92,7 +92,7 @@ std::unique_ptr<ExpressionEvaluator> ExpressionMapper::getConstantEvaluator(
         return getFunctionEvaluator(std::move(expression));
     } else {
         // LCOV_EXCL_START
-        throw NotImplementedException(stringFormat("Cannot evaluate expression with type {}.",
+        throw NotImplementedException(std::format("Cannot evaluate expression with type {}.",
             ExpressionTypeUtil::toString(expressionType)));
         // LCOV_EXCL_STOP
     }

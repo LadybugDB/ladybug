@@ -1,3 +1,4 @@
+#include <format>
 #include "function/table/table_function.h"
 
 #include "common/exception/binder.h"
@@ -65,7 +66,7 @@ std::vector<std::string> TableFunction::extractYieldVariables(const std::vector<
         }
         for (auto i = 0u; i < names.size(); i++) {
             if (names[i] != yieldVariables[i].name) {
-                throw BinderException{stringFormat(
+                throw BinderException{std::format(
                     "Unknown table function output variable name: {}.", yieldVariables[i].name)};
             }
             auto variableName =

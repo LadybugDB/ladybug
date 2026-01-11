@@ -1,3 +1,4 @@
+#include <format>
 #include "storage/predicate/column_predicate.h"
 
 #include "binder/expression/literal_expression.h"
@@ -26,7 +27,7 @@ std::string ColumnPredicateSet::toString() const {
     }
     auto result = predicates[0]->toString();
     for (auto i = 1u; i < predicates.size(); ++i) {
-        result += stringFormat(" AND {}", predicates[i]->toString());
+        result += std::format(" AND {}", predicates[i]->toString());
     }
     return result;
 }
@@ -116,7 +117,7 @@ std::unique_ptr<ColumnPredicate> ColumnPredicateUtil::tryConvert(const Expressio
 }
 
 std::string ColumnPredicate::toString() {
-    return stringFormat("{} {}", columnName, ExpressionTypeUtil::toParsableString(expressionType));
+    return std::format("{} {}", columnName, ExpressionTypeUtil::toParsableString(expressionType));
 }
 
 } // namespace storage

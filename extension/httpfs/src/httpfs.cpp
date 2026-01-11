@@ -1,3 +1,4 @@
+#include <format>
 #include "httpfs.h"
 
 #include "common/cast.h"
@@ -32,7 +33,7 @@ void HTTPFileInfo::initMetadata() {
         if ((flags & FileFlags::WRITE) && res->code == 404) {
             if (!(flags & FileFlags::CREATE_IF_NOT_EXISTS) &&
                 !(flags & FileFlags::CREATE_AND_TRUNCATE_IF_EXISTS)) {
-                throw IOException(stringFormat("Unable to open URL: \"{}\" for writing: file does "
+                throw IOException(std::format("Unable to open URL: \"{}\" for writing: file does "
                                                "not exist and CREATE flag is not set",
                     path));
             }
@@ -44,7 +45,7 @@ void HTTPFileInfo::initMetadata() {
                 hfs->getRangeRequest(this, this->path, {}, 0, nullptr /* buffer */, 2);
             if (rangeRequest->code != 206) {
                 // LCOV_EXCL_START
-                throw IOException(stringFormat("Unable to connect to URL \"{}\": {} ({})",
+                throw IOException(std::format("Unable to connect to URL \"{}\": {} ({})",
                     this->path, res->code, res->error));
                 // LCOV_EXCL_STOP
             }
@@ -53,7 +54,7 @@ void HTTPFileInfo::initMetadata() {
             if (rangeFound == std::string::npos ||
                 rangeRequest->headers["Content-Range"].size() < rangeFound + 1) {
                 // LCOV_EXCL_START
-                throw IOException(stringFormat("Unknown Content-Range Header \"The value of "
+                throw IOException(std::format("Unknown Content-Range Header \"The value of "
                                                "Content-Range Header\":  ({})",
                     rangeRequest->headers["Content-Range"]));
                 // LCOV_EXCL_STOP
@@ -63,14 +64,14 @@ void HTTPFileInfo::initMetadata() {
             if (rangeLength == "*") {
                 // LCOV_EXCL_START
                 throw IOException(
-                    stringFormat("Unknown total length of the document \"{}\": {} ({})", this->path,
+                    std::format("Unknown total length of the document \"{}\": {} ({})", this->path,
                         res->code, res->error));
                 // LCOV_EXCL_STOP
             }
             res = std::move(rangeRequest);
         } else {
             // LCOV_EXCL_START
-            throw IOException(stringFormat("Unable to connect to URL \"{}\": {} ({})", res->url,
+            throw IOException(std::format("Unable to connect to URL \"{}\": {} ({})", res->url,
                 std::to_string(res->code), res->error));
             // LCOV_EXCL_STOP
         }
@@ -96,12 +97,12 @@ void HTTPFileInfo::initMetadata() {
             }
         } catch (std::invalid_argument& e) {
             // LCOV_EXCL_START
-            throw IOException(stringFormat("Invalid Content-Length header received: {}",
+            throw IOException(std::format("Invalid Content-Length header received: {}",
                 res->headers["Content-Length"]));
             // LCOV_EXCL_STOP
         } catch (std::out_of_range& e) {
             // LCOV_EXCL_START
-            throw IOException(stringFormat("Invalid Content-Length header received: {}",
+            throw IOException(std::format("Invalid Content-Length header received: {}",
                 res->headers["Content-Length"]));
             // LCOV_EXCL_STOP
         }
@@ -355,13 +356,13 @@ std::unique_ptr<HTTPResponse> HTTPFileSystem::runRequestWithRetry(
                 std::rethrow_exception(exception);
             } else if (err == httplib::Error::Success) {
                 // LCOV_EXCL_START
-                throw IOException(stringFormat("Request returned HTTP {} for HTTP {} to '{}'",
+                throw IOException(std::format("Request returned HTTP {} for HTTP {} to '{}'",
                     status, method, url));
                 // LCOV_EXCL_STOP
             } else {
                 // LCOV_EXCL_START
                 throw IOException(
-                    stringFormat("{} error for HTTP {} to '{}'", to_string(err), method, url));
+                    std::format("{} error for HTTP {} to '{}'", to_string(err), method, url));
                 // LCOV_EXCL_STOP
             }
         }
@@ -394,7 +395,7 @@ std::unique_ptr<HTTPResponse> HTTPFileSystem::getRangeRequest(FileInfo* fileInfo
     auto headers = getHTTPHeaders(headerMap);
 
     headers->insert(std::make_pair("Range",
-        stringFormat("bytes={}-{}", fileOffset, fileOffset + bufferLen - 1)));
+        std::format("bytes={}-{}", fileOffset, fileOffset + bufferLen - 1)));
 
     uint64_t bufferOffset = 0;
 
@@ -405,7 +406,7 @@ std::unique_ptr<HTTPResponse> HTTPFileSystem::getRangeRequest(FileInfo* fileInfo
                 if (response.status >= 400) {
                     // LCOV_EXCL_START
                     auto error =
-                        stringFormat("HTTP GET error on '{}' (HTTP {})", url, response.status);
+                        std::format("HTTP GET error on '{}' (HTTP {})", url, response.status);
                     if (response.status == 416) {
                         error += "Try confirm the server supports range requests.";
                     }
@@ -418,7 +419,7 @@ std::unique_ptr<HTTPResponse> HTTPFileSystem::getRangeRequest(FileInfo* fileInfo
                         auto contentLen = stoll(response.get_header_value("Content-Length", 0));
                         if ((uint64_t)contentLen != bufferLen) {
                             // LCOV_EXCL_START
-                            throw IOException(common::stringFormat(
+                            throw IOException(std::format(
                                 "Server returned: {}, HTTP GET error: Content-Length from server "
                                 "mismatches requested "
                                 "range, server may not support range requests.",

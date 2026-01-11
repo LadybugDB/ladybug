@@ -1,3 +1,4 @@
+#include <format>
 #include "api_test/api_test.h"
 
 using namespace lbug::common;
@@ -7,7 +8,7 @@ namespace testing {
 
 TEST_F(ApiTest, PrepareVectorKTest) {
 #ifndef __STATIC_LINK_EXTENSION_TEST__
-    ASSERT_TRUE(conn->query(common::stringFormat("LOAD EXTENSION '{}'",
+    ASSERT_TRUE(conn->query(std::format("LOAD EXTENSION '{}'",
                                 TestHelper::appendLbugRootPath(
                                     "extension/vector/build/libvector.lbug_extension")))
                     ->isSuccess());

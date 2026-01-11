@@ -1,3 +1,4 @@
+#include <format>
 #include "index/hnsw_index_utils.h"
 
 #include "binder/binder.h"
@@ -27,7 +28,7 @@ bool HNSWIndexUtils::validateIndexExistence(const main::ClientContext& context,
         if (indexExists(context, transaction, tableEntry, indexName)) {
             switch (conflictAction) {
             case common::ConflictAction::ON_CONFLICT_THROW:
-                throw common::BinderException{common::stringFormat(
+                throw common::BinderException{std::format(
                     "Index {} already exists in table {}.", indexName, tableEntry->getName())};
             case common::ConflictAction::ON_CONFLICT_DO_NOTHING:
                 return true;
@@ -42,7 +43,7 @@ bool HNSWIndexUtils::validateIndexExistence(const main::ClientContext& context,
             switch (conflictAction) {
             case common::ConflictAction::ON_CONFLICT_THROW:
                 throw common::BinderException{
-                    common::stringFormat("Table {} doesn't have an index with name {}.",
+                    std::format("Table {} doesn't have an index with name {}.",
                         tableEntry->getName(), indexName)};
             case common::ConflictAction::ON_CONFLICT_DO_NOTHING:
                 return false;
@@ -54,7 +55,7 @@ bool HNSWIndexUtils::validateIndexExistence(const main::ClientContext& context,
     } break;
     case IndexOperation::QUERY: {
         if (!indexExists(context, transaction, tableEntry, indexName)) {
-            throw common::BinderException{common::stringFormat(
+            throw common::BinderException{std::format(
                 "Table {} doesn't have an index with name {}.", tableEntry->getName(), indexName)};
         }
         return true;
@@ -79,7 +80,7 @@ void HNSWIndexUtils::validateAutoTransaction(const main::ClientContext& context,
     const std::string& funcName) {
     if (!transaction::TransactionContext::Get(context)->isAutoTransaction()) {
         throw common::BinderException{
-            common::stringFormat("{} is only supported in auto transaction mode.", funcName)};
+            std::format("{} is only supported in auto transaction mode.", funcName)};
     }
 }
 

@@ -1,6 +1,6 @@
+#include <format>
 #include "common/exception/conversion.h"
 #include "common/json_common.h"
-#include "common/string_format.h"
 #include "function/scalar_function.h"
 #include "json_cast_functions.h"
 #include "json_creation_functions.h"
@@ -26,7 +26,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
         if (!doc) {
             yyjson_doc_free(doc);
             throw common::ConversionException{
-                common::stringFormat("Cannot convert {} to JSON.", str.getAsString())};
+                std::format("Cannot convert {} to JSON.", str.getAsString())};
         }
         yyjson_doc_free(doc);
         StringVector::addString(&result, resultPos, str);

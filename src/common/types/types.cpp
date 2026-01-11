@@ -1,6 +1,7 @@
 #include "common/types/types.h"
 
 #include <set>
+#include <format>
 
 #include "catalog/catalog.h"
 #include "common/cast.h"
@@ -1375,7 +1376,7 @@ std::vector<StructField> parseStructTypeInfo(const std::string& structTypeStr,
     auto structFieldStrs = parseStructFields(structFieldsStr);
     auto numFields = structFieldStrs.size();
     if (numFields > INVALID_STRUCT_FIELD_IDX + 1) {
-        throw BinderException(stringFormat("Too many fields in {} definition (max {}, got {})",
+        throw BinderException(std::format("Too many fields in {} definition (max {}, got {})",
             defType, INVALID_STRUCT_FIELD_IDX + 1, numFields));
     }
     std::set<std::string> fieldNames;
@@ -1384,7 +1385,7 @@ std::vector<StructField> parseStructTypeInfo(const std::string& structTypeStr,
         auto fieldName = structFieldStr.substr(0, pos);
         if (!fieldNames.insert(fieldName).second) {
             throw BinderException(
-                stringFormat("Duplicate field '{}' in {} definition", fieldName, defType));
+                std::format("Duplicate field '{}' in {} definition", fieldName, defType));
         }
         auto fieldTypeString = structFieldStr.substr(pos + 1);
         LogicalType fieldType = LogicalType::convertFromString(fieldTypeString, context);
@@ -1850,7 +1851,7 @@ bool LogicalTypeUtils::tryGetMaxLogicalType(const LogicalType& left, const Logic
             throw ConversionException("Union casting is not supported");
             // return tryCombineUnionTypes(left, right, result);
         default:
-            throw RuntimeException(stringFormat("Casting between {} and {} is not implemented.",
+            throw RuntimeException(std::format("Casting between {} and {} is not implemented.",
                 left.toString(), right.toString()));
             // LCOV_EXCL_END
         }
@@ -1935,7 +1936,7 @@ LogicalType LogicalTypeUtils::combineTypes(const std::vector<LogicalType>& types
     if (types.empty()) {
         // LCOV_EXCL_START
         throw RuntimeException(
-            stringFormat("Trying to combine empty types. This should never happen."));
+            std::format("Trying to combine empty types. This should never happen."));
         // LCOV_EXCL_STOP
     }
     if (types.size() == 1) {

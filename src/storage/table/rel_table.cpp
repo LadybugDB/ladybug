@@ -18,6 +18,7 @@
 #include "storage/wal/local_wal.h"
 #include "transaction/transaction.h"
 #include <ranges>
+#include <format>
 
 using namespace lbug::catalog;
 using namespace lbug::common;
@@ -293,7 +294,7 @@ void RelTable::detachDelete(Transaction* transaction, RelTableDeleteState* delet
     auto direction = deleteState->detachDeleteDirection;
     if (std::ranges::count(getStorageDirections(), direction) == 0) {
         throw RuntimeException(
-            stringFormat("Cannot delete edges of direction {} from table {} as they do not exist.",
+            std::format("Cannot delete edges of direction {} from table {} as they do not exist.",
                 RelDirectionUtils::relDirectionToString(direction), tableName));
     }
     KU_ASSERT(deleteState->srcNodeIDVector.state->getSelVector().getSelSize() == 1);
@@ -406,7 +407,7 @@ void RelTable::addColumn(Transaction* transaction, TableAddColumnState& addColum
 RelTableData* RelTable::getDirectedTableData(RelDataDirection direction) const {
     const auto directionIdx = RelDirectionUtils::relDirectionToKeyIdx(direction);
     if (directionIdx >= directedRelData.size()) {
-        throw RuntimeException(stringFormat(
+        throw RuntimeException(std::format(
             "Failed to get {} data for rel table \"{}\", please set the storage direction to BOTH",
             RelDirectionUtils::relDirectionToString(direction), tableName));
     }

@@ -1,3 +1,4 @@
+#include <format>
 #include "connector/azure_connector.h"
 
 #include "common/exception/runtime.h"
@@ -24,7 +25,7 @@ void AzureConnector::initRemoteAzureSecrets(main::ClientContext* context) const 
         std::string setting = context->getCurrentSetting(fieldName).toString();
         if (!setting.empty()) {
             std::string duckdbFieldName = fieldName.substr(6); // strip "AZURE_" prefix
-            query += common::stringFormat(", {} '{}'", duckdbFieldName, setting);
+            query += std::format(", {} '{}'", duckdbFieldName, setting);
         }
     }
     if (query.empty()) {

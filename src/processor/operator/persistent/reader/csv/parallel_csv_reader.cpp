@@ -8,9 +8,9 @@
 
 #if defined(_WIN32)
 #include <io.h>
+#include <format>
 #endif
 
-#include "common/string_format.h"
 #include "common/system_message.h"
 #include "function/table/table_function.h"
 #include "processor/operator/persistent/reader/csv/driver.h"
@@ -68,7 +68,7 @@ void ParallelCSVReader::seekToBlockStart() {
     if (fileInfo->seek(currentBlockIdx * CopyConstants::PARALLEL_BLOCK_SIZE, SEEK_SET) == -1) {
         // LCOV_EXCL_START
         handleCopyException(
-            stringFormat("Failed to seek to block {}: {}", currentBlockIdx, posixErrMessage()),
+            std::format("Failed to seek to block {}: {}", currentBlockIdx, posixErrMessage()),
             true);
         // LCOV_EXCL_STOP
     }

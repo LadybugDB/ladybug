@@ -1,10 +1,10 @@
 #include "graph_test/base_graph_test.h"
 
 #include <fstream>
+#include <format>
 
 #include "common/assert.h"
 #include "common/exception/runtime.h"
-#include "common/string_format.h"
 #include "common/string_utils.h"
 #include "spdlog/spdlog.h"
 #include "test_helper/test_helper.h"
@@ -22,7 +22,7 @@ void BaseGraphTest::createConns(const std::set<std::string>& connNames) {
     } else {
         for (auto connName : connNames) {
             if (connMap.contains(connName)) {
-                throw RuntimeException(stringFormat(
+                throw RuntimeException(std::format(
                     "Cannot create connection with name {} because it already exists.", connName));
             }
             auto newConn = std::make_unique<Connection>(database.get());
@@ -56,7 +56,7 @@ void BaseGraphTest::initGraph(const std::string& datasetDir) const {
     // imports across versions work correctly. This skips importing the `empty` dataset.
     auto dirs = StringUtils::split(StringUtils::getLower(datasetDir), "/");
     if (std::find(dirs.begin(), dirs.end(), "empty") != dirs.end()) {
-        std::cout << stringFormat("Skipping Empty Dataset {}", datasetDir) << std::endl;
+        std::cout << std::format("Skipping Empty Dataset {}", datasetDir) << std::endl;
         return;
     }
     std::string query = "IMPORT DATABASE '" + datasetDir + "';";
@@ -64,7 +64,7 @@ void BaseGraphTest::initGraph(const std::string& datasetDir) const {
     auto result = connection->query(query);
     std::cout << "Executed query: " << query << std::endl;
     if (!result->isSuccess()) {
-        throw Exception(stringFormat("Failed to execute statement: {}.\nError: {}", query,
+        throw Exception(std::format("Failed to execute statement: {}.\nError: {}", query,
             result->getErrorMessage()));
     }
 }

@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/expression/expression_util.h"
 #include "common/exception/binder.h"
 #include "common/exception/connection.h"
@@ -107,7 +108,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
 void validateValAsPositive(int64_t val) {
     if (val <= 0) {
         throw(BinderException(
-            common::stringFormat("Dimensions should be greater than 0. Got: {}.\n{}", val,
+            std::format("Dimensions should be greater than 0. Got: {}.\n{}", val,
                 std::string(EmbeddingProvider::referenceLbugDocs))));
     }
 }

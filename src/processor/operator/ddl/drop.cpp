@@ -1,10 +1,10 @@
+#include <format>
 #include "processor/operator/ddl/drop.h"
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/binder.h"
-#include "common/string_format.h"
 #include "common/string_utils.h"
 #include "main/client_context.h"
 #include "main/database.h"
@@ -44,7 +44,7 @@ void Drop::dropSequence(const main::ClientContext* context) {
     auto transaction = transaction::Transaction::Get(*context);
     auto memoryManager = storage::MemoryManager::Get(*context);
     if (!catalog->containsSequence(transaction, dropInfo.name)) {
-        auto message = stringFormat("Sequence {} does not exist.", dropInfo.name);
+        auto message = std::format("Sequence {} does not exist.", dropInfo.name);
         switch (dropInfo.conflictAction) {
         case ConflictAction::ON_CONFLICT_DO_NOTHING: {
             appendMessage(message, memoryManager);
@@ -58,7 +58,7 @@ void Drop::dropSequence(const main::ClientContext* context) {
         }
     }
     catalog->dropSequence(transaction, dropInfo.name);
-    appendMessage(stringFormat("Sequence {} has been dropped.", dropInfo.name), memoryManager);
+    appendMessage(std::format("Sequence {} has been dropped.", dropInfo.name), memoryManager);
 }
 
 void Drop::dropTable(const main::ClientContext* context) {
@@ -66,7 +66,7 @@ void Drop::dropTable(const main::ClientContext* context) {
     auto transaction = transaction::Transaction::Get(*context);
     auto memoryManager = storage::MemoryManager::Get(*context);
     if (!catalog->containsTable(transaction, dropInfo.name, context->useInternalCatalogEntry())) {
-        auto message = stringFormat("Table {} does not exist.", dropInfo.name);
+        auto message = std::format("Table {} does not exist.", dropInfo.name);
         switch (dropInfo.conflictAction) {
         case ConflictAction::ON_CONFLICT_DO_NOTHING: {
             appendMessage(message, memoryManager);
@@ -84,14 +84,14 @@ void Drop::dropTable(const main::ClientContext* context) {
     case CatalogEntryType::NODE_TABLE_ENTRY: {
         for (auto& indexEntry : catalog->getIndexEntries(transaction)) {
             if (indexEntry->getTableID() == entry->getTableID()) {
-                throw BinderException(stringFormat(
+                throw BinderException(std::format(
                     "Cannot delete node table {} because it is referenced by index {}.",
                     entry->getName(), indexEntry->getIndexName()));
             }
         }
         for (auto& relEntry : catalog->getRelGroupEntries(transaction)) {
             if (relEntry->isParent(entry->getTableID())) {
-                throw BinderException(stringFormat("Cannot delete node table {} because it is "
+                throw BinderException(std::format("Cannot delete node table {} because it is "
                                                    "referenced by relationship table {}.",
                     entry->getName(), relEntry->getName()));
             }
@@ -104,7 +104,7 @@ void Drop::dropTable(const main::ClientContext* context) {
         KU_UNREACHABLE;
     }
     catalog->dropTableEntryAndIndex(transaction, dropInfo.name);
-    appendMessage(stringFormat("Table {} has been dropped.", dropInfo.name), memoryManager);
+    appendMessage(std::format("Table {} has been dropped.", dropInfo.name), memoryManager);
 }
 
 void Drop::dropMacro(const main::ClientContext* context) {
@@ -113,7 +113,7 @@ void Drop::dropMacro(const main::ClientContext* context) {
     auto memoryManager = storage::MemoryManager::Get(*context);
     handleMacroExistence(context);
     catalog->dropMacro(transaction, dropInfo.name);
-    appendMessage(stringFormat("Macro {} has been dropped.", dropInfo.name), memoryManager);
+    appendMessage(std::format("Macro {} has been dropped.", dropInfo.name), memoryManager);
 }
 
 void Drop::dropGraph(const main::ClientContext* context) {
@@ -121,7 +121,7 @@ void Drop::dropGraph(const main::ClientContext* context) {
     auto memoryManager = storage::MemoryManager::Get(*context);
 
     if (!dbManager->hasGraph(dropInfo.name)) {
-        auto message = stringFormat("Graph {} does not exist.", dropInfo.name);
+        auto message = std::format("Graph {} does not exist.", dropInfo.name);
         switch (dropInfo.conflictAction) {
         case ConflictAction::ON_CONFLICT_DO_NOTHING: {
             appendMessage(message, memoryManager);
@@ -141,7 +141,7 @@ void Drop::dropGraph(const main::ClientContext* context) {
     }
 
     dbManager->dropGraph(dropInfo.name, const_cast<main::ClientContext*>(context));
-    appendMessage(stringFormat("Graph {} has been dropped.", dropInfo.name), memoryManager);
+    appendMessage(std::format("Graph {} has been dropped.", dropInfo.name), memoryManager);
 }
 
 void Drop::handleMacroExistence(const main::ClientContext* context) {
@@ -149,7 +149,7 @@ void Drop::handleMacroExistence(const main::ClientContext* context) {
     auto transaction = transaction::Transaction::Get(*context);
     auto memoryManager = storage::MemoryManager::Get(*context);
     if (!catalog->containsMacro(transaction, dropInfo.name)) {
-        auto message = stringFormat("Macro {} does not exist.", dropInfo.name);
+        auto message = std::format("Macro {} does not exist.", dropInfo.name);
         switch (dropInfo.conflictAction) {
         case ConflictAction::ON_CONFLICT_DO_NOTHING: {
             appendMessage(message, memoryManager);

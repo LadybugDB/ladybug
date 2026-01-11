@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
@@ -34,7 +35,7 @@ static void validateArrayColumnType(const catalog::TableCatalogEntry* entry,
     property_id_t propertyID) {
     auto& type = entry->getProperty(propertyID).getType();
     if (type.getLogicalTypeID() != LogicalTypeID::ARRAY) {
-        throw BinderException{stringFormat("Column {} is not of the expected type {}.",
+        throw BinderException{std::format("Column {} is not of the expected type {}.",
             entry->getProperty(propertyID).getName(),
             LogicalTypeUtils::toString(LogicalTypeID::ARRAY))};
     }

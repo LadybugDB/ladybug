@@ -1,3 +1,4 @@
+#include <format>
 #include "py_scan_config.h"
 
 #include "common/constants.h"
@@ -31,7 +32,7 @@ PyScanConfig::PyScanConfig(const common::case_insensitive_map_t<common::Value>& 
             ignoreErrors = i.second.val.booleanVal;
         } else {
             throw common::BinderException(
-                common::stringFormat("{} Option not recognized by pyArrow scanner.", i.first));
+                std::format("{} Option not recognized by pyArrow scanner.", i.first));
         }
     }
 }

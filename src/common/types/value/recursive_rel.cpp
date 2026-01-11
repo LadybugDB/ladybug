@@ -1,7 +1,7 @@
+#include <format>
 #include "common/types/value/recursive_rel.h"
 
 #include "common/exception/exception.h"
-#include "common/string_format.h"
 #include "common/types/types.h"
 #include "common/types/value/value.h"
 
@@ -22,7 +22,7 @@ void RecursiveRelVal::throwIfNotRecursiveRel(const Value* val) {
     // LCOV_EXCL_START
     if (val->dataType.getLogicalTypeID() != LogicalTypeID::RECURSIVE_REL) {
         throw Exception(
-            stringFormat("Expected RECURSIVE_REL type, but got {} type", val->dataType.toString()));
+            std::format("Expected RECURSIVE_REL type, but got {} type", val->dataType.toString()));
     }
     // LCOV_EXCL_STOP
 }

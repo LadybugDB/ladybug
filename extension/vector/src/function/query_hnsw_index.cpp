@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/literal_expression.h"
@@ -88,12 +89,12 @@ static std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
         if (graphEntry->type == graph::GraphEntryType::NATIVE) {
             auto& nativeEntry = graphEntry->cast<graph::ParsedNativeGraphEntry>();
             if (!nativeEntry.relInfos.empty() || nativeEntry.nodeInfos.size() != 1) {
-                throw BinderException(stringFormat("In vector filtered search, projected graph {} "
+                throw BinderException(std::format("In vector filtered search, projected graph {} "
                                                    "must contain exactly one node table.",
                     tableOrGraphName));
             }
             auto nodeInfo = nativeEntry.nodeInfos[0];
-            cypherQuery = stringFormat("MATCH (n:`{}`) WHERE {} RETURN n", nodeInfo.tableName,
+            cypherQuery = std::format("MATCH (n:`{}`) WHERE {} RETURN n", nodeInfo.tableName,
                 nodeInfo.predicate);
         } else {
             KU_ASSERT(graphEntry->type == graph::GraphEntryType::CYPHER);
@@ -107,32 +108,32 @@ static std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
         } catch (Exception& e) {
             // LCOV_EXCL_START
             throw BinderException{
-                stringFormat("Failed to bind the filter query. Found error: {}", e.what())};
+                std::format("Failed to bind the filter query. Found error: {}", e.what())};
             // LCOV_EXCL_STOP
         }
         auto resultColumns = boundStatement->getStatementResult()->getColumns();
         if (resultColumns.size() != 1) {
             throw BinderException(
-                stringFormat("The return clause of a filter query should contain "
+                std::format("The return clause of a filter query should contain "
                              "exactly one node expression. Found more than one expressions: {}.",
                     ExpressionUtil::toString(resultColumns)));
         }
         auto resultColumn = resultColumns[0];
         if (resultColumn->getDataType().getLogicalTypeID() != LogicalTypeID::NODE) {
-            throw BinderException(stringFormat("The return clause of a filter query should be of "
+            throw BinderException(std::format("The return clause of a filter query should be of "
                                                "type NODE. Found type {} instead.",
                 resultColumn->getDataType().toString()));
         }
         auto& node = resultColumn->constCast<NodeExpression>();
         if (node.getNumEntries() != 1) {
-            throw BinderException(stringFormat(
+            throw BinderException(std::format(
                 "Node {} in the return clause of the filter query should have one label.",
                 node.toString()));
         }
         tableName = node.getEntry(0)->getName();
     } else {
         throw BinderException(
-            stringFormat("Cannot find table or graph named as {}.", tableOrGraphName));
+            std::format("Cannot find table or graph named as {}.", tableOrGraphName));
     }
     auto nodeTableEntry = HNSWIndexUtils::bindNodeTable(*context, tableName);
     (void)HNSWIndexUtils::validateIndexExistence(*context, nodeTableEntry, indexName,

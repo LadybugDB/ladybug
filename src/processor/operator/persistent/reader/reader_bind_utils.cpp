@@ -1,7 +1,7 @@
+#include <format>
 #include "processor/operator/persistent/reader/reader_bind_utils.h"
 
 #include "common/exception/binder.h"
-#include "common/string_format.h"
 
 using namespace lbug::common;
 
@@ -13,7 +13,7 @@ void ReaderBindUtils::validateNumColumns(uint32_t expectedNumber, uint32_t detec
         return; // Empty CSV. Continue processing.
     }
     if (expectedNumber != detectedNumber) {
-        throw common::BinderException(common::stringFormat(
+        throw common::BinderException(std::format(
             "Number of columns mismatch. Expected {} but got {}.", expectedNumber, detectedNumber));
     }
 }
@@ -24,7 +24,7 @@ void ReaderBindUtils::validateColumnTypes(const std::vector<std::string>& column
     KU_ASSERT(expectedColumnTypes.size() == detectedColumnTypes.size());
     for (auto i = 0u; i < expectedColumnTypes.size(); ++i) {
         if (expectedColumnTypes[i] != detectedColumnTypes[i]) {
-            throw common::BinderException(common::stringFormat(
+            throw common::BinderException(std::format(
                 "Column `{}` type mismatch. Expected {} but got {}.", columnNames[i],
                 expectedColumnTypes[i].toString(), detectedColumnTypes[i].toString()));
         }

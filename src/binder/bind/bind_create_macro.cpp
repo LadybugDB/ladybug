@@ -1,8 +1,8 @@
+#include <format>
 #include "binder/binder.h"
 #include "binder/bound_create_macro.h"
 #include "catalog/catalog.h"
 #include "common/exception/binder.h"
-#include "common/string_format.h"
 #include "common/string_utils.h"
 #include "parser/create_macro.h"
 #include "transaction/transaction.h"
@@ -19,7 +19,7 @@ std::unique_ptr<BoundStatement> Binder::bindCreateMacro(const Statement& stateme
     StringUtils::toUpper(macroName);
     if (catalog::Catalog::Get(*clientContext)
             ->containsMacro(transaction::Transaction::Get(*clientContext), macroName)) {
-        throw BinderException{stringFormat("Macro {} already exists.", macroName)};
+        throw BinderException{std::format("Macro {} already exists.", macroName)};
     }
     parser::default_macro_args defaultArgs;
     for (auto& defaultArg : createMacro.getDefaultArgs()) {

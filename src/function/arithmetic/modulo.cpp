@@ -1,8 +1,8 @@
+#include <format>
 #include "function/arithmetic/modulo.h"
 
 #include "common/exception/overflow.h"
 #include "common/exception/runtime.h"
-#include "common/string_format.h"
 #include "common/type_utils.h"
 #include "function/cast/functions/numeric_limits.h"
 
@@ -88,7 +88,7 @@ void Modulo::operation(int8_t& left, int8_t& right, int8_t& result) {
     }
     if (!TryModulo::operation(left, right, result)) {
         throw common::OverflowException{
-            common::stringFormat("Value {} % {} is not within INT8 range.",
+            std::format("Value {} % {} is not within INT8 range.",
                 common::TypeUtils::toString(left), common::TypeUtils::toString(right))};
     }
 }
@@ -100,7 +100,7 @@ void Modulo::operation(int16_t& left, int16_t& right, int16_t& result) {
     }
     if (!TryModulo::operation(left, right, result)) {
         throw common::OverflowException{
-            common::stringFormat("Value {} % {} is not within INT16 range.",
+            std::format("Value {} % {} is not within INT16 range.",
                 common::TypeUtils::toString(left), common::TypeUtils::toString(right))};
     }
 }
@@ -112,7 +112,7 @@ void Modulo::operation(int32_t& left, int32_t& right, int32_t& result) {
     }
     if (!TryModulo::operation(left, right, result)) {
         throw common::OverflowException{
-            common::stringFormat("Value {} % {} is not within INT32 range.",
+            std::format("Value {} % {} is not within INT32 range.",
                 common::TypeUtils::toString(left), common::TypeUtils::toString(right))};
     }
 }
@@ -124,7 +124,7 @@ void Modulo::operation(int64_t& left, int64_t& right, int64_t& result) {
     }
     if (!TryModulo::operation(left, right, result)) {
         throw common::OverflowException{
-            common::stringFormat("Value {} % {} is not within INT64 range.",
+            std::format("Value {} % {} is not within INT64 range.",
                 common::TypeUtils::toString(left), common::TypeUtils::toString(right))};
     }
 }

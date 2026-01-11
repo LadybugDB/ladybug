@@ -18,9 +18,9 @@
 #else
 #include <sys/mman.h>
 #include <unistd.h>
+#include <format>
 #endif
 #include "common/exception/copy.h"
-#include "common/string_format.h"
 #include "common/utils.h"
 #include "function/table/bind_data.h"
 #include "function/table/bind_input.h"
@@ -52,7 +52,7 @@ NpyReader::NpyReader(const std::string& filePath)
         CreateFileMappingW((HANDLE)_get_osfhandle(fd), NULL, PAGE_READONLY, high, low, NULL);
     if (handle == NULL) {
         throw BufferManagerException(
-            stringFormat("CreateFileMapping for size {} failed with error code {}: {}.", fileSize,
+            std::format("CreateFileMapping for size {} failed with error code {}: {}.", fileSize,
                 GetLastError(), std::system_category().message(GetLastError())));
     }
 
@@ -60,7 +60,7 @@ NpyReader::NpyReader(const std::string& filePath)
     CloseHandle(handle);
     if (mmapRegion == NULL) {
         throw BufferManagerException(
-            stringFormat("MapViewOfFile for size {} failed with error code {}: {}.", fileSize,
+            std::format("MapViewOfFile for size {} failed with error code {}: {}.", fileSize,
                 GetLastError(), std::system_category().message(GetLastError())));
     }
 #else
@@ -183,7 +183,7 @@ void NpyReader::parseType(std::string descr) {
 void NpyReader::validate(const LogicalType& type_, offset_t numRows) {
     auto numNodesInFile = getNumRows();
     if (numNodesInFile == 0) {
-        throw CopyException(stringFormat("Number of rows in npy file {} is 0.", filePath));
+        throw CopyException(std::format("Number of rows in npy file {} is 0.", filePath));
     }
     if (numNodesInFile != numRows) {
         throw CopyException("Number of rows in npy files is not equal to each other.");
@@ -191,24 +191,24 @@ void NpyReader::validate(const LogicalType& type_, offset_t numRows) {
     // TODO(Guodong): Set npy reader data type to ARRAY, so we can simplify checks here.
     if (type_.getLogicalTypeID() == this->type) {
         if (getNumElementsPerRow() != 1) {
-            throw CopyException(stringFormat("Cannot copy a vector property in npy file {} to a "
+            throw CopyException(std::format("Cannot copy a vector property in npy file {} to a "
                                              "scalar property.",
                 filePath));
         }
         return;
     } else if (type_.getLogicalTypeID() == LogicalTypeID::ARRAY) {
         if (this->type != ArrayType::getChildType(type_).getLogicalTypeID()) {
-            throw CopyException(stringFormat("The type of npy file {} does not "
+            throw CopyException(std::format("The type of npy file {} does not "
                                              "match the expected type.",
                 filePath));
         }
         if (getNumElementsPerRow() != ArrayType::getNumElements(type_)) {
             throw CopyException(
-                stringFormat("The shape of {} does not match {}.", filePath, type_.toString()));
+                std::format("The shape of {} does not match {}.", filePath, type_.toString()));
         }
         return;
     } else {
-        throw CopyException(stringFormat("The type of npy file {} does not "
+        throw CopyException(std::format("The type of npy file {} does not "
                                          "match the expected type.",
             filePath));
     }

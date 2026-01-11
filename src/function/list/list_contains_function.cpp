@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/expression/expression_util.h"
 #include "common/exception/binder.h"
 #include "common/type_utils.h"
@@ -38,7 +39,7 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
         auto& elementType = elementExpr->getDataType();
         if (!LogicalTypeUtils::tryGetMaxLogicalType(listChildType, elementType, childType)) {
             throw BinderException(
-                stringFormat("Cannot compare {} and {} in list_contains function.",
+                std::format("Cannot compare {} and {} in list_contains function.",
                     listChildType.toString(), elementType.toString()));
         }
     }

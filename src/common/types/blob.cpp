@@ -1,7 +1,7 @@
+#include <format>
 #include "common/types/blob.h"
 
 #include "common/exception/conversion.h"
-#include "common/string_format.h"
 
 namespace lbug {
 namespace common {
@@ -92,7 +92,7 @@ void Blob::validateHexCode(const uint8_t* blobStr, uint64_t length, uint64_t cur
         HexFormatConstants::HEX_MAP[blobStr[curPos + HexFormatConstants::FIRST_BYTE_POS]] < 0 ||
         HexFormatConstants::HEX_MAP[blobStr[curPos + HexFormatConstants::SECOND_BYTES_POS]] < 0) {
         throw ConversionException(
-            stringFormat("Invalid hex escape code encountered in string -> blob conversion: {}",
+            std::format("Invalid hex escape code encountered in string -> blob conversion: {}",
                 std::string((char*)blobStr + curPos, HexFormatConstants::LENGTH)));
     }
 }

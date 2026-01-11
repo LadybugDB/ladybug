@@ -315,7 +315,6 @@ option(BUILD_SHELL "Build Interactive Shell" TRUE)
 option(BUILD_SINGLE_FILE_HEADER "Build single file header. Requires Python >= 3.9." TRUE)
 option(BUILD_LBUG "Build Lbug." TRUE)
 option(ENABLE_BACKTRACES "Enable backtrace printing for exceptions and segfaults" FALSE)
-option(USE_STD_FORMAT "Use std::format instead of a custom formatter." FALSE)
 option(PREFER_SYSTEM_DEPS "Only download certain deps if not found on the system" TRUE)
 
 option(BUILD_LCOV "Build coverage report." FALSE)
@@ -344,10 +343,6 @@ if (ENABLE_BACKTRACES)
         FetchContent_MakeAvailable(cpptrace)
     endif()
     add_compile_definitions(LBUG_BACKTRACE)
-endif()
-
-if (USE_STD_FORMAT)
-    add_compile_definitions(USE_STD_FORMAT)
 endif()
 
 function(add_lbug_test TEST_NAME)

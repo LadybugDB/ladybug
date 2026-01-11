@@ -1,3 +1,4 @@
+#include <format>
 #include "function/cast/functions/cast_array.h"
 
 #include "common/exception/conversion.h"
@@ -72,7 +73,7 @@ bool CastArrayHelper::containsListToArray(const LogicalType& srcType, const Logi
             auto dstFieldTypes = StructType::getFieldTypes(dstType);
             if (srcFieldTypes.size() != dstFieldTypes.size()) {
                 throw ConversionException{
-                    stringFormat("Unsupported casting function from {} to {}.", srcType.toString(),
+                    std::format("Unsupported casting function from {} to {}.", srcType.toString(),
                         dstType.toString())};
             }
 
@@ -102,7 +103,7 @@ void CastArrayHelper::validateListEntry(ValueVector* inputVector, const LogicalT
             auto listEntry = inputVector->getValue<list_entry_t>(pos);
             if (listEntry.size != ArrayType::getNumElements(resultType)) {
                 throw ConversionException{
-                    stringFormat("Unsupported casting LIST with incorrect list entry to ARRAY. "
+                    std::format("Unsupported casting LIST with incorrect list entry to ARRAY. "
                                  "Expected: {}, Actual: {}.",
                         ArrayType::getNumElements(resultType),
                         inputVector->getValue<list_entry_t>(pos).size)};
@@ -114,7 +115,7 @@ void CastArrayHelper::validateListEntry(ValueVector* inputVector, const LogicalT
         } else if (inputType.getPhysicalType() == PhysicalTypeID::ARRAY) {
             if (ArrayType::getNumElements(inputType) != ArrayType::getNumElements(resultType)) {
                 throw ConversionException(
-                    stringFormat("Unsupported casting function from {} to {}.",
+                    std::format("Unsupported casting function from {} to {}.",
                         inputType.toString(), resultType.toString()));
             }
             auto listEntry = inputVector->getValue<list_entry_t>(pos);

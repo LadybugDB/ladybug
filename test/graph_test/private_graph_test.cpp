@@ -1,3 +1,4 @@
+#include <format>
 #include "graph_test/private_graph_test.h"
 
 #include "common/exception/test.h"
@@ -48,7 +49,7 @@ static void removeFile(const std::string& path) {
         return;
     }
     if (!std::filesystem::remove(path, removeErrorCode)) {
-        throw Exception(stringFormat("Error removing directory {}.  Error Message: {}", path,
+        throw Exception(std::format("Error removing directory {}.  Error Message: {}", path,
             removeErrorCode.message()));
     }
 }
@@ -157,7 +158,7 @@ void DBTest::runTest(std::vector<TestStatement>& statements, uint64_t checkpoint
                 }
             } else {
                 throw TestException(
-                    stringFormat("No connection name provided for statement: {}", statement.query));
+                    std::format("No connection name provided for statement: {}", statement.query));
             }
         }
     }

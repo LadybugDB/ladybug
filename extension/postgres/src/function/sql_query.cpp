@@ -1,3 +1,4 @@
+#include <format>
 #include "function/sql_query.h"
 
 #include "binder/binder.h"
@@ -41,11 +42,11 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
     }
     auto queryTemplate =
         "select {} " +
-        common::stringFormat("from postgres_query({}, '{}')",
+        std::format("from postgres_query({}, '{}')",
             attachedDB->constCast<AttachedPostgresDatabase>().getAttachedCatalogNameInDuckDB(),
             escapeSpecialChars(query));
     // Query to sniff the column names and types.
-    auto queryToExecuteInDuckDB = common::stringFormat(queryTemplate, "*") + " limit 1";
+    auto queryToExecuteInDuckDB = std::vformat(queryTemplate, std::make_format_args("*")) + " limit 1";
     auto& attachedPostgresDB = attachedDB->constCast<AttachedPostgresDatabase>();
     auto queryResult = attachedPostgresDB.executeQuery(queryToExecuteInDuckDB);
     std::vector<common::LogicalType> returnTypes;
@@ -64,7 +65,8 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
 
 std::unique_ptr<TableFuncSharedState> initSharedState(const TableFuncInitSharedStateInput& input) {
     auto scanBindData = input.bindData->constPtrCast<DuckDBScanBindData>();
-    auto finalQuery = stringFormat(scanBindData->query, scanBindData->getColumnsToSelect());
+    auto columnsToSelect = scanBindData->getColumnsToSelect();
+    auto finalQuery = std::vformat(scanBindData->query, std::make_format_args(columnsToSelect));
     auto result = scanBindData->connector.executeQuery(finalQuery);
     return std::make_unique<DuckDBScanSharedState>(std::move(result));
 }

@@ -1,3 +1,4 @@
+#include <format>
 #include "expression_evaluator/lambda_evaluator.h"
 
 #include "binder/expression/lambda_expression.h"
@@ -99,7 +100,7 @@ std::vector<idx_t> ListLambdaEvaluator::getParamIndices() {
         if (it != paramNames.end()) {
             index[i] = it - paramNames.begin();
         } else {
-            throw RuntimeException(stringFormat("Lambda paramName {} cannot found.", paramName));
+            throw RuntimeException(std::format("Lambda paramName {} cannot found.", paramName));
         }
     }
     return index;

@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <random>
+#include <format>
 
 #include "common/exception/test.h"
 #include "common/random_engine.h"
@@ -18,7 +19,7 @@ static std::unique_ptr<main::QueryResult> validateQuery(main::Connection& conn,
     std::string& query) {
     auto result = conn.query(query);
     if (!result->isSuccess()) {
-        throw Exception(stringFormat("Failed to execute statement: {}.\nError: {}", query,
+        throw Exception(std::format("Failed to execute statement: {}.\nError: {}", query,
             result->getErrorMessage()));
     }
     return result;
@@ -38,7 +39,7 @@ std::vector<uint32_t> SplitMultiCopyRandom::getLineEnds(std::string path) const 
     spdlog::info("RANDOM GENERATOR used seed: {} {}", seed[0], seed[1]);
     std::ifstream file(path);
     if (!file.is_open()) {
-        throw TestException(stringFormat("Error opening file: {}, errno: {}.", path, errno));
+        throw TestException(std::format("Error opening file: {}, errno: {}.", path, errno));
     }
     // determine # lines in each split file
     std::string line;
@@ -62,7 +63,7 @@ void SplitMultiCopyRandom::init() {
 
     const std::string tmpDir = TestHelper::getTempDir("multi_copy");
     auto totalFilePath = TestHelper::joinPath(tmpDir, tableName + ".csv");
-    auto loadQuery = stringFormat("COPY (LOAD FROM {} RETURN *) TO '{}';", source, totalFilePath);
+    auto loadQuery = std::format("COPY (LOAD FROM {} RETURN *) TO '{}';", source, totalFilePath);
     spdlog::info("QUERY: {}", loadQuery);
     validateQuery(connection, loadQuery);
 
@@ -78,14 +79,14 @@ void SplitMultiCopyRandom::init() {
         std::ofstream outfile(currFilePath);
         if (!outfile.is_open()) {
             throw TestException(
-                stringFormat("Error opening file: {}, errno: {}.", currFilePath, errno));
+                std::format("Error opening file: {}, errno: {}.", currFilePath, errno));
         }
         splitFilePaths.push_back(currFilePath);
         std::string line;
         for (; lineIdx < endLine; lineIdx++) {
             if (!getline(file, line)) {
                 throw TestException(
-                    stringFormat("Expected line number mismatch: {} to {}.", lineIdx, endLine));
+                    std::format("Expected line number mismatch: {} to {}.", lineIdx, endLine));
             }
             outfile << line << "\n";
         }
@@ -96,7 +97,7 @@ void SplitMultiCopyRandom::init() {
 
 void SplitMultiCopyRandom::run() {
     for (auto file : splitFilePaths) {
-        auto currQuery = stringFormat("COPY {} FROM \"{}\";", tableName, file);
+        auto currQuery = std::format("COPY {} FROM \"{}\";", tableName, file);
         spdlog::info("QUERY: {}", currQuery);
         validateQuery(connection, currQuery);
     }

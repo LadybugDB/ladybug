@@ -1,3 +1,4 @@
+#include <format>
 #include "common/exception/binder.h"
 #include "common/exception/runtime.h"
 #include "expression_evaluator/lambda_evaluator.h"
@@ -12,7 +13,7 @@ using namespace lbug::common;
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
     if (input.arguments[1]->expressionType != ExpressionType::LAMBDA) {
-        throw BinderException(stringFormat(
+        throw BinderException(std::format(
             "The second argument of LIST_REDUCE should be a lambda expression but got {}.",
             ExpressionTypeUtil::toString(input.arguments[1]->expressionType)));
     }

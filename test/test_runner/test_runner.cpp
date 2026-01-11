@@ -1,6 +1,7 @@
 #include "test_runner/test_runner.h"
 
 #include <fstream>
+#include <format>
 
 #include "common/assert.h"
 #include "common/exception/test.h"
@@ -42,7 +43,7 @@ void TestRunner::runBatchStatements(TestStatement& statement, Connection& conn,
     }
     std::ifstream file(cypherScript);
     if (!file.is_open()) {
-        throw Exception(stringFormat("Error opening file: {}, errno: {}.", cypherScript, errno));
+        throw Exception(std::format("Error opening file: {}, errno: {}.", cypherScript, errno));
     }
     std::string line;
     while (getline(file, line)) {

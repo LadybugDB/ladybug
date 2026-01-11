@@ -1,3 +1,4 @@
+#include <format>
 #include "processor/operator/ddl/create_type.h"
 
 #include "catalog/catalog.h"
@@ -19,7 +20,7 @@ void CreateType::executeInternal(ExecutionContext* context) {
     auto clientContext = context->clientContext;
     auto transaction = transaction::Transaction::Get(*clientContext);
     Catalog::Get(*clientContext)->createType(transaction, name, type.copy());
-    appendMessage(stringFormat("Type {}({}) has been created.", name, type.toString()),
+    appendMessage(std::format("Type {}({}) has been created.", name, type.toString()),
         storage::MemoryManager::Get(*clientContext));
 }
 

@@ -27,6 +27,7 @@
 #include <memoryapi.h>
 #include <windows.h>
 #include <winnt.h>
+#include <format>
 #endif
 
 using namespace lbug::common;
@@ -87,7 +88,7 @@ BufferManager::BufferManager(const std::string& databasePath, const std::string&
 
 void BufferManager::verifySizeParams(uint64_t bufferPoolSize, uint64_t maxDBSize) {
     if (bufferPoolSize < LBUG_PAGE_SIZE) {
-        throw BufferManagerException(stringFormat(
+        throw BufferManagerException(std::format(
             "The given buffer pool size should be at least {} bytes.", LBUG_PAGE_SIZE));
     }
     // We require at least two page groups, one for the main data file, and one for the shadow file.
@@ -336,7 +337,7 @@ bool BufferManager::claimAFrame(FileHandle& fileHandle, page_idx_t pageIdx,
         VirtualAlloc(getFrame(fileHandle, pageIdx), pageSizeToClaim, MEM_COMMIT, PAGE_READWRITE);
     if (result == NULL) {
         throw BufferManagerException(
-            stringFormat("VirtualAlloc MEM_COMMIT failed with error code {}: {}.", GetLastError(),
+            std::format("VirtualAlloc MEM_COMMIT failed with error code {}: {}.", GetLastError(),
                 std::system_category().message(GetLastError())));
     }
 #endif

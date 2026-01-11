@@ -1,6 +1,7 @@
 #include "optimizer/foreign_join_push_down_optimizer.h"
 
 #include <algorithm>
+#include <format>
 
 #include "binder/expression/property_expression.h"
 #include "binder/expression/variable_expression.h"
@@ -83,7 +84,7 @@ static std::string getNodeForeignDatabaseName(const NodeExpression* node,
     if (!attachedDB) {
         return "";
     }
-    return stringFormat("{}({})", dbName, attachedDB->getDBType());
+    return std::format("{}({})", dbName, attachedDB->getDBType());
 }
 
 // Helper to get foreign database name from a rel group entry
@@ -117,7 +118,7 @@ static std::string getRelForeignDatabaseName(const RelExpression* rel,
     if (!attachedDB) {
         return "";
     }
-    return stringFormat("{}({})", dbName, attachedDB->getDBType());
+    return std::format("{}({})", dbName, attachedDB->getDBType());
 }
 
 // Structure to hold extracted pattern info
@@ -338,7 +339,7 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
     std::string srcJoinCol, dstJoinCol;
     auto tableColumnNames = getForeignTableColumnNames(info.dbName, info.relTable, context);
     if (tableColumnNames.size() < 2) {
-        throw RuntimeException(stringFormat(
+        throw RuntimeException(std::format(
             "Foreign join push down optimizer: unable to retrieve column names for table '{}.{}', "
             "got {} columns but need at least 2 for join",
             info.dbName, info.relTable, tableColumnNames.size()));
@@ -377,11 +378,11 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
 
             if (propName == InternalKeyword::ID) {
                 // Internal ID maps to id column in external table
-                colExpr = stringFormat("{}.id", rawVarName);
-                colName = stringFormat("{}_id", rawVarName);
+                colExpr = std::format("{}.id", rawVarName);
+                colName = std::format("{}_id", rawVarName);
             } else {
-                colExpr = stringFormat("{}.{}", rawVarName, propName);
-                colName = stringFormat("{}_{}", rawVarName, propName);
+                colExpr = std::format("{}.{}", rawVarName, propName);
+                colName = std::format("{}_{}", rawVarName, propName);
             }
         } else {
             // For non-property expressions, parse the unique name to extract table alias and column
@@ -399,10 +400,10 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
                 auto underscorePos = prefix.find('_', 1); // Find second underscore
                 if (underscorePos != std::string::npos) {
                     auto rawVar = prefix.substr(underscorePos + 1); // "a", "c", etc.
-                    colExpr = stringFormat("{}.{}", rawVar, colNamePart);
+                    colExpr = std::format("{}.{}", rawVar, colNamePart);
                 } else {
                     // Fallback: use the whole prefix
-                    colExpr = stringFormat("{}.{}", prefix, colNamePart);
+                    colExpr = std::format("{}.{}", prefix, colNamePart);
                 }
 
                 // Column name is the sanitized unique name
@@ -419,14 +420,14 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
         std::replace(colName.begin(), colName.end(), '.', '_');
 
         // Add AS clause to ensure consistent column naming
-        selectClause += stringFormat("{} AS {}", colExpr, colName);
+        selectClause += std::format("{} AS {}", colExpr, colName);
         columnNames.push_back(colName);
     }
 
     // Build the full query with proper JOIN syntax
     // Join on id columns: srcNode.id = rel.first/second column and rel.second/first column =
     // dstNode.id
-    std::string query = stringFormat("{} FROM {} {} "
+    std::string query = std::format("{} FROM {} {} "
                                      "JOIN {} {} ON {}.id = {}.{} "
                                      "JOIN {} {} ON {}.{} = {}.id",
         selectClause, info.srcTable, srcAlias, info.relTable, relAlias, srcAlias, relAlias,
@@ -461,9 +462,9 @@ static std::shared_ptr<LogicalOperator> createJoinTableFunctionCall(
 
             // Use lowercase "id" for the ID property to match user-facing format
             if (propName == InternalKeyword::ID) {
-                uniqueName = stringFormat("{}.id", varName);
+                uniqueName = std::format("{}.id", varName);
             } else {
-                uniqueName = stringFormat("{}.{}", varName, propName);
+                uniqueName = std::format("{}.{}", varName, propName);
             }
         } else {
             uniqueName = col->getUniqueName();

@@ -1,6 +1,7 @@
 #include "common/types/value/value.h"
 
 #include <utility>
+#include <format>
 
 #include "common/exception/binder.h"
 #include "common/null_buffer.h"
@@ -928,7 +929,7 @@ void Value::validateType(LogicalTypeID targetTypeID) const {
     if (dataType.getLogicalTypeID() == targetTypeID) {
         return;
     }
-    throw BinderException(stringFormat("{} has data type {} but {} was expected.", toString(),
+    throw BinderException(std::format("{} has data type {} but {} was expected.", toString(),
         dataType.toString(), LogicalTypeUtils::toString(targetTypeID)));
 }
 

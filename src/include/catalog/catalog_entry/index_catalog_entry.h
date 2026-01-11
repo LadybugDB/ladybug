@@ -1,4 +1,5 @@
 #pragma once
+#include <format>
 
 #include "catalog_entry.h"
 #include "common/copier_config/file_scan_info.h"
@@ -51,13 +52,13 @@ struct LBUG_API IndexAuxInfo {
 class LBUG_API IndexCatalogEntry final : public CatalogEntry {
 public:
     static std::string getInternalIndexName(common::table_id_t tableID, std::string indexName) {
-        return common::stringFormat("{}_{}", tableID, std::move(indexName));
+        return std::format("{}_{}", tableID, std::move(indexName));
     }
 
     IndexCatalogEntry(std::string type, common::table_id_t tableID, std::string indexName,
         std::vector<common::property_id_t> properties, std::unique_ptr<IndexAuxInfo> auxInfo)
         : CatalogEntry{CatalogEntryType::INDEX_ENTRY,
-              common::stringFormat("{}_{}", tableID, indexName)},
+              std::format("{}_{}", tableID, indexName)},
           type{std::move(type)}, tableID{tableID}, indexName{std::move(indexName)},
           propertyIDs{std::move(properties)}, auxInfo{std::move(auxInfo)} {}
 

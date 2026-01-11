@@ -1,4 +1,5 @@
 #include <fstream>
+#include <format>
 
 #include "api_test/private_api_test.h"
 #include "common/exception/runtime.h"
@@ -37,7 +38,7 @@ public:
         conn->query("CALL auto_checkpoint=false");
         conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
         for (auto i = 0; i < 5000; i++) {
-            conn->query(stringFormat("CREATE (a:test {{id: {}, name: 'name_{}'}});", i, i));
+            conn->query(std::format("CREATE (a:test {{id: {}, name: 'name_{}'}});", i, i));
         }
         auto context = getClientContext(*conn);
         flakyCheckpointer.setCheckpointer(*context);

@@ -1,3 +1,4 @@
+#include <format>
 #include "catalog/catalog.h"
 
 #include "binder/ddl/bound_create_sequence_info.h"
@@ -13,7 +14,6 @@
 #include "common/exception/runtime.h"
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
-#include "common/string_format.h"
 #include "extension/extension_manager.h"
 #include "function/function_collection.h"
 #include "main/client_context.h"
@@ -91,7 +91,7 @@ TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
     // LCOV_EXCL_START
     if (result == nullptr) {
         throw RuntimeException(
-            stringFormat("Cannot find table catalog entry with id {}.", std::to_string(tableID)));
+            std::format("Cannot find table catalog entry with id {}.", std::to_string(tableID)));
     }
     // LCOV_EXCL_STOP
     return result->ptrCast<TableCatalogEntry>();
@@ -102,7 +102,7 @@ TableCatalogEntry* Catalog::getTableCatalogEntry(const Transaction* transaction,
     CatalogEntry* result = nullptr;
     if (!tables->containsEntry(transaction, tableName)) {
         if (!useInternal) {
-            throw CatalogException(stringFormat("{} does not exist in catalog.", tableName));
+            throw CatalogException(std::format("{} does not exist in catalog.", tableName));
         } else {
             result = internalTables->getEntry(transaction, tableName);
         }
@@ -286,7 +286,7 @@ void Catalog::createType(Transaction* transaction, std::string name, LogicalType
 
 static std::string getInstallExtensionMessage(std::string_view extensionName,
     std::string_view entryType) {
-    return stringFormat("This {} exists in the {} "
+    return std::format("This {} exists in the {} "
                         "extension. You can install and load the "
                         "extension by running 'INSTALL {}; LOAD EXTENSION {};'.",
         entryType, extensionName, extensionName, extensionName);
@@ -294,11 +294,11 @@ static std::string getInstallExtensionMessage(std::string_view extensionName,
 
 static std::string getTypeDoesNotExistMessage(std::string_view entryName) {
     std::string message =
-        stringFormat("{} is neither an internal type nor a user defined type.", entryName);
+        std::format("{} is neither an internal type nor a user defined type.", entryName);
     const auto matchingExtensionFunction =
         extension::ExtensionManager::lookupExtensionsByTypeName(entryName);
     if (matchingExtensionFunction.has_value()) {
-        message = stringFormat("{} {}", message,
+        message = std::format("{} {}", message,
             getInstallExtensionMessage(matchingExtensionFunction->extensionName, "type"));
     }
     return message;
@@ -403,7 +403,7 @@ void Catalog::dropIndex(Transaction* transaction, table_id_t tableID,
 void Catalog::dropIndex(Transaction* transaction, oid_t indexOID) {
     const auto entry = indexes->getEntryOfOID(transaction, indexOID);
     if (entry == nullptr) {
-        throw CatalogException{stringFormat("Index with OID {} does not exist.", indexOID)};
+        throw CatalogException{std::format("Index with OID {} does not exist.", indexOID)};
     }
     indexes->dropEntry(transaction, entry->getName(), indexOID);
 }
@@ -421,18 +421,18 @@ void Catalog::addFunction(Transaction* transaction, CatalogEntryType entryType, 
     function::function_set functionSet, bool isInternal) {
     auto& catalogSet = isInternal ? internalFunctions : functions;
     if (catalogSet->containsEntry(transaction, name)) {
-        throw CatalogException{stringFormat("function {} already exists.", name)};
+        throw CatalogException{std::format("function {} already exists.", name)};
     }
     catalogSet->createEntry(transaction,
         std::make_unique<FunctionCatalogEntry>(entryType, std::move(name), std::move(functionSet)));
 }
 
 static std::string getFunctionDoesNotExistMessage(std::string_view entryName) {
-    std::string message = stringFormat("function {} does not exist.", entryName);
+    std::string message = std::format("function {} does not exist.", entryName);
     const auto matchingExtensionFunction =
         extension::ExtensionManager::lookupExtensionsByFunctionName(entryName);
     if (matchingExtensionFunction.has_value()) {
-        message = stringFormat("function {} is not defined. {}", entryName,
+        message = std::format("function {} is not defined. {}", entryName,
             getInstallExtensionMessage(matchingExtensionFunction->extensionName, "function"));
     }
     return message;
@@ -440,7 +440,7 @@ static std::string getFunctionDoesNotExistMessage(std::string_view entryName) {
 
 void Catalog::dropFunction(Transaction* transaction, const std::string& name) {
     if (!containsFunction(transaction, name)) {
-        throw CatalogException{stringFormat("function {} doesn't exist.", name)};
+        throw CatalogException{std::format("function {} doesn't exist.", name)};
     }
     auto entry = getFunctionEntry(transaction, name);
     functions->dropEntry(transaction, name, entry->getOID());
@@ -503,7 +503,7 @@ ScalarMacroCatalogEntry* Catalog::getScalarMacroCatalogEntry(const Transaction* 
     auto result = functions->getEntryOfOID(transaction, macroID);
     if (result == nullptr) {
         throw RuntimeException(
-            stringFormat("Cannot find macro catalog entry with id {}.", std::to_string(macroID)));
+            std::format("Cannot find macro catalog entry with id {}.", std::to_string(macroID)));
     }
 
     return result->ptrCast<ScalarMacroCatalogEntry>();
@@ -520,7 +520,7 @@ std::vector<std::string> Catalog::getMacroNames(const Transaction* transaction) 
 
 void Catalog::dropMacro(Transaction* transaction, std::string& name) {
     if (!containsMacro(transaction, name)) {
-        throw CatalogException{stringFormat("Marco {} doesn't exist.", name)};
+        throw CatalogException{std::format("Marco {} doesn't exist.", name)};
     }
     auto entry = getFunctionEntry(transaction, name);
     macros->dropEntry(transaction, name, entry->getOID());

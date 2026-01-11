@@ -1,10 +1,10 @@
+#include <format>
 #include "processor/operator/persistent/reader/parquet/parquet_reader.h"
 
 #include "binder/binder.h"
 #include "common/exception/binder.h"
 #include "common/exception/copy.h"
 #include "common/file_system/virtual_file_system.h"
-#include "common/string_format.h"
 #include "function/table/bind_data.h"
 #include "function/table/bind_input.h"
 #include "function/table/table_function.h"
@@ -154,7 +154,7 @@ bool ParquetReader::scanInternal(ParquetReaderScanState& state, DataChunk& resul
         // LCOV_EXCL_START
         if (rowsRead != result.state->getSelVector().getSelSize()) {
             throw CopyException(
-                stringFormat("Mismatch in parquet read for column {}, expected {} rows, got {}",
+                std::format("Mismatch in parquet read for column {}, expected {} rows, got {}",
                     fileColIdx, result.state->getSelVector().getSelSize(), rowsRead));
         }
         // LCOV_EXCL_STOP
@@ -181,7 +181,7 @@ void ParquetReader::initMetadata() {
     // LCOV_EXCL_START
     if (fileSize < 12) {
         throw CopyException{
-            stringFormat("File {} is too small to be a Parquet file", filePath.c_str())};
+            std::format("File {} is too small to be a Parquet file", filePath.c_str())};
     }
     // LCOV_EXCL_STOP
 
@@ -195,18 +195,18 @@ void ParquetReader::initMetadata() {
     // LCOV_EXCL_START
     if (memcmp(buf.ptr + 4, "PAR1", 4) != 0) {
         if (memcmp(buf.ptr + 4, "PARE", 4) == 0) {
-            throw CopyException{stringFormat(
+            throw CopyException{std::format(
                 "Encrypted Parquet files are not supported for file {}", fileInfo->path.c_str())};
         }
         throw CopyException{
-            stringFormat("No magic bytes found at the end of file {}", fileInfo->path.c_str())};
+            std::format("No magic bytes found at the end of file {}", fileInfo->path.c_str())};
     }
     // LCOV_EXCL_STOP
     // Read four-byte footer length from just before the end magic bytes.
     auto footerLen = *reinterpret_cast<uint32_t*>(buf.ptr);
     // LCOV_EXCL_START
     if (footerLen == 0 || fileSize < 12 + footerLen) {
-        throw CopyException{stringFormat("Footer length error in file {}", fileInfo->path.c_str())};
+        throw CopyException{std::format("Footer length error in file {}", fileInfo->path.c_str())};
     }
     // LCOV_EXCL_STOP
     auto metadataPos = fileSize - (footerLen + 8);

@@ -1,3 +1,4 @@
+#include <format>
 #include "reader/buffered_json_reader.h"
 
 #include "common/file_system/virtual_file_system.h"
@@ -69,7 +70,7 @@ void BufferedJsonReader::throwParseError(const yyjson_read_err& err, bool comple
     const processor::WarningSourceData& errorData, processor::LocalFileErrorHandler* errorHandler,
     const std::string& extra) const {
     errorHandler->handleError(
-        processor::CopyFromFileError{common::stringFormat("Malformed JSON: {}. {}", err.msg, extra),
+        processor::CopyFromFileError{std::format("Malformed JSON: {}. {}", err.msg, extra),
             errorData, completedParsingObject});
 }
 

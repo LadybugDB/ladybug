@@ -2,7 +2,6 @@
 
 #include "common/assert.h"
 #include "common/exception/io.h"
-#include "common/string_format.h"
 #include "common/string_utils.h"
 #include "common/system_message.h"
 #include "glob/glob.hpp"
@@ -24,6 +23,7 @@
 #include <fcntl.h>
 
 #include <cstring>
+#include <format>
 
 #include "storage/storage_utils.h"
 
@@ -111,7 +111,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
     HANDLE handle = CreateFileA(fullPath.c_str(), dwDesiredAccess, dwShareMode, nullptr,
         dwCreationDisposition, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
-        throw IOException(stringFormat("Cannot open file. path: {} - Error {}: {}", fullPath,
+        throw IOException(std::format("Cannot open file. path: {} - Error {}: {}", fullPath,
             GetLastError(), std::system_category().message(GetLastError())));
     }
     if (flags.lockType != FileLockType::NO_LOCK) {
@@ -132,7 +132,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
 #else
     int fd = open(fullPath.c_str(), openFlags, 0644);
     if (fd == -1) {
-        throw IOException(stringFormat("Cannot open file {}: {}", fullPath, posixErrMessage()));
+        throw IOException(std::format("Cannot open file {}: {}", fullPath, posixErrMessage()));
     }
     if (flags.lockType != FileLockType::NO_LOCK) {
         struct flock fl {};
@@ -179,7 +179,7 @@ std::vector<std::string> LocalFileSystem::glob(main::ClientContext* context,
             if (fileSearchPath != "") {
                 auto searchPaths = StringUtils::split(fileSearchPath, ",");
                 for (auto& searchPath : searchPaths) {
-                    pathsToGlob.push_back(stringFormat("{}/{}", searchPath, path));
+                    pathsToGlob.push_back(std::format("{}/{}", searchPath, path));
                 }
             }
         }
@@ -201,7 +201,7 @@ void LocalFileSystem::overwriteFile(const std::string& from, const std::string& 
     if (!std::filesystem::copy_file(from, to, std::filesystem::copy_options::overwrite_existing,
             errorCode)) {
         // LCOV_EXCL_START
-        throw IOException(stringFormat("Error copying file {} to {}.  ErrorMessage: {}", from, to,
+        throw IOException(std::format("Error copying file {} to {}.  ErrorMessage: {}", from, to,
             errorCode.message()));
         // LCOV_EXCL_STOP
     }
@@ -214,7 +214,7 @@ void LocalFileSystem::copyFile(const std::string& from, const std::string& to) {
     std::error_code errorCode;
     if (!std::filesystem::copy_file(from, to, std::filesystem::copy_options::none, errorCode)) {
         // LCOV_EXCL_START
-        throw IOException(stringFormat("Error copying file {} to {}.  ErrorMessage: {}", from, to,
+        throw IOException(std::format("Error copying file {} to {}.  ErrorMessage: {}", from, to,
             errorCode.message()));
         // LCOV_EXCL_STOP
     }
@@ -224,7 +224,7 @@ void LocalFileSystem::createDir(const std::string& dir) const {
     try {
         if (std::filesystem::exists(dir)) {
             // LCOV_EXCL_START
-            throw IOException(stringFormat("Directory {} already exists.", dir));
+            throw IOException(std::format("Directory {} already exists.", dir));
             // LCOV_EXCL_STOP
         }
         auto directoryToCreate = dir;
@@ -242,19 +242,19 @@ void LocalFileSystem::createDir(const std::string& dir) const {
         if (!std::filesystem::create_directories(directoryToCreate, errCode)) {
             // LCOV_EXCL_START
             throw IOException(
-                stringFormat("Directory {} cannot be created. Check if it exists and remove it.",
+                std::format("Directory {} cannot be created. Check if it exists and remove it.",
                     directoryToCreate));
             // LCOV_EXCL_STOP
         }
         if (errCode) {
             // LCOV_EXCL_START
-            throw IOException(stringFormat("Failed to create directory: {}, error message: {}.",
+            throw IOException(std::format("Failed to create directory: {}, error message: {}.",
                 dir, errCode.message()));
             // LCOV_EXCL_STOP
         }
     } catch (std::exception& e) {
         // LCOV_EXCL_START
-        throw IOException(stringFormat("Failed to create directory {} due to: {}", dir, e.what()));
+        throw IOException(std::format("Failed to create directory {} due to: {}", dir, e.what()));
         // LCOV_EXCL_STOP
     }
 }
@@ -298,7 +298,7 @@ static bool isExtensionFile(const main::ClientContext* context, const std::strin
 void LocalFileSystem::removeFileIfExists(const std::string& path,
     const main::ClientContext* context) {
     if (!isAllowedDeletionPath(path, dbPath) && !isExtensionFile(context, path)) {
-        throw IOException(stringFormat(
+        throw IOException(std::format(
             "Error: Path {} is not within the allowed list of files to be removed.", path));
     }
     if (!fileOrPathExists(path)) {
@@ -313,7 +313,7 @@ void LocalFileSystem::removeFileIfExists(const std::string& path,
     }
     if (!success) {
         // LCOV_EXCL_START
-        throw IOException(stringFormat("Error removing directory or file {}.  Error Message: {}",
+        throw IOException(std::format("Error removing directory or file {}.  Error Message: {}",
             path, errCode.message()));
         // LCOV_EXCL_STOP
     }
@@ -382,13 +382,13 @@ void LocalFileSystem::readFromFile(FileInfo& fileInfo, void* buffer, uint64_t nu
     if (!ReadFile((HANDLE)localFileInfo->handle, buffer, numBytes, &numBytesRead, &overlapped)) {
         auto error = GetLastError();
         throw IOException(
-            stringFormat("Cannot read from file: {} handle: {} "
+            std::format("Cannot read from file: {} handle: {} "
                          "numBytesRead: {} numBytesToRead: {} position: {}. Error {}: {}",
                 fileInfo.path, (intptr_t)localFileInfo->handle, numBytesRead, numBytes, position,
                 error, std::system_category().message(error)));
     }
     if (numBytesRead != numBytes && fileInfo.getFileSize() != position + numBytesRead) {
-        throw IOException(stringFormat("Cannot read from file: {} handle: {} "
+        throw IOException(std::format("Cannot read from file: {} handle: {} "
                                        "numBytesRead: {} numBytesToRead: {} position: {}",
             fileInfo.path, (intptr_t)localFileInfo->handle, numBytesRead, numBytes, position));
     }
@@ -397,7 +397,7 @@ void LocalFileSystem::readFromFile(FileInfo& fileInfo, void* buffer, uint64_t nu
     if (static_cast<uint64_t>(numBytesRead) != numBytes &&
         localFileInfo->getFileSize() != position + numBytesRead) {
         // LCOV_EXCL_START
-        throw IOException(stringFormat("Cannot read from file: {} fileDescriptor: {} "
+        throw IOException(std::format("Cannot read from file: {} fileDescriptor: {} "
                                        "numBytesRead: {} numBytesToRead: {} position: {}",
             fileInfo.path, localFileInfo->fd, numBytesRead, numBytes, position));
         // LCOV_EXCL_STOP
@@ -435,7 +435,7 @@ void LocalFileSystem::writeFile(FileInfo& fileInfo, const uint8_t* buffer, uint6
                 &numBytesWritten, &overlapped)) {
             auto error = GetLastError();
             throw IOException(
-                stringFormat("Cannot write to file. path: {} handle: {} offsetToWrite: {} "
+                std::format("Cannot write to file. path: {} handle: {} offsetToWrite: {} "
                              "numBytesToWrite: {} numBytesWritten: {}. Error {}: {}.",
                     fileInfo.path, (intptr_t)localFileInfo->handle, offset, numBytesToWrite,
                     numBytesWritten, error, std::system_category().message(error)));
@@ -446,7 +446,7 @@ void LocalFileSystem::writeFile(FileInfo& fileInfo, const uint8_t* buffer, uint6
         if (numBytesWritten != static_cast<int64_t>(numBytesToWrite)) {
             // LCOV_EXCL_START
             throw IOException(
-                stringFormat("Cannot write to file. path: {} fileDescriptor: {} offsetToWrite: {} "
+                std::format("Cannot write to file. path: {} fileDescriptor: {} offsetToWrite: {} "
                              "numBytesToWrite: {} numBytesWritten: {}. Error: {}",
                     fileInfo.path, localFileInfo->fd, offset, numBytesToWrite, numBytesWritten,
                     posixErrMessage()));
@@ -465,7 +465,7 @@ void LocalFileSystem::syncFile(const FileInfo& fileInfo) const {
     // Note that `FlushFileBuffers` returns 0 when fails, while `fsync` returns 0 when succeeds.
     if (FlushFileBuffers((HANDLE)localFileInfo->handle) == 0) {
         auto error = GetLastError();
-        throw IOException(stringFormat("Failed to sync file {}. Error {}: {}", fileInfo.path, error,
+        throw IOException(std::format("Failed to sync file {}. Error {}: {}", fileInfo.path, error,
             std::system_category().message(error)));
     }
 #else
@@ -481,7 +481,7 @@ void LocalFileSystem::syncFile(const FileInfo& fileInfo) const {
             throw IOException("Fatal error: fsync failed!");
         }
         throw IOException(
-            stringFormat("Failed to sync file {}: {}", fileInfo.path, posixErrMessage()));
+            std::format("Failed to sync file {}: {}", fileInfo.path, posixErrMessage()));
         // LCOV_EXCL_STOP
     }
 #endif
@@ -492,7 +492,7 @@ void LocalFileSystem::syncFile(const FileInfo& fileInfo) const {
     syncSuccess = fsync(localFileInfo->fd) == 0; // Sync file data + all metadata.
 #endif
     if (!syncSuccess) {
-        throw IOException(stringFormat("Failed to sync file {}.", fileInfo.path));
+        throw IOException(std::format("Failed to sync file {}.", fileInfo.path));
     }
 #endif
 }
@@ -520,14 +520,14 @@ void LocalFileSystem::truncate(FileInfo& fileInfo, uint64_t size) const {
     if (SetFilePointer((HANDLE)localFileInfo->handle, size & 0xffffffff, offsetHighPtr,
             FILE_BEGIN) == INVALID_SET_FILE_POINTER) {
         auto error = GetLastError();
-        throw IOException(stringFormat("Cannot set file pointer for file: {} handle: {} "
+        throw IOException(std::format("Cannot set file pointer for file: {} handle: {} "
                                        "new position: {}. Error {}: {}",
             fileInfo.path, (intptr_t)localFileInfo->handle, size, error,
             std::system_category().message(error)));
     }
     if (!SetEndOfFile((HANDLE)localFileInfo->handle)) {
         auto error = GetLastError();
-        throw IOException(stringFormat("Cannot truncate file: {} handle: {} "
+        throw IOException(std::format("Cannot truncate file: {} handle: {} "
                                        "size: {}. Error {}: {}",
             fileInfo.path, (intptr_t)localFileInfo->handle, size, error,
             std::system_category().message(error)));
@@ -536,7 +536,7 @@ void LocalFileSystem::truncate(FileInfo& fileInfo, uint64_t size) const {
     if (ftruncate(localFileInfo->fd, size) < 0) {
         // LCOV_EXCL_START
         throw IOException(
-            stringFormat("Failed to truncate file {}: {}", fileInfo.path, posixErrMessage()));
+            std::format("Failed to truncate file {}: {}", fileInfo.path, posixErrMessage()));
         // LCOV_EXCL_STOP
     }
 #endif
@@ -548,14 +548,14 @@ uint64_t LocalFileSystem::getFileSize(const FileInfo& fileInfo) const {
     LARGE_INTEGER size;
     if (!GetFileSizeEx((HANDLE)localFileInfo->handle, &size)) {
         auto error = GetLastError();
-        throw IOException(stringFormat("Cannot read size of file. path: {} - Error {}: {}",
+        throw IOException(std::format("Cannot read size of file. path: {} - Error {}: {}",
             fileInfo.path, error, systemErrMessage(error)));
     }
     return size.QuadPart;
 #else
     struct stat s {};
     if (fstat(localFileInfo->fd, &s) == -1) {
-        throw IOException(stringFormat("Cannot read size of file. path: {} - Error {}: {}",
+        throw IOException(std::format("Cannot read size of file. path: {} - Error {}: {}",
             fileInfo.path, errno, posixErrMessage()));
     }
     KU_ASSERT(s.st_size >= 0);

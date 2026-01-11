@@ -1,3 +1,4 @@
+#include <format>
 #include "storage/predicate/constant_predicate.h"
 
 #include "common/type_utils.h"
@@ -84,11 +85,11 @@ std::string ColumnConstantPredicate::toString() {
         value.getDataType().getLogicalTypeID() == LogicalTypeID::TIMESTAMP ||
         value.getDataType().getLogicalTypeID() == LogicalTypeID::DATE ||
         value.getDataType().getLogicalTypeID() == LogicalTypeID::INTERVAL) {
-        valStr = stringFormat("'{}'", value.toString());
+        valStr = std::format("'{}'", value.toString());
     } else {
         valStr = value.toString();
     }
-    return stringFormat("{} {}", ColumnPredicate::toString(), valStr);
+    return std::format("{} {}", ColumnPredicate::toString(), valStr);
 }
 
 } // namespace storage

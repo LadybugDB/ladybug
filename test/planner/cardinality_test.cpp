@@ -1,3 +1,4 @@
+#include <format>
 #include "graph_test/private_graph_test.h"
 #include "planner/operator/logical_plan_util.h"
 #include "test_runner/test_runner.h"
@@ -122,14 +123,14 @@ TEST_F(CardinalityTest, TestOperators) {
 
     // Load From Parquet
     {
-        auto plan = getRoot(common::stringFormat(
+        auto plan = getRoot(std::format(
             "LOAD FROM \"{}/dataset/demo-db/parquet/user.parquet\" RETURN *", LBUG_ROOT_DIRECTORY));
         EXPECT_EQ(4, plan->getCardinality());
     }
 
     // Load From Numpy
     {
-        auto plan = getRoot(common::stringFormat(
+        auto plan = getRoot(std::format(
             "LOAD FROM \"{}/dataset/npy-1d/one_dim_int64.npy\" RETURN *", LBUG_ROOT_DIRECTORY));
         EXPECT_EQ(3, plan->getCardinality());
     }

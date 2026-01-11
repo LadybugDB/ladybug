@@ -1,4 +1,5 @@
 #pragma once
+#include <format>
 
 #include "connector/duckdb_connector.h"
 #include "main/attached_database.h"
@@ -23,7 +24,7 @@ public:
 
     std::vector<std::string> getTableColumnNames(const std::string& tableName) const override {
         std::string query =
-            common::stringFormat("SELECT column_name FROM information_schema.columns WHERE "
+            std::format("SELECT column_name FROM information_schema.columns WHERE "
                                  "table_name = '{}' ORDER BY ordinal_position",
                 tableName);
 

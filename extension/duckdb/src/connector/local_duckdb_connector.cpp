@@ -1,3 +1,4 @@
+#include <format>
 #include "connector/local_duckdb_connector.h"
 
 #include "common/exception/runtime.h"
@@ -11,7 +12,7 @@ void LocalDuckDBConnector::connect(const std::string& dbPath, const std::string&
     const std::string& /*schemaName*/, main::ClientContext* context) {
     if (!common::VirtualFileSystem::GetUnsafe(*context)->fileOrPathExists(dbPath, context)) {
         throw common::RuntimeException{
-            common::stringFormat("Given duckdb database path {} does not exist.", dbPath)};
+            std::format("Given duckdb database path {} does not exist.", dbPath)};
     }
     duckdb::DBConfig dbConfig{true /* isReadOnly */};
     instance = std::make_unique<duckdb::DuckDB>(dbPath, &dbConfig);

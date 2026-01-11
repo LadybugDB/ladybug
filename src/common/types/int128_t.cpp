@@ -10,6 +10,7 @@
 #include "function/cast/functions/numeric_limits.h"
 #include "function/hash/hash_functions.h"
 #include <bit>
+#include <format>
 
 namespace lbug::common {
 
@@ -744,7 +745,7 @@ int128_t::operator uint8_t() const {
 int128_t::operator double() const {
     double result = NAN;
     if (!Int128_t::tryCast(*this, result)) { // LCOV_EXCL_START
-        throw common::OverflowException(common::stringFormat("Value {} is not within DOUBLE range",
+        throw common::OverflowException(std::format("Value {} is not within DOUBLE range",
             common::TypeUtils::toString(*this)));
     } // LCOV_EXCL_STOP
     return result;
@@ -753,7 +754,7 @@ int128_t::operator double() const {
 int128_t::operator float() const {
     float result = NAN;
     if (!Int128_t::tryCast(*this, result)) { // LCOV_EXCL_START
-        throw common::OverflowException(common::stringFormat("Value {} is not within FLOAT range",
+        throw common::OverflowException(std::format("Value {} is not within FLOAT range",
             common::TypeUtils::toString(*this)));
     } // LCOV_EXCL_STOP
     return result;
@@ -762,7 +763,7 @@ int128_t::operator float() const {
 int128_t::operator uint128_t() const {
     uint128_t result{};
     if (!Int128_t::tryCast(*this, result)) {
-        throw common::OverflowException(common::stringFormat(
+        throw common::OverflowException(std::format(
             "Cannot cast negative INT128 value {} to UINT128", common::TypeUtils::toString(*this)));
     }
     return result;

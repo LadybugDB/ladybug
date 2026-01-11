@@ -1,3 +1,4 @@
+#include <format>
 #include "function/cast/vector_cast_functions.h"
 
 #include "binder/expression/expression_util.h"
@@ -61,7 +62,7 @@ static void resolveNestedVector(std::shared_ptr<ValueVector> inputVector, ValueV
                        resultType->getLogicalTypeID() == LogicalTypeID::STRUCT) ||
                    CastArrayHelper::isUnionSpecialCast(*inputType, *resultType)) {
             // Check if struct type can be cast
-            auto errorMsg = stringFormat("Unsupported casting function from {} to {}.",
+            auto errorMsg = std::format("Unsupported casting function from {} to {}.",
                 inputType->toString(), resultType->toString());
             // Check if two structs have the same number of fields
             if (StructType::getNumFields(*inputType) != StructType::getNumFields(*resultType)) {
@@ -98,7 +99,7 @@ static void resolveNestedVector(std::shared_ptr<ValueVector> inputVector, ValueV
                 for (auto i = 0u; i < numFieldsSrc; ++i) {
                     const auto& fieldName = UnionType::getFieldName(*inputType, i);
                     if (!UnionType::hasField(*resultType, fieldName)) {
-                        throw ConversionException{stringFormat(
+                        throw ConversionException{std::format(
                             "Cannot cast from {} to {}, target type is missing field '{}'.",
                             inputType->toString(), resultType->toString(), fieldName)};
                     }
@@ -106,7 +107,7 @@ static void resolveNestedVector(std::shared_ptr<ValueVector> inputVector, ValueV
                     const auto& fieldTypeDst = UnionType::getFieldType(*resultType, fieldName);
                     if (!CastFunction::hasImplicitCast(fieldTypeSrc, fieldTypeDst)) {
                         throw ConversionException{
-                            stringFormat("Unsupported casting function from {} to {}.",
+                            std::format("Unsupported casting function from {} to {}.",
                                 fieldTypeSrc.toString(), fieldTypeDst.toString())};
                     }
                     auto dstTag = UnionType::getFieldIdx(*resultType, fieldName);
@@ -439,7 +440,7 @@ static std::unique_ptr<ScalarFunction> bindCastFromStringFunction(const std::str
     } break;
     default:
         throw ConversionException{
-            stringFormat("Unsupported casting function from STRING to {}.", targetType.toString())};
+            std::format("Unsupported casting function from STRING to {}.", targetType.toString())};
     }
     return std::make_unique<ScalarFunction>(functionName,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING}, targetType.getLogicalTypeID(), execFunc);
@@ -676,7 +677,7 @@ static std::unique_ptr<ScalarFunction> bindCastToNumericFunction(const std::stri
         }
     } break;
     default:
-        throw ConversionException{stringFormat("Unsupported casting function from {} to {}.",
+        throw ConversionException{std::format("Unsupported casting function from {} to {}.",
             sourceType.toString(), targetType.toString())};
     }
     return std::make_unique<ScalarFunction>(functionName,
@@ -702,7 +703,7 @@ static union_field_idx_t findUnionMinCostTag(const LogicalType& sourceType,
     }
     if (minCastCost == UNDEFINED_CAST_COST) {
         throw ConversionException{
-            stringFormat("Cannot cast from {} to {}, target type has no compatible field.",
+            std::format("Cannot cast from {} to {}, target type has no compatible field.",
                 sourceType.toString(), unionType.toString())};
     }
     return minCostTag;
@@ -747,7 +748,7 @@ static std::unique_ptr<ScalarFunction> bindCastBetweenNested(const std::string& 
             std::vector<LogicalTypeID>{sourceType.getLogicalTypeID()},
             targetType.getLogicalTypeID(), nestedTypesCastExecFunction);
     }
-    throw ConversionException{stringFormat("Unsupported casting function from {} to {}.",
+    throw ConversionException{std::format("Unsupported casting function from {} to {}.",
         LogicalTypeUtils::toString(sourceType.getLogicalTypeID()),
         LogicalTypeUtils::toString(targetType.getLogicalTypeID()))};
 }
@@ -772,7 +773,7 @@ static std::unique_ptr<ScalarFunction> bindCastToDateFunction(const std::string&
         break;
     // LCOV_EXCL_START
     default:
-        throw ConversionException{stringFormat("Unsupported casting function from {} to {}.",
+        throw ConversionException{std::format("Unsupported casting function from {} to {}.",
             sourceType.toString(), dstType.toString())};
         // LCOV_EXCL_END
     }
@@ -806,7 +807,7 @@ static std::unique_ptr<ScalarFunction> bindCastToTimestampFunction(const std::st
             EXECUTOR>;
     } break;
     default:
-        throw ConversionException{stringFormat("Unsupported casting function from {} to {}.",
+        throw ConversionException{std::format("Unsupported casting function from {} to {}.",
             sourceType.toString(), dstType.toString())};
     }
     return std::make_unique<ScalarFunction>(functionName,
@@ -950,7 +951,7 @@ std::unique_ptr<ScalarFunction> CastFunction::bindCastFunction(const std::string
             LogicalType::STRING());
     }
     default: {
-        throw ConversionException(stringFormat("Unsupported casting function from {} to {}.",
+        throw ConversionException(std::format("Unsupported casting function from {} to {}.",
             sourceType.toString(), targetType.toString()));
     }
     }
@@ -1160,7 +1161,7 @@ static std::unique_ptr<FunctionBindData> castBindFunc(ScalarBindFuncInput input)
     KU_ASSERT(input.arguments.size() == 2);
     // Bind target type.
     if (input.arguments[1]->expressionType != ExpressionType::LITERAL) {
-        throw BinderException(stringFormat("Second parameter of CAST function must be a literal."));
+        throw BinderException(std::format("Second parameter of CAST function must be a literal."));
     }
     auto literalExpr = input.arguments[1]->constPtrCast<LiteralExpression>();
     auto targetTypeStr = literalExpr->getValue().getValue<std::string>();

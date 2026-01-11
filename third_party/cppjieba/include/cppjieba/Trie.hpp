@@ -18,13 +18,6 @@ struct DictUnit {
   string tag;
 }; // struct DictUnit
 
-// for debugging
-// inline ostream & operator << (ostream& os, const DictUnit& unit) {
-//   string s;
-//   s << unit.word;
-//   return os << StringFormat("%s %s %.3lf", s.c_str(), unit.tag.c_str(), unit.weight);
-// }
-
 struct Dag {
   RuneStr runestr;
   // [offset, nexts.first]

@@ -1,4 +1,5 @@
 #pragma once
+#include <format>
 
 #include "common/case_insensitive_map.h"
 #include "common/constants.h"
@@ -53,13 +54,13 @@ struct CSVOption {
             result["header"] = hasHeader ? "true" : "false";
         }
         if (setEscape) {
-            result["escape"] = stringFormat("'\\{}'", escapeChar);
+            result["escape"] = std::format("'\\{}'", escapeChar);
         }
         if (setDelim) {
-            result["delim"] = stringFormat("'{}'", delimiter);
+            result["delim"] = std::format("'{}'", delimiter);
         }
         if (setQuote) {
-            result["quote"] = stringFormat("'\\{}'", quoteChar);
+            result["quote"] = std::format("'\\{}'", quoteChar);
         }
         if (autoDetection != CopyConstants::DEFAULT_CSV_AUTO_DETECT) {
             result["auto_detect"] = autoDetection ? "true" : "false";

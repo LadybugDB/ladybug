@@ -1,3 +1,4 @@
+#include <format>
 #include "function/stem.h"
 
 #include "binder/expression/expression_util.h"
@@ -44,7 +45,7 @@ void Stem::operation(common::ku_string_t& word, common::ku_string_t& stemmer,
         sb_stemmer_new(reinterpret_cast<const char*>(stemmer.getData()), "UTF_8");
     if (sbStemmer == nullptr) {
         throw common::RuntimeException(
-            common::stringFormat("Unrecognized stemmer '{}'. Supported stemmers are: ['{}'], or "
+            std::format("Unrecognized stemmer '{}'. Supported stemmers are: ['{}'], or "
                                  "use 'none' for no stemming.",
                 stemmer.getAsString(), getStemmerList()));
     }
@@ -81,7 +82,7 @@ struct StemBindData final : public FunctionBindData {
         }
         sbStemmer = sb_stemmer_new(stemmer.c_str(), "UTF_8");
         if (sbStemmer == nullptr) {
-            throw common::RuntimeException(common::stringFormat(
+            throw common::RuntimeException(std::format(
                 "Unrecognized stemmer '{}'. Supported stemmers are: ['{}'], or "
                 "use 'none' for no stemming.",
                 stemmer, getStemmerList()));
@@ -154,7 +155,7 @@ void StemFunction::validateStemmer(const std::string& stemmer) {
         sb_stemmer_new(reinterpret_cast<const char*>(stemmer.c_str()), "UTF_8");
     if (sbStemmer == nullptr) {
         throw common::BinderException(
-            common::stringFormat("Unrecognized stemmer '{}'. Supported stemmers are: ['{}'], or "
+            std::format("Unrecognized stemmer '{}'. Supported stemmers are: ['{}'], or "
                                  "use 'none' for no stemming.",
                 stemmer, getStemmerList()));
     }

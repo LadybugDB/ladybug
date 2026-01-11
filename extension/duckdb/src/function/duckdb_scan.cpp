@@ -1,3 +1,4 @@
+#include <format>
 #include "function/duckdb_scan.h"
 
 #include "binder/binder.h"
@@ -49,7 +50,7 @@ std::string DuckDBScanBindData::getDescription() const {
         if (predicatesString.empty()) {
             predicatesString = " WHERE " + predicates.toString();
         } else {
-            predicatesString += common::stringFormat(" AND {}", predicates.toString());
+            predicatesString += std::format(" AND {}", predicates.toString());
         }
     }
     std::string q = query;
@@ -60,7 +61,7 @@ std::string DuckDBScanBindData::getDescription() const {
     q += predicatesString;
     q += getOrderBy();
     if (getLimitNum() != common::INVALID_ROW_IDX) {
-        q += common::stringFormat(" LIMIT {}", getLimitNum());
+        q += std::format(" LIMIT {}", getLimitNum());
     }
     return q;
 }
@@ -98,7 +99,7 @@ std::unique_ptr<TableFuncSharedState> DuckDBScanFunction::initSharedState(
         if (predicatesString.empty()) {
             predicatesString = " WHERE " + predicates.toString();
         } else {
-            predicatesString += stringFormat(" AND {}", predicates.toString());
+            predicatesString += std::format(" AND {}", predicates.toString());
         }
     }
     std::string finalQuery = scanBindData->query;
@@ -109,12 +110,12 @@ std::unique_ptr<TableFuncSharedState> DuckDBScanFunction::initSharedState(
     finalQuery += predicatesString;
     finalQuery += scanBindData->getOrderBy();
     if (scanBindData->getLimitNum() != INVALID_ROW_IDX) {
-        finalQuery += stringFormat(" LIMIT {}", scanBindData->getLimitNum());
+        finalQuery += std::format(" LIMIT {}", scanBindData->getLimitNum());
     }
     auto result = scanBindData->connector.executeQuery(finalQuery);
     if (result->HasError()) {
         throw RuntimeException(
-            stringFormat("Failed to execute query due to error: {}", result->GetError()));
+            std::format("Failed to execute query due to error: {}", result->GetError()));
     }
     return std::make_unique<DuckDBScanSharedState>(std::move(result));
 }

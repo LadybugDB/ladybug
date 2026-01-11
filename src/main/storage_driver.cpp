@@ -1,6 +1,7 @@
 #include "main/storage_driver.h"
 
 #include <thread>
+#include <format>
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
@@ -51,7 +52,7 @@ static bool validateNumericalType(const LogicalType& type) {
 }
 
 static std::string getUnsupportedTypeErrMsg(const LogicalType& type) {
-    return stringFormat("Unsupported data type {}.", type.toString());
+    return std::format("Unsupported data type {}.", type.toString());
 }
 
 static uint32_t getElementSize(const LogicalType& type) {
@@ -172,7 +173,7 @@ void StorageDriver::scanColumn(Table* table, column_id_t columnID, const offset_
         }
     } break;
     default:
-        throw RuntimeException(stringFormat("Not supported data type in StorageDriver::scanColumn",
+        throw RuntimeException(std::format("Not supported data type in StorageDriver::scanColumn",
             PhysicalTypeUtils::toString(physicalType)));
     }
 }

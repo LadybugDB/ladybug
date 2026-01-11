@@ -1,3 +1,4 @@
+#include <format>
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
 #include "extension/mapper_extension.h"
@@ -82,7 +83,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExportDatabase(
     KU_ASSERT(boundFileInfo->filePaths.size() == 1);
     auto filePath = boundFileInfo->filePaths[0];
     if (fs->fileOrPathExists(filePath, clientContext)) {
-        throw RuntimeException(stringFormat("Directory {} already exists.", filePath));
+        throw RuntimeException(std::format("Directory {} already exists.", filePath));
     }
     fs->createDir(filePath);
     auto printInfo = std::make_unique<ExportDBPrintInfo>(filePath, boundFileInfo->options);

@@ -1,3 +1,4 @@
+#include <format>
 #include "common/exception/binder.h"
 #include "function/scalar_function.h"
 #include "function/struct/vector_struct_functions.h"
@@ -10,7 +11,7 @@ namespace function {
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
     std::vector<StructField> fields;
     if (input.arguments.size() > INVALID_STRUCT_FIELD_IDX - 1) {
-        throw BinderException(stringFormat("Too many fields in STRUCT literal (max {}, got {})",
+        throw BinderException(std::format("Too many fields in STRUCT literal (max {}, got {})",
             INVALID_STRUCT_FIELD_IDX - 1, input.arguments.size()));
     }
     std::unordered_set<std::string> fieldNameSet;
@@ -21,11 +22,11 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
         }
         if (i >= input.optionalArguments.size()) {
             throw BinderException(
-                stringFormat("Cannot infer field name for {}.", argument->toString()));
+                std::format("Cannot infer field name for {}.", argument->toString()));
         }
         auto fieldName = input.optionalArguments[i];
         if (fieldNameSet.contains(fieldName)) {
-            throw BinderException(stringFormat("Found duplicate field {} in STRUCT.", fieldName));
+            throw BinderException(std::format("Found duplicate field {} in STRUCT.", fieldName));
         } else {
             fieldNameSet.insert(fieldName);
         }

@@ -1,3 +1,4 @@
+#include <format>
 #include "common/exception/binder.h"
 #include "common/types/value/nested.h"
 #include "function/gds/gds.h"
@@ -67,7 +68,7 @@ static std::vector<ParsedNativeGraphTableInfo> extractGraphEntryTableInfos(const
     } break;
     default:
         throw BinderException(
-            stringFormat("Argument {} has data type {}. LIST or STRUCT was expected.",
+            std::format("Argument {} has data type {}. LIST or STRUCT was expected.",
                 value.toString(), value.getDataType().toString()));
     }
     return infos;

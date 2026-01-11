@@ -1,6 +1,6 @@
+#include <format>
 #include "processor/operator/persistent/reader/csv/driver.h"
 
-#include "common/string_format.h"
 #include "common/system_config.h"
 #include "function/cast/functions/cast_from_string_functions.h"
 #include "processor/operator/persistent/reader/csv/parallel_csv_reader.h"
@@ -35,7 +35,7 @@ bool ParsingDriver::addValue(uint64_t rowNum, common::column_id_t columnIdx,
     }
     if (columnIdx >= reader->getNumColumns()) {
         reader->handleCopyException(
-            stringFormat("expected {} values per row, but got more.", reader->getNumColumns()));
+            std::format("expected {} values per row, but got more.", reader->getNumColumns()));
         return false;
     }
     if (reader->skipColumn(columnIdx)) {
@@ -64,7 +64,7 @@ bool ParsingDriver::addRow(uint64_t rowNum, common::column_id_t columnCount,
     }
     if (columnCount < reader->getNumColumns()) {
         // Column number mismatch.
-        reader->handleCopyException(stringFormat("expected {} values per row, but got {}.",
+        reader->handleCopyException(std::format("expected {} values per row, but got {}.",
             reader->getNumColumns(), columnCount));
         return false;
     }
@@ -216,10 +216,10 @@ bool SniffCSVNameAndTypeDriver::addValue(uint64_t rowNum, common::column_id_t co
     auto& csvOption = reader->getCSVOption();
     if (columns.size() < columnIdx + 1 && csvOption.hasHeader && rowNum > 0) {
         reader->handleCopyException(
-            stringFormat("expected {} values per row, but got more.", reader->getNumColumns()));
+            std::format("expected {} values per row, but got more.", reader->getNumColumns()));
     }
     while (columns.size() < columnIdx + 1) {
-        columns.emplace_back(stringFormat("column{}", columns.size()), LogicalType::ANY());
+        columns.emplace_back(std::format("column{}", columns.size()), LogicalType::ANY());
         sniffType.push_back(true);
     }
     if (rowNum == 0 && csvOption.hasHeader) {

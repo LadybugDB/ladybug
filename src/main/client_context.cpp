@@ -27,6 +27,7 @@
 #include "storage/storage_manager.h"
 #include "transaction/transaction_context.h"
 #include <processor/warning_context.h>
+#include <format>
 
 #if defined(_WIN32)
 #include "common/windows_utils.h"
@@ -182,7 +183,7 @@ const main::ExtensionOption* ClientContext::getExtensionOption(std::string optio
 }
 
 std::string ClientContext::getExtensionDir() const {
-    return stringFormat("{}/.lbug/extension/{}/{}/", clientConfig.homeDirectory,
+    return std::format("{}/.lbug/extension/{}/{}/", clientConfig.homeDirectory,
         LBUG_EXTENSION_VERSION, extension::getPlatform());
 }
 
@@ -324,7 +325,7 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     // The following should never happen. But we still throw just in case.
     if (!cachedPreparedStatementManager.containsStatement(name)) {
         return QueryResult::getQueryResultWithError(
-            stringFormat("Cannot find prepared statement with name {}.", name));
+            std::format("Cannot find prepared statement with name {}.", name));
     }
     // LCOV_EXCL_STOP
     auto cachedStatement = cachedPreparedStatementManager.getCachedStatement(name);

@@ -1,3 +1,4 @@
+#include <format>
 #include "binder/binder.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
@@ -194,7 +195,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
                 KU_UNREACHABLE;
             }
         } else {
-            throw CatalogException(stringFormat("{} does not exist in catalog.", tableName));
+            throw CatalogException(std::format("{} does not exist in catalog.", tableName));
         }
     } else {
         auto dbName = name[0];

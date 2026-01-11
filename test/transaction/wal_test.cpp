@@ -1,4 +1,5 @@
 #include <fstream>
+#include <format>
 
 #include "api_test/api_test.h"
 #include "common/exception/runtime.h"
@@ -414,7 +415,7 @@ TEST_F(WalTest, WALFileLeftoverFromPreviousDBNewDBCOPYWithoutCheckpoint) {
         conn->query("CALL force_checkpoint_on_close=false");
         conn->query("create node table Comment (id int64, creationDate INT64, locationIP STRING, "
                     "browserUsed STRING, content STRING, length INT32, PRIMARY KEY (id));");
-        conn->query(stringFormat("COPY Comment FROM '{}/dataset/ldbc-sf01/Comment.csv'",
+        conn->query(std::format("COPY Comment FROM '{}/dataset/ldbc-sf01/Comment.csv'",
             LBUG_ROOT_DIRECTORY));
     });
 }
@@ -424,7 +425,7 @@ TEST_F(WalTest, WALFileLeftoverFromPreviousDBNewDBCOPYWithoutCheckpointReadOnly)
         conn->query("CALL force_checkpoint_on_close=false");
         conn->query("create node table Comment (id int64, creationDate INT64, locationIP STRING, "
                     "browserUsed STRING, content STRING, length INT32, PRIMARY KEY (id));");
-        conn->query(stringFormat("COPY Comment FROM '{}/dataset/ldbc-sf01/Comment.csv'",
+        conn->query(std::format("COPY Comment FROM '{}/dataset/ldbc-sf01/Comment.csv'",
             LBUG_ROOT_DIRECTORY));
         systemConfig->readOnly = true;
     });

@@ -1,3 +1,4 @@
+#include <format>
 #include "function/gds/gds.h"
 
 #include "binder/binder.h"
@@ -48,7 +49,7 @@ static void validateNodeProjected(const table_id_set_t& connectedNodeTableIDSet,
         if (!projectedNodeIDSet.contains(id)) {
             auto entryName = catalog->getTableCatalogEntry(transaction, id)->getName();
             throw BinderException(
-                stringFormat("{} is connected to {} but not projected.", entryName, relName));
+                std::format("{} is connected to {} but not projected.", entryName, relName));
         }
     }
 }
@@ -79,15 +80,15 @@ static NativeGraphEntryTableInfo bindNodeEntry(ClientContext& context, const std
     auto transaction = transaction::Transaction::Get(context);
     auto nodeEntry = catalog->getTableCatalogEntry(transaction, tableName);
     if (nodeEntry->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
-        throw BinderException(stringFormat("{} is not a NODE table.", tableName));
+        throw BinderException(std::format("{} is not a NODE table.", tableName));
     }
     if (!predicate.empty()) {
-        auto cypher = stringFormat("MATCH (n:`{}`) RETURN n, {}", nodeEntry->getName(), predicate);
+        auto cypher = std::format("MATCH (n:`{}`) RETURN n, {}", nodeEntry->getName(), predicate);
         auto columns = getResultColumns(cypher, &context);
         KU_ASSERT(columns.size() == 2);
         return {nodeEntry, columns[0], columns[1]};
     } else {
-        auto cypher = stringFormat("MATCH (n:`{}`) RETURN n", nodeEntry->getName());
+        auto cypher = std::format("MATCH (n:`{}`) RETURN n", nodeEntry->getName());
         auto columns = getResultColumns(cypher, &context);
         KU_ASSERT(columns.size() == 1);
         return {nodeEntry, columns[0], nullptr /* empty predicate */};
@@ -101,16 +102,16 @@ static NativeGraphEntryTableInfo bindRelEntry(ClientContext& context, const std:
     auto relEntry = catalog->getTableCatalogEntry(transaction, tableName);
     if (relEntry->getType() != CatalogEntryType::REL_GROUP_ENTRY) {
         throw BinderException(
-            stringFormat("{} has catalog entry type. REL entry was expected.", tableName));
+            std::format("{} has catalog entry type. REL entry was expected.", tableName));
     }
     if (!predicate.empty()) {
         auto cypher =
-            stringFormat("MATCH ()-[r:`{}`]->() RETURN r, {}", relEntry->getName(), predicate);
+            std::format("MATCH ()-[r:`{}`]->() RETURN r, {}", relEntry->getName(), predicate);
         auto columns = getResultColumns(cypher, &context);
         KU_ASSERT(columns.size() == 2);
         return {relEntry, columns[0], columns[1]};
     } else {
-        auto cypher = stringFormat("MATCH ()-[r:`{}`]->() RETURN r", relEntry->getName());
+        auto cypher = std::format("MATCH ()-[r:`{}`]->() RETURN r", relEntry->getName());
         auto columns = getResultColumns(cypher, &context);
         KU_ASSERT(columns.size() == 1);
         return {relEntry, columns[0], nullptr /* empty predicate */};
@@ -135,7 +136,7 @@ NativeGraphEntry GDSFunction::bindGraphEntry(ClientContext& context,
                 transaction);
             result.relInfos.push_back(std::move(boundInfo));
         } else {
-            throw BinderException(stringFormat("{} is not a REL table.", relInfo.tableName));
+            throw BinderException(std::format("{} is not a REL table.", relInfo.tableName));
         }
     }
     return result;
@@ -175,7 +176,7 @@ std::string GDSFunction::bindColumnName(const parser::YieldVariable& yieldVariab
     std::string expressionName) {
     if (yieldVariable.name != expressionName) {
         throw common::BinderException{
-            common::stringFormat("Unknown variable name: {}.", yieldVariable.name)};
+            std::format("Unknown variable name: {}.", yieldVariable.name)};
     }
     if (yieldVariable.hasAlias()) {
         return yieldVariable.alias;

@@ -1,3 +1,4 @@
+#include <format>
 #include "storage/wal/wal_replayer.h"
 
 #include "binder/binder.h"
@@ -64,7 +65,7 @@ static Deserializer initDeserializer(FileInfo& fileInfo, main::ClientContext& cl
 
 static void checkWALHeader(const WALHeader& header, bool enableChecksums) {
     if (enableChecksums != header.enableChecksums) {
-        throw RuntimeException(stringFormat(
+        throw RuntimeException(std::format(
             "The database you are trying to open was serialized with enableChecksums={} but you "
             "are trying to open it with enableChecksums={}. Please open your database using the "
             "correct enableChecksums config. If you wish to change this for your database, please "
