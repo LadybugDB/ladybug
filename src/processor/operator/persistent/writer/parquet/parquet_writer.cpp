@@ -80,6 +80,7 @@ Type::type ParquetWriter::convertToParquetType(const LogicalType& type) {
         return Type::DOUBLE;
     case LogicalTypeID::BLOB:
     case LogicalTypeID::STRING:
+    case LogicalTypeID::JSON:
         return Type::BYTE_ARRAY;
     case LogicalTypeID::UUID:
     case LogicalTypeID::INTERVAL:
@@ -129,7 +130,8 @@ void ParquetWriter::setSchemaProperties(const LogicalType& type, SchemaElement& 
         schemaElement.converted_type = ConvertedType::DATE;
         schemaElement.__isset.converted_type = true;
     } break;
-    case LogicalTypeID::STRING: {
+    case LogicalTypeID::STRING:
+    case LogicalTypeID::JSON: {
         schemaElement.converted_type = ConvertedType::UTF8;
         schemaElement.__isset.converted_type = true;
     } break;

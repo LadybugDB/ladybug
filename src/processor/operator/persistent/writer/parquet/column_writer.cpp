@@ -252,6 +252,7 @@ std::unique_ptr<ColumnWriter> ColumnWriter::createWriterRecursive(
                 canHaveNullsToCreate);
         case LogicalTypeID::BLOB:
         case LogicalTypeID::STRING:
+        case LogicalTypeID::JSON:
             return std::make_unique<StringColumnWriter>(writer, schemaIdx,
                 std::move(schemaPathToCreate), maxRepeatToCreate, maxDefineToCreate,
                 canHaveNullsToCreate, mm);
