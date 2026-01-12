@@ -1,4 +1,3 @@
-#include <format>
 #include "transaction/transaction.h"
 
 #include "catalog/catalog.h"
@@ -11,6 +10,7 @@
 #include "storage/undo_buffer.h"
 #include "storage/wal/local_wal.h"
 #include "transaction/transaction_context.h"
+#include <format>
 
 using namespace lbug::catalog;
 
@@ -146,9 +146,8 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
         } break;
         case CatalogEntryType::TYPE_ENTRY:
         default: {
-            throw common::RuntimeException(
-                std::format("Not supported catalog entry type {} yet.",
-                    CatalogEntryTypeUtils::toString(catalogEntry.getType())));
+            throw common::RuntimeException(std::format("Not supported catalog entry type {} yet.",
+                CatalogEntryTypeUtils::toString(catalogEntry.getType())));
         }
         }
     } break;
@@ -158,9 +157,8 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
         // DO NOTHING. We don't persist function entries.
     } break;
     default: {
-        throw common::RuntimeException(
-            std::format("Not supported catalog entry type {} yet.",
-                CatalogEntryTypeUtils::toString(catalogEntry.getType())));
+        throw common::RuntimeException(std::format("Not supported catalog entry type {} yet.",
+            CatalogEntryTypeUtils::toString(catalogEntry.getType())));
     }
     }
 }

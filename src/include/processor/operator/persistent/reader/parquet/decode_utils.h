@@ -1,8 +1,7 @@
 #pragma once
-#include <format>
-
 #include "common/exception/copy.h"
 #include "resizable_buffer.h"
+#include <format>
 
 namespace lbug {
 namespace processor {

@@ -7,8 +7,8 @@
 #include "processor/operator/persistent/reader/reader_bind_utils.h"
 
 #if defined(_WIN32)
-#include <io.h>
 #include <format>
+#include <io.h>
 #endif
 
 #include "common/system_message.h"

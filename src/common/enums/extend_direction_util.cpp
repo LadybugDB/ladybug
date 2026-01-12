@@ -1,8 +1,8 @@
-#include <format>
 #include "common/enums/extend_direction_util.h"
 
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
+#include <format>
 
 namespace lbug {
 namespace common {

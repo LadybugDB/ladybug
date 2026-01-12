@@ -1,4 +1,3 @@
-#include <format>
 #include "processor/operator/ddl/drop.h"
 
 #include "catalog/catalog.h"
@@ -12,6 +11,7 @@
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::catalog;
 using namespace lbug::common;
@@ -84,15 +84,15 @@ void Drop::dropTable(const main::ClientContext* context) {
     case CatalogEntryType::NODE_TABLE_ENTRY: {
         for (auto& indexEntry : catalog->getIndexEntries(transaction)) {
             if (indexEntry->getTableID() == entry->getTableID()) {
-                throw BinderException(std::format(
-                    "Cannot delete node table {} because it is referenced by index {}.",
-                    entry->getName(), indexEntry->getIndexName()));
+                throw BinderException(
+                    std::format("Cannot delete node table {} because it is referenced by index {}.",
+                        entry->getName(), indexEntry->getIndexName()));
             }
         }
         for (auto& relEntry : catalog->getRelGroupEntries(transaction)) {
             if (relEntry->isParent(entry->getTableID())) {
                 throw BinderException(std::format("Cannot delete node table {} because it is "
-                                                   "referenced by relationship table {}.",
+                                                  "referenced by relationship table {}.",
                     entry->getName(), relEntry->getName()));
             }
         }

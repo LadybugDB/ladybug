@@ -1,5 +1,4 @@
 #include <optional>
-#include <format>
 
 #include "binder/binder.h"
 #include "binder/ddl/bound_alter.h"
@@ -30,6 +29,7 @@
 #include "parser/expression/parsed_function_expression.h"
 #include "parser/expression/parsed_literal_expression.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::parser;
@@ -253,7 +253,7 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
                     if (propertyDefinitions.size() == 1) { // Only has ID column
                         throw BinderException(
                             std::format("Storage table '{}' must have at least one property "
-                                         "column.",
+                                        "column.",
                                 tableName));
                     }
 
@@ -304,7 +304,7 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
             if (srcDbName != dstDbName) {
                 throw BinderException(
                     std::format("Cannot create rel table with FROM and TO tables from different "
-                                 "databases. FROM is from '{}', TO is from '{}'.",
+                                "databases. FROM is from '{}', TO is from '{}'.",
                         srcDbName, dstDbName));
             }
         }

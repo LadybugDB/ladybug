@@ -1,8 +1,8 @@
-#include <format>
 #include "common/file_system/gzip_file_system.h"
 
 #include "common/exception/io.h"
 #include "miniz.hpp"
+#include <format>
 
 namespace lbug {
 namespace common {
@@ -135,8 +135,7 @@ bool MiniZStreamWrapper::read(StreamData& sd) {
     auto ret = miniz::mz_inflate(mzStreamPtr.get(), miniz::MZ_NO_FLUSH);
     // LCOV_EXCL_START
     if (ret != miniz::MZ_OK && ret != miniz::MZ_STREAM_END) {
-        throw IOException(
-            std::format("Failed to decode gzip stream: {}", miniz::mz_error(ret)));
+        throw IOException(std::format("Failed to decode gzip stream: {}", miniz::mz_error(ret)));
     }
     // LCOV_EXCL_STOP
     sd.inputBufStart = (uint8_t*)mzStreamPtr->next_in;

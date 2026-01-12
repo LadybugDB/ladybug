@@ -1,7 +1,6 @@
 #include "test_runner/test_runner.h"
 
 #include <fstream>
-#include <format>
 
 #include "common/assert.h"
 #include "common/exception/test.h"
@@ -12,6 +11,7 @@
 #include "planner/operator/logical_plan.h"
 #include "spdlog/spdlog.h"
 #include "test_helper/test_helper.h"
+#include <format>
 
 using namespace lbug::main;
 using namespace lbug::common;

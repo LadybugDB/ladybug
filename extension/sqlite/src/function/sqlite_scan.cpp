@@ -1,7 +1,7 @@
-#include <format>
 #include "function/sqlite_scan.h"
 
 #include "main/client_context.h"
+#include <format>
 
 namespace lbug {
 namespace sqlite_extension {

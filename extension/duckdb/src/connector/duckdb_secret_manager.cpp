@@ -1,7 +1,7 @@
-#include <format>
 #include "connector/duckdb_secret_manager.h"
 
 #include "s3fs_config.h"
+#include <format>
 
 namespace lbug {
 namespace duckdb_extension {
@@ -24,7 +24,7 @@ std::string DuckDBSecretManager::getRemoteS3FSSecret(main::ClientContext* contex
         TYPE {}
     );)";
     return std::format(templateQuery, config.fsName,
-            getDuckDBExtensionOptions(config.getAuthParams(context)), config.fsName);
+        getDuckDBExtensionOptions(config.getAuthParams(context)), config.fsName);
 }
 
 } // namespace duckdb_extension

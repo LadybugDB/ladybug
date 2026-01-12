@@ -1,8 +1,7 @@
 #pragma once
-#include <format>
-
 #include "storage/table/column_chunk_data.h"
 #include "transaction/transaction.h"
+#include <format>
 
 namespace lbug {
 namespace storage {

@@ -1,7 +1,6 @@
 #include "common/types/value/value.h"
 
 #include <utility>
-#include <format>
 
 #include "common/exception/binder.h"
 #include "common/null_buffer.h"
@@ -14,6 +13,7 @@
 #include "common/vector/value_vector.h"
 #include "function/hash/hash_functions.h"
 #include "storage/storage_utils.h"
+#include <format>
 
 namespace lbug {
 namespace common {

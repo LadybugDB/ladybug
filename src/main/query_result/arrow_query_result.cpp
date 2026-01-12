@@ -1,10 +1,10 @@
-#include <format>
 #include "main/query_result/arrow_query_result.h"
 
 #include "common/arrow/arrow_row_batch.h"
 #include "common/exception/not_implemented.h"
 #include "common/exception/runtime.h"
 #include "processor/result/factorized_table.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::processor;

@@ -1,7 +1,6 @@
 #include "include/py_connection.h"
 
 #include <utility>
-#include <format>
 
 #include "cached_import/py_cached_import.h"
 #include "common/constants.h"
@@ -17,6 +16,7 @@
 #include "pandas/pandas_scan.h"
 #include "processor/result/factorized_table.h"
 #include "pyarrow/pyarrow_scan.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug;
@@ -203,8 +203,10 @@ void PyConnection::getAllEdgesForTorchGeometric(py::array_t<int64_t>& npArray,
     // Set the number of threads to 1 for fetching edges to ensure ordering.
     auto numThreadsForExec = conn->getMaxNumThreadForExec();
     conn->setMaxNumThreadForExec(1);
-    auto query = std::format("MATCH (a:{})-[:{}]->(b:{}) WHERE offset(id(b)) >= $s AND offset(id(b)) < "
-                       "$e RETURN offset(id(a)), offset(id(b))", srcTableName, relName, dstTableName);
+    auto query =
+        std::format("MATCH (a:{})-[:{}]->(b:{}) WHERE offset(id(b)) >= $s AND offset(id(b)) < "
+                    "$e RETURN offset(id(a)), offset(id(b))",
+            srcTableName, relName, dstTableName);
     auto preparedStatement = conn->prepare(query);
     auto srcBuffer = buffer;
     auto dstBuffer = buffer + numRels;
@@ -377,7 +379,7 @@ static LogicalType pyLogicalType(const py::handle& val) {
         if (precision > common::DECIMAL_PRECISION_LIMIT) {
             throw common::NotImplementedException(
                 std::format("Decimal precision cannot be greater than {}"
-                             "Note: positive exponents contribute to precision",
+                            "Note: positive exponents contribute to precision",
                     common::DECIMAL_PRECISION_LIMIT));
         }
         return LogicalType::DECIMAL(precision, -exponent);

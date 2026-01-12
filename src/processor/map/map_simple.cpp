@@ -1,4 +1,3 @@
-#include <format>
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
 #include "extension/mapper_extension.h"
@@ -23,6 +22,7 @@
 #include "processor/plan_mapper.h"
 #include "processor/result/factorized_table_util.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include <format>
 
 namespace lbug {
 namespace processor {

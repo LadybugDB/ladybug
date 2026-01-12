@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/bound_standalone_call.h"
 #include "binder/expression/expression_util.h"
@@ -8,6 +7,7 @@
 #include "main/client_context.h"
 #include "main/db_config.h"
 #include "parser/standalone_call.h"
+#include <format>
 
 using namespace lbug::common;
 

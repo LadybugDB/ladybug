@@ -1,9 +1,9 @@
-#include <format>
 #include "py_scan_config.h"
 
 #include "common/constants.h"
 #include "common/exception/binder.h"
 #include "function/cast/functions/numeric_limits.h"
+#include <format>
 
 namespace lbug {
 

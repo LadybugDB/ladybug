@@ -1,11 +1,11 @@
 #pragma once
 
 #include <string>
-#include <format>
 
 #include "common/exception/binder.h"
 #include "common/types/types.h"
 #include "function/gds/gds.h"
+#include <format>
 
 namespace lbug {
 namespace function {
@@ -18,8 +18,8 @@ struct Variant {
     static constexpr common::LogicalTypeID TYPE = common::LogicalTypeID::STRING;
     static void validate(std::string variant) {
         if (variant != MAX_VARIANT && variant != MIN_VARIANT) {
-            throw common::BinderException(std::format(
-                "Variant argument expects {} or {}. Got: {}", MAX_VARIANT, MIN_VARIANT, variant));
+            throw common::BinderException(std::format("Variant argument expects {} or {}. Got: {}",
+                MAX_VARIANT, MIN_VARIANT, variant));
         }
     }
 };

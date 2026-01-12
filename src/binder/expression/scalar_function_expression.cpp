@@ -1,7 +1,7 @@
-#include <format>
 #include "binder/expression/scalar_function_expression.h"
 
 #include "binder/expression/expression_util.h"
+#include <format>
 
 using namespace lbug::common;
 

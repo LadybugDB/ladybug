@@ -15,8 +15,8 @@
 #include "common/exception/not_implemented.h"
 #include "function/cast/functions/cast_string_non_nested_functions.h"
 #include "main/lbug.h"
-#include <jni.h>
 #include <format>
+#include <jni.h>
 
 using namespace lbug::main;
 using namespace lbug::common;
@@ -1149,7 +1149,7 @@ JNIEXPORT jlong JNICALL Java_com_ladybugdb_Native_lbugValueCreateValue(JNIEnv* e
             if (precision > DECIMAL_PRECISION_LIMIT) {
                 throw NotImplementedException(
                     std::format("Decimal precision cannot be greater than {}"
-                                 "Note: positive exponents contribute to precision",
+                                "Note: positive exponents contribute to precision",
                         DECIMAL_PRECISION_LIMIT));
             }
             auto type = LogicalType::DECIMAL(precision, scale);

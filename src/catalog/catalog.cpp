@@ -1,4 +1,3 @@
-#include <format>
 #include "catalog/catalog.h"
 
 #include "binder/ddl/bound_create_sequence_info.h"
@@ -19,6 +18,7 @@
 #include "main/client_context.h"
 #include "main/database_manager.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -287,8 +287,8 @@ void Catalog::createType(Transaction* transaction, std::string name, LogicalType
 static std::string getInstallExtensionMessage(std::string_view extensionName,
     std::string_view entryType) {
     return std::format("This {} exists in the {} "
-                        "extension. You can install and load the "
-                        "extension by running 'INSTALL {}; LOAD EXTENSION {};'.",
+                       "extension. You can install and load the "
+                       "extension by running 'INSTALL {}; LOAD EXTENSION {};'.",
         entryType, extensionName, extensionName, extensionName);
 }
 

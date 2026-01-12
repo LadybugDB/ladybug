@@ -2,10 +2,10 @@
 
 #include <chrono>
 #include <string>
-#include <format>
 
 #include "common/exception/conversion.h"
 #include "function/arithmetic/multiply.h"
+#include <format>
 
 namespace lbug {
 namespace common {

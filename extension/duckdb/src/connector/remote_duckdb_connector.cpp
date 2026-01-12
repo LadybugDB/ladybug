@@ -1,9 +1,9 @@
-#include <format>
 #include "connector/remote_duckdb_connector.h"
 
 #include "connector/duckdb_secret_manager.h"
 #include "main/client_context.h"
 #include "s3fs_config.h"
+#include <format>
 
 namespace lbug {
 namespace duckdb_extension {

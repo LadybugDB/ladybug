@@ -1,7 +1,6 @@
 #include "json_utils.h"
 
 #include <cstdlib>
-#include <format>
 
 #include "common/exception/not_implemented.h"
 #include "common/exception/runtime.h"
@@ -16,6 +15,7 @@
 #include "function/cast/functions/cast_string_non_nested_functions.h"
 #include "function/cast/functions/numeric_limits.h"
 #include "json_type.h"
+#include <format>
 
 using namespace lbug::common;
 
@@ -346,9 +346,8 @@ static void readFromJsonArr(yyjson_val* val, common::ValueVector& vec, uint64_t 
     case LogicalTypeID::LIST: {
         if (outputType.getLogicalTypeID() == LogicalTypeID::ARRAY) {
             if (yyjson_arr_size(val) != ArrayType::getNumElements(outputType)) {
-                throw RuntimeException(
-                    std::format("Expected type {} but list type has {} elements",
-                        outputType.toString(), yyjson_arr_size(val)));
+                throw RuntimeException(std::format("Expected type {} but list type has {} elements",
+                    outputType.toString(), yyjson_arr_size(val)));
             }
         }
         auto lst = ListVector::addList(&vec, yyjson_arr_size(val));

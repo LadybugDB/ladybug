@@ -2,7 +2,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <format>
 
 #include "common/string_utils.h"
 #include "graph_test/private_graph_test.h"
@@ -10,6 +9,7 @@
 #include "test_helper/test_helper.h"
 #include "test_runner/csv_converter.h"
 #include "test_runner/test_parser.h"
+#include <format>
 
 using ::testing::Test;
 using namespace lbug::testing;

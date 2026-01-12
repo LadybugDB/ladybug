@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/literal_expression.h"
@@ -26,6 +25,7 @@
 #include "processor/operator/table_function_call.h"
 #include "processor/plan_mapper.h"
 #include "storage/storage_manager.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::binder;
@@ -90,7 +90,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
             auto& nativeEntry = graphEntry->cast<graph::ParsedNativeGraphEntry>();
             if (!nativeEntry.relInfos.empty() || nativeEntry.nodeInfos.size() != 1) {
                 throw BinderException(std::format("In vector filtered search, projected graph {} "
-                                                   "must contain exactly one node table.",
+                                                  "must contain exactly one node table.",
                     tableOrGraphName));
             }
             auto nodeInfo = nativeEntry.nodeInfos[0];
@@ -115,13 +115,13 @@ static std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
         if (resultColumns.size() != 1) {
             throw BinderException(
                 std::format("The return clause of a filter query should contain "
-                             "exactly one node expression. Found more than one expressions: {}.",
+                            "exactly one node expression. Found more than one expressions: {}.",
                     ExpressionUtil::toString(resultColumns)));
         }
         auto resultColumn = resultColumns[0];
         if (resultColumn->getDataType().getLogicalTypeID() != LogicalTypeID::NODE) {
             throw BinderException(std::format("The return clause of a filter query should be of "
-                                               "type NODE. Found type {} instead.",
+                                              "type NODE. Found type {} instead.",
                 resultColumn->getDataType().toString()));
         }
         auto& node = resultColumn->constCast<NodeExpression>();

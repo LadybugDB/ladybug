@@ -1,4 +1,3 @@
-#include <format>
 #include "catalog/fts_index_catalog_entry.h"
 
 #include "catalog/catalog.h"
@@ -7,6 +6,7 @@
 #include "common/string_utils.h"
 #include "transaction/transaction.h"
 #include "utils/fts_utils.h"
+#include <format>
 
 namespace lbug {
 namespace fts_extension {
@@ -34,9 +34,9 @@ std::string FTSIndexAuxInfo::getStopWordsName(const common::FileScanInfo& export
     case common::FileType::CSV:
     case common::FileType::PARQUET: {
         if (config.stopWordsTableName != FTSUtils::getDefaultStopWordsTableName()) {
-            stopWordsName = std::format("{}/{}.{}", exportFileInfo.filePaths[0],
-                config.stopWordsTableName,
-                common::StringUtils::getLower(exportFileInfo.fileTypeInfo.fileTypeStr));
+            stopWordsName =
+                std::format("{}/{}.{}", exportFileInfo.filePaths[0], config.stopWordsTableName,
+                    common::StringUtils::getLower(exportFileInfo.fileTypeInfo.fileTypeStr));
         }
     } break;
     default:
@@ -62,7 +62,7 @@ std::string FTSIndexAuxInfo::toCypher(const catalog::IndexCatalogEntry& indexEnt
     }
 
     cypher += std::format("CALL CREATE_FTS_INDEX('{}', '{}', [{}], stemmer := '{}', "
-                                   "stopWords := '{}');",
+                          "stopWords := '{}');",
         tableName, indexEntry.getIndexName(), std::move(propertyStr), config.stemmer,
         getStopWordsName(indexToCypherInfo.exportFileInfo));
     return cypher;

@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
@@ -9,6 +8,7 @@
 #include "main/client_context.h"
 #include "main/database.h"
 #include "main/database_manager.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::catalog;

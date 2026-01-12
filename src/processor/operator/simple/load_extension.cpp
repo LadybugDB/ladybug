@@ -1,10 +1,10 @@
-#include <format>
 #include "processor/operator/simple/load_extension.h"
 
 #include "extension/extension_manager.h"
 #include "main/client_context.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include <format>
 
 using namespace lbug::common;
 

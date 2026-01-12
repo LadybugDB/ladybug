@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/expression/expression.h"
 #include "binder/query/reading_clause/bound_table_function_call.h"
@@ -19,6 +18,7 @@
 #include "planner/planner.h"
 #include "processor/execution_context.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::binder;
 using namespace lbug::common;

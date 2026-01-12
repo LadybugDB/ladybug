@@ -1,8 +1,8 @@
-#include <format>
 #include "binder/expression/rel_expression.h"
 #include "common/exception/binder.h"
 #include "function/rewrite_function.h"
 #include "function/schema/vector_node_rel_functions.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::binder;

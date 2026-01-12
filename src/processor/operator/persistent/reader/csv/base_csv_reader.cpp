@@ -1,7 +1,6 @@
 #include "processor/operator/persistent/reader/csv/base_csv_reader.h"
 
 #include <vector>
-#include <format>
 
 #include "common/file_system/virtual_file_system.h"
 #include "common/string_utils.h"
@@ -11,6 +10,7 @@
 #include "processor/operator/persistent/reader/csv/driver.h"
 #include "processor/operator/persistent/reader/file_error_handler.h"
 #include "utf8proc_wrapper.h"
+#include <format>
 
 using namespace lbug::common;
 

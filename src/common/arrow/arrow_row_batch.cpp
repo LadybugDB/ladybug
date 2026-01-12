@@ -1,7 +1,6 @@
 #include "common/arrow/arrow_row_batch.h"
 
 #include <cstring>
-#include <format>
 
 #include "common/exception/runtime.h"
 #include "common/types/value/node.h"
@@ -9,6 +8,7 @@
 #include "common/types/value/value.h"
 #include "processor/result/flat_tuple.h"
 #include "storage/storage_utils.h"
+#include <format>
 
 namespace lbug {
 namespace common {

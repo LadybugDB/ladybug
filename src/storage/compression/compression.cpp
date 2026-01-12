@@ -22,8 +22,8 @@
 #include "storage/compression/sign_extend.h"
 #include "storage/storage_utils.h"
 #include "storage/table/column_chunk_data.h"
-#include <ranges>
 #include <format>
+#include <ranges>
 
 using namespace lbug::common;
 

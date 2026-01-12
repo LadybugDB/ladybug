@@ -1,9 +1,8 @@
 #pragma once
-#include <format>
-
 #include "common/exception/runtime.h"
 #include "common/type_utils.h"
 #include "common/types/types.h"
+#include <format>
 
 namespace lbug {
 namespace function {

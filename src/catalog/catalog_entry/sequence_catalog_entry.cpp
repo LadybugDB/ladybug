@@ -1,4 +1,3 @@
-#include <format>
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 
 #include "binder/ddl/bound_create_sequence_info.h"
@@ -8,6 +7,7 @@
 #include "common/vector/value_vector.h"
 #include "function/arithmetic/add.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -157,9 +157,9 @@ std::unique_ptr<SequenceCatalogEntry> SequenceCatalogEntry::deserialize(
 
 std::string SequenceCatalogEntry::toCypher(const ToCypherInfo& /* info */) const {
     return std::format("DROP SEQUENCE IF EXISTS `{}`;\n"
-                        "CREATE SEQUENCE IF NOT EXISTS `{}` START {} INCREMENT {} MINVALUE {} "
-                        "MAXVALUE {} {} CYCLE;\n"
-                        "RETURN nextval('{}');",
+                       "CREATE SEQUENCE IF NOT EXISTS `{}` START {} INCREMENT {} MINVALUE {} "
+                       "MAXVALUE {} {} CYCLE;\n"
+                       "RETURN nextval('{}');",
         getName(), getName(), sequenceData.currVal, sequenceData.increment, sequenceData.minValue,
         sequenceData.maxValue, sequenceData.cycle ? "" : "NO", getName());
 }

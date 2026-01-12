@@ -2,7 +2,6 @@
 
 #include <string>
 #include <type_traits>
-#include <format>
 
 #include "common/exception/overflow.h"
 #include "common/type_utils.h"
@@ -11,6 +10,7 @@
 #include "common/vector/value_vector.h"
 #include "function/cast/functions/cast_string_non_nested_functions.h"
 #include "function/cast/functions/numeric_limits.h"
+#include <format>
 
 namespace lbug {
 namespace function {

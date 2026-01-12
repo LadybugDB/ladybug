@@ -1,7 +1,7 @@
-#include <format>
 #include "common/exception/binder.h"
 #include "function/scalar_function.h"
 #include "function/struct/vector_struct_functions.h"
+#include <format>
 
 using namespace lbug::common;
 

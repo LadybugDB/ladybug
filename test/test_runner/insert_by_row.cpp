@@ -1,11 +1,11 @@
 #include "test_runner/insert_by_row.h"
 
 #include <fstream>
-#include <format>
 
 #include "common/exception/test.h"
 #include "common/string_utils.h"
 #include "test_helper/test_helper.h"
+#include <format>
 
 using namespace lbug::common;
 
@@ -73,7 +73,7 @@ void InsertDatasetByRow::init() {
             to.name = tuple->getValue(1)->toString();
             to.property = tuple->getValue(3)->toString();
             query = std::format("call table_info('{}') where name='{}' return type;"
-                                 "call table_info('{}') where name='{}' return type;",
+                                "call table_info('{}') where name='{}' return type;",
                 from.name, from.property, to.name, to.property);
             result = validateQuery(connection, query);
             from.type = result->getNext()->getValue(0)->toString();
@@ -124,8 +124,8 @@ std::string InsertDatasetByRow::RelTableInfo::getLoadFromQuery() const {
     header += headerRest.length() == 0 ? "" : "," + getHeaderForLoad();
     const auto body = getBodyForLoad();
     return std::format("LOAD WITH HEADERS ({}) FROM {} "
-                        "MATCH (a:{}), (b:{}) WHERE a.{} = aid_ AND b.{} = bid_ "
-                        "CREATE (a)-[:{} {{{}}}]->(b);",
+                       "MATCH (a:{}), (b:{}) WHERE a.{} = aid_ AND b.{} = bid_ "
+                       "CREATE (a)-[:{} {{{}}}]->(b);",
         header, filePath, from.name, to.name, from.property, to.property, name, body);
 }
 

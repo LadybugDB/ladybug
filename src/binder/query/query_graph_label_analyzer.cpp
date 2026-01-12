@@ -1,10 +1,10 @@
-#include <format>
 #include "binder/query/query_graph_label_analyzer.h"
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/binder.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::catalog;
@@ -215,7 +215,7 @@ void QueryGraphLabelAnalyzer::pruneRel(RelExpression& rel) const {
     if (prunedEntries.empty()) {
         if (throwOnViolate) {
             throw BinderException(std::format("Cannot find a label for relationship {} that "
-                                               "connects to all of its neighbour nodes.",
+                                              "connects to all of its neighbour nodes.",
                 rel.toString()));
         }
     }

@@ -1,8 +1,8 @@
-#include <format>
 #include "graph/graph_entry_set.h"
 
 #include "common/exception/runtime.h"
 #include "main/client_context.h"
+#include <format>
 
 using namespace lbug::common;
 

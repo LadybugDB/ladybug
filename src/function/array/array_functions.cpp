@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/expression/literal_expression.h"
 #include "common/exception/binder.h"
 #include "function/array/functions/array_cosine_similarity.h"
@@ -8,6 +7,7 @@
 #include "function/array/functions/array_squared_distance.h"
 #include "function/array/vector_array_functions.h"
 #include "function/scalar_function.h"
+#include <format>
 
 using namespace lbug::common;
 

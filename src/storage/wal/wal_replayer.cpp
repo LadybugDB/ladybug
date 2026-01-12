@@ -1,4 +1,3 @@
-#include <format>
 #include "storage/wal/wal_replayer.h"
 
 #include "binder/binder.h"
@@ -21,6 +20,7 @@
 #include "storage/wal/checksum_reader.h"
 #include "storage/wal/wal_record.h"
 #include "transaction/transaction_context.h"
+#include <format>
 
 using namespace lbug::binder;
 using namespace lbug::catalog;

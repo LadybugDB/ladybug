@@ -1,5 +1,4 @@
 #include <fstream>
-#include <format>
 
 #include "api_test/private_api_test.h"
 #include "common/exception/runtime.h"
@@ -7,6 +6,7 @@
 #include "storage/storage_manager.h"
 #include "storage/wal/wal.h"
 #include "transaction/transaction_manager.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::testing;

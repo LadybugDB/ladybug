@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
@@ -13,6 +12,7 @@
 #include "storage/table/node_table.h"
 #include "storage/table/table.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 

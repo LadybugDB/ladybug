@@ -1,4 +1,3 @@
-#include <format>
 #include "processor/expression_mapper.h"
 
 #include "binder/expression/case_expression.h"
@@ -18,6 +17,7 @@
 #include "expression_evaluator/pattern_evaluator.h"
 #include "expression_evaluator/reference_evaluator.h"
 #include "planner/operator/schema.h"
+#include <format>
 
 using namespace lbug::binder;
 using namespace lbug::common;

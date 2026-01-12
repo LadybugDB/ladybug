@@ -1,12 +1,12 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 
 #include <sstream>
-#include <format>
 
 #include "binder/ddl/bound_create_table_info.h"
 #include "catalog/catalog.h"
 #include "common/serializer/deserializer.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::main;

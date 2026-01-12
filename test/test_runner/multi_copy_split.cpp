@@ -2,13 +2,13 @@
 
 #include <fstream>
 #include <random>
-#include <format>
 
 #include "common/exception/test.h"
 #include "common/random_engine.h"
 #include "common/string_utils.h"
 #include "spdlog/spdlog.h"
 #include "test_helper/test_helper.h"
+#include <format>
 
 using namespace lbug::common;
 

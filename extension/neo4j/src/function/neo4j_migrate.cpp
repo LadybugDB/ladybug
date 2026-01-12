@@ -1,4 +1,3 @@
-#include <format>
 #include "function/neo4j_migrate.h"
 
 #include "binder/ddl/property_definition.h"
@@ -12,6 +11,7 @@
 #include "function/table/table_function.h"
 #include "httplib.h"
 #include "yyjson.h"
+#include <format>
 
 namespace lbug {
 namespace neo4j_extension {
@@ -37,7 +37,8 @@ struct Neo4jMigrateBindData final : TableFuncBindData {
 };
 
 static std::string executeNeo4jQuery(httplib::Client& cli, std::string neo4jQuery) {
-    std::string requestBody = ("{{\"statements\":[{{\"statement\":\"{}\"}}]}}", neo4jQuery);
+    std::string requestBody =
+        std::format("{{\"statements\":[{{\"statement\":\"{}\"}}]}}", neo4jQuery);
     httplib::Request req;
     req.method = "POST";
     req.path = "/db/neo4j/tx/commit";
@@ -178,27 +179,26 @@ static std::unique_ptr<TableFuncBindData> bindFunc(ClientContext* /*context*/,
 
 void exportNeo4jNodeToCSV(std::string nodeName, httplib::Client& cli) {
     auto query = std::format("MATCH (p:{}) "
-                                      "with collect(p) as n "
-                                      "CALL apoc.export.csv.data(n, [], \\\"/tmp/{}.csv\\\", null) "
-                                      "YIELD file, source, format, nodes, relationships, "
-                                      "properties, time, rows, batchSize, batches, done, data "
-                                      "RETURN file, source, format, nodes, relationships, "
-                                      "properties, time, rows, batchSize, batches, done, data",
+                             "with collect(p) as n "
+                             "CALL apoc.export.csv.data(n, [], \\\"/tmp/{}.csv\\\", null) "
+                             "YIELD file, source, format, nodes, relationships, "
+                             "properties, time, rows, batchSize, batches, done, data "
+                             "RETURN file, source, format, nodes, relationships, "
+                             "properties, time, rows, batchSize, batches, done, data",
         nodeName, nodeName);
     executeNeo4jQuery(cli, query);
 }
 
 void exportNeo4jRelToCSV(std::string relName, std::pair<std::string, std::string> nodePairs,
     httplib::Client& cli) {
-    auto query =
-        std::format("MATCH (:{})-[e:{}]->(:{}) "
+    auto query = std::format("MATCH (:{})-[e:{}]->(:{}) "
                              "with collect(e) as rels "
                              "CALL apoc.export.csv.data([], rels, \\\"/tmp/{}_{}_{}.csv\\\", null) "
                              "YIELD file, source, format, nodes, relationships, "
                              "properties, time, rows, batchSize, batches, done, data "
                              "RETURN file, source, format, nodes, relationships, "
                              "properties, time, rows, batchSize, batches, done, data",
-            nodePairs.first, relName, nodePairs.second, nodePairs.first, relName, nodePairs.second);
+        nodePairs.first, relName, nodePairs.second, nodePairs.first, relName, nodePairs.second);
     executeNeo4jQuery(cli, query);
 }
 
@@ -283,8 +283,8 @@ std::pair<std::string, std::string> getCreateNodeTableQuery(httplib::Client& cli
         ddlProperties += (" " + propertyDefinition.type.toString() + ",");
         propertiesToCopy += ", " + propertyDefinition.name;
     }
-    return {std::format("CREATE NODE TABLE `{}` (`_id_` int64, {} PRIMARY KEY(_id_));",
-                nodeName, ddlProperties),
+    return {std::format("CREATE NODE TABLE `{}` (`_id_` int64, {} PRIMARY KEY(_id_));", nodeName,
+                ddlProperties),
         std::format(
             "COPY `{}` FROM (LOAD WITH HEADERS(_id STRING, _labels STRING, {} _start STRING, "
             "_end STRING, _type STRING) FROM '/tmp/{}.csv'(sample_size "
@@ -295,8 +295,8 @@ std::pair<std::string, std::string> getCreateNodeTableQuery(httplib::Client& cli
 std::vector<std::string> getRelProperties(httplib::Client& cli, std::string srcLabel,
     std::string dstLabel, std::string relLabel) {
     auto neo4jQuery =
-        std::format("MATCH (:{})-[e:{}]->(:{}) UNWIND keys(e) AS key return distinct key",
-            srcLabel, relLabel, dstLabel);
+        std::format("MATCH (:{})-[e:{}]->(:{}) UNWIND keys(e) AS key return distinct key", srcLabel,
+            relLabel, dstLabel);
     auto jsonStr = executeNeo4jQuery(cli, neo4jQuery);
     auto doc = yyjson_read(jsonStr.c_str(), jsonStr.size(), 0);
     auto resultsArr = yyjson_obj_get(yyjson_doc_get_root(doc), "results");
@@ -402,8 +402,8 @@ std::string getCreateRelTableQuery(httplib::Client& cli, const std::string& relN
         std::string loadFromHeaders = "";
         for (auto i = 0u; i < relProperties.size(); i++) {
             propertiesToCopy += relProperties[i];
-            loadFromHeaders += std::format(", {} {}", relProperties[i],
-                propertyTypes.at(relProperties[i]));
+            loadFromHeaders +=
+                std::format(", {} {}", relProperties[i], propertyTypes.at(relProperties[i]));
             if (i != relProperties.size() - 1) {
                 propertiesToCopy += ",";
             }
@@ -412,13 +412,12 @@ std::string getCreateRelTableQuery(httplib::Client& cli, const std::string& relN
                 originalTypes.at(relProperties[i]));
             outputTables.emplace_back(std::move(newRel));
         }
-        copyQuery +=
-            std::format("COPY `{}`({}) FROM (LOAD WITH HEADERS(_id STRING, _labels "
+        copyQuery += std::format("COPY `{}`({}) FROM (LOAD WITH HEADERS(_id STRING, _labels "
                                  "STRING, _start INT64, _end INT64, _type STRING{}) FROM "
                                  "'/tmp/{}_{}_{}.csv'(sample_size=0, header=true) "
                                  "RETURN `_start`, `_end`{} {}) (from = \"{}\", to = \"{}\");",
-                relName, propertiesToCopy, loadFromHeaders, srcLabel, relName, dstLabel,
-                propertiesToCopy.empty() ? "" : ", ", propertiesToCopy, srcLabel, dstLabel);
+            relName, propertiesToCopy, loadFromHeaders, srcLabel, relName, dstLabel,
+            propertiesToCopy.empty() ? "" : ", ", propertiesToCopy, srcLabel, dstLabel);
     }
     yyjson_doc_free(doc);
     if (nodePairsString.empty()) {

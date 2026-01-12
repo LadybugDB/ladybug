@@ -1,7 +1,6 @@
 #include "binder/expression/expression_util.h"
 
 #include <algorithm>
-#include <format>
 
 #include "binder/binder.h"
 #include "binder/expression/literal_expression.h"
@@ -11,6 +10,7 @@
 #include "common/exception/runtime.h"
 #include "common/type_utils.h"
 #include "common/types/value/nested.h"
+#include <format>
 
 using namespace lbug::common;
 
@@ -476,8 +476,8 @@ template<typename T>
 T ExpressionUtil::getExpressionVal(const Expression& expr, const Value& value,
     const LogicalType& targetType, validate_param_func<T> validateParamFunc) {
     if (value.getDataType() != targetType) {
-        throw RuntimeException{std::format("Parameter: {} must be a {} literal.",
-            expr.getAlias(), targetType.toString())};
+        throw RuntimeException{std::format("Parameter: {} must be a {} literal.", expr.getAlias(),
+            targetType.toString())};
     }
     T val = value.getValue<T>();
     if (validateParamFunc != nullptr) {
@@ -499,9 +499,8 @@ T ExpressionUtil::evaluateLiteral(main::ClientContext* context,
                 expression->toString());
         } break;
         default: {
-            errMsg =
-                std::format("The expression: '{}' must be a parameter/literal expression.",
-                    expression->toString());
+            errMsg = std::format("The expression: '{}' must be a parameter/literal expression.",
+                expression->toString());
             ;
         } break;
         }

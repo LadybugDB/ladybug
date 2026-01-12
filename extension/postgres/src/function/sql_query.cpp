@@ -1,4 +1,3 @@
-#include <format>
 #include "function/sql_query.h"
 
 #include "binder/binder.h"
@@ -10,6 +9,7 @@
 #include "processor/execution_context.h"
 #include "storage/attached_postgres_database.h"
 #include "storage/postgres_storage.h"
+#include <format>
 
 using namespace lbug::function;
 using namespace lbug::main;
@@ -46,7 +46,8 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
             attachedDB->constCast<AttachedPostgresDatabase>().getAttachedCatalogNameInDuckDB(),
             escapeSpecialChars(query));
     // Query to sniff the column names and types.
-    auto queryToExecuteInDuckDB = std::vformat(queryTemplate, std::make_format_args("*")) + " limit 1";
+    auto queryToExecuteInDuckDB =
+        std::vformat(queryTemplate, std::make_format_args("*")) + " limit 1";
     auto& attachedPostgresDB = attachedDB->constCast<AttachedPostgresDatabase>();
     auto queryResult = attachedPostgresDB.executeQuery(queryToExecuteInDuckDB);
     std::vector<common::LogicalType> returnTypes;

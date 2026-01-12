@@ -1,10 +1,9 @@
 #pragma once
-#include <format>
-
 #include "common/exception/runtime.h"
 #include "common/vector/value_vector.h"
 #include "function/list/functions/list_unique_function.h"
 #include "main/client_context.h"
+#include <format>
 
 namespace lbug {
 namespace function {

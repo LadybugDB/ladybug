@@ -1,4 +1,3 @@
-#include <format>
 #include "expression_evaluator/lambda_evaluator.h"
 
 #include "binder/expression/lambda_expression.h"
@@ -9,6 +8,7 @@
 #include "main/client_context.h"
 #include "parser/expression/parsed_lambda_expression.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::processor;

@@ -1,4 +1,3 @@
-#include <format>
 #include "processor/operator/persistent/reader/parquet/parquet_reader.h"
 
 #include "binder/binder.h"
@@ -14,6 +13,7 @@
 #include "processor/operator/persistent/reader/parquet/thrift_tools.h"
 #include "processor/operator/persistent/reader/reader_bind_utils.h"
 #include "processor/warning_context.h"
+#include <format>
 
 using namespace lbug_parquet::format;
 
@@ -195,8 +195,8 @@ void ParquetReader::initMetadata() {
     // LCOV_EXCL_START
     if (memcmp(buf.ptr + 4, "PAR1", 4) != 0) {
         if (memcmp(buf.ptr + 4, "PARE", 4) == 0) {
-            throw CopyException{std::format(
-                "Encrypted Parquet files are not supported for file {}", fileInfo->path.c_str())};
+            throw CopyException{std::format("Encrypted Parquet files are not supported for file {}",
+                fileInfo->path.c_str())};
         }
         throw CopyException{
             std::format("No magic bytes found at the end of file {}", fileInfo->path.c_str())};

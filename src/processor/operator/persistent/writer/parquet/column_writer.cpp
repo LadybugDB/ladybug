@@ -1,4 +1,3 @@
-#include <format>
 #include "processor/operator/persistent/writer/parquet/column_writer.h"
 
 #include "common/exception/runtime.h"
@@ -15,6 +14,7 @@
 #include "processor/operator/persistent/writer/parquet/uuid_column_writer.h"
 #include "snappy.h"
 #include "zstd.h"
+#include <format>
 
 namespace lbug {
 namespace processor {

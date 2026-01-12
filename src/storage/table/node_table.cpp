@@ -1,4 +1,3 @@
-#include <format>
 #include "storage/table/node_table.h"
 
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
@@ -13,6 +12,7 @@
 #include "storage/storage_manager.h"
 #include "storage/wal/local_wal.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::catalog;
 using namespace lbug::common;

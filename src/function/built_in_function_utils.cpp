@@ -1,13 +1,13 @@
 #include "function/built_in_function_utils.h"
 
 #include <sstream>
-#include <format>
 
 #include "catalog/catalog_entry/function_catalog_entry.h"
 #include "common/exception/binder.h"
 #include "function/aggregate_function.h"
 #include "function/arithmetic/vector_arithmetic_functions.h"
 #include "function/scalar_function.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::catalog;

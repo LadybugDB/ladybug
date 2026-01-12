@@ -20,11 +20,11 @@
 
 #include <filesystem>
 #include <sstream>
-#include <format>
 
 #include "common/string_utils.h"
 #include "common/types/timestamp_t.h"
 #include "test_helper/test_helper.h"
+#include <format>
 
 using namespace lbug::common;
 

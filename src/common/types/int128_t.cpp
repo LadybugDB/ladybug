@@ -745,8 +745,8 @@ int128_t::operator uint8_t() const {
 int128_t::operator double() const {
     double result = NAN;
     if (!Int128_t::tryCast(*this, result)) { // LCOV_EXCL_START
-        throw common::OverflowException(std::format("Value {} is not within DOUBLE range",
-            common::TypeUtils::toString(*this)));
+        throw common::OverflowException(
+            std::format("Value {} is not within DOUBLE range", common::TypeUtils::toString(*this)));
     } // LCOV_EXCL_STOP
     return result;
 }
@@ -754,8 +754,8 @@ int128_t::operator double() const {
 int128_t::operator float() const {
     float result = NAN;
     if (!Int128_t::tryCast(*this, result)) { // LCOV_EXCL_START
-        throw common::OverflowException(std::format("Value {} is not within FLOAT range",
-            common::TypeUtils::toString(*this)));
+        throw common::OverflowException(
+            std::format("Value {} is not within FLOAT range", common::TypeUtils::toString(*this)));
     } // LCOV_EXCL_STOP
     return result;
 }

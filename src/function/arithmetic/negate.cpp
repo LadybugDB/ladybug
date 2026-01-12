@@ -1,9 +1,9 @@
-#include <format>
 #include "function/arithmetic/negate.h"
 
 #include "common/exception/overflow.h"
 #include "common/type_utils.h"
 #include "function/cast/functions/numeric_limits.h"
+#include <format>
 
 namespace lbug {
 namespace function {
@@ -46,8 +46,8 @@ bool NegateInPlace::operation(int64_t& input, int64_t& result) {
 template<>
 void Negate::operation(int8_t& input, int8_t& result) {
     if (!NegateInPlace::operation(input, result)) {
-        throw common::OverflowException{std::format(
-            "Value {} cannot be negated within INT8 range.", common::TypeUtils::toString(input))};
+        throw common::OverflowException{std::format("Value {} cannot be negated within INT8 range.",
+            common::TypeUtils::toString(input))};
     }
 }
 

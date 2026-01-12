@@ -1,4 +1,3 @@
-#include <format>
 #include "common/exception/conversion.h"
 #include "common/json_common.h"
 #include "function/scalar_function.h"
@@ -6,6 +5,7 @@
 #include "json_creation_functions.h"
 #include "json_type.h"
 #include "json_utils.h"
+#include <format>
 
 namespace lbug {
 namespace json_extension {

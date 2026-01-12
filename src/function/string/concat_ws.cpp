@@ -1,6 +1,6 @@
-#include <format>
 #include "common/exception/binder.h"
 #include "function/string/vector_string_functions.h"
+#include <format>
 
 namespace lbug {
 namespace function {

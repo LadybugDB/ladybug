@@ -1,4 +1,3 @@
-#include <format>
 #include "processor/operator/simple/uninstall_extension.h"
 
 #include "common/exception/runtime.h"
@@ -7,6 +6,7 @@
 #include "main/client_context.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include <format>
 
 namespace lbug {
 namespace processor {

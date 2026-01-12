@@ -1,8 +1,8 @@
-#include <format>
 #include "connector/duckdb_type_converter.h"
 
 #include "common/exception/binder.h"
 #include "common/string_utils.h"
+#include <format>
 
 namespace lbug {
 namespace duckdb_extension {

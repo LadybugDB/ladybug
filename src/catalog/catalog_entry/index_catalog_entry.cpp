@@ -1,8 +1,8 @@
-#include <format>
 #include "catalog/catalog_entry/index_catalog_entry.h"
 
 #include "common/exception/runtime.h"
 #include "common/serializer/buffer_writer.h"
+#include <format>
 
 namespace lbug {
 namespace catalog {

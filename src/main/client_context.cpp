@@ -26,8 +26,8 @@
 #include "storage/buffer_manager/spiller.h"
 #include "storage/storage_manager.h"
 #include "transaction/transaction_context.h"
-#include <processor/warning_context.h>
 #include <format>
+#include <processor/warning_context.h>
 
 #if defined(_WIN32)
 #include "common/windows_utils.h"

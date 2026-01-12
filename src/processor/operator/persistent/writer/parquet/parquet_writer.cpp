@@ -1,4 +1,3 @@
-#include <format>
 #include "processor/operator/persistent/writer/parquet/parquet_writer.h"
 
 #include "common/constants.h"
@@ -9,6 +8,7 @@
 #include "main/client_context.h"
 #include "protocol/TCompactProtocol.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include <format>
 
 namespace lbug {
 namespace processor {

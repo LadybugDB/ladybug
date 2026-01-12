@@ -1,10 +1,10 @@
-#include <format>
 #include "binder/expression/expression_util.h"
 #include "common/exception/binder.h"
 #include "common/type_utils.h"
 #include "function/list/functions/list_position_function.h"
 #include "function/list/vector_list_functions.h"
 #include "function/scalar_function.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::binder;
@@ -38,9 +38,8 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
         auto& listChildType = ListType::getChildType(listExpr->getDataType());
         auto& elementType = elementExpr->getDataType();
         if (!LogicalTypeUtils::tryGetMaxLogicalType(listChildType, elementType, childType)) {
-            throw BinderException(
-                std::format("Cannot compare {} and {} in list_contains function.",
-                    listChildType.toString(), elementType.toString()));
+            throw BinderException(std::format("Cannot compare {} and {} in list_contains function.",
+                listChildType.toString(), elementType.toString()));
         }
     }
     if (childType.getLogicalTypeID() == LogicalTypeID::ANY) {

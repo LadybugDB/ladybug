@@ -1,10 +1,10 @@
-#include <format>
 #include "storage/predicate/constant_predicate.h"
 
 #include "common/type_utils.h"
 #include "function/comparison/comparison_functions.h"
 #include "storage/compression/compression.h"
 #include "storage/table/column_chunk_stats.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::function;

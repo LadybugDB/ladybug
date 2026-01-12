@@ -1,7 +1,6 @@
 #include "common/types/types.h"
 
 #include <set>
-#include <format>
 
 #include "catalog/catalog.h"
 #include "common/cast.h"
@@ -22,6 +21,7 @@
 #include "function/cast/functions/numeric_limits.h"
 #include "storage/compression/float_compression.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using lbug::function::BuiltInFunctionsUtils;
 

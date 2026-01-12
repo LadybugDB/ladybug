@@ -1,4 +1,3 @@
-#include <format>
 #include "catalog/hnsw_index_catalog_entry.h"
 
 #include "catalog/catalog.h"
@@ -8,6 +7,7 @@
 #include "common/serializer/deserializer.h"
 #include "index/hnsw_config.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::catalog;
 
@@ -40,7 +40,7 @@ std::string HNSWIndexAuxInfo::toCypher(const IndexCatalogEntry& indexEntry,
     auto propertyName = tableEntry->getProperty(indexEntry.getPropertyIDs()[0]).getName();
     auto metricName = HNSWIndexConfig::metricToString(config.metric);
     cypher += std::format("CALL CREATE_VECTOR_INDEX('{}', '{}', '{}', mu := {}, ml := {}, "
-                                   "pu := {}, metric := '{}', alpha := {}, efc := {});",
+                          "pu := {}, metric := '{}', alpha := {}, efc := {});",
         tableName, indexEntry.getIndexName(), propertyName, config.mu, config.ml, config.pu,
         metricName, config.alpha, config.efc);
     return cypher;

@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/bound_extension_statement.h"
 #include "common/exception/binder.h"
@@ -6,6 +5,7 @@
 #include "common/string_utils.h"
 #include "extension/extension.h"
 #include "parser/extension_statement.h"
+#include <format>
 
 using namespace lbug::parser;
 
@@ -16,7 +16,7 @@ static void bindInstallExtension(const ExtensionAuxInfo& auxInfo) {
     if (!ExtensionUtils::isOfficialExtension(auxInfo.path)) {
         throw common::BinderException(
             std::format("{} is not an official extension.\nNon-official extensions "
-                                 "can be installed directly by: `LOAD EXTENSION [EXTENSION_PATH]`.",
+                        "can be installed directly by: `LOAD EXTENSION [EXTENSION_PATH]`.",
                 auxInfo.path));
     }
 }
@@ -29,7 +29,7 @@ static void bindLoadExtension(main::ClientContext* context, const ExtensionAuxIn
                 ExtensionUtils::getLocalPathForExtensionLib(context, extensionName))) {
             throw common::BinderException(
                 std::format("Extension: {} is an official extension and has not been "
-                                     "installed.\nYou can install it by: install {}.",
+                            "installed.\nYou can install it by: install {}.",
                     extensionName, extensionName));
         }
         return;
@@ -37,7 +37,7 @@ static void bindLoadExtension(main::ClientContext* context, const ExtensionAuxIn
     if (!localFileSystem.fileOrPathExists(auxInfo.path, nullptr /* clientContext */)) {
         throw common::BinderException(
             std::format("The extension {} is neither an official extension, nor does "
-                                 "the extension path: '{}' exists.",
+                        "the extension path: '{}' exists.",
                 auxInfo.path, auxInfo.path));
     }
 }
@@ -46,7 +46,7 @@ static void bindUninstallExtension(const ExtensionAuxInfo& auxInfo) {
     if (!ExtensionUtils::isOfficialExtension(auxInfo.path)) {
         throw common::BinderException(
             std::format("The extension {} is not an official extension.\nOnly official "
-                                 "extensions can be uninstalled.",
+                        "extensions can be uninstalled.",
                 auxInfo.path));
     }
 }

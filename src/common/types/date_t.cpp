@@ -1,4 +1,3 @@
-#include <format>
 #include "common/types/date_t.h"
 
 #include "common/assert.h"
@@ -7,6 +6,7 @@
 #include "common/types/cast_helpers.h"
 #include "common/types/timestamp_t.h"
 #include "re2.h"
+#include <format>
 
 namespace lbug {
 namespace common {

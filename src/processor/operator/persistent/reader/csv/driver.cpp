@@ -1,4 +1,3 @@
-#include <format>
 #include "processor/operator/persistent/reader/csv/driver.h"
 
 #include "common/system_config.h"
@@ -6,6 +5,7 @@
 #include "processor/operator/persistent/reader/csv/parallel_csv_reader.h"
 #include "processor/operator/persistent/reader/csv/serial_csv_reader.h"
 #include "utf8proc_wrapper.h"
+#include <format>
 
 using namespace lbug::common;
 

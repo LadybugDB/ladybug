@@ -1,9 +1,9 @@
-#include <format>
 #include "common/enums/rel_multiplicity.h"
 
 #include "common/assert.h"
 #include "common/exception/binder.h"
 #include "common/string_utils.h"
+#include <format>
 
 namespace lbug {
 namespace common {

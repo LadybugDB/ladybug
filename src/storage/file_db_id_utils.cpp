@@ -1,7 +1,7 @@
-#include <format>
 #include "storage/file_db_id_utils.h"
 
 #include "common/exception/runtime.h"
+#include <format>
 
 namespace lbug::storage {
 void FileDBIDUtils::verifyDatabaseID(const common::FileInfo& fileInfo,

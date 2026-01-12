@@ -1,4 +1,3 @@
-#include <format>
 #include "function/create_fts_index.h"
 
 #include "binder/expression/literal_expression.h"
@@ -21,6 +20,7 @@
 #include "processor/execution_context.h"
 #include "storage/storage_manager.h"
 #include "utils/fts_utils.h"
+#include <format>
 
 namespace lbug {
 namespace fts_extension {
@@ -68,7 +68,7 @@ static void validateInternalTableNotExist(const std::string& tableName,
     if (catalog.containsTable(transaction, tableName)) {
         throw BinderException{
             std::format("Table: {} already exists. Please drop or rename the table before "
-                         "creating a full text search index.",
+                        "creating a full text search index.",
                 tableName)};
     }
 }
@@ -174,7 +174,7 @@ std::string createFTSIndexQuery(ClientContext& context, const TableFuncBindData&
     // relationship between terms and docs.
     auto appearsInfoTableName = FTSUtils::getAppearsInfoTableName(tableID, indexName);
     query += std::format("CREATE NODE TABLE `{}` (ID SERIAL, term string, docID INT64, primary "
-                          "key(ID));",
+                         "key(ID));",
         appearsInfoTableName);
     auto tableName = ftsBindData->tableName;
     auto tableEntry = catalog::Catalog::Get(context)->getTableCatalogEntry(
@@ -182,13 +182,13 @@ std::string createFTSIndexQuery(ClientContext& context, const TableFuncBindData&
     for (auto& property : ftsBindData->propertyIDs) {
         auto propertyName = tableEntry->getProperty(property).getName();
         query += std::format("COPY `{}` FROM "
-                              "(MATCH (b:`{}`) "
-                              "WITH `{}`(b.{}) AS tk, OFFSET(ID(b)) AS id "
-                              "UNWIND tk AS t "
-                              "WITH t AS t1, id AS id1 "
-                              "WHERE t1 is NOT NULL AND SIZE(t1) > 0 AND "
-                              "NOT EXISTS {{MATCH (s:`{}` {{sw: t1}})}} "
-                              "RETURN STEM(t1, '{}'), id1);",
+                             "(MATCH (b:`{}`) "
+                             "WITH `{}`(b.{}) AS tk, OFFSET(ID(b)) AS id "
+                             "UNWIND tk AS t "
+                             "WITH t AS t1, id AS id1 "
+                             "WHERE t1 is NOT NULL AND SIZE(t1) > 0 AND "
+                             "NOT EXISTS {{MATCH (s:`{}` {{sw: t1}})}} "
+                             "RETURN STEM(t1, '{}'), id1);",
             appearsInfoTableName, tableName, FTSUtils::getTokenizeMacroName(tableID, indexName),
             propertyName, ftsBindData->createFTSConfig.stopWordsTableInfo.tableName,
             ftsBindData->createFTSConfig.stemmer);
@@ -199,8 +199,8 @@ std::string createFTSIndexQuery(ClientContext& context, const TableFuncBindData&
     query += std::format("CREATE NODE TABLE `{}` (docID INT64, len UINT64, primary key(docID));",
         docsTableName);
     query += std::format("COPY `{}` FROM "
-                          "(MATCH (t:`{}`) "
-                          "RETURN t.docID, CAST(count(t) AS UINT64)); ",
+                         "(MATCH (t:`{}`) "
+                         "RETURN t.docID, CAST(count(t) AS UINT64)); ",
         docsTableName, appearsInfoTableName);
 
     auto termsTableName = FTSUtils::getTermsTableName(tableID, indexName);
@@ -208,8 +208,8 @@ std::string createFTSIndexQuery(ClientContext& context, const TableFuncBindData&
     query += std::format("CREATE NODE TABLE `{}` (term STRING, df UINT64, PRIMARY KEY(term));",
         termsTableName);
     query += std::format("COPY `{}` FROM "
-                          "(MATCH (t:`{}`) "
-                          "RETURN t.term, CAST(count(distinct t.docID) AS UINT64));",
+                         "(MATCH (t:`{}`) "
+                         "RETURN t.term, CAST(count(distinct t.docID) AS UINT64));",
         termsTableName, appearsInfoTableName);
 
     auto appearsInTableName = FTSUtils::getAppearsInTableName(tableID, indexName);
@@ -218,8 +218,8 @@ std::string createFTSIndexQuery(ClientContext& context, const TableFuncBindData&
     query += std::format("CREATE REL TABLE `{}` (FROM `{}` TO `{}`, tf UINT64);",
         appearsInTableName, termsTableName, docsTableName);
     query += std::format("COPY `{}` FROM ("
-                          "MATCH (b:`{}`) "
-                          "RETURN b.term, b.docID, CAST(count(*) as UINT64));",
+                         "MATCH (b:`{}`) "
+                         "RETURN b.term, b.docID, CAST(count(*) as UINT64));",
         appearsInTableName, appearsInfoTableName);
 
     // Drop the intermediate terms_in_doc table.
@@ -235,8 +235,8 @@ std::string createFTSIndexQuery(ClientContext& context, const TableFuncBindData&
     properties += "]";
     std::string params;
     params += std::format("stemmer := '{}', ", ftsBindData->createFTSConfig.stemmer);
-    params += std::format("stopWords := '{}'",
-        ftsBindData->createFTSConfig.stopWordsTableInfo.stopWords);
+    params +=
+        std::format("stopWords := '{}'", ftsBindData->createFTSConfig.stopWordsTableInfo.stopWords);
     query += std::format("CALL _CREATE_FTS_INDEX('{}', '{}', {}, {});", tableName, indexName,
         properties, params);
     query += std::format("RETURN 'Index {} has been created.' as result;", ftsBindData->indexName);

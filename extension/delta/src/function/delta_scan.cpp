@@ -1,5 +1,6 @@
-#include <format>
 #include "function/delta_scan.h"
+
+#include <format>
 
 namespace lbug {
 namespace delta_extension {

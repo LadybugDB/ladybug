@@ -1,7 +1,7 @@
-#include <format>
 #include "common/assert.h"
 #include "common/copier_config/file_scan_info.h"
 #include "common/string_utils.h"
+#include <format>
 
 namespace lbug {
 namespace common {

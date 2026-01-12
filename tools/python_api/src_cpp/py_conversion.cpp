@@ -1,4 +1,3 @@
-#include <format>
 #include "py_conversion.h"
 
 #include "cached_import/py_cached_import.h"
@@ -7,6 +6,7 @@
 #include "common/type_utils.h"
 #include "common/types/uuid.h"
 #include "py_objects.h"
+#include <format>
 
 namespace lbug {
 

@@ -1,4 +1,3 @@
-#include <format>
 #include "catalog/duckdb_catalog.h"
 
 #include "binder/bound_attach_info.h"
@@ -11,6 +10,7 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/duckdb_storage.h"
 #include "storage/storage_manager.h"
+#include <format>
 
 namespace lbug {
 namespace duckdb_extension {
@@ -64,8 +64,8 @@ std::string DuckDBCatalog::bindSchemaName(const binder::AttachOption& options,
     if (options.options.contains(DuckDBStorageExtension::SCHEMA_OPTION)) {
         auto val = options.options.at(DuckDBStorageExtension::SCHEMA_OPTION);
         if (val.getDataType().getLogicalTypeID() != common::LogicalTypeID::STRING) {
-            throw common::RuntimeException{std::format("Invalid option value for {}",
-                DuckDBStorageExtension::SCHEMA_OPTION)};
+            throw common::RuntimeException{
+                std::format("Invalid option value for {}", DuckDBStorageExtension::SCHEMA_OPTION)};
         }
         return val.getValue<std::string>();
     }
@@ -122,10 +122,9 @@ static bool getTableInfo(const DuckDBConnector& connector, const std::string& ta
     const std::string& schemaName, const std::string& catalogName,
     std::vector<common::LogicalType>& columnTypes, std::vector<std::string>& columnNames,
     bool skipUnsupportedTable) {
-    auto query =
-        std::format("select data_type,column_name from information_schema.columns where "
+    auto query = std::format("select data_type,column_name from information_schema.columns where "
                              "table_name = '{}' and table_schema = '{}' and table_catalog = '{}';",
-            tableName, schemaName, catalogName);
+        tableName, schemaName, catalogName);
     auto result = connector.executeQuery(query);
     if (result->RowCount() == 0) {
         return false;

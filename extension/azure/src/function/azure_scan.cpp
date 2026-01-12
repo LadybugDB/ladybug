@@ -1,5 +1,6 @@
-#include <format>
 #include "function/azure_scan.h"
+
+#include <format>
 
 namespace lbug {
 namespace azure_extension {

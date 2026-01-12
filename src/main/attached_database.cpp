@@ -1,4 +1,3 @@
-#include <format>
 #include "main/attached_database.h"
 
 #include "common/exception/runtime.h"
@@ -9,6 +8,7 @@
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
 #include "transaction/transaction_manager.h"
+#include <format>
 
 namespace lbug {
 namespace main {
@@ -60,8 +60,8 @@ AttachedLbugDatabase::AttachedLbugDatabase(std::string dbPath, std::string dbNam
         path = path.substr(0, path.size() - 1);
     }
     if (!vfs->fileOrPathExists(path, clientContext)) {
-        throw common::RuntimeException(std::format(
-            "Cannot attach a remote Lbug database due to invalid path: {}.", path));
+        throw common::RuntimeException(
+            std::format("Cannot attach a remote Lbug database due to invalid path: {}.", path));
     }
     catalog = std::make_unique<catalog::Catalog>();
     validateEmptyWAL(path, clientContext);

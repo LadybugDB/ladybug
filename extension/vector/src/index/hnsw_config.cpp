@@ -1,4 +1,3 @@
-#include <format>
 #include "index/hnsw_config.h"
 
 #include "common/exception/binder.h"
@@ -7,6 +6,7 @@
 #include "common/serializer/serializer.h"
 #include "common/string_utils.h"
 #include "function/hnsw_index_functions.h"
+#include <format>
 
 namespace lbug {
 namespace vector_extension {
@@ -29,9 +29,9 @@ void Ml::validate(int64_t value) {
     }
     if (HNSWIndex::getDegreeThresholdToShrink(value) >
         static_cast<int64_t>(common::DEFAULT_VECTOR_CAPACITY)) {
-        throw common::BinderException(std::format(
-            "Unsupported configured ml value {}, the maximum supported value is {}.", value,
-            HNSWIndex::getMaximumSupportedMl()));
+        throw common::BinderException(
+            std::format("Unsupported configured ml value {}, the maximum supported value is {}.",
+                value, HNSWIndex::getMaximumSupportedMl()));
     }
 }
 
@@ -118,9 +118,8 @@ HNSWIndexConfig::HNSWIndexConfig(const function::optional_params_t& optionalPara
                                  common::ConflictAction::ON_CONFLICT_DO_NOTHING :
                                  common::ConflictAction::ON_CONFLICT_THROW;
         } else {
-            throw common::BinderException{
-                std::format("Unrecognized optional parameter {} in {}.", name,
-                    CreateVectorIndexFunction::name)};
+            throw common::BinderException{std::format("Unrecognized optional parameter {} in {}.",
+                name, CreateVectorIndexFunction::name)};
         }
     }
 }
@@ -140,8 +139,8 @@ std::string HNSWIndexConfig::metricToString(MetricType metric) {
         return "dotproduct";
     }
     default: {
-        throw common::RuntimeException(std::format("Unknown distance function type {}.",
-            static_cast<int64_t>(metric)));
+        throw common::RuntimeException(
+            std::format("Unknown distance function type {}.", static_cast<int64_t>(metric)));
     }
     }
 }
@@ -203,8 +202,8 @@ DropHNSWConfig::DropHNSWConfig(const function::optional_params_t& optionalParams
                                  common::ConflictAction::ON_CONFLICT_DO_NOTHING :
                                  common::ConflictAction::ON_CONFLICT_THROW;
         } else {
-            throw common::BinderException{std::format(
-                "Unrecognized optional parameter {} in {}.", name, DropVectorIndexFunction::name)};
+            throw common::BinderException{std::format("Unrecognized optional parameter {} in {}.",
+                name, DropVectorIndexFunction::name)};
         }
     }
 }
@@ -225,8 +224,8 @@ QueryHNSWConfig::QueryHNSWConfig(const function::optional_params_t& optionalPara
             directedSearchUpSelThreshold = value.getValue<double>();
             DirectedSearchUpSelThreshold::validate(directedSearchUpSelThreshold);
         } else {
-            throw common::BinderException{std::format(
-                "Unrecognized optional parameter {} in {}.", name, QueryVectorIndexFunction::name)};
+            throw common::BinderException{std::format("Unrecognized optional parameter {} in {}.",
+                name, QueryVectorIndexFunction::name)};
         }
     }
     if (blindSearchUpSelThreshold >= directedSearchUpSelThreshold) {

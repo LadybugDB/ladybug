@@ -1,7 +1,7 @@
-#include <format>
 #include "common/exception/runtime.h"
 #include "function/string/functions/base_lower_upper_function.h"
 #include "utf8proc.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::utf8proc;
@@ -21,8 +21,7 @@ uint32_t BaseLowerUpperFunction::getResultLen(char* inputStr, uint32_t inputLen,
                 // LCOV_EXCL_START
                 // TODO(Xiyang): We shouldn't allow invalid UTF-8 to enter a string column.
                 std::string funcName = isUpper ? "UPPER" : "LOWER";
-                throw RuntimeException(
-                    std::format("Failed calling {}: Invalid UTF-8.", funcName));
+                throw RuntimeException(std::format("Failed calling {}: Invalid UTF-8.", funcName));
                 // LCOV_EXCL_STOP
             }
             int convertedCodepoint =

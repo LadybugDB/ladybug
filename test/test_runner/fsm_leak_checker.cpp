@@ -4,7 +4,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include <format>
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
@@ -14,6 +13,7 @@
 #include "storage/checkpointer.h"
 #include "storage/storage_manager.h"
 #include "transaction/transaction_context.h"
+#include <format>
 
 namespace lbug::testing {
 
@@ -61,11 +61,9 @@ void FSMLeakChecker::checkForLeakedPages(main::Connection* conn) {
     for (auto& [tableName, indexName, indexType] : indexes) {
         std::string dropQuery;
         if (indexType == "FTS") {
-            dropQuery =
-                std::format("CALL DROP_FTS_INDEX('{}', '{}');", tableName, indexName);
+            dropQuery = std::format("CALL DROP_FTS_INDEX('{}', '{}');", tableName, indexName);
         } else if (indexType == "HNSW") {
-            dropQuery =
-                std::format("CALL DROP_VECTOR_INDEX('{}', '{}');", tableName, indexName);
+            dropQuery = std::format("CALL DROP_VECTOR_INDEX('{}', '{}');", tableName, indexName);
         } else {
             EXPECT_TRUE(false) << "Unknown index type: " << indexType << " (table=" << tableName
                                << ", index=" << indexName << ")" << std::endl;

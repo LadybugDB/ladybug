@@ -1,4 +1,3 @@
-#include <format>
 #include "function/cast/functions/cast_string_non_nested_functions.h"
 
 #include "common/constants.h"
@@ -8,6 +7,7 @@
 #include "common/types/uuid.h"
 #include "function/cast/functions/numeric_limits.h"
 #include "re2.h"
+#include <format>
 
 namespace lbug {
 namespace function {

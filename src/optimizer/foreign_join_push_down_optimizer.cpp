@@ -1,7 +1,6 @@
 #include "optimizer/foreign_join_push_down_optimizer.h"
 
 #include <algorithm>
-#include <format>
 
 #include "binder/expression/property_expression.h"
 #include "binder/expression/variable_expression.h"
@@ -14,6 +13,7 @@
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_table_function_call.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
+#include <format>
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -428,8 +428,8 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
     // Join on id columns: srcNode.id = rel.first/second column and rel.second/first column =
     // dstNode.id
     std::string query = std::format("{} FROM {} {} "
-                                     "JOIN {} {} ON {}.id = {}.{} "
-                                     "JOIN {} {} ON {}.{} = {}.id",
+                                    "JOIN {} {} ON {}.id = {}.{} "
+                                    "JOIN {} {} ON {}.{} = {}.id",
         selectClause, info.srcTable, srcAlias, info.relTable, relAlias, srcAlias, relAlias,
         srcJoinCol, info.dstTable, dstAlias, relAlias, dstJoinCol, dstAlias);
 

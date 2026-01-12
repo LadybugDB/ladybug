@@ -1,10 +1,10 @@
-#include <format>
 #include "httpfs.h"
 
 #include "common/cast.h"
 #include "common/exception/io.h"
 #include "common/exception/not_implemented.h"
 #include "transaction/transaction.h"
+#include <format>
 
 namespace lbug {
 namespace httpfs_extension {
@@ -34,7 +34,7 @@ void HTTPFileInfo::initMetadata() {
             if (!(flags & FileFlags::CREATE_IF_NOT_EXISTS) &&
                 !(flags & FileFlags::CREATE_AND_TRUNCATE_IF_EXISTS)) {
                 throw IOException(std::format("Unable to open URL: \"{}\" for writing: file does "
-                                               "not exist and CREATE flag is not set",
+                                              "not exist and CREATE flag is not set",
                     path));
             }
             length = 0;
@@ -55,7 +55,7 @@ void HTTPFileInfo::initMetadata() {
                 rangeRequest->headers["Content-Range"].size() < rangeFound + 1) {
                 // LCOV_EXCL_START
                 throw IOException(std::format("Unknown Content-Range Header \"The value of "
-                                               "Content-Range Header\":  ({})",
+                                              "Content-Range Header\":  ({})",
                     rangeRequest->headers["Content-Range"]));
                 // LCOV_EXCL_STOP
             }

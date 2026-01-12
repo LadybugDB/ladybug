@@ -1,4 +1,3 @@
-#include <format>
 #include "common/exception/binder.h"
 #include "common/types/value/nested.h"
 #include "function/gds/gds.h"
@@ -8,6 +7,7 @@
 #include "graph/graph_entry_set.h"
 #include "parser/parser.h"
 #include "processor/execution_context.h"
+#include <format>
 
 using namespace lbug::binder;
 using namespace lbug::common;

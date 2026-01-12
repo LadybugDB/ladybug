@@ -1,13 +1,13 @@
-#include <format>
 #include "common/exception/message.h"
 
+#include <format>
 
 namespace lbug {
 namespace common {
 
 std::string ExceptionMessage::duplicatePKException(const std::string& pkString) {
     return std::format("Found duplicated primary key value {}, which violates the uniqueness"
-                        " constraint of the primary key column.",
+                       " constraint of the primary key column.",
         pkString);
 }
 
@@ -17,7 +17,7 @@ std::string ExceptionMessage::nonExistentPKException(const std::string& pkString
 
 std::string ExceptionMessage::invalidPKType(const std::string& type) {
     return std::format("Invalid primary key column type {}. Primary keys must be either STRING or "
-                        "a numeric type.",
+                       "a numeric type.",
         type);
 }
 
@@ -27,7 +27,7 @@ std::string ExceptionMessage::nullPKException() {
 
 std::string ExceptionMessage::overLargeStringPKValueException(uint64_t length) {
     return std::format("The maximum length of primary key strings is 262144 bytes. The input "
-                        "string's length was {}.",
+                       "string's length was {}.",
         length);
 }
 
@@ -47,7 +47,7 @@ std::string ExceptionMessage::violateDeleteNodeWithConnectedEdgesConstraint(
 std::string ExceptionMessage::violateRelMultiplicityConstraint(const std::string& tableName,
     const std::string& offset, const std::string& direction) {
     return std::format("Node(nodeOffset: {}) has more than one neighbour in table {} in the {} "
-                        "direction, which violates the rel multiplicity constraint.",
+                       "direction, which violates the rel multiplicity constraint.",
         offset, tableName, direction);
 }
 

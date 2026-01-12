@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/bound_scan_source.h"
 #include "binder/expression/literal_expression.h"
@@ -15,6 +14,7 @@
 #include "main/database_manager.h"
 #include "parser/expression/parsed_function_expression.h"
 #include "parser/scan_source.h"
+#include <format>
 
 using namespace lbug::parser;
 using namespace lbug::binder;

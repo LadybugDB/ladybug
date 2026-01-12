@@ -1,7 +1,7 @@
-#include <format>
 #include "common/json_common.h"
 
 #include "common/exception/runtime.h"
+#include <format>
 
 namespace lbug {
 namespace json_extension {
@@ -27,8 +27,7 @@ void JSONCommon::throwParseError(const char* data, size_t length, yyjson_read_er
         throw common::RuntimeException(std::format(
             "Error {} at line {}, column {}, character index {}", err.msg, line, col, chr));
     } else {
-        throw common::RuntimeException(
-            std::format("Error {} at byte {}", err.msg, err.pos));
+        throw common::RuntimeException(std::format("Error {} at byte {}", err.msg, err.pos));
     }
 }
 

@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/path_expression.h"
@@ -17,6 +16,7 @@
 #include "main/client_context.h"
 #include "main/database_manager.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::parser;
@@ -162,7 +162,7 @@ static void checkRelDirectionTypeAgainstStorageDirection(const RelExpression* re
         // Directed pattern is in the fwd direction
         if (!containsValue(rel->getExtendDirections(), ExtendDirection::FWD)) {
             throw BinderException(std::format("Querying table matched in rel pattern '{}' with "
-                                               "bwd-only storage direction isn't supported.",
+                                              "bwd-only storage direction isn't supported.",
                 rel->toString()));
         }
         break;
@@ -170,8 +170,8 @@ static void checkRelDirectionTypeAgainstStorageDirection(const RelExpression* re
         if (rel->getExtendDirections().size() < NUM_REL_DIRECTIONS) {
             throw BinderException(
                 std::format("Undirected rel pattern '{}' has at least one matched rel table with "
-                             "storage type 'fwd' or 'bwd'. Undirected rel patterns are only "
-                             "supported if every matched rel table has storage type 'both'.",
+                            "storage type 'fwd' or 'bwd'. Undirected rel patterns are only "
+                            "supported if every matched rel table has storage type 'both'.",
                     rel->toString()));
         }
         break;
@@ -342,8 +342,8 @@ static void checkWeightedShortestPathSupportedType(const LogicalType& type) {
     default:
         break;
     }
-    throw BinderException(std::format(
-        "{} weight type is not supported for weighted shortest path.", type.toString()));
+    throw BinderException(std::format("{} weight type is not supported for weighted shortest path.",
+        type.toString()));
 }
 
 std::shared_ptr<RelExpression> Binder::createRecursiveQueryRel(const parser::RelPattern& relPattern,
@@ -698,8 +698,8 @@ std::pair<TableCatalogEntry*, std::string> Binder::bindNodeTableEntry(
         }
         auto attachedCatalog = attachedDB->getCatalog();
         if (!attachedCatalog->containsTable(transaction, tableName, useInternal)) {
-            throw BinderException(std::format("Table {} does not exist in attached database {}.",
-                tableName, dbName));
+            throw BinderException(
+                std::format("Table {} does not exist in attached database {}.", tableName, dbName));
         }
         return {attachedCatalog->getTableCatalogEntry(transaction, tableName, useInternal), dbName};
     } else {

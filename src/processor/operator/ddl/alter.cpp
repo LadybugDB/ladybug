@@ -1,4 +1,3 @@
-#include <format>
 #include "processor/operator/ddl/alter.h"
 
 #include "catalog/catalog.h"
@@ -11,6 +10,7 @@
 #include "storage/storage_manager.h"
 #include "storage/table/table.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::binder;
 using namespace lbug::common;

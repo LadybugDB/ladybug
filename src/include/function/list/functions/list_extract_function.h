@@ -1,11 +1,10 @@
 #pragma once
-#include <format>
-
 #include "common/exception/runtime.h"
 #include "common/type_utils.h"
 #include "common/types/ku_string.h"
 #include "common/vector/value_vector.h"
 #include "function/string/functions/array_extract_function.h"
+#include <format>
 
 namespace lbug {
 namespace function {

@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/expression/rel_expression.h"
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
@@ -6,6 +5,7 @@
 #include "common/enums/extend_direction_util.h"
 #include "common/exception/binder.h"
 #include "common/utils.h"
+#include <format>
 
 using namespace lbug::common;
 

@@ -18,6 +18,7 @@
 #else
 #include <sys/mman.h>
 #include <unistd.h>
+
 #include <format>
 #endif
 #include "common/exception/copy.h"
@@ -192,14 +193,14 @@ void NpyReader::validate(const LogicalType& type_, offset_t numRows) {
     if (type_.getLogicalTypeID() == this->type) {
         if (getNumElementsPerRow() != 1) {
             throw CopyException(std::format("Cannot copy a vector property in npy file {} to a "
-                                             "scalar property.",
+                                            "scalar property.",
                 filePath));
         }
         return;
     } else if (type_.getLogicalTypeID() == LogicalTypeID::ARRAY) {
         if (this->type != ArrayType::getChildType(type_).getLogicalTypeID()) {
             throw CopyException(std::format("The type of npy file {} does not "
-                                             "match the expected type.",
+                                            "match the expected type.",
                 filePath));
         }
         if (getNumElementsPerRow() != ArrayType::getNumElements(type_)) {
@@ -209,7 +210,7 @@ void NpyReader::validate(const LogicalType& type_, offset_t numRows) {
         return;
     } else {
         throw CopyException(std::format("The type of npy file {} does not "
-                                         "match the expected type.",
+                                        "match the expected type.",
             filePath));
     }
 }

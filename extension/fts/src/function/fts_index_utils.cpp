@@ -1,4 +1,3 @@
-#include <format>
 #include "function/fts_index_utils.h"
 
 #include "binder/binder.h"
@@ -6,6 +5,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/exception/binder.h"
 #include "transaction/transaction_context.h"
+#include <format>
 
 namespace lbug {
 namespace fts_extension {
@@ -18,8 +18,8 @@ void FTSIndexUtils::validateIndexExistence(const main::ClientContext& context,
     case IndexOperation::CREATE: {
         if (catalog->containsIndex(transaction::Transaction::Get(context), tableEntry->getTableID(),
                 indexName)) {
-            throw common::BinderException{std::format(
-                "Index {} already exists in table {}.", indexName, tableEntry->getName())};
+            throw common::BinderException{std::format("Index {} already exists in table {}.",
+                indexName, tableEntry->getName())};
         }
     } break;
     case IndexOperation::DROP:

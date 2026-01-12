@@ -1,4 +1,3 @@
-#include <format>
 #include "function/cast/vector_cast_functions.h"
 
 #include "binder/expression/expression_util.h"
@@ -13,6 +12,7 @@
 #include "function/cast/functions/cast_from_string_functions.h"
 #include "function/cast/functions/cast_functions.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::binder;

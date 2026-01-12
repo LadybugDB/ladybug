@@ -1,4 +1,3 @@
-#include <format>
 #include "processor/operator/ddl/create_table.h"
 
 #include "catalog/catalog.h"
@@ -6,6 +5,7 @@
 #include "common/exception/binder.h"
 #include "processor/execution_context.h"
 #include "storage/storage_manager.h"
+#include <format>
 
 using namespace lbug::catalog;
 using namespace lbug::common;

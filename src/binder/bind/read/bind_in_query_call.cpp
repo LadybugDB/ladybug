@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/query/reading_clause/bound_table_function_call.h"
 #include "catalog/catalog.h"
@@ -6,6 +5,7 @@
 #include "parser/expression/parsed_function_expression.h"
 #include "parser/query/reading_clause/in_query_call_clause.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::catalog;

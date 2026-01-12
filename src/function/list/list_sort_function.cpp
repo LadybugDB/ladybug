@@ -1,4 +1,3 @@
-#include <format>
 #include "function/list/functions/list_sort_function.h"
 
 #include "common/exception/binder.h"
@@ -7,6 +6,7 @@
 #include "function/list/functions/list_reverse_sort_function.h"
 #include "function/list/vector_list_functions.h"
 #include "function/scalar_function.h"
+#include <format>
 
 using namespace lbug::common;
 

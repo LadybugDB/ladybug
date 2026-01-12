@@ -1,10 +1,10 @@
-#include <format>
 #include "function/cast/functions/cast_from_string_functions.h"
 
 #include "common/exception/parser.h"
 #include "common/types/blob.h"
 #include "function/list/functions/list_unique_function.h"
 #include "utf8proc_wrapper.h"
+#include <format>
 
 using namespace lbug::common;
 

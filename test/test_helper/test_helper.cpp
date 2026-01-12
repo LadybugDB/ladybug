@@ -3,9 +3,9 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
-#include <format>
 
 #include "spdlog/spdlog.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::planner;

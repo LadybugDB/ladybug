@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/node_rel_expression.h"
@@ -7,6 +6,7 @@
 #include "common/exception/binder.h"
 #include "function/struct/vector_struct_functions.h"
 #include "parser/expression/parsed_property_expression.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::parser;

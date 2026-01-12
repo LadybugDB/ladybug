@@ -1,4 +1,3 @@
-#include <format>
 #include "processor/operator/persistent/writer/parquet/basic_column_writer.h"
 
 #include "common/constants.h"
@@ -7,6 +6,7 @@
 #include "processor/operator/persistent/reader/parquet/parquet_rle_bp_decoder.h"
 #include "processor/operator/persistent/writer//parquet/parquet_rle_bp_encoder.h"
 #include "processor/operator/persistent/writer/parquet/parquet_writer.h"
+#include <format>
 
 namespace lbug {
 namespace processor {
@@ -217,9 +217,9 @@ void BasicColumnWriter::flushPage(BasicColumnWriterState& state) {
 
     // now that we have finished writing the data we know the uncompressed size
     if (bufferedWriter.getSize() > uint64_t(function::NumericLimits<int32_t>::maximum())) {
-        throw common::RuntimeException{std::format(
-            "Parquet writer: %d uncompressed page size out of range for type integer",
-            bufferedWriter.getSize())};
+        throw common::RuntimeException{
+            std::format("Parquet writer: %d uncompressed page size out of range for type integer",
+                bufferedWriter.getSize())};
     }
     hdr.uncompressed_page_size = bufferedWriter.getSize();
 

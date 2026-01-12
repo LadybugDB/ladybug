@@ -1,9 +1,9 @@
-#include <format>
 #include "binder/expression/expression_util.h"
 #include "binder/expression/literal_expression.h"
 #include "common/exception/binder.h"
 #include "function/scalar_function.h"
 #include "function/struct/vector_struct_functions.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::binder;

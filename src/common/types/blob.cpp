@@ -1,7 +1,7 @@
-#include <format>
 #include "common/types/blob.h"
 
 #include "common/exception/conversion.h"
+#include <format>
 
 namespace lbug {
 namespace common {

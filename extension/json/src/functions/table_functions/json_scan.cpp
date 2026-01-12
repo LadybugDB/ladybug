@@ -3,7 +3,6 @@
 #include <climits>
 #include <cstdint>
 #include <string_view>
-#include <format>
 
 #include "binder/binder.h"
 #include "common/case_insensitive_map.h"
@@ -21,6 +20,7 @@
 #include "processor/operator/persistent/reader/file_error_handler.h"
 #include "processor/warning_context.h"
 #include "reader/buffered_json_reader.h"
+#include <format>
 
 namespace lbug {
 namespace json_extension {
@@ -257,7 +257,7 @@ void JSONScanLocalState::skipOverArrayStart() {
         skipWhitespace(bufferPtr, ++bufferOffset, bufferSize, &lineCountInBuffer);
         if (bufferOffset != bufferSize) {
             throw Exception(std::format("Empty array with trailing data when parsing JSON "
-                                         "array with format='array' in file \"{}\"",
+                                        "array with format='array' in file \"{}\"",
                 currentReader->getFileName()));
         }
         return;

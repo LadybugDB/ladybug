@@ -1,4 +1,3 @@
-#include <format>
 #include "planner/join_order/join_tree_constructor.h"
 
 #include "binder/expression/expression_util.h"
@@ -6,6 +5,7 @@
 #include "common/exception/binder.h"
 #include "common/exception/not_implemented.h"
 #include "planner/planner.h"
+#include <format>
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -15,9 +15,8 @@ namespace planner {
 
 JoinTree JoinTreeConstructor::construct(std::shared_ptr<BoundJoinHintNode> root) {
     if (planningInfo.subqueryType == SubqueryPlanningType::CORRELATED) {
-        throw NotImplementedException(
-            std::format("Hint join pattern has correlation with previous "
-                         "patterns. This is not supported yet."));
+        throw NotImplementedException(std::format("Hint join pattern has correlation with previous "
+                                                  "patterns. This is not supported yet."));
     }
     return JoinTree(constructTreeNode(root).treeNode);
 }

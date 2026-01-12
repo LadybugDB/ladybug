@@ -1,4 +1,3 @@
-#include <format>
 #include "function/table/table_function.h"
 
 #include "common/exception/binder.h"
@@ -8,6 +7,7 @@
 #include "processor/data_pos.h"
 #include "processor/operator/table_function_call.h"
 #include "processor/plan_mapper.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::planner;

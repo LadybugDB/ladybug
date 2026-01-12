@@ -1,4 +1,3 @@
-#include <format>
 #include "processor/operator/persistent/rel_batch_insert.h"
 
 #include "catalog/catalog.h"
@@ -16,6 +15,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/csr_chunked_node_group.h"
 #include "storage/table/rel_table.h"
+#include <format>
 
 using namespace lbug::catalog;
 using namespace lbug::common;
@@ -252,7 +252,7 @@ void RelBatchInsert::finalizeInternal(ExecutionContext* context) {
         if (warningCount > 0) {
             auto warningMsg =
                 std::format("{} warnings encountered during copy. Use 'CALL "
-                             "show_warnings() RETURN *' to view the actual warnings. Query ID: {}",
+                            "show_warnings() RETURN *' to view the actual warnings. Query ID: {}",
                     warningCount, context->queryID);
             FactorizedTableUtils::appendStringToTable(sharedState->fTable.get(), warningMsg,
                 MemoryManager::Get(*context->clientContext));

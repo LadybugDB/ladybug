@@ -1,7 +1,7 @@
-#include <format>
 #include "graph_test/private_graph_test.h"
 #include "planner/operator/logical_plan_util.h"
 #include "test_runner/test_runner.h"
+#include <format>
 
 namespace lbug {
 namespace testing {

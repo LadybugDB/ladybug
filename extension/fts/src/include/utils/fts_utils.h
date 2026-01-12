@@ -1,9 +1,8 @@
 #pragma once
-#include <format>
-
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "function/fts_config.h"
 #include "main/client_context.h"
+#include <format>
 
 namespace lbug {
 namespace storage {

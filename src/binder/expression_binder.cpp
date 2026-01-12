@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/expression_binder.h"
 
 #include "binder/binder.h"
@@ -11,6 +10,7 @@
 #include "function/cast/vector_cast_functions.h"
 #include "parser/expression/parsed_expression_visitor.h"
 #include "parser/expression/parsed_parameter_expression.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::function;

@@ -1,9 +1,9 @@
-#include <format>
 #include "common/types/value/recursive_rel.h"
 
 #include "common/exception/exception.h"
 #include "common/types/types.h"
 #include "common/types/value/value.h"
+#include <format>
 
 namespace lbug {
 namespace common {

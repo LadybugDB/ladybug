@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/property_expression.h"
@@ -18,6 +17,7 @@
 #include "parser/query/updating_clause/merge_clause.h"
 #include "parser/query/updating_clause/set_clause.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::parser;
@@ -233,7 +233,7 @@ void Binder::bindInsertRel(std::shared_ptr<RelExpression> rel,
     }
     if (rel->getDirectionType() == RelDirectionType::BOTH) {
         throw BinderException(std::format("Create undirected relationship is not supported. "
-                                           "Try create 2 directed relationships instead."));
+                                          "Try create 2 directed relationships instead."));
     }
     if (ExpressionUtil::isRecursiveRelPattern(*rel)) {
         throw BinderException(std::format("Cannot create recursive rel {}.", rel->toString()));
@@ -311,7 +311,7 @@ BoundSetPropertyInfo Binder::bindSetPropertyInfo(const ParsedExpression* column,
         if (catalog->containsUnloadedIndex(transaction, entry->getTableID(), propertyID)) {
             throw BinderException(
                 std::format("Cannot set property {} in table {} because it is used in one or more "
-                             "indexes which is unloaded.",
+                            "indexes which is unloaded.",
                     property.getPropertyName(), entry->getName()));
         }
     }
@@ -321,7 +321,7 @@ BoundSetPropertyInfo Binder::bindSetPropertyInfo(const ParsedExpression* column,
             if (property.isPrimaryKey(entry->getTableID())) {
                 throw BinderException(
                     std::format("Cannot set property {} in table {} because it is used as primary "
-                                 "key. Try delete and then insert.",
+                                "key. Try delete and then insert.",
                         property.getPropertyName(), entry->getName()));
             }
         }
@@ -356,7 +356,7 @@ std::unique_ptr<BoundUpdatingClause> Binder::bindDeleteClause(
                     if (!index->isLoaded()) {
                         throw BinderException(
                             std::format("Trying to delete from an index on table {} but its "
-                                         "extension is not loaded.",
+                                        "extension is not loaded.",
                                 entry->getName()));
                     }
                 }
@@ -375,9 +375,9 @@ std::unique_ptr<BoundUpdatingClause> Binder::bindDeleteClause(
             auto deleteRel = BoundDeleteInfo(deleteType, TableType::REL, pattern);
             boundDeleteClause->addInfo(std::move(deleteRel));
         } else {
-            throw BinderException(std::format(
-                "Cannot delete expression {} with type {}. Expect node or rel pattern.",
-                pattern->toString(), ExpressionTypeUtil::toString(pattern->expressionType)));
+            throw BinderException(
+                std::format("Cannot delete expression {} with type {}. Expect node or rel pattern.",
+                    pattern->toString(), ExpressionTypeUtil::toString(pattern->expressionType)));
         }
     }
     return boundDeleteClause;

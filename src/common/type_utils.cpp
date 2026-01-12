@@ -1,8 +1,8 @@
-#include <format>
 #include "common/type_utils.h"
 
 #include "common/exception/runtime.h"
 #include "common/vector/value_vector.h"
+#include <format>
 
 namespace lbug {
 namespace common {

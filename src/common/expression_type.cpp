@@ -1,8 +1,8 @@
-#include <format>
 #include "common/enums/expression_type.h"
 
 #include "common/assert.h"
 #include "function/comparison/vector_comparison_functions.h"
+#include <format>
 
 using namespace lbug::function;
 

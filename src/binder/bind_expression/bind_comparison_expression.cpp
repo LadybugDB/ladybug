@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/scalar_function_expression.h"
@@ -7,6 +6,7 @@
 #include "common/exception/binder.h"
 #include "function/built_in_function_utils.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::catalog;

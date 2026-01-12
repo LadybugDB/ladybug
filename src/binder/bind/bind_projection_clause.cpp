@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/lambda_expression.h"
@@ -8,6 +7,7 @@
 #include "common/exception/binder.h"
 #include "parser/expression/parsed_property_expression.h"
 #include "parser/query/return_with_clause/with_clause.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::parser;

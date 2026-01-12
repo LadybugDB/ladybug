@@ -1,6 +1,4 @@
 #pragma once
-#include <format>
-
 #include "common/constants.h"
 #include "common/exception/conversion.h"
 #include "common/string_utils.h"
@@ -10,6 +8,7 @@
 #include "common/types/uint128_t.h"
 #include "fast_float.h"
 #include "function/cast/functions/numeric_limits.h"
+#include <format>
 
 using namespace lbug::common;
 

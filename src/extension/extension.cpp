@@ -15,6 +15,7 @@
 
 #else
 #include <dlfcn.h>
+
 #include <format>
 #endif
 
@@ -74,8 +75,8 @@ std::string ExtensionSourceUtils::toString(ExtensionSource source) {
 
 static ExtensionRepoInfo getExtensionFilePath(const std::string& extensionName,
     const std::string& extensionRepo, const std::string& fileName) {
-    auto extensionURL = std::format(ExtensionUtils::EXTENSION_FILE_REPO_PATH,
-        extensionRepo, LBUG_EXTENSION_VERSION, getPlatform(), extensionName, fileName);
+    auto extensionURL = std::format(ExtensionUtils::EXTENSION_FILE_REPO_PATH, extensionRepo,
+        LBUG_EXTENSION_VERSION, getPlatform(), extensionName, fileName);
     return getExtensionRepoInfo(extensionURL);
 }
 
@@ -98,14 +99,14 @@ ExtensionRepoInfo ExtensionUtils::getExtensionInstallerRepoInfo(const std::strin
 
 ExtensionRepoInfo ExtensionUtils::getSharedLibRepoInfo(const std::string& fileName,
     const std::string& extensionRepo) {
-    auto extensionURL = std::format(SHARED_LIB_REPO,
-        extensionRepo, LBUG_EXTENSION_VERSION, getPlatform(), fileName);
+    auto extensionURL = std::format(SHARED_LIB_REPO, extensionRepo, LBUG_EXTENSION_VERSION,
+        getPlatform(), fileName);
     return getExtensionRepoInfo(extensionURL);
 }
 
 std::string ExtensionUtils::getExtensionFileName(const std::string& name) {
-    return std::format(EXTENSION_FILE_NAME,
-        common::StringUtils::getLower(name), EXTENSION_FILE_SUFFIX);
+    return std::format(EXTENSION_FILE_NAME, common::StringUtils::getLower(name),
+        EXTENSION_FILE_SUFFIX);
 }
 
 std::string ExtensionUtils::getLocalPathForExtensionLib(main::ClientContext* context,
@@ -171,9 +172,9 @@ ExtensionLibLoader::ExtensionLibLoader(const std::string& extensionName, const s
     : extensionName{extensionName} {
     libHdl = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
     if (libHdl == nullptr) {
-        throw common::IOException(std::format(
-            "Failed to load library: {} which is needed by extension: {}.\nError: {}.", path,
-            extensionName, common::dlErrMessage()));
+        throw common::IOException(
+            std::format("Failed to load library: {} which is needed by extension: {}.\nError: {}.",
+                path, extensionName, common::dlErrMessage()));
     }
 }
 

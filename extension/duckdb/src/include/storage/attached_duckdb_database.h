@@ -1,8 +1,7 @@
 #pragma once
-#include <format>
-
 #include "connector/duckdb_connector.h"
 #include "main/attached_database.h"
+#include <format>
 
 namespace lbug {
 namespace duckdb_extension {
@@ -23,10 +22,9 @@ public:
     }
 
     std::vector<std::string> getTableColumnNames(const std::string& tableName) const override {
-        std::string query =
-            std::format("SELECT column_name FROM information_schema.columns WHERE "
-                                 "table_name = '{}' ORDER BY ordinal_position",
-                tableName);
+        std::string query = std::format("SELECT column_name FROM information_schema.columns WHERE "
+                                        "table_name = '{}' ORDER BY ordinal_position",
+            tableName);
 
         auto result = connector->executeQuery(query);
         if (!result || result->RowCount() == 0) {

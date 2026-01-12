@@ -1,4 +1,3 @@
-#include <format>
 #include "storage/storage_manager.h"
 
 #include "catalog/catalog.h"
@@ -25,6 +24,7 @@
 #include "storage/table/rel_table.h"
 #include "storage/wal/wal_replayer.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::catalog;
 using namespace lbug::common;

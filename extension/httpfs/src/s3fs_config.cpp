@@ -1,9 +1,9 @@
-#include <format>
 #include "s3fs_config.h"
 
 #include "extension/extension.h"
 #include "main/client_context.h"
 #include "main/database.h"
+#include <format>
 
 namespace lbug {
 namespace httpfs_extension {

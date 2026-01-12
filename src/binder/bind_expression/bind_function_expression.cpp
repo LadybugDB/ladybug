@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/expression/aggregate_function_expression.h"
 #include "binder/expression/scalar_function_expression.h"
@@ -12,6 +11,7 @@
 #include "parser/expression/parsed_expression_visitor.h"
 #include "parser/expression/parsed_function_expression.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::parser;

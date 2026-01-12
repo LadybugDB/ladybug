@@ -24,10 +24,10 @@
 
 #include <eh.h>
 #include <errhandlingapi.h>
+#include <format>
 #include <memoryapi.h>
 #include <windows.h>
 #include <winnt.h>
-#include <format>
 #endif
 
 using namespace lbug::common;
@@ -88,8 +88,8 @@ BufferManager::BufferManager(const std::string& databasePath, const std::string&
 
 void BufferManager::verifySizeParams(uint64_t bufferPoolSize, uint64_t maxDBSize) {
     if (bufferPoolSize < LBUG_PAGE_SIZE) {
-        throw BufferManagerException(std::format(
-            "The given buffer pool size should be at least {} bytes.", LBUG_PAGE_SIZE));
+        throw BufferManagerException(
+            std::format("The given buffer pool size should be at least {} bytes.", LBUG_PAGE_SIZE));
     }
     // We require at least two page groups, one for the main data file, and one for the shadow file.
     if (maxDBSize < 2 * LBUG_PAGE_SIZE * StorageConstants::PAGE_GROUP_SIZE) {

@@ -1,4 +1,3 @@
-#include <format>
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
 #include "common/system_config.h"
@@ -8,6 +7,7 @@
 #include "processor/operator/persistent/writer/parquet/parquet_writer.h"
 #include "processor/result/factorized_table.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include <format>
 
 namespace lbug {
 namespace function {
@@ -48,8 +48,8 @@ struct ParquetOptions {
         } else if (strVal == "LZ4_RAW") {
             codec = lbug_parquet::format::CompressionCodec::LZ4_RAW;
         } else {
-            throw common::RuntimeException{std::format(
-                "Unrecognized parquet compression option: {}.", value.toString())};
+            throw common::RuntimeException{
+                std::format("Unrecognized parquet compression option: {}.", value.toString())};
         }
     }
 };

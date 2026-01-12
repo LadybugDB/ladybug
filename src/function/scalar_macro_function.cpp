@@ -1,9 +1,9 @@
-#include <format>
 #include "function/scalar_macro_function.h"
 
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
 #include "common/string_utils.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::parser;

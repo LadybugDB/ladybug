@@ -1,9 +1,9 @@
-#include <format>
 #include "binder/expression/literal_expression.h"
 #include "common/exception/binder.h"
 #include "common/vector/value_vector.h"
 #include "function/path/vector_path_functions.h"
 #include "function/scalar_function.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::binder;
@@ -13,8 +13,8 @@ namespace function {
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
     if (input.arguments[1]->expressionType != ExpressionType::LITERAL) {
-        throw BinderException(std::format(
-            "Expected literal input as the second argument for {}().", PropertiesFunction::name));
+        throw BinderException(std::format("Expected literal input as the second argument for {}().",
+            PropertiesFunction::name));
     }
     auto literalExpr = input.arguments[1]->constPtrCast<LiteralExpression>();
     auto key = literalExpr->getValue().getValue<std::string>();

@@ -1,12 +1,12 @@
 #include "processor/result/flat_tuple.h"
 
 #include <sstream>
-#include <format>
 
 #include "common/exception/runtime.h"
 #include "common/types/value/value.h"
 #include "utf8proc.h"
 #include "utf8proc_wrapper.h"
+#include <format>
 
 using namespace lbug::utf8proc;
 using namespace lbug::common;

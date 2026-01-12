@@ -1,10 +1,9 @@
 #pragma once
-#include <format>
-
 #include "common/case_insensitive_map.h"
 #include "common/constants.h"
 #include "common/copy_constructors.h"
 #include "common/types/value/value.h"
+#include <format>
 
 namespace lbug {
 namespace common {

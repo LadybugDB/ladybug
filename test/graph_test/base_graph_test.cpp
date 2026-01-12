@@ -1,13 +1,13 @@
 #include "graph_test/base_graph_test.h"
 
 #include <fstream>
-#include <format>
 
 #include "common/assert.h"
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
 #include "spdlog/spdlog.h"
 #include "test_helper/test_helper.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::main;

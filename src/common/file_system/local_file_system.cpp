@@ -23,9 +23,9 @@
 #include <fcntl.h>
 
 #include <cstring>
-#include <format>
 
 #include "storage/storage_utils.h"
+#include <format>
 
 namespace lbug {
 namespace common {
@@ -248,8 +248,8 @@ void LocalFileSystem::createDir(const std::string& dir) const {
         }
         if (errCode) {
             // LCOV_EXCL_START
-            throw IOException(std::format("Failed to create directory: {}, error message: {}.",
-                dir, errCode.message()));
+            throw IOException(std::format("Failed to create directory: {}, error message: {}.", dir,
+                errCode.message()));
             // LCOV_EXCL_STOP
         }
     } catch (std::exception& e) {
@@ -383,13 +383,13 @@ void LocalFileSystem::readFromFile(FileInfo& fileInfo, void* buffer, uint64_t nu
         auto error = GetLastError();
         throw IOException(
             std::format("Cannot read from file: {} handle: {} "
-                         "numBytesRead: {} numBytesToRead: {} position: {}. Error {}: {}",
+                        "numBytesRead: {} numBytesToRead: {} position: {}. Error {}: {}",
                 fileInfo.path, (intptr_t)localFileInfo->handle, numBytesRead, numBytes, position,
                 error, std::system_category().message(error)));
     }
     if (numBytesRead != numBytes && fileInfo.getFileSize() != position + numBytesRead) {
         throw IOException(std::format("Cannot read from file: {} handle: {} "
-                                       "numBytesRead: {} numBytesToRead: {} position: {}",
+                                      "numBytesRead: {} numBytesToRead: {} position: {}",
             fileInfo.path, (intptr_t)localFileInfo->handle, numBytesRead, numBytes, position));
     }
 #else
@@ -398,7 +398,7 @@ void LocalFileSystem::readFromFile(FileInfo& fileInfo, void* buffer, uint64_t nu
         localFileInfo->getFileSize() != position + numBytesRead) {
         // LCOV_EXCL_START
         throw IOException(std::format("Cannot read from file: {} fileDescriptor: {} "
-                                       "numBytesRead: {} numBytesToRead: {} position: {}",
+                                      "numBytesRead: {} numBytesToRead: {} position: {}",
             fileInfo.path, localFileInfo->fd, numBytesRead, numBytes, position));
         // LCOV_EXCL_STOP
     }
@@ -436,7 +436,7 @@ void LocalFileSystem::writeFile(FileInfo& fileInfo, const uint8_t* buffer, uint6
             auto error = GetLastError();
             throw IOException(
                 std::format("Cannot write to file. path: {} handle: {} offsetToWrite: {} "
-                             "numBytesToWrite: {} numBytesWritten: {}. Error {}: {}.",
+                            "numBytesToWrite: {} numBytesWritten: {}. Error {}: {}.",
                     fileInfo.path, (intptr_t)localFileInfo->handle, offset, numBytesToWrite,
                     numBytesWritten, error, std::system_category().message(error)));
         }
@@ -447,7 +447,7 @@ void LocalFileSystem::writeFile(FileInfo& fileInfo, const uint8_t* buffer, uint6
             // LCOV_EXCL_START
             throw IOException(
                 std::format("Cannot write to file. path: {} fileDescriptor: {} offsetToWrite: {} "
-                             "numBytesToWrite: {} numBytesWritten: {}. Error: {}",
+                            "numBytesToWrite: {} numBytesWritten: {}. Error: {}",
                     fileInfo.path, localFileInfo->fd, offset, numBytesToWrite, numBytesWritten,
                     posixErrMessage()));
             // LCOV_EXCL_STOP
@@ -521,14 +521,14 @@ void LocalFileSystem::truncate(FileInfo& fileInfo, uint64_t size) const {
             FILE_BEGIN) == INVALID_SET_FILE_POINTER) {
         auto error = GetLastError();
         throw IOException(std::format("Cannot set file pointer for file: {} handle: {} "
-                                       "new position: {}. Error {}: {}",
+                                      "new position: {}. Error {}: {}",
             fileInfo.path, (intptr_t)localFileInfo->handle, size, error,
             std::system_category().message(error)));
     }
     if (!SetEndOfFile((HANDLE)localFileInfo->handle)) {
         auto error = GetLastError();
         throw IOException(std::format("Cannot truncate file: {} handle: {} "
-                                       "size: {}. Error {}: {}",
+                                      "size: {}. Error {}: {}",
             fileInfo.path, (intptr_t)localFileInfo->handle, size, error,
             std::system_category().message(error)));
     }

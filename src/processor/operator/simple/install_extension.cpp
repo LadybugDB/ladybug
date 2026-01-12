@@ -1,8 +1,8 @@
-#include <format>
 #include "processor/operator/simple/install_extension.h"
 
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include <format>
 
 namespace lbug {
 namespace processor {
@@ -12,8 +12,7 @@ using namespace lbug::extension;
 
 void InstallExtension::setOutputMessage(bool installed, storage::MemoryManager* memoryManager) {
     if (info.forceInstall) {
-        appendMessage(
-            std::format("Extension: {} updated from the repo: {}.", info.name, info.repo),
+        appendMessage(std::format("Extension: {} updated from the repo: {}.", info.name, info.repo),
             memoryManager);
         return;
     }

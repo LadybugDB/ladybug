@@ -1,7 +1,7 @@
-#include <format>
 #include "binder/expression/parameter_expression.h"
 
 #include "common/exception/binder.h"
+#include <format>
 
 namespace lbug {
 using namespace common;

@@ -17,8 +17,8 @@
 #include "storage/table/rel_table_data.h"
 #include "storage/wal/local_wal.h"
 #include "transaction/transaction.h"
-#include <ranges>
 #include <format>
+#include <ranges>
 
 using namespace lbug::catalog;
 using namespace lbug::common;

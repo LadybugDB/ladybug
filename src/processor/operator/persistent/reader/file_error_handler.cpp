@@ -1,11 +1,11 @@
 #include "processor/operator/persistent/reader/file_error_handler.h"
 
 #include <algorithm>
-#include <format>
 
 #include "common/assert.h"
 #include "common/exception/copy.h"
 #include "main/client_context.h"
+#include <format>
 
 namespace lbug {
 using namespace common;
@@ -78,14 +78,12 @@ void SharedFileErrorHandler::tryThrowFirstCachedError() {
 namespace {
 std::string getFilePathMessage(std::string_view filePath) {
     static constexpr std::string_view invalidFilePath = "";
-    return filePath == invalidFilePath ? std::string{} :
-                                         std::format(" in file {}", filePath);
+    return filePath == invalidFilePath ? std::string{} : std::format(" in file {}", filePath);
 }
 
 std::string getLineNumberMessage(uint64_t lineNumber) {
     static constexpr uint64_t invalidLineNumber = 0;
-    return lineNumber == invalidLineNumber ? std::string{} :
-                                             std::format(" on line {}", lineNumber);
+    return lineNumber == invalidLineNumber ? std::string{} : std::format(" on line {}", lineNumber);
 }
 
 std::string getSkippedLineMessage(std::string_view skippedLineOrRecord) {

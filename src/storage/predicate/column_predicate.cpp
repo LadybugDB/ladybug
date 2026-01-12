@@ -1,10 +1,10 @@
-#include <format>
 #include "storage/predicate/column_predicate.h"
 
 #include "binder/expression/literal_expression.h"
 #include "binder/expression/scalar_function_expression.h"
 #include "storage/predicate/constant_predicate.h"
 #include "storage/predicate/null_predicate.h"
+#include <format>
 
 using namespace lbug::binder;
 using namespace lbug::common;

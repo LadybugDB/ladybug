@@ -1,7 +1,6 @@
 #include "processor/operator/simple/export_db.h"
 
 #include <sstream>
-#include <format>
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
@@ -16,6 +15,7 @@
 #include "main/client_context.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::transaction;

@@ -1,11 +1,10 @@
 #pragma once
-#include <format>
-
 #include "common/exception/internal.h"
 #include "common/metric.h"
 #include "processor/operator/physical_operator.h"
 #include "processor/result/factorized_table.h"
 #include "processor/result/result_set_descriptor.h"
+#include <format>
 
 namespace lbug {
 namespace main {
@@ -44,9 +43,9 @@ public:
     }
 
     virtual std::shared_ptr<FactorizedTable> getResultFTable() const {
-        throw common::InternalException(std::format(
-            "Trying to get result table from {} operator which doesn't have one.",
-            PhysicalOperatorUtils::operatorTypeToString(operatorType)));
+        throw common::InternalException(
+            std::format("Trying to get result table from {} operator which doesn't have one.",
+                PhysicalOperatorUtils::operatorTypeToString(operatorType)));
     }
 
     virtual bool terminate() const { return false; }

@@ -1,7 +1,6 @@
 #pragma once
-#include <format>
-
 #include "common/exception/internal.h"
+#include <format>
 
 namespace lbug {
 namespace common {

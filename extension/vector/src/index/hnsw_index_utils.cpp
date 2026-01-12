@@ -1,4 +1,3 @@
-#include <format>
 #include "index/hnsw_index_utils.h"
 
 #include "binder/binder.h"
@@ -8,6 +7,7 @@
 #include "common/types/types.h"
 #include "simsimd.h"
 #include "transaction/transaction_context.h"
+#include <format>
 
 namespace lbug {
 namespace vector_extension {
@@ -28,8 +28,8 @@ bool HNSWIndexUtils::validateIndexExistence(const main::ClientContext& context,
         if (indexExists(context, transaction, tableEntry, indexName)) {
             switch (conflictAction) {
             case common::ConflictAction::ON_CONFLICT_THROW:
-                throw common::BinderException{std::format(
-                    "Index {} already exists in table {}.", indexName, tableEntry->getName())};
+                throw common::BinderException{std::format("Index {} already exists in table {}.",
+                    indexName, tableEntry->getName())};
             case common::ConflictAction::ON_CONFLICT_DO_NOTHING:
                 return true;
             default:

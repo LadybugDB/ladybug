@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/copy/bound_copy_from.h"
 #include "catalog/catalog.h"
@@ -9,6 +8,7 @@
 #include "common/string_utils.h"
 #include "parser/copy.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::binder;
 using namespace lbug::catalog;

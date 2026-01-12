@@ -1,4 +1,3 @@
-#include <format>
 #include "api_test/private_api_test.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
@@ -7,6 +6,7 @@
 #include "storage/storage_manager.h"
 #include "storage/table/rel_table.h"
 #include "storage/table/table.h"
+#include <format>
 
 namespace lbug {
 

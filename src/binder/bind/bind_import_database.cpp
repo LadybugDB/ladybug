@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 #include "binder/bound_import_database.h"
 #include "common/copier_config/csv_reader_config.h"
@@ -8,6 +7,7 @@
 #include "parser/copy.h"
 #include "parser/parser.h"
 #include "parser/port_db.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::parser;

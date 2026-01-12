@@ -1,4 +1,3 @@
-#include <format>
 #include "binder/binder.h"
 
 #include "binder/bound_statement_rewriter.h"
@@ -14,6 +13,7 @@
 #include "processor/operator/persistent/reader/npy/npy_reader.h"
 #include "processor/operator/persistent/reader/parquet/parquet_reader.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::catalog;
 using namespace lbug::common;
@@ -270,7 +270,7 @@ TableFunction Binder::getScanFunction(const FileTypeInfo& typeInfo,
             }
             throw BinderException{
                 std::format("Cannot load from file type {}. If this file type is part of a lbug "
-                             "extension please load the extension then try again.",
+                            "extension please load the extension then try again.",
                     typeInfo.fileTypeStr)};
         }
     } break;

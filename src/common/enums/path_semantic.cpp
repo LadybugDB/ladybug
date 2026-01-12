@@ -1,9 +1,9 @@
-#include <format>
 #include "common/enums/path_semantic.h"
 
 #include "common/assert.h"
 #include "common/exception/binder.h"
 #include "common/string_utils.h"
+#include <format>
 
 namespace lbug {
 namespace common {

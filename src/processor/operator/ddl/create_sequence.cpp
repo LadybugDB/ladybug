@@ -1,10 +1,10 @@
-#include <format>
 #include "processor/operator/ddl/create_sequence.h"
 
 #include "catalog/catalog.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::catalog;
 using namespace lbug::common;

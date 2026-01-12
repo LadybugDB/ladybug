@@ -1,9 +1,9 @@
-#include <format>
 #include "connector/azure_connector.h"
 
 #include "common/exception/runtime.h"
 #include "connector/azure_config.h"
 #include "main/client_context.h"
+#include <format>
 
 namespace lbug {
 namespace azure_extension {

@@ -1,10 +1,10 @@
 #include <fstream>
-#include <format>
 
 #include "api_test/api_test.h"
 #include "api_test/private_api_test.h"
 #include "storage/storage_utils.h"
 #include "storage/wal/wal.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::testing;
@@ -139,8 +139,7 @@ static void insertNodes(uint64_t startID, uint64_t num, lbug::main::Database& da
     auto conn = std::make_unique<lbug::main::Connection>(&database);
     for (uint64_t i = 0; i < num; ++i) {
         auto id = startID + i;
-        auto res =
-            conn->query(std::format("CREATE (:test {{id: {}, name: 'Person{}'}});", id, id));
+        auto res = conn->query(std::format("CREATE (:test {{id: {}, name: 'Person{}'}});", id, id));
         ASSERT_TRUE(res->isSuccess())
             << "Failed to insert test" << id << ": " << res->getErrorMessage();
     }
@@ -229,7 +228,7 @@ static void insertRelationships(uint64_t startID, uint64_t num, lbug::main::Data
         auto toID = (startID + i + 1) % (num * 4);
         auto weight = 1.0 + (i % 10) * 0.1;
         auto res = conn->query(std::format("MATCH (a:person), (b:person) WHERE a.id = {} AND b.id "
-                                            "= {} CREATE (a)-[:knows {{weight: {}}}]->(b);",
+                                           "= {} CREATE (a)-[:knows {{weight: {}}}]->(b);",
             fromID, toID, weight));
         ASSERT_TRUE(res->isSuccess()) << "Failed to insert relationship from " << fromID << " to "
                                       << toID << ": " << res->getErrorMessage();
@@ -250,8 +249,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipInsertions) {
 
     conn->query("BEGIN TRANSACTION;");
     for (auto i = 0; i < numTotalInsertions; ++i) {
-        auto res =
-            conn->query(std::format("CREATE (:person {{id: {}, name: 'Person{}'}});", i, i));
+        auto res = conn->query(std::format("CREATE (:person {{id: {}, name: 'Person{}'}});", i, i));
         ASSERT_TRUE(res->isSuccess());
     }
     conn->query("COMMIT;");
@@ -289,7 +287,7 @@ static void insertComplexRelationships(uint64_t startID, uint64_t num,
         auto isVerified = (i % 3 == 0) ? "true" : "false";
         auto res =
             conn->query(std::format("MATCH (u:user), (p:product) WHERE u.id = {} AND p.id = {} "
-                                     "CREATE (u)-[:rates {{rating: {}, verified: {}}}]->(p);",
+                                    "CREATE (u)-[:rates {{rating: {}, verified: {}}}]->(p);",
                 userID, productID, rating, isVerified));
         ASSERT_TRUE(res->isSuccess())
             << "Failed to insert rating from user " << userID << " to product " << productID << ": "
@@ -485,7 +483,7 @@ static void updateRelationships(uint64_t startID, uint64_t num, lbug::main::Data
         auto toID = (startID + i + 1) % (num * 4);
         auto newWeight = 10.0 + (i % 5) * 2.0;
         auto res = conn->query(std::format("MATCH (a:person)-[r:knows]->(b:person) WHERE a.id = "
-                                            "{} AND b.id = {} SET r.weight = {};",
+                                           "{} AND b.id = {} SET r.weight = {};",
             fromID, toID, newWeight));
         ASSERT_TRUE(res->isSuccess()) << "Failed to update relationship from " << fromID << " to "
                                       << toID << ": " << res->getErrorMessage();
@@ -506,8 +504,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdates) {
 
     // Create nodes
     for (auto i = 0; i < numTotalUpdates; ++i) {
-        auto res =
-            conn->query(std::format("CREATE (:person {{id: {}, name: 'Person{}'}});", i, i));
+        auto res = conn->query(std::format("CREATE (:person {{id: {}, name: 'Person{}'}});", i, i));
         ASSERT_TRUE(res->isSuccess());
     }
 
@@ -517,7 +514,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdates) {
         auto toID = (i + 1) % numTotalUpdates;
         auto weight = 1.0 + (i % 10) * 0.1;
         auto res = conn->query(std::format("MATCH (a:person), (b:person) WHERE a.id = {} AND b.id "
-                                            "= {} CREATE (a)-[:knows {{weight: {}}}]->(b);",
+                                           "= {} CREATE (a)-[:knows {{weight: {}}}]->(b);",
             fromID, toID, weight));
         ASSERT_TRUE(res->isSuccess());
     }
@@ -628,7 +625,7 @@ static void updateRelationshipsWithMixedTransactions(uint64_t startID, uint64_t 
         auto toID = startID + i;
         auto newWeight = 200.0;
         auto res = conn->query(std::format("MATCH (a:person)-[r:knows]->(b:person) WHERE a.id = "
-                                            "{} AND b.id = {} SET r.weight = {};",
+                                           "{} AND b.id = {} SET r.weight = {};",
             fromID, toID, newWeight));
         ASSERT_TRUE(res->isSuccess()) << "Failed to update relationship from " << fromID << " to "
                                       << toID << ": " << res->getErrorMessage();
@@ -654,8 +651,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdatesWithMixedTransaction
 
     // Create nodes
     for (auto i = 0; i < numTotalUpdates; ++i) {
-        auto res =
-            conn->query(std::format("CREATE (:person {{id: {}, name: 'Person{}'}});", i, i));
+        auto res = conn->query(std::format("CREATE (:person {{id: {}, name: 'Person{}'}});", i, i));
         ASSERT_TRUE(res->isSuccess());
     }
 
@@ -665,7 +661,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdatesWithMixedTransaction
         auto toID = i;
         auto weight = 20.0;
         auto res = conn->query(std::format("MATCH (a:person), (b:person) WHERE a.id = {} AND b.id "
-                                            "= {} CREATE (a)-[:knows {{weight: {}}}]->(b);",
+                                           "= {} CREATE (a)-[:knows {{weight: {}}}]->(b);",
             fromID, toID, weight));
         ASSERT_TRUE(res->isSuccess());
     }

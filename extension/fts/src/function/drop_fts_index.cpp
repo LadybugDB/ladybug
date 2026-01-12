@@ -1,4 +1,3 @@
-#include <format>
 #include "function/drop_fts_index.h"
 
 #include "catalog/catalog.h"
@@ -11,6 +10,7 @@
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "utils/fts_utils.h"
+#include <format>
 
 namespace lbug {
 namespace fts_extension {

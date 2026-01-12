@@ -1,9 +1,9 @@
-#include <format>
 #include "expression_evaluator/expression_evaluator.h"
 
 #include "common/exception/runtime.h"
 #include "main/client_context.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include <format>
 
 using namespace lbug::common;
 
@@ -42,7 +42,7 @@ void ExpressionEvaluator::resolveResultStateFromChildren(
 void ExpressionEvaluator::evaluate(common::sel_t) {
     // LCOV_EXCL_START
     throw RuntimeException(std::format("Cannot evaluate expression {} with count. This should "
-                                        "never happen.",
+                                       "never happen.",
         expression->toString()));
     // LCOV_EXCL_STOP
 }

@@ -1,11 +1,10 @@
 #pragma once
-#include <format>
-
 #include "catalog_entry.h"
 #include "common/copier_config/file_scan_info.h"
 #include "common/serializer/buffer_reader.h"
 #include "common/serializer/deserializer.h"
 #include "table_catalog_entry.h"
+#include <format>
 
 namespace lbug::common {
 struct BufferReader;
@@ -57,8 +56,7 @@ public:
 
     IndexCatalogEntry(std::string type, common::table_id_t tableID, std::string indexName,
         std::vector<common::property_id_t> properties, std::unique_ptr<IndexAuxInfo> auxInfo)
-        : CatalogEntry{CatalogEntryType::INDEX_ENTRY,
-              std::format("{}_{}", tableID, indexName)},
+        : CatalogEntry{CatalogEntryType::INDEX_ENTRY, std::format("{}_{}", tableID, indexName)},
           type{std::move(type)}, tableID{tableID}, indexName{std::move(indexName)},
           propertyIDs{std::move(properties)}, auxInfo{std::move(auxInfo)} {}
 

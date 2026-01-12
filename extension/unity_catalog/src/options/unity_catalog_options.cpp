@@ -1,9 +1,9 @@
-#include <format>
 #include "options/unity_catalog_options.h"
 
 #include "extension/extension.h"
 #include "main/client_context.h"
 #include "main/database.h"
+#include <format>
 
 namespace lbug {
 namespace unity_catalog_extension {

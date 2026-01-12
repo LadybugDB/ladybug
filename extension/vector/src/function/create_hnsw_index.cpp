@@ -1,4 +1,3 @@
-#include <format>
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/function_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
@@ -19,6 +18,7 @@
 #include "processor/result/factorized_table_util.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::function;

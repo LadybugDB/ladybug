@@ -1,4 +1,3 @@
-#include <format>
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/exception/binder.h"
@@ -9,6 +8,7 @@
 #include "processor/execution_context.h"
 #include "storage/storage_manager.h"
 #include "transaction/transaction_context.h"
+#include <format>
 
 using namespace lbug::function;
 

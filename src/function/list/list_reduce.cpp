@@ -1,10 +1,10 @@
-#include <format>
 #include "common/exception/binder.h"
 #include "common/exception/runtime.h"
 #include "expression_evaluator/lambda_evaluator.h"
 #include "expression_evaluator/list_slice_info.h"
 #include "function/list/vector_list_functions.h"
 #include "function/scalar_function.h"
+#include <format>
 
 namespace lbug {
 namespace function {

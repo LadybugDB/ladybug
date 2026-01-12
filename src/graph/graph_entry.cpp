@@ -1,7 +1,7 @@
-#include <format>
 #include "graph/graph_entry.h"
 
 #include "common/exception/runtime.h"
+#include <format>
 
 using namespace lbug::planner;
 using namespace lbug::binder;

@@ -1,7 +1,6 @@
 #include "catalog/catalog_set.h"
 
 #include <mutex>
-#include <format>
 
 #include "binder/ddl/bound_alter_info.h"
 #include "catalog/catalog_entry/dummy_catalog_entry.h"
@@ -10,6 +9,7 @@
 #include "common/exception/catalog.h"
 #include "common/serializer/deserializer.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::transaction;

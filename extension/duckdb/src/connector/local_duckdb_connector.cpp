@@ -1,9 +1,9 @@
-#include <format>
 #include "connector/local_duckdb_connector.h"
 
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
 #include "main/client_context.h"
+#include <format>
 
 namespace lbug {
 namespace duckdb_extension {

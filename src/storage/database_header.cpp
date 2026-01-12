@@ -1,7 +1,6 @@
 #include "storage/database_header.h"
 
 #include <cstring>
-#include <format>
 
 #include "common/exception/runtime.h"
 #include "common/file_system/file_info.h"
@@ -12,6 +11,7 @@
 #include "main/client_context.h"
 #include "storage/page_manager.h"
 #include "storage/storage_version_info.h"
+#include <format>
 
 namespace lbug::storage {
 static void validateStorageVersion(common::Deserializer& deSer) {
@@ -24,7 +24,7 @@ static void validateStorageVersion(common::Deserializer& deSer) {
         // TODO(Guodong): Add a test case for this.
         throw common::RuntimeException(
             std::format("Trying to read a database file with a different version. "
-                                 "Database file version: {}, Current build storage version: {}",
+                        "Database file version: {}, Current build storage version: {}",
                 savedStorageVersion, storageVersion));
     }
 }

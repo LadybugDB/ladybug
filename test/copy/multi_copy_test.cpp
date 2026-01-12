@@ -3,12 +3,12 @@
 #include <filesystem>
 #include <fstream>
 #include <random>
-#include <format>
 
 #include "../include/test_helper/test_helper.h"
 #include "common/file_system/local_file_system.h"
 #include "common/system_config.h"
 #include "graph_test/private_graph_test.h"
+#include <format>
 
 namespace lbug {
 namespace testing {
@@ -75,16 +75,16 @@ public:
         if (isSerial) {
             for (size_t i = 0; i < std::min(static_cast<size_t>(1000), totalTuples); i++) {
                 auto index = dist(rng);
-                auto result = conn->query(std::format(
-                    "MATCH (t:TestSerial) WHERE t.id = {} RETURN t.id", index));
+                auto result = conn->query(
+                    std::format("MATCH (t:TestSerial) WHERE t.id = {} RETURN t.id", index));
                 ASSERT_TRUE(result->isSuccess()) << result->toString();
                 ASSERT_EQ(result->getNumTuples(), 1) << "ID " << index << " is missing";
             }
         } else {
             for (size_t i = 0; i < std::min(static_cast<size_t>(1000), totalTuples); i++) {
                 auto index = dist(rng);
-                auto result = conn->query(
-                    std::format("MATCH (t:Test) WHERE t.id = {} RETURN t.id", index));
+                auto result =
+                    conn->query(std::format("MATCH (t:Test) WHERE t.id = {} RETURN t.id", index));
                 ASSERT_TRUE(result->isSuccess()) << result->toString();
                 ASSERT_EQ(result->getNumTuples(), 1) << "ID " << index << " is missing";
                 ASSERT_EQ(result->getNext()->getValue(0)->getValue<int32_t>(), index);

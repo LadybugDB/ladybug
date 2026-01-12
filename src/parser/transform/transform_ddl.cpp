@@ -1,4 +1,3 @@
-#include <format>
 #include "common/exception/parser.h"
 #include "parser/ddl/alter.h"
 #include "parser/ddl/create_sequence.h"
@@ -7,6 +6,7 @@
 #include "parser/ddl/drop.h"
 #include "parser/ddl/drop_info.h"
 #include "parser/transformer.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::catalog;
@@ -366,8 +366,8 @@ std::string Transformer::transformStructType(CypherParser::KU_StructTypeContext&
 }
 
 std::string Transformer::transformMapType(CypherParser::KU_MapTypeContext& ctx) {
-    return std::format("{}({},{})", ctx.MAP()->getText(),
-        transformDataType(*ctx.kU_DataType()[0]), transformDataType(*ctx.kU_DataType()[1]));
+    return std::format("{}({},{})", ctx.MAP()->getText(), transformDataType(*ctx.kU_DataType()[0]),
+        transformDataType(*ctx.kU_DataType()[1]));
 }
 
 std::string Transformer::transformDecimalType(CypherParser::KU_DecimalTypeContext& ctx) {

@@ -1,4 +1,3 @@
-#include <format>
 #include "graph_test/private_graph_test.h"
 
 #include "common/exception/test.h"
@@ -10,6 +9,7 @@
 #include "test_runner/multi_copy_split.h"
 #include "test_runner/test_runner.h"
 #include "transaction/transaction_manager.h"
+#include <format>
 
 using ::testing::Test;
 using namespace lbug::binder;

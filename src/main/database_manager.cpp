@@ -1,4 +1,3 @@
-#include <format>
 #include "main/database_manager.h"
 
 #include "catalog/catalog.h"
@@ -11,6 +10,7 @@
 #include "main/db_config.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
+#include <format>
 
 using namespace lbug::common;
 

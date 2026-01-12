@@ -1,7 +1,6 @@
 #include "test_runner/csv_converter.h"
 
 #include <fstream>
-#include <format>
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
@@ -12,6 +11,7 @@
 #include "spdlog/spdlog.h"
 #include "test_helper/test_helper.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 

@@ -1,4 +1,3 @@
-#include <format>
 #include "function/duckdb_scan.h"
 
 #include "binder/binder.h"
@@ -7,6 +6,7 @@
 #include "function/table/bind_input.h"
 #include "function/table/table_function.h"
 #include "processor/execution_context.h"
+#include <format>
 
 using namespace lbug::function;
 using namespace lbug::common;
