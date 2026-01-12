@@ -9,6 +9,7 @@
 #include "common/serializer/in_mem_file_writer.h"
 #include "common/serializer/serializer.h"
 #include "common/string_utils.h"
+#include "common/types/types.h"
 #include "function/sequence/sequence_functions.h"
 #include "main/client_context.h"
 #include "main/database.h"
@@ -23,7 +24,6 @@
 #include "storage/storage_utils.h"
 #include "transaction/transaction.h"
 #include "transaction/transaction_context.h"
-
 #include <format>
 
 using namespace lbug::common;
@@ -143,8 +143,8 @@ void DatabaseManager::createGraph(const std::string& graphName,
             std::move(serialDefault)));
         nodeProperties.emplace_back(binder::PropertyDefinition(
             binder::ColumnDefinition("label", common::LogicalType::STRING())));
-        nodeProperties.emplace_back(binder::PropertyDefinition(
-            binder::ColumnDefinition("data", common::LogicalType::STRING())));
+        nodeProperties.emplace_back(
+            binder::PropertyDefinition(binder::ColumnDefinition("data", LogicalType::JSON())));
 
         auto nodeExtraInfo = std::make_unique<binder::BoundExtraCreateNodeTableInfo>("id",
             std::move(nodeProperties), "");
@@ -162,7 +162,7 @@ void DatabaseManager::createGraph(const std::string& graphName,
             binder::ColumnDefinition("_id", common::LogicalType::INTERNAL_ID()));
         relProperties.emplace_back(
             binder::ColumnDefinition("label", common::LogicalType::STRING()));
-        relProperties.emplace_back(binder::ColumnDefinition("data", common::LogicalType::STRING()));
+        relProperties.emplace_back(binder::ColumnDefinition("data", LogicalType::JSON()));
 
         std::vector<catalog::NodeTableIDPair> nodePairs;
         nodePairs.emplace_back(catalog::NodeTableIDPair(nodeTableID, nodeTableID));

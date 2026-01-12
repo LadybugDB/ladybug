@@ -5,11 +5,11 @@
 #include "catalog/catalog.h"
 #include "common/cast.h"
 #include "common/exception/binder.h"
+#include "common/types/types.h"
 #include "function/struct/vector_struct_functions.h"
 #include "main/client_context.h"
 #include "parser/expression/parsed_property_expression.h"
 #include "transaction/transaction.h"
-
 #include <format>
 
 using namespace lbug::common;
@@ -141,9 +141,9 @@ std::shared_ptr<Expression> ExpressionBinder::bindNodeOrRelPropertyExpression(
                 infos.insert({entry->getTableID(),
                     SingleLabelPropertyInfo(true /* exists */, false /* isPrimaryKey */)});
             }
-            // Use STRING type for ANY graph properties to avoid type casting issues
-            // The actual storage will be as JSON in the data column
-            return std::make_shared<PropertyExpression>(LogicalType::STRING(), propertyName,
+            // Use JSON type for ANY graph properties
+            // The actual storage is as JSON in the data column
+            return std::make_shared<PropertyExpression>(LogicalType::JSON(), propertyName,
                 nodeOrRel.getUniqueName(), nodeOrRel.getVariableName(), std::move(infos));
         }
         throw BinderException(

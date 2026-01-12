@@ -12,6 +12,7 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/assert.h"
 #include "common/exception/binder.h"
+#include "common/types/types.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
 #include "parser/query/updating_clause/delete_clause.h"
@@ -202,7 +203,7 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
                 ->getTableID();
 
     if (isAnyGraph) {
-        // For ANY graphs, the _nodes table has columns: id (SERIAL), label (STRING), data (STRING)
+        // For ANY graphs, the _nodes table has columns: id (SERIAL), label (STRING), data (JSON)
         // The id is auto-populated by the serial default
         // We need to ensure label and data expressions are at the correct positions
 
@@ -229,8 +230,9 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
         }
         if (insertInfo.columnDataExprs.size() >= 2) {
             // Replace or add data at position 2
-            // For now, use an empty JSON object as placeholder
-            auto dataExpr = expressionBinder.createLiteralExpression(std::string("{}"));
+            // Use empty JSON object as placeholder
+            auto dataExpr = expressionBinder.createLiteralExpression(
+                Value(LogicalType::JSON(), std::string("{}")));
             if (insertInfo.columnDataExprs.size() == 2) {
                 insertInfo.columnDataExprs.push_back(dataExpr);
             } else {
@@ -320,7 +322,7 @@ void Binder::bindInsertRel(std::shared_ptr<RelExpression> rel,
 
     if (isAnyGraph) {
         // For ANY graphs, add label and data expressions for the _edges table
-        // The _edges table has columns: _id (INTERNAL_ID), label (STRING), data (STRING)
+        // The _edges table has columns: _id (INTERNAL_ID), label (STRING), data (JSON)
         // The _id is auto-populated during insert
         // We need to add label and data expressions at the correct positions
 
@@ -342,7 +344,8 @@ void Binder::bindInsertRel(std::shared_ptr<RelExpression> rel,
             // Only _id is present, add label and data
             insertInfo.columnDataExprs.push_back(boundLabelExpr);
             // Use empty JSON object for data
-            auto dataExpr = expressionBinder.createLiteralExpression(std::string("{}"));
+            auto dataExpr = expressionBinder.createLiteralExpression(
+                Value(LogicalType::JSON(), std::string("{}")));
             insertInfo.columnDataExprs.push_back(dataExpr);
         }
     }
