@@ -2,10 +2,14 @@
 #include "binder/expression/expression_util.h"
 #include "binder/expression/node_rel_expression.h"
 #include "binder/expression_binder.h"
+#include "catalog/catalog.h"
 #include "common/cast.h"
 #include "common/exception/binder.h"
 #include "function/struct/vector_struct_functions.h"
+#include "main/client_context.h"
 #include "parser/expression/parsed_property_expression.h"
+#include "transaction/transaction.h"
+
 #include <format>
 
 using namespace lbug::common;
@@ -23,6 +27,28 @@ static bool isStructPattern(const Expression& expression) {
     auto logicalTypeID = expression.getDataType().getLogicalTypeID();
     return logicalTypeID == LogicalTypeID::NODE || logicalTypeID == LogicalTypeID::REL ||
            logicalTypeID == LogicalTypeID::STRUCT;
+}
+
+static bool isAnyGraphNodeOrRel(const NodeOrRelExpression& nodeOrRel,
+    main::ClientContext* context) {
+    auto transaction = transaction::Transaction::Get(*context);
+    auto catalog = Catalog::Get(*context);
+    auto useInternal = context->useInternalCatalogEntry();
+    for (auto& entry : nodeOrRel.getEntries()) {
+        if (entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY &&
+            catalog->containsTable(transaction, "_nodes", useInternal) &&
+            entry->getTableID() ==
+                catalog->getTableCatalogEntry(transaction, "_nodes", useInternal)->getTableID()) {
+            return true;
+        }
+        if (entry->getType() == CatalogEntryType::REL_GROUP_ENTRY &&
+            catalog->containsTable(transaction, "_edges", useInternal) &&
+            entry->getTableID() ==
+                catalog->getTableCatalogEntry(transaction, "_edges", useInternal)->getTableID()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 expression_vector ExpressionBinder::bindPropertyStarExpression(
@@ -106,6 +132,20 @@ std::shared_ptr<Expression> ExpressionBinder::bindNodeOrRelPropertyExpression(
         return node.getInternalID();
     }
     if (!nodeOrRel.hasPropertyExpression(propertyName)) {
+        // Check if this is an ANY graph (_nodes or _edges table)
+        // In ANY graphs, all properties are stored dynamically in the JSON data column
+        if (isAnyGraphNodeOrRel(nodeOrRel, context)) {
+            // Create a property expression with exists=true for ANY graph properties
+            table_id_map_t<SingleLabelPropertyInfo> infos;
+            for (auto& entry : nodeOrRel.getEntries()) {
+                infos.insert({entry->getTableID(),
+                    SingleLabelPropertyInfo(true /* exists */, false /* isPrimaryKey */)});
+            }
+            // Use STRING type for ANY graph properties to avoid type casting issues
+            // The actual storage will be as JSON in the data column
+            return std::make_shared<PropertyExpression>(LogicalType::STRING(), propertyName,
+                nodeOrRel.getUniqueName(), nodeOrRel.getVariableName(), std::move(infos));
+        }
         throw BinderException(
             "Cannot find property " + propertyName + " for " + child.toString() + ".");
     }

@@ -12,6 +12,8 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/assert.h"
 #include "common/exception/binder.h"
+#include "main/client_context.h"
+#include "main/database_manager.h"
 #include "parser/query/updating_clause/delete_clause.h"
 #include "parser/query/updating_clause/insert_clause.h"
 #include "parser/query/updating_clause/merge_clause.h"
@@ -188,16 +190,30 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
     }
     insertInfo.columnDataExprs =
         bindInsertColumnDataExprs(node->getPropertyDataExprRef(), entry->getProperties());
-    auto nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
-    validatePrimaryKeyExistence(nodeEntry, *node, insertInfo.columnDataExprs);
+
+    // Check if this is an ANY graph (_nodes table) - skip primary key validation for SERIAL
+    auto transaction = transaction::Transaction::Get(*clientContext);
+    auto useInternal = clientContext->useInternalCatalogEntry();
+    auto dbManager = main::DatabaseManager::Get(*clientContext);
+    auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
+    bool isAnyGraph =
+        defaultGraphCatalog != nullptr &&
+        entry->getTableID() ==
+            defaultGraphCatalog->getTableCatalogEntry(transaction, "_nodes", useInternal)
+                ->getTableID();
+
+    if (!isAnyGraph) {
+        auto nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
+        validatePrimaryKeyExistence(nodeEntry, *node, insertInfo.columnDataExprs);
+    }
+
     // Check extension secondary index loaded
     auto catalog = Catalog::Get(*clientContext);
-    auto transaction = transaction::Transaction::Get(*clientContext);
-    for (auto indexEntry : catalog->getIndexEntries(transaction, nodeEntry->getTableID())) {
+    for (auto indexEntry : catalog->getIndexEntries(transaction, entry->getTableID())) {
         if (!indexEntry->isLoaded()) {
             throw BinderException(std::format(
                 "Trying to insert into an index on table {} but its extension is not loaded.",
-                nodeEntry->getName()));
+                entry->getName()));
         }
     }
     infos.push_back(std::move(insertInfo));

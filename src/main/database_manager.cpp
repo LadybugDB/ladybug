@@ -9,9 +9,12 @@
 #include "common/serializer/in_mem_file_writer.h"
 #include "common/serializer/serializer.h"
 #include "common/string_utils.h"
+#include "function/sequence/sequence_functions.h"
 #include "main/client_context.h"
 #include "main/database.h"
 #include "main/db_config.h"
+#include "parser/expression/parsed_function_expression.h"
+#include "parser/expression/parsed_literal_expression.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/checkpointer.h"
 #include "storage/database_header.h"
@@ -127,12 +130,21 @@ void DatabaseManager::createGraph(const std::string& graphName,
         // Use DUMMY_CHECKPOINT_TRANSACTION to create tables
         auto* transaction = &transaction::DUMMY_CHECKPOINT_TRANSACTION;
 
+        // Create serial name for the id column: _nodes_id_serial
+        auto serialName = "_nodes_id_serial";
+        auto serialLiteral =
+            std::make_unique<parser::ParsedLiteralExpression>(Value(serialName), serialName);
+        auto serialDefault = std::make_unique<parser::ParsedFunctionExpression>(
+            function::NextValFunction::name, std::move(serialLiteral), serialName);
+
         std::vector<binder::PropertyDefinition> nodeProperties;
-        nodeProperties.emplace_back(binder::ColumnDefinition("id", common::LogicalType::SERIAL()));
-        nodeProperties.emplace_back(
-            binder::ColumnDefinition("label", common::LogicalType::STRING()));
-        nodeProperties.emplace_back(
-            binder::ColumnDefinition("data", common::LogicalType::STRING()));
+        nodeProperties.emplace_back(binder::PropertyDefinition(
+            binder::ColumnDefinition("id", common::LogicalType::SERIAL()),
+            std::move(serialDefault)));
+        nodeProperties.emplace_back(binder::PropertyDefinition(
+            binder::ColumnDefinition("label", common::LogicalType::STRING())));
+        nodeProperties.emplace_back(binder::PropertyDefinition(
+            binder::ColumnDefinition("data", common::LogicalType::STRING())));
 
         auto nodeExtraInfo = std::make_unique<binder::BoundExtraCreateNodeTableInfo>("id",
             std::move(nodeProperties), "");

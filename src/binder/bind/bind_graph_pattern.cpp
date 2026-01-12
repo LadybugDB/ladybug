@@ -8,6 +8,7 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/enums/rel_direction.h"
 #include "common/exception/binder.h"
+#include "common/types/types.h"
 #include "common/utils.h"
 #include "function/cast/functions/cast_from_string_functions.h"
 #include "function/gds/rec_joins.h"
@@ -583,7 +584,11 @@ std::shared_ptr<NodeExpression> Binder::bindQueryNode(const NodePattern& nodePat
     for (auto& [propertyName, rhs] : nodePattern.getPropertyKeyVals()) {
         auto boundLhs = expressionBinder.bindNodeOrRelPropertyExpression(*queryNode, propertyName);
         auto boundRhs = expressionBinder.bindExpression(*rhs);
-        boundRhs = expressionBinder.forceCast(boundRhs, boundLhs->dataType);
+        // For ANY graphs, properties are stored as JSON in the data column
+        // Skip forceCast for ANY type as it cannot be cast to
+        if (boundLhs->dataType.getLogicalTypeID() != LogicalTypeID::ANY) {
+            boundRhs = expressionBinder.forceCast(boundRhs, boundLhs->dataType);
+        }
         queryNode->addPropertyDataExpr(propertyName, std::move(boundRhs));
     }
     queryGraph.addQueryNode(queryNode);
@@ -679,7 +684,6 @@ Binder::bindNodeTableEntries(const std::vector<std::string>& tableNames) const {
 std::pair<TableCatalogEntry*, std::string> Binder::bindNodeTableEntry(
     const std::string& name) const {
     auto transaction = transaction::Transaction::Get(*clientContext);
-    auto catalog = Catalog::Get(*clientContext);
     auto useInternal = clientContext->useInternalCatalogEntry();
 
     std::string dbName;
@@ -703,14 +707,25 @@ std::pair<TableCatalogEntry*, std::string> Binder::bindNodeTableEntry(
         }
         return {attachedCatalog->getTableCatalogEntry(transaction, tableName, useInternal), dbName};
     } else {
+        // Check if there's a default graph set and use its catalog
+        auto dbManager = main::DatabaseManager::Get(*clientContext);
+        catalog::Catalog* catalog = nullptr;
+        auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
+        if (defaultGraphCatalog != nullptr) {
+            catalog = defaultGraphCatalog;
+        } else {
+            catalog = Catalog::Get(*clientContext);
+        }
         // Unqualified name: only search main catalog
         // Foreign tables require qualified names (db.table) to avoid ambiguity
-        if (catalog->containsTable(transaction, name, useInternal)) {
+        bool hasTable = catalog->containsTable(transaction, name, useInternal);
+        if (hasTable) {
             return {catalog->getTableCatalogEntry(transaction, name, useInternal), ""};
         }
         // Check if this is an ANY graph (has _nodes table)
         // In ANY graphs, labels are stored dynamically in the _nodes table
-        if (catalog->containsTable(transaction, "_nodes", useInternal)) {
+        bool hasNodes = catalog->containsTable(transaction, "_nodes", useInternal);
+        if (hasNodes) {
             return {catalog->getTableCatalogEntry(transaction, "_nodes", useInternal), ""};
         }
         throw BinderException(std::format("Table {} does not exist.", name));
@@ -720,14 +735,23 @@ std::pair<TableCatalogEntry*, std::string> Binder::bindNodeTableEntry(
 std::vector<TableCatalogEntry*> Binder::bindRelGroupEntries(
     const std::vector<std::string>& tableNames) const {
     auto transaction = transaction::Transaction::Get(*clientContext);
-    auto catalog = Catalog::Get(*clientContext);
     auto useInternal = clientContext->useInternalCatalogEntry();
+
+    // Check if there's a default graph set and use its catalog
+    auto dbManager = main::DatabaseManager::Get(*clientContext);
+    catalog::Catalog* catalog = nullptr;
+    auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
+    if (defaultGraphCatalog != nullptr) {
+        catalog = defaultGraphCatalog;
+    } else {
+        catalog = Catalog::Get(*clientContext);
+    }
+
     table_catalog_entry_set_t entrySet;
     if (tableNames.empty()) { // Rewrite as all rel groups in database.
         for (auto entry : catalog->getRelGroupEntries(transaction, useInternal)) {
             entrySet.insert(entry);
         }
-        auto dbManager = main::DatabaseManager::Get(*clientContext);
         for (auto attachedDB : dbManager->getAttachedDatabases()) {
             auto attachedCatalog = attachedDB->getCatalog();
             for (auto entry : attachedCatalog->getRelGroupEntries(transaction, useInternal)) {
