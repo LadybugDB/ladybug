@@ -163,7 +163,7 @@ Binder exception: CREATE_VECTOR_INDEX is only supported in auto transaction mode
 ---- ok
 -STATEMENT CALL show_indexes() RETURN *;
 ---- 1
-embeddings|e_hnsw_index|HNSW|[vec]|True|CALL CREATE_VECTOR_INDEX('embeddings', 'e_hnsw_index', 'vec', mu := 30, ml := 60, pu := 0.050000, metric := 'l2', alpha := 1.100000, efc := 200);
+embeddings|e_hnsw_index|HNSW|[vec]|True|CALL CREATE_VECTOR_INDEX('embeddings', 'e_hnsw_index', 'vec', mu := 30, ml := 60, pu := 0.05, metric := 'l2', alpha := 1.1, efc := 200);
 
 # TODO(Guodong): Uncomment this when we support CREATE_VECTOR_INDEX in the manual transaction mode.
 # -CASE CreateHNSWRollbackRecovery
