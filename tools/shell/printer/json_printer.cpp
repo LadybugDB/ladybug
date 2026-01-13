@@ -1,6 +1,6 @@
 #include "printer/json_printer.h"
 
-#include "json_utils.h"
+#include "common/json_utils.h"
 #include "main/query_result/materialized_query_result.h"
 #include "processor/result/factorized_table.h"
 #include "storage/buffer_manager/memory_manager.h"

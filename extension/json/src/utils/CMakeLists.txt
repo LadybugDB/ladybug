@@ -1,7 +1,6 @@
-add_library(lbug_json_utils
-        OBJECT
-        json_utils.cpp)
+# json_utils.cpp moved to src/common/
+# This file kept for backwards compatibility but no longer builds anything
 
 set(JSON_EXTENSION_OBJECT_FILES
-        ${JSON_EXTENSION_OBJECT_FILES} $<TARGET_OBJECTS:lbug_json_utils>
+        ${JSON_EXTENSION_OBJECT_FILES}
         PARENT_SCOPE)

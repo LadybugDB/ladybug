@@ -1,4 +1,4 @@
-#include "json_utils.h"
+#include "common/json_utils.h"
 
 #include <cstdlib>
 
@@ -14,7 +14,7 @@
 #include "function/cast/functions/cast_from_string_functions.h"
 #include "function/cast/functions/cast_string_non_nested_functions.h"
 #include "function/cast/functions/numeric_limits.h"
-#include "json_type.h"
+#include "common/types/json_type.h"
 #include <format>
 
 using namespace lbug::common;

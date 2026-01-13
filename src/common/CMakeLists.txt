@@ -18,6 +18,7 @@ add_library(lbug_common
         database_lifecycle_manager.cpp
         expression_type.cpp
         in_mem_overflow_buffer.cpp
+        json_utils.cpp
         mask.cpp
         md5.cpp
         metric.cpp

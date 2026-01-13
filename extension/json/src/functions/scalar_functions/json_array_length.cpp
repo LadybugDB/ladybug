@@ -1,6 +1,6 @@
+#include "common/json_utils.h"
 #include "function/scalar_function.h"
 #include "json_scalar_functions.h"
-#include "json_utils.h"
 
 namespace lbug {
 namespace json_extension {
