@@ -15,7 +15,9 @@
 #include "common/assert.h"
 #include "common/exception/binder.h"
 #include "common/json.h"
+#include "common/json_utils.h"
 #include "common/types/types.h"
+#include "common/vector/value_vector.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
 #include "parser/query/updating_clause/delete_clause.h"
@@ -234,8 +236,8 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
         if (insertInfo.columnDataExprs.size() >= 2) {
             // Replace or add data at position 2
             // Build JSON object from property data expressions
-            JsonMutDoc doc;
-            JsonMutValue root = doc.addRoot();
+            json_extension::JsonMutWrapper mutWrapper;
+            yyjson_mut_val* root = yyjson_mut_obj(mutWrapper.ptr);
 
             for (const auto& [propertyName, dataExpr] : node->getPropertyDataExprRef()) {
                 const LiteralExpression* literalExpr = nullptr;
@@ -252,63 +254,24 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
                 } else {
                     literalExpr = dynamic_cast<LiteralExpression*>(dataExpr.get());
                 }
+                yyjson_mut_val* jsonVal = nullptr;
                 if (literalExpr && !literalExpr->isNull()) {
                     auto val = literalExpr->getValue();
-                    switch (val.getDataType().getLogicalTypeID()) {
-                    case LogicalTypeID::STRING:
-                        root.addStr(doc.doc_, propertyName.c_str(),
-                            val.getValue<std::string>().c_str());
-                        break;
-                    case LogicalTypeID::INT64:
-                        root.addSint(doc.doc_, propertyName.c_str(), val.getValue<int64_t>());
-                        break;
-                    case LogicalTypeID::INT32:
-                        root.addSint(doc.doc_, propertyName.c_str(),
-                            static_cast<int64_t>(val.getValue<int32_t>()));
-                        break;
-                    case LogicalTypeID::INT16:
-                        root.addSint(doc.doc_, propertyName.c_str(),
-                            static_cast<int64_t>(val.getValue<int16_t>()));
-                        break;
-                    case LogicalTypeID::INT8:
-                        root.addSint(doc.doc_, propertyName.c_str(),
-                            static_cast<int64_t>(val.getValue<int8_t>()));
-                        break;
-                    case LogicalTypeID::UINT64:
-                        root.addUint(doc.doc_, propertyName.c_str(), val.getValue<uint64_t>());
-                        break;
-                    case LogicalTypeID::UINT32:
-                        root.addUint(doc.doc_, propertyName.c_str(),
-                            static_cast<uint64_t>(val.getValue<uint32_t>()));
-                        break;
-                    case LogicalTypeID::UINT16:
-                        root.addUint(doc.doc_, propertyName.c_str(),
-                            static_cast<uint64_t>(val.getValue<uint16_t>()));
-                        break;
-                    case LogicalTypeID::UINT8:
-                        root.addUint(doc.doc_, propertyName.c_str(),
-                            static_cast<uint64_t>(val.getValue<uint8_t>()));
-                        break;
-                    case LogicalTypeID::DOUBLE:
-                        root.addReal(doc.doc_, propertyName.c_str(), val.getValue<double>());
-                        break;
-                    case LogicalTypeID::FLOAT:
-                        root.addReal(doc.doc_, propertyName.c_str(),
-                            static_cast<double>(val.getValue<float>()));
-                        break;
-                    case LogicalTypeID::BOOL:
-                        root.addBool(doc.doc_, propertyName.c_str(), val.getValue<bool>());
-                        break;
-                    default:
-                        root.addNull(doc.doc_, propertyName.c_str());
-                        break;
-                    }
+                    // Create a temporary ValueVector of size 1 and reuse json_extension::jsonify
+                    ValueVector tempVec(val.getDataType().copy());
+                    tempVec.state = DataChunkState::getSingleValueDataChunkState();
+                    tempVec.copyFromValue(0, val);
+                    jsonVal = json_extension::jsonify(mutWrapper, tempVec, 0);
                 } else {
-                    root.addNull(doc.doc_, propertyName.c_str());
+                    jsonVal = yyjson_mut_null(mutWrapper.ptr);
                 }
+                auto key = yyjson_mut_strcpy(mutWrapper.ptr, propertyName.c_str());
+                yyjson_mut_obj_add(root, key, jsonVal);
             }
 
-            auto jsonStr = doc.toString();
+            yyjson_mut_doc_set_root(mutWrapper.ptr, root);
+            auto jsonStr = json_extension::jsonToString(
+                json_extension::JsonWrapper(yyjson_mut_doc_imut_copy(mutWrapper.ptr, nullptr)));
             auto dataExpr =
                 expressionBinder.createLiteralExpression(Value(LogicalType::JSON(), jsonStr));
             if (insertInfo.columnDataExprs.size() == 2) {
@@ -422,8 +385,8 @@ void Binder::bindInsertRel(std::shared_ptr<RelExpression> rel,
             // Only _id is present, add label and data
             insertInfo.columnDataExprs.push_back(boundLabelExpr);
             // Build JSON object from property data expressions
-            JsonMutDoc doc;
-            JsonMutValue root = doc.addRoot();
+            json_extension::JsonMutWrapper mutWrapper;
+            yyjson_mut_val* root = yyjson_mut_obj(mutWrapper.ptr);
 
             for (const auto& [propertyName, dataExpr] : rel->getPropertyDataExprRef()) {
                 const LiteralExpression* literalExpr = nullptr;
@@ -437,63 +400,24 @@ void Binder::bindInsertRel(std::shared_ptr<RelExpression> rel,
                 } else {
                     literalExpr = dynamic_cast<LiteralExpression*>(dataExpr.get());
                 }
+                yyjson_mut_val* jsonVal = nullptr;
                 if (literalExpr && !literalExpr->isNull()) {
                     auto val = literalExpr->getValue();
-                    switch (val.getDataType().getLogicalTypeID()) {
-                    case LogicalTypeID::STRING:
-                        root.addStr(doc.doc_, propertyName.c_str(),
-                            val.getValue<std::string>().c_str());
-                        break;
-                    case LogicalTypeID::INT64:
-                        root.addSint(doc.doc_, propertyName.c_str(), val.getValue<int64_t>());
-                        break;
-                    case LogicalTypeID::INT32:
-                        root.addSint(doc.doc_, propertyName.c_str(),
-                            static_cast<int64_t>(val.getValue<int32_t>()));
-                        break;
-                    case LogicalTypeID::INT16:
-                        root.addSint(doc.doc_, propertyName.c_str(),
-                            static_cast<int64_t>(val.getValue<int16_t>()));
-                        break;
-                    case LogicalTypeID::INT8:
-                        root.addSint(doc.doc_, propertyName.c_str(),
-                            static_cast<int64_t>(val.getValue<int8_t>()));
-                        break;
-                    case LogicalTypeID::UINT64:
-                        root.addUint(doc.doc_, propertyName.c_str(), val.getValue<uint64_t>());
-                        break;
-                    case LogicalTypeID::UINT32:
-                        root.addUint(doc.doc_, propertyName.c_str(),
-                            static_cast<uint64_t>(val.getValue<uint32_t>()));
-                        break;
-                    case LogicalTypeID::UINT16:
-                        root.addUint(doc.doc_, propertyName.c_str(),
-                            static_cast<uint64_t>(val.getValue<uint16_t>()));
-                        break;
-                    case LogicalTypeID::UINT8:
-                        root.addUint(doc.doc_, propertyName.c_str(),
-                            static_cast<uint64_t>(val.getValue<uint8_t>()));
-                        break;
-                    case LogicalTypeID::DOUBLE:
-                        root.addReal(doc.doc_, propertyName.c_str(), val.getValue<double>());
-                        break;
-                    case LogicalTypeID::FLOAT:
-                        root.addReal(doc.doc_, propertyName.c_str(),
-                            static_cast<double>(val.getValue<float>()));
-                        break;
-                    case LogicalTypeID::BOOL:
-                        root.addBool(doc.doc_, propertyName.c_str(), val.getValue<bool>());
-                        break;
-                    default:
-                        root.addNull(doc.doc_, propertyName.c_str());
-                        break;
-                    }
+                    // Create a temporary ValueVector of size 1 and reuse json_extension::jsonify
+                    ValueVector tempVec(val.getDataType().copy());
+                    tempVec.state = DataChunkState::getSingleValueDataChunkState();
+                    tempVec.copyFromValue(0, val);
+                    jsonVal = json_extension::jsonify(mutWrapper, tempVec, 0);
                 } else {
-                    root.addNull(doc.doc_, propertyName.c_str());
+                    jsonVal = yyjson_mut_null(mutWrapper.ptr);
                 }
+                auto key = yyjson_mut_strcpy(mutWrapper.ptr, propertyName.c_str());
+                yyjson_mut_obj_add(root, key, jsonVal);
             }
 
-            auto jsonStr = doc.toString();
+            yyjson_mut_doc_set_root(mutWrapper.ptr, root);
+            auto jsonStr = json_extension::jsonToString(
+                json_extension::JsonWrapper(yyjson_mut_doc_imut_copy(mutWrapper.ptr, nullptr)));
             auto dataExpr =
                 expressionBinder.createLiteralExpression(Value(LogicalType::JSON(), jsonStr));
             insertInfo.columnDataExprs.push_back(dataExpr);
