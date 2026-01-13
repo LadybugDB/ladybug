@@ -8,13 +8,13 @@
 #include "common/type_utils.h"
 #include "common/types/date_t.h"
 #include "common/types/interval_t.h"
+#include "common/types/json_type.h"
 #include "common/types/timestamp_t.h"
 #include "common/types/uuid.h"
 #include "function/cast/functions/cast_decimal.h"
 #include "function/cast/functions/cast_from_string_functions.h"
 #include "function/cast/functions/cast_string_non_nested_functions.h"
 #include "function/cast/functions/numeric_limits.h"
-#include "common/types/json_type.h"
 #include <format>
 
 using namespace lbug::common;

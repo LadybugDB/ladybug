@@ -194,8 +194,6 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
             insertInfo.columnExprs.push_back(property);
         }
     }
-    insertInfo.columnDataExprs =
-        bindInsertColumnDataExprs(node->getPropertyDataExprRef(), entry->getProperties());
 
     auto transaction = transaction::Transaction::Get(*clientContext);
     auto useInternal = clientContext->useInternalCatalogEntry();
@@ -210,77 +208,76 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
     if (isAnyGraph) {
         // For ANY graphs, the _nodes table has columns: id (SERIAL), label (STRING), data (JSON)
         // The id is auto-populated by the serial default
-        // We need to ensure label and data expressions are at the correct positions
+        // We need to build columnDataExprs for: [id_default, label, data]
 
-        // Get the original label from the node's original labels
-        std::shared_ptr<Expression> boundLabelExpr;
+        // Property expressions are already bound - just reference them
+        const auto& boundPropertyExprs = node->getPropertyDataExprRef();
+
+        // Build columnDataExprs for _nodes table: [id, label, data]
+        insertInfo.columnDataExprs.clear();
+
+        // id column: use default (SERIAL)
+        auto props = entry->getProperties();
+        auto idDefaultExpr = expressionBinder.bindExpression(*props[0].defaultExpr);
+        insertInfo.columnDataExprs.push_back(
+            expressionBinder.implicitCastIfNecessary(idDefaultExpr, props[0].getType()));
+
+        // label column
         auto originalLabels = node->getOriginalLabels();
+        std::shared_ptr<Expression> boundLabelExpr;
         if (!originalLabels.empty()) {
-            // Use the first original label
             boundLabelExpr = expressionBinder.createLiteralExpression(originalLabels[0]);
         } else {
-            // Fallback to entry name if no original labels
             boundLabelExpr = expressionBinder.createLiteralExpression(entry->getName());
         }
+        insertInfo.columnDataExprs.push_back(boundLabelExpr);
 
-        // The _nodes table properties are: id, label, data
-        // We need to ensure columnDataExprs has label at index 1 and data at index 2
-        if (insertInfo.columnDataExprs.size() >= 1) {
-            // Replace or add label at position 1
-            if (insertInfo.columnDataExprs.size() == 1) {
-                insertInfo.columnDataExprs.push_back(boundLabelExpr);
-            } else {
-                insertInfo.columnDataExprs[1] = boundLabelExpr;
-            }
-        }
-        if (insertInfo.columnDataExprs.size() >= 2) {
-            // Replace or add data at position 2
-            // Build JSON object from property data expressions
-            json_extension::JsonMutWrapper mutWrapper;
-            yyjson_mut_val* root = yyjson_mut_obj(mutWrapper.ptr);
+        // data column: build JSON from bound property expressions
+        json_extension::JsonMutWrapper mutWrapper;
+        yyjson_mut_val* root = yyjson_mut_obj(mutWrapper.ptr);
 
-            for (const auto& [propertyName, dataExpr] : node->getPropertyDataExprRef()) {
-                const LiteralExpression* literalExpr = nullptr;
-                if (dataExpr->expressionType == common::ExpressionType::FUNCTION) {
-                    auto* scalarFunc = dynamic_cast<ScalarFunctionExpression*>(dataExpr.get());
-                    if (scalarFunc && scalarFunc->getFunction().name == "CAST" &&
-                        !scalarFunc->getChildren().empty()) {
-                        auto& sourceExpr = scalarFunc->getChildren()[0];
-                        literalExpr = dynamic_cast<LiteralExpression*>(sourceExpr.get());
-                        if (!literalExpr) {
-                            literalExpr = dynamic_cast<LiteralExpression*>(dataExpr.get());
-                        }
-                    }
+        for (const auto& [propertyName, boundExpr] : boundPropertyExprs) {
+            const LiteralExpression* literalExpr = nullptr;
+            if (boundExpr->expressionType == common::ExpressionType::FUNCTION) {
+                auto* scalarFunc = dynamic_cast<ScalarFunctionExpression*>(boundExpr.get());
+                if (scalarFunc &&
+                    (scalarFunc->getFunction().name == "CAST" ||
+                        scalarFunc->getFunction().name == "CAST_TO_JSON") &&
+                    !scalarFunc->getChildren().empty()) {
+                    auto const& children = scalarFunc->getChildren();
+                    literalExpr = dynamic_cast<LiteralExpression*>(children[0].get());
                 } else {
-                    literalExpr = dynamic_cast<LiteralExpression*>(dataExpr.get());
+                    literalExpr = dynamic_cast<LiteralExpression*>(boundExpr.get());
                 }
-                yyjson_mut_val* jsonVal = nullptr;
-                if (literalExpr && !literalExpr->isNull()) {
-                    auto val = literalExpr->getValue();
-                    // Create a temporary ValueVector of size 1 and reuse json_extension::jsonify
-                    ValueVector tempVec(val.getDataType().copy());
-                    tempVec.state = DataChunkState::getSingleValueDataChunkState();
-                    tempVec.copyFromValue(0, val);
-                    jsonVal = json_extension::jsonify(mutWrapper, tempVec, 0);
-                } else {
-                    jsonVal = yyjson_mut_null(mutWrapper.ptr);
-                }
-                auto key = yyjson_mut_strcpy(mutWrapper.ptr, propertyName.c_str());
-                yyjson_mut_obj_add(root, key, jsonVal);
+            } else {
+                literalExpr = dynamic_cast<LiteralExpression*>(boundExpr.get());
             }
 
-            yyjson_mut_doc_set_root(mutWrapper.ptr, root);
-            auto jsonStr = json_extension::jsonToString(
-                json_extension::JsonWrapper(yyjson_mut_doc_imut_copy(mutWrapper.ptr, nullptr)));
-            auto dataExpr =
-                expressionBinder.createLiteralExpression(Value(LogicalType::JSON(), jsonStr));
-            if (insertInfo.columnDataExprs.size() == 2) {
-                insertInfo.columnDataExprs.push_back(dataExpr);
+            yyjson_mut_val* jsonVal = nullptr;
+            if (literalExpr && !literalExpr->isNull()) {
+                auto val = literalExpr->getValue();
+                // Create a temporary ValueVector of size 1 and reuse json_extension::jsonify
+                ValueVector tempVec(val.getDataType().copy());
+                tempVec.state = DataChunkState::getSingleValueDataChunkState();
+                tempVec.copyFromValue(0, val);
+                jsonVal = json_extension::jsonify(mutWrapper, tempVec, 0);
             } else {
-                insertInfo.columnDataExprs[2] = dataExpr;
+                jsonVal = yyjson_mut_null(mutWrapper.ptr);
             }
+            auto key = yyjson_mut_strcpy(mutWrapper.ptr, propertyName.c_str());
+            yyjson_mut_obj_add(root, key, jsonVal);
         }
+
+        yyjson_mut_doc_set_root(mutWrapper.ptr, root);
+        auto jsonStr = json_extension::jsonToString(
+            json_extension::JsonWrapper(yyjson_mut_doc_imut_copy(mutWrapper.ptr, nullptr)));
+        auto dataExpr =
+            expressionBinder.createLiteralExpression(Value(LogicalType::JSON(), jsonStr));
+        insertInfo.columnDataExprs.push_back(dataExpr);
     } else {
+        // For regular node tables, match input properties against table schema
+        insertInfo.columnDataExprs =
+            bindInsertColumnDataExprs(node->getPropertyDataExprRef(), entry->getProperties());
         auto nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
         validatePrimaryKeyExistence(nodeEntry, *node, insertInfo.columnDataExprs);
     }
@@ -347,8 +344,6 @@ void Binder::bindInsertRel(std::shared_ptr<RelExpression> rel,
     for (auto& p : entry->getProperties()) {
         insertInfo.columnExprs.push_back(rel->getPropertyExpression(p.getName()));
     }
-    insertInfo.columnDataExprs =
-        bindInsertColumnDataExprs(rel->getPropertyDataExprRef(), entry->getProperties());
 
     // Check if this is an ANY graph (_edges table)
     auto transaction = transaction::Transaction::Get(*clientContext);
@@ -362,66 +357,77 @@ void Binder::bindInsertRel(std::shared_ptr<RelExpression> rel,
                 ->getTableID();
 
     if (isAnyGraph) {
-        // For ANY graphs, add label and data expressions for the _edges table
-        // The _edges table has columns: _id (INTERNAL_ID), label (STRING), data (JSON)
-        // The _id is auto-populated during insert
-        // We need to add label and data expressions at the correct positions
+        // For ANY graphs, the _edges table has columns: _id (INTERNAL_ID), label (STRING), data
+        // (JSON) Build columnDataExprs for these three columns
 
-        // Get the original label from the rel's original labels
-        std::shared_ptr<Expression> boundLabelExpr;
+        // Property expressions are already bound - just reference them
+        const auto& boundPropertyExprs = rel->getPropertyDataExprRef();
+
+        // Build columnDataExprs for _edges table: [_id, label, data]
+        insertInfo.columnDataExprs.clear();
+
+        // _id column: use default
+        auto props = entry->getProperties();
+        auto idDefaultExpr = expressionBinder.bindExpression(*props[0].defaultExpr);
+        insertInfo.columnDataExprs.push_back(
+            expressionBinder.implicitCastIfNecessary(idDefaultExpr, props[0].getType()));
+
+        // label column
         auto originalLabels = rel->getOriginalLabels();
+        std::shared_ptr<Expression> boundLabelExpr;
         if (!originalLabels.empty()) {
-            // Use the first original label
             boundLabelExpr = expressionBinder.createLiteralExpression(originalLabels[0]);
         } else {
-            // Fallback to entry name if no original labels
             boundLabelExpr = expressionBinder.createLiteralExpression(entry->getName());
         }
+        insertInfo.columnDataExprs.push_back(boundLabelExpr);
 
-        // Insert label and data at the correct positions (after _id)
-        // The properties are: _id, label, data
-        // We already have _id in columnDataExprs, now add label and data
-        if (insertInfo.columnDataExprs.size() == 1) {
-            // Only _id is present, add label and data
-            insertInfo.columnDataExprs.push_back(boundLabelExpr);
-            // Build JSON object from property data expressions
-            json_extension::JsonMutWrapper mutWrapper;
-            yyjson_mut_val* root = yyjson_mut_obj(mutWrapper.ptr);
+        // data column: build JSON from bound property expressions
+        json_extension::JsonMutWrapper mutWrapper;
+        yyjson_mut_val* root = yyjson_mut_obj(mutWrapper.ptr);
 
-            for (const auto& [propertyName, dataExpr] : rel->getPropertyDataExprRef()) {
-                const LiteralExpression* literalExpr = nullptr;
-                if (dataExpr->expressionType == common::ExpressionType::FUNCTION) {
-                    auto* scalarFunc = dynamic_cast<ScalarFunctionExpression*>(dataExpr.get());
-                    if (scalarFunc && scalarFunc->getFunction().name == "CAST" &&
-                        !scalarFunc->getChildren().empty()) {
-                        auto& sourceExpr = scalarFunc->getChildren()[0];
-                        literalExpr = dynamic_cast<LiteralExpression*>(sourceExpr.get());
-                    }
+        for (const auto& [propertyName, boundExpr] : boundPropertyExprs) {
+            const LiteralExpression* literalExpr = nullptr;
+            if (boundExpr->expressionType == common::ExpressionType::FUNCTION) {
+                auto* scalarFunc = dynamic_cast<ScalarFunctionExpression*>(boundExpr.get());
+                if (scalarFunc &&
+                    (scalarFunc->getFunction().name == "CAST" ||
+                        scalarFunc->getFunction().name == "CAST_TO_JSON") &&
+                    !scalarFunc->getChildren().empty()) {
+                    auto const& children = scalarFunc->getChildren();
+                    literalExpr = dynamic_cast<LiteralExpression*>(children[0].get());
                 } else {
-                    literalExpr = dynamic_cast<LiteralExpression*>(dataExpr.get());
+                    literalExpr = dynamic_cast<LiteralExpression*>(boundExpr.get());
                 }
-                yyjson_mut_val* jsonVal = nullptr;
-                if (literalExpr && !literalExpr->isNull()) {
-                    auto val = literalExpr->getValue();
-                    // Create a temporary ValueVector of size 1 and reuse json_extension::jsonify
-                    ValueVector tempVec(val.getDataType().copy());
-                    tempVec.state = DataChunkState::getSingleValueDataChunkState();
-                    tempVec.copyFromValue(0, val);
-                    jsonVal = json_extension::jsonify(mutWrapper, tempVec, 0);
-                } else {
-                    jsonVal = yyjson_mut_null(mutWrapper.ptr);
-                }
-                auto key = yyjson_mut_strcpy(mutWrapper.ptr, propertyName.c_str());
-                yyjson_mut_obj_add(root, key, jsonVal);
+            } else {
+                literalExpr = dynamic_cast<LiteralExpression*>(boundExpr.get());
             }
 
-            yyjson_mut_doc_set_root(mutWrapper.ptr, root);
-            auto jsonStr = json_extension::jsonToString(
-                json_extension::JsonWrapper(yyjson_mut_doc_imut_copy(mutWrapper.ptr, nullptr)));
-            auto dataExpr =
-                expressionBinder.createLiteralExpression(Value(LogicalType::JSON(), jsonStr));
-            insertInfo.columnDataExprs.push_back(dataExpr);
+            yyjson_mut_val* jsonVal = nullptr;
+            if (literalExpr && !literalExpr->isNull()) {
+                auto val = literalExpr->getValue();
+                // Create a temporary ValueVector of size 1 and reuse json_extension::jsonify
+                ValueVector tempVec(val.getDataType().copy());
+                tempVec.state = DataChunkState::getSingleValueDataChunkState();
+                tempVec.copyFromValue(0, val);
+                jsonVal = json_extension::jsonify(mutWrapper, tempVec, 0);
+            } else {
+                jsonVal = yyjson_mut_null(mutWrapper.ptr);
+            }
+            auto key = yyjson_mut_strcpy(mutWrapper.ptr, propertyName.c_str());
+            yyjson_mut_obj_add(root, key, jsonVal);
         }
+
+        yyjson_mut_doc_set_root(mutWrapper.ptr, root);
+        auto jsonStr = json_extension::jsonToString(
+            json_extension::JsonWrapper(yyjson_mut_doc_imut_copy(mutWrapper.ptr, nullptr)));
+        auto dataExpr =
+            expressionBinder.createLiteralExpression(Value(LogicalType::JSON(), jsonStr));
+        insertInfo.columnDataExprs.push_back(dataExpr);
+    } else {
+        // For regular rel tables, match input properties against table schema
+        insertInfo.columnDataExprs =
+            bindInsertColumnDataExprs(rel->getPropertyDataExprRef(), entry->getProperties());
     }
 
     infos.push_back(std::move(insertInfo));

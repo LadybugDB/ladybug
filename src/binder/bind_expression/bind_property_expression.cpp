@@ -8,6 +8,7 @@
 #include "common/types/types.h"
 #include "function/struct/vector_struct_functions.h"
 #include "main/client_context.h"
+#include "main/database_manager.h"
 #include "parser/expression/parsed_property_expression.h"
 #include "transaction/transaction.h"
 #include <format>
@@ -32,8 +33,10 @@ static bool isStructPattern(const Expression& expression) {
 static bool isAnyGraphNodeOrRel(const NodeOrRelExpression& nodeOrRel,
     main::ClientContext* context) {
     auto transaction = transaction::Transaction::Get(*context);
-    auto catalog = Catalog::Get(*context);
     auto useInternal = context->useInternalCatalogEntry();
+    auto dbManager = main::DatabaseManager::Get(*context);
+    auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
+    auto catalog = defaultGraphCatalog != nullptr ? defaultGraphCatalog : Catalog::Get(*context);
     for (auto& entry : nodeOrRel.getEntries()) {
         if (entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY &&
             catalog->containsTable(transaction, "_nodes", useInternal) &&
