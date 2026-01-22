@@ -68,7 +68,7 @@ concurrency:
 jobs:
   generate-binary-datasets:
     name: generate binary dataset
-    needs: [ sanity-checks, python-lint-check ]
+    needs: [ sanity-checks, python-format ]
     runs-on: lbug-self-hosted-testing
     if: false
     env:
@@ -136,7 +136,7 @@ jobs:
 
   gcc-build-test:
     name: gcc build & test
-    needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
+    needs: [ sanity-checks, python-format, generate-binary-datasets ]
     runs-on: lbug-self-hosted-testing
     if: false
     env:
@@ -291,7 +291,7 @@ jobs:
     name: code coverage
     runs-on: lbug-self-hosted-testing
     if: false
-    needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
+    needs: [ sanity-checks, python-format, generate-binary-datasets ]
     env:
       NUM_THREADS: 32
       TEST_JOBS: 16
@@ -525,7 +525,7 @@ jobs:
 
   clang-build-test:
     name: clang build & test
-    needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
+    needs: [ sanity-checks, python-format, generate-binary-datasets ]
     runs-on: lbug-self-hosted-testing
     if: false
     env:
@@ -731,7 +731,7 @@ jobs:
 
   msvc-build-test:
     name: msvc build & test
-    needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
+    needs: [ sanity-checks, python-format, generate-binary-datasets ]
     runs-on: self-hosted-windows
     if: false
     env:
@@ -895,8 +895,27 @@ jobs:
           cmp tmphashfile scripts/antlr4/hash.md5
           rm tmphashfile
 
-  code-format:
-    name: code format
+  clang-format:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: ['src/', 'test/', 'tools/', 'extension/']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-18
+          
+      - name: Clang Format (${{ matrix.directory }})
+        run: python3 scripts/run-clang-format.py --clang-format-executable /usr/bin/clang-format-18 -r ${{ matrix.directory }}
+
+  python-format:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -907,62 +926,24 @@ jobs:
       - name: Install uv
         run: pip3 install uv
 
-      - name: Install clang-format
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format-18
-
-      - name: Check and fix source format
-        run: python3 scripts/run-clang-format.py --in-place --clang-format-executable /usr/bin/clang-format-18 -r src/
-
-      - name: Check and fix test format
-        run: python3 scripts/run-clang-format.py --in-place --clang-format-executable /usr/bin/clang-format-18 -r test/
-
-      - name: Check and fix tools format
-        run: python3 scripts/run-clang-format.py --in-place --clang-format-executable /usr/bin/clang-format-18 -r tools/
-
-      - name: Check and fix extension format
-        run: python3 scripts/run-clang-format.py --in-place --clang-format-executable /usr/bin/clang-format-18 -r extension/
-
-      - name: Format Python API
+      - name: Python API format check
         working-directory: tools/python_api
-        run: make format
+        run: make check
+
+  rust-format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Update Rust
         run: rustup update
 
-      - name: Format Rust API
+      - name: Rust API format check
         working-directory: tools/rust_api
-        run: cargo fmt --all
-
-      - name: Fail if any change is detected on the master branch
-        if: github.ref == 'refs/heads/master'
-        run: git diff --exit-code
-
-      - name: Commit changes on non-master branches
-        uses: EndBug/add-and-commit@v9
-        if: github.ref != 'refs/heads/master'
-        with:
-          author_name: "CI Bot"
-          message: "ci: auto code format"
-
-  python-lint-check:
-    name: python lint check
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        run: pip3 install uv
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Run Python lint
-        working-directory: tools/python_api
-        run: make check
+        run: cargo fmt --all --check
 
   benchmark:
     name: benchmark
@@ -1015,7 +996,7 @@ jobs:
 
   macos-build-test:
     name: apple clang build & test
-    needs: [ sanity-checks, python-lint-check, generate-binary-datasets ]
+    needs: [ sanity-checks, python-format, generate-binary-datasets ]
     runs-on: [ self-hosted, macOS ]
     if: false
     env:
