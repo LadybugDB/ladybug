@@ -897,10 +897,6 @@ jobs:
 
   clang-format:
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        directory: ['src/', 'test/', 'tools/', 'extension/']
     steps:
       - uses: actions/checkout@v4
         with:
@@ -913,7 +909,7 @@ jobs:
           sudo apt-get install -y clang-format-18
           
       - name: Clang Format (${{ matrix.directory }})
-        run: python3 scripts/run-clang-format.py --clang-format-executable /usr/bin/clang-format-18 -r ${{ matrix.directory }}
+        run: python3 scripts/run-clang-format.py --clang-format-executable /usr/bin/clang-format-18 -r src/ test/ tools/ extension/
 
   python-format:
     runs-on: ubuntu-24.04
