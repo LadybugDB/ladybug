@@ -120,7 +120,21 @@ uint64_t StorageDriver::getNumNodes(const std::string& nodeName) const {
 uint64_t StorageDriver::getNumRels(const std::string& relName) const {
     clientContext->query("BEGIN TRANSACTION READ ONLY;");
     auto transaction = Transaction::Get(*clientContext);
-    auto result = getTable(*clientContext, relName)->getNumTotalRows(transaction);
+    auto catalogEntry = getEntry(*clientContext, relName);
+
+    if(catalogEntry->getTableType() != CatalogEntryType::REL_GROUP_ENTRY) {
+        clientContext->query("COMMIT");
+        throw RuntimeException(std::format("{} is not a relationship table", relName));
+    }
+
+    uint64_t result = 0;
+    auto relGroupCatalogEntry = catalogEntry->ptrCast<RelGroupCatalogEntry>();
+
+    for(const auto& relTableInfo : relGroupCatalogEntry->getRelEntryInfos()) {
+        auto table = StorageManager::Get(*clientContext)->getTable(relTableInfo.oid);
+        result += table->getNumTotalRows(transaction);
+    }
+
     clientContext->query("COMMIT");
     return result;
 }
