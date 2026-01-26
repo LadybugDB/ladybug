@@ -4,6 +4,7 @@
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
+#include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "main/client_context.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
@@ -112,7 +113,16 @@ void StorageDriver::scan(const std::string& nodeName, const std::string& propert
 uint64_t StorageDriver::getNumNodes(const std::string& nodeName) const {
     clientContext->query("BEGIN TRANSACTION READ ONLY;");
     auto transaction = Transaction::Get(*clientContext);
-    auto result = getTable(*clientContext, nodeName)->getNumTotalRows(transaction);
+    auto catalogEntry = getEntry(*clientContext, nodeName);
+
+    if(catalogEntry->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
+        clientContext->query("COMMIT");
+        throw RuntimeException(std::format("{} is not a node table", nodeName));
+    }
+
+    uint64_t result = StorageManager::Get(*clientContext)
+                        ->getTable(catalogEntry->getTableID())
+                        ->getNumTotalRows(transaction);
     clientContext->query("COMMIT");
     return result;
 }
@@ -122,7 +132,7 @@ uint64_t StorageDriver::getNumRels(const std::string& relName) const {
     auto transaction = Transaction::Get(*clientContext);
     auto catalogEntry = getEntry(*clientContext, relName);
 
-    if(catalogEntry->getTableType() != CatalogEntryType::REL_GROUP_ENTRY) {
+    if(catalogEntry->getType() != CatalogEntryType::REL_GROUP_ENTRY) {
         clientContext->query("COMMIT");
         throw RuntimeException(std::format("{} is not a relationship table", relName));
     }

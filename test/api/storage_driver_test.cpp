@@ -5,6 +5,10 @@ using namespace lbug::main;
 using namespace lbug::testing;
 using namespace lbug::common;
 
+class StorageDriverTest : public lbug::testing::ApiTest {
+protected:
+};
+
 // TODO(Guodong): FIX-ME. Rework storage driver scan.
 // TEST_F(ApiTest, StorageDriverScan) {
 //     auto storageDriver = std::make_unique<StorageDriver>(database.get());
@@ -28,3 +32,33 @@ using namespace lbug::common;
 //     ASSERT_EQ(ids[4], 3);
 //     ASSERT_EQ(ids[5], 9);
 // }
+
+TEST_F(StorageDriverTest, GetNumNodes) {
+    auto storageDriver = std::make_unique<StorageDriver>(database.get());
+
+    auto numNodes = storageDriver->getNumNodes("person");
+    auto numNodesQuery = conn->query("MATCH (n:person) RETURN COUNT(n)");
+    ASSERT_TRUE(numNodesQuery->isSuccess());
+    ASSERT_EQ(numNodes, numNodesQuery->getNext()->getValue(0)->getValue<uint64_t>());
+}
+
+TEST_F(StorageDriverTest, GetNumNodesNonNodeTable) {
+    auto storageDriver = std::make_unique<StorageDriver>(database.get());
+
+    EXPECT_ANY_THROW(storageDriver->getNumNodes("knows"));
+}
+
+TEST_F(StorageDriverTest, GetNumRels) {
+    auto storageDriver = std::make_unique<StorageDriver>(database.get());
+
+    auto numRels = storageDriver->getNumRels("knows");
+    auto numRelsQuery = conn->query("MATCH ()-[:knows]->() RETURN COUNT(*)");
+    ASSERT_TRUE(numRelsQuery->isSuccess());
+    ASSERT_EQ(numRels, numRelsQuery->getNext()->getValue(0)->getValue<uint64_t>());
+}
+
+TEST_F(StorageDriverTest, GetNumRelsNonRelTable) {
+    auto storageDriver = std::make_unique<StorageDriver>(database.get());
+
+    EXPECT_ANY_THROW(storageDriver->getNumRels("person"));
+}
