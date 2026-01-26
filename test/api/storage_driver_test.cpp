@@ -39,7 +39,7 @@ TEST_F(StorageDriverTest, GetNumNodes) {
     auto numNodes = storageDriver->getNumNodes("person");
     auto numNodesQuery = conn->query("MATCH (n:person) RETURN COUNT(n)");
     ASSERT_TRUE(numNodesQuery->isSuccess());
-    ASSERT_EQ(numNodes, numNodesQuery->getNext()->getValue(0)->getValue<uint64_t>());
+    ASSERT_EQ(numNodes, numNodesQuery->getNext()->getValue(0)->getValue<int64_t>());
 }
 
 TEST_F(StorageDriverTest, GetNumNodesNonNodeTable) {
@@ -54,7 +54,7 @@ TEST_F(StorageDriverTest, GetNumRels) {
     auto numRels = storageDriver->getNumRels("knows");
     auto numRelsQuery = conn->query("MATCH ()-[:knows]->() RETURN COUNT(*)");
     ASSERT_TRUE(numRelsQuery->isSuccess());
-    ASSERT_EQ(numRels, numRelsQuery->getNext()->getValue(0)->getValue<uint64_t>());
+    ASSERT_EQ(numRels, numRelsQuery->getNext()->getValue(0)->getValue<int64_t>());
 }
 
 TEST_F(StorageDriverTest, GetNumRelsNonRelTable) {
