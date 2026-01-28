@@ -11,70 +11,63 @@ namespace json_extension {
 
 class JsonMutWrapper;
 
-class JsonWrapper {
-    JsonWrapper() : ptr{nullptr} {}
+class LBUG_API JsonWrapper {
+    JsonWrapper();
 
 public:
-    explicit JsonWrapper(yyjson_doc* ptr, std::shared_ptr<char[]> buffer = nullptr)
-        : ptr{ptr}, buffer{std::move(buffer)} {}
+    explicit JsonWrapper(yyjson_doc* ptr, std::shared_ptr<char[]> buffer = nullptr);
     ~JsonWrapper();
     JsonWrapper(JsonWrapper& other) = delete;
-    JsonWrapper(JsonWrapper&& other) {
-        ptr = other.ptr;
-        other.ptr = nullptr;
-        buffer = std::move(other.buffer);
-    }
+    JsonWrapper(JsonWrapper&& other);
 
     yyjson_doc* ptr;
     std::shared_ptr<char[]> buffer;
 };
 
-class JsonMutWrapper {
+class LBUG_API JsonMutWrapper {
 public:
-    JsonMutWrapper() : ptr{yyjson_mut_doc_new(nullptr)} {}
-    explicit JsonMutWrapper(yyjson_mut_doc* ptr) : ptr{ptr} {}
+    JsonMutWrapper();
+    explicit JsonMutWrapper(yyjson_mut_doc* ptr);
     ~JsonMutWrapper();
     JsonMutWrapper(JsonMutWrapper& other) = delete;
-    JsonMutWrapper(JsonMutWrapper&& other) {
-        ptr = other.ptr;
-        other.ptr = nullptr;
-    }
+    JsonMutWrapper(JsonMutWrapper&& other);
 
     yyjson_mut_doc* ptr;
 };
 
-JsonWrapper jsonify(const common::ValueVector& vec, uint64_t pos);
-yyjson_mut_val* jsonify(JsonMutWrapper& wrapper, const common::ValueVector& vec, uint64_t pos);
-yyjson_mut_val* jsonifyAsString(JsonMutWrapper& wrapper, const common::ValueVector& vec,
+LBUG_API JsonWrapper jsonify(const common::ValueVector& vec, uint64_t pos);
+LBUG_API yyjson_mut_val* jsonify(JsonMutWrapper& wrapper, const common::ValueVector& vec,
+    uint64_t pos);
+LBUG_API yyjson_mut_val* jsonifyAsString(JsonMutWrapper& wrapper, const common::ValueVector& vec,
     uint64_t pos);
 // Converts an internal Lbug Value into json
 
-std::vector<JsonWrapper> jsonifyQueryResult(
+LBUG_API std::vector<JsonWrapper> jsonifyQueryResult(
     const std::vector<std::shared_ptr<common::ValueVector>>& columns,
     const std::vector<std::string>& names);
 // Converts an entire query result into a sequence of json values
-common::LogicalType jsonSchema(const JsonWrapper& wrapper, int64_t depth = -1,
+LBUG_API common::LogicalType jsonSchema(const JsonWrapper& wrapper, int64_t depth = -1,
     int64_t breadth = -1);
-common::LogicalType jsonSchema(yyjson_val* val, int64_t depth, int64_t breadth);
+LBUG_API common::LogicalType jsonSchema(yyjson_val* val, int64_t depth, int64_t breadth);
 // depth indicates at what nested depth to stop
 // breadth indicates the limit of how many children the root nested type is sampled
 // -1 means to scan the whole thing
 // may return ANY
 
-void readJsonToValueVector(yyjson_val* val, common::ValueVector& vec, uint64_t pos);
+LBUG_API void readJsonToValueVector(yyjson_val* val, common::ValueVector& vec, uint64_t pos);
 
-std::string jsonToString(const JsonWrapper& wrapper);
-std::string jsonToString(const yyjson_val* val);
-JsonWrapper stringToJson(const std::string& str);
-JsonWrapper stringToJsonNoError(const std::string& str);
+LBUG_API std::string jsonToString(const JsonWrapper& wrapper);
+LBUG_API std::string jsonToString(const yyjson_val* val);
+LBUG_API JsonWrapper stringToJson(const std::string& str);
+LBUG_API JsonWrapper stringToJsonNoError(const std::string& str);
 // format can be 'unstructured' or 'array'
 
-JsonWrapper mergeJson(const JsonWrapper& A, const JsonWrapper& B);
+LBUG_API JsonWrapper mergeJson(const JsonWrapper& A, const JsonWrapper& B);
 
-std::string jsonExtractToString(const JsonWrapper& wrapper, uint64_t pos);
-std::string jsonExtractToString(const JsonWrapper& wrapper, std::string path);
+LBUG_API std::string jsonExtractToString(const JsonWrapper& wrapper, uint64_t pos);
+LBUG_API std::string jsonExtractToString(const JsonWrapper& wrapper, std::string path);
 
-uint32_t jsonArraySize(const JsonWrapper& wrapper);
+LBUG_API uint32_t jsonArraySize(const JsonWrapper& wrapper);
 
 } // namespace json_extension
 } // namespace lbug

@@ -22,11 +22,31 @@ using namespace lbug::common;
 namespace lbug {
 namespace json_extension {
 
+JsonWrapper::JsonWrapper() : ptr{nullptr} {}
+
+JsonWrapper::JsonWrapper(yyjson_doc* ptr, std::shared_ptr<char[]> buffer)
+    : ptr{ptr}, buffer{std::move(buffer)} {}
+
+JsonWrapper::JsonWrapper(JsonWrapper&& other) {
+    ptr = other.ptr;
+    other.ptr = nullptr;
+    buffer = std::move(other.buffer);
+}
+
 JsonWrapper::~JsonWrapper() {
     if (ptr) {
         yyjson_doc_free(ptr);
         ptr = nullptr;
     }
+}
+
+JsonMutWrapper::JsonMutWrapper() : ptr{yyjson_mut_doc_new(nullptr)} {}
+
+JsonMutWrapper::JsonMutWrapper(yyjson_mut_doc* ptr) : ptr{ptr} {}
+
+JsonMutWrapper::JsonMutWrapper(JsonMutWrapper&& other) {
+    ptr = other.ptr;
+    other.ptr = nullptr;
 }
 
 JsonMutWrapper::~JsonMutWrapper() {

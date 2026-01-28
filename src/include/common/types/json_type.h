@@ -5,11 +5,14 @@
 namespace lbug {
 namespace common {
 
-struct LBUG_API JsonType {
+struct JsonType {
     static constexpr char JSON_TYPE_NAME[] = "JSON";
 
-    static LogicalType getJsonType();
-    static bool isJson(const LogicalType& type);
+    static inline LogicalType getJsonType() { return LogicalType::JSON(); }
+
+    static inline bool isJson(const LogicalType& type) {
+        return type.getLogicalTypeID() == LogicalTypeID::JSON;
+    }
 };
 
 } // namespace common
