@@ -117,7 +117,7 @@ jobs:
         run: |
           arch -arm64 env JAVA_HOME=$(/usr/libexec/java_home) make GEN=Ninja java
         env:
-          MACOSX_DEPLOYMENT_TARGET: 11.0
+          MACOSX_DEPLOYMENT_TARGET: 13.3
           ARCHFLAGS: "-arch arm64"
 
       - uses: actions/upload-artifact@v4

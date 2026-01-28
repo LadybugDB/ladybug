@@ -126,7 +126,7 @@ jobs:
         if: runner.os == 'macOS'
         run: make extension-release
         env:
-          MACOSX_DEPLOYMENT_TARGET: 11.0
+          MACOSX_DEPLOYMENT_TARGET: 13.3
           CMAKE_OSX_ARCHITECTURES: "arm64"
 
       - name: Build precompiled extensions (Windows)

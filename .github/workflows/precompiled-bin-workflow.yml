@@ -50,7 +50,7 @@ jobs:
           make GEN=Ninja
           make install
         env:
-          MACOSX_DEPLOYMENT_TARGET: 11.0
+          MACOSX_DEPLOYMENT_TARGET: 13.3
           CMAKE_OSX_ARCHITECTURES: "x86_64;arm64"
 
       - name: Build precompiled binaries (Windows)
