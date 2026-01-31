@@ -74,6 +74,12 @@ struct ShowTablesFunction final {
     static function_set getFunctionSet();
 };
 
+struct ShowGraphsFunction final {
+    static constexpr const char* name = "SHOW_GRAPHS";
+
+    static function_set getFunctionSet();
+};
+
 struct ShowWarningsFunction final {
     static constexpr const char* name = "SHOW_WARNINGS";
 
