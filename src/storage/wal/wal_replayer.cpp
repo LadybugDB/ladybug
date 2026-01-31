@@ -285,6 +285,10 @@ void WALReplayer::replayCreateCatalogEntryRecord(WALRecord& walRecord) const {
     case CatalogEntryType::INDEX_ENTRY: {
         catalog->createIndex(transaction, std::move(record.ownedCatalogEntry));
     } break;
+    case CatalogEntryType::GRAPH_ENTRY: {
+        auto& graphEntry = record.ownedCatalogEntry->constCast<GraphCatalogEntry>();
+        catalog->createGraph(transaction, graphEntry.getName(), graphEntry.isAnyGraphType());
+    } break;
     default: {
         KU_UNREACHABLE;
     }
@@ -310,6 +314,10 @@ void WALReplayer::replayDropCatalogEntryRecord(const WALRecord& walRecord) const
     } break;
     case CatalogEntryType::SCALAR_MACRO_ENTRY: {
         catalog->dropMacroEntry(transaction, entryID);
+    } break;
+    case CatalogEntryType::GRAPH_ENTRY: {
+        // Graph drop is handled separately by DatabaseManager
+        // We don't drop from catalog here since graph files are managed differently
     } break;
     default: {
         KU_UNREACHABLE;

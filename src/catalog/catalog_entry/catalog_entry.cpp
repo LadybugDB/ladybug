@@ -1,5 +1,6 @@
 #include "catalog/catalog_entry/catalog_entry.h"
 
+#include "catalog/catalog_entry/graph_catalog_entry.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/scalar_macro_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
@@ -53,6 +54,9 @@ std::unique_ptr<CatalogEntry> CatalogEntry::deserialize(common::Deserializer& de
     } break;
     case CatalogEntryType::INDEX_ENTRY: {
         entry = IndexCatalogEntry::deserialize(deserializer);
+    } break;
+    case CatalogEntryType::GRAPH_ENTRY: {
+        entry = GraphCatalogEntry::deserialize(deserializer);
     } break;
     default:
         KU_UNREACHABLE;

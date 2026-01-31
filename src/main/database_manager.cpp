@@ -26,6 +26,8 @@
 #include "transaction/transaction_context.h"
 #include <format>
 
+using namespace lbug::transaction;
+
 using namespace lbug::common;
 
 namespace lbug {
@@ -108,12 +110,25 @@ DatabaseManager* DatabaseManager::Get(const ClientContext& context) {
 void DatabaseManager::createGraph(const std::string& graphName,
     storage::MemoryManager* memoryManager, main::ClientContext* clientContext, bool isAnyGraph) {
     auto upperCaseName = StringUtils::getUpper(graphName);
+
+    // Check if graph already exists in system catalog
+    auto mainCatalog = clientContext->getDatabase()->getCatalog();
+    auto transaction = TransactionContext::Get(*clientContext)->getActiveTransaction();
+    if (mainCatalog->containsGraph(transaction, graphName)) {
+        throw RuntimeException{std::format("Graph {} already exists.", graphName)};
+    }
+
+    // Also check in-memory graphs vector (for any edge cases)
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
         if (graphNameUpper == upperCaseName) {
             throw RuntimeException{std::format("Graph {} already exists.", graphName)};
         }
     }
+
+    // Add to system catalog first (for transactional durability)
+    mainCatalog->createGraph(transaction, graphName, isAnyGraph);
+
     auto catalog = std::make_unique<catalog::Catalog>();
     catalog->setCatalogName(graphName);
     auto dbPath = clientContext->getDatabasePath();
@@ -128,7 +143,7 @@ void DatabaseManager::createGraph(const std::string& graphName,
 
     if (isAnyGraph) {
         // Use DUMMY_CHECKPOINT_TRANSACTION to create tables
-        auto* transaction = &transaction::DUMMY_CHECKPOINT_TRANSACTION;
+        auto* dummyTransaction = &transaction::DUMMY_CHECKPOINT_TRANSACTION;
 
         // Create serial name for the id column: _nodes_id_serial
         auto serialName = "_nodes_id_serial";
@@ -151,7 +166,7 @@ void DatabaseManager::createGraph(const std::string& graphName,
         auto nodeTableInfo =
             binder::BoundCreateTableInfo(catalog::CatalogEntryType::NODE_TABLE_ENTRY, "_nodes",
                 common::ConflictAction::ON_CONFLICT_THROW, std::move(nodeExtraInfo), false);
-        auto* nodeEntry = catalog->createTableEntry(transaction, nodeTableInfo);
+        auto* nodeEntry = catalog->createTableEntry(dummyTransaction, nodeTableInfo);
         // Mark entry as committed so it's visible to all transactions
         nodeEntry->setTimestamp(0);
         catalog->getStorageManager()->createTable(nodeEntry->ptrCast<catalog::TableCatalogEntry>());
@@ -173,7 +188,7 @@ void DatabaseManager::createGraph(const std::string& graphName,
                 common::ExtendDirection::BOTH, std::move(nodePairs), std::string("")));
         auto relTableInfo = binder::BoundCreateTableInfo(catalog::CatalogEntryType::REL_GROUP_ENTRY,
             "_edges", common::ConflictAction::ON_CONFLICT_THROW, std::move(relExtraInfo), false);
-        auto* relEntry = catalog->createTableEntry(transaction, relTableInfo);
+        auto* relEntry = catalog->createTableEntry(dummyTransaction, relTableInfo);
         // Mark entry as committed so it's visible to all transactions
         relEntry->setTimestamp(0);
         catalog->getStorageManager()->createTable(relEntry->ptrCast<catalog::TableCatalogEntry>());
@@ -187,6 +202,17 @@ void DatabaseManager::createGraph(const std::string& graphName,
 
 void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContext* clientContext) {
     auto upperCaseName = StringUtils::getUpper(graphName);
+
+    // Check if graph exists in system catalog first
+    auto mainCatalog = clientContext->getDatabase()->getCatalog();
+    auto transaction = TransactionContext::Get(*clientContext)->getActiveTransaction();
+    if (!mainCatalog->containsGraph(transaction, graphName)) {
+        throw RuntimeException{std::format("No graph named {}.", graphName)};
+    }
+
+    // Remove from system catalog
+    mainCatalog->dropGraph(transaction, graphName);
+
     for (auto it = graphs.begin(); it != graphs.end(); ++it) {
         auto graphNameUpper = StringUtils::getUpper((*it)->getCatalogName());
         if (graphNameUpper == upperCaseName) {
@@ -227,7 +253,6 @@ void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContex
             return;
         }
     }
-    throw RuntimeException{std::format("No graph named {}.", graphName)};
 }
 
 void DatabaseManager::setDefaultGraph(const std::string& graphName) {
@@ -248,6 +273,60 @@ void DatabaseManager::setDefaultGraph(const std::string& graphName) {
 
 void DatabaseManager::clearDefaultGraph() {
     defaultGraph = "main";
+}
+
+void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManager,
+    main::ClientContext* clientContext) {
+    auto mainCatalog = clientContext->getDatabase()->getCatalog();
+    // Use DUMMY_CHECKPOINT_TRANSACTION since we're loading from disk during startup
+    // and there's no active transaction yet
+    auto* transaction = &transaction::DUMMY_CHECKPOINT_TRANSACTION;
+    auto graphEntries = mainCatalog->getGraphEntries(transaction);
+
+    for (auto* graphEntry : graphEntries) {
+        auto graphName = graphEntry->getName();
+        auto isAnyGraph = graphEntry->isAnyGraphType();
+
+        // Check if graph is already loaded
+        auto upperCaseName = StringUtils::getUpper(graphName);
+        bool alreadyLoaded = false;
+        for (auto& graph : graphs) {
+            if (StringUtils::getUpper(graph->getCatalogName()) == upperCaseName) {
+                alreadyLoaded = true;
+                break;
+            }
+        }
+        if (alreadyLoaded) {
+            continue;
+        }
+
+        // Load the graph
+        auto catalog = std::make_unique<catalog::Catalog>();
+        catalog->setCatalogName(graphName);
+        auto dbPath = clientContext->getDatabasePath();
+        auto graphPath = DBConfig::isDBPathInMemory(dbPath) ?
+                             ":" + graphName :
+                             storage::StorageUtils::getGraphPath(dbPath, graphName);
+
+        // Check if graph file exists before trying to load
+        auto vfs = common::VirtualFileSystem::GetUnsafe(*clientContext);
+        if (!DBConfig::isDBPathInMemory(dbPath) && !vfs->fileOrPathExists(graphPath)) {
+            // Graph file doesn't exist, skip this graph
+            continue;
+        }
+
+        auto storageManager = std::make_unique<storage::StorageManager>(graphPath, false, false,
+            *memoryManager, false, vfs);
+        storageManager->initDataFileHandle(vfs, clientContext);
+        catalog->setStorageManager(std::move(storageManager));
+
+        graphs.push_back(std::move(catalog));
+
+        // Set first loaded graph as default if no default set
+        if (defaultGraph == "") {
+            defaultGraph = graphName;
+        }
+    }
 }
 
 bool DatabaseManager::hasGraph(const std::string& graphName) {

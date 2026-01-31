@@ -30,6 +30,8 @@ public:
     void createGraph(const std::string& graphName, storage::MemoryManager* memoryManager,
         main::ClientContext* clientContext, bool isAnyGraph = false);
     void dropGraph(const std::string& graphName, main::ClientContext* clientContext);
+    void loadGraphsFromCatalog(storage::MemoryManager* memoryManager,
+        main::ClientContext* clientContext);
     void setDefaultGraph(const std::string& graphName);
     void clearDefaultGraph();
     bool hasGraph(const std::string& graphName);

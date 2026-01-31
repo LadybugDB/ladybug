@@ -3,6 +3,7 @@ add_library(lbug_catalog_entry
         catalog_entry.cpp
         catalog_entry_type.cpp
         function_catalog_entry.cpp
+        graph_catalog_entry.cpp
         table_catalog_entry.cpp
         node_table_catalog_entry.cpp
         node_table_id_pair.cpp

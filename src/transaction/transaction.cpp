@@ -121,7 +121,8 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
         localWAL->logCreateCatalogEntryRecord(newCatalogEntry, isInternal);
     } break;
     case CatalogEntryType::SCALAR_MACRO_ENTRY:
-    case CatalogEntryType::TYPE_ENTRY: {
+    case CatalogEntryType::TYPE_ENTRY:
+    case CatalogEntryType::GRAPH_ENTRY: {
         KU_ASSERT(
             catalogEntry.getType() == CatalogEntryType::DUMMY_ENTRY && catalogEntry.isDeleted());
         localWAL->logCreateCatalogEntryRecord(newCatalogEntry, isInternal);
@@ -136,7 +137,8 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
         case CatalogEntryType::SCALAR_MACRO_ENTRY:
         case CatalogEntryType::NODE_TABLE_ENTRY:
         case CatalogEntryType::REL_GROUP_ENTRY:
-        case CatalogEntryType::SEQUENCE_ENTRY: {
+        case CatalogEntryType::SEQUENCE_ENTRY:
+        case CatalogEntryType::GRAPH_ENTRY: {
             localWAL->logDropCatalogEntryRecord(catalogEntry.getOID(), catalogEntry.getType());
         } break;
         case CatalogEntryType::SCALAR_FUNCTION_ENTRY:

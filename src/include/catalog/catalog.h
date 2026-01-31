@@ -1,6 +1,7 @@
 #pragma once
 
 #include "catalog/catalog_entry/function_catalog_entry.h"
+#include "catalog/catalog_entry/graph_catalog_entry.h"
 #include "catalog/catalog_entry/scalar_macro_catalog_entry.h"
 #include "catalog/catalog_set.h"
 #include "common/cast.h"
@@ -202,6 +203,23 @@ public:
     std::vector<std::string> getMacroNames(const transaction::Transaction* transaction) const;
     void dropMacro(transaction::Transaction* transaction, std::string& name);
 
+    // ----------------------------- Graphs ----------------------------
+
+    // Check if graph entry exists.
+    bool containsGraph(const transaction::Transaction* transaction,
+        const std::string& graphName) const;
+    // Get graph entry with name.
+    GraphCatalogEntry* getGraphEntry(const transaction::Transaction* transaction,
+        const std::string& graphName) const;
+    // Get all graph entries.
+    std::vector<GraphCatalogEntry*> getGraphEntries(
+        const transaction::Transaction* transaction) const;
+
+    // Create graph entry.
+    void createGraph(transaction::Transaction* transaction, std::string name, bool isAnyGraph);
+    // Drop graph entry with name.
+    void dropGraph(transaction::Transaction* transaction, const std::string& name);
+
     void incrementVersion() { version++; }
     uint64_t getVersion() const { return version; }
     bool changedSinceLastCheckpoint() const { return version != 0; }
@@ -253,6 +271,7 @@ private:
     std::unique_ptr<CatalogSet> internalTables;
     std::unique_ptr<CatalogSet> internalSequences;
     std::unique_ptr<CatalogSet> internalFunctions;
+    std::unique_ptr<CatalogSet> graphs;
 
     // incremented whenever a change is made to the catalog
     // reset to 0 at the end of each checkpoint

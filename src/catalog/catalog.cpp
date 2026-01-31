@@ -58,6 +58,7 @@ void Catalog::initCatalogSets() {
     internalTables = std::make_unique<CatalogSet>(true /* isInternal */);
     internalSequences = std::make_unique<CatalogSet>(true /* isInternal */);
     internalFunctions = std::make_unique<CatalogSet>(true /* isInternal */);
+    graphs = std::make_unique<CatalogSet>();
 }
 
 bool Catalog::containsTable(const Transaction* transaction, const std::string& tableName,
@@ -597,6 +598,35 @@ void Catalog::dropSerialSequence(Transaction* transaction, const TableCatalogEnt
     }
 }
 
+bool Catalog::containsGraph(const Transaction* transaction, const std::string& graphName) const {
+    return graphs->containsEntry(transaction, graphName);
+}
+
+GraphCatalogEntry* Catalog::getGraphEntry(const Transaction* transaction,
+    const std::string& graphName) const {
+    auto entry = graphs->getEntry(transaction, graphName);
+    KU_ASSERT(entry);
+    return entry->ptrCast<GraphCatalogEntry>();
+}
+
+std::vector<GraphCatalogEntry*> Catalog::getGraphEntries(const Transaction* transaction) const {
+    std::vector<GraphCatalogEntry*> result;
+    for (auto& [_, entry] : graphs->getEntries(transaction)) {
+        result.push_back(entry->ptrCast<GraphCatalogEntry>());
+    }
+    return result;
+}
+
+void Catalog::createGraph(Transaction* transaction, std::string name, bool isAnyGraph) {
+    auto entry = std::make_unique<GraphCatalogEntry>(std::move(name), isAnyGraph);
+    graphs->createEntry(transaction, std::move(entry));
+}
+
+void Catalog::dropGraph(Transaction* transaction, const std::string& name) {
+    const auto entry = getGraphEntry(transaction, name);
+    graphs->dropEntry(transaction, name, entry->getOID());
+}
+
 void Catalog::serialize(Serializer& ser) const {
     tables->serialize(ser);
     sequences->serialize(ser);
@@ -607,6 +637,7 @@ void Catalog::serialize(Serializer& ser) const {
     internalTables->serialize(ser);
     internalSequences->serialize(ser);
     internalFunctions->serialize(ser);
+    graphs->serialize(ser);
 }
 
 void Catalog::deserialize(Deserializer& deSer) {
@@ -620,6 +651,7 @@ void Catalog::deserialize(Deserializer& deSer) {
     internalTables = CatalogSet::deserialize(deSer);
     internalSequences = CatalogSet::deserialize(deSer);
     internalFunctions = CatalogSet::deserialize(deSer);
+    graphs = CatalogSet::deserialize(deSer);
 }
 
 } // namespace catalog

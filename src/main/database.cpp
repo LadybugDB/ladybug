@@ -135,6 +135,9 @@ void Database::initMembers(std::string_view dbPath, construct_bm_func_t initBmFu
     }
     StorageManager::recover(clientContext, dbConfig.throwOnWalReplayFailure,
         dbConfig.enableChecksums);
+
+    // Load graphs from system catalog
+    databaseManager->loadGraphsFromCatalog(memoryManager.get(), &clientContext);
 }
 
 Database::~Database() {

@@ -63,11 +63,11 @@ page_idx_t ShadowFile::getShadowPage(file_idx_t originalFile, page_idx_t origina
     KU_ASSERT(hasShadowPage(originalFile, originalPage));
     return shadowPagesMap.at(originalFile).at(originalPage);
 }
-
-void ShadowFile::applyShadowPages(ClientContext& context) const {
+void ShadowFile::applyShadowPages(StorageManager& storageManager, ClientContext& context) const {
     const auto pageBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
     page_idx_t shadowPageIdx = 1; // Skip header page.
-    auto dataFileInfo = StorageManager::Get(context)->getDataFH()->getFileInfo();
+    auto dataFH = storageManager.getDataFH();
+    auto dataFileInfo = dataFH->getFileInfo();
     KU_ASSERT(shadowingFH);
     for (const auto& record : shadowPageRecords) {
         shadowingFH->readPageFromDisk(pageBuffer.get(), shadowPageIdx++);
