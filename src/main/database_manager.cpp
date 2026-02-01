@@ -285,7 +285,6 @@ void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManage
 
     for (auto* graphEntry : graphEntries) {
         auto graphName = graphEntry->getName();
-        auto isAnyGraph = graphEntry->isAnyGraphType();
 
         // Check if graph is already loaded
         auto upperCaseName = StringUtils::getUpper(graphName);

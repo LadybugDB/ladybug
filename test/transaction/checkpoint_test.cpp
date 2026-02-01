@@ -214,7 +214,7 @@ public:
         // system crashes before this point, the WAL can still be used to recover the system to a
         // state where the checkpoint can be redone.
         wal->logAndFlushCheckpoint(&clientContext);
-        shadowFile.applyShadowPages(clientContext);
+        shadowFile.applyShadowPages(*storageManager, clientContext);
         // Simulate a failure during clearing the WAL and shadow files.
         throw RuntimeException("checkpoint failed.");
     }
