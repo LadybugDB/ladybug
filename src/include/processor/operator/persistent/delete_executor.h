@@ -74,6 +74,11 @@ protected:
     std::unique_ptr<common::ValueVector> dstNodeIDVector;
     std::unique_ptr<common::ValueVector> relIDVector;
     std::unique_ptr<storage::RelTableDeleteState> detachDeleteState;
+    std::vector<common::internalID_t> batchNodeIDs;
+    std::unique_ptr<common::ValueVector> batchSrcNodeIDVector;
+    std::unique_ptr<common::ValueVector> batchDstNodeIDVector;
+    std::unique_ptr<common::ValueVector> batchRelIDVector;
+    static constexpr uint32_t BATCH_SIZE = 1024;
 };
 
 // Handle MATCH (n) (DETACH)? DELETE n

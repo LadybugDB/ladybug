@@ -152,6 +152,9 @@ public:
     // Currently only supports deleting from a single src node
     // Note that since the rel table doesn't store nodes this doesn't delete the node itself
     void detachDelete(transaction::Transaction* transaction, RelTableDeleteState* deleteState);
+    void detachDeleteBatch(transaction::Transaction* transaction,
+        common::ValueVector& srcNodeIDVector, common::ValueVector& dstNodeIDVector,
+        common::ValueVector& relIDVector, common::RelDataDirection direction);
     bool checkIfNodeHasRels(transaction::Transaction* transaction,
         common::RelDataDirection direction, common::ValueVector* srcNodeIDVector) const;
     void throwIfNodeHasRels(transaction::Transaction* transaction,
