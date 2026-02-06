@@ -29,6 +29,10 @@ void ProcessorTask::run() {
     auto resultSet =
         sink->getResultSet(storage::MemoryManager::Get(*executionContext->clientContext));
     taskRoot->ptrCast<Sink>()->execute(resultSet.get(), executionContext);
+    // It's not super clear why this conditional is needed. Without it, issue.2589 fails
+    if (taskRoot->getOperatorType() == PhysicalOperatorType::RESULT_COLLECTOR) {
+        taskRoot->finalize(executionContext);
+    }
 }
 
 void ProcessorTask::finalize() {

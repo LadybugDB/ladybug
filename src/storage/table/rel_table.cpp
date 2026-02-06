@@ -348,8 +348,10 @@ void RelTable::detachDeleteBatch(Transaction* transaction, ValueVector& srcNodeI
 
     for (const auto srcOffset : srcOffsets) {
         nodeID_t srcNodeID{srcOffset, srcNodeIDVector.getValue<nodeID_t>(0).tableID};
+        const auto tempState = std::make_shared<DataChunkState>();
         ValueVector tempSrcNodeID(LogicalType::INTERNAL_ID());
-        tempSrcNodeID.setState(srcNodeIDVector.state);
+        tempSrcNodeID.setState(tempState);
+        tempState->getSelVectorUnsafe().setSelSize(1);
         tempSrcNodeID.setValue(0, srcNodeID);
 
         auto relReadState = std::make_unique<RelTableScanState>(*memoryManager, &tempSrcNodeID,
@@ -359,17 +361,17 @@ void RelTable::detachDeleteBatch(Transaction* transaction, ValueVector& srcNodeI
             direction);
         initScanState(transaction, *relReadState);
 
-        const auto tempState = dstNodeIDVector.state.get();
+        const auto sharedState = dstNodeIDVector.state.get();
         while (scan(transaction, *relReadState)) {
-            const auto numRelsScanned = tempState->getSelVector().getSelSize();
+            const auto numRelsScanned = sharedState->getSelVector().getSelSize();
 
-            if (tempState->getSelVector().isUnfiltered()) {
-                tempState->getSelVectorUnsafe().setRange(0, numRelsScanned);
+            if (sharedState->getSelVector().isUnfiltered()) {
+                sharedState->getSelVectorUnsafe().setRange(0, numRelsScanned);
             }
-            tempState->getSelVectorUnsafe().setToFiltered(1);
+            sharedState->getSelVectorUnsafe().setToFiltered(1);
 
             for (auto i = 0u; i < numRelsScanned; i++) {
-                tempState->getSelVectorUnsafe()[0] = relIDVector.state->getSelVector()[i];
+                sharedState->getSelVectorUnsafe()[0] = relIDVector.state->getSelVector()[i];
 
                 const auto relIDPos = relIDVector.state->getSelVector()[0];
                 const auto relOffset = relIDVector.readNodeOffset(relIDPos);
@@ -387,7 +389,7 @@ void RelTable::detachDeleteBatch(Transaction* transaction, ValueVector& srcNodeI
                         reverseTableData->delete_(transaction, dstNodeIDVector, relIDVector);
                 }
             }
-            tempState->getSelVectorUnsafe().setToUnfiltered();
+            sharedState->getSelVectorUnsafe().setToUnfiltered();
         }
     }
     hasChanges = true;

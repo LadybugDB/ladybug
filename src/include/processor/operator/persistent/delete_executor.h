@@ -69,7 +69,10 @@ public:
 
     virtual std::unique_ptr<NodeDeleteExecutor> copy() const = 0;
 
+    void finalize(ExecutionContext* context);
+
 protected:
+    virtual void flushBatch(ExecutionContext* context, transaction::Transaction* transaction) = 0;
     NodeDeleteInfo info;
     std::unique_ptr<common::ValueVector> dstNodeIDVector;
     std::unique_ptr<common::ValueVector> relIDVector;
@@ -92,6 +95,9 @@ public:
     std::unique_ptr<NodeDeleteExecutor> copy() const override {
         return std::make_unique<EmptyNodeDeleteExecutor>(*this);
     }
+
+private:
+    void flushBatch(ExecutionContext*, transaction::Transaction*) override {}
 };
 
 class SingleLabelNodeDeleteExecutor final : public NodeDeleteExecutor {
@@ -109,6 +115,8 @@ public:
     }
 
 private:
+    void flushBatch(ExecutionContext* context, transaction::Transaction* transaction) override;
+
     NodeTableDeleteInfo tableInfo;
 };
 
@@ -128,6 +136,8 @@ public:
     }
 
 private:
+    void flushBatch(ExecutionContext* context, transaction::Transaction* transaction) override;
+
     common::table_id_map_t<NodeTableDeleteInfo> tableInfos;
 };
 

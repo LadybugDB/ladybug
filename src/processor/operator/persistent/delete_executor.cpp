@@ -74,6 +74,34 @@ void SingleLabelNodeDeleteExecutor::init(ResultSet* resultSet, ExecutionContext*
     tableInfo.init(*resultSet);
 }
 
+void NodeDeleteExecutor::finalize(ExecutionContext* context) {
+    if (!batchNodeIDs.empty()) {
+        auto transaction = Transaction::Get(*context->clientContext);
+        flushBatch(context, transaction);
+        batchNodeIDs.clear();
+    }
+}
+
+void SingleLabelNodeDeleteExecutor::flushBatch([[maybe_unused]] ExecutionContext* context,
+    transaction::Transaction* transaction) {
+    const auto batchState = std::make_shared<DataChunkState>();
+    batchSrcNodeIDVector->setState(batchState);
+    batchDstNodeIDVector->setState(batchState);
+    batchRelIDVector->setState(batchState);
+    batchState->getSelVectorUnsafe().setSelSize(batchNodeIDs.size());
+    for (size_t i = 0; i < batchNodeIDs.size(); i++) {
+        batchSrcNodeIDVector->setValue(i, batchNodeIDs[i]);
+    }
+    for (auto& relTable : tableInfo.fwdRelTables) {
+        relTable->detachDeleteBatch(transaction, *batchSrcNodeIDVector, *batchDstNodeIDVector,
+            *batchRelIDVector, RelDataDirection::FWD);
+    }
+    for (auto& relTable : tableInfo.bwdRelTables) {
+        relTable->detachDeleteBatch(transaction, *batchSrcNodeIDVector, *batchDstNodeIDVector,
+            *batchRelIDVector, RelDataDirection::BWD);
+    }
+}
+
 void SingleLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
     KU_ASSERT(tableInfo.pkVector->state == info.nodeIDVector->state);
     auto deleteState =
@@ -93,22 +121,7 @@ void SingleLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
             batchNodeIDs.push_back(info.nodeIDVector->getValue<internalID_t>(pos));
         }
         if (batchNodeIDs.size() >= BATCH_SIZE) {
-            const auto batchState = std::make_shared<DataChunkState>();
-            batchSrcNodeIDVector->setState(batchState);
-            batchDstNodeIDVector->setState(batchState);
-            batchRelIDVector->setState(batchState);
-            batchState->getSelVectorUnsafe().setSelSize(batchNodeIDs.size());
-            for (size_t i = 0; i < batchNodeIDs.size(); i++) {
-                batchSrcNodeIDVector->setValue(i, batchNodeIDs[i]);
-            }
-            for (auto& relTable : tableInfo.fwdRelTables) {
-                relTable->detachDeleteBatch(transaction, *batchSrcNodeIDVector,
-                    *batchDstNodeIDVector, *batchRelIDVector, RelDataDirection::FWD);
-            }
-            for (auto& relTable : tableInfo.bwdRelTables) {
-                relTable->detachDeleteBatch(transaction, *batchSrcNodeIDVector,
-                    *batchDstNodeIDVector, *batchRelIDVector, RelDataDirection::BWD);
-            }
+            flushBatch(context, transaction);
             batchNodeIDs.clear();
         }
     } break;
@@ -121,6 +134,28 @@ void MultiLabelNodeDeleteExecutor::init(ResultSet* resultSet, ExecutionContext* 
     NodeDeleteExecutor::init(resultSet, context);
     for (auto& [_, tableInfo] : tableInfos) {
         tableInfo.init(*resultSet);
+    }
+}
+
+void MultiLabelNodeDeleteExecutor::flushBatch([[maybe_unused]] ExecutionContext* context,
+    transaction::Transaction* transaction) {
+    const auto batchState = std::make_shared<DataChunkState>();
+    batchSrcNodeIDVector->setState(batchState);
+    batchDstNodeIDVector->setState(batchState);
+    batchRelIDVector->setState(batchState);
+    batchState->getSelVectorUnsafe().setSelSize(batchNodeIDs.size());
+    for (size_t i = 0; i < batchNodeIDs.size(); i++) {
+        batchSrcNodeIDVector->setValue(i, batchNodeIDs[i]);
+    }
+    for (auto& [_, tblInfo] : tableInfos) {
+        for (auto& relTable : tblInfo.fwdRelTables) {
+            relTable->detachDeleteBatch(transaction, *batchSrcNodeIDVector, *batchDstNodeIDVector,
+                *batchRelIDVector, RelDataDirection::FWD);
+        }
+        for (auto& relTable : tblInfo.bwdRelTables) {
+            relTable->detachDeleteBatch(transaction, *batchSrcNodeIDVector, *batchDstNodeIDVector,
+                *batchRelIDVector, RelDataDirection::BWD);
+        }
     }
 }
 
@@ -146,24 +181,7 @@ void MultiLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
     case DeleteNodeType::DETACH_DELETE: {
         batchNodeIDs.push_back(nodeID);
         if (batchNodeIDs.size() >= BATCH_SIZE) {
-            const auto batchState = std::make_shared<DataChunkState>();
-            batchSrcNodeIDVector->setState(batchState);
-            batchDstNodeIDVector->setState(batchState);
-            batchRelIDVector->setState(batchState);
-            batchState->getSelVectorUnsafe().setSelSize(batchNodeIDs.size());
-            for (size_t i = 0; i < batchNodeIDs.size(); i++) {
-                batchSrcNodeIDVector->setValue(i, batchNodeIDs[i]);
-            }
-            for (auto& [_, tblInfo] : tableInfos) {
-                for (auto& relTable : tblInfo.fwdRelTables) {
-                    relTable->detachDeleteBatch(transaction, *batchSrcNodeIDVector,
-                        *batchDstNodeIDVector, *batchRelIDVector, RelDataDirection::FWD);
-                }
-                for (auto& relTable : tblInfo.bwdRelTables) {
-                    relTable->detachDeleteBatch(transaction, *batchSrcNodeIDVector,
-                        *batchDstNodeIDVector, *batchRelIDVector, RelDataDirection::BWD);
-                }
-            }
+            flushBatch(context, transaction);
             batchNodeIDs.clear();
         }
     } break;
