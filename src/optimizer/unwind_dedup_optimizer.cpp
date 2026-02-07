@@ -26,6 +26,21 @@ std::shared_ptr<LogicalOperator> UnwindDedupOptimizer::visitOperator(
     return result;
 }
 
+// Helper function to recursively find UNWIND in the operator tree
+static std::shared_ptr<LogicalUnwind> findUnwind(std::shared_ptr<LogicalOperator> op) {
+    if (op->getOperatorType() == LogicalOperatorType::UNWIND) {
+        return std::static_pointer_cast<LogicalUnwind>(op);
+    }
+    // Recursively search through children
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        auto result = findUnwind(op->getChild(i));
+        if (result != nullptr) {
+            return result;
+        }
+    }
+    return nullptr;
+}
+
 std::shared_ptr<LogicalOperator> UnwindDedupOptimizer::visitMergeReplace(
     std::shared_ptr<LogicalOperator> op) {
     auto merge = op->ptrCast<LogicalMerge>();
@@ -38,13 +53,25 @@ std::shared_ptr<LogicalOperator> UnwindDedupOptimizer::visitMergeReplace(
     }
     auto hashJoin = mergeChild->ptrCast<LogicalHashJoin>();
     auto probeChild = hashJoin->getChild(0);
-    if (probeChild->getOperatorType() != LogicalOperatorType::UNWIND) {
+
+    // Try to find UNWIND either as direct child or nested deeper
+    std::shared_ptr<LogicalUnwind> unwind;
+    if (probeChild->getOperatorType() == LogicalOperatorType::UNWIND) {
+        // Direct UNWIND child (original case)
+        unwind = std::static_pointer_cast<LogicalUnwind>(probeChild);
+    } else {
+        // Search recursively for UNWIND (handles FLATTEN and other intermediate operators)
+        unwind = findUnwind(probeChild);
+    }
+
+    if (unwind != nullptr) {
+        // Wrap the probe child with UNWIND_DEDUP
+        auto dedup = std::make_shared<LogicalUnwindDeduplicate>(probeChild, unwind->getOutExpr());
+        dedup->computeFlatSchema();
+        hashJoin->setChild(0, dedup);
         return op;
     }
-    auto unwind = probeChild->ptrCast<LogicalUnwind>();
-    auto dedup = std::make_shared<LogicalUnwindDeduplicate>(probeChild, unwind->getOutExpr());
-    dedup->computeFlatSchema();
-    hashJoin->setChild(0, dedup);
+
     return op;
 }
 
