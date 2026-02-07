@@ -47,6 +47,18 @@ std::shared_ptr<LogicalOperator> UnwindDedupOptimizer::visitMergeReplace(
     if (merge == nullptr) {
         return op;
     }
+
+    // Check if MERGE has ON MATCH or ON CREATE clauses
+    // If it does, we should NOT apply UNWIND_DEDUP because duplicates need different handling:
+    // - First occurrence: ON CREATE
+    // - Subsequent occurrences: ON MATCH
+    bool hasOnMatchOrOnCreate =
+        !merge->getOnMatchSetNodeInfos().empty() || !merge->getOnMatchSetRelInfos().empty() ||
+        !merge->getOnCreateSetNodeInfos().empty() || !merge->getOnCreateSetRelInfos().empty();
+    if (hasOnMatchOrOnCreate) {
+        return op;
+    }
+
     auto mergeChild = merge->getChild(0);
     if (mergeChild->getOperatorType() != LogicalOperatorType::HASH_JOIN) {
         return op;
