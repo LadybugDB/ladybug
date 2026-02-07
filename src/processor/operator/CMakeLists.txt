@@ -34,7 +34,8 @@ add_library(lbug_processor_operator
         standalone_call.cpp
         table_function_call.cpp
         transaction.cpp
-        unwind.cpp)
+        unwind.cpp
+        unwind_dedup.cpp)
 
 set(ALL_OBJECT_FILES
         ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_processor_operator>

@@ -125,6 +125,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "UNION_ALL_SCAN";
     case PhysicalOperatorType::UNWIND:
         return "UNWIND";
+    case PhysicalOperatorType::UNWIND_DEDUP:
+        return "UNWIND_DEDUP";
     case PhysicalOperatorType::USE_DATABASE:
         return "USE_DATABASE";
     case PhysicalOperatorType::CREATE_GRAPH:

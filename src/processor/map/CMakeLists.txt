@@ -45,6 +45,7 @@ add_library(lbug_processor_mapper
         map_transaction.cpp
         map_union.cpp
         map_unwind.cpp
+        map_unwind_dedup.cpp
         plan_mapper.cpp)
 
 set(ALL_OBJECT_FILES

@@ -16,6 +16,7 @@
 #include "optimizer/remove_unnecessary_join_optimizer.h"
 #include "optimizer/schema_populator.h"
 #include "optimizer/top_k_optimizer.h"
+#include "optimizer/unwind_dedup_optimizer.h"
 #include "planner/operator/logical_explain.h"
 #include "transaction/transaction.h"
 
@@ -34,6 +35,11 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
 
         auto removeUnnecessaryJoinOptimizer = RemoveUnnecessaryJoinOptimizer();
         removeUnnecessaryJoinOptimizer.rewrite(plan);
+
+        // UnwindDedupOptimizer should be applied after factorization is removed
+        // to avoid issues with computeFlatSchema.
+        auto unwindDedupOptimizer = UnwindDedupOptimizer();
+        unwindDedupOptimizer.rewrite(plan);
 
         // CountRelTableOptimizer should be applied early before other optimizations
         // that might change the plan structure.

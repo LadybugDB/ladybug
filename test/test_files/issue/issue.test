@@ -677,3 +677,16 @@ alice
 -STATEMENT match (t:TestNode) where t.id = 'test_0_0_1' return t.grids
 ---- 1
 [{type: column}]
+
+-CASE issue_170
+-STATEMENT CREATE NODE TABLE A(id SERIAL, stuff INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND [1, 1] AS i MERGE (a:A {stuff: i}) RETURN a.stuff;
+---- 1
+1
+-STATEMENT MATCH (a:A) RETURN COUNT(*);
+---- 1
+1
+-STATEMENT UNWIND [gen_random_uuid(), gen_random_uuid()] AS i RETURN COUNT(DISTINCT i);
+---- 1
+2

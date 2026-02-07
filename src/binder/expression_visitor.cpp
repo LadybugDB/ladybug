@@ -259,6 +259,9 @@ bool ConstantExpressionVisitor::needFold(const Expression& expr) {
 }
 
 bool ConstantExpressionVisitor::isConstant(const Expression& expr) {
+    if (ExpressionVisitor::isRandom(expr)) {
+        return false;
+    }
     switch (expr.expressionType) {
     case ExpressionType::LITERAL:
         return true;

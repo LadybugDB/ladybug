@@ -64,6 +64,9 @@ enum class LogicalOperatorType : uint8_t {
     USE_DATABASE,
     USE_GRAPH,
     EXTENSION_CLAUSE,
+    // Deduplication operator for UNWIND with duplicate values
+    // Executes child once per unique value and replicates outputs for duplicates
+    UNWIND_DEDUPLICATE,
 };
 
 class LogicalOperator;

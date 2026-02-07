@@ -116,6 +116,8 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
         return "CREATE_TYPE";
     case LogicalOperatorType::EXTENSION_CLAUSE:
         return "EXTENSION_CLAUSE";
+    case LogicalOperatorType::UNWIND_DEDUPLICATE:
+        return "UNWIND_DEDUPLICATE";
     default:
         throw RuntimeException("Unknown logical operator type.");
     }

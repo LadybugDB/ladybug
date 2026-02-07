@@ -31,6 +31,7 @@ add_library(lbug_planner_operator
         logical_standalone_call.cpp
         logical_union.cpp
         logical_unwind.cpp
+        logical_unwind_deduplicate.cpp
         schema.cpp)
 
 set(ALL_OBJECT_FILES

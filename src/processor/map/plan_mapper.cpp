@@ -191,6 +191,9 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapOperator(const LogicalOperator*
     case LogicalOperatorType::UNWIND: {
         physicalOperator = mapUnwind(logicalOperator);
     } break;
+    case LogicalOperatorType::UNWIND_DEDUPLICATE: {
+        physicalOperator = mapUnwindDedup(logicalOperator);
+    } break;
     case LogicalOperatorType::USE_DATABASE: {
         physicalOperator = mapUseDatabase(logicalOperator);
     } break;

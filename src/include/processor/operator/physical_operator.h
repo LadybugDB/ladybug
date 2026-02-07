@@ -73,6 +73,7 @@ enum class PhysicalOperatorType : uint8_t {
     ORDER_BY_SCAN,
     UNION_ALL_SCAN,
     UNWIND,
+    UNWIND_DEDUP,
     USE_DATABASE,
     USE_GRAPH,
     UNINSTALL_EXTENSION,

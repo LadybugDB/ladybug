@@ -17,7 +17,8 @@ add_library(lbug_optimizer
         remove_unnecessary_join_optimizer.cpp
         top_k_optimizer.cpp
         limit_push_down_optimizer.cpp
-        order_by_push_down_optimizer.cpp)
+        order_by_push_down_optimizer.cpp
+        unwind_dedup_optimizer.cpp)
 
 set(ALL_OBJECT_FILES
         ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_optimizer>
