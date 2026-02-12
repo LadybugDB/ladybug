@@ -22,6 +22,24 @@ using namespace lbug::transaction;
 
 namespace lbug {
 namespace storage {
+namespace {
+
+std::string resolveParquetPath(main::ClientContext* context, const std::string& path) {
+    if (!context) {
+        return path;
+    }
+    auto vfs = VirtualFileSystem::GetUnsafe(*context);
+    if (!vfs) {
+        return path;
+    }
+    auto paths = vfs->glob(context, path);
+    if (!paths.empty()) {
+        return paths.front();
+    }
+    return path;
+}
+
+} // namespace
 
 ParquetNodeTable::ParquetNodeTable(const StorageManager* storageManager,
     const NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager)
@@ -63,8 +81,9 @@ void ParquetNodeTable::initScanState(Transaction* transaction, TableScanState& s
 
         std::vector<bool> columnSkips;
         try {
+            auto resolvedPath = resolveParquetPath(context, parquetFilePath);
             parquetNodeScanState.parquetReader =
-                std::make_unique<ParquetReader>(parquetFilePath, columnSkips, context);
+                std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
             parquetNodeScanState.initialized = true;
         } catch (const std::exception& e) {
             throw RuntimeException("Failed to initialize parquet reader for file '" +
@@ -87,7 +106,8 @@ common::node_group_idx_t ParquetNodeTable::getNumBatches(const Transaction* tran
 
     std::vector<bool> columnSkips;
     try {
-        auto tempReader = std::make_unique<ParquetReader>(parquetFilePath, columnSkips, context);
+        auto resolvedPath = resolveParquetPath(context, parquetFilePath);
+        auto tempReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
         return tempReader->getNumRowsGroups();
     } catch (const std::exception& e) {
         return 1; // Fallback
@@ -311,7 +331,8 @@ row_idx_t ParquetNodeTable::getTotalRowCount(const Transaction* transaction) con
     std::vector<bool> columnSkips;
 
     try {
-        auto tempReader = std::make_unique<ParquetReader>(parquetFilePath, columnSkips, context);
+        auto resolvedPath = resolveParquetPath(context, parquetFilePath);
+        auto tempReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
         if (!tempReader) {
             return 0;
         }

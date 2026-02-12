@@ -2,6 +2,7 @@
 
 #include "args.hxx"
 #include "common/file_system/local_file_system.h"
+#include "common/string_utils.h"
 #include "common/task_system/progress_bar.h"
 #include "embedded_shell.h"
 #include "linenoise.h"
@@ -19,6 +20,26 @@ int setConfigOutputMode(const std::string& mode, ShellConfig& shell) {
     }
     shell.stats = shell.printer->defaultPrintStats();
     return 0;
+}
+
+void addInitFileDirToSearchPath(const std::shared_ptr<Connection>& conn,
+    const std::string& initFile) {
+    auto initDir = std::filesystem::path{initFile}.parent_path();
+    if (initDir.empty()) {
+        return;
+    }
+    auto initDirPath = std::filesystem::absolute(initDir).lexically_normal().string();
+    auto clientConfig = conn->getClientContext()->getClientConfigUnsafe();
+    auto& fileSearchPath = clientConfig->fileSearchPath;
+    if (!fileSearchPath.empty()) {
+        auto searchPaths = StringUtils::split(fileSearchPath, ",");
+        if (std::find(searchPaths.begin(), searchPaths.end(), initDirPath) != searchPaths.end()) {
+            return;
+        }
+        fileSearchPath = std::format("{},{}", initDirPath, fileSearchPath);
+        return;
+    }
+    fileSearchPath = initDirPath;
 }
 
 void processRunCommands(EmbeddedShell& shell, const std::string& filename) {
@@ -188,6 +209,7 @@ int main(int argc, char* argv[]) {
     std::string initFile = ".lbugrc";
     if (init) {
         initFile = args::get(init);
+        addInitFileDirToSearchPath(conn, initFile);
     }
     try {
         auto shell = EmbeddedShell(database, conn, shellConfig);
