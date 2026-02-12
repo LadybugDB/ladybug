@@ -7,12 +7,31 @@
 #include "storage/local_storage/local_storage.h"
 #include "storage/table/arrow_node_table.h"
 #include "storage/table/parquet_node_table.h"
+#include "common/file_system/virtual_file_system.h"
 
 using namespace lbug::common;
 using namespace lbug::storage;
 
 namespace lbug {
 namespace processor {
+namespace {
+
+std::string resolveParquetPath(main::ClientContext* context, const std::string& path) {
+    if (!context) {
+        return path;
+    }
+    auto vfs = common::VirtualFileSystem::GetUnsafe(*context);
+    if (!vfs) {
+        return path;
+    }
+    auto paths = vfs->glob(context, path);
+    if (!paths.empty()) {
+        return paths.front();
+    }
+    return path;
+}
+
+} // namespace
 
 std::string ScanNodeTablePrintInfo::toString() const {
     std::string result = "Tables: ";
@@ -46,8 +65,10 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
         // For parquet tables, set numCommittedNodeGroups to number of row groups
         std::vector<bool> columnSkips;
         try {
+            auto context = transaction->getClientContext();
+            auto resolvedPath = resolveParquetPath(context, parquetTable->getParquetFilePath());
             auto tempReader = std::make_unique<processor::ParquetReader>(
-                parquetTable->getParquetFilePath(), columnSkips, transaction->getClientContext());
+                resolvedPath, columnSkips, context);
             this->numCommittedNodeGroups = tempReader->getNumRowsGroups();
         } catch (const std::exception& e) {
             this->numCommittedNodeGroups = 1;
