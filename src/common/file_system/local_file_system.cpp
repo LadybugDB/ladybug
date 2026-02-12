@@ -260,22 +260,35 @@ void LocalFileSystem::createDir(const std::string& dir) const {
 }
 
 static bool isAllowedDeletionPath(const std::string& path, const std::string& dbPath) {
-    std::filesystem::path p(path);
-    std::string extension = p.extension().string();
-    std::string stemWithoutExt = p.stem().string();
-
-    std::filesystem::path dbPathP(dbPath);
-    std::string dbBase = dbPathP.stem().string();
-    std::string dbExt = dbPathP.extension().string();
-    std::string dbPrefix = dbBase + dbExt;
-
-    if (extension == ".wal" || extension == ".shadow" || extension == ".tmp" ||
-        extension == ".lock") {
-        return stemWithoutExt.starts_with(dbPrefix + ".") || stemWithoutExt == dbPrefix;
+    const auto p = std::filesystem::path(path);
+    const auto dbPathP = std::filesystem::path(dbPath);
+    const auto dbDir = dbPathP.parent_path();
+    // For absolute paths, only allow deletion in the same directory as the database file.
+    if (p.is_absolute() && dbPathP.is_absolute() && p.parent_path() != dbDir) {
+        return false;
     }
 
+    const auto fileName = p.filename().string();
+    const auto extension = p.extension().string();
+    const auto stemWithoutExt = p.stem().string();
+
+    const auto dbBase = dbPathP.stem().string();
+    const auto dbExt = dbPathP.extension().string();
+    const auto dbFileName = dbBase + dbExt;
+
+    // Main DB sidecars: db.kz.{wal|shadow|tmp|lock}
+    if (extension == ".wal" || extension == ".shadow" || extension == ".tmp" ||
+        extension == ".lock") {
+        if (stemWithoutExt == dbFileName) {
+            return true;
+        }
+        // Graph DB sidecars: db.<graph>.kz.{wal|shadow|tmp|lock}
+        return stemWithoutExt.starts_with(dbBase + ".") && stemWithoutExt.ends_with(dbExt);
+    }
+
+    // Graph DB file: db.<graph>.kz
     if (extension == dbExt) {
-        return stemWithoutExt.starts_with(dbBase + ".");
+        return fileName.starts_with(dbBase + ".") && fileName != dbFileName;
     }
 
     return false;

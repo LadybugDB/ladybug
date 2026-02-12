@@ -81,7 +81,8 @@ public:
         auto path = std::filesystem::path(dbPath);
         auto base = path.stem().string();
         auto ext = path.extension().string();
-        return base + "." + graphName + ext;
+        auto graphFile = std::filesystem::path(base + "." + graphName + ext);
+        return (path.parent_path() / graphFile).string();
     }
 
     static std::string expandPath(const main::ClientContext* context, const std::string& path);
