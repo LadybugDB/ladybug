@@ -282,8 +282,11 @@ static bool isAllowedDeletionPath(const std::string& path, const std::string& db
         if (stemWithoutExt == dbFileName) {
             return true;
         }
-        // Graph DB sidecars: db.<graph>.kz.{wal|shadow|tmp|lock}
-        return stemWithoutExt.starts_with(dbBase + ".") && stemWithoutExt.ends_with(dbExt);
+        // Graph/copy sidecars can use either:
+        // - db.<graph>.kz.{wal|shadow|tmp|lock}
+        // - db.kz.<graph-or-tag>.{wal|shadow|tmp|lock}
+        return (stemWithoutExt.starts_with(dbBase + ".") && stemWithoutExt.ends_with(dbExt)) ||
+               stemWithoutExt.starts_with(dbFileName + ".");
     }
 
     // Graph DB file: db.<graph>.kz
