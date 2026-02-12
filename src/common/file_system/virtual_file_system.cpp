@@ -135,5 +135,20 @@ VirtualFileSystem* VirtualFileSystem::GetUnsafe(const main::ClientContext& conte
     return context.getDatabase()->getVFS();
 }
 
+std::string VirtualFileSystem::resolvePath(main::ClientContext* context, const std::string& path) {
+    if (!context) {
+        return path;
+    }
+    auto vfs = GetUnsafe(*context);
+    if (!vfs) {
+        return path;
+    }
+    auto paths = vfs->glob(context, path);
+    if (!paths.empty()) {
+        return paths.front();
+    }
+    return path;
+}
+
 } // namespace common
 } // namespace lbug

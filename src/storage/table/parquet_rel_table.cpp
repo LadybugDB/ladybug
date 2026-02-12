@@ -18,24 +18,6 @@ using namespace lbug::transaction;
 
 namespace lbug {
 namespace storage {
-namespace {
-
-std::string resolveParquetPath(main::ClientContext* context, const std::string& path) {
-    if (!context) {
-        return path;
-    }
-    auto vfs = VirtualFileSystem::GetUnsafe(*context);
-    if (!vfs) {
-        return path;
-    }
-    auto paths = vfs->glob(context, path);
-    if (!paths.empty()) {
-        return paths.front();
-    }
-    return path;
-}
-
-} // namespace
 
 void ParquetRelTableScanState::setToTable(const Transaction* transaction, Table* table_,
     std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
@@ -88,14 +70,14 @@ void ParquetRelTable::initScanState(Transaction* transaction, TableScanState& sc
     if (!parquetRelScanState.indicesReader) {
         std::vector<bool> columnSkips; // Read all columns
         auto context = transaction->getClientContext();
-        auto resolvedPath = resolveParquetPath(context, indicesFilePath);
+        auto resolvedPath = VirtualFileSystem::resolvePath(context, indicesFilePath);
         parquetRelScanState.indicesReader =
             std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
     }
     if (!indptrFilePath.empty() && !parquetRelScanState.indptrReader) {
         std::vector<bool> columnSkips; // Read all columns
         auto context = transaction->getClientContext();
-        auto resolvedPath = resolveParquetPath(context, indptrFilePath);
+        auto resolvedPath = VirtualFileSystem::resolvePath(context, indptrFilePath);
         parquetRelScanState.indptrReader =
             std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
     }
@@ -137,7 +119,7 @@ void ParquetRelTable::initializeParquetReaders(Transaction* transaction) const {
         if (!indicesReader) {
             std::vector<bool> columnSkips; // Read all columns
             auto context = transaction->getClientContext();
-            auto resolvedPath = resolveParquetPath(context, indicesFilePath);
+            auto resolvedPath = VirtualFileSystem::resolvePath(context, indicesFilePath);
             indicesReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
         }
     }
@@ -149,7 +131,7 @@ void ParquetRelTable::initializeIndptrReader(Transaction* transaction) const {
         if (!indptrReader) {
             std::vector<bool> columnSkips; // Read all columns
             auto context = transaction->getClientContext();
-            auto resolvedPath = resolveParquetPath(context, indptrFilePath);
+            auto resolvedPath = VirtualFileSystem::resolvePath(context, indptrFilePath);
             indptrReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
         }
     }
