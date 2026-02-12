@@ -7,6 +7,10 @@ make python # for tasks involving python
 Use release builds for fast builds/run times.
 Use relwithdebinfo if stack traces are desired
 
+## Formatting code
+
+python3 scripts/run-clang-format.py --clang-format-executable /usr/bin/clang-format-18  -r <dirs>
+
 ## Running C++ tests
 
 make test-build-release
