@@ -190,10 +190,10 @@ FunctionCollection* FunctionCollection::getFunctions() {
         SCALAR_FUNCTION(UnionExtractFunction),
 
         // Node/rel functions
-        SCALAR_FUNCTION(OffsetFunction), REWRITE_FUNCTION(IDFunction),
-        REWRITE_FUNCTION(StartNodeFunction), REWRITE_FUNCTION(EndNodeFunction),
-        REWRITE_FUNCTION(LabelFunction), REWRITE_FUNCTION_ALIAS(LabelsFunction),
-        REWRITE_FUNCTION(CostFunction),
+        SCALAR_FUNCTION(OffsetFunction), REWRITE_FUNCTION(RowIDFunction),
+        REWRITE_FUNCTION(IDFunction), REWRITE_FUNCTION(StartNodeFunction),
+        REWRITE_FUNCTION(EndNodeFunction), REWRITE_FUNCTION(LabelFunction),
+        REWRITE_FUNCTION_ALIAS(LabelsFunction), REWRITE_FUNCTION(CostFunction),
 
         // Path functions
         SCALAR_FUNCTION(NodesFunction), SCALAR_FUNCTION(RelsFunction),

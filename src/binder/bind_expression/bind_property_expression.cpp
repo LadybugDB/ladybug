@@ -1,11 +1,15 @@
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
+#include "binder/expression/node_expression.h"
 #include "binder/expression/node_rel_expression.h"
+#include "binder/expression/rel_expression.h"
 #include "binder/expression_binder.h"
 #include "catalog/catalog.h"
 #include "common/cast.h"
 #include "common/exception/binder.h"
+#include "common/string_utils.h"
 #include "common/types/types.h"
+#include "function/schema/vector_node_rel_functions.h"
 #include "function/struct/vector_struct_functions.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
@@ -127,6 +131,19 @@ std::shared_ptr<Expression> ExpressionBinder::bindPropertyExpression(
 std::shared_ptr<Expression> ExpressionBinder::bindNodeOrRelPropertyExpression(
     const Expression& child, const std::string& propertyName) {
     auto& nodeOrRel = child.constCast<NodeOrRelExpression>();
+    if (StringUtils::getUpper(propertyName) == function::RowIDFunction::name) {
+        std::shared_ptr<Expression> idExpr;
+        if (ExpressionUtil::isNodePattern(child)) {
+            auto& node = child.constCast<NodeExpression>();
+            idExpr = node.getInternalID()->copy();
+        } else {
+            auto& rel = child.constCast<RelExpression>();
+            idExpr = rel.getInternalID()->copy();
+        }
+        auto rowIDExpr = bindScalarFunctionExpression({idExpr}, function::OffsetFunction::name);
+        rowIDExpr->setAlias(std::format("{}.{}", child.toString(), propertyName));
+        return rowIDExpr;
+    }
     // TODO(Xiyang): we should be able to remove l97-l100 after removing propertyDataExprs from node
     // & rel expression.
     if (propertyName == InternalKeyword::ID &&

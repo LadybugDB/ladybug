@@ -13,6 +13,12 @@ struct OffsetFunction {
     static function_set getFunctionSet();
 };
 
+struct RowIDFunction {
+    static constexpr const char* name = "ROWID";
+
+    static function_set getFunctionSet();
+};
+
 struct IDFunction {
     static constexpr const char* name = "ID";
 

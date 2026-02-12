@@ -1,0 +1,59 @@
+-DATASET CSV tinysnb
+
+--
+
+-CASE FunctionRowID
+
+-LOG NodeRowIDTest1
+-STATEMENT MATCH (a:person) RETURN id(a), a.rowid
+---- 8
+0:0|0
+0:1|1
+0:2|2
+0:3|3
+0:4|4
+0:5|5
+0:6|6
+0:7|7
+
+-LOG NodeRowIDTest2
+-STATEMENT MATCH (a:person) WHERE rowid(a)=0 RETURN a.fName
+---- 1
+Alice
+
+-LOG NodeRowIDPseudoCol
+-STATEMENT MATCH (a:person) RETURN id(a), a.rowid
+---- 8
+0:0|0
+0:1|1
+0:2|2
+0:3|3
+0:4|4
+0:5|5
+0:6|6
+0:7|7
+
+-LOG RelRowIDTest1
+-STATEMENT MATCH (:person)-[e:studyAt]->(:organisation) RETURN id(e), rowid(e)
+---- 3
+5:0|0
+5:1|1
+5:2|2
+
+-LOG RelRowIDPseudoCol
+-STATEMENT MATCH (:person)-[e:studyAt]->(:organisation) RETURN id(e), e.rowid
+---- 3
+5:0|0
+5:1|1
+5:2|2
+
+-LOG SingleQueryNodeRelRowID
+-STATEMENT MATCH (n), ()-[e]->() WHERE rowid(n)=0 AND rowid(e)=0 RETURN count(*)
+---- 1
+15
+
+-LOG SingleStatementUnionForExport
+-STATEMENT MATCH (n) WHERE rowid(n)=0 RETURN 'node', count(*) UNION ALL MATCH ()-[r]->() WHERE rowid(r)=0 RETURN 'rel', count(*)
+---- 2
+node|3
+rel|5

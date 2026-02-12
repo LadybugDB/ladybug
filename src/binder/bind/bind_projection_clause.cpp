@@ -129,7 +129,8 @@ std::pair<expression_vector, std::vector<std::string>> Binder::bindProjectionLis
             } else {
                 auto expr = expressionBinder.bindExpression(*parsedExpr);
                 projectionExprs.push_back(expr);
-                aliases.push_back(parsedExpr->getAlias());
+                aliases.push_back(
+                    parsedExpr->hasAlias() ? parsedExpr->getAlias() : expr->getAlias());
             }
         } else {
             auto expr = expressionBinder.bindExpression(*parsedExpr);
