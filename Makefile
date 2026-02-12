@@ -5,7 +5,7 @@
 # Explicit targets to avoid conflict with files of the same name.
 .PHONY: \
 	release relwithdebinfo debug all allconfig alldebug \
-	test-build test lcov \
+	test-build test test-build-release lcov \
 	java_native_header java javatest \
 	nodejs nodejstest \
 	python python-debug pytest pytest-debug \
@@ -154,6 +154,9 @@ test-build:
 
 test: test-build
 	ctest --test-dir build/$(call get-build-path,RelWithDebInfo)/test --output-on-failure -j ${TEST_JOBS}
+
+test-build-release:
+	$(call run-cmake-release, -DBUILD_TESTS=TRUE -DENABLE_BACKTRACES=TRUE)
 
 lcov:
 	$(call run-cmake-release, -DBUILD_TESTS=TRUE -DBUILD_LCOV=TRUE)

@@ -1,34 +1,19 @@
-Use
+Prefer Ninja over make
+Prefer uv over pip for venv
 
-make GEN=Ninja python
+make shell  # for tasks involving lbug shell cli
+make python # for tasks involving python
 
-to compile
+Use release builds for fast builds/run times.
+Use relwithdebinfo if stack traces are desired
 
-For debug builds, add -debug suffix to Makefile targets.
+## Running C++ tests
 
-Python is an important surface area to test. If you make significant changes use
+make test-build-release
+E2E_TEST_FILES_DIRECTORY=test/test_files build/release/test/runner/e2e_test --gtest_filter="*merge_tinysnb.Merge*"
 
-make GEN=Ninja pytest-venv 
+## More docs
 
-to test.
+docs/extensions.md on how to work with extensions
+docs/grammar.md on how to edit Cypher grammar
 
-Prefer using uv over pip for venv management.
-
-## Changing the grammar
-
-source: src/antlr4/Cypher.g4
-generated: scripts/antrl4/Cypher.g4 (via keywordhandler.py)
-generated: third_party/antlr4_cypher/cypher_parser.{cpp,h}
-
-Running make will autogenerate, but manual generation can be done via
-
-(cd scripts/antlr4 && cmake -D ROOT_DIR=../.. -P generate_grammar.cmake)
-
-## Building and testing specific extensions
-
-The following will build only the `vector` extension and run only a specific test
-
-```
-EXTENSION_LIST=vector make extension-test-build
-E2E_TEST_FILES_DIRECTORY=extension/vector/test/test_files ./build/relwithdebinfo/test/runner/e2e_test --gtest_filter="insert.InsertToNonEmpty"
-```
