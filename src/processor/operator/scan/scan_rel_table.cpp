@@ -1,10 +1,14 @@
 #include "processor/operator/scan/scan_rel_table.h"
 
+#include <algorithm>
+
 #include "binder/expression/expression_util.h"
+#include "common/system_config.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/local_storage/local_rel_table.h"
 #include "storage/table/foreign_rel_table.h"
+#include "storage/table/node_table.h"
 #include "storage/table/parquet_rel_table.h"
 
 using namespace lbug::common;
@@ -85,10 +89,57 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
             boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     }
     tableInfo.initScanState(*scanState, outVectors, clientContext);
+    if (sourceMode) {
+        currentSourceTableIdx = 0;
+        nextSourceOffset = 0;
+        currentSourceTableNumRows = 0;
+    }
+}
+
+bool ScanRelTable::fetchNextBoundNodeBatch(transaction::Transaction* transaction) {
+    auto* boundNodeIDVector = scanState->nodeIDVector;
+    while (currentSourceTableIdx < sourceNodeTables.size()) {
+        auto* nodeTable = sourceNodeTables[currentSourceTableIdx];
+        if (currentSourceTableNumRows == 0) {
+            currentSourceTableNumRows = nodeTable->getNumTotalRows(transaction);
+        }
+        if (nextSourceOffset >= currentSourceTableNumRows) {
+            currentSourceTableIdx++;
+            nextSourceOffset = 0;
+            currentSourceTableNumRows = 0;
+            continue;
+        }
+        const auto numToGenerate = std::min<row_idx_t>(DEFAULT_VECTOR_CAPACITY,
+            currentSourceTableNumRows - nextSourceOffset);
+        boundNodeIDVector->state->setToUnflat();
+        boundNodeIDVector->state->getSelVectorUnsafe().setToUnfiltered(numToGenerate);
+        for (auto i = 0u; i < numToGenerate; ++i) {
+            boundNodeIDVector->setValue<nodeID_t>(i,
+                nodeID_t{nextSourceOffset + i, nodeTable->getTableID()});
+        }
+        nextSourceOffset += numToGenerate;
+        tableInfo.table->initScanState(transaction, *scanState);
+        return true;
+    }
+    return false;
 }
 
 bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
     const auto transaction = transaction::Transaction::Get(*context->clientContext);
+    if (sourceMode) {
+        while (true) {
+            while (tableInfo.table->scan(transaction, *scanState)) {
+                const auto outputSize = scanState->outState->getSelVector().getSelSize();
+                if (outputSize > 0) {
+                    metrics->numOutputTuple.increase(outputSize);
+                    return true;
+                }
+            }
+            if (!fetchNextBoundNodeBatch(transaction)) {
+                return false;
+            }
+        }
+    }
     while (true) {
         while (tableInfo.table->scan(transaction, *scanState)) {
             const auto outputSize = scanState->outState->getSelVector().getSelSize();

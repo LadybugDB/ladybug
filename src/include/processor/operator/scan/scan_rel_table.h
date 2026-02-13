@@ -9,7 +9,8 @@
 namespace lbug {
 namespace storage {
 class MemoryManager;
-}
+class NodeTable;
+} // namespace storage
 namespace processor {
 
 struct ScanRelTableInfo : ScanTableInfo {
@@ -69,18 +70,40 @@ public:
         : ScanTable{type_, std::move(info), std::move(child), id, std::move(printInfo)},
           tableInfo{std::move(tableInfo)} {}
 
+    ScanRelTable(ScanOpInfo info, ScanRelTableInfo tableInfo,
+        std::vector<storage::NodeTable*> sourceNodeTables, physical_op_id id,
+        std::unique_ptr<OPPrintInfo> printInfo)
+        : ScanTable{type_, std::move(info), id, std::move(printInfo)},
+          tableInfo{std::move(tableInfo)}, sourceNodeTables{std::move(sourceNodeTables)},
+          sourceMode{true} {}
+
+    bool isSource() const override { return sourceMode; }
+    bool isParallel() const override { return !sourceMode; }
+
     void initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) override;
 
     bool getNextTuplesInternal(ExecutionContext* context) override;
 
     std::unique_ptr<PhysicalOperator> copy() override {
+        if (sourceMode) {
+            return std::make_unique<ScanRelTable>(opInfo.copy(), tableInfo.copy(), sourceNodeTables,
+                id, printInfo->copy());
+        }
         return std::make_unique<ScanRelTable>(opInfo.copy(), tableInfo.copy(), children[0]->copy(),
             id, printInfo->copy());
     }
 
 protected:
+    bool fetchNextBoundNodeBatch(transaction::Transaction* transaction);
+
+protected:
     ScanRelTableInfo tableInfo;
     std::unique_ptr<storage::RelTableScanState> scanState;
+    std::vector<storage::NodeTable*> sourceNodeTables;
+    bool sourceMode = false;
+    common::idx_t currentSourceTableIdx = 0;
+    common::offset_t nextSourceOffset = 0;
+    common::row_idx_t currentSourceTableNumRows = 0;
 };
 
 } // namespace processor

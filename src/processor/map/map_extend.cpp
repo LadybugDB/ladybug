@@ -4,10 +4,12 @@
 #include "common/enums/extend_direction_util.h"
 #include "main/client_context.h"
 #include "planner/operator/extend/logical_extend.h"
+#include "planner/operator/scan/logical_scan_node_table.h"
 #include "processor/operator/scan/scan_multi_rel_tables.h"
 #include "processor/operator/scan/scan_rel_table.h"
 #include "processor/plan_mapper.h"
 #include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -151,6 +153,28 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
         auto scanRelInfo =
             getRelTableScanInfo(*entry, relDataDirection, relTable, extend->shouldScanNbrID(),
                 extend->getProperties(), extend->getPropertyPredicates(), clientContext);
+        if (logicalOperator->getChild(0)->getOperatorType() ==
+            LogicalOperatorType::SCAN_NODE_TABLE) {
+            auto* scanNode = logicalOperator->getChild(0)->ptrCast<LogicalScanNodeTable>();
+            if (scanNode->getScanType() == LogicalScanNodeTableType::SCAN &&
+                scanNode->getProperties().empty()) {
+                std::vector<NodeTable*> sourceNodeTables;
+                auto expectedBoundTableID = relDataDirection == RelDataDirection::FWD ?
+                                                relTable->getFromNodeTableID() :
+                                                relTable->getToNodeTableID();
+                for (auto tableID : scanNode->getTableIDs()) {
+                    if (tableID == expectedBoundTableID) {
+                        sourceNodeTables.push_back(
+                            storageManager->getTable(tableID)->ptrCast<NodeTable>());
+                    }
+                }
+                if (!sourceNodeTables.empty()) {
+                    return std::make_unique<ScanRelTable>(std::move(scanInfo),
+                        std::move(scanRelInfo), std::move(sourceNodeTables), getOperatorID(),
+                        printInfo->copy());
+                }
+            }
+        }
         return std::make_unique<ScanRelTable>(std::move(scanInfo), std::move(scanRelInfo),
             std::move(prevOperator), getOperatorID(), printInfo->copy());
     }
