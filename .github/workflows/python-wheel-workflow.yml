@@ -188,9 +188,7 @@ jobs:
         if: matrix.os != 'windows'
         shell: bash
         run: |
-          uv venv
           source .venv/bin/activate
-          uv pip install cibuildwheel
           python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse ${{ env.SDIST_FILE }}
 
       - name: Upload wheels
