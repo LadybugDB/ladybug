@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 #include "storage/wal/wal_record.h"
 
 namespace lbug {
