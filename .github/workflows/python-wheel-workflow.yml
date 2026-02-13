@@ -154,17 +154,22 @@ jobs:
         shell: cmd
         run: |
           choco install ccache -y
-          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
-          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          echo CMAKE_C_COMPILER_LAUNCHER=ccache>> %GITHUB_ENV%
+          echo CMAKE_CXX_COMPILER_LAUNCHER=ccache>> %GITHUB_ENV%
+          echo CCACHE_DIR=D:\c>> %GITHUB_ENV%
+          echo CCACHE_TEMPDIR=D:\t>> %GITHUB_ENV%
+          if not exist D:\c mkdir D:\c
+          if not exist D:\t mkdir D:\t
           ccache --set-config=max_size=2G
           ccache --set-config=compression=true
-          ccache --set-config=cache_dir=D:\ccache
+          ccache --set-config=cache_dir=D:\c
+          ccache --set-config=temporary_dir=D:\t
 
       - name: Cache ccache directory (Windows)
         if: matrix.os == 'windows'
         uses: actions/cache@v4
         with:
-          path: D:\ccache
+          path: D:\c
           key: ${{ runner.os }}-ccache-wheel-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
           restore-keys: |
             ${{ runner.os }}-ccache-wheel-

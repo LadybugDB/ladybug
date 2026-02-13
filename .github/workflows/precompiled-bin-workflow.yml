@@ -70,16 +70,20 @@ jobs:
         run: |
           echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
           echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
+          echo "CCACHE_DIR=D:\c" >> $GITHUB_ENV
+          echo "CCACHE_TEMPDIR=D:\t" >> $GITHUB_ENV
+          mkdir -p /d/c /d/t
           ccache --set-config=max_size=2G
           ccache --set-config=compression=true
-          ccache --set-config=cache_dir=D:\ccache
+          ccache --set-config=cache_dir=D:\c
+          ccache --set-config=temporary_dir=D:\t
         shell: bash
 
       - name: Cache ccache directory (Windows)
         if: runner.os == 'Windows'
         uses: actions/cache@v4
         with:
-          path: D:\ccache
+          path: D:\c
           key: ${{ runner.os }}-ccache-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
           restore-keys: |
             ${{ runner.os }}-ccache-
