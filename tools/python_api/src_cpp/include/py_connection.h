@@ -48,6 +48,10 @@ public:
         const py::list& params, const std::string& retval, bool defaultNull, bool catchExceptions);
     void removeScalarFunction(const std::string& name);
 
+    std::unique_ptr<PyQueryResult> createArrowTable(const std::string& tableName,
+        py::object arrowTable);
+    std::unique_ptr<PyQueryResult> dropArrowTable(const std::string& tableName);
+
     static Value transformPythonValue(const py::handle& val);
     static Value transformPythonValueAs(const py::handle& val, const LogicalType& type);
     static Value transformPythonValueFromParameter(const py::handle& val);

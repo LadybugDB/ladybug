@@ -321,3 +321,52 @@ class Connection:
             name of function to be removed.
         """
         self._connection.remove_function(name)
+
+    def create_arrow_table(
+        self,
+        table_name: str,
+        dataframe: Any,
+    ) -> QueryResult:
+        """
+        Create an Arrow memory-backed table from a DataFrame.
+
+        Parameters
+        ----------
+        table_name : str
+            Name of the table to create.
+
+        dataframe : Any
+            A pandas DataFrame, polars DataFrame, or PyArrow table.
+
+        Returns
+        -------
+        QueryResult
+            Result of the table creation query.
+
+        """
+        self.init_connection()
+        query_result_internal = self._connection.create_arrow_table(table_name, dataframe)
+        if not query_result_internal.isSuccess():
+            raise RuntimeError(query_result_internal.getErrorMessage())
+        return QueryResult(self, query_result_internal)
+
+    def drop_arrow_table(self, table_name: str) -> QueryResult:
+        """
+        Drop an Arrow memory-backed table.
+
+        Parameters
+        ----------
+        table_name : str
+            Name of the table to drop.
+
+        Returns
+        -------
+        QueryResult
+            Result of the drop table query.
+
+        """
+        self.init_connection()
+        query_result_internal = self._connection.drop_arrow_table(table_name)
+        if not query_result_internal.isSuccess():
+            raise RuntimeError(query_result_internal.getErrorMessage())
+        return QueryResult(self, query_result_internal)
