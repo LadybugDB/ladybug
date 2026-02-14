@@ -168,7 +168,10 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
                             storageManager->getTable(tableID)->ptrCast<NodeTable>());
                     }
                 }
-                if (!sourceNodeTables.empty()) {
+                // Only apply optimization if scan node is not already mapped (e.g., by a
+                // semi-masker)
+                if (!sourceNodeTables.empty() &&
+                    !logicalOpToPhysicalOpMap.contains(logicalOperator->getChild(0).get())) {
                     return std::make_unique<ScanRelTable>(std::move(scanInfo),
                         std::move(scanRelInfo), std::move(sourceNodeTables), getOperatorID(),
                         printInfo->copy());
