@@ -53,6 +53,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "EMPTY_RESULT";
     case PhysicalOperatorType::EXPORT_DATABASE:
         return "EXPORT_DATABASE";
+    case PhysicalOperatorType::EXTENSION_CLAUSE:
+        return "EXTENSION_CLAUSE";
     case PhysicalOperatorType::FILTER:
         return "FILTER";
     case PhysicalOperatorType::FLATTEN:
