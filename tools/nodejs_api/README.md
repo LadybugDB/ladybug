@@ -7,9 +7,23 @@ A high-performance graph database for knowledge-intensive applications. This Nod
 
 ## 📦 Installation
 
+**From npm (if published):**
+
 ```bash
 npm install lbug
 ```
+
+**From GitHub** (monorepo; the Node package lives in `tools/nodejs_api`):
+
+- **pnpm** (v9+), subdirectory is supported:
+
+  ```bash
+  pnpm add lbug@github:LadybugDB/ladybug#path:tools/nodejs_api
+  ```
+
+  On install, the package will build the native addon from source (needs CMake and a C++20 compiler).
+
+- **npm**: no built-in subdirectory install. Either use a **local path** after cloning and building (see [Build and use in other projects](#-build-and-use-in-other-projects-local)), or a tarball from [GitPkg](https://gitpkg.vercel.app/) (e.g. `https://gitpkg.vercel.app/LadybugDB/ladybug/tools/nodejs_api?main`).
 
 ---
 
@@ -192,6 +206,84 @@ make nodejs
 # Then from tools/nodejs_api:
 cd tools/nodejs_api && npm test
 ```
+
+---
+
+## 🔧 Build and use in other projects (local)
+
+To use the Node.js API from the Ladybug repo in another project without publishing to npm:
+
+1. **Build the addon** (from the Ladybug repo root):
+
+   ```bash
+   make nodejs
+   ```
+
+   Or from this directory:
+
+   ```bash
+   npm run build
+   ```
+
+   This compiles the native addon into `build/lbugjs.node` and copies JS and types.
+
+2. **In your other project**, add a file dependency in `package.json`:
+
+   ```json
+   "dependencies": {
+     "lbug": "file:../path/to/ladybug/tools/nodejs_api"
+   }
+   ```
+
+   Then run `npm install`. After that, `require("lbug")` or `import ... from "lbug"` will use your local build.
+
+3. **Optional:** to pack and install a tarball instead:
+
+   ```bash
+   cd /path/to/ladybug/tools/nodejs_api
+   npm run build
+   npm pack
+   ```
+
+   In the other project: `npm install /path/to/ladybug/tools/nodejs_api/lbug-0.0.1.tgz`.
+
+### Prebuilt in your fork (install from GitHub without building)
+
+If you install from GitHub (e.g. `pnpm add lbug@github:user/ladybug#path:tools/nodejs_api`), the package runs `install.js`: if it finds a prebuilt binary, it uses it and does not build from source. To ship a prebuilt in your fork:
+
+1. **Build once** in your clone (from repo root):
+
+   ```bash
+   make nodejs
+   ```
+
+2. **Create the prebuilt file** (name = `lbugjs-<platform>-<arch>.node`):
+
+   - Windows x64: copy `tools/nodejs_api/build/lbugjs.node` → `tools/nodejs_api/prebuilt/lbugjs-win32-x64.node`
+   - Linux x64: `lbugjs-linux-x64.node`
+   - macOS x64: `lbugjs-darwin-x64.node`, arm64: `lbugjs-darwin-arm64.node`
+
+   Example (from repo root). **Windows (PowerShell):**
+
+   ```powershell
+   New-Item -ItemType Directory -Force -Path tools/nodejs_api/prebuilt
+   Copy-Item tools/nodejs_api/build/lbugjs.node tools/nodejs_api/prebuilt/lbugjs-win32-x64.node
+   ```
+
+   **Linux/macOS:**
+
+   ```bash
+   mkdir -p tools/nodejs_api/prebuilt
+   cp tools/nodejs_api/build/lbugjs.node tools/nodejs_api/prebuilt/lbugjs-$(node -p "process.platform")-$(node -p "process.arch").node
+   ```
+
+3. **Commit and push** the `prebuilt/` folder. Then anyone (or you in another project) can do:
+
+   ```bash
+   pnpm add lbug@github:YOUR_USERNAME/ladybug#path:tools/nodejs_api
+   ```
+
+   and the addon will be used from prebuilt without a local build.
 
 ---
 
