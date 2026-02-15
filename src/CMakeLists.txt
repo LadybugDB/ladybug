@@ -30,9 +30,9 @@ endif()
 if(NOT WIN32)
         set(LBUG_LIBRARIES dl ${LBUG_LIBRARIES})
 endif()
-# Seems to be needed for clang on linux only
+# Seems to be needed for clang on linux only (not Windows: no atomic.lib with Clang+lld-link)
 # for compiling std::atomic<T>::compare_exchange_weak
-if ((NOT APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang") AND NOT __WASM__ AND NOT __SINGLE_THREADED__)
+if ((NOT APPLE AND NOT WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang") AND NOT __WASM__ AND NOT __SINGLE_THREADED__)
         set(LBUG_LIBRARIES atomic ${LBUG_LIBRARIES})
 endif()
 if (ENABLE_BACKTRACES)

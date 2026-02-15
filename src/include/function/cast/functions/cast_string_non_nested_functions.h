@@ -102,12 +102,12 @@ struct IntegerCastOperation<T> {
     static bool handleDigit(CastData& state, uint8_t digit) {
         using result_t = typename CastData::Result;
         if constexpr (NEGATIVE) {
-            if (state.result < ((std::numeric_limits<result_t>::min() + digit) / 10)) {
+            if (state.result < (((std::numeric_limits<result_t>::min)() + digit) / 10)) {
                 return false;
             }
             state.result = state.result * 10 - digit;
         } else {
-            if (state.result > ((std::numeric_limits<result_t>::max() - digit) / 10)) {
+            if (state.result > (((std::numeric_limits<result_t>::max)() - digit) / 10)) {
                 return false;
             }
             state.result = state.result * 10 + digit;
@@ -138,7 +138,7 @@ struct IntegerCastOperation<int128_t> {
             result.intermediate *= 10;
             result.intermediate -= digit;
         } else {
-            if (result.intermediate > (std::numeric_limits<int64_t>::max() - digit) / 10) {
+            if (result.intermediate > ((std::numeric_limits<int64_t>::max)() - digit) / 10) {
                 if (!result.flush()) {
                     return false;
                 }
@@ -168,7 +168,7 @@ struct IntegerCastOperation<uint128_t> {
             result.intermediate *= 10;
             result.intermediate -= digit;
         } else {
-            if (result.intermediate > (std::numeric_limits<uint64_t>::max() - digit) / 10) {
+            if (result.intermediate > ((std::numeric_limits<uint64_t>::max)() - digit) / 10) {
                 if (!result.flush()) {
                     return false;
                 }

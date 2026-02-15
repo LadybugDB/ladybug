@@ -13,6 +13,11 @@ add_executable(lbug_shell
         linenoise.cpp
         shell_runner.cpp)
 
+# Static link: avoid LNK4217 (locally defined symbol imported) when linking lbug.lib
+if(WIN32)
+    target_compile_definitions(lbug_shell PRIVATE LBUG_STATIC_DEFINE)
+endif()
+
 if (NOT MSVC)
     # On Windows, rename the executable to lbug.exe will cause an error
     # "multiple rules generate src/lbug.lib", so we do not set the output
