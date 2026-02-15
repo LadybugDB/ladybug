@@ -3,6 +3,7 @@ tree-sitter-cypher/
 
 .idea/
 .vscode
+.cursor
 .vs
 bazel-*
 .clwb

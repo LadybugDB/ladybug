@@ -19,6 +19,7 @@ Napi::Object NodeConnection::Init(Napi::Env env, Napi::Object exports) {
             InstanceMethod("querySync", &NodeConnection::QuerySync),
             InstanceMethod("setMaxNumThreadForExec", &NodeConnection::SetMaxNumThreadForExec),
             InstanceMethod("setQueryTimeout", &NodeConnection::SetQueryTimeout),
+            InstanceMethod("interrupt", &NodeConnection::Interrupt),
             InstanceMethod("close", &NodeConnection::Close)});
 
     exports.Set("NodeConnection", t);
@@ -80,6 +81,12 @@ void NodeConnection::SetQueryTimeout(const Napi::CallbackInfo& info) {
         this->connection->setQueryTimeOut(timeout);
     } catch (const std::exception& exc) {
         Napi::Error::New(env, std::string(exc.what())).ThrowAsJavaScriptException();
+    }
+}
+
+void NodeConnection::Interrupt(const Napi::CallbackInfo& info) {
+    if (this->connection) {
+        this->connection->interrupt();
     }
 }
 
