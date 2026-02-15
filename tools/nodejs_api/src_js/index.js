@@ -10,6 +10,7 @@ module.exports = {
   Database,
   PreparedStatement,
   QueryResult,
+  LBUG_DATABASE_LOCKED: Database.LBUG_DATABASE_LOCKED,
   get VERSION() {
     return Database.getVersion();
   },
