@@ -78,6 +78,8 @@ main().catch(console.error);
 
 ## 📚 API Overview
 
+**Full API reference:** [docs/API.md](docs/API.md) — types, methods, options, errors, and constants.
+
 The `lbug` package exposes the following primary classes:
 
 * **Database** – `new Database(path, bufferPoolSize?, ...)`. Initialize with `init()` / `initSync()` (optional; done on first use). When the file is locked, **async init() retries for up to 5s** (configurable: last ctor arg `openLockRetryMs`; set `0` to fail immediately). Close with `close()`.
