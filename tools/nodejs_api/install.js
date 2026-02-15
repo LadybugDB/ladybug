@@ -78,11 +78,13 @@ if (!fsCallback.existsSync(lbugSourceDir)) {
 const THREADS = os.cpus().length;
 console.log(`Using ${THREADS} threads to build Lbug.`);
 
-// Install dependencies (--ignore-scripts to avoid nested install.js running without lbug-source)
+// Install dependencies only; skip install script so nested install.js does not run (no lbug-source there).
 console.log("Installing dependencies...");
+const innerNpmEnv = { ...process.env, NPM_CONFIG_IGNORE_SCRIPTS: "true" };
 childProcess.execSync("npm install --ignore-scripts", {
   cwd: path.join(__dirname, "lbug-source", "tools", "nodejs_api"),
   stdio: "inherit",
+  env: innerNpmEnv,
 });
 
 // Build the Lbug source code
