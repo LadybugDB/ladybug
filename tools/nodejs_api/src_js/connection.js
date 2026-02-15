@@ -404,6 +404,54 @@ class Connection {
   }
 
   /**
+   * Register a stream source for LOAD FROM name. The source must be AsyncIterable; each yielded
+   * value is a row (array of column values in schema order, or object keyed by column name).
+   * Call unregisterStream(name) when done or before reusing the name.
+   * @param {string} name – name used in Cypher: LOAD FROM name RETURN ...
+   * @param {AsyncIterable<Array<*>|Object>} source – async iterable of rows
+   * @param {{ columns: Array<{ name: string, type: string }> }} options – schema (required). type: INT64, INT32, DOUBLE, STRING, BOOL, DATE, etc.
+   */
+  async registerStream(name, source, options = {}) {
+    if (typeof name !== "string") {
+      throw new Error("registerStream: name must be a string.");
+    }
+    const columns = options.columns;
+    if (!Array.isArray(columns) || columns.length === 0) {
+      throw new Error("registerStream: options.columns (array of { name, type }) is required.");
+    }
+    const conn = await this._getConnection();
+    const it = source[Symbol.asyncIterator] ? source[Symbol.asyncIterator].call(source) : source;
+    const getChunk = (requestId) => {
+      setImmediate(() => {
+        (async () => {
+          try {
+            const n = await it.next();
+            const rows = n.value != null ? (Array.isArray(n.value) ? n.value : [n.value]) : [];
+            conn.returnChunk(requestId, rows, n.done);
+          } catch (e) {
+            conn.returnChunk(requestId, [], true);
+          }
+        })();
+      });
+    };
+    conn.registerStream(name, getChunk, columns);
+  }
+
+  /**
+   * Unregister a stream source by name.
+   * @param {string} name – name passed to registerStream
+   */
+  unregisterStream(name) {
+    if (typeof name !== "string") {
+      throw new Error("unregisterStream: name must be a string.");
+    }
+    if (!this._connection) {
+      return;
+    }
+    this._connection.unregisterStream(name);
+  }
+
+  /**
    * Execute a query synchronously.
    * @param {String} statement the statement to execute. This function blocks the main thread for the duration of the query, so use it with caution.
    * @returns {Array<lbug.QueryResult> | lbug.QueryResult} an array of query results. If there is only one query result, the function returns the query result directly.

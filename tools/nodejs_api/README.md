@@ -67,7 +67,7 @@ main().catch(console.error);
 The `lbug` package exposes the following primary classes:
 
 * **Database** – `new Database(path, bufferPoolSize?, ...)`. Initialize with `init()` / `initSync()` (optional; done on first use). Close with `close()`.
-* **Connection** – `new Connection(database, numThreads?)`. Run Cypher with `query(statement)` or `prepare(statement)` then `execute(preparedStatement, params)`. Use `transaction(fn)` for a single write transaction, `ping()` for liveness checks. Configure with `setQueryTimeout(ms)`, `setMaxNumThreadForExec(n)`.
+* **Connection** – `new Connection(database, numThreads?)`. Run Cypher with `query(statement)` or `prepare(statement)` then `execute(preparedStatement, params)`. Use `transaction(fn)` for a single write transaction, `ping()` for liveness checks. Use `registerStream(name, source, { columns })` to load data from an AsyncIterable via `LOAD FROM name`; `unregisterStream(name)` when done. Configure with `setQueryTimeout(ms)`, `setMaxNumThreadForExec(n)`.
 * **QueryResult** – Returned by `query()` / `execute()`. Consume with `getAll()`, `getNext()` / `hasNext()`, **async iteration** (`for await...of`), or **`toStream()`** (Node.js `Readable`). Metadata: `getColumnNames()`, `getColumnDataTypes()`, `getQuerySummary()`. Call `close()` when done (optional if fully consumed).
 * **PreparedStatement** – Created by `conn.prepare(statement)`. Execute with `conn.execute(preparedStatement, params)`. Reuse for parameterized queries.
 
@@ -120,6 +120,46 @@ await conn.transaction(async () => {
   // commit happens automatically; on throw, rollback then rethrow
 });
 ```
+
+### Loading data from a Node.js stream
+
+You can feed data from an **AsyncIterable** (generator, async generator, or any `Symbol.asyncIterator`) into Cypher using **scan replacement**: register a stream by name, then use `LOAD FROM name` in your query. Rows are pulled from JavaScript on demand during execution.
+
+**API:**
+
+* **`conn.registerStream(name, source, options)`** (async)  
+  * `name` – string used in Cypher: `LOAD FROM name RETURN ...`  
+  * `source` – AsyncIterable of rows. Each row is an **array** of column values (same order as `options.columns`) or an **object** keyed by column name.  
+  * `options.columns` – **required**. Schema: array of `{ name: string, type: string }`. Supported types: `INT64`, `INT32`, `INT16`, `INT8`, `UINT64`, `UINT32`, `DOUBLE`, `FLOAT`, `STRING`, `BOOL`, `DATE`, `TIMESTAMP`.
+
+* **`conn.unregisterStream(name)`**  
+  Unregisters the source so the name can be reused or to avoid leaving stale entries. Call after the query (or when done with the stream).
+
+**Example:**
+
+```js
+async function* generateRows() {
+  yield [1, "Alice"];
+  yield [2, "Bob"];
+  yield [3, "Carol"];
+}
+
+await conn.registerStream("users", generateRows(), {
+  columns: [
+    { name: "id", type: "INT64" },
+    { name: "name", type: "STRING" },
+  ],
+});
+
+const result = await conn.query("LOAD FROM users RETURN *");
+for await (const row of result) {
+  console.log(row); // { id: 1, name: "Alice" }, ...
+}
+
+conn.unregisterStream("users");
+```
+
+You can combine the stream with other Cypher: e.g. `LOAD FROM stream RETURN * WHERE col > 0`, or `COPY MyTable FROM (LOAD FROM stream RETURN *)`.
 
 ---
 
