@@ -263,13 +263,13 @@ describe("Interrupt", function () {
     if (process.platform === "win32") {
       this.skip();
     }
-    this.timeout(10000);
+    this.timeout(5000);
     const newConn = new lbug.Connection(db);
     await newConn.init();
     const longQuery =
-      "UNWIND RANGE(1,100000) AS x UNWIND RANGE(1, 100000) AS y RETURN COUNT(x + y);";
+      "UNWIND RANGE(1, 30000) AS x UNWIND RANGE(1, 30000) AS y RETURN COUNT(x + y);";
     const queryPromise = newConn.query(longQuery);
-    setTimeout(() => newConn.interrupt(), 150);
+    setTimeout(() => newConn.interrupt(), 100);
     try {
       await queryPromise;
       assert.fail("No error thrown when the query was interrupted.");
@@ -297,9 +297,9 @@ describe("AbortSignal", function () {
     await newConn.init();
     const ac = new AbortController();
     const longQuery =
-      "UNWIND RANGE(1,100000) AS x UNWIND RANGE(1, 100000) AS y RETURN COUNT(x + y);";
+      "UNWIND RANGE(1, 30000) AS x UNWIND RANGE(1, 30000) AS y RETURN COUNT(x + y);";
     const queryPromise = newConn.query(longQuery, { signal: ac.signal });
-    setTimeout(() => ac.abort(), 150);
+    setTimeout(() => ac.abort(), 100);
     try {
       await queryPromise;
       assert.fail("No error thrown when signal was aborted during query.");
