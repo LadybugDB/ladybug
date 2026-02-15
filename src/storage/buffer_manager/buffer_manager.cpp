@@ -284,6 +284,13 @@ uint64_t BufferManager::evictPages() {
             if (!evictionCandidate.isEvictable(pageStateAndVersion)) {
                 if (evictionCandidate.isSecondChanceEvictable(pageStateAndVersion)) {
                     pageState->tryMark(pageStateAndVersion);
+                } else if (evictionCandidate.isEvicted(pageStateAndVersion)) {
+                    // Remove evicted candidate from queue. Lock page before clearing to avoid
+                    // data races with other threads that might re-add or evict the same slot.
+                    if (pageState->tryLock(pageStateAndVersion)) {
+                        evictionQueue.clear(candidate);
+                        pageState->unlock();
+                    }
                 }
                 continue;
             }
