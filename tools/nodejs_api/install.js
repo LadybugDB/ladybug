@@ -78,9 +78,9 @@ if (!fsCallback.existsSync(lbugSourceDir)) {
 const THREADS = os.cpus().length;
 console.log(`Using ${THREADS} threads to build Lbug.`);
 
-// Install dependencies
+// Install dependencies (--ignore-scripts to avoid nested install.js running without lbug-source)
 console.log("Installing dependencies...");
-childProcess.execSync("npm install", {
+childProcess.execSync("npm install --ignore-scripts", {
   cwd: path.join(__dirname, "lbug-source", "tools", "nodejs_api"),
   stdio: "inherit",
 });
