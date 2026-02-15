@@ -37,6 +37,7 @@ private:
     Napi::Value GetColumnNamesSync(const Napi::CallbackInfo& info);
     Napi::Value GetQuerySummarySync(const Napi::CallbackInfo& info);
     Napi::Value GetQuerySummaryAsync(const Napi::CallbackInfo& info);
+    Napi::Value GetToStringSync(const Napi::CallbackInfo& info);
     void PopulateColumnNames();
     void Close(const Napi::CallbackInfo& info);
     void Close();

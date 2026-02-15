@@ -40,6 +40,8 @@ private:
     Napi::Value RegisterStream(const Napi::CallbackInfo& info);
     void UnregisterStream(const Napi::CallbackInfo& info);
     void ReturnChunk(const Napi::CallbackInfo& info);
+    Napi::Value GetNumNodes(const Napi::CallbackInfo& info);
+    Napi::Value GetNumRels(const Napi::CallbackInfo& info);
 
 private:
     std::shared_ptr<Database> database;

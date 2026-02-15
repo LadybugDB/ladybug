@@ -436,6 +436,32 @@ class Connection {
   }
 
   /**
+   * Get the number of nodes in a node table. Connection must be initialized.
+   * @param {string} nodeName – name of the node table (e.g. "User")
+   * @returns {number} count of nodes
+   */
+  getNumNodes(nodeName) {
+    if (typeof nodeName !== "string") {
+      throw new Error("getNumNodes(nodeName): nodeName must be a string.");
+    }
+    const connection = this._getConnectionSync();
+    return connection.getNumNodes(nodeName);
+  }
+
+  /**
+   * Get the number of relationships in a rel table. Connection must be initialized.
+   * @param {string} relName – name of the rel table (e.g. "Follows")
+   * @returns {number} count of relationships
+   */
+  getNumRels(relName) {
+    if (typeof relName !== "string") {
+      throw new Error("getNumRels(relName): relName must be a string.");
+    }
+    const connection = this._getConnectionSync();
+    return connection.getNumRels(relName);
+  }
+
+  /**
    * Register a stream source for LOAD FROM name. The source must be AsyncIterable; each yielded
    * value is a row (array of column values in schema order, or object keyed by column name).
    * Call unregisterStream(name) when done or before reusing the name.

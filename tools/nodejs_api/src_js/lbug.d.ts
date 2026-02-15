@@ -128,6 +128,7 @@ export class Database {
      * @param checkpointThreshold Threshold for automatic checkpoints
      * @param throwOnWalReplayFailure If true, WAL replay failures throw; otherwise replay stops at error
      * @param enableChecksums If true, use checksums to detect WAL corruption
+     * @param openLockRetryMs When the file is locked, retry opening for up to this many ms (default 5000). Set 0 to fail immediately. Only for async init(); ignored for :memory:
      */
     constructor(
         databasePath?: string,
@@ -138,12 +139,14 @@ export class Database {
         autoCheckpoint?: boolean,
         checkpointThreshold?: number,
         throwOnWalReplayFailure?: boolean,
-        enableChecksums?: boolean
+        enableChecksums?: boolean,
+        openLockRetryMs?: number
     );
 
     /**
      * Initialize the database. Calling this function is optional, as the
      * database is initialized automatically when the first query is executed.
+     * When the file is locked, retries for up to openLockRetryMs (default 5s) before throwing.
      * @returns Promise that resolves when initialization completes
      */
     init(): Promise<void>;
@@ -307,6 +310,20 @@ export class Connection {
     explain(statement: string): Promise<string>;
 
     /**
+     * Get the number of nodes in a node table. Connection must be initialized.
+     * @param nodeName Name of the node table (e.g. "User")
+     * @returns Count of nodes
+     */
+    getNumNodes(nodeName: string): number;
+
+    /**
+     * Get the number of relationships in a rel table. Connection must be initialized.
+     * @param relName Name of the rel table (e.g. "Follows")
+     * @returns Count of relationships
+     */
+    getNumRels(relName: string): number;
+
+    /**
      * Register a stream source for LOAD FROM name. Source must be AsyncIterable of rows (array or object).
      * Unregister with unregisterStream(name) when done.
      * @param name Name used in Cypher: LOAD FROM name RETURN ...
@@ -393,6 +410,12 @@ export class QueryResult implements AsyncIterable<Record<string, LbugValue> | nu
     getNextSync(): Record<string, LbugValue> | null;
 
     /**
+     * Return the query result as a string (header + rows). For failed queries returns the error message.
+     * @returns String representation of the result
+     */
+    toString(): string;
+
+    /**
      * Return a Node.js Readable stream (object mode) that yields one row per chunk.
      * @returns Readable stream of row objects
      */
@@ -475,6 +498,12 @@ export class QueryResult implements AsyncIterable<Record<string, LbugValue> | nu
 }
 
 /**
+ * Error code when the database file is locked by another process.
+ * Use with init() / initSync() or first query: catch and check err.code === LBUG_DATABASE_LOCKED.
+ */
+export const LBUG_DATABASE_LOCKED: "LBUG_DATABASE_LOCKED";
+
+/**
  * Default export for the Lbug module.
  */
 declare const lbug: {
@@ -482,6 +511,7 @@ declare const lbug: {
     Connection: typeof Connection;
     PreparedStatement: typeof PreparedStatement;
     QueryResult: typeof QueryResult;
+    LBUG_DATABASE_LOCKED: typeof LBUG_DATABASE_LOCKED;
     VERSION: string;
     STORAGE_VERSION: bigint;
 };
