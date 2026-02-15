@@ -5,14 +5,19 @@
   "main": "index.js",
   "module": "./index.mjs",
   "types": "./lbug.d.ts",
-  "exports":{
-    ".":{
+  "exports": {
+    ".": {
       "require": "./index.js",
       "import": "./index.mjs",
       "types": "./lbug.d.ts"
     }
   },
-  "files": ["index.js", "index.mjs", "lbug.d.ts", "lbugjs.node"],
+  "files": [
+    "index.js",
+    "index.mjs",
+    "lbug.d.ts",
+    "lbugjs.node"
+  ],
   "type": "commonjs",
   "homepage": "https://ladybugdb.com/",
   "repository": {
@@ -20,6 +25,7 @@
     "url": "git+https://github.com/LadybugDB/ladybug.git"
   },
   "scripts": {
+    "install": "node install.js",
     "test": "mocha test --timeout 20000",
     "clean": "node clean.js",
     "clean-all": "node clean.js all",
