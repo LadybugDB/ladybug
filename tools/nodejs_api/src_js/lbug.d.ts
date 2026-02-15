@@ -114,6 +114,63 @@ export interface SystemConfig {
 }
 
 /**
+ * Options for createPool(). Same shape as Database constructor args (except path).
+ */
+export interface PoolDatabaseOptions {
+    bufferManagerSize?: number;
+    enableCompression?: boolean;
+    readOnly?: boolean;
+    maxDBSize?: number;
+    autoCheckpoint?: boolean;
+    checkpointThreshold?: number;
+    throwOnWalReplayFailure?: boolean;
+    enableChecksums?: boolean;
+    openLockRetryMs?: number;
+}
+
+/**
+ * Options for createPool().
+ */
+export interface PoolOptions {
+    /** Database file path (default ":memory:") */
+    databasePath?: string;
+    /** Same shape as Database constructor options (bufferManagerSize, readOnly, etc.) */
+    databaseOptions?: PoolDatabaseOptions;
+    /** Minimum connections to keep (default 0) */
+    minSize?: number;
+    /** Maximum connections in the pool (required) */
+    maxSize: number;
+    /** Max time to wait for acquire in ms (0 = wait forever, default 0) */
+    acquireTimeoutMillis?: number;
+    /** If true, call conn.ping() before handing out (default false) */
+    validateOnAcquire?: boolean;
+}
+
+/**
+ * Connection pool: acquire/release or run(fn). One shared Database, up to maxSize Connection instances.
+ */
+export interface Pool {
+    /** Acquire a connection; must call release(conn) when done. Prefer run(fn) to avoid leaks. */
+    acquire(): Promise<Connection>;
+    /** Return a connection to the pool. */
+    release(conn: Connection): void;
+    /** Run fn(conn); connection is released in finally (on success or throw). */
+    run<T>(fn: (conn: Connection) => Promise<T>): Promise<T>;
+    /** Close pool: reject new/pending acquire, then close all connections and database. */
+    close(): Promise<void>;
+}
+
+/** Pool constructor (use createPool() instead of new Pool()). */
+export type PoolConstructor = new (options: PoolOptions) => Pool;
+
+/**
+ * Create a connection pool.
+ * @param options Pool options (maxSize required; databasePath, databaseOptions, minSize, acquireTimeoutMillis, validateOnAcquire optional)
+ * @returns Pool instance
+ */
+export function createPool(options: PoolOptions): Pool;
+
+/**
  * Represents a Lbug database instance.
  */
 export class Database {
@@ -511,6 +568,8 @@ declare const lbug: {
     Connection: typeof Connection;
     PreparedStatement: typeof PreparedStatement;
     QueryResult: typeof QueryResult;
+    createPool: typeof createPool;
+    Pool: PoolConstructor;
     LBUG_DATABASE_LOCKED: typeof LBUG_DATABASE_LOCKED;
     VERSION: string;
     STORAGE_VERSION: bigint;

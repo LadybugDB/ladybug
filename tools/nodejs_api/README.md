@@ -84,6 +84,7 @@ The `lbug` package exposes the following primary classes:
 * **Connection** – `new Connection(database, numThreads?)`. Run Cypher with `query(statement)` or `prepare(statement)` then `execute(preparedStatement, params)`. Use `transaction(fn)` for a single write transaction, `ping()` for liveness checks. **`getNumNodes(nodeName)`** and **`getNumRels(relName)`** return row counts for node/rel tables. Use `registerStream(name, source, { columns })` to load data from an AsyncIterable via `LOAD FROM name`; `unregisterStream(name)` when done. Configure with `setQueryTimeout(ms)`, `setMaxNumThreadForExec(n)`.
 * **QueryResult** – Returned by `query()` / `execute()`. Consume with `getAll()`, `getNext()` / `hasNext()`, **async iteration** (`for await...of`), or **`toStream()`** (Node.js `Readable`). Use **`toString()`** for a string representation (header + rows; useful for debugging). Metadata: `getColumnNames()`, `getColumnDataTypes()`, `getQuerySummary()`. Call `close()` when done (optional if fully consumed).
 * **PreparedStatement** – Created by `conn.prepare(statement)`. Execute with `conn.execute(preparedStatement, params)`. Reuse for parameterized queries.
+* **Pool** – `createPool({ databasePath, maxSize, ... })` returns a connection pool. Use **`pool.run(conn => ...)`** (recommended) or `acquire()` / `release(conn)`; call **`pool.close()`** when done.
 
 Both CommonJS (`require`) and ES Modules (`import`) are fully supported.
 
@@ -123,6 +124,44 @@ conn.initSync(); // or await conn.init()
 const numUsers = conn.getNumNodes("User");
 const numFollows = conn.getNumRels("Follows");
 ```
+
+### Connection pool
+
+Use **`createPool(options)`** to get a pool of connections (one shared `Database`, up to `maxSize` connections). Prefer **`pool.run(fn)`**: it acquires a connection, runs `fn(conn)`, and releases in `finally` (on success or throw), so you never leak a connection.
+
+**Options:** `maxSize` (required), `databasePath`, `databaseOptions` (same shape as `Database` constructor), `minSize` (default 0), `acquireTimeoutMillis` (default 0 = wait forever), `validateOnAcquire` (default false; if true, `conn.ping()` before hand-out).
+
+**Example (recommended: `run`):**
+
+```js
+import { createPool } from "lbug";
+
+const pool = createPool({ databasePath: "./mydb", maxSize: 10 });
+
+const rows = await pool.run(async (conn) => {
+  const result = await conn.query("MATCH (u:User) RETURN u.name LIMIT 5");
+  const rows = await result.getAll();
+  result.close();
+  return rows;
+});
+console.log(rows);
+
+await pool.close();
+```
+
+**Manual acquire/release:** If you need the same connection for multiple operations, use `acquire()` and always call `release(conn)` in a `finally` block so the connection is returned even on throw.
+
+```js
+const conn = await pool.acquire();
+try {
+  await conn.query("...");
+  // ...
+} finally {
+  pool.release(conn);
+}
+```
+
+When shutting down, call **`pool.close()`**: it rejects new and pending `acquire()`, then closes all connections and the database.
 
 ### Transactions
 
