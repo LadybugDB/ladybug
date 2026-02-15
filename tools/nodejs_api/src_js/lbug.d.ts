@@ -338,6 +338,14 @@ export class PreparedStatement {
 }
 
 /**
+ * Query summary with compiling and execution times (milliseconds).
+ */
+export interface QuerySummary {
+    compilingTime: number;
+    executionTime: number;
+}
+
+/**
  * Represents the results of a query execution.
  * Note: This class is created internally by Connection query methods.
  * Supports async iteration: for await (const row of result) { ... }
@@ -440,6 +448,18 @@ export class QueryResult implements AsyncIterable<Record<string, LbugValue> | nu
      * @returns Array of column names
      */
     getColumnNamesSync(): string[];
+
+    /**
+     * Get the query summary (compiling and execution time in milliseconds).
+     * @returns Promise that resolves to the query summary
+     */
+    getQuerySummary(): Promise<QuerySummary>;
+
+    /**
+     * Get the query summary synchronously.
+     * @returns The query summary
+     */
+    getQuerySummarySync(): QuerySummary;
 
     /**
      * Close the result set and release resources.
