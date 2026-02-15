@@ -9,9 +9,15 @@ on:
         required: true
         default: false
 
+# Let heavy builds finish; new push queues instead of cancelling.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-nodejs:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     strategy:
       matrix:
         include:

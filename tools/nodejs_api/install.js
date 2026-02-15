@@ -64,6 +64,15 @@ else if (fsCallback.existsSync(prebuiltPath)) {
 }
 
 if (!fsCallback.existsSync(lbugSourceDir)) {
+  // Full git clone (e.g. CI Windows): no lbug-source; install deps only; build via "make nodejs" from repo root.
+  const repoRoot = path.join(__dirname, "..", "..");
+  const repoCmake = path.join(repoRoot, "CMakeLists.txt");
+  if (fsCallback.existsSync(repoCmake)) {
+    console.log("Full clone layout: installing dependencies only. Run 'make nodejs' from repo root to build.");
+    const env = { ...process.env, NPM_CONFIG_IGNORE_SCRIPTS: "true" };
+    childProcess.execSync("npm install --ignore-scripts", { cwd: __dirname, stdio: "inherit", env });
+    process.exit(0);
+  }
   console.error(
     "lbug-source/ not found (install from git clone). Add prebuilt binary to prebuilt/lbugjs-" +
       platform +
