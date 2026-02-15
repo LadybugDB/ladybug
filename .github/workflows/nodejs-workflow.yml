@@ -180,4 +180,5 @@ jobs:
           git add tools/nodejs_api/prebuilt/
           git diff --staged --quiet && echo "No prebuilt changes" && exit 0
           git commit -m "chore(nodejs): update prebuilt addons from CI [skip ci]"
-          git push
+          # Push to origin (repo where workflow runs: your fork when run from fork)
+          git push origin HEAD:"${GITHUB_REF#refs/heads/}"
