@@ -97,6 +97,32 @@ class QueryResult {
   }
 
   /**
+   * Async iterator for consuming the result row-by-row (e.g. `for await (const row of result)`).
+   * Does not materialize the full result in memory.
+   * @returns {AsyncIterator<Object>}
+   */
+  [Symbol.asyncIterator]() {
+    const self = this;
+    return {
+      async next() {
+        self._checkClosed();
+        if (!self.hasNext()) {
+          return { done: true };
+        }
+        try {
+          const value = await self.getNext();
+          if (value === null) {
+            return { done: true };
+          }
+          return { value, done: false };
+        } catch (err) {
+          return Promise.reject(err);
+        }
+      },
+    };
+  }
+
+  /**
    * Get all rows of the query result.
    * @returns {Promise<Array<Object>>} a promise that resolves to all rows of the query result. The promise is rejected if there is an error.
    */

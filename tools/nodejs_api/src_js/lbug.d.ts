@@ -261,6 +261,13 @@ export class Connection {
     ): Promise<QueryResult | QueryResult[]>;
 
     /**
+     * Run a function inside a single write transaction. Commits on success, rolls back on throw.
+     * @param fn Async function that can use this connection's query/execute
+     * @returns Promise that resolves to the return value of fn
+     */
+    transaction<T>(fn: () => Promise<T>): Promise<T>;
+
+    /**
      * Execute a query synchronously.
      * @param statement The statement to execute
      * @returns The query result(s)
@@ -289,8 +296,14 @@ export class PreparedStatement {
 /**
  * Represents the results of a query execution.
  * Note: This class is created internally by Connection query methods.
+ * Supports async iteration: for await (const row of result) { ... }
  */
-export class QueryResult {
+export class QueryResult implements AsyncIterable<Record<string, LbugValue> | null> {
+    /**
+     * Async iterator for row-by-row consumption (for await...of).
+     */
+    [Symbol.asyncIterator](): AsyncIterator<Record<string, LbugValue> | null>;
+
     /**
      * Reset the iterator for reading results.
      */

@@ -211,6 +211,31 @@ describe("Get query summary", function () {
   });
 });
 
+describe("Async iterator (for await...of)", function () {
+  it("should iterate rows same as getNext", async function () {
+    const queryResult = await conn.query(
+      "MATCH (a:person) RETURN a.ID ORDER BY a.ID"
+    );
+    const ids = [];
+    for await (const row of queryResult) {
+      ids.push(row["a.ID"]);
+    }
+    assert.deepEqual(ids, PERSON_IDS);
+  });
+
+  it("should not materialize full result in memory", async function () {
+    const queryResult = await conn.query(
+      "MATCH (a:person) RETURN a.ID ORDER BY a.ID"
+    );
+    let count = 0;
+    for await (const row of queryResult) {
+      count++;
+      assert.equal(row["a.ID"], PERSON_IDS[count - 1]);
+    }
+    assert.equal(count, PERSON_IDS.length);
+  });
+});
+
 describe("Close", function () {
   it("should close the query result", async function () {
     const queryResult = await conn.query(

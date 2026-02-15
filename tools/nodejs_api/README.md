@@ -49,10 +49,8 @@ const main = async () => {
   // Run a query
   const result = await conn.query("MATCH (u:User) RETURN u.name, u.age;");
 
-  // Fetch all results
+  // Consume results (choose one style)
   const rows = await result.getAll();
-
-  // Output results
   for (const row of rows) {
     console.log(row);
   }
@@ -68,11 +66,56 @@ main().catch(console.error);
 
 The `lbug` package exposes the following primary classes:
 
-* `Database` – Initializes a database from a file path.
-* `Connection` – Executes queries on a connected database.
-* `QueryResult` – Provides methods like `getAll()` to retrieve results.
+* **Database** – `new Database(path, bufferPoolSize?, ...)`. Initialize with `init()` / `initSync()` (optional; done on first use). Close with `close()`.
+* **Connection** – `new Connection(database, numThreads?)`. Run Cypher with `query(statement)` or `prepare(statement)` then `execute(preparedStatement, params)`. Use `transaction(fn)` for a single write transaction. Configure with `setQueryTimeout(ms)`, `setMaxNumThreadForExec(n)`.
+* **QueryResult** – Returned by `query()` / `execute()`. Consume with `getAll()`, or `getNext()` / `hasNext()`, or **async iteration** (see below). Metadata: `getColumnNames()`, `getColumnDataTypes()`, `getQuerySummary()`. Call `close()` when done (optional if fully consumed).
+* **PreparedStatement** – Created by `conn.prepare(statement)`. Execute with `conn.execute(preparedStatement, params)`. Reuse for parameterized queries.
 
 Both CommonJS (`require`) and ES Modules (`import`) are fully supported.
+
+### Consuming query results
+
+```js
+const result = await conn.query("MATCH (n:User) RETURN n.name LIMIT 1000");
+
+// Option 1: get all rows (loads into memory)
+const rows = await result.getAll();
+
+// Option 2: row by row (async)
+while (result.hasNext()) {
+  const row = await result.getNext();
+  console.log(row);
+}
+
+// Option 3: async iterator (streaming, no full materialization)
+for await (const row of result) {
+  console.log(row);
+}
+```
+
+### Transactions
+
+**Manual:** Run `BEGIN TRANSACTION`, then your queries, then `COMMIT` or `ROLLBACK`. On error, call `ROLLBACK` before continuing.
+
+```js
+await conn.query("BEGIN TRANSACTION");
+await conn.query("CREATE NODE TABLE Nodes(id INT64, PRIMARY KEY(id))");
+await conn.query('COPY Nodes FROM "data.csv"');
+await conn.query("COMMIT");
+// or on error: await conn.query("ROLLBACK");
+```
+
+**Read-only transaction:** `BEGIN TRANSACTION READ ONLY` then queries, then `COMMIT` / `ROLLBACK`.
+
+**Wrapper:** One write transaction with automatic commit on success and rollback on throw:
+
+```js
+await conn.transaction(async () => {
+  await conn.query("CREATE NODE TABLE Nodes(id INT64, PRIMARY KEY(id))");
+  await conn.query('COPY Nodes FROM "data.csv"');
+  // commit happens automatically; on throw, rollback then rethrow
+});
+```
 
 ---
 

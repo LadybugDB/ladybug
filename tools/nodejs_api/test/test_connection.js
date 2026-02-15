@@ -122,6 +122,43 @@ describe("Execute", function () {
   });
 });
 
+describe("transaction", function () {
+  it("should commit and return fn result on success", async function () {
+    const result = await conn.transaction(async () => {
+      const q = await conn.query("RETURN 42 AS x");
+      const rows = await q.getAll();
+      q.close();
+      return rows[0].x;
+    });
+    assert.equal(result, 42);
+  });
+
+  it("should rollback and rethrow on fn error", async function () {
+    const err = new Error("tx abort");
+    try {
+      await conn.transaction(async () => {
+        await conn.query("RETURN 1");
+        throw err;
+      });
+      assert.fail("transaction should have thrown");
+    } catch (e) {
+      assert.strictEqual(e, err);
+    }
+    const q = await conn.query("RETURN 1");
+    assert.isTrue(q.hasNext());
+    q.close();
+  });
+
+  it("should reject non-function", async function () {
+    try {
+      await conn.transaction("not a function");
+      assert.fail("transaction should have thrown");
+    } catch (e) {
+      assert.equal(e.message, "transaction() requires a function.");
+    }
+  });
+});
+
 describe("Query", function () {
   it("should run a valid query", async function () {
     const queryResult = await conn.query("MATCH (a:person) RETURN COUNT(*)");

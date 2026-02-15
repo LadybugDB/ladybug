@@ -397,6 +397,37 @@ class Connection {
   }
 
   /**
+   * Run a function inside a single write transaction. On success commits, on throw rolls back and rethrows.
+   * Uses Cypher BEGIN TRANSACTION / COMMIT / ROLLBACK under the hood.
+   * @param {Function} fn async function to run; can use this connection's query/execute inside.
+   * @returns {Promise<*>} the value returned by fn.
+   */
+  async transaction(fn) {
+    if (typeof fn !== "function") {
+      throw new Error("transaction() requires a function.");
+    }
+    const closeResult = (r) => {
+      if (Array.isArray(r)) {
+        r.forEach((q) => q.close());
+      } else {
+        r.close();
+      }
+    };
+    const beginRes = await this.query("BEGIN TRANSACTION");
+    closeResult(beginRes);
+    try {
+      const result = await fn();
+      const commitRes = await this.query("COMMIT");
+      closeResult(commitRes);
+      return result;
+    } catch (e) {
+      const rollbackRes = await this.query("ROLLBACK");
+      closeResult(rollbackRes);
+      throw e;
+    }
+  }
+
+  /**
    * Set the timeout for queries. Queries that take longer than the timeout
    * will be aborted.
    * @param {Number} timeoutInMs the timeout in milliseconds.
