@@ -300,6 +300,13 @@ export class Connection {
     ping(): Promise<boolean>;
 
     /**
+     * Run EXPLAIN on a Cypher statement and return the plan as a string.
+     * @param statement Cypher statement (e.g. "MATCH (a:person) RETURN a")
+     * @returns Promise that resolves to the plan string (one row per line)
+     */
+    explain(statement: string): Promise<string>;
+
+    /**
      * Register a stream source for LOAD FROM name. Source must be AsyncIterable of rows (array or object).
      * Unregister with unregisterStream(name) when done.
      * @param name Name used in Cypher: LOAD FROM name RETURN ...
