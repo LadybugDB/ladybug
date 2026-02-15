@@ -13,8 +13,11 @@
 #include <napi.h>
 
 namespace lbug {
+namespace main {
+class Connection;
+}
 namespace common {
-struct LogicalType;
+class LogicalType;
 }
 }
 
@@ -22,6 +25,7 @@ struct NodeStreamChunkRequest {
     std::mutex mtx;
     std::condition_variable cv;
     std::vector<std::vector<lbug::common::Value>> rows;
+    std::vector<std::string> columnNames; // schema order for object rows
     bool done = false;
     bool filled = false;
 };

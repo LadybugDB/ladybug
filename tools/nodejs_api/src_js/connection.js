@@ -127,8 +127,14 @@ class Connection {
   execute(preparedStatement, params = {}, optionsOrProgressCallback) {
     const { signal, progressCallback } = this._normalizeQueryOptions(optionsOrProgressCallback);
     return new Promise((resolve, reject) => {
+      if (progressCallback !== undefined && typeof progressCallback !== "function") {
+        return reject(new Error("progressCallback must be a function."));
+      }
+      if (optionsOrProgressCallback != null && typeof optionsOrProgressCallback !== "function" && typeof optionsOrProgressCallback !== "object") {
+        return reject(new Error("progressCallback must be a function."));
+      }
       if (
-        !typeof preparedStatement === "object" ||
+        typeof preparedStatement !== "object" ||
         preparedStatement.constructor.name !== "PreparedStatement"
       ) {
         return reject(
@@ -147,9 +153,6 @@ class Connection {
       for (const key in params) {
         const value = params[key];
         paramArray.push([key, value]);
-      }
-      if (progressCallback && typeof progressCallback !== "function") {
-        return reject(new Error("progressCallback must be a function."));
       }
       if (signal?.aborted) {
         return reject(this._createAbortError());
@@ -308,6 +311,12 @@ class Connection {
   query(statement, optionsOrProgressCallback) {
     const { signal, progressCallback } = this._normalizeQueryOptions(optionsOrProgressCallback);
     return new Promise((resolve, reject) => {
+      if (progressCallback !== undefined && typeof progressCallback !== "function") {
+        return reject(new Error("progressCallback must be a function."));
+      }
+      if (optionsOrProgressCallback != null && typeof optionsOrProgressCallback !== "function" && typeof optionsOrProgressCallback !== "object") {
+        return reject(new Error("progressCallback must be a function."));
+      }
       if (typeof statement !== "string") {
         return reject(new Error("statement must be a string."));
       }
@@ -421,18 +430,42 @@ class Connection {
     }
     const conn = await this._getConnection();
     const it = source[Symbol.asyncIterator] ? source[Symbol.asyncIterator].call(source) : source;
+    const pending = [];
+    let consumerRunning = false;
+
+    const toRows = (raw) => {
+      if (raw == null) return [];
+      if (Array.isArray(raw)) {
+        const first = raw[0];
+        const isArrayOfRows =
+          raw.length > 0 &&
+          (Array.isArray(first) || (typeof first === "object" && first !== null && !Array.isArray(first)));
+        return isArrayOfRows ? raw : [raw];
+      }
+      return [raw];
+    };
+
+    const runConsumer = async () => {
+      pending.sort((a, b) => a - b);
+      while (pending.length > 0) {
+        const requestId = pending.shift();
+        try {
+          const n = await it.next();
+          const { rows, done } = { rows: toRows(n.value), done: n.done };
+          conn.returnChunk(requestId, rows, done);
+        } catch (e) {
+          conn.returnChunk(requestId, [], true);
+        }
+      }
+      consumerRunning = false;
+    };
+
     const getChunk = (requestId) => {
-      setImmediate(() => {
-        (async () => {
-          try {
-            const n = await it.next();
-            const rows = n.value != null ? (Array.isArray(n.value) ? n.value : [n.value]) : [];
-            conn.returnChunk(requestId, rows, n.done);
-          } catch (e) {
-            conn.returnChunk(requestId, [], true);
-          }
-        })();
-      });
+      pending.push(requestId);
+      if (!consumerRunning) {
+        consumerRunning = true;
+        setImmediate(() => runConsumer());
+      }
     };
     conn.registerStream(name, getChunk, columns);
   }

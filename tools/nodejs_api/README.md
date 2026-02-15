@@ -183,6 +183,16 @@ npm run build
 npm test
 ```
 
+When developing from the **monorepo root**, build the native addon first so tests see the latest C++ code:
+
+```bash
+# From repo root (D:\prj\ladybug or similar)
+make nodejs
+# Or: cmake --build build/release --target lbugjs
+# Then from tools/nodejs_api:
+cd tools/nodejs_api && npm test
+```
+
 ---
 
 ## 📦 Packaging and Binary Distribution

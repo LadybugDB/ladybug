@@ -91,7 +91,7 @@ void NodeConnection::SetQueryTimeout(const Napi::CallbackInfo& info) {
     }
 }
 
-void NodeConnection::Interrupt(const Napi::CallbackInfo& info) {
+void NodeConnection::Interrupt(const Napi::CallbackInfo& /* info */) {
     if (this->connection) {
         this->connection->interrupt();
     }

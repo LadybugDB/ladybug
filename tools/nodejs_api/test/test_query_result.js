@@ -66,22 +66,30 @@ describe("Get next", function () {
     }
   });
 
-  it("should throw an error if there is no next tuple", async function () {
+  it("should return null when no more tuples", async function () {
     const queryResult = await conn.query(
       "MATCH (a:person) RETURN a.ID ORDER BY a.ID"
     );
     for (let i = 0; i < 8; ++i) {
       await queryResult.getNext();
     }
-    try {
-      await queryResult.getNext();
-      assert.fail("No error thrown when there is no next tuple");
-    } catch (err) {
-      assert.equal(
-        err.message,
-        "Runtime exception: No more tuples in QueryResult, Please check hasNext() before calling getNext()."
-      );
+    const exhausted = await queryResult.getNext();
+    assert.isNull(exhausted, "getNext() returns null when no more tuples");
+  });
+
+  it("getNext() returns null exactly when hasNext() is false", async function () {
+    const queryResult = await conn.query(
+      "MATCH (a:person) RETURN a.ID ORDER BY a.ID"
+    );
+    let count = 0;
+    while (queryResult.hasNext()) {
+      const row = await queryResult.getNext();
+      assert.isNotNull(row, "getNext() must return value when hasNext() is true");
+      count++;
     }
+    assert.equal(count, 8);
+    const afterExhausted = await queryResult.getNext();
+    assert.isNull(afterExhausted, "getNext() must return null when hasNext() was false");
   });
 });
 

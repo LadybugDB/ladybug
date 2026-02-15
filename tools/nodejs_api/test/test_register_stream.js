@@ -35,6 +35,34 @@ describe("registerStream / LOAD FROM stream", function () {
     }
   });
 
+  it("should LOAD FROM stream with object rows (column order from schema)", async function () {
+    async function* objectRowSource() {
+      yield { id: 10, label: "x" };
+      yield { label: "y", id: 20 };
+    }
+    await conn.registerStream("objstream", objectRowSource(), {
+      columns: [
+        { name: "id", type: "INT64" },
+        { name: "label", type: "STRING" },
+      ],
+    });
+    try {
+      const result = await conn.query("LOAD FROM objstream RETURN *");
+      const r = Array.isArray(result) ? result[0] : result;
+      const row1 = await r.getNext();
+      assert.isNotNull(row1, "expected first row from stream");
+      assert.equal(row1["id"], 10);
+      assert.equal(row1["label"], "x");
+      const row2 = await r.getNext();
+      assert.isNotNull(row2, "expected second row from stream");
+      assert.equal(row2["id"], 20);
+      assert.equal(row2["label"], "y");
+      assert.isNull(await r.getNext());
+    } finally {
+      conn.unregisterStream("objstream");
+    }
+  });
+
   it("should unregisterStream by name", async function () {
     async function* empty() {
       if (false) yield [];
@@ -47,7 +75,7 @@ describe("registerStream / LOAD FROM stream", function () {
       await conn.query("LOAD FROM tmpstream RETURN *");
       assert.fail("Expected error when loading from unregistered stream.");
     } catch (e) {
-      assert.include(e.message, "variableNotInScope");
+      assert.include(e.message, "not in scope");
     }
   });
 });

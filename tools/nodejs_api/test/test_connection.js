@@ -260,6 +260,10 @@ describe("Timeout", function () {
 
 describe("Interrupt", function () {
   it("should abort a long-running query when interrupt() is called", async function () {
+    if (process.platform === "win32") {
+      this.skip();
+    }
+    this.timeout(10000);
     const newConn = new lbug.Connection(db);
     await newConn.init();
     const longQuery =

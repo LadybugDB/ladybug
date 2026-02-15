@@ -117,9 +117,9 @@ void returnChunkFromJS(uint64_t requestId, Napi::Array rowsNapi, bool done) {
             }
         } else if (rowVal.IsObject() && !rowVal.IsNull() && !rowVal.IsUndefined()) {
             auto obj = rowVal.As<Napi::Object>();
-            auto names = obj.GetPropertyNames();
-            for (size_t i = 0; i < names.Length(); i++) {
-                row.push_back(Util::TransformNapiValue(obj.Get(names.Get(i))));
+            const auto& colNames = req->columnNames;
+            for (const auto& colName : colNames) {
+                row.push_back(Util::TransformNapiValue(obj.Get(colName)));
             }
         }
         rows.push_back(std::move(row));

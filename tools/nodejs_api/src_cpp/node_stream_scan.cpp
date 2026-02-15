@@ -1,23 +1,29 @@
 #include "include/node_stream_scan.h"
 #include "include/node_scan_replacement.h"
 
+#include "binder/binder.h"
 #include "common/constants.h"
+#include "common/system_config.h"
 #include "function/table/bind_input.h"
 #include "processor/execution_context.h"
 #include "processor/result/factorized_table.h"
+
+#include <mutex>
 
 using namespace lbug::common;
 using namespace lbug::function;
 
 namespace lbug {
 
+namespace {
+std::mutex g_nodeStreamTableFuncMutex;
+}
+
 static std::unique_ptr<TableFuncBindData> bindFunc(lbug::main::ClientContext*,
     const TableFuncBindInput* input) {
     auto* statePtr = reinterpret_cast<NodeStreamSourceState*>(input->getLiteralVal<uint8_t*>(0));
     KU_ASSERT(statePtr != nullptr);
     std::shared_ptr<NodeStreamSourceState> state(statePtr, [](NodeStreamSourceState*) {});
-    auto* extra = input->extraInput ? input->extraInput->constPtrCast<ExtraScanTableFuncBindInput>()
-                                     : nullptr;
     auto columns = input->binder->createVariables(state->columnNames, state->columnTypes);
     return std::make_unique<NodeStreamScanFunctionData>(std::move(columns), state);
 }
@@ -35,24 +41,27 @@ static std::unique_ptr<TableFuncLocalState> initLocalState(
 static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
     auto* bindData = input.bindData->constPtrCast<NodeStreamScanFunctionData>();
     auto& state = *bindData->state;
+    std::unique_lock<std::mutex> streamLock(g_nodeStreamTableFuncMutex);
     const uint64_t requestId = NodeStreamRegistry::nextRequestId();
     auto req = std::make_unique<NodeStreamChunkRequest>();
+    req->columnNames = state.columnNames;
     NodeStreamRegistry::setChunkRequest(requestId, std::move(req));
     NodeStreamChunkRequest* reqPtr = NodeStreamRegistry::getChunkRequest(requestId);
     KU_ASSERT(reqPtr != nullptr);
 
-    state.getChunkTsf.BlockingCall(requestId,
-        [](Napi::Env env, Napi::Function jsCallback, uint64_t id) {
-            jsCallback.Call({Napi::Number::New(env, static_cast<double>(id))});
+    state.getChunkTsf.BlockingCall(&requestId,
+        [](Napi::Env env, Napi::Function jsCallback, const uint64_t* idPtr) {
+            jsCallback.Call({Napi::Number::New(env, static_cast<double>(*idPtr))});
         });
 
     std::vector<std::vector<Value>> rowsCopy;
     {
         std::unique_lock<std::mutex> lock(reqPtr->mtx);
         reqPtr->cv.wait(lock, [reqPtr] { return reqPtr->filled; });
-        rowsCopy = reqPtr->rows;
+        rowsCopy = std::move(reqPtr->rows);
     }
     NodeStreamRegistry::setChunkRequest(requestId, nullptr);
+    streamLock.unlock();
 
     const offset_t numRows = static_cast<offset_t>(rowsCopy.size());
     if (numRows == 0) {
@@ -87,6 +96,7 @@ TableFunction NodeStreamScanFunction::getFunction() {
     func.initSharedStateFunc = initSharedState;
     func.initLocalStateFunc = initLocalState;
     func.progressFunc = progressFunc;
+    func.canParallelFunc = [] { return false; };
     return func;
 }
 
