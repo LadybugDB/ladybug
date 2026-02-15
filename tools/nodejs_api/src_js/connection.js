@@ -303,6 +303,24 @@ class Connection {
   }
 
   /**
+   * Check that the connection is alive (e.g. for connection pools or health checks).
+   * Runs a trivial query; rejects if the connection is broken.
+   * @returns {Promise<boolean>} resolves to true if the connection is OK.
+   */
+  async ping() {
+    const result = await this.query("RETURN 1");
+    const closeResult = (r) => {
+      if (Array.isArray(r)) {
+        r.forEach((q) => q.close());
+      } else {
+        r.close();
+      }
+    };
+    closeResult(result);
+    return true;
+  }
+
+  /**
    * Execute a query synchronously.
    * @param {String} statement the statement to execute. This function blocks the main thread for the duration of the query, so use it with caution.
    * @returns {Array<lbug.QueryResult> | lbug.QueryResult} an array of query results. If there is only one query result, the function returns the query result directly.

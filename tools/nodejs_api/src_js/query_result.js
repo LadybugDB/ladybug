@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("assert");
+const { Readable } = require("stream");
 
 class QueryResult {
   /**
@@ -120,6 +121,38 @@ class QueryResult {
         }
       },
     };
+  }
+
+  /**
+   * Return a Node.js Readable stream (object mode) that yields one row per chunk.
+   * Useful for piping or integrating with stream consumers. Does not require native changes.
+   * @returns {stream.Readable} Readable stream of row objects.
+   */
+  toStream() {
+    const self = this;
+    return new Readable({
+      objectMode: true,
+      read() {
+        if (self._isClosed) {
+          return this.push(null);
+        }
+        if (!self.hasNext()) {
+          return this.push(null);
+        }
+        self.getNext()
+          .then((row) => {
+            if (row !== null && row !== undefined) {
+              this.push(row);
+            }
+            if (!self.hasNext()) {
+              this.push(null);
+            }
+          })
+          .catch((err) => {
+            this.destroy(err);
+          });
+      },
+    });
   }
 
   /**

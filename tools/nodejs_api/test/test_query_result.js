@@ -236,6 +236,21 @@ describe("Async iterator (for await...of)", function () {
   });
 });
 
+describe("toStream", function () {
+  it("should yield rows as Readable stream", async function () {
+    const queryResult = await conn.query(
+      "MATCH (a:person) RETURN a.ID ORDER BY a.ID"
+    );
+    const stream = queryResult.toStream();
+    const rows = [];
+    for await (const row of stream) {
+      rows.push(row);
+    }
+    const ids = rows.map((r) => r["a.ID"]);
+    assert.deepEqual(ids, PERSON_IDS);
+  });
+});
+
 describe("Close", function () {
   it("should close the query result", async function () {
     const queryResult = await conn.query(

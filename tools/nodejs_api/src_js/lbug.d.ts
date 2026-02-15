@@ -117,6 +117,8 @@ export class Database {
      * @param maxDBSize Maximum size of the database in bytes
      * @param autoCheckpoint Whether to enable automatic checkpoints
      * @param checkpointThreshold Threshold for automatic checkpoints
+     * @param throwOnWalReplayFailure If true, WAL replay failures throw; otherwise replay stops at error
+     * @param enableChecksums If true, use checksums to detect WAL corruption
      */
     constructor(
         databasePath?: string,
@@ -125,7 +127,9 @@ export class Database {
         readOnly?: boolean,
         maxDBSize?: number,
         autoCheckpoint?: boolean,
-        checkpointThreshold?: number
+        checkpointThreshold?: number,
+        throwOnWalReplayFailure?: boolean,
+        enableChecksums?: boolean
     );
 
     /**
@@ -273,6 +277,12 @@ export class Connection {
      * @returns The query result(s)
      */
     querySync(statement: string): QueryResult | QueryResult[];
+
+    /**
+     * Check that the connection is alive (e.g. for pools or health checks).
+     * @returns Promise that resolves to true if OK, rejects if connection is broken
+     */
+    ping(): Promise<boolean>;
 }
 
 /**
@@ -332,6 +342,12 @@ export class QueryResult implements AsyncIterable<Record<string, LbugValue> | nu
      * @returns The next row or null if no more rows
      */
     getNextSync(): Record<string, LbugValue> | null;
+
+    /**
+     * Return a Node.js Readable stream (object mode) that yields one row per chunk.
+     * @returns Readable stream of row objects
+     */
+    toStream(): import("stream").Readable;
 
     /**
      * Iterate through the query result with callback functions.

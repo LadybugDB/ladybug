@@ -67,8 +67,8 @@ main().catch(console.error);
 The `lbug` package exposes the following primary classes:
 
 * **Database** – `new Database(path, bufferPoolSize?, ...)`. Initialize with `init()` / `initSync()` (optional; done on first use). Close with `close()`.
-* **Connection** – `new Connection(database, numThreads?)`. Run Cypher with `query(statement)` or `prepare(statement)` then `execute(preparedStatement, params)`. Use `transaction(fn)` for a single write transaction. Configure with `setQueryTimeout(ms)`, `setMaxNumThreadForExec(n)`.
-* **QueryResult** – Returned by `query()` / `execute()`. Consume with `getAll()`, or `getNext()` / `hasNext()`, or **async iteration** (see below). Metadata: `getColumnNames()`, `getColumnDataTypes()`, `getQuerySummary()`. Call `close()` when done (optional if fully consumed).
+* **Connection** – `new Connection(database, numThreads?)`. Run Cypher with `query(statement)` or `prepare(statement)` then `execute(preparedStatement, params)`. Use `transaction(fn)` for a single write transaction, `ping()` for liveness checks. Configure with `setQueryTimeout(ms)`, `setMaxNumThreadForExec(n)`.
+* **QueryResult** – Returned by `query()` / `execute()`. Consume with `getAll()`, `getNext()` / `hasNext()`, **async iteration** (`for await...of`), or **`toStream()`** (Node.js `Readable`). Metadata: `getColumnNames()`, `getColumnDataTypes()`, `getQuerySummary()`. Call `close()` when done (optional if fully consumed).
 * **PreparedStatement** – Created by `conn.prepare(statement)`. Execute with `conn.execute(preparedStatement, params)`. Reuse for parameterized queries.
 
 Both CommonJS (`require`) and ES Modules (`import`) are fully supported.
@@ -91,6 +91,10 @@ while (result.hasNext()) {
 for await (const row of result) {
   console.log(row);
 }
+
+// Option 4: Node.js Readable stream (e.g. for .pipe())
+const stream = result.toStream();
+stream.on("data", (row) => console.log(row));
 ```
 
 ### Transactions

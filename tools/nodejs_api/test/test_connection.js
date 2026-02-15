@@ -122,6 +122,13 @@ describe("Execute", function () {
   });
 });
 
+describe("ping", function () {
+  it("should resolve to true when connection is alive", async function () {
+    const ok = await conn.ping();
+    assert.strictEqual(ok, true);
+  });
+});
+
 describe("transaction", function () {
   it("should commit and return fn result on success", async function () {
     const result = await conn.transaction(async () => {
