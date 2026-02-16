@@ -1,8 +1,8 @@
 "use strict";
 
-const { assert } = require("chai");
-const tmp = require("tmp");
 const path = require("path");
+const fsp = require("fs/promises");
+const os = require("os");
 
 /**
  * Resilience tests: close connection/database during or after operations.
@@ -10,12 +10,7 @@ const path = require("path");
  */
 function withTempDb(fn) {
   return async function () {
-    const tmpPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, p, _) => {
-        if (err) return reject(err);
-        return resolve(p);
-      });
-    });
+    const tmpPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpPath, "db.kz");
     const testDb = new lbug.Database(dbPath, 1 << 26 /* 64MB */);
     await testDb.init();
@@ -26,13 +21,12 @@ function withTempDb(fn) {
     } finally {
       if (!testDb._isClosed) await testDb.close().catch(() => {});
       if (!testConn._isClosed) await testConn.close().catch(() => {});
+      await fsp.rm(tmpPath, { recursive: true }).catch(() => {});
     }
   };
 }
 
-describe("Resilience (close during/after use)", function () {
-  this.timeout(10000);
-
+describe("Resilience (close during/after use)", { timeout: 10000 }, function () {
   it("query rejects when connection is closed while query is in flight", withTempDb(async (testDb, testConn) => {
     const longQuery = "UNWIND range(1, 20000) AS x UNWIND range(1, 2000) AS y RETURN count(*)";
     const queryPromise = testConn.query(longQuery);

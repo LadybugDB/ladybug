@@ -26,7 +26,7 @@
   },
   "scripts": {
     "install": "node install.js",
-    "test": "mocha test --timeout 20000",
+    "test": "node --test test/test.js --test-timeout=20000",
     "clean": "node clean.js",
     "clean-all": "node clean.js all",
     "build": "node build.js",
@@ -37,11 +37,7 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "devDependencies": {
-    "chai": "^4.5.0",
-    "mocha": "^10.8.0",
-    "tmp": "^0.2.5"
-  },
+  "devDependencies": {},
   "dependencies": {
     "cmake-js": "^8.0.0",
     "node-addon-api": "^8.5.0"

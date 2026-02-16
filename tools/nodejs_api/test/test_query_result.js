@@ -1,5 +1,3 @@
-const { assert } = require("chai");
-
 const PERSON_IDS = [0, 2, 3, 5, 7, 8, 9, 10];
 
 describe("Reset iterator", function () {
@@ -189,7 +187,7 @@ describe("Get column data types", function () {
                 p.courseScoresPerTerm`
     );
     const columnDataTypes = await queryResult.getColumnDataTypes();
-    const ansexpectedResultArr = [
+    const expectedResultArr = [
       "INT64",
       "STRING",
       "BOOL",
@@ -200,7 +198,7 @@ describe("Get column data types", function () {
       "INT64[]",
       "INT64[][]",
     ];
-    assert.deepEqual(columnDataTypes, ansexpectedResultArr);
+    assert.deepEqual(columnDataTypes, expectedResultArr);
   });
 });
 
