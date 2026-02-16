@@ -7,6 +7,10 @@ A high-performance graph database for knowledge-intensive applications. This Nod
 
 ## 📦 Installation
 
+**Node.js version requirement**
+
+This package **requires Node.js 20 or later**. Older Node.js versions are not supported and installation may fail due to the enforced `engines.node` constraint and native build tooling (`cmake-js` 8.x, `node-addon-api` 8.x).
+
 **From npm (if published):**
 
 ```bash
