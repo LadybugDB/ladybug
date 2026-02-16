@@ -17,6 +17,7 @@ history.txt
 test_temp/
 build/
 install/
+logs/
 
 compile_commands.json
 
