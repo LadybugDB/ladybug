@@ -69,8 +69,16 @@ if (!fsCallback.existsSync(lbugSourceDir)) {
   const repoCmake = path.join(repoRoot, "CMakeLists.txt");
   if (fsCallback.existsSync(repoCmake)) {
     console.log("Full clone layout: installing dependencies only. Run 'make nodejs' from repo root to build.");
+    const nodeModulesDir = path.join(__dirname, "node_modules");
+    const lockFile = path.join(__dirname, "package-lock.json");
+    if (fsCallback.existsSync(nodeModulesDir)) {
+      fsCallback.rmSync(nodeModulesDir, { recursive: true, force: true });
+    }
+    if (fsCallback.existsSync(lockFile)) {
+      fsCallback.unlinkSync(lockFile);
+    }
     const env = { ...process.env, NPM_CONFIG_IGNORE_SCRIPTS: "true" };
-    childProcess.execSync("npm install --ignore-scripts", { cwd: __dirname, stdio: "inherit", env });
+    childProcess.execSync("npm install --ignore-scripts --legacy-peer-deps", { cwd: __dirname, stdio: "inherit", env });
     process.exit(0);
   }
   console.error(
@@ -90,7 +98,7 @@ console.log(`Using ${THREADS} threads to build Lbug.`);
 // Install dependencies only; skip install script so nested install.js does not run (no lbug-source there).
 console.log("Installing dependencies...");
 const innerNpmEnv = { ...process.env, NPM_CONFIG_IGNORE_SCRIPTS: "true" };
-childProcess.execSync("npm install --ignore-scripts", {
+childProcess.execSync("npm install --ignore-scripts --legacy-peer-deps", {
   cwd: path.join(__dirname, "lbug-source", "tools", "nodejs_api"),
   stdio: "inherit",
   env: innerNpmEnv,
