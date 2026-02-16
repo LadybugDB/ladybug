@@ -267,6 +267,24 @@ void ClientContext::cleanUp() {
     VirtualFileSystem::GetUnsafe(*this)->cleanUP(this);
 }
 
+void ClientContext::registerQueryStart() {
+    activeQueryCount++;
+}
+
+void ClientContext::registerQueryEnd() {
+    std::lock_guard lck{mtxForClose};
+    KU_ASSERT(activeQueryCount > 0);
+    activeQueryCount--;
+    if (activeQueryCount == 0) {
+        cvForClose.notify_all();
+    }
+}
+
+void ClientContext::waitForNoActiveQuery() {
+    std::unique_lock lck{mtxForClose};
+    cvForClose.wait(lck, [this] { return activeQueryCount.load() == 0; });
+}
+
 std::unique_ptr<PreparedStatement> ClientContext::prepareWithParams(std::string_view query,
     std::unordered_map<std::string, std::unique_ptr<Value>> inputParams) {
     std::unique_lock lck{mtx};
