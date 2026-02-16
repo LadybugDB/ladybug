@@ -1,6 +1,7 @@
 #include "processor/processor.h"
 
 #include "common/task_system/progress_bar.h"
+#include "main/client_context.h"
 #include "main/query_result.h"
 #include "processor/operator/sink.h"
 #include "processor/physical_plan.h"
@@ -24,6 +25,11 @@ QueryProcessor::QueryProcessor(uint64_t numThreads) {
 
 std::unique_ptr<main::QueryResult> QueryProcessor::execute(PhysicalPlan* physicalPlan,
     ExecutionContext* context) {
+    context->clientContext->registerQueryStart();
+    struct Guard {
+        main::ClientContext* ctx;
+        ~Guard() { ctx->registerQueryEnd(); }
+    } guard{context->clientContext};
     auto lastOperator = physicalPlan->lastOperator.get();
     // The root pipeline(task) consists of operators and its prevOperator only, because we
     // expect to have linear plans. For binary operators, e.g., HashJoin, we  keep probe and its

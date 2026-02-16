@@ -1,5 +1,7 @@
 #include "main/client_context.h"
 
+#include <cstdlib>
+
 #include "binder/binder.h"
 #include "common/exception/checkpoint.h"
 #include "common/exception/connection.h"
@@ -26,7 +28,6 @@
 #include "storage/buffer_manager/spiller.h"
 #include "storage/storage_manager.h"
 #include "transaction/transaction_context.h"
-#include <cstdlib>
 #include <format>
 #include <processor/warning_context.h>
 
@@ -265,6 +266,24 @@ void ClientContext::removeScalarFunction(const std::string& name) {
 
 void ClientContext::cleanUp() {
     VirtualFileSystem::GetUnsafe(*this)->cleanUP(this);
+}
+
+void ClientContext::registerQueryStart() {
+    activeQueryCount++;
+}
+
+void ClientContext::registerQueryEnd() {
+    std::lock_guard lck{mtxForClose};
+    KU_ASSERT(activeQueryCount > 0);
+    activeQueryCount--;
+    if (activeQueryCount == 0) {
+        cvForClose.notify_all();
+    }
+}
+
+void ClientContext::waitForNoActiveQuery() {
+    std::unique_lock lck{mtxForClose};
+    cvForClose.wait(lck, [this] { return activeQueryCount.load() == 0; });
 }
 
 std::unique_ptr<PreparedStatement> ClientContext::prepareWithParams(std::string_view query,
