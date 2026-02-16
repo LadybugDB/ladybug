@@ -1,14 +1,14 @@
 #include "include/node_stream_scan.h"
-#include "include/node_scan_replacement.h"
+
+#include <mutex>
 
 #include "binder/binder.h"
 #include "common/constants.h"
 #include "common/system_config.h"
 #include "function/table/bind_input.h"
+#include "include/node_scan_replacement.h"
 #include "processor/execution_context.h"
 #include "processor/result/factorized_table.h"
-
-#include <mutex>
 
 using namespace lbug::common;
 using namespace lbug::function;
@@ -28,13 +28,11 @@ static std::unique_ptr<TableFuncBindData> bindFunc(lbug::main::ClientContext*,
     return std::make_unique<NodeStreamScanFunctionData>(std::move(columns), state);
 }
 
-static std::unique_ptr<TableFuncSharedState> initSharedState(
-    const TableFuncInitSharedStateInput&) {
+static std::unique_ptr<TableFuncSharedState> initSharedState(const TableFuncInitSharedStateInput&) {
     return std::make_unique<TableFuncSharedState>(0);
 }
 
-static std::unique_ptr<TableFuncLocalState> initLocalState(
-    const TableFuncInitLocalStateInput&) {
+static std::unique_ptr<TableFuncLocalState> initLocalState(const TableFuncInitLocalStateInput&) {
     return std::make_unique<TableFuncLocalState>();
 }
 

@@ -49,7 +49,8 @@ std::shared_ptr<Expression> ExpressionBinder::bindComparisonExpression(
             } else {
                 expression_vector extractChildren;
                 extractChildren.push_back(child);
-                extractChildren.push_back(createLiteralExpression(std::string(InternalKeyword::ID)));
+                extractChildren.push_back(
+                    createLiteralExpression(std::string(InternalKeyword::ID)));
                 newChildren.push_back(
                     bindScalarFunctionExpression(extractChildren, StructExtractFunctions::name));
             }

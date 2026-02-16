@@ -1,8 +1,8 @@
+#include <unordered_set>
+
 #include "binder/expression/expression_util.h"
 #include "function/list/vector_list_functions.h"
 #include "function/scalar_function.h"
-
-#include <unordered_set>
 
 using namespace lbug::common;
 
