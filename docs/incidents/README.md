@@ -31,6 +31,7 @@ Use these sections so reports are consistent and easy to scan:
 
 | Section | Purpose |
 |--------|--------|
+| **Author** | Optional. Your name or handle for attribution and traceability. |
 | **Summary** | 2–4 sentences: what failed, where, and the one-line root cause. |
 | **Impact** | Who/what was affected (tests, users, CI) and severity. |
 | **Root cause** | Why it happened: code/API/contract involved and the exact mismatch or bug. |
@@ -59,5 +60,7 @@ Keep the report **blameless**: focus on systems, APIs, and process, not on indiv
 | Date | Document | Short description |
 |------|----------|-------------------|
 | 2026-02-16 | [2026-02-16-copy-rel-segment-planner-schema-groups.md](2026-02-16-copy-rel-segment-planner-schema-groups.md) | CopyRelSegmentTest failure; wrong schema group check in `planCopyRelFrom` vs Partitioner’s single-group requirement. |
+
+| 2026-02-16 | [2026-02-16-connection-close-sigsegv.md](2026-02-16-connection-close-sigsegv.md) | SIGSEGV when Connection destroyed while query workers still running; fix: wait for in-flight queries before destroying ClientContext. |
 
 *(Add new rows here when you add a new incident document.)*

@@ -3,7 +3,8 @@
 **Date:** 2026-02-16  
 **Status:** Resolved  
 **Severity:** Medium (E2E test failure; no production impact)  
-**Component:** Planner — COPY FROM for relationship tables
+**Component:** Planner — COPY FROM for relationship tables  
+**Author:** [@vkozio](https://github.com/vkozio)
 
 ---
 
