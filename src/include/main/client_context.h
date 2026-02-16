@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -147,6 +148,13 @@ public:
 
     void cleanUp();
 
+    // Lifecycle: used by Connection close to wait until no query is in flight (avoids SIGSEGV
+    // when workers touch context after it is destroyed). Processor::execute calls the register
+    // pair around scheduleTaskAndWaitOrError.
+    void registerQueryStart();
+    void registerQueryEnd();
+    void waitForNoActiveQuery();
+
     struct QueryConfig {
         QueryResultType resultType;
         common::ArrowResultConfig arrowConfig;
@@ -250,6 +258,10 @@ private:
     // Whether the transaction should be rolled back on destruction. If the parent database is
     // closed, the rollback should be prevented or it will SEGFAULT.
     bool preventTransactionRollbackOnDestruction = false;
+
+    std::atomic<uint32_t> activeQueryCount{0};
+    std::mutex mtxForClose;
+    std::condition_variable cvForClose;
 };
 
 } // namespace main

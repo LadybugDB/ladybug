@@ -22,6 +22,7 @@ Connection::Connection(Database* database) {
 }
 
 Connection::~Connection() {
+    clientContext->waitForNoActiveQuery();
     // Never run transaction rollback during Connection teardown. Rollback during destruction
     // can SIGSEGV (e.g. after write path when Connection is closed before Database). Commit
     // has already happened when the result was drained; skipping rollback here avoids the crash.
