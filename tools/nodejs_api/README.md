@@ -280,6 +280,8 @@ npm run build
 
 ### Run Tests
 
+See [docs/nodejs_testing.md](docs/nodejs_testing.md) for guidelines on writing and reviewing tests.
+
 ```bash
 npm test
 ```

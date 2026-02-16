@@ -35,6 +35,12 @@ TEST_F(MyTest, TestCaseName) {
 - `test/planner/` - Query planner tests
 - `test/optimizer/` - Query optimizer tests
 
+## Node.js API
+
+Tests live in `tools/nodejs_api/test/` and use the Node.js built-in test runner (`node --test`). Run with `npm test` from `tools/nodejs_api/`.
+
+For guidelines on writing and reviewing these tests, see [Node.js API — Testing Guide](../tools/nodejs_api/docs/nodejs_testing.md).
+
 ## Running Tests
 
 See `AGENTS.md` for build and test commands.
