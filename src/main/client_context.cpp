@@ -26,6 +26,7 @@
 #include "storage/buffer_manager/spiller.h"
 #include "storage/storage_manager.h"
 #include "transaction/transaction_context.h"
+#include <cstdlib>
 #include <format>
 #include <processor/warning_context.h>
 
@@ -210,11 +211,14 @@ bool ClientContext::isInMemory() const {
 std::string ClientContext::getEnvVariable(const std::string& name) {
 #if defined(_WIN32)
     auto envValue = WindowsUtils::utf8ToUnicode(name.c_str());
-    auto result = _wgetenv(envValue.c_str());
-    if (!result) {
+    wchar_t* result = nullptr;
+    size_t len = 0;
+    if (_wdupenv_s(&result, &len, envValue.c_str()) != 0 || !result) {
         return std::string();
     }
-    return WindowsUtils::unicodeToUTF8(result);
+    std::string out = WindowsUtils::unicodeToUTF8(result);
+    free(result);
+    return out;
 #else
     const char* env = getenv(name.c_str()); // NOLINT(*-mt-unsafe)
     if (!env) {

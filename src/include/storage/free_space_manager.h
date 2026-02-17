@@ -48,6 +48,9 @@ public:
     // each checkpoint we remove any already-evicted pages.
     void clearEvictedBufferManagerEntriesIfNeeded(BufferManager* bufferManager);
 
+    // Merge uncheckpointed free page ranges (e.g. after rollback) so the file can be truncated.
+    void mergeFreePages(FileHandle* fileHandle);
+
 private:
     PageRange splitPageRange(PageRange chunk, common::page_idx_t numRequiredPages);
     void mergePageRanges(free_list_t newInitialEntries, FileHandle* fileHandle);

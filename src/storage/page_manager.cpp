@@ -59,6 +59,14 @@ void PageManager::clearEvictedBMEntriesIfNeeded(BufferManager* bufferManager) {
     freeSpaceManager->clearEvictedBufferManagerEntriesIfNeeded(bufferManager);
 }
 
+void PageManager::mergeFreePages(FileHandle* fileHandle) {
+    if constexpr (ENABLE_FSM) {
+        common::UniqLock lck{mtx};
+        freeSpaceManager->mergeFreePages(fileHandle);
+        ++version;
+    }
+}
+
 PageManager* PageManager::Get(const main::ClientContext& context) {
     return StorageManager::Get(context)->getDataFH()->getPageManager();
 }

@@ -47,6 +47,7 @@ public:
     }
 
     void clearEvictedBMEntriesIfNeeded(BufferManager* bufferManager);
+    void mergeFreePages(FileHandle* fileHandle);
 
     static PageManager* Get(const main::ClientContext& context);
 

@@ -2,6 +2,10 @@
 
 #include <cmath>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #include "common/types/int128_t.h"
 #include "common/types/uint128_t.h"
 

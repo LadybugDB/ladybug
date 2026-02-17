@@ -13,7 +13,7 @@ namespace function {
 template<class T>
 struct NumericLimits {
     static constexpr T minimum() { return std::numeric_limits<T>::lowest(); }
-    static constexpr T maximum() { return std::numeric_limits<T>::max(); }
+    static constexpr T maximum() { return (std::numeric_limits<T>::max)(); }
     static constexpr bool isSigned() { return std::is_signed<T>::value; }
     template<typename V>
     static bool isInBounds(V val) {
@@ -28,7 +28,7 @@ struct NumericLimits<common::int128_t> {
         return {0, std::numeric_limits<int64_t>::lowest()};
     }
     static constexpr common::int128_t maximum() {
-        return {std::numeric_limits<uint64_t>::max(), std::numeric_limits<int64_t>::max()};
+        return {(std::numeric_limits<uint64_t>::max)(), (std::numeric_limits<int64_t>::max)()};
     }
     template<typename V>
     static bool isInBounds(V val) {
@@ -42,7 +42,7 @@ template<>
 struct NumericLimits<common::uint128_t> {
     static constexpr common::uint128_t minimum() { return {0, 0}; }
     static constexpr common::uint128_t maximum() {
-        return {std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max()};
+        return {(std::numeric_limits<uint64_t>::max)(), (std::numeric_limits<uint64_t>::max)()};
     }
     template<typename V>
     static bool isInBounds(V val) {
