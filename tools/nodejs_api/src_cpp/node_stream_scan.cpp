@@ -1,14 +1,14 @@
 #include "include/node_stream_scan.h"
 
-#include <mutex>
-
+#include "include/node_scan_replacement.h"
 #include "binder/binder.h"
 #include "common/constants.h"
 #include "common/system_config.h"
 #include "function/table/bind_input.h"
-#include "include/node_scan_replacement.h"
 #include "processor/execution_context.h"
 #include "processor/result/factorized_table.h"
+
+#include <mutex>
 
 using namespace lbug::common;
 using namespace lbug::function;
