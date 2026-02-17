@@ -3,6 +3,14 @@
 using namespace lbug;
 using namespace common;
 
+NodeProgressBarDisplay::~NodeProgressBarDisplay() {
+    std::unique_lock<std::shared_mutex> lock(callbackMutex);
+    for (auto& kv : queryCallbacks) {
+        kv.second.Release();
+    }
+    queryCallbacks.clear();
+}
+
 void NodeProgressBarDisplay::updateProgress(uint64_t queryID, double newPipelineProgress,
     uint32_t newNumPipelinesFinished) {
     if (numPipelines == 0) {

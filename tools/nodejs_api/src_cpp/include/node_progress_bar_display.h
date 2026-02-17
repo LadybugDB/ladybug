@@ -13,6 +13,8 @@ using namespace common;
  */
 class NodeProgressBarDisplay : public ProgressBarDisplay {
 public:
+    ~NodeProgressBarDisplay() override;
+
     void updateProgress(uint64_t queryID, double newPipelineProgress,
         uint32_t newNumPipelinesFinished) override;
 

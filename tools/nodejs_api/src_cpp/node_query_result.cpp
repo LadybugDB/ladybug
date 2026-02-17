@@ -25,6 +25,7 @@ Napi::Object NodeQueryResult::Init(Napi::Env env, Napi::Object exports) {
             InstanceMethod("getColumnNamesSync", &NodeQueryResult::GetColumnNamesSync),
             InstanceMethod("getQuerySummaryAsync", &NodeQueryResult::GetQuerySummaryAsync),
             InstanceMethod("getQuerySummarySync", &NodeQueryResult::GetQuerySummarySync),
+            InstanceMethod("toStringSync", &NodeQueryResult::GetToStringSync),
             InstanceMethod("close", &NodeQueryResult::Close)});
 
     exports.Set("NodeQueryResult", t);
@@ -222,6 +223,17 @@ Napi::Value NodeQueryResult::GetQuerySummarySync(const Napi::CallbackInfo& info)
         summary.Set("compilingTime", Napi::Number::New(env, cppSummary->getCompilingTime()));
         summary.Set("executionTime", Napi::Number::New(env, cppSummary->getExecutionTime()));
         return summary;
+    } catch (const std::exception& exc) {
+        Napi::Error::New(env, std::string(exc.what())).ThrowAsJavaScriptException();
+    }
+    return env.Undefined();
+}
+
+Napi::Value NodeQueryResult::GetToStringSync(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    Napi::HandleScope scope(env);
+    try {
+        return Napi::String::New(env, this->queryResult->toString());
     } catch (const std::exception& exc) {
         Napi::Error::New(env, std::string(exc.what())).ThrowAsJavaScriptException();
     }

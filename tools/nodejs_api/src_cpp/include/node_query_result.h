@@ -37,6 +37,7 @@ private:
     Napi::Value GetColumnNamesSync(const Napi::CallbackInfo& info);
     Napi::Value GetQuerySummarySync(const Napi::CallbackInfo& info);
     Napi::Value GetQuerySummaryAsync(const Napi::CallbackInfo& info);
+    Napi::Value GetToStringSync(const Napi::CallbackInfo& info);
     void PopulateColumnNames();
     void Close(const Napi::CallbackInfo& info);
     void Close();
@@ -102,6 +103,7 @@ public:
         try {
             if (!nodeQueryResult->queryResult->hasNext()) {
                 cppTuple.reset();
+                return;
             }
             cppTuple = nodeQueryResult->queryResult->getNext();
         } catch (const std::exception& exc) {
@@ -112,7 +114,7 @@ public:
     inline void OnOK() override {
         auto env = Env();
         if (cppTuple == nullptr) {
-            Callback().Call({env.Null(), env.Undefined()});
+            Callback().Call({env.Null(), env.Null()});
             return;
         }
         Napi::Object nodeTuple = Napi::Object::New(env);

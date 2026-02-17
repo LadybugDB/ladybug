@@ -1,5 +1,3 @@
-const { assert } = require("chai");
-
 describe("BOOL", function () {
   it("should transform booleans as BOOL parameter", async function () {
     const preparedStatement = await conn.prepare(
@@ -73,7 +71,7 @@ describe("UINT64", function () {
       1: 10000000000000000000,
     });
     const result = await queryResult.getAll();
-    assert.equal(result[0]["CAST($1, UINT64)"], "10000000000000000000");
+    assert.equal(result[0]["CAST($1, UINT64)"], 10000000000000000000);
   });
 });
 
@@ -84,7 +82,7 @@ describe("UINT32", function () {
       1: 4294967295,
     });
     const result = await queryResult.getAll();
-    assert.equal(result[0]["CAST($1, UINT32)"], "4294967295");
+    assert.equal(result[0]["CAST($1, UINT32)"], 4294967295);
   });
 });
 
@@ -95,7 +93,7 @@ describe("UINT16", function () {
       1: 65535,
     });
     const result = await queryResult.getAll();
-    assert.equal(result[0]["CAST($1, UINT16)"], "65535");
+    assert.equal(result[0]["CAST($1, UINT16)"], 65535);
   });
 });
 
@@ -106,7 +104,7 @@ describe("UINT8", function () {
       1: 255,
     });
     const result = await queryResult.getAll();
-    assert.equal(result[0]["CAST($1, UINT8)"], "255");
+    assert.equal(result[0]["CAST($1, UINT8)"], 255);
   });
 });
 

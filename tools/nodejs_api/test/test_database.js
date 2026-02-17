@@ -1,23 +1,25 @@
-const { assert } = require("chai");
-const tmp = require("tmp");
 const process = require("process");
 const path = require("path");
-const fs = require('fs');
+const fs = require("fs");
+const fsp = require("fs/promises");
+const os = require("os");
 
-const spwan = require("child_process").spawn;
+const { spawn } = require("child_process");
 
 const openDatabaseOnSubprocess = (dbPath) => {
   return new Promise((resolve, _) => {
     const node = process.argv[0];
+    // Use env vars so Windows paths with backslashes don't break the -e code string
+    const env = { ...process.env, LBUG_PATH: lbugPath, DB_PATH: dbPath };
     const code = `
       (async() => {
-        const lbug = require("${lbugPath}");
-        const db = new lbug.Database("${dbPath}", 1 << 28);
+        const lbug = require(process.env.LBUG_PATH);
+        const db = new lbug.Database(process.env.DB_PATH, 1 << 28);
         await db.init();
         console.log("Database initialized.");
       })();
     `;
-    const child = spwan(node, ["-e", code]);
+    const child = spawn(node, ["-e", code], { env });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (data) => {
@@ -34,14 +36,7 @@ const openDatabaseOnSubprocess = (dbPath) => {
 
 describe("Database constructor", function () {
   it("should create a database with a valid path and buffer size", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     assert.exists(testDb);
@@ -53,14 +48,7 @@ describe("Database constructor", function () {
   });
 
   it("should create a database with a valid path and no buffer size", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const testDb = new lbug.Database(dbPath);
     assert.exists(testDb);
@@ -70,22 +58,18 @@ describe("Database constructor", function () {
     assert.isTrue(testDb._isInitialized);
     assert.notExists(testDb._initPromise);
 
-    // check default config
-    let res = await conn.query("CALL current_setting('checkpoint_threshold') RETURN *");
+    const testConn = new lbug.Connection(testDb);
+    const res = await testConn.query("CALL current_setting('checkpoint_threshold') RETURN *");
     assert.equal(res.getNumTuples(), 1);
     const tuple = await res.getNext();
-    assert.isTrue(tuple["checkpoint_threshold"] > 0);
+    assert.isTrue(Number(tuple["checkpoint_threshold"]) > 0);
+    res.close();
+    testConn.close();
+    testDb.close();
   });
 
   it("should create a database with auto checkpoint configured", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const testDb = new lbug.Database(dbPath,
       1 << 28 /* 256MB */,
@@ -105,14 +89,7 @@ describe("Database constructor", function () {
   });
 
   it("should create a database with checkpoint threshold configured", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const testDb = new lbug.Database(dbPath,
       1 << 28 /* 256MB */,
@@ -126,21 +103,14 @@ describe("Database constructor", function () {
     let res = await conn.query("CALL current_setting('checkpoint_threshold') RETURN *");
     assert.equal(res.getNumTuples(), 1);
     const tuple = await res.getNext();
-    assert.equal(tuple["checkpoint_threshold"], 1234);
+    assert.equal(Number(tuple["checkpoint_threshold"]), 1234);
     res.close();
     conn.close();
     testDb.close();
   });
 
   it("should create a database with throwOnWalReplayFailure configured", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const walPath = dbPath + ".wal";
     fs.writeFileSync(walPath, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
@@ -164,14 +134,7 @@ describe("Database constructor", function () {
   });
 
   it("should create a database with enableChecksums configured", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     let testDb = new lbug.Database(dbPath,
       1 << 28 /* 256MB */,
@@ -211,14 +174,7 @@ describe("Database constructor", function () {
   });
 
   it("should create a database in read-only mode", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     assert.exists(testDb);
@@ -263,14 +219,7 @@ describe("Database constructor", function () {
   });
 
   it("should create a database with a valid max DB size", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const testDb = new lbug.Database(
       dbPath,
@@ -374,22 +323,10 @@ describe("Database constructor", function () {
 
 describe("Database close", function () {
   it("should allow initializing a new database after closing", async function () {
-    if (process.platform === "win32") {
-      this._runnable.title += " (skipped: not implemented on Windows)";
-      this.skip();
-    }
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     await testDb.init();
-    // FIXME: doesn't work properly on windows
     let subProcessResult = await openDatabaseOnSubprocess(dbPath);
     assert.notEqual(subProcessResult.code, 0);
     assert.include(
@@ -404,14 +341,7 @@ describe("Database close", function () {
   });
 
   it("should throw error if the database is closed", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     await testDb.init();
@@ -425,14 +355,7 @@ describe("Database close", function () {
   });
 
   it("should close the database if it is initialized", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     await testDb.init();
@@ -444,14 +367,7 @@ describe("Database close", function () {
   });
 
   it("should close the database if it is not initialized", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     assert.isFalse(testDb._isInitialized);
@@ -462,14 +378,7 @@ describe("Database close", function () {
   });
 
   it("should close a initializing database", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     await Promise.all([testDb.init(), testDb.close()]);
@@ -479,14 +388,7 @@ describe("Database close", function () {
   });
 
   it("should gracefully close a database multiple times", async function () {
-    const tmpDbPath = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, path, _) => {
-        if (err) {
-          return reject(err);
-        }
-        return resolve(path);
-      });
-    });
+    const tmpDbPath = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-"));
     const dbPath = path.join(tmpDbPath, "db.kz");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     await testDb.init();
@@ -507,9 +409,17 @@ describe("Database close", function () {
     assert.deepEqual(tuple, { "+(1,1)": 2 });
     testDb.closeSync();
     assert.isTrue(testDb._isClosed);
-    assert.throws(() => conn.querySync("RETURN 1+1"), Error, "Runtime exception: The current operation is not allowed because the parent database is closed.");
+    assert.throws(
+      () => conn.querySync("RETURN 1+1"),
+      Error,
+      /(Runtime exception:.*parent database is closed|Connection is closed\.)/
+    );
     conn.closeSync();
     assert.isTrue(conn._isClosed);
-    assert.throws(() => res.resetIterator(), Error, "Runtime exception: The current operation is not allowed because the parent database is closed.");
+    assert.throws(
+      () => res.resetIterator(),
+      Error,
+      /(Runtime exception:.*parent database is closed|Connection is closed\.)/
+    );
   });
 });

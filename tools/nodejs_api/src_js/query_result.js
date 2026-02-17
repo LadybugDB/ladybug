@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("assert");
+const { Readable } = require("stream");
 
 class QueryResult {
   /**
@@ -76,6 +77,15 @@ class QueryResult {
   }
 
   /**
+   * Return the query result as a string (header + rows). For failed queries returns the error message.
+   * @returns {string}
+   */
+  toString() {
+    this._checkClosed();
+    return this._queryResult.toStringSync();
+  }
+
+  /**
    * Iterate through the query result with callback functions.
    * @param {Function} resultCallback the callback function that is called for each row of the query result.
    * @param {Function} doneCallback the callback function that is called when the iteration is done.
@@ -94,6 +104,64 @@ class QueryResult {
       .catch((err) => {
         errorCallback(err);
       });
+  }
+
+  /**
+   * Async iterator for consuming the result row-by-row (e.g. `for await (const row of result)`).
+   * Does not materialize the full result in memory.
+   * @returns {AsyncIterator<Object>}
+   */
+  [Symbol.asyncIterator]() {
+    const self = this;
+    return {
+      async next() {
+        self._checkClosed();
+        if (!self.hasNext()) {
+          return { done: true };
+        }
+        try {
+          const value = await self.getNext();
+          if (value === null) {
+            return { done: true };
+          }
+          return { value, done: false };
+        } catch (err) {
+          return Promise.reject(err);
+        }
+      },
+    };
+  }
+
+  /**
+   * Return a Node.js Readable stream (object mode) that yields one row per chunk.
+   * Useful for piping or integrating with stream consumers. Does not require native changes.
+   * @returns {stream.Readable} Readable stream of row objects.
+   */
+  toStream() {
+    const self = this;
+    return new Readable({
+      objectMode: true,
+      read() {
+        if (self._isClosed) {
+          return this.push(null);
+        }
+        if (!self.hasNext()) {
+          return this.push(null);
+        }
+        self.getNext()
+          .then((row) => {
+            if (row !== null && row !== undefined) {
+              this.push(row);
+            }
+            if (!self.hasNext()) {
+              this.push(null);
+            }
+          })
+          .catch((err) => {
+            this.destroy(err);
+          });
+      },
+    });
   }
 
   /**
@@ -229,12 +297,15 @@ class QueryResult {
   }
 
   /**
-   * Internal function to check if the query result is closed.
-   * @throws {Error} if the query result is closed.
+   * Internal function to check if the query result or its connection is closed.
+   * @throws {Error} if the query result is closed or the connection is closed.
    */
   _checkClosed() {
     if (this._isClosed) {
       throw new Error("Query result is closed.");
+    }
+    if (this._connection._isClosed) {
+      throw new Error("Connection is closed.");
     }
   }
 }

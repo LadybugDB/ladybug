@@ -1,5 +1,3 @@
-const { assert } = require("chai");
-
 const PERSON_IDS = [0, 2, 3, 5, 7, 8, 9, 10];
 
 describe("Reset iterator", function () {
@@ -66,22 +64,30 @@ describe("Get next", function () {
     }
   });
 
-  it("should throw an error if there is no next tuple", async function () {
+  it("should return null when no more tuples", async function () {
     const queryResult = await conn.query(
       "MATCH (a:person) RETURN a.ID ORDER BY a.ID"
     );
     for (let i = 0; i < 8; ++i) {
       await queryResult.getNext();
     }
-    try {
-      await queryResult.getNext();
-      assert.fail("No error thrown when there is no next tuple");
-    } catch (err) {
-      assert.equal(
-        err.message,
-        "Runtime exception: No more tuples in QueryResult, Please check hasNext() before calling getNext()."
-      );
+    const exhausted = await queryResult.getNext();
+    assert.isNull(exhausted, "getNext() returns null when no more tuples");
+  });
+
+  it("getNext() returns null exactly when hasNext() is false", async function () {
+    const queryResult = await conn.query(
+      "MATCH (a:person) RETURN a.ID ORDER BY a.ID"
+    );
+    let count = 0;
+    while (queryResult.hasNext()) {
+      const row = await queryResult.getNext();
+      assert.isNotNull(row, "getNext() must return value when hasNext() is true");
+      count++;
     }
+    assert.equal(count, 8);
+    const afterExhausted = await queryResult.getNext();
+    assert.isNull(afterExhausted, "getNext() must return null when hasNext() was false");
   });
 });
 
@@ -181,7 +187,7 @@ describe("Get column data types", function () {
                 p.courseScoresPerTerm`
     );
     const columnDataTypes = await queryResult.getColumnDataTypes();
-    const ansexpectedResultArr = [
+    const expectedResultArr = [
       "INT64",
       "STRING",
       "BOOL",
@@ -192,7 +198,7 @@ describe("Get column data types", function () {
       "INT64[]",
       "INT64[][]",
     ];
-    assert.deepEqual(columnDataTypes, ansexpectedResultArr);
+    assert.deepEqual(columnDataTypes, expectedResultArr);
   });
 });
 
@@ -208,6 +214,46 @@ describe("Get query summary", function () {
     assert.isNumber(querySummary.compilingTime);
     assert.isTrue(querySummary.executionTime >= 0);
     assert.isTrue(querySummary.compilingTime >= 0);
+  });
+});
+
+describe("Async iterator (for await...of)", function () {
+  it("should iterate rows same as getNext", async function () {
+    const queryResult = await conn.query(
+      "MATCH (a:person) RETURN a.ID ORDER BY a.ID"
+    );
+    const ids = [];
+    for await (const row of queryResult) {
+      ids.push(row["a.ID"]);
+    }
+    assert.deepEqual(ids, PERSON_IDS);
+  });
+
+  it("should not materialize full result in memory", async function () {
+    const queryResult = await conn.query(
+      "MATCH (a:person) RETURN a.ID ORDER BY a.ID"
+    );
+    let count = 0;
+    for await (const row of queryResult) {
+      count++;
+      assert.equal(row["a.ID"], PERSON_IDS[count - 1]);
+    }
+    assert.equal(count, PERSON_IDS.length);
+  });
+});
+
+describe("toStream", function () {
+  it("should yield rows as Readable stream", async function () {
+    const queryResult = await conn.query(
+      "MATCH (a:person) RETURN a.ID ORDER BY a.ID"
+    );
+    const stream = queryResult.toStream();
+    const rows = [];
+    for await (const row of stream) {
+      rows.push(row);
+    }
+    const ids = rows.map((r) => r["a.ID"]);
+    assert.deepEqual(ids, PERSON_IDS);
   });
 });
 

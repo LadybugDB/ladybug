@@ -1,5 +1,3 @@
-const { assert } = require("chai");
-
 describe("Concurrent query execution within a single connection", function () {
   it("should dispatch multiple queries concurrently with query strings", async function () {
     const queryResults = await Promise.all([
@@ -47,30 +45,36 @@ describe("Concurrent query execution across multiple connections", function () {
     for (let i = 0; i < 5; i++) {
       connections.push(new lbug.Connection(db));
     }
-    const queryResults = await Promise.all([
-      connections[0].query(
-        "MATCH (a:person) WHERE a.ID = 0 RETURN a.isStudent;"
-      ),
-      connections[1].query(
-        "MATCH (a:person) WHERE a.ID = 2 RETURN a.isStudent;"
-      ),
-      connections[2].query(
-        "MATCH (a:person) WHERE a.ID = 3 RETURN a.isStudent;"
-      ),
-      connections[3].query(
-        "MATCH (a:person) WHERE a.ID = 5 RETURN a.isStudent;"
-      ),
-      connections[4].query(
-        "MATCH (a:person) WHERE a.ID = 7 RETURN a.isStudent;"
-      ),
-    ]);
-    const results = await Promise.all(
-      queryResults.map((queryResult) => queryResult.getAll())
-    );
-    assert.isTrue(results[0][0]["a.isStudent"]);
-    assert.isTrue(results[1][0]["a.isStudent"]);
-    assert.isFalse(results[2][0]["a.isStudent"]);
-    assert.isFalse(results[3][0]["a.isStudent"]);
-    assert.isFalse(results[4][0]["a.isStudent"]);
+    try {
+      const queryResults = await Promise.all([
+        connections[0].query(
+          "MATCH (a:person) WHERE a.ID = 0 RETURN a.isStudent;"
+        ),
+        connections[1].query(
+          "MATCH (a:person) WHERE a.ID = 2 RETURN a.isStudent;"
+        ),
+        connections[2].query(
+          "MATCH (a:person) WHERE a.ID = 3 RETURN a.isStudent;"
+        ),
+        connections[3].query(
+          "MATCH (a:person) WHERE a.ID = 5 RETURN a.isStudent;"
+        ),
+        connections[4].query(
+          "MATCH (a:person) WHERE a.ID = 7 RETURN a.isStudent;"
+        ),
+      ]);
+      const results = await Promise.all(
+        queryResults.map((queryResult) => queryResult.getAll())
+      );
+      assert.isTrue(results[0][0]["a.isStudent"]);
+      assert.isTrue(results[1][0]["a.isStudent"]);
+      assert.isFalse(results[2][0]["a.isStudent"]);
+      assert.isFalse(results[3][0]["a.isStudent"]);
+      assert.isFalse(results[4][0]["a.isStudent"]);
+    } finally {
+      for (const c of connections) {
+        if (!c._isClosed) await c.close().catch(() => {});
+      }
+    }
   });
 });
