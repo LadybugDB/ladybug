@@ -298,6 +298,25 @@ export class Connection {
      * @returns Promise that resolves to true if OK, rejects if connection is broken
      */
     ping(): Promise<boolean>;
+
+    /**
+     * Register a stream source for LOAD FROM name. Source must be AsyncIterable of rows (array or object).
+     * Unregister with unregisterStream(name) when done.
+     * @param name Name used in Cypher: LOAD FROM name RETURN ...
+     * @param source AsyncIterable of rows (array of column values or object keyed by column name)
+     * @param options.columns Schema: array of { name: string, type: string } (type: INT64, INT32, DOUBLE, STRING, BOOL, DATE, etc.)
+     */
+    registerStream(
+        name: string,
+        source: AsyncIterable<unknown[] | Record<string, unknown>>,
+        options: { columns: Array<{ name: string; type: string }> }
+    ): Promise<void>;
+
+    /**
+     * Unregister a stream source by name.
+     * @param name Name passed to registerStream
+     */
+    unregisterStream(name: string): void;
 }
 
 /**

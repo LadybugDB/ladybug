@@ -102,6 +102,7 @@ public:
         try {
             if (!nodeQueryResult->queryResult->hasNext()) {
                 cppTuple.reset();
+                return;
             }
             cppTuple = nodeQueryResult->queryResult->getNext();
         } catch (const std::exception& exc) {
@@ -112,7 +113,7 @@ public:
     inline void OnOK() override {
         auto env = Env();
         if (cppTuple == nullptr) {
-            Callback().Call({env.Null(), env.Undefined()});
+            Callback().Call({env.Null(), env.Null()});
             return;
         }
         Napi::Object nodeTuple = Napi::Object::New(env);

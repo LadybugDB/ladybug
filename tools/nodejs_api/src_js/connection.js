@@ -127,8 +127,14 @@ class Connection {
   execute(preparedStatement, params = {}, optionsOrProgressCallback) {
     const { signal, progressCallback } = this._normalizeQueryOptions(optionsOrProgressCallback);
     return new Promise((resolve, reject) => {
+      if (progressCallback !== undefined && typeof progressCallback !== "function") {
+        return reject(new Error("progressCallback must be a function."));
+      }
+      if (optionsOrProgressCallback != null && typeof optionsOrProgressCallback !== "function" && typeof optionsOrProgressCallback !== "object") {
+        return reject(new Error("progressCallback must be a function."));
+      }
       if (
-        !typeof preparedStatement === "object" ||
+        typeof preparedStatement !== "object" ||
         preparedStatement.constructor.name !== "PreparedStatement"
       ) {
         return reject(
@@ -147,9 +153,6 @@ class Connection {
       for (const key in params) {
         const value = params[key];
         paramArray.push([key, value]);
-      }
-      if (progressCallback && typeof progressCallback !== "function") {
-        return reject(new Error("progressCallback must be a function."));
       }
       if (signal?.aborted) {
         return reject(this._createAbortError());
@@ -308,6 +311,12 @@ class Connection {
   query(statement, optionsOrProgressCallback) {
     const { signal, progressCallback } = this._normalizeQueryOptions(optionsOrProgressCallback);
     return new Promise((resolve, reject) => {
+      if (progressCallback !== undefined && typeof progressCallback !== "function") {
+        return reject(new Error("progressCallback must be a function."));
+      }
+      if (optionsOrProgressCallback != null && typeof optionsOrProgressCallback !== "function" && typeof optionsOrProgressCallback !== "object") {
+        return reject(new Error("progressCallback must be a function."));
+      }
       if (typeof statement !== "string") {
         return reject(new Error("statement must be a string."));
       }
@@ -401,6 +410,78 @@ class Connection {
     };
     closeResult(result);
     return true;
+  }
+
+  /**
+   * Register a stream source for LOAD FROM name. The source must be AsyncIterable; each yielded
+   * value is a row (array of column values in schema order, or object keyed by column name).
+   * Call unregisterStream(name) when done or before reusing the name.
+   * @param {string} name – name used in Cypher: LOAD FROM name RETURN ...
+   * @param {AsyncIterable<Array<*>|Object>} source – async iterable of rows
+   * @param {{ columns: Array<{ name: string, type: string }> }} options – schema (required). type: INT64, INT32, DOUBLE, STRING, BOOL, DATE, etc.
+   */
+  async registerStream(name, source, options = {}) {
+    if (typeof name !== "string") {
+      throw new Error("registerStream: name must be a string.");
+    }
+    const columns = options.columns;
+    if (!Array.isArray(columns) || columns.length === 0) {
+      throw new Error("registerStream: options.columns (array of { name, type }) is required.");
+    }
+    const conn = await this._getConnection();
+    const it = source[Symbol.asyncIterator] ? source[Symbol.asyncIterator].call(source) : source;
+    const pending = [];
+    let consumerRunning = false;
+
+    const toRows = (raw) => {
+      if (raw == null) return [];
+      if (Array.isArray(raw)) {
+        const first = raw[0];
+        const isArrayOfRows =
+          raw.length > 0 &&
+          (Array.isArray(first) || (typeof first === "object" && first !== null && !Array.isArray(first)));
+        return isArrayOfRows ? raw : [raw];
+      }
+      return [raw];
+    };
+
+    const runConsumer = async () => {
+      pending.sort((a, b) => a - b);
+      while (pending.length > 0) {
+        const requestId = pending.shift();
+        try {
+          const n = await it.next();
+          const { rows, done } = { rows: toRows(n.value), done: n.done };
+          conn.returnChunk(requestId, rows, done);
+        } catch (e) {
+          conn.returnChunk(requestId, [], true);
+        }
+      }
+      consumerRunning = false;
+    };
+
+    const getChunk = (requestId) => {
+      pending.push(requestId);
+      if (!consumerRunning) {
+        consumerRunning = true;
+        setImmediate(() => runConsumer());
+      }
+    };
+    conn.registerStream(name, getChunk, columns);
+  }
+
+  /**
+   * Unregister a stream source by name.
+   * @param {string} name – name passed to registerStream
+   */
+  unregisterStream(name) {
+    if (typeof name !== "string") {
+      throw new Error("unregisterStream: name must be a string.");
+    }
+    if (!this._connection) {
+      return;
+    }
+    this._connection.unregisterStream(name);
   }
 
   /**

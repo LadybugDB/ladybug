@@ -187,7 +187,7 @@ nodejs-deps:
 	cd tools/nodejs_api && npm install --include=dev
 
 nodejstest: nodejs
-	cd tools/nodejs_api && npm test
+	cd tools/nodejs_api && node copy_src_to_build.js && npm test
 
 nodejstest-deps: nodejs-deps nodejstest
 

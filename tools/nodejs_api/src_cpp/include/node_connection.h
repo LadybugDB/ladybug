@@ -8,6 +8,7 @@
 #include "node_prepared_statement.h"
 #include "node_progress_bar_display.h"
 #include "node_query_result.h"
+#include "node_scan_replacement.h"
 #include <napi.h>
 
 using namespace lbug::main;
@@ -36,10 +37,14 @@ private:
     Napi::Value ExecuteSync(const Napi::CallbackInfo& info);
     Napi::Value QuerySync(const Napi::CallbackInfo& info);
     void Close(const Napi::CallbackInfo& info);
+    Napi::Value RegisterStream(const Napi::CallbackInfo& info);
+    void UnregisterStream(const Napi::CallbackInfo& info);
+    void ReturnChunk(const Napi::CallbackInfo& info);
 
 private:
     std::shared_ptr<Database> database;
     std::shared_ptr<Connection> connection;
+    std::unique_ptr<NodeStreamRegistry> streamRegistry;
 };
 
 class ConnectionInitAsyncWorker : public Napi::AsyncWorker {

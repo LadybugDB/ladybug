@@ -18,4 +18,6 @@ describe("lbug", () => {
   importTest("Concurrent query execution", "./test_concurrency.js");
   importTest("Version", "./test_version.js");
   importTest("Synchronous API", "./test_sync_api.js");
+  importTest("registerStream / LOAD FROM stream", "./test_register_stream.js");
+  importTest("Resilience (close during/after use)", "./test_resilience.js");
 });

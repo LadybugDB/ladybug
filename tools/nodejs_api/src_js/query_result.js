@@ -288,12 +288,15 @@ class QueryResult {
   }
 
   /**
-   * Internal function to check if the query result is closed.
-   * @throws {Error} if the query result is closed.
+   * Internal function to check if the query result or its connection is closed.
+   * @throws {Error} if the query result is closed or the connection is closed.
    */
   _checkClosed() {
     if (this._isClosed) {
       throw new Error("Query result is closed.");
+    }
+    if (this._connection._isClosed) {
+      throw new Error("Connection is closed.");
     }
   }
 }
