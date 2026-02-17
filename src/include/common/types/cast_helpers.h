@@ -285,8 +285,8 @@ struct IntervalToStringCast {
             }
         } else if (length == 0) {
             // empty interval: default to 00:00:00
-            strcpy(buffer, "00:00:00"); // NOLINT(clang-analyzer-security.insecureAPI.strcpy):
-                                        // safety guaranteed by Length().
+            static const char defaultTime[] = "00:00:00";
+            memcpy(buffer, defaultTime, sizeof(defaultTime));
             return 8;
         }
         return length;

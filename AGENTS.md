@@ -28,7 +28,25 @@ make example       # Examples
 # Build with extensions
 make extension-build          # Build all extensions
 make extension-debug          # Debug build with extensions
-make extension-release        # Release build with extensions
+make extension-release       # Release build with extensions
+```
+
+### Windows (PowerShell, without make)
+
+Requires CMake and Ninja in PATH (e.g. from LLVM or Visual Studio).
+
+```powershell
+# RelWithDebInfo (generates compile_commands.json for clangd/MCP)
+cmake -B build/relwithdebinfo -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo .
+cmake --build build/relwithdebinfo --config RelWithDebInfo
+
+# Release
+cmake -B build/release -G Ninja -DCMAKE_BUILD_TYPE=Release .
+cmake --build build/release --config Release
+
+# Debug
+cmake -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug .
+cmake --build build/debug --config Debug
 ```
 
 ## Test Commands

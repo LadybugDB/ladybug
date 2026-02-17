@@ -30,6 +30,7 @@ struct LBUG_API RelBatchInsertPrintInfo final : OPPrintInfo {
 private:
     RelBatchInsertPrintInfo(const RelBatchInsertPrintInfo& other)
         : OPPrintInfo(other), tableName(other.tableName) {}
+    RelBatchInsertPrintInfo& operator=(const RelBatchInsertPrintInfo&) = default;
 };
 
 struct LBUG_API RelBatchInsertProgressSharedState {

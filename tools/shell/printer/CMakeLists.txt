@@ -8,6 +8,9 @@ add_library(lbug_shell_printer
         printer_factory.cpp
         ${PROJECT_SOURCE_DIR}/extension/json/src/type/json_type.cpp
 )
+if(WIN32)
+    target_compile_definitions(lbug_shell_printer PUBLIC LBUG_STATIC_DEFINE)
+endif()
 
 set(LBUG_SHELL_OBJECT_FILES
         ${LBUG_SHELL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_shell_printer>

@@ -118,7 +118,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         DWORD dwFlags = flags.lockType == FileLockType::READ_LOCK ?
                             LOCKFILE_FAIL_IMMEDIATELY :
                             LOCKFILE_FAIL_IMMEDIATELY | LOCKFILE_EXCLUSIVE_LOCK;
-        OVERLAPPED overlapped = {0};
+        OVERLAPPED overlapped = {};
         overlapped.Offset = 0;
         BOOL rc = LockFileEx(handle, dwFlags, 0 /*reserved*/, 1 /*numBytesLow*/, 0 /*numBytesHigh*/,
             &overlapped);
@@ -392,7 +392,7 @@ void LocalFileSystem::readFromFile(FileInfo& fileInfo, void* buffer, uint64_t nu
     KU_ASSERT(localFileInfo->getFileSize() >= position + numBytes);
 #if defined(_WIN32)
     DWORD numBytesRead;
-    OVERLAPPED overlapped{0, 0, 0, 0};
+    OVERLAPPED overlapped = {};
     overlapped.Offset = position & 0xffffffff;
     overlapped.OffsetHigh = position >> 32;
     if (!ReadFile((HANDLE)localFileInfo->handle, buffer, numBytes, &numBytesRead, &overlapped)) {
@@ -440,11 +440,11 @@ void LocalFileSystem::writeFile(FileInfo& fileInfo, const uint8_t* buffer, uint6
     // Split large writes to 1GB at a time
     uint64_t maxBytesToWriteAtOnce = 1ull << 30; // 1ull << 30 = 1G
     while (remainingNumBytesToWrite > 0) {
-        uint64_t numBytesToWrite = std::min(remainingNumBytesToWrite, maxBytesToWriteAtOnce);
+        uint64_t numBytesToWrite = (std::min)(remainingNumBytesToWrite, maxBytesToWriteAtOnce);
 
 #if defined(_WIN32)
         DWORD numBytesWritten;
-        OVERLAPPED overlapped{0, 0, 0, 0};
+        OVERLAPPED overlapped = {};
         overlapped.Offset = offset & 0xffffffff;
         overlapped.OffsetHigh = offset >> 32;
         if (!WriteFile((HANDLE)localFileInfo->handle, buffer + bufferOffset, numBytesToWrite,
