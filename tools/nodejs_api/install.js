@@ -8,11 +8,21 @@ const process = require("process");
 const isNpmBuildFromSourceSet = process.env.npm_config_build_from_source;
 const platform = process.platform;
 const arch = process.arch;
+
+// Skip when already built (e.g. local dev after make nodejs)
+if (fsCallback.existsSync(path.join(__dirname, "build", "lbugjs.node"))) {
+  process.exit(0);
+}
+
 const prebuiltPath = path.join(
   __dirname,
   "prebuilt",
   `lbugjs-${platform}-${arch}.node`
 );
+
+const buildDir = path.join(__dirname, "build");
+const srcJsDir = path.join(__dirname, "src_js");
+const lbugSourceDir = path.join(__dirname, "lbug-source");
 
 // Check if building from source is forced
 if (isNpmBuildFromSourceSet) {
@@ -20,37 +30,48 @@ if (isNpmBuildFromSourceSet) {
     "The NPM_CONFIG_BUILD_FROM_SOURCE environment variable is set. Building from source."
   );
 }
-// Check if prebuilt binaries are available
+// Prebuilt available + git-clone layout (src_js present, no lbug-source): use prebuilt and copy src_js → build/
+else if (fsCallback.existsSync(prebuiltPath) && fsCallback.existsSync(srcJsDir)) {
+  console.log("Prebuilt binary is available (git clone layout).");
+  if (!fsCallback.existsSync(buildDir)) {
+    fsCallback.mkdirSync(buildDir, { recursive: true });
+  }
+  fs.copyFileSync(prebuiltPath, path.join(buildDir, "lbugjs.node"));
+  const jsFiles = fs.readdirSync(srcJsDir).filter((file) => {
+    return file.endsWith(".js") || file.endsWith(".mjs") || file.endsWith(".d.ts");
+  });
+  for (const file of jsFiles) {
+    fs.copyFileSync(path.join(srcJsDir, file), path.join(buildDir, file));
+  }
+  console.log("Done! Prebuilt + JS copied to build/.");
+  process.exit(0);
+}
+// Prebuilt available + tarball layout (lbug-source present): copy to root (legacy publish flow)
 else if (fsCallback.existsSync(prebuiltPath)) {
   console.log("Prebuilt binary is available.");
-  console.log("Copying prebuilt binary to package directory...");
   fs.copyFileSync(prebuiltPath, path.join(__dirname, "lbugjs.node"));
-  console.log(
-    `Copied ${prebuiltPath} -> ${path.join(__dirname, "lbugjs.node")}.`
-  );
-  console.log("Copying JS files to package directory...");
-  const jsSourceDir = path.join(
-    __dirname,
-    "lbug-source",
-    "tools",
-    "nodejs_api",
-    "src_js"
-  );
+  const jsSourceDir = path.join(lbugSourceDir, "tools", "nodejs_api", "src_js");
   const jsFiles = fs.readdirSync(jsSourceDir).filter((file) => {
     return file.endsWith(".js") || file.endsWith(".mjs") || file.endsWith(".d.ts");
   });
-  console.log("Files to copy: ");
-  for (const file of jsFiles) {
-    console.log("  " + file);
-  }
   for (const file of jsFiles) {
     fs.copyFileSync(path.join(jsSourceDir, file), path.join(__dirname, file));
   }
-  console.log("Copied JS files to package directory.");
   console.log("Done!");
   process.exit(0);
 } else {
   console.log("Prebuilt binary is not available, building from source...");
+}
+
+if (!fsCallback.existsSync(lbugSourceDir)) {
+  console.error(
+    "lbug-source/ not found (install from git clone). Add prebuilt binary to prebuilt/lbugjs-" +
+      platform +
+      "-" +
+      arch +
+      ".node and commit, or install from a full clone and build there."
+  );
+  process.exit(1);
 }
 
 // Get number of threads

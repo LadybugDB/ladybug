@@ -300,6 +300,13 @@ export class Connection {
     ping(): Promise<boolean>;
 
     /**
+     * Run EXPLAIN on a Cypher statement and return the plan as a string.
+     * @param statement Cypher statement (e.g. "MATCH (a:person) RETURN a")
+     * @returns Promise that resolves to the plan string (one row per line)
+     */
+    explain(statement: string): Promise<string>;
+
+    /**
      * Register a stream source for LOAD FROM name. Source must be AsyncIterable of rows (array or object).
      * Unregister with unregisterStream(name) when done.
      * @param name Name used in Cypher: LOAD FROM name RETURN ...
@@ -335,6 +342,14 @@ export class PreparedStatement {
      * @returns The error message or empty string if successful
      */
     getErrorMessage(): string;
+}
+
+/**
+ * Query summary with compiling and execution times (milliseconds).
+ */
+export interface QuerySummary {
+    compilingTime: number;
+    executionTime: number;
 }
 
 /**
@@ -440,6 +455,18 @@ export class QueryResult implements AsyncIterable<Record<string, LbugValue> | nu
      * @returns Array of column names
      */
     getColumnNamesSync(): string[];
+
+    /**
+     * Get the query summary (compiling and execution time in milliseconds).
+     * @returns Promise that resolves to the query summary
+     */
+    getQuerySummary(): Promise<QuerySummary>;
+
+    /**
+     * Get the query summary synchronously.
+     * @returns The query summary
+     */
+    getQuerySummarySync(): QuerySummary;
 
     /**
      * Close the result set and release resources.

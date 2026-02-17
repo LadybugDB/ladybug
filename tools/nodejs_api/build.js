@@ -24,5 +24,10 @@ if (fs.existsSync(SRC_JS_DIR) && fs.existsSync(BUILD_DIR)) {
       fs.copyFileSync(path.join(SRC_JS_DIR, name), path.join(BUILD_DIR, name));
     }
   }
+  // So package root has types when used as file: dependency
+  const dts = path.join(BUILD_DIR, "lbug.d.ts");
+  if (fs.existsSync(dts)) {
+    fs.copyFileSync(dts, path.join(NODEJS_API, "lbug.d.ts"));
+  }
   console.log("Copied src_js to build.");
 }

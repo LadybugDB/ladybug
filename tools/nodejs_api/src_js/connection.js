@@ -413,6 +413,29 @@ class Connection {
   }
 
   /**
+   * Run EXPLAIN on a Cypher statement and return the plan as a string.
+   * @param {string} statement – Cypher statement (e.g. "MATCH (a:person) RETURN a")
+   * @returns {Promise<string>} the plan string (one row per line)
+   */
+  async explain(statement) {
+    if (typeof statement !== "string") {
+      throw new Error("explain: statement must be a string.");
+    }
+    const trimmed = statement.trim();
+    const explainStatement = trimmed.toUpperCase().startsWith("EXPLAIN") ? trimmed : "EXPLAIN " + trimmed;
+    const result = await this.query(explainStatement);
+    const single = Array.isArray(result) ? result[0] : result;
+    const rows = await single.getAll();
+    single.close();
+    if (rows.length === 0) {
+      return "";
+    }
+    return rows
+      .map((row) => Object.values(row).join(" | "))
+      .join("\n");
+  }
+
+  /**
    * Register a stream source for LOAD FROM name. The source must be AsyncIterable; each yielded
    * value is a row (array of column values in schema order, or object keyed by column name).
    * Call unregisterStream(name) when done or before reusing the name.
