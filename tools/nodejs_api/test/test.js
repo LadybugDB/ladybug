@@ -10,6 +10,14 @@ describe("lbug", () => {
   before(() => {
     return initTests();
   });
+  after(async () => {
+    if (global.conn && !global.conn._isClosed) {
+      await global.conn.close().catch(() => {});
+    }
+    if (global.db && !global.db._isClosed) {
+      await global.db.close().catch(() => {});
+    }
+  });
   importTest("Database", "./test_database.js");
   importTest("Connection", "./test_connection.js");
   importTest("Query result", "./test_query_result.js");

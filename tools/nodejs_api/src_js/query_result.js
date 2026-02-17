@@ -77,6 +77,15 @@ class QueryResult {
   }
 
   /**
+   * Return the query result as a string (header + rows). For failed queries returns the error message.
+   * @returns {string}
+   */
+  toString() {
+    this._checkClosed();
+    return this._queryResult.toStringSync();
+  }
+
+  /**
    * Iterate through the query result with callback functions.
    * @param {Function} resultCallback the callback function that is called for each row of the query result.
    * @param {Function} doneCallback the callback function that is called when the iteration is done.

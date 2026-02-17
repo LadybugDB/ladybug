@@ -80,10 +80,11 @@ main().catch(console.error);
 
 The `lbug` package exposes the following primary classes:
 
-* **Database** – `new Database(path, bufferPoolSize?, ...)`. Initialize with `init()` / `initSync()` (optional; done on first use). Close with `close()`.
-* **Connection** – `new Connection(database, numThreads?)`. Run Cypher with `query(statement)` or `prepare(statement)` then `execute(preparedStatement, params)`. Use `transaction(fn)` for a single write transaction, `ping()` for liveness checks. Use `registerStream(name, source, { columns })` to load data from an AsyncIterable via `LOAD FROM name`; `unregisterStream(name)` when done. Configure with `setQueryTimeout(ms)`, `setMaxNumThreadForExec(n)`.
-* **QueryResult** – Returned by `query()` / `execute()`. Consume with `getAll()`, `getNext()` / `hasNext()`, **async iteration** (`for await...of`), or **`toStream()`** (Node.js `Readable`). Metadata: `getColumnNames()`, `getColumnDataTypes()`, `getQuerySummary()`. Call `close()` when done (optional if fully consumed).
+* **Database** – `new Database(path, bufferPoolSize?, ...)`. Initialize with `init()` / `initSync()` (optional; done on first use). When the file is locked, **async init() retries for up to 5s** (configurable: last ctor arg `openLockRetryMs`; set `0` to fail immediately). Close with `close()`.
+* **Connection** – `new Connection(database, numThreads?)`. Run Cypher with `query(statement)` or `prepare(statement)` then `execute(preparedStatement, params)`. Use `transaction(fn)` for a single write transaction, `ping()` for liveness checks. **`getNumNodes(nodeName)`** and **`getNumRels(relName)`** return row counts for node/rel tables. Use `registerStream(name, source, { columns })` to load data from an AsyncIterable via `LOAD FROM name`; `unregisterStream(name)` when done. Configure with `setQueryTimeout(ms)`, `setMaxNumThreadForExec(n)`.
+* **QueryResult** – Returned by `query()` / `execute()`. Consume with `getAll()`, `getNext()` / `hasNext()`, **async iteration** (`for await...of`), or **`toStream()`** (Node.js `Readable`). Use **`toString()`** for a string representation (header + rows; useful for debugging). Metadata: `getColumnNames()`, `getColumnDataTypes()`, `getQuerySummary()`. Call `close()` when done (optional if fully consumed).
 * **PreparedStatement** – Created by `conn.prepare(statement)`. Execute with `conn.execute(preparedStatement, params)`. Reuse for parameterized queries.
+* **Pool** – `createPool({ databasePath, maxSize, ... })` returns a connection pool. Use **`pool.run(conn => ...)`** (recommended) or `acquire()` / `release(conn)`; call **`pool.close()`** when done.
 
 Both CommonJS (`require`) and ES Modules (`import`) are fully supported.
 
@@ -109,7 +110,58 @@ for await (const row of result) {
 // Option 4: Node.js Readable stream (e.g. for .pipe())
 const stream = result.toStream();
 stream.on("data", (row) => console.log(row));
+
+// Option 5: string representation (e.g. for debugging)
+console.log(result.toString());
 ```
+
+### Table counts
+
+After creating node/rel tables and loading data, you can get row counts:
+
+```js
+conn.initSync(); // or await conn.init()
+const numUsers = conn.getNumNodes("User");
+const numFollows = conn.getNumRels("Follows");
+```
+
+### Connection pool
+
+Use **`createPool(options)`** to get a pool of connections (one shared `Database`, up to `maxSize` connections). Prefer **`pool.run(fn)`**: it acquires a connection, runs `fn(conn)`, and releases in `finally` (on success or throw), so you never leak a connection.
+
+**Options:** `maxSize` (required), `databasePath`, `databaseOptions` (same shape as `Database` constructor), `minSize` (default 0), `acquireTimeoutMillis` (default 0 = wait forever), `validateOnAcquire` (default false; if true, `conn.ping()` before hand-out).
+
+**Example (recommended: `run`):**
+
+```js
+import { createPool } from "lbug";
+
+const pool = createPool({ databasePath: "./mydb", maxSize: 10 });
+
+const rows = await pool.run(async (conn) => {
+  const result = await conn.query("MATCH (u:User) RETURN u.name LIMIT 5");
+  const rows = await result.getAll();
+  result.close();
+  return rows;
+});
+console.log(rows);
+
+await pool.close();
+```
+
+**Manual acquire/release:** If you need the same connection for multiple operations, use `acquire()` and always call `release(conn)` in a `finally` block so the connection is returned even on throw.
+
+```js
+const conn = await pool.acquire();
+try {
+  await conn.query("...");
+  // ...
+} finally {
+  pool.release(conn);
+}
+```
+
+When shutting down, call **`pool.close()`**: it rejects new and pending `acquire()`, then closes all connections and the database.
 
 ### Transactions
 
@@ -174,6 +226,35 @@ conn.unregisterStream("users");
 ```
 
 You can combine the stream with other Cypher: e.g. `LOAD FROM stream RETURN * WHERE col > 0`, or `COPY MyTable FROM (LOAD FROM stream RETURN *)`.
+
+### Database locked
+
+Only one process can open the same database path for writing. If the file is already locked, **async `init()` retries for up to 5 seconds** by default (grace period), then throws. You can tune or disable this:
+
+- **Default**: `new Database("./my.db")` — last ctor arg `openLockRetryMs` defaults to `5000` (retry for up to 5s on lock).
+- **No retry**: `new Database("./my.db", 0, true, false, 0, true, -1, true, true, 0)` or pass `openLockRetryMs = 0` as the 10th argument to fail immediately.
+- **Longer grace**: e.g. `openLockRetryMs = 3000` to wait up to 3s.
+
+The error has **`code === 'LBUG_DATABASE_LOCKED'`** so you can catch and handle it if the grace period wasn’t enough:
+
+```js
+import { Database, Connection, LBUG_DATABASE_LOCKED } from "lbug";
+
+const db = new Database("./my.db"); // already retries ~5s on lock
+try {
+  await db.init();
+} catch (err) {
+  if (err.code === LBUG_DATABASE_LOCKED) {
+    console.error("Database still locked after grace period.");
+  }
+  throw err;
+}
+const conn = new Connection(db);
+```
+
+Use **read-only** mode for concurrent readers: `new Database(path, undefined, undefined, true)` so multiple processes can open the same DB for read.
+
+See [docs/database_locked.md](docs/database_locked.md) for how other systems handle this and best practices.
 
 ---
 

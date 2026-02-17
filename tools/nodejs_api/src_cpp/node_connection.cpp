@@ -8,6 +8,7 @@
 #include "include/node_scan_replacement.h"
 #include "include/node_util.h"
 #include "main/lbug.h"
+#include "main/storage_driver.h"
 
 Napi::Object NodeConnection::Init(Napi::Env env, Napi::Object exports) {
     Napi::HandleScope scope(env);
@@ -25,7 +26,9 @@ Napi::Object NodeConnection::Init(Napi::Env env, Napi::Object exports) {
             InstanceMethod("close", &NodeConnection::Close),
             InstanceMethod("registerStream", &NodeConnection::RegisterStream),
             InstanceMethod("unregisterStream", &NodeConnection::UnregisterStream),
-            InstanceMethod("returnChunk", &NodeConnection::ReturnChunk)});
+            InstanceMethod("returnChunk", &NodeConnection::ReturnChunk),
+            InstanceMethod("getNumNodes", &NodeConnection::GetNumNodes),
+            InstanceMethod("getNumRels", &NodeConnection::GetNumRels)});
 
     exports.Set("NodeConnection", t);
     return exports;
@@ -261,4 +264,50 @@ void NodeConnection::ReturnChunk(const Napi::CallbackInfo& info) {
     Napi::Array rows = info[1].As<Napi::Array>();
     bool done = info[2].ToBoolean().Value();
     returnChunkFromJS(requestId, rows, done);
+}
+
+Napi::Value NodeConnection::GetNumNodes(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    Napi::HandleScope scope(env);
+    if (!connection) {
+        Napi::Error::New(env, "Connection not initialized.").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    if (info.Length() < 1 || !info[0].IsString()) {
+        Napi::Error::New(env, "getNumNodes(nodeName): nodeName string required.").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    try {
+        Database* db = connection->getClientContext()->getDatabase();
+        StorageDriver storageDriver(db);
+        std::string nodeName = info[0].As<Napi::String>().Utf8Value();
+        uint64_t count = storageDriver.getNumNodes(nodeName);
+        return Napi::Number::New(env, static_cast<double>(count));
+    } catch (const std::exception& exc) {
+        Napi::Error::New(env, std::string(exc.what())).ThrowAsJavaScriptException();
+    }
+    return env.Undefined();
+}
+
+Napi::Value NodeConnection::GetNumRels(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    Napi::HandleScope scope(env);
+    if (!connection) {
+        Napi::Error::New(env, "Connection not initialized.").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    if (info.Length() < 1 || !info[0].IsString()) {
+        Napi::Error::New(env, "getNumRels(relName): relName string required.").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    try {
+        Database* db = connection->getClientContext()->getDatabase();
+        StorageDriver storageDriver(db);
+        std::string relName = info[0].As<Napi::String>().Utf8Value();
+        uint64_t count = storageDriver.getNumRels(relName);
+        return Napi::Number::New(env, static_cast<double>(count));
+    } catch (const std::exception& exc) {
+        Napi::Error::New(env, std::string(exc.what())).ThrowAsJavaScriptException();
+    }
+    return env.Undefined();
 }

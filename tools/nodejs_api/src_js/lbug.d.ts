@@ -114,6 +114,63 @@ export interface SystemConfig {
 }
 
 /**
+ * Options for createPool(). Same shape as Database constructor args (except path).
+ */
+export interface PoolDatabaseOptions {
+    bufferManagerSize?: number;
+    enableCompression?: boolean;
+    readOnly?: boolean;
+    maxDBSize?: number;
+    autoCheckpoint?: boolean;
+    checkpointThreshold?: number;
+    throwOnWalReplayFailure?: boolean;
+    enableChecksums?: boolean;
+    openLockRetryMs?: number;
+}
+
+/**
+ * Options for createPool().
+ */
+export interface PoolOptions {
+    /** Database file path (default ":memory:") */
+    databasePath?: string;
+    /** Same shape as Database constructor options (bufferManagerSize, readOnly, etc.) */
+    databaseOptions?: PoolDatabaseOptions;
+    /** Minimum connections to keep (default 0) */
+    minSize?: number;
+    /** Maximum connections in the pool (required) */
+    maxSize: number;
+    /** Max time to wait for acquire in ms (0 = wait forever, default 0) */
+    acquireTimeoutMillis?: number;
+    /** If true, call conn.ping() before handing out (default false) */
+    validateOnAcquire?: boolean;
+}
+
+/**
+ * Connection pool: acquire/release or run(fn). One shared Database, up to maxSize Connection instances.
+ */
+export interface Pool {
+    /** Acquire a connection; must call release(conn) when done. Prefer run(fn) to avoid leaks. */
+    acquire(): Promise<Connection>;
+    /** Return a connection to the pool. */
+    release(conn: Connection): void;
+    /** Run fn(conn); connection is released in finally (on success or throw). */
+    run<T>(fn: (conn: Connection) => Promise<T>): Promise<T>;
+    /** Close pool: reject new/pending acquire, then close all connections and database. */
+    close(): Promise<void>;
+}
+
+/** Pool constructor (use createPool() instead of new Pool()). */
+export type PoolConstructor = new (options: PoolOptions) => Pool;
+
+/**
+ * Create a connection pool.
+ * @param options Pool options (maxSize required; databasePath, databaseOptions, minSize, acquireTimeoutMillis, validateOnAcquire optional)
+ * @returns Pool instance
+ */
+export function createPool(options: PoolOptions): Pool;
+
+/**
  * Represents a Lbug database instance.
  */
 export class Database {
@@ -128,6 +185,7 @@ export class Database {
      * @param checkpointThreshold Threshold for automatic checkpoints
      * @param throwOnWalReplayFailure If true, WAL replay failures throw; otherwise replay stops at error
      * @param enableChecksums If true, use checksums to detect WAL corruption
+     * @param openLockRetryMs When the file is locked, retry opening for up to this many ms (default 5000). Set 0 to fail immediately. Only for async init(); ignored for :memory:
      */
     constructor(
         databasePath?: string,
@@ -138,12 +196,14 @@ export class Database {
         autoCheckpoint?: boolean,
         checkpointThreshold?: number,
         throwOnWalReplayFailure?: boolean,
-        enableChecksums?: boolean
+        enableChecksums?: boolean,
+        openLockRetryMs?: number
     );
 
     /**
      * Initialize the database. Calling this function is optional, as the
      * database is initialized automatically when the first query is executed.
+     * When the file is locked, retries for up to openLockRetryMs (default 5s) before throwing.
      * @returns Promise that resolves when initialization completes
      */
     init(): Promise<void>;
@@ -300,6 +360,27 @@ export class Connection {
     ping(): Promise<boolean>;
 
     /**
+     * Run EXPLAIN on a Cypher statement and return the plan as a string.
+     * @param statement Cypher statement (e.g. "MATCH (a:person) RETURN a")
+     * @returns Promise that resolves to the plan string (one row per line)
+     */
+    explain(statement: string): Promise<string>;
+
+    /**
+     * Get the number of nodes in a node table. Connection must be initialized.
+     * @param nodeName Name of the node table (e.g. "User")
+     * @returns Count of nodes
+     */
+    getNumNodes(nodeName: string): number;
+
+    /**
+     * Get the number of relationships in a rel table. Connection must be initialized.
+     * @param relName Name of the rel table (e.g. "Follows")
+     * @returns Count of relationships
+     */
+    getNumRels(relName: string): number;
+
+    /**
      * Register a stream source for LOAD FROM name. Source must be AsyncIterable of rows (array or object).
      * Unregister with unregisterStream(name) when done.
      * @param name Name used in Cypher: LOAD FROM name RETURN ...
@@ -335,6 +416,14 @@ export class PreparedStatement {
      * @returns The error message or empty string if successful
      */
     getErrorMessage(): string;
+}
+
+/**
+ * Query summary with compiling and execution times (milliseconds).
+ */
+export interface QuerySummary {
+    compilingTime: number;
+    executionTime: number;
 }
 
 /**
@@ -376,6 +465,12 @@ export class QueryResult implements AsyncIterable<Record<string, LbugValue> | nu
      * @returns The next row or null if no more rows
      */
     getNextSync(): Record<string, LbugValue> | null;
+
+    /**
+     * Return the query result as a string (header + rows). For failed queries returns the error message.
+     * @returns String representation of the result
+     */
+    toString(): string;
 
     /**
      * Return a Node.js Readable stream (object mode) that yields one row per chunk.
@@ -442,10 +537,28 @@ export class QueryResult implements AsyncIterable<Record<string, LbugValue> | nu
     getColumnNamesSync(): string[];
 
     /**
+     * Get the query summary (compiling and execution time in milliseconds).
+     * @returns Promise that resolves to the query summary
+     */
+    getQuerySummary(): Promise<QuerySummary>;
+
+    /**
+     * Get the query summary synchronously.
+     * @returns The query summary
+     */
+    getQuerySummarySync(): QuerySummary;
+
+    /**
      * Close the result set and release resources.
      */
     close(): void;
 }
+
+/**
+ * Error code when the database file is locked by another process.
+ * Use with init() / initSync() or first query: catch and check err.code === LBUG_DATABASE_LOCKED.
+ */
+export const LBUG_DATABASE_LOCKED: "LBUG_DATABASE_LOCKED";
 
 /**
  * Default export for the Lbug module.
@@ -455,6 +568,9 @@ declare const lbug: {
     Connection: typeof Connection;
     PreparedStatement: typeof PreparedStatement;
     QueryResult: typeof QueryResult;
+    createPool: typeof createPool;
+    Pool: PoolConstructor;
+    LBUG_DATABASE_LOCKED: typeof LBUG_DATABASE_LOCKED;
     VERSION: string;
     STORAGE_VERSION: bigint;
 };
