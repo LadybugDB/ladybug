@@ -3,6 +3,8 @@
 #include <utility>
 
 #include "common/random_engine.h"
+#include "transaction/transaction.h"
+#include "transaction/transaction_manager.h"
 
 using namespace lbug::parser;
 using namespace lbug::binder;
@@ -23,9 +25,13 @@ Connection::Connection(Database* database) {
 
 Connection::~Connection() {
     clientContext->waitForNoActiveQuery();
-    // Never run transaction rollback during Connection teardown. Rollback during destruction
-    // can SIGSEGV (e.g. after write path when Connection is closed before Database). Commit
-    // has already happened when the result was drained; skipping rollback here avoids the crash.
+    // Roll back any active transaction so it is removed from TransactionManager. Otherwise
+    // Database::~Database() checkpoint can time out waiting for transactions to leave.
+    // We do this here (before destroying ClientContext) while Database and Connection are still
+    // valid; ~ClientContext then skips rollback to avoid double-rollback or use-after-free.
+    if (Transaction* tx = Transaction::Get(*clientContext)) {
+        database->getTransactionManager()->rollback(*clientContext, tx);
+    }
     clientContext->preventTransactionRollbackOnDestruction = true;
 }
 
