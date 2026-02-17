@@ -1,5 +1,7 @@
 #include "storage/disk_array_collection.h"
 
+#include <memory>
+
 #include "common/system_config.h"
 #include "common/types/types.h"
 #include "storage/file_handle.h"
@@ -23,16 +25,21 @@ DiskArrayCollection::DiskArrayCollection(FileHandle& fileHandle, ShadowFile& sha
     page_idx_t firstHeaderPage, bool bypassShadowing)
     : fileHandle(fileHandle), shadowFile{shadowFile}, bypassShadowing{bypassShadowing},
       numHeaders{0} {
-    // Read headers from disk
+    // Read headers from disk (no external state in lambda: optimistic read may run multiple times)
     page_idx_t headerPageIdx = firstHeaderPage;
     do {
+        std::unique_ptr<HeaderPage> headerPage;
+        page_idx_t nextHeaderPageIdx = INVALID_PAGE_IDX;
         fileHandle.optimisticReadPage(headerPageIdx, [&](auto* frame) {
             const auto page = reinterpret_cast<HeaderPage*>(frame);
-            headersForReadTrx.push_back(std::make_unique<HeaderPage>(*page));
-            headersForWriteTrx.push_back(std::make_unique<HeaderPage>(*page));
-            headerPageIdx = page->nextHeaderPage;
-            numHeaders += page->numHeaders;
+            headerPage = std::make_unique<HeaderPage>(*page);
+            nextHeaderPageIdx = page->nextHeaderPage;
         });
+        KU_ASSERT(headerPage);
+        numHeaders += headerPage->numHeaders;
+        headersForReadTrx.push_back(std::make_unique<HeaderPage>(*headerPage));
+        headersForWriteTrx.push_back(std::move(headerPage));
+        headerPageIdx = nextHeaderPageIdx;
     } while (headerPageIdx != INVALID_PAGE_IDX);
     headerPagesOnDisk = headersForReadTrx.size();
 }

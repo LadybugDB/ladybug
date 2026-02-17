@@ -1,0 +1,11 @@
+-DATASET CSV EMPTY
+
+--
+
+-CASE UnwindMixedTypes
+-STATEMENT UNWIND [1, 'hello', true, 3.14, null] AS x RETURN x
+---- 5
+1
+hello
+True
+3.140000

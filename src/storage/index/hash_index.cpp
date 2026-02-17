@@ -490,21 +490,19 @@ PrimaryKeyIndex::PrimaryKeyIndex(IndexInfo indexInfo, std::unique_ptr<IndexStora
             hashIndexDiskArrays->addDiskArray();
         }
     } else {
-        size_t headerIdx = 0;
         for (size_t headerPageIdx = 0; headerPageIdx < INDEX_HEADER_PAGES; headerPageIdx++) {
+            size_t startHeaderIdx = headerPageIdx * INDEX_HEADERS_PER_PAGE;
             pageAllocator.getDataFH()->optimisticReadPage(
                 hashIndexStorageInfo.firstHeaderPage + headerPageIdx, [&](auto* frame) {
                     const auto onDiskHeaders = reinterpret_cast<HashIndexHeaderOnDisk*>(frame);
-                    for (size_t i = 0; i < INDEX_HEADERS_PER_PAGE && headerIdx < NUM_HASH_INDEXES;
-                         i++) {
+                    for (size_t i = 0;
+                         i < INDEX_HEADERS_PER_PAGE && startHeaderIdx + i < NUM_HASH_INDEXES; i++) {
                         hashIndexHeadersForReadTrx.emplace_back(onDiskHeaders[i]);
-                        headerIdx++;
                     }
                 });
         }
         hashIndexHeadersForWriteTrx.assign(hashIndexHeadersForReadTrx.begin(),
             hashIndexHeadersForReadTrx.end());
-        KU_ASSERT(headerIdx == NUM_HASH_INDEXES);
         hashIndexDiskArrays = std::make_unique<DiskArrayCollection>(*pageAllocator.getDataFH(),
             *shadowFile,
             hashIndexStorageInfo.firstHeaderPage +
