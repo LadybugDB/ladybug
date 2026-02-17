@@ -30,6 +30,7 @@ private:
     void InitCppConnection();
     void SetMaxNumThreadForExec(const Napi::CallbackInfo& info);
     void SetQueryTimeout(const Napi::CallbackInfo& info);
+    void Interrupt(const Napi::CallbackInfo& info);
     Napi::Value ExecuteAsync(const Napi::CallbackInfo& info);
     Napi::Value QueryAsync(const Napi::CallbackInfo& info);
     Napi::Value ExecuteSync(const Napi::CallbackInfo& info);

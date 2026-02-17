@@ -23,6 +23,15 @@ export type ProgressCallback = (
 ) => void;
 
 /**
+ * Options for query() and execute().
+ * Use signal to cancel the operation via AbortController.
+ */
+export interface QueryOptions {
+    signal?: AbortSignal;
+    progressCallback?: ProgressCallback;
+}
+
+/**
  * Represents a node ID in the graph database.
  */
 export interface NodeID {
@@ -205,6 +214,12 @@ export class Connection {
     setQueryTimeout(timeoutInMs: number): void;
 
     /**
+     * Interrupt the currently executing query on this connection.
+     * No-op if the connection is not initialized or no query is running.
+     */
+    interrupt(): void;
+
+    /**
      * Close the connection.
      * @returns Promise that resolves when connection is closed
      */
@@ -219,13 +234,13 @@ export class Connection {
      * Execute a prepared statement.
      * @param preparedStatement The prepared statement to execute
      * @param params Parameters for the query as a plain object
-     * @param progressCallback Optional progress callback
-     * @returns Promise that resolves to the query result(s)
+     * @param optionsOrProgressCallback Options (e.g. signal for abort) or legacy progress callback
+     * @returns Promise that resolves to the query result(s). Rejects with DOMException AbortError if signal is aborted.
      */
     execute(
         preparedStatement: PreparedStatement,
         params?: Record<string, LbugValue>,
-        progressCallback?: ProgressCallback
+        optionsOrProgressCallback?: QueryOptions | ProgressCallback
     ): Promise<QueryResult | QueryResult[]>;
 
     /**
@@ -256,12 +271,12 @@ export class Connection {
     /**
      * Execute a query.
      * @param statement The statement to execute
-     * @param progressCallback Optional progress callback
-     * @returns Promise that resolves to the query result(s)
+     * @param optionsOrProgressCallback Options (e.g. signal for abort) or legacy progress callback
+     * @returns Promise that resolves to the query result(s). Rejects with DOMException AbortError if signal is aborted.
      */
     query(
         statement: string,
-        progressCallback?: ProgressCallback
+        optionsOrProgressCallback?: QueryOptions | ProgressCallback
     ): Promise<QueryResult | QueryResult[]>;
 
     /**

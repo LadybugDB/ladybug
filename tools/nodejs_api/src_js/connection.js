@@ -121,10 +121,11 @@ class Connection {
    * Execute a prepared statement with the given parameters.
    * @param {lbug.PreparedStatement} preparedStatement the prepared statement to execute.
    * @param {Object} params a plain object mapping parameter names to values.
-   * @param {Function} [progressCallback] - Optional callback function that is invoked with the progress of the query execution. The callback receives three arguments: pipelineProgress, numPipelinesFinished, and numPipelines.
-   * @returns {Promise<lbug.QueryResult>} a promise that resolves to the query result. The promise is rejected if there is an error.
+   * @param {Object|Function} [optionsOrProgressCallback] - Options { signal?: AbortSignal, progressCallback?: Function } or legacy progress callback.
+   * @returns {Promise<lbug.QueryResult>} a promise that resolves to the query result. Rejects if error or options.signal is aborted.
    */
-  execute(preparedStatement, params = {}, progressCallback) {
+  execute(preparedStatement, params = {}, optionsOrProgressCallback) {
+    const { signal, progressCallback } = this._normalizeQueryOptions(optionsOrProgressCallback);
     return new Promise((resolve, reject) => {
       if (
         !typeof preparedStatement === "object" ||
@@ -150,8 +151,29 @@ class Connection {
       if (progressCallback && typeof progressCallback !== "function") {
         return reject(new Error("progressCallback must be a function."));
       }
+      if (signal?.aborted) {
+        return reject(this._createAbortError());
+      }
+      let abortListener;
+      const cleanup = () => {
+        if (signal && abortListener) {
+          signal.removeEventListener("abort", abortListener);
+        }
+      };
+      if (signal) {
+        abortListener = () => {
+          this.interrupt();
+          cleanup();
+          reject(this._createAbortError());
+        };
+        signal.addEventListener("abort", abortListener);
+      }
       this._getConnection()
         .then((connection) => {
+          if (signal?.aborted) {
+            cleanup();
+            return reject(this._createAbortError());
+          }
           const nodeQueryResult = new LbugNative.NodeQueryResult();
           try {
             connection.executeAsync(
@@ -159,7 +181,11 @@ class Connection {
               nodeQueryResult,
               paramArray,
               (err) => {
+                cleanup();
                 if (err) {
+                  if (signal?.aborted && err.message === "Interrupted.") {
+                    return reject(this._createAbortError());
+                  }
                   return reject(err);
                 }
                 this._unwrapMultipleQueryResults(nodeQueryResult)
@@ -173,10 +199,12 @@ class Connection {
               progressCallback
             );
           } catch (e) {
+            cleanup();
             return reject(e);
           }
         })
         .catch((err) => {
+          cleanup();
           return reject(err);
         });
     });
@@ -262,25 +290,58 @@ class Connection {
   }
 
   /**
+   * Interrupt the currently executing query on this connection.
+   * No-op if the connection is not initialized or no query is running.
+   */
+  interrupt() {
+    if (this._connection) {
+      this._connection.interrupt();
+    }
+  }
+
+  /**
    * Execute a query.
    * @param {String} statement the statement to execute.
-   * @param {Function} [progressCallback] - Optional callback function that is invoked with the progress of the query execution. The callback receives three arguments: pipelineProgress, numPipelinesFinished, and numPipelines.
-   * @returns {Promise<lbug.QueryResult>} a promise that resolves to the query result. The promise is rejected if there is an error.
+   * @param {Object|Function} [optionsOrProgressCallback] - Options object { signal?: AbortSignal, progressCallback?: Function } or legacy progress callback.
+   * @returns {Promise<lbug.QueryResult>} a promise that resolves to the query result. The promise is rejected if there is an error or if options.signal is aborted.
    */
-  query(statement, progressCallback) {
+  query(statement, optionsOrProgressCallback) {
+    const { signal, progressCallback } = this._normalizeQueryOptions(optionsOrProgressCallback);
     return new Promise((resolve, reject) => {
       if (typeof statement !== "string") {
         return reject(new Error("statement must be a string."));
       }
-      if (progressCallback && typeof progressCallback !== "function") {
-        return reject(new Error("progressCallback must be a function."));
+      if (signal?.aborted) {
+        return reject(this._createAbortError());
+      }
+      let abortListener;
+      const cleanup = () => {
+        if (signal && abortListener) {
+          signal.removeEventListener("abort", abortListener);
+        }
+      };
+      if (signal) {
+        abortListener = () => {
+          this.interrupt();
+          cleanup();
+          reject(this._createAbortError());
+        };
+        signal.addEventListener("abort", abortListener);
       }
       this._getConnection()
         .then((connection) => {
+          if (signal?.aborted) {
+            cleanup();
+            return reject(this._createAbortError());
+          }
           const nodeQueryResult = new LbugNative.NodeQueryResult();
           try {
             connection.queryAsync(statement, nodeQueryResult, (err) => {
+              cleanup();
               if (err) {
+                if (signal?.aborted && err.message === "Interrupted.") {
+                  return reject(this._createAbortError());
+                }
                 return reject(err);
               }
               this._unwrapMultipleQueryResults(nodeQueryResult)
@@ -293,13 +354,35 @@ class Connection {
             },
               progressCallback);
           } catch (e) {
+            cleanup();
             return reject(e);
           }
         })
         .catch((err) => {
+          cleanup();
           return reject(err);
         });
     });
+  }
+
+  _normalizeQueryOptions(optionsOrProgressCallback) {
+    if (optionsOrProgressCallback == null) {
+      return { signal: undefined, progressCallback: undefined };
+    }
+    if (typeof optionsOrProgressCallback === "function") {
+      return { signal: undefined, progressCallback: optionsOrProgressCallback };
+    }
+    if (typeof optionsOrProgressCallback === "object" && optionsOrProgressCallback !== null) {
+      return {
+        signal: optionsOrProgressCallback.signal,
+        progressCallback: optionsOrProgressCallback.progressCallback,
+      };
+    }
+    return { signal: undefined, progressCallback: undefined };
+  }
+
+  _createAbortError() {
+    return new DOMException("The operation was aborted.", "AbortError");
   }
 
   /**
