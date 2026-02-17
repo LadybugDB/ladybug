@@ -1,3 +1,6 @@
+tree-sitter/
+tree-sitter-cypher/
+
 .idea/
 .vscode
 .vs

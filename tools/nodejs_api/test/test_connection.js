@@ -1,3 +1,5 @@
+const { assert } = require("chai");
+
 describe("Connection constructor", function () {
   it("should create a connection with a valid database object", async function () {
     const connection = new lbug.Connection(db);
@@ -7,7 +9,6 @@ describe("Connection constructor", function () {
     assert.exists(connection._connection);
     assert.isTrue(connection._isInitialized);
     assert.notExists(connection._initPromise);
-    await connection.close();
   });
 
   it("should throw error if the database object is invalid", async function () {
@@ -229,8 +230,8 @@ describe("Query", function () {
 
 describe("Timeout", function () {
   it("should abort a query if the timeout is reached", async function () {
-    const newConn = new lbug.Connection(db);
     try {
+      const newConn = new lbug.Connection(db);
       await newConn.init();
       newConn.setQueryTimeout(1);
       await newConn.query(
@@ -239,14 +240,12 @@ describe("Timeout", function () {
       assert.fail("No error thrown when the query times out.");
     } catch (err) {
       assert.equal(err.message, "Interrupted.");
-    } finally {
-      if (!newConn._isClosed) await newConn.close().catch(() => {});
     }
   });
 
   it("should allow setting a timeout before the connection is initialized", async function () {
-    const newConn = new lbug.Connection(db);
     try {
+      const newConn = new lbug.Connection(db);
       newConn.setQueryTimeout(1);
       await newConn.init();
       await newConn.query(
@@ -255,80 +254,7 @@ describe("Timeout", function () {
       assert.fail("No error thrown when the query times out.");
     } catch (err) {
       assert.equal(err.message, "Interrupted.");
-    } finally {
-      if (!newConn._isClosed) await newConn.close().catch(() => {});
     }
-  });
-});
-
-describe("Interrupt", function () {
-  it("should abort a long-running query when interrupt() is called", { timeout: 5000 }, async function () {
-    if (process.platform === "win32") {
-      this.skip();
-    }
-    const newConn = new lbug.Connection(db);
-    try {
-      await newConn.init();
-      const longQuery =
-        "UNWIND RANGE(1, 30000) AS x UNWIND RANGE(1, 30000) AS y RETURN COUNT(x + y);";
-      const queryPromise = newConn.query(longQuery);
-      setTimeout(() => newConn.interrupt(), 100);
-      try {
-        await queryPromise;
-        assert.fail("No error thrown when the query was interrupted.");
-      } catch (err) {
-        assert.equal(err.message, "Interrupted.");
-      }
-    } finally {
-      if (!newConn._isClosed) await newConn.close().catch(() => {});
-    }
-  });
-});
-
-describe("AbortSignal", function () {
-  it("should reject with AbortError when signal is already aborted before query starts", async function () {
-    const ac = new AbortController();
-    ac.abort();
-    try {
-      await conn.query("RETURN 1", { signal: ac.signal });
-      assert.fail("No error thrown when signal was already aborted.");
-    } catch (err) {
-      assert.equal(err.name, "AbortError");
-      assert.equal(err.message, "The operation was aborted.");
-    }
-  });
-
-  it("should reject with AbortError when signal is aborted during query", async function () {
-    const newConn = new lbug.Connection(db);
-    try {
-      await newConn.init();
-      const ac = new AbortController();
-      const longQuery =
-        "UNWIND RANGE(1, 30000) AS x UNWIND RANGE(1, 30000) AS y RETURN COUNT(x + y);";
-      const queryPromise = newConn.query(longQuery, { signal: ac.signal });
-      setTimeout(() => ac.abort(), 100);
-      try {
-        await queryPromise;
-        assert.fail("No error thrown when signal was aborted during query.");
-      } catch (err) {
-        assert.equal(err.name, "AbortError");
-      }
-    } finally {
-      if (!newConn._isClosed) await newConn.close().catch(() => {});
-    }
-  });
-
-  it("should work with progressCallback in options object", async function () {
-    let progressCalled = false;
-    const result = await conn.query("RETURN 1", {
-      progressCallback: () => {
-        progressCalled = true;
-      },
-    });
-    assert.exists(result);
-    const rows = Array.isArray(result) ? result : [result];
-    assert.isAtLeast(rows.length, 1);
-    rows.forEach((r) => r.close());
   });
 });
 

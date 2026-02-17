@@ -121,20 +121,13 @@ class Connection {
    * Execute a prepared statement with the given parameters.
    * @param {lbug.PreparedStatement} preparedStatement the prepared statement to execute.
    * @param {Object} params a plain object mapping parameter names to values.
-   * @param {Object|Function} [optionsOrProgressCallback] - Options { signal?: AbortSignal, progressCallback?: Function } or legacy progress callback.
-   * @returns {Promise<lbug.QueryResult>} a promise that resolves to the query result. Rejects if error or options.signal is aborted.
+   * @param {Function} [progressCallback] - Optional callback function that is invoked with the progress of the query execution. The callback receives three arguments: pipelineProgress, numPipelinesFinished, and numPipelines.
+   * @returns {Promise<lbug.QueryResult>} a promise that resolves to the query result. The promise is rejected if there is an error.
    */
-  execute(preparedStatement, params = {}, optionsOrProgressCallback) {
-    const { signal, progressCallback } = this._normalizeQueryOptions(optionsOrProgressCallback);
+  execute(preparedStatement, params = {}, progressCallback) {
     return new Promise((resolve, reject) => {
-      if (progressCallback !== undefined && typeof progressCallback !== "function") {
-        return reject(new Error("progressCallback must be a function."));
-      }
-      if (optionsOrProgressCallback != null && typeof optionsOrProgressCallback !== "function" && typeof optionsOrProgressCallback !== "object") {
-        return reject(new Error("progressCallback must be a function."));
-      }
       if (
-        typeof preparedStatement !== "object" ||
+        !typeof preparedStatement === "object" ||
         preparedStatement.constructor.name !== "PreparedStatement"
       ) {
         return reject(
@@ -154,29 +147,11 @@ class Connection {
         const value = params[key];
         paramArray.push([key, value]);
       }
-      if (signal?.aborted) {
-        return reject(this._createAbortError());
-      }
-      let abortListener;
-      const cleanup = () => {
-        if (signal && abortListener) {
-          signal.removeEventListener("abort", abortListener);
-        }
-      };
-      if (signal) {
-        abortListener = () => {
-          this.interrupt();
-          cleanup();
-          reject(this._createAbortError());
-        };
-        signal.addEventListener("abort", abortListener);
+      if (progressCallback && typeof progressCallback !== "function") {
+        return reject(new Error("progressCallback must be a function."));
       }
       this._getConnection()
         .then((connection) => {
-          if (signal?.aborted) {
-            cleanup();
-            return reject(this._createAbortError());
-          }
           const nodeQueryResult = new LbugNative.NodeQueryResult();
           try {
             connection.executeAsync(
@@ -184,11 +159,7 @@ class Connection {
               nodeQueryResult,
               paramArray,
               (err) => {
-                cleanup();
                 if (err) {
-                  if (signal?.aborted && err.message === "Interrupted.") {
-                    return reject(this._createAbortError());
-                  }
                   return reject(err);
                 }
                 this._unwrapMultipleQueryResults(nodeQueryResult)
@@ -202,12 +173,10 @@ class Connection {
               progressCallback
             );
           } catch (e) {
-            cleanup();
             return reject(e);
           }
         })
         .catch((err) => {
-          cleanup();
           return reject(err);
         });
     });
@@ -293,64 +262,25 @@ class Connection {
   }
 
   /**
-   * Interrupt the currently executing query on this connection.
-   * No-op if the connection is not initialized or no query is running.
-   */
-  interrupt() {
-    if (this._connection) {
-      this._connection.interrupt();
-    }
-  }
-
-  /**
    * Execute a query.
    * @param {String} statement the statement to execute.
-   * @param {Object|Function} [optionsOrProgressCallback] - Options object { signal?: AbortSignal, progressCallback?: Function } or legacy progress callback.
-   * @returns {Promise<lbug.QueryResult>} a promise that resolves to the query result. The promise is rejected if there is an error or if options.signal is aborted.
+   * @param {Function} [progressCallback] - Optional callback function that is invoked with the progress of the query execution. The callback receives three arguments: pipelineProgress, numPipelinesFinished, and numPipelines.
+   * @returns {Promise<lbug.QueryResult>} a promise that resolves to the query result. The promise is rejected if there is an error.
    */
-  query(statement, optionsOrProgressCallback) {
-    const { signal, progressCallback } = this._normalizeQueryOptions(optionsOrProgressCallback);
+  query(statement, progressCallback) {
     return new Promise((resolve, reject) => {
-      if (progressCallback !== undefined && typeof progressCallback !== "function") {
-        return reject(new Error("progressCallback must be a function."));
-      }
-      if (optionsOrProgressCallback != null && typeof optionsOrProgressCallback !== "function" && typeof optionsOrProgressCallback !== "object") {
-        return reject(new Error("progressCallback must be a function."));
-      }
       if (typeof statement !== "string") {
         return reject(new Error("statement must be a string."));
       }
-      if (signal?.aborted) {
-        return reject(this._createAbortError());
-      }
-      let abortListener;
-      const cleanup = () => {
-        if (signal && abortListener) {
-          signal.removeEventListener("abort", abortListener);
-        }
-      };
-      if (signal) {
-        abortListener = () => {
-          this.interrupt();
-          cleanup();
-          reject(this._createAbortError());
-        };
-        signal.addEventListener("abort", abortListener);
+      if (progressCallback && typeof progressCallback !== "function") {
+        return reject(new Error("progressCallback must be a function."));
       }
       this._getConnection()
         .then((connection) => {
-          if (signal?.aborted) {
-            cleanup();
-            return reject(this._createAbortError());
-          }
           const nodeQueryResult = new LbugNative.NodeQueryResult();
           try {
             connection.queryAsync(statement, nodeQueryResult, (err) => {
-              cleanup();
               if (err) {
-                if (signal?.aborted && err.message === "Interrupted.") {
-                  return reject(this._createAbortError());
-                }
                 return reject(err);
               }
               this._unwrapMultipleQueryResults(nodeQueryResult)
@@ -363,35 +293,13 @@ class Connection {
             },
               progressCallback);
           } catch (e) {
-            cleanup();
             return reject(e);
           }
         })
         .catch((err) => {
-          cleanup();
           return reject(err);
         });
     });
-  }
-
-  _normalizeQueryOptions(optionsOrProgressCallback) {
-    if (optionsOrProgressCallback == null) {
-      return { signal: undefined, progressCallback: undefined };
-    }
-    if (typeof optionsOrProgressCallback === "function") {
-      return { signal: undefined, progressCallback: optionsOrProgressCallback };
-    }
-    if (typeof optionsOrProgressCallback === "object" && optionsOrProgressCallback !== null) {
-      return {
-        signal: optionsOrProgressCallback.signal,
-        progressCallback: optionsOrProgressCallback.progressCallback,
-      };
-    }
-    return { signal: undefined, progressCallback: undefined };
-  }
-
-  _createAbortError() {
-    return new DOMException("The operation was aborted.", "AbortError");
   }
 
   /**
@@ -410,127 +318,6 @@ class Connection {
     };
     closeResult(result);
     return true;
-  }
-
-  /**
-   * Run EXPLAIN on a Cypher statement and return the plan as a string.
-   * @param {string} statement – Cypher statement (e.g. "MATCH (a:person) RETURN a")
-   * @returns {Promise<string>} the plan string (one row per line)
-   */
-  async explain(statement) {
-    if (typeof statement !== "string") {
-      throw new Error("explain: statement must be a string.");
-    }
-    const trimmed = statement.trim();
-    const explainStatement = trimmed.toUpperCase().startsWith("EXPLAIN") ? trimmed : "EXPLAIN " + trimmed;
-    const result = await this.query(explainStatement);
-    const single = Array.isArray(result) ? result[0] : result;
-    const rows = await single.getAll();
-    single.close();
-    if (rows.length === 0) {
-      return "";
-    }
-    return rows
-      .map((row) => Object.values(row).join(" | "))
-      .join("\n");
-  }
-
-  /**
-   * Get the number of nodes in a node table. Connection must be initialized.
-   * @param {string} nodeName – name of the node table (e.g. "User")
-   * @returns {number} count of nodes
-   */
-  getNumNodes(nodeName) {
-    if (typeof nodeName !== "string") {
-      throw new Error("getNumNodes(nodeName): nodeName must be a string.");
-    }
-    const connection = this._getConnectionSync();
-    return connection.getNumNodes(nodeName);
-  }
-
-  /**
-   * Get the number of relationships in a rel table. Connection must be initialized.
-   * @param {string} relName – name of the rel table (e.g. "Follows")
-   * @returns {number} count of relationships
-   */
-  getNumRels(relName) {
-    if (typeof relName !== "string") {
-      throw new Error("getNumRels(relName): relName must be a string.");
-    }
-    const connection = this._getConnectionSync();
-    return connection.getNumRels(relName);
-  }
-
-  /**
-   * Register a stream source for LOAD FROM name. The source must be AsyncIterable; each yielded
-   * value is a row (array of column values in schema order, or object keyed by column name).
-   * Call unregisterStream(name) when done or before reusing the name.
-   * @param {string} name – name used in Cypher: LOAD FROM name RETURN ...
-   * @param {AsyncIterable<Array<*>|Object>} source – async iterable of rows
-   * @param {{ columns: Array<{ name: string, type: string }> }} options – schema (required). type: INT64, INT32, DOUBLE, STRING, BOOL, DATE, etc.
-   */
-  async registerStream(name, source, options = {}) {
-    if (typeof name !== "string") {
-      throw new Error("registerStream: name must be a string.");
-    }
-    const columns = options.columns;
-    if (!Array.isArray(columns) || columns.length === 0) {
-      throw new Error("registerStream: options.columns (array of { name, type }) is required.");
-    }
-    const conn = await this._getConnection();
-    const it = source[Symbol.asyncIterator] ? source[Symbol.asyncIterator].call(source) : source;
-    const pending = [];
-    let consumerRunning = false;
-
-    const toRows = (raw) => {
-      if (raw == null) return [];
-      if (Array.isArray(raw)) {
-        const first = raw[0];
-        const isArrayOfRows =
-          raw.length > 0 &&
-          (Array.isArray(first) || (typeof first === "object" && first !== null && !Array.isArray(first)));
-        return isArrayOfRows ? raw : [raw];
-      }
-      return [raw];
-    };
-
-    const runConsumer = async () => {
-      pending.sort((a, b) => a - b);
-      while (pending.length > 0) {
-        const requestId = pending.shift();
-        try {
-          const n = await it.next();
-          const { rows, done } = { rows: toRows(n.value), done: n.done };
-          conn.returnChunk(requestId, rows, done);
-        } catch (e) {
-          conn.returnChunk(requestId, [], true);
-        }
-      }
-      consumerRunning = false;
-    };
-
-    const getChunk = (requestId) => {
-      pending.push(requestId);
-      if (!consumerRunning) {
-        consumerRunning = true;
-        setImmediate(() => runConsumer());
-      }
-    };
-    conn.registerStream(name, getChunk, columns);
-  }
-
-  /**
-   * Unregister a stream source by name.
-   * @param {string} name – name passed to registerStream
-   */
-  unregisterStream(name) {
-    if (typeof name !== "string") {
-      throw new Error("unregisterStream: name must be a string.");
-    }
-    if (!this._connection) {
-      return;
-    }
-    this._connection.unregisterStream(name);
   }
 
   /**

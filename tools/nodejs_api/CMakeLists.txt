@@ -9,42 +9,25 @@ else()
   set(NPX_CMD npx)
 endif()
 
-# Use --log-level error so INFO lines are not captured in OUTPUT_VARIABLE
 execute_process(
-  COMMAND ${NPX_CMD} cmake-js print-cmakejs-include --log-level error
+  COMMAND ${NPX_CMD} cmake-js print-cmakejs-include
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   OUTPUT_VARIABLE CMAKE_JS_INC
 )
 execute_process(
-  COMMAND ${NPX_CMD} cmake-js print-cmakejs-lib --log-level error
+  COMMAND ${NPX_CMD} cmake-js print-cmakejs-lib
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   OUTPUT_VARIABLE CMAKE_JS_LIB
 )
 execute_process(
-  COMMAND ${NPX_CMD} cmake-js print-cmakejs-src --log-level error
+  COMMAND ${NPX_CMD} cmake-js print-cmakejs-src
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   OUTPUT_VARIABLE CMAKE_JS_SRC
 )
 
-string(STRIP "${CMAKE_JS_INC}" CMAKE_JS_INC)
-string(STRIP "${CMAKE_JS_LIB}" CMAKE_JS_LIB)
-string(STRIP "${CMAKE_JS_SRC}" CMAKE_JS_SRC)
-# Filter out cmake-js INFO lines that may be mixed into stdout
-foreach(VAR CMAKE_JS_INC CMAKE_JS_LIB CMAKE_JS_SRC)
-  string(REPLACE "\n" ";" _LINES "${${VAR}}")
-  set(_FILTERED "")
-  foreach(_LINE ${_LINES})
-    string(STRIP "${_LINE}" _LINE)
-    if(_LINE AND NOT _LINE MATCHES "^INFO")
-      list(APPEND _FILTERED "${_LINE}")
-    endif()
-  endforeach()
-  list(JOIN _FILTERED " " _JOINED)
-  set(${VAR} "${_JOINED}")
-endforeach()
-string(STRIP "${CMAKE_JS_INC}" CMAKE_JS_INC)
-string(STRIP "${CMAKE_JS_LIB}" CMAKE_JS_LIB)
-string(STRIP "${CMAKE_JS_SRC}" CMAKE_JS_SRC)
+string(STRIP ${CMAKE_JS_INC} CMAKE_JS_INC)
+string(STRIP ${CMAKE_JS_LIB} CMAKE_JS_LIB)
+string(STRIP ${CMAKE_JS_SRC} CMAKE_JS_SRC)
 
 # Print CMAKE_JS variables
 message(STATUS "CMake.js configurations: LIB=${CMAKE_JS_LIB}, INC=${CMAKE_JS_INC}, SRC=${CMAKE_JS_SRC}")

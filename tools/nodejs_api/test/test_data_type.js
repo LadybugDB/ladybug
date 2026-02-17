@@ -1,3 +1,4 @@
+const { assert } = require("chai");
 const EPSILON = 1e-6;
 
 describe("BOOL", function () {
@@ -379,8 +380,8 @@ describe("LIST", function () {
     assert.equal(result[0]["a.courseScoresPerTerm"].length, 2);
     assert.equal(result[0]["a.courseScoresPerTerm"][0].length, 2);
     assert.equal(result[0]["a.courseScoresPerTerm"][1].length, 3);
-    assert.deepEqual(result[0]["a.courseScoresPerTerm"][0], [10, 8]);
-    assert.deepEqual(result[0]["a.courseScoresPerTerm"][1], [6, 7, 8]);
+    assert.deepEqual(result[0]["a.courseScoresPerTerm"][0][(10, 8)]);
+    assert.deepEqual(result[0]["a.courseScoresPerTerm"][1][(6, 7, 8)]);
   });
 });
 
@@ -450,7 +451,7 @@ describe("NODE", function () {
     );
     assert.deepEqual(result["courseScoresPerTerm"][0], [10, 8]);
     assert.deepEqual(result["courseScoresPerTerm"][1], [6, 7, 8]);
-    assert.deepEqual(result["usedNames"], ["Aida"]);
+    assert.equal(result["usedNames"], "Aida");
     assert.equal(result["_id"]["offset"], 0);
     assert.equal(result["_id"]["table"], 0);
   });

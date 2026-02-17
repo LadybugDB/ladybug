@@ -2,29 +2,6 @@
 
 const LbugNative = require("./lbug_native.js");
 
-/** Error code when the database file is locked by another process. */
-const LBUG_DATABASE_LOCKED = "LBUG_DATABASE_LOCKED";
-
-const LOCK_ERROR_MESSAGE = "Could not set lock on file";
-
-function isLockError(err) {
-  return err && typeof err.message === "string" && err.message.includes(LOCK_ERROR_MESSAGE);
-}
-
-function normalizeInitError(err) {
-  if (isLockError(err)) {
-    const e = new Error(err.message);
-    e.code = LBUG_DATABASE_LOCKED;
-    e.cause = err;
-    return e;
-  }
-  return err;
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
 class Database {
   /**
    * Initialize a new Database object. Note that the initialization is done
@@ -49,8 +26,6 @@ class Database {
    * the error occured.
    * @param {Boolean} enableChecksums If true, the database will use checksums to detect corruption in the
    * WAL file.
-   * @param {Number} [openLockRetryMs=5000] When the database file is locked, retry opening for up to this many ms
-   * (grace period). Only applies to async init(); set to 0 to fail immediately. Ignored for in-memory databases.
    */
   constructor(
     databasePath,
@@ -62,7 +37,6 @@ class Database {
     checkpointThreshold = -1,
     throwOnWalReplayFailure = true,
     enableChecksums = true,
-    openLockRetryMs = 5000,
   ) {
     if (!databasePath) {
       databasePath = ":memory:";
@@ -78,9 +52,6 @@ class Database {
     }
     if (typeof checkpointThreshold !== "number" || maxDBSize < -1) {
       throw new Error("Checkpoint threshold must be a positive integer.");
-    }
-    if (typeof openLockRetryMs !== "number" || openLockRetryMs < 0) {
-      throw new Error("openLockRetryMs must be a non-negative number.");
     }
     bufferManagerSize = Math.floor(bufferManagerSize);
     maxDBSize = Math.floor(maxDBSize);
@@ -99,8 +70,6 @@ class Database {
     this._isInitialized = false;
     this._initPromise = null;
     this._isClosed = false;
-    // Grace period for lock: retry for up to openLockRetryMs (0 = no retry). In-memory has no file lock.
-    this._openLockRetryMs = databasePath === ":memory:" ? 0 : Math.floor(openLockRetryMs);
   }
 
   /**
@@ -122,49 +91,27 @@ class Database {
   /**
    * Initialize the database. Calling this function is optional, as the
    * database is initialized automatically when the first query is executed.
-   * When the file is locked, init() retries for up to openLockRetryMs (default 5s) before throwing.
    */
   async init() {
     if (!this._isInitialized) {
       if (!this._initPromise) {
-        const self = this;
-        const tryOnce = () =>
-          new Promise((resolve, reject) => {
-            self._database.initAsync((err) => {
-              if (err) reject(err);
-              else {
-                self._isInitialized = true;
-                resolve();
+        this._initPromise = new Promise((resolve, reject) => {
+          this._database.initAsync((err) => {
+            if (err) {
+              reject(err);
+            } else {
+              try {
+                this._isInitialized = true;
+              } catch (e) {
+                return reject(e);
               }
-            });
-          });
-        const OPEN_LOCK_DELAY_MS = 200;
-
-        this._initPromise = (async () => {
-          const start = Date.now();
-          for (;;) {
-            if (self._isClosed) throw new Error("Database is closed.");
-            try {
-              await tryOnce();
-              return;
-            } catch (err) {
-              if (!isLockError(err)) throw normalizeInitError(err);
-              if (
-                self._openLockRetryMs <= 0 ||
-                Date.now() - start >= self._openLockRetryMs
-              ) {
-                throw normalizeInitError(err);
-              }
-              await sleep(OPEN_LOCK_DELAY_MS);
+              resolve();
             }
-          }
-        })();
+          });
+        });
       }
-      try {
-        await this._initPromise;
-      } finally {
-        this._initPromise = null;
-      }
+      await this._initPromise;
+      this._initPromise = null;
     }
   }
 
@@ -180,11 +127,7 @@ class Database {
     if (this._isInitialized) {
       return;
     }
-    try {
-      this._database.initSync();
-    } catch (err) {
-      throw normalizeInitError(err);
-    }
+    this._database.initSync();
     this._isInitialized = true;
   }
 
@@ -264,7 +207,5 @@ class Database {
     this._isClosed = true;
   }
 }
-
-Database.LBUG_DATABASE_LOCKED = LBUG_DATABASE_LOCKED;
 
 module.exports = Database;

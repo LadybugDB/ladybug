@@ -1,3 +1,5 @@
+const { assert } = require("chai");
+
 const PERSON_IDS = [0, 2, 3, 5, 7, 8, 9, 10];
 
 describe("Query execution", function () {
