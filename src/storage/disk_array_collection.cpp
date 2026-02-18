@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "common/exception/runtime.h"
 #include "common/system_config.h"
 #include "common/types/types.h"
 #include "storage/file_handle.h"
@@ -35,7 +36,9 @@ DiskArrayCollection::DiskArrayCollection(FileHandle& fileHandle, ShadowFile& sha
             headerPage = std::make_unique<HeaderPage>(*page);
             nextHeaderPageIdx = page->nextHeaderPage;
         });
-        KU_ASSERT(headerPage);
+        if (!headerPage) {
+            throw RuntimeException("Failed to read header page from disk.");
+        }
         numHeaders += headerPage->numHeaders;
         headersForReadTrx.push_back(std::make_unique<HeaderPage>(*headerPage));
         headersForWriteTrx.push_back(std::move(headerPage));
