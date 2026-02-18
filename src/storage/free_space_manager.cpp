@@ -202,6 +202,10 @@ void FreeSpaceManager::finalizeCheckpoint(FileHandle* fileHandle) {
 }
 
 void FreeSpaceManager::mergeFreePages(FileHandle* fileHandle) {
+    // evict pages before they're added to the free list (same as finalizeCheckpoint)
+    for (const auto& entry : uncheckpointedFreePageRanges) {
+        evictPages(fileHandle, entry);
+    }
     mergePageRanges(std::move(uncheckpointedFreePageRanges), fileHandle);
 }
 
