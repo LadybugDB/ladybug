@@ -25,7 +25,7 @@ npm install lbug
   pnpm add lbug@github:LadybugDB/ladybug#path:tools/nodejs_api
   ```
 
-  On install, the package will build the native addon from source (needs CMake and a C++20 compiler).
+  If the ref has prebuilt binaries (see [bindings_release](../../docs/bindings_release.md#nodejs-addon-prebuilts)), install uses them and no local build is needed. Otherwise the package will build the native addon from source (needs CMake and a C++20 compiler).
 
 - **npm**: no built-in subdirectory install. Either use a **local path** after cloning and building (see [Build and use in other projects](#-build-and-use-in-other-projects-local)), or a tarball from [GitPkg](https://gitpkg.vercel.app/) (e.g. `https://gitpkg.vercel.app/LadybugDB/ladybug/tools/nodejs_api?main`).
 
