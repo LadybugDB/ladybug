@@ -1,9 +1,9 @@
 # Incident: CI minimal test — CloseConnectionWithActiveTransaction fails (checkpoint timeout)
 
-**Date:** 2026-02-17  
-**Status:** Resolved  
-**Severity:** Medium (CI red; test passes locally, fails in CI)  
-**Component:** Main — Connection/ClientContext teardown, TransactionManager checkpoint  
+**Date:** 2026-02-17
+**Status:** Resolved
+**Severity:** Medium (CI red; test passes locally, fails in CI)
+**Component:** Main — Connection/ClientContext teardown, TransactionManager checkpoint
 **Related:** [2026-02-16-connection-close-sigsegv.md](2026-02-16-connection-close-sigsegv.md)
 
 ---
@@ -12,11 +12,11 @@
 
 - **Observed:** Job "minimal test" fails in CI with one failed test: `PrivateApiTest.CloseConnectionWithActiveTransaction`. The failure occurs during **TearDown**, not in the test body. Stack trace shows `CheckpointException` thrown from `TransactionManager::checkpointNoLock` → `stopNewTransactionsAndWaitUntilAllTransactionsLeave()` (timeout waiting for active transactions).
 - **Goal:** Test must pass in CI; teardown must not throw so that checkpoint either succeeds or is skipped/absorbed without failing the test.
-- **Existing behaviour:**  
-  - `Connection::~Connection()` calls `waitForNoActiveQuery()`, sets `clientContext->preventTransactionRollbackOnDestruction = true`, then destroys `clientContext`. So **no rollback** runs when a connection is closed without draining the result (by design, to avoid SIGSEGV — see 2026-02-16 incident).  
-  - The active transaction is therefore **never removed** from `TransactionManager::activeTransactions`.  
-  - `BaseGraphTest::TearDown()` does `conn.reset()` then `database.reset()`.  
-  - `Database::~Database()` calls `transactionManager->checkpoint(clientContext)` when not read-only and `forceCheckpointOnClose` is true.  
+- **Existing behaviour:**
+  - `Connection::~Connection()` calls `waitForNoActiveQuery()`, sets `clientContext->preventTransactionRollbackOnDestruction = true`, then destroys `clientContext`. So **no rollback** runs when a connection is closed without draining the result (by design, to avoid SIGSEGV — see 2026-02-16 incident).
+  - The active transaction is therefore **never removed** from `TransactionManager::activeTransactions`.
+  - `BaseGraphTest::TearDown()` does `conn.reset()` then `database.reset()`.
+  - `Database::~Database()` calls `transactionManager->checkpoint(clientContext)` when not read-only and `forceCheckpointOnClose` is true.
   - Checkpoint calls `stopNewTransactionsAndWaitUntilAllTransactionsLeave()` and waits up to `DEFAULT_CHECKPOINT_WAIT_TIMEOUT_IN_MICROS` (5s). Because the transaction from the closed connection is still in the list, the wait **times out** and throws. In CI (slower runner) this manifests consistently; locally it may pass by timing or not hit the path.
 - **Gap:** Closing a connection with an active transaction leaves that transaction in the manager; a subsequent database close then tries to checkpoint and times out. There is no path that clears the transaction on connection close without running the full rollback path.
 
@@ -38,15 +38,15 @@
 
 ## Validation
 
-- **Option A:**  
-  - Code path: `Connection::~Connection()` runs while `database` pointer is still valid (Connection holds `Database*`). So `getDatabase()->transactionManager->rollback(*clientContext, Transaction::Get(*clientContext))` is called with live ClientContext and Database. This is the same rollback path used on normal ROLLBACK/error.  
-  - The 2026-02-16 incident stated that rollback was skipped in **ClientContext** destructor because it “could touch the database and could also crash if the database or connection was already torn down”. Here we perform rollback **before** destroying ClientContext, so the connection and database are still intact.  
+- **Option A:**
+  - Code path: `Connection::~Connection()` runs while `database` pointer is still valid (Connection holds `Database*`). So `getDatabase()->transactionManager->rollback(*clientContext, Transaction::Get(*clientContext))` is called with live ClientContext and Database. This is the same rollback path used on normal ROLLBACK/error.
+  - The 2026-02-16 incident stated that rollback was skipped in **ClientContext** destructor because it “could touch the database and could also crash if the database or connection was already torn down”. Here we perform rollback **before** destroying ClientContext, so the connection and database are still intact.
   - Evidence: `TransactionManager::rollback` takes `ClientContext&` and `Transaction*`; both are valid in `~Connection()` before `clientContext.reset()`.
 
-- **Option B:**  
+- **Option B:**
   - Would require a new API (e.g. remove from `activeTransactions` without WAL/undo rollback). Checkpoint then runs; uncommitted changes might still be in version info / buffers. Not validated as safe for correctness; keep as optional fallback only.
 
-- **Option D:**  
+- **Option D:**
   - `Database::~Database()` at `database.cpp:143–148` already wraps `checkpoint(clientContext)` in `try { ... } catch (...) {}`. So in theory the exception should not propagate. The CI failure stack shows the exception in the checkpoint path; it is possible the exception is rethrown from somewhere else (e.g. from a destructor invoked during unwinding) or that the test binary was built from a version where the catch was not present. Re-check current `database.cpp` and test binary to confirm.
 
 ---
@@ -63,18 +63,18 @@
 
 ## Implementation sketch (Option A)
 
-1. **File:** `src/main/connection.cpp`  
-   - In `Connection::~Connection()` after `clientContext->waitForNoActiveQuery();`:  
-     - Include or forward-declare so that `Transaction::Get(*clientContext)` and `transactionManager->rollback(...)` are available.  
-     - If `Transaction::Get(*clientContext)` is non-null, call `database->getTransactionManager()->rollback(*clientContext, Transaction::Get(*clientContext))`.  
-     - Then set `clientContext->preventTransactionRollbackOnDestruction = true;` (so that when `clientContext` is destroyed, `~ClientContext` does not attempt rollback again).  
+1. **File:** `src/main/connection.cpp`
+   - In `Connection::~Connection()` after `clientContext->waitForNoActiveQuery();`:
+     - Include or forward-declare so that `Transaction::Get(*clientContext)` and `transactionManager->rollback(...)` are available.
+     - If `Transaction::Get(*clientContext)` is non-null, call `database->getTransactionManager()->rollback(*clientContext, Transaction::Get(*clientContext))`.
+     - Then set `clientContext->preventTransactionRollbackOnDestruction = true;` (so that when `clientContext` is destroyed, `~ClientContext` does not attempt rollback again).
      - Then leave the rest of the destructor as-is (e.g. `clientContext.reset()` or equivalent).
 
 2. **Dependencies:** `connection.cpp` already has access to `database` and `clientContext`. Ensure `Transaction::Get` and `TransactionManager::rollback` are visible (include `transaction/transaction.h`, `transaction/transaction_manager.h`, or equivalent).
 
-3. **Tests:**  
-   - `build/relwithdebinfo/test/transaction/transaction_test --gtest_filter="*CloseConnectionWithActiveTransaction*"` (single test).  
-   - Then `make shell-test test` or the full minimal-test job.  
+3. **Tests:**
+   - `build/relwithdebinfo/test/transaction/transaction_test --gtest_filter="*CloseConnectionWithActiveTransaction*"` (single test).
+   - Then `make shell-test test` or the full minimal-test job.
    - Re-run CI job "minimal test" after pushing.
 
 4. **Rollback behaviour:** No change to normal commit/rollback semantics; only the teardown path when a connection is closed with an active transaction now performs one explicit rollback before destroying ClientContext.

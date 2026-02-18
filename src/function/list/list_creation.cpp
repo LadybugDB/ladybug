@@ -1,3 +1,5 @@
+#include <unordered_set>
+
 #include "binder/expression/expression_util.h"
 #include "function/list/vector_list_functions.h"
 #include "function/scalar_function.h"
@@ -31,7 +33,21 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
     LogicalType combinedType(LogicalTypeID::ANY);
     binder::ExpressionUtil::tryCombineDataType(input.arguments, combinedType);
     if (combinedType.getLogicalTypeID() == LogicalTypeID::ANY) {
-        combinedType = LogicalType::INT64();
+        // Truly mixed-type list (e.g. [1, 'hello', true]): use STRING so all types can cast.
+        bool hasConcreteType = false;
+        std::unordered_set<LogicalTypeID> distinctTypes;
+        for (auto& arg : input.arguments) {
+            auto typeID = arg->getDataType().getLogicalTypeID();
+            if (typeID != LogicalTypeID::ANY) {
+                hasConcreteType = true;
+                distinctTypes.insert(typeID);
+            }
+        }
+        if (hasConcreteType && distinctTypes.size() > 1) {
+            combinedType = LogicalType::STRING();
+        } else {
+            combinedType = LogicalType::INT64();
+        }
     }
     auto resultType = LogicalType::LIST(combinedType.copy());
     auto bindData = std::make_unique<FunctionBindData>(std::move(resultType));
