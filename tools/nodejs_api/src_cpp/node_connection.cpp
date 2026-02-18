@@ -179,20 +179,32 @@ Napi::Value NodeConnection::QueryAsync(const Napi::CallbackInfo& info) {
 static lbug::common::LogicalType parseColumnType(const std::string& typeStr) {
     std::string upper = typeStr;
     std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
-    if (upper == "INT64") return lbug::common::LogicalType(lbug::common::LogicalTypeID::INT64);
-    if (upper == "INT32") return lbug::common::LogicalType(lbug::common::LogicalTypeID::INT32);
-    if (upper == "INT16") return lbug::common::LogicalType(lbug::common::LogicalTypeID::INT16);
-    if (upper == "INT8") return lbug::common::LogicalType(lbug::common::LogicalTypeID::INT8);
-    if (upper == "UINT64") return lbug::common::LogicalType(lbug::common::LogicalTypeID::UINT64);
-    if (upper == "UINT32") return lbug::common::LogicalType(lbug::common::LogicalTypeID::UINT32);
-    if (upper == "UINT16") return lbug::common::LogicalType(lbug::common::LogicalTypeID::UINT16);
-    if (upper == "UINT8") return lbug::common::LogicalType(lbug::common::LogicalTypeID::UINT8);
-    if (upper == "DOUBLE") return lbug::common::LogicalType(lbug::common::LogicalTypeID::DOUBLE);
-    if (upper == "FLOAT") return lbug::common::LogicalType(lbug::common::LogicalTypeID::FLOAT);
-    if (upper == "STRING") return lbug::common::LogicalType(lbug::common::LogicalTypeID::STRING);
+    if (upper == "INT64")
+        return lbug::common::LogicalType(lbug::common::LogicalTypeID::INT64);
+    if (upper == "INT32")
+        return lbug::common::LogicalType(lbug::common::LogicalTypeID::INT32);
+    if (upper == "INT16")
+        return lbug::common::LogicalType(lbug::common::LogicalTypeID::INT16);
+    if (upper == "INT8")
+        return lbug::common::LogicalType(lbug::common::LogicalTypeID::INT8);
+    if (upper == "UINT64")
+        return lbug::common::LogicalType(lbug::common::LogicalTypeID::UINT64);
+    if (upper == "UINT32")
+        return lbug::common::LogicalType(lbug::common::LogicalTypeID::UINT32);
+    if (upper == "UINT16")
+        return lbug::common::LogicalType(lbug::common::LogicalTypeID::UINT16);
+    if (upper == "UINT8")
+        return lbug::common::LogicalType(lbug::common::LogicalTypeID::UINT8);
+    if (upper == "DOUBLE")
+        return lbug::common::LogicalType(lbug::common::LogicalTypeID::DOUBLE);
+    if (upper == "FLOAT")
+        return lbug::common::LogicalType(lbug::common::LogicalTypeID::FLOAT);
+    if (upper == "STRING")
+        return lbug::common::LogicalType(lbug::common::LogicalTypeID::STRING);
     if (upper == "BOOL" || upper == "BOOLEAN")
         return lbug::common::LogicalType(lbug::common::LogicalTypeID::BOOL);
-    if (upper == "DATE") return lbug::common::LogicalType(lbug::common::LogicalTypeID::DATE);
+    if (upper == "DATE")
+        return lbug::common::LogicalType(lbug::common::LogicalTypeID::DATE);
     if (upper == "TIMESTAMP")
         return lbug::common::LogicalType(lbug::common::LogicalTypeID::TIMESTAMP);
     throw std::runtime_error("Unsupported column type for registerStream: " + typeStr);
@@ -219,20 +231,21 @@ Napi::Value NodeConnection::RegisterStream(const Napi::CallbackInfo& info) {
     std::vector<lbug::common::LogicalType> columnTypes;
     for (uint32_t i = 0; i < columnsArr.Length(); i++) {
         Napi::Value col = columnsArr.Get(i);
-        if (!col.IsObject()) continue;
+        if (!col.IsObject())
+            continue;
         Napi::Object obj = col.As<Napi::Object>();
-        if (!obj.Get("name").IsString() || !obj.Get("type").IsString()) continue;
+        if (!obj.Get("name").IsString() || !obj.Get("type").IsString())
+            continue;
         columnNames.push_back(obj.Get("name").As<Napi::String>().Utf8Value());
-        columnTypes.push_back(
-            parseColumnType(obj.Get("type").As<Napi::String>().Utf8Value()));
+        columnTypes.push_back(parseColumnType(obj.Get("type").As<Napi::String>().Utf8Value()));
     }
     if (columnNames.empty()) {
-        Napi::Error::New(env, "registerStream: at least one column required.").ThrowAsJavaScriptException();
+        Napi::Error::New(env, "registerStream: at least one column required.")
+            .ThrowAsJavaScriptException();
         return env.Undefined();
     }
     try {
-        auto tsf = Napi::ThreadSafeFunction::New(
-            env, getChunkCallback, "NodeStreamGetChunk", 0, 1);
+        auto tsf = Napi::ThreadSafeFunction::New(env, getChunkCallback, "NodeStreamGetChunk", 0, 1);
         streamRegistry->registerSource(name, std::move(tsf), std::move(columnNames),
             std::move(columnTypes));
     } catch (const std::exception& exc) {
@@ -244,7 +257,8 @@ Napi::Value NodeConnection::RegisterStream(const Napi::CallbackInfo& info) {
 void NodeConnection::UnregisterStream(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     Napi::HandleScope scope(env);
-    if (!streamRegistry) return;
+    if (!streamRegistry)
+        return;
     if (info.Length() < 1 || !info[0].IsString()) {
         Napi::Error::New(env, "unregisterStream(name): name string.").ThrowAsJavaScriptException();
         return;
@@ -255,8 +269,8 @@ void NodeConnection::UnregisterStream(const Napi::CallbackInfo& info) {
 void NodeConnection::ReturnChunk(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     if (info.Length() < 3 || !info[0].IsNumber() || !info[1].IsArray() || !info[2].IsBoolean()) {
-        Napi::Error::New(env,
-            "returnChunk(requestId, rows, done): requestId number, rows array of rows, done boolean.")
+        Napi::Error::New(env, "returnChunk(requestId, rows, done): requestId number, rows array of "
+                              "rows, done boolean.")
             .ThrowAsJavaScriptException();
         return;
     }
@@ -274,7 +288,8 @@ Napi::Value NodeConnection::GetNumNodes(const Napi::CallbackInfo& info) {
         return env.Undefined();
     }
     if (info.Length() < 1 || !info[0].IsString()) {
-        Napi::Error::New(env, "getNumNodes(nodeName): nodeName string required.").ThrowAsJavaScriptException();
+        Napi::Error::New(env, "getNumNodes(nodeName): nodeName string required.")
+            .ThrowAsJavaScriptException();
         return env.Undefined();
     }
     try {
@@ -297,7 +312,8 @@ Napi::Value NodeConnection::GetNumRels(const Napi::CallbackInfo& info) {
         return env.Undefined();
     }
     if (info.Length() < 1 || !info[0].IsString()) {
-        Napi::Error::New(env, "getNumRels(relName): relName string required.").ThrowAsJavaScriptException();
+        Napi::Error::New(env, "getNumRels(relName): relName string required.")
+            .ThrowAsJavaScriptException();
         return env.Undefined();
     }
     try {

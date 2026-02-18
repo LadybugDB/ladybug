@@ -1,7 +1,7 @@
 require("./common.js");
-const { assert } = require("chai");
 const path = require("path");
-const tmp = require("tmp");
+const fsp = require("fs/promises");
+const os = require("os");
 
 describe("Connection pool", function () {
   let pool;
@@ -9,13 +9,11 @@ describe("Connection pool", function () {
 
   before(async function () {
     await initTests();
-    tmpDir = await new Promise((resolve, reject) => {
-      tmp.dir({ unsafeCleanup: true }, (err, p) => (err ? reject(err) : resolve(p)));
-    });
+    tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "lbug-pool-"));
   });
 
   after(async function () {
-    if (tmpDir) tmp.setGracefulCleanup();
+    if (tmpDir) await fsp.rm(tmpDir, { recursive: true }).catch(() => {});
   });
 
   afterEach(async function () {

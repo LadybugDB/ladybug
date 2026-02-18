@@ -1,11 +1,10 @@
 #include "include/node_scan_replacement.h"
-#include "include/node_stream_scan.h"
-#include "include/node_util.h"
 
 #include "function/table/bind_input.h"
+#include "include/node_stream_scan.h"
+#include "include/node_util.h"
 #include "main/client_context.h"
 #include "main/connection.h"
-
 #include <napi.h>
 
 using namespace lbug::common;
@@ -90,9 +89,7 @@ static std::unique_ptr<ScanReplacementData> replaceNodeStream(
 }
 
 void addNodeScanReplacement(Connection* connection, NodeStreamRegistry* registry) {
-    auto lookup = [registry](const std::string& name) {
-        return lookupNodeStream(name, registry);
-    };
+    auto lookup = [registry](const std::string& name) { return lookupNodeStream(name, registry); };
     auto replace = [registry](std::span<scan_replace_handle_t> handles) {
         return replaceNodeStream(handles, registry);
     };

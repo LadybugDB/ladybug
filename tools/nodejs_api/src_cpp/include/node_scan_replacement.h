@@ -19,7 +19,7 @@ class Connection;
 namespace common {
 class LogicalType;
 }
-}
+} // namespace lbug
 
 struct NodeStreamChunkRequest {
     std::mutex mtx;
@@ -39,8 +39,7 @@ struct NodeStreamSourceState {
 class NodeStreamRegistry {
 public:
     void registerSource(const std::string& name, Napi::ThreadSafeFunction tsf,
-        std::vector<std::string> columnNames,
-        std::vector<lbug::common::LogicalType> columnTypes);
+        std::vector<std::string> columnNames, std::vector<lbug::common::LogicalType> columnTypes);
     void unregisterSource(const std::string& name);
     std::vector<lbug::function::scan_replace_handle_t> lookup(const std::string& name) const;
     std::unique_ptr<lbug::function::ScanReplacementData> replace(

@@ -1,5 +1,3 @@
-const { assert } = require("chai");
-
 describe("registerStream / LOAD FROM stream", function () {
   it("should LOAD FROM registered stream and return rows", async function () {
     async function* rowSource() {

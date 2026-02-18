@@ -1,5 +1,3 @@
-const { assert } = require("chai");
-
 describe("Get version", function () {
   it("should get the version of the library", function () {
     assert.isString(lbug.VERSION);

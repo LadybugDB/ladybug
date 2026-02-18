@@ -9,9 +9,15 @@ on:
         required: true
         default: false
 
+# Let heavy builds finish; new push queues instead of cancelling.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-nodejs:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     strategy:
       matrix:
         include:
@@ -144,3 +150,41 @@ jobs:
         if: ${{ matrix.platform == 'darwin' }}
         working-directory: tools/nodejs_api/
         run: rm -rf package
+
+  # Push prebuilt/*.node to repo so pnpm add github:user/ladybug#path:tools/nodejs_api uses them without building.
+  # Runs only on manual workflow_dispatch to avoid push loops.
+  update-prebuilt:
+    if: github.event_name == 'workflow_dispatch'
+    needs: build-nodejs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Node.js artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: "*nodejs*"
+          merge-multiple: false
+
+      - name: Copy artifacts to prebuilt
+        run: |
+          mkdir -p tools/nodejs_api/prebuilt
+          for d in artifacts/*/; do
+            find "$d" -name "lbugjs-*.node" -exec cp {} tools/nodejs_api/prebuilt/ \;
+          done
+          ls -la tools/nodejs_api/prebuilt/
+
+      - name: Commit and push prebuilt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f tools/nodejs_api/prebuilt/
+          git diff --staged --quiet && echo "No prebuilt changes" && exit 0
+          git commit -m "chore(nodejs): update prebuilt addons from CI [skip ci]"
+          # Push to origin (repo where workflow runs: your fork when run from fork)
+          git push origin HEAD:"${GITHUB_REF#refs/heads/}"
