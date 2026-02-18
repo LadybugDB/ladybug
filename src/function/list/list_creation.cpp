@@ -33,7 +33,6 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
     LogicalType combinedType(LogicalTypeID::ANY);
     binder::ExpressionUtil::tryCombineDataType(input.arguments, combinedType);
     if (combinedType.getLogicalTypeID() == LogicalTypeID::ANY) {
-        // Truly mixed-type list (e.g. [1, 'hello', true]): use STRING so all types can cast.
         bool hasConcreteType = false;
         std::unordered_set<LogicalTypeID> distinctTypes;
         for (auto& arg : input.arguments) {
@@ -44,7 +43,16 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
             }
         }
         if (hasConcreteType && distinctTypes.size() > 1) {
-            combinedType = LogicalType::STRING();
+            // Mixed concrete types (e.g. [123, True]): use first concrete type as combinedType.
+            // ParamTypes will be [INT64, INT64]; implicitCastIfNecessary(True, INT64) in the
+            // scalar function binder will throw the TCK-expected message: "Expression True has
+            // data type BOOL but expected INT64. Implicit cast is not supported."
+            for (auto& arg : input.arguments) {
+                if (arg->getDataType().getLogicalTypeID() != LogicalTypeID::ANY) {
+                    combinedType = arg->getDataType().copy();
+                    break;
+                }
+            }
         } else {
             combinedType = LogicalType::INT64();
         }
