@@ -3,6 +3,34 @@ import pytest
 from type_aliases import ConnDB
 
 
+def test_create_arrow_table_keeps_pyarrow_memory_alive(conn_db_empty: ConnDB) -> None:
+    conn, _ = conn_db_empty
+
+    def register_table() -> None:
+        table = pa.Table.from_arrays(
+            [
+                pa.array([1, 2, 3], type=pa.int64()),
+                pa.array(["alice", "bob", "carol"], type=pa.string()),
+            ],
+            names=["id", "name"],
+        )
+        conn.create_arrow_table("people_arrow_gc", table)
+
+    register_table()
+
+    import gc
+
+    gc.collect()
+    result = conn.execute("MATCH (n:people_arrow_gc) RETURN n.id, n.name ORDER BY n.id")
+
+    assert result.get_next() == [1, "alice"]
+    assert result.get_next() == [2, "bob"]
+    assert result.get_next() == [3, "carol"]
+    assert not result.has_next()
+
+    conn.drop_arrow_table("people_arrow_gc")
+
+
 def test_pyarrow_basic(conn_db_readonly: ConnDB) -> None:
     conn, _ = conn_db_readonly
     tab = pa.Table.from_arrays(
@@ -48,6 +76,51 @@ def test_pyarrow_copy_from_parameterized_df(conn_db_readwrite: ConnDB) -> None:
     assert result.get_next() == [1, 2]
     assert result.get_next() == [2, 3]
     assert result.get_next() == [3, 1]
+
+
+def test_create_arrow_table_from_pyarrow_table(conn_db_empty: ConnDB) -> None:
+    conn, _ = conn_db_empty
+    tab = pa.Table.from_arrays(
+        [
+            pa.array([1, 2, 3], type=pa.int64()),
+            pa.array(["alice", "bob", "carol"], type=pa.string()),
+        ],
+        names=["id", "name"],
+    )
+
+    conn.create_arrow_table("people_arrow", tab)
+    result = conn.execute("MATCH (n:people_arrow) RETURN n.id, n.name ORDER BY n.id")
+
+    assert result.get_next() == [1, "alice"]
+    assert result.get_next() == [2, "bob"]
+    assert result.get_next() == [3, "carol"]
+    assert not result.has_next()
+
+    conn.drop_arrow_table("people_arrow")
+
+
+def test_pyarrow_to_filtered_pyarrow_table(conn_db_empty: ConnDB) -> None:
+    conn, _ = conn_db_empty
+    tab = pa.Table.from_arrays(
+        [
+            pa.array([4, 1, 3, 2], type=pa.int64()),
+            pa.array(["bob", "alice", "bob", "carol"], type=pa.string()),
+        ],
+        names=["id", "name"],
+    )
+
+    conn.create_arrow_table("people_arrow_filter", tab)
+    filtered = conn.execute(
+        "MATCH (n:people_arrow_filter) "
+        "WHERE n.name = 'bob' "
+        "RETURN n.id, n.name "
+        "ORDER BY n.id"
+    ).get_as_arrow()
+
+    assert filtered.column("n.id").to_pylist() == [3, 4]
+    assert filtered.column("n.name").to_pylist() == ["bob", "bob"]
+
+    conn.drop_arrow_table("people_arrow_filter")
 
 
 def test_pyarrow_copy_from_invalid_source(conn_db_readwrite: ConnDB) -> None:
