@@ -17,6 +17,10 @@ struct DatabaseHeader {
     // Used to ensure that files such as the WAL match the current database
     common::ku_uuid_t databaseID{0};
 
+    // Number of pages in the data file at checkpoint time (0 = unknown, e.g. old checkpoint).
+    // Used on reload to reclaim tail pages when file was grown by a rolled-back transaction.
+    common::page_idx_t dataFileNumPages{0};
+
     void updateCatalogPageRange(PageManager& pageManager, PageRange newPageRange);
     void freeMetadataPageRange(PageManager& pageManager) const;
     void serialize(common::Serializer& ser) const;

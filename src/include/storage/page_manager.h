@@ -39,6 +39,7 @@ public:
     void deserialize(common::Deserializer& deSer);
     void finalizeCheckpoint();
     void rollbackCheckpoint() { freeSpaceManager->rollbackCheckpoint(); }
+    void reclaimTailPagesIfNeeded(common::page_idx_t checkpointNumPages);
 
     common::row_idx_t getNumFreeEntries() const { return freeSpaceManager->getNumEntries(); }
     std::vector<PageRange> getFreeEntries(common::row_idx_t startOffset,
