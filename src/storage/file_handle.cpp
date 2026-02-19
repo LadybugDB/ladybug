@@ -133,6 +133,11 @@ void FileHandle::removePageIdxAndTruncateIfNecessary(page_idx_t pageIdx) {
         return;
     }
     numPages = pageIdx;
+
+    if (!isInMemoryMode() && fileInfo) {
+        fileInfo->truncate(static_cast<uint64_t>(numPages) * getPageSize());
+    }
+
     pageStates.resize(numPages);
     const auto numPageGroups = getNumPageGroups();
     if (numPageGroups == frameGroupIdxes.size()) {
