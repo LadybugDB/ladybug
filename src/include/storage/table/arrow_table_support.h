@@ -18,7 +18,8 @@ struct ArrowTableCreationResult {
 class ArrowTableSupport {
 public:
     // Register Arrow data and return an ID
-    static std::string registerArrowData(ArrowSchema& schema, std::vector<ArrowArray>& arrays);
+    static std::string registerArrowData(
+        ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays);
 
     // Retrieve Arrow data by ID (returns pointers to data in registry)
     static bool getArrowData(const std::string& id, ArrowSchemaWrapper*& schema,
@@ -29,7 +30,7 @@ public:
 
     // Create a view from Arrow C Data Interface structures
     static ArrowTableCreationResult createViewFromArrowTable(main::Connection& connection,
-        const std::string& viewName, ArrowSchema& schema, std::vector<ArrowArray>& arrays);
+        const std::string& viewName, ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays);
 
     // Unregister an arrow table completely (drop table and unregister data)
     static std::unique_ptr<main::QueryResult> unregisterArrowTable(main::Connection& connection,

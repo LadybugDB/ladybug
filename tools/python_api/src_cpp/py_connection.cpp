@@ -139,6 +139,7 @@ PyConnection::PyConnection(PyDatabase* pyDatabase, uint64_t numThreads) {
 }
 
 void PyConnection::close() {
+    arrowTableRefs.clear();
     conn.reset();
 }
 
@@ -802,18 +803,24 @@ std::unique_ptr<PyQueryResult> PyConnection::createArrowTable(const std::string&
         batch.attr("_export_to_c")(reinterpret_cast<uint64_t>(&arrays.back()));
     }
 
-    // Convert wrappers to raw Arrow structs for the API
-    std::vector<ArrowArray> rawArrays;
-    for (auto& arr : arrays) {
-        rawArrays.push_back(static_cast<ArrowArray>(arr));
-    }
+    // Keep pyarrow producers alive while C++ accesses exported Arrow memory.
+    py::list keepAlive;
+    keepAlive.append(arrowTable);
+    keepAlive.append(batches);
 
-    auto result = ArrowTableSupport::createViewFromArrowTable(*conn, tableName, schema, rawArrays);
+    auto result = ArrowTableSupport::createViewFromArrowTable(*conn, tableName, std::move(schema),
+        std::move(arrays));
+    if (result.queryResult && result.queryResult->isSuccess()) {
+        arrowTableRefs[tableName] = std::move(keepAlive);
+    }
 
     return checkAndWrapQueryResult(result.queryResult);
 }
 
 std::unique_ptr<PyQueryResult> PyConnection::dropArrowTable(const std::string& tableName) {
     auto result = ArrowTableSupport::unregisterArrowTable(*conn, tableName);
+    if (result && result->isSuccess()) {
+        arrowTableRefs.erase(tableName);
+    }
     return checkAndWrapQueryResult(result);
 }

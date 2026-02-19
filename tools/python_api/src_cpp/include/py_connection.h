@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_map>
+
 #include "main/storage_driver.h"
 #include "py_database.h"
 #include "py_prepared_statement.h"
@@ -61,6 +63,7 @@ public:
 private:
     std::unique_ptr<StorageDriver> storageDriver;
     std::unique_ptr<Connection> conn;
+    std::unordered_map<std::string, py::object> arrowTableRefs;
 
     static std::unique_ptr<PyQueryResult> checkAndWrapQueryResult(
         std::unique_ptr<QueryResult>& queryResult);

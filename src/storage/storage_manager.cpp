@@ -106,19 +106,18 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry) {
                 throw common::RuntimeException("Failed to retrieve Arrow data for ID: " + arrowId);
             }
 
-            // Create wrappers that reference the registry data (make shallow copies since
-            // ArrowNodeTable expects ownership but we don't want to take ownership from the
-            // registry)
+            // Create wrappers that reference registry memory while registry keeps ownership.
             ArrowSchemaWrapper schemaCopy = createShallowCopy(*schema);
-
             std::vector<ArrowArrayWrapper> arraysCopy;
+            arraysCopy.reserve(arrays->size());
             for (const auto& arr : *arrays) {
                 arraysCopy.push_back(createShallowCopy(arr));
             }
 
             // Create Arrow-backed node table
-            tables[entry->getTableID()] = std::make_unique<ArrowNodeTable>(this, entry,
-                &memoryManager, std::move(schemaCopy), std::move(arraysCopy), arrowId);
+            tables[entry->getTableID()] =
+                std::make_unique<ArrowNodeTable>(this, entry, &memoryManager, std::move(schemaCopy),
+                    std::move(arraysCopy), arrowId);
         } else {
             // Create parquet-backed node table
             tables[entry->getTableID()] =

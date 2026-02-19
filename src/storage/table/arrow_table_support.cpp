@@ -30,56 +30,16 @@ std::string join(const std::vector<std::string>& strings, const std::string& del
     return result;
 }
 
-std::string ArrowTableSupport::registerArrowData(ArrowSchema& schema,
-    std::vector<ArrowArray>& arrays) {
+std::string ArrowTableSupport::registerArrowData(ArrowSchemaWrapper schema,
+    std::vector<ArrowArrayWrapper> arrays) {
     std::lock_guard<std::mutex> lock(g_arrowRegistryMutex);
 
     // Generate a unique ID
     static size_t nextId = 0;
     std::string id = "arrow_" + std::to_string(nextId++);
 
-    // Move the schema and arrays into wrappers - transfer ownership
-    ArrowSchemaWrapper schemaWrapper;
-    schemaWrapper.format = schema.format;
-    schemaWrapper.name = schema.name;
-    schemaWrapper.metadata = schema.metadata;
-    schemaWrapper.flags = schema.flags;
-    schemaWrapper.n_children = schema.n_children;
-    schemaWrapper.children = schema.children;
-    schemaWrapper.dictionary = schema.dictionary;
-    schemaWrapper.release = schema.release;
-    schemaWrapper.private_data = schema.private_data;
-
-    // Mark original as moved (prevent double-free)
-    schema.release = nullptr;
-    schema.children = nullptr;
-    schema.dictionary = nullptr;
-
-    std::vector<ArrowArrayWrapper> arrayWrappers;
-    for (auto& array : arrays) {
-        ArrowArrayWrapper wrapper;
-        wrapper.length = array.length;
-        wrapper.null_count = array.null_count;
-        wrapper.offset = array.offset;
-        wrapper.n_buffers = array.n_buffers;
-        wrapper.n_children = array.n_children;
-        wrapper.buffers = array.buffers;
-        wrapper.children = array.children;
-        wrapper.dictionary = array.dictionary;
-        wrapper.release = array.release;
-        wrapper.private_data = array.private_data;
-
-        // Mark original as moved (prevent double-free)
-        array.release = nullptr;
-        array.children = nullptr;
-        array.buffers = nullptr;
-        array.dictionary = nullptr;
-
-        arrayWrappers.push_back(std::move(wrapper));
-    }
-
     // Store in registry
-    g_arrowRegistry[id] = std::make_pair(std::move(schemaWrapper), std::move(arrayWrappers));
+    g_arrowRegistry[id] = std::make_pair(std::move(schema), std::move(arrays));
 
     return id;
 }
@@ -105,7 +65,7 @@ void ArrowTableSupport::unregisterArrowData(const std::string& id) {
 }
 
 ArrowTableCreationResult ArrowTableSupport::createViewFromArrowTable(main::Connection& connection,
-    const std::string& viewName, ArrowSchema& schema, std::vector<ArrowArray>& arrays) {
+    const std::string& viewName, ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays) {
 
     // Get table info from Arrow C Data Interface
     int64_t numColumns = schema.n_children;
@@ -127,7 +87,7 @@ ArrowTableCreationResult ArrowTableSupport::createViewFromArrowTable(main::Conne
     std::string tableDef = "(" + join(columnDefs, ", ") + ")";
 
     // Register the Arrow data and get an ID
-    std::string arrowId = registerArrowData(schema, arrays);
+    std::string arrowId = registerArrowData(std::move(schema), std::move(arrays));
 
     // Build CREATE NODE TABLE statement with arrow storage
 
@@ -136,6 +96,9 @@ ArrowTableCreationResult ArrowTableSupport::createViewFromArrowTable(main::Conne
 
     // Create table with Arrow storage
     auto queryResult = connection.query(statement);
+    if (!queryResult->isSuccess()) {
+        unregisterArrowData(arrowId);
+    }
 
     return {std::move(queryResult), arrowId};
 }
