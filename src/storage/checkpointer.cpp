@@ -73,6 +73,7 @@ void Checkpointer::writeCheckpoint() {
     // checkpointing storage may overwrite columnIDs in the catalog.
     bool hasStorageChanges = checkpointStorage();
     serializeCatalogAndMetadata(databaseHeader, hasStorageChanges);
+    databaseHeader.dataFileNumPages = mainStorageManager->getDataFH()->getNumPages();
     writeDatabaseHeader(databaseHeader);
     logCheckpointAndApplyShadowPages();
 
@@ -214,6 +215,8 @@ void Checkpointer::readCheckpoint(main::ClientContext* context, catalog::Catalog
             currentHeader->metadataPageRange.startPageIdx * common::LBUG_PAGE_SIZE);
         storageManager->deserialize(context, catalog, deSer);
         storageManager->getDataFH()->getPageManager()->deserialize(deSer);
+        storageManager->getDataFH()->getPageManager()->reclaimTailPagesIfNeeded(
+            currentHeader->dataFileNumPages);
     }
     storageManager->setDatabaseHeader(std::move(currentHeader));
 }
