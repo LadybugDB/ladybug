@@ -34,8 +34,11 @@ bool FreeSpaceManager::entryCmp(const PageRange& a, const PageRange& b) {
 void FreeSpaceManager::addFreePages(PageRange entry) {
     KU_ASSERT(entry.numPages > 0);
     const auto entryLevel = getLevel(entry.numPages);
-    KU_ASSERT(!getFreeList(freeLists, entryLevel).contains(entry));
-    getFreeList(freeLists, entryLevel).insert(entry);
+    auto& freeList = getFreeList(freeLists, entryLevel);
+    if (freeList.contains(entry)) {
+        return;
+    }
+    freeList.insert(entry);
     ++numEntries;
 }
 
