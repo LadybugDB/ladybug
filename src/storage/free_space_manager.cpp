@@ -34,8 +34,11 @@ bool FreeSpaceManager::entryCmp(const PageRange& a, const PageRange& b) {
 void FreeSpaceManager::addFreePages(PageRange entry) {
     KU_ASSERT(entry.numPages > 0);
     const auto entryLevel = getLevel(entry.numPages);
-    KU_ASSERT(!getFreeList(freeLists, entryLevel).contains(entry));
-    getFreeList(freeLists, entryLevel).insert(entry);
+    auto& freeList = getFreeList(freeLists, entryLevel);
+    if (freeList.contains(entry)) {
+        return;
+    }
+    freeList.insert(entry);
     ++numEntries;
 }
 
@@ -231,9 +234,12 @@ void FreeSpaceManager::mergePageRanges(free_list_t newInitialEntries, FileHandle
     PageRange prevEntry = allEntries[0];
     for (common::row_idx_t i = 1; i < allEntries.size(); ++i) {
         const auto& entry = allEntries[i];
-        KU_ASSERT(prevEntry.startPageIdx + prevEntry.numPages <= entry.startPageIdx);
-        if (prevEntry.startPageIdx + prevEntry.numPages == entry.startPageIdx) {
-            prevEntry.numPages += entry.numPages;
+        const auto prevEnd = prevEntry.startPageIdx + prevEntry.numPages;
+        if (entry.startPageIdx <= prevEnd) {
+            // Overlapping or adjacent: merge (covers duplicates and overlapping ranges)
+            const auto entryEnd = entry.startPageIdx + entry.numPages;
+            prevEntry.numPages =
+                (prevEnd >= entryEnd ? prevEnd : entryEnd) - prevEntry.startPageIdx;
         } else {
             addFreePages(prevEntry);
             prevEntry = entry;

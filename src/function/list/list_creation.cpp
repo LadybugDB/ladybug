@@ -31,21 +31,31 @@ void ListCreationFunction::execFunc(
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
     LogicalType combinedType(LogicalTypeID::ANY);
-    binder::ExpressionUtil::tryCombineDataType(input.arguments, combinedType);
-    if (combinedType.getLogicalTypeID() == LogicalTypeID::ANY) {
-        // Truly mixed-type list (e.g. [1, 'hello', true]): use STRING so all types can cast.
-        bool hasConcreteType = false;
-        std::unordered_set<LogicalTypeID> distinctTypes;
-        for (auto& arg : input.arguments) {
-            auto typeID = arg->getDataType().getLogicalTypeID();
-            if (typeID != LogicalTypeID::ANY) {
-                hasConcreteType = true;
-                distinctTypes.insert(typeID);
+    std::unordered_set<LogicalTypeID> distinctTypes;
+    for (auto& arg : input.arguments) {
+        auto typeID = arg->getDataType().getLogicalTypeID();
+        if (typeID != LogicalTypeID::ANY) {
+            distinctTypes.insert(typeID);
+        }
+    }
+    const bool mixedConcreteTypes = distinctTypes.size() > 1;
+    if (mixedConcreteTypes) {
+        binder::ExpressionUtil::tryCombineDataType(input.arguments, combinedType);
+        if (combinedType.getLogicalTypeID() == LogicalTypeID::ANY) {
+            if (distinctTypes.contains(LogicalTypeID::STRING)) {
+                combinedType = LogicalType::STRING();
+            } else {
+                for (auto& arg : input.arguments) {
+                    if (arg->getDataType().getLogicalTypeID() != LogicalTypeID::ANY) {
+                        combinedType = arg->getDataType().copy();
+                        break;
+                    }
+                }
             }
         }
-        if (hasConcreteType && distinctTypes.size() > 1) {
-            combinedType = LogicalType::STRING();
-        } else {
+    } else {
+        binder::ExpressionUtil::tryCombineDataType(input.arguments, combinedType);
+        if (combinedType.getLogicalTypeID() == LogicalTypeID::ANY) {
             combinedType = LogicalType::INT64();
         }
     }

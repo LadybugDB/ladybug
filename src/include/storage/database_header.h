@@ -13,6 +13,8 @@ struct DatabaseHeader {
     PageRange catalogPageRange;
     PageRange metadataPageRange;
 
+    common::page_idx_t dataFileNumPages{0};
+
     // An ID that is unique between lbug databases
     // Used to ensure that files such as the WAL match the current database
     common::ku_uuid_t databaseID{0};

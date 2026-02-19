@@ -67,6 +67,23 @@ void PageManager::mergeFreePages(FileHandle* fileHandle) {
     }
 }
 
+void PageManager::reclaimTailPagesIfNeeded(common::page_idx_t checkpointNumPages) {
+    if constexpr (!ENABLE_FSM) {
+        return;
+    }
+    if (checkpointNumPages == 0) {
+        return;
+    }
+    const auto currentNumPages = fileHandle->getNumPages();
+    if (currentNumPages <= checkpointNumPages) {
+        return;
+    }
+    common::UniqLock lck{mtx};
+    const PageRange tail(checkpointNumPages, currentNumPages - checkpointNumPages);
+    freeSpaceManager->evictAndAddFreePages(fileHandle, tail);
+    ++version;
+}
+
 PageManager* PageManager::Get(const main::ClientContext& context) {
     return StorageManager::Get(context)->getDataFH()->getPageManager();
 }
