@@ -370,3 +370,44 @@ class Connection:
         if not query_result_internal.isSuccess():
             raise RuntimeError(query_result_internal.getErrorMessage())
         return QueryResult(self, query_result_internal)
+
+    def create_arrow_rel_table(
+        self,
+        table_name: str,
+        dataframe: Any,
+        src_table_name: str,
+        dst_table_name: str,
+    ) -> QueryResult:
+        """
+        Create an Arrow memory-backed relationship table from a DataFrame.
+
+        Parameters
+        ----------
+        table_name : str
+            Name of the relationship table to create.
+
+        dataframe : Any
+            A pandas DataFrame, polars DataFrame, or PyArrow table.
+
+        src_table_name : str
+            Source node table name in the FROM/TO pair.
+
+        dst_table_name : str
+            Destination node table name in the FROM/TO pair.
+
+        Returns
+        -------
+        QueryResult
+            Result of the table creation query.
+
+        """
+        self.init_connection()
+        query_result_internal = self._connection.create_arrow_rel_table(
+            table_name,
+            dataframe,
+            src_table_name,
+            dst_table_name,
+        )
+        if not query_result_internal.isSuccess():
+            raise RuntimeError(query_result_internal.getErrorMessage())
+        return QueryResult(self, query_result_internal)

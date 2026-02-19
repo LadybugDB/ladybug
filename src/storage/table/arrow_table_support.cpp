@@ -4,6 +4,7 @@
 #include <unordered_map>
 
 #include "common/arrow/arrow_converter.h"
+#include "common/exception/runtime.h"
 #include "main/database.h"
 
 namespace lbug {
@@ -28,6 +29,16 @@ std::string join(const std::vector<std::string>& strings, const std::string& del
         result += delimiter + strings[i];
     }
     return result;
+}
+
+static int64_t findArrowColumnByName(const ArrowSchemaWrapper& schema, const std::string& name) {
+    for (int64_t i = 0; i < schema.n_children; ++i) {
+        if (schema.children && schema.children[i] && schema.children[i]->name &&
+            name == schema.children[i]->name) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 std::string ArrowTableSupport::registerArrowData(ArrowSchemaWrapper schema,
@@ -95,6 +106,62 @@ ArrowTableCreationResult ArrowTableSupport::createViewFromArrowTable(main::Conne
                             " WITH (storage='arrow://" + arrowId + "')";
 
     // Create table with Arrow storage
+    auto queryResult = connection.query(statement);
+    if (!queryResult->isSuccess()) {
+        unregisterArrowData(arrowId);
+    }
+
+    return {std::move(queryResult), arrowId};
+}
+
+ArrowTableCreationResult ArrowTableSupport::createRelTableFromArrowTable(
+    main::Connection& connection, const std::string& tableName, const std::string& srcTableName,
+    const std::string& dstTableName, ArrowSchemaWrapper schema,
+    std::vector<ArrowArrayWrapper> arrays, const std::string& srcColumnName,
+    const std::string& dstColumnName) {
+    if (srcColumnName != "from" || dstColumnName != "to") {
+        throw common::RuntimeException(
+            "Arrow relationship registration currently requires endpoint columns named 'from' and "
+            "'to'");
+    }
+
+    int64_t numColumns = schema.n_children;
+    if (numColumns < 2) {
+        throw common::RuntimeException(
+            "Arrow relationship table must contain at least source and destination columns");
+    }
+
+    auto srcColIdx = findArrowColumnByName(schema, srcColumnName);
+    auto dstColIdx = findArrowColumnByName(schema, dstColumnName);
+    if (srcColIdx < 0 || dstColIdx < 0) {
+        throw common::RuntimeException("Arrow relationship table must include endpoint columns '" +
+                                       srcColumnName + "' and '" + dstColumnName + "'");
+    }
+    if (srcColIdx == dstColIdx) {
+        throw common::RuntimeException("Source and destination endpoint columns must be distinct");
+    }
+
+    std::vector<std::string> propertyDefs;
+    for (int64_t i = 0; i < numColumns; ++i) {
+        if (i == srcColIdx || i == dstColIdx) {
+            continue;
+        }
+        std::string colName = schema.children[i]->name;
+        std::string colType =
+            common::ArrowConverter::fromArrowSchema(schema.children[i]).toString();
+        propertyDefs.push_back(colName + " " + colType);
+    }
+
+    std::vector<std::string> relDefs;
+    relDefs.push_back("FROM " + srcTableName + " TO " + dstTableName);
+    relDefs.insert(relDefs.end(), propertyDefs.begin(), propertyDefs.end());
+    std::string tableDef = "(" + join(relDefs, ", ") + ")";
+
+    // Register the Arrow data and get an ID.
+    std::string arrowId = registerArrowData(std::move(schema), std::move(arrays));
+
+    std::string statement = "CREATE REL TABLE " + tableName + " " + tableDef +
+                            " WITH (storage='arrow://" + arrowId + "')";
     auto queryResult = connection.query(statement);
     if (!queryResult->isSuccess()) {
         unregisterArrowData(arrowId);

@@ -16,6 +16,7 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/checkpointer.h"
 #include "storage/table/arrow_node_table.h"
+#include "storage/table/arrow_rel_table.h"
 #include "storage/table/arrow_table_support.h"
 #include "storage/table/foreign_rel_table.h"
 #include "storage/table/node_table.h"
@@ -115,9 +116,8 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry) {
             }
 
             // Create Arrow-backed node table
-            tables[entry->getTableID()] =
-                std::make_unique<ArrowNodeTable>(this, entry, &memoryManager, std::move(schemaCopy),
-                    std::move(arraysCopy), arrowId);
+            tables[entry->getTableID()] = std::make_unique<ArrowNodeTable>(this, entry,
+                &memoryManager, std::move(schemaCopy), std::move(arraysCopy), arrowId);
         } else {
             // Create parquet-backed node table
             tables[entry->getTableID()] =
@@ -139,9 +139,38 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
             info.nodePair.dstTableID, this, &memoryManager, *entry->getScanFunction(),
             std::move(entry->getScanBindData().value()));
     } else if (!entry->getStorage().empty()) {
-        // Create parquet-backed rel table
-        tables[info.oid] = std::make_unique<ParquetRelTable>(entry, info.nodePair.srcTableID,
-            info.nodePair.dstTableID, this, &memoryManager);
+        if (entry->getStorage().substr(0, 8) == "arrow://") {
+            std::string arrowId = entry->getStorage().substr(8);
+            ArrowSchemaWrapper* schema = nullptr;
+            std::vector<ArrowArrayWrapper>* arrays = nullptr;
+            if (!ArrowTableSupport::getArrowData(arrowId, schema, arrays)) {
+                throw common::RuntimeException("Failed to retrieve Arrow data for ID: " + arrowId);
+            }
+            if (!tables.contains(info.nodePair.srcTableID) ||
+                !tables.contains(info.nodePair.dstTableID)) {
+                throw common::RuntimeException(
+                    "Source or destination node table is not initialized for Arrow rel table");
+            }
+            auto* fromNodeTable = tables.at(info.nodePair.srcTableID)->ptrCast<NodeTable>();
+            auto* toNodeTable = tables.at(info.nodePair.dstTableID)->ptrCast<NodeTable>();
+            if (!fromNodeTable || !toNodeTable) {
+                throw common::RuntimeException(
+                    "Arrow rel table currently supports only regular node tables");
+            }
+            ArrowSchemaWrapper schemaCopy = createShallowCopy(*schema);
+            std::vector<ArrowArrayWrapper> arraysCopy;
+            arraysCopy.reserve(arrays->size());
+            for (const auto& arr : *arrays) {
+                arraysCopy.push_back(createShallowCopy(arr));
+            }
+            tables[info.oid] = std::make_unique<ArrowRelTable>(entry, info.nodePair.srcTableID,
+                info.nodePair.dstTableID, this, &memoryManager, fromNodeTable, toNodeTable,
+                std::move(schemaCopy), std::move(arraysCopy), arrowId);
+        } else {
+            // Create parquet-backed rel table
+            tables[info.oid] = std::make_unique<ParquetRelTable>(entry, info.nodePair.srcTableID,
+                info.nodePair.dstTableID, this, &memoryManager);
+        }
     } else {
         // Create regular rel table
         tables[info.oid] = std::make_unique<RelTable>(entry, info.nodePair.srcTableID,

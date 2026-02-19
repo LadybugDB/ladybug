@@ -7,6 +7,7 @@
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/local_storage/local_rel_table.h"
+#include "storage/table/arrow_rel_table.h"
 #include "storage/table/foreign_rel_table.h"
 #include "storage/table/node_table.h"
 #include "storage/table/parquet_rel_table.h"
@@ -73,10 +74,15 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
     auto clientContext = context->clientContext;
     auto boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
-    // Check if this is a ParquetRelTable or ForeignRelTable and create appropriate scan state
+    // Check if this is an external rel table and create the corresponding scan state.
+    auto* arrowTable = dynamic_cast<storage::ArrowRelTable*>(tableInfo.table);
     auto* parquetTable = dynamic_cast<storage::ParquetRelTable*>(tableInfo.table);
     auto* foreignTable = dynamic_cast<storage::ForeignRelTable*>(tableInfo.table);
-    if (parquetTable) {
+    if (arrowTable) {
+        scanState =
+            std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
+                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+    } else if (parquetTable) {
         scanState =
             std::make_unique<storage::ParquetRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);

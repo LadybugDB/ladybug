@@ -18,8 +18,8 @@ struct ArrowTableCreationResult {
 class ArrowTableSupport {
 public:
     // Register Arrow data and return an ID
-    static std::string registerArrowData(
-        ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays);
+    static std::string registerArrowData(ArrowSchemaWrapper schema,
+        std::vector<ArrowArrayWrapper> arrays);
 
     // Retrieve Arrow data by ID (returns pointers to data in registry)
     static bool getArrowData(const std::string& id, ArrowSchemaWrapper*& schema,
@@ -30,7 +30,16 @@ public:
 
     // Create a view from Arrow C Data Interface structures
     static ArrowTableCreationResult createViewFromArrowTable(main::Connection& connection,
-        const std::string& viewName, ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays);
+        const std::string& viewName, ArrowSchemaWrapper schema,
+        std::vector<ArrowArrayWrapper> arrays);
+
+    // Create a relationship table from Arrow C Data Interface structures.
+    // The Arrow table must contain source/destination endpoint columns.
+    static ArrowTableCreationResult createRelTableFromArrowTable(main::Connection& connection,
+        const std::string& tableName, const std::string& srcTableName,
+        const std::string& dstTableName, ArrowSchemaWrapper schema,
+        std::vector<ArrowArrayWrapper> arrays, const std::string& srcColumnName = "from",
+        const std::string& dstColumnName = "to");
 
     // Unregister an arrow table completely (drop table and unregister data)
     static std::unique_ptr<main::QueryResult> unregisterArrowTable(main::Connection& connection,
