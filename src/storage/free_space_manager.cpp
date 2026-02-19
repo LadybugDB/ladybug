@@ -238,7 +238,8 @@ void FreeSpaceManager::mergePageRanges(free_list_t newInitialEntries, FileHandle
         if (entry.startPageIdx <= prevEnd) {
             // Overlapping or adjacent: merge (covers duplicates and overlapping ranges)
             const auto entryEnd = entry.startPageIdx + entry.numPages;
-            prevEntry.numPages = (prevEnd >= entryEnd ? prevEnd : entryEnd) - prevEntry.startPageIdx;
+            prevEntry.numPages =
+                (prevEnd >= entryEnd ? prevEnd : entryEnd) - prevEntry.startPageIdx;
         } else {
             addFreePages(prevEntry);
             prevEntry = entry;
