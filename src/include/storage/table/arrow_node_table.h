@@ -14,15 +14,13 @@ namespace lbug {
 namespace storage {
 
 struct ArrowNodeTableScanState final : NodeTableScanState {
-    ArrowSchemaWrapper schema;
-    std::vector<ArrowArrayWrapper> arrays;
-    std::vector<std::vector<std::unique_ptr<common::Value>>> allData;
     size_t totalRows = 0;
-    size_t nextRowToDistribute = 0;
-    uint64_t lastQueryId = 0;
+    size_t currentBatchIdx = 0;
+    size_t currentBatchOffset = 0;
+    size_t nextGlobalRowOffset = 0;
+    std::vector<int64_t> outputToArrowColumnIdx;
     bool initialized = false;
     bool scanCompleted = false;
-    bool dataRead = false;
 
     ArrowNodeTableScanState([[maybe_unused]] MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
@@ -56,10 +54,9 @@ protected:
 private:
     ArrowSchemaWrapper schema;
     std::vector<ArrowArrayWrapper> arrays;
+    std::vector<size_t> batchStartOffsets;
     size_t totalRows;
     std::string arrowId; // ID in registry for cleanup
-
-    void readArrowTableData(ArrowNodeTableScanState& scanState) const;
 };
 
 } // namespace storage
