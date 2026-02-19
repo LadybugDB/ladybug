@@ -269,3 +269,45 @@ def test_create_arrow_rel_table_from_pyarrow_table_query_results(conn_db_empty: 
     assert rows == [[1, 2], [2, 3], [3, 1]]
 
     conn.drop_arrow_table("knows_arrow_rel_reg")
+
+
+def test_arrow_node_and_arrow_rel_with_filtering_query(conn_db_empty: ConnDB) -> None:
+    conn, _ = conn_db_empty
+
+    people = pa.Table.from_arrays(
+        [
+            pa.array([1, 2, 3, 4], type=pa.int64()),
+            pa.array(["eng", "sales", "eng", "hr"], type=pa.string()),
+        ],
+        names=["id", "department"],
+    )
+    conn.create_arrow_table("people_arrow_mix", people)
+
+    conn.execute("CREATE NODE TABLE person(id INT64, PRIMARY KEY(id))")
+    conn.execute("CREATE (:person {id: 1})")
+    conn.execute("CREATE (:person {id: 2})")
+    conn.execute("CREATE (:person {id: 3})")
+
+    rels = pa.Table.from_arrays(
+        [
+            pa.array([1, 2, 3], type=pa.int64()),
+            pa.array([2, 3, 1], type=pa.int64()),
+            pa.array([5, 6, 7], type=pa.int64()),
+        ],
+        names=["from", "to", "weight"],
+    )
+    conn.create_arrow_rel_table("knows_arrow_mix", rels, "person", "person")
+
+    result = conn.execute(
+        "MATCH (x:people_arrow_mix), (a:person)-[r:knows_arrow_mix]->(b:person) "
+        "WHERE x.department='eng' AND a.id >= 2 "
+        "RETURN x.id, a.id, b.id, r.weight ORDER BY x.id, a.id"
+    )
+    rows = []
+    while result.has_next():
+        rows.append(result.get_next())
+
+    assert rows == [[1, 2, 3, 6], [1, 3, 1, 7], [3, 2, 3, 6], [3, 3, 1, 7]]
+
+    conn.drop_arrow_table("knows_arrow_mix")
+    conn.drop_arrow_table("people_arrow_mix")
