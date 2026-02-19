@@ -3,7 +3,6 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
@@ -18,7 +17,7 @@ struct ArrowRelTableScanState final : RelTableScanState {
     size_t currentBatchIdx = 0;
     size_t currentBatchOffset = 0;
     std::vector<int64_t> outputToArrowColumnIdx;
-    std::unordered_set<common::offset_t> boundNodeOffsets;
+    std::unordered_map<common::offset_t, common::sel_t> boundNodeOffsetToSelPos;
     std::unique_ptr<common::ValueVector> srcKeyVector;
     std::unique_ptr<common::ValueVector> dstKeyVector;
     // ScanRelTable invokes scan() once before the first initScanState() call for a bound node.

@@ -141,11 +141,11 @@ void ArrowRelTable::initScanState([[maybe_unused]] transaction::Transaction* tra
             relScanState.nodeIDVector->state->getSelVector().getSelSize());
     }
 
-    relScanState.boundNodeOffsets.clear();
+    relScanState.boundNodeOffsetToSelPos.clear();
     for (uint64_t i = 0; i < relScanState.cachedBoundNodeSelVector.getSelSize(); ++i) {
         auto boundNodeIdx = relScanState.cachedBoundNodeSelVector[i];
         const auto boundNodeID = relScanState.nodeIDVector->getValue<nodeID_t>(boundNodeIdx);
-        relScanState.boundNodeOffsets.insert(boundNodeID.offset);
+        relScanState.boundNodeOffsetToSelPos.emplace(boundNodeID.offset, boundNodeIdx);
     }
 
     relScanState.outputToArrowColumnIdx.assign(scanState.columnIDs.size(), -1);
@@ -241,9 +241,10 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
 
         auto isFwd = relScanState.direction != RelDataDirection::BWD;
         auto boundOffset = isFwd ? srcNodeOffset : dstNodeOffset;
-        if (!relScanState.boundNodeOffsets.contains(boundOffset)) {
+        if (!relScanState.boundNodeOffsetToSelPos.contains(boundOffset)) {
             continue;
         }
+        relScanState.setNodeIDVectorToFlat(relScanState.boundNodeOffsetToSelPos.at(boundOffset));
 
         auto nbrOffset = isFwd ? dstNodeOffset : srcNodeOffset;
         auto nbrTableID = isFwd ? getToNodeTableID() : getFromNodeTableID();
