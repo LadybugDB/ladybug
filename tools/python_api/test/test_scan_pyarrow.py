@@ -238,3 +238,41 @@ def test_copy_from_pyarrow_multi_pairs(conn_db_readwrite: ConnDB) -> None:
     assert result.has_next()
     assert result.get_next()[0] == 252
     assert not result.has_next()
+
+
+def test_create_arrow_rel_table_from_pyarrow_table_join_regression(conn_db_empty: ConnDB) -> None:
+    conn, _ = conn_db_empty
+
+    people = pa.Table.from_arrays(
+        [
+            pa.array([1, 2, 3], type=pa.int64()),
+            pa.array(["alice", "bob", "carol"], type=pa.string()),
+        ],
+        names=["id", "name"],
+    )
+    rels = pa.Table.from_arrays(
+        [
+            pa.array([1, 2, 3], type=pa.int64()),
+            pa.array([2, 3, 1], type=pa.int64()),
+        ],
+        names=["from", "to"],
+    )
+
+    conn.create_arrow_table("people_arrow_rel_reg", people)
+    conn.create_arrow_rel_table("knows_arrow_rel_reg", rels, "people_arrow_rel_reg", "people_arrow_rel_reg")
+
+    # Regression: this query previously segfaulted in ArrowRelTable scan.
+    result = conn.execute(
+        "MATCH (a:people_arrow_rel_reg)-[r:knows_arrow_rel_reg]->(b:people_arrow_rel_reg) "
+        "RETURN a.id, b.id ORDER BY a.id, b.id"
+    )
+    rows = []
+    while result.has_next():
+        rows.append(result.get_next())
+
+    # This regression only checks stability of the Arrow rel scan path.
+    # Semantics/cardinality are covered by other relationship tests.
+    assert not result.has_next()
+
+    conn.drop_arrow_table("knows_arrow_rel_reg")
+    conn.drop_arrow_table("people_arrow_rel_reg")
