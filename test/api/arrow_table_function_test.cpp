@@ -19,7 +19,7 @@ TEST_F(ArrowTableFunctionTest, CreateArrowTable) {
     std::vector<int32_t> intData = {1, 2, 3};
 
     // Create Arrow schema
-    ArrowSchema schema;
+    ArrowSchemaWrapper schema;
     createStructSchema(&schema, 1);
     createSchema<int32_t>(schema.children[0], "id");
 
@@ -72,7 +72,7 @@ TEST_F(ArrowTableFunctionTest, CreateArrowTableMultipleColumns) {
     std::vector<double> scoreData = {95.5, 87.3, 92.1};
 
     // Create Arrow schema with 3 fields
-    ArrowSchema schema;
+    ArrowSchemaWrapper schema;
     createStructSchema(&schema, 3);
     createSchema<int32_t>(schema.children[0], "id");
     createSchema<std::string>(schema.children[1], "name");
@@ -132,14 +132,14 @@ TEST_F(ArrowTableFunctionTest, CypherQueryWithArrowTable) {
     std::vector<std::string> nameData = {"a", "b", "c", "d", "e"};
 
     // Create Arrow schema with 2 fields
-    ArrowSchema schema;
+    ArrowSchemaWrapper schema;
     createStructSchema(&schema, 2);
     createSchema<int32_t>(schema.children[0], "value");
     createSchema<std::string>(schema.children[1], "name");
 
     // Create Arrow array with 2 children
-    std::vector<ArrowArray> arrays;
-    ArrowArray array;
+    std::vector<ArrowArrayWrapper> arrays;
+    ArrowArrayWrapper array;
     array.length = valueData.size();
     array.null_count = 0;
     array.offset = 0;
@@ -171,11 +171,11 @@ TEST_F(ArrowTableFunctionTest, CypherQueryWithArrowTable) {
     };
     array.private_data = nullptr;
 
-    arrays.push_back(array);
+    arrays.push_back(std::move(array));
 
     // Create a view from the Arrow table
-    auto creationResult =
-        ArrowTableSupport::createViewFromArrowTable(*conn, "arrow_test_view", schema, arrays);
+    auto creationResult = ArrowTableSupport::createViewFromArrowTable(*conn, "arrow_test_view",
+        std::move(schema), std::move(arrays));
     if (!creationResult.queryResult->isSuccess()) {
         std::cout << "Error: " << creationResult.queryResult->getErrorMessage() << std::endl;
     }
@@ -191,10 +191,7 @@ TEST_F(ArrowTableFunctionTest, CypherQueryWithArrowTable) {
     // that the view creation succeeds and the query executes
     EXPECT_TRUE(true);
 
-    // Cleanup
-    if (schema.release)
-        schema.release(&schema);
-    // Note: arrays cleanup is handled by the vector and the release callback
+    // Note: schema/arrays ownership was moved into createViewFromArrowTable.
 }
 
 TEST_F(ArrowTableFunctionTest, UnregisterArrowTable) {
@@ -203,14 +200,14 @@ TEST_F(ArrowTableFunctionTest, UnregisterArrowTable) {
     std::vector<std::string> nameData = {"x", "y", "z"};
 
     // Create Arrow schema with 2 fields
-    ArrowSchema schema;
+    ArrowSchemaWrapper schema;
     createStructSchema(&schema, 2);
     createSchema<int32_t>(schema.children[0], "value");
     createSchema<std::string>(schema.children[1], "name");
 
     // Create Arrow array with 2 children
-    std::vector<ArrowArray> arrays;
-    ArrowArray array;
+    std::vector<ArrowArrayWrapper> arrays;
+    ArrowArrayWrapper array;
     array.length = valueData.size();
     array.null_count = 0;
     array.offset = 0;
@@ -242,11 +239,11 @@ TEST_F(ArrowTableFunctionTest, UnregisterArrowTable) {
     };
     array.private_data = nullptr;
 
-    arrays.push_back(array);
+    arrays.push_back(std::move(array));
 
     // Create a view from the Arrow table
-    auto creationResult =
-        ArrowTableSupport::createViewFromArrowTable(*conn, "arrow_unregister_test", schema, arrays);
+    auto creationResult = ArrowTableSupport::createViewFromArrowTable(*conn,
+        "arrow_unregister_test", std::move(schema), std::move(arrays));
     ASSERT_TRUE(creationResult.queryResult->isSuccess());
 
     // Verify the table exists by querying it
@@ -262,8 +259,5 @@ TEST_F(ArrowTableFunctionTest, UnregisterArrowTable) {
     // This should fail because the table doesn't exist
     ASSERT_FALSE(queryAfterDrop->isSuccess());
 
-    // Cleanup
-    if (schema.release)
-        schema.release(&schema);
-    // Note: arrays cleanup is handled by the vector and the release callback
+    // Note: schema/arrays ownership was moved into createViewFromArrowTable.
 }
