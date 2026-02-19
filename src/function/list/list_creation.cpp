@@ -31,29 +31,31 @@ void ListCreationFunction::execFunc(
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
     LogicalType combinedType(LogicalTypeID::ANY);
-    binder::ExpressionUtil::tryCombineDataType(input.arguments, combinedType);
-    if (combinedType.getLogicalTypeID() == LogicalTypeID::ANY) {
-        bool hasConcreteType = false;
-        std::unordered_set<LogicalTypeID> distinctTypes;
-        for (auto& arg : input.arguments) {
-            auto typeID = arg->getDataType().getLogicalTypeID();
-            if (typeID != LogicalTypeID::ANY) {
-                hasConcreteType = true;
-                distinctTypes.insert(typeID);
-            }
+    std::unordered_set<LogicalTypeID> distinctTypes;
+    for (auto& arg : input.arguments) {
+        auto typeID = arg->getDataType().getLogicalTypeID();
+        if (typeID != LogicalTypeID::ANY) {
+            distinctTypes.insert(typeID);
         }
-        if (hasConcreteType && distinctTypes.size() > 1) {
-            // Mixed concrete types (e.g. [123, True]): use first concrete type as combinedType.
-            // ParamTypes will be [INT64, INT64]; implicitCastIfNecessary(True, INT64) in the
-            // scalar function binder will throw the TCK-expected message: "Expression True has
-            // data type BOOL but expected INT64. Implicit cast is not supported."
+    }
+    const bool mixedConcreteTypes = distinctTypes.size() > 1;
+    if (mixedConcreteTypes) {
+        // Use type system: tryCombineDataType. If it finds a common type (e.g. STRING for
+        // [1, 'hello', true]) use it; if not (e.g. [123, True]) use first type so cast throws
+        // TCK-expected "Expression True has data type BOOL but expected INT64. Implicit cast
+        // is not supported."
+        binder::ExpressionUtil::tryCombineDataType(input.arguments, combinedType);
+        if (combinedType.getLogicalTypeID() == LogicalTypeID::ANY) {
             for (auto& arg : input.arguments) {
                 if (arg->getDataType().getLogicalTypeID() != LogicalTypeID::ANY) {
                     combinedType = arg->getDataType().copy();
                     break;
                 }
             }
-        } else {
+        }
+    } else {
+        binder::ExpressionUtil::tryCombineDataType(input.arguments, combinedType);
+        if (combinedType.getLogicalTypeID() == LogicalTypeID::ANY) {
             combinedType = LogicalType::INT64();
         }
     }
