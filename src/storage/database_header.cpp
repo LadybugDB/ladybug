@@ -99,10 +99,11 @@ DatabaseHeader DatabaseHeader::deserialize(common::Deserializer& deSer) {
     deSer.deserializeValue(databaseID.value);
     common::page_idx_t dataFileNumPages = 0;
     uint8_t headerFormatVersion = 0;
+    // Old format (e.g. lbug-0.14.1) ends here; reading 9 bytes would read beyond logical header.
+    // Read one byte: only if it matches our format version do we read the following 8 bytes.
     deSer.deserializeValue(headerFormatVersion);
-    deSer.deserializeValue(dataFileNumPages);
-    if (headerFormatVersion < HEADER_FORMAT_VERSION_WITH_DATAFILE_NUM_PAGES) {
-        dataFileNumPages = 0; // Old checkpoint: no dataFileNumPages stored.
+    if (headerFormatVersion == HEADER_FORMAT_VERSION_WITH_DATAFILE_NUM_PAGES) {
+        deSer.deserializeValue(dataFileNumPages);
     }
     return {catalogPageRange, metaPageRange, dataFileNumPages, databaseID};
 }
