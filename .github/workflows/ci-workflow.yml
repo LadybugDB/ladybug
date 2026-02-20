@@ -1176,9 +1176,11 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: minimal-test-${{ runner.os }}
+          key: minimal-test-${{ runner.os }}-${{ github.ref }}
           max-size: 2G
-          restore-keys: minimal-test-
+          restore-keys: |
+            minimal-test-${{ runner.os }}-refs/heads/master
+            minimal-test-${{ runner.os }}-
 
       - name: Build
         env:
@@ -1235,9 +1237,11 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: minimal-extension-test-${{ runner.os }}
+          key: minimal-extension-test-${{ runner.os }}-${{ github.ref }}
           max-size: 2G
-          restore-keys: minimal-extension-test-
+          restore-keys: |
+            minimal-extension-test-${{ runner.os }}-refs/heads/master
+            minimal-extension-test-${{ runner.os }}-
 
       - name: Update PostgreSQL host
         working-directory: extension/postgres/test/test_files
