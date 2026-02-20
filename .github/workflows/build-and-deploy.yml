@@ -383,7 +383,7 @@ jobs:
         run: npm publish lbug-source.tar.gz --access public --tag latest
         working-directory: tools/nodejs_api
   
-  build-wasm:
+  build-and-test-wasm:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipWasm != 'true' }}
     uses: ./.github/workflows/wasm-workflow.yml
     with:
@@ -392,7 +392,7 @@ jobs:
   
   deploy-wasm:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipWasm != 'true' }}
-    needs: [build-wasm]
+    needs: [build-and-test-wasm]
     runs-on: ubuntu-latest
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_JS_TOKEN }}

@@ -10,7 +10,7 @@ on:
         default: false
 
 jobs:
-  build-wasm:
+  build-and-test-wasm:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,3 +50,30 @@ jobs:
         with:
           name: lbug-deploy-wasm
           path: tools/wasm/lbug-wasm.tar.gz
+
+      - name: API test
+        working-directory: tools/wasm
+        run: npm run test
+
+      - name: Clean up
+        run: make clean
+
+      - name: Kernel build & test
+        run: |
+          source /home/runner/emsdk/emsdk_env.sh
+          make wasmtest
+
+      - name: Kernel build & test in memory
+        run: |
+          source /home/runner/emsdk/emsdk_env.sh
+          make wasmtest
+        env:
+          IN_MEM_MODE: true
+
+      - name: Kernel build & test (single-threaded)
+        env:
+          SINGLE_THREADED: true
+        run: |
+          make clean
+          source /home/runner/emsdk/emsdk_env.sh
+          make wasmtest
