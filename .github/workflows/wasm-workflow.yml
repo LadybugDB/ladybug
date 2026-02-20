@@ -18,6 +18,9 @@ jobs:
       - name: Install uv
         run: python3 -m pip install uv
 
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
+
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         env:
