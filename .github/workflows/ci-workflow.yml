@@ -1181,6 +1181,9 @@ jobs:
           restore-keys: minimal-test-
 
       - name: Build
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: make relwithdebinfo
 
       - name: Generate datasets
@@ -1190,6 +1193,9 @@ jobs:
         run: pip3 install uv
 
       - name: Test
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           uv venv
           source .venv/bin/activate
