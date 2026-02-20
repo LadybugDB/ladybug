@@ -10,7 +10,7 @@ void LogicalDistinct::computeFactorizedSchema() {
     createEmptySchema();
     auto groupPos = schema->createGroup();
     for (auto& expression : getKeysAndPayloads()) {
-        schema->insertToGroupAndScopeMayRepeat(expression, groupPos);
+        schema->insertToGroupAndScope(expression, groupPos);
     }
 }
 
@@ -18,7 +18,7 @@ void LogicalDistinct::computeFlatSchema() {
     createEmptySchema();
     schema->createGroup();
     for (auto& expression : getKeysAndPayloads()) {
-        schema->insertToGroupAndScopeMayRepeat(expression, 0);
+        schema->insertToGroupAndScope(expression, 0);
     }
 }
 

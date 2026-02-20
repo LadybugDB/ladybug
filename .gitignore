@@ -3,7 +3,6 @@ tree-sitter-cypher/
 
 .idea/
 .vscode
-.cursor
 .vs
 bazel-*
 .clwb
@@ -17,7 +16,6 @@ history.txt
 test_temp/
 build/
 install/
-logs/
 
 compile_commands.json
 
