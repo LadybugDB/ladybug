@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-precompiled-bin-linux:
-    uses: ./.github/workflows/linux-precompiled-bin-workflow.yml
+    uses: ./.github/workflows/precompiled-bin-workflow.yml
     with:
       isNightly: true
       x86_64Only: true
