@@ -343,17 +343,18 @@ install:
 
 
 # Cleaning
+CMAKE ?= cmake
 clean-extension:
-	cmake -E rm -rf extension/*/build
+	$(CMAKE) -E rm -rf extension/*/build
 
 clean-python-api:
-	cmake -E rm -rf tools/python_api/build
+	$(CMAKE) -E rm -rf tools/python_api/build
 
 clean-java:
-	cmake -E rm -rf tools/java_api/build
+	$(CMAKE) -E rm -rf tools/java_api/build
 
 clean: clean-extension clean-python-api clean-java
-	cmake -E rm -rf build
+	$(CMAKE) -E rm -rf build
 
 
 # Utils

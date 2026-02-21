@@ -73,7 +73,7 @@ jobs:
         run: npm run test
 
       - name: Clean up
-        run: make clean
+        run: make clean CMAKE=/usr/bin/cmake
 
       - name: Kernel build & test
         env:
@@ -98,6 +98,6 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
           SINGLE_THREADED: true
         run: |
-          make clean
+          make clean CMAKE=/usr/bin/cmake
           source /home/runner/emsdk/emsdk_env.sh
           make wasmtest
