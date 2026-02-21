@@ -9,7 +9,7 @@
 	java_native_header java javatest \
 	nodejs nodejstest \
 	python python-debug pytest pytest-debug \
-	wasm wasmtest \
+	wasm wasmtest wasmtest-build \
 	rusttest \
 	benchmark example \
 	extension-test-build extension-test extension-json-test-build extension-json-test \
@@ -218,11 +218,13 @@ wasm:
 	emcmake cmake $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=$(call get-build-type,Release) -DBUILD_WASM=TRUE -DBUILD_BENCHMARK=FALSE -DBUILD_TESTS=FALSE -DBUILD_SHELL=FALSE  ../.. && \
 	cmake --build . --config $(call get-build-type,Release) -j $(NUM_THREADS)
 
-wasmtest:
+wasmtest-build:
 	mkdir -p build/wasm && cd build/wasm &&\
 	emcmake cmake $(CMAKE_FLAGS) -DCMAKE_BUILD_TYPE=$(call get-build-type,Release) -DBUILD_WASM=TRUE -DBUILD_BENCHMARK=FALSE -DBUILD_TESTS=TRUE -DBUILD_SHELL=FALSE  ../.. && \
-	cmake --build . --config $(call get-build-type,Release) -j $(NUM_THREADS) &&\
-	cd ../.. && ctest --test-dir  build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600
+	cmake --build . --config $(call get-build-type,Release) -j $(NUM_THREADS)
+
+wasmtest: wasmtest-build
+	ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600
 
 rusttest:
 ifeq ($(OS),Windows_NT)

@@ -46,14 +46,25 @@ jobs:
       - name: Verify Emscripten
         run: emcc -v
 
-      - name: Setup ccache
+      - name: Setup ccache (package)
+        if: ${{ inputs.isNightly != true }}
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: wasm-${{ runner.os }}-${{ github.ref }}
+          key: wasm-package-${{ runner.os }}-${{ github.ref }}
           max-size: 2G
           restore-keys: |
-            wasm-${{ runner.os }}-refs/heads/master
-            wasm-${{ runner.os }}-
+            wasm-package-${{ runner.os }}-refs/heads/master
+            wasm-package-${{ runner.os }}-
+
+      - name: Setup ccache (test)
+        if: ${{ inputs.isNightly == true }}
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: wasm-test-${{ runner.os }}-${{ github.ref }}
+          max-size: 2G
+          restore-keys: |
+            wasm-test-${{ runner.os }}-refs/heads/master
+            wasm-test-${{ runner.os }}-
 
       - name: Build WebAssembly package
         working-directory: tools/wasm
@@ -72,32 +83,45 @@ jobs:
         working-directory: tools/wasm
         run: npm run test
 
-      - name: Clean up
+      - name: Kernel build
+        if: ${{ inputs.isNightly == true }}
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+        run: |
+          source /home/runner/emsdk/emsdk_env.sh
+          make wasmtest-build
+
+      - name: Kernel test
+        if: ${{ inputs.isNightly == true }}
+        run: ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600
+
+      - name: Kernel test (in memory)
+        if: ${{ inputs.isNightly == true }}
+        env:
+          IN_MEM_MODE: true
+        run: ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600
+
+      - name: Clean up for single-threaded build
+        if: ${{ inputs.isNightly == true }}
         run: make clean CMAKE=/usr/bin/cmake
 
-      - name: Kernel build & test
-        env:
-          CMAKE_C_COMPILER_LAUNCHER: ccache
-          CMAKE_CXX_COMPILER_LAUNCHER: ccache
-        run: |
-          source /home/runner/emsdk/emsdk_env.sh
-          make wasmtest
-
-      - name: Kernel build & test in memory
-        env:
-          CMAKE_C_COMPILER_LAUNCHER: ccache
-          CMAKE_CXX_COMPILER_LAUNCHER: ccache
-          IN_MEM_MODE: true
-        run: |
-          source /home/runner/emsdk/emsdk_env.sh
-          make wasmtest
+      - name: Setup ccache (single-threaded)
+        if: ${{ inputs.isNightly == true }}
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: wasm-test-single-${{ runner.os }}-${{ github.ref }}
+          max-size: 2G
+          restore-keys: |
+            wasm-test-single-${{ runner.os }}-refs/heads/master
+            wasm-test-single-${{ runner.os }}-
 
       - name: Kernel build & test (single-threaded)
+        if: ${{ inputs.isNightly == true }}
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
           SINGLE_THREADED: true
         run: |
-          make clean CMAKE=/usr/bin/cmake
           source /home/runner/emsdk/emsdk_env.sh
           make wasmtest
