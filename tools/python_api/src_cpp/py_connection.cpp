@@ -16,6 +16,7 @@
 #include "pandas/pandas_scan.h"
 #include "processor/result/factorized_table.h"
 #include "pyarrow/pyarrow_scan.h"
+#include "storage/table/arrow_table_support.h"
 #include <format>
 
 using namespace lbug::common;
@@ -42,7 +43,12 @@ void PyConnection::initialize(py::handle& m) {
         .def("create_function", &PyConnection::createScalarFunction, py::arg("name"),
             py::arg("udf"), py::arg("params_type"), py::arg("return_value"),
             py::arg("default_null"), py::arg("catch_exceptions"))
-        .def("remove_function", &PyConnection::removeScalarFunction, py::arg("name"));
+        .def("remove_function", &PyConnection::removeScalarFunction, py::arg("name"))
+        .def("create_arrow_table", &PyConnection::createArrowTable, py::arg("table_name"),
+            py::arg("arrow_table"))
+        .def("create_arrow_rel_table", &PyConnection::createArrowRelTable, py::arg("table_name"),
+            py::arg("arrow_table"), py::arg("src_table_name"), py::arg("dst_table_name"))
+        .def("drop_arrow_table", &PyConnection::dropArrowTable, py::arg("table_name"));
     PyDateTime_IMPORT;
 }
 
@@ -135,6 +141,7 @@ PyConnection::PyConnection(PyDatabase* pyDatabase, uint64_t numThreads) {
 }
 
 void PyConnection::close() {
+    arrowTableRefs.clear();
     conn.reset();
 }
 
@@ -767,4 +774,90 @@ void PyConnection::createScalarFunction(const std::string& name, const py::funct
 
 void PyConnection::removeScalarFunction(const std::string& name) {
     conn->removeUDFFunction(name);
+}
+
+std::unique_ptr<PyQueryResult> PyConnection::createArrowTable(const std::string& tableName,
+    py::object arrowTable) {
+    py::gil_scoped_acquire acquire;
+
+    // Convert pandas/polars to pyarrow if needed
+    if (PyConnection::isPandasDataframe(arrowTable)) {
+        arrowTable = importCache->pyarrow.lib.Table.from_pandas()(arrowTable);
+    } else if (PyConnection::isPolarsDataframe(arrowTable)) {
+        arrowTable = arrowTable.attr("to_arrow")();
+    }
+
+    // Ensure we have a pyarrow table
+    if (!PyConnection::isPyArrowTable(arrowTable)) {
+        throw RuntimeException("Expected a pyarrow Table, polars DataFrame, or pandas DataFrame");
+    }
+
+    // Export Arrow table to C Data Interface
+    // First, get the schema
+    ArrowSchemaWrapper schema;
+    arrowTable.attr("schema").attr("_export_to_c")(reinterpret_cast<uint64_t>(&schema));
+
+    // Get the batches (arrays)
+    std::vector<ArrowArrayWrapper> arrays;
+    py::list batches = arrowTable.attr("to_batches")();
+    for (auto& batch : batches) {
+        arrays.emplace_back();
+        batch.attr("_export_to_c")(reinterpret_cast<uint64_t>(&arrays.back()));
+    }
+
+    // Keep pyarrow producers alive while C++ accesses exported Arrow memory.
+    py::list keepAlive;
+    keepAlive.append(arrowTable);
+    keepAlive.append(batches);
+
+    auto result = ArrowTableSupport::createViewFromArrowTable(*conn, tableName, std::move(schema),
+        std::move(arrays));
+    if (result.queryResult && result.queryResult->isSuccess()) {
+        arrowTableRefs[tableName] = std::move(keepAlive);
+    }
+
+    return checkAndWrapQueryResult(result.queryResult);
+}
+
+std::unique_ptr<PyQueryResult> PyConnection::createArrowRelTable(const std::string& tableName,
+    py::object arrowTable, const std::string& srcTableName, const std::string& dstTableName) {
+    py::gil_scoped_acquire acquire;
+
+    if (PyConnection::isPandasDataframe(arrowTable)) {
+        arrowTable = importCache->pyarrow.lib.Table.from_pandas()(arrowTable);
+    } else if (PyConnection::isPolarsDataframe(arrowTable)) {
+        arrowTable = arrowTable.attr("to_arrow")();
+    }
+    if (!PyConnection::isPyArrowTable(arrowTable)) {
+        throw RuntimeException("Expected a pyarrow Table, polars DataFrame, or pandas DataFrame");
+    }
+
+    ArrowSchemaWrapper schema;
+    arrowTable.attr("schema").attr("_export_to_c")(reinterpret_cast<uint64_t>(&schema));
+    std::vector<ArrowArrayWrapper> arrays;
+    py::list batches = arrowTable.attr("to_batches")();
+    for (auto& batch : batches) {
+        arrays.emplace_back();
+        batch.attr("_export_to_c")(reinterpret_cast<uint64_t>(&arrays.back()));
+    }
+
+    py::list keepAlive;
+    keepAlive.append(arrowTable);
+    keepAlive.append(batches);
+
+    auto result = ArrowTableSupport::createRelTableFromArrowTable(*conn, tableName, srcTableName,
+        dstTableName, std::move(schema), std::move(arrays));
+    if (result.queryResult && result.queryResult->isSuccess()) {
+        arrowTableRefs[tableName] = std::move(keepAlive);
+    }
+
+    return checkAndWrapQueryResult(result.queryResult);
+}
+
+std::unique_ptr<PyQueryResult> PyConnection::dropArrowTable(const std::string& tableName) {
+    auto result = ArrowTableSupport::unregisterArrowTable(*conn, tableName);
+    if (result && result->isSuccess()) {
+        arrowTableRefs.erase(tableName);
+    }
+    return checkAndWrapQueryResult(result);
 }

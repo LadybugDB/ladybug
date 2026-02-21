@@ -39,7 +39,6 @@ public:
     void deserialize(common::Deserializer& deSer);
     void finalizeCheckpoint();
     void rollbackCheckpoint() { freeSpaceManager->rollbackCheckpoint(); }
-    void reclaimTailPagesIfNeeded(common::page_idx_t checkpointNumPages);
 
     common::row_idx_t getNumFreeEntries() const { return freeSpaceManager->getNumEntries(); }
     std::vector<PageRange> getFreeEntries(common::row_idx_t startOffset,
@@ -49,6 +48,7 @@ public:
 
     void clearEvictedBMEntriesIfNeeded(BufferManager* bufferManager);
     void mergeFreePages(FileHandle* fileHandle);
+    void reclaimTailPagesIfNeeded(common::page_idx_t checkpointNumPages);
 
     static PageManager* Get(const main::ClientContext& context);
 

@@ -4,6 +4,7 @@
 #include <unordered_map>
 
 #include "common/arrow/arrow_converter.h"
+#include "common/exception/runtime.h"
 #include "main/database.h"
 
 namespace lbug {
@@ -30,56 +31,26 @@ std::string join(const std::vector<std::string>& strings, const std::string& del
     return result;
 }
 
-std::string ArrowTableSupport::registerArrowData(ArrowSchema& schema,
-    std::vector<ArrowArray>& arrays) {
+static int64_t findArrowColumnByName(const ArrowSchemaWrapper& schema, const std::string& name) {
+    for (int64_t i = 0; i < schema.n_children; ++i) {
+        if (schema.children && schema.children[i] && schema.children[i]->name &&
+            name == schema.children[i]->name) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+std::string ArrowTableSupport::registerArrowData(ArrowSchemaWrapper schema,
+    std::vector<ArrowArrayWrapper> arrays) {
     std::lock_guard<std::mutex> lock(g_arrowRegistryMutex);
 
     // Generate a unique ID
     static size_t nextId = 0;
     std::string id = "arrow_" + std::to_string(nextId++);
 
-    // Move the schema and arrays into wrappers - transfer ownership
-    ArrowSchemaWrapper schemaWrapper;
-    schemaWrapper.format = schema.format;
-    schemaWrapper.name = schema.name;
-    schemaWrapper.metadata = schema.metadata;
-    schemaWrapper.flags = schema.flags;
-    schemaWrapper.n_children = schema.n_children;
-    schemaWrapper.children = schema.children;
-    schemaWrapper.dictionary = schema.dictionary;
-    schemaWrapper.release = schema.release;
-    schemaWrapper.private_data = schema.private_data;
-
-    // Mark original as moved (prevent double-free)
-    schema.release = nullptr;
-    schema.children = nullptr;
-    schema.dictionary = nullptr;
-
-    std::vector<ArrowArrayWrapper> arrayWrappers;
-    for (auto& array : arrays) {
-        ArrowArrayWrapper wrapper;
-        wrapper.length = array.length;
-        wrapper.null_count = array.null_count;
-        wrapper.offset = array.offset;
-        wrapper.n_buffers = array.n_buffers;
-        wrapper.n_children = array.n_children;
-        wrapper.buffers = array.buffers;
-        wrapper.children = array.children;
-        wrapper.dictionary = array.dictionary;
-        wrapper.release = array.release;
-        wrapper.private_data = array.private_data;
-
-        // Mark original as moved (prevent double-free)
-        array.release = nullptr;
-        array.children = nullptr;
-        array.buffers = nullptr;
-        array.dictionary = nullptr;
-
-        arrayWrappers.push_back(std::move(wrapper));
-    }
-
     // Store in registry
-    g_arrowRegistry[id] = std::make_pair(std::move(schemaWrapper), std::move(arrayWrappers));
+    g_arrowRegistry[id] = std::make_pair(std::move(schema), std::move(arrays));
 
     return id;
 }
@@ -105,7 +76,7 @@ void ArrowTableSupport::unregisterArrowData(const std::string& id) {
 }
 
 ArrowTableCreationResult ArrowTableSupport::createViewFromArrowTable(main::Connection& connection,
-    const std::string& viewName, ArrowSchema& schema, std::vector<ArrowArray>& arrays) {
+    const std::string& viewName, ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays) {
 
     // Get table info from Arrow C Data Interface
     int64_t numColumns = schema.n_children;
@@ -127,7 +98,7 @@ ArrowTableCreationResult ArrowTableSupport::createViewFromArrowTable(main::Conne
     std::string tableDef = "(" + join(columnDefs, ", ") + ")";
 
     // Register the Arrow data and get an ID
-    std::string arrowId = registerArrowData(schema, arrays);
+    std::string arrowId = registerArrowData(std::move(schema), std::move(arrays));
 
     // Build CREATE NODE TABLE statement with arrow storage
 
@@ -136,6 +107,65 @@ ArrowTableCreationResult ArrowTableSupport::createViewFromArrowTable(main::Conne
 
     // Create table with Arrow storage
     auto queryResult = connection.query(statement);
+    if (!queryResult->isSuccess()) {
+        unregisterArrowData(arrowId);
+    }
+
+    return {std::move(queryResult), arrowId};
+}
+
+ArrowTableCreationResult ArrowTableSupport::createRelTableFromArrowTable(
+    main::Connection& connection, const std::string& tableName, const std::string& srcTableName,
+    const std::string& dstTableName, ArrowSchemaWrapper schema,
+    std::vector<ArrowArrayWrapper> arrays, const std::string& srcColumnName,
+    const std::string& dstColumnName) {
+    if (srcColumnName != "from" || dstColumnName != "to") {
+        throw common::RuntimeException(
+            "Arrow relationship registration currently requires endpoint columns named 'from' and "
+            "'to'");
+    }
+
+    int64_t numColumns = schema.n_children;
+    if (numColumns < 2) {
+        throw common::RuntimeException(
+            "Arrow relationship table must contain at least source and destination columns");
+    }
+
+    auto srcColIdx = findArrowColumnByName(schema, srcColumnName);
+    auto dstColIdx = findArrowColumnByName(schema, dstColumnName);
+    if (srcColIdx < 0 || dstColIdx < 0) {
+        throw common::RuntimeException("Arrow relationship table must include endpoint columns '" +
+                                       srcColumnName + "' and '" + dstColumnName + "'");
+    }
+    if (srcColIdx == dstColIdx) {
+        throw common::RuntimeException("Source and destination endpoint columns must be distinct");
+    }
+
+    std::vector<std::string> propertyDefs;
+    for (int64_t i = 0; i < numColumns; ++i) {
+        if (i == srcColIdx || i == dstColIdx) {
+            continue;
+        }
+        std::string colName = schema.children[i]->name;
+        std::string colType =
+            common::ArrowConverter::fromArrowSchema(schema.children[i]).toString();
+        propertyDefs.push_back(colName + " " + colType);
+    }
+
+    std::vector<std::string> relDefs;
+    relDefs.push_back("FROM " + srcTableName + " TO " + dstTableName);
+    relDefs.insert(relDefs.end(), propertyDefs.begin(), propertyDefs.end());
+    std::string tableDef = "(" + join(relDefs, ", ") + ")";
+
+    // Register the Arrow data and get an ID.
+    std::string arrowId = registerArrowData(std::move(schema), std::move(arrays));
+
+    std::string statement = "CREATE REL TABLE " + tableName + " " + tableDef +
+                            " WITH (storage='arrow://" + arrowId + "')";
+    auto queryResult = connection.query(statement);
+    if (!queryResult->isSuccess()) {
+        unregisterArrowData(arrowId);
+    }
 
     return {std::move(queryResult), arrowId};
 }

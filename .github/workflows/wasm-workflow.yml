@@ -10,13 +10,16 @@ on:
         default: false
 
 jobs:
-  build-wasm:
+  build-and-test-wasm:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
         run: python3 -m pip install uv
+
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
 
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
@@ -41,8 +44,20 @@ jobs:
       - name: Verify Emscripten
         run: emcc -v
 
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: wasm-${{ runner.os }}-${{ github.ref }}
+          max-size: 2G
+          restore-keys: |
+            wasm-${{ runner.os }}-refs/heads/master
+            wasm-${{ runner.os }}-
+
       - name: Build WebAssembly package
         working-directory: tools/wasm
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           npm run build
 
@@ -50,3 +65,37 @@ jobs:
         with:
           name: lbug-deploy-wasm
           path: tools/wasm/lbug-wasm.tar.gz
+
+      - name: API test
+        working-directory: tools/wasm
+        run: npm run test
+
+      - name: Clean up
+        run: make clean
+
+      - name: Kernel build & test
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+        run: |
+          source /home/runner/emsdk/emsdk_env.sh
+          make wasmtest
+
+      - name: Kernel build & test in memory
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          IN_MEM_MODE: true
+        run: |
+          source /home/runner/emsdk/emsdk_env.sh
+          make wasmtest
+
+      - name: Kernel build & test (single-threaded)
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          SINGLE_THREADED: true
+        run: |
+          make clean
+          source /home/runner/emsdk/emsdk_env.sh
+          make wasmtest

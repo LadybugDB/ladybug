@@ -1,9 +1,9 @@
 # Incident: CopyRelSegmentTest failure — "Try to partition multiple factorization group"
 
-**Date:** 2026-02-16  
-**Status:** Resolved  
-**Severity:** Medium (E2E test failure; no production impact)  
-**Component:** Planner — COPY FROM for relationship tables  
+**Date:** 2026-02-16
+**Status:** Resolved
+**Severity:** Medium (E2E test failure; no production impact)
+**Component:** Planner — COPY FROM for relationship tables
 **Author:** [@vkozio](https://github.com/vkozio)
 
 ---
@@ -91,9 +91,9 @@ So node COPY and rel COPY were using different criteria for when to accumulate, 
 
 **Change (single file):** `src/planner/plan/plan_copy.cpp`
 
-- **Before:**  
+- **Before:**
   `if (schema->getGroupsPosInScope().size() == 1) break;`
-- **After:**  
+- **After:**
   `if (schema->getNumGroups() <= 1) break;`
 
 So we only skip adding Accumulate when the query plan has at most one factorization group. When it has more than one, we always add Accumulate so that the plan reaching the Partitioner has a single group, satisfying `validateSingleGroup()`.

@@ -1,9 +1,9 @@
 # Incident: SIGSEGV when Connection is destroyed while query workers are still running
 
-**Date:** 2026-02-16  
-**Status:** Resolved  
-**Severity:** High (crash; observed in Node.js addon and during COPY)  
-**Component:** Main — Connection / ClientContext lifecycle, Processor task scheduler  
+**Date:** 2026-02-16
+**Status:** Resolved
+**Severity:** High (crash; observed in Node.js addon and during COPY)
+**Component:** Main — Connection / ClientContext lifecycle, Processor task scheduler
 **Author:** [@vkozio](https://github.com/vkozio)
 
 ---

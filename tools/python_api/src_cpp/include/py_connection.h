@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_map>
+
 #include "main/storage_driver.h"
 #include "py_database.h"
 #include "py_prepared_statement.h"
@@ -48,6 +50,12 @@ public:
         const py::list& params, const std::string& retval, bool defaultNull, bool catchExceptions);
     void removeScalarFunction(const std::string& name);
 
+    std::unique_ptr<PyQueryResult> createArrowTable(const std::string& tableName,
+        py::object arrowTable);
+    std::unique_ptr<PyQueryResult> createArrowRelTable(const std::string& tableName,
+        py::object arrowTable, const std::string& srcTableName, const std::string& dstTableName);
+    std::unique_ptr<PyQueryResult> dropArrowTable(const std::string& tableName);
+
     static Value transformPythonValue(const py::handle& val);
     static Value transformPythonValueAs(const py::handle& val, const LogicalType& type);
     static Value transformPythonValueFromParameter(const py::handle& val);
@@ -57,6 +65,7 @@ public:
 private:
     std::unique_ptr<StorageDriver> storageDriver;
     std::unique_ptr<Connection> conn;
+    std::unordered_map<std::string, py::object> arrowTableRefs;
 
     static std::unique_ptr<PyQueryResult> checkAndWrapQueryResult(
         std::unique_ptr<QueryResult>& queryResult);

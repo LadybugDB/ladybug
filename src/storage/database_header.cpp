@@ -56,6 +56,8 @@ void DatabaseHeader::freeMetadataPageRange(PageManager& pageManager) const {
     }
 }
 
+static constexpr uint8_t HEADER_FORMAT_VERSION_WITH_DATAFILE_NUM_PAGES = 2;
+
 static void writeMagicBytes(common::Serializer& serializer) {
     serializer.writeDebuggingInfo("magic");
     const auto numMagicBytes = strlen(StorageVersionInfo::MAGIC_BYTES);
@@ -63,8 +65,6 @@ static void writeMagicBytes(common::Serializer& serializer) {
         serializer.serializeValue<uint8_t>(StorageVersionInfo::MAGIC_BYTES[i]);
     }
 }
-
-static constexpr uint8_t HEADER_FORMAT_VERSION_WITH_DATAFILE_NUM_PAGES = 2;
 
 void DatabaseHeader::serialize(common::Serializer& ser) const {
     writeMagicBytes(ser);
@@ -99,17 +99,18 @@ DatabaseHeader DatabaseHeader::deserialize(common::Deserializer& deSer) {
     deSer.deserializeValue(databaseID.value);
     common::page_idx_t dataFileNumPages = 0;
     uint8_t headerFormatVersion = 0;
+    // Old format (e.g. lbug-0.14.1) ends here; reading 9 bytes would read beyond logical header.
+    // Read one byte: only if it matches our format version do we read the following 8 bytes.
     deSer.deserializeValue(headerFormatVersion);
-    deSer.deserializeValue(dataFileNumPages);
-    if (headerFormatVersion < HEADER_FORMAT_VERSION_WITH_DATAFILE_NUM_PAGES) {
-        dataFileNumPages = 0; // Old checkpoint: no dataFileNumPages stored.
+    if (headerFormatVersion == HEADER_FORMAT_VERSION_WITH_DATAFILE_NUM_PAGES) {
+        deSer.deserializeValue(dataFileNumPages);
     }
-    return {catalogPageRange, metaPageRange, databaseID, dataFileNumPages};
+    return {catalogPageRange, metaPageRange, dataFileNumPages, databaseID};
 }
 
 DatabaseHeader DatabaseHeader::createInitialHeader(common::RandomEngine* randomEngine) {
     // We generate a random UUID to act as the database ID
-    return DatabaseHeader{{}, {}, common::UUID::generateRandomUUID(randomEngine), 0};
+    return DatabaseHeader{{}, {}, 0, common::UUID::generateRandomUUID(randomEngine)};
 }
 
 std::optional<DatabaseHeader> DatabaseHeader::readDatabaseHeader(common::FileInfo& dataFileInfo) {

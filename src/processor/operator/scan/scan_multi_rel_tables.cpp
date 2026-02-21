@@ -1,7 +1,9 @@
 #include "processor/operator/scan/scan_multi_rel_tables.h"
 
+#include "common/exception/runtime.h"
 #include "processor/execution_context.h"
 #include "storage/local_storage/local_storage.h"
+#include "storage/table/arrow_rel_table.h"
 #include "storage/table/parquet_rel_table.h"
 
 using namespace lbug::common;
@@ -56,21 +58,35 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
     boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
 
-    // Check if any table in any scanner is a ParquetRelTable
+    // Check if any table in any scanner is an external rel table with a custom scan state.
+    bool hasArrowTable = false;
     bool hasParquetTable = false;
     for (auto& [_, scanner] : scanners) {
         for (auto& relInfo : scanner.relInfos) {
+            if (dynamic_cast<storage::ArrowRelTable*>(relInfo.table) != nullptr) {
+                hasArrowTable = true;
+                break;
+            }
             if (dynamic_cast<storage::ParquetRelTable*>(relInfo.table) != nullptr) {
                 hasParquetTable = true;
                 break;
             }
         }
-        if (hasParquetTable)
+        if (hasArrowTable || hasParquetTable) {
             break;
+        }
     }
 
     // Create appropriate scan state type
-    if (hasParquetTable) {
+    if (hasArrowTable && hasParquetTable) {
+        throw RuntimeException(
+            "Scanning mixed Arrow-backed and Parquet-backed rel tables in one operator is not "
+            "supported");
+    } else if (hasArrowTable) {
+        scanState =
+            std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
+                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+    } else if (hasParquetTable) {
         scanState =
             std::make_unique<storage::ParquetRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);

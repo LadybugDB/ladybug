@@ -393,8 +393,20 @@ jobs:
         working-directory: tools/wasm
         run: npm i
 
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: wasm-${{ runner.os }}-${{ github.ref }}
+          max-size: 2G
+          restore-keys: |
+            wasm-${{ runner.os }}-refs/heads/master
+            wasm-${{ runner.os }}-
+
       - name: Build WebAssembly package
         working-directory: tools/wasm
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           source /home/runner/emsdk/emsdk_env.sh
           npm run build
@@ -407,19 +419,26 @@ jobs:
         run: make clean
 
       - name: Kernel build & test
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           source /home/runner/emsdk/emsdk_env.sh
           make wasmtest
 
       - name: Kernel build & test in memory
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          IN_MEM_MODE: true
         run: |
           source /home/runner/emsdk/emsdk_env.sh
           make wasmtest
-        env:
-          IN_MEM_MODE: true
 
       - name: Kernel build & test (single-threaded)
         env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
           SINGLE_THREADED: true
         run: |
           make clean
@@ -1176,11 +1195,16 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: minimal-test-${{ runner.os }}
+          key: minimal-test-${{ runner.os }}-${{ github.ref }}
           max-size: 2G
-          restore-keys: minimal-test-
+          restore-keys: |
+            minimal-test-${{ runner.os }}-refs/heads/master
+            minimal-test-${{ runner.os }}-
 
       - name: Build
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: make relwithdebinfo
 
       - name: Generate datasets
@@ -1190,6 +1214,9 @@ jobs:
         run: pip3 install uv
 
       - name: Test
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           uv venv
           source .venv/bin/activate
@@ -1229,9 +1256,11 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: minimal-extension-test-${{ runner.os }}
+          key: minimal-extension-test-${{ runner.os }}-${{ github.ref }}
           max-size: 2G
-          restore-keys: minimal-extension-test-
+          restore-keys: |
+            minimal-extension-test-${{ runner.os }}-refs/heads/master
+            minimal-extension-test-${{ runner.os }}-
 
       - name: Update PostgreSQL host
         working-directory: extension/postgres/test/test_files

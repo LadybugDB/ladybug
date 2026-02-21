@@ -65,6 +65,6 @@ Keep the report **blameless**: focus on systems, APIs, and process, not on indiv
 
 | 2026-02-17 | [2026-02-17-minimal-test-checkpoint-timeout.md](2026-02-17-minimal-test-checkpoint-timeout.md) | CI minimal test: CloseConnectionWithActiveTransaction fails in TearDown; checkpoint times out because Connection destructor skips rollback and transaction stays in manager. |
 
-| 2026-02-17 | [2026-02-17-fsm-leak-copy-rollback-recovery.md](2026-02-17-fsm-leak-copy-rollback-recovery.md) | FSM leak after COPY + ROLLBACK + RELOAD; two e2e tests 95 used pages instead of 4. Fixed by evict loop in mergeFreePages. |
+| 2026-02-17 | [2026-02-17-fsm-leak-copy-rollback-recovery.md](2026-02-17-fsm-leak-copy-rollback-recovery.md) | FSM leak after COPY + ROLLBACK + RELOAD: two e2e tests see 95 used pages instead of 4; analysis and options (audit allocation paths, checkpoint/reload). |
 
 *(Add new rows here when you add a new incident document.)*

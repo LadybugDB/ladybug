@@ -40,15 +40,8 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
     }
     const bool mixedConcreteTypes = distinctTypes.size() > 1;
     if (mixedConcreteTypes) {
-        // First, let the type system try to find a common super type (e.g. numeric promotion).
         binder::ExpressionUtil::tryCombineDataType(input.arguments, combinedType);
         if (combinedType.getLogicalTypeID() == LogicalTypeID::ANY) {
-            // No common type found. For UNWIND-style mixed lists, if there is any STRING element
-            // we upcast the whole list to STRING so queries like
-            //   UNWIND [1, 'hello', true, 3.14, null] AS x RETURN x
-            // work as expected. Otherwise fall back to the first concrete element type so that
-            // expressions like [123, True] trigger the implicit cast error on True (BOOL->INT64),
-            // matching the TCK Map1.Scenario6 expectation.
             if (distinctTypes.contains(LogicalTypeID::STRING)) {
                 combinedType = LogicalType::STRING();
             } else {
