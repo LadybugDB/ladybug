@@ -20,4 +20,4 @@ docker run --rm \
   -v "$REPO_ROOT:/src" \
   -w /src \
   alpine:3.20 \
-  sh -c "apk add --no-cache -q python3 clang18 > /dev/null && python3 scripts/run-clang-format.py --clang-format-executable /usr/bin/clang-format -r src/ test/ tools/ extension/ $IN_PLACE"
+  sh -c "apk add --no-cache -q python3 clang18-extra-tools > /dev/null && python3 scripts/run-clang-format.py --clang-format-executable /usr/lib/llvm18/bin/clang-format -r src/ test/ tools/ extension/ $IN_PLACE"

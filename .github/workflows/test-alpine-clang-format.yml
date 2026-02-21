@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          apk add --no-cache git python3 clang18
+          apk add --no-cache git python3 clang18-extra-tools
 
       - uses: actions/checkout@v4
         with:
@@ -18,11 +18,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Show clang-format version
-        run: clang-format --version
+        run: /usr/lib/llvm18/bin/clang-format --version
 
       - name: Run clang-format check
         run: |
-          python3 scripts/run-clang-format.py --clang-format-executable /usr/bin/clang-format -r src/ test/ tools/ extension/
+          python3 scripts/run-clang-format.py --clang-format-executable /usr/lib/llvm18/bin/clang-format -r src/ test/ tools/ extension/
 
   compare-with-ubuntu:
     runs-on: ubuntu-24.04
