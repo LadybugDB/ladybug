@@ -16,10 +16,7 @@
     "index.js",
     "index.mjs",
     "lbug.d.ts",
-    "lbugjs.node",
-    "prebuilt",
-    "src_js",
-    "install.js"
+    "lbugjs.node"
   ],
   "type": "commonjs",
   "homepage": "https://ladybugdb.com/",
