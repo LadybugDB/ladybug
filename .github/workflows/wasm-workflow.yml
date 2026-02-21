@@ -39,39 +39,48 @@ jobs:
         run: npm i
 
       - name: Setup Emscripten
-        uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: 'latest'
+        run: |
+          if [ ! -d /home/runner/emsdk ]; then
+            git clone https://github.com/emscripten-core/emsdk.git /home/runner/emsdk
+          fi
+          cd /home/runner/emsdk
+          ./emsdk install latest
+          ./emsdk activate latest
 
       - name: Verify Emscripten
-        run: emcc -v
+        run: |
+          source /home/runner/emsdk/emsdk_env.sh
+          emcc -v
 
-      - name: Configure ccache for Emscripten
+      - name: Install ccache
         run: |
           sudo apt-get install -y ccache
-          ccache --set-config=compiler_check=content
-          ccache --set-config=hash_dir=false
-          ccache --set-config=base_dir=${{ github.workspace }}
 
       - name: Setup ccache (package)
         if: ${{ inputs.isNightly != true }}
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: wasm-package-v3-${{ runner.os }}-${{ github.ref }}
+          key: wasm-package-${{ runner.os }}-${{ github.ref }}
           max-size: 2G
           restore-keys: |
-            wasm-package-v3-${{ runner.os }}-refs/heads/master
-            wasm-package-v3-${{ runner.os }}-
+            wasm-package-${{ runner.os }}-refs/heads/master
+            wasm-package-${{ runner.os }}-
 
       - name: Setup ccache (test)
         if: ${{ inputs.isNightly == true }}
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: wasm-test-v3-${{ runner.os }}-${{ github.ref }}
+          key: wasm-test-${{ runner.os }}-${{ github.ref }}
           max-size: 2G
           restore-keys: |
-            wasm-test-v3-${{ runner.os }}-refs/heads/master
-            wasm-test-v3-${{ runner.os }}-
+            wasm-test-${{ runner.os }}-refs/heads/master
+            wasm-test-${{ runner.os }}-
+
+      - name: Configure ccache for Emscripten
+        run: |
+          ccache --set-config=compiler_check=content
+          ccache --set-config=hash_dir=false
+          ccache --set-config=base_dir=${{ github.workspace }}
 
       - name: Build WebAssembly package
         working-directory: tools/wasm
@@ -79,6 +88,7 @@ jobs:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
+          source /home/runner/emsdk/emsdk_env.sh
           npm run build
 
       - uses: actions/upload-artifact@v4
@@ -95,7 +105,9 @@ jobs:
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
-        run: make wasmtest-build
+        run: |
+          source /home/runner/emsdk/emsdk_env.sh
+          make wasmtest-build
 
       - name: Kernel test
         if: ${{ inputs.isNightly == true }}
@@ -111,6 +123,16 @@ jobs:
         if: ${{ inputs.isNightly == true }}
         run: make clean CMAKE=/usr/bin/cmake
 
+      - name: Setup ccache (single-threaded)
+        if: ${{ inputs.isNightly == true }}
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: wasm-test-single-${{ runner.os }}-${{ github.ref }}
+          max-size: 2G
+          restore-keys: |
+            wasm-test-single-${{ runner.os }}-refs/heads/master
+            wasm-test-single-${{ runner.os }}-
+
       - name: Configure ccache for single-threaded build
         if: ${{ inputs.isNightly == true }}
         run: |
@@ -118,20 +140,12 @@ jobs:
           ccache --set-config=hash_dir=false
           ccache --set-config=base_dir=${{ github.workspace }}
 
-      - name: Setup ccache (single-threaded)
-        if: ${{ inputs.isNightly == true }}
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: wasm-test-single-v3-${{ runner.os }}-${{ github.ref }}
-          max-size: 2G
-          restore-keys: |
-            wasm-test-single-v3-${{ runner.os }}-refs/heads/master
-            wasm-test-single-v3-${{ runner.os }}-
-
       - name: Kernel build & test (single-threaded)
         if: ${{ inputs.isNightly == true }}
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
           SINGLE_THREADED: true
-        run: make wasmtest
+        run: |
+          source /home/runner/emsdk/emsdk_env.sh
+          make wasmtest
