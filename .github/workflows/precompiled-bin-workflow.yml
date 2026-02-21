@@ -33,17 +33,45 @@ jobs:
         run: |
           apt-get update
           apt-get install -y wget gnupg lsb-release software-properties-common
-          echo "deb http://deb.debian.org/debian bookworm-backports main" > /etc/apt/sources.list.d/backports.list
-          apt-get update
-          apt-get install -y -t bookworm-backports g++-13
+          apt-get install -y libstdc++-13-dev  # needed for c++20 compat
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           ./llvm.sh 20
-          apt-get install -y cmake ninja-build python3 python3-pip git
+          apt-get install -y cmake ninja-build python3 python3-pip git ccache
           rm llvm.sh
 
       - name: Install uv
         run: python3 -m pip install uv
+
+      - name: Setup ccache (Linux)
+        if: runner.os == 'Linux'
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: precompiled-bin-${{ runner.os }}-${{ runner.arch }}-${{ github.ref }}
+          max-size: 2G
+          restore-keys: |
+            precompiled-bin-${{ runner.os }}-${{ runner.arch }}-refs/heads/master
+            precompiled-bin-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Setup ccache (macOS)
+        if: runner.os == 'macOS'
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: precompiled-bin-${{ runner.os }}-${{ github.ref }}
+          max-size: 2G
+          restore-keys: |
+            precompiled-bin-${{ runner.os }}-refs/heads/master
+            precompiled-bin-${{ runner.os }}-
+
+      - name: Setup ccache (Windows)
+        if: runner.os == 'Windows'
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: precompiled-bin-${{ runner.os }}-${{ github.ref }}
+          max-size: 2G
+          restore-keys: |
+            precompiled-bin-${{ runner.os }}-refs/heads/master
+            precompiled-bin-${{ runner.os }}-
 
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
@@ -61,6 +89,9 @@ jobs:
 
       - name: Build precompiled binaries (Linux)
         if: runner.os == 'Linux'
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           export CC=clang-20
           export CXX=clang++-20
@@ -70,12 +101,14 @@ jobs:
 
       - name: Build precompiled binaries (macOS)
         if: runner.os == 'macOS'
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          MACOSX_DEPLOYMENT_TARGET: 13.3
+          CMAKE_OSX_ARCHITECTURES: "x86_64;arm64"
         run: |
           make GEN=Ninja
           make install
-        env:
-          MACOSX_DEPLOYMENT_TARGET: 13.3
-          CMAKE_OSX_ARCHITECTURES: "x86_64;arm64"
 
       - name: Enable long paths (Windows)
         if: runner.os == 'Windows'
@@ -84,52 +117,17 @@ jobs:
           git config --system core.longpaths true
         shell: pwsh
 
-      - name: Install ccache (Windows)
-        if: runner.os == 'Windows'
-        run: choco install ccache -y
-        shell: cmd
-
-      - name: Setup ccache (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
-          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> $GITHUB_ENV
-          echo "CCACHE_DIR=D:\c" >> $GITHUB_ENV
-          echo "CCACHE_TEMPDIR=D:\t" >> $GITHUB_ENV
-          mkdir -p /d/c /d/t
-          ccache --set-config=max_size=2G
-          ccache --set-config=compression=true
-          ccache --set-config=cache_dir=D:\c
-          ccache --set-config=temporary_dir=D:\t
-        shell: bash
-
-      - name: Cache ccache directory (Windows)
-        if: runner.os == 'Windows'
-        uses: actions/cache@v4
-        with:
-          path: D:\c
-          key: ${{ runner.os }}-ccache-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
-          restore-keys: |
-            ${{ runner.os }}-ccache-
-
-      - name: Show ccache stats (before) (Windows)
-        if: runner.os == 'Windows'
-        run: ccache -s
-        shell: bash
-
       - name: Build precompiled binaries (Windows)
         if: runner.os == 'Windows'
         shell: cmd
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           make GEN=Ninja
           make install
-
-      - name: Show ccache stats (after) (Windows)
-        if: runner.os == 'Windows'
-        run: ccache -s
-        shell: bash
 
       - name: Collect artifacts (Linux)
         if: runner.os == 'Linux'
