@@ -96,7 +96,7 @@ LogicalPlan Planner::planCopyRelFrom(const BoundCopyFromInfo* info) {
         auto& querySource = info->source->constCast<BoundQueryScanSource>();
         plan = planQuery(*querySource.statement);
         auto schema = plan.getSchema();
-        if (schema->getGroupsPosInScope().size() == 1) {
+        if (schema->getNumGroups() <= 1) {
             break;
         }
         // Copy operator assumes all input are in the same data chunk. If this is not the case,
