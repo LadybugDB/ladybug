@@ -35,7 +35,7 @@ jobs:
           apt-get install -y wget gnupg lsb-release software-properties-common
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
-          ./llvm.sh 19
+          ./llvm.sh 20
           apt-get install -y cmake ninja-build python3 python3-pip git
           rm llvm.sh
 
@@ -59,8 +59,8 @@ jobs:
       - name: Build precompiled binaries (Linux)
         if: runner.os == 'Linux'
         run: |
-          export CC=clang-19
-          export CXX=clang++-19
+          export CC=clang-20
+          export CXX=clang++-20
           make GEN=Ninja
           make install
 
