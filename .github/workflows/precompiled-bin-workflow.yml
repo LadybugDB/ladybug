@@ -62,7 +62,7 @@ jobs:
           export CC=clang-20
           export CXX=clang++-20
           export CXXFLAGS="-stdlib=libc++"
-          export LDFLAGS="-stdlib=libc++"
+          export LDFLAGS="-stdlib=libc++ -Wl,-Bstatic -lc++ -lc++abi -Wl,-Bdynamic"
           make GEN=Ninja
           make install
 
