@@ -135,7 +135,7 @@ jobs:
         run: |
           mv install/include/lbug.h .
           mv install/include/lbug.hpp .
-          mv install/lib/liblbug.so .
+          mv install/lib*/liblbug.so .
           mv install/bin/lbug .
 
       - name: Collect artifacts (macOS)
