@@ -1,9 +1,6 @@
 name: Build Node.js Module
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -12,15 +9,9 @@ on:
         required: true
         default: false
 
-# Let heavy builds finish; new push queues instead of cancelling.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   build-nodejs:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
     strategy:
       matrix:
         include:
@@ -155,8 +146,9 @@ jobs:
         run: rm -rf package
 
   # Push prebuilt/*.node to repo so pnpm add github:user/ladybug#path:tools/nodejs_api uses them without building.
+  # Runs only on manual workflow_dispatch to avoid push loops.
   update-prebuilt:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    if: github.event_name == 'workflow_dispatch'
     needs: build-nodejs
     runs-on: ubuntu-latest
     permissions:
@@ -180,26 +172,12 @@ jobs:
             find "$d" -name "lbugjs-*.node" -exec cp {} tools/nodejs_api/prebuilt/ \;
           done
           ls -la tools/nodejs_api/prebuilt/
-          cp -r tools/nodejs_api/prebuilt /tmp/prebuilt-backup
-
-      - name: Switch to default branch (on tag)
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        run: |
-          git fetch origin ${{ github.event.repository.default_branch }}
-          git checkout ${{ github.event.repository.default_branch }}
-          git pull origin ${{ github.event.repository.default_branch }} --no-rebase
-          rm -rf tools/nodejs_api/prebuilt
-          cp -r /tmp/prebuilt-backup tools/nodejs_api/prebuilt
 
       - name: Commit and push prebuilt
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f tools/nodejs_api/prebuilt/
+          git add tools/nodejs_api/prebuilt/
           git diff --staged --quiet && echo "No prebuilt changes" && exit 0
           git commit -m "chore(nodejs): update prebuilt addons from CI [skip ci]"
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            git push origin HEAD:${{ github.event.repository.default_branch }}
-          else
-            git push origin HEAD:"${GITHUB_REF#refs/heads/}"
-          fi
+          git push
