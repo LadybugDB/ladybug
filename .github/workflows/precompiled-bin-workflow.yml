@@ -36,7 +36,7 @@ jobs:
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           ./llvm.sh 20
-          apt-get install -y cmake ninja-build python3 python3-pip git
+          apt-get install -y libc++-20-dev libc++abi-20-dev cmake ninja-build python3 python3-pip git
           rm llvm.sh
 
       - name: Install uv
@@ -61,6 +61,8 @@ jobs:
         run: |
           export CC=clang-20
           export CXX=clang++-20
+          export CXXFLAGS="-stdlib=libc++"
+          export LDFLAGS="-stdlib=libc++"
           make GEN=Ninja
           make install
 
