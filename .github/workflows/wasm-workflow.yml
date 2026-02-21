@@ -88,9 +88,7 @@ jobs:
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
-        run: |
-          source /home/runner/emsdk/emsdk_env.sh
-          make wasmtest-build
+        run: make wasmtest-build
 
       - name: Kernel test
         if: ${{ inputs.isNightly == true }}
@@ -122,6 +120,4 @@ jobs:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
           SINGLE_THREADED: true
-        run: |
-          source /home/runner/emsdk/emsdk_env.sh
-          make wasmtest
+        run: make wasmtest
