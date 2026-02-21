@@ -393,8 +393,20 @@ jobs:
         working-directory: tools/wasm
         run: npm i
 
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: wasm-${{ runner.os }}-${{ github.ref }}
+          max-size: 2G
+          restore-keys: |
+            wasm-${{ runner.os }}-refs/heads/master
+            wasm-${{ runner.os }}-
+
       - name: Build WebAssembly package
         working-directory: tools/wasm
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           source /home/runner/emsdk/emsdk_env.sh
           npm run build
@@ -407,19 +419,26 @@ jobs:
         run: make clean
 
       - name: Kernel build & test
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           source /home/runner/emsdk/emsdk_env.sh
           make wasmtest
 
       - name: Kernel build & test in memory
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          IN_MEM_MODE: true
         run: |
           source /home/runner/emsdk/emsdk_env.sh
           make wasmtest
-        env:
-          IN_MEM_MODE: true
 
       - name: Kernel build & test (single-threaded)
         env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
           SINGLE_THREADED: true
         run: |
           make clean
