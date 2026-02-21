@@ -18,7 +18,7 @@ public:
     void computeFactorizedSchema() override;
     void computeFlatSchema() override;
 
-    virtual f_group_pos_set getGroupsPosToFlatten();
+    f_group_pos_set getGroupsPosToFlatten();
 
     std::string getExpressionsForPrinting() const override;
 
