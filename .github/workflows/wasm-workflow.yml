@@ -46,25 +46,32 @@ jobs:
       - name: Verify Emscripten
         run: emcc -v
 
+      - name: Configure ccache for Emscripten
+        run: |
+          sudo apt-get install -y ccache
+          ccache --set-config=compiler_check=content
+          ccache --set-config=hash_dir=false
+          ccache --set-config=base_dir=${{ github.workspace }}
+
       - name: Setup ccache (package)
         if: ${{ inputs.isNightly != true }}
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: wasm-package-${{ runner.os }}-${{ github.ref }}
+          key: wasm-package-v3-${{ runner.os }}-${{ github.ref }}
           max-size: 2G
           restore-keys: |
-            wasm-package-${{ runner.os }}-refs/heads/master
-            wasm-package-${{ runner.os }}-
+            wasm-package-v3-${{ runner.os }}-refs/heads/master
+            wasm-package-v3-${{ runner.os }}-
 
       - name: Setup ccache (test)
         if: ${{ inputs.isNightly == true }}
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: wasm-test-${{ runner.os }}-${{ github.ref }}
+          key: wasm-test-v3-${{ runner.os }}-${{ github.ref }}
           max-size: 2G
           restore-keys: |
-            wasm-test-${{ runner.os }}-refs/heads/master
-            wasm-test-${{ runner.os }}-
+            wasm-test-v3-${{ runner.os }}-refs/heads/master
+            wasm-test-v3-${{ runner.os }}-
 
       - name: Build WebAssembly package
         working-directory: tools/wasm
@@ -104,15 +111,22 @@ jobs:
         if: ${{ inputs.isNightly == true }}
         run: make clean CMAKE=/usr/bin/cmake
 
+      - name: Configure ccache for single-threaded build
+        if: ${{ inputs.isNightly == true }}
+        run: |
+          ccache --set-config=compiler_check=content
+          ccache --set-config=hash_dir=false
+          ccache --set-config=base_dir=${{ github.workspace }}
+
       - name: Setup ccache (single-threaded)
         if: ${{ inputs.isNightly == true }}
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: wasm-test-single-${{ runner.os }}-${{ github.ref }}
+          key: wasm-test-single-v3-${{ runner.os }}-${{ github.ref }}
           max-size: 2G
           restore-keys: |
-            wasm-test-single-${{ runner.os }}-refs/heads/master
-            wasm-test-single-${{ runner.os }}-
+            wasm-test-single-v3-${{ runner.os }}-refs/heads/master
+            wasm-test-single-v3-${{ runner.os }}-
 
       - name: Kernel build & test (single-threaded)
         if: ${{ inputs.isNightly == true }}
