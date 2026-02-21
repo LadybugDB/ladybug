@@ -18,9 +18,9 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            container: debian:12
+            container: quay.io/pypa/manylinux_2_28_x86_64
           - os: ubuntu-24.04-arm
-            container: debian:12
+            container: quay.io/pypa/manylinux_2_28_aarch64
           - os: macos-latest
           - os: windows-latest
     runs-on: ${{ matrix.os }}
@@ -31,17 +31,17 @@ jobs:
       - name: Install build dependencies (Linux container)
         if: runner.os == 'Linux'
         run: |
-          apt-get update
-          apt-get install -y wget gnupg lsb-release software-properties-common
-          apt-get install -y libstdc++-13-dev  # needed for c++20 compat
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          ./llvm.sh 20
-          apt-get install -y cmake ninja-build python3 python3-pip git ccache
-          rm llvm.sh
+          dnf install -y 'dnf-command(config-manager)'
+          dnf config-manager --set-enabled powertools
+          dnf install -y cmake ninja-build python3 python3-pip git ccache gcc-toolset-13
 
-      - name: Install uv
+      - name: Install uv (Windows/Mac)
+        if: runner.os != 'Linux'
         run: python3 -m pip install uv
+
+      - name: Install uv (Manylinux)
+        if: runner.os != 'Linux'
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
       - name: Setup ccache (Linux)
         if: runner.os == 'Linux'
@@ -93,8 +93,9 @@ jobs:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
-          export CC=clang-20
-          export CXX=clang++-20
+          source /opt/rh/gcc-toolset-13/enable
+          export CC=gcc
+          export CXX=g++
           export LDFLAGS="-static-libstdc++"
           make GEN=Ninja
           make install
