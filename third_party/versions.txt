@@ -24,4 +24,4 @@ taywee_args=6.4.2
 thrift=unknown
 utf8proc=2.4.0
 yyjson=0.10.0
-zstd=1.4.5
+zstd=1.5.7

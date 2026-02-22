@@ -281,11 +281,43 @@ def find_file_in_repo(repo_path: Path, rel_path: str) -> Path:
         repo_path / filename,
     ]
 
-    for base_dir in ['include', 'src', 'cpp']:
+    # Also try .c -> .cpp mapping (for C to C++ renaming)
+    if filename.endswith('.cpp'):
+        c_filename = filename[:-4] + '.c'
+        search_paths.append(repo_path / rel_path.replace('.cpp', '.c'))
+        search_paths.append(repo_path / c_filename)
+    elif filename.endswith('.c'):
+        cpp_filename = filename[:-2] + '.cpp'
+        search_paths.append(repo_path / rel_path.replace('.c', '.cpp'))
+        search_paths.append(repo_path / cpp_filename)
+
+    for base_dir in ['include', 'src', 'cpp', 'lib']:
         base_path = repo_path / base_dir
-        if base_path.exists():
-            for match in base_path.rglob(filename):
-                search_paths.append(match)
+        if base_dir == 'lib':
+            # For lib directory, also search for .c when looking for .cpp
+            search_filename = filename
+            if filename.endswith('.cpp'):
+                c_filename = filename[:-4] + '.c'
+                if base_path.exists():
+                    for match in base_path.rglob(filename):
+                        search_paths.append(match)
+                    for match in base_path.rglob(c_filename):
+                        search_paths.append(match)
+            elif filename.endswith('.c'):
+                cpp_filename = filename[:-2] + '.cpp'
+                if base_path.exists():
+                    for match in base_path.rglob(filename):
+                        search_paths.append(match)
+                    for match in base_path.rglob(cpp_filename):
+                        search_paths.append(match)
+            else:
+                if base_path.exists():
+                    for match in base_path.rglob(filename):
+                        search_paths.append(match)
+        else:
+            if base_path.exists():
+                for match in base_path.rglob(filename):
+                    search_paths.append(match)
 
     for path in search_paths:
         if path.exists():

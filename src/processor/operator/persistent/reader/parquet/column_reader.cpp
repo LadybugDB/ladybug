@@ -352,9 +352,9 @@ void ColumnReader::decompressInternal(lbug_parquet::format::CompressionCodec::ty
         // LCOV_EXCL_STOP
     } break;
     case CompressionCodec::ZSTD: {
-        auto res = lbug_zstd::ZSTD_decompress(dst, dstSize, src, srcSize);
+        auto res = ZSTD_decompress(dst, dstSize, src, srcSize);
         // LCOV_EXCL_START
-        if (lbug_zstd::ZSTD_isError(res) || res != (size_t)dstSize) {
+        if (ZSTD_isError(res) || res != (size_t)dstSize) {
             throw common::RuntimeException{"ZSTD decompression failed."};
         }
         // LCOV_EXCL_STOP

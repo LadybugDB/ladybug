@@ -339,9 +339,9 @@ void ColumnWriter::compressPage(common::BufferWriter& bufferedSerializer, size_t
         KU_ASSERT(compressedSize <= lbug_snappy::MaxCompressedLength(bufferedSerializer.getSize()));
     } break;
     case CompressionCodec::ZSTD: {
-        compressedSize = lbug_zstd::ZSTD_compressBound(bufferedSerializer.getSize());
+        compressedSize = ZSTD_compressBound(bufferedSerializer.getSize());
         compressedBuf = std::unique_ptr<uint8_t[]>(new uint8_t[compressedSize]);
-        compressedSize = lbug_zstd::ZSTD_compress((void*)compressedBuf.get(), compressedSize,
+        compressedSize = ZSTD_compress((void*)compressedBuf.get(), compressedSize,
             reinterpret_cast<const char*>(bufferedSerializer.getBlobData()),
             bufferedSerializer.getSize(), ZSTD_CLEVEL_DEFAULT);
         compressedData = compressedBuf.get();

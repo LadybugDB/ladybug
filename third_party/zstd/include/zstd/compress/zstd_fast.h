@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020, Yann Collet, Facebook, Inc.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -11,23 +11,20 @@
 #ifndef ZSTD_FAST_H
 #define ZSTD_FAST_H
 
-#include "zstd/common/mem.h"      /* U32 */
-#include "zstd/compress/zstd_compress_internal.h"
+#include "../common/mem.h"      /* U32 */
+#include "zstd_compress_internal.h"
 
-namespace lbug_zstd {
-
-void ZSTD_fillHashTable(ZSTD_matchState_t* ms,
-                        void const* end, ZSTD_dictTableLoadMethod_e dtlm);
+void ZSTD_fillHashTable(ZSTD_MatchState_t* ms,
+                        void const* end, ZSTD_dictTableLoadMethod_e dtlm,
+                        ZSTD_tableFillPurpose_e tfp);
 size_t ZSTD_compressBlock_fast(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+        ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
         void const* src, size_t srcSize);
 size_t ZSTD_compressBlock_fast_dictMatchState(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+        ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
         void const* src, size_t srcSize);
 size_t ZSTD_compressBlock_fast_extDict(
-        ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
+        ZSTD_MatchState_t* ms, SeqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
         void const* src, size_t srcSize);
-
-}
 
 #endif /* ZSTD_FAST_H */
