@@ -1,0 +1,111 @@
+--- a/include/roaring/portability.h
++++ b/include/roaring/portability.h
+@@ -593,9 +593,21 @@
+ #endif
+ 
+ #if defined(__cplusplus)
++#define CROARING_STATIC_ASSERT(x, y) static_assert(x, y)
++#elif defined(_MSC_VER) && !defined(__clang__)
+ #define CROARING_STATIC_ASSERT(x, y) static_assert(x, y)
+ #else
+ #define CROARING_STATIC_ASSERT(x, y) _Static_assert(x, y)
++#endif
++
++// On MSVC, use compiler builtin directly.
++#if defined(_MSC_VER) && !defined(__clang__)
++#define CROARING_ALIGNOF(x) (__alignof(x))
++#elif defined(__cplusplus)
++#define CROARING_ALIGNOF(x) alignof(x)
++#else
++#include <stdalign.h>
++#define CROARING_ALIGNOF(x) alignof(x)
+ #endif
+ 
+ // We need portability.h to be included first,
+--- a/src/art/art.c
++++ b/src/art/art.c
+@@ -2284,13 +2284,13 @@
+     return art_internal_validate_at(art, art->root, validator);
+ }
+ 
+-CROARING_STATIC_ASSERT(alignof(art_leaf_t) == alignof(art_node4_t),
++CROARING_STATIC_ASSERT(CROARING_ALIGNOF(art_leaf_t) == CROARING_ALIGNOF(art_node4_t),
+                        "Serialization assumes node type alignment is equal");
+-CROARING_STATIC_ASSERT(alignof(art_leaf_t) == alignof(art_node16_t),
++CROARING_STATIC_ASSERT(CROARING_ALIGNOF(art_leaf_t) == CROARING_ALIGNOF(art_node16_t),
+                        "Serialization assumes node type alignment is equal");
+-CROARING_STATIC_ASSERT(alignof(art_leaf_t) == alignof(art_node48_t),
++CROARING_STATIC_ASSERT(CROARING_ALIGNOF(art_leaf_t) == CROARING_ALIGNOF(art_node48_t),
+                        "Serialization assumes node type alignment is equal");
+-CROARING_STATIC_ASSERT(alignof(art_leaf_t) == alignof(art_node256_t),
++CROARING_STATIC_ASSERT(CROARING_ALIGNOF(art_leaf_t) == CROARING_ALIGNOF(art_node256_t),
+                        "Serialization assumes node type alignment is equal");
+ 
+ size_t art_size_in_bytes(const art_t *art) {
+@@ -2303,7 +2303,7 @@
+     size += sizeof(art->capacities);
+     // Alignment for leaves. The rest of the nodes are aligned the same way.
+     size +=
+-        ((size + alignof(art_leaf_t) - 1) & ~(alignof(art_leaf_t) - 1)) - size;
++        ((size + CROARING_ALIGNOF(art_leaf_t) - 1) & ~(CROARING_ALIGNOF(art_leaf_t) - 1)) - size;
+     for (art_typecode_t t = CROARING_ART_MIN_TYPE; t <= CROARING_ART_MAX_TYPE;
+          ++t) {
+         size += art->capacities[t] * ART_NODE_SIZES[t];
+@@ -2330,7 +2330,7 @@
+ 
+     // Alignment for leaves. The rest of the nodes are aligned the same way.
+     size_t align_bytes =
+-        CROARING_ART_ALIGN_SIZE_RELATIVE(buf, initial_buf, alignof(art_leaf_t));
++        CROARING_ART_ALIGN_SIZE_RELATIVE(buf, initial_buf, CROARING_ALIGNOF(art_leaf_t));
+     memset(buf, 0, align_bytes);
+     buf += align_bytes;
+ 
+@@ -2372,7 +2372,7 @@
+ 
+     // Alignment for leaves. The rest of the nodes are aligned the same way.
+     const char *before_align = buf;
+-    buf = CROARING_ART_ALIGN_BUF(buf, alignof(art_leaf_t));
++    buf = CROARING_ART_ALIGN_BUF(buf, CROARING_ALIGNOF(art_leaf_t));
+     if (maxbytes < (size_t)(buf - before_align)) {
+         return 0;
+     }
+--- a/src/roaring64.c
++++ b/src/roaring64.c
+@@ -2259,9 +2259,9 @@
+     // Containers (aligned).
+     size = align_size(size, CROARING_BITSET_ALIGNMENT);
+     size += total_sizes[BITSET_CONTAINER_TYPE];
+-    size = align_size(size, alignof(rle16_t));
++    size = align_size(size, CROARING_ALIGNOF(rle16_t));
+     size += total_sizes[ARRAY_CONTAINER_TYPE];
+-    size = align_size(size, alignof(uint16_t));
++    size = align_size(size, CROARING_ALIGNOF(uint16_t));
+     size += total_sizes[RUN_CONTAINER_TYPE];
+     // Padding to make overall size a multiple of required alignment.
+     size = align_size(size, CROARING_BITSET_ALIGNMENT);
+@@ -2362,10 +2362,10 @@
+     buf = pad_align(buf, initial_buf, CROARING_BITSET_ALIGNMENT);
+     uint64_t *bitsets = (uint64_t *)buf;
+     buf += total_sizes[BITSET_CONTAINER_TYPE];
+-    buf = pad_align(buf, initial_buf, alignof(rle16_t));
++    buf = pad_align(buf, initial_buf, CROARING_ALIGNOF(rle16_t));
+     rle16_t *runs = (rle16_t *)buf;
+     buf += total_sizes[RUN_CONTAINER_TYPE];
+-    buf = pad_align(buf, initial_buf, alignof(uint16_t));
++    buf = pad_align(buf, initial_buf, CROARING_ALIGNOF(uint16_t));
+     uint16_t *arrays = (uint16_t *)buf;
+     buf += total_sizes[ARRAY_CONTAINER_TYPE];
+ 
+@@ -2497,10 +2497,10 @@
+     buf = CROARING_ALIGN_BUF(buf, CROARING_BITSET_ALIGNMENT);
+     const uint64_t *bitsets = (const uint64_t *)buf;
+     buf += total_sizes[BITSET_CONTAINER_TYPE];
+-    buf = CROARING_ALIGN_BUF(buf, alignof(rle16_t));
++    buf = CROARING_ALIGN_BUF(buf, CROARING_ALIGNOF(rle16_t));
+     const rle16_t *runs = (const rle16_t *)buf;
+     buf += total_sizes[RUN_CONTAINER_TYPE];
+-    buf = CROARING_ALIGN_BUF(buf, alignof(uint16_t));
++    buf = CROARING_ALIGN_BUF(buf, CROARING_ALIGNOF(uint16_t));
+     const uint16_t *arrays = (const uint16_t *)buf;
+     buf += total_sizes[ARRAY_CONTAINER_TYPE];
+     if (maxbytes < (uint64_t)(buf - before_containers)) {

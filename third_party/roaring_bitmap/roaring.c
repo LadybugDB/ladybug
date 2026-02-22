@@ -4891,13 +4891,13 @@ bool art_internal_validate(const art_t *art, const char **reason,
     return art_internal_validate_at(art, art->root, validator);
 }
 
-CROARING_STATIC_ASSERT(alignof(art_leaf_t) == alignof(art_node4_t),
+CROARING_STATIC_ASSERT(CROARING_ALIGNOF(art_leaf_t) == CROARING_ALIGNOF(art_node4_t),
                        "Serialization assumes node type alignment is equal");
-CROARING_STATIC_ASSERT(alignof(art_leaf_t) == alignof(art_node16_t),
+CROARING_STATIC_ASSERT(CROARING_ALIGNOF(art_leaf_t) == CROARING_ALIGNOF(art_node16_t),
                        "Serialization assumes node type alignment is equal");
-CROARING_STATIC_ASSERT(alignof(art_leaf_t) == alignof(art_node48_t),
+CROARING_STATIC_ASSERT(CROARING_ALIGNOF(art_leaf_t) == CROARING_ALIGNOF(art_node48_t),
                        "Serialization assumes node type alignment is equal");
-CROARING_STATIC_ASSERT(alignof(art_leaf_t) == alignof(art_node256_t),
+CROARING_STATIC_ASSERT(CROARING_ALIGNOF(art_leaf_t) == CROARING_ALIGNOF(art_node256_t),
                        "Serialization assumes node type alignment is equal");
 
 size_t art_size_in_bytes(const art_t *art) {
@@ -4910,7 +4910,9 @@ size_t art_size_in_bytes(const art_t *art) {
     size += sizeof(art->capacities);
     // Alignment for leaves. The rest of the nodes are aligned the same way.
     size +=
-        ((size + alignof(art_leaf_t) - 1) & ~(alignof(art_leaf_t) - 1)) - size;
+        ((size + CROARING_ALIGNOF(art_leaf_t) - 1) &
+         ~(CROARING_ALIGNOF(art_leaf_t) - 1)) -
+        size;
     for (art_typecode_t t = CROARING_ART_MIN_TYPE; t <= CROARING_ART_MAX_TYPE;
          ++t) {
         size += art->capacities[t] * ART_NODE_SIZES[t];
@@ -4937,7 +4939,8 @@ size_t art_serialize(const art_t *art, char *buf) {
 
     // Alignment for leaves. The rest of the nodes are aligned the same way.
     size_t align_bytes =
-        CROARING_ART_ALIGN_SIZE_RELATIVE(buf, initial_buf, alignof(art_leaf_t));
+        CROARING_ART_ALIGN_SIZE_RELATIVE(buf, initial_buf,
+                                         CROARING_ALIGNOF(art_leaf_t));
     memset(buf, 0, align_bytes);
     buf += align_bytes;
 
@@ -4979,7 +4982,7 @@ size_t art_frozen_view(const char *buf, size_t maxbytes, art_t *art) {
 
     // Alignment for leaves. The rest of the nodes are aligned the same way.
     const char *before_align = buf;
-    buf = CROARING_ART_ALIGN_BUF(buf, alignof(art_leaf_t));
+    buf = CROARING_ART_ALIGN_BUF(buf, CROARING_ALIGNOF(art_leaf_t));
     if (maxbytes < (size_t)(buf - before_align)) {
         return 0;
     }
@@ -20181,9 +20184,9 @@ size_t roaring64_bitmap_frozen_size_in_bytes(const roaring64_bitmap_t *r) {
     // Containers (aligned).
     size = align_size(size, CROARING_BITSET_ALIGNMENT);
     size += total_sizes[BITSET_CONTAINER_TYPE];
-    size = align_size(size, alignof(rle16_t));
+    size = align_size(size, CROARING_ALIGNOF(rle16_t));
     size += total_sizes[ARRAY_CONTAINER_TYPE];
-    size = align_size(size, alignof(uint16_t));
+    size = align_size(size, CROARING_ALIGNOF(uint16_t));
     size += total_sizes[RUN_CONTAINER_TYPE];
     // Padding to make overall size a multiple of required alignment.
     size = align_size(size, CROARING_BITSET_ALIGNMENT);
@@ -20284,10 +20287,10 @@ size_t roaring64_bitmap_frozen_serialize(const roaring64_bitmap_t *r,
     buf = pad_align(buf, initial_buf, CROARING_BITSET_ALIGNMENT);
     uint64_t *bitsets = (uint64_t *)buf;
     buf += total_sizes[BITSET_CONTAINER_TYPE];
-    buf = pad_align(buf, initial_buf, alignof(rle16_t));
+    buf = pad_align(buf, initial_buf, CROARING_ALIGNOF(rle16_t));
     rle16_t *runs = (rle16_t *)buf;
     buf += total_sizes[RUN_CONTAINER_TYPE];
-    buf = pad_align(buf, initial_buf, alignof(uint16_t));
+    buf = pad_align(buf, initial_buf, CROARING_ALIGNOF(uint16_t));
     uint16_t *arrays = (uint16_t *)buf;
     buf += total_sizes[ARRAY_CONTAINER_TYPE];
 
@@ -20419,10 +20422,10 @@ roaring64_bitmap_t *roaring64_bitmap_frozen_view(const char *buf,
     buf = CROARING_ALIGN_BUF(buf, CROARING_BITSET_ALIGNMENT);
     const uint64_t *bitsets = (const uint64_t *)buf;
     buf += total_sizes[BITSET_CONTAINER_TYPE];
-    buf = CROARING_ALIGN_BUF(buf, alignof(rle16_t));
+    buf = CROARING_ALIGN_BUF(buf, CROARING_ALIGNOF(rle16_t));
     const rle16_t *runs = (const rle16_t *)buf;
     buf += total_sizes[RUN_CONTAINER_TYPE];
-    buf = CROARING_ALIGN_BUF(buf, alignof(uint16_t));
+    buf = CROARING_ALIGN_BUF(buf, CROARING_ALIGNOF(uint16_t));
     const uint16_t *arrays = (const uint16_t *)buf;
     buf += total_sizes[ARRAY_CONTAINER_TYPE];
     if (maxbytes < (uint64_t)(buf - before_containers)) {
