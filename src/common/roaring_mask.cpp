@@ -19,7 +19,7 @@ offset_vec_t Roaring32BitmapSemiMask::collectMaskedNodes(uint64_t size) const {
 
 offset_vec_t Roaring32BitmapSemiMask::range(uint32_t start, uint32_t end) {
     auto it = roaring->begin();
-    it.equalorlarger(start);
+    it.move_equalorlarger(start);
     offset_vec_t ans;
     for (; it != roaring->end(); it++) {
         auto value = *it;
@@ -47,7 +47,7 @@ offset_vec_t Roaring64BitmapSemiMask::collectMaskedNodes(uint64_t size) const {
 
 offset_vec_t Roaring64BitmapSemiMask::range(uint32_t start, uint32_t end) {
     auto it = roaring->begin();
-    it.move(start);
+    it.move_equalorlarger(start);
     offset_vec_t ans;
     for (; it != roaring->end(); it++) {
         auto value = *it;
