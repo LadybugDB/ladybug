@@ -86,7 +86,7 @@ jobs:
 
     env:
       CIBW_PLATFORM: ${{ matrix.os }}
-      CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
+      CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
 
       # Let CIBW detect the arch from the runner
       CIBW_ARCHS: ${{ matrix.os == 'windows' && 'AMD64' || 'auto' }}
