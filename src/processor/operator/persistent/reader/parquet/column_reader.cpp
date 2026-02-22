@@ -363,7 +363,7 @@ void ColumnReader::decompressInternal(lbug_parquet::format::CompressionCodec::ty
         brotliDecompress(dst, dstSize, src, srcSize);
     } break;
     case CompressionCodec::LZ4_RAW: {
-        auto res = lbug_lz4::LZ4_decompress_safe(reinterpret_cast<const char*>(src),
+        auto res = LZ4_decompress_safe(reinterpret_cast<const char*>(src),
             reinterpret_cast<char*>(dst), srcSize, dstSize);
         // LCOV_EXCL_START
         if (res != (int64_t)dstSize) {

@@ -356,12 +356,12 @@ void ColumnWriter::compressPage(common::BufferWriter& bufferedSerializer, size_t
         compressedData = compressedBuf.get();
     } break;
     case CompressionCodec::LZ4_RAW: {
-        compressedSize = lbug_lz4::LZ4_compressBound(bufferedSerializer.getSize());
+        compressedSize = LZ4_compressBound(bufferedSerializer.getSize());
         compressedBuf = std::unique_ptr<uint8_t[]>(new uint8_t[compressedSize]);
-        compressedSize = lbug_lz4::LZ4_compress_default(
-            reinterpret_cast<const char*>(bufferedSerializer.getBlobData()),
-            reinterpret_cast<char*>(compressedBuf.get()), bufferedSerializer.getSize(),
-            compressedSize);
+        compressedSize =
+            LZ4_compress_default(reinterpret_cast<const char*>(bufferedSerializer.getBlobData()),
+                reinterpret_cast<char*>(compressedBuf.get()), bufferedSerializer.getSize(),
+                compressedSize);
         compressedData = compressedBuf.get();
     } break;
     default:
