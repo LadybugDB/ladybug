@@ -102,8 +102,9 @@ httplib::Headers BedrockEmbedding::getHeaders(const std::string& model,
     hmac256(stringToSignStr, kSigning, signatureBytes);
     hex256(signatureBytes, signatureHex);
     std::ostringstream authorizationHeader;
-    authorizationHeader << algorithm << " " << "Credential=" << envAWSAccessKey << "/"
-                        << credentialScope << ", " << "SignedHeaders=" << signedHeaders << ", "
+    authorizationHeader << algorithm << " "
+                        << "Credential=" << envAWSAccessKey << "/" << credentialScope << ", "
+                        << "SignedHeaders=" << signedHeaders << ", "
                         << "Signature="
                         << std::string(reinterpret_cast<const char*>(signatureHex),
                                sizeof(hash_str));

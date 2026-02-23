@@ -960,14 +960,9 @@ jobs:
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
-
-      - name: Install clang-format
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format-18
           
       - name: Clang Format (${{ matrix.directory }})
-        run: python3 scripts/run-clang-format.py --clang-format-executable /usr/bin/clang-format-18 -r src/ test/ tools/ extension/
+        run: ./scripts/run-clang-format-docker.sh
 
   python-format:
     runs-on: ubuntu-24.04

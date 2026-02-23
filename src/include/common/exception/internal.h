@@ -8,7 +8,7 @@ namespace common {
 
 class LBUG_API InternalException : public Exception {
 public:
-    explicit InternalException(const std::string& msg) : Exception(msg){};
+    explicit InternalException(const std::string& msg) : Exception(msg) {};
 };
 
 } // namespace common
