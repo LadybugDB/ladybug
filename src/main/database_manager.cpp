@@ -231,7 +231,8 @@ void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContex
             graphs.erase(it);
 
             // Delete the physical graph files
-            if (!graphPath.empty() && !DBConfig::isDBPathInMemory(graphPath)) {
+            if (!graphPath.empty() &&
+                !DBConfig::isDBPathInMemory(clientContext->getDatabasePath())) {
                 auto vfs = common::VirtualFileSystem::GetUnsafe(*clientContext);
                 vfs->removeFileIfExists(graphPath, clientContext);
                 vfs->removeFileIfExists(storage::StorageUtils::getWALFilePath(graphPath),
