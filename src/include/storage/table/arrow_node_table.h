@@ -52,6 +52,12 @@ protected:
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
 
 private:
+    void copyArrowBatchToOutputVectors(const ArrowArrayWrapper& batch,
+        const size_t currentBatchOffset, const uint64_t numRowsToCopy,
+        const std::vector<common::ValueVector*>& outputVectors,
+        const std::vector<int64_t>& outputToArrowColumnIdx) const;
+
+private:
     ArrowSchemaWrapper schema;
     std::vector<ArrowArrayWrapper> arrays;
     std::vector<size_t> batchStartOffsets;
