@@ -2,6 +2,7 @@
 
 #include "common/arrow/arrow_converter.h"
 #include "common/arrow/arrow_nullmask_tree.h"
+#include "common/data_chunk/sel_vector.h"
 #include "common/system_config.h"
 #include "common/types/types.h"
 #include "storage/storage_manager.h"
@@ -82,6 +83,32 @@ void ArrowNodeTable::initScanState([[maybe_unused]] transaction::Transaction* tr
     arrowScanState.initialized = true;
 }
 
+static void applySemiMaskFilter(const TableScanState& state, const size_t startOffset,
+    const uint64_t numRowsToScan, common::SelectionVector& selVector) {
+    const auto endOffset = startOffset + numRowsToScan;
+    const auto& arr = state.semiMask->range(startOffset, endOffset);
+    if (arr.empty()) {
+        selVector.setSelSize(0);
+    } else {
+        auto stat = selVector.getMutableBuffer();
+        uint64_t numSelectedValues = 0;
+        size_t i = 0, j = 0;
+        while (i < numRowsToScan && j < arr.size()) {
+            auto temp = arr[j] - startOffset;
+            if (selVector[i] < temp) {
+                ++i;
+            } else if (selVector[i] > temp) {
+                ++j;
+            } else {
+                stat[numSelectedValues++] = temp;
+                ++i;
+                ++j;
+            }
+        }
+        selVector.setToFiltered(numSelectedValues);
+    }
+}
+
 bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* transaction,
     TableScanState& scanState) {
     auto& arrowScanState = scanState.cast<ArrowNodeTableScanState>();
@@ -97,28 +124,23 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
         return false;
     }
 
-    auto batchRemaining = batchLength - arrowScanState.currentBatchOffset;
-    auto outputSize = std::min<uint64_t>(1, batchRemaining);
-    auto numChildren = batch.n_children < 0 ? 0u : static_cast<uint64_t>(batch.n_children);
-    for (uint64_t outCol = 0; outCol < scanState.outputVectors.size(); ++outCol) {
-        if (!scanState.outputVectors[outCol] ||
-            outCol >= arrowScanState.outputToArrowColumnIdx.size()) {
-            continue;
+    auto outputSize = static_cast<uint64_t>(batchLength - arrowScanState.currentBatchOffset);
+
+    scanState.outState->getSelVectorUnsafe().setSelSize(outputSize);
+
+    if (scanState.semiMask && scanState.semiMask->isEnabled()) {
+        applySemiMaskFilter(scanState, arrowScanState.nextGlobalRowOffset, outputSize,
+            scanState.outState->getSelVectorUnsafe());
+        if (scanState.outState->getSelVector().getSelSize() == 0) {
+            arrowScanState.currentBatchOffset += outputSize;
+            arrowScanState.nextGlobalRowOffset += outputSize;
+            return true;
         }
-        auto arrowColIdx = arrowScanState.outputToArrowColumnIdx[outCol];
-        if (arrowColIdx < 0 || static_cast<uint64_t>(arrowColIdx) >= numChildren ||
-            !batch.children || !schema.children || !batch.children[arrowColIdx] ||
-            !schema.children[arrowColIdx]) {
-            continue;
-        }
-        auto& outputVector = *scanState.outputVectors[outCol];
-        auto* childArray = batch.children[arrowColIdx];
-        auto* childSchema = schema.children[arrowColIdx];
-        common::ArrowNullMaskTree nullMask(childSchema, childArray, childArray->offset,
-            childArray->length);
-        common::ArrowConverter::fromArrowArray(childSchema, childArray, outputVector, &nullMask,
-            childArray->offset + arrowScanState.currentBatchOffset, 0, outputSize);
     }
+
+    KU_ASSERT(scanState.outputVectors.size() == arrowScanState.outputToArrowColumnIdx.size());
+    copyArrowBatchToOutputVectors(batch, arrowScanState.currentBatchOffset, outputSize,
+        scanState.outputVectors, arrowScanState.outputToArrowColumnIdx);
 
     auto tableID = this->getTableID();
     for (uint64_t i = 0; i < outputSize; ++i) {
@@ -127,7 +149,6 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
         nodeID.offset = arrowScanState.nextGlobalRowOffset + i;
     }
 
-    scanState.outState->getSelVectorUnsafe().setSelSize(outputSize);
     arrowScanState.currentBatchOffset += outputSize;
     arrowScanState.nextGlobalRowOffset += outputSize;
     return true;
@@ -141,6 +162,32 @@ common::node_group_idx_t ArrowNodeTable::getNumBatches(
 common::row_idx_t ArrowNodeTable::getTotalRowCount(
     [[maybe_unused]] const transaction::Transaction* transaction) const {
     return totalRows;
+}
+
+void ArrowNodeTable::copyArrowBatchToOutputVectors(const ArrowArrayWrapper& batch,
+    const size_t currentBatchOffset, const uint64_t numRowsToCopy,
+    const std::vector<common::ValueVector*>& outputVectors,
+    const std::vector<int64_t>& outputToArrowColumnIdx) const {
+    auto numChildren = batch.n_children < 0 ? 0u : static_cast<uint64_t>(batch.n_children);
+
+    for (uint64_t outCol = 0; outCol < outputVectors.size(); ++outCol) {
+        if (!outputVectors[outCol]) {
+            continue;
+        }
+        auto arrowColIdx = outputToArrowColumnIdx[outCol];
+        if (arrowColIdx < 0 || static_cast<uint64_t>(arrowColIdx) >= numChildren ||
+            !batch.children || !schema.children || !batch.children[arrowColIdx] ||
+            !schema.children[arrowColIdx]) {
+            continue;
+        }
+        auto& outputVector = *outputVectors[outCol];
+        auto* childArray = batch.children[arrowColIdx];
+        auto* childSchema = schema.children[arrowColIdx];
+        common::ArrowNullMaskTree nullMask(childSchema, childArray, childArray->offset,
+            childArray->length);
+        common::ArrowConverter::fromArrowArray(childSchema, childArray, outputVector, &nullMask,
+            childArray->offset + currentBatchOffset, 0, numRowsToCopy);
+    }
 }
 
 } // namespace storage
