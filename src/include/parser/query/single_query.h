@@ -35,7 +35,7 @@ public:
     inline void setReturnClause(ReturnClause clause) { returnClause = std::move(clause); }
     inline bool hasReturnClause() const { return returnClause.has_value(); }
     inline const ReturnClause* getReturnClause() const {
-        LBUG_ASSERT(returnClause.has_value());
+        DASSERT(returnClause.has_value());
         return &returnClause.value();
     }
 

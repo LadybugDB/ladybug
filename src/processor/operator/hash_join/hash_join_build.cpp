@@ -49,7 +49,7 @@ void HashJoinBuild::setKeyState(common::DataChunkState* state) {
     if (keyState == nullptr) {
         keyState = state;
     } else {
-        LBUG_ASSERT(keyState == state); // two pointers should be pointing to the same state
+        DASSERT(keyState == state); // two pointers should be pointing to the same state
     }
 }
 

@@ -17,7 +17,7 @@ public:
     template<typename T>
         requires std::integral<T>
     static T all1sMaskForLeastSignificantBits(uint32_t numBits) {
-        LBUG_ASSERT(numBits <= 64);
+        DASSERT(numBits <= 64);
         using U = numeric_utils::MakeUnSignedT<T>;
         return (T)(numBits == (sizeof(U) * 8) ? std::numeric_limits<U>::max() :
                                                 static_cast<U>(((U)1 << numBits) - 1));
@@ -49,7 +49,7 @@ constexpr T ceilDiv(T a, T b) {
 
 template<std::integral To, std::integral From>
 constexpr To safeIntegerConversion(From val) {
-    LBUG_ASSERT(static_cast<To>(val) == val);
+    DASSERT(static_cast<To>(val) == val);
     return val;
 }
 

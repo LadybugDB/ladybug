@@ -24,7 +24,7 @@ BatchInsertErrorHandler::BatchInsertErrorHandler(ExecutionContext* context, bool
       sharedErrorCounter(std::move(sharedErrorCounter)) {}
 
 void BatchInsertErrorHandler::addNewVectorsIfNeeded() {
-    LBUG_ASSERT(currentInsertIdx <= cachedErrors.size());
+    DASSERT(currentInsertIdx <= cachedErrors.size());
     if (currentInsertIdx == cachedErrors.size()) {
         cachedErrors.emplace_back();
     }
@@ -67,12 +67,12 @@ void BatchInsertErrorHandler::flushStoredErrors() {
     }
 
     if (!unpopulatedErrors.empty()) {
-        LBUG_ASSERT(ignoreErrors);
+        DASSERT(ignoreErrors);
         WarningContext::Get(*context->clientContext)->appendWarningMessages(unpopulatedErrors);
     }
 
     if (!unpopulatedErrors.empty() && sharedErrorCounter != nullptr) {
-        LBUG_ASSERT(sharedErrorCounterMtx);
+        DASSERT(sharedErrorCounterMtx);
         common::UniqLock lockGuard{*sharedErrorCounterMtx};
         *sharedErrorCounter += unpopulatedErrors.size();
     }

@@ -265,7 +265,7 @@ std::unique_ptr<ColumnWriter> ColumnWriter::createWriterRecursive(
                 std::move(schemaPathToCreate), maxRepeatToCreate, maxDefineToCreate,
                 canHaveNullsToCreate);
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
     }
@@ -336,7 +336,7 @@ void ColumnWriter::compressPage(common::BufferWriter& bufferedSerializer, size_t
             bufferedSerializer.getSize(), reinterpret_cast<char*>(compressedBuf.get()),
             &compressedSize);
         compressedData = compressedBuf.get();
-        LBUG_ASSERT(compressedSize <= lbug_snappy::MaxCompressedLength(bufferedSerializer.getSize()));
+        DASSERT(compressedSize <= lbug_snappy::MaxCompressedLength(bufferedSerializer.getSize()));
     } break;
     case CompressionCodec::ZSTD: {
         compressedSize = ZSTD_compressBound(bufferedSerializer.getSize());
@@ -365,7 +365,7 @@ void ColumnWriter::compressPage(common::BufferWriter& bufferedSerializer, size_t
         compressedData = compressedBuf.get();
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 
     if (compressedSize > uint64_t(function::NumericLimits<int32_t>::maximum())) {

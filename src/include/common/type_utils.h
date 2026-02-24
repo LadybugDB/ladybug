@@ -104,7 +104,7 @@ public:
                              std::same_as<T, std::string_view>) {
             return common::PhysicalTypeID::STRING;
         } else {
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
 
@@ -121,7 +121,7 @@ public:
      *      } else if (std::integral<T>) {
      *          result = std::to_string(vector->getValue<T>(0));
      *      } else {
-     *          LBUG_UNREACHABLE;
+     *          UNREACHABLE_CODE;
      *      }
      *  });
      *
@@ -134,7 +134,7 @@ public:
      *      [&]<std::integral T>(T) {
      *          result = std::to_string(vector->getValue<T>(0));
      *      },
-     *      [](auto) { LBUG_UNREACHABLE; }
+     *      [](auto) { UNREACHABLE_CODE; }
      *  );
      *
      * Note that when multiple functions are provided, at least one function must match all data
@@ -187,7 +187,7 @@ public:
             case PhysicalTypeID::INT128:
                 return func(int128_t());
             default:
-                LBUG_UNREACHABLE;
+                UNREACHABLE_CODE;
             }
         case LogicalTypeID::INTERVAL:
             return func(interval_t());
@@ -228,7 +228,7 @@ public:
         /* NOLINTEND(bugprone-branch-clone)*/
         default:
             // Unsupported type
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
 
@@ -282,11 +282,11 @@ public:
         case PhysicalTypeID::ALP_EXCEPTION_DOUBLE:
         case PhysicalTypeID::ALP_EXCEPTION_FLOAT:
             // Unsupported type
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
             // Needed for return type deduction to work
             return func(uint8_t());
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
 };

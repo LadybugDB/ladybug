@@ -24,7 +24,7 @@ public:
     bool isSink() const override { return true; }
 
     void setDescriptor(std::unique_ptr<ResultSetDescriptor> descriptor) {
-        LBUG_ASSERT(resultSetDescriptor == nullptr);
+        DASSERT(resultSetDescriptor == nullptr);
         resultSetDescriptor = std::move(descriptor);
     }
     std::unique_ptr<ResultSet> getResultSet(storage::MemoryManager* memoryManager);

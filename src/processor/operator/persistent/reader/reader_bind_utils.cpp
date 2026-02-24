@@ -21,7 +21,7 @@ void ReaderBindUtils::validateNumColumns(uint32_t expectedNumber, uint32_t detec
 void ReaderBindUtils::validateColumnTypes(const std::vector<std::string>& columnNames,
     const std::vector<common::LogicalType>& expectedColumnTypes,
     const std::vector<common::LogicalType>& detectedColumnTypes) {
-    LBUG_ASSERT(expectedColumnTypes.size() == detectedColumnTypes.size());
+    DASSERT(expectedColumnTypes.size() == detectedColumnTypes.size());
     for (auto i = 0u; i < expectedColumnTypes.size(); ++i) {
         if (expectedColumnTypes[i] != detectedColumnTypes[i]) {
             throw common::BinderException(

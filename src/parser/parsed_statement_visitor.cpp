@@ -78,7 +78,7 @@ void StatementVisitor::visit(const Statement& statement) {
         visitExtensionClause(statement);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -134,7 +134,7 @@ void StatementVisitor::visitReadingClause(const ReadingClause* readingClause) {
         visitLoadFrom(readingClause);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -153,7 +153,7 @@ void StatementVisitor::visitUpdatingClause(const UpdatingClause* updatingClause)
         visitMerge(updatingClause);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

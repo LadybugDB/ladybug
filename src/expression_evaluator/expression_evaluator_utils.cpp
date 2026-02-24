@@ -17,7 +17,7 @@ Value ExpressionEvaluatorUtils::evaluateConstantExpression(
     evaluator->init(*emptyResultSet, clientContext);
     evaluator->evaluate();
     auto& selVector = evaluator->resultVector->state->getSelVector();
-    LBUG_ASSERT(selVector.getSelSize() == 1);
+    DASSERT(selVector.getSelSize() == 1);
     return *evaluator->resultVector->getAsValue(selVector[0]);
 }
 

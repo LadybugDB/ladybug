@@ -28,7 +28,7 @@ struct UnaryPathExecutor {
     static void executeNodeIDs(common::ValueVector& input, common::SelectionVector& inputSelVector,
         common::ValueVector& result) {
         auto nodesFieldIdx = 0;
-        LBUG_ASSERT(nodesFieldIdx ==
+        DASSERT(nodesFieldIdx ==
                   common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::NODES));
         auto nodesVector = common::StructVector::getFieldVector(&input, nodesFieldIdx).get();
         auto internalIDFieldIdx = 0;
@@ -38,7 +38,7 @@ struct UnaryPathExecutor {
     static void executeRelIDs(common::ValueVector& input, common::SelectionVector& inputSelVector,
         common::ValueVector& result) {
         auto relsFieldIdx = 1;
-        LBUG_ASSERT(relsFieldIdx ==
+        DASSERT(relsFieldIdx ==
                   common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::RELS));
         auto relsVector = common::StructVector::getFieldVector(&input, relsFieldIdx).get();
         auto internalIDFieldIdx = 3;
@@ -48,7 +48,7 @@ struct UnaryPathExecutor {
     static bool selectNodeIDs(common::ValueVector& input,
         common::SelectionVector& selectionVector) {
         auto nodesFieldIdx = 0;
-        LBUG_ASSERT(nodesFieldIdx ==
+        DASSERT(nodesFieldIdx ==
                   common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::NODES));
         auto nodesVector = common::StructVector::getFieldVector(&input, nodesFieldIdx).get();
         auto internalIDFieldIdx = 0;
@@ -58,7 +58,7 @@ struct UnaryPathExecutor {
 
     static bool selectRelIDs(common::ValueVector& input, common::SelectionVector& selectionVector) {
         auto relsFieldIdx = 1;
-        LBUG_ASSERT(relsFieldIdx ==
+        DASSERT(relsFieldIdx ==
                   common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::RELS));
         auto relsVector = common::StructVector::getFieldVector(&input, relsFieldIdx).get();
         auto internalIDFieldIdx = 3;
@@ -71,7 +71,7 @@ private:
         common::ValueVector& listVector, common::struct_field_idx_t fieldIdx,
         common::ValueVector& result) {
         auto listDataVector = common::ListVector::getDataVector(&listVector);
-        LBUG_ASSERT(fieldIdx == common::StructType::getFieldIdx(listDataVector->dataType,
+        DASSERT(fieldIdx == common::StructType::getFieldIdx(listDataVector->dataType,
                                   common::InternalKeyword::ID));
         auto internalIDsVector =
             common::StructVector::getFieldVector(listDataVector, fieldIdx).get();
@@ -98,7 +98,7 @@ private:
         common::ValueVector& listVector, common::struct_field_idx_t fieldIdx,
         common::SelectionVector& selectionVector) {
         auto listDataVector = common::ListVector::getDataVector(&listVector);
-        LBUG_ASSERT(fieldIdx == common::StructType::getFieldIdx(listDataVector->dataType,
+        DASSERT(fieldIdx == common::StructType::getFieldIdx(listDataVector->dataType,
                                   common::InternalKeyword::ID));
         auto internalIDsVector =
             common::StructVector::getFieldVector(listDataVector, fieldIdx).get();

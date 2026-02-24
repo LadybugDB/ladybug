@@ -86,7 +86,7 @@ public:
           scanState{nullptr}, tableInfos{std::move(tableInfos)},
           sharedStates{std::move(sharedStates)},
           progressSharedState{std::move(progressSharedState)} {
-        LBUG_ASSERT(this->tableInfos.size() == this->sharedStates.size());
+        DASSERT(this->tableInfos.size() == this->sharedStates.size());
     }
 
     common::table_id_map_t<common::SemiMask*> getSemiMasks() const;
@@ -98,7 +98,7 @@ public:
     bool getNextTuplesInternal(ExecutionContext* context) override;
 
     const ScanNodeTableSharedState& getSharedState(common::idx_t idx) const {
-        LBUG_ASSERT(idx < sharedStates.size());
+        DASSERT(idx < sharedStates.size());
         return *sharedStates[idx];
     }
 

@@ -59,10 +59,10 @@ struct CopyPartitionerSharedState : public PartitionerSharedState {
     // need to be freed after its processed.
     std::unique_ptr<storage::InMemChunkedNodeGroupCollection> getPartitionBuffer(
         common::idx_t partitioningIdx, common::partition_idx_t partitionIdx) const {
-        LBUG_ASSERT(partitioningIdx < partitioningBuffers.size());
-        LBUG_ASSERT(partitionIdx < partitioningBuffers[partitioningIdx]->partitions.size());
+        DASSERT(partitioningIdx < partitioningBuffers.size());
+        DASSERT(partitionIdx < partitioningBuffers[partitioningIdx]->partitions.size());
 
-        LBUG_ASSERT(partitioningBuffers[partitioningIdx]->partitions[partitionIdx].get());
+        DASSERT(partitioningBuffers[partitioningIdx]->partitions[partitionIdx].get());
         auto partitioningBuffer =
             std::move(partitioningBuffers[partitioningIdx]->partitions[partitionIdx]);
         // This may still run out of memory if there isn't enough space for one partitioningBuffer
@@ -76,7 +76,7 @@ struct PartitionerLocalState {
     std::vector<std::unique_ptr<PartitioningBuffer>> partitioningBuffers;
 
     PartitioningBuffer* getPartitioningBuffer(common::partition_idx_t partitioningIdx) const {
-        LBUG_ASSERT(partitioningIdx < partitioningBuffers.size());
+        DASSERT(partitioningIdx < partitioningBuffers.size());
         return partitioningBuffers[partitioningIdx].get();
     }
 };

@@ -17,7 +17,7 @@ PageRange PageManager::allocatePageRange(common::page_idx_t numPages) {
         }
     }
     auto startPageIdx = fileHandle->addNewPages(numPages);
-    LBUG_ASSERT(fileHandle->getNumPages() >= startPageIdx + numPages);
+    DASSERT(fileHandle->getNumPages() >= startPageIdx + numPages);
     return PageRange(startPageIdx, numPages);
 }
 

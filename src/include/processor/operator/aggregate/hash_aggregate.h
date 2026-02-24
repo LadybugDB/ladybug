@@ -186,7 +186,7 @@ public:
     bool isSource() const override { return true; }
 
     void executeInternal(ExecutionContext* /*context*/) override {
-        LBUG_ASSERT(sharedState->isReadyForFinalization());
+        DASSERT(sharedState->isReadyForFinalization());
         sharedState->finalizePartitions();
     }
     void finalizeInternal(ExecutionContext* /*context*/) override {

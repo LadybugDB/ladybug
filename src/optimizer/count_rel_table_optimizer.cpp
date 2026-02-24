@@ -152,14 +152,14 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
         current = current->getChild(0).get();
     }
 
-    LBUG_ASSERT(current->getOperatorType() == LogicalOperatorType::EXTEND);
+    DASSERT(current->getOperatorType() == LogicalOperatorType::EXTEND);
     auto& extend = current->constCast<LogicalExtend>();
     auto rel = extend.getRel();
     auto boundNode = extend.getBoundNode();
     auto nbrNode = extend.getNbrNode();
 
     // Get the rel group entry
-    LBUG_ASSERT(rel->getNumEntries() == 1);
+    DASSERT(rel->getNumEntries() == 1);
     auto* relGroupEntry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
 
     // Determine the source and destination node table IDs based on extend direction.

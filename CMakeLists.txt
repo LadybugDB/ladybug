@@ -302,11 +302,11 @@ if(${ENABLE_UBSAN})
 endif()
 
 if(${ENABLE_RUNTIME_CHECKS})
-    add_compile_definitions(LBUG_RUNTIME_CHECKS)
+    add_compile_definitions(RUNTIME_CHECKS)
 endif()
 
 if (${ENABLE_DESER_DEBUG})
-    add_compile_definitions(LBUG_DESER_DEBUG)
+    add_compile_definitions(DESER_DEBUG)
 endif()
 
 if(${ENABLE_LTO})

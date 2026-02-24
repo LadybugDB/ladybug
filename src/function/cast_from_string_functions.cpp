@@ -183,7 +183,7 @@ static void skipWhitespace(const char*& input, const char* end) {
             // We only skip ASCII white spaces there.
             break;
         } else {
-            LBUG_ASSERT(*input >= -1);
+            DASSERT(*input >= -1);
             if (!isspace(*input)) {
                 break;
             }
@@ -769,7 +769,7 @@ static bool tryCastUnionField(ValueVector* vector, uint64_t rowToAdd, const char
             testAndSetValue(vector, rowToAdd, result, success);
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     } break;
     case LogicalTypeID::DATE: {
@@ -961,7 +961,7 @@ void CastString::copyStringToVector(ValueVector* vector, uint64_t vectorPos,
             vector->setValue(vectorPos, val);
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     } break;
     case LogicalTypeID::DOUBLE: {
@@ -1047,7 +1047,7 @@ void CastString::copyStringToVector(ValueVector* vector, uint64_t vectorPos,
         CastStringHelper::cast(strVal.data(), strVal.length(), val, vector, vectorPos, option);
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }

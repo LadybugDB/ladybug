@@ -34,7 +34,7 @@ std::string CatalogEntryTypeUtils::toString(CatalogEntryType type) {
     case CatalogEntryType::GRAPH_ENTRY:
         return "GRAPH_ENTRY";
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -55,7 +55,7 @@ std::string FunctionEntryTypeUtils::toString(CatalogEntryType type) {
     case CatalogEntryType::COPY_FUNCTION_ENTRY:
         return "COPY FUNCTION";
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

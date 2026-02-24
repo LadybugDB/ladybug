@@ -48,7 +48,7 @@ void ChecksumWriter::onObjectBegin() {
 }
 
 void ChecksumWriter::onObjectEnd() {
-    LBUG_ASSERT(currentEntrySize.has_value());
+    DASSERT(currentEntrySize.has_value());
     const auto checksum = common::checksum(entryBuffer->getData(), *currentEntrySize);
     outputSerializer.write(entryBuffer->getData(), *currentEntrySize);
     outputSerializer.serializeValue(checksum);

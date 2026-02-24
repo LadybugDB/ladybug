@@ -21,7 +21,7 @@ std::string CachedPreparedStatementManager::addStatement(
 
 CachedPreparedStatement* CachedPreparedStatementManager::getCachedStatement(
     const std::string& name) const {
-    LBUG_ASSERT(containsStatement(name));
+    DASSERT(containsStatement(name));
     return statementMap.at(name).get();
 }
 

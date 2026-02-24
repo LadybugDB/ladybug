@@ -15,7 +15,7 @@ static PhysicalTypeID getPhysicalTypeFromDataSource(T* data) {
     } else if constexpr (std::is_same_v<T, ValueVector>) {
         return data->dataType.getPhysicalType();
     } else {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -28,18 +28,18 @@ WarningSourceData::DataType getValueFromData(T* data, common::idx_t pos) {
     case common::PhysicalTypeID::UINT32:
         return data->template getValue<uint32_t>(pos);
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
 WarningSourceData::WarningSourceData(uint64_t numValues) : numValues(numValues) {
-    LBUG_ASSERT(numValues <= values.size());
+    DASSERT(numValues <= values.size());
 }
 
 template<DataSource T>
 WarningSourceData WarningSourceData::constructFromData(const std::vector<T*>& data,
     common::idx_t pos) {
-    LBUG_ASSERT(data.size() >= CopyConstants::SHARED_WARNING_DATA_NUM_COLUMNS &&
+    DASSERT(data.size() >= CopyConstants::SHARED_WARNING_DATA_NUM_COLUMNS &&
               data.size() <= CopyConstants::MAX_NUM_WARNING_DATA_COLUMNS);
     WarningSourceData ret{data.size()};
     for (idx_t i = 0; i < data.size(); ++i) {

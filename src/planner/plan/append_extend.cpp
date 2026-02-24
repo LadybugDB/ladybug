@@ -38,7 +38,7 @@ static std::unordered_set<table_id_t> getBoundNodeTableIDSet(const RelExpression
             result.merge(groupEntry.getBoundNodeTableIDSet(RelDataDirection::BWD));
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
     return result;
@@ -61,7 +61,7 @@ static std::unordered_set<table_id_t> getNbrNodeTableIDSet(const RelExpression& 
             result.merge(groupEntry.getNbrNodeTableIDSet(RelDataDirection::BWD));
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
     return result;

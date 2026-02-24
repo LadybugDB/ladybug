@@ -42,7 +42,7 @@ public:
         return nodeGroups.getNumGroupsNoLock();
     }
     NodeGroup* getNodeGroupNoLock(const common::node_group_idx_t groupIdx) const {
-        LBUG_ASSERT(nodeGroups.getGroupNoLock(groupIdx)->getNodeGroupIdx() == groupIdx);
+        DASSERT(nodeGroups.getGroupNoLock(groupIdx)->getNodeGroupIdx() == groupIdx);
         return nodeGroups.getGroupNoLock(groupIdx);
     }
     NodeGroup* getNodeGroup(const common::node_group_idx_t groupIdx,
@@ -51,7 +51,7 @@ public:
         if (mayOutOfBound && groupIdx >= nodeGroups.getNumGroups(lock)) {
             return nullptr;
         }
-        LBUG_ASSERT(nodeGroups.getGroupNoLock(groupIdx)->getNodeGroupIdx() == groupIdx);
+        DASSERT(nodeGroups.getGroupNoLock(groupIdx)->getNodeGroupIdx() == groupIdx);
         return nodeGroups.getGroup(lock, groupIdx);
     }
     NodeGroup* getOrCreateNodeGroup(const transaction::Transaction* transaction,
@@ -84,8 +84,8 @@ public:
         return stats.copy();
     }
     TableStats getStats(const common::UniqLock& lock) const {
-        LBUG_ASSERT(lock.isLocked());
-        LBUG_UNUSED(lock);
+        DASSERT(lock.isLocked());
+        UNUSED(lock);
         return stats.copy();
     }
     void mergeStats(const TableStats& stats) {

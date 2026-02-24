@@ -69,7 +69,7 @@ std::unique_ptr<ParsedExpression> ParsedExpression::deserialize(Deserializer& de
         parsedExpression = ParsedVariableExpression::deserialize(deserializer);
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
     parsedExpression->alias = std::move(alias);

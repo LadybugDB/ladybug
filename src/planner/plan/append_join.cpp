@@ -51,7 +51,7 @@ void Planner::appendHashJoin(const std::vector<expression_pair>& joinConditions,
 void Planner::appendAccHashJoin(const std::vector<binder::expression_pair>& joinConditions,
     JoinType joinType, std::shared_ptr<Expression> mark, LogicalPlan& probePlan,
     LogicalPlan& buildPlan, LogicalPlan& resultPlan) {
-    LBUG_ASSERT(probePlan.hasUpdate());
+    DASSERT(probePlan.hasUpdate());
     tryAppendAccumulate(probePlan);
     appendHashJoin(joinConditions, joinType, mark, probePlan, buildPlan, resultPlan);
     auto& sipInfo = probePlan.getLastOperator()->cast<LogicalHashJoin>().getSIPInfoUnsafe();
@@ -88,7 +88,7 @@ void Planner::appendMarkJoin(const std::vector<expression_pair>& joinConditions,
 
 void Planner::appendIntersect(const std::shared_ptr<Expression>& intersectNodeID,
     expression_vector& boundNodeIDs, LogicalPlan& probePlan, std::vector<LogicalPlan>& buildPlans) {
-    LBUG_ASSERT(boundNodeIDs.size() == buildPlans.size());
+    DASSERT(boundNodeIDs.size() == buildPlans.size());
     std::vector<std::shared_ptr<LogicalOperator>> buildChildren;
     expression_vector keyNodeIDs;
     for (auto i = 0u; i < buildPlans.size(); ++i) {

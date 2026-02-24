@@ -61,7 +61,7 @@ std::unique_ptr<BoundStatement> Binder::bindCopyFromClause(const Statement& stat
     case CatalogEntryType::REL_GROUP_ENTRY: {
         auto entry = tableEntry->ptrCast<RelGroupCatalogEntry>();
         auto properties = entry->getProperties();
-        LBUG_ASSERT(entry->getNumRelTables() > 0);
+        DASSERT(entry->getNumRelTables() > 0);
         if (entry->getNumRelTables() == 1) {
             auto fromToNodePair = entry->getSingleRelEntryInfo().nodePair;
             auto fromTable = catalog->getTableCatalogEntry(transaction, fromToNodePair.srcTableID);
@@ -84,7 +84,7 @@ std::unique_ptr<BoundStatement> Binder::bindCopyFromClause(const Statement& stat
         }
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
@@ -316,7 +316,7 @@ static void bindExpectedColumns(const TableCatalogEntry& entry, const CopyFromCo
 
 void bindExpectedNodeColumns(const NodeTableCatalogEntry& entry, const CopyFromColumnInfo& info,
     std::vector<std::string>& columnNames, std::vector<LogicalType>& columnTypes) {
-    LBUG_ASSERT(columnNames.empty() && columnTypes.empty());
+    DASSERT(columnNames.empty() && columnTypes.empty());
     bindExpectedColumns(entry, info, columnNames, columnTypes);
 }
 
@@ -324,7 +324,7 @@ void bindExpectedRelColumns(const RelGroupCatalogEntry& entry,
     const NodeTableCatalogEntry& fromEntry, const NodeTableCatalogEntry& toEntry,
     const CopyFromColumnInfo& info, std::vector<std::string>& columnNames,
     std::vector<LogicalType>& columnTypes) {
-    LBUG_ASSERT(columnNames.empty() && columnTypes.empty());
+    DASSERT(columnNames.empty() && columnTypes.empty());
     columnNames.push_back("from");
     columnNames.push_back("to");
     auto srcPKColumnType = fromEntry.getPrimaryKeyDefinition().getType().copy();

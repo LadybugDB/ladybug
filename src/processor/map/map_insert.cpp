@@ -36,7 +36,7 @@ NodeInsertExecutor PlanMapper::getNodeInsertExecutor(const LogicalInsertInfo* bo
     auto columnsPos = populateReturnColumnsPos(*boundInfo, outSchema);
     auto info = NodeInsertInfo(nodeIDPos, columnsPos, boundInfo->conflictAction);
     auto storageManager = StorageManager::Get(*clientContext);
-    LBUG_ASSERT(node.getNumEntries() == 1);
+    DASSERT(node.getNumEntries() == 1);
     ;
     auto table = storageManager->getTable(node.getEntry(0)->getTableID())->ptrCast<NodeTable>();
     evaluator_vector_t evaluators;
@@ -58,10 +58,10 @@ RelInsertExecutor PlanMapper::getRelInsertExecutor(const LogicalInsertInfo* boun
     auto columnsPos = populateReturnColumnsPos(*boundInfo, outSchema);
     auto info = RelInsertInfo(srcNodeIDPos, dstNodeIDPos, std::move(columnsPos));
     auto storageManager = StorageManager::Get(*clientContext);
-    LBUG_ASSERT(srcNode->getNumEntries() == 1 && dstNode->getNumEntries() == 1);
+    DASSERT(srcNode->getNumEntries() == 1 && dstNode->getNumEntries() == 1);
     auto srcTableID = srcNode->getEntry(0)->getTableID();
     auto dstTableID = dstNode->getEntry(0)->getTableID();
-    LBUG_ASSERT(rel.getNumEntries() == 1);
+    DASSERT(rel.getNumEntries() == 1);
     auto& relGroupEntry = rel.getEntry(0)->constCast<RelGroupCatalogEntry>();
     auto relEntryInfo = relGroupEntry.getRelEntryInfo(srcTableID, dstTableID);
     auto table = storageManager->getTable(relEntryInfo->oid)->ptrCast<RelTable>();
@@ -90,7 +90,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapInsert(const LogicalOperator* l
             relExecutors.push_back(getRelInsertExecutor(&info, *inSchema, *outSchema));
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
     expression_vector expressions;

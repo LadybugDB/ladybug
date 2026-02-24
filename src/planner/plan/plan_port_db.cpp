@@ -33,11 +33,11 @@ std::vector<std::shared_ptr<LogicalOperator>> Planner::planExportTableData(
         Catalog::Get(*clientContext)->getFunctionEntry(Transaction::Get(*clientContext), name);
     auto func = function::BuiltInFunctionsUtils::matchFunction(name,
         entry->ptrCast<FunctionCatalogEntry>());
-    LBUG_ASSERT(func != nullptr);
+    DASSERT(func != nullptr);
     auto exportFunc = *func->constPtrCast<function::ExportFunction>();
     for (auto& exportTableData : *boundExportDatabase.getExportData()) {
         auto regularQuery = exportTableData.getRegularQuery();
-        LBUG_ASSERT(regularQuery->getStatementType() == StatementType::QUERY);
+        DASSERT(regularQuery->getStatementType() == StatementType::QUERY);
         auto tablePlan = planStatement(*regularQuery);
         auto path = VirtualFileSystem::GetUnsafe(*clientContext)
                         ->joinPath(boundExportDatabase.getFilePath(), exportTableData.fileName);

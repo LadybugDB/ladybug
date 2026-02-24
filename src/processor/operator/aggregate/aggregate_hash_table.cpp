@@ -31,7 +31,7 @@ AggregateHashTable::AggregateHashTable(MemoryManager& memoryManager,
     : BaseHashTable{memoryManager, std::move(keyTypes)}, payloadTypes{std::move(payloadTypes)} {
     initializeFT(aggregateFunctions, std::move(tableSchema));
     initializeHashTable(numEntriesToAllocate);
-    LBUG_ASSERT(aggregateFunctions.size() == distinctAggKeyTypes.size());
+    DASSERT(aggregateFunctions.size() == distinctAggKeyTypes.size());
     distinctHashTables.reserve(this->aggregateFunctions.size());
     distinctHashEntriesProcessed.resize(this->aggregateFunctions.size());
     for (auto i = 0u; i < this->aggregateFunctions.size(); ++i) {
@@ -64,7 +64,7 @@ hash_t getHash(const FactorizedTable& table, ft_tuple_idx_t tupleIdx) {
 }
 
 void AggregateHashTable::merge(FactorizedTable&& table) {
-    LBUG_ASSERT(*table.getTableSchema() == *getTableSchema());
+    DASSERT(*table.getTableSchema() == *getTableSchema());
     resizeHashTableIfNecessary(table.getNumTuples());
 
     uint64_t startTupleIdx = 0;
@@ -151,7 +151,7 @@ void AggregateHashTable::mergeDistinctAggregateInfo() {
                                        vectorPtrs.size() - 1),
                                    1, 0) == 0;
                     });
-                    LBUG_ASSERT(entry != nullptr);
+                    DASSERT(entry != nullptr);
                     aggregateFunctions[distinctIdx].updatePosState(entry + aggStateColOffset,
                         vectors.back().get() /*aggregateVector*/,
                         1 /* Distinct aggregate should ignore multiplicity since they are known to
@@ -330,7 +330,7 @@ void AggregateHashTable::initializeFTEntries(const FactorizedTable& sourceTable,
 
 uint64_t AggregateHashTable::matchUnFlatVecWithFTColumn(const ValueVector* vector,
     uint64_t numMayMatches, uint64_t& numNoMatches, uint32_t colIdx) {
-    LBUG_ASSERT(!vector->state->isFlat());
+    DASSERT(!vector->state->isFlat());
     auto& schema = *getTableSchema();
     auto colOffset = schema.getColOffset(colIdx);
     uint64_t mayMatchIdx = 0;
@@ -377,7 +377,7 @@ uint64_t AggregateHashTable::matchUnFlatVecWithFTColumn(const ValueVector* vecto
 
 uint64_t AggregateHashTable::matchFlatVecWithFTColumn(const ValueVector* vector,
     uint64_t numMayMatches, uint64_t& numNoMatches, uint32_t colIdx) {
-    LBUG_ASSERT(vector->state->isFlat());
+    DASSERT(vector->state->isFlat());
     auto colOffset = getTableSchema()->getColOffset(colIdx);
     uint64_t mayMatchIdx = 0;
     auto pos = vector->state->getSelVector()[0];
@@ -406,7 +406,7 @@ uint64_t AggregateHashTable::matchFlatVecWithFTColumn(const ValueVector* vector,
 
 void AggregateHashTable::initializeFTEntryWithFlatVec(ValueVector* flatVector,
     uint64_t numEntriesToInitialize, uint32_t colIdx) {
-    LBUG_ASSERT(flatVector->state->isFlat());
+    DASSERT(flatVector->state->isFlat());
     auto colOffset = getTableSchema()->getColOffset(colIdx);
     auto pos = flatVector->state->getSelVector()[0];
     if (flatVector->isNull(pos)) {
@@ -428,7 +428,7 @@ void AggregateHashTable::initializeFTEntryWithFlatVec(ValueVector* flatVector,
 
 void AggregateHashTable::initializeFTEntryWithUnFlatVec(ValueVector* unFlatVector,
     uint64_t numEntriesToInitialize, uint32_t colIdx) {
-    LBUG_ASSERT(!unFlatVector->state->isFlat());
+    DASSERT(!unFlatVector->state->isFlat());
     auto colOffset = factorizedTable->getTableSchema()->getColOffset(colIdx);
     if (unFlatVector->hasNoNullsGuarantee()) {
         for (auto i = 0u; i < numEntriesToInitialize; i++) {
@@ -504,7 +504,7 @@ void AggregateHashTable::findHashSlots(const std::vector<ValueVector*>& keyVecto
     const std::vector<ValueVector*>& dependentKeyVectors, const DataChunkState* leadingState) {
     initTmpHashSlotsAndIdxes();
     auto numEntriesToFindHashSlots = leadingState->getSelSize();
-    LBUG_ASSERT(getNumEntries() + numEntriesToFindHashSlots < maxNumHashSlots);
+    DASSERT(getNumEntries() + numEntriesToFindHashSlots < maxNumHashSlots);
     while (numEntriesToFindHashSlots > 0) {
         uint64_t numFTEntriesToUpdate = 0;
         uint64_t numMayMatches = 0;
@@ -525,7 +525,7 @@ void AggregateHashTable::findHashSlots(const std::vector<ValueVector*>& keyVecto
         initializeFTEntries(keyVectors, dependentKeyVectors, numFTEntriesToUpdate);
         numNoMatches = matchFTEntries(constSpan(keyVectors), numMayMatches, numNoMatches);
         increaseHashSlotIdxes(numNoMatches);
-        LBUG_ASSERT(numNoMatches <= numEntriesToFindHashSlots);
+        DASSERT(numNoMatches <= numEntriesToFindHashSlots);
         numEntriesToFindHashSlots = numNoMatches;
         memcpy(tmpValueIdxes.get(), noMatchIdxes.get(), numNoMatches * sizeof(uint64_t));
     }
@@ -534,7 +534,7 @@ void AggregateHashTable::findHashSlots(const std::vector<ValueVector*>& keyVecto
 void AggregateHashTable::findHashSlots(const FactorizedTable& srcTable, uint64_t startOffset,
     uint64_t numEntriesToFindHashSlots) {
     initTmpHashSlotsAndIdxes(srcTable, startOffset, numEntriesToFindHashSlots);
-    LBUG_ASSERT(getNumEntries() + numEntriesToFindHashSlots < maxNumHashSlots);
+    DASSERT(getNumEntries() + numEntriesToFindHashSlots < maxNumHashSlots);
     while (numEntriesToFindHashSlots > 0) {
         uint64_t numFTEntriesToUpdate = 0;
         uint64_t numMayMatches = 0;
@@ -555,7 +555,7 @@ void AggregateHashTable::findHashSlots(const FactorizedTable& srcTable, uint64_t
         initializeFTEntries(srcTable, startOffset, numFTEntriesToUpdate);
         numNoMatches = matchFTEntries(srcTable, startOffset, numMayMatches, numNoMatches);
         increaseHashSlotIdxes(numNoMatches);
-        LBUG_ASSERT(numNoMatches <= numEntriesToFindHashSlots);
+        DASSERT(numNoMatches <= numEntriesToFindHashSlots);
         numEntriesToFindHashSlots = numNoMatches;
         memcpy(tmpValueIdxes.get(), noMatchIdxes.get(), numNoMatches * sizeof(uint64_t));
     }
@@ -779,7 +779,7 @@ uint64_t PartitioningAggregateHashTable::append(const std::vector<ValueVector*>&
 
     // mergeAll makes use of the hashVector, so it needs to be called before computeVectorHashes
     computeVectorHashes(keyVectors);
-    LBUG_ASSERT(
+    DASSERT(
         hashVector->getSelVectorPtr()->getSelSize() == leadingState->getSelVector().getSelSize());
     findHashSlots(keyVectors, dependentKeyVectors, leadingState);
     // Don't update distinct states since they can't be merged into the global hash tables.

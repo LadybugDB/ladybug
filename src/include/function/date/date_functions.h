@@ -11,7 +11,7 @@ namespace function {
 struct DayName {
     template<class T>
     static inline void operation(T& /*input*/, common::string_t& /*result*/) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 };
 
@@ -33,7 +33,7 @@ inline void DayName::operation(common::timestamp_t& input, common::string_t& res
 struct MonthName {
     template<class T>
     static inline void operation(T& /*input*/, common::string_t& /*result*/) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 };
 
@@ -56,7 +56,7 @@ struct LastDay {
     template<class T>
 
     static inline void operation(T& /*input*/, common::date_t& /*result*/) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 };
 
@@ -77,7 +77,7 @@ struct DatePart {
     template<class LEFT_TYPE, class RIGHT_TYPE>
     static inline void operation(LEFT_TYPE& /*partSpecifier*/, RIGHT_TYPE& /*input*/,
         int64_t& /*result*/) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 };
 
@@ -109,7 +109,7 @@ struct DateTrunc {
     template<class LEFT_TYPE, class RIGHT_TYPE>
     static inline void operation(LEFT_TYPE& /*partSpecifier*/, RIGHT_TYPE& /*input*/,
         RIGHT_TYPE& /*result*/) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 };
 

@@ -25,7 +25,7 @@ std::unique_ptr<Statement> Transformer::transformTransaction(
     if (ctx.CHECKPOINT()) {
         return std::make_unique<TransactionStatement>(TransactionAction::CHECKPOINT);
     }
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 } // namespace parser

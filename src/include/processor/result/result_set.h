@@ -16,7 +16,7 @@ public:
     ResultSet(ResultSetDescriptor* resultSetDescriptor, storage::MemoryManager* memoryManager);
 
     void insert(common::idx_t pos, std::shared_ptr<common::DataChunk> dataChunk) {
-        LBUG_ASSERT(dataChunks.size() > pos);
+        DASSERT(dataChunks.size() > pos);
         dataChunks[pos] = std::move(dataChunk);
     }
 

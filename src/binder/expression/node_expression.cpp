@@ -11,7 +11,7 @@ std::shared_ptr<Expression> NodeExpression::getPrimaryKey(common::table_id_t tab
             return property;
         }
     }
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 } // namespace binder

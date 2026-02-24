@@ -25,7 +25,7 @@ public:
     //===--------------------------------------------------------------------===//
     // We always register functions while initializing the catalog, so we don't have to
     // serialize functions.
-    void serialize(common::Serializer& /*serializer*/) const override { LBUG_UNREACHABLE; }
+    void serialize(common::Serializer& /*serializer*/) const override { UNREACHABLE_CODE; }
 
 protected:
     function::function_set functionSet;

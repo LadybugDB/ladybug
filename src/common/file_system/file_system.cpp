@@ -6,23 +6,23 @@ namespace lbug {
 namespace common {
 
 void FileSystem::overwriteFile(const std::string& /*from*/, const std::string& /*to*/) {
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 void FileSystem::copyFile(const std::string& /*from*/, const std::string& /*to*/) {
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 void FileSystem::createDir(const std::string& /*dir*/) const {
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 void FileSystem::removeFileIfExists(const std::string&, const main::ClientContext* /*context*/) {
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 bool FileSystem::fileOrPathExists(const std::string& /*path*/, main::ClientContext* /*context*/) {
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 std::string FileSystem::expandPath(main::ClientContext* /*context*/,
@@ -52,11 +52,11 @@ std::string FileSystem::getFileName(const std::filesystem::path& path) {
 
 void FileSystem::writeFile(FileInfo& /*fileInfo*/, const uint8_t* /*buffer*/, uint64_t /*numBytes*/,
     uint64_t /*offset*/) const {
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 void FileSystem::truncate(FileInfo& /*fileInfo*/, uint64_t /*size*/) const {
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 void FileSystem::reset(FileInfo& fileInfo) {

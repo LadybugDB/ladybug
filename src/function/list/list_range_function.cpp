@@ -57,7 +57,7 @@ static scalar_func_exec_t getBinaryExecFunc(const LogicalType& type) {
         [&execFunc]<IntegerTypes T>(T) {
             execFunc = ScalarFunction::BinaryExecListStructFunction<T, T, list_entry_t, Range>;
         },
-        [](auto) { LBUG_UNREACHABLE; });
+        [](auto) { UNREACHABLE_CODE; });
     return execFunc;
 }
 
@@ -68,7 +68,7 @@ static scalar_func_exec_t getTernaryExecFunc(const LogicalType& type) {
         [&execFunc]<IntegerTypes T>(T) {
             execFunc = ScalarFunction::TernaryExecListStructFunction<T, T, T, list_entry_t, Range>;
         },
-        [](auto) { LBUG_UNREACHABLE; });
+        [](auto) { UNREACHABLE_CODE; });
     return execFunc;
 }
 

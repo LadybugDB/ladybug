@@ -20,7 +20,7 @@ void NodeInsertInfo::init(const ResultSet& resultSet) {
 }
 
 void NodeInsertInfo::updateNodeID(nodeID_t nodeID) const {
-    LBUG_ASSERT(nodeIDVector->state->getSelVector().getSelSize() == 1);
+    DASSERT(nodeIDVector->state->getSelVector().getSelSize() == 1);
     auto pos = nodeIDVector->state->getSelVector()[0];
     nodeIDVector->setNull(pos, false);
     nodeIDVector->setValue<nodeID_t>(pos, nodeID);
@@ -28,7 +28,7 @@ void NodeInsertInfo::updateNodeID(nodeID_t nodeID) const {
 
 nodeID_t NodeInsertInfo::getNodeID() const {
     auto& nodeIDSelVector = nodeIDVector->state->getSelVector();
-    LBUG_ASSERT(nodeIDSelVector.getSelSize() == 1);
+    DASSERT(nodeIDSelVector.getSelSize() == 1);
     if (nodeIDVector->isNull(nodeIDSelVector[0])) {
         return {INVALID_OFFSET, INVALID_TABLE_ID};
     }
@@ -51,7 +51,7 @@ void NodeInsertExecutor::init(ResultSet* resultSet, const ExecutionContext* cont
 static void writeColumnVector(ValueVector* columnVector, const ValueVector* dataVector) {
     auto& columnSelVector = columnVector->state->getSelVector();
     auto& dataSelVector = dataVector->state->getSelVector();
-    LBUG_ASSERT(columnSelVector.getSelSize() == 1 && dataSelVector.getSelSize() == 1);
+    DASSERT(columnSelVector.getSelSize() == 1 && dataSelVector.getSelSize() == 1);
     auto columnPos = columnSelVector[0];
     auto dataPos = dataSelVector[0];
     if (dataVector->isNull(dataPos)) {
@@ -65,7 +65,7 @@ static void writeColumnVector(ValueVector* columnVector, const ValueVector* data
 // TODO(Guodong/Xiyang): think we can reference data vector instead of copy.
 static void writeColumnVectors(const std::vector<ValueVector*>& columnVectors,
     const std::vector<ValueVector*>& dataVectors) {
-    LBUG_ASSERT(columnVectors.size() == dataVectors.size());
+    DASSERT(columnVectors.size() == dataVectors.size());
     for (auto i = 0u; i < columnVectors.size(); ++i) {
         if (columnVectors[i] == nullptr) { // No need to project
             continue;
@@ -81,7 +81,7 @@ static void writeColumnVectorsToNull(const std::vector<ValueVector*>& columnVect
             continue;
         }
         auto& columnSelVector = columnVector->state->getSelVector();
-        LBUG_ASSERT(columnSelVector.getSelSize() == 1);
+        DASSERT(columnSelVector.getSelSize() == 1);
         columnVector->setNull(columnSelVector[0], true);
     }
 }
@@ -149,7 +149,7 @@ void RelTableInsertInfo::init(const ResultSet& resultSet, main::ClientContext* c
 internalID_t RelTableInsertInfo::getRelID() const {
     auto relIDVector = columnDataVectors[0];
     auto& nodeIDSelVector = relIDVector->state->getSelVector();
-    LBUG_ASSERT(nodeIDSelVector.getSelSize() == 1);
+    DASSERT(nodeIDSelVector.getSelSize() == 1);
     if (relIDVector->isNull(nodeIDSelVector[0])) {
         return {INVALID_OFFSET, INVALID_TABLE_ID};
     }
@@ -162,8 +162,8 @@ void RelInsertExecutor::init(ResultSet* resultSet, const ExecutionContext* conte
 }
 
 internalID_t RelInsertExecutor::insert(main::ClientContext* context) {
-    LBUG_ASSERT(info.srcNodeIDVector->state->getSelVector().getSelSize() == 1);
-    LBUG_ASSERT(info.dstNodeIDVector->state->getSelVector().getSelSize() == 1);
+    DASSERT(info.srcNodeIDVector->state->getSelVector().getSelSize() == 1);
+    DASSERT(info.dstNodeIDVector->state->getSelVector().getSelSize() == 1);
     auto srcNodeIDPos = info.srcNodeIDVector->state->getSelVector()[0];
     auto dstNodeIDPos = info.dstNodeIDVector->state->getSelVector()[0];
     if (info.srcNodeIDVector->isNull(srcNodeIDPos) || info.dstNodeIDVector->isNull(dstNodeIDPos)) {

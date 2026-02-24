@@ -103,7 +103,7 @@ uint64_t LocalWAL::getSize() {
 // NOLINTNEXTLINE(readability-make-member-function-const): semantically non-const function.
 void LocalWAL::addNewWALRecord(const WALRecord& walRecord) {
     std::unique_lock lck{mtx};
-    LBUG_ASSERT(walRecord.type != WALRecordType::INVALID_RECORD);
+    DASSERT(walRecord.type != WALRecordType::INVALID_RECORD);
     serializer.getWriter()->onObjectBegin();
     walRecord.serialize(serializer);
     serializer.getWriter()->onObjectEnd();

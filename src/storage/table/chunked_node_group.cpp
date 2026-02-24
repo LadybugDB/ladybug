@@ -37,13 +37,13 @@ static void handleAppendException(std::vector<std::unique_ptr<Chunk>>& chunks, u
 ChunkedNodeGroup::ChunkedNodeGroup(std::vector<std::unique_ptr<ColumnChunk>> chunks,
     row_idx_t startRowIdx, NodeGroupDataFormat format)
     : format{format}, startRowIdx{startRowIdx}, chunks{std::move(chunks)} {
-    LBUG_ASSERT(!this->chunks.empty());
+    DASSERT(!this->chunks.empty());
     residencyState = this->chunks[0]->getResidencyState();
     numRows = this->chunks[0]->getNumValues();
     capacity = numRows;
     for (auto columnID = 1u; columnID < this->chunks.size(); columnID++) {
-        LBUG_ASSERT(this->chunks[columnID]->getNumValues() == numRows);
-        LBUG_ASSERT(this->chunks[columnID]->getResidencyState() == residencyState);
+        DASSERT(this->chunks[columnID]->getNumValues() == numRows);
+        DASSERT(this->chunks[columnID]->getResidencyState() == residencyState);
     }
 }
 
@@ -54,7 +54,7 @@ ChunkedNodeGroup::ChunkedNodeGroup(ChunkedNodeGroup& base,
     chunks.resize(selectedColumns.size());
     for (auto i = 0u; i < selectedColumns.size(); i++) {
         auto columnID = selectedColumns[i];
-        LBUG_ASSERT(columnID < base.getNumColumns());
+        DASSERT(columnID < base.getNumColumns());
         chunks[i] = base.moveColumnChunk(columnID);
     }
 }
@@ -66,7 +66,7 @@ ChunkedNodeGroup::ChunkedNodeGroup(InMemChunkedNodeGroup& base,
     chunks.resize(selectedColumns.size());
     for (auto i = 0u; i < selectedColumns.size(); i++) {
         auto columnID = selectedColumns[i];
-        LBUG_ASSERT(columnID < base.getNumColumns());
+        DASSERT(columnID < base.getNumColumns());
         chunks[i] = std::make_unique<ColumnChunk>(true /*enableCompression*/,
             base.moveColumnChunk(columnID));
     }
@@ -90,17 +90,17 @@ ChunkedNodeGroup::ChunkedNodeGroup(MemoryManager& mm, ChunkedNodeGroup& base,
       capacity{base.capacity}, numRows{base.numRows.load()},
       versionInfo(std::move(base.versionInfo)) {
     bool enableCompression = false;
-    LBUG_ASSERT(!baseColumnIDs.empty());
+    DASSERT(!baseColumnIDs.empty());
 
     chunks.resize(columnTypes.size());
 
-    LBUG_ASSERT(base.getNumColumns() == baseColumnIDs.size());
+    DASSERT(base.getNumColumns() == baseColumnIDs.size());
     for (column_id_t i = 0; i < baseColumnIDs.size(); ++i) {
         auto baseColumnID = baseColumnIDs[i];
-        LBUG_ASSERT(baseColumnID < chunks.size());
+        DASSERT(baseColumnID < chunks.size());
         chunks[baseColumnID] = base.moveColumnChunk(i);
         enableCompression = chunks[baseColumnID]->isCompressionEnabled();
-        LBUG_ASSERT(chunks[baseColumnID]->getDataType().getPhysicalType() ==
+        DASSERT(chunks[baseColumnID]->getDataType().getPhysicalType() ==
                   columnTypes[baseColumnID].getPhysicalType());
     }
 
@@ -113,12 +113,12 @@ ChunkedNodeGroup::ChunkedNodeGroup(MemoryManager& mm, ChunkedNodeGroup& base,
 }
 
 void ChunkedNodeGroup::resetNumRowsFromChunks() {
-    LBUG_ASSERT(residencyState == ResidencyState::ON_DISK);
-    LBUG_ASSERT(!chunks.empty());
+    DASSERT(residencyState == ResidencyState::ON_DISK);
+    DASSERT(!chunks.empty());
     numRows = getColumnChunk(0).getNumValues();
     capacity = numRows;
     for (auto i = 1u; i < getNumColumns(); i++) {
-        LBUG_ASSERT(numRows == getColumnChunk(i).getNumValues());
+        DASSERT(numRows == getColumnChunk(i).getNumValues());
     }
 }
 
@@ -132,7 +132,7 @@ void ChunkedNodeGroup::resetVersionAndUpdateInfo() {
 }
 
 void ChunkedNodeGroup::truncate(const offset_t numRows_) {
-    LBUG_ASSERT(numRows >= numRows_);
+    DASSERT(numRows >= numRows_);
     for (const auto& chunk : chunks) {
         chunk->truncate(numRows_);
     }
@@ -149,8 +149,8 @@ void InMemChunkedNodeGroup::setNumRows(const offset_t numRows_) {
 uint64_t ChunkedNodeGroup::append(const Transaction* transaction,
     const std::vector<ValueVector*>& columnVectors, row_idx_t startRowInVectors,
     uint64_t numValuesToAppend) {
-    LBUG_ASSERT(residencyState != ResidencyState::ON_DISK);
-    LBUG_ASSERT(columnVectors.size() == chunks.size());
+    DASSERT(residencyState != ResidencyState::ON_DISK);
+    DASSERT(columnVectors.size() == chunks.size());
     const auto numRowsToAppendInChunk = std::min(numValuesToAppend, capacity - numRows);
     try {
         for (auto i = 0u; i < columnVectors.size(); i++) {
@@ -174,8 +174,8 @@ uint64_t ChunkedNodeGroup::append(const Transaction* transaction,
 offset_t ChunkedNodeGroup::append(const Transaction* transaction,
     const std::vector<column_id_t>& columnIDs, const ChunkedNodeGroup& other,
     offset_t offsetInOtherNodeGroup, offset_t numRowsToAppend) {
-    LBUG_ASSERT(residencyState == ResidencyState::IN_MEMORY);
-    LBUG_ASSERT(other.chunks.size() == chunks.size());
+    DASSERT(residencyState == ResidencyState::IN_MEMORY);
+    DASSERT(other.chunks.size() == chunks.size());
     std::vector<const ColumnChunk*> chunksToAppend(other.chunks.size());
     for (auto i = 0u; i < chunks.size(); i++) {
         chunksToAppend[i] = other.chunks[i].get();
@@ -186,8 +186,8 @@ offset_t ChunkedNodeGroup::append(const Transaction* transaction,
 offset_t ChunkedNodeGroup::append(const Transaction* transaction,
     const std::vector<column_id_t>& columnIDs, const InMemChunkedNodeGroup& other,
     offset_t offsetInOtherNodeGroup, offset_t numRowsToAppend) {
-    LBUG_ASSERT(residencyState == ResidencyState::IN_MEMORY);
-    LBUG_ASSERT(other.chunks.size() == chunks.size());
+    DASSERT(residencyState == ResidencyState::IN_MEMORY);
+    DASSERT(other.chunks.size() == chunks.size());
     std::vector<const ColumnChunkData*> chunksToAppend(other.chunks.size());
     for (auto i = 0u; i < chunks.size(); i++) {
         chunksToAppend[i] = other.chunks[i].get();
@@ -198,13 +198,13 @@ offset_t ChunkedNodeGroup::append(const Transaction* transaction,
 offset_t ChunkedNodeGroup::append(const Transaction* transaction,
     const std::vector<column_id_t>& columnIDs, std::span<const ColumnChunkData*> other,
     offset_t offsetInOtherNodeGroup, offset_t numRowsToAppend) {
-    LBUG_ASSERT(residencyState == ResidencyState::IN_MEMORY);
-    LBUG_ASSERT(other.size() == columnIDs.size());
+    DASSERT(residencyState == ResidencyState::IN_MEMORY);
+    DASSERT(other.size() == columnIDs.size());
     const auto numToAppendInChunkedGroup = std::min(numRowsToAppend, capacity - numRows);
     try {
         for (auto i = 0u; i < columnIDs.size(); i++) {
             auto columnID = columnIDs[i];
-            LBUG_ASSERT(columnID < chunks.size());
+            DASSERT(columnID < chunks.size());
             chunks[columnID]->append(other[i], offsetInOtherNodeGroup, numToAppendInChunkedGroup);
         }
     } catch ([[maybe_unused]] std::exception& e) {
@@ -223,13 +223,13 @@ offset_t ChunkedNodeGroup::append(const Transaction* transaction,
 offset_t ChunkedNodeGroup::append(const Transaction* transaction,
     const std::vector<column_id_t>& columnIDs, std::span<const ColumnChunk*> other,
     offset_t offsetInOtherNodeGroup, offset_t numRowsToAppend) {
-    LBUG_ASSERT(residencyState == ResidencyState::IN_MEMORY);
-    LBUG_ASSERT(other.size() == columnIDs.size());
+    DASSERT(residencyState == ResidencyState::IN_MEMORY);
+    DASSERT(other.size() == columnIDs.size());
     const auto numToAppendInChunkedGroup = std::min(numRowsToAppend, capacity - numRows);
     try {
         for (auto i = 0u; i < columnIDs.size(); i++) {
             auto columnID = columnIDs[i];
-            LBUG_ASSERT(columnID < chunks.size());
+            DASSERT(columnID < chunks.size());
             chunks[columnID]->append(other[i], offsetInOtherNodeGroup, numToAppendInChunkedGroup);
         }
     } catch ([[maybe_unused]] std::exception& e) {
@@ -246,7 +246,7 @@ offset_t ChunkedNodeGroup::append(const Transaction* transaction,
 }
 
 void InMemChunkedNodeGroup::write(const InMemChunkedNodeGroup& data, column_id_t offsetColumnID) {
-    LBUG_ASSERT(data.chunks.size() == chunks.size() + 1);
+    DASSERT(data.chunks.size() == chunks.size() + 1);
     auto& offsetChunk = data.chunks[offsetColumnID];
     column_id_t columnID = 0, chunkIdx = 0;
     for (auto i = 0u; i < data.chunks.size(); i++) {
@@ -254,14 +254,14 @@ void InMemChunkedNodeGroup::write(const InMemChunkedNodeGroup& data, column_id_t
             columnID++;
             continue;
         }
-        LBUG_ASSERT(columnID < data.chunks.size());
+        DASSERT(columnID < data.chunks.size());
         writeToColumnChunk(chunkIdx, columnID, data.chunks, *offsetChunk);
         chunkIdx++;
         columnID++;
     }
     numRows = chunks[0]->getNumValues();
     for (auto i = 1u; i < chunks.size(); i++) {
-        LBUG_ASSERT(numRows == chunks[i]->getNumValues());
+        DASSERT(numRows == chunks[i]->getNumValues());
     }
 }
 
@@ -274,7 +274,7 @@ static ZoneMapCheckResult getZoneMapResult(const TableScanState& scanState,
                 continue;
             }
 
-            LBUG_ASSERT(i < scanState.columnPredicateSets.size());
+            DASSERT(i < scanState.columnPredicateSets.size());
             if (chunks[columnID]->hasUpdates()) {
                 // With updates, we need to merge with update data for the correct stats, which can
                 // be slow if there are lots of updates. We defer this for now.
@@ -293,7 +293,7 @@ static ZoneMapCheckResult getZoneMapResult(const TableScanState& scanState,
 void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState& scanState,
     const NodeGroupScanState& nodeGroupScanState, offset_t rowIdxInGroup,
     length_t numRowsToScan) const {
-    LBUG_ASSERT(rowIdxInGroup + numRowsToScan <= numRows);
+    DASSERT(rowIdxInGroup + numRowsToScan <= numRows);
     auto& anchorSelVector = scanState.outState->getSelVectorUnsafe();
     if (getZoneMapResult(scanState, chunks) == ZoneMapCheckResult::SKIP_SCAN) {
         anchorSelVector.setToFiltered(0);
@@ -321,7 +321,7 @@ void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState
                 }
                 continue;
             }
-            LBUG_ASSERT(columnID < chunks.size());
+            DASSERT(columnID < chunks.size());
             chunks[columnID]->scan(transaction, nodeGroupScanState.chunkStates[i],
                 *scanState.outputVectors[i], rowIdxInGroup, numRowsToScan);
         }
@@ -357,7 +357,7 @@ row_idx_t ChunkedNodeGroup::getNumUpdatedRows(const Transaction* transaction,
 
 bool ChunkedNodeGroup::lookup(const Transaction* transaction, const TableScanState& state,
     const NodeGroupScanState& nodeGroupScanState, offset_t rowIdxInChunk, sel_t posInOutput) const {
-    LBUG_ASSERT(rowIdxInChunk + 1 <= numRows);
+    DASSERT(rowIdxInChunk + 1 <= numRows);
     const bool hasValuesToRead = versionInfo ? versionInfo->isSelected(transaction->getStartTS(),
                                                    transaction->getID(), rowIdxInChunk) :
                                                true;
@@ -376,8 +376,8 @@ bool ChunkedNodeGroup::lookup(const Transaction* transaction, const TableScanSta
                 rowIdxInChunk + startRowIdx);
             continue;
         }
-        LBUG_ASSERT(columnID < chunks.size());
-        LBUG_ASSERT(i < nodeGroupScanState.chunkStates.size());
+        DASSERT(columnID < chunks.size());
+        DASSERT(i < nodeGroupScanState.chunkStates.size());
         chunks[columnID]->lookup(transaction, nodeGroupScanState.chunkStates[i], rowIdxInChunk,
             *state.outputVectors[i], state.outputVectors[i]->state->getSelVector()[posInOutput]);
     }
@@ -405,7 +405,7 @@ void ChunkedNodeGroup::addColumn(MemoryManager& mm, const TableAddColumnState& a
     chunks.back()->populateWithDefaultVal(addColumnState.defaultEvaluator, numExistingRows,
         newColumnStats);
     if (residencyState == ResidencyState::ON_DISK) {
-        LBUG_ASSERT(pageAllocator);
+        DASSERT(pageAllocator);
         chunks.back()->flush(*pageAllocator);
     }
 }
@@ -472,7 +472,7 @@ std::unique_ptr<ChunkedNodeGroup> InMemChunkedNodeGroup::flush(Transaction* tran
     auto flushedChunkedGroup =
         std::make_unique<ChunkedNodeGroup>(std::move(flushedChunks), 0 /*startRowIdx*/);
     flushedChunkedGroup->versionInfo = std::make_unique<VersionInfo>();
-    LBUG_ASSERT(flushedChunkedGroup->getNumRows() == numRows);
+    DASSERT(flushedChunkedGroup->getNumRows() == numRows);
     flushedChunkedGroup->versionInfo->append(transaction->getID(), 0, numRows);
     return flushedChunkedGroup;
 }
@@ -550,7 +550,7 @@ void ChunkedNodeGroup::reclaimStorage(PageAllocator& pageAllocator) const {
 }
 
 void ChunkedNodeGroup::serialize(Serializer& serializer) const {
-    LBUG_ASSERT(residencyState == ResidencyState::ON_DISK);
+    DASSERT(residencyState == ResidencyState::ON_DISK);
     serializer.writeDebuggingInfo("chunks");
     serializer.serializeVectorOfPtrs(chunks);
     serializer.writeDebuggingInfo("startRowIdx");
@@ -599,9 +599,9 @@ InMemChunkedNodeGroup::InMemChunkedNodeGroup(std::vector<std::unique_ptr<ColumnC
     row_idx_t startRowIdx)
     : startRowIdx{startRowIdx}, numRows{chunks[0]->getNumValues()}, capacity{numRows},
       chunks{std::move(chunks)}, dataInUse{true} {
-    LBUG_ASSERT(!this->chunks.empty());
+    DASSERT(!this->chunks.empty());
     for (auto columnID = 1u; columnID < this->chunks.size(); columnID++) {
-        LBUG_ASSERT(this->chunks[columnID]->getNumValues() == numRows);
+        DASSERT(this->chunks[columnID]->getNumValues() == numRows);
     }
 }
 
@@ -667,7 +667,7 @@ void InMemChunkedNodeGroup::resizeChunks(const uint64_t newSize) {
 
 uint64_t InMemChunkedNodeGroup::append(const std::vector<ValueVector*>& columnVectors,
     row_idx_t startRowInVectors, uint64_t numValuesToAppend) {
-    LBUG_ASSERT(columnVectors.size() == chunks.size());
+    DASSERT(columnVectors.size() == chunks.size());
     const auto numRowsToAppendInChunk = std::min(numValuesToAppend, capacity - numRows);
     try {
         for (auto i = 0u; i < columnVectors.size(); i++) {
@@ -684,7 +684,7 @@ uint64_t InMemChunkedNodeGroup::append(const std::vector<ValueVector*>& columnVe
 
 offset_t InMemChunkedNodeGroup::append(const InMemChunkedNodeGroup& other,
     offset_t offsetInOtherNodeGroup, offset_t numRowsToAppend) {
-    LBUG_ASSERT(other.chunks.size() == chunks.size());
+    DASSERT(other.chunks.size() == chunks.size());
     const auto numToAppendInChunkedGroup = std::min(numRowsToAppend, capacity - numRows);
     try {
         for (auto i = 0u; i < other.getNumColumns(); i++) {
@@ -700,9 +700,9 @@ offset_t InMemChunkedNodeGroup::append(const InMemChunkedNodeGroup& other,
 
 void InMemChunkedNodeGroup::merge(InMemChunkedNodeGroup& base,
     const std::vector<column_id_t>& columnsToMergeInto) {
-    LBUG_ASSERT(base.getNumColumns() == columnsToMergeInto.size());
+    DASSERT(base.getNumColumns() == columnsToMergeInto.size());
     for (idx_t i = 0; i < base.getNumColumns(); ++i) {
-        LBUG_ASSERT(columnsToMergeInto[i] < chunks.size());
+        DASSERT(columnsToMergeInto[i] < chunks.size());
         chunks[columnsToMergeInto[i]] = base.moveColumnChunk(i);
     }
 }
@@ -714,7 +714,7 @@ InMemChunkedNodeGroup::InMemChunkedNodeGroup(InMemChunkedNodeGroup& base,
     chunks.resize(selectedColumns.size());
     for (auto i = 0u; i < selectedColumns.size(); i++) {
         auto columnID = selectedColumns[i];
-        LBUG_ASSERT(columnID < base.getNumColumns());
+        DASSERT(columnID < base.getNumColumns());
         chunks[i] = base.moveColumnChunk(columnID);
     }
 }

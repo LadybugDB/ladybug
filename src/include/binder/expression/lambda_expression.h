@@ -16,7 +16,7 @@ public:
           parsedLambdaExpr{std::move(parsedLambdaExpr)} {}
 
     void cast(const common::LogicalType& type_) override {
-        LBUG_ASSERT(dataType.getLogicalTypeID() == common::LogicalTypeID::ANY);
+        DASSERT(dataType.getLogicalTypeID() == common::LogicalTypeID::ANY);
         dataType = type_.copy();
     }
 

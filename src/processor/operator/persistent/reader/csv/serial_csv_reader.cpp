@@ -61,7 +61,7 @@ std::vector<std::pair<std::string, LogicalType>> SerialCSVReader::sniffCSV(
 }
 
 uint64_t SerialCSVReader::parseBlock(block_idx_t blockIdx, DataChunk& resultChunk) {
-    LBUG_ASSERT(nullptr != errorHandler);
+    DASSERT(nullptr != errorHandler);
 
     if (blockIdx != currentBlockIdx) {
         resetNumRowsInCurrentBlock();
@@ -169,7 +169,7 @@ static void bindColumnsFromFile(const ExtraScanTableFuncBindInput* bindInput, ui
 void SerialCSVScan::bindColumns(const ExtraScanTableFuncBindInput* bindInput,
     std::vector<std::string>& columnNames, std::vector<LogicalType>& columnTypes,
     DialectOption& detectedDialect, bool& detectedHeader, main::ClientContext* context) {
-    LBUG_ASSERT(bindInput->fileScanInfo.getNumFiles() > 0);
+    DASSERT(bindInput->fileScanInfo.getNumFiles() > 0);
     bindColumnsFromFile(bindInput, 0, columnNames, columnTypes, detectedDialect, detectedHeader,
         context);
     for (auto i = 1u; i < bindInput->fileScanInfo.getNumFiles(); ++i) {

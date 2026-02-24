@@ -75,7 +75,7 @@ static void sortSelectedPos(ValueVector* nodeIDVector) {
 uint64_t JoinHashTable::appendVectorWithSorting(ValueVector* keyVector,
     std::vector<ValueVector*> payloadVectors) {
     auto numTuplesToAppend = 1;
-    LBUG_ASSERT(keyVector->state->getSelVector().getSelSize() == 1);
+    DASSERT(keyVector->state->getSelVector().getSelSize() == 1);
     // Based on the way we are planning, we assume that the first and second vectors are both
     // nodeIDs from extending, while the first one is key, and the second one is payload.
     auto payloadNodeIDVector = payloadVectors[0];
@@ -86,7 +86,7 @@ uint64_t JoinHashTable::appendVectorWithSorting(ValueVector* keyVector,
     }
     // A single appendInfo will return from `allocateFlatTupleBlocks` when numTuplesToAppend is 1.
     auto appendInfos = factorizedTable->allocateFlatTupleBlocks(numTuplesToAppend);
-    LBUG_ASSERT(appendInfos.size() == 1);
+    DASSERT(appendInfos.size() == 1);
     auto colIdx = 0u;
     std::vector<ValueVector*> keyVectors = {keyVector};
     computeVectorHashes(keyVectors);
@@ -128,7 +128,7 @@ void JoinHashTable::buildHashSlots() {
 
 void JoinHashTable::probe(const std::vector<ValueVector*>& keyVectors, ValueVector& hashVector,
     SelectionVector& hashSelVec, ValueVector* tmpHashResultVector, uint8_t** probedTuples) {
-    LBUG_ASSERT(keyVectors.size() == keyTypes.size());
+    DASSERT(keyVectors.size() == keyTypes.size());
     if (getNumEntries() == 0) {
         return;
     }
@@ -146,7 +146,7 @@ void JoinHashTable::probe(const std::vector<ValueVector*>& keyVectors, ValueVect
             hashVector, hashSelVec);
     }
     for (auto i = 0u; i < hashSelVec.getSelSize(); i++) {
-        LBUG_ASSERT(i < DEFAULT_VECTOR_CAPACITY);
+        DASSERT(i < DEFAULT_VECTOR_CAPACITY);
         probedTuples[i] = getTupleForHash(hashVector.getValue<hash_t>(hashSelVec[i]));
     }
 }

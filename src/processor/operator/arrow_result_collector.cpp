@@ -20,7 +20,7 @@ bool ArrowResultCollectorLocalState::advance() {
 }
 
 void ArrowResultCollectorLocalState::fillTuple() {
-    LBUG_ASSERT(tuple->len() == vectors.size());
+    DASSERT(tuple->len() == vectors.size());
     for (auto i = 0u; i < vectors.size(); ++i) {
         auto vector = vectors[i];
         auto pos = vector->state->getSelVector()[vectorsSelPos[i]];

@@ -5,7 +5,7 @@ namespace duckdb_extension {
 
 std::unique_ptr<duckdb::MaterializedQueryResult> DuckDBConnector::executeQuery(
     std::string query) const {
-    LBUG_ASSERT(instance != nullptr && connection != nullptr);
+    DASSERT(instance != nullptr && connection != nullptr);
     auto result = connection->Query(query);
     if (result->HasError()) {
         throw common::Exception{result->GetError()};

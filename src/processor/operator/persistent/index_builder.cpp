@@ -40,7 +40,7 @@ IndexBuilderGlobalQueues::IndexBuilderGlobalQueues(transaction::Transaction* tra
     : nodeTable(nodeTable), transaction{transaction} {
     TypeUtils::visit(
         pkTypeID(), [&](string_t) { queues.emplace<Queue<std::string>>(); },
-        [&]<HashablePrimitive T>(T) { queues.emplace<Queue<T>>(); }, [](auto) { LBUG_UNREACHABLE; });
+        [&]<HashablePrimitive T>(T) { queues.emplace<Queue<T>>(); }, [](auto) { UNREACHABLE_CODE; });
 }
 
 PhysicalTypeID IndexBuilderGlobalQueues::pkTypeID() const {
@@ -106,7 +106,7 @@ IndexBuilderLocalBuffers::IndexBuilderLocalBuffers(IndexBuilderGlobalQueues& glo
         globalQueues.pkTypeID(),
         [&](string_t) { buffers = std::make_unique<Buffers<std::string>>(); },
         [&]<HashablePrimitive T>(T) { buffers = std::make_unique<Buffers<T>>(); },
-        [](auto) { LBUG_UNREACHABLE; });
+        [](auto) { UNREACHABLE_CODE; });
 }
 
 void IndexBuilderLocalBuffers::flush(NodeBatchInsertErrorHandler& errorHandler) {
@@ -192,7 +192,7 @@ bool IndexBuilder::checkNonNullConstraint(const ColumnChunkData& chunk,
             chunk.getDataType().getPhysicalType(),
             [&](struct_entry_t) {
                 // primary key cannot be struct
-                LBUG_UNREACHABLE;
+                UNREACHABLE_CODE;
             },
             [&]<typename T>(T) {
                 errorHandler.handleError<T>({.message = ExceptionMessage::nullPKException(),

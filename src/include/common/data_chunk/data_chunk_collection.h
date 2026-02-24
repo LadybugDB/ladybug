@@ -16,11 +16,11 @@ public:
     std::vector<DataChunk>& getChunksUnsafe() { return chunks; }
     uint64_t getNumChunks() const { return chunks.size(); }
     const DataChunk& getChunk(uint64_t idx) const {
-        LBUG_ASSERT(idx < chunks.size());
+        DASSERT(idx < chunks.size());
         return chunks[idx];
     }
     DataChunk& getChunkUnsafe(uint64_t idx) {
-        LBUG_ASSERT(idx < chunks.size());
+        DASSERT(idx < chunks.size());
         return chunks[idx];
     }
 

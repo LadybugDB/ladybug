@@ -15,13 +15,13 @@ public:
     inline std::string getParameterName() const { return parameterName; }
 
     static std::unique_ptr<ParsedParameterExpression> deserialize(common::Deserializer&) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 
-    inline std::unique_ptr<ParsedExpression> copy() const override { LBUG_UNREACHABLE; }
+    inline std::unique_ptr<ParsedExpression> copy() const override { UNREACHABLE_CODE; }
 
 private:
-    void serializeInternal(common::Serializer&) const override { LBUG_UNREACHABLE; }
+    void serializeInternal(common::Serializer&) const override { UNREACHABLE_CODE; }
 
 private:
     std::string parameterName;

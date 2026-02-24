@@ -82,7 +82,7 @@ void StorageManager::closeFileHandle() {
 
 Table* StorageManager::getTable(table_id_t tableID) {
     std::lock_guard lck{mtx};
-    LBUG_ASSERT(tables.contains(tableID));
+    DASSERT(tables.contains(tableID));
     return tables.at(tableID).get();
 }
 
@@ -194,18 +194,18 @@ void StorageManager::createTable(TableCatalogEntry* entry) {
         createRelTableGroup(entry->ptrCast<RelGroupCatalogEntry>());
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
 
 WAL& StorageManager::getWAL() const {
-    LBUG_ASSERT(wal);
+    DASSERT(wal);
     return *wal;
 }
 
 ShadowFile& StorageManager::getShadowFile() const {
-    LBUG_ASSERT(shadowFile);
+    DASSERT(shadowFile);
     return *shadowFile;
 }
 
@@ -282,7 +282,7 @@ void StorageManager::rollbackCheckpoint(const Catalog& catalog) {
     std::lock_guard lck{mtx};
     const auto nodeTableEntries = catalog.getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     for (const auto tableEntry : nodeTableEntries) {
-        LBUG_ASSERT(tables.contains(tableEntry->getTableID()));
+        DASSERT(tables.contains(tableEntry->getTableID()));
         tables.at(tableEntry->getTableID())->rollbackCheckpoint();
     }
     dataFH->getPageManager()->rollbackCheckpoint();
@@ -309,7 +309,7 @@ void StorageManager::serialize(const Catalog& catalog, Serializer& ser) {
     ser.writeDebuggingInfo("num_node_tables");
     ser.write<uint64_t>(nodeTableEntries.size());
     for (const auto tableEntry : nodeTableEntries) {
-        LBUG_ASSERT(tables.contains(tableEntry->getTableID()));
+        DASSERT(tables.contains(tableEntry->getTableID()));
         ser.writeDebuggingInfo("table_id");
         ser.write<table_id_t>(tableEntry->getTableID());
         tables.at(tableEntry->getTableID())->serialize(ser);
@@ -323,7 +323,7 @@ void StorageManager::serialize(const Catalog& catalog, Serializer& ser) {
         ser.writeDebuggingInfo("num_inner_rel_tables");
         ser.write<uint64_t>(relGroupEntry.getNumRelTables());
         for (auto& info : relGroupEntry.getRelEntryInfos()) {
-            LBUG_ASSERT(tables.contains(info.oid));
+            DASSERT(tables.contains(info.oid));
             info.serialize(ser);
             tables.at(info.oid)->serialize(ser);
         }
@@ -344,7 +344,7 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
             throw RuntimeException(
                 std::format("Load table failed: table {} doesn't exist in catalog.", tableID));
         }
-        LBUG_ASSERT(!tables.contains(tableID));
+        DASSERT(!tables.contains(tableID));
         auto tableEntry = catalog->getTableCatalogEntry(&DUMMY_TRANSACTION, tableID)
                               ->ptrCast<NodeTableCatalogEntry>();
         tableNameCache[tableID] = tableEntry->getName();
@@ -375,7 +375,7 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
                                  ->ptrCast<RelGroupCatalogEntry>();
         for (auto k = 0u; k < numInnerRelTables; k++) {
             RelTableCatalogInfo info = RelTableCatalogInfo::deserialize(deSer);
-            LBUG_ASSERT(!tables.contains(info.oid));
+            DASSERT(!tables.contains(info.oid));
             if (!relGroupEntry->getStorage().empty()) {
                 // Create parquet-backed rel table
                 tables[info.oid] = std::make_unique<ParquetRelTable>(relGroupEntry,
@@ -398,7 +398,7 @@ const storage::DatabaseHeader* StorageManager::getOrInitDatabaseHeader(
     const main::ClientContext& clientContext) {
     if (databaseHeader == nullptr) {
         // We should only create the database header if a persistent one doesn't exist
-        LBUG_ASSERT(std::nullopt == DatabaseHeader::readDatabaseHeader(*dataFH->getFileInfo()));
+        DASSERT(std::nullopt == DatabaseHeader::readDatabaseHeader(*dataFH->getFileInfo()));
         databaseHeader = std::make_unique<DatabaseHeader>(
             DatabaseHeader::createInitialHeader(RandomEngine::Get(clientContext)));
     }
@@ -406,7 +406,7 @@ const storage::DatabaseHeader* StorageManager::getOrInitDatabaseHeader(
 }
 
 void StorageManager::setDatabaseHeader(std::unique_ptr<storage::DatabaseHeader> header) {
-    LBUG_ASSERT(!databaseHeader || header->databaseID.value == databaseHeader->databaseID.value);
+    DASSERT(!databaseHeader || header->databaseID.value == databaseHeader->databaseID.value);
     databaseHeader = std::move(header);
 }
 

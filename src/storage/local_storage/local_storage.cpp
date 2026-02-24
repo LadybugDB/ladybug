@@ -32,7 +32,7 @@ LocalTable* LocalStorage::getOrCreateLocalTable(Table& table) {
             tables[tableID] = std::make_unique<LocalRelTable>(tableEntry, table, mm);
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
     return tables.at(tableID).get();

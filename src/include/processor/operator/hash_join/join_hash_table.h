@@ -48,7 +48,7 @@ public:
     }
     uint8_t* getTupleForHash(common::hash_t hash) {
         auto slotIdx = getSlotIdxForHash(hash);
-        LBUG_ASSERT(slotIdx < maxNumHashSlots);
+        DASSERT(slotIdx < maxNumHashSlots);
         return ((uint8_t**)(hashSlotsBlocks[slotIdx >> numSlotsPerBlockLog2]
                                 ->getData()))[slotIdx & slotIdxInBlockMask];
     }

@@ -36,7 +36,7 @@ void GDSFuncSharedState::setGraphNodeMask(std::unique_ptr<NodeOffsetMaskMap> mas
 
 static expression_vector getResultColumns(const std::string& cypher, ClientContext* context) {
     auto parsedStatements = parser::Parser::parseQuery(cypher);
-    LBUG_ASSERT(parsedStatements.size() == 1);
+    DASSERT(parsedStatements.size() == 1);
     auto binder = Binder(context);
     auto boundStatement = binder.bind(*parsedStatements[0]);
     return boundStatement->getStatementResult()->getColumns();
@@ -85,12 +85,12 @@ static NativeGraphEntryTableInfo bindNodeEntry(ClientContext& context, const std
     if (!predicate.empty()) {
         auto cypher = std::format("MATCH (n:`{}`) RETURN n, {}", nodeEntry->getName(), predicate);
         auto columns = getResultColumns(cypher, &context);
-        LBUG_ASSERT(columns.size() == 2);
+        DASSERT(columns.size() == 2);
         return {nodeEntry, columns[0], columns[1]};
     } else {
         auto cypher = std::format("MATCH (n:`{}`) RETURN n", nodeEntry->getName());
         auto columns = getResultColumns(cypher, &context);
-        LBUG_ASSERT(columns.size() == 1);
+        DASSERT(columns.size() == 1);
         return {nodeEntry, columns[0], nullptr /* empty predicate */};
     }
 }
@@ -108,12 +108,12 @@ static NativeGraphEntryTableInfo bindRelEntry(ClientContext& context, const std:
         auto cypher =
             std::format("MATCH ()-[r:`{}`]->() RETURN r, {}", relEntry->getName(), predicate);
         auto columns = getResultColumns(cypher, &context);
-        LBUG_ASSERT(columns.size() == 2);
+        DASSERT(columns.size() == 2);
         return {relEntry, columns[0], columns[1]};
     } else {
         auto cypher = std::format("MATCH ()-[r:`{}`]->() RETURN r", relEntry->getName());
         auto columns = getResultColumns(cypher, &context);
-        LBUG_ASSERT(columns.size() == 1);
+        DASSERT(columns.size() == 1);
         return {relEntry, columns[0], nullptr /* empty predicate */};
     }
 }
@@ -220,7 +220,7 @@ void GDSFunction::getLogicalPlan(Planner* planner, const BoundReadingClause& rea
     planner->planReadOp(std::move(op), predicates, plan);
 
     auto nodeOutput = bindData->output[0]->ptrCast<NodeExpression>();
-    LBUG_ASSERT(nodeOutput != nullptr);
+    DASSERT(nodeOutput != nullptr);
     planner->getCardinliatyEstimatorUnsafe().init(*nodeOutput);
     auto scanPlan = planner->getNodePropertyScanPlan(*nodeOutput);
     if (scanPlan.isEmpty()) {
@@ -256,9 +256,9 @@ std::unique_ptr<PhysicalOperator> GDSFunction::getPhysicalPlan(PlanMapper* planM
         auto maskMap = funcSharedState->getGraphNodeMaskMap();
         planMapper->addOperatorMapping(logicalOp, call.get());
         for (auto logicalRoot : logicalCall->getChildren()) {
-            LBUG_ASSERT(logicalRoot->getNumChildren() == 1);
+            DASSERT(logicalRoot->getNumChildren() == 1);
             auto child = logicalRoot->getChild(0);
-            LBUG_ASSERT(child->getOperatorType() == LogicalOperatorType::SEMI_MASKER);
+            DASSERT(child->getOperatorType() == LogicalOperatorType::SEMI_MASKER);
             auto logicalSemiMasker = child->ptrCast<LogicalSemiMasker>();
             logicalSemiMasker->addTarget(logicalOp);
             for (auto tableID : logicalSemiMasker->getNodeTableIDs()) {

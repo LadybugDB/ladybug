@@ -7,7 +7,7 @@ namespace function {
 
 TableFuncMorsel SimpleTableFuncSharedState::getMorsel() {
     std::lock_guard lck{mtx};
-    LBUG_ASSERT(curRowIdx <= numRows);
+    DASSERT(curRowIdx <= numRows);
     if (curRowIdx == numRows) {
         return TableFuncMorsel::createInvalidMorsel();
     }

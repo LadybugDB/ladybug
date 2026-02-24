@@ -17,7 +17,7 @@ namespace lbug {
 namespace main {
 
 Connection::Connection(Database* database) {
-    LBUG_ASSERT(database != nullptr);
+    DASSERT(database != nullptr);
     this->database = database;
     this->dbLifeCycleManager = database->dbLifeCycleManager;
     clientContext = std::make_unique<ClientContext>(database);

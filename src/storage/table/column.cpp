@@ -35,9 +35,9 @@ struct ReadInternalIDValuesToVector {
     ReadInternalIDValuesToVector() : compressedReader{LogicalType(LogicalTypeID::INTERNAL_ID)} {}
     void operator()(const uint8_t* frame, PageCursor& pageCursor, ValueVector* resultVector,
         uint32_t posInVector, uint32_t numValuesToRead, const CompressionMetadata& metadata) {
-        LBUG_ASSERT(resultVector->dataType.getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
+        DASSERT(resultVector->dataType.getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
 
-        LBUG_ASSERT(numValuesToRead <= DEFAULT_VECTOR_CAPACITY);
+        DASSERT(numValuesToRead <= DEFAULT_VECTOR_CAPACITY);
         offset_t offsetBuffer[DEFAULT_VECTOR_CAPACITY];
 
         compressedReader(frame, pageCursor, reinterpret_cast<uint8_t*>(offsetBuffer), 0,
@@ -60,7 +60,7 @@ struct WriteInternalIDValuesToPage {
     }
     void operator()(uint8_t* frame, uint16_t posInFrame, ValueVector* vector,
         uint32_t offsetInVector, offset_t numValues, const CompressionMetadata& metadata) {
-        LBUG_ASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
+        DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
         compressedWriter(frame, posInFrame,
             reinterpret_cast<const uint8_t*>(
                 &vector->getValue<internalID_t>(offsetInVector).offset),
@@ -180,7 +180,7 @@ std::unique_ptr<ColumnChunkData> Column::flushNonNestedChunkData(const ColumnChu
 
 ColumnChunkMetadata Column::flushData(const ColumnChunkData& chunkData,
     PageAllocator& pageAllocator) {
-    LBUG_ASSERT(chunkData.sanityCheck());
+    DASSERT(chunkData.sanityCheck());
     const auto preScanMetadata = chunkData.getMetadataToFlush();
     auto allocatedBlock = pageAllocator.allocatePageRange(preScanMetadata.getNumPages());
     return chunkData.flushBuffer(pageAllocator, allocatedBlock, preScanMetadata);
@@ -195,8 +195,8 @@ void Column::scan(const ChunkState& state, offset_t startOffsetInChunk, offset_t
     RUNTIME_CHECK(if (resultVector->state) {
         sel_t prevValue = 0;
         resultVector->state->getSelVector().forEach([&](auto i) {
-            LBUG_ASSERT(prevValue <= i);
-            LBUG_ASSERT(i < length);
+            DASSERT(prevValue <= i);
+            DASSERT(i < length);
             prevValue = i;
         });
     });
@@ -213,9 +213,9 @@ void Column::scanSegment(const SegmentState& state, offset_t startOffsetInSegmen
     if (numValuesToScan == 0) {
         return;
     }
-    LBUG_ASSERT(startOffsetInSegment + numValuesToScan <= state.metadata.numValues);
+    DASSERT(startOffsetInSegment + numValuesToScan <= state.metadata.numValues);
     if (nullColumn) {
-        LBUG_ASSERT(state.nullState);
+        DASSERT(state.nullState);
         nullColumn->scanSegment(*state.nullState, startOffsetInSegment, numValuesToScan,
             resultVector, offsetInVector);
     }
@@ -255,7 +255,7 @@ void Column::scanSegment(const SegmentState& state, ColumnChunkData* outputChunk
     if (numValues == 0) {
         return;
     }
-    LBUG_ASSERT(offsetInSegment + numValues <= state.metadata.numValues);
+    DASSERT(offsetInSegment + numValues <= state.metadata.numValues);
     auto startLength = outputChunk->getNumValues();
     if (nullColumn) {
         nullColumn->scanSegment(*state.nullState, outputChunk->getNullData(), offsetInSegment,
@@ -280,12 +280,12 @@ void Column::scan(const ChunkState& state, ColumnChunkData* outputChunk, offset_
         [&](auto& segmentState, auto startOffsetInSegment, auto lengthInSegment, auto) {
             scanSegment(segmentState, outputChunk, startOffsetInSegment, lengthInSegment);
         });
-    LBUG_ASSERT(outputChunk->getNumValues() == numValuesScanned);
+    DASSERT(outputChunk->getNumValues() == numValuesScanned);
 }
 
 void Column::scanSegment(const SegmentState& state, offset_t startOffsetInSegment, offset_t length,
     uint8_t* result) const {
-    LBUG_ASSERT(startOffsetInSegment + length <= state.metadata.numValues);
+    DASSERT(startOffsetInSegment + length <= state.metadata.numValues);
     columnReadWriter->readCompressedValuesToPage(state, result, 0, startOffsetInSegment, length,
         readToPageFunc);
 }
@@ -329,10 +329,10 @@ void Column::updateStatistics(ColumnChunkMetadata& metadata, offset_t maxIndex,
     const std::optional<StorageValue>& min, const std::optional<StorageValue>& max) const {
     if (maxIndex >= metadata.numValues) {
         metadata.numValues = maxIndex + 1;
-        LBUG_ASSERT(sanityCheckForWrites(metadata, dataType));
+        DASSERT(sanityCheckForWrites(metadata, dataType));
     }
     // Either both or neither should be provided
-    LBUG_ASSERT((!min && !max) || (min && max));
+    DASSERT((!min && !max) || (min && max));
     if (min && max) {
         // If new values are outside of the existing min/max, update them
         if (max->gt(metadata.compMeta.max, dataType.getPhysicalType())) {
@@ -414,7 +414,7 @@ bool Column::isEndOffsetOutOfPagesCapacity(const ColumnChunkMetadata& metadata,
 void Column::checkpointColumnChunkInPlace(SegmentState& state,
     const ColumnCheckpointState& checkpointState, PageAllocator& pageAllocator) const {
     for (auto& segmentCheckpointState : checkpointState.segmentCheckpointStates) {
-        LBUG_ASSERT(segmentCheckpointState.numRows > 0);
+        DASSERT(segmentCheckpointState.numRows > 0);
         state.column->writeSegment(checkpointState.persistentData, state,
             segmentCheckpointState.offsetInSegment, segmentCheckpointState.chunkData,
             segmentCheckpointState.startRowInData, segmentCheckpointState.numRows);
@@ -432,12 +432,12 @@ void Column::checkpointNullData(const ColumnCheckpointState& checkpointState,
     PageAllocator& pageAllocator) const {
     std::vector<SegmentCheckpointState> nullSegmentCheckpointStates;
     for (const auto& segmentCheckpointState : checkpointState.segmentCheckpointStates) {
-        LBUG_ASSERT(segmentCheckpointState.chunkData.hasNullData());
+        DASSERT(segmentCheckpointState.chunkData.hasNullData());
         nullSegmentCheckpointStates.emplace_back(*segmentCheckpointState.chunkData.getNullData(),
             segmentCheckpointState.startRowInData, segmentCheckpointState.offsetInSegment,
             segmentCheckpointState.numRows);
     }
-    LBUG_ASSERT(checkpointState.persistentData.hasNullData());
+    DASSERT(checkpointState.persistentData.hasNullData());
     nullColumn->checkpointSegment(
         ColumnCheckpointState(*checkpointState.persistentData.getNullData(),
             std::move(nullSegmentCheckpointStates)),
@@ -450,7 +450,7 @@ std::vector<std::unique_ptr<ColumnChunkData>> Column::checkpointColumnChunkOutOf
     const auto numRows = std::max(checkpointState.endRowIdxToWrite, state.metadata.numValues);
     checkpointState.persistentData.setToInMemory();
     checkpointState.persistentData.resize(numRows);
-    LBUG_ASSERT(checkpointState.persistentData.getNumValues() == 0);
+    DASSERT(checkpointState.persistentData.getNumValues() == 0);
     scanSegment(state, &checkpointState.persistentData, 0, state.metadata.numValues);
     state.reclaimAllocatedPages(pageAllocator);
     // TODO(bmwinger): for simple compression types, we can predict whether or not we will need to
@@ -516,7 +516,7 @@ std::vector<std::unique_ptr<ColumnChunkData>> Column::checkpointSegment(
             } else if (dataType.getPhysicalType() == PhysicalTypeID::FLOAT) {
                 chunkState.getExceptionChunk<float>()->finalizeAndFlushToDisk(chunkState);
             } else {
-                LBUG_UNREACHABLE;
+                UNREACHABLE_CODE;
             }
             checkpointState.persistentData.getMetadata().compMeta.floatMetadata()->exceptionCount =
                 chunkState.metadata.compMeta.floatMetadata()->exceptionCount;
@@ -571,7 +571,7 @@ std::unique_ptr<Column> ColumnFactory::createColumn(std::string name, LogicalTyp
             enableCompression);
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }

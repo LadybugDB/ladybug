@@ -7,7 +7,7 @@ namespace lbug {
 namespace httpfs_extension {
 
 HTTPConfig::HTTPConfig(main::ClientContext* context) {
-    LBUG_ASSERT(context != nullptr);
+    DASSERT(context != nullptr);
     cacheFile =
         context->getCurrentSetting(HTTPCacheFileConfig::HTTP_CACHE_FILE_OPTION).getValue<bool>();
 }

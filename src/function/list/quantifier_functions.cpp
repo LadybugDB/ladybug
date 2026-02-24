@@ -24,7 +24,7 @@ void execQuantifierFunc(quantifier_handler handler,
     bool isConstantTrueExpr = listLambdaBindData->lambdaParamEvaluators.empty() &&
                               filterVector.getValue<bool>(filterVector.state->getSelVector()[0]);
     listLambdaBindData->rootEvaluator->evaluate();
-    LBUG_ASSERT(input.size() == 2);
+    DASSERT(input.size() == 2);
     auto& listInputSelVector = *inputSelVectors[0];
     uint64_t numSelectedValues = 0;
     for (auto i = 0u; i < listInputSelVector.getSelSize(); ++i) {

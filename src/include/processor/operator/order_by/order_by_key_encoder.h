@@ -89,7 +89,7 @@ private:
 
     template<typename type>
     static void encodeData(type /*data*/, uint8_t* /*resultPtr*/, bool /*swapBytes*/) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 
     static inline uint8_t flipSign(uint8_t key_byte) { return key_byte ^ 128; }

@@ -90,7 +90,7 @@ public:
 
         T dummy;
         while (pop(dummy)) {}
-        LBUG_ASSERT(head == tail.load(std::memory_order_relaxed));
+        DASSERT(head == tail.load(std::memory_order_relaxed));
         delete head;
     }
 

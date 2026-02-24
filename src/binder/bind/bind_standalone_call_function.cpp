@@ -22,7 +22,7 @@ std::unique_ptr<BoundStatement> Binder::bindStandaloneCallFunction(
     auto transaction = transaction::Transaction::Get(*clientContext);
     auto entry =
         catalog->getFunctionEntry(transaction, funcName, clientContext->useInternalCatalogEntry());
-    LBUG_ASSERT(entry);
+    DASSERT(entry);
     if (entry->getType() != catalog::CatalogEntryType::STANDALONE_TABLE_FUNCTION_ENTRY) {
         throw BinderException(
             "Only standalone table functions can be called without return statement.");

@@ -34,7 +34,7 @@ std::string FileTypeUtils::toString(FileType fileType) {
         return "NPY";
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }

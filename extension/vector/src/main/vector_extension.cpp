@@ -20,7 +20,7 @@ static void initHNSWEntries(main::ClientContext* context) {
             auto& nodeTable =
                 storageManager->getTable(indexEntry->getTableID())->cast<storage::NodeTable>();
             auto optionalIndex = nodeTable.getIndexHolder(indexEntry->getIndexName());
-            LBUG_ASSERT_UNCONDITIONAL(
+            ASSERT(
                 optionalIndex.has_value() && !optionalIndex.value().get().isLoaded());
             auto& unloadedIndex = optionalIndex.value().get();
             unloadedIndex.load(context, storageManager);

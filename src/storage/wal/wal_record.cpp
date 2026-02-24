@@ -76,7 +76,7 @@ std::unique_ptr<WALRecord> WALRecord::deserialize(Deserializer& deserializer,
         throw RuntimeException("Corrupted wal file. Read out invalid WAL record type.");
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
     walRecord->type = type;
@@ -182,7 +182,7 @@ static void serializeAlterExtraInfo(Serializer& serializer, const BoundAlterInfo
         serializer.write(connectionInfo->toTableID);
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
@@ -230,7 +230,7 @@ static decltype(auto) deserializeAlterRecord(Deserializer& deserializer) {
         extraInfo = std::make_unique<BoundExtraAlterFromToConnection>(fromTableID, toTableID);
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
     return std::make_tuple(alterType, tableName, std::move(extraInfo));

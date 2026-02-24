@@ -40,7 +40,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
 }
 
 static std::unique_ptr<FunctionBindData> bindFunc(ScalarBindFuncInput input) {
-    LBUG_ASSERT(input.arguments.size() == 1);
+    DASSERT(input.arguments.size() == 1);
     auto type = input.arguments[0]->dataType.copy();
     if (type.getLogicalTypeID() == LogicalTypeID::ANY) {
         type = LogicalType::INT64();

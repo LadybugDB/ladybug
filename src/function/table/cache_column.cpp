@@ -67,7 +67,7 @@ struct CacheArrayColumnSharedState final : public SimpleTableFuncSharedState {
     void merge(node_group_idx_t nodeGroupIdx,
         std::unique_ptr<storage::ColumnChunkData> columnChunkData) {
         std::unique_lock lck{mtx};
-        LBUG_ASSERT(cachedColumn->columnChunks.size() > nodeGroupIdx);
+        DASSERT(cachedColumn->columnChunks.size() > nodeGroupIdx);
         cachedColumn->columnChunks[nodeGroupIdx] = std::move(columnChunkData);
         ++numNodeGroupsCached;
     }

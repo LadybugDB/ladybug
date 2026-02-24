@@ -107,7 +107,7 @@ std::shared_ptr<Expression> Binder::createPath(const std::string& pathName,
                 nodeFields);
             extraFieldFromStructType(recursiveInfo->rel->getDataType(), relFieldNameSet, relFields);
         } else {
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
     auto nodeType = LogicalType::NODE(std::move(nodeFields));
@@ -177,7 +177,7 @@ static void checkRelDirectionTypeAgainstStorageDirection(const RelExpression* re
         }
         break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -218,7 +218,7 @@ std::shared_ptr<RelExpression> Binder::bindQueryRel(const RelPattern& relPattern
         directionType = RelDirectionType::BOTH;
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     // bind variable length
     std::shared_ptr<RelExpression> queryRel;
@@ -263,7 +263,7 @@ static std::vector<StructField> getBaseRelStructFields() {
 
 static std::shared_ptr<PropertyExpression> construct(LogicalType type,
     const std::string& propertyName, const Expression& child) {
-    LBUG_ASSERT(child.expressionType == ExpressionType::PATTERN);
+    DASSERT(child.expressionType == ExpressionType::PATTERN);
     auto& patternExpr = child.constCast<NodeOrRelExpression>();
     auto variableName = patternExpr.getVariableName();
     auto uniqueName = patternExpr.getUniqueName();

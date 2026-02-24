@@ -111,7 +111,7 @@ void DictionaryColumn::scan(const SegmentState& offsetState, const SegmentState&
         auto startOffset = offsets[offsetsToScan[pos].first - firstOffsetToScan];
         auto endOffset = offsets[offsetsToScan[pos].first - firstOffsetToScan + 1];
         auto lengthToScan = endOffset - startOffset;
-        LBUG_ASSERT(endOffset >= startOffset);
+        DASSERT(endOffset >= startOffset);
         scanValue(dataState, startOffset, lengthToScan, result, offsetsToScan[pos].second);
         // For each string which has the same index in the dictionary as the one we scanned,
         // copy the scanned string to its position in the result vector
@@ -129,7 +129,7 @@ void DictionaryColumn::scan(const SegmentState& offsetState, const SegmentState&
             // The offset chunk cannot have multiple offsets pointing to the same data, even if
             // consecutive, since that would break the mechanism for calculating the size of a
             // string.
-            LBUG_ASSERT(pos == offsetsToScan.size() - 1 ||
+            DASSERT(pos == offsetsToScan.size() - 1 ||
                       offsetsToScan[pos].first != offsetsToScan[pos + 1].first);
         }
     }

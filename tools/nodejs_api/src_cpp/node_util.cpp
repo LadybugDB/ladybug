@@ -208,8 +208,8 @@ std::unordered_map<std::string, std::unique_ptr<Value>> Util::TransformParameter
     std::unordered_map<std::string, std::unique_ptr<Value>> result;
     for (size_t i = 0; i < params.Length(); i++) {
         auto param = params.Get(i).As<Napi::Array>();
-        LBUG_ASSERT(param.Length() == 2);
-        LBUG_ASSERT(param.Get(uint32_t(0)).IsString());
+        DASSERT(param.Length() == 2);
+        DASSERT(param.Get(uint32_t(0)).IsString());
         auto key = param.Get(uint32_t(0)).ToString().Utf8Value();
         auto napiValue = param.Get(uint32_t(1));
         auto transformedVal = TransformNapiValue(napiValue);

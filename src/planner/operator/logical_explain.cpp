@@ -19,7 +19,7 @@ void LogicalExplain::computeSchema() {
         createEmptySchema();
         break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

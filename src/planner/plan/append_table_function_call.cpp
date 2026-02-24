@@ -9,14 +9,14 @@ namespace lbug {
 namespace planner {
 
 void Planner::appendTableFunctionCall(const BoundTableScanInfo& info, LogicalPlan& plan) {
-    LBUG_ASSERT(info.func.has_value());
+    DASSERT(info.func.has_value());
     auto call = std::make_shared<LogicalTableFunctionCall>(*info.func, info.bindData->copy());
     call->computeFactorizedSchema();
     plan.setLastOperator(std::move(call));
 }
 
 std::shared_ptr<LogicalOperator> Planner::getTableFunctionCall(const BoundTableScanInfo& info) {
-    LBUG_ASSERT(info.func.has_value());
+    DASSERT(info.func.has_value());
     auto call = std::make_shared<LogicalTableFunctionCall>(*info.func, info.bindData->copy());
     call->computeFactorizedSchema();
     return call;

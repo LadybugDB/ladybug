@@ -20,7 +20,7 @@ namespace processor {
 static void initMask(table_id_map_t<std::vector<SemiMask*>>& masksPerTable,
     const table_id_map_t<SemiMask*>& maskPerTable) {
     for (auto& [tableID, masks] : masksPerTable) {
-        LBUG_ASSERT(maskPerTable.contains(tableID));
+        DASSERT(maskPerTable.contains(tableID));
         auto mask = maskPerTable.at(tableID);
         mask->enable();
         masks.emplace_back(mask);
@@ -43,7 +43,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapSemiMasker(
         operatorNames.push_back(PhysicalOperatorUtils::operatorToString(physicalOp));
         switch (physicalOp->getOperatorType()) {
         case PhysicalOperatorType::SCAN_NODE_TABLE: {
-            LBUG_ASSERT(semiMasker.getTargetType() == SemiMaskTargetType::SCAN_NODE);
+            DASSERT(semiMasker.getTargetType() == SemiMaskTargetType::SCAN_NODE);
             auto scan = physicalOp->ptrCast<ScanNodeTable>();
             initMask(masksPerTable, scan->getSemiMasks());
         } break;
@@ -59,7 +59,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapSemiMasker(
                 initMask(masksPerTable, tableFunc->getSharedState()->getSemiMasks());
             } break;
             default:
-                LBUG_UNREACHABLE;
+                UNREACHABLE_CODE;
             }
         } break;
         case PhysicalOperatorType::RECURSIVE_EXTEND: {
@@ -76,13 +76,13 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapSemiMasker(
                 maskMap = sharedState->getPathNodeMaskMap();
             } break;
             default:
-                LBUG_UNREACHABLE;
+                UNREACHABLE_CODE;
             }
-            LBUG_ASSERT(maskMap != nullptr);
+            DASSERT(maskMap != nullptr);
             initMask(masksPerTable, maskMap->getMasks());
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
     auto keyPos = DataPos(inSchema->getExpressionPos(*semiMasker.getKey()));
@@ -123,7 +123,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapSemiMasker(
         }
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

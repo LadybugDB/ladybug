@@ -17,7 +17,7 @@ void unpackSingleField(const CompressedType* __restrict in, UncompressedType* __
         *out = static_cast<UncompressedType>(in[0]) >> shiftRight;
     } else {
         unpackSingleField<compressed_field - 1>(in, out, delta, shiftRight);
-        LBUG_ASSERT(
+        DASSERT(
             sizeof(UncompressedType) * 8 > compressed_field * compressedFieldSizeBits - shiftRight);
         *out |= static_cast<UncompressedType>(in[compressed_field])
                 << (compressed_field * compressedFieldSizeBits - shiftRight);
@@ -78,7 +78,7 @@ void packSingleField(const UncompressedType in, CompressedType* __restrict out, 
         setValueForBitsMatchingMask<false>(out[0], in, mask, shiftLeft);
     } else {
         packSingleField<compressed_field - 1>(in, out, delta, shiftLeft, mask);
-        LBUG_ASSERT(
+        DASSERT(
             sizeof(UncompressedType) * 8 > compressed_field * compressedFieldSizeBits - shiftLeft);
 
         setValueForBitsMatchingMask<true>(out[compressed_field], in, mask,

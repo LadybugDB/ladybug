@@ -5,11 +5,11 @@ namespace processor {
 
 void SimpleAggregateScan::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     BaseAggregateScan::initLocalStateInternal(resultSet, context);
-    LBUG_ASSERT(!scanInfo.aggregatesPos.empty());
+    DASSERT(!scanInfo.aggregatesPos.empty());
     auto outDataChunkPos = scanInfo.aggregatesPos[0].dataChunkPos;
     RUNTIME_CHECK({
         for (auto& dataPos : scanInfo.aggregatesPos) {
-            LBUG_ASSERT(dataPos.dataChunkPos == outDataChunkPos);
+            DASSERT(dataPos.dataChunkPos == outDataChunkPos);
         }
     });
     outDataChunk = resultSet->dataChunks[outDataChunkPos].get();
@@ -21,12 +21,12 @@ bool SimpleAggregateScan::getNextTuplesInternal(ExecutionContext* /*context*/) {
         return false;
     }
     // Output of simple aggregate is guaranteed to be a single value for each aggregate.
-    LBUG_ASSERT(startOffset == 0 && endOffset == 1);
+    DASSERT(startOffset == 0 && endOffset == 1);
     for (auto i = 0u; i < aggregateVectors.size(); i++) {
         scanInfo.moveAggResultToVectorFuncs[i](*aggregateVectors[i], 0 /* position to write */,
             sharedState->getAggregateState(i));
     }
-    LBUG_ASSERT(!scanInfo.aggregatesPos.empty());
+    DASSERT(!scanInfo.aggregatesPos.empty());
     outDataChunk->state->initOriginalAndSelectedSize(1);
     metrics->numOutputTuple.increase(outDataChunk->state->getSelVector().getSelSize());
     return true;

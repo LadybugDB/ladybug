@@ -43,7 +43,7 @@ void WarningContext::appendWarningMessages(const std::vector<CopyFromFileError>&
 const std::vector<WarningInfo>& WarningContext::getPopulatedWarnings() const {
     // if there are still unpopulated warnings when we try to get populated warnings something is
     // probably wrong
-    LBUG_ASSERT(unpopulatedWarnings.empty());
+    DASSERT(unpopulatedWarnings.empty());
     return populatedWarnings;
 }
 

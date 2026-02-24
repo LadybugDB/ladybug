@@ -9,7 +9,7 @@ namespace planner {
 void LogicalPathPropertyProbe::computeFactorizedSchema() {
     copyChildSchema(0);
     if (pathNodeIDs != nullptr) {
-        LBUG_ASSERT(schema->getNumGroups() == 1);
+        DASSERT(schema->getNumGroups() == 1);
         schema->insertToGroupAndScope(recursiveRel, 0);
     }
 
@@ -26,7 +26,7 @@ void LogicalPathPropertyProbe::computeFactorizedSchema() {
 void LogicalPathPropertyProbe::computeFlatSchema() {
     copyChildSchema(0);
     if (pathNodeIDs != nullptr) {
-        LBUG_ASSERT(schema->getNumGroups() == 1);
+        DASSERT(schema->getNumGroups() == 1);
         schema->insertToGroupAndScope(recursiveRel, 0);
     }
 

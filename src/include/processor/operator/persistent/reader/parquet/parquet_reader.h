@@ -64,9 +64,9 @@ private:
             std::make_shared<ThriftFileTransport>(fileInfo_, prefetch_mode));
     }
     const lbug_parquet::format::RowGroup& getGroup(ParquetReaderScanState& state) {
-        LBUG_ASSERT(
+        DASSERT(
             state.currentGroup >= 0 && (uint64_t)state.currentGroup < state.groupIdxList.size());
-        LBUG_ASSERT(state.groupIdxList[state.currentGroup] < metadata->row_groups.size());
+        DASSERT(state.groupIdxList[state.currentGroup] < metadata->row_groups.size());
         return metadata->row_groups[state.groupIdxList[state.currentGroup]];
     }
     static common::LogicalType deriveLogicalType(const lbug_parquet::format::SchemaElement& s_ele);

@@ -58,7 +58,7 @@ bool RelGroupCatalogEntry::isParent(table_id_t tableID) {
 }
 
 const RelTableCatalogInfo& RelGroupCatalogEntry::getSingleRelEntryInfo() const {
-    LBUG_ASSERT(relTableInfos.size() == 1);
+    DASSERT(relTableInfos.size() == 1);
     return relTableInfos[0];
 }
 
@@ -164,7 +164,7 @@ std::string RelGroupCatalogEntry::toCypher(const ToCypherInfo& info) const {
     auto transaction = transaction::Transaction::Get(*relGroupInfo.context);
     std::stringstream ss;
     ss << std::format("CREATE REL TABLE `{}` (", getName());
-    LBUG_ASSERT(!relTableInfos.empty());
+    DASSERT(!relTableInfos.empty());
     ss << getFromToStr(relTableInfos[0].nodePair, catalog, transaction, storage);
     for (auto i = 1u; i < relTableInfos.size(); ++i) {
         ss << std::format(", {}",
@@ -187,7 +187,7 @@ std::vector<RelDataDirection> RelGroupCatalogEntry::getRelDataDirections() const
         return {RelDataDirection::FWD, RelDataDirection::BWD};
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }

@@ -43,7 +43,7 @@ bool Transaction::getNextTuplesInternal(ExecutionContext* context) {
         TransactionManager::Get(*clientContext)->checkpoint(*clientContext);
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
     return true;
@@ -74,7 +74,7 @@ void Transaction::validateActiveTransaction(const TransactionContext& context) c
         }
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }

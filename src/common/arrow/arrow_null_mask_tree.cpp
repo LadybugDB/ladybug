@@ -210,11 +210,11 @@ ArrowNullMaskTree::ArrowNullMaskTree(const ArrowSchema* schema, const ArrowArray
             }
             break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
         break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

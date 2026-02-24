@@ -28,7 +28,7 @@ static PageCursor getAPIdxAndOffsetInAP(const PageStorageInfo& info, uint64_t id
 PageStorageInfo::PageStorageInfo(uint64_t elementSize)
     : alignedElementSize{std::bit_ceil(elementSize)},
       numElementsPerPage{LBUG_PAGE_SIZE / alignedElementSize} {
-    LBUG_ASSERT(elementSize <= LBUG_PAGE_SIZE);
+    DASSERT(elementSize <= LBUG_PAGE_SIZE);
 }
 
 PIPWrapper::PIPWrapper(const FileHandle& fileHandle, page_idx_t pipPageIdx)
@@ -85,7 +85,7 @@ bool DiskArrayInternal::checkOutOfBoundAccess(TransactionType trxType, uint64_t 
 void DiskArrayInternal::get(uint64_t idx, const Transaction* transaction,
     std::span<std::byte> val) {
     std::shared_lock sLck{diskArraySharedMtx};
-    LBUG_ASSERT(checkOutOfBoundAccess(transaction->getType(), idx));
+    DASSERT(checkOutOfBoundAccess(transaction->getType(), idx));
     auto apCursor = getAPIdxAndOffsetInAP(storageInfo, idx);
     page_idx_t apPageIdx = getAPPageIdxNoLock(apCursor.pageIdx, transaction->getType());
     if (transaction->getType() != TransactionType::CHECKPOINT || !hasTransactionalUpdates ||
@@ -124,7 +124,7 @@ void DiskArrayInternal::update(const Transaction* transaction, uint64_t idx,
     std::span<std::byte> val) {
     std::unique_lock xLck{diskArraySharedMtx};
     hasTransactionalUpdates = true;
-    LBUG_ASSERT(checkOutOfBoundAccess(transaction->getType(), idx));
+    DASSERT(checkOutOfBoundAccess(transaction->getType(), idx));
     auto apCursor = getAPIdxAndOffsetInAP(storageInfo, idx);
     // TODO: We are currently supporting only DiskArrays that can grow in size and not
     // those that can shrink in size. That is why we can use
@@ -166,7 +166,7 @@ void DiskArrayInternal::setNextPIPPageIDxOfPIPNoLock(uint64_t pipIdxOfPreviousPI
         if (pipIdxOfPreviousPIP == pips.size() - 1) {
             pipUpdates.updatedLastPIP->pipContents.nextPipPageIdx = nextPIPPageIdx;
         } else {
-            LBUG_ASSERT(pipIdxOfPreviousPIP >= pips.size() &&
+            DASSERT(pipIdxOfPreviousPIP >= pips.size() &&
                       pipUpdates.newPIPs.size() > pipIdxOfPreviousPIP - pips.size());
             pipUpdates.newPIPs[pipIdxOfPreviousPIP - pips.size()].pipContents.nextPipPageIdx =
                 nextPIPPageIdx;
@@ -181,7 +181,7 @@ page_idx_t DiskArrayInternal::getAPPageIdxNoLock(page_idx_t apIdx, TransactionTy
     } else if (pipIdx == pips.size() - 1 && pipUpdates.updatedLastPIP) {
         return pipUpdates.updatedLastPIP->pipContents.pageIdxs[offsetInPIP];
     } else {
-        LBUG_ASSERT(pipIdx >= pips.size() && pipIdx - pips.size() < pipUpdates.newPIPs.size());
+        DASSERT(pipIdx >= pips.size() && pipIdx - pips.size() < pipUpdates.newPIPs.size());
         return pipUpdates.newPIPs[pipIdx - pips.size()].pipContents.pageIdxs[offsetInPIP];
     }
 }
@@ -273,7 +273,7 @@ DiskArrayInternal::getAPPageIdxAndAddAPToPIPIfNecessaryForWriteTrxNoLock(
             false /* is not inserting a new ap page */);
     } else {
         // apIdx even if it's being inserted should never be > updatedDiskArrayHeader->numAPs.
-        LBUG_ASSERT(apIdx == getNumAPs(headerForWriteTrx));
+        DASSERT(apIdx == getNumAPs(headerForWriteTrx));
         // We need to add a new AP. This may further cause a new pip to be inserted, which is
         // handled by the if/else-if/else branch below.
         page_idx_t newAPPageIdx = pageAllocator.allocatePage();
@@ -284,7 +284,7 @@ DiskArrayInternal::getAPPageIdxAndAddAPToPIPIfNecessaryForWriteTrxNoLock(
         uint64_t pipIdx = pipIdxAndOffsetOfNewAP.first;
         uint64_t offsetOfNewAPInPIP = pipIdxAndOffsetOfNewAP.second;
         if (pipIdx < pips.size()) {
-            LBUG_ASSERT(pipIdx == pips.size() - 1);
+            DASSERT(pipIdx == pips.size() - 1);
             // We do not need to insert a new pip and we need to add newAPPageIdx to a PIP that
             // existed before this transaction started.
             if (!pipUpdates.updatedLastPIP.has_value()) {
@@ -309,7 +309,7 @@ DiskArrayInternal::getAPPageIdxAndAddAPToPIPIfNecessaryForWriteTrxNoLock(
 }
 
 DiskArrayInternal::WriteIterator& DiskArrayInternal::WriteIterator::seek(size_t newIdx) {
-    LBUG_ASSERT(newIdx < diskArray.headerForWriteTrx.numElements);
+    DASSERT(newIdx < diskArray.headerForWriteTrx.numElements);
     auto oldPageIdx = apCursor.pageIdx;
     idx = newIdx;
     apCursor = getAPIdxAndOffsetInAP(diskArray.storageInfo, idx);
@@ -377,14 +377,14 @@ page_idx_t DiskArrayInternal::getAPIdx(uint64_t idx) const {
 // This changes the contents directly in memory and not on disk (nor on the wal)
 uint8_t* BlockVectorInternal::operator[](uint64_t idx) const {
     auto apCursor = getAPIdxAndOffsetInAP(storageInfo, idx);
-    LBUG_ASSERT(apCursor.pageIdx < inMemArrayPages.size());
+    DASSERT(apCursor.pageIdx < inMemArrayPages.size());
     return inMemArrayPages[apCursor.pageIdx]->getData() + apCursor.elemPosInPage;
 }
 
 void BlockVectorInternal::resize(uint64_t newNumElements,
     const element_construct_func_t& defaultConstructor) {
     auto oldNumElements = numElements;
-    LBUG_ASSERT(newNumElements >= oldNumElements);
+    DASSERT(newNumElements >= oldNumElements);
     uint64_t oldNumArrayPages = inMemArrayPages.size();
     uint64_t newNumArrayPages = getNumArrayPagesNeededForElements(newNumElements);
     for (auto i = oldNumArrayPages; i < newNumArrayPages; ++i) {

@@ -13,7 +13,7 @@ namespace function {
 static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& params,
     const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
     common::SelectionVector* resultSelVector, void* /*dataPtr*/ = nullptr) {
-    LBUG_ASSERT(params.size() == 1);
+    DASSERT(params.size() == 1);
     UnaryFunctionExecutor::execute<internalID_t, int64_t, Offset>(*params[0], paramSelVectors[0],
         result, resultSelVector);
 }

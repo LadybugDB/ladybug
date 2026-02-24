@@ -268,7 +268,7 @@ void QueryGraphCollection::finalize() {
 }
 
 std::vector<QueryGraph> QueryGraphCollection::mergeGraphs(common::idx_t baseGraphIdx) {
-    LBUG_ASSERT(baseGraphIdx < queryGraphs.size());
+    DASSERT(baseGraphIdx < queryGraphs.size());
     auto& baseGraph = queryGraphs[baseGraphIdx];
     std::unordered_set<common::idx_t> mergedGraphIndices;
     mergedGraphIndices.insert(baseGraphIdx);

@@ -30,7 +30,7 @@ const PropertyDefinition& PropertyDefinitionCollection::getDefinition(
 
 const PropertyDefinition& PropertyDefinitionCollection::getDefinition(
     property_id_t propertyID) const {
-    LBUG_ASSERT(definitions.contains(propertyID));
+    DASSERT(definitions.contains(propertyID));
     return definitions.at(propertyID);
 }
 
@@ -39,7 +39,7 @@ column_id_t PropertyDefinitionCollection::getColumnID(const std::string& name) c
 }
 
 column_id_t PropertyDefinitionCollection::getColumnID(property_id_t propertyID) const {
-    LBUG_ASSERT(columnIDs.contains(propertyID));
+    DASSERT(columnIDs.contains(propertyID));
     return columnIDs.at(propertyID);
 }
 
@@ -59,7 +59,7 @@ void PropertyDefinitionCollection::add(const PropertyDefinition& definition) {
 }
 
 void PropertyDefinitionCollection::drop(const std::string& name) {
-    LBUG_ASSERT(contains(name));
+    DASSERT(contains(name));
     auto propertyID = nameToPropertyIDMap.at(name);
     definitions.erase(propertyID);
     columnIDs.erase(propertyID);
@@ -67,7 +67,7 @@ void PropertyDefinitionCollection::drop(const std::string& name) {
 }
 
 void PropertyDefinitionCollection::rename(const std::string& name, const std::string& newName) {
-    LBUG_ASSERT(contains(name));
+    DASSERT(contains(name));
     auto idx = nameToPropertyIDMap.at(name);
     definitions[idx].rename(newName);
     nameToPropertyIDMap.erase(name);
@@ -85,7 +85,7 @@ column_id_t PropertyDefinitionCollection::getMaxColumnID() const {
 }
 
 property_id_t PropertyDefinitionCollection::getPropertyID(const std::string& name) const {
-    LBUG_ASSERT(contains(name));
+    DASSERT(contains(name));
     return nameToPropertyIDMap.at(name);
 }
 

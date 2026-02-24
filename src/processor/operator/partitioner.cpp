@@ -21,7 +21,7 @@ std::string PartitionerPrintInfo::toString() const {
 }
 
 void PartitionerFunctions::partitionRelData(ValueVector* key, ValueVector* partitionIdxes) {
-    LBUG_ASSERT(key->state == partitionIdxes->state &&
+    DASSERT(key->state == partitionIdxes->state &&
               key->dataType.getPhysicalType() == PhysicalTypeID::INT64);
     for (auto i = 0u; i < key->state->getSelVector().getSelSize(); i++) {
         const auto pos = key->state->getSelVector()[i];
@@ -41,7 +41,7 @@ void CopyPartitionerSharedState::initialize(const logical_type_vec_t& columnType
 void CopyPartitionerSharedState::merge(
     const std::vector<std::unique_ptr<PartitioningBuffer>>& localPartitioningStates) {
     std::unique_lock xLck{mtx};
-    LBUG_ASSERT(partitioningBuffers.size() == localPartitioningStates.size());
+    DASSERT(partitioningBuffers.size() == localPartitioningStates.size());
     for (auto partitioningIdx = 0u; partitioningIdx < partitioningBuffers.size();
          partitioningIdx++) {
         partitioningBuffers[partitioningIdx]->merge(*localPartitioningStates[partitioningIdx]);
@@ -54,7 +54,7 @@ void CopyPartitionerSharedState::resetState(common::idx_t partitioningIdx) {
 }
 
 void PartitioningBuffer::merge(const PartitioningBuffer& localPartitioningState) const {
-    LBUG_ASSERT(partitions.size() == localPartitioningState.partitions.size());
+    DASSERT(partitions.size() == localPartitioningState.partitions.size());
     for (auto partitionIdx = 0u; partitionIdx < partitions.size(); partitionIdx++) {
         auto& sharedPartition = partitions[partitionIdx];
         auto& localPartition = localPartitioningState.partitions[partitionIdx];
@@ -130,7 +130,7 @@ void Partitioner::initializePartitioningStates(const logical_type_vec_t& columnT
 void Partitioner::executeInternal(ExecutionContext* context) {
     const auto relOffsetVector = resultSet->getValueVector(info.relOffsetDataPos);
     while (children[0]->getNextTuple(context)) {
-        LBUG_ASSERT(dataInfo.columnEvaluators.size() >= 1);
+        DASSERT(dataInfo.columnEvaluators.size() >= 1);
         const auto numRels = relOffsetVector->state->getSelVector().getSelSize();
         evaluateExpressions(numRels);
         auto currentRelOffset = sharedState->relTable->reserveRelOffsets(numRels);
@@ -175,7 +175,7 @@ void Partitioner::copyDataToPartitions(MemoryManager& memoryManager,
     for (auto i = 0u; i < chunkToCopyFrom.state->getSelVector().getSelSize(); i++) {
         const auto posToCopyFrom = chunkToCopyFrom.state->getSelVector()[i];
         const auto partitionIdx = partitionIdxes->getValue<partition_idx_t>(posToCopyFrom);
-        LBUG_ASSERT(
+        DASSERT(
             partitionIdx < localState->getPartitioningBuffer(partitioningIdx)->partitions.size());
         const auto& partition =
             localState->getPartitioningBuffer(partitioningIdx)->partitions[partitionIdx];

@@ -103,7 +103,7 @@ void NPArrayWrapper::appendElement(Value* value) {
             ((py::dict*)dataBuffer)[numElements] = PyQueryResult::convertValueToPyObject(*value);
         } break;
         default: {
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
         }
     }
@@ -182,7 +182,7 @@ py::dtype NPArrayWrapper::convertToArrayType(const LogicalType& type) {
         dtype = "object";
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
     return py::dtype(dtype);

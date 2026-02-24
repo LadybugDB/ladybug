@@ -80,7 +80,7 @@ case_insensitive_map_t<Value> Binder::bindParsingOptions(const options_t& parsin
         auto name = option.first;
         StringUtils::toUpper(name);
         auto expr = expressionBinder.bindExpression(*option.second);
-        LBUG_ASSERT(expr->expressionType == ExpressionType::LITERAL);
+        DASSERT(expr->expressionType == ExpressionType::LITERAL);
         auto literalExpr = dynamic_cast_checked<LiteralExpression*>(expr.get());
         options.insert({name, literalExpr->getValue()});
     }
@@ -107,7 +107,7 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindScanSource(const BaseScanSource
         return bindParameterScanSource(*source, options, columnNames, columnTypes);
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -193,7 +193,7 @@ static TableFunction getObjectScanFunc(const std::string& dbName, const std::str
     auto entry = attachedCatalog->getTableCatalogEntry(
         transaction::Transaction::Get(*clientContext), tableName);
     auto scanFunc = entry->ptrCast<TableCatalogEntry>()->getScanFunction();
-    LBUG_ASSERT(scanFunc.has_value());
+    DASSERT(scanFunc.has_value());
     return *scanFunc;
 }
 
@@ -305,7 +305,7 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindTableFuncScanSource(
     auto boundTableFunc = bindTableFunc(parsedFuncExpression.getFunctionName(),
         *tableFuncScanSource->functionExpression, {} /* yieldVariables */);
     auto& tableFunc = boundTableFunc.func;
-    LBUG_ASSERT(tableFunc.has_value());
+    DASSERT(tableFunc.has_value());
     auto info = bindTableScanSourceInfo(*this, *tableFunc, tableFunc->name,
         std::move(boundTableFunc.bindData), columnNames, columnTypes);
     return std::make_unique<BoundTableScanSource>(ScanSourceType::OBJECT, std::move(info));

@@ -16,7 +16,7 @@ public:
         PageAllocator& pageAllocator);
 
     Column* getChild(common::idx_t childIdx) const {
-        LBUG_ASSERT(childIdx < childColumns.size());
+        DASSERT(childIdx < childColumns.size());
         return childColumns[childIdx].get();
     }
     void writeSegment(ColumnChunkData& persistentChunk, SegmentState& state,

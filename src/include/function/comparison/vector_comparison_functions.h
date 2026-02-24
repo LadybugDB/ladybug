@@ -27,7 +27,7 @@ private:
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr = nullptr) {
-        LBUG_ASSERT(params.size() == 2);
+        DASSERT(params.size() == 2);
         BinaryFunctionExecutor::executeSwitch<LEFT_TYPE, RIGHT_TYPE, RESULT_TYPE, FUNC,
             BinaryComparisonFunctionWrapper>(*params[0], paramSelVectors[0], *params[1],
             paramSelVectors[1], result, resultSelVector, dataPtr);
@@ -37,7 +37,7 @@ private:
     static bool BinaryComparisonSelectFunction(
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         common::SelectionVector& selVector, void* dataPtr = nullptr) {
-        LBUG_ASSERT(params.size() == 2);
+        DASSERT(params.size() == 2);
         return BinaryFunctionExecutor::selectComparison<LEFT_TYPE, RIGHT_TYPE, FUNC>(*params[0],
             *params[1], selVector, dataPtr);
     }
@@ -154,7 +154,7 @@ private:
     template<typename FUNC>
     static void getSelectFunc(common::PhysicalTypeID leftTypeID, common::PhysicalTypeID rightTypeID,
         scalar_func_select_t& func) {
-        LBUG_ASSERT(leftTypeID == rightTypeID);
+        DASSERT(leftTypeID == rightTypeID);
         switch (leftTypeID) {
         case common::PhysicalTypeID::INT64: {
             func = BinaryComparisonSelectFunction<int64_t, int64_t, FUNC>;

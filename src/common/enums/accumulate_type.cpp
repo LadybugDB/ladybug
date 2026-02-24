@@ -14,7 +14,7 @@ std::string AccumulateTypeUtil::toString(AccumulateType type) {
         return "OPTIONAL";
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

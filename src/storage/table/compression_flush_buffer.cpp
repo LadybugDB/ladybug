@@ -14,8 +14,8 @@ using namespace transaction;
 
 ColumnChunkMetadata uncompressedFlushBuffer(std::span<const uint8_t> buffer, FileHandle* dataFH,
     const PageRange& entry, const ColumnChunkMetadata& metadata) {
-    LBUG_ASSERT(dataFH->getNumPages() >= entry.startPageIdx + entry.numPages);
-    LBUG_ASSERT(buffer.size_bytes() <= entry.numPages * LBUG_PAGE_SIZE);
+    DASSERT(dataFH->getNumPages() >= entry.startPageIdx + entry.numPages);
+    DASSERT(buffer.size_bytes() <= entry.numPages * LBUG_PAGE_SIZE);
     dataFH->writePagesToFile(buffer.data(), buffer.size(), entry.startPageIdx);
     return ColumnChunkMetadata(entry.startPageIdx, entry.numPages, metadata.numValues,
         metadata.compMeta);
@@ -28,7 +28,7 @@ ColumnChunkMetadata CompressedFlushBuffer::operator()(std::span<const uint8_t> b
     const auto compressedBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
     auto numPages = 0u;
     const auto numValuesPerPage = metadata.compMeta.numValues(LBUG_PAGE_SIZE, dataType);
-    LBUG_ASSERT(numValuesPerPage * entry.numPages >= metadata.numValues);
+    DASSERT(numValuesPerPage * entry.numPages >= metadata.numValues);
     while (valuesRemaining > 0) {
         const auto compressedSize = alg->compressNextPage(bufferStart, valuesRemaining,
             compressedBuffer.get(), LBUG_PAGE_SIZE, metadata.compMeta);
@@ -42,8 +42,8 @@ ColumnChunkMetadata CompressedFlushBuffer::operator()(std::span<const uint8_t> b
         if (compressedSize < LBUG_PAGE_SIZE) {
             memset(compressedBuffer.get() + compressedSize, 0, LBUG_PAGE_SIZE - compressedSize);
         }
-        LBUG_ASSERT(numPages < entry.numPages);
-        LBUG_ASSERT(dataFH->getNumPages() >= entry.startPageIdx + numPages);
+        DASSERT(numPages < entry.numPages);
+        DASSERT(dataFH->getNumPages() >= entry.startPageIdx + numPages);
         dataFH->writePageToFile(compressedBuffer.get(), entry.startPageIdx + numPages);
         numPages++;
     }
@@ -67,10 +67,10 @@ std::pair<std::unique_ptr<uint8_t[]>, uint64_t> flushCompressedFloats(const Comp
     const auto& castedAlg = dynamic_cast_checked<const FloatCompression<T>&>(alg);
 
     const auto* floatMetadata = metadata.compMeta.floatMetadata();
-    LBUG_ASSERT(floatMetadata->exceptionCapacity >= floatMetadata->exceptionCount);
+    DASSERT(floatMetadata->exceptionCapacity >= floatMetadata->exceptionCount);
 
     auto valuesRemaining = metadata.numValues;
-    LBUG_ASSERT(valuesRemaining <= buffer.size_bytes() / sizeof(T));
+    DASSERT(valuesRemaining <= buffer.size_bytes() / sizeof(T));
 
     const size_t exceptionBufferSize =
         EncodeException<T>::numPagesFromExceptions(floatMetadata->exceptionCapacity) *
@@ -79,7 +79,7 @@ std::pair<std::unique_ptr<uint8_t[]>, uint64_t> flushCompressedFloats(const Comp
     std::byte* exceptionBufferCursor = reinterpret_cast<std::byte*>(exceptionBuffer.get());
 
     const auto numValuesPerPage = metadata.compMeta.numValues(LBUG_PAGE_SIZE, dataType);
-    LBUG_ASSERT(numValuesPerPage * metadata.getNumDataPages(dataType) >= metadata.numValues);
+    DASSERT(numValuesPerPage * metadata.getNumDataPages(dataType) >= metadata.numValues);
 
     const auto compressedBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
     const uint8_t* bufferCursor = buffer.data();
@@ -105,13 +105,13 @@ std::pair<std::unique_ptr<uint8_t[]>, uint64_t> flushCompressedFloats(const Comp
         } else {
             valuesRemaining -= numValuesPerPage;
         }
-        LBUG_ASSERT(numPages < entry.numPages);
-        LBUG_ASSERT(dataFH->getNumPages() >= entry.startPageIdx + numPages);
+        DASSERT(numPages < entry.numPages);
+        DASSERT(dataFH->getNumPages() >= entry.startPageIdx + numPages);
         dataFH->writePageToFile(compressedBuffer.get(), entry.startPageIdx + numPages);
         numPages++;
     }
 
-    LBUG_ASSERT(totalExceptionCount == floatMetadata->exceptionCount);
+    DASSERT(totalExceptionCount == floatMetadata->exceptionCount);
 
     return {std::move(exceptionBuffer), exceptionBufferSize};
 }
@@ -127,7 +127,7 @@ void flushALPExceptions(std::span<const uint8_t> exceptionBuffer, FileHandle* da
 
     const auto exceptionStartPageIdx =
         entry.startPageIdx + entry.numPages - preExceptionMetadata.getNumPages();
-    LBUG_ASSERT(exceptionStartPageIdx + preExceptionMetadata.getNumPages() <= dataFH->getNumPages());
+    DASSERT(exceptionStartPageIdx + preExceptionMetadata.getNumPages() <= dataFH->getNumPages());
     PageRange exceptionBlock{exceptionStartPageIdx, preExceptionMetadata.getNumPages()};
 
     CompressedFlushBuffer exceptionFlushBuffer{
@@ -155,7 +155,7 @@ ColumnChunkMetadata CompressedFloatFlushBuffer<T>::operator()(std::span<const ui
             buffer, dataFH, entry, metadata);
     }
     // FlushBuffer should not be called with constant compression
-    LBUG_ASSERT(metadata.compMeta.compression == CompressionType::ALP);
+    DASSERT(metadata.compMeta.compression == CompressionType::ALP);
 
     auto [exceptionBuffer, exceptionBufferSize] =
         flushCompressedFloats<T>(*alg, dataType, buffer, dataFH, entry, metadata);

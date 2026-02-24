@@ -15,7 +15,7 @@ public:
         : BoundReadingClause{clauseType_}, info{std::move(info)} {}
 
     const function::TableFunction& getTableFunc() const {
-        LBUG_ASSERT(info.func.has_value());
+        DASSERT(info.func.has_value());
         return *info.func;
     }
     const function::TableFuncBindData* getBindData() const { return info.bindData.get(); }

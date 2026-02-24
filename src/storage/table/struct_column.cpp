@@ -43,7 +43,7 @@ std::unique_ptr<ColumnChunkData> StructColumn::flushChunkData(const ColumnChunkD
 
 void StructColumn::scanSegment(const SegmentState& state, ColumnChunkData* resultChunk,
     common::offset_t startOffsetInSegment, common::row_idx_t numValuesToScan) const {
-    LBUG_ASSERT(resultChunk->getDataType().getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(resultChunk->getDataType().getPhysicalType() == PhysicalTypeID::STRUCT);
     // Fix size since Column::scanSegment will adjust the size of the child chunks to be equal to
     // the size of the main one (see note in list_column.cpp)
     // TODO(bmwinger): eventually this shouldn't be necessary
@@ -79,7 +79,7 @@ void StructColumn::lookupInternal(const SegmentState& state, offset_t offsetInSe
 void StructColumn::writeSegment(ColumnChunkData& persistentChunk, SegmentState& state,
     offset_t offsetInSegment, const ColumnChunkData& data, offset_t dataOffset,
     length_t numValues) const {
-    LBUG_ASSERT(data.getDataType().getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(data.getDataType().getPhysicalType() == PhysicalTypeID::STRUCT);
     nullColumn->writeSegment(*persistentChunk.getNullData(), *state.nullState, offsetInSegment,
         *data.getNullData(), dataOffset, numValues);
     auto& structData = data.cast<StructChunkData>();
@@ -124,7 +124,7 @@ bool StructColumn::canCheckpointInPlace(const SegmentState& state,
     }
     for (size_t i = 0; i < childColumns.size(); ++i) {
         auto& structChunkData = checkpointState.persistentData.cast<StructChunkData>();
-        LBUG_ASSERT(childColumns.size() == structChunkData.getNumChildren());
+        DASSERT(childColumns.size() == structChunkData.getNumChildren());
         auto* childChunkData = structChunkData.getChild(i);
 
         std::vector<SegmentCheckpointState> childSegmentCheckpointStates;

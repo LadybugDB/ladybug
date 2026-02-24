@@ -183,20 +183,20 @@ void HashAggregateSharedState::scan(std::span<uint8_t*> entries,
     auto [table, tableStartOffset] = getPartitionForOffset(startOffset);
     // Due to the way FactorizedTable::lookup works, it's necessary to read one partition
     // at a time.
-    LBUG_ASSERT(startOffset - tableStartOffset + numTuplesToScan <= table->getNumTuples());
+    DASSERT(startOffset - tableStartOffset + numTuplesToScan <= table->getNumTuples());
     for (size_t pos = 0; pos < numTuplesToScan; pos++) {
         auto posInTable = startOffset + pos - tableStartOffset;
         entries[pos] = table->getTuple(posInTable);
     }
     table->lookup(keyVectors, columnIndices, entries.data(), 0, numTuplesToScan);
-    LBUG_ASSERT(true);
+    DASSERT(true);
 }
 
 void HashAggregateSharedState::assertFinalized() const {
     RUNTIME_CHECK(for (const auto& partition
                        : globalPartitions) {
-        LBUG_ASSERT(partition.finalized);
-        LBUG_ASSERT(partition.queue->empty());
+        DASSERT(partition.finalized);
+        DASSERT(partition.queue->empty());
     });
 }
 

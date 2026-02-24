@@ -225,7 +225,7 @@ void FTSIndex::finalize(main::ClientContext* context) {
 }
 
 void FTSIndex::checkpoint(main::ClientContext* context, storage::PageAllocator& pageAllocator) {
-    LBUG_ASSERT(!context->isInMemory());
+    DASSERT(!context->isInMemory());
     auto catalog = catalog::Catalog::Get(*context);
     internalTableInfo.docTable->checkpoint(context,
         catalog->getTableCatalogEntry(&DUMMY_CHECKPOINT_TRANSACTION,

@@ -24,7 +24,7 @@ FreeSpaceManager::FreeSpaceManager()
 common::idx_t FreeSpaceManager::getLevel(common::page_idx_t numPages) {
     // level is exponent of largest power of 2 that is <= numPages
     // e.g. 2 -> level 1, 5 -> level 2
-    LBUG_ASSERT(numPages > 0);
+    DASSERT(numPages > 0);
     return common::CountZeros<common::page_idx_t>::Trailing(std::bit_floor(numPages));
 }
 
@@ -33,7 +33,7 @@ bool FreeSpaceManager::entryCmp(const PageRange& a, const PageRange& b) {
 }
 
 void FreeSpaceManager::addFreePages(PageRange entry) {
-    LBUG_ASSERT(entry.numPages > 0);
+    DASSERT(entry.numPages > 0);
     const auto entryLevel = getLevel(entry.numPages);
     auto& freeList = getFreeList(freeLists, entryLevel);
     if (freeList.contains(entry)) {
@@ -75,7 +75,7 @@ std::optional<PageRange> FreeSpaceManager::popFreePages(common::page_idx_t numPa
 }
 
 PageRange FreeSpaceManager::splitPageRange(PageRange chunk, common::page_idx_t numRequiredPages) {
-    LBUG_ASSERT(chunk.numPages >= numRequiredPages);
+    DASSERT(chunk.numPages >= numRequiredPages);
     PageRange ret{chunk.startPageIdx, numRequiredPages};
     if (numRequiredPages < chunk.numPages) {
         PageRange remainingEntry{chunk.startPageIdx + numRequiredPages,
@@ -156,7 +156,7 @@ void FreeSpaceManager::serializeInternal(ValueProcessor& ser) const {
         serializeCheckpointedEntries(freeLists, ser);
     [[maybe_unused]] const auto numUncheckpointedEntries =
         serializeUncheckpointedEntries(uncheckpointedFreePageRanges, ser);
-    LBUG_ASSERT(numCheckpointedEntries + numUncheckpointedEntries == numEntries);
+    DASSERT(numCheckpointedEntries + numUncheckpointedEntries == numEntries);
 }
 
 common::page_idx_t FreeSpaceManager::getMaxNumPagesForSerialization() const {
@@ -263,12 +263,12 @@ common::row_idx_t FreeSpaceManager::getNumEntries() const {
 
 std::vector<PageRange> FreeSpaceManager::getEntries(common::row_idx_t startOffset,
     common::row_idx_t endOffset) const {
-    LBUG_ASSERT(endOffset >= startOffset);
+    DASSERT(endOffset >= startOffset);
     std::vector<PageRange> ret;
     FreeEntryIterator it{freeLists};
     it.advance(startOffset);
     while (ret.size() < endOffset - startOffset) {
-        LBUG_ASSERT(!it.done());
+        DASSERT(!it.done());
         ret.push_back(*it);
         ++it;
     }
@@ -289,7 +289,7 @@ void FreeEntryIterator::advance(common::row_idx_t numEntries) {
 }
 
 void FreeEntryIterator::operator++() {
-    LBUG_ASSERT(freeListIdx < freeLists.size());
+    DASSERT(freeListIdx < freeLists.size());
     ++freeListIt;
     if (freeListIt == freeLists[freeListIdx].end()) {
         ++freeListIdx;
@@ -311,7 +311,7 @@ void FreeEntryIterator::advanceFreeListIdx() {
 }
 
 PageRange FreeEntryIterator::operator*() const {
-    LBUG_ASSERT(freeListIdx < freeLists.size() && freeListIt != freeLists[freeListIdx].end());
+    DASSERT(freeListIdx < freeLists.size() && freeListIt != freeLists[freeListIdx].end());
     return *freeListIt;
 }
 

@@ -33,7 +33,7 @@ namespace storage {
 template<typename T>
 auto getTypedMinMax(std::span<const T> data, const NullMask* nullMask, uint64_t nullMaskOffset) {
     std::optional<StorageValue> min, max;
-    LBUG_ASSERT(data.size() > 0);
+    DASSERT(data.size() > 0);
     if (!nullMask || nullMask->hasNoNullsGuarantee()) {
         auto [minRaw, maxRaw] = std::minmax_element(data.begin(), data.end());
         min = StorageValue(*minRaw);
@@ -70,7 +70,7 @@ uint32_t getDataTypeSizeInChunk(const common::PhysicalTypeID& dataType) {
     }
     default: {
         auto size = PhysicalTypeUtils::getFixedTypeSize(dataType);
-        LBUG_ASSERT(size <= LBUG_PAGE_SIZE);
+        DASSERT(size <= LBUG_PAGE_SIZE);
         return size;
     }
     }
@@ -122,7 +122,7 @@ CompressionMetadata::CompressionMetadata(StorageValue min, StorageValue max,
 }
 
 const CompressionMetadata& CompressionMetadata::getChild(offset_t idx) const {
-    LBUG_ASSERT(idx < getChildCount(compression));
+    DASSERT(idx < getChildCount(compression));
     return children[idx];
 }
 
@@ -157,7 +157,7 @@ void CompressionMetadata::serialize(Serializer& serializer) const {
         floatMetadata()->serialize(serializer);
     }
 
-    LBUG_ASSERT(children.size() == getChildCount(compression));
+    DASSERT(children.size() == getChildCount(compression));
     for (size_t i = 0; i < children.size(); ++i) {
         children[i].serialize(serializer);
     }
@@ -405,7 +405,7 @@ std::optional<CompressionMetadata> ConstantCompression::analyze(const ColumnChun
     case PhysicalTypeID::INT128: {
         uint8_t size = chunk.getNumBytesPerValue();
         StorageValue value{};
-        LBUG_ASSERT(size <= sizeof(value.unsignedInt));
+        DASSERT(size <= sizeof(value.unsignedInt));
         // If there are no values, or only one value, we will always use constant compression
         // since the loop won't execute
         for (auto i = 1u; i < chunk.getNumValues(); i++) {
@@ -448,7 +448,7 @@ std::string CompressionMetadata::toString(const PhysicalTypeID physicalType) con
                     getChild(BITPACKING_CHILD_IDX))
                     .bitWidth;
             },
-            [](auto) -> uint8_t { LBUG_UNREACHABLE; });
+            [](auto) -> uint8_t { UNREACHABLE_CODE; });
         return std::format("FLOAT_COMPRESSION[{}], {} Exceptions", bitWidth,
             floatMetadata()->exceptionCount);
     }
@@ -458,10 +458,10 @@ std::string CompressionMetadata::toString(const PhysicalTypeID physicalType) con
             [&](common::internalID_t) {
                 return IntegerBitpacking<uint64_t>::getPackingInfo(*this).bitWidth;
             },
-            [](bool) -> uint8_t { LBUG_UNREACHABLE; },
+            [](bool) -> uint8_t { UNREACHABLE_CODE; },
             [&]<numeric_utils::IsIntegral T>(
                 T) { return IntegerBitpacking<T>::getPackingInfo(*this).bitWidth; },
-            [](auto) -> uint8_t { LBUG_UNREACHABLE; });
+            [](auto) -> uint8_t { UNREACHABLE_CODE; });
         return std::format("INTEGER_BITPACKING[{}]", bitWidth);
     }
     case CompressionType::BOOLEAN_BITPACKING: {
@@ -471,7 +471,7 @@ std::string CompressionMetadata::toString(const PhysicalTypeID physicalType) con
         return "CONSTANT";
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
@@ -580,7 +580,7 @@ bool IntegerBitpacking<T>::canUpdateInPlace(std::span<const T> values,
     uint64_t nullMaskOffset) {
     auto info = getPackingInfo(metadata);
     auto [min, max] = getTypedMinMax<T>(values, nullMask ? &*nullMask : nullptr, nullMaskOffset);
-    LBUG_ASSERT((min && max) || (!min && !max));
+    DASSERT((min && max) || (!min && !max));
     // If all values are null update can trivially be done in-place
     if (!min) {
         return true;
@@ -641,7 +641,7 @@ template<IntegerBitpackingType T>
 void IntegerBitpacking<T>::setValuesFromUncompressed(const uint8_t* srcBuffer, offset_t posInSrc,
     uint8_t* dstBuffer, offset_t posInDst, offset_t numValues, const CompressionMetadata& metadata,
     const NullMask* nullMask) const {
-    LBUG_UNUSED(nullMask);
+    UNUSED(nullMask);
 
     auto header = getPackingInfo(metadata);
 
@@ -649,7 +649,7 @@ void IntegerBitpacking<T>::setValuesFromUncompressed(const uint8_t* srcBuffer, o
     // non-zero offset However we don't care about the value stored for null values
     // Currently they will be mangled by storage+recovery (underflow in the subtraction
     // below)
-    LBUG_ASSERT(numValues == static_cast<offset_t>(std::ranges::count_if(
+    DASSERT(numValues == static_cast<offset_t>(std::ranges::count_if(
                                std::ranges::iota_view{posInSrc, posInSrc + numValues},
                                [srcBuffer, &metadata, nullMask](offset_t i) {
                                    auto value = reinterpret_cast<const T*>(srcBuffer)[i];
@@ -697,7 +697,7 @@ template<IntegerBitpackingType T>
 void IntegerBitpacking<T>::getValues(const uint8_t* chunkStart, uint8_t pos, uint8_t* dst,
     uint8_t numValuesToRead, const BitpackInfo<T>& header) const {
     const size_t maxReadIndex = pos + numValuesToRead;
-    LBUG_ASSERT(maxReadIndex <= CHUNK_SIZE);
+    DASSERT(maxReadIndex <= CHUNK_SIZE);
 
     for (size_t i = pos; i < maxReadIndex; i++) {
         // Always use unsigned version of unpacker to prevent sign-bit filling when right
@@ -741,7 +741,7 @@ uint64_t IntegerBitpacking<T>::compressNextPage(const uint8_t*& srcBuffer,
         return Uncompressed(sizeof(T)).compressNextPage(srcBuffer, numValuesRemaining, dstBuffer,
             dstBufferSize, metadata);
     }
-    LBUG_ASSERT(metadata.compression == CompressionType::INTEGER_BITPACKING);
+    DASSERT(metadata.compression == CompressionType::INTEGER_BITPACKING);
     auto info = getPackingInfo(metadata);
     auto bitWidth = info.bitWidth;
 
@@ -752,8 +752,8 @@ uint64_t IntegerBitpacking<T>::compressNextPage(const uint8_t*& srcBuffer,
     // Round up to nearest byte
     auto sizeToCompress =
         numValuesToCompress * bitWidth / 8 + (numValuesToCompress * bitWidth % 8 != 0);
-    LBUG_ASSERT(dstBufferSize >= CHUNK_SIZE);
-    LBUG_ASSERT(dstBufferSize >= sizeToCompress);
+    DASSERT(dstBufferSize >= CHUNK_SIZE);
+    DASSERT(dstBufferSize >= sizeToCompress);
     // This might overflow the source buffer if there are fewer values remaining than the chunk
     // size so we stop at the end of the last full chunk and use a temporary array to avoid
     // overflow.
@@ -955,7 +955,7 @@ void ReadCompressedValuesFromPageToVector::operator()(const uint8_t* frame, Page
         return booleanBitpacking.decompressFromPage(frame, pageCursor.elemPosInPage,
             resultVector->getData(), posInVector, numValuesToRead, metadata);
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -1035,7 +1035,7 @@ void ReadCompressedValuesFromPage::operator()(const uint8_t* frame, PageCursor& 
         return booleanBitpacking.copyFromPage(frame, pageCursor.elemPosInPage, result,
             startPosInResult, numValuesToRead, metadata);
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -1082,7 +1082,7 @@ void WriteCompressedValuesToPage::operator()(uint8_t* frame, uint16_t posInFrame
             metadata);
 
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -1131,7 +1131,7 @@ bool StorageValue::gt(const StorageValue& other, common::PhysicalTypeID type) co
     case common::PhysicalTypeID::DOUBLE:
         return this->floatVal > other.floatVal;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

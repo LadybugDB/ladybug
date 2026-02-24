@@ -31,7 +31,7 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput&) {
     graphEntrySet->validateGraphNotExist(bindData->graphName);
     // bind graph entry to check if input is valid or not. Ignore bind result.
     auto parsedStatements = parser::Parser::parseQuery(bindData->cypherQuery);
-    LBUG_ASSERT(parsedStatements.size() == 1);
+    DASSERT(parsedStatements.size() == 1);
     auto binder = binder::Binder(input.context->clientContext);
     binder.bind(*parsedStatements[0]);
     auto entry = std::make_unique<ParsedCypherGraphEntry>(bindData->cypherQuery);

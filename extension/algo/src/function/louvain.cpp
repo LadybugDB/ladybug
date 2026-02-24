@@ -495,7 +495,7 @@ void initInMemoryGraph(const table_id_t tableId, const offset_t numNodes, Graph*
     PhaseState& state) {
     const auto nbrTables = graph->getRelInfos(tableId);
     const auto nbrInfo = nbrTables[0];
-    LBUG_ASSERT(nbrInfo.srcTableID == nbrInfo.dstTableID);
+    DASSERT(nbrInfo.srcTableID == nbrInfo.dstTableID);
     // Set randomLookup to false to enable caching during graph materialization.
     const auto scanState = graph->prepareRelScan(*nbrInfo.relGroupEntry, nbrInfo.relTableID,
         nbrInfo.dstTableID, {}, false /*randomLookup*/);
@@ -578,7 +578,7 @@ static common::offset_t tableFunc(const TableFuncInput& input, TableFuncOutput&)
     auto mm = MemoryManager::Get(*clientContext);
     const auto graph = sharedState->graph.get();
     auto maxOffsetMap = graph->getMaxOffsetMap(transaction);
-    LBUG_ASSERT(graph->getNodeTableIDs().size() == 1);
+    DASSERT(graph->getNodeTableIDs().size() == 1);
     const auto tableID = graph->getNodeTableIDs()[0];
     const auto origNumNodes = graph->getMaxOffset(transaction, tableID);
 

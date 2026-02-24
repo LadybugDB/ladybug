@@ -67,7 +67,7 @@ static void exportDatabaseCollectParallelFlags(const std::unique_ptr<DummySimple
     auto exportDB = sink->getChild(0)->ptrCast<ExportDB>();
     for (auto i = 1u; i < sink->getNumChildren(); ++i) {
         const auto& tableFuncCall = sink->getChild(i);
-        LBUG_ASSERT_UNCONDITIONAL(
+        ASSERT(
             tableFuncCall->getChild(0)->getOperatorType() == PhysicalOperatorType::COPY_TO);
         const auto& [file, parallelFlag] =
             tableFuncCall->getChild(0)->ptrCast<CopyTo>()->getParallelFlag();
@@ -80,7 +80,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExportDatabase(
     auto exportDatabase = logicalOperator->constPtrCast<LogicalExportDatabase>();
     auto fs = VirtualFileSystem::GetUnsafe(*clientContext);
     auto boundFileInfo = exportDatabase->getBoundFileInfo();
-    LBUG_ASSERT(boundFileInfo->filePaths.size() == 1);
+    DASSERT(boundFileInfo->filePaths.size() == 1);
     auto filePath = boundFileInfo->filePaths[0];
     if (fs->fileOrPathExists(filePath, clientContext)) {
         throw RuntimeException(std::format("Directory {} already exists.", filePath));
@@ -135,7 +135,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtension(const LogicalOperator
             std::move(printInfo));
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -147,7 +147,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtensionClause(
             return physicalOP;
         }
     }
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapCreateGraph(

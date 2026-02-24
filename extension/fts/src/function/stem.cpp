@@ -100,7 +100,7 @@ void StemStaticStemmer::operation(string_t& word, string_t& /*stemmer*/,
     string_t& result, common::ValueVector& /*leftValueVector*/,
     common::ValueVector& /*rightValueVector*/, common::ValueVector& resultVector, void* dataPtr) {
     auto stemBindData = reinterpret_cast<StemBindData*>(dataPtr);
-    LBUG_ASSERT(stemBindData->sbStemmer != nullptr);
+    DASSERT(stemBindData->sbStemmer != nullptr);
     auto stemData = sb_stemmer_stem(stemBindData->sbStemmer,
         reinterpret_cast<const sb_symbol*>(word.getData()), word.len);
     common::StringVector::addString(&resultVector, result, reinterpret_cast<const char*>(stemData),

@@ -23,7 +23,7 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
 static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& params,
     const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
     common::SelectionVector* resultSelVector, void* /*dataPtr*/) {
-    LBUG_ASSERT(params.size() == 2);
+    DASSERT(params.size() == 2);
     result.resetAuxiliaryBuffer();
     for (auto i = 0u; i < resultSelVector->getSelSize(); ++i) {
         auto resultPos = (*resultSelVector)[i];
@@ -40,7 +40,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
 
 static bool selectFunc(const std::vector<std::shared_ptr<ValueVector>>& params,
     SelectionVector& selVector, void* /* dataPtr */) {
-    LBUG_ASSERT(params.size() == 2);
+    DASSERT(params.size() == 2);
     auto unFlatVectorIdx = 0u;
     for (auto i = 0u; i < params.size(); ++i) {
         if (!params[i]->state->isFlat()) {

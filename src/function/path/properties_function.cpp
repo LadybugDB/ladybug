@@ -42,7 +42,7 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
 static void compileFunc(FunctionBindData* bindData,
     const std::vector<std::shared_ptr<ValueVector>>& parameters,
     std::shared_ptr<ValueVector>& result) {
-    LBUG_ASSERT(parameters[0]->dataType.getPhysicalType() == PhysicalTypeID::LIST);
+    DASSERT(parameters[0]->dataType.getPhysicalType() == PhysicalTypeID::LIST);
     auto& propertiesBindData = bindData->cast<PropertiesBindData>();
     auto fieldVector = StructVector::getFieldVector(ListVector::getDataVector(parameters[0].get()),
         propertiesBindData.childIdx);

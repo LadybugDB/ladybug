@@ -64,25 +64,25 @@ struct SegmentState {
     }
 
     SegmentState& getChildState(common::idx_t childIdx) {
-        LBUG_ASSERT(childIdx < childrenStates.size());
+        DASSERT(childIdx < childrenStates.size());
         return childrenStates[childIdx];
     }
     const SegmentState& getChildState(common::idx_t childIdx) const {
-        LBUG_ASSERT(childIdx < childrenStates.size());
+        DASSERT(childIdx < childrenStates.size());
         return childrenStates[childIdx];
     }
 
     template<std::floating_point T>
     InMemoryExceptionChunk<T>* getExceptionChunk() {
         using GetType = std::unique_ptr<InMemoryExceptionChunk<T>>;
-        LBUG_ASSERT(std::holds_alternative<GetType>(alpExceptionChunk));
+        DASSERT(std::holds_alternative<GetType>(alpExceptionChunk));
         return std::get<GetType>(alpExceptionChunk).get();
     }
 
     template<std::floating_point T>
     const InMemoryExceptionChunk<T>* getExceptionChunkConst() const {
         using GetType = std::unique_ptr<InMemoryExceptionChunk<T>>;
-        LBUG_ASSERT(std::holds_alternative<GetType>(alpExceptionChunk));
+        DASSERT(std::holds_alternative<GetType>(alpExceptionChunk));
         return std::get<GetType>(alpExceptionChunk).get();
     }
 
@@ -114,14 +114,14 @@ public:
 
     template<typename T>
     T getValue(common::offset_t pos) const {
-        LBUG_ASSERT(pos < numValues);
-        LBUG_ASSERT(residencyState != ResidencyState::ON_DISK);
+        DASSERT(pos < numValues);
+        DASSERT(residencyState != ResidencyState::ON_DISK);
         return getData<T>()[pos];
     }
     template<typename T>
     void setValue(T val, common::offset_t pos) {
-        LBUG_ASSERT(pos < capacity);
-        LBUG_ASSERT(residencyState != ResidencyState::ON_DISK);
+        DASSERT(pos < capacity);
+        DASSERT(residencyState != ResidencyState::ON_DISK);
         getData<T>()[pos] = val;
         if (pos >= numValues) {
             numValues = pos + 1;
@@ -144,15 +144,15 @@ public:
     ResidencyState getResidencyState() const { return residencyState; }
     bool isCompressionEnabled() const { return enableCompression; }
     ColumnChunkMetadata& getMetadata() {
-        LBUG_ASSERT(residencyState == ResidencyState::ON_DISK);
+        DASSERT(residencyState == ResidencyState::ON_DISK);
         return metadata;
     }
     const ColumnChunkMetadata& getMetadata() const {
-        LBUG_ASSERT(residencyState == ResidencyState::ON_DISK);
+        DASSERT(residencyState == ResidencyState::ON_DISK);
         return metadata;
     }
     void setMetadata(const ColumnChunkMetadata& metadata_) {
-        LBUG_ASSERT(residencyState == ResidencyState::ON_DISK);
+        DASSERT(residencyState == ResidencyState::ON_DISK);
         metadata = metadata_;
     }
 
@@ -210,7 +210,7 @@ public:
     void populateWithDefaultVal(evaluator::ExpressionEvaluator& defaultEvaluator,
         uint64_t& numValues_, ColumnStats* newColumnStats);
     virtual void finalize() {
-        LBUG_ASSERT(residencyState != ResidencyState::ON_DISK);
+        DASSERT(residencyState != ResidencyState::ON_DISK);
         // DO NOTHING.
     }
 
@@ -324,8 +324,8 @@ protected:
 
 template<>
 inline void ColumnChunkData::setValue(bool val, common::offset_t pos) {
-    LBUG_ASSERT(pos < capacity);
-    LBUG_ASSERT(residencyState != ResidencyState::ON_DISK);
+    DASSERT(pos < capacity);
+    DASSERT(residencyState != ResidencyState::ON_DISK);
     // Buffer is rounded up to the nearest 8 bytes so that this cast is safe
     common::NullMask::setNull(getData<uint64_t>(), pos, val);
     if (pos >= numValues) {
@@ -407,7 +407,7 @@ public:
 
     void copyFromBuffer(const uint64_t* srcBuffer, uint64_t srcOffset, uint64_t dstOffset,
         uint64_t numBits) {
-        LBUG_ASSERT(numBits > 0);
+        DASSERT(numBits > 0);
         common::NullMask::copyNullMask(srcBuffer, srcOffset, getData<uint64_t>(), dstOffset,
             numBits);
         auto [min, max] = common::NullMask::getMinMax(srcBuffer, srcOffset, numBits);

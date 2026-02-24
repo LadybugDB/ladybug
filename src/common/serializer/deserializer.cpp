@@ -12,13 +12,13 @@ void Deserializer::deserializeValue(std::string& value) {
 }
 
 void Deserializer::validateDebuggingInfo(std::string& value, const std::string& expectedVal) {
-#if defined(LBUG_DESER_DEBUG) && (defined(LBUG_RUNTIME_CHECKS) || !defined(NDEBUG))
+#if defined(DESER_DEBUG) && (defined(RUNTIME_CHECKS) || !defined(NDEBUG))
     deserializeValue<std::string>(value);
-    LBUG_ASSERT(value == expectedVal);
+    DASSERT(value == expectedVal);
 #endif
     // DO NOTHING
-    LBUG_UNUSED(value);
-    LBUG_UNUSED(expectedVal);
+    UNUSED(value);
+    UNUSED(expectedVal);
 }
 
 } // namespace common

@@ -20,7 +20,7 @@ std::string LogicalDelete::getExpressionsForPrinting() const {
 }
 
 f_group_pos_set LogicalDelete::getGroupsPosToFlatten() const {
-    LBUG_ASSERT(!infos.empty());
+    DASSERT(!infos.empty());
     const auto childSchema = children[0]->getSchema();
     f_group_pos_set dependentGroupPos;
     switch (infos[0].tableType) {
@@ -38,7 +38,7 @@ f_group_pos_set LogicalDelete::getGroupsPosToFlatten() const {
         }
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     return FlattenAll::getGroupsPosToFlatten(dependentGroupPos, *childSchema);
 }

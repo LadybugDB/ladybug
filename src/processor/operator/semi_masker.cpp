@@ -122,8 +122,8 @@ bool NodeIDsSingleTableSemiMasker::getNextTuplesInternal(ExecutionContext* conte
         return false;
     }
     auto& selVector = keyVector->state->getSelVector();
-    LBUG_ASSERT(keyVector->state == srcNodeIDVector->state);
-    LBUG_ASSERT(keyVector->state == dstNodeIDVector->state);
+    DASSERT(keyVector->state == srcNodeIDVector->state);
+    DASSERT(keyVector->state == dstNodeIDVector->state);
     auto keyDataVector = ListVector::getDataVector(keyVector);
     for (auto i = 0u; i < selVector.getSelSize(); ++i) {
         auto pos = selVector[i];
@@ -142,8 +142,8 @@ bool NodeIDsMultipleTableSemiMasker::getNextTuplesInternal(ExecutionContext* con
         return false;
     }
     auto& selVector = keyVector->state->getSelVector();
-    LBUG_ASSERT(keyVector->state == srcNodeIDVector->state);
-    LBUG_ASSERT(keyVector->state == dstNodeIDVector->state);
+    DASSERT(keyVector->state == srcNodeIDVector->state);
+    DASSERT(keyVector->state == dstNodeIDVector->state);
     auto keyDataVector = ListVector::getDataVector(keyVector);
     for (auto i = 0u; i < selVector.getSelSize(); ++i) {
         auto pos = selVector[i];

@@ -154,7 +154,7 @@ struct InMemHNSWLayerInfo {
     uint64_t getDimension() const { return embeddings->getDimension(); }
     EmbeddingHandle getEmbedding(common::offset_t offsetInGraph,
         GetEmbeddingsScanState& scanState) const {
-        LBUG_ASSERT(offsetInGraph < numNodes);
+        DASSERT(offsetInGraph < numNodes);
         return embeddings->getEmbedding(offsetMap.graphToNodeOffset(offsetInGraph), scanState);
     }
     std::vector<EmbeddingHandle> getEmbeddings(std::span<const common::offset_t> offsetsInGraph,
@@ -218,11 +218,11 @@ public:
 
     std::unique_ptr<InsertState> initInsertState(main::ClientContext*,
         storage::visible_func) override {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     void insert(transaction::Transaction*, const common::ValueVector&,
         const std::vector<common::ValueVector*>&, InsertState&) override {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     // Note that the input is only `offset`, as we assume embeddings are already cached in memory.
     bool insert(common::offset_t offset, CreateInMemHNSWLocalState* localState);

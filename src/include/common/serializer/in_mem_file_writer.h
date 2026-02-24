@@ -22,7 +22,7 @@ public:
     void write(const uint8_t* data, uint64_t size) override;
 
     std::span<uint8_t> getPage(page_idx_t pageIdx) const {
-        LBUG_ASSERT(pageIdx < pages.size());
+        DASSERT(pageIdx < pages.size());
         return pages[pageIdx]->getBuffer();
     }
 

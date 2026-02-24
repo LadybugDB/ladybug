@@ -65,7 +65,7 @@ static void copyParameterValueToStructFieldVector(const ValueVector* parameter,
     ValueVector* structField, DataChunkState* structVectorState) {
     // If the parameter is unFlat, then its state must be consistent with the result's state.
     // Thus, we don't need to copy values to structFieldVector.
-    LBUG_ASSERT(parameter->state->isFlat());
+    DASSERT(parameter->state->isFlat());
     auto paramPos = parameter->state->getSelVector()[0];
     if (structVectorState->isFlat()) {
         auto pos = structVectorState->getSelVector()[0];
@@ -98,7 +98,7 @@ void StructPackFunctions::execFunc(
 
 void StructPackFunctions::undirectedRelPackExecFunc(
     const std::vector<std::shared_ptr<ValueVector>>& parameters, ValueVector& result, void*) {
-    LBUG_ASSERT(parameters.size() > 1);
+    DASSERT(parameters.size() > 1);
     // Force copy of the src and internal id child vectors because we might modify them later.
     for (auto i = 0u; i < 2; i++) {
         auto& parameter = parameters[i];

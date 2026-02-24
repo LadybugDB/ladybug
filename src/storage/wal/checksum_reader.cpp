@@ -44,7 +44,7 @@ void ChecksumReader::onObjectBegin() {
 }
 
 void ChecksumReader::onObjectEnd() {
-    LBUG_ASSERT(currentEntrySize.has_value());
+    DASSERT(currentEntrySize.has_value());
     const uint64_t computedChecksum = common::checksum(entryBuffer->getData(), *currentEntrySize);
     uint64_t storedChecksum{};
     deserializer.deserializeValue(storedChecksum);

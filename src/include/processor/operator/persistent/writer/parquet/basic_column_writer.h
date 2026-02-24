@@ -67,7 +67,7 @@ protected:
     // Retrieves the row size of a vector at the specified location. Only used for scalar types.
     virtual uint64_t getRowSize(common::ValueVector* /*vector*/, uint64_t /*index*/,
         BasicColumnWriterState& /*state*/) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     // Writes a (subset of a) vector to the specified serializer. Only used for scalar types.
     virtual void writeVector(common::Serializer& bufferedSerializer, ColumnWriterStatistics* stats,
@@ -76,12 +76,12 @@ protected:
 
     virtual bool hasDictionary(BasicColumnWriterState& /*writerState*/) { return false; }
     // The number of elements in the dictionary.
-    virtual uint64_t dictionarySize(BasicColumnWriterState& /*writerState*/) { LBUG_UNREACHABLE; }
+    virtual uint64_t dictionarySize(BasicColumnWriterState& /*writerState*/) { UNREACHABLE_CODE; }
     void writeDictionary(BasicColumnWriterState& state,
         std::unique_ptr<common::BufferWriter> bufferedSerializer, uint64_t rowCount);
     virtual void flushDictionary(BasicColumnWriterState& /*state*/,
         ColumnWriterStatistics* /*stats*/) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 
     void setParquetStatistics(BasicColumnWriterState& state,

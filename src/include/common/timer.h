@@ -34,7 +34,7 @@ public:
         auto now = std::chrono::high_resolution_clock::now();
         auto duration = now - startTime;
         auto count = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-        LBUG_ASSERT(count >= 0);
+        DASSERT(count >= 0);
         return count;
     }
 

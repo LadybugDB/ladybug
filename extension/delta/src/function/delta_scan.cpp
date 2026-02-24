@@ -29,7 +29,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
             returnColumnNames.push_back(name);
         }
     }
-    LBUG_ASSERT(returnTypes.size() == returnColumnNames.size());
+    DASSERT(returnTypes.size() == returnColumnNames.size());
     returnColumnNames =
         TableFunction::extractYieldVariables(returnColumnNames, input->yieldVariables);
     auto columns = input->binder->createVariables(returnColumnNames, returnTypes);

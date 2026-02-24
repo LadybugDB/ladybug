@@ -7,7 +7,7 @@ using namespace lbug::testing;
 
 // This class starts database without initializing graph.
 class APIEmptyDBTest : public BaseGraphTest {
-    std::string getInputDir() override { LBUG_UNREACHABLE; }
+    std::string getInputDir() override { UNREACHABLE_CODE; }
 };
 
 class CApiDatabaseTest : public APIEmptyDBTest {

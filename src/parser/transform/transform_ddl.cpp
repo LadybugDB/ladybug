@@ -202,7 +202,7 @@ DropType transformDropType(CypherParser::IC_DropContext& ctx) {
     } else if (ctx.GRAPH()) {
         return DropType::GRAPH;
     } else {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -228,7 +228,7 @@ std::unique_ptr<Statement> Transformer::transformAddFromToConnection(
     auto tableName = transformSchemaName(*ctx.oC_SchemaName());
     auto schemaNameCtx =
         ctx.iC_AlterOptions()->iC_AddFromToConnection()->iC_FromToConnection()->oC_SchemaName();
-    LBUG_ASSERT(schemaNameCtx.size() == 2);
+    DASSERT(schemaNameCtx.size() == 2);
     auto srcTableName = transformSchemaName(*schemaNameCtx[0]);
     auto dstTableName = transformSchemaName(*schemaNameCtx[1]);
     auto extraInfo = std::make_unique<ExtraAddFromToConnection>(std::move(srcTableName),
@@ -247,7 +247,7 @@ std::unique_ptr<Statement> Transformer::transformDropFromToConnection(
     auto tableName = transformSchemaName(*ctx.oC_SchemaName());
     auto schemaNameCtx =
         ctx.iC_AlterOptions()->iC_DropFromToConnection()->iC_FromToConnection()->oC_SchemaName();
-    LBUG_ASSERT(schemaNameCtx.size() == 2);
+    DASSERT(schemaNameCtx.size() == 2);
     auto srcTableName = transformSchemaName(*schemaNameCtx[0]);
     auto dstTableName = transformSchemaName(*schemaNameCtx[1]);
     auto extraInfo = std::make_unique<ExtraAddFromToConnection>(std::move(srcTableName),

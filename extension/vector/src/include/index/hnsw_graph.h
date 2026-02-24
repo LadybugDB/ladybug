@@ -246,29 +246,29 @@ public:
 
     compressed_offsets_t getNeighbors(common::offset_t nodeOffset) const {
         const auto numNbrs = getCSRLength(nodeOffset);
-        LBUG_ASSERT(numNbrs <= maxDegree);
-        LBUG_ASSERT(nodeOffset < numNodes);
+        DASSERT(numNbrs <= maxDegree);
+        DASSERT(nodeOffset < numNodes);
         return dstNodes.getNeighbors(nodeOffset, maxDegree, numNbrs);
     }
 
     common::length_t getMaxDegree() const { return maxDegree; }
 
     uint16_t getCSRLength(common::offset_t nodeOffset) const {
-        LBUG_ASSERT(nodeOffset < numNodes);
+        DASSERT(nodeOffset < numNodes);
         const auto val = csrLengths[nodeOffset].load();
-        LBUG_ASSERT(val <= maxDegree);
+        DASSERT(val <= maxDegree);
         return val;
     }
     // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const function.
     void setCSRLength(common::offset_t nodeOffset, uint16_t length) {
-        LBUG_ASSERT(nodeOffset < numNodes);
-        LBUG_ASSERT(length <= maxDegree);
+        DASSERT(nodeOffset < numNodes);
+        DASSERT(length <= maxDegree);
         csrLengths[nodeOffset].store(length);
     }
     // Note: when the incremented csr length hits maxDegree, this function will block until there is
     // a shrink happening.
     uint16_t incrementCSRLength(common::offset_t nodeOffset) {
-        LBUG_ASSERT(nodeOffset < numNodes);
+        DASSERT(nodeOffset < numNodes);
         while (true) {
             auto val = csrLengths[nodeOffset].load();
             if (val < maxDegree && csrLengths[nodeOffset].compare_exchange_strong(val, val + 1)) {
@@ -277,7 +277,7 @@ public:
         }
     }
     void setDstNode(common::offset_t csrOffset, common::offset_t dstNode) {
-        LBUG_ASSERT(csrOffset < numNodes * maxDegree);
+        DASSERT(csrOffset < numNodes * maxDegree);
         dstNodes.setNodeOffset(csrOffset, dstNode);
     }
 

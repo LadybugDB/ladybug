@@ -13,7 +13,7 @@ struct ArrayInnerProduct {
         common::ValueVector& /*resultVector*/) {
         auto leftElements = (T*)common::ListVector::getListValues(&leftVector, left);
         auto rightElements = (T*)common::ListVector::getListValues(&rightVector, right);
-        LBUG_ASSERT(left.size == right.size);
+        DASSERT(left.size == right.size);
         simsimd_distance_t tmpResult = 0.0;
         static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>);
         if constexpr (std::is_same_v<T, float>) {

@@ -30,8 +30,8 @@ public:
 
     void removeTrailingGroups([[maybe_unused]] const common::UniqLock& lock,
         common::idx_t numGroupsToRemove) {
-        LBUG_ASSERT(lock.isLocked());
-        LBUG_ASSERT(numGroupsToRemove <= groups.size());
+        DASSERT(lock.isLocked());
+        DASSERT(numGroupsToRemove <= groups.size());
         groups.erase(groups.end() - numGroupsToRemove, groups.end());
     }
 
@@ -41,26 +41,26 @@ public:
     }
 
     void appendGroup(const common::UniqLock& lock, std::unique_ptr<T> group) {
-        LBUG_ASSERT(group);
-        LBUG_ASSERT(lock.isLocked());
-        LBUG_UNUSED(lock);
+        DASSERT(group);
+        DASSERT(lock.isLocked());
+        UNUSED(lock);
         groups.push_back(std::move(group));
     }
     T* getGroup(const common::UniqLock& lock, common::idx_t groupIdx) const {
-        LBUG_ASSERT(lock.isLocked());
-        LBUG_UNUSED(lock);
-        LBUG_ASSERT(groupIdx < groups.size());
+        DASSERT(lock.isLocked());
+        UNUSED(lock);
+        DASSERT(groupIdx < groups.size());
         return groups[groupIdx].get();
     }
     T* getGroupNoLock(common::idx_t groupIdx) const {
-        LBUG_ASSERT(groupIdx < groups.size());
+        DASSERT(groupIdx < groups.size());
         return groups[groupIdx].get();
     }
     void replaceGroup(const common::UniqLock& lock, common::idx_t groupIdx,
         std::unique_ptr<T> group) {
-        LBUG_ASSERT(group);
-        LBUG_ASSERT(lock.isLocked());
-        LBUG_UNUSED(lock);
+        DASSERT(group);
+        DASSERT(lock.isLocked());
+        UNUSED(lock);
         if (groupIdx >= groups.size()) {
             groups.resize(groupIdx + 1);
         }
@@ -68,8 +68,8 @@ public:
     }
 
     void resize(const common::UniqLock& lock, common::idx_t newSize) {
-        LBUG_ASSERT(lock.isLocked());
-        LBUG_UNUSED(lock);
+        DASSERT(lock.isLocked());
+        UNUSED(lock);
         if (newSize <= groups.size()) {
             return;
         }
@@ -77,25 +77,25 @@ public:
     }
 
     bool isEmpty(const common::UniqLock& lock) const {
-        LBUG_ASSERT(lock.isLocked());
-        LBUG_UNUSED(lock);
+        DASSERT(lock.isLocked());
+        UNUSED(lock);
         return groups.empty();
     }
     common::idx_t getNumGroups(const common::UniqLock& lock) const {
-        LBUG_ASSERT(lock.isLocked());
-        LBUG_UNUSED(lock);
+        DASSERT(lock.isLocked());
+        UNUSED(lock);
         return groups.size();
     }
     common::idx_t getNumGroupsNoLock() const { return groups.size(); }
 
     const std::vector<std::unique_ptr<T>>& getAllGroups(const common::UniqLock& lock) const {
-        LBUG_ASSERT(lock.isLocked());
-        LBUG_UNUSED(lock);
+        DASSERT(lock.isLocked());
+        UNUSED(lock);
         return groups;
     }
     T* getFirstGroup(const common::UniqLock& lock) const {
-        LBUG_ASSERT(lock.isLocked());
-        LBUG_UNUSED(lock);
+        DASSERT(lock.isLocked());
+        UNUSED(lock);
         if (groups.empty()) {
             return nullptr;
         }
@@ -108,8 +108,8 @@ public:
         return groups.front().get();
     }
     T* getLastGroup(const common::UniqLock& lock) const {
-        LBUG_ASSERT(lock.isLocked());
-        LBUG_UNUSED(lock);
+        DASSERT(lock.isLocked());
+        UNUSED(lock);
         if (groups.empty()) {
             return nullptr;
         }
@@ -117,8 +117,8 @@ public:
     }
 
     void clear(const common::UniqLock& lock) {
-        LBUG_ASSERT(lock.isLocked());
-        LBUG_UNUSED(lock);
+        DASSERT(lock.isLocked());
+        UNUSED(lock);
         groups.clear();
     }
 

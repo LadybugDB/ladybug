@@ -29,7 +29,7 @@ void SelectionVector::setToUnfiltered() {
     state = State::STATIC;
 }
 void SelectionVector::setToUnfiltered(sel_t size) {
-    LBUG_ASSERT(size <= capacity);
+    DASSERT(size <= capacity);
     selectedPositions = INCREMENTAL_SELECTED_POS.data();
     selectedSize = size;
     state = State::STATIC;

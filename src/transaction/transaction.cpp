@@ -67,7 +67,7 @@ void Transaction::commit(storage::WAL* wal) {
     localStorage->commit();
     undoBuffer->commit(commitTS);
     if (shouldLogToWAL()) {
-        LBUG_ASSERT(localWAL && wal);
+        DASSERT(localWAL && wal);
         localWAL->logCommit();
         wal->logCommittedWAL(*localWAL, clientContext);
         localWAL->clear();
@@ -99,21 +99,21 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
     if (!shouldLogToWAL() || skipLoggingToWAL) {
         return;
     }
-    LBUG_ASSERT(localWAL);
+    DASSERT(localWAL);
     const auto newCatalogEntry = catalogEntry.getNext();
     switch (newCatalogEntry->getType()) {
     case CatalogEntryType::INDEX_ENTRY:
     case CatalogEntryType::NODE_TABLE_ENTRY:
     case CatalogEntryType::REL_GROUP_ENTRY: {
         if (catalogEntry.getType() == CatalogEntryType::DUMMY_ENTRY) {
-            LBUG_ASSERT(catalogEntry.isDeleted());
+            DASSERT(catalogEntry.isDeleted());
             localWAL->logCreateCatalogEntryRecord(newCatalogEntry, isInternal);
         } else {
             throw common::RuntimeException("This shouldn't happen. Alter table is not supported.");
         }
     } break;
     case CatalogEntryType::SEQUENCE_ENTRY: {
-        LBUG_ASSERT(
+        DASSERT(
             catalogEntry.getType() == CatalogEntryType::DUMMY_ENTRY && catalogEntry.isDeleted());
         if (newCatalogEntry->hasParent()) {
             // We don't log SERIAL catalog entry creation as it is implicit
@@ -124,12 +124,12 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
     case CatalogEntryType::SCALAR_MACRO_ENTRY:
     case CatalogEntryType::TYPE_ENTRY:
     case CatalogEntryType::GRAPH_ENTRY: {
-        LBUG_ASSERT(
+        DASSERT(
             catalogEntry.getType() == CatalogEntryType::DUMMY_ENTRY && catalogEntry.isDeleted());
         localWAL->logCreateCatalogEntryRecord(newCatalogEntry, isInternal);
     } break;
     case CatalogEntryType::DUMMY_ENTRY: {
-        LBUG_ASSERT(newCatalogEntry->isDeleted());
+        DASSERT(newCatalogEntry->isDeleted());
         if (catalogEntry.hasParent()) {
             return;
         }
@@ -171,7 +171,7 @@ void Transaction::pushAlterCatalogEntry(CatalogSet& catalogSet, CatalogEntry& ca
     undoBuffer->createCatalogEntry(catalogSet, catalogEntry);
     hasCatalogChanges = true;
     if (shouldLogToWAL()) {
-        LBUG_ASSERT(localWAL);
+        DASSERT(localWAL);
         localWAL->logAlterCatalogEntryRecord(&alterInfo);
     }
 }
@@ -181,7 +181,7 @@ void Transaction::pushSequenceChange(SequenceCatalogEntry* sequenceEntry, int64_
     undoBuffer->createSequenceChange(*sequenceEntry, data);
     hasCatalogChanges = true;
     if (shouldLogToWAL()) {
-        LBUG_ASSERT(localWAL);
+        DASSERT(localWAL);
         localWAL->logUpdateSequenceRecord(sequenceEntry->getOID(), kCount);
     }
 }

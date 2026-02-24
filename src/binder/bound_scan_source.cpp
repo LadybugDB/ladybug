@@ -12,7 +12,7 @@ expression_vector BoundTableScanSource::getWarningColumns() const {
     case ScanSourceType::FILE: {
         auto bindData = info.bindData->constPtrCast<function::ScanFileBindData>();
         for (auto i = bindData->numWarningDataColumns; i >= 1; --i) {
-            LBUG_ASSERT(i < columns.size());
+            DASSERT(i < columns.size());
             warningDataExprs.push_back(columns[columns.size() - i]);
         }
     } break;

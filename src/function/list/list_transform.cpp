@@ -61,7 +61,7 @@ static void execFunc(const std::vector<std::shared_ptr<ValueVector>>& input,
 
     auto& inputVector = *input[0];
     const auto& inputSelVector = *inputSelVectors[0];
-    LBUG_ASSERT(input.size() == 2);
+    DASSERT(input.size() == 2);
     if (!bindData->lambdaParamEvaluators.empty()) {
         if (sliceInfo->done()) {
             ListVector::copyListEntryAndBufferMetaData(result, *resultSelVector, inputVector,

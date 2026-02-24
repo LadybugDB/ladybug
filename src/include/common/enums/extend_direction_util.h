@@ -10,7 +10,7 @@ namespace common {
 class ExtendDirectionUtil {
 public:
     static RelDataDirection getRelDataDirection(ExtendDirection direction) {
-        LBUG_ASSERT(direction != ExtendDirection::BOTH);
+        DASSERT(direction != ExtendDirection::BOTH);
         return direction == ExtendDirection::FWD ? RelDataDirection::FWD : RelDataDirection::BWD;
     }
 

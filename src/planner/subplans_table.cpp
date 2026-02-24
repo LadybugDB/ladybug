@@ -90,7 +90,7 @@ bool SubPlansTable::containSubgraphPlans(const SubqueryGraph& subqueryGraph) con
 const std::vector<LogicalPlan>& SubPlansTable::getSubgraphPlans(
     const SubqueryGraph& subqueryGraph) const {
     auto& dpLevel = getDPLevel(subqueryGraph);
-    LBUG_ASSERT(dpLevel.contains(subqueryGraph));
+    DASSERT(dpLevel.contains(subqueryGraph));
     return dpLevel.getSubgraphPlans(subqueryGraph).getPlans();
 }
 

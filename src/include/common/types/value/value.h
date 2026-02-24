@@ -308,7 +308,7 @@ private:
  */
 template<>
 inline bool Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::BOOL);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::BOOL);
     return val.booleanVal;
 }
 
@@ -317,7 +317,7 @@ inline bool Value::getValue() const {
  */
 template<>
 inline int8_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT8);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT8);
     return val.int8Val;
 }
 
@@ -326,7 +326,7 @@ inline int8_t Value::getValue() const {
  */
 template<>
 inline int16_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT16);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT16);
     return val.int16Val;
 }
 
@@ -335,7 +335,7 @@ inline int16_t Value::getValue() const {
  */
 template<>
 inline int32_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT32);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT32);
     return val.int32Val;
 }
 
@@ -344,7 +344,7 @@ inline int32_t Value::getValue() const {
  */
 template<>
 inline int64_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT64);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT64);
     return val.int64Val;
 }
 
@@ -353,7 +353,7 @@ inline int64_t Value::getValue() const {
  */
 template<>
 inline uint64_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT64);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT64);
     return val.uint64Val;
 }
 
@@ -362,7 +362,7 @@ inline uint64_t Value::getValue() const {
  */
 template<>
 inline uint32_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT32);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT32);
     return val.uint32Val;
 }
 
@@ -371,7 +371,7 @@ inline uint32_t Value::getValue() const {
  */
 template<>
 inline uint16_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT16);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT16);
     return val.uint16Val;
 }
 
@@ -380,7 +380,7 @@ inline uint16_t Value::getValue() const {
  */
 template<>
 inline uint8_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT8);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT8);
     return val.uint8Val;
 }
 
@@ -389,7 +389,7 @@ inline uint8_t Value::getValue() const {
  */
 template<>
 inline int128_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT128);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT128);
     return val.int128Val;
 }
 
@@ -398,7 +398,7 @@ inline int128_t Value::getValue() const {
  */
 template<>
 inline float Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::FLOAT);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::FLOAT);
     return val.floatVal;
 }
 
@@ -407,7 +407,7 @@ inline float Value::getValue() const {
  */
 template<>
 inline double Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::DOUBLE);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::DOUBLE);
     return val.doubleVal;
 }
 
@@ -416,7 +416,7 @@ inline double Value::getValue() const {
  */
 template<>
 inline date_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::DATE);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::DATE);
     return date_t{val.int32Val};
 }
 
@@ -425,7 +425,7 @@ inline date_t Value::getValue() const {
  */
 template<>
 inline timestamp_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP);
     return timestamp_t{val.int64Val};
 }
 
@@ -434,7 +434,7 @@ inline timestamp_t Value::getValue() const {
  */
 template<>
 inline timestamp_ns_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_NS);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_NS);
     return timestamp_ns_t{val.int64Val};
 }
 
@@ -443,7 +443,7 @@ inline timestamp_ns_t Value::getValue() const {
  */
 template<>
 inline timestamp_ms_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_MS);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_MS);
     return timestamp_ms_t{val.int64Val};
 }
 
@@ -452,7 +452,7 @@ inline timestamp_ms_t Value::getValue() const {
  */
 template<>
 inline timestamp_sec_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_SEC);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_SEC);
     return timestamp_sec_t{val.int64Val};
 }
 
@@ -461,7 +461,7 @@ inline timestamp_sec_t Value::getValue() const {
  */
 template<>
 inline timestamp_tz_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_TZ);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_TZ);
     return timestamp_tz_t{val.int64Val};
 }
 
@@ -470,7 +470,7 @@ inline timestamp_tz_t Value::getValue() const {
  */
 template<>
 inline interval_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERVAL);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERVAL);
     return val.intervalVal;
 }
 
@@ -479,7 +479,7 @@ inline interval_t Value::getValue() const {
  */
 template<>
 inline internalID_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID);
     return val.internalIDVal;
 }
 
@@ -488,7 +488,7 @@ inline internalID_t Value::getValue() const {
  */
 template<>
 inline uint128_t Value::getValue() const {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT128);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT128);
     return val.uint128Val;
 }
 
@@ -497,7 +497,7 @@ inline uint128_t Value::getValue() const {
  */
 template<>
 inline std::string Value::getValue() const {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::STRING ||
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::STRING ||
               dataType.getLogicalTypeID() == LogicalTypeID::BLOB ||
               dataType.getLogicalTypeID() == LogicalTypeID::UUID);
     return strVal;
@@ -508,7 +508,7 @@ inline std::string Value::getValue() const {
  */
 template<>
 inline uint8_t* Value::getValue() const {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::POINTER);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::POINTER);
     return val.pointer;
 }
 
@@ -517,7 +517,7 @@ inline uint8_t* Value::getValue() const {
  */
 template<>
 inline bool& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::BOOL);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::BOOL);
     return val.booleanVal;
 }
 
@@ -526,7 +526,7 @@ inline bool& Value::getValueReference() {
  */
 template<>
 inline int8_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT8);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT8);
     return val.int8Val;
 }
 
@@ -535,7 +535,7 @@ inline int8_t& Value::getValueReference() {
  */
 template<>
 inline int16_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT16);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT16);
     return val.int16Val;
 }
 
@@ -544,7 +544,7 @@ inline int16_t& Value::getValueReference() {
  */
 template<>
 inline int32_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT32);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT32);
     return val.int32Val;
 }
 
@@ -553,7 +553,7 @@ inline int32_t& Value::getValueReference() {
  */
 template<>
 inline int64_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT64);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT64);
     return val.int64Val;
 }
 
@@ -562,7 +562,7 @@ inline int64_t& Value::getValueReference() {
  */
 template<>
 inline uint8_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT8);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT8);
     return val.uint8Val;
 }
 
@@ -571,7 +571,7 @@ inline uint8_t& Value::getValueReference() {
  */
 template<>
 inline uint16_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT16);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT16);
     return val.uint16Val;
 }
 
@@ -580,7 +580,7 @@ inline uint16_t& Value::getValueReference() {
  */
 template<>
 inline uint32_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT32);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT32);
     return val.uint32Val;
 }
 
@@ -589,7 +589,7 @@ inline uint32_t& Value::getValueReference() {
  */
 template<>
 inline uint64_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT64);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT64);
     return val.uint64Val;
 }
 
@@ -598,7 +598,7 @@ inline uint64_t& Value::getValueReference() {
  */
 template<>
 inline int128_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT128);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::INT128);
     return val.int128Val;
 }
 
@@ -607,7 +607,7 @@ inline int128_t& Value::getValueReference() {
  */
 template<>
 inline float& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::FLOAT);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::FLOAT);
     return val.floatVal;
 }
 
@@ -616,7 +616,7 @@ inline float& Value::getValueReference() {
  */
 template<>
 inline double& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::DOUBLE);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::DOUBLE);
     return val.doubleVal;
 }
 
@@ -625,7 +625,7 @@ inline double& Value::getValueReference() {
  */
 template<>
 inline date_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::DATE);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::DATE);
     return *reinterpret_cast<date_t*>(&val.int32Val);
 }
 
@@ -634,7 +634,7 @@ inline date_t& Value::getValueReference() {
  */
 template<>
 inline timestamp_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP);
     return *reinterpret_cast<timestamp_t*>(&val.int64Val);
 }
 
@@ -643,7 +643,7 @@ inline timestamp_t& Value::getValueReference() {
  */
 template<>
 inline timestamp_ms_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_MS);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_MS);
     return *reinterpret_cast<timestamp_ms_t*>(&val.int64Val);
 }
 
@@ -652,7 +652,7 @@ inline timestamp_ms_t& Value::getValueReference() {
  */
 template<>
 inline timestamp_ns_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_NS);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_NS);
     return *reinterpret_cast<timestamp_ns_t*>(&val.int64Val);
 }
 
@@ -661,7 +661,7 @@ inline timestamp_ns_t& Value::getValueReference() {
  */
 template<>
 inline timestamp_sec_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_SEC);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_SEC);
     return *reinterpret_cast<timestamp_sec_t*>(&val.int64Val);
 }
 
@@ -670,7 +670,7 @@ inline timestamp_sec_t& Value::getValueReference() {
  */
 template<>
 inline timestamp_tz_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_TZ);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::TIMESTAMP_TZ);
     return *reinterpret_cast<timestamp_tz_t*>(&val.int64Val);
 }
 
@@ -679,7 +679,7 @@ inline timestamp_tz_t& Value::getValueReference() {
  */
 template<>
 inline interval_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERVAL);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERVAL);
     return val.intervalVal;
 }
 
@@ -688,7 +688,7 @@ inline interval_t& Value::getValueReference() {
  */
 template<>
 inline uint128_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT128);
+    DASSERT(dataType.getPhysicalType() == PhysicalTypeID::UINT128);
     return val.uint128Val;
 }
 
@@ -697,7 +697,7 @@ inline uint128_t& Value::getValueReference() {
  */
 template<>
 inline nodeID_t& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID);
     return val.internalIDVal;
 }
 
@@ -706,7 +706,7 @@ inline nodeID_t& Value::getValueReference() {
  */
 template<>
 inline std::string& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::STRING);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::STRING);
     return strVal;
 }
 
@@ -715,7 +715,7 @@ inline std::string& Value::getValueReference() {
  */
 template<>
 inline uint8_t*& Value::getValueReference() {
-    LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::POINTER);
+    DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::POINTER);
     return val.pointer;
 }
 

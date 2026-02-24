@@ -66,7 +66,7 @@ AggregateFunction* BuiltInFunctionsUtils::matchAggregateFunction(const std::stri
     }
     validateNonEmptyCandidateFunctions(candidateFunctions, name, inputTypes, isDistinct,
         functionSet);
-    LBUG_ASSERT(candidateFunctions.size() == 1);
+    DASSERT(candidateFunctions.size() == 1);
     return candidateFunctions[0];
 }
 
@@ -433,7 +433,7 @@ uint32_t BuiltInFunctionsUtils::castArray(LogicalTypeID targetTypeID) {
 // Additionally, we prefer function with string parameter because string is most permissive and
 // can be cast to any type.
 Function* BuiltInFunctionsUtils::getBestMatch(std::vector<Function*>& functionsToMatch) {
-    LBUG_ASSERT(functionsToMatch.size() > 1);
+    DASSERT(functionsToMatch.size() > 1);
     Function* result = nullptr;
     auto cost = UNDEFINED_CAST_COST;
     for (auto& function : functionsToMatch) {
@@ -453,7 +453,7 @@ Function* BuiltInFunctionsUtils::getBestMatch(std::vector<Function*>& functionsT
             result = function;
         }
     }
-    LBUG_ASSERT(result != nullptr);
+    DASSERT(result != nullptr);
     return result;
 }
 
@@ -463,7 +463,7 @@ uint32_t BuiltInFunctionsUtils::getFunctionCost(const std::vector<LogicalType>& 
                             function->constPtrCast<ScalarFunction>()->isVarLength :
                             false);
     if (isVarLength) {
-        LBUG_ASSERT(function->parameterTypeIDs.size() == 1);
+        DASSERT(function->parameterTypeIDs.size() == 1);
         return matchVarLengthParameters(inputTypes, function->parameterTypeIDs[0]);
     }
     return matchParameters(inputTypes, function->parameterTypeIDs);

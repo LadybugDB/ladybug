@@ -40,7 +40,7 @@ static bool isCastedColumnRef(const Expression& expr) {
     if (expr.expressionType == ExpressionType::FUNCTION) {
         const auto& funcExpr = expr.constCast<ScalarFunctionExpression>();
         if (funcExpr.getFunction().name.starts_with("CAST")) {
-            LBUG_ASSERT(funcExpr.getNumChildren() > 0);
+            DASSERT(funcExpr.getNumChildren() > 0);
             return isColumnRef(funcExpr.getChild(0)->expressionType);
         }
     }

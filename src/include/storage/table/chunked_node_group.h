@@ -64,12 +64,12 @@ public:
     void setNumRows(common::offset_t numRows_);
 
     ColumnChunkData& getColumnChunk(const common::column_id_t columnID) {
-        LBUG_ASSERT(columnID < chunks.size());
+        DASSERT(columnID < chunks.size());
         return *chunks[columnID];
     }
 
     const ColumnChunkData& getColumnChunk(const common::column_id_t columnID) const {
-        LBUG_ASSERT(columnID < chunks.size());
+        DASSERT(columnID < chunks.size());
         return *chunks[columnID];
     }
 
@@ -96,7 +96,7 @@ public:
     }
 
     std::unique_ptr<ColumnChunkData> moveColumnChunk(const common::column_id_t columnID) {
-        LBUG_ASSERT(columnID < chunks.size());
+        DASSERT(columnID < chunks.size());
         return std::move(chunks[columnID]);
     }
 
@@ -143,15 +143,15 @@ public:
     common::row_idx_t getStartRowIdx() const { return startRowIdx; }
     common::row_idx_t getNumRows() const { return numRows; }
     const ColumnChunk& getColumnChunk(const common::column_id_t columnID) const {
-        LBUG_ASSERT(columnID < chunks.size());
+        DASSERT(columnID < chunks.size());
         return *chunks[columnID];
     }
     ColumnChunk& getColumnChunk(const common::column_id_t columnID) {
-        LBUG_ASSERT(columnID < chunks.size());
+        DASSERT(columnID < chunks.size());
         return *chunks[columnID];
     }
     std::unique_ptr<ColumnChunk> moveColumnChunk(const common::column_id_t columnID) {
-        LBUG_ASSERT(columnID < chunks.size());
+        DASSERT(columnID < chunks.size());
         return std::move(chunks[columnID]);
     }
     bool isFullOrOnDisk() const {

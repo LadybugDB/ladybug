@@ -16,7 +16,7 @@ LogicalScanNodeTable::LogicalScanNodeTable(const LogicalScanNodeTable& other)
 void LogicalScanNodeTable::computeFactorizedSchema() {
     createEmptySchema();
     const auto groupPos = schema->createGroup();
-    LBUG_ASSERT(groupPos == 0);
+    DASSERT(groupPos == 0);
     schema->insertToGroupAndScope(nodeID, groupPos);
     for (auto& property : properties) {
         schema->insertToGroupAndScope(property, groupPos);

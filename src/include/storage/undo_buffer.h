@@ -36,7 +36,7 @@ public:
     uint64_t getSize() const { return capacity; }
     uint64_t getCurrentPosition() const { return currentPosition; }
     void moveCurrentPosition(uint64_t offset) {
-        LBUG_ASSERT(currentPosition + offset <= capacity);
+        DASSERT(currentPosition + offset <= capacity);
         currentPosition += offset;
     }
     bool canFit(uint64_t size_) const { return currentPosition + size_ <= this->capacity; }

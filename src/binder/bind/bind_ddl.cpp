@@ -138,7 +138,7 @@ BoundCreateTableInfo Binder::bindCreateTableInfo(const CreateTableInfo* info) {
         return bindCreateRelTableGroupInfo(info);
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
@@ -401,7 +401,7 @@ std::unique_ptr<BoundStatement> Binder::bindCreateTableAs(const Statement& state
         return boundCreateTable;
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
@@ -508,7 +508,7 @@ std::unique_ptr<BoundStatement> Binder::bindAlter(const Statement& statement) {
         return bindAlterFromToConnection(statement);
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }

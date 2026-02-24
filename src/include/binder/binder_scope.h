@@ -15,7 +15,7 @@ public:
     bool empty() const { return expressions.empty(); }
     bool contains(const std::string& varName) const { return nameToExprIdx.contains(varName); }
     std::shared_ptr<Expression> getExpression(const std::string& varName) const {
-        LBUG_ASSERT(nameToExprIdx.contains(varName));
+        DASSERT(nameToExprIdx.contains(varName));
         return expressions[nameToExprIdx.at(varName)];
     }
     expression_vector getExpressions() const { return expressions; }
@@ -31,7 +31,7 @@ public:
         return memorizedNodeNameToEntries.contains(name);
     }
     std::vector<catalog::TableCatalogEntry*> getMemorizedTableEntries(const std::string& name) {
-        LBUG_ASSERT(memorizedNodeNameToEntries.contains(name));
+        DASSERT(memorizedNodeNameToEntries.contains(name));
         return memorizedNodeNameToEntries.at(name);
     }
 
@@ -42,7 +42,7 @@ public:
         return nodeReplacement.contains(name);
     }
     std::shared_ptr<NodeExpression> getNodeReplacement(const std::string& name) const {
-        LBUG_ASSERT(hasNodeReplacement(name));
+        DASSERT(hasNodeReplacement(name));
         return nodeReplacement.at(name);
     }
 

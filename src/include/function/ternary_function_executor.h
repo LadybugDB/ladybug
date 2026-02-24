@@ -130,7 +130,7 @@ struct TernaryFunctionExecutor {
         common::ValueVector& b, common::SelectionVector* bSelVector, common::ValueVector& c,
         [[maybe_unused]] common::SelectionVector* cSelVector, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr) {
-        LBUG_ASSERT(bSelVector == cSelVector);
+        DASSERT(bSelVector == cSelVector);
         auto aPos = (*aSelVector)[0];
         if (a.isNull(aPos)) {
             result.setAllNull();
@@ -227,7 +227,7 @@ struct TernaryFunctionExecutor {
         common::ValueVector& b, [[maybe_unused]] common::SelectionVector* bSelVector,
         common::ValueVector& c, [[maybe_unused]] common::SelectionVector* cSelVector,
         common::ValueVector& result, common::SelectionVector* resultSelVector, void* dataPtr) {
-        LBUG_ASSERT(aSelVector == bSelVector && bSelVector == cSelVector);
+        DASSERT(aSelVector == bSelVector && bSelVector == cSelVector);
         if (a.hasNoNullsGuarantee() && b.hasNoNullsGuarantee() && c.hasNoNullsGuarantee()) {
             if (aSelVector->isUnfiltered()) {
                 for (uint64_t i = 0; i < aSelVector->getSelSize(); i++) {
@@ -322,7 +322,7 @@ struct TernaryFunctionExecutor {
         common::ValueVector& b, common::SelectionVector* bSelVector, common::ValueVector& c,
         [[maybe_unused]] common::SelectionVector* cSelVector, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr) {
-        LBUG_ASSERT(aSelVector == cSelVector);
+        DASSERT(aSelVector == cSelVector);
         auto bPos = (*bSelVector)[0];
         if (b.isNull(bPos)) {
             result.setAllNull();
@@ -371,7 +371,7 @@ struct TernaryFunctionExecutor {
         common::ValueVector& b, [[maybe_unused]] common::SelectionVector* bSelVector,
         common::ValueVector& c, common::SelectionVector* cSelVector, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr) {
-        LBUG_ASSERT(aSelVector == bSelVector);
+        DASSERT(aSelVector == bSelVector);
         auto cPos = (*cSelVector)[0];
         if (c.isNull(cPos)) {
             result.setAllNull();
@@ -446,7 +446,7 @@ struct TernaryFunctionExecutor {
             executeUnflatFlatUnflat<A_TYPE, B_TYPE, C_TYPE, RESULT_TYPE, FUNC, OP_WRAPPER>(a,
                 aSelVector, b, bSelVector, c, cSelVector, result, resultSelVector, dataPtr);
         } else {
-            LBUG_ASSERT(false);
+            DASSERT(false);
         }
     }
 };

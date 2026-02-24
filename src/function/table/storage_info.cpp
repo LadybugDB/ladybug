@@ -90,7 +90,7 @@ static void appendStorageInfoForChunkData(StorageInfoLocalState* localState, Dat
         metadata = chunkData.getMetadata();
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
     auto& columnType = chunkData.getDataType();
@@ -225,7 +225,7 @@ static void appendStorageInfoForNodeGroup(StorageInfoLocalState* localState, Dat
 static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
     auto& dataChunk = output.dataChunk;
     auto localState = dynamic_cast_checked<StorageInfoLocalState*>(input.localState);
-    LBUG_ASSERT(dataChunk.state->getSelVector().isUnfiltered());
+    DASSERT(dataChunk.state->getSelVector().isUnfiltered());
     auto storageManager = StorageManager::Get(*input.context->clientContext);
     while (true) {
         if (localState->currChunkIdx < localState->dataChunkCollection->getNumChunks()) {
@@ -295,7 +295,7 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) 
             }
         } break;
         default: {
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
         }
         localState->dataChunkCollection->append(dataChunk);

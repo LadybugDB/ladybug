@@ -127,7 +127,7 @@ LogicalPlan Planner::planStatement(const BoundStatement& statement) {
         return planExtensionClause(statement);
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

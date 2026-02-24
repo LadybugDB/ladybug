@@ -7,7 +7,7 @@ namespace lbug {
 namespace evaluator {
 
 inline static bool isTrue(ValueVector& vector, uint64_t pos) {
-    LBUG_ASSERT(vector.dataType.getLogicalTypeID() == LogicalTypeID::BOOL);
+    DASSERT(vector.dataType.getLogicalTypeID() == LogicalTypeID::BOOL);
     return !vector.isNull(pos) && vector.getValue<bool>(pos);
 }
 

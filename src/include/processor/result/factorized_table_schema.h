@@ -70,7 +70,7 @@ public:
     ft_col_offset_t getColOffset(ft_col_idx_t idx) const { return colOffsets[idx]; }
 
     void setMayContainsNullsToTrue(ft_col_idx_t idx) {
-        LBUG_ASSERT(idx < columns.size());
+        DASSERT(idx < columns.size());
         columns[idx].setMayContainsNullsToTrue();
     }
 

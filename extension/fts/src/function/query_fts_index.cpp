@@ -47,8 +47,8 @@ struct QFTSSharedState : public GDSFuncSharedState {
 
     virtual void addDocScore(std::vector<ValueVector*> vectors,
         processor::FactorizedTable& localTable, DocScore docScore) {
-        LBUG_ASSERT(vectors[0]->dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID);
-        LBUG_ASSERT(vectors[1]->dataType.getLogicalTypeID() == LogicalTypeID::DOUBLE);
+        DASSERT(vectors[0]->dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID);
+        DASSERT(vectors[1]->dataType.getLogicalTypeID() == LogicalTypeID::DOUBLE);
         vectors[0]->setValue(0, internalID_t{(common::offset_t)docScore.offset, outputTableID});
         vectors[1]->setValue(0, docScore.score);
         localTable.append(vectors);
@@ -138,7 +138,7 @@ struct QFTSEdgeCompute final : EdgeCompute {
 
     std::vector<nodeID_t> edgeCompute(nodeID_t boundNodeID, graph::NbrScanState::Chunk& resultChunk,
         bool) override {
-        LBUG_ASSERT(dfs.contains(boundNodeID.offset));
+        DASSERT(dfs.contains(boundNodeID.offset));
         auto df = dfs.at(boundNodeID.offset);
         std::vector<nodeID_t> activeNodes;
         resultChunk.forEach([&](auto neighbors, auto propertyVectors, auto i) {
@@ -474,7 +474,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
     auto nodeTable =
         StorageManager::Get(*context)->getTable(ftsIndexEntry->getTableID())->ptrCast<NodeTable>();
     auto index = nodeTable->getIndex(indexName);
-    LBUG_ASSERT(index.has_value());
+    DASSERT(index.has_value());
     auto& ftsIndex = index.value()->cast<FTSIndex>();
     auto& ftsStorageInfo = ftsIndex.getStorageInfo().constCast<FTSStorageInfo>();
     auto bindData = std::make_unique<QueryFTSBindData>(std::move(columns), std::move(graphEntry),
@@ -494,7 +494,7 @@ static void getLogicalPlan(Planner* planner, const BoundReadingClause& readingCl
     planner->planReadOp(std::move(op), predicates, plan);
 
     auto nodeOutput = bindData->output[0]->ptrCast<NodeExpression>();
-    LBUG_ASSERT(nodeOutput != nullptr);
+    DASSERT(nodeOutput != nullptr);
     planner->getCardinliatyEstimatorUnsafe().init(*nodeOutput);
     auto scanPlan = planner->getNodePropertyScanPlan(*nodeOutput);
     if (scanPlan.isEmpty()) {

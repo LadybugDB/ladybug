@@ -74,7 +74,7 @@ void StringChunkData::resetToEmpty() {
 void StringChunkData::append(ValueVector* vector, const SelectionView& selView) {
     selView.forEach([&](auto pos) {
         // index is stored in main chunk, data is stored in the data chunk
-        LBUG_ASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+        DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
         // index is stored in main chunk, data is stored in the data chunk
         nullData->setNull(numValues, vector->isNull(pos));
         auto dstPos = numValues;
@@ -97,14 +97,14 @@ void StringChunkData::append(const ColumnChunkData* other, offset_t startPosInOt
         appendStringColumnChunk(&otherChunk, startPosInOtherChunk, numValuesToAppend);
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
 
 void StringChunkData::scan(ValueVector& output, offset_t offset, length_t length,
     sel_t posInOutputVector) const {
-    LBUG_ASSERT(offset + length <= numValues && nullData);
+    DASSERT(offset + length <= numValues && nullData);
     nullData->scan(output, offset, length, posInOutputVector);
     if (!nullData->noNullsGuaranteedInMem()) {
         for (auto i = 0u; i < length; i++) {
@@ -123,7 +123,7 @@ void StringChunkData::scan(ValueVector& output, offset_t offset, length_t length
 
 void StringChunkData::lookup(offset_t offsetInChunk, ValueVector& output,
     sel_t posInOutputVector) const {
-    LBUG_ASSERT(offsetInChunk < numValues);
+    DASSERT(offsetInChunk < numValues);
     output.setNull(posInOutputVector, nullData->isNull(offsetInChunk));
     if (nullData->isNull(offsetInChunk)) {
         return;
@@ -149,7 +149,7 @@ void StringChunkData::initializeScanState(SegmentState& state, const Column* col
 
 void StringChunkData::write(const ValueVector* vector, offset_t offsetInVector,
     offset_t offsetInChunk) {
-    LBUG_ASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
     if (!needFinalize && offsetInChunk < numValues) [[unlikely]] {
         needFinalize = true;
     }
@@ -164,7 +164,7 @@ void StringChunkData::write(const ValueVector* vector, offset_t offsetInVector,
 }
 
 void StringChunkData::write(ColumnChunkData* chunk, ColumnChunkData* dstOffsets, RelMultiplicity) {
-    LBUG_ASSERT(chunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING &&
+    DASSERT(chunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING &&
               dstOffsets->getDataType().getPhysicalType() == PhysicalTypeID::INTERNAL_ID &&
               chunk->getNumValues() == dstOffsets->getNumValues());
     auto& stringChunk = chunk->cast<StringChunkData>();
@@ -186,7 +186,7 @@ void StringChunkData::write(ColumnChunkData* chunk, ColumnChunkData* dstOffsets,
 
 void StringChunkData::write(const ColumnChunkData* srcChunk, offset_t srcOffsetInChunk,
     offset_t dstOffsetInChunk, offset_t numValuesToCopy) {
-    LBUG_ASSERT(srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING);
     if ((dstOffsetInChunk + numValuesToCopy) >= numValues) {
         updateNumValues(dstOffsetInChunk + numValuesToCopy);
     }
@@ -305,14 +305,14 @@ void StringChunkData::deserialize(Deserializer& deSer, ColumnChunkData& chunkDat
 
 template<>
 string_t StringChunkData::getValue<string_t>(offset_t) const {
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 // STRING
 template<>
 std::string_view StringChunkData::getValue<std::string_view>(offset_t pos) const {
-    LBUG_ASSERT(pos < numValues);
-    LBUG_ASSERT(!nullData->isNull(pos));
+    DASSERT(pos < numValues);
+    DASSERT(!nullData->isNull(pos));
     auto index = indexColumnChunk->getValue<DictionaryChunk::string_index_t>(pos);
     return dictionaryChunk->getString(index);
 }

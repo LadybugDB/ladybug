@@ -36,7 +36,7 @@ struct BaseLogicalExtendPrintInfo : OPPrintInfo {
                    nbrNode->toString() + ")";
         }
         default: {
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
         }
     }

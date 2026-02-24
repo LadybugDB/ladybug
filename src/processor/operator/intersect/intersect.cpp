@@ -44,7 +44,7 @@ void Intersect::probeHTs() {
     std::vector<std::vector<overflow_value_t>> flatTuples(probeKeyVectors.size());
     hash_t hashVal = 0;
     for (auto i = 0u; i < probeKeyVectors.size(); i++) {
-        LBUG_ASSERT(probeKeyVectors[i]->state->isFlat());
+        DASSERT(probeKeyVectors[i]->state->isFlat());
         probedFlatTuples[i].clear();
         if (sharedHTs[i]->getHashTable()->getNumEntries() == 0) {
             continue;
@@ -64,7 +64,7 @@ void Intersect::probeHTs() {
 
 void Intersect::twoWayIntersect(nodeID_t* leftNodeIDs, SelectionVector& lSelVector,
     nodeID_t* rightNodeIDs, SelectionVector& rSelVector) {
-    LBUG_ASSERT(lSelVector.getSelSize() <= rSelVector.getSelSize());
+    DASSERT(lSelVector.getSelSize() <= rSelVector.getSelSize());
     auto leftPositionBuffer = lSelVector.getMutableBuffer();
     auto rightPositionBuffer = rSelVector.getMutableBuffer();
     sel_t leftPosition = 0, rightPosition = 0;
@@ -101,7 +101,7 @@ static std::vector<overflow_value_t> fetchListsToIntersectFromTuples(
 }
 
 static std::vector<uint32_t> swapSmallestListToFront(std::vector<overflow_value_t>& lists) {
-    LBUG_ASSERT(lists.size() >= 2);
+    DASSERT(lists.size() >= 2);
     std::vector<uint32_t> listIdxes(lists.size());
     iota(listIdxes.begin(), listIdxes.end(), 0);
     uint32_t smallestListIdx = 0;
@@ -134,7 +134,7 @@ void Intersect::intersectLists(const std::vector<overflow_value_t>& listsToInter
         outKeyVector->state->getSelVectorUnsafe().setSelSize(0);
         return;
     }
-    LBUG_ASSERT(listsToIntersect[0].numElements <= DEFAULT_VECTOR_CAPACITY);
+    DASSERT(listsToIntersect[0].numElements <= DEFAULT_VECTOR_CAPACITY);
     memcpy(outKeyVector->getData(), listsToIntersect[0].value,
         listsToIntersect[0].numElements * sizeof(nodeID_t));
     SelectionVector lSelVector(listsToIntersect[0].numElements);

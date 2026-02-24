@@ -98,7 +98,7 @@ uint8_t* FileHandle::pinPage(page_idx_t pageIdx, PageReadPolicy readPolicy) {
 void FileHandle::optimisticReadPage(page_idx_t pageIdx,
     const std::function<void(uint8_t*)>& readOp) {
     if (isInMemoryMode()) {
-        LBUG_ASSERT(
+        DASSERT(
             PageState::getState(getPageState(pageIdx)->getStateAndVersion()) == PageState::LOCKED);
         const auto frame = bm->getFrame(*this, pageIdx);
         readOp(frame);
@@ -123,7 +123,7 @@ void FileHandle::resetToZeroPagesAndPageCapacity() {
 }
 
 uint8_t* FileHandle::getFrame(page_idx_t pageIdx) {
-    LBUG_ASSERT(pageIdx < numPages);
+    DASSERT(pageIdx < numPages);
     return bm->getFrame(*this, pageIdx);
 }
 
@@ -138,7 +138,7 @@ void FileHandle::removePageIdxAndTruncateIfNecessary(page_idx_t pageIdx) {
     if (numPageGroups == frameGroupIdxes.size()) {
         return;
     }
-    LBUG_ASSERT(numPageGroups < frameGroupIdxes.size());
+    DASSERT(numPageGroups < frameGroupIdxes.size());
     frameGroupIdxes.resize(numPageGroups);
     pageCapacity = numPageGroups * StorageConstants::PAGE_GROUP_SIZE;
 }

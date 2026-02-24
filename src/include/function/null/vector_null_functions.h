@@ -20,7 +20,7 @@ private:
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector*, void* /*dataPtr*/ = nullptr) {
-        LBUG_ASSERT(params.size() == 1);
+        DASSERT(params.size() == 1);
         NullOperationExecutor::execute<FUNC>(*params[0], *paramSelVectors[0], result);
     }
 
@@ -28,7 +28,7 @@ private:
     static bool UnaryNullSelectFunction(
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         common::SelectionVector& selVector, void* dataPtr) {
-        LBUG_ASSERT(params.size() == 1);
+        DASSERT(params.size() == 1);
         return NullOperationExecutor::select<FUNC>(*params[0], selVector, dataPtr);
     }
 };

@@ -53,17 +53,17 @@ public:
     }
     void unlock() {
         // TODO(Keenan / Guodong): Track down this rare bug and re-enable the assert. Ref #2289.
-        // LBUG_ASSERT(getState(stateAndVersion.load()) == LOCKED);
+        // DASSERT(getState(stateAndVersion.load()) == LOCKED);
         stateAndVersion.store(updateStateAndIncrementVersion(stateAndVersion.load(), UNLOCKED));
     }
     void unlockUnchanged() {
         // TODO(Keenan / Guodong): Track down this rare bug and re-enable the assert. Ref #2289.
-        // LBUG_ASSERT(getState(stateAndVersion.load()) == LOCKED);
+        // DASSERT(getState(stateAndVersion.load()) == LOCKED);
         stateAndVersion.store(updateStateWithSameVersion(stateAndVersion.load(), UNLOCKED));
     }
     // Change page state from Mark to Unlocked.
     bool tryClearMark(uint64_t oldStateAndVersion) {
-        LBUG_ASSERT(getState(oldStateAndVersion) == MARKED);
+        DASSERT(getState(oldStateAndVersion) == MARKED);
         return stateAndVersion.compare_exchange_strong(oldStateAndVersion,
             updateStateWithSameVersion(oldStateAndVersion, UNLOCKED));
     }
@@ -73,11 +73,11 @@ public:
     }
 
     void setDirty() {
-        LBUG_ASSERT(getState(stateAndVersion.load()) == LOCKED);
+        DASSERT(getState(stateAndVersion.load()) == LOCKED);
         stateAndVersion |= DIRTY_MASK;
     }
     void clearDirty() {
-        LBUG_ASSERT(getState(stateAndVersion.load()) == LOCKED);
+        DASSERT(getState(stateAndVersion.load()) == LOCKED);
         stateAndVersion &= ~DIRTY_MASK;
     }
     // Meant to be used when flushing in a single thread.

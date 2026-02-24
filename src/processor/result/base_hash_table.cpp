@@ -179,7 +179,7 @@ template<>
 
 static bool compareNodeEntry(const common::ValueVector* vector, uint32_t vectorPos,
     const uint8_t* entry) {
-    LBUG_ASSERT(0 == common::StructType::getFieldIdx(vector->dataType, common::InternalKeyword::ID));
+    DASSERT(0 == common::StructType::getFieldIdx(vector->dataType, common::InternalKeyword::ID));
     auto idVector = common::StructVector::getFieldVector(vector, 0).get();
     return compareEntry<common::internalID_t>(idVector, vectorPos,
         getFTStructNodeID(entry, vector->dataType));
@@ -187,7 +187,7 @@ static bool compareNodeEntry(const common::ValueVector* vector, uint32_t vectorP
 
 static bool compareRelEntry(const common::ValueVector* vector, uint32_t vectorPos,
     const uint8_t* entry) {
-    LBUG_ASSERT(3 == common::StructType::getFieldIdx(vector->dataType, common::InternalKeyword::ID));
+    DASSERT(3 == common::StructType::getFieldIdx(vector->dataType, common::InternalKeyword::ID));
     auto idVector = common::StructVector::getFieldVector(vector, 3).get();
     return compareEntry<common::internalID_t>(idVector, vectorPos,
         getFTStructRelID(entry, vector->dataType));
@@ -227,7 +227,7 @@ static compare_function_t getCompareEntryFunc(const LogicalType& type) {
     default: {
         TypeUtils::visit(
             type.getPhysicalType(), [&]<HashableTypes T>(T) { func = compareEntry<T>; },
-            [](auto) { LBUG_UNREACHABLE; });
+            [](auto) { UNREACHABLE_CODE; });
     }
     }
     return func;
@@ -246,7 +246,7 @@ static ft_compare_function_t getFactorizedTableCompareEntryFunc(const LogicalTyp
         TypeUtils::visit(
             type.getPhysicalType(),
             [&]<HashableTypes T>(T) { func = factorizedTableCompareEntry<T>; },
-            [](auto) { LBUG_UNREACHABLE; });
+            [](auto) { UNREACHABLE_CODE; });
     }
     }
     return func;
@@ -264,8 +264,8 @@ bool BaseHashTable::matchFlatVecWithEntry(const std::vector<common::ValueVector*
     const uint8_t* entry) {
     for (auto i = 0u; i < keyVectors.size(); i++) {
         auto keyVector = keyVectors[i];
-        LBUG_ASSERT(keyVector->state->isFlat());
-        LBUG_ASSERT(keyVector->state->getSelVector().getSelSize() == 1);
+        DASSERT(keyVector->state->isFlat());
+        DASSERT(keyVector->state->getSelVector().getSelSize() == 1);
         auto pos = keyVector->state->getSelVector()[0];
         auto isKeyVectorNull = keyVector->isNull(pos);
         auto isEntryKeyNull =

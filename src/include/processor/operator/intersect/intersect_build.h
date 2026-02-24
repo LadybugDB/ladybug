@@ -43,7 +43,7 @@ public:
               std::move(printInfo)} {}
 
     uint64_t appendVectors() final {
-        LBUG_ASSERT(keyVectors.size() == 1);
+        DASSERT(keyVectors.size() == 1);
         return hashTable->appendVectorWithSorting(keyVectors[0], payloadVectors);
     }
 

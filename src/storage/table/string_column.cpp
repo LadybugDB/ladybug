@@ -122,12 +122,12 @@ std::vector<std::unique_ptr<ColumnChunkData>> StringColumn::checkpointSegment(
 void StringColumn::scanSegment(const SegmentState& state, offset_t startOffsetInChunk,
     row_idx_t numValuesToScan, ValueVector* resultVector, offset_t offsetInResult) const {
     if (nullColumn) {
-        LBUG_ASSERT(state.nullState);
+        DASSERT(state.nullState);
         nullColumn->scanSegment(*state.nullState, startOffsetInChunk, numValuesToScan, resultVector,
             offsetInResult);
     }
 
-    LBUG_ASSERT(resultVector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(resultVector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
     if (!resultVector->state || resultVector->state->getSelVector().isUnfiltered()) {
         scanUnfiltered(state, startOffsetInChunk, numValuesToScan, resultVector, offsetInResult);
     } else {
@@ -139,7 +139,7 @@ void StringColumn::scanSegment(const SegmentState& state, ColumnChunkData* resul
     common::offset_t startOffsetInSegment, common::row_idx_t numValuesToScan) const {
     auto startOffsetInResult = resultChunk->getNumValues();
     Column::scanSegment(state, resultChunk, startOffsetInSegment, numValuesToScan);
-    LBUG_ASSERT(resultChunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(resultChunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING);
 
     auto* stringResultChunk = dynamic_cast_checked<StringChunkData*>(resultChunk);
     // Revert change to numValues from Column::scanSegment (see note in list_column.cpp)
@@ -191,7 +191,7 @@ void StringColumn::scanSegment(const SegmentState& state, ColumnChunkData* resul
             getChildState(state, ChildStateIndex::DATA), offsetsToScan, stringResultChunk,
             getChildState(state, ChildStateIndex::INDEX).metadata);
     }
-    LBUG_ASSERT(resultChunk->getNumValues() == startOffsetInResult + numValuesToScan &&
+    DASSERT(resultChunk->getNumValues() == startOffsetInResult + numValuesToScan &&
               stringResultChunk->getIndexColumnChunk()->getNumValues() ==
                   startOffsetInResult + numValuesToScan);
     RUNTIME_CHECK({
@@ -202,7 +202,7 @@ void StringColumn::scanSegment(const SegmentState& state, ColumnChunkData* resul
             if (!stringResultChunk->isNull(i)) {
                 auto stringIndex =
                     stringResultChunk->getIndexColumnChunk()->getValue<string_index_t>(i);
-                LBUG_ASSERT(stringIndex < dictionarySize);
+                DASSERT(stringIndex < dictionarySize);
             }
         }
     });

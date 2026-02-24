@@ -39,7 +39,7 @@ protected:
 
 // This class starts database without initializing graph.
 class EmptyDBTest : public PrivateGraphTest {
-    std::string getInputDir() override { LBUG_UNREACHABLE; }
+    std::string getInputDir() override { UNREACHABLE_CODE; }
 };
 
 // ConcurrentTestExecutor is not thread safe

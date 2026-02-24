@@ -41,7 +41,7 @@ T Load(const uint8_t* ptr) {
 // Sign bit extension
 template<class T, class T_U = typename common::numeric_utils::MakeUnSignedT<T>, uint64_t CHUNK_SIZE>
 static void SignExtend(uint8_t* dst, uint8_t width) {
-    LBUG_ASSERT(width < sizeof(T) * 8);
+    DASSERT(width < sizeof(T) * 8);
     T const mask = T_U(1) << (width - 1);
     for (uint64_t i = 0; i < CHUNK_SIZE; ++i) {
         T value = Load<T>(dst + i * sizeof(T));

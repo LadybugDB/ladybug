@@ -58,7 +58,7 @@ CatalogEntry* CatalogSet::getEntryNoLock(const Transaction* transaction,
     // LCOV_EXCL_STOP
     const auto entry =
         traverseVersionChainsForTransactionNoLock(transaction, entries.at(name).get());
-    LBUG_ASSERT(entry != nullptr && !entry->isDeleted());
+    DASSERT(entry != nullptr && !entry->isDeleted());
     return entry;
 }
 
@@ -71,7 +71,7 @@ oid_t CatalogSet::createEntry(Transaction* transaction, std::unique_ptr<CatalogE
         entry->setOID(oid);
         entryPtr = createEntryNoLock(transaction, std::move(entry));
     }
-    LBUG_ASSERT(entryPtr);
+    DASSERT(entryPtr);
     if (transaction->shouldAppendToUndoBuffer()) {
         transaction->pushCreateDropCatalogEntry(*this, *entryPtr, isInternal());
     }
@@ -150,7 +150,7 @@ void CatalogSet::dropEntry(Transaction* transaction, const std::string& name, oi
         std::unique_lock lck{mtx};
         entryPtr = dropEntryNoLock(transaction, name, oid);
     }
-    LBUG_ASSERT(entryPtr);
+    DASSERT(entryPtr);
     if (transaction->shouldAppendToUndoBuffer()) {
         transaction->pushCreateDropCatalogEntry(*this, *entryPtr, isInternal());
     }
@@ -175,7 +175,7 @@ void CatalogSet::alterTableEntry(Transaction* transaction,
     validateExistNoLock(transaction, alterInfo.tableName);
     // LCOV_EXCL_STOP
     auto entry = getEntryNoLock(transaction, alterInfo.tableName);
-    LBUG_ASSERT(entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ||
+    DASSERT(entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ||
               entry->getType() == CatalogEntryType::REL_GROUP_ENTRY);
     const auto tableEntry = entry->ptrCast<TableCatalogEntry>();
     auto newEntry = tableEntry->alter(transaction->getID(), alterInfo, this);
@@ -202,7 +202,7 @@ void CatalogSet::alterTableEntry(Transaction* transaction,
         }
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }

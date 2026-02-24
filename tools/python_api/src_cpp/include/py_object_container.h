@@ -22,7 +22,7 @@ public:
     }
 
     const py::object& getLastAddedObject() {
-        LBUG_ASSERT(!pyObjects.empty());
+        DASSERT(!pyObjects.empty());
         return pyObjects.back();
     }
 

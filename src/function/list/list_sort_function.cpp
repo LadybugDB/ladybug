@@ -41,7 +41,7 @@ static std::unique_ptr<FunctionBindData> ListSortBindFunc(ScalarBindFuncInput in
         [&input, &scalarFunction]<ComparableTypes T>(T) {
             scalarFunction->execFunc = getListSortExecFunction<ListSort<T>>(input.arguments);
         },
-        [](auto) { LBUG_UNREACHABLE; });
+        [](auto) { UNREACHABLE_CODE; });
     return FunctionBindData::getSimpleBindData(input.arguments, input.arguments[0]->getDataType());
 }
 
@@ -52,7 +52,7 @@ static std::unique_ptr<FunctionBindData> ListReverseSortBindFunc(const ScalarBin
         [&input, &scalarFunction]<ComparableTypes T>(T) {
             scalarFunction->execFunc = getListSortExecFunction<ListReverseSort<T>>(input.arguments);
         },
-        [](auto) { LBUG_UNREACHABLE; });
+        [](auto) { UNREACHABLE_CODE; });
     return FunctionBindData::getSimpleBindData(input.arguments, input.arguments[0]->getDataType());
 }
 

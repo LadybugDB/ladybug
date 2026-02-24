@@ -1,1 +1,1 @@
-lcov_excl_line = LCOV_EXCL_LINE|LBUG_UNREACHABLE
+lcov_excl_line = LCOV_EXCL_LINE|UNREACHABLE_CODE

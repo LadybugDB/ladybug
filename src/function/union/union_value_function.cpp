@@ -7,7 +7,7 @@ namespace lbug {
 namespace function {
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
-    LBUG_ASSERT(input.arguments.size() == 1);
+    DASSERT(input.arguments.size() == 1);
     std::vector<StructField> fields;
     if (input.arguments[0]->getDataType().getLogicalTypeID() == common::LogicalTypeID::ANY) {
         input.arguments[0]->cast(LogicalType::STRING());
@@ -26,7 +26,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>&,
 static void valueCompileFunc(FunctionBindData* /*bindData*/,
     const std::vector<std::shared_ptr<ValueVector>>& parameters,
     std::shared_ptr<ValueVector>& result) {
-    LBUG_ASSERT(parameters.size() == 1);
+    DASSERT(parameters.size() == 1);
     result->setState(parameters[0]->state);
     UnionVector::getTagVector(result.get())->setState(parameters[0]->state);
     UnionVector::referenceVector(result.get(), UnionType::TAG_FIELD_IDX, parameters[0]);

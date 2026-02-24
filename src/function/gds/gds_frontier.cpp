@@ -16,12 +16,12 @@ void SparseFrontier::pinTableID(table_id_t tableID) {
 }
 
 void SparseFrontier::addNode(nodeID_t nodeID, iteration_t iter) {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     addNode(nodeID.offset, iter);
 }
 
 void SparseFrontier::addNode(offset_t offset, iteration_t iter) {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     if (!curData->contains(offset)) {
         curData->insert({offset, iter});
     } else {
@@ -30,14 +30,14 @@ void SparseFrontier::addNode(offset_t offset, iteration_t iter) {
 }
 
 void SparseFrontier::addNodes(const std::vector<nodeID_t>& nodeIDs, iteration_t iter) {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     for (auto& nodeID : nodeIDs) {
         addNode(nodeID.offset, iter);
     }
 }
 
 iteration_t SparseFrontier::getIteration(offset_t offset) const {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     if (!curData->contains(offset)) {
         return FRONTIER_UNVISITED;
     }
@@ -49,7 +49,7 @@ void SparseFrontierReference::pinTableID(table_id_t tableID) {
 }
 
 void SparseFrontierReference::addNode(offset_t offset, iteration_t iter) {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     if (!curData->contains(offset)) {
         curData->insert({offset, iter});
     } else {
@@ -58,19 +58,19 @@ void SparseFrontierReference::addNode(offset_t offset, iteration_t iter) {
 }
 
 void SparseFrontierReference::addNode(nodeID_t nodeID, iteration_t iter) {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     addNode(nodeID.offset, iter);
 }
 
 void SparseFrontierReference::addNodes(const std::vector<nodeID_t>& nodeIDs, iteration_t iter) {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     for (auto nodeID : nodeIDs) {
         addNode(nodeID.offset, iter);
     }
 }
 
 iteration_t SparseFrontierReference::getIteration(offset_t offset) const {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     if (!curData->contains(offset)) {
         return FRONTIER_UNVISITED;
     }
@@ -120,24 +120,24 @@ void DenseFrontier::pinTableID(table_id_t tableID) {
 }
 
 void DenseFrontier::addNode(nodeID_t nodeID, iteration_t iter) {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     curData[nodeID.offset].store(iter, std::memory_order_relaxed);
 }
 
 void DenseFrontier::addNode(offset_t offset, iteration_t iter) {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     curData[offset].store(iter, std::memory_order_relaxed);
 }
 
 void DenseFrontier::addNodes(const std::vector<nodeID_t>& nodeIDs, iteration_t iter) {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     for (auto nodeID : nodeIDs) {
         curData[nodeID.offset].store(iter, std::memory_order_relaxed);
     }
 }
 
 iteration_t DenseFrontier::getIteration(offset_t offset) const {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     return curData[offset].load(std::memory_order_relaxed);
 }
 
@@ -190,24 +190,24 @@ void DenseFrontierReference::pinTableID(table_id_t tableID) {
 }
 
 void DenseFrontierReference::addNode(nodeID_t nodeID, iteration_t iter) {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     curData[nodeID.offset].store(iter, std::memory_order_relaxed);
 }
 
 void DenseFrontierReference::addNode(offset_t offset, iteration_t iter) {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     curData[offset].store(iter, std::memory_order_relaxed);
 }
 
 void DenseFrontierReference::addNodes(const std::vector<nodeID_t>& nodeIDs, iteration_t iter) {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     for (auto nodeID : nodeIDs) {
         curData[nodeID.offset].store(iter, std::memory_order_relaxed);
     }
 }
 
 iteration_t DenseFrontierReference::getIteration(offset_t offset) const {
-    LBUG_ASSERT(curData);
+    DASSERT(curData);
     return curData[offset].load(std::memory_order_relaxed);
 }
 
@@ -261,7 +261,7 @@ Frontier* SPFrontierPair::getFrontier() {
         return denseFrontier.get();
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -289,7 +289,7 @@ void SPFrontierPair::beginNewIterationInternalNoLock() {
         nextFrontier = nextDenseFrontier.get();
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -311,7 +311,7 @@ offset_t SPFrontierPair::getNumActiveNodesInCurrentFrontier(NodeOffsetMaskMap& m
 }
 
 std::unordered_set<offset_t> SPFrontierPair::getActiveNodesOnCurrentFrontier() {
-    LBUG_ASSERT(state == GDSDensityState::SPARSE);
+    DASSERT(state == GDSDensityState::SPARSE);
     std::unordered_set<offset_t> result;
     for (auto& [offset, iter] : curSparseFrontier->getCurrentData()) {
         if (iter != curIter - 1) {
@@ -323,7 +323,7 @@ std::unordered_set<offset_t> SPFrontierPair::getActiveNodesOnCurrentFrontier() {
 }
 
 void SPFrontierPair::switchToDense(ExecutionContext* context, graph::Graph* graph) {
-    LBUG_ASSERT(state == GDSDensityState::SPARSE);
+    DASSERT(state == GDSDensityState::SPARSE);
     state = GDSDensityState::DENSE;
     denseFrontier->init(context, graph, FRONTIER_UNVISITED);
     for (auto& [tableID, map] : sparseFrontier->sparseObjects.getData()) {
@@ -359,12 +359,12 @@ void DenseSparseDynamicFrontierPair::beginNewIterationInternalNoLock() {
         nextFrontier = nextDenseFrontier.get();
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
 std::unordered_set<offset_t> DenseSparseDynamicFrontierPair::getActiveNodesOnCurrentFrontier() {
-    LBUG_ASSERT(state == GDSDensityState::SPARSE);
+    DASSERT(state == GDSDensityState::SPARSE);
     std::unordered_set<offset_t> result;
     for (auto& [offset, iter] : *curSparseFrontier->curData) {
         if (iter != curIter - 1) {
@@ -376,7 +376,7 @@ std::unordered_set<offset_t> DenseSparseDynamicFrontierPair::getActiveNodesOnCur
 }
 
 void DenseSparseDynamicFrontierPair::switchToDense(ExecutionContext* context, Graph* graph) {
-    LBUG_ASSERT(state == GDSDensityState::SPARSE);
+    DASSERT(state == GDSDensityState::SPARSE);
     state = GDSDensityState::DENSE;
     curDenseFrontier->init(context, graph, FRONTIER_UNVISITED);
     nextDenseFrontier->init(context, graph, FRONTIER_UNVISITED);

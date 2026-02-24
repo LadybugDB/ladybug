@@ -75,7 +75,7 @@ common::offset_t genericRangeSegmentsFromIt(std::span<SegmentView> segments,
     common::length_t length, Func func) {
     common::offset_t lengthScanned = 0;
     while (lengthScanned < length && segment != segments.end()) {
-        LBUG_ASSERT((**segment).getNumValues() > offsetInSegment);
+        DASSERT((**segment).getNumValues() > offsetInSegment);
         auto lengthInSegment =
             std::min(length - lengthScanned, (**segment).getNumValues() - offsetInSegment);
         func(*segment, offsetInSegment, lengthInSegment, lengthScanned);
@@ -214,7 +214,7 @@ public:
 
     ResidencyState getResidencyState() const {
         auto state = data.front()->getResidencyState();
-        RUNTIME_CHECK(for (auto& chunk : data) { LBUG_ASSERT(chunk->getResidencyState() == state); });
+        RUNTIME_CHECK(for (auto& chunk : data) { DASSERT(chunk->getResidencyState() == state); });
         return state;
     }
     bool hasUpdates() const { return updateInfo.isSet(); }
@@ -237,7 +237,7 @@ public:
     void mapValues(Func func, uint64_t startOffset = 0, uint64_t endOffset = UINT64_MAX) {
         rangeSegments(startOffset, endOffset == UINT64_MAX ? UINT64_MAX : endOffset - startOffset,
             [&](auto& segment, auto offsetInSegment, auto lengthInSegment, auto dstOffset) {
-                LBUG_ASSERT(segment->getResidencyState() == ResidencyState::IN_MEMORY);
+                DASSERT(segment->getResidencyState() == ResidencyState::IN_MEMORY);
                 auto* segmentData = segment->template getData<T>();
                 for (size_t i = offsetInSegment; i < lengthInSegment; i++) {
                     func(segmentData[i], dstOffset + i - offsetInSegment);
@@ -247,38 +247,38 @@ public:
 
     template<typename T>
     T getValue(common::offset_t pos) const {
-        LBUG_ASSERT(pos < getCapacity());
+        DASSERT(pos < getCapacity());
         auto [segment, offsetInSegment] = genericFindSegment(std::span(data), pos);
-        LBUG_ASSERT(segment->get() != nullptr);
-        LBUG_ASSERT((*segment)->getResidencyState() == ResidencyState::IN_MEMORY);
+        DASSERT(segment->get() != nullptr);
+        DASSERT((*segment)->getResidencyState() == ResidencyState::IN_MEMORY);
         return (*segment)->template getValue<T>(offsetInSegment);
     }
 
     template<typename T>
     void setValue(T val, common::offset_t pos) const {
-        LBUG_ASSERT(pos < getCapacity());
+        DASSERT(pos < getCapacity());
         auto [segment, offsetInSegment] = genericFindSegment(std::span(data), pos);
-        LBUG_ASSERT(segment->get() != nullptr);
-        LBUG_ASSERT((*segment)->getResidencyState() == ResidencyState::IN_MEMORY);
+        DASSERT(segment->get() != nullptr);
+        DASSERT((*segment)->getResidencyState() == ResidencyState::IN_MEMORY);
         (*segment)->template setValue<T>(val, pos);
     }
 
     void flush(PageAllocator& pageAllocator) {
         for (auto& segment : data) {
-            LBUG_ASSERT(segment->getResidencyState() == ResidencyState::IN_MEMORY);
+            DASSERT(segment->getResidencyState() == ResidencyState::IN_MEMORY);
             segment->flush(pageAllocator);
         }
     }
 
     void populateWithDefaultVal(evaluator::ExpressionEvaluator& defaultEvaluator,
         uint64_t& numValues_, ColumnStats* newColumnStats) {
-        LBUG_ASSERT(data.size() == 1 && data.back()->getNumValues() == 0);
+        DASSERT(data.size() == 1 && data.back()->getNumValues() == 0);
         data.back()->populateWithDefaultVal(defaultEvaluator, numValues_, newColumnStats);
     }
 
     void finalize() {
         for (auto& segment : data) {
-            LBUG_ASSERT(segment->getResidencyState() == ResidencyState::IN_MEMORY);
+            DASSERT(segment->getResidencyState() == ResidencyState::IN_MEMORY);
             segment->finalize();
         }
     }

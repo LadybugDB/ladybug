@@ -15,7 +15,7 @@ namespace vector_extension {
 EmbeddingHandle::EmbeddingHandle(common::offset_t offset, GetEmbeddingsScanState* lifetimeManager)
     : offsetInData(offset), lifetimeManager(lifetimeManager) {
     if (lifetimeManager) {
-        LBUG_ASSERT(!isNull());
+        DASSERT(!isNull());
         lifetimeManager->addEmbedding(*this);
     }
 }
@@ -59,12 +59,12 @@ void* InMemEmbeddingLocalState::getEmbeddingPtr(const EmbeddingHandle& handle) {
         common::TypeUtils::visit(type, [&]<typename T>(T) {
             auto [nodeGroupIdx, offsetInGroup] =
                 StorageUtils::getNodeGroupIdxAndOffsetInChunk(handle.offsetInData);
-            LBUG_ASSERT(nodeGroupIdx < data->columnChunks.size());
+            DASSERT(nodeGroupIdx < data->columnChunks.size());
             const auto& listChunk = data->columnChunks[nodeGroupIdx]->cast<ListChunkData>();
             val = &listChunk.getDataColumnChunk()
                        ->getData<T>()[listChunk.getListStartOffset(offsetInGroup)];
         });
-        LBUG_ASSERT(val != nullptr);
+        DASSERT(val != nullptr);
     }
     return val;
 }
@@ -87,7 +87,7 @@ std::unique_ptr<GetEmbeddingsScanState> InMemEmbeddings::constructScanState() co
 
 static bool isNull(common::offset_t offset, CachedColumn* data) {
     auto [nodeGroupIdx, offsetInGroup] = StorageUtils::getNodeGroupIdxAndOffsetInChunk(offset);
-    LBUG_ASSERT(nodeGroupIdx < data->columnChunks.size());
+    DASSERT(nodeGroupIdx < data->columnChunks.size());
     const auto& listChunk = data->columnChunks[nodeGroupIdx]->cast<ListChunkData>();
     return listChunk.isNull(offsetInGroup);
 }
@@ -146,20 +146,20 @@ EmbeddingHandle OnDiskEmbeddings::getEmbedding(common::offset_t offset,
         nodeTable.initScanState(transaction, scanState);
     }
     const auto result = nodeTable.lookup<false>(transaction, scanState);
-    LBUG_ASSERT(scanState.outputVectors.size() == 1 &&
+    DASSERT(scanState.outputVectors.size() == 1 &&
               scanState.outputVectors[0]->state->getSelVector()[0] == 0);
     if (!result || scanState.outputVectors[0]->isNull(0)) {
         return EmbeddingHandle::createNullHandle();
     }
     const auto value = scanState.outputVectors[0]->getValue<common::list_entry_t>(0);
-    LBUG_ASSERT(value.size == info.typeInfo.getNumElements());
+    DASSERT(value.size == info.typeInfo.getNumElements());
     return EmbeddingHandle{value.offset, &embeddingScanState};
 }
 
 std::vector<EmbeddingHandle> OnDiskEmbeddings::getEmbeddings(
     std::span<const common::offset_t> offsets, GetEmbeddingsScanState& embeddingScanState) const {
     auto& scanState = embeddingScanState.cast<OnDiskEmbeddingScanState>().getScanState();
-    LBUG_ASSERT(scanState.nodeIDVector->state == scanState.outState);
+    DASSERT(scanState.nodeIDVector->state == scanState.outState);
 
     // We skip scanning deleted nodes
     common::sel_t numSelectedValues = 0;
@@ -175,14 +175,14 @@ std::vector<EmbeddingHandle> OnDiskEmbeddings::getEmbeddings(
     }
     selVector.setSelSize(numSelectedValues);
 
-    LBUG_ASSERT(
+    DASSERT(
         scanState.outputVectors[0]->dataType.getLogicalTypeID() == common::LogicalTypeID::ARRAY);
     [[maybe_unused]] const auto lookupSuccess =
         nodeTable.lookupMultiple<false>(transaction, scanState);
-    LBUG_ASSERT(lookupSuccess);
+    DASSERT(lookupSuccess);
     std::vector<EmbeddingHandle> embeddings;
     embeddings.reserve(offsets.size());
-    LBUG_ASSERT(selVector.getSelSize() == numSelectedValues);
+    DASSERT(selVector.getSelSize() == numSelectedValues);
     for (common::sel_t i = 0u; i < selVector.getSelSize(); i++) {
         const auto pos = selVector[i];
         while (embeddings.size() < pos) {
@@ -193,7 +193,7 @@ std::vector<EmbeddingHandle> OnDiskEmbeddings::getEmbeddings(
             embeddings.emplace_back(EmbeddingHandle::createNullHandle());
         } else {
             const auto value = scanState.outputVectors[0]->getValue<common::list_entry_t>(pos);
-            LBUG_ASSERT(value.size == info.typeInfo.getNumElements());
+            DASSERT(value.size == info.typeInfo.getNumElements());
             embeddings.emplace_back(value.offset, &embeddingScanState);
         }
     }
@@ -217,30 +217,30 @@ OnDiskEmbeddingScanState::OnDiskEmbeddingScanState(const transaction::Transactio
 }
 
 void* OnDiskEmbeddingScanState::getEmbeddingPtr(const EmbeddingHandle& handle) {
-    LBUG_ASSERT(!handle.isNull());
+    DASSERT(!handle.isNull());
     void* val = nullptr;
     const auto dataVector = common::ListVector::getDataVector(scanState->outputVectors[0]);
     common::TypeUtils::visit(
         dataVector->dataType,
         [&]<VectorElementType T>(
             T) { val = reinterpret_cast<T*>(dataVector->getData()) + handle.offsetInData; },
-        [&](auto) { LBUG_UNREACHABLE; });
-    LBUG_ASSERT(val != nullptr);
+        [&](auto) { UNREACHABLE_CODE; });
+    DASSERT(val != nullptr);
     return val;
 }
 
 void OnDiskEmbeddingScanState::addEmbedding(const EmbeddingHandle& handle) {
-    LBUG_ASSERT(!handle.isNull());
-    LBUG_ASSERT(handle.offsetInData % embeddingDim == 0);
+    DASSERT(!handle.isNull());
+    DASSERT(handle.offsetInData % embeddingDim == 0);
     const auto offsetToAdd = handle.offsetInData / embeddingDim;
     allocatedOffsets.set(offsetToAdd);
-    LBUG_ASSERT(usedEmbeddingOffsets.empty() || offsetToAdd > usedEmbeddingOffsets.top());
+    DASSERT(usedEmbeddingOffsets.empty() || offsetToAdd > usedEmbeddingOffsets.top());
     usedEmbeddingOffsets.push(offsetToAdd);
 }
 
 void OnDiskEmbeddingScanState::reclaimEmbedding(const EmbeddingHandle& handle) {
-    LBUG_ASSERT(!handle.isNull());
-    LBUG_ASSERT(handle.offsetInData % embeddingDim == 0);
+    DASSERT(!handle.isNull());
+    DASSERT(handle.offsetInData % embeddingDim == 0);
     const auto offsetToRemove = handle.offsetInData / embeddingDim;
     allocatedOffsets.reset(offsetToRemove);
 
@@ -278,7 +278,7 @@ struct TypedCompressedView final : CompressedOffsetsView {
     }
 
     void setNodeOffsetAtomic(common::offset_t idx, common::offset_t nodeOffset) override {
-        LBUG_ASSERT(nodeOffset <= invalidOffset);
+        DASSERT(nodeOffset <= invalidOffset);
         dstNodes[idx].store(static_cast<CompressedType>(nodeOffset), std::memory_order_relaxed);
     }
 
@@ -317,7 +317,7 @@ CompressedNodeOffsetBuffer::CompressedNodeOffsetBuffer(MemoryManager* mm, common
         view = std::make_unique<TypedCompressedView<uint8_t>>(buffer->getData(), numEntries);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -365,7 +365,7 @@ common::offset_t NodeToHNSWGraphOffsetMap::nodeToGraphOffset(common::offset_t no
     const auto it =
         std::lower_bound(graphToNodeMap.get(), graphToNodeMap.get() + numNodesInGraph, nodeOffset);
     const common::offset_t pos = it - graphToNodeMap.get();
-    LBUG_ASSERT(!exactMatch || pos >= numNodesInGraph || *it == nodeOffset);
+    DASSERT(!exactMatch || pos >= numNodesInGraph || *it == nodeOffset);
     return pos;
 }
 

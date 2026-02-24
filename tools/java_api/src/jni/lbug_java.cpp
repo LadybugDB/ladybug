@@ -1754,8 +1754,8 @@ JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugCreateMap(JNIEnv* env, j
     jobjectArray keys, jobjectArray values) {
     try {
         jsize len = env->GetArrayLength(keys);
-        LBUG_ASSERT(env->GetArrayLength(values) == len);
-        LBUG_ASSERT(len > 0);
+        DASSERT(env->GetArrayLength(values) == len);
+        DASSERT(len > 0);
 
         std::optional<LogicalType> keyType;
         std::optional<LogicalType> valueType;
@@ -1769,7 +1769,7 @@ JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugCreateMap(JNIEnv* env, j
                 keyType = key->getDataType().copy();
                 valueType = value->getDataType().copy();
             } else {
-                LBUG_ASSERT(valueType.has_value());
+                DASSERT(valueType.has_value());
                 if (key->getDataType() != *keyType || value->getDataType() != *valueType) {
                     return nullptr;
                 }
@@ -1786,8 +1786,8 @@ JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugCreateMap(JNIEnv* env, j
                 LogicalType::STRUCT(std::move(structFields)), std::move(structVals)));
         }
 
-        LBUG_ASSERT(keyType.has_value());
-        LBUG_ASSERT(valueType.has_value());
+        DASSERT(keyType.has_value());
+        DASSERT(valueType.has_value());
         Value* mapValue = new Value(LogicalType::MAP(std::move(*keyType), std::move(*valueType)),
             std::move(children));
         return createJavaObject(env, mapValue, J_C_Value, J_C_Value_F_v_ref);
@@ -1803,8 +1803,8 @@ JNIEXPORT jobject JNICALL Java_com_ladybugdb_Native_lbugCreateStruct(JNIEnv* env
     jobjectArray fieldNames, jobjectArray fieldValues) {
     try {
         jsize len = env->GetArrayLength(fieldNames);
-        LBUG_ASSERT(env->GetArrayLength(fieldValues) == len);
-        LBUG_ASSERT(len > 0);
+        DASSERT(env->GetArrayLength(fieldValues) == len);
+        DASSERT(len > 0);
 
         std::vector<std::unique_ptr<Value>> children;
         auto structFields = std::vector<StructField>{};

@@ -32,7 +32,7 @@ struct CSVWarningSourceData {
 
 CSVWarningSourceData CSVWarningSourceData::constructFrom(
     const processor::WarningSourceData& warningData) {
-    LBUG_ASSERT(warningData.numValues == CopyConstants::CSV_WARNING_DATA_NUM_COLUMNS);
+    DASSERT(warningData.numValues == CopyConstants::CSV_WARNING_DATA_NUM_COLUMNS);
 
     CSVWarningSourceData ret{};
     warningData.dumpTo(ret.blockIdx, ret.offsetInBlock, ret.startByteOffset, ret.endByteOffset,
@@ -162,7 +162,7 @@ bool BaseCSVReader::readBuffer(uint64_t* start) {
     // the remaining part of the last buffer
     uint64_t remaining = 0;
     if (start != nullptr) {
-        LBUG_ASSERT(*start <= bufferSize);
+        DASSERT(*start <= bufferSize);
         remaining = bufferSize - *start;
     }
 
@@ -174,7 +174,7 @@ bool BaseCSVReader::readBuffer(uint64_t* start) {
     buffer = std::unique_ptr<char[]>(new char[bufferReadSize + remaining + 1]());
     if (remaining > 0) {
         // remaining from last buffer: copy it here
-        LBUG_ASSERT(start != nullptr);
+        DASSERT(start != nullptr);
         memcpy(buffer.get(), oldBuffer.get() + *start, remaining);
     }
     auto readCount = fileInfo->readFile(buffer.get() + remaining, bufferReadSize);
@@ -203,7 +203,7 @@ bool BaseCSVReader::readBuffer(uint64_t* start) {
 
 std::string BaseCSVReader::reconstructLine(uint64_t startPosition, uint64_t endPosition,
     bool completeLine) {
-    LBUG_ASSERT(endPosition >= startPosition);
+    DASSERT(endPosition >= startPosition);
 
     std::string res;
     // For cases where we cannot perform a seek (e.g. compressed file system) we just return an
@@ -259,7 +259,7 @@ static std::optional<WarningDataWithColumnInfo> getOptionalWarningData(
                   std::is_same_v<Driver, SerialParsingDriver>) {
         // For now we only populate extra warning data when IGNORE_ERRORS is enabled
         if (option.ignoreErrors) {
-            LBUG_ASSERT(
+            DASSERT(
                 columnInfo.numWarningDataColumns == CopyConstants::CSV_WARNING_DATA_NUM_COLUMNS);
             warningData.emplace(warningSourceData, columnInfo.numColumns);
         }
@@ -274,7 +274,7 @@ WarningSourceData BaseCSVReader::getWarningSourceData() const {
 
 template<typename Driver>
 BaseCSVReader::parse_result_t BaseCSVReader::parseCSV(Driver& driver) {
-    LBUG_ASSERT(nullptr != errorHandler);
+    DASSERT(nullptr != errorHandler);
 
     // used for parsing algorithm
     curRowIdx = 0;
@@ -331,7 +331,7 @@ BaseCSVReader::parse_result_t BaseCSVReader::parseCSV(Driver& driver) {
         goto final_state;
     add_value:
         // We get here after we have a delimiter.
-        LBUG_ASSERT(buffer[position] == option.delimiter ||
+        DASSERT(buffer[position] == option.delimiter ||
                   buffer[position] == CopyConstants::DEFAULT_CSV_LIST_END_CHAR);
         // Trim one character if we have quotes.
         if (!addValue(driver, curRowIdx, column,
@@ -353,7 +353,7 @@ BaseCSVReader::parse_result_t BaseCSVReader::parseCSV(Driver& driver) {
         goto value_start;
     add_row: {
         // We get here after we have a newline.
-        LBUG_ASSERT(isNewLine(buffer[position]));
+        DASSERT(isNewLine(buffer[position]));
         lineContext.setEndOfLine(getFileOffset());
         bool isCarriageReturn = buffer[position] == '\r';
         if (!addValue(driver, curRowIdx, column,
@@ -418,7 +418,7 @@ BaseCSVReader::parse_result_t BaseCSVReader::parseCSV(Driver& driver) {
         // we are ignoring this error, skip current row and restart state machine
         goto ignore_error;
     unquote:
-        LBUG_ASSERT(hasQuotes && buffer[position] == option.quoteChar);
+        DASSERT(hasQuotes && buffer[position] == option.quoteChar);
         // this state handles the state directly after we unquote
         // in this state we expect either another quote (entering the quoted state again, and
         // escaping the quote) or a delimiter/newline, ending the current value and moving on to the
@@ -532,7 +532,7 @@ BaseCSVReader::parse_result_t BaseCSVReader::parseCSV(Driver& driver) {
         }
         continue;
     }
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 column_id_t BaseCSVReader::appendWarningDataColumns(std::vector<std::string>& resultColumnNames,
@@ -580,7 +580,7 @@ template BaseCSVReader::parse_result_t BaseCSVReader::parseCSV<SniffCSVHeaderDri
     SniffCSVHeaderDriver&);
 
 uint64_t BaseCSVReader::getFileOffset() const {
-    LBUG_ASSERT(osFileOffset >= bufferSize);
+    DASSERT(osFileOffset >= bufferSize);
     return osFileOffset - bufferSize + position;
 }
 

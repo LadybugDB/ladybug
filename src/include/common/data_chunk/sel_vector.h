@@ -66,7 +66,7 @@ public:
     sel_t getSelSize() const { return selectedSize; }
 
     sel_t operator[](sel_t index) const {
-        LBUG_ASSERT(index < selectedSize);
+        DASSERT(index < selectedSize);
         return selectedPositions[index];
     }
 
@@ -113,7 +113,7 @@ public:
     LBUG_API void setToUnfiltered();
     LBUG_API void setToUnfiltered(sel_t size);
     void setRange(sel_t startPos, sel_t size) {
-        LBUG_ASSERT(startPos + size <= capacity);
+        DASSERT(startPos + size <= capacity);
         selectedPositions = selectedPositionsBuffer.get();
         for (auto i = 0u; i < size; ++i) {
             selectedPositionsBuffer[i] = startPos + i;
@@ -128,7 +128,7 @@ public:
         state = State::DYNAMIC;
     }
     void setToFiltered(sel_t size) {
-        LBUG_ASSERT(size <= capacity && selectedPositionsBuffer);
+        DASSERT(size <= capacity && selectedPositionsBuffer);
         setToFiltered();
         selectedSize = size;
     }
@@ -145,20 +145,20 @@ public:
     }
 
     void setSelSize(sel_t size) {
-        LBUG_ASSERT(size <= capacity);
+        DASSERT(size <= capacity);
         selectedSize = size;
     }
     void incrementSelSize(sel_t increment = 1) {
-        LBUG_ASSERT(selectedSize < capacity);
+        DASSERT(selectedSize < capacity);
         selectedSize += increment;
     }
 
     sel_t operator[](sel_t index) const {
-        LBUG_ASSERT(index < capacity);
+        DASSERT(index < capacity);
         return const_cast<sel_t&>(selectedPositions[index]);
     }
     sel_t& operator[](sel_t index) {
-        LBUG_ASSERT(index < capacity);
+        DASSERT(index < capacity);
         return const_cast<sel_t&>(selectedPositions[index]);
     }
 

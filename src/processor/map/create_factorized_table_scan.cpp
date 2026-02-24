@@ -15,7 +15,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::createFTableScan(const expression_
     std::shared_ptr<FactorizedTable> table, uint64_t maxMorselSize, physical_op_vector_t children) {
     std::vector<DataPos> outPosV;
     if (!exprs.empty()) {
-        LBUG_ASSERT(schema);
+        DASSERT(schema);
         outPosV = getDataPos(exprs, *schema);
     }
     auto function = FTableScan::getFunction();

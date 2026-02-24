@@ -27,10 +27,10 @@ public:
 
     void merge(const std::vector<common::column_id_t>& columnIDs, const TableStats& other) {
         cardinality += other.cardinality;
-        LBUG_ASSERT(columnIDs.size() == other.columnStats.size());
+        DASSERT(columnIDs.size() == other.columnStats.size());
         for (auto i = 0u; i < columnIDs.size(); ++i) {
             auto columnID = columnIDs[i];
-            LBUG_ASSERT(columnID < columnStats.size());
+            DASSERT(columnID < columnStats.size());
             columnStats[columnID].merge(other.columnStats[i]);
         }
     }
@@ -38,7 +38,7 @@ public:
     common::cardinality_t getTableCard() const { return cardinality; }
 
     common::cardinality_t getNumDistinctValues(common::column_id_t columnID) const {
-        LBUG_ASSERT(columnID < columnStats.size());
+        DASSERT(columnID < columnStats.size());
         return columnStats[columnID].getNumDistinctValues();
     }
 

@@ -135,7 +135,7 @@ public:
         auto cursor = getPageCursorForOffsetInGroup(dstOffset, state.metadata.getStartPageIdx(),
             state.numValuesPerPage);
         while (numValuesWritten < numValues) {
-            LBUG_ASSERT(
+            DASSERT(
                 cursor.pageIdx == INVALID_PAGE_IDX /*constant compression*/ ||
                 cursor.pageIdx < state.metadata.getStartPageIdx() + state.metadata.getNumPages());
             auto numValuesToWriteInPage = std::min(numValues - numValuesWritten,
@@ -177,13 +177,13 @@ public:
 
         auto pageCursor = getPageCursorForOffsetInGroup(startOffsetInSegment,
             chunkMeta.getStartPageIdx(), state.numValuesPerPage);
-        LBUG_ASSERT(isPageIdxValid(pageCursor.pageIdx, chunkMeta));
+        DASSERT(isPageIdxValid(pageCursor.pageIdx, chunkMeta));
 
         uint64_t numValuesScanned = 0;
         while (numValuesScanned < length) {
             uint64_t numValuesToScanInPage = std::min(
                 state.numValuesPerPage - pageCursor.elemPosInPage, length - numValuesScanned);
-            LBUG_ASSERT(isPageIdxValid(pageCursor.pageIdx, chunkMeta));
+            DASSERT(isPageIdxValid(pageCursor.pageIdx, chunkMeta));
             if (!filterFunc.has_value() ||
                 filterFunc.value()(numValuesScanned, numValuesScanned + numValuesToScanInPage)) {
 
@@ -270,10 +270,10 @@ private:
             exceptionChunk->findFirstExceptionAtOrPastOffset(startOffsetInChunk);
         for (; curExceptionIdx < exceptionChunk->getExceptionCount(); ++curExceptionIdx) {
             const auto curException = exceptionChunk->getExceptionAt(curExceptionIdx);
-            LBUG_ASSERT(curExceptionIdx == 0 ||
+            DASSERT(curExceptionIdx == 0 ||
                       curException.posInChunk >
                           exceptionChunk->getExceptionAt(curExceptionIdx - 1).posInChunk);
-            LBUG_ASSERT(curException.posInChunk >= curExceptionIdx);
+            DASSERT(curException.posInChunk >= curExceptionIdx);
             if (curException.posInChunk >= startOffsetInChunk + numValuesToScan) {
                 break;
             }
@@ -295,7 +295,7 @@ private:
         OutputType result, uint32_t offsetInResult,
         const read_value_from_page_func_t<OutputType>& readFunc) {
         RUNTIME_CHECK(const ColumnChunkMetadata& metadata = state.metadata);
-        LBUG_ASSERT(metadata.compMeta.compression == CompressionType::ALP ||
+        DASSERT(metadata.compMeta.compression == CompressionType::ALP ||
                   metadata.compMeta.compression == CompressionType::CONSTANT ||
                   metadata.compMeta.compression == CompressionType::UNCOMPRESSED);
         std::optional<filter_func_t> filterFunc{};
@@ -309,7 +309,7 @@ private:
         const read_values_from_page_func_t<OutputType>& readFunc,
         const std::optional<filter_func_t>& filterFunc) {
         const ColumnChunkMetadata& metadata = state.metadata;
-        LBUG_ASSERT(metadata.compMeta.compression == CompressionType::ALP ||
+        DASSERT(metadata.compMeta.compression == CompressionType::ALP ||
                   metadata.compMeta.compression == CompressionType::CONSTANT ||
                   metadata.compMeta.compression == CompressionType::UNCOMPRESSED);
 
@@ -433,7 +433,7 @@ void ColumnReadWriter::updatePageWithCursor(PageCursor cursor,
         writeOp(nullptr, cursor.elemPosInPage);
         return;
     }
-    LBUG_ASSERT(cursor.pageIdx < dataFH->getNumPages());
+    DASSERT(cursor.pageIdx < dataFH->getNumPages());
 
     ShadowUtils::updatePage(*dataFH, cursor.pageIdx, false /*insertingNewPage*/, *shadowFile,
         [&](auto frame) { writeOp(frame, cursor.elemPosInPage); });
@@ -442,7 +442,7 @@ void ColumnReadWriter::updatePageWithCursor(PageCursor cursor,
 // This function returns the page pageIdx of the page where element will be found and the pos of
 // the element in the page as the offset.
 static PageCursor getPageCursorForPos(uint64_t elementPos, uint32_t numElementsPerPage) {
-    LBUG_ASSERT((elementPos / numElementsPerPage) < UINT32_MAX);
+    DASSERT((elementPos / numElementsPerPage) < UINT32_MAX);
     return PageCursor{static_cast<page_idx_t>(elementPos / numElementsPerPage),
         static_cast<uint32_t>(elementPos % numElementsPerPage)};
 }

@@ -11,9 +11,9 @@ namespace lbug {
 namespace function {
 
 static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& input) {
-    LBUG_ASSERT(input.arguments.size() == 1);
+    DASSERT(input.arguments.size() == 1);
     auto param = input.arguments[0].get();
-    LBUG_ASSERT(param->getDataType().getLogicalTypeID() == LogicalTypeID::RECURSIVE_REL);
+    DASSERT(param->getDataType().getLogicalTypeID() == LogicalTypeID::RECURSIVE_REL);
     auto recursiveInfo = param->ptrCast<RelExpression>()->getRecursiveInfo();
     if (recursiveInfo->bindData->weightOutputExpr == nullptr) {
         throw BinderException(

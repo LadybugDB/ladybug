@@ -81,7 +81,7 @@ static std::vector<std::string> transformStructKeys(py::handle keys, idx_t size)
 
 void transformDictionaryToStruct(common::ValueVector* outputVector, uint64_t pos,
     const PyDictionary& dict) {
-    LBUG_ASSERT(outputVector->dataType.getLogicalTypeID() == LogicalTypeID::STRUCT);
+    DASSERT(outputVector->dataType.getLogicalTypeID() == LogicalTypeID::STRUCT);
     auto structKeys = transformStructKeys(dict.keys, dict.len);
     if (StructType::getNumFields(outputVector->dataType) != dict.len) {
         throw common::ConversionException(
@@ -104,7 +104,7 @@ void transformDictionaryToStruct(common::ValueVector* outputVector, uint64_t pos
 
 void transformDictionaryToMap(common::ValueVector* outputVector, uint64_t pos,
     const PyDictionary& dict) {
-    LBUG_ASSERT(outputVector->dataType.getLogicalTypeID() == LogicalTypeID::MAP);
+    DASSERT(outputVector->dataType.getLogicalTypeID() == LogicalTypeID::MAP);
     auto keys = dict.values.attr("__getitem__")(0);
     auto values = dict.values.attr("__getitem__")(1);
 
@@ -114,7 +114,7 @@ void transformDictionaryToMap(common::ValueVector* outputVector, uint64_t pos,
     }
 
     auto numKeys = py::len(keys);
-    LBUG_ASSERT(numKeys == py::len(values));
+    DASSERT(numKeys == py::len(values));
     auto listEntry = ListVector::addList(outputVector, numKeys);
     outputVector->setValue(pos, listEntry);
     auto structVector = ListVector::getDataVector(outputVector);
@@ -203,11 +203,11 @@ void transformPythonValue(common::ValueVector* outputVector, uint64_t pos, py::h
             transformDictionaryToMap(outputVector, pos, dict);
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

@@ -47,7 +47,7 @@ void PatternExpressionEvaluator::initFurther(const ResultSet&) {
     StructPackFunctions::compileFunc(nullptr, parameters, resultVector);
     const auto& dataType = expression->getDataType();
     auto fieldIdx = StructType::getFieldIdx(dataType.copy(), InternalKeyword::ID);
-    LBUG_ASSERT(fieldIdx != INVALID_STRUCT_FIELD_IDX);
+    DASSERT(fieldIdx != INVALID_STRUCT_FIELD_IDX);
     idVector = StructVector::getFieldVector(resultVector.get(), fieldIdx).get();
 }
 

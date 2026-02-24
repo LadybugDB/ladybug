@@ -190,7 +190,7 @@ MetricType HNSWIndexConfig::getMetricType(const std::string& metricName) {
     if (lowerMetricName == "dot_product" || lowerMetricName == "dotproduct") {
         return MetricType::DotProduct;
     }
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 DropHNSWConfig::DropHNSWConfig(const function::optional_params_t& optionalParams) {

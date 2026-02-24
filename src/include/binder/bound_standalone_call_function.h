@@ -16,7 +16,7 @@ public:
           info{std::move(info)} {}
 
     const function::TableFunction& getTableFunction() const {
-        LBUG_ASSERT(info.func.has_value());
+        DASSERT(info.func.has_value());
         return *info.func;
     }
 

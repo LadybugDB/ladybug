@@ -25,7 +25,7 @@ public:
         return chunkedGroups;
     }
     InMemChunkedNodeGroup& getChunkedGroup(common::node_group_idx_t groupIdx) const {
-        LBUG_ASSERT(groupIdx < chunkedGroups.size());
+        DASSERT(groupIdx < chunkedGroups.size());
         return *chunkedGroups[groupIdx];
     }
 

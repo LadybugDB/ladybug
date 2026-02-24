@@ -101,38 +101,38 @@ void UDTTypeInfo::serializeInternal(Serializer& serializer) const {
 }
 
 uint32_t DecimalType::getPrecision(const LogicalType& type) {
-    LBUG_ASSERT(type.getLogicalTypeID() == LogicalTypeID::DECIMAL);
+    DASSERT(type.getLogicalTypeID() == LogicalTypeID::DECIMAL);
     auto decimalTypeInfo = type.extraTypeInfo->constPtrCast<DecimalTypeInfo>();
     return decimalTypeInfo->getPrecision();
 }
 
 uint32_t DecimalType::getScale(const LogicalType& type) {
-    LBUG_ASSERT(type.getLogicalTypeID() == LogicalTypeID::DECIMAL);
+    DASSERT(type.getLogicalTypeID() == LogicalTypeID::DECIMAL);
     auto decimalTypeInfo = type.extraTypeInfo->constPtrCast<DecimalTypeInfo>();
     return decimalTypeInfo->getScale();
 }
 
 const LogicalType& ListType::getChildType(const lbug::common::LogicalType& type) {
-    LBUG_ASSERT(type.getPhysicalType() == PhysicalTypeID::LIST ||
+    DASSERT(type.getPhysicalType() == PhysicalTypeID::LIST ||
               type.getPhysicalType() == PhysicalTypeID::ARRAY);
     auto listTypeInfo = type.extraTypeInfo->constPtrCast<ListTypeInfo>();
     return listTypeInfo->getChildType();
 }
 
 const LogicalType& ArrayType::getChildType(const LogicalType& type) {
-    LBUG_ASSERT(type.getPhysicalType() == PhysicalTypeID::ARRAY);
+    DASSERT(type.getPhysicalType() == PhysicalTypeID::ARRAY);
     auto arrayTypeInfo = type.extraTypeInfo->constPtrCast<ArrayTypeInfo>();
     return arrayTypeInfo->getChildType();
 }
 
 uint64_t ArrayType::getNumElements(const LogicalType& type) {
-    LBUG_ASSERT(type.getPhysicalType() == PhysicalTypeID::ARRAY);
+    DASSERT(type.getPhysicalType() == PhysicalTypeID::ARRAY);
     auto arrayTypeInfo = type.extraTypeInfo->constPtrCast<ArrayTypeInfo>();
     return arrayTypeInfo->getNumElements();
 }
 
 std::vector<const LogicalType*> StructType::getFieldTypes(const LogicalType& type) {
-    LBUG_ASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
     auto structTypeInfo = type.extraTypeInfo->constPtrCast<StructTypeInfo>();
     return structTypeInfo->getChildrenTypes();
 }
@@ -146,53 +146,53 @@ const LogicalType& StructType::getFieldType(const LogicalType& type, const std::
 }
 
 std::vector<std::string> StructType::getFieldNames(const LogicalType& type) {
-    LBUG_ASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
     auto structTypeInfo = type.extraTypeInfo->constPtrCast<StructTypeInfo>();
     return structTypeInfo->getChildrenNames();
 }
 
 uint64_t StructType::getNumFields(const LogicalType& type) {
-    LBUG_ASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
     return getFields(type).size();
 }
 
 const std::vector<StructField>& StructType::getFields(const LogicalType& type) {
-    LBUG_ASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
     auto structTypeInfo = type.extraTypeInfo->constPtrCast<StructTypeInfo>();
     return structTypeInfo->getStructFields();
 }
 
 bool StructType::hasField(const LogicalType& type, const std::string& key) {
-    LBUG_ASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
     auto structTypeInfo = type.extraTypeInfo->constPtrCast<StructTypeInfo>();
     return structTypeInfo->hasField(key);
 }
 
 const StructField& StructType::getField(const LogicalType& type, struct_field_idx_t idx) {
-    LBUG_ASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
     auto structTypeInfo = type.extraTypeInfo->constPtrCast<StructTypeInfo>();
     return structTypeInfo->getStructField(idx);
 }
 
 const StructField& StructType::getField(const LogicalType& type, const std::string& key) {
-    LBUG_ASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
     auto structTypeInfo = type.extraTypeInfo->constPtrCast<StructTypeInfo>();
     return structTypeInfo->getStructField(key);
 }
 
 struct_field_idx_t StructType::getFieldIdx(const LogicalType& type, const std::string& key) {
-    LBUG_ASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(type.getPhysicalType() == PhysicalTypeID::STRUCT);
     auto structTypeInfo = type.extraTypeInfo->constPtrCast<StructTypeInfo>();
     return structTypeInfo->getStructFieldIdx(key);
 }
 
 const LogicalType& MapType::getKeyType(const LogicalType& type) {
-    LBUG_ASSERT(type.getLogicalTypeID() == LogicalTypeID::MAP);
+    DASSERT(type.getLogicalTypeID() == LogicalTypeID::MAP);
     return *StructType::getFieldTypes(ListType::getChildType(type))[0];
 }
 
 const LogicalType& MapType::getValueType(const LogicalType& type) {
-    LBUG_ASSERT(type.getLogicalTypeID() == LogicalTypeID::MAP);
+    DASSERT(type.getLogicalTypeID() == LogicalTypeID::MAP);
     return *StructType::getFieldTypes(ListType::getChildType(type))[1];
 }
 
@@ -201,32 +201,32 @@ union_field_idx_t UnionType::getInternalFieldIdx(union_field_idx_t idx) {
 }
 
 std::string UnionType::getFieldName(const LogicalType& type, union_field_idx_t idx) {
-    LBUG_ASSERT(type.getLogicalTypeID() == LogicalTypeID::UNION);
+    DASSERT(type.getLogicalTypeID() == LogicalTypeID::UNION);
     return StructType::getFieldNames(type)[getInternalFieldIdx(idx)];
 }
 
 const LogicalType& UnionType::getFieldType(const LogicalType& type, union_field_idx_t idx) {
-    LBUG_ASSERT(type.getLogicalTypeID() == LogicalTypeID::UNION);
+    DASSERT(type.getLogicalTypeID() == LogicalTypeID::UNION);
     return StructType::getFieldType(type, getInternalFieldIdx(idx));
 }
 
 const LogicalType& UnionType::getFieldType(const LogicalType& type, const std::string& key) {
-    LBUG_ASSERT(type.getLogicalTypeID() == LogicalTypeID::UNION);
+    DASSERT(type.getLogicalTypeID() == LogicalTypeID::UNION);
     return StructType::getFieldType(type, key);
 }
 
 uint64_t UnionType::getNumFields(const LogicalType& type) {
-    LBUG_ASSERT(type.getLogicalTypeID() == LogicalTypeID::UNION);
+    DASSERT(type.getLogicalTypeID() == LogicalTypeID::UNION);
     return StructType::getNumFields(type) - 1;
 }
 
 bool UnionType::hasField(const LogicalType& type, const std::string& key) {
-    LBUG_ASSERT(type.getLogicalTypeID() == LogicalTypeID::UNION);
+    DASSERT(type.getLogicalTypeID() == LogicalTypeID::UNION);
     return StructType::hasField(type, key);
 }
 
 union_field_idx_t UnionType::getFieldIdx(const LogicalType& type, const std::string& key) {
-    LBUG_ASSERT(type.getLogicalTypeID() == LogicalTypeID::UNION);
+    DASSERT(type.getLogicalTypeID() == LogicalTypeID::UNION);
     return StructType::getFieldIdx(type, key) - 1; // inverse of getInternalFieldIdx
 }
 
@@ -278,7 +278,7 @@ std::string PhysicalTypeUtils::toString(PhysicalTypeID physicalType) {
     case PhysicalTypeID::ALP_EXCEPTION_DOUBLE:
         return "ALP_EXCEPTION_DOUBLE";
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     // LCOV_EXCL_STOP
 }
@@ -320,7 +320,7 @@ uint32_t PhysicalTypeUtils::getFixedTypeSize(PhysicalTypeID physicalType) {
     case PhysicalTypeID::ALP_EXCEPTION_DOUBLE:
         return storage::EncodeException<double>::sizeInBytes();
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -673,7 +673,7 @@ std::string LogicalType::toString() const {
     case LogicalTypeID::JSON:
         return LogicalTypeUtils::toString(typeID);
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -911,7 +911,7 @@ PhysicalTypeID LogicalType::getPhysicalType(LogicalTypeID typeID,
         return PhysicalTypeID::POINTER;
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -1055,7 +1055,7 @@ std::string LogicalTypeUtils::toString(LogicalTypeID dataTypeID) {
     case LogicalTypeID::POINTER:
         return "POINTER";
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     // LCOV_EXCL_STOP
 }
@@ -1596,8 +1596,8 @@ static bool tryCombineUnionTypes(const LogicalType& left, const LogicalType& rig
 */
 
 static LogicalTypeID joinToWiderType(const LogicalTypeID& left, const LogicalTypeID& right) {
-    LBUG_ASSERT(LogicalTypeUtils::isIntegral(left));
-    LBUG_ASSERT(LogicalTypeUtils::isIntegral(right));
+    DASSERT(LogicalTypeUtils::isIntegral(left));
+    DASSERT(LogicalTypeUtils::isIntegral(right));
     if (PhysicalTypeUtils::getFixedTypeSize(LogicalType::getPhysicalType(left)) >
         PhysicalTypeUtils::getFixedTypeSize(LogicalType::getPhysicalType(right))) {
         return left;

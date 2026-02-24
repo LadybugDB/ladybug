@@ -32,7 +32,7 @@ public:
     }
 
     std::shared_ptr<Expression> getSingleColumnExpr() const {
-        LBUG_ASSERT(columns.size() == 1);
+        DASSERT(columns.size() == 1);
         return columns[0];
     }
 

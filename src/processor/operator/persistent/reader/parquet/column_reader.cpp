@@ -40,11 +40,11 @@ ColumnReader::ColumnReader(ParquetReader& reader, LogicalType type,
 void ColumnReader::initializeRead(uint64_t /*rowGroupIdx*/,
     const std::vector<lbug_parquet::format::ColumnChunk>& columns,
     lbug_apache::thrift::protocol::TProtocol& protocol) {
-    LBUG_ASSERT(fileIdx < columns.size());
+    DASSERT(fileIdx < columns.size());
     chunk = &columns[fileIdx];
     this->protocol = &protocol;
-    LBUG_ASSERT(chunk);
-    LBUG_ASSERT(chunk->__isset.meta_data);
+    DASSERT(chunk);
+    DASSERT(chunk->__isset.meta_data);
 
     if (chunk->__isset.file_path) {
         throw std::runtime_error("Only inlined data files are supported (no references)");
@@ -127,18 +127,18 @@ uint64_t ColumnReader::read(uint64_t numValues, parquet_filter_t& filter, uint8_
             prepareRead(filter);
         }
 
-        LBUG_ASSERT(block);
+        DASSERT(block);
         auto readNow = std::min<uint64_t>(toRead, pageRowsAvailable);
 
-        LBUG_ASSERT(readNow <= common::DEFAULT_VECTOR_CAPACITY);
+        DASSERT(readNow <= common::DEFAULT_VECTOR_CAPACITY);
 
         if (hasRepeats()) {
-            LBUG_ASSERT(repeatedDecoder);
+            DASSERT(repeatedDecoder);
             repeatedDecoder->GetBatch<uint8_t>(repeatOut + resultOffset, readNow);
         }
 
         if (hasDefines()) {
-            LBUG_ASSERT(defineDecoder);
+            DASSERT(defineDecoder);
             defineDecoder->GetBatch<uint8_t>(defineOut + resultOffset, readNow);
         }
 
@@ -178,7 +178,7 @@ uint64_t ColumnReader::read(uint64_t numValues, parquet_filter_t& filter, uint8_
             plain(readBuf, defineOut, readNow, filter, resultOffset, resultOut);
         } else if (rleDecoder) {
             // RLE encoding for boolean
-            LBUG_ASSERT(type.getLogicalTypeID() == common::LogicalTypeID::BOOL);
+            DASSERT(type.getLogicalTypeID() == common::LogicalTypeID::BOOL);
             auto readBuf = std::make_shared<ResizeableBuffer>();
             readBuf->resize(sizeof(bool) * (readNow - nullCount));
             rleDecoder->GetBatch<uint8_t>(readBuf->ptr, readNow - nullCount);
@@ -265,7 +265,7 @@ std::unique_ptr<ColumnReader> ColumnReader::createReader(ParquetReader& reader,
         return std::make_unique<UUIDColumnReader>(reader, std::move(type), schema, fileIdx,
             maxDefine, maxRepeat);
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -383,7 +383,7 @@ void ColumnReader::decompressInternal(lbug_parquet::format::CompressionCodec::ty
 }
 
 void ColumnReader::preparePageV2(lbug_parquet::format::PageHeader& pageHdr) {
-    LBUG_ASSERT(pageHdr.type == PageType::DATA_PAGE_V2);
+    DASSERT(pageHdr.type == PageType::DATA_PAGE_V2);
 
     auto& trans = reinterpret_cast<ThriftFileTransport&>(*protocol->getTransport());
 
@@ -499,7 +499,7 @@ void ColumnReader::prepareDataPage(lbug_parquet::format::PageHeader& pageHdr) {
     }
     case Encoding::DELTA_LENGTH_BYTE_ARRAY:
     case Encoding::DELTA_BYTE_ARRAY: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     case Encoding::PLAIN:
         // nothing to do here, will be read directly below
@@ -553,14 +553,14 @@ std::unique_ptr<ColumnReader> ColumnReader::createTimestampReader(ParquetReader&
                     ParquetTimeStampUtils::parquetTimestampMsToTimestamp>>(reader, std::move(type),
                     schema, fileIdx, maxDefine, maxRepeat);
             default:
-                LBUG_UNREACHABLE;
+                UNREACHABLE_CODE;
             }
             // LCOV_EXCL_STOP
         }
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }

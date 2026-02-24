@@ -35,7 +35,7 @@ public:
     DELETE_COPY_AND_MOVE(MemoryBuffer);
 
     std::span<uint8_t> getBuffer() const {
-        LBUG_ASSERT(!evicted);
+        DASSERT(!evicted);
         return buffer;
     }
     uint8_t* getData() const { return getBuffer().data(); }

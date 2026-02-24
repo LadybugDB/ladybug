@@ -42,7 +42,7 @@ ColumnChunk::ColumnChunk(MemoryManager& mm, LogicalType&& dataType, uint64_t cap
     : enableCompression{enableCompression} {
     data.push_back(ColumnChunkFactory::createColumnChunkData(mm, std::move(dataType),
         enableCompression, capacity, residencyState, true, initializeToZero));
-    LBUG_ASSERT(residencyState != ResidencyState::ON_DISK);
+    DASSERT(residencyState != ResidencyState::ON_DISK);
 }
 
 ColumnChunk::ColumnChunk(MemoryManager& mm, LogicalType&& dataType, bool enableCompression,
@@ -82,7 +82,7 @@ void ColumnChunk::scan(const Transaction* transaction, const ChunkState& state, 
         state.column->scan(state, offsetInChunk, length, &output, 0);
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
     updateInfo.scan(transaction, output, offsetInChunk, length);
@@ -90,7 +90,7 @@ void ColumnChunk::scan(const Transaction* transaction, const ChunkState& state, 
 
 static void scanPersistentSegments(ChunkState& chunkState, ColumnChunkScanner& output,
     common::offset_t startRow, common::offset_t numRows) {
-    LBUG_ASSERT(output.getNumValues() == 0);
+    DASSERT(output.getNumValues() == 0);
     [[maybe_unused]] uint64_t numValuesScanned = chunkState.rangeSegments(startRow, numRows,
         [&](auto& segmentState, auto offsetInSegment, auto lengthInSegment, auto) {
             output.scanSegment(offsetInSegment, lengthInSegment,
@@ -100,7 +100,7 @@ static void scanPersistentSegments(ChunkState& chunkState, ColumnChunkScanner& o
                         lengthInSegment);
                 });
         });
-    LBUG_ASSERT(output.getNumValues() == numValuesScanned);
+    DASSERT(output.getNumValues() == numValuesScanned);
 }
 
 void ColumnChunk::scanInMemSegments(ColumnChunkScanner& output, common::offset_t startRow,
@@ -195,7 +195,7 @@ void ColumnChunk::update(const Transaction* transaction, offset_t offsetInChunk,
 }
 
 MergedColumnChunkStats ColumnChunk::getMergedColumnChunkStats() const {
-    LBUG_ASSERT(!updateInfo.isSet());
+    DASSERT(!updateInfo.isSet());
     auto baseStats = MergedColumnChunkStats{ColumnChunkStats{}, true, true};
     for (auto& segment : data) {
         // TODO: Replace with a function that modifies the existing stats in-place?
@@ -290,7 +290,7 @@ void ColumnChunk::checkpoint(Column& column,
     for (size_t i = 0; i < data.size(); i++) {
         std::vector<SegmentCheckpointState> segmentCheckpointStates;
         auto& segment = data[i];
-        LBUG_ASSERT(segment->getResidencyState() == ResidencyState::ON_DISK);
+        DASSERT(segment->getResidencyState() == ResidencyState::ON_DISK);
         for (auto& state : chunkCheckpointStates) {
             const bool isLastSegment = (i == data.size() - 1);
             if (state.startRow + state.numRows > segmentStart &&

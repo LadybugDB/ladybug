@@ -13,7 +13,7 @@ namespace lbug {
 namespace function {
 
 static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& input) {
-    LBUG_ASSERT(input.arguments.size() == 1);
+    DASSERT(input.arguments.size() == 1);
     auto param = input.arguments[0].get();
     auto binder = input.expressionBinder;
     if (param->expressionType == ExpressionType::PATH) {
@@ -43,7 +43,7 @@ static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& i
     } else if (ExpressionUtil::isRecursiveRelPattern(*param)) {
         return param->constPtrCast<RelExpression>()->getLengthExpression();
     }
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 function_set LengthFunction::getFunctionSet() {

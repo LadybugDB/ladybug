@@ -81,7 +81,7 @@ union StorageValue {
         } else if constexpr (std::is_floating_point<T>()) {
             return floatVal;
         } else {
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
 
@@ -180,11 +180,11 @@ struct LBUG_API CompressionMetadata {
 
     // accessors for additionalMetadata
     inline const ExtraMetadata* getExtraMetadata() const {
-        LBUG_ASSERT(extraMetadata.has_value());
+        DASSERT(extraMetadata.has_value());
         return extraMetadata.value().get();
     }
     inline ExtraMetadata* getExtraMetadata() {
-        LBUG_ASSERT(extraMetadata.has_value());
+        DASSERT(extraMetadata.has_value());
         return extraMetadata.value().get();
     }
     inline const ALPMetadata* floatMetadata() const {
@@ -320,7 +320,7 @@ public:
         }
         uint64_t numValues = std::min(numValuesRemaining, dstBufferSize / numBytesPerValue);
         uint64_t sizeToCopy = numValues * numBytesPerValue;
-        LBUG_ASSERT(sizeToCopy <= dstBufferSize);
+        DASSERT(sizeToCopy <= dstBufferSize);
         std::memcpy(dstBuffer, srcBuffer, sizeToCopy);
         srcBuffer += sizeToCopy;
         return sizeToCopy;

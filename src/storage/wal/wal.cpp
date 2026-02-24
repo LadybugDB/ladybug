@@ -26,7 +26,7 @@ WAL::WAL(const std::string& dbPath, bool readOnly, bool enableChecksums, Virtual
 WAL::~WAL() {}
 
 void WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context) {
-    LBUG_ASSERT(!readOnly);
+    DASSERT(!readOnly);
     if (inMemory || localWAL.getSize() == 0) {
         return; // No need to log empty WAL.
     }
@@ -105,16 +105,16 @@ void WAL::initWriter(main::ClientContext* context) {
 
 // NOLINTNEXTLINE(readability-make-member-function-const): semantically non-const function.
 void WAL::addNewWALRecordNoLock(const WALRecord& walRecord) {
-    LBUG_ASSERT(walRecord.type != WALRecordType::INVALID_RECORD);
-    LBUG_ASSERT(!inMemory);
-    LBUG_ASSERT(serializer != nullptr);
+    DASSERT(walRecord.type != WALRecordType::INVALID_RECORD);
+    DASSERT(!inMemory);
+    DASSERT(serializer != nullptr);
     serializer->getWriter()->onObjectBegin();
     walRecord.serialize(*serializer);
     serializer->getWriter()->onObjectEnd();
 }
 
 WAL* WAL::Get(const main::ClientContext& context) {
-    LBUG_ASSERT(context.getDatabase() && context.getDatabase()->getStorageManager());
+    DASSERT(context.getDatabase() && context.getDatabase()->getStorageManager());
     return &context.getDatabase()->getStorageManager()->getWAL();
 }
 

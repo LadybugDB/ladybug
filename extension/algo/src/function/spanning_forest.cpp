@@ -234,7 +234,7 @@ offset_t KruskalCompute::findComponent(const offset_t& nodeId) {
 }
 
 void KruskalCompute::mergeComponents(const offset_t& srcCompId, const offset_t& dstCompId) {
-    LBUG_ASSERT_UNCONDITIONAL(srcCompId != dstCompId);
+    ASSERT(srcCompId != dstCompId);
     // Merge with the larger component, based on the rank. If ranks are equal, use IDs to break
     // ties.
     if (rank[srcCompId] == rank[dstCompId]) {
@@ -264,7 +264,7 @@ public:
 
     void parallelCompute(const offset_t startOffset, const offset_t endOffset,
         const std::optional<table_id_t>& tableID) override {
-        LBUG_ASSERT(tableID.has_value());
+        DASSERT(tableID.has_value());
         for (auto i = startOffset; i < endOffset; ++i) {
             const auto& [srcId, dstId, relId, forestId] = finalResults[i];
             relIdVector->setValue<relID_t>(0, relId);
@@ -293,12 +293,12 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput&) {
     const auto clientContext = input.context->clientContext;
     auto sharedState = input.sharedState->ptrCast<GDSFuncSharedState>();
     auto graph = sharedState->graph.get();
-    LBUG_ASSERT(graph->getNodeTableIDs().size() == 1);
+    DASSERT(graph->getNodeTableIDs().size() == 1);
     const auto tableId = graph->getNodeTableIDs()[0];
     auto mm = MemoryManager::Get(*clientContext);
     const auto nbrTables = graph->getRelInfos(tableId);
     const auto nbrInfo = nbrTables[0];
-    LBUG_ASSERT(nbrInfo.srcTableID == nbrInfo.dstTableID);
+    DASSERT(nbrInfo.srcTableID == nbrInfo.dstTableID);
 
     auto spanningForestBindData = input.bindData->constPtrCast<SFBindData>();
     auto& config = spanningForestBindData->optionalParams->constCast<SFOptionalParams>();
@@ -405,7 +405,7 @@ static void getLogicalPlan(Planner* planner, const BoundReadingClause& readingCl
 
     for (auto i = 1u; i < 3; ++i) {
         auto nodeOutput = bindData->output[i]->ptrCast<NodeExpression>();
-        LBUG_ASSERT(nodeOutput != nullptr);
+        DASSERT(nodeOutput != nullptr);
         planner->getCardinliatyEstimatorUnsafe().init(*nodeOutput);
         auto scanPlan = planner->getNodePropertyScanPlan(*nodeOutput);
         if (!scanPlan.isEmpty()) {
@@ -415,7 +415,7 @@ static void getLogicalPlan(Planner* planner, const BoundReadingClause& readingCl
         }
     }
     auto relOutput = bindData->output[0]->ptrCast<RelExpression>();
-    LBUG_ASSERT(relOutput != nullptr);
+    DASSERT(relOutput != nullptr);
     auto scanPlan = LogicalPlan();
     auto boundNode = relOutput->getSrcNode();
     auto nbrNode = relOutput->getDstNode();

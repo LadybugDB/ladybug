@@ -33,7 +33,7 @@ bool HNSWIndexUtils::validateIndexExistence(const main::ClientContext& context,
             case common::ConflictAction::ON_CONFLICT_DO_NOTHING:
                 return true;
             default:
-                LBUG_UNREACHABLE;
+                UNREACHABLE_CODE;
             }
         }
         return false;
@@ -48,7 +48,7 @@ bool HNSWIndexUtils::validateIndexExistence(const main::ClientContext& context,
             case common::ConflictAction::ON_CONFLICT_DO_NOTHING:
                 return false;
             default:
-                LBUG_UNREACHABLE;
+                UNREACHABLE_CODE;
             }
         }
         return true;
@@ -61,7 +61,7 @@ bool HNSWIndexUtils::validateIndexExistence(const main::ClientContext& context,
         return true;
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
@@ -108,7 +108,7 @@ static metric_func_t computeDistanceFuncDispatch(const common::LogicalType& type
         return computeDistance<FUNC_F64, double>;
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
@@ -129,7 +129,7 @@ metric_func_t HNSWIndexUtils::getMetricsFunction(MetricType metric,
         return computeDistanceFuncDispatch<simsimd_l2sq_f32, simsimd_l2sq_f64>(type);
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }

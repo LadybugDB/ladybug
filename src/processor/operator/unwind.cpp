@@ -36,7 +36,7 @@ void Unwind::copyTuplesToOutVector(uint64_t startPos, uint64_t endPos) const {
         outValueVector->copyFromVectorData(i, listDataVector, listPos++);
     }
     if (idVector != nullptr) {
-        LBUG_ASSERT(listDataVector->dataType.getLogicalTypeID() == common::LogicalTypeID::NODE);
+        DASSERT(listDataVector->dataType.getLogicalTypeID() == common::LogicalTypeID::NODE);
         auto idFieldVector = StructVector::getFieldVector(listDataVector, 0);
         listPos = listEntry.offset + startPos;
         for (auto i = 0u; i < endPos - startPos; i++) {

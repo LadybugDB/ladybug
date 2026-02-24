@@ -43,7 +43,7 @@ public:
 
     template<typename T>
     T getValue(common::offset_t /*pos*/) const {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 
     uint64_t getStringLength(common::offset_t pos) const {

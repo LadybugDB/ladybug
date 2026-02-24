@@ -32,7 +32,7 @@ std::string PathSemanticUtils::toString(PathSemantic semantic) {
     case PathSemantic::ACYCLIC:
         return "ACYCLIC";
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

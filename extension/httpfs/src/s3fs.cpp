@@ -43,7 +43,7 @@ void S3FileInfo::initialize(main::ClientContext* context) {
         auto maxNumParts = uploadParams.maxNumPartsPerFile;
         auto requiredPartSize = uploadParams.maxFileSize / maxNumParts;
         partSize = std::max<uint64_t>(AWS_MINIMUM_PART_SIZE, requiredPartSize);
-        LBUG_ASSERT(partSize * maxNumParts >= uploadParams.maxFileSize);
+        DASSERT(partSize * maxNumParts >= uploadParams.maxFileSize);
         multipartUploadID = s3FS->initializeMultiPartUpload(this);
     }
 }

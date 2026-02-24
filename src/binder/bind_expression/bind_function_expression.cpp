@@ -141,7 +141,7 @@ std::shared_ptr<Expression> ExpressionBinder::bindRewriteFunctionExpression(
     auto match = BuiltInFunctionsUtils::matchFunction(functionName, childrenTypes,
         entry->ptrCast<FunctionCatalogEntry>());
     auto function = match->constPtrCast<RewriteFunction>();
-    LBUG_ASSERT(function->rewriteFunc != nullptr);
+    DASSERT(function->rewriteFunc != nullptr);
     auto input = RewriteFunctionBindInput(context, this, children);
     return function->rewriteFunc(input);
 }

@@ -8,7 +8,7 @@ namespace processor {
 
 static void setOffsetToWithinNodeGroup(storage::ColumnChunkData& chunk,
     common::offset_t startOffset) {
-    LBUG_ASSERT(chunk.getDataType().getPhysicalType() == common::PhysicalTypeID::INTERNAL_ID);
+    DASSERT(chunk.getDataType().getPhysicalType() == common::PhysicalTypeID::INTERNAL_ID);
     const auto offsets = reinterpret_cast<common::offset_t*>(chunk.getData());
     for (auto i = 0u; i < chunk.getNumValues(); i++) {
         offsets[i] -= startOffset;
@@ -33,7 +33,7 @@ std::unique_ptr<RelBatchInsertExecutionState> CopyRelBatchInsert::initExecutionS
 void CopyRelBatchInsert::populateCSRLengthsInternal(const storage::InMemChunkedCSRHeader& csrHeader,
     common::offset_t numNodes, storage::InMemChunkedNodeGroupCollection& partition,
     common::column_id_t boundNodeOffsetColumn) {
-    LBUG_ASSERT(numNodes == csrHeader.length->getNumValues() &&
+    DASSERT(numNodes == csrHeader.length->getNumValues() &&
               numNodes == csrHeader.offset->getNumValues());
     const auto lengthData = reinterpret_cast<common::length_t*>(csrHeader.length->getData());
     std::fill(lengthData, lengthData + numNodes, 0);
@@ -41,7 +41,7 @@ void CopyRelBatchInsert::populateCSRLengthsInternal(const storage::InMemChunkedC
         auto& offsetChunk = chunkedGroup->getColumnChunk(boundNodeOffsetColumn);
         for (auto i = 0u; i < offsetChunk.getNumValues(); i++) {
             const auto nodeOffset = offsetChunk.getValue<common::offset_t>(i);
-            LBUG_ASSERT(nodeOffset < numNodes);
+            DASSERT(nodeOffset < numNodes);
             lengthData[nodeOffset]++;
         }
     }
@@ -57,7 +57,7 @@ void CopyRelBatchInsert::populateCSRLengths(RelBatchInsertExecutionState& execut
 
 void CopyRelBatchInsert::setRowIdxFromCSROffsets(storage::ColumnChunkData& rowIdxChunk,
     storage::ColumnChunkData& csrOffsetChunk) {
-    LBUG_ASSERT(rowIdxChunk.getDataType().getPhysicalType() == common::PhysicalTypeID::INTERNAL_ID);
+    DASSERT(rowIdxChunk.getDataType().getPhysicalType() == common::PhysicalTypeID::INTERNAL_ID);
     for (auto i = 0u; i < rowIdxChunk.getNumValues(); i++) {
         const auto nodeOffset = rowIdxChunk.getValue<common::offset_t>(i);
         const auto csrOffset = csrOffsetChunk.getValue<common::offset_t>(nodeOffset);

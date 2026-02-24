@@ -12,7 +12,7 @@ namespace lbug {
 namespace function {
 
 static std::shared_ptr<Expression> rewriteFunc(const RewriteFunctionBindInput& input) {
-    LBUG_ASSERT(input.arguments.size() == 1);
+    DASSERT(input.arguments.size() == 1);
     auto argument = input.arguments[0].get();
     auto expressionBinder = input.expressionBinder;
     if (ExpressionUtil::isNullLiteral(*argument)) {

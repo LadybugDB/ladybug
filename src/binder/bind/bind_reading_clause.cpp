@@ -22,7 +22,7 @@ std::unique_ptr<BoundReadingClause> Binder::bindReadingClause(const ReadingClaus
         return bindLoadFrom(readingClause);
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

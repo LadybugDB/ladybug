@@ -14,12 +14,12 @@ std::string TreeNodeTypeUtils::toString(TreeNodeType type) {
     case TreeNodeType::MULTIWAY_JOIN:
         return "MULTIWAY_JOIN";
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
 void ExtraScanTreeNodeInfo::merge(const ExtraScanTreeNodeInfo& other) {
-    LBUG_ASSERT(other.nodeInfo == nullptr && other.relInfos.size() == 1);
+    DASSERT(other.nodeInfo == nullptr && other.relInfos.size() == 1);
     relInfos.push_back(other.relInfos[0]);
 }
 
@@ -36,11 +36,11 @@ std::string JoinTreeNode::toString() const {
         return result;
     }
     case TreeNodeType::BINARY_JOIN: {
-        LBUG_ASSERT(children.size() == 2);
+        DASSERT(children.size() == 2);
         return "JOIN(" + children[0]->toString() + "," + children[1]->toString() + ")";
     }
     case TreeNodeType::MULTIWAY_JOIN: {
-        LBUG_ASSERT(!children.empty());
+        DASSERT(!children.empty());
         auto result = "MULTI_JOIN(" + children[0]->toString();
         for (auto i = 1u; i < children.size(); ++i) {
             result += "," + children[i]->toString();
@@ -48,7 +48,7 @@ std::string JoinTreeNode::toString() const {
         return result;
     }
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }

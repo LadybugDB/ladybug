@@ -25,7 +25,7 @@ bool Limit::getNextTuplesInternal(ExecutionContext* context) {
             // If all dataChunks are flat, numTupleAvailable = 1 which means numTupleProcessedBefore
             // = limitNumber. So execution is terminated in above if statement.
             auto& dataChunkToSelect = resultSet->dataChunks[dataChunkToSelectPos];
-            LBUG_ASSERT(!dataChunkToSelect->state->isFlat());
+            DASSERT(!dataChunkToSelect->state->isFlat());
             dataChunkToSelect->state->getSelVectorUnsafe().setSelSize(
                 numTupleToProcessInCurrentResultSet);
             metrics->numOutputTuple.increase(numTupleToProcessInCurrentResultSet);

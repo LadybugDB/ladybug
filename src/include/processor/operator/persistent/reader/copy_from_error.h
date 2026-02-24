@@ -89,7 +89,7 @@ struct PopulatedCopyFromError {
 template<std::integral... Types>
 void WarningSourceData::dumpTo(uint64_t& blockIdx, uint32_t& offsetInBlock, Types&... vars) const {
     static_assert(sizeof...(Types) + NUM_BLOCK_VALUES <= std::tuple_size_v<decltype(values)>);
-    LBUG_ASSERT(sizeof...(Types) + NUM_BLOCK_VALUES == numValues);
+    DASSERT(sizeof...(Types) + NUM_BLOCK_VALUES == numValues);
     common::TypeUtils::paramPackForEach(
         [this](auto idx, auto& value) {
             value = std::get<std::decay_t<decltype(value)>>(values[idx]);

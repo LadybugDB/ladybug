@@ -69,7 +69,7 @@ std::unique_ptr<NodeSetExecutor> PlanMapper::getNodeSetExecutor(
         return std::make_unique<MultiLabelNodeSetExecutor>(std::move(setInfo),
             std::move(tableInfos));
     }
-    LBUG_ASSERT(node.getNumEntries() == 1);
+    DASSERT(node.getNumEntries() == 1);
     auto tableInfo =
         getNodeTableSetInfo(*node.getEntry(0), property, StorageManager::Get(*clientContext));
     return std::make_unique<SingleLabelNodeSetExecutor>(std::move(setInfo), std::move(tableInfo));
@@ -86,7 +86,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapSetProperty(
         return mapSetRelProperty(logicalOperator);
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -140,7 +140,7 @@ std::unique_ptr<RelSetExecutor> PlanMapper::getRelSetExecutor(const BoundSetProp
         }
         return std::make_unique<MultiLabelRelSetExecutor>(std::move(info), std::move(tableInfos));
     }
-    LBUG_ASSERT(rel.getNumEntries() == 1);
+    DASSERT(rel.getNumEntries() == 1);
     auto& relGroupEntry = rel.getEntry(0)->constCast<RelGroupCatalogEntry>();
     auto fromToNodePair = relGroupEntry.getSingleRelEntryInfo().nodePair;
     auto tableInfo = getRelTableSetInfo(relGroupEntry, fromToNodePair.srcTableID,

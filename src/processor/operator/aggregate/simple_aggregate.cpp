@@ -80,7 +80,7 @@ SimpleAggregateSharedState::SimpleAggregateSharedState(main::ClientContext* cont
 void SimpleAggregateSharedState::combineAggregateStates(
     const std::vector<std::unique_ptr<AggregateState>>& localAggregateStates,
     common::InMemOverflowBuffer&& localOverflowBuffer) {
-    LBUG_ASSERT(localAggregateStates.size() == globalAggregateStates.size());
+    DASSERT(localAggregateStates.size() == globalAggregateStates.size());
     std::unique_lock lck{mtx};
     for (auto i = 0u; i < aggregateFunctions.size(); ++i) {
         // Distinct functions will be combined accross the partitions in
@@ -122,7 +122,7 @@ std::pair<uint64_t, uint64_t> SimpleAggregateSharedState::getNextRangeToRead() {
 
 void SimpleAggregateSharedState::SimpleAggregatePartitioningData::appendTuples(
     const FactorizedTable& factorizedTable, ft_col_offset_t hashOffset) {
-    LBUG_ASSERT(sharedState->globalPartitions.size() > 0);
+    DASSERT(sharedState->globalPartitions.size() > 0);
     auto numBytesPerTuple = factorizedTable.getTableSchema()->getNumBytesPerTuple();
     for (ft_tuple_idx_t tupleIdx = 0; tupleIdx < factorizedTable.getNumTuples(); tupleIdx++) {
         auto tuple = factorizedTable.getTuple(tupleIdx);
@@ -138,7 +138,7 @@ void SimpleAggregateSharedState::SimpleAggregatePartitioningData::appendTuples(
 // LCOV_EXCL_START
 void SimpleAggregateSharedState::SimpleAggregatePartitioningData::appendDistinctTuple(size_t,
     std::span<uint8_t>, common::hash_t) {
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 // LCOV_EXCL_END
 
@@ -161,7 +161,7 @@ void SimpleAggregateSharedState::finalizePartitions(storage::MemoryManager* memo
             }
             auto& [hashTable, queue, state] = partition.distinctTables[i];
             if (queue) {
-                LBUG_ASSERT(hashTable);
+                DASSERT(hashTable);
                 queue->mergeInto(*hashTable);
             }
 
@@ -267,7 +267,7 @@ void SimpleAggregateFinalize::finalizeInternal(ExecutionContext* /*context*/) {
 }
 
 void SimpleAggregateFinalize::executeInternal(ExecutionContext* context) {
-    LBUG_ASSERT(sharedState->isReadyForFinalization());
+    DASSERT(sharedState->isReadyForFinalization());
     sharedState->finalizePartitions(storage::MemoryManager::Get(*context->clientContext), aggInfos);
 }
 

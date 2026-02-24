@@ -57,7 +57,7 @@ void MergeLocalState::init(ResultSet& resultSet, main::ClientContext* context, M
 }
 
 bool MergeLocalState::patternExists() const {
-    LBUG_ASSERT(existenceVector->state->getSelVector().getSelSize() == 1);
+    DASSERT(existenceVector->state->getSelVector().getSelSize() == 1);
     auto pos = existenceVector->state->getSelVector()[0];
     return existenceVector->getValue<bool>(pos);
 }

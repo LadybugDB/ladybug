@@ -51,7 +51,7 @@ public:
     void setOID(common::oid_t oid) { this->oid = oid; }
     common::oid_t getOID() const { return oid; }
     CatalogEntry* getPrev() const {
-        LBUG_ASSERT(prev);
+        DASSERT(prev);
         return prev.get();
     }
     std::unique_ptr<CatalogEntry> movePrev() {
@@ -75,7 +75,7 @@ public:
     virtual void serialize(common::Serializer& serializer) const;
     static std::unique_ptr<CatalogEntry> deserialize(common::Deserializer& deserializer);
 
-    virtual std::string toCypher(const ToCypherInfo& /*info*/) const { LBUG_UNREACHABLE; }
+    virtual std::string toCypher(const ToCypherInfo& /*info*/) const { UNREACHABLE_CODE; }
 
     template<class TARGET>
     TARGET& cast() {

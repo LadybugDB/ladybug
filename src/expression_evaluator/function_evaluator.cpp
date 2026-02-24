@@ -33,7 +33,7 @@ void FunctionExpressionEvaluator::evaluate() {
 }
 
 void FunctionExpressionEvaluator::evaluate(common::sel_t count) {
-    LBUG_ASSERT(expression->constCast<ScalarFunctionExpression>().getFunction().name ==
+    DASSERT(expression->constCast<ScalarFunctionExpression>().getFunction().name ==
               NextValFunction::name);
     for (auto& child : children) {
         child->evaluate(count);
@@ -50,7 +50,7 @@ bool FunctionExpressionEvaluator::selectInternal(SelectionVector& selVector) {
     // Temporary code path for function whose return type is BOOL but select interface is not
     // implemented (e.g. list_contains). We should remove this if statement eventually.
     if (function->selectFunc == nullptr) {
-        LBUG_ASSERT(resultVector->dataType.getLogicalTypeID() == LogicalTypeID::BOOL);
+        DASSERT(resultVector->dataType.getLogicalTypeID() == LogicalTypeID::BOOL);
         runExecFunc();
         return updateSelectedPos(selVector);
     }

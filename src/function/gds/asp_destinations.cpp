@@ -34,7 +34,7 @@ public:
     void pinTableID(table_id_t tableID) override { curData = spareObjects.getData(tableID); }
 
     void increaseMultiplicity(offset_t offset, multiplicity_t multiplicity) override {
-        LBUG_ASSERT(curData);
+        DASSERT(curData);
         if (curData->contains(offset)) {
             curData->at(offset) += multiplicity;
         } else {
@@ -43,7 +43,7 @@ public:
     }
 
     multiplicity_t getMultiplicity(offset_t offset) override {
-        LBUG_ASSERT(curData);
+        DASSERT(curData);
         if (curData->contains(offset)) {
             return curData->at(offset);
         }
@@ -64,12 +64,12 @@ public:
     void pinTableID(table_id_t tableID) override { curData = denseObjects.getData(tableID); }
 
     void increaseMultiplicity(offset_t offset, multiplicity_t multiplicity) override {
-        LBUG_ASSERT(curData);
+        DASSERT(curData);
         curData[offset].fetch_add(multiplicity);
     }
 
     multiplicity_t getMultiplicity(offset_t offset) override {
-        LBUG_ASSERT(curData);
+        DASSERT(curData);
         return curData[offset].load(std::memory_order_relaxed);
     }
 
@@ -101,7 +101,7 @@ public:
             curMultiplicities = curDenseMultiplicities.get();
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
 
@@ -116,7 +116,7 @@ public:
             nextMultiplicities = nextDenseMultiplicities.get();
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
 
@@ -130,7 +130,7 @@ public:
     Multiplicities* getCurrentMultiplicities() { return curMultiplicities; }
 
     void switchToDense(ExecutionContext* context) {
-        LBUG_ASSERT(densityState == GDSDensityState::SPARSE);
+        DASSERT(densityState == GDSDensityState::SPARSE);
         densityState = GDSDensityState::DENSE;
         for (auto& [tableID, maxOffset] : maxOffsetMap) {
             denseObjects.allocate(tableID, maxOffset, MemoryManager::Get(*context->clientContext));

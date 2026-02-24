@@ -23,7 +23,7 @@ public:
 
     void evaluate() override;
 
-    bool selectInternal(common::SelectionVector& /*selVector*/) override { LBUG_UNREACHABLE; }
+    bool selectInternal(common::SelectionVector& /*selVector*/) override { UNREACHABLE_CODE; }
 
     std::unique_ptr<ExpressionEvaluator> copy() override {
         return make_unique<PathExpressionEvaluator>(expression, copyVector(children));

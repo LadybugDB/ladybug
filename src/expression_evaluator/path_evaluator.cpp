@@ -73,7 +73,7 @@ void PathExpressionEvaluator::init(const processor::ResultSet& resultSet,
                 pathExpression->getRelType(), vectors->relsDataInput);
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
         inputVectorsPerChild.push_back(std::move(vectors));
     }
@@ -197,7 +197,7 @@ uint64_t PathExpressionEvaluator::copyRels(sel_t resultPos) {
 void PathExpressionEvaluator::copyFieldVectors(offset_t inputVectorPos,
     const std::vector<ValueVector*>& inputFieldVectors, offset_t& resultVectorPos,
     const std::vector<ValueVector*>& resultFieldVectors) {
-    LBUG_ASSERT(resultFieldVectors.size() == inputFieldVectors.size());
+    DASSERT(resultFieldVectors.size() == inputFieldVectors.size());
     for (auto i = 0u; i < inputFieldVectors.size(); ++i) {
         auto inputFieldVector = inputFieldVectors[i];
         auto resultFieldVector = resultFieldVectors[i];
@@ -206,7 +206,7 @@ void PathExpressionEvaluator::copyFieldVectors(offset_t inputVectorPos,
             continue;
         }
         resultFieldVector->setNull(resultVectorPos, false);
-        LBUG_ASSERT(inputFieldVector->dataType == resultFieldVector->dataType);
+        DASSERT(inputFieldVector->dataType == resultFieldVector->dataType);
         resultFieldVector->copyFromVectorData(resultVectorPos, inputFieldVector, inputVectorPos);
     }
     resultVectorPos++;

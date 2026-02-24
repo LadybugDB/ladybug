@@ -203,7 +203,7 @@ void GroupDependencyAnalyzer::visitNodeOrRel(std::shared_ptr<Expression> expr) {
         }
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

@@ -59,7 +59,7 @@ std::unique_ptr<CatalogEntry> CatalogEntry::deserialize(common::Deserializer& de
         entry = GraphCatalogEntry::deserialize(deserializer);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     entry->type = type;
     entry->name = std::move(name);

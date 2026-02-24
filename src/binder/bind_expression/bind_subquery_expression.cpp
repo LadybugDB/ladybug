@@ -56,7 +56,7 @@ std::shared_ptr<Expression> ExpressionBinder::bindSubqueryExpression(
             expression_vector{countStarExpr, literalExpr});
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     // Use the same unique identifier for projection & subquery expression. We will replace subquery
     // expression with projection expression during processing.

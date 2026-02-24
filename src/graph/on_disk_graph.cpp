@@ -92,7 +92,7 @@ OnDiskGraphNbrScanState::OnDiskGraphNbrScanState(ClientContext* context,
     auto schema = getSchema(predicateProps);
     auto mm = MemoryManager::Get(*context);
     auto resultSet = getResultSet(&schema, mm);
-    LBUG_ASSERT(resultSet.dataChunks.size() == 1);
+    DASSERT(resultSet.dataChunks.size() == 1);
     auto state = resultSet.getDataChunk(0)->state;
     srcNodeIDVector = getValueVector(LogicalType::INTERNAL_ID(), mm, state);
     srcNodeIDVector->state = DataChunkState::getSingleValueDataChunkState();
@@ -107,7 +107,7 @@ OnDiskGraphNbrScanState::OnDiskGraphNbrScanState(ClientContext* context,
         auto propertyName = relProperties[i];
         auto& property = entry.getProperty(propertyName);
         relPropertyColumnIDs[i] = entry.getColumnID(propertyName);
-        LBUG_ASSERT(relPropertyColumnIDs[i] != INVALID_COLUMN_ID);
+        DASSERT(relPropertyColumnIDs[i] != INVALID_COLUMN_ID);
         propertyVectors.valueVectors[i] = getValueVector(property.getType(), mm, state);
     }
     if (predicate != nullptr) {
@@ -166,7 +166,7 @@ table_id_map_t<offset_t> OnDiskGraph::getMaxOffsetMap(transaction::Transaction* 
 }
 
 offset_t OnDiskGraph::getMaxOffset(transaction::Transaction* transaction, table_id_t id) const {
-    LBUG_ASSERT(nodeIDToNodeTable.contains(id));
+    DASSERT(nodeIDToNodeTable.contains(id));
     return nodeIDToNodeTable.at(id)->getNumTotalRows(transaction);
 }
 
@@ -275,13 +275,13 @@ void OnDiskGraphNbrScanState::InnerIterator::initScan() const {
 
 void OnDiskGraphNbrScanState::startScan(RelDataDirection direction) {
     auto idx = RelDirectionUtils::relDirectionToKeyIdx(direction);
-    LBUG_ASSERT(idx < directedIterators.size() && directedIterators[idx].getDirection() == direction);
+    DASSERT(idx < directedIterators.size() && directedIterators[idx].getDirection() == direction);
     currentIter = &directedIterators[idx];
     currentIter->initScan();
 }
 
 bool OnDiskGraphNbrScanState::next() {
-    LBUG_ASSERT(currentIter != nullptr);
+    DASSERT(currentIter != nullptr);
     if (currentIter->next(relPredicateEvaluator.get(), nbrNodeMask)) {
         return true;
     }

@@ -61,7 +61,7 @@ void EvictionQueue::clear(std::atomic<EvictionCandidate>& candidate) {
         size--;
         return;
     }
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 BufferManager::BufferManager(const std::string& databasePath, const std::string& spillToDiskPath,
@@ -129,7 +129,7 @@ uint8_t* BufferManager::pin(FileHandle& fileHandle, page_idx_t pageIdx,
                         "Eviction queue is full! This should be impossible.");
                 }
 #if BM_MALLOC
-                LBUG_ASSERT(pageState->getPage());
+                DASSERT(pageState->getPage());
                 return pageState->getPage();
 #else
                 return getFrame(fileHandle, pageIdx);
@@ -146,7 +146,7 @@ uint8_t* BufferManager::pin(FileHandle& fileHandle, page_idx_t pageIdx,
             continue;
         }
         default: {
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
         }
     }
@@ -277,7 +277,7 @@ uint64_t BufferManager::evictPages() {
             if (evictionCandidate == EvictionQueue::EMPTY) {
                 continue;
             }
-            LBUG_ASSERT(evictionCandidate.fileIdx < fileHandles.size());
+            DASSERT(evictionCandidate.fileIdx < fileHandles.size());
             auto* pageState =
                 fileHandles[evictionCandidate.fileIdx]->getPageState(evictionCandidate.pageIdx);
             auto pageStateAndVersion = pageState->getStateAndVersion();
@@ -312,7 +312,7 @@ void BufferManager::removeEvictedCandidates() {
             if (evictionCandidate == EvictionQueue::EMPTY) {
                 continue;
             }
-            LBUG_ASSERT(evictionCandidate.fileIdx < fileHandles.size());
+            DASSERT(evictionCandidate.fileIdx < fileHandles.size());
             auto* pageState =
                 fileHandles[evictionCandidate.fileIdx]->getPageState(evictionCandidate.pageIdx);
             auto pageStateAndVersion = pageState->getStateAndVersion();
@@ -473,7 +473,7 @@ void BufferManager::removeFilePagesFromFrames(FileHandle& fileHandle) {
 
 void BufferManager::updateFrameIfPageIsInFrameWithoutLock(file_idx_t fileIdx,
     const uint8_t* newPage, page_idx_t pageIdx) {
-    LBUG_ASSERT(fileIdx < fileHandles.size());
+    DASSERT(fileIdx < fileHandles.size());
     auto& fileHandle = *fileHandles[fileIdx];
     auto state = fileHandle.getPageState(pageIdx);
     if (state && state->getState() != PageState::EVICTED) {
@@ -505,7 +505,7 @@ void BufferManager::removePageFromFrame(FileHandle& fileHandle, page_idx_t pageI
 }
 
 uint64_t BufferManager::freeUsedMemory(uint64_t size) {
-    LBUG_ASSERT(usedMemory.load() >= size);
+    DASSERT(usedMemory.load() >= size);
     return usedMemory.fetch_sub(size);
 }
 

@@ -109,7 +109,7 @@ public:
     }
     bool shouldLogToWAL() const;
     storage::LocalWAL& getLocalWAL() const {
-        LBUG_ASSERT(localWAL);
+        DASSERT(localWAL);
         return *localWAL;
     }
 

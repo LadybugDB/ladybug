@@ -84,7 +84,7 @@ uint64_t ListColumnReader::read(uint64_t numValues, parquet_filter_t& /*filter*/
         for (childIdx = 0; childIdx < childActualNumValues; childIdx++) {
             if (childRepeatsPtr[childIdx] == maxRepeat) {
                 // value repeats on this level, append
-                LBUG_ASSERT(resultOffset > 0);
+                DASSERT(resultOffset > 0);
                 resultPtr[resultOffset - 1].size++;
                 continue;
             }

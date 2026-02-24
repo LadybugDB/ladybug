@@ -56,7 +56,7 @@ public:
 
     void setUniqueName(const std::string& name) { uniqueName = name; }
     std::string getUniqueName() const {
-        LBUG_ASSERT(!uniqueName.empty());
+        DASSERT(!uniqueName.empty());
         return uniqueName;
     }
 
@@ -69,12 +69,12 @@ public:
 
     common::idx_t getNumChildren() const { return children.size(); }
     std::shared_ptr<Expression> getChild(common::idx_t idx) const {
-        LBUG_ASSERT(idx < children.size());
+        DASSERT(idx < children.size());
         return children[idx];
     }
     expression_vector getChildren() const { return children; }
     void setChild(common::idx_t idx, std::shared_ptr<Expression> child) {
-        LBUG_ASSERT(idx < children.size());
+        DASSERT(idx < children.size());
         children[idx] = std::move(child);
     }
 

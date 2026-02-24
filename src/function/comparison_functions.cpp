@@ -96,7 +96,7 @@ static void executeNestedOperation(uint8_t& result, ValueVector* leftVector,
             rightVector->getValue<struct_entry_t>(rightPos), result, leftVector, rightVector);
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
@@ -186,7 +186,7 @@ static void executeNestedGreaterThan(uint8_t& isGreaterThan, uint8_t& isEqual,
 template<>
 void GreaterThan::operation(const list_entry_t& left, const list_entry_t& right, uint8_t& result,
     ValueVector* leftVector, ValueVector* rightVector) {
-    LBUG_ASSERT(leftVector->dataType == rightVector->dataType);
+    DASSERT(leftVector->dataType == rightVector->dataType);
     auto leftDataVector = ListVector::getDataVector(leftVector);
     auto rightDataVector = ListVector::getDataVector(rightVector);
     auto commonLength = std::min(left.size, right.size);
@@ -206,7 +206,7 @@ void GreaterThan::operation(const list_entry_t& left, const list_entry_t& right,
 template<>
 void GreaterThan::operation(const struct_entry_t& left, const struct_entry_t& right,
     uint8_t& result, ValueVector* leftVector, ValueVector* rightVector) {
-    LBUG_ASSERT(leftVector->dataType == rightVector->dataType);
+    DASSERT(leftVector->dataType == rightVector->dataType);
     auto leftFields = StructVector::getFieldVectors(leftVector);
     auto rightFields = StructVector::getFieldVectors(rightVector);
     uint8_t isEqual = 0;

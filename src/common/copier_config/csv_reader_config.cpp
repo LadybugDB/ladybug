@@ -36,7 +36,7 @@ static void bindBoolParsingOption(CSVReaderConfig& config, const std::string& op
     } else if (optionName == "AUTODETECT" || optionName == "AUTO_DETECT") {
         config.option.autoDetection = optionValue;
     } else {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -53,7 +53,7 @@ static void bindStringParsingOption(CSVReaderConfig& config, const std::string& 
         config.option.quoteChar = parsingOptionValue;
         config.option.setQuote = true;
     } else {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -72,7 +72,7 @@ static void bindIntParsingOption(CSVReaderConfig& config, const std::string& opt
         }
         config.option.sampleSize = optionValue;
     } else {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -81,7 +81,7 @@ static void bindListParsingOption(CSVReaderConfig& config, const std::string& op
     if (optionName == "NULL_STRINGS") {
         config.option.nullStrings = optionValue;
     } else {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

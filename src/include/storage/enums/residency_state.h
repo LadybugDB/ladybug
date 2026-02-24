@@ -20,7 +20,7 @@ struct ResidencyStateUtils {
             return "ON_DISK";
         }
         default: {
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
         }
     }

@@ -28,7 +28,7 @@ ResultSet::ResultSet(ResultSetDescriptor* resultSetDescriptor,
 
 uint64_t ResultSet::getNumTuplesWithoutMultiplicity(
     const std::unordered_set<uint32_t>& dataChunksPosInScope) {
-    LBUG_ASSERT(!dataChunksPosInScope.empty());
+    DASSERT(!dataChunksPosInScope.empty());
     uint64_t numTuples = 1;
     for (auto& dataChunkPos : dataChunksPosInScope) {
         numTuples *= dataChunks[dataChunkPos]->state->getSelVector().getSelSize();

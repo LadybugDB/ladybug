@@ -112,7 +112,7 @@ static void packDelta128(const common::int128_t* __restrict in, uint32_t* __rest
 
 void Int128Packer::pack(const common::int128_t* __restrict in, uint32_t* __restrict out,
     uint8_t width) {
-    LBUG_ASSERT(width <= 128);
+    DASSERT(width <= 128);
     switch (width) {
     case 0:
         break;
@@ -139,7 +139,7 @@ void Int128Packer::pack(const common::int128_t* __restrict in, uint32_t* __restr
 
 void Int128Packer::unpack(const uint32_t* __restrict in, common::int128_t* __restrict out,
     uint8_t width) {
-    LBUG_ASSERT(width <= 128);
+    DASSERT(width <= 128);
     switch (width) {
     case 0:
         unpackDelta0(out);

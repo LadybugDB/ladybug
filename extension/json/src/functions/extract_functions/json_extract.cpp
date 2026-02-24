@@ -35,7 +35,7 @@ static void jsonExtractSinglePath(
                 auto param2Int = param2.getValue<int64_t>(param2Pos);
                 output = jsonExtractToString(stringToJson(param1Str), param2Int);
             } else {
-                LBUG_UNREACHABLE;
+                UNREACHABLE_CODE;
             }
             StringVector::addString(&result, resultPos, output);
         }
@@ -43,7 +43,7 @@ static void jsonExtractSinglePath(
 }
 
 static std::unique_ptr<FunctionBindData> bindJsonExtractSinglePath(ScalarBindFuncInput input) {
-    LBUG_ASSERT(input.arguments.size() == 2);
+    DASSERT(input.arguments.size() == 2);
     std::vector<LogicalType> types;
     types.emplace_back(input.definition->parameterTypeIDs[0]);
     types.emplace_back(input.definition->parameterTypeIDs[1]);
@@ -84,7 +84,7 @@ static void jsonExtractMultiPath(
 }
 
 static std::unique_ptr<FunctionBindData> bindJsonExtractMultiPath(ScalarBindFuncInput input) {
-    LBUG_ASSERT(input.arguments.size() == 2);
+    DASSERT(input.arguments.size() == 2);
     if (ListType::getChildType(input.arguments[1]->getDataType()).getLogicalTypeID() !=
         LogicalTypeID::STRING) {
         throw BinderException("List passed to json_extract must contain type STRING");

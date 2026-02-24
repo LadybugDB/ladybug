@@ -82,7 +82,7 @@ void LogicalHashJoin::computeFactorizedSchema() {
         schema->insertToGroupAndScope(mark, markPos);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -106,7 +106,7 @@ void LogicalHashJoin::computeFlatSchema() {
         schema->insertToGroupAndScope(mark, 0);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -128,7 +128,7 @@ binder::expression_vector LogicalHashJoin::getExpressionsToMaterialize() const {
         return binder::expression_vector{};
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

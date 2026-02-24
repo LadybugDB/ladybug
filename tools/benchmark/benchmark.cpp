@@ -22,7 +22,7 @@ Benchmark::Benchmark(const std::string& benchmarkPath, Database* database, Bench
 void Benchmark::loadBenchmark(const std::string& benchmarkPath) {
     BenchmarkParser parser;
     const auto parsedBenchmarks = parser.parseBenchmarkFile(benchmarkPath);
-    LBUG_ASSERT(parsedBenchmarks.size() == 1);
+    DASSERT(parsedBenchmarks.size() == 1);
     const auto queryConfig = parsedBenchmarks[0].get();
     preRun = queryConfig->preRun;
     query = queryConfig->query;

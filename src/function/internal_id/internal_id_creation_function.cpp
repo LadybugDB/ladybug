@@ -25,7 +25,7 @@ function_set InternalIDCreationFunction::getFunctionSet() {
                 execFunc =
                     ScalarFunction::BinaryExecFunction<T, T, internalID_t, InternalIDCreation>;
             },
-            [](auto) { LBUG_UNREACHABLE; });
+            [](auto) { UNREACHABLE_CODE; });
         result.push_back(std::make_unique<ScalarFunction>(name,
             std::vector<common::LogicalTypeID>{typeID, typeID}, LogicalTypeID::INTERNAL_ID,
             execFunc));

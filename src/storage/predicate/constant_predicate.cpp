@@ -60,7 +60,7 @@ ZoneMapCheckResult checkZoneMapSwitch(const MergedColumnChunkStats& mergedStats,
             }
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
     return ZoneMapCheckResult::ALWAYS_SCAN;

@@ -5,7 +5,7 @@ namespace lbug {
 namespace planner {
 
 void Planner::appendDummyScan(LogicalPlan& plan) {
-    LBUG_ASSERT(plan.isEmpty());
+    DASSERT(plan.isEmpty());
     auto dummyScan = std::make_shared<LogicalDummyScan>();
     dummyScan->computeFactorizedSchema();
     plan.setLastOperator(std::move(dummyScan));

@@ -23,12 +23,12 @@ public:
           expressionNameToPos{other.expressionNameToPos} {}
 
     void setFlat() {
-        LBUG_ASSERT(!flat);
+        DASSERT(!flat);
         flat = true;
     }
     bool isFlat() const { return flat; }
     void setSingleState() {
-        LBUG_ASSERT(!singleState);
+        DASSERT(!singleState);
         singleState = true;
         setFlat();
     }
@@ -38,13 +38,13 @@ public:
     double getMultiplier() const { return cardinalityMultiplier; }
 
     void insertExpression(const std::shared_ptr<binder::Expression>& expression) {
-        LBUG_ASSERT(!expressionNameToPos.contains(expression->getUniqueName()));
+        DASSERT(!expressionNameToPos.contains(expression->getUniqueName()));
         expressionNameToPos.insert({expression->getUniqueName(), expressions.size()});
         expressions.push_back(expression);
     }
     binder::expression_vector getExpressions() const { return expressions; }
     uint32_t getExpressionPos(const binder::Expression& expression) const {
-        LBUG_ASSERT(expressionNameToPos.contains(expression.getUniqueName()));
+        DASSERT(expressionNameToPos.contains(expression.getUniqueName()));
         return expressionNameToPos.at(expression.getUniqueName());
     }
 

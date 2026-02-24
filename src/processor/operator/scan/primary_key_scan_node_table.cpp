@@ -44,13 +44,13 @@ bool PrimaryKeyScanNodeTable::getNextTuplesInternal(ExecutionContext* context) {
     if (tableIdx >= tableInfos.size()) {
         return false;
     }
-    LBUG_ASSERT(tableIdx < tableInfos.size());
+    DASSERT(tableIdx < tableInfos.size());
     auto& tableInfo = tableInfos[tableIdx];
     // Look up index
     indexEvaluator->evaluate();
     auto indexVector = indexEvaluator->resultVector.get();
     auto& selVector = indexVector->state->getSelVector();
-    LBUG_ASSERT(selVector.getSelSize() == 1);
+    DASSERT(selVector.getSelSize() == 1);
     auto pos = selVector.getSelectedPositions()[0];
     if (indexVector->isNull(pos)) {
         return false;

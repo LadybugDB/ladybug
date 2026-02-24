@@ -10,7 +10,7 @@ class ColumnNullPredicate : public ColumnPredicate {
 public:
     explicit ColumnNullPredicate(std::string columnName, common::ExpressionType type)
         : ColumnPredicate{std::move(columnName), type} {
-        LBUG_ASSERT(
+        DASSERT(
             type == common::ExpressionType::IS_NULL || type == common::ExpressionType::IS_NOT_NULL);
     }
 

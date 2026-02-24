@@ -126,7 +126,7 @@ void UndoBuffer::createDeleteInfo(node_group_idx_t nodeGroupIdx, row_idx_t start
 void UndoBuffer::createVersionInfo(const UndoRecordType recordType, row_idx_t startRow,
     row_idx_t numRows, const VersionRecordHandler* versionRecordHandler,
     node_group_idx_t nodeGroupIdx) {
-    LBUG_ASSERT(versionRecordHandler);
+    DASSERT(versionRecordHandler);
     auto buffer = createUndoRecord(sizeof(UndoRecordHeader) + sizeof(VersionRecord));
     const UndoRecordHeader recordHeader{recordType, sizeof(VersionRecord)};
     *reinterpret_cast<UndoRecordHeader*>(buffer) = recordHeader;
@@ -192,14 +192,14 @@ void UndoBuffer::commitRecord(UndoRecordType recordType, const uint8_t* record,
         commitVectorUpdateInfo(record, commitTS);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
 void UndoBuffer::commitCatalogEntryRecord(const uint8_t* record, const transaction_t commitTS) {
     const auto& [_, catalogEntry] = *reinterpret_cast<CatalogEntryRecord const*>(record);
     const auto newCatalogEntry = catalogEntry->getNext();
-    LBUG_ASSERT(newCatalogEntry);
+    DASSERT(newCatalogEntry);
     newCatalogEntry->setTimestamp(commitTS);
 }
 
@@ -216,15 +216,15 @@ void UndoBuffer::commitVersionInfo(UndoRecordType recordType, const uint8_t* rec
             undoRecord.nodeGroupIdx, undoRecord.startRow, undoRecord.numRows, commitTS);
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
 
 void UndoBuffer::commitVectorUpdateInfo(const uint8_t* record, transaction_t commitTS) {
     auto& undoRecord = *reinterpret_cast<VectorUpdateRecord const*>(record);
-    LBUG_ASSERT(undoRecord.updateInfo);
-    LBUG_ASSERT(undoRecord.vectorUpdateInfo);
+    DASSERT(undoRecord.updateInfo);
+    DASSERT(undoRecord.vectorUpdateInfo);
     undoRecord.updateInfo->commit(undoRecord.vectorIdx, undoRecord.vectorUpdateInfo, commitTS);
 }
 
@@ -245,7 +245,7 @@ void UndoBuffer::rollbackRecord(ClientContext* context, const UndoRecordType rec
         rollbackVectorUpdateInfo(record);
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
@@ -253,7 +253,7 @@ void UndoBuffer::rollbackRecord(ClientContext* context, const UndoRecordType rec
 void UndoBuffer::rollbackCatalogEntryRecord(const uint8_t* record) {
     const auto& [catalogSet, catalogEntry] = *reinterpret_cast<CatalogEntryRecord const*>(record);
     const auto entryToRollback = catalogEntry->getNext();
-    LBUG_ASSERT(entryToRollback);
+    DASSERT(entryToRollback);
     if (entryToRollback->getNext()) {
         // If entryToRollback has a newer entry (next) in the version chain. Simple remove
         // entryToRollback from the chain.
@@ -294,14 +294,14 @@ void UndoBuffer::rollbackVersionInfo(ClientContext* context, UndoRecordType reco
             transaction::Transaction::Get(*context)->getCommitTS());
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
 }
 
 void UndoBuffer::rollbackVectorUpdateInfo(const uint8_t* record) {
     auto& undoRecord = *reinterpret_cast<VectorUpdateRecord const*>(record);
-    LBUG_ASSERT(undoRecord.updateInfo);
+    DASSERT(undoRecord.updateInfo);
     undoRecord.updateInfo->rollback(undoRecord.vectorIdx, undoRecord.version);
 }
 

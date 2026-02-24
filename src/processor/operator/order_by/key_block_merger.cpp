@@ -32,7 +32,7 @@ MergedKeyBlocks::MergedKeyBlocks(uint32_t numBytesPerTuple, std::shared_ptr<Data
 
 uint8_t* MergedKeyBlocks::getBlockEndTuplePtr(uint32_t blockIdx, uint64_t endTupleIdx,
     uint32_t endTupleBlockIdx) const {
-    LBUG_ASSERT(blockIdx < keyBlocks.size());
+    DASSERT(blockIdx < keyBlocks.size());
     if (endTupleIdx == 0) {
         return getKeyBlockBuffer(0);
     }
@@ -138,7 +138,7 @@ std::unique_ptr<KeyBlockMergeMorsel> KeyBlockMergeTask::getMorsel() {
 }
 
 void KeyBlockMerger::mergeKeyBlocks(KeyBlockMergeMorsel& keyBlockMergeMorsel) const {
-    LBUG_ASSERT(keyBlockMergeMorsel.leftKeyBlockStartIdx < keyBlockMergeMorsel.leftKeyBlockEndIdx ||
+    DASSERT(keyBlockMergeMorsel.leftKeyBlockStartIdx < keyBlockMergeMorsel.leftKeyBlockEndIdx ||
               keyBlockMergeMorsel.rightKeyBlockStartIdx < keyBlockMergeMorsel.rightKeyBlockEndIdx);
 
     auto leftBlockPtrInfo = BlockPtrInfo(keyBlockMergeMorsel.leftKeyBlockStartIdx,
@@ -315,7 +315,7 @@ void KeyBlockMergeTaskDispatcher::init(MemoryManager* memoryManager,
     std::queue<std::shared_ptr<MergedKeyBlocks>>* sortedKeyBlocks,
     std::vector<FactorizedTable*> factorizedTables, std::vector<StrKeyColInfo>& strKeyColsInfo,
     uint64_t numBytesPerTuple) {
-    LBUG_ASSERT(this->keyBlockMerger == nullptr);
+    DASSERT(this->keyBlockMerger == nullptr);
     this->memoryManager = memoryManager;
     this->sortedKeyBlocks = sortedKeyBlocks;
     this->keyBlockMerger = std::make_unique<KeyBlockMerger>(std::move(factorizedTables),

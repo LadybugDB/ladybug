@@ -179,7 +179,7 @@ void StringColumnWriter::flushDictionary(BasicColumnWriterState& writerState,
     // First we need to sort the values in index order.
     auto values = std::vector<string_t>(state.dictionary.size());
     for (const auto& entry : state.dictionary) {
-        LBUG_ASSERT(values[entry.second].len == 0);
+        DASSERT(values[entry.second].len == 0);
         values[entry.second] = entry.first;
     }
     // First write the contents of the dictionary page to a temporary buffer.

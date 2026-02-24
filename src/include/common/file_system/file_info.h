@@ -36,7 +36,7 @@ struct LBUG_API FileInfo {
 
     bool canPerformSeek() const;
 
-    virtual function::TableFunction getHandleFunction() const { LBUG_UNREACHABLE; }
+    virtual function::TableFunction getHandleFunction() const { UNREACHABLE_CODE; }
 
     template<class TARGET>
     TARGET* ptrCast() {

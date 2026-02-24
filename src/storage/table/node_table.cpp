@@ -37,7 +37,7 @@ void NodeTableVersionRecordHandler::rollbackInsert(main::ClientContext* context,
 
     // the only case where a node group would be empty (and potentially removed before) is if an
     // exception occurred while adding its first chunk
-    LBUG_ASSERT(nodeGroupIdx < table->getNumNodeGroups() || startRow == 0);
+    DASSERT(nodeGroupIdx < table->getNumNodeGroups() || startRow == 0);
     if (nodeGroupIdx < table->getNumNodeGroups()) {
         VersionRecordHandler::rollbackInsert(context, nodeGroupIdx, startRow, numRows);
         auto* nodeGroup = table->getNodeGroupNoLock(nodeGroupIdx);
@@ -49,7 +49,7 @@ void NodeTableVersionRecordHandler::rollbackInsert(main::ClientContext* context,
 
 NodeGroupScanResult NodeTableScanState::scanNext(Transaction* transaction, offset_t startOffset,
     offset_t numNodes) {
-    LBUG_ASSERT(columns.size() == outputVectors.size());
+    DASSERT(columns.size() == outputVectors.size());
     if (source == TableScanSource::NONE) {
         return NODE_GROUP_SCAN_EMPTY_RESULT;
     }
@@ -161,7 +161,7 @@ bool RollbackPKDeleter::processScanOutput(main::ClientContext* context,
     if (scanResult == NODE_GROUP_SCAN_EMPTY_RESULT) {
         return false;
     }
-    LBUG_ASSERT(scannedVectors.size() == 1);
+    DASSERT(scannedVectors.size() == 1);
     auto& scannedVector = *scannedVectors[0];
     auto& pkIndex = index->cast<PrimaryKeyIndex>();
     const auto rollbackFunc = [&]<IndexHashable T>(T) {
@@ -178,7 +178,7 @@ bool RollbackPKDeleter::processScanOutput(main::ClientContext* context,
         }
     };
     TypeUtils::visit(scannedVector.dataType.getPhysicalType(), std::cref(rollbackFunc),
-        []<notIndexHashable T>(T) { LBUG_UNREACHABLE; });
+        []<notIndexHashable T>(T) { UNREACHABLE_CODE; });
     return true;
 }
 } // namespace
@@ -202,7 +202,7 @@ bool NodeTableScanState::scanNext(Transaction* transaction) {
     if (source == TableScanSource::NONE) {
         return false;
     }
-    LBUG_ASSERT(columns.size() == outputVectors.size());
+    DASSERT(columns.size() == outputVectors.size());
     const NodeGroupScanResult scanResult = nodeGroup->scan(transaction, *this);
     if (scanResult == NODE_GROUP_SCAN_EMPTY_RESULT) {
         return false;
@@ -237,7 +237,7 @@ NodeTable::NodeTable(const StorageManager* storageManager,
             dataFH, mm, shadowFile, enableCompression);
     }
     auto& pkDefinition = nodeTableEntry->getPrimaryKeyDefinition();
-    LBUG_ASSERT(pkColumnID != INVALID_COLUMN_ID);
+    DASSERT(pkColumnID != INVALID_COLUMN_ID);
     auto hashIndexType = PrimaryKeyIndex::getIndexType();
     IndexInfo indexInfo{PrimaryKeyIndex::DEFAULT_NAME, hashIndexType.typeName, tableID,
         {pkColumnID}, {pkDefinition.getType().getPhysicalType()},
@@ -270,16 +270,16 @@ void NodeTable::initScanState(Transaction* transaction, TableScanState& scanStat
     } break;
     case TableScanSource::UNCOMMITTED: {
         const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
-        LBUG_ASSERT(localTable);
+        DASSERT(localTable);
         const auto& localNodeTable = localTable->cast<LocalNodeTable>();
         nodeGroup = localNodeTable.getNodeGroup(nodeScanState.nodeGroupIdx);
-        LBUG_ASSERT(nodeGroup);
+        DASSERT(nodeGroup);
     } break;
     case TableScanSource::NONE: {
         // DO NOTHING.
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
     nodeScanState.initState(transaction, nodeGroup);
@@ -305,7 +305,7 @@ bool NodeTable::scanInternal(Transaction* transaction, TableScanState& scanState
 
 template<bool lock>
 bool NodeTable::lookup(const Transaction* transaction, const TableScanState& scanState) const {
-    LBUG_ASSERT(scanState.nodeIDVector->state->getSelVector().getSelSize() == 1);
+    DASSERT(scanState.nodeIDVector->state->getSelVector().getSelSize() == 1);
     const auto nodeIDPos = scanState.nodeIDVector->state->getSelVector()[0];
     if (scanState.nodeIDVector->isNull(nodeIDPos)) {
         return false;
@@ -376,7 +376,7 @@ template bool NodeTable::lookupMultiple<false>(Transaction* transaction,
 offset_t NodeTable::validateUniquenessConstraint(const Transaction* transaction,
     const std::vector<ValueVector*>& propertyVectors) const {
     const auto pkVector = propertyVectors[pkColumnID];
-    LBUG_ASSERT(pkVector->state->getSelVector().getSelSize() == 1);
+    DASSERT(pkVector->state->getSelVector().getSelSize() == 1);
     const auto pkVectorPos = pkVector->state->getSelVector()[0];
     if (offset_t offset = INVALID_OFFSET;
         getPKIndex()->lookup(transaction, propertyVectors[pkColumnID], pkVectorPos, offset,
@@ -393,7 +393,7 @@ offset_t NodeTable::validateUniquenessConstraint(const Transaction* transaction,
 void NodeTable::validatePkNotExists(const Transaction* transaction, ValueVector* pkVector) const {
     offset_t dummyOffset = INVALID_OFFSET;
     auto& selVector = pkVector->state->getSelVector();
-    LBUG_ASSERT(selVector.getSelSize() == 1);
+    DASSERT(selVector.getSelSize() == 1);
     if (pkVector->isNull(selVector[0])) {
         throw RuntimeException(ExceptionMessage::nullPKException());
     }
@@ -420,8 +420,8 @@ void NodeTable::initInsertState(main::ClientContext* context, TableInsertState& 
 void NodeTable::insert(Transaction* transaction, TableInsertState& insertState) {
     const auto& nodeInsertState = insertState.cast<NodeTableInsertState>();
     auto& nodeIDSelVector = nodeInsertState.nodeIDVector.state->getSelVector();
-    LBUG_ASSERT(nodeInsertState.propertyVectors[0]->state->getSelVector().getSelSize() == 1);
-    LBUG_ASSERT(nodeIDSelVector.getSelSize() == 1);
+    DASSERT(nodeInsertState.propertyVectors[0]->state->getSelVector().getSelSize() == 1);
+    DASSERT(nodeIDSelVector.getSelSize() == 1);
     if (nodeInsertState.nodeIDVector.isNull(nodeIDSelVector[0])) {
         return;
     }
@@ -438,7 +438,7 @@ void NodeTable::insert(Transaction* transaction, TableInsertState& insertState) 
             *nodeInsertState.indexInsertStates[i]);
     }
     if (insertState.logToWAL && transaction->shouldLogToWAL()) {
-        LBUG_ASSERT(transaction->isWriteTransaction());
+        DASSERT(transaction->isWriteTransaction());
         auto& wal = transaction->getLocalWAL();
         wal.logTableInsertion(tableID, TableType::NODE,
             nodeInsertState.nodeIDVector.state->getSelVector().getSelSize(),
@@ -468,7 +468,7 @@ void NodeTable::update(Transaction* transaction, TableUpdateState& updateState) 
     // NOTE: We assume all inputs are flattened now. This is to simplify the implementation.
     // We should optimize this to take unflattened input later.
     auto& nodeUpdateState = updateState.constCast<NodeTableUpdateState>();
-    LBUG_ASSERT(nodeUpdateState.nodeIDVector.state->getSelVector().getSelSize() == 1 &&
+    DASSERT(nodeUpdateState.nodeIDVector.state->getSelVector().getSelSize() == 1 &&
               nodeUpdateState.propertyVector.state->getSelVector().getSelSize() == 1);
     const auto pos = nodeUpdateState.nodeIDVector.state->getSelVector()[0];
     if (nodeUpdateState.nodeIDVector.isNull(pos)) {
@@ -489,7 +489,7 @@ void NodeTable::update(Transaction* transaction, TableUpdateState& updateState) 
     }
     if (transaction->isUnCommitted(tableID, nodeOffset)) {
         const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
-        LBUG_ASSERT(localTable);
+        DASSERT(localTable);
         localTable->update(&DUMMY_TRANSACTION, updateState);
     } else {
         const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(nodeOffset);
@@ -500,7 +500,7 @@ void NodeTable::update(Transaction* transaction, TableUpdateState& updateState) 
                 nodeUpdateState.propertyVector);
     }
     if (updateState.logToWAL && transaction->shouldLogToWAL()) {
-        LBUG_ASSERT(transaction->isWriteTransaction());
+        DASSERT(transaction->isWriteTransaction());
         auto& wal = transaction->getLocalWAL();
         wal.logNodeUpdate(tableID, nodeUpdateState.columnID, nodeOffset,
             &nodeUpdateState.propertyVector);
@@ -510,7 +510,7 @@ void NodeTable::update(Transaction* transaction, TableUpdateState& updateState) 
 
 bool NodeTable::delete_(Transaction* transaction, TableDeleteState& deleteState) {
     const auto& nodeDeleteState = dynamic_cast_checked<NodeTableDeleteState&>(deleteState);
-    LBUG_ASSERT(nodeDeleteState.nodeIDVector.state->getSelVector().getSelSize() == 1);
+    DASSERT(nodeDeleteState.nodeIDVector.state->getSelVector().getSelSize() == 1);
     const auto pos = nodeDeleteState.nodeIDVector.state->getSelVector()[0];
     if (nodeDeleteState.nodeIDVector.isNull(pos)) {
         return false;
@@ -538,7 +538,7 @@ bool NodeTable::delete_(Transaction* transaction, TableDeleteState& deleteState)
     if (isDeleted) {
         hasChanges = true;
         if (deleteState.logToWAL && transaction->shouldLogToWAL()) {
-            LBUG_ASSERT(transaction->isWriteTransaction());
+            DASSERT(transaction->isWriteTransaction());
             auto& wal = transaction->getLocalWAL();
             wal.logNodeDeletion(tableID, nodeOffset, &nodeDeleteState.pkVector);
         }
@@ -573,7 +573,7 @@ std::pair<offset_t, offset_t> NodeTable::appendToLastNodeGroup(Transaction* tran
 DataChunk NodeTable::constructDataChunkForColumns(const std::vector<column_id_t>& columnIDs) const {
     std::vector<LogicalType> types;
     for (const auto& columnID : columnIDs) {
-        LBUG_ASSERT(columnID < columns.size());
+        DASSERT(columnID < columns.size());
         types.push_back(columns[columnID]->getDataType().copy());
     }
     return constructDataChunk(memoryManager, std::move(types));
@@ -612,7 +612,7 @@ void NodeTable::commit(main::ClientContext* context, TableCatalogEntry* tableEnt
                         nodeOffset - StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
                     [[maybe_unused]] const bool isDeleted =
                         nodeGroups->getNodeGroup(nodeGroupIdx)->delete_(transaction, rowIdxInGroup);
-                    LBUG_ASSERT(isDeleted);
+                    DASSERT(isDeleted);
                     if (transaction->shouldAppendToUndoBuffer()) {
                         transaction->pushDeleteInfo(nodeGroupIdx, rowIdxInGroup, 1,
                             &versionRecordHandler);
@@ -757,7 +757,7 @@ void NodeTable::scanIndexColumns(main::ClientContext* context, IndexScanHelper& 
         // an exception that is thrown before any chunked groups could be appended to the node group
         if (scanState->nodeGroup->getNumChunkedGroups() > 0) {
             scanState->nodeGroupIdx = nodeGroupToScan;
-            LBUG_ASSERT(scanState->nodeGroup);
+            DASSERT(scanState->nodeGroup);
             scanState->nodeGroup->initializeScanState(transaction::Transaction::Get(*context),
                 *scanState);
             while (true) {
@@ -780,10 +780,10 @@ void NodeTable::addIndex(std::unique_ptr<Index> index) {
 }
 
 void NodeTable::dropIndex(const std::string& name) {
-    LBUG_ASSERT(getIndex(name) != nullptr);
+    DASSERT(getIndex(name) != nullptr);
     for (auto it = indexes.begin(); it != indexes.end(); ++it) {
         if (StringUtils::caseInsensitiveEquals(it->getName(), name)) {
-            LBUG_ASSERT(it->isLoaded());
+            DASSERT(it->isLoaded());
             indexes.erase(it);
             hasChanges = true;
             return;

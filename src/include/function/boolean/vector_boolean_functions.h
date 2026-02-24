@@ -20,7 +20,7 @@ private:
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* /*dataPtr*/ = nullptr) {
-        LBUG_ASSERT(params.size() == 2);
+        DASSERT(params.size() == 2);
         BinaryBooleanFunctionExecutor::execute<FUNC>(*params[0], paramSelVectors[0], *params[1],
             paramSelVectors[1], result, resultSelVector);
     }
@@ -29,7 +29,7 @@ private:
     static bool BinaryBooleanSelectFunction(
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         common::SelectionVector& selVector, void* /*dataPtr*/) {
-        LBUG_ASSERT(params.size() == 2);
+        DASSERT(params.size() == 2);
         return BinaryBooleanFunctionExecutor::select<FUNC>(*params[0], *params[1], selVector);
     }
 
@@ -38,7 +38,7 @@ private:
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* /*dataPtr*/ = nullptr) {
-        LBUG_ASSERT(params.size() == 1);
+        DASSERT(params.size() == 1);
         UnaryBooleanOperationExecutor::execute<FUNC>(*params[0], paramSelVectors[0], result,
             resultSelVector);
     }
@@ -47,7 +47,7 @@ private:
     static bool UnaryBooleanSelectFunction(
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         common::SelectionVector& selVector, void* /*dataPtr*/) {
-        LBUG_ASSERT(params.size() == 1);
+        DASSERT(params.size() == 1);
         return UnaryBooleanOperationExecutor::select<FUNC>(*params[0], selVector);
     }
 

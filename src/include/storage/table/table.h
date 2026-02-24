@@ -64,12 +64,12 @@ struct LBUG_API TableScanState {
     // Note that `resetCachedBoundNodeSelVec` is only applicable to RelTable for now.
     virtual void initState(transaction::Transaction* transaction, NodeGroup* nodeGroup,
         bool /*resetCachedBoundNodeSelVev*/ = true) {
-        LBUG_ASSERT(nodeGroup);
+        DASSERT(nodeGroup);
         this->nodeGroup = nodeGroup;
         this->nodeGroup->initializeScanState(transaction, *this);
     }
 
-    virtual bool scanNext(transaction::Transaction*) { LBUG_UNREACHABLE; }
+    virtual bool scanNext(transaction::Transaction*) { UNREACHABLE_CODE; }
 
     void resetOutVectors();
 

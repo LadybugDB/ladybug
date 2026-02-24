@@ -147,7 +147,7 @@ bool TransactionManager::hasActiveWriteTransactionNoLock() const {
 }
 
 void TransactionManager::clearTransactionNoLock(transaction_t transactionID) {
-    LBUG_ASSERT(std::ranges::any_of(activeTransactions.begin(), activeTransactions.end(),
+    DASSERT(std::ranges::any_of(activeTransactions.begin(), activeTransactions.end(),
         [transactionID](const auto& activeTransaction) {
             return activeTransaction->getID() == transactionID;
         }));

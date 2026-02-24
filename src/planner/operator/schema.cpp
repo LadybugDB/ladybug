@@ -16,15 +16,15 @@ f_group_pos Schema::createGroup() {
 }
 
 void Schema::insertToScope(const std::shared_ptr<Expression>& expression, f_group_pos groupPos) {
-    LBUG_ASSERT(!expressionNameToGroupPos.contains(expression->getUniqueName()));
+    DASSERT(!expressionNameToGroupPos.contains(expression->getUniqueName()));
     expressionNameToGroupPos.insert({expression->getUniqueName(), groupPos});
-    LBUG_ASSERT(getGroup(groupPos)->expressionNameToPos.contains(expression->getUniqueName()));
+    DASSERT(getGroup(groupPos)->expressionNameToPos.contains(expression->getUniqueName()));
     expressionsInScope.push_back(expression);
 }
 
 void Schema::insertToGroupAndScope(const std::shared_ptr<Expression>& expression,
     f_group_pos groupPos) {
-    LBUG_ASSERT(!expressionNameToGroupPos.contains(expression->getUniqueName()));
+    DASSERT(!expressionNameToGroupPos.contains(expression->getUniqueName()));
     expressionNameToGroupPos.insert({expression->getUniqueName(), groupPos});
     groups[groupPos]->insertExpression(expression);
     expressionsInScope.push_back(expression);
@@ -53,7 +53,7 @@ void Schema::insertToGroupAndScope(const expression_vector& expressions, f_group
 }
 
 f_group_pos Schema::getGroupPos(const std::string& expressionName) const {
-    LBUG_ASSERT(expressionNameToGroupPos.contains(expressionName));
+    DASSERT(expressionNameToGroupPos.contains(expressionName));
     return expressionNameToGroupPos.at(expressionName);
 }
 

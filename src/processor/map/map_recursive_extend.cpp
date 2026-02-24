@@ -49,9 +49,9 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapRecursiveExtend(
         addOperatorMapping(logicalOperator, recursiveExtend.get());
         sharedState->setPathNodeMask(std::make_unique<NodeOffsetMaskMap>());
         auto maskMap = sharedState->getPathNodeMaskMap();
-        LBUG_ASSERT(extend.getNumChildren() == 1);
+        DASSERT(extend.getNumChildren() == 1);
         auto logicalRoot = extend.getChild(0);
-        LBUG_ASSERT(logicalRoot->getNumChildren() == 1 &&
+        DASSERT(logicalRoot->getNumChildren() == 1 &&
                   logicalRoot->getChild(0)->getOperatorType() == LogicalOperatorType::SEMI_MASKER);
         auto logicalSemiMasker = logicalRoot->getChild(0)->ptrCast<LogicalSemiMasker>();
         logicalSemiMasker->addTarget(logicalOperator);

@@ -17,7 +17,7 @@ struct SemiMaskerLocalState {
 
     void maskSingleTable(common::offset_t offset) const { singleTableRef->mask(offset); }
     void maskMultiTable(common::nodeID_t nodeID) const {
-        LBUG_ASSERT(localMasksPerTable.contains(nodeID.tableID));
+        DASSERT(localMasksPerTable.contains(nodeID.tableID));
         localMasksPerTable.at(nodeID.tableID)->mask(nodeID.offset);
     }
 };

@@ -28,7 +28,7 @@ std::unique_ptr<TableFuncBindData> bindFunc(ClientContext* /*context*/,
     std::vector<LogicalType> returnTypes;
     std::vector<std::string> names;
     if (py::isinstance<py::dict>(df)) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     } else {
         Pandas::bind(df, columnBindData, returnTypes, names);
     }
@@ -39,7 +39,7 @@ std::unique_ptr<TableFuncBindData> bindFunc(ClientContext* /*context*/,
     auto scanConfig = PyScanConfig{
         input->extraInput->constPtrCast<ExtraScanTableFuncBindInput>()->fileScanInfo.options,
         numRows};
-    LBUG_ASSERT(numRows >= scanConfig.skipNum);
+    DASSERT(numRows >= scanConfig.skipNum);
     return std::make_unique<PandasScanFunctionData>(std::move(returnColumns), df,
         std::min(numRows - scanConfig.skipNum, scanConfig.limitNum), std::move(columnBindData),
         scanConfig);
@@ -68,7 +68,7 @@ void pandasBackendScanSwitch(PandasColumnBindData* bindData, uint64_t count, uin
         NumpyScan::scan(bindData, count, offset, outputVector);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

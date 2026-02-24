@@ -93,7 +93,7 @@ public:
             if (backtracking) {
                 auto next = curPath[topIdx]->getNextPtr();
                 if (next != nullptr) { // Find next top node with the same cost.
-                    LBUG_ASSERT(curPath[topIdx]->getCost() == next->getCost());
+                    DASSERT(curPath[topIdx]->getCost() == next->getCost());
                     curPath[topIdx] = next;
                     backtracking = false;
                 } else { // Move to next top.
@@ -101,7 +101,7 @@ public:
                 }
             } else { // Forward track fill path.
                 auto parent = bfsGraph.getParentListHead(curPath[topIdx]->getNodeID());
-                LBUG_ASSERT(parent != nullptr);
+                DASSERT(parent != nullptr);
                 curPath.push_back(parent);
                 backtracking = false;
             }

@@ -72,7 +72,7 @@ void convertDuckDBVectorToVector<list_entry_t>(duckdb::Vector& duckDBVector, Val
         }
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 
     ListVector::resizeDataVector(&result, numValuesInDataVec);
@@ -128,7 +128,7 @@ void DuckDBResultConverter::convertDuckDBResultToVector(duckdb::DataChunk& duckD
             }
             continue;
         }
-        LBUG_ASSERT(duckDBResult.data[duckdbResultColIdx].GetVectorType() ==
+        DASSERT(duckDBResult.data[duckdbResultColIdx].GetVectorType() ==
                   duckdb::VectorType::FLAT_VECTOR);
         // Write to output vector at position i (the original column index)
         conversionFunctions[i](duckDBResult.data[duckdbResultColIdx],

@@ -47,7 +47,7 @@ uint64_t CostModel::computeIntersectCost(const LogicalPlan& probePlan,
     // case.
     cost += probePlan.getCardinality();
     for (auto& buildPlan : buildPlans) {
-        LBUG_ASSERT(buildPlan.getCardinality() >= 1);
+        DASSERT(buildPlan.getCardinality() >= 1);
         cost += buildPlan.getCost();
     }
     return cost;

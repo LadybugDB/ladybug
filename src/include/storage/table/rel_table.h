@@ -167,10 +167,10 @@ public:
         return getDirectedTableData(direction)->getCSRLengthColumn();
     }
     common::column_id_t getNumColumns() const {
-        LBUG_ASSERT(directedRelData.size() >= 1);
+        DASSERT(directedRelData.size() >= 1);
         RUNTIME_CHECK(for (const auto& relData
                            : directedRelData) {
-            LBUG_ASSERT(relData->getNumColumns() == directedRelData[0]->getNumColumns());
+            DASSERT(relData->getNumColumns() == directedRelData[0]->getNumColumns());
         });
         return directedRelData[0]->getNumColumns();
     }

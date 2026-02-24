@@ -191,7 +191,7 @@ void HTTPFileSystem::readFromFile(common::FileInfo& fileInfo, void* buffer, uint
     while (numBytesToRead > 0) {
         auto buffer_read_len = std::min<uint64_t>(httpFileInfo.availableBuffer, numBytesToRead);
         if (buffer_read_len > 0) {
-            LBUG_ASSERT(httpFileInfo.bufferStartPos + httpFileInfo.bufferIdx + buffer_read_len <=
+            DASSERT(httpFileInfo.bufferStartPos + httpFileInfo.bufferIdx + buffer_read_len <=
                       httpFileInfo.bufferEndPos);
             memcpy((char*)buffer + bufferOffset,
                 httpFileInfo.readBuffer.get() + httpFileInfo.bufferIdx, buffer_read_len);

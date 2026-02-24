@@ -92,7 +92,7 @@ void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& parameter
             });
         memcpy(resultStr.prefix, resultStr.getData(),
             std::min<uint64_t>(resultStr.len, string_t::PREFIX_LENGTH));
-        LBUG_ASSERT(resultBuffer - resultStr.getData() == len);
+        DASSERT(resultBuffer - resultStr.getData() == len);
         result.setNull(pos, false /* isNull */);
         result.setValue(pos, resultStr);
     }

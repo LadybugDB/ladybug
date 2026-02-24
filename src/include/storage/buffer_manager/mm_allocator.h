@@ -17,23 +17,23 @@ public:
     DELETE_BOTH_MOVE(MmAllocator);
 
     [[nodiscard]] T* allocate(const std::size_t size) {
-        LBUG_ASSERT_UNCONDITIONAL(mm != nullptr);
-        LBUG_ASSERT_UNCONDITIONAL(size > 0);
-        LBUG_ASSERT_UNCONDITIONAL(size <= std::numeric_limits<std::size_t>::max() / sizeof(T));
+        ASSERT(mm != nullptr);
+        ASSERT(size > 0);
+        ASSERT(size <= std::numeric_limits<std::size_t>::max() / sizeof(T));
 
         auto buffer = mm->mallocBuffer(false, size * sizeof(T));
         auto p = reinterpret_cast<T*>(buffer.data());
 
         // Ensure proper alignment
-        LBUG_ASSERT_UNCONDITIONAL(reinterpret_cast<std::uintptr_t>(p) % alignof(T) == 0);
+        ASSERT(reinterpret_cast<std::uintptr_t>(p) % alignof(T) == 0);
 
         return p;
     }
 
     void deallocate(T* p, const std::size_t size) noexcept {
-        LBUG_ASSERT_UNCONDITIONAL(mm != nullptr);
-        LBUG_ASSERT_UNCONDITIONAL(p != nullptr);
-        LBUG_ASSERT_UNCONDITIONAL(size > 0);
+        ASSERT(mm != nullptr);
+        ASSERT(p != nullptr);
+        ASSERT(size > 0);
 
         const auto buffer = std::span(reinterpret_cast<uint8_t*>(p), size * sizeof(T));
         if (buffer.data() != nullptr) {

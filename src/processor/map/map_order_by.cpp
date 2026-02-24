@@ -51,7 +51,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapOrderBy(const LogicalOperator* 
     for (auto& expression : keyExpressions) {
         keysPos.emplace_back(inSchema->getExpressionPos(*expression));
         keyTypes.push_back(expression->getDataType().copy());
-        LBUG_ASSERT(payloadToColIdx.contains(expression));
+        DASSERT(payloadToColIdx.contains(expression));
         keyInPayloadPos.push_back(payloadToColIdx.at(expression));
     }
     std::vector<DataPos> outPos;

@@ -30,7 +30,7 @@ function_set CountIfFunction::getFunctionSet() {
                 T) { execFunc = ScalarFunction::UnaryExecFunction<T, uint8_t, CountIf>; },
             [&execFunc](
                 bool) { execFunc = ScalarFunction::UnaryExecFunction<bool, uint8_t, CountIf>; },
-            [](auto) { LBUG_UNREACHABLE; });
+            [](auto) { UNREACHABLE_CODE; });
         functionSet.push_back(std::make_unique<ScalarFunction>(name,
             std::vector<LogicalTypeID>{operandTypeID}, LogicalTypeID::UINT8, execFunc));
     }

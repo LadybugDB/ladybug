@@ -24,7 +24,7 @@ struct MinMaxFunction {
     template<class OP>
     static void updateAll(uint8_t* state_, common::ValueVector* input, uint64_t /*multiplicity*/,
         common::InMemOverflowBuffer* overflowBuffer) {
-        LBUG_ASSERT(!input->state->isFlat());
+        DASSERT(!input->state->isFlat());
         auto* state = reinterpret_cast<MinMaxState*>(state_);
         input->forEachNonNull(
             [&](auto pos) { updateSingleValue<OP>(state, input, pos, overflowBuffer); });

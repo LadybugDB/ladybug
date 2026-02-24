@@ -46,7 +46,7 @@ struct QueryFTSBindData final : public function::GDSBindData {
           outputTableID{output[0]->constCast<binder::NodeExpression>().getTableIDs()[0]},
           numDocs{numDocs}, avgDocLen{avgDocLen} {
         auto& nodeExpr = output[0]->constCast<binder::NodeExpression>();
-        LBUG_ASSERT(nodeExpr.getNumEntries() == 1);
+        DASSERT(nodeExpr.getNumEntries() == 1);
         outputTableID = nodeExpr.getEntry(0)->getTableID();
         this->optionalParams = std::move(optionalParams);
     }

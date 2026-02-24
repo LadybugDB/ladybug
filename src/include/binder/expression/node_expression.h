@@ -18,7 +18,7 @@ public:
 
     void setInternalID(std::shared_ptr<PropertyExpression> expr) { internalID = std::move(expr); }
     std::shared_ptr<PropertyExpression> getInternalID() const override {
-        LBUG_ASSERT(internalID != nullptr);
+        DASSERT(internalID != nullptr);
         return internalID;
     }
 

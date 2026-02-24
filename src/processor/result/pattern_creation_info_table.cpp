@@ -29,7 +29,7 @@ PatternCreationInfo PatternCreationInfoTable::getPatternCreationInfo(
             tuple = factorizedTable->appendEmptyTuple();
             hasCreated = false;
         }
-        LBUG_ASSERT(factorizedTable->getNumTuples() == 1);
+        DASSERT(factorizedTable->getNumTuples() == 1);
         return PatternCreationInfo{tuple, hasCreated};
     } else {
         resizeHashTableIfNecessary(1);
@@ -46,7 +46,7 @@ PatternCreationInfo PatternCreationInfoTable::getPatternCreationInfo(
 uint64_t PatternCreationInfoTable::matchFTEntries(std::span<const common::ValueVector*> keyVectors,
     uint64_t numMayMatches, uint64_t numNoMatches) {
     numNoMatches = AggregateHashTable::matchFTEntries(keyVectors, numMayMatches, numNoMatches);
-    LBUG_ASSERT(numMayMatches <= 1);
+    DASSERT(numMayMatches <= 1);
     // If we found the entry for the target key, we set tuple to the key tuple. Otherwise, simply
     // set tuple to nullptr.
     tuple = numMayMatches != 0 ? hashSlotsToUpdateAggState[mayMatchIdxes[0]]->getEntry() : nullptr;

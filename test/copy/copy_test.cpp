@@ -109,7 +109,7 @@ public:
         conn = std::make_unique<main::Connection>(database.get());
         currentBM->setClientContext(conn->getClientContext());
     }
-    std::string getInputDir() override { LBUG_UNREACHABLE; }
+    std::string getInputDir() override { UNREACHABLE_CODE; }
     void BMExceptionRecoveryTest(BMExceptionRecoveryTestConfig cfg);
     std::atomic<uint64_t> failureFrequency;
     FlakyBufferManager* currentBM;

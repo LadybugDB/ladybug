@@ -50,7 +50,7 @@ std::string ScanRelTablePrintInfo::toString() const {
         result += "]->";
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     result += "(";
     result += nbrNode->toString();

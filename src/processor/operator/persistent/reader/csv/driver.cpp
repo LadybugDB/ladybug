@@ -72,11 +72,11 @@ bool ParsingDriver::addRow(uint64_t rowNum, common::column_id_t columnCount,
     if (warningDataWithColumnInfo.has_value()) {
         const auto warningDataStartColumn = warningDataWithColumnInfo->warningDataStartColumnIdx;
         const auto numWarningDataColumns = warningDataWithColumnInfo->data.numValues;
-        LBUG_ASSERT(numWarningDataColumns == CopyConstants::CSV_WARNING_DATA_NUM_COLUMNS);
+        DASSERT(numWarningDataColumns == CopyConstants::CSV_WARNING_DATA_NUM_COLUMNS);
         for (idx_t i = 0; i < numWarningDataColumns; ++i) {
             const auto& warningData = warningDataWithColumnInfo->data.values[i];
             const auto columnIdx = warningDataStartColumn + i;
-            LBUG_ASSERT(columnIdx < chunk.getNumValueVectors());
+            DASSERT(columnIdx < chunk.getNumValueVectors());
             auto& vectorToSet = chunk.getValueVectorMutable(columnIdx);
             std::visit(
                 [&vectorToSet, rowNum](

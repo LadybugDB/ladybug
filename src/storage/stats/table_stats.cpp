@@ -29,17 +29,17 @@ void TableStats::update(const std::vector<common::ValueVector*>& vectors, size_t
 
 void TableStats::update(const std::vector<common::column_id_t>& columnIDs,
     const std::vector<common::ValueVector*>& vectors, size_t numColumns) {
-    LBUG_ASSERT(columnIDs.size() == vectors.size());
+    DASSERT(columnIDs.size() == vectors.size());
     size_t numColumnsToUpdate = std::min(numColumns, vectors.size());
 
     for (auto i = 0u; i < numColumnsToUpdate; ++i) {
         auto columnID = columnIDs[i];
-        LBUG_ASSERT(columnID < columnStats.size());
+        DASSERT(columnID < columnStats.size());
         columnStats[columnID].update(vectors[i]);
     }
     const auto numValues = vectors[0]->state->getSelVector().getSelSize();
     for (auto i = 1u; i < numColumnsToUpdate; ++i) {
-        LBUG_ASSERT(vectors[i]->state->getSelVector().getSelSize() == numValues);
+        DASSERT(vectors[i]->state->getSelVector().getSelSize() == numValues);
     }
     incrementCardinality(numValues);
 }

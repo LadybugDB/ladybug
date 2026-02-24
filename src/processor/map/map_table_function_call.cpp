@@ -11,7 +11,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapTableFunctionCall(
     const LogicalOperator* logicalOperator) {
     auto& call = logicalOperator->constCast<LogicalTableFunctionCall>();
     auto getPhysicalPlanFunc = call.getTableFunc().getPhysicalPlanFunc;
-    LBUG_ASSERT(getPhysicalPlanFunc);
+    DASSERT(getPhysicalPlanFunc);
     auto res = getPhysicalPlanFunc(this, logicalOperator);
     logicalOpToPhysicalOpMap.insert({logicalOperator, res.get()});
     return res;

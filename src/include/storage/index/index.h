@@ -134,12 +134,12 @@ public:
     }
     virtual std::unique_ptr<UpdateState> initUpdateState(main::ClientContext* /*context*/,
         common::column_id_t /*columnID*/, visible_func /*isVisible*/) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     virtual void update(transaction::Transaction* /*transaction*/,
         const common::ValueVector& /*nodeIDVector*/, common::ValueVector& /*propertyVector*/,
         UpdateState& /*updateState*/) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     virtual std::unique_ptr<DeleteState> initDeleteState(
         const transaction::Transaction* transaction, MemoryManager* mm, visible_func isVisible) = 0;
@@ -165,7 +165,7 @@ public:
     }
 
     std::span<uint8_t> getStorageBuffer() const {
-        LBUG_ASSERT(!loaded);
+        DASSERT(!loaded);
         return std::span(storageInfoBuffer.get(), storageInfoBufferSize);
     }
     const IndexStorageInfo& getStorageInfo() const { return *storageInfo; }
@@ -201,27 +201,27 @@ public:
     // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
     void checkpoint(main::ClientContext* context, PageAllocator& pageAllocator) {
         if (loaded) {
-            LBUG_ASSERT(index);
+            DASSERT(index);
             index->checkpoint(context, pageAllocator);
         }
     }
     // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
     void rollbackCheckpoint() {
         if (loaded) {
-            LBUG_ASSERT(index);
+            DASSERT(index);
             index->rollbackCheckpoint();
         }
     }
     // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
     void finalize(main::ClientContext* context) {
         if (loaded) {
-            LBUG_ASSERT(index);
+            DASSERT(index);
             index->finalize(context);
         }
     }
 
     Index* getIndex() const {
-        LBUG_ASSERT(index);
+        DASSERT(index);
         return index.get();
     }
 

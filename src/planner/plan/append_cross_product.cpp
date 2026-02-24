@@ -20,7 +20,7 @@ void Planner::appendOptionalCrossProduct(std::shared_ptr<Expression> mark,
 
 void Planner::appendAccOptionalCrossProduct(std::shared_ptr<Expression> mark,
     LogicalPlan& probePlan, const LogicalPlan& buildPlan, LogicalPlan& resultPlan) {
-    LBUG_ASSERT(probePlan.hasUpdate());
+    DASSERT(probePlan.hasUpdate());
     tryAppendAccumulate(probePlan);
     appendCrossProduct(AccumulateType::OPTIONAL_, mark, probePlan, buildPlan, resultPlan);
     auto& sipInfo = resultPlan.getLastOperator()->cast<LogicalCrossProduct>().getSIPInfoUnsafe();

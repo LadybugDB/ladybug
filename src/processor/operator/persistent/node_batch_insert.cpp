@@ -78,7 +78,7 @@ void NodeBatchInsert::initLocalStateInternal(ResultSet* resultSet, ExecutionCont
     localState = std::make_unique<NodeBatchInsertLocalState>(
         std::span{nodeInfo->columnTypes.begin(), nodeInfo->outputDataColumns.size()});
     const auto nodeLocalState = localState->ptrCast<NodeBatchInsertLocalState>();
-    LBUG_ASSERT(nodeSharedState->globalIndexBuilder);
+    DASSERT(nodeSharedState->globalIndexBuilder);
     nodeLocalState->localIndexBuilder = nodeSharedState->globalIndexBuilder->clone();
     nodeLocalState->errorHandler = createErrorHandler(context);
     nodeLocalState->optimisticAllocator =
@@ -94,7 +94,7 @@ void NodeBatchInsert::initLocalStateInternal(ResultSet* resultSet, ExecutionCont
     nodeLocalState->chunkedGroup =
         std::make_unique<InMemChunkedNodeGroup>(*MemoryManager::Get(*context->clientContext),
             nodeInfo->columnTypes, info->compressionEnabled, StorageConfig::NODE_GROUP_SIZE, 0);
-    LBUG_ASSERT(resultSet->dataChunks[0]);
+    DASSERT(resultSet->dataChunks[0]);
     nodeLocalState->columnState = resultSet->dataChunks[0]->state;
 }
 
@@ -119,10 +119,10 @@ void NodeBatchInsert::executeInternal(ExecutionContext* context) {
             nodeLocalState->localIndexBuilder, MemoryManager::Get(*context->clientContext));
     }
     if (nodeLocalState->localIndexBuilder) {
-        LBUG_ASSERT(token);
+        DASSERT(token);
         token->quit();
 
-        LBUG_ASSERT(nodeLocalState->errorHandler.has_value());
+        DASSERT(nodeLocalState->errorHandler.has_value());
         nodeLocalState->localIndexBuilder->finishedProducing(nodeLocalState->errorHandler.value());
         nodeLocalState->errorHandler->flushStoredErrors();
     }
@@ -191,7 +191,7 @@ void NodeBatchInsert::writeAndResetNodeGroup(transaction::Transaction* transacti
     std::unique_ptr<InMemChunkedNodeGroup>& nodeGroup, std::optional<IndexBuilder>& indexBuilder,
     MemoryManager* mm, PageAllocator& pageAllocator) const {
     const auto nodeLocalState = localState->ptrCast<NodeBatchInsertLocalState>();
-    LBUG_ASSERT(nodeLocalState->errorHandler.has_value());
+    DASSERT(nodeLocalState->errorHandler.has_value());
     writeAndResetNodeGroup(transaction, nodeGroup, indexBuilder, mm,
         nodeLocalState->errorHandler.value(), pageAllocator);
 }
@@ -253,11 +253,11 @@ void NodeBatchInsert::appendIncompleteNodeGroup(transaction::Transaction* transa
             numNodesAppended /* offsetInNodeGroup */,
             localNodeGroup->getNumRows() - numNodesAppended);
     }
-    LBUG_ASSERT(numNodesAppended == localNodeGroup->getNumRows());
+    DASSERT(numNodesAppended == localNodeGroup->getNumRows());
 }
 
 void NodeBatchInsert::finalize(ExecutionContext* context) {
-    LBUG_ASSERT(localState == nullptr);
+    DASSERT(localState == nullptr);
     const auto nodeSharedState = dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
     auto errorHandler = createErrorHandler(context);
     auto clientContext = context->clientContext;

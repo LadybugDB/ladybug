@@ -56,10 +56,10 @@ public:
         }
     }
     bool isEmpty() const {
-        LBUG_ASSERT(directedIndices.size() >= 1);
+        DASSERT(directedIndices.size() >= 1);
         RUNTIME_CHECK(for (const auto& index
                            : directedIndices) {
-            LBUG_ASSERT(index.index.empty() == directedIndices[0].index.empty());
+            DASSERT(index.index.empty() == directedIndices[0].index.empty());
         });
         return directedIndices[0].isEmpty();
     }
@@ -69,7 +69,7 @@ public:
 
     DirectedCSRIndex::index_t& getCSRIndex(common::RelDataDirection direction) {
         const auto directionIdx = common::RelDirectionUtils::relDirectionToKeyIdx(direction);
-        LBUG_ASSERT(directionIdx < directedIndices.size());
+        DASSERT(directionIdx < directedIndices.size());
         return directedIndices[directionIdx].index;
     }
     NodeGroup& getLocalNodeGroup() const { return *localNodeGroup; }

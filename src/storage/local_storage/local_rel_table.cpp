@@ -42,7 +42,7 @@ bool LocalRelTable::insert(Transaction*, TableInsertState& state) {
     std::vector<row_idx_vec_t*> rowIndicesToInsertTo;
     for (auto& directedIndex : directedIndices) {
         const auto& nodeIDVector = insertState.getBoundNodeIDVector(directedIndex.direction);
-        LBUG_ASSERT(nodeIDVector.state->getSelVector().getSelSize() == 1);
+        DASSERT(nodeIDVector.state->getSelVector().getSelSize() == 1);
         auto nodePos = nodeIDVector.state->getSelVector()[0];
         if (nodeIDVector.isNull(nodePos)) {
             return false;
@@ -54,7 +54,7 @@ bool LocalRelTable::insert(Transaction*, TableInsertState& state) {
     const auto numRowsInLocalTable = localNodeGroup->getNumRows();
     const auto relOffset = StorageConstants::MAX_NUM_ROWS_IN_TABLE + numRowsInLocalTable;
     const auto relIDVector = insertState.propertyVectors[0];
-    LBUG_ASSERT(relIDVector->dataType.getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
+    DASSERT(relIDVector->dataType.getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
     const auto relIDPos = relIDVector->state->getSelVector()[0];
     relIDVector->setValue<internalID_t>(relIDPos, internalID_t{relOffset, table.getTableID()});
     relIDVector->setNull(relIDPos, false);
@@ -75,13 +75,13 @@ bool LocalRelTable::insert(Transaction*, TableInsertState& state) {
 }
 
 bool LocalRelTable::update(Transaction* transaction, TableUpdateState& state) {
-    LBUG_ASSERT(transaction->isDummy());
+    DASSERT(transaction->isDummy());
     const auto& updateState = state.cast<RelTableUpdateState>();
 
     std::vector<row_idx_vec_t*> rowIndicesToUpdate;
     for (auto& directedIndex : directedIndices) {
         const auto& nodeIDVector = updateState.getBoundNodeIDVector(directedIndex.direction);
-        LBUG_ASSERT(nodeIDVector.state->getSelVector().getSelSize() == 1);
+        DASSERT(nodeIDVector.state->getSelVector().getSelSize() == 1);
         auto nodePos = nodeIDVector.state->getSelVector()[0];
         if (nodeIDVector.isNull(nodePos)) {
             return false;
@@ -99,7 +99,7 @@ bool LocalRelTable::update(Transaction* transaction, TableUpdateState& state) {
     if (matchedRow == INVALID_ROW_IDX) {
         return false;
     }
-    LBUG_ASSERT(updateState.columnID != NBR_ID_COLUMN_ID);
+    DASSERT(updateState.columnID != NBR_ID_COLUMN_ID);
     localNodeGroup->update(transaction, matchedRow,
         rewriteLocalColumnID(RelDataDirection::FWD /* This is a dummy direction */,
             updateState.columnID),
@@ -128,13 +128,13 @@ bool LocalRelTable::delete_(Transaction* transaction, TableDeleteState& state) {
             deleteState.dstNodeIDVector);
     }
     for (auto& [csrIndex, nodeIDVector] : directedIndicesAndNodeIDVectors) {
-        LBUG_ASSERT(nodeIDVector.state->getSelVector().getSelSize() == 1);
+        DASSERT(nodeIDVector.state->getSelVector().getSelSize() == 1);
         auto nodePos = nodeIDVector.state->getSelVector()[0];
         if (nodeIDVector.isNull(nodePos)) {
             return false;
         }
         auto nodeOffset = nodeIDVector.readNodeOffset(nodePos);
-        LBUG_ASSERT(csrIndex.index.contains(nodeOffset));
+        DASSERT(csrIndex.index.contains(nodeOffset));
         rowIndicesToDeleteFrom.push_back(&csrIndex.index[nodeOffset]);
     }
 
@@ -162,7 +162,7 @@ bool LocalRelTable::addColumn(TableAddColumnState& addColumnState) {
 
 bool LocalRelTable::checkIfNodeHasRels(ValueVector* srcNodeIDVector,
     RelDataDirection direction) const {
-    LBUG_ASSERT(srcNodeIDVector->state->isFlat());
+    DASSERT(srcNodeIDVector->state->isFlat());
     const auto nodeIDPos = srcNodeIDVector->state->getSelVector()[0];
     const auto nodeOffset = srcNodeIDVector->getValue<nodeID_t>(nodeIDPos).offset;
     const auto& directedIndex =
@@ -172,8 +172,8 @@ bool LocalRelTable::checkIfNodeHasRels(ValueVector* srcNodeIDVector,
 
 void LocalRelTable::initializeScan(TableScanState& state) {
     auto& relScanState = state.cast<RelTableScanState>();
-    LBUG_ASSERT(relScanState.source == TableScanSource::UNCOMMITTED);
-    LBUG_ASSERT(relScanState.localTableScanState);
+    DASSERT(relScanState.source == TableScanSource::UNCOMMITTED);
+    DASSERT(relScanState.localTableScanState);
     auto& localScanState = *relScanState.localTableScanState;
     localScanState.rowIndices.clear();
     localScanState.nextRowToScan = 0;
@@ -199,7 +199,7 @@ column_id_t LocalRelTable::rewriteLocalColumnID(RelDataDirection direction, colu
 
 bool LocalRelTable::scan(const Transaction* transaction, TableScanState& state) const {
     auto& relScanState = state.cast<RelTableScanState>();
-    LBUG_ASSERT(relScanState.localTableScanState);
+    DASSERT(relScanState.localTableScanState);
     auto& localScanState = *relScanState.localTableScanState;
     while (true) {
         if (relScanState.currBoundNodeIdx >= relScanState.cachedBoundNodeSelVector.getSelSize()) {
@@ -213,10 +213,10 @@ bool LocalRelTable::scan(const Transaction* transaction, TableScanState& state) 
         if (localScanState.rowIndices.empty() && localCSRIndex.contains(boundNodeOffset)) {
             localScanState.rowIndices = localCSRIndex.at(boundNodeOffset);
             localScanState.nextRowToScan = 0;
-            LBUG_ASSERT(
+            DASSERT(
                 std::is_sorted(localScanState.rowIndices.begin(), localScanState.rowIndices.end()));
         }
-        LBUG_ASSERT(localScanState.rowIndices.size() >= localScanState.nextRowToScan);
+        DASSERT(localScanState.rowIndices.size() >= localScanState.nextRowToScan);
         const auto numToScan =
             std::min(localScanState.rowIndices.size() - localScanState.nextRowToScan,
                 DEFAULT_VECTOR_CAPACITY);
@@ -283,7 +283,7 @@ row_idx_t LocalRelTable::findMatchingRow(const Transaction* transaction,
 
         [[maybe_unused]] auto lookupRes = localNodeGroup->lookupMultiple(transaction, *scanState);
         const auto scannedRelIDVector = scanState->outputVectors[0];
-        LBUG_ASSERT(
+        DASSERT(
             scannedRelIDVector->state->getSelVector().getSelSize() == currentRowsToCheck.size());
         for (auto i = 0u; i < currentRowsToCheck.size(); i++) {
             if (scannedRelIDVector->getValue<internalID_t>(i).offset == relOffset) {

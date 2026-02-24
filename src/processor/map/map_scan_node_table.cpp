@@ -87,7 +87,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapScanNodeTable(
             std::move(evaluator), std::move(sharedState), getOperatorID(), std::move(printInfo));
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

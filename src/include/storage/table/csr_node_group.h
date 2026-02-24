@@ -70,8 +70,8 @@ struct NodeCSRIndex {
         }
     }
     void setInvalid(common::idx_t idx) {
-        LBUG_ASSERT(!isSequential);
-        LBUG_ASSERT(idx < rowIndices.size());
+        DASSERT(!isSequential);
+        DASSERT(idx < rowIndices.size());
         rowIndices[idx] = common::INVALID_ROW_IDX;
     }
 };
@@ -215,7 +215,7 @@ public:
 
     ChunkedNodeGroup* getPersistentChunkedGroup() const { return persistentChunkGroup.get(); }
     void setPersistentChunkedGroup(std::unique_ptr<ChunkedNodeGroup> chunkedNodeGroup) {
-        LBUG_ASSERT(chunkedNodeGroup->getFormat() == NodeGroupDataFormat::CSR);
+        DASSERT(chunkedNodeGroup->getFormat() == NodeGroupDataFormat::CSR);
         persistentChunkGroup = std::move(chunkedNodeGroup);
     }
 

@@ -36,7 +36,7 @@ std::shared_ptr<LogicalOperator> TopKOptimizer::visitLimitReplace(
         return op; // only skip no limit. No need to rewrite
     }
     auto multiplicityReducer = limit->getChild(0);
-    LBUG_ASSERT(multiplicityReducer->getOperatorType() == LogicalOperatorType::MULTIPLICITY_REDUCER);
+    DASSERT(multiplicityReducer->getOperatorType() == LogicalOperatorType::MULTIPLICITY_REDUCER);
     auto projectionOrOrderBy = multiplicityReducer->getChild(0);
     std::shared_ptr<LogicalOrderBy> orderBy;
     if (projectionOrOrderBy->getOperatorType() == LogicalOperatorType::PROJECTION) {
@@ -49,7 +49,7 @@ std::shared_ptr<LogicalOperator> TopKOptimizer::visitLimitReplace(
     } else {
         return op;
     }
-    LBUG_ASSERT(orderBy != nullptr);
+    DASSERT(orderBy != nullptr);
     if (limit->hasLimitNum()) {
         orderBy->setLimitNum(limit->getLimitNum());
     }

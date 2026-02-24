@@ -13,7 +13,7 @@ static void BinaryExecListExtractFunction(
     const std::vector<std::shared_ptr<common::ValueVector>>& params,
     const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
     common::SelectionVector* resultSelVector, void* dataPtr = nullptr) {
-    LBUG_ASSERT(params.size() == 2);
+    DASSERT(params.size() == 2);
     BinaryFunctionExecutor::executeSwitch<LEFT_TYPE, RIGHT_TYPE, RESULT_TYPE, FUNC,
         BinaryListExtractFunctionWrapper>(*params[0], paramSelVectors[0], *params[1],
         paramSelVectors[1], result, resultSelVector, dataPtr);

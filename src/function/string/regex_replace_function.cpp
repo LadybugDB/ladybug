@@ -72,7 +72,7 @@ static re2_replace_func_t bindReplaceFunc(const binder::expression_vector& expr)
         result = RE2::GlobalReplace;
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     return result;
 }
@@ -98,7 +98,7 @@ scalar_func_exec_t getExecFunc(const binder::expression_vector& expr) {
             string_t, OP>;
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     return execFunc;
 }

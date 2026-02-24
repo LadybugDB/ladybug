@@ -33,7 +33,7 @@ f_group_pos_set LogicalSetProperty::getGroupsPosToFlatten(uint32_t idx) const {
         result.insert(childSchema->getGroupPos(*rel->getDstNode()->getInternalID()));
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     auto analyzer = GroupDependencyAnalyzer(false, *childSchema);
     analyzer.visit(info.columnData);
@@ -53,7 +53,7 @@ std::string LogicalSetProperty::getExpressionsForPrinting() const {
 }
 
 common::TableType LogicalSetProperty::getTableType() const {
-    LBUG_ASSERT(!infos.empty());
+    DASSERT(!infos.empty());
     return infos[0].tableType;
 }
 

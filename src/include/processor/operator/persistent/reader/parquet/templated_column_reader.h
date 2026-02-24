@@ -9,7 +9,7 @@ namespace processor {
 template<class VALUE_TYPE>
 struct TemplatedParquetValueConversion {
     static VALUE_TYPE dictRead(ByteBuffer& dict, uint32_t& offset, ColumnReader& /*reader*/) {
-        LBUG_ASSERT(offset < dict.len / sizeof(VALUE_TYPE));
+        DASSERT(offset < dict.len / sizeof(VALUE_TYPE));
         return ((VALUE_TYPE*)dict.ptr)[offset];
     }
 

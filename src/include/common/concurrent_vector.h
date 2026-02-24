@@ -46,7 +46,7 @@ public:
                 index->blocks[index->numBlocks] = newBlock.get();
                 index->numBlocks++;
             } else {
-                LBUG_ASSERT(indices.back()->numBlocks == INDEX_SIZE);
+                DASSERT(indices.back()->numBlocks == INDEX_SIZE);
                 auto index = std::make_unique<BlockIndex>();
                 index->blocks[0] = newBlock.get();
                 index->numBlocks = 1;
@@ -66,20 +66,20 @@ public:
 
     T& operator[](uint64_t elemPos) {
         if (elemPos < initialBlockSize) {
-            LBUG_ASSERT(initialBlock);
+            DASSERT(initialBlock);
             return initialBlock[elemPos];
         } else {
             auto blockNum = (elemPos - initialBlockSize) / BLOCK_SIZE;
             auto posInBlock = (elemPos - initialBlockSize) % BLOCK_SIZE;
             auto indexNum = blockNum / INDEX_SIZE;
             BlockIndex* index = firstIndex;
-            LBUG_ASSERT(index != nullptr);
+            DASSERT(index != nullptr);
             while (indexNum > 0) {
-                LBUG_ASSERT(index->nextIndex != nullptr);
+                DASSERT(index->nextIndex != nullptr);
                 index = index->nextIndex;
                 indexNum--;
             }
-            LBUG_ASSERT(index->blocks[blockNum % INDEX_SIZE] != nullptr);
+            DASSERT(index->blocks[blockNum % INDEX_SIZE] != nullptr);
             return index->blocks[blockNum % INDEX_SIZE]->data[posInBlock];
         }
     }

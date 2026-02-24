@@ -15,7 +15,7 @@ std::string LoadedExtension::toCypher() {
     case ExtensionSource::STATIC_LINKED:
         return "";
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

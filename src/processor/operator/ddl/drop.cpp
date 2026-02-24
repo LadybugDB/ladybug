@@ -35,7 +35,7 @@ void Drop::executeInternal(ExecutionContext* context) {
         dropGraph(clientContext);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -54,7 +54,7 @@ void Drop::dropSequence(const main::ClientContext* context) {
             throw BinderException(message);
         }
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
     catalog->dropSequence(transaction, dropInfo.name);
@@ -76,7 +76,7 @@ void Drop::dropTable(const main::ClientContext* context) {
             throw BinderException(message);
         }
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
     auto entry = catalog->getTableCatalogEntry(transaction, dropInfo.name);
@@ -101,7 +101,7 @@ void Drop::dropTable(const main::ClientContext* context) {
         // Do nothing
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     catalog->dropTableEntryAndIndex(transaction, dropInfo.name);
     appendMessage(std::format("Table {} has been dropped.", dropInfo.name), memoryManager);
@@ -131,7 +131,7 @@ void Drop::dropGraph(const main::ClientContext* context) {
             throw BinderException(message);
         }
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
 
@@ -159,7 +159,7 @@ void Drop::handleMacroExistence(const main::ClientContext* context) {
             throw BinderException(message);
         }
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
 }

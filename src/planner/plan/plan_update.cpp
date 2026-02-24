@@ -30,7 +30,7 @@ void Planner::planUpdatingClause(const BoundUpdatingClause& updatingClause, Logi
         return;
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

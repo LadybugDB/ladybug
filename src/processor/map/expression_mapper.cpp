@@ -82,7 +82,7 @@ std::unique_ptr<ExpressionEvaluator> ExpressionMapper::getEvaluator(
 
 std::unique_ptr<ExpressionEvaluator> ExpressionMapper::getConstantEvaluator(
     std::shared_ptr<Expression> expression) {
-    LBUG_ASSERT(ConstantExpressionVisitor::isConstant(*expression));
+    DASSERT(ConstantExpressionVisitor::isConstant(*expression));
     auto expressionType = expression->expressionType;
     if (ExpressionType::LITERAL == expressionType) {
         return getLiteralEvaluator(std::move(expression));
@@ -114,7 +114,7 @@ std::unique_ptr<ExpressionEvaluator> ExpressionMapper::getParameterEvaluator(
 
 std::unique_ptr<ExpressionEvaluator> ExpressionMapper::getReferenceEvaluator(
     std::shared_ptr<Expression> expression) const {
-    LBUG_ASSERT(schema != nullptr);
+    DASSERT(schema != nullptr);
     auto vectorPos = DataPos(schema->getExpressionPos(*expression));
     auto expressionGroup = schema->getGroup(expression->getUniqueName());
     return std::make_unique<ReferenceExpressionEvaluator>(std::move(expression),

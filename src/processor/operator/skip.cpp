@@ -35,7 +35,7 @@ bool Skip::getNextTuplesInternal(ExecutionContext* context) {
     } else {
         // If all dataChunks are flat, numTupleAvailable = 1 which means numTupleSkippedBefore =
         // skipNumber. So execution is handled in above if statement.
-        LBUG_ASSERT(!dataChunkToSelect->state->isFlat());
+        DASSERT(!dataChunkToSelect->state->isFlat());
         auto buffer = dataChunkToSelect->state->getSelVectorUnsafe().getMutableBuffer();
         if (dataChunkToSelect->state->getSelVector().isUnfiltered()) {
             for (uint64_t i = numTupleToSkipInCurrentResultSet;

@@ -24,7 +24,7 @@ idx_t RelDirectionUtils::relDirectionToKeyIdx(RelDataDirection direction) {
     case RelDataDirection::BWD:
         return 1;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -36,7 +36,7 @@ table_id_t RelDirectionUtils::getNbrTableID(RelDataDirection direction, table_id
     case RelDataDirection::BWD:
         return srcTableID;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

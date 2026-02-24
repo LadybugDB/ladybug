@@ -49,7 +49,7 @@ public:
 
         std::span<const common::nodeID_t> getNbrNodes() const {
             RUNTIME_CHECK(for (size_t i = 0; i < getSelVector().getSelSize(); i++) {
-                LBUG_ASSERT(
+                DASSERT(
                     getSelVector().getSelectedPositions()[i] < common::DEFAULT_VECTOR_CAPACITY);
             });
             return std::span(&dstVector().getValue<const common::nodeID_t>(0),

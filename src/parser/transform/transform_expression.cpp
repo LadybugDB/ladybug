@@ -93,7 +93,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformComparisonExpression(
     }
     // Antlr parser throws error for conjunctive comparison.
     // Transformer should only handle the case of single comparison operator.
-    LBUG_ASSERT(ctx.ComparisonOperator().size() == 1);
+    DASSERT(ctx.ComparisonOperator().size() == 1);
     auto left = transformBitwiseOrOperatorExpression(*ctx.iC_BitwiseOrOperatorExpression(0));
     auto right = transformBitwiseOrOperatorExpression(*ctx.iC_BitwiseOrOperatorExpression(1));
     auto comparisonOperator = ctx.iC_ComparisonOperator()[0]->getText();
@@ -113,7 +113,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformComparisonExpression(
         return std::make_unique<ParsedExpression>(ExpressionType::LESS_THAN, std::move(left),
             std::move(right), ctx.getText());
     } else {
-        LBUG_ASSERT(comparisonOperator == "<=");
+        DASSERT(comparisonOperator == "<=");
         return std::make_unique<ParsedExpression>(ExpressionType::LESS_THAN_EQUALS, std::move(left),
             std::move(right), ctx.getText());
     }
@@ -166,7 +166,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformBitShiftOperatorExpressi
                 expression = std::make_unique<ParsedFunctionExpression>(BitShiftLeftFunction::name,
                     std::move(expression), std::move(next), rawName);
             } else {
-                LBUG_ASSERT(bitShiftOperator == ">>");
+                DASSERT(bitShiftOperator == ">>");
                 expression = std::make_unique<ParsedFunctionExpression>(BitShiftRightFunction::name,
                     std::move(expression), std::move(next), rawName);
             }
@@ -296,7 +296,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformStringOperatorExpression
         return std::make_unique<ParsedFunctionExpression>(ContainsFunction::name,
             std::move(propertyExpression), std::move(right), rawExpression);
     } else {
-        LBUG_ASSERT(ctx.oC_RegularExpression());
+        DASSERT(ctx.oC_RegularExpression());
         return std::make_unique<ParsedFunctionExpression>(RegexpFullMatchFunction::name,
             std::move(propertyExpression), std::move(right), rawExpression);
     }
@@ -343,7 +343,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformListOperatorExpression(
     auto listExtract =
         std::make_unique<ParsedFunctionExpression>(ListExtractFunction::name, std::move(raw));
     listExtract->addChild(std::move(child));
-    LBUG_ASSERT(ctx.oC_Expression().size() == 1);
+    DASSERT(ctx.oC_Expression().size() == 1);
     listExtract->addChild(transformExpression(*ctx.oC_Expression()[0]));
     return listExtract;
 }
@@ -352,7 +352,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformNullOperatorExpression(
     CypherParser::OC_NullOperatorExpressionContext& ctx,
     std::unique_ptr<ParsedExpression> propertyExpression) {
     auto rawExpression = propertyExpression->getRawName() + " " + ctx.getText();
-    LBUG_ASSERT(ctx.IS() && ctx.NULL_());
+    DASSERT(ctx.IS() && ctx.NULL_());
     return ctx.NOT() ? std::make_unique<ParsedExpression>(ExpressionType::IS_NOT_NULL,
                            std::move(propertyExpression), rawExpression) :
                        std::make_unique<ParsedExpression>(ExpressionType::IS_NULL,
@@ -392,7 +392,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformAtom(CypherParser::OC_At
     } else if (ctx.oC_Quantifier()) {
         return transformOcQuantifier(*ctx.oC_Quantifier());
     } else {
-        LBUG_ASSERT(ctx.oC_Variable());
+        DASSERT(ctx.oC_Variable());
         return std::make_unique<ParsedVariableExpression>(transformVariable(*ctx.oC_Variable()),
             ctx.getText());
     }
@@ -413,7 +413,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformLiteral(
     } else if (ctx.iC_StructLiteral()) {
         return transformStructLiteral(*ctx.iC_StructLiteral());
     } else {
-        LBUG_ASSERT(ctx.oC_ListLiteral());
+        DASSERT(ctx.oC_ListLiteral());
         return transformListLiteral(*ctx.oC_ListLiteral());
     }
 }
@@ -425,7 +425,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformBooleanLiteral(
     } else if (ctx.FALSE()) {
         return std::make_unique<ParsedLiteralExpression>(Value(false), ctx.getText());
     }
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 std::unique_ptr<ParsedExpression> Transformer::transformListLiteral(
@@ -621,7 +621,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformCaseExpression(
         if (ctx.oC_Expression().size() == 1) {
             elseExpression = transformExpression(*ctx.oC_Expression(0));
         } else {
-            LBUG_ASSERT(ctx.oC_Expression().size() == 2);
+            DASSERT(ctx.oC_Expression().size() == 2);
             caseExpression = transformExpression(*ctx.oC_Expression(0));
             elseExpression = transformExpression(*ctx.oC_Expression(1));
         }
@@ -651,7 +651,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformNumberLiteral(
     if (ctx.oC_IntegerLiteral()) {
         return transformIntegerLiteral(*ctx.oC_IntegerLiteral(), negative);
     } else {
-        LBUG_ASSERT(ctx.oC_DoubleLiteral());
+        DASSERT(ctx.oC_DoubleLiteral());
         return transformDoubleLiteral(*ctx.oC_DoubleLiteral(), negative);
     }
 }

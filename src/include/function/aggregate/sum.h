@@ -24,7 +24,7 @@ struct SumFunction {
 
     static void updateAll(uint8_t* state_, common::ValueVector* input, uint64_t multiplicity,
         common::InMemOverflowBuffer* /*overflowBuffer*/) {
-        LBUG_ASSERT(!input->state->isFlat());
+        DASSERT(!input->state->isFlat());
         auto* state = reinterpret_cast<SumState<RESULT_TYPE>*>(state_);
         input->forEachNonNull(
             [&](auto pos) { updateSingleValue(state, input, pos, multiplicity); });

@@ -5,7 +5,7 @@ namespace common {
 
 void DataChunk::insert(uint32_t pos, std::shared_ptr<ValueVector> valueVector) {
     valueVector->setState(state);
-    LBUG_ASSERT(valueVectors.size() > pos);
+    DASSERT(valueVectors.size() > pos);
     valueVectors[pos] = std::move(valueVector);
 }
 

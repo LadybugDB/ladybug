@@ -88,7 +88,7 @@ public:
     }
     const RecursiveInfo* getRecursiveInfo() const { return recursiveInfo.get(); }
     std::shared_ptr<Expression> getLengthExpression() const {
-        LBUG_ASSERT(recursiveInfo != nullptr);
+        DASSERT(recursiveInfo != nullptr);
         return recursiveInfo->bindData->lengthExpr;
     }
 

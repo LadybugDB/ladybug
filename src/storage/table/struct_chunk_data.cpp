@@ -120,9 +120,9 @@ uint64_t StructChunkData::getSizeOnDiskInMemoryStats() const {
 
 void StructChunkData::append(const ColumnChunkData* other, offset_t startPosInOtherChunk,
     uint32_t numValuesToAppend) {
-    LBUG_ASSERT(other->getDataType().getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(other->getDataType().getPhysicalType() == PhysicalTypeID::STRUCT);
     const auto& otherStructChunk = other->cast<StructChunkData>();
-    LBUG_ASSERT(childChunks.size() == otherStructChunk.childChunks.size());
+    DASSERT(childChunks.size() == otherStructChunk.childChunks.size());
     nullData->append(other->getNullData(), startPosInOtherChunk, numValuesToAppend);
     for (auto i = 0u; i < childChunks.size(); i++) {
         childChunks[i]->append(otherStructChunk.childChunks[i].get(), startPosInOtherChunk,
@@ -144,7 +144,7 @@ void StructChunkData::append(ValueVector* vector, const SelectionView& selView) 
 
 void StructChunkData::scan(ValueVector& output, offset_t offset, length_t length,
     sel_t posInOutputVector) const {
-    LBUG_ASSERT(offset + length <= numValues);
+    DASSERT(offset + length <= numValues);
     if (nullData) {
         nullData->scan(output, offset, length, posInOutputVector);
     }
@@ -157,7 +157,7 @@ void StructChunkData::scan(ValueVector& output, offset_t offset, length_t length
 
 void StructChunkData::lookup(offset_t offsetInChunk, ValueVector& output,
     sel_t posInOutputVector) const {
-    LBUG_ASSERT(offsetInChunk < numValues);
+    DASSERT(offsetInChunk < numValues);
     const auto numFields = StructType::getNumFields(dataType);
     output.setNull(posInOutputVector, nullData->isNull(offsetInChunk));
     for (auto i = 0u; i < numFields; i++) {
@@ -208,7 +208,7 @@ void StructChunkData::resetToEmpty() {
 
 void StructChunkData::write(const ValueVector* vector, offset_t offsetInVector,
     offset_t offsetInChunk) {
-    LBUG_ASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRUCT);
     nullData->setNull(offsetInChunk, vector->isNull(offsetInVector));
     const auto fields = StructVector::getFieldVectors(vector);
     for (auto i = 0u; i < fields.size(); i++) {
@@ -221,11 +221,11 @@ void StructChunkData::write(const ValueVector* vector, offset_t offsetInVector,
 
 void StructChunkData::write(ColumnChunkData* chunk, ColumnChunkData* dstOffsets,
     RelMultiplicity multiplicity) {
-    LBUG_ASSERT(chunk->getDataType().getPhysicalType() == PhysicalTypeID::STRUCT &&
+    DASSERT(chunk->getDataType().getPhysicalType() == PhysicalTypeID::STRUCT &&
               dstOffsets->getDataType().getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
     for (auto i = 0u; i < dstOffsets->getNumValues(); i++) {
         const auto offsetInChunk = dstOffsets->getValue<offset_t>(i);
-        LBUG_ASSERT(offsetInChunk < capacity);
+        DASSERT(offsetInChunk < capacity);
         nullData->setNull(offsetInChunk, chunk->getNullData()->isNull(i));
         numValues = offsetInChunk >= numValues ? offsetInChunk + 1 : numValues;
     }
@@ -237,9 +237,9 @@ void StructChunkData::write(ColumnChunkData* chunk, ColumnChunkData* dstOffsets,
 
 void StructChunkData::write(const ColumnChunkData* srcChunk, offset_t srcOffsetInChunk,
     offset_t dstOffsetInChunk, offset_t numValuesToCopy) {
-    LBUG_ASSERT(srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::STRUCT);
+    DASSERT(srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::STRUCT);
     const auto& srcStructChunk = srcChunk->cast<StructChunkData>();
-    LBUG_ASSERT(childChunks.size() == srcStructChunk.childChunks.size());
+    DASSERT(childChunks.size() == srcStructChunk.childChunks.size());
     nullData->write(srcChunk->getNullData(), srcOffsetInChunk, dstOffsetInChunk, numValuesToCopy);
     if ((dstOffsetInChunk + numValuesToCopy) >= numValues) {
         numValues = dstOffsetInChunk + numValuesToCopy;

@@ -18,7 +18,7 @@ LogicalPlan JoinPlanSolver::solveTreeNode(const JoinTreeNode& current, const Joi
         return solveNodeScanTreeNode(current);
     }
     case TreeNodeType::REL_SCAN: {
-        LBUG_ASSERT(parent != nullptr);
+        DASSERT(parent != nullptr);
         return solveRelScanTreeNode(current, *parent);
     }
     case TreeNodeType::BINARY_JOIN: {
@@ -28,7 +28,7 @@ LogicalPlan JoinPlanSolver::solveTreeNode(const JoinTreeNode& current, const Joi
         return solveMultiwayJoinTreeNode(current);
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -54,7 +54,7 @@ static std::shared_ptr<binder::NodeExpression> getOtherNode(const RelExpression&
 
 LogicalPlan JoinPlanSolver::solveNodeScanTreeNode(const JoinTreeNode& treeNode) {
     auto& extraInfo = treeNode.extraInfo->constCast<ExtraScanTreeNodeInfo>();
-    LBUG_ASSERT(extraInfo.nodeInfo != nullptr);
+    DASSERT(extraInfo.nodeInfo != nullptr);
     auto& nodeInfo = *extraInfo.nodeInfo;
     auto boundNode = std::static_pointer_cast<NodeExpression>(nodeInfo.nodeOrRel);
     auto plan = LogicalPlan();
@@ -91,12 +91,12 @@ LogicalPlan JoinPlanSolver::solveRelScanTreeNode(const JoinTreeNode& treeNode,
     } break;
     case TreeNodeType::MULTIWAY_JOIN: {
         auto& joinExtraInfo = parent.extraInfo->constCast<ExtraJoinTreeNodeInfo>();
-        LBUG_ASSERT(joinExtraInfo.joinNodes.size() == 1);
+        DASSERT(joinExtraInfo.joinNodes.size() == 1);
         nbrNode = joinExtraInfo.joinNodes[0];
         boundNode = getOtherNode(*rel, *nbrNode);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     auto direction = getExtendDirection(*rel, *boundNode);
     auto plan = LogicalPlan();
@@ -123,14 +123,14 @@ LogicalPlan JoinPlanSolver::solveBinaryJoinTreeNode(const JoinTreeNode& treeNode
 
 LogicalPlan JoinPlanSolver::solveMultiwayJoinTreeNode(const JoinTreeNode& treeNode) {
     auto& extraInfo = treeNode.extraInfo->constCast<ExtraJoinTreeNodeInfo>();
-    LBUG_ASSERT(extraInfo.joinNodes.size() == 1);
+    DASSERT(extraInfo.joinNodes.size() == 1);
     auto& joinNode = extraInfo.joinNodes[0]->constCast<NodeExpression>();
     auto probePlan = solveTreeNode(*treeNode.children[0], &treeNode);
     std::vector<LogicalPlan> buildPlans;
     expression_vector boundNodeIDs;
     for (auto i = 1u; i < treeNode.children.size(); ++i) {
         auto child = treeNode.children[i];
-        LBUG_ASSERT(child->type == TreeNodeType::REL_SCAN);
+        DASSERT(child->type == TreeNodeType::REL_SCAN);
         auto& childExtraInfo = child->extraInfo->constCast<ExtraScanTreeNodeInfo>();
         auto rel = std::static_pointer_cast<RelExpression>(childExtraInfo.relInfos[0].nodeOrRel);
         auto boundNode = *rel->getSrcNode() == joinNode ? rel->getDstNode() : rel->getSrcNode();

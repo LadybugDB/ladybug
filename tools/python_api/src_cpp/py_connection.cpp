@@ -229,7 +229,7 @@ void PyConnection::getAllEdgesForTorchGeometric(py::array_t<int64_t>& npArray,
         if (!result->isSuccess()) {
             throw std::runtime_error(result->getErrorMessage());
         }
-        LBUG_ASSERT(result->getType() == QueryResultType::FTABLE);
+        DASSERT(result->getType() == QueryResultType::FTABLE);
         auto& table = result->constCast<MaterializedQueryResult>().getFactorizedTable();
         auto tableSchema = table.getTableSchema();
         if (tableSchema->getColumn(0)->isFlat() && !tableSchema->getColumn(1)->isFlat()) {
@@ -687,7 +687,7 @@ Value PyConnection::transformPythonValueAs(const py::handle& val, const LogicalT
     }
     // LCOV_EXCL_START
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
         // LCOV_EXCL_STOP
     }
 }

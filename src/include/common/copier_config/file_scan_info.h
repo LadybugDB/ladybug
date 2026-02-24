@@ -42,7 +42,7 @@ struct FileScanInfo {
 
     uint32_t getNumFiles() const { return filePaths.size(); }
     std::string getFilePath(idx_t fileIdx) const {
-        LBUG_ASSERT(fileIdx < getNumFiles());
+        DASSERT(fileIdx < getNumFiles());
         return filePaths[fileIdx];
     }
 

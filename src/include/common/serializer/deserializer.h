@@ -95,7 +95,7 @@ public:
 
     template<typename T, uint64_t ARRAY_SIZE>
     void deserializeArray(std::array<T, ARRAY_SIZE>& values) {
-        LBUG_ASSERT(values.size() == ARRAY_SIZE);
+        DASSERT(values.size() == ARRAY_SIZE);
         for (auto& value : values) {
             if constexpr (requires(Deserializer& deser) { T::deserialize(deser); }) {
                 value = T::deserialize(*this);

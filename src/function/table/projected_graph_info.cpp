@@ -94,7 +94,7 @@ static offset_t internalTableFunc(const TableFuncMorsel& morsel, const TableFunc
         return 1;
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -122,7 +122,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
         returnTypes.emplace_back(LogicalType::STRING());
     } break;
     default: {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     }
     returnColumnNames =
@@ -149,7 +149,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
         projectedGraphInfo = std::make_unique<NativeProjectedGraphInfo>(std::move(tableInfo));
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     return std::make_unique<ProjectedGraphInfoBindData>(std::move(columns), graphEntry->type,
         std::move(projectedGraphInfo));

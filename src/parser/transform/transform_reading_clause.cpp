@@ -21,7 +21,7 @@ std::unique_ptr<ReadingClause> Transformer::transformReadingClause(
     } else if (ctx.iC_LoadFrom()) {
         return transformLoadFrom(*ctx.iC_LoadFrom());
     }
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 std::unique_ptr<ReadingClause> Transformer::transformMatch(CypherParser::OC_MatchContext& ctx) {
@@ -54,7 +54,7 @@ std::shared_ptr<JoinHintNode> Transformer::transformJoinHint(
     if (ctx.iC_JoinNode().size() == 1) {
         return transformJoinHint(*ctx.iC_JoinNode(0));
     }
-    LBUG_ASSERT(ctx.iC_JoinNode().size() == 2);
+    DASSERT(ctx.iC_JoinNode().size() == 2);
     auto joinNode = std::make_shared<JoinHintNode>();
     joinNode->addChild(transformJoinHint(*ctx.iC_JoinNode(0)));
     joinNode->addChild(transformJoinHint(*ctx.iC_JoinNode(1)));

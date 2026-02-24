@@ -199,10 +199,10 @@ void Date::extractYearOffset(int32_t& n, int32_t& year, int32_t& year_offset) {
     // offset until we find our year
     while (n < Date::CUMULATIVE_YEAR_DAYS[year_offset]) {
         year_offset--;
-        LBUG_ASSERT(year_offset >= 0);
+        DASSERT(year_offset >= 0);
     }
     year += year_offset;
-    LBUG_ASSERT(n >= Date::CUMULATIVE_YEAR_DAYS[year_offset]);
+    DASSERT(n >= Date::CUMULATIVE_YEAR_DAYS[year_offset]);
 }
 
 void Date::convert(date_t date, int32_t& out_year, int32_t& out_month, int32_t& out_day) {
@@ -211,7 +211,7 @@ void Date::convert(date_t date, int32_t& out_year, int32_t& out_month, int32_t& 
     Date::extractYearOffset(n, out_year, year_offset);
 
     out_day = n - Date::CUMULATIVE_YEAR_DAYS[year_offset];
-    LBUG_ASSERT(out_day >= 0 && out_day <= 365);
+    DASSERT(out_day >= 0 && out_day <= 365);
 
     bool is_leap_year = (Date::CUMULATIVE_YEAR_DAYS[year_offset + 1] -
                             Date::CUMULATIVE_YEAR_DAYS[year_offset]) == 366;
@@ -223,10 +223,10 @@ void Date::convert(date_t date, int32_t& out_year, int32_t& out_month, int32_t& 
         out_day -= Date::CUMULATIVE_DAYS[out_month - 1];
     }
     out_day++;
-    LBUG_ASSERT(out_day > 0 && out_day <= (is_leap_year ? Date::LEAP_DAYS[out_month] :
+    DASSERT(out_day > 0 && out_day <= (is_leap_year ? Date::LEAP_DAYS[out_month] :
                                                         Date::NORMAL_DAYS[out_month]));
-    LBUG_ASSERT(out_month > 0 && out_month <= 12);
-    LBUG_ASSERT(Date::isValid(out_year, out_month, out_day));
+    DASSERT(out_month > 0 && out_month <= 12);
+    DASSERT(Date::isValid(out_year, out_month, out_day));
 }
 
 date_t Date::fromDate(int32_t year, int32_t month, int32_t day) {
@@ -381,7 +381,7 @@ bool Date::isValid(int32_t year, int32_t month, int32_t day) {
 }
 
 int32_t Date::monthDays(int32_t year, int32_t month) {
-    LBUG_ASSERT(month >= 1 && month <= 12);
+    DASSERT(month >= 1 && month <= 12);
     return Date::isLeapYear(year) ? Date::LEAP_DAYS[month] : Date::NORMAL_DAYS[month];
 }
 

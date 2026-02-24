@@ -22,7 +22,7 @@ void ListLambdaEvaluator::init(const ResultSet& resultSet, ClientContext* client
     for (auto& child : children) {
         child->init(resultSet, clientContext);
     }
-    LBUG_ASSERT(children.size() == 1);
+    DASSERT(children.size() == 1);
     auto listInputVector = children[0]->resultVector.get();
     // Find all param in lambda, e.g. find x in x->x+1
     auto collector = LambdaParamEvaluatorCollector();
@@ -68,13 +68,13 @@ void ListLambdaEvaluator::evaluateInternal() {
 }
 
 void ListLambdaEvaluator::evaluate() {
-    LBUG_ASSERT(children.size() == 1);
+    DASSERT(children.size() == 1);
     children[0]->evaluate();
     evaluateInternal();
 }
 
 bool ListLambdaEvaluator::selectInternal(SelectionVector& selVector) {
-    LBUG_ASSERT(children.size() == 1);
+    DASSERT(children.size() == 1);
     children[0]->evaluate();
     evaluateInternal();
     return updateSelectedPos(selVector);

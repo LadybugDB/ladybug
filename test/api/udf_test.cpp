@@ -363,7 +363,7 @@ TEST_F(ApiTest, TernaryUDFMoreParamType) {
 static void addFour(const std::vector<std::shared_ptr<common::ValueVector>>& parameters,
     const std::vector<common::SelectionVector*>& parameterSelVectors, common::ValueVector& result,
     common::SelectionVector*, void* /*dataPtr*/ = nullptr) {
-    LBUG_ASSERT(parameters.size() == 1);
+    DASSERT(parameters.size() == 1);
     const auto& parameter = *parameters[0];
     const auto& parameterSelVector = *parameterSelVectors[0];
     result.resetAuxiliaryBuffer();
@@ -396,7 +396,7 @@ struct AddDate {
 static void addDate(const std::vector<std::shared_ptr<common::ValueVector>>& parameters,
     const std::vector<common::SelectionVector*>& parameterSelVectors, common::ValueVector& result,
     common::SelectionVector* resultSelVector, void* /*dataPtr*/ = nullptr) {
-    LBUG_ASSERT(parameters.size() == 2);
+    DASSERT(parameters.size() == 2);
     function::BinaryFunctionExecutor::execute<date_t, int64_t, date_t, AddDate>(*parameters[0],
         parameterSelVectors[0], *parameters[1], parameterSelVectors[1], result, resultSelVector);
 }
@@ -442,7 +442,7 @@ struct ConditionalConcat {
 static void conditionalConcat(const std::vector<std::shared_ptr<common::ValueVector>>& parameters,
     const std::vector<common::SelectionVector*>& parameterSelVectors, common::ValueVector& result,
     common::SelectionVector* resultSelVector, void* dataPtr = nullptr) {
-    LBUG_ASSERT(parameters.size() == 3);
+    DASSERT(parameters.size() == 3);
     function::TernaryFunctionExecutor::executeSwitch<string_t, bool, string_t, string_t,
         ConditionalConcat, function::TernaryStringFunctionWrapper>(*parameters[0],
         parameterSelVectors[0], *parameters[1], parameterSelVectors[1], *parameters[2],

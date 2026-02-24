@@ -21,7 +21,7 @@ PathSemantic QueryRelTypeUtils::getPathSemantic(QueryRelType queryRelType) {
     case QueryRelType::ALL_WEIGHTED_SHORTEST:
         return PathSemantic::ACYCLIC;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -45,7 +45,7 @@ std::unique_ptr<function::RJAlgorithm> QueryRelTypeUtils::getFunction(QueryRelTy
         return AllWeightedSPPathsFunction::getAlgorithm();
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

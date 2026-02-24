@@ -13,11 +13,11 @@ void Serializer::serializeValue(const std::string& value) {
 }
 
 void Serializer::writeDebuggingInfo(const std::string& value) {
-#if defined(LBUG_DESER_DEBUG) && (defined(LBUG_RUNTIME_CHECKS) || !defined(NDEBUG))
+#if defined(DESER_DEBUG) && (defined(RUNTIME_CHECKS) || !defined(NDEBUG))
     serializeValue<std::string>(value);
 #endif
     // DO NOTHING
-    LBUG_UNUSED(value);
+    UNUSED(value);
 }
 
 } // namespace common

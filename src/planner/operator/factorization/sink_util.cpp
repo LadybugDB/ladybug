@@ -24,7 +24,7 @@ void SinkOperatorUtil::mergeSchema(const Schema& inputSchema,
 
 void SinkOperatorUtil::recomputeSchema(const Schema& inputSchema,
     const binder::expression_vector& expressionsToMerge, Schema& resultSchema) {
-    LBUG_ASSERT(!expressionsToMerge.empty());
+    DASSERT(!expressionsToMerge.empty());
     resultSchema.clear();
     mergeSchema(inputSchema, expressionsToMerge, resultSchema);
 }

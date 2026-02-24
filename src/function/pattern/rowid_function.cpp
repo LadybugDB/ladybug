@@ -13,7 +13,7 @@ namespace lbug {
 namespace function {
 
 static std::shared_ptr<binder::Expression> rewriteFunc(const RewriteFunctionBindInput& input) {
-    LBUG_ASSERT(input.arguments.size() == 1);
+    DASSERT(input.arguments.size() == 1);
     std::shared_ptr<Expression> idExpr;
     auto param = input.arguments[0].get();
     if (ExpressionUtil::isNodePattern(*param)) {

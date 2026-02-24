@@ -23,7 +23,7 @@ bool PropertyExpression::isPrimaryKey(table_id_t tableID) const {
 }
 
 bool PropertyExpression::hasProperty(table_id_t tableID) const {
-    LBUG_ASSERT(infos.contains(tableID));
+    DASSERT(infos.contains(tableID));
     return infos.at(tableID).exists;
 }
 

@@ -37,11 +37,11 @@ public:
     }
     bool hasProjectionBody() const { return projectionBody.has_value(); }
     BoundProjectionBody* getProjectionBodyUnsafe() {
-        LBUG_ASSERT(projectionBody.has_value());
+        DASSERT(projectionBody.has_value());
         return &projectionBody.value();
     }
     const BoundProjectionBody* getProjectionBody() const {
-        LBUG_ASSERT(projectionBody.has_value());
+        DASSERT(projectionBody.has_value());
         return &projectionBody.value();
     }
 

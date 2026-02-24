@@ -153,7 +153,7 @@ RelPattern Transformer::transformRelationshipPattern(
             }
             if (!comprehension->iC_RecursiveProjectionItems().empty()) {
                 recursiveInfo.hasProjection = true;
-                LBUG_ASSERT(comprehension->iC_RecursiveProjectionItems().size() == 2);
+                DASSERT(comprehension->iC_RecursiveProjectionItems().size() == 2);
                 auto relProjectionList =
                     comprehension->iC_RecursiveProjectionItems(0)->oC_ProjectionItems();
                 if (relProjectionList) {
@@ -175,7 +175,7 @@ RelPattern Transformer::transformRelationshipPattern(
 std::vector<s_parsed_expr_pair> Transformer::transformProperties(
     CypherParser::IC_PropertiesContext& ctx) {
     std::vector<std::pair<std::string, std::unique_ptr<ParsedExpression>>> result;
-    LBUG_ASSERT(ctx.oC_PropertyKeyName().size() == ctx.oC_Expression().size());
+    DASSERT(ctx.oC_PropertyKeyName().size() == ctx.oC_Expression().size());
     for (auto i = 0u; i < ctx.oC_PropertyKeyName().size(); ++i) {
         auto propertyKeyName = transformPropertyKeyName(*ctx.oC_PropertyKeyName(i));
         auto expression = transformExpression(*ctx.oC_Expression(i));

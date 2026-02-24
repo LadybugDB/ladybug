@@ -28,7 +28,7 @@ std::unique_ptr<DuckDBConnector> DuckDBConnectorFactory::getDuckDBConnector(
     case DuckDBConnectionType::S3:
         return std::make_unique<S3DuckDBConnector>();
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

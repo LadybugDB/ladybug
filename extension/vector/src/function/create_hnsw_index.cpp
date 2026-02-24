@@ -115,7 +115,7 @@ static std::unique_ptr<PhysicalOperator> getPhysicalPlan(PlanMapper* planMapper,
                                     ->getBindData()
                                     ->constPtrCast<CreateHNSWIndexBindData>();
     auto createHNSWCallOp = TableFunction::getPhysicalPlan(planMapper, logicalOp);
-    LBUG_ASSERT(createHNSWCallOp->getOperatorType() == PhysicalOperatorType::TABLE_FUNCTION_CALL);
+    DASSERT(createHNSWCallOp->getOperatorType() == PhysicalOperatorType::TABLE_FUNCTION_CALL);
     auto createFuncCall = createHNSWCallOp->ptrCast<TableFunctionCall>();
     auto createFuncSharedState =
         createFuncCall->getSharedState()->ptrCast<CreateInMemHNSWSharedState>();

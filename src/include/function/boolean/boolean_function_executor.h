@@ -106,7 +106,7 @@ struct BinaryBooleanFunctionExecutor {
     static void executeBothUnFlat(common::ValueVector& left, common::SelectionVector* leftSelVector,
         common::ValueVector& right, [[maybe_unused]] common::SelectionVector* rightSelVector,
         common::ValueVector& result, common::SelectionVector*) {
-        LBUG_ASSERT(leftSelVector == rightSelVector);
+        DASSERT(leftSelVector == rightSelVector);
         if (leftSelVector->isUnfiltered()) {
             if (left.hasNoNullsGuarantee() && right.hasNoNullsGuarantee()) {
                 for (auto i = 0u; i < leftSelVector->getSelSize(); ++i) {
@@ -136,7 +136,7 @@ struct BinaryBooleanFunctionExecutor {
     static void execute(common::ValueVector& left, common::SelectionVector* leftSelVector,
         common::ValueVector& right, common::SelectionVector* rightSelVector,
         common::ValueVector& result, common::SelectionVector* resultSelVector) {
-        LBUG_ASSERT(left.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL &&
+        DASSERT(left.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL &&
                   right.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL &&
                   result.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL);
         if (left.state->isFlat() && right.state->isFlat()) {
@@ -246,7 +246,7 @@ struct BinaryBooleanFunctionExecutor {
     template<typename FUNC>
     static bool select(common::ValueVector& left, common::ValueVector& right,
         common::SelectionVector& selVector) {
-        LBUG_ASSERT(left.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL &&
+        DASSERT(left.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL &&
                   right.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL);
         if (left.state->isFlat() && right.state->isFlat()) {
             return selectBothFlat<FUNC>(left, right);

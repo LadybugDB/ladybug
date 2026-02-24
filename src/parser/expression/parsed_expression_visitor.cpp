@@ -163,7 +163,7 @@ void ReadWriteExprAnalyzer::visitFunctionExpr(const ParsedExpression* expr) {
         return;
     }
     auto& funcSet = entry->constPtrCast<FunctionCatalogEntry>()->getFunctionSet();
-    LBUG_ASSERT(!funcSet.empty());
+    DASSERT(!funcSet.empty());
     if (!funcSet[0]->isReadOnly) {
         readOnly = false;
     }

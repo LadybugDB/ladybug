@@ -30,7 +30,7 @@ public:
         std::shared_ptr<DataChunkState> dataChunkState = nullptr);
     explicit ValueVector(LogicalTypeID dataTypeID, storage::MemoryManager* memoryManager = nullptr)
         : ValueVector(LogicalType(dataTypeID), memoryManager) {
-        LBUG_ASSERT(dataTypeID != LogicalTypeID::LIST);
+        DASSERT(dataTypeID != LogicalTypeID::LIST);
     }
 
     DELETE_COPY_AND_MOVE(ValueVector);
@@ -119,7 +119,7 @@ public:
     uint8_t* getData() const { return valueBuffer.get(); }
 
     offset_t readNodeOffset(uint32_t pos) const {
-        LBUG_ASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID);
+        DASSERT(dataType.getLogicalTypeID() == LogicalTypeID::INTERNAL_ID);
         return getValue<nodeID_t>(pos).offset;
     }
 
@@ -155,7 +155,7 @@ private:
 class LBUG_API StringVector {
 public:
     static inline InMemOverflowBuffer* getInMemOverflowBuffer(ValueVector* vector) {
-        LBUG_ASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+        DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
         return dynamic_cast_checked<StringAuxiliaryBuffer*>(vector->auxiliaryBuffer.get())
             ->getOverflowBuffer();
     }
@@ -199,7 +199,7 @@ public:
     // copyListEntryAndBufferMetaData at runtime.
     // TODO(Xiyang): try to merge setDataVector & copyListEntryAndBufferMetaData
     static void setDataVector(const ValueVector* vector, std::shared_ptr<ValueVector> dataVector) {
-        LBUG_ASSERT(validateType(*vector));
+        DASSERT(validateType(*vector));
         auto& listBuffer = getAuxBufferUnsafe(*vector);
         listBuffer.setDataVector(std::move(dataVector));
     }
@@ -207,34 +207,34 @@ public:
         const SelectionVector& selVector, const ValueVector& other,
         const SelectionVector& otherSelVector);
     static ValueVector* getDataVector(const ValueVector* vector) {
-        LBUG_ASSERT(validateType(*vector));
+        DASSERT(validateType(*vector));
         return getAuxBuffer(*vector).getDataVector();
     }
     static std::shared_ptr<ValueVector> getSharedDataVector(const ValueVector* vector) {
-        LBUG_ASSERT(validateType(*vector));
+        DASSERT(validateType(*vector));
         return getAuxBuffer(*vector).getSharedDataVector();
     }
     static uint64_t getDataVectorSize(const ValueVector* vector) {
-        LBUG_ASSERT(validateType(*vector));
+        DASSERT(validateType(*vector));
         return getAuxBuffer(*vector).getSize();
     }
     static uint8_t* getListValues(const ValueVector* vector, const list_entry_t& listEntry) {
-        LBUG_ASSERT(validateType(*vector));
+        DASSERT(validateType(*vector));
         auto dataVector = getDataVector(vector);
         return dataVector->getData() + dataVector->getNumBytesPerValue() * listEntry.offset;
     }
     static uint8_t* getListValuesWithOffset(const ValueVector* vector,
         const list_entry_t& listEntry, offset_t elementOffsetInList) {
-        LBUG_ASSERT(validateType(*vector));
+        DASSERT(validateType(*vector));
         return getListValues(vector, listEntry) +
                elementOffsetInList * getDataVector(vector)->getNumBytesPerValue();
     }
     static list_entry_t addList(ValueVector* vector, uint64_t listSize) {
-        LBUG_ASSERT(validateType(*vector));
+        DASSERT(validateType(*vector));
         return getAuxBufferUnsafe(*vector).addList(listSize);
     }
     static void resizeDataVector(ValueVector* vector, uint64_t numValues) {
-        LBUG_ASSERT(validateType(*vector));
+        DASSERT(validateType(*vector));
         getAuxBufferUnsafe(*vector).resize(numValues);
     }
 
@@ -295,18 +295,18 @@ public:
 class UnionVector {
 public:
     static inline ValueVector* getTagVector(const ValueVector* vector) {
-        LBUG_ASSERT(vector->dataType.getLogicalTypeID() == LogicalTypeID::UNION);
+        DASSERT(vector->dataType.getLogicalTypeID() == LogicalTypeID::UNION);
         return StructVector::getFieldVector(vector, UnionType::TAG_FIELD_IDX).get();
     }
 
     static inline ValueVector* getValVector(const ValueVector* vector, union_field_idx_t fieldIdx) {
-        LBUG_ASSERT(vector->dataType.getLogicalTypeID() == LogicalTypeID::UNION);
+        DASSERT(vector->dataType.getLogicalTypeID() == LogicalTypeID::UNION);
         return StructVector::getFieldVector(vector, UnionType::getInternalFieldIdx(fieldIdx)).get();
     }
 
     static inline std::shared_ptr<ValueVector> getSharedValVector(const ValueVector* vector,
         union_field_idx_t fieldIdx) {
-        LBUG_ASSERT(vector->dataType.getLogicalTypeID() == LogicalTypeID::UNION);
+        DASSERT(vector->dataType.getLogicalTypeID() == LogicalTypeID::UNION);
         return StructVector::getFieldVector(vector, UnionType::getInternalFieldIdx(fieldIdx));
     }
 
@@ -318,7 +318,7 @@ public:
 
     static inline void setTagField(ValueVector& vector, SelectionVector& sel,
         union_field_idx_t tag) {
-        LBUG_ASSERT(vector.dataType.getLogicalTypeID() == LogicalTypeID::UNION);
+        DASSERT(vector.dataType.getLogicalTypeID() == LogicalTypeID::UNION);
         for (auto i = 0u; i < sel.getSelSize(); i++) {
             vector.setValue<struct_field_idx_t>(sel[i], tag);
         }

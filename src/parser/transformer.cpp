@@ -84,7 +84,7 @@ std::unique_ptr<Statement> Transformer::transformStatement(CypherParser::OC_Stat
     } else if (ctx.iC_UseGraph()) {
         return transformUseGraph(*ctx.iC_UseGraph());
     } else {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -153,13 +153,13 @@ std::string Transformer::transformStringLiteral(antlr4::tree::TerminalNode& stri
                 if (next == 'u' || next == 'U') {
                     int hexDigits = (next == 'u') ? 4 : 8;
                     if (i + 1 + hexDigits > content.length()) {
-                        LBUG_UNREACHABLE;
+                        UNREACHABLE_CODE;
                     }
                     std::string hexStr = content.substr(i + 2, hexDigits);
                     char* endPtr = nullptr;
                     long hexValue = std::strtol(hexStr.c_str(), &endPtr, 16);
                     if (endPtr != hexStr.c_str() + hexDigits) {
-                        LBUG_UNREACHABLE;
+                        UNREACHABLE_CODE;
                     }
                     // Convert Unicode code point to UTF-8
                     if (hexValue <= 0x7F) {
@@ -177,13 +177,13 @@ std::string Transformer::transformStringLiteral(antlr4::tree::TerminalNode& stri
                         result += static_cast<char>(0x80 | ((hexValue >> 6) & 0x3F));
                         result += static_cast<char>(0x80 | (hexValue & 0x3F));
                     } else {
-                        LBUG_UNREACHABLE;
+                        UNREACHABLE_CODE;
                     }
                     i += 1 + hexDigits;
                 }
             } break;
             default:
-                LBUG_UNREACHABLE;
+                UNREACHABLE_CODE;
             }
         } else {
             result += content[i];
@@ -203,7 +203,7 @@ std::string Transformer::transformSymbolicName(CypherParser::OC_SymbolicNameCont
         // it such that we don't store the symbol with escape character.
         return escapedSymbolName.substr(1, escapedSymbolName.size() - 2);
     } else {
-        LBUG_ASSERT(ctx.HexLetter() || ctx.UnescapedSymbolicName() || ctx.iC_NonReservedKeywords());
+        DASSERT(ctx.HexLetter() || ctx.UnescapedSymbolicName() || ctx.iC_NonReservedKeywords());
         return ctx.getText();
     }
 }

@@ -30,7 +30,7 @@ offset_t ListOffsetSizeInfo::getListEndOffset(uint64_t pos) const {
     if (numTotal == 0) {
         return 0;
     }
-    LBUG_ASSERT(pos < offsetColumnChunk->getNumValues());
+    DASSERT(pos < offsetColumnChunk->getNumValues());
     return offsetColumnChunk->getValue<offset_t>(pos);
 }
 
@@ -38,7 +38,7 @@ list_size_t ListOffsetSizeInfo::getListSize(uint64_t pos) const {
     if (numTotal == 0) {
         return 0;
     }
-    LBUG_ASSERT(pos < sizeColumnChunk->getNumValues());
+    DASSERT(pos < sizeColumnChunk->getNumValues());
     return sizeColumnChunk->getValue<list_size_t>(pos);
 }
 
@@ -102,7 +102,7 @@ std::unique_ptr<ColumnChunkData> ListColumn::flushChunkData(const ColumnChunkDat
 void ListColumn::scanSegment(const SegmentState& state, offset_t startOffsetInChunk,
     row_idx_t numValuesToScan, ValueVector* resultVector, offset_t offsetInResult) const {
     if (nullColumn) {
-        LBUG_ASSERT(state.nullState);
+        DASSERT(state.nullState);
         nullColumn->scanSegment(*state.nullState, startOffsetInChunk, numValuesToScan, resultVector,
             offsetInResult);
     }
@@ -136,7 +136,7 @@ void ListColumn::scanSegment(const SegmentState& state, ColumnChunkData* resultC
         listColumnChunk.getSizeColumnChunk(), startOffsetInSegment, numValuesToScan);
     auto resizeNumValues = listColumnChunk.getDataColumnChunk()->getNumValues();
     bool isOffsetSortedAscending = true;
-    LBUG_ASSERT(listColumnChunk.getSizeColumnChunk()->getNumValues() ==
+    DASSERT(listColumnChunk.getSizeColumnChunk()->getNumValues() ==
               startOffsetInResult + numValuesToScan);
     offset_t prevOffset = listColumnChunk.getListStartOffset(startOffsetInResult);
     for (auto i = startOffsetInResult; i < startOffsetInResult + numValuesToScan; i++) {
@@ -153,7 +153,7 @@ void ListColumn::scanSegment(const SegmentState& state, ColumnChunkData* resultC
         offset_t startListOffset = listColumnChunk.getListStartOffset(startOffsetInResult);
         offset_t endListOffset =
             listColumnChunk.getListStartOffset(startOffsetInResult + numValuesToScan);
-        LBUG_ASSERT(endListOffset >= startListOffset);
+        DASSERT(endListOffset >= startListOffset);
         dataColumn->scanSegment(state.childrenStates[DATA_COLUMN_CHILD_READ_STATE_IDX],
             listColumnChunk.getDataColumnChunk(), startListOffset, endListOffset - startListOffset);
     } else {
@@ -168,7 +168,7 @@ void ListColumn::scanSegment(const SegmentState& state, ColumnChunkData* resultC
     }
     listColumnChunk.resetOffset();
 
-    LBUG_ASSERT(listColumnChunk.sanityCheck());
+    DASSERT(listColumnChunk.sanityCheck());
 }
 
 void ListColumn::lookupInternal(const SegmentState& state, offset_t nodeOffset,
@@ -255,7 +255,7 @@ void ListColumn::scanFiltered(const SegmentState& state, offset_t startOffsetInS
             auto appendSize = listOffsetSizeInfo.getListSize(pos - offsetInResult);
             // If there is a selection vector for the dataVector, its selected positions are not
             // being updated at all for this specific segment
-            LBUG_ASSERT(!dataVector->state || dataVector->state->getSelVector().isUnfiltered());
+            DASSERT(!dataVector->state || dataVector->state->getSelVector().isUnfiltered());
             dataColumn->scanSegment(state.childrenStates[DATA_COLUMN_CHILD_READ_STATE_IDX],
                 startOffsetInStorageToScan, appendSize, dataVector, offsetInDataVector);
             offsetInDataVector += resultVector->getValue<list_entry_t>(pos).size;
@@ -379,7 +379,7 @@ std::vector<std::unique_ptr<ColumnChunkData>> ListColumn::checkpointSegment(
     // Checkpoint offset data.
     std::vector<SegmentCheckpointState> offsetChunkCheckpointStates;
 
-    LBUG_ASSERT(std::is_sorted(checkpointState.segmentCheckpointStates.begin(),
+    DASSERT(std::is_sorted(checkpointState.segmentCheckpointStates.begin(),
         checkpointState.segmentCheckpointStates.end(),
         [](const auto& a, const auto& b) { return a.startRowInData < b.startRowInData; }));
     std::vector<std::unique_ptr<ColumnChunkData>> offsetsToWrite;
@@ -422,7 +422,7 @@ std::vector<std::unique_ptr<ColumnChunkData>> ListColumn::checkpointSegment(
     // Checkpoint null data.
     Column::checkpointNullData(checkpointState, pageAllocator);
 
-    LBUG_ASSERT(persistentListChunk.getNullData()->getNumValues() ==
+    DASSERT(persistentListChunk.getNullData()->getNumValues() ==
                   persistentListChunk.getOffsetColumnChunk()->getNumValues() &&
               persistentListChunk.getNullData()->getNumValues() ==
                   persistentListChunk.getSizeColumnChunk()->getNumValues());

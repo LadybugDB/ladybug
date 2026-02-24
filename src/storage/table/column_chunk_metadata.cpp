@@ -93,7 +93,7 @@ page_idx_t ColumnChunkMetadata::getNumDataPages(PhysicalTypeID dataType) const {
             [this]<std::floating_point T>(T) -> page_idx_t {
                 return FloatCompression<T>::getNumDataPages(getNumPages(), compMeta);
             },
-            [](auto) -> page_idx_t { LBUG_UNREACHABLE; });
+            [](auto) -> page_idx_t { UNREACHABLE_CODE; });
     }
     default:
         return getNumPages();
@@ -147,7 +147,7 @@ alp::state getAlpMetadata(const T* buffer, uint64_t numValues) {
                 alpMetadata.best_k_combinations, alpMetadata.k_combinations, buffer, numValues,
                 alpMetadata.fac, alpMetadata.exp);
         } else {
-            LBUG_ASSERT(alpMetadata.best_k_combinations.size() == 1);
+            DASSERT(alpMetadata.best_k_combinations.size() == 1);
             alpMetadata.exp = alpMetadata.best_k_combinations[0].first;
             alpMetadata.fac = alpMetadata.best_k_combinations[0].second;
         }

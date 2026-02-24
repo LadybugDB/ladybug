@@ -53,7 +53,7 @@ void AggregateFunctionUtils::appendSumOrAvgFuncs(std::string name, common::Logic
                 aggFunc = AggregateFunctionUtils::getAggFunc<FunctionType<T, double>>(name,
                     inputType, LogicalTypeID::DOUBLE, isDistinct);
             },
-            [](auto) { LBUG_UNREACHABLE; });
+            [](auto) { UNREACHABLE_CODE; });
         result.push_back(std::move(aggFunc));
     }
 }

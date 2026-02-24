@@ -30,7 +30,7 @@ public:
         : LogicalOperator{type_, std::move(child)}, infos{std::move(infos)} {}
 
     common::TableType getTableType() const {
-        LBUG_ASSERT(!infos.empty());
+        DASSERT(!infos.empty());
         return infos[0].tableType;
     }
     const std::vector<binder::BoundDeleteInfo>& getInfos() const { return infos; }

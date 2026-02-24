@@ -177,7 +177,7 @@ common::LogicalType PandasAnalyzer::getItemType(py::object ele, bool& canConvert
         return dictToStruct(dict, canConvert);
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

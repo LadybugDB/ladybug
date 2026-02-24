@@ -126,7 +126,7 @@ public:
         auto prefetch_buffer = ra_buffer.GetReadHead(location);
         if (prefetch_buffer != nullptr &&
             location - prefetch_buffer->location + len <= prefetch_buffer->size) {
-            LBUG_ASSERT(location - prefetch_buffer->location + len <= prefetch_buffer->size);
+            DASSERT(location - prefetch_buffer->location + len <= prefetch_buffer->size);
 
             if (!prefetch_buffer->data_isset) {
                 prefetch_buffer->Allocate();
@@ -140,7 +140,7 @@ public:
                 Prefetch(location, std::min<uint64_t>(PREFETCH_FALLBACK_BUFFERSIZE,
                                        handle->getFileSize() - location));
                 auto prefetch_buffer_fallback = ra_buffer.GetReadHead(location);
-                LBUG_ASSERT(location - prefetch_buffer_fallback->location + len <=
+                DASSERT(location - prefetch_buffer_fallback->location + len <=
                           prefetch_buffer_fallback->size);
                 memcpy(buf,
                     prefetch_buffer_fallback->data.get() + location -

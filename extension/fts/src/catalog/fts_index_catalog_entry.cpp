@@ -40,7 +40,7 @@ std::string FTSIndexAuxInfo::getStopWordsName(const common::FileScanInfo& export
         }
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     return stopWordsName;
 }

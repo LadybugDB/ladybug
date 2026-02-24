@@ -33,9 +33,9 @@ void InMemChunkedNodeGroupCollection::append(MemoryManager& memoryManager,
 }
 
 void InMemChunkedNodeGroupCollection::merge(std::unique_ptr<InMemChunkedNodeGroup> chunkedGroup) {
-    LBUG_ASSERT(chunkedGroup->getNumColumns() == types.size());
+    DASSERT(chunkedGroup->getNumColumns() == types.size());
     for (auto i = 0u; i < chunkedGroup->getNumColumns(); i++) {
-        LBUG_ASSERT(chunkedGroup->getColumnChunk(i).getDataType() == types[i]);
+        DASSERT(chunkedGroup->getColumnChunk(i).getDataType() == types[i]);
     }
     chunkedGroups.push_back(std::move(chunkedGroup));
 }

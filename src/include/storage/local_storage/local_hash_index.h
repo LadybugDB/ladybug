@@ -148,7 +148,7 @@ public:
             [&]<common::HashablePrimitive T>(T) {
                 localIndex = std::make_unique<HashIndexLocalStorage<T>>(memoryManager, nullptr);
             },
-            [&](auto) { LBUG_UNREACHABLE; });
+            [&](auto) { UNREACHABLE_CODE; });
     }
 
     common::offset_t lookup(const common::ValueVector& keyVector, common::sel_t pos,
@@ -158,12 +158,12 @@ public:
             keyDataTypeID,
             [&]<common::IndexHashable T>(
                 T) { result = lookup(keyVector.getValue<T>(pos), isVisible); },
-            [](auto) { LBUG_UNREACHABLE; });
+            [](auto) { UNREACHABLE_CODE; });
         return result;
     }
 
     common::offset_t lookup(const common::ValueVector& keyVector, visible_func isVisible) {
-        LBUG_ASSERT(keyVector.state->getSelVector().getSelSize() == 1);
+        DASSERT(keyVector.state->getSelVector().getSelSize() == 1);
         auto pos = keyVector.state->getSelVector().getSelectedPositions()[0];
         return lookup(keyVector, pos, isVisible);
     }
@@ -191,7 +191,7 @@ public:
                         insert(keyVector.getValue<T>(pos), startNodeOffset + i, isVisible);
                 }
             },
-            [](auto) { LBUG_UNREACHABLE; });
+            [](auto) { UNREACHABLE_CODE; });
         return numInserted == keyVector.state->getSelVector().getSelSize();
     }
 
@@ -200,7 +200,7 @@ public:
     }
     template<common::IndexHashable T>
     bool insert(T key, common::offset_t value, visible_func isVisible) {
-        LBUG_ASSERT(keyDataTypeID == common::TypeUtils::getPhysicalTypeIDForType<T>());
+        DASSERT(keyDataTypeID == common::TypeUtils::getPhysicalTypeIDForType<T>());
         return common::dynamic_cast_checked<HashIndexLocalStorage<HashIndexType<T>>*>(localIndex.get())
             ->insert(std::move(key), value, isVisible);
     }
@@ -214,13 +214,13 @@ public:
                     delete_(keyVector.getValue<T>(pos));
                 }
             },
-            [](auto) { LBUG_UNREACHABLE; });
+            [](auto) { UNREACHABLE_CODE; });
     }
 
     void delete_(const common::string_t key) { delete_(key.getAsStringView()); }
     template<common::IndexHashable T>
     void delete_(T key) {
-        LBUG_ASSERT(keyDataTypeID == common::TypeUtils::getPhysicalTypeIDForType<T>());
+        DASSERT(keyDataTypeID == common::TypeUtils::getPhysicalTypeIDForType<T>());
         common::dynamic_cast_checked<HashIndexLocalStorage<HashIndexType<T>>*>(localIndex.get())
             ->deleteKey(key);
     }

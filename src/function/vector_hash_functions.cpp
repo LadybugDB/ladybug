@@ -77,12 +77,12 @@ static void validateSelState(const SelectionView& leftSelVec, const SelectionVie
     auto resultSelSize = resultSelVec.getSelSize();
     (void)resultSelSize;
     if (leftSelSize > 1 && rightSelSize > 1) {
-        LBUG_ASSERT(leftSelSize == rightSelSize);
-        LBUG_ASSERT(leftSelSize == resultSelSize);
+        DASSERT(leftSelSize == rightSelSize);
+        DASSERT(leftSelSize == resultSelSize);
     } else if (leftSelSize > 1) {
-        LBUG_ASSERT(leftSelSize == resultSelSize);
+        DASSERT(leftSelSize == resultSelSize);
     } else if (rightSelSize > 1) {
-        LBUG_ASSERT(rightSelSize == resultSelSize);
+        DASSERT(rightSelSize == resultSelSize);
     }
 }
 
@@ -173,12 +173,12 @@ static void computeStructVecHash(const ValueVector& operand, const SelectionView
     ValueVector& result, const SelectionView& resultSelVec) {
     switch (operand.dataType.getLogicalTypeID()) {
     case LogicalTypeID::NODE: {
-        LBUG_ASSERT(0 == common::StructType::getFieldIdx(operand.dataType, InternalKeyword::ID));
+        DASSERT(0 == common::StructType::getFieldIdx(operand.dataType, InternalKeyword::ID));
         UnaryHashFunctionExecutor::execute<internalID_t, hash_t>(
             *StructVector::getFieldVector(&operand, 0), operandSelVec, result, resultSelVec);
     } break;
     case LogicalTypeID::REL: {
-        LBUG_ASSERT(3 == StructType::getFieldIdx(operand.dataType, InternalKeyword::ID));
+        DASSERT(3 == StructType::getFieldIdx(operand.dataType, InternalKeyword::ID));
         UnaryHashFunctionExecutor::execute<internalID_t, hash_t>(
             *StructVector::getFieldVector(&operand, 3), operandSelVec, result, resultSelVec);
     } break;
@@ -197,7 +197,7 @@ static void computeStructVecHash(const ValueVector& operand, const SelectionView
         }
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -205,7 +205,7 @@ void VectorHashFunction::computeHash(const ValueVector& operand,
     const SelectionView& operandSelectVec, ValueVector& result,
     const SelectionView& resultSelectVec) {
     result.state = operand.state;
-    LBUG_ASSERT(result.dataType.getLogicalTypeID() == LogicalType::HASH().getLogicalTypeID());
+    DASSERT(result.dataType.getLogicalTypeID() == LogicalType::HASH().getLogicalTypeID());
     TypeUtils::visit(
         operand.dataType.getPhysicalType(),
         [&]<HashableNonNestedTypes T>(T) {
@@ -228,9 +228,9 @@ void VectorHashFunction::computeHash(const ValueVector& operand,
 void VectorHashFunction::combineHash(const ValueVector& left, const SelectionView& leftSelVec,
     const ValueVector& right, const SelectionView& rightSelVec, ValueVector& result,
     const SelectionView& resultSelVec) {
-    LBUG_ASSERT(left.dataType.getLogicalTypeID() == LogicalType::HASH().getLogicalTypeID());
-    LBUG_ASSERT(left.dataType.getLogicalTypeID() == right.dataType.getLogicalTypeID());
-    LBUG_ASSERT(left.dataType.getLogicalTypeID() == result.dataType.getLogicalTypeID());
+    DASSERT(left.dataType.getLogicalTypeID() == LogicalType::HASH().getLogicalTypeID());
+    DASSERT(left.dataType.getLogicalTypeID() == right.dataType.getLogicalTypeID());
+    DASSERT(left.dataType.getLogicalTypeID() == result.dataType.getLogicalTypeID());
     BinaryHashFunctionExecutor::execute<hash_t, hash_t, hash_t, CombineHash>(left, leftSelVec,
         right, rightSelVec, result, resultSelVec);
 }
@@ -238,7 +238,7 @@ void VectorHashFunction::combineHash(const ValueVector& left, const SelectionVie
 static void HashExecFunc(const std::vector<std::shared_ptr<common::ValueVector>>& params,
     const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
     common::SelectionVector*, void* /*dataPtr*/ = nullptr) {
-    LBUG_ASSERT(params.size() == 1);
+    DASSERT(params.size() == 1);
     // TODO(Ziyi): evaluators should resolve the state for result vector.
     result.state = params[0]->state;
     VectorHashFunction::computeHash(*params[0], *paramSelVectors[0], result,

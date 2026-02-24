@@ -106,15 +106,15 @@ void RelTableData::initPropertyColumns(const RelGroupCatalogEntry& relGroupEntry
 
 bool RelTableData::update(Transaction* transaction, ValueVector& boundNodeIDVector,
     const ValueVector& relIDVector, column_id_t columnID, const ValueVector& dataVector) const {
-    LBUG_ASSERT(boundNodeIDVector.state->getSelVector().getSelSize() == 1);
-    LBUG_ASSERT(relIDVector.state->getSelVector().getSelSize() == 1);
+    DASSERT(boundNodeIDVector.state->getSelVector().getSelSize() == 1);
+    DASSERT(relIDVector.state->getSelVector().getSelSize() == 1);
     const auto boundNodePos = boundNodeIDVector.state->getSelVector()[0];
     const auto relIDPos = relIDVector.state->getSelVector()[0];
     if (boundNodeIDVector.isNull(boundNodePos) || relIDVector.isNull(relIDPos)) {
         return false;
     }
     const auto [source, rowIdx] = findMatchingRow(transaction, boundNodeIDVector, relIDVector);
-    LBUG_ASSERT(rowIdx != INVALID_ROW_IDX);
+    DASSERT(rowIdx != INVALID_ROW_IDX);
     const auto boundNodeOffset = boundNodeIDVector.getValue<nodeID_t>(boundNodePos).offset;
     const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(boundNodeOffset);
     auto& csrNodeGroup = getNodeGroup(nodeGroupIdx)->cast<CSRNodeGroup>();
@@ -153,8 +153,8 @@ void RelTableData::addColumn(TableAddColumnState& addColumnState, PageAllocator&
 
 std::pair<CSRNodeGroupScanSource, row_idx_t> RelTableData::findMatchingRow(Transaction* transaction,
     ValueVector& boundNodeIDVector, const ValueVector& relIDVector) const {
-    LBUG_ASSERT(boundNodeIDVector.state->getSelVector().getSelSize() == 1);
-    LBUG_ASSERT(relIDVector.state->getSelVector().getSelSize() == 1);
+    DASSERT(boundNodeIDVector.state->getSelVector().getSelSize() == 1);
+    DASSERT(relIDVector.state->getSelVector().getSelSize() == 1);
     const auto boundNodePos = boundNodeIDVector.state->getSelVector()[0];
     const auto relIDPos = relIDVector.state->getSelVector()[0];
     const auto boundNodeOffset = boundNodeIDVector.getValue<nodeID_t>(boundNodePos).offset;
@@ -196,7 +196,7 @@ std::pair<CSRNodeGroupScanSource, row_idx_t> RelTableData::findMatchingRow(Trans
 
 bool RelTableData::checkIfNodeHasRels(Transaction* transaction,
     ValueVector* srcNodeIDVector) const {
-    LBUG_ASSERT(srcNodeIDVector->state->isFlat());
+    DASSERT(srcNodeIDVector->state->isFlat());
     const auto nodeIDPos = srcNodeIDVector->state->getSelVector()[0];
     const auto nodeOffset = srcNodeIDVector->getValue<nodeID_t>(nodeIDPos).offset;
     const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(nodeOffset);
@@ -229,7 +229,7 @@ void RelTableData::pushInsertInfo(const Transaction* transaction, const CSRNodeG
     row_idx_t numRows_, CSRNodeGroupScanSource source) {
     // we shouldn't be appending directly to the to the persistent data
     // unless we are performing batch insert and the persistent chunked group is empty
-    LBUG_ASSERT(source != CSRNodeGroupScanSource::COMMITTED_PERSISTENT ||
+    DASSERT(source != CSRNodeGroupScanSource::COMMITTED_PERSISTENT ||
               !nodeGroup.getPersistentChunkedGroup() ||
               nodeGroup.getPersistentChunkedGroup()->getNumRows() == 0);
 
@@ -274,7 +274,7 @@ const VersionRecordHandler* RelTableData::getVersionRecordHandler(
     if (source == CSRNodeGroupScanSource::COMMITTED_PERSISTENT) {
         return &persistentVersionRecordHandler;
     } else {
-        LBUG_ASSERT(source == CSRNodeGroupScanSource::COMMITTED_IN_MEMORY);
+        DASSERT(source == CSRNodeGroupScanSource::COMMITTED_IN_MEMORY);
         return &inMemoryVersionRecordHandler;
     }
 }

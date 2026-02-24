@@ -23,7 +23,7 @@ std::string TransactionActionUtils::toString(TransactionAction action) {
         return "CHECKPOINT";
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

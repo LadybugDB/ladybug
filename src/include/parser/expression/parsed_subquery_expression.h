@@ -37,13 +37,13 @@ public:
     std::shared_ptr<JoinHintNode> getHint() const { return hintRoot; }
 
     static std::unique_ptr<ParsedSubqueryExpression> deserialize(common::Deserializer&) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 
-    std::unique_ptr<ParsedExpression> copy() const override { LBUG_UNREACHABLE; }
+    std::unique_ptr<ParsedExpression> copy() const override { UNREACHABLE_CODE; }
 
 private:
-    void serializeInternal(common::Serializer&) const override { LBUG_UNREACHABLE; }
+    void serializeInternal(common::Serializer&) const override { UNREACHABLE_CODE; }
 
 private:
     common::SubqueryType subqueryType;

@@ -44,7 +44,7 @@ void BaseGraphTest::createDBAndConn() {
 
 void BaseGraphTest::initGraph(const std::string& datasetDir) const {
     Connection* connection = conn ? conn.get() : (connMap.begin()->second).get();
-    LBUG_ASSERT_UNCONDITIONAL(connection != nullptr);
+    ASSERT(connection != nullptr);
 
     if (TestHelper::E2E_OVERRIDE_IMPORT_DIR.empty()) {
         TestHelper::executeScript(datasetDir + TestHelper::SCHEMA_FILE_NAME, *connection);

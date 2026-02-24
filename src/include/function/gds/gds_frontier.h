@@ -282,7 +282,7 @@ public:
     void beginNewIterationInternalNoLock() override;
 
     std::unordered_set<common::offset_t> getActiveNodesOnCurrentFrontier() override {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 
     void resetValue(processor::ExecutionContext* context, graph::Graph* graph, iteration_t val);

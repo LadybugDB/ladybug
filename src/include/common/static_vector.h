@@ -48,20 +48,20 @@ public:
     ~StaticVector() { clear(); }
 
     T& operator[](size_t i) {
-        LBUG_ASSERT(i < len);
+        DASSERT(i < len);
         return items[i].assumeInit();
     }
     const T& operator[](size_t i) const {
-        LBUG_ASSERT(i < len);
+        DASSERT(i < len);
         return items[i].assumeInit();
     }
     void push_back(T elem) {
-        LBUG_ASSERT(len < N);
+        DASSERT(len < N);
         new (items[len].ptr()) T(std::move(elem));
         len++;
     }
     T pop_back() {
-        LBUG_ASSERT(len > 0);
+        DASSERT(len > 0);
         len--;
         return std::move(items[len].assumeInit());
     }

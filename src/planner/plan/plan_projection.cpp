@@ -50,7 +50,7 @@ void Planner::planProjectionBody(const BoundProjectionBody* projectionBody, Logi
 
 void Planner::planAggregate(const expression_vector& expressionsToAggregate,
     const expression_vector& expressionsToGroupBy, LogicalPlan& plan) {
-    LBUG_ASSERT(!expressionsToAggregate.empty());
+    DASSERT(!expressionsToAggregate.empty());
     expression_vector expressionsToProject;
     for (auto& expressionToAggregate : expressionsToAggregate) {
         if (ExpressionChildrenCollector::collectChildren(*expressionToAggregate)

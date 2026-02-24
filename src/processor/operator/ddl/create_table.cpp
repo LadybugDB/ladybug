@@ -29,7 +29,7 @@ void CreateTable::executeInternal(ExecutionContext* context) {
             throw BinderException(info.tableName + " already exists in catalog.");
         }
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
     }
     // Create the table.
@@ -40,7 +40,7 @@ void CreateTable::executeInternal(ExecutionContext* context) {
         entry = catalog->createTableEntry(transaction, info);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     storage::StorageManager::Get(*clientContext)->createTable(entry->ptrCast<TableCatalogEntry>());
     appendMessage(std::format("Table {} has been created.", info.tableName), memoryManager);

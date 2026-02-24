@@ -140,7 +140,7 @@ common::Value RecursivePatternFactorSetting::getSetting(const ClientContext* con
 }
 
 void EnableMVCCSetting::setContext(ClientContext* context, const common::Value& parameter) {
-    LBUG_ASSERT(parameter.getDataType().getLogicalTypeID() == common::LogicalTypeID::BOOL);
+    DASSERT(parameter.getDataType().getLogicalTypeID() == common::LogicalTypeID::BOOL);
     // TODO: This is a temporary solution to make tests of multiple write transactions easier.
     context->getDBConfigUnsafe()->enableMultiWrites = parameter.getValue<bool>();
 }

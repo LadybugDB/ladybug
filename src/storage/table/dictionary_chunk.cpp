@@ -44,7 +44,7 @@ uint64_t DictionaryChunk::getStringLength(string_index_t index) const {
         return 0;
     }
     if (index + 1 < offsetChunk->getNumValues()) {
-        LBUG_ASSERT(offsetChunk->getValue<string_offset_t>(index + 1) >=
+        DASSERT(offsetChunk->getValue<string_offset_t>(index + 1) >=
                   offsetChunk->getValue<string_offset_t>(index));
         return offsetChunk->getValue<string_offset_t>(index + 1) -
                offsetChunk->getValue<string_offset_t>(index);
@@ -80,7 +80,7 @@ DictionaryChunk::string_index_t DictionaryChunk::appendString(std::string_view v
 }
 
 std::string_view DictionaryChunk::getString(string_index_t index) const {
-    LBUG_ASSERT(index < offsetChunk->getNumValues());
+    DASSERT(index < offsetChunk->getNumValues());
     const auto startOffset = offsetChunk->getValue<string_offset_t>(index);
     const auto length = getStringLength(index);
     return std::string_view(reinterpret_cast<const char*>(stringDataChunk->getData()) + startOffset,

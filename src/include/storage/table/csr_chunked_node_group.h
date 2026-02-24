@@ -34,7 +34,7 @@ struct CSRRegion {
                    [](bool hasUpdate) { return hasUpdate; });
     }
     bool needCheckpointColumn(common::column_id_t columnID) const {
-        LBUG_ASSERT(columnID < hasUpdates.size());
+        DASSERT(columnID < hasUpdates.size());
         return hasInsertions || hasPersistentDeletions || hasUpdates[columnID];
     }
     bool hasDeletionsOrInsertions() const { return hasInsertions || hasPersistentDeletions; }
@@ -65,7 +65,7 @@ struct LBUG_API InMemChunkedCSRHeader {
     InMemChunkedCSRHeader(std::unique_ptr<ColumnChunkData> offset,
         std::unique_ptr<ColumnChunkData> length)
         : offset{std::move(offset)}, length{std::move(length)} {
-        LBUG_ASSERT(this->offset && this->length);
+        DASSERT(this->offset && this->length);
     }
 
     common::offset_t getStartCSROffset(common::offset_t nodeOffset) const;
@@ -107,7 +107,7 @@ struct ChunkedCSRHeader {
           randomLookup{other.randomLookup} {}
     ChunkedCSRHeader(std::unique_ptr<ColumnChunk> offset, std::unique_ptr<ColumnChunk> length)
         : offset{std::move(offset)}, length{std::move(length)} {
-        LBUG_ASSERT(this->offset && this->length);
+        DASSERT(this->offset && this->length);
     }
 
     common::offset_t getStartCSROffset(common::offset_t nodeOffset) const;

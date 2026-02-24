@@ -48,7 +48,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
     static void TernaryExecFunction(const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr = nullptr) {
-        LBUG_ASSERT(params.size() == 3);
+        DASSERT(params.size() == 3);
         TernaryFunctionExecutor::executeSwitch<A_TYPE, B_TYPE, C_TYPE, RESULT_TYPE, FUNC,
             TernaryFunctionWrapper>(*params[0], paramSelVectors[0], *params[1], paramSelVectors[1],
             *params[2], paramSelVectors[2], result, resultSelVector, dataPtr);
@@ -59,7 +59,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr = nullptr) {
-        LBUG_ASSERT(params.size() == 3);
+        DASSERT(params.size() == 3);
         TernaryFunctionExecutor::executeSwitch<A_TYPE, B_TYPE, C_TYPE, RESULT_TYPE, FUNC,
             TernaryStringFunctionWrapper>(*params[0], paramSelVectors[0], *params[1],
             paramSelVectors[1], *params[2], paramSelVectors[2], result, resultSelVector, dataPtr);
@@ -80,7 +80,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr = nullptr) {
-        LBUG_ASSERT(params.size() == 3);
+        DASSERT(params.size() == 3);
         TernaryFunctionExecutor::executeSwitch<A_TYPE, B_TYPE, C_TYPE, RESULT_TYPE, FUNC,
             TernaryListFunctionWrapper>(*params[0], paramSelVectors[0], *params[1],
             paramSelVectors[1], *params[2], paramSelVectors[2], result, resultSelVector, dataPtr);
@@ -90,7 +90,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
     static void BinaryExecFunction(const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* /*dataPtr*/ = nullptr) {
-        LBUG_ASSERT(params.size() == 2);
+        DASSERT(params.size() == 2);
         BinaryFunctionExecutor::execute<LEFT_TYPE, RIGHT_TYPE, RESULT_TYPE, FUNC>(*params[0],
             paramSelVectors[0], *params[1], paramSelVectors[1], result, resultSelVector);
     }
@@ -100,7 +100,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr = nullptr) {
-        LBUG_ASSERT(params.size() == 2);
+        DASSERT(params.size() == 2);
         BinaryFunctionExecutor::executeSwitch<LEFT_TYPE, RIGHT_TYPE, RESULT_TYPE, FUNC,
             BinaryStringFunctionWrapper>(*params[0], paramSelVectors[0], *params[1],
             paramSelVectors[1], result, resultSelVector, dataPtr);
@@ -111,7 +111,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr = nullptr) {
-        LBUG_ASSERT(params.size() == 2);
+        DASSERT(params.size() == 2);
         BinaryFunctionExecutor::executeSwitch<LEFT_TYPE, RIGHT_TYPE, RESULT_TYPE, FUNC,
             BinaryListStructFunctionWrapper>(*params[0], paramSelVectors[0], *params[1],
             paramSelVectors[1], result, resultSelVector, dataPtr);
@@ -122,7 +122,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr) {
-        LBUG_ASSERT(params.size() == 2);
+        DASSERT(params.size() == 2);
         BinaryFunctionExecutor::executeSwitch<LEFT_TYPE, RIGHT_TYPE, RESULT_TYPE, FUNC,
             BinaryMapCreationFunctionWrapper>(*params[0], paramSelVectors[0], *params[1],
             paramSelVectors[1], result, resultSelVector, dataPtr);
@@ -132,7 +132,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
     static bool BinarySelectFunction(
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         common::SelectionVector& selVector, void* dataPtr) {
-        LBUG_ASSERT(params.size() == 2);
+        DASSERT(params.size() == 2);
         return BinaryFunctionExecutor::select<LEFT_TYPE, RIGHT_TYPE, FUNC>(*params[0], *params[1],
             selVector, dataPtr);
     }
@@ -141,7 +141,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
     static bool BinarySelectWithBindData(
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         common::SelectionVector& selVector, void* dataPtr) {
-        LBUG_ASSERT(params.size() == 2);
+        DASSERT(params.size() == 2);
         return BinaryFunctionExecutor::select<LEFT_TYPE, RIGHT_TYPE, FUNC,
             BinarySelectWithBindDataWrapper>(*params[0], *params[1], selVector, dataPtr);
     }
@@ -151,7 +151,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
     static void UnaryExecFunction(const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr) {
-        LBUG_ASSERT(params.size() == 1);
+        DASSERT(params.size() == 1);
         EXECUTOR::template executeSwitch<OPERAND_TYPE, RESULT_TYPE, FUNC, UnaryFunctionWrapper>(
             *params[0], paramSelVectors[0], result, resultSelVector, dataPtr);
     }
@@ -161,7 +161,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr) {
-        LBUG_ASSERT(params.size() == 1);
+        DASSERT(params.size() == 1);
         UnaryFunctionExecutor::executeSequence<OPERAND_TYPE, RESULT_TYPE, FUNC>(*params[0],
             paramSelVectors[0], result, resultSelVector, dataPtr);
     }
@@ -171,7 +171,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* /*dataPtr*/ = nullptr) {
-        LBUG_ASSERT(params.size() == 1);
+        DASSERT(params.size() == 1);
         UnaryFunctionExecutor::executeSwitch<OPERAND_TYPE, RESULT_TYPE, FUNC,
             UnaryStringFunctionWrapper>(*params[0], paramSelVectors[0], result, resultSelVector,
             nullptr /* dataPtr */);
@@ -183,7 +183,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr) {
-        LBUG_ASSERT(params.size() == 1);
+        DASSERT(params.size() == 1);
         EXECUTOR::template executeSwitch<OPERAND_TYPE, RESULT_TYPE, FUNC,
             UnaryCastStringFunctionWrapper>(*params[0], paramSelVectors[0], result, resultSelVector,
             dataPtr);
@@ -195,7 +195,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr) {
-        LBUG_ASSERT(params.size() == 1);
+        DASSERT(params.size() == 1);
         EXECUTOR::template executeSwitch<OPERAND_TYPE, RESULT_TYPE, FUNC, WRAPPER>(*params[0],
             paramSelVectors[0], result, resultSelVector, dataPtr);
     }
@@ -206,7 +206,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr) {
-        LBUG_ASSERT(params.size() == 1);
+        DASSERT(params.size() == 1);
         EXECUTOR::template executeSwitch<OPERAND_TYPE, RESULT_TYPE, FUNC,
             UnaryNestedTypeFunctionWrapper>(*params[0], paramSelVectors[0], result, resultSelVector,
             dataPtr);
@@ -218,7 +218,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr) {
-        LBUG_ASSERT(params.size() == 1);
+        DASSERT(params.size() == 1);
         EXECUTOR::template executeSwitch<OPERAND_TYPE, RESULT_TYPE, FUNC, SetSeedFunctionWrapper>(
             *params[0], paramSelVectors[0], result, resultSelVector, dataPtr);
     }
@@ -229,7 +229,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         [[maybe_unused]] const std::vector<common::SelectionVector*>& paramSelVectors,
         common::ValueVector& result, common::SelectionVector* resultSelVector,
         void* /*dataPtr*/ = nullptr) {
-        LBUG_ASSERT(params.empty() && paramSelVectors.empty());
+        DASSERT(params.empty() && paramSelVectors.empty());
         ConstFunctionExecutor::execute<RESULT_TYPE, FUNC>(result, *resultSelVector);
     }
 
@@ -238,7 +238,7 @@ struct LBUG_API ScalarFunction : public ScalarOrAggregateFunction {
         [[maybe_unused]] const std::vector<std::shared_ptr<common::ValueVector>>& params,
         [[maybe_unused]] const std::vector<common::SelectionVector*>& paramSelVectors,
         common::ValueVector& result, common::SelectionVector* resultSelVector, void* dataPtr) {
-        LBUG_ASSERT(params.empty() && paramSelVectors.empty());
+        DASSERT(params.empty() && paramSelVectors.empty());
         PointerFunctionExecutor::execute<RESULT_TYPE, FUNC>(result, *resultSelVector, dataPtr);
     }
 

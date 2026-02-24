@@ -85,7 +85,7 @@ std::unique_ptr<BaseScanSource> Transformer::transformScanSource(
         auto paramExpression = transformParameterExpression(*ctx.oC_Parameter());
         return std::make_unique<ParameterScanSource>(std::move(paramExpression));
     }
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 options_t Transformer::transformOptions(CypherParser::IC_OptionsContext& ctx) {

@@ -24,7 +24,7 @@ struct CollectListElement {
     CollectListElement getNextElement() const { return CollectListElement{*getNextElementPtr()}; }
     uint8_t** getNextElementPtr() const { return reinterpret_cast<uint8_t**>(elementPtr); }
     void setNextElement(CollectListElement next) const {
-        LBUG_ASSERT(*getNextElementPtr() == nullptr);
+        DASSERT(*getNextElementPtr() == nullptr);
         *getNextElementPtr() = next.elementPtr;
     }
     void setNextElement(std::nullptr_t next) const { *getNextElementPtr() = next; }
@@ -63,7 +63,7 @@ struct CollectState : public AggregateStateWithNull {
 
 void CollectState::appendList(const CollectState& o) {
     if (head.valid()) {
-        LBUG_ASSERT(tail.valid());
+        DASSERT(tail.valid());
         tail.setNextElement(o.head);
         tail = o.tail;
     } else {
@@ -83,7 +83,7 @@ void CollectState::appendElement(ValueVector* input, uint32_t pos,
     if (tail.valid()) {
         tail.setNextElement(newElement);
     } else {
-        LBUG_ASSERT(!head.valid());
+        DASSERT(!head.valid());
         head = newElement;
     }
     tail = newElement;
@@ -103,7 +103,7 @@ void CollectState::writeToVector(common::ValueVector* outputVector, uint64_t pos
     auto outputDataVector = common::ListVector::getDataVector(outputVector);
     CollectListElement curElement = head;
     for (auto i = 0u; i < listEntry.size; i++) {
-        LBUG_ASSERT(curElement.valid());
+        DASSERT(curElement.valid());
         outputDataVector->copyFromRowData(listEntry.offset + i, curElement.getDataPtr());
         curElement = curElement.getNextElement();
     }
@@ -123,7 +123,7 @@ static void updateSingleValue(CollectState* state, ValueVector* input, uint32_t 
 
 static void updateAll(uint8_t* state_, ValueVector* input, uint64_t multiplicity,
     InMemOverflowBuffer* overflowBuffer) {
-    LBUG_ASSERT(!input->state->isFlat());
+    DASSERT(!input->state->isFlat());
     auto state = reinterpret_cast<CollectState*>(state_);
     auto& inputSelVector = input->state->getSelVector();
     if (input->hasNoNullsGuarantee()) {
@@ -163,7 +163,7 @@ static void combine(uint8_t* state_, uint8_t* otherState_,
 }
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
-    LBUG_ASSERT(input.arguments.size() == 1);
+    DASSERT(input.arguments.size() == 1);
     auto aggFuncDefinition = reinterpret_cast<AggregateFunction*>(input.definition);
     aggFuncDefinition->parameterTypeIDs[0] = input.arguments[0]->dataType.getLogicalTypeID();
     auto returnType = LogicalType::LIST(input.arguments[0]->dataType.copy());

@@ -17,7 +17,7 @@ std::unique_ptr<UpdatingClause> Transformer::transformUpdatingClause(
     } else if (ctx.oC_Set()) {
         return transformSet(*ctx.oC_Set());
     } else {
-        LBUG_ASSERT(ctx.oC_Delete());
+        DASSERT(ctx.oC_Delete());
         return transformDelete(*ctx.oC_Delete());
     }
 }

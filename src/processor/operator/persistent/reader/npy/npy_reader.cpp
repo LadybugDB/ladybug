@@ -286,7 +286,7 @@ static void bindColumns(const FileScanInfo& fileScanInfo, uint32_t fileIdx,
 
 static void bindColumns(const FileScanInfo& fileScanInfo, std::vector<std::string>& columnNames,
     std::vector<LogicalType>& columnTypes) {
-    LBUG_ASSERT(fileScanInfo.getNumFiles() > 0);
+    DASSERT(fileScanInfo.getNumFiles() > 0);
     bindColumns(fileScanInfo, 0, columnNames, columnTypes);
     for (auto i = 1u; i < fileScanInfo.getNumFiles(); ++i) {
         std::vector<std::string> tmpColumnNames;
@@ -314,7 +314,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
     ReaderBindUtils::resolveColumns(scanInput->expectedColumnNames, detectedColumnNames,
         resultColumnNames, scanInput->expectedColumnTypes, detectedColumnTypes, resultColumnTypes);
     auto config = scanInput->fileScanInfo.copy();
-    LBUG_ASSERT(!config.filePaths.empty() && config.getNumFiles() == resultColumnNames.size());
+    DASSERT(!config.filePaths.empty() && config.getNumFiles() == resultColumnNames.size());
     row_idx_t numRows = 0;
     for (auto i = 0u; i < config.getNumFiles(); i++) {
         auto reader = make_unique<NpyReader>(config.filePaths[i]);

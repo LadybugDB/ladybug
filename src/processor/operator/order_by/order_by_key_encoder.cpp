@@ -26,7 +26,7 @@ OrderByKeyEncoder::OrderByKeyEncoder(const OrderByDataInfo& orderByDataInfo,
             "The number of tuples per block of factorizedTable exceeds the maximum blockOffset!");
     }
     keyBlocks.emplace_back(std::make_unique<DataBlock>(memoryManager, DATA_BLOCK_SIZE));
-    LBUG_ASSERT(this->numBytesPerTuple == getNumBytesPerTuple());
+    DASSERT(this->numBytesPerTuple == getNumBytesPerTuple());
     maxNumTuplesPerBlock = DATA_BLOCK_SIZE / numBytesPerTuple;
     if (maxNumTuplesPerBlock <= 0) {
         throw RuntimeException(
@@ -264,7 +264,7 @@ void OrderByKeyEncoder::getEncodingFunction(PhysicalTypeID physicalType, encode_
         return;
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

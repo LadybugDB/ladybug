@@ -71,7 +71,7 @@ void InMemoryExceptionChunk<T>::finalize(SegmentState& state) {
         }
     }
 
-    LBUG_ASSERT(
+    DASSERT(
         finalizedExceptionCount <= state.metadata.compMeta.floatMetadata()->exceptionCapacity);
     state.metadata.compMeta.floatMetadata()->exceptionCount = finalizedExceptionCount;
 
@@ -93,7 +93,7 @@ void InMemoryExceptionChunk<T>::finalize(SegmentState& state) {
 
 template<std::floating_point T>
 void InMemoryExceptionChunk<T>::addException(EncodeException<T> exception) {
-    LBUG_ASSERT(exceptionCount < exceptionCapacity);
+    DASSERT(exceptionCount < exceptionCapacity);
     ++exceptionCount;
     writeException(exception, exceptionCount - 1);
     emptyMask.setNull(exceptionCount - 1, false);
@@ -107,14 +107,14 @@ void InMemoryExceptionChunk<T>::removeExceptionAt(size_t exceptionIdx) {
 
 template<std::floating_point T>
 EncodeException<T> InMemoryExceptionChunk<T>::getExceptionAt(size_t exceptionIdx) const {
-    LBUG_ASSERT(exceptionIdx < exceptionCount);
+    DASSERT(exceptionIdx < exceptionCount);
     auto bytesInBuffer = chunkData->getValue<ExceptionInBuffer<T>>(exceptionIdx);
     return EncodeExceptionView<T>{reinterpret_cast<std::byte*>(&bytesInBuffer)}.getValue();
 }
 
 template<std::floating_point T>
 void InMemoryExceptionChunk<T>::writeException(EncodeException<T> exception, size_t exceptionIdx) {
-    LBUG_ASSERT(exceptionIdx < exceptionCount);
+    DASSERT(exceptionIdx < exceptionCount);
     EncodeExceptionView<T>{reinterpret_cast<std::byte*>(chunkData->getData())}.setValue(exception,
         exceptionIdx);
 }
@@ -145,7 +145,7 @@ PageCursor InMemoryExceptionChunk<T>::getExceptionPageCursor(const ColumnChunkMe
     PageCursor pageBaseCursor, size_t exceptionCapacity) {
     const size_t numExceptionPages = EncodeException<T>::numPagesFromExceptions(exceptionCapacity);
     const size_t exceptionPageOffset = metadata.getNumPages() - numExceptionPages;
-    LBUG_ASSERT(exceptionPageOffset == (page_idx_t)exceptionPageOffset);
+    DASSERT(exceptionPageOffset == (page_idx_t)exceptionPageOffset);
     return {pageBaseCursor.pageIdx + (page_idx_t)exceptionPageOffset, 0};
 }
 

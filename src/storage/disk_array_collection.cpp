@@ -101,7 +101,7 @@ size_t DiskArrayCollection::addDiskArray() {
     }
 
     auto& headerPage = *headersForWriteTrx[pageIdx];
-    LBUG_ASSERT(headerPage.numHeaders < HeaderPage::NUM_HEADERS_PER_PAGE);
+    DASSERT(headerPage.numHeaders < HeaderPage::NUM_HEADERS_PER_PAGE);
     auto indexInPage = headerPage.numHeaders;
     headerPage.headers[indexInPage] = DiskArrayHeader();
     headerPage.numHeaders++;

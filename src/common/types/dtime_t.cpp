@@ -215,7 +215,7 @@ void Time::convert(dtime_t dtime, int32_t& hour, int32_t& min, int32_t& sec, int
     sec = int32_t(time / Interval::MICROS_PER_SEC);
     time -= int64_t(sec) * Interval::MICROS_PER_SEC;
     micros = int32_t(time);
-    LBUG_ASSERT(Time::isValid(hour, min, sec, micros));
+    DASSERT(Time::isValid(hour, min, sec, micros));
 }
 
 } // namespace common

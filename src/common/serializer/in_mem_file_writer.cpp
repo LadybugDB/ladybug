@@ -40,7 +40,7 @@ storage::PageRange InMemFileWriter::flush(storage::PageAllocator& pageAllocator,
 void InMemFileWriter::flush(storage::PageRange allocatedPageRange, storage::FileHandle* fileHandle,
     storage::ShadowFile& shadowFile) const {
     auto numPagesToWrite = getNumPagesToFlush();
-    LBUG_ASSERT(allocatedPageRange.numPages >= numPagesToWrite);
+    DASSERT(allocatedPageRange.numPages >= numPagesToWrite);
     auto numPagesBeforeAllocate = allocatedPageRange.startPageIdx;
     for (auto i = 0u; i < numPagesToWrite; i++) {
         auto pageIdx = allocatedPageRange.startPageIdx + i;

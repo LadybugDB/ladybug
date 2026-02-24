@@ -218,7 +218,7 @@ void Planner::planRegularMatch(const QueryGraphCollection& queryGraphCollection,
 }
 
 void Planner::planSubquery(const std::shared_ptr<Expression>& expression, LogicalPlan& outerPlan) {
-    LBUG_ASSERT(expression->expressionType == ExpressionType::SUBQUERY);
+    DASSERT(expression->expressionType == ExpressionType::SUBQUERY);
     auto subquery = expression->ptrCast<SubqueryExpression>();
     auto correlatedExprs = getDependentExprs(expression, *outerPlan.getSchema());
     auto predicates = subquery->getPredicatesSplitOnAnd();
@@ -243,7 +243,7 @@ void Planner::planSubquery(const std::shared_ptr<Expression>& expression, Logica
             appendAggregate(emptyHashKeys, projectExprs, innerPlan);
         } break;
         default:
-            LBUG_UNREACHABLE;
+            UNREACHABLE_CODE;
         }
         appendCrossProduct(outerPlan, innerPlan, outerPlan);
         return;
@@ -287,7 +287,7 @@ void Planner::planSubquery(const std::shared_ptr<Expression>& expression, Logica
             outerPlan);
     } break;
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 

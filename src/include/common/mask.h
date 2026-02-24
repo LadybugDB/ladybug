@@ -45,7 +45,7 @@ public:
     offset_t getNumMaskedNode() const;
 
     void addMask(table_id_t tableID, std::unique_ptr<SemiMask> mask) {
-        LBUG_ASSERT(!maskMap.contains(tableID));
+        DASSERT(!maskMap.contains(tableID));
         maskMap.insert({tableID, std::move(mask)});
     }
 
@@ -59,7 +59,7 @@ public:
 
     bool containsTableID(table_id_t tableID) const { return maskMap.contains(tableID); }
     SemiMask* getOffsetMask(table_id_t tableID) const {
-        LBUG_ASSERT(containsTableID(tableID));
+        DASSERT(containsTableID(tableID));
         return maskMap.at(tableID).get();
     }
 
@@ -74,11 +74,11 @@ public:
     SemiMask* getPinnedMask() const { return pinnedMask; }
 
     bool valid(offset_t offset) const {
-        LBUG_ASSERT(pinnedMask != nullptr);
+        DASSERT(pinnedMask != nullptr);
         return pinnedMask->isMasked(offset);
     }
     bool valid(nodeID_t nodeID) const {
-        LBUG_ASSERT(maskMap.contains(nodeID.tableID));
+        DASSERT(maskMap.contains(nodeID.tableID));
         return maskMap.at(nodeID.tableID)->isMasked(nodeID.offset);
     }
 

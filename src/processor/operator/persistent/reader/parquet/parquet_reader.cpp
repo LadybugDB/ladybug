@@ -219,7 +219,7 @@ void ParquetReader::initMetadata() {
 
 std::unique_ptr<ColumnReader> ParquetReader::createReaderRecursive(uint64_t depth,
     uint64_t maxDefine, uint64_t maxRepeat, uint64_t& nextSchemaIdx, uint64_t& nextFileIdx) {
-    LBUG_ASSERT(nextSchemaIdx < metadata->schema.size());
+    DASSERT(nextSchemaIdx < metadata->schema.size());
     auto& sEle = metadata->schema[nextSchemaIdx];
     auto thisIdx = nextSchemaIdx;
 
@@ -246,7 +246,7 @@ std::unique_ptr<ColumnReader> ParquetReader::createReaderRecursive(uint64_t dept
             childrenReaders.push_back(std::move(childReader));
             cIdx++;
         }
-        LBUG_ASSERT(!structFields.empty());
+        DASSERT(!structFields.empty());
         std::unique_ptr<ColumnReader> result;
         LogicalType resultType;
 
@@ -349,8 +349,8 @@ std::unique_ptr<ColumnReader> ParquetReader::createReader() {
         columnTypes.push_back(field.getType().copy());
     }
 
-    LBUG_ASSERT(nextSchemaIdx == metadata->schema.size() - 1);
-    LBUG_ASSERT(
+    DASSERT(nextSchemaIdx == metadata->schema.size() - 1);
+    DASSERT(
         metadata->row_groups.empty() || nextFileIdx == metadata->row_groups[0].columns.size());
     return rootReader;
 }
@@ -662,7 +662,7 @@ static void bindColumns(const ExtraScanTableFuncBindInput* bindInput, uint32_t f
 static void bindColumns(const ExtraScanTableFuncBindInput* bindInput,
     std::vector<std::string>& columnNames, std::vector<LogicalType>& columnTypes,
     main::ClientContext* context) {
-    LBUG_ASSERT(bindInput->fileScanInfo.getNumFiles() > 0);
+    DASSERT(bindInput->fileScanInfo.getNumFiles() > 0);
     bindColumns(bindInput, 0 /* fileIdx */, columnNames, columnTypes, context);
     for (auto i = 1u; i < bindInput->fileScanInfo.getNumFiles(); ++i) {
         std::vector<std::string> tmpColumnNames;

@@ -29,11 +29,11 @@ static void writeColumnUpdateResult(ValueVector* idVector, ValueVector* columnVe
     auto& idSelVector = idVector->state->getSelVector();
     auto& columnSelVector = columnVector->state->getSelVector();
     auto& dataSelVector = dataVector->state->getSelVector();
-    LBUG_ASSERT(idSelVector.getSelSize() == 1);
+    DASSERT(idSelVector.getSelSize() == 1);
     if (idVector->isNull(idSelVector[0])) { // No update happened.
         return;
     }
-    LBUG_ASSERT(dataSelVector.getSelSize() == 1);
+    DASSERT(dataSelVector.getSelSize() == 1);
     if (dataVector->isNull(dataSelVector[0])) { // Update to NULL
         columnVector->setNull(dataSelVector[0], true);
         return;
@@ -63,7 +63,7 @@ void SingleLabelNodeSetExecutor::set(ExecutionContext* context) {
 void MultiLabelNodeSetExecutor::set(ExecutionContext* context) {
     info.evaluator->evaluate();
     auto& nodeIDSelVector = info.nodeIDVector->state->getSelVector();
-    LBUG_ASSERT(nodeIDSelVector.getSelSize() == 1);
+    DASSERT(nodeIDSelVector.getSelSize() == 1);
     auto nodeIDPos = nodeIDSelVector[0];
     auto& nodeID = info.nodeIDVector->getValue<internalID_t>(nodeIDPos);
     if (!tableInfos.contains(nodeID.tableID)) {
@@ -120,7 +120,7 @@ void SingleLabelRelSetExecutor::set(ExecutionContext* context) {
 void MultiLabelRelSetExecutor::set(ExecutionContext* context) {
     info.evaluator->evaluate();
     auto& idSelVector = info.relIDVector->state->getSelVector();
-    LBUG_ASSERT(idSelVector.getSelSize() == 1);
+    DASSERT(idSelVector.getSelSize() == 1);
     auto relID = info.relIDVector->getValue<internalID_t>(idSelVector[0]);
     if (!tableInfos.contains(relID.tableID)) {
         if (info.columnVectorPos.isValid()) {

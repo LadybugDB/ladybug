@@ -14,7 +14,7 @@ std::unique_ptr<BoundStatement> Binder::bindExtensionClause(const parser::Statem
             return boundStatement;
         }
     }
-    LBUG_UNREACHABLE;
+    UNREACHABLE_CODE;
 }
 
 } // namespace binder

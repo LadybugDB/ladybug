@@ -43,7 +43,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(ClientContext*,
     std::vector<LogicalType> returnTypes;
     std::vector<std::string> names;
     if (py::isinstance<py::dict>(table)) {
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
     auto numRows = py::len(table);
     auto schema = Pyarrow::bind(table, returnTypes, names);

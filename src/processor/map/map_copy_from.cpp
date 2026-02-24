@@ -37,7 +37,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCopyFrom(const LogicalOperator*
         return mapCopyRelFrom(logicalOperator);
     }
     default:
-        LBUG_UNREACHABLE;
+        UNREACHABLE_CODE;
     }
 }
 
@@ -121,7 +121,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCopyRelFrom(
     auto& copyFrom = logicalOperator->constCast<LogicalCopyFrom>();
     const auto copyFromInfo = copyFrom.getInfo();
     auto partitioner = mapOperator(copyFrom.getChild(0).get());
-    LBUG_ASSERT(partitioner->getOperatorType() == PhysicalOperatorType::PARTITIONER);
+    DASSERT(partitioner->getOperatorType() == PhysicalOperatorType::PARTITIONER);
     auto partitionerSharedState = partitioner->ptrCast<Partitioner>()->getSharedState();
     const auto catalog = Catalog::Get(*clientContext);
     const auto transaction = transaction::Transaction::Get(*clientContext);

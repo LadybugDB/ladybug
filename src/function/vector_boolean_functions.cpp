@@ -13,7 +13,7 @@ void VectorBooleanFunction::bindExecFunction(ExpressionType expressionType,
     if (ExpressionTypeUtil::isBinary(expressionType)) {
         bindBinaryExecFunction(expressionType, children, func);
     } else {
-        LBUG_ASSERT(ExpressionTypeUtil::isUnary(expressionType));
+        DASSERT(ExpressionTypeUtil::isUnary(expressionType));
         bindUnaryExecFunction(expressionType, children, func);
     }
 }
@@ -23,19 +23,19 @@ void VectorBooleanFunction::bindSelectFunction(ExpressionType expressionType,
     if (ExpressionTypeUtil::isBinary(expressionType)) {
         bindBinarySelectFunction(expressionType, children, func);
     } else {
-        LBUG_ASSERT(ExpressionTypeUtil::isUnary(expressionType));
+        DASSERT(ExpressionTypeUtil::isUnary(expressionType));
         bindUnarySelectFunction(expressionType, children, func);
     }
 }
 
 void VectorBooleanFunction::bindBinaryExecFunction(ExpressionType expressionType,
     const binder::expression_vector& children, scalar_func_exec_t& func) {
-    LBUG_ASSERT(children.size() == 2);
+    DASSERT(children.size() == 2);
     const auto& leftType = children[0]->dataType;
     const auto& rightType = children[1]->dataType;
     (void)leftType;
     (void)rightType;
-    LBUG_ASSERT(leftType.getLogicalTypeID() == LogicalTypeID::BOOL &&
+    DASSERT(leftType.getLogicalTypeID() == LogicalTypeID::BOOL &&
               rightType.getLogicalTypeID() == LogicalTypeID::BOOL);
     switch (expressionType) {
     case ExpressionType::AND: {
@@ -59,12 +59,12 @@ void VectorBooleanFunction::bindBinaryExecFunction(ExpressionType expressionType
 
 void VectorBooleanFunction::bindBinarySelectFunction(ExpressionType expressionType,
     const binder::expression_vector& children, scalar_func_select_t& func) {
-    LBUG_ASSERT(children.size() == 2);
+    DASSERT(children.size() == 2);
     const auto& leftType = children[0]->dataType;
     const auto& rightType = children[1]->dataType;
     (void)leftType;
     (void)rightType;
-    LBUG_ASSERT(leftType.getLogicalTypeID() == LogicalTypeID::BOOL &&
+    DASSERT(leftType.getLogicalTypeID() == LogicalTypeID::BOOL &&
               rightType.getLogicalTypeID() == LogicalTypeID::BOOL);
     switch (expressionType) {
     case ExpressionType::AND: {
@@ -88,7 +88,7 @@ void VectorBooleanFunction::bindBinarySelectFunction(ExpressionType expressionTy
 
 void VectorBooleanFunction::bindUnaryExecFunction(ExpressionType expressionType,
     const binder::expression_vector& children, scalar_func_exec_t& func) {
-    LBUG_ASSERT(
+    DASSERT(
         children.size() == 1 && children[0]->dataType.getLogicalTypeID() == LogicalTypeID::BOOL);
     (void)children;
     switch (expressionType) {
@@ -105,7 +105,7 @@ void VectorBooleanFunction::bindUnaryExecFunction(ExpressionType expressionType,
 
 void VectorBooleanFunction::bindUnarySelectFunction(ExpressionType expressionType,
     const binder::expression_vector& children, scalar_func_select_t& func) {
-    LBUG_ASSERT(
+    DASSERT(
         children.size() == 1 && children[0]->dataType.getLogicalTypeID() == LogicalTypeID::BOOL);
     (void)children;
     switch (expressionType) {

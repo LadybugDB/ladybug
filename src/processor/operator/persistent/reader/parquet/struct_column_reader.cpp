@@ -8,11 +8,11 @@ StructColumnReader::StructColumnReader(ParquetReader& reader, common::LogicalTyp
     uint64_t maxRepeat, std::vector<std::unique_ptr<ColumnReader>> childReaders)
     : ColumnReader(reader, std::move(type), schema, schemaIdx, maxDefine, maxRepeat),
       childReaders(std::move(childReaders)) {
-    LBUG_ASSERT(this->type.getPhysicalType() == common::PhysicalTypeID::STRUCT);
+    DASSERT(this->type.getPhysicalType() == common::PhysicalTypeID::STRUCT);
 }
 
 ColumnReader* StructColumnReader::getChildReader(uint64_t childIdx) {
-    LBUG_ASSERT(childIdx < childReaders.size());
+    DASSERT(childIdx < childReaders.size());
     return childReaders[childIdx].get();
 }
 
@@ -41,7 +41,7 @@ void StructColumnReader::registerPrefetch(ThriftFileTransport& transport, bool a
 uint64_t StructColumnReader::read(uint64_t numValuesToRead, parquet_filter_t& filter,
     uint8_t* define_out, uint8_t* repeat_out, common::ValueVector* result) {
     auto& fieldVectors = common::StructVector::getFieldVectors(result);
-    LBUG_ASSERT(common::StructType::getNumFields(type) == fieldVectors.size());
+    DASSERT(common::StructType::getNumFields(type) == fieldVectors.size());
     if (pendingSkips > 0) {
         applyPendingSkips(pendingSkips);
     }
