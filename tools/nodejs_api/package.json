@@ -5,14 +5,19 @@
   "main": "index.js",
   "module": "./index.mjs",
   "types": "./lbug.d.ts",
-  "exports":{
-    ".":{
+  "exports": {
+    ".": {
       "require": "./index.js",
       "import": "./index.mjs",
       "types": "./lbug.d.ts"
     }
   },
-  "files": ["index.js", "index.mjs", "lbug.d.ts", "lbugjs.node"],
+  "files": [
+    "index.js",
+    "index.mjs",
+    "lbug.d.ts",
+    "lbugjs.node"
+  ],
   "type": "commonjs",
   "homepage": "https://ladybugdb.com/",
   "repository": {
@@ -34,7 +39,7 @@
     "tmp": "^0.2.3"
   },
   "dependencies": {
-    "cmake-js": "^7.3.0",
+    "cmake-js": "^8.0.0",
     "node-addon-api": "^6.0.0"
   }
 }
