@@ -165,7 +165,7 @@ TEST_F(VertexScanTest, ScanVertexProperties) {
             for (auto chunk : graph->scanVertices(startNodeOffset, endNodeOffset, *scanState)) {
                 for (size_t i = 0; i < chunk.size(); i++) {
                     results.push_back(std::make_tuple(chunk.getNodeIDs()[i].offset,
-                        chunk.getProperties<string_t>(0)[i].getAsString(),
+                        chunk.getProperties<common::string_t>(0)[i].getAsString(),
                         chunk.getProperties<float>(1)[i]));
                 }
             }
