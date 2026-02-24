@@ -13,7 +13,7 @@ namespace common {
     // LCOV_EXCL_STOP
 }
 
-#define ASSERT(condition)                                                         \
+#define ASSERT(condition)                                                                          \
     static_cast<bool>(condition) ?                                                                 \
         void(0) :                                                                                  \
         lbug::common::assertFailureInternal(#condition, __FILE__, __LINE__)
@@ -26,7 +26,7 @@ namespace common {
 #define RUNTIME_CHECK(code) void(0)
 #endif
 
-#define UNREACHABLE_CODE                                                                             \
+#define UNREACHABLE_CODE                                                                           \
     /* LCOV_EXCL_START */ [[unlikely]] lbug::common::assertFailureInternal("UNREACHABLE_CODE",     \
         __FILE__, __LINE__) /* LCOV_EXCL_STOP */
 #define UNUSED(expr) (void)(expr)

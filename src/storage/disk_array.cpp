@@ -167,7 +167,7 @@ void DiskArrayInternal::setNextPIPPageIDxOfPIPNoLock(uint64_t pipIdxOfPreviousPI
             pipUpdates.updatedLastPIP->pipContents.nextPipPageIdx = nextPIPPageIdx;
         } else {
             DASSERT(pipIdxOfPreviousPIP >= pips.size() &&
-                      pipUpdates.newPIPs.size() > pipIdxOfPreviousPIP - pips.size());
+                    pipUpdates.newPIPs.size() > pipIdxOfPreviousPIP - pips.size());
             pipUpdates.newPIPs[pipIdxOfPreviousPIP - pips.size()].pipContents.nextPipPageIdx =
                 nextPIPPageIdx;
         }

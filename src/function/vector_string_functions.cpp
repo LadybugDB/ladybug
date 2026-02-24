@@ -34,8 +34,8 @@ void BaseLowerUpperFunction::operation(string_t& input, string_t& result,
     }
 }
 
-void BaseStrOperation::operation(string_t& input, string_t& result,
-    ValueVector& resultValueVector, uint32_t (*strOperation)(char* data, uint32_t len)) {
+void BaseStrOperation::operation(string_t& input, string_t& result, ValueVector& resultValueVector,
+    uint32_t (*strOperation)(char* data, uint32_t len)) {
     if (input.len <= string_t::SHORT_STR_LENGTH) {
         memcpy(result.prefix, input.prefix, input.len);
         result.len = strOperation((char*)result.prefix, input.len);
@@ -181,8 +181,7 @@ function_set LpadFunction::getFunctionSet() {
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::INT64,
             LogicalTypeID::STRING},
         LogicalTypeID::STRING,
-        ScalarFunction::TernaryStringExecFunction<string_t, int64_t, string_t, string_t,
-            Lpad>));
+        ScalarFunction::TernaryStringExecFunction<string_t, int64_t, string_t, string_t, Lpad>));
     return functionSet;
 }
 
@@ -210,8 +209,7 @@ function_set RpadFunction::getFunctionSet() {
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::INT64,
             LogicalTypeID::STRING},
         LogicalTypeID::STRING,
-        ScalarFunction::TernaryStringExecFunction<string_t, int64_t, string_t, string_t,
-            Rpad>));
+        ScalarFunction::TernaryStringExecFunction<string_t, int64_t, string_t, string_t, Rpad>));
     return functionSet;
 }
 
@@ -231,8 +229,7 @@ function_set SubStrFunction::getFunctionSet() {
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::INT64,
             LogicalTypeID::INT64},
         LogicalTypeID::STRING,
-        ScalarFunction::TernaryStringExecFunction<string_t, int64_t, int64_t, string_t,
-            SubStr>));
+        ScalarFunction::TernaryStringExecFunction<string_t, int64_t, int64_t, string_t, SubStr>));
     return functionSet;
 }
 
@@ -251,8 +248,7 @@ function_set RegexpExtractFunction::getFunctionSet() {
     functionSet.emplace_back(make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::STRING},
         LogicalTypeID::STRING,
-        ScalarFunction::BinaryStringExecFunction<string_t, string_t, string_t,
-            RegexpExtract>));
+        ScalarFunction::BinaryStringExecFunction<string_t, string_t, string_t, RegexpExtract>));
     functionSet.emplace_back(make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::STRING,
             LogicalTypeID::INT64},

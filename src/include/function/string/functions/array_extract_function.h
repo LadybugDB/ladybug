@@ -9,8 +9,7 @@ namespace lbug {
 namespace function {
 
 struct ArrayExtract {
-    static inline void operation(common::string_t& str, int64_t& idx,
-        common::string_t& result) {
+    static inline void operation(common::string_t& str, int64_t& idx, common::string_t& result) {
         if (idx == 0) {
             result.len = 0;
             return;

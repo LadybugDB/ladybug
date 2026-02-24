@@ -40,7 +40,8 @@ IndexBuilderGlobalQueues::IndexBuilderGlobalQueues(transaction::Transaction* tra
     : nodeTable(nodeTable), transaction{transaction} {
     TypeUtils::visit(
         pkTypeID(), [&](string_t) { queues.emplace<Queue<std::string>>(); },
-        [&]<HashablePrimitive T>(T) { queues.emplace<Queue<T>>(); }, [](auto) { UNREACHABLE_CODE; });
+        [&]<HashablePrimitive T>(T) { queues.emplace<Queue<T>>(); },
+        [](auto) { UNREACHABLE_CODE; });
 }
 
 PhysicalTypeID IndexBuilderGlobalQueues::pkTypeID() const {

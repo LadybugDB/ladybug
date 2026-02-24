@@ -14,8 +14,8 @@ public:
     static inline void operation(common::string_t& src, int64_t count,
         common::string_t& characterToPad, common::string_t& result,
         common::ValueVector& resultValueVector,
-        void (*padOperation)(common::string_t& src, int64_t count,
-            common::string_t& characterToPad, std::string& paddedResult)) {
+        void (*padOperation)(common::string_t& src, int64_t count, common::string_t& characterToPad,
+            std::string& paddedResult)) {
         if (count < 0) {
             count = 0;
         }

@@ -10,8 +10,8 @@ struct FileDBIDUtils {
     // We want to verify that they actually match the current database before replaying
     // We do this by adding a unique UUID to the header of the data.lbug file
     // And making sure they match the IDs of the temporary files
-    static void verifyDatabaseID(const common::FileInfo& fileInfo,
-        common::uuid expectedDatabaseID, common::uuid databaseID);
+    static void verifyDatabaseID(const common::FileInfo& fileInfo, common::uuid expectedDatabaseID,
+        common::uuid databaseID);
     static void writeDatabaseID(common::Serializer& ser, common::uuid databaseID);
 };
 } // namespace storage

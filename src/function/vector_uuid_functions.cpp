@@ -10,9 +10,8 @@ namespace function {
 
 function_set GenRandomUUIDFunction::getFunctionSet() {
     function_set definitions;
-    definitions.push_back(
-        make_unique<ScalarFunction>(name, std::vector<LogicalTypeID>{}, LogicalTypeID::UUID,
-            ScalarFunction::NullaryAuxilaryExecFunction<uuid, GenRandomUUID>));
+    definitions.push_back(make_unique<ScalarFunction>(name, std::vector<LogicalTypeID>{},
+        LogicalTypeID::UUID, ScalarFunction::NullaryAuxilaryExecFunction<uuid, GenRandomUUID>));
     return definitions;
 }
 

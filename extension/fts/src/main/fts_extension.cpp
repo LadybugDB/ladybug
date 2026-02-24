@@ -25,8 +25,7 @@ static void initFTSEntries(main::ClientContext* context, catalog::Catalog& catal
             auto& nodeTable =
                 storageManager->getTable(indexEntry->getTableID())->cast<storage::NodeTable>();
             auto optionalIndex = nodeTable.getIndexHolder(indexEntry->getIndexName());
-            ASSERT(
-                optionalIndex.has_value() && !optionalIndex.value().get().isLoaded());
+            ASSERT(optionalIndex.has_value() && !optionalIndex.value().get().isLoaded());
             auto& unloadedIndex = optionalIndex.value().get();
             unloadedIndex.load(context, storageManager);
         }

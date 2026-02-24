@@ -19,8 +19,8 @@ static scalar_func_exec_t getListSortExecFunction(const binder::expression_vecto
     if (arguments.size() == 1) {
         func = ScalarFunction::UnaryExecNestedTypeFunction<list_entry_t, list_entry_t, T>;
     } else if (arguments.size() == 2) {
-        func = ScalarFunction::BinaryExecListStructFunction<list_entry_t, string_t, list_entry_t,
-            T>;
+        func =
+            ScalarFunction::BinaryExecListStructFunction<list_entry_t, string_t, list_entry_t, T>;
     } else if (arguments.size() == 3) {
         func = ScalarFunction::TernaryExecListStructFunction<list_entry_t, string_t, string_t,
             list_entry_t, T>;

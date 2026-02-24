@@ -21,10 +21,9 @@ struct ListReverseSort : BaseListSortOperation {
             isNullFirst(nullOrder.getAsString()) /* nullFirst */);
     }
 
-    static inline void operation(common::list_entry_t& /*input*/,
-        common::string_t& /*sortOrder*/, common::string_t& /*nullOrder*/,
-        common::list_entry_t& /*result*/, common::ValueVector& /*inputVector*/,
-        common::ValueVector& /*resultVector*/) {
+    static inline void operation(common::list_entry_t& /*input*/, common::string_t& /*sortOrder*/,
+        common::string_t& /*nullOrder*/, common::list_entry_t& /*result*/,
+        common::ValueVector& /*inputVector*/, common::ValueVector& /*resultVector*/) {
         throw common::RuntimeException("Invalid number of arguments");
     }
 };

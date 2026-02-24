@@ -97,7 +97,8 @@ void BoundStatementVisitor::visitUnsafe(BoundStatement& statement) {
 void BoundStatementVisitor::visitCopyFrom(const BoundStatement& statement) {
     auto& copyFrom = dynamic_cast_checked<const BoundCopyFrom&>(statement);
     if (copyFrom.getInfo()->source->type == ScanSourceType::QUERY) {
-        auto querySource = dynamic_cast_checked<BoundQueryScanSource*>(copyFrom.getInfo()->source.get());
+        auto querySource =
+            dynamic_cast_checked<BoundQueryScanSource*>(copyFrom.getInfo()->source.get());
         visit(*querySource->statement);
     }
 }

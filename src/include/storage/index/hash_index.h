@@ -284,7 +284,7 @@ private:
 
     bool nextChainedSlot(const transaction::Transaction* transaction, SlotIterator& iter) const {
         DASSERT(iter.slotInfo.slotType == SlotType::PRIMARY ||
-                  iter.slotInfo.slotId != iter.slot.header.nextOvfSlotId);
+                iter.slotInfo.slotId != iter.slot.header.nextOvfSlotId);
         if (iter.slot.header.nextOvfSlotId != SlotHeader::INVALID_OVERFLOW_SLOT_ID) {
             iter.slotInfo.slotId = iter.slot.header.nextOvfSlotId;
             iter.slotInfo.slotType = SlotType::OVF;
@@ -310,8 +310,8 @@ private:
 };
 
 template<>
-common::hash_t HashIndex<common::string_t>::hashStored(
-    const transaction::Transaction* transaction, const common::string_t& key) const;
+common::hash_t HashIndex<common::string_t>::hashStored(const transaction::Transaction* transaction,
+    const common::string_t& key) const;
 
 template<>
 bool HashIndex<common::string_t>::equals(const transaction::Transaction* transaction,
@@ -367,7 +367,8 @@ public:
     }
     template<common::IndexHashable T>
     inline HashIndex<T>* getTypedHashIndexByPos(uint64_t indexPos) {
-        return common::dynamic_cast_checked<HashIndex<HashIndexType<T>>*>(hashIndices[indexPos].get());
+        return common::dynamic_cast_checked<HashIndex<HashIndexType<T>>*>(
+            hashIndices[indexPos].get());
     }
 
     bool tryLockTypedIndex(uint64_t indexPos) { return hashIndices[indexPos]->tryLock(); }
@@ -375,8 +376,8 @@ public:
         return hashIndices[indexPos]->adoptLock();
     }
 
-    bool lookup(const transaction::Transaction* trx, common::string_t key,
-        common::offset_t& result, visible_func isVisible) {
+    bool lookup(const transaction::Transaction* trx, common::string_t key, common::offset_t& result,
+        visible_func isVisible) {
         return lookup(trx, key.getAsStringView(), result, isVisible);
     }
     template<common::IndexHashable T>

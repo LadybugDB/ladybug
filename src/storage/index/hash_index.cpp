@@ -358,7 +358,7 @@ size_t HashIndex<T>::mergeSlot(PageAllocator& pageAllocator, const Transaction* 
     // in the slot to merge
     OnDiskSlotType* diskSlot = &*diskSlotIterator.seek(diskSlotId);
     DASSERT(diskSlot->header.nextOvfSlotId == SlotHeader::INVALID_OVERFLOW_SLOT_ID ||
-              diskOverflowSlotIterator.size() > diskSlot->header.nextOvfSlotId);
+            diskOverflowSlotIterator.size() > diskSlot->header.nextOvfSlotId);
     // Merge slot from local storage to an existing slot.
     size_t merged = 0;
     for (auto it = std::rbegin(slotToMerge); it != std::rend(slotToMerge); ++it) {

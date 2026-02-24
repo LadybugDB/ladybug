@@ -27,8 +27,7 @@ function_set StringSplitFunction::getFunctionSet() {
     auto function = std::make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::STRING},
         LogicalTypeID::LIST,
-        ScalarFunction::BinaryStringExecFunction<string_t, string_t, list_entry_t,
-            StringSplit>);
+        ScalarFunction::BinaryStringExecFunction<string_t, string_t, list_entry_t, StringSplit>);
     function->bindFunc = bindFunc;
     functionSet.emplace_back(std::move(function));
     return functionSet;

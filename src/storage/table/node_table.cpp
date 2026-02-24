@@ -469,7 +469,7 @@ void NodeTable::update(Transaction* transaction, TableUpdateState& updateState) 
     // We should optimize this to take unflattened input later.
     auto& nodeUpdateState = updateState.constCast<NodeTableUpdateState>();
     DASSERT(nodeUpdateState.nodeIDVector.state->getSelVector().getSelSize() == 1 &&
-              nodeUpdateState.propertyVector.state->getSelVector().getSelSize() == 1);
+            nodeUpdateState.propertyVector.state->getSelVector().getSelSize() == 1);
     const auto pos = nodeUpdateState.nodeIDVector.state->getSelVector()[0];
     if (nodeUpdateState.nodeIDVector.isNull(pos)) {
         return;

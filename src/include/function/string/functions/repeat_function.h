@@ -11,8 +11,8 @@ namespace function {
 
 struct Repeat {
 public:
-    LBUG_API static void operation(common::string_t& left, int64_t& right,
-        common::string_t& result, common::ValueVector& resultValueVector);
+    LBUG_API static void operation(common::string_t& left, int64_t& right, common::string_t& result,
+        common::ValueVector& resultValueVector);
 
 private:
     static void repeatStr(char* data, const std::string& pattern, uint64_t count) {

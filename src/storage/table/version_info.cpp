@@ -330,12 +330,12 @@ void VectorVersionInfo::serialize(Serializer& serializer) const {
         for (const auto deleted : *deletedVersions) {
             // Versions should be either INVALID_TRANSACTION or committed timestamps.
             DASSERT(deleted == INVALID_TRANSACTION ||
-                      deleted < transaction::Transaction::START_TRANSACTION_ID);
+                    deleted < transaction::Transaction::START_TRANSACTION_ID);
             UNUSED(deleted);
         }
     }
     DASSERT(insertionStatus == InsertionStatus::NO_INSERTED ||
-              insertionStatus == InsertionStatus::ALWAYS_INSERTED);
+            insertionStatus == InsertionStatus::ALWAYS_INSERTED);
     serializer.writeDebuggingInfo("insertion_status");
     serializer.serializeValue<InsertionStatus>(insertionStatus);
     serializer.writeDebuggingInfo("deletion_status");
@@ -365,7 +365,7 @@ std::unique_ptr<VectorVersionInfo> VectorVersionInfo::deSerialize(Deserializer& 
     deSer.validateDebuggingInfo(key, "insertion_status");
     deSer.deserializeValue<InsertionStatus>(vectorVersionInfo->insertionStatus);
     DASSERT(vectorVersionInfo->insertionStatus == InsertionStatus::NO_INSERTED ||
-              vectorVersionInfo->insertionStatus == InsertionStatus::ALWAYS_INSERTED);
+            vectorVersionInfo->insertionStatus == InsertionStatus::ALWAYS_INSERTED);
     deSer.validateDebuggingInfo(key, "deletion_status");
     deSer.deserializeValue<DeletionStatus>(vectorVersionInfo->deletionStatus);
     switch (vectorVersionInfo->deletionStatus) {
@@ -390,7 +390,7 @@ std::unique_ptr<VectorVersionInfo> VectorVersionInfo::deSerialize(Deserializer& 
         for (const auto deleted : *vectorVersionInfo->deletedVersions) {
             // Versions should be either INVALID_TRANSACTION or committed timestamps.
             DASSERT(deleted == INVALID_TRANSACTION ||
-                      deleted < transaction::Transaction::START_TRANSACTION_ID);
+                    deleted < transaction::Transaction::START_TRANSACTION_ID);
             UNUSED(deleted);
         }
     }

@@ -29,10 +29,9 @@ struct RegexpFullMatch {
 };
 
 struct RegexpFullMatchStaticPattern : BaseRegexpOperation {
-    static void operation(string_t& left, string_t& /*right*/,
-        uint8_t& result, common::ValueVector& /*leftValueVector*/,
-        common::ValueVector& /*rightValueVector*/, common::ValueVector& /*resultValueVector*/,
-        void* dataPtr) {
+    static void operation(string_t& left, string_t& /*right*/, uint8_t& result,
+        common::ValueVector& /*leftValueVector*/, common::ValueVector& /*rightValueVector*/,
+        common::ValueVector& /*resultValueVector*/, void* dataPtr) {
         auto regexFullMatchBindData = reinterpret_cast<RegexFullMatchBindData*>(dataPtr);
         result = RE2::FullMatch(left.getAsString(), regexFullMatchBindData->pattern);
     }

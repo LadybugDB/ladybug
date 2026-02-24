@@ -142,7 +142,7 @@ void NodeGroup::merge(Transaction*, std::unique_ptr<ChunkedNodeGroup> chunkedGro
     DASSERT(chunkedGroup->getNumColumns() == dataTypes.size());
     for (auto i = 0u; i < chunkedGroup->getNumColumns(); i++) {
         DASSERT(chunkedGroup->getColumnChunk(i).getDataType().getPhysicalType() ==
-                  dataTypes[i].getPhysicalType());
+                dataTypes[i].getPhysicalType());
     }
     const auto lock = chunkedGroups.lock();
     numRows += chunkedGroup->getNumRows();
@@ -264,7 +264,7 @@ NodeGroupScanResult NodeGroup::scan(Transaction* transaction, TableScanState& st
     }
     if (state.outputVectors.size() == 0) {
         DASSERT(scanInternal(chunkedGroups.lock(), transaction, state, startOffsetInGroup,
-                      numRowsToScan) == NodeGroupScanResult(startOffsetInGroup, numRowsToScan));
+                    numRowsToScan) == NodeGroupScanResult(startOffsetInGroup, numRowsToScan));
         return NodeGroupScanResult{startOffsetInGroup, numRowsToScan};
     }
     return scanInternal(chunkedGroups.lock(), transaction, state, startOffsetInGroup,

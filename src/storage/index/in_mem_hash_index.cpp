@@ -125,7 +125,7 @@ void InMemHashIndex<T>::splitSlot() {
             if (!originalSlot.slot->header.isEntryValid(entryPos)) {
                 // Check that this function leaves no gaps
                 DASSERT(originalSlot.slot->header.numEntries() ==
-                          std::countr_one(originalSlot.slot->header.validityMask));
+                        std::countr_one(originalSlot.slot->header.validityMask));
                 // There should be no gaps, so when we encounter an invalid entry we can return
                 // early
                 reclaimOverflowSlots(originalSlotForInsert);
@@ -168,7 +168,7 @@ void InMemHashIndex<T>::splitSlot() {
             }
         }
         DASSERT(originalSlot.slot->header.numEntries() ==
-                  std::countr_one(originalSlot.slot->header.validityMask));
+                std::countr_one(originalSlot.slot->header.validityMask));
     } while (nextChainedSlot(originalSlot));
 
     reclaimOverflowSlots(originalSlotForInsert);

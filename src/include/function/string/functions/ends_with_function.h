@@ -6,8 +6,7 @@ namespace lbug {
 namespace function {
 
 struct EndsWith {
-    static inline void operation(common::string_t& left, common::string_t& right,
-        uint8_t& result) {
+    static inline void operation(common::string_t& left, common::string_t& right, uint8_t& result) {
         if (right.len > left.len) {
             result = 0;
             return;

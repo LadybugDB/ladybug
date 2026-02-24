@@ -163,15 +163,15 @@ void CastStringHelper::cast(const char* input, uint64_t len, blob_t& /*result*/,
 
 //---------------------- cast String to UUID ------------------------------ //
 template<>
-void CastString::operation(const string_t& input, uuid& result,
-    ValueVector* /*result_vector*/, uint64_t /*rowToAdd*/, const CSVOption* /*option*/) {
+void CastString::operation(const string_t& input, uuid& result, ValueVector* /*result_vector*/,
+    uint64_t /*rowToAdd*/, const CSVOption* /*option*/) {
     result.value = UUID::fromString(input.getAsString());
 }
 
 // LCOV_EXCL_START
 template<>
-void CastStringHelper::cast(const char* input, uint64_t len, uuid& result,
-    ValueVector* /*vector*/, uint64_t /*rowToAdd*/, const CSVOption* /*option*/) {
+void CastStringHelper::cast(const char* input, uint64_t len, uuid& result, ValueVector* /*vector*/,
+    uint64_t /*rowToAdd*/, const CSVOption* /*option*/) {
     result.value = UUID::fromCString(input, len);
 }
 // LCOV_EXCL_STOP
@@ -409,8 +409,8 @@ void CastStringHelper::cast(const char* input, uint64_t len, list_entry_t& /*res
 }
 
 template<>
-void CastString::operation(const string_t& input, list_entry_t& result,
-    ValueVector* resultVector, uint64_t rowToAdd, const CSVOption* option) {
+void CastString::operation(const string_t& input, list_entry_t& result, ValueVector* resultVector,
+    uint64_t rowToAdd, const CSVOption* option) {
     CastStringHelper::cast(reinterpret_cast<const char*>(input.getData()), input.len, result,
         resultVector, rowToAdd, option);
 }
@@ -658,8 +658,8 @@ void CastStringHelper::cast(const char* input, uint64_t len, struct_entry_t& /*r
 }
 
 template<>
-void CastString::operation(const string_t& input, struct_entry_t& result,
-    ValueVector* resultVector, uint64_t rowToAdd, const CSVOption* option) {
+void CastString::operation(const string_t& input, struct_entry_t& result, ValueVector* resultVector,
+    uint64_t rowToAdd, const CSVOption* option) {
     CastStringHelper::cast(reinterpret_cast<const char*>(input.getData()), input.len, result,
         resultVector, rowToAdd, option);
 }
@@ -852,8 +852,8 @@ void CastStringHelper::cast(const char* input, uint64_t len, union_entry_t& /*re
 }
 
 template<>
-void CastString::operation(const string_t& input, union_entry_t& result,
-    ValueVector* resultVector, uint64_t rowToAdd, const CSVOption* CSVOption) {
+void CastString::operation(const string_t& input, union_entry_t& result, ValueVector* resultVector,
+    uint64_t rowToAdd, const CSVOption* CSVOption) {
     CastStringHelper::cast(reinterpret_cast<const char*>(input.getData()), input.len, result,
         resultVector, rowToAdd, CSVOption);
 }

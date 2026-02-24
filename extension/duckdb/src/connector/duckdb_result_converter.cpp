@@ -129,7 +129,7 @@ void DuckDBResultConverter::convertDuckDBResultToVector(duckdb::DataChunk& duckD
             continue;
         }
         DASSERT(duckDBResult.data[duckdbResultColIdx].GetVectorType() ==
-                  duckdb::VectorType::FLAT_VECTOR);
+                duckdb::VectorType::FLAT_VECTOR);
         // Write to output vector at position i (the original column index)
         conversionFunctions[i](duckDBResult.data[duckdbResultColIdx],
             result.getValueVectorMutable(i), result.state->getSelVector().getSelSize());

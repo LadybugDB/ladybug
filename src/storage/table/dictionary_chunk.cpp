@@ -45,7 +45,7 @@ uint64_t DictionaryChunk::getStringLength(string_index_t index) const {
     }
     if (index + 1 < offsetChunk->getNumValues()) {
         DASSERT(offsetChunk->getValue<string_offset_t>(index + 1) >=
-                  offsetChunk->getValue<string_offset_t>(index));
+                offsetChunk->getValue<string_offset_t>(index));
         return offsetChunk->getValue<string_offset_t>(index + 1) -
                offsetChunk->getValue<string_offset_t>(index);
     }

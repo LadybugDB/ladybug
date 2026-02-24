@@ -201,7 +201,8 @@ public:
     template<common::IndexHashable T>
     bool insert(T key, common::offset_t value, visible_func isVisible) {
         DASSERT(keyDataTypeID == common::TypeUtils::getPhysicalTypeIDForType<T>());
-        return common::dynamic_cast_checked<HashIndexLocalStorage<HashIndexType<T>>*>(localIndex.get())
+        return common::dynamic_cast_checked<HashIndexLocalStorage<HashIndexType<T>>*>(
+            localIndex.get())
             ->insert(std::move(key), value, isVisible);
     }
 

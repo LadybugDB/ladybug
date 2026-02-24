@@ -146,13 +146,13 @@ void FloatCompression<T>::setValuesFromUncompressed(const uint8_t* srcBuffer,
     // each individual value that is being updated should be able to be updated in place
     RUNTIME_CHECK(InPlaceUpdateLocalState localUpdateState{});
     DASSERT(numValues ==
-              static_cast<common::offset_t>(
-                  std::ranges::count_if(std::ranges::iota_view{srcOffset, srcOffset + numValues},
-                      [&localUpdateState, srcBuffer, &metadata, nullMask](common::offset_t i) {
-                          auto value = reinterpret_cast<const T*>(srcBuffer)[i];
-                          return (nullMask && nullMask->isNull(i)) ||
-                                 canUpdateInPlace(std::span(&value, 1), metadata, localUpdateState);
-                      })));
+            static_cast<common::offset_t>(
+                std::ranges::count_if(std::ranges::iota_view{srcOffset, srcOffset + numValues},
+                    [&localUpdateState, srcBuffer, &metadata, nullMask](common::offset_t i) {
+                        auto value = reinterpret_cast<const T*>(srcBuffer)[i];
+                        return (nullMask && nullMask->isNull(i)) ||
+                               canUpdateInPlace(std::span(&value, 1), metadata, localUpdateState);
+                    })));
 
     std::vector<EncodedType> integerEncodedValues(numValues);
     for (size_t i = 0; i < numValues; ++i) {

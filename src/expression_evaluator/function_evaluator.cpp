@@ -34,7 +34,7 @@ void FunctionExpressionEvaluator::evaluate() {
 
 void FunctionExpressionEvaluator::evaluate(common::sel_t count) {
     DASSERT(expression->constCast<ScalarFunctionExpression>().getFunction().name ==
-              NextValFunction::name);
+            NextValFunction::name);
     for (auto& child : children) {
         child->evaluate(count);
     }

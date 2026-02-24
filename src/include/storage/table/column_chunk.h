@@ -309,7 +309,8 @@ public:
 
     void setTableID(common::table_id_t tableID) {
         for (const auto& segment : data) {
-            auto internalIDSegment = common::dynamic_cast_checked<InternalIDChunkData*>(segment.get());
+            auto internalIDSegment =
+                common::dynamic_cast_checked<InternalIDChunkData*>(segment.get());
             internalIDSegment->setTableID(tableID);
         }
     }

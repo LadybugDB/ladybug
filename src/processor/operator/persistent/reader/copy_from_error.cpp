@@ -40,7 +40,7 @@ template<DataSource T>
 WarningSourceData WarningSourceData::constructFromData(const std::vector<T*>& data,
     common::idx_t pos) {
     DASSERT(data.size() >= CopyConstants::SHARED_WARNING_DATA_NUM_COLUMNS &&
-              data.size() <= CopyConstants::MAX_NUM_WARNING_DATA_COLUMNS);
+            data.size() <= CopyConstants::MAX_NUM_WARNING_DATA_COLUMNS);
     WarningSourceData ret{data.size()};
     for (idx_t i = 0; i < data.size(); ++i) {
         ret.values[i] = getValueFromData(data[i], pos);

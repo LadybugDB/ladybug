@@ -130,7 +130,7 @@ void DictionaryColumn::scan(const SegmentState& offsetState, const SegmentState&
             // consecutive, since that would break the mechanism for calculating the size of a
             // string.
             DASSERT(pos == offsetsToScan.size() - 1 ||
-                      offsetsToScan[pos].first != offsetsToScan[pos + 1].first);
+                    offsetsToScan[pos].first != offsetsToScan[pos + 1].first);
         }
     }
 }

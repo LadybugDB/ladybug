@@ -137,7 +137,7 @@ void ListColumn::scanSegment(const SegmentState& state, ColumnChunkData* resultC
     auto resizeNumValues = listColumnChunk.getDataColumnChunk()->getNumValues();
     bool isOffsetSortedAscending = true;
     DASSERT(listColumnChunk.getSizeColumnChunk()->getNumValues() ==
-              startOffsetInResult + numValuesToScan);
+            startOffsetInResult + numValuesToScan);
     offset_t prevOffset = listColumnChunk.getListStartOffset(startOffsetInResult);
     for (auto i = startOffsetInResult; i < startOffsetInResult + numValuesToScan; i++) {
         auto currentEndOffset = listColumnChunk.getListEndOffset(i);
@@ -423,9 +423,9 @@ std::vector<std::unique_ptr<ColumnChunkData>> ListColumn::checkpointSegment(
     Column::checkpointNullData(checkpointState, pageAllocator);
 
     DASSERT(persistentListChunk.getNullData()->getNumValues() ==
-                  persistentListChunk.getOffsetColumnChunk()->getNumValues() &&
-              persistentListChunk.getNullData()->getNumValues() ==
-                  persistentListChunk.getSizeColumnChunk()->getNumValues());
+                persistentListChunk.getOffsetColumnChunk()->getNumValues() &&
+            persistentListChunk.getNullData()->getNumValues() ==
+                persistentListChunk.getSizeColumnChunk()->getNumValues());
 
     persistentListChunk.syncNumValues();
     return {};

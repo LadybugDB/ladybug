@@ -176,7 +176,7 @@ void CatalogSet::alterTableEntry(Transaction* transaction,
     // LCOV_EXCL_STOP
     auto entry = getEntryNoLock(transaction, alterInfo.tableName);
     DASSERT(entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ||
-              entry->getType() == CatalogEntryType::REL_GROUP_ENTRY);
+            entry->getType() == CatalogEntryType::REL_GROUP_ENTRY);
     const auto tableEntry = entry->ptrCast<TableCatalogEntry>();
     auto newEntry = tableEntry->alter(transaction->getID(), alterInfo, this);
     switch (alterInfo.alterType) {

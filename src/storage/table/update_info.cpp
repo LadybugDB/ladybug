@@ -131,9 +131,9 @@ void UpdateInfo::iterateVectorInfo(const Transaction* transaction, idx_t idx,
         if (current->version == transaction->getID() ||
             current->version <= transaction->getStartTS()) {
             DASSERT((current->version == transaction->getID() &&
-                          current->version >= Transaction::START_TRANSACTION_ID) ||
-                      (current->version <= transaction->getStartTS() &&
-                          current->version < Transaction::START_TRANSACTION_ID));
+                        current->version >= Transaction::START_TRANSACTION_ID) ||
+                    (current->version <= transaction->getStartTS() &&
+                        current->version < Transaction::START_TRANSACTION_ID));
             func(*current);
         }
         current = current->getPrev();

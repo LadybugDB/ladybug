@@ -95,24 +95,24 @@ struct CastBetweenDecimal {
 
 // DECIMAL TO STRING SPECIALIZATION
 template<>
-inline void CastDecimalTo::operation(int16_t& input, string_t& output,
-    const ValueVector& inputVec, ValueVector& resultVector) {
+inline void CastDecimalTo::operation(int16_t& input, string_t& output, const ValueVector& inputVec,
+    ValueVector& resultVector) {
     auto scale = DecimalType::getScale(inputVec.dataType);
     auto str = DecimalType::insertDecimalPoint(std::to_string(input), scale);
     common::StringVector::addString(&resultVector, output, str);
 }
 
 template<>
-inline void CastDecimalTo::operation(int32_t& input, string_t& output,
-    const ValueVector& inputVec, ValueVector& resultVector) {
+inline void CastDecimalTo::operation(int32_t& input, string_t& output, const ValueVector& inputVec,
+    ValueVector& resultVector) {
     auto scale = DecimalType::getScale(inputVec.dataType);
     auto str = DecimalType::insertDecimalPoint(std::to_string(input), scale);
     common::StringVector::addString(&resultVector, output, str);
 }
 
 template<>
-inline void CastDecimalTo::operation(int64_t& input, string_t& output,
-    const ValueVector& inputVec, ValueVector& resultVector) {
+inline void CastDecimalTo::operation(int64_t& input, string_t& output, const ValueVector& inputVec,
+    ValueVector& resultVector) {
     auto scale = DecimalType::getScale(inputVec.dataType);
     auto str = DecimalType::insertDecimalPoint(std::to_string(input), scale);
     common::StringVector::addString(&resultVector, output, str);
@@ -146,8 +146,8 @@ inline void CastToDecimal::operation(string_t& input, int64_t& output, const Val
 }
 
 template<>
-inline void CastToDecimal::operation(string_t& input, common::int128_t& output,
-    const ValueVector&, const ValueVector& outputVec) {
+inline void CastToDecimal::operation(string_t& input, common::int128_t& output, const ValueVector&,
+    const ValueVector& outputVec) {
     decimalCast((const char*)input.getData(), input.len, output, outputVec.dataType);
 }
 

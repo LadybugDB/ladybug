@@ -13,8 +13,8 @@ namespace function {
 
 struct CastToString {
     template<typename T>
-    static inline void operation(T& input, string_t& result,
-        common::ValueVector& inputVector, common::ValueVector& resultVector) {
+    static inline void operation(T& input, string_t& result, common::ValueVector& inputVector,
+        common::ValueVector& resultVector) {
         auto str = common::TypeUtils::toString(input, (void*)&inputVector);
         common::StringVector::addString(&resultVector, result, str);
     }

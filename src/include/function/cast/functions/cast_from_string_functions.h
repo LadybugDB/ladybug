@@ -171,20 +171,20 @@ void CastString::operation(const string_t& input, uuid& result, ValueVector* res
     uint64_t rowToAdd, const CSVOption* option);
 
 template<>
-void CastString::operation(const string_t& input, list_entry_t& result,
-    ValueVector* resultVector, uint64_t rowToAdd, const CSVOption* option);
+void CastString::operation(const string_t& input, list_entry_t& result, ValueVector* resultVector,
+    uint64_t rowToAdd, const CSVOption* option);
 
 template<>
 void CastString::operation(const string_t& input, map_entry_t& result, ValueVector* resultVector,
     uint64_t rowToAdd, const CSVOption* option);
 
 template<>
-void CastString::operation(const string_t& input, struct_entry_t& result,
-    ValueVector* resultVector, uint64_t rowToAdd, const CSVOption* option);
+void CastString::operation(const string_t& input, struct_entry_t& result, ValueVector* resultVector,
+    uint64_t rowToAdd, const CSVOption* option);
 
 template<>
-void CastString::operation(const string_t& input, union_entry_t& result,
-    ValueVector* resultVector, uint64_t rowToAdd, const CSVOption* option);
+void CastString::operation(const string_t& input, union_entry_t& result, ValueVector* resultVector,
+    uint64_t rowToAdd, const CSVOption* option);
 
 } // namespace function
 } // namespace lbug

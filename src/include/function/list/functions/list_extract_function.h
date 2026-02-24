@@ -40,8 +40,7 @@ public:
         }
     }
 
-    static inline void operation(common::string_t& str, int64_t& idx,
-        common::string_t& result) {
+    static inline void operation(common::string_t& str, int64_t& idx, common::string_t& result) {
         if (str.len < idx) {
             result.set("", 0);
         } else {

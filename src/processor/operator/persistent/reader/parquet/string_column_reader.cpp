@@ -13,8 +13,8 @@ namespace processor {
 StringColumnReader::StringColumnReader(ParquetReader& reader, common::LogicalType type,
     const lbug_parquet::format::SchemaElement& schema, uint64_t schemaIdx, uint64_t maxDefine,
     uint64_t maxRepeat)
-    : TemplatedColumnReader<common::string_t, StringParquetValueConversion>(reader,
-          std::move(type), schema, schemaIdx, maxDefine, maxRepeat) {
+    : TemplatedColumnReader<common::string_t, StringParquetValueConversion>(reader, std::move(type),
+          schema, schemaIdx, maxDefine, maxRepeat) {
     fixedWidthStringLength = 0;
     if (schema.type == Type::FIXED_LEN_BYTE_ARRAY) {
         DASSERT(schema.__isset.type_length);

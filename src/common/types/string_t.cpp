@@ -51,8 +51,7 @@ std::string_view string_t::getAsStringView() const {
 bool string_t::operator==(const string_t& rhs) const {
     // First compare the length and prefix of the strings.
     auto numBytesOfLenAndPrefix =
-        sizeof(uint32_t) +
-        std::min((uint64_t)len, static_cast<uint64_t>(string_t::PREFIX_LENGTH));
+        sizeof(uint32_t) + std::min((uint64_t)len, static_cast<uint64_t>(string_t::PREFIX_LENGTH));
     if (!memcmp(this, &rhs, numBytesOfLenAndPrefix)) {
         // If length and prefix of a and b are equal, we compare the overflow buffer.
         return !memcmp(getData(), rhs.getData(), len);

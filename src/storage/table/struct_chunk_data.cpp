@@ -222,7 +222,7 @@ void StructChunkData::write(const ValueVector* vector, offset_t offsetInVector,
 void StructChunkData::write(ColumnChunkData* chunk, ColumnChunkData* dstOffsets,
     RelMultiplicity multiplicity) {
     DASSERT(chunk->getDataType().getPhysicalType() == PhysicalTypeID::STRUCT &&
-              dstOffsets->getDataType().getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
+            dstOffsets->getDataType().getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
     for (auto i = 0u; i < dstOffsets->getNumValues(); i++) {
         const auto offsetInChunk = dstOffsets->getValue<offset_t>(i);
         DASSERT(offsetInChunk < capacity);

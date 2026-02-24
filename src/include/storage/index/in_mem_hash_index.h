@@ -147,7 +147,7 @@ public:
     // Leaves the slot pointer pointing at the last slot to make it easier to add a new one
     bool nextChainedSlot(SlotIterator& iter) const {
         DASSERT(iter.slotInfo.slotType == SlotType::PRIMARY ||
-                  iter.slotInfo.slotId != iter.slot->header.nextOvfSlotId);
+                iter.slotInfo.slotId != iter.slot->header.nextOvfSlotId);
         if (iter.slot->header.nextOvfSlotId != SlotHeader::INVALID_OVERFLOW_SLOT_ID) {
             iter.slotInfo.slotId = iter.slot->header.nextOvfSlotId;
             iter.slotInfo.slotType = SlotType::OVF;

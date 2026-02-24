@@ -230,8 +230,8 @@ void RelTableData::pushInsertInfo(const Transaction* transaction, const CSRNodeG
     // we shouldn't be appending directly to the to the persistent data
     // unless we are performing batch insert and the persistent chunked group is empty
     DASSERT(source != CSRNodeGroupScanSource::COMMITTED_PERSISTENT ||
-              !nodeGroup.getPersistentChunkedGroup() ||
-              nodeGroup.getPersistentChunkedGroup()->getNumRows() == 0);
+            !nodeGroup.getPersistentChunkedGroup() ||
+            nodeGroup.getPersistentChunkedGroup()->getNumRows() == 0);
 
     const auto [startRow, shouldIncrementNumRows] =
         (source == CSRNodeGroupScanSource::COMMITTED_PERSISTENT) ?

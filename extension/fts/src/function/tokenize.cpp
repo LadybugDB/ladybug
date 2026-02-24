@@ -39,9 +39,8 @@ static void addTokensToVector(const std::vector<std::string>& tokens, list_entry
 }
 
 struct JiebaTokenizer {
-    static void operation(string_t& text, string_t& /*tokenizerName*/,
-        string_t& /*extraParam*/, list_entry_t& result,
-        common::ValueVector& resultVector, void* dataPtr) {
+    static void operation(string_t& text, string_t& /*tokenizerName*/, string_t& /*extraParam*/,
+        list_entry_t& result, common::ValueVector& resultVector, void* dataPtr) {
         std::vector<std::string> tokens;
         auto bindData = reinterpret_cast<JiebaBindData*>(dataPtr);
         bindData->jieba->CutForSearch(text.getAsString(), tokens);
@@ -50,9 +49,8 @@ struct JiebaTokenizer {
 };
 
 struct SimpleTokenizer {
-    static void operation(string_t& text, string_t& /*tokenizerName*/,
-        string_t& /*extraParam*/, list_entry_t& result,
-        common::ValueVector& resultVector, void* /*dataPtr*/) {
+    static void operation(string_t& text, string_t& /*tokenizerName*/, string_t& /*extraParam*/,
+        list_entry_t& result, common::ValueVector& resultVector, void* /*dataPtr*/) {
         auto tokens =
             StringUtils::split(text.getAsString(), " ", true /* ignoreEmptyStringParts */);
         addTokensToVector(tokens, result, resultVector);
@@ -80,14 +78,14 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
         std::string stop = dictDir + "/stop_words.utf8";
         auto jieba = std::make_unique<cppjieba::Jieba>(dict, hmm, user, idf, stop);
         input.definition->ptrCast<ScalarFunction>()->execFunc =
-            ScalarFunction::TernaryRegexExecFunction<string_t, string_t, string_t,
-                list_entry_t, JiebaTokenizer>;
+            ScalarFunction::TernaryRegexExecFunction<string_t, string_t, string_t, list_entry_t,
+                JiebaTokenizer>;
         return std::make_unique<JiebaBindData>(
             binder::ExpressionUtil::getDataTypes(input.arguments), std::move(jieba));
     } else if (tokenizer == "simple" || tokenizer == "") {
         input.definition->ptrCast<ScalarFunction>()->execFunc =
-            ScalarFunction::TernaryRegexExecFunction<string_t, string_t, string_t,
-                list_entry_t, SimpleTokenizer>;
+            ScalarFunction::TernaryRegexExecFunction<string_t, string_t, string_t, list_entry_t,
+                SimpleTokenizer>;
         return FunctionBindData::getSimpleBindData(input.arguments,
             LogicalType::LIST(LogicalType::STRING()));
     } else {

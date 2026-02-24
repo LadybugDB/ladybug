@@ -43,8 +43,7 @@ public:
     // Moving the handle would invalidate those pointers
     OverflowFileHandle(OverflowFileHandle&& other) = delete;
 
-    std::string readString(transaction::TransactionType trxType,
-        const common::string_t& str) const;
+    std::string readString(transaction::TransactionType trxType, const common::string_t& str) const;
 
     bool equals(transaction::TransactionType trxType, std::string_view keyToLookup,
         const common::string_t& keyInEntry) const;

@@ -65,7 +65,7 @@ JoinTreeConstructor::IntermediateResult JoinTreeConstructor::constructTreeNode(
             return constructNodeScan(hintNode->nodeOrRel);
         } else {
             DASSERT(ExpressionUtil::isRelPattern(*hintNode->nodeOrRel) ||
-                      ExpressionUtil::isRecursiveRelPattern(*hintNode->nodeOrRel));
+                    ExpressionUtil::isRecursiveRelPattern(*hintNode->nodeOrRel));
             return constructRelScan(hintNode->nodeOrRel);
         }
     }

@@ -57,7 +57,8 @@ bool ParquetReader::scanInternal(ParquetReaderScanState& state, DataChunk& resul
         state.currentGroup++;
         state.groupOffset = 0;
 
-        auto& trans = dynamic_cast_checked<ThriftFileTransport&>(*state.thriftFileProto->getTransport());
+        auto& trans =
+            dynamic_cast_checked<ThriftFileTransport&>(*state.thriftFileProto->getTransport());
         trans.ClearPrefetch();
         state.currentGroupPrefetched = false;
 
@@ -104,7 +105,8 @@ bool ParquetReader::scanInternal(ParquetReaderScanState& state, DataChunk& resul
                 // Prefetch column-wise.
                 for (auto colIdx = 0u; colIdx < result.getNumValueVectors(); colIdx++) {
                     auto fileColIdx = colIdx;
-                    auto rootReader = dynamic_cast_checked<StructColumnReader*>(state.rootReader.get());
+                    auto rootReader =
+                        dynamic_cast_checked<StructColumnReader*>(state.rootReader.get());
 
                     rootReader->getChildReader(fileColIdx)
                         ->registerPrefetch(trans, true /* lazy fetch */);
@@ -350,8 +352,7 @@ std::unique_ptr<ColumnReader> ParquetReader::createReader() {
     }
 
     DASSERT(nextSchemaIdx == metadata->schema.size() - 1);
-    DASSERT(
-        metadata->row_groups.empty() || nextFileIdx == metadata->row_groups[0].columns.size());
+    DASSERT(metadata->row_groups.empty() || nextFileIdx == metadata->row_groups[0].columns.size());
     return rootReader;
 }
 

@@ -36,7 +36,7 @@ void VectorBooleanFunction::bindBinaryExecFunction(ExpressionType expressionType
     (void)leftType;
     (void)rightType;
     DASSERT(leftType.getLogicalTypeID() == LogicalTypeID::BOOL &&
-              rightType.getLogicalTypeID() == LogicalTypeID::BOOL);
+            rightType.getLogicalTypeID() == LogicalTypeID::BOOL);
     switch (expressionType) {
     case ExpressionType::AND: {
         func = &BinaryBooleanExecFunction<And>;
@@ -65,7 +65,7 @@ void VectorBooleanFunction::bindBinarySelectFunction(ExpressionType expressionTy
     (void)leftType;
     (void)rightType;
     DASSERT(leftType.getLogicalTypeID() == LogicalTypeID::BOOL &&
-              rightType.getLogicalTypeID() == LogicalTypeID::BOOL);
+            rightType.getLogicalTypeID() == LogicalTypeID::BOOL);
     switch (expressionType) {
     case ExpressionType::AND: {
         func = &BinaryBooleanSelectFunction<And>;

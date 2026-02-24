@@ -74,7 +74,8 @@ void NodeBatchInsert::initLocalStateInternal(ResultSet* resultSet, ExecutionCont
     const auto nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
     const auto numColumns = nodeInfo->columnEvaluators.size();
 
-    const auto nodeSharedState = dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
+    const auto nodeSharedState =
+        dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
     localState = std::make_unique<NodeBatchInsertLocalState>(
         std::span{nodeInfo->columnTypes.begin(), nodeInfo->outputDataColumns.size()});
     const auto nodeLocalState = localState->ptrCast<NodeBatchInsertLocalState>();
@@ -168,7 +169,8 @@ void NodeBatchInsert::copyToNodeGroup(transaction::Transaction* transaction,
 }
 
 NodeBatchInsertErrorHandler NodeBatchInsert::createErrorHandler(ExecutionContext* context) const {
-    const auto nodeSharedState = dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
+    const auto nodeSharedState =
+        dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
     auto* nodeTable = dynamic_cast_checked<NodeTable*>(sharedState->table);
     return NodeBatchInsertErrorHandler{context, nodeSharedState->pkType.getLogicalTypeID(),
         nodeTable, WarningContext::Get(*context->clientContext)->getIgnoreErrorsOption(),
@@ -200,7 +202,8 @@ void NodeBatchInsert::writeAndResetNodeGroup(transaction::Transaction* transacti
     std::unique_ptr<InMemChunkedNodeGroup>& nodeGroup, std::optional<IndexBuilder>& indexBuilder,
     MemoryManager* mm, NodeBatchInsertErrorHandler& errorHandler,
     PageAllocator& pageAllocator) const {
-    const auto nodeSharedState = dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
+    const auto nodeSharedState =
+        dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
     const auto nodeTable = dynamic_cast_checked<NodeTable*>(sharedState->table);
 
     uint64_t nodeOffset{};
@@ -238,7 +241,8 @@ void NodeBatchInsert::appendIncompleteNodeGroup(transaction::Transaction* transa
     std::optional<IndexBuilder>& indexBuilder, MemoryManager* mm) const {
     std::unique_lock xLck{sharedState->mtx};
     const auto nodeLocalState = dynamic_cast_checked<NodeBatchInsertLocalState*>(localState.get());
-    const auto nodeSharedState = dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
+    const auto nodeSharedState =
+        dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
     if (!nodeSharedState->sharedNodeGroup) {
         nodeSharedState->sharedNodeGroup = std::move(localNodeGroup);
         return;
@@ -258,7 +262,8 @@ void NodeBatchInsert::appendIncompleteNodeGroup(transaction::Transaction* transa
 
 void NodeBatchInsert::finalize(ExecutionContext* context) {
     DASSERT(localState == nullptr);
-    const auto nodeSharedState = dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
+    const auto nodeSharedState =
+        dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
     auto errorHandler = createErrorHandler(context);
     auto clientContext = context->clientContext;
     auto transaction = Transaction::Get(*clientContext);

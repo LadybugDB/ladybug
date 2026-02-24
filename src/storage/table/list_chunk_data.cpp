@@ -32,7 +32,7 @@ ListChunkData::ListChunkData(MemoryManager& memoryManager, LogicalType dataType,
         residencyState);
     checkOffsetSortedAsc = false;
     DASSERT(this->dataType.getPhysicalType() == PhysicalTypeID::LIST ||
-              this->dataType.getPhysicalType() == PhysicalTypeID::ARRAY);
+            this->dataType.getPhysicalType() == PhysicalTypeID::ARRAY);
 }
 
 ListChunkData::ListChunkData(MemoryManager& memoryManager, LogicalType dataType,
@@ -235,8 +235,8 @@ void ListChunkData::initializeScanState(SegmentState& state, const Column* colum
 
 void ListChunkData::write(ColumnChunkData* chunk, ColumnChunkData* dstOffsets, RelMultiplicity) {
     DASSERT(chunk->getDataType().getPhysicalType() == dataType.getPhysicalType() &&
-              dstOffsets->getDataType().getPhysicalType() == PhysicalTypeID::INTERNAL_ID &&
-              chunk->getNumValues() == dstOffsets->getNumValues());
+            dstOffsets->getDataType().getPhysicalType() == PhysicalTypeID::INTERNAL_ID &&
+            chunk->getNumValues() == dstOffsets->getNumValues());
     checkOffsetSortedAsc = true;
     offset_t currentIndex = dataColumnChunk->getNumValues();
     auto& otherListChunk = chunk->cast<ListChunkData>();
@@ -289,7 +289,7 @@ void ListChunkData::write(const ValueVector* vector, offset_t offsetInVector,
 void ListChunkData::write(const ColumnChunkData* srcChunk, offset_t srcOffsetInChunk,
     offset_t dstOffsetInChunk, offset_t numValuesToCopy) {
     DASSERT(srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::LIST ||
-              srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::ARRAY);
+            srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::ARRAY);
     checkOffsetSortedAsc = true;
     auto& srcListChunk = srcChunk->cast<ListChunkData>();
     auto offsetInDataChunkToAppend = dataColumnChunk->getNumValues();

@@ -7,8 +7,8 @@ namespace function {
 using namespace lbug::common;
 
 struct SplitPart {
-    static void operation(string_t& strToSplit, string_t& separator, int64_t idx,
-        string_t& result, ValueVector& resultVector) {
+    static void operation(string_t& strToSplit, string_t& separator, int64_t idx, string_t& result,
+        ValueVector& resultVector) {
         auto splitStrVec = StringUtils::split(strToSplit.getAsString(), separator.getAsString());
         bool idxOutOfRange = idx <= 0 || (uint64_t)idx > splitStrVec.size();
         std::string resultStr = idxOutOfRange ? "" : splitStrVec[idx - 1];

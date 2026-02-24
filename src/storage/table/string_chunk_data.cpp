@@ -165,8 +165,8 @@ void StringChunkData::write(const ValueVector* vector, offset_t offsetInVector,
 
 void StringChunkData::write(ColumnChunkData* chunk, ColumnChunkData* dstOffsets, RelMultiplicity) {
     DASSERT(chunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING &&
-              dstOffsets->getDataType().getPhysicalType() == PhysicalTypeID::INTERNAL_ID &&
-              chunk->getNumValues() == dstOffsets->getNumValues());
+            dstOffsets->getDataType().getPhysicalType() == PhysicalTypeID::INTERNAL_ID &&
+            chunk->getNumValues() == dstOffsets->getNumValues());
     auto& stringChunk = chunk->cast<StringChunkData>();
     for (auto i = 0u; i < chunk->getNumValues(); i++) {
         auto offsetInChunk = dstOffsets->getValue<offset_t>(i);

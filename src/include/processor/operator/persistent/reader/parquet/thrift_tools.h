@@ -141,7 +141,7 @@ public:
                                        handle->getFileSize() - location));
                 auto prefetch_buffer_fallback = ra_buffer.GetReadHead(location);
                 DASSERT(location - prefetch_buffer_fallback->location + len <=
-                          prefetch_buffer_fallback->size);
+                        prefetch_buffer_fallback->size);
                 memcpy(buf,
                     prefetch_buffer_fallback->data.get() + location -
                         prefetch_buffer_fallback->location,

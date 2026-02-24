@@ -413,7 +413,7 @@ void WALReplayer::replayNodeTableInsertRecord(const WALRecord& walRecord) const 
     const auto insertState =
         std::make_unique<NodeTableInsertState>(*nodeIDVector, pkVector, propertyVectors);
     DASSERT(transaction::Transaction::Get(clientContext) &&
-              transaction::Transaction::Get(clientContext)->isRecovery());
+            transaction::Transaction::Get(clientContext)->isRecovery());
     table.initInsertState(&clientContext, *insertState);
     anchorState->getSelVectorUnsafe().setToFiltered(1);
     for (auto i = 0u; i < numNodes; i++) {
@@ -445,7 +445,7 @@ void WALReplayer::replayRelTableInsertRecord(const WALRecord& walRecord) const {
         *insertionRecord.ownedVectors[LOCAL_BOUND_NODE_ID_COLUMN_ID],
         *insertionRecord.ownedVectors[LOCAL_NBR_NODE_ID_COLUMN_ID], propertyVectors);
     DASSERT(transaction::Transaction::Get(clientContext) &&
-              transaction::Transaction::Get(clientContext)->isRecovery());
+            transaction::Transaction::Get(clientContext)->isRecovery());
     for (auto i = 0u; i < numRels; i++) {
         anchorState->getSelVectorUnsafe()[0] = i;
         table.initInsertState(&clientContext, *insertState);
@@ -466,7 +466,7 @@ void WALReplayer::replayNodeDeletionRecord(const WALRecord& walRecord) const {
     const auto deleteState =
         std::make_unique<NodeTableDeleteState>(*nodeIDVector, *deletionRecord.ownedPKVector);
     DASSERT(transaction::Transaction::Get(clientContext) &&
-              transaction::Transaction::Get(clientContext)->isRecovery());
+            transaction::Transaction::Get(clientContext)->isRecovery());
     table.delete_(transaction::Transaction::Get(clientContext), *deleteState);
 }
 
@@ -483,7 +483,7 @@ void WALReplayer::replayNodeUpdateRecord(const WALRecord& walRecord) const {
     const auto updateState = std::make_unique<NodeTableUpdateState>(updateRecord.columnID,
         *nodeIDVector, *updateRecord.ownedPropertyVector);
     DASSERT(transaction::Transaction::Get(clientContext) &&
-              transaction::Transaction::Get(clientContext)->isRecovery());
+            transaction::Transaction::Get(clientContext)->isRecovery());
     table.update(transaction::Transaction::Get(clientContext), *updateState);
 }
 
@@ -497,7 +497,7 @@ void WALReplayer::replayRelDeletionRecord(const WALRecord& walRecord) const {
         std::make_unique<RelTableDeleteState>(*deletionRecord.ownedSrcNodeIDVector,
             *deletionRecord.ownedDstNodeIDVector, *deletionRecord.ownedRelIDVector);
     DASSERT(transaction::Transaction::Get(clientContext) &&
-              transaction::Transaction::Get(clientContext)->isRecovery());
+            transaction::Transaction::Get(clientContext)->isRecovery());
     table.delete_(transaction::Transaction::Get(clientContext), *deleteState);
 }
 
@@ -506,7 +506,7 @@ void WALReplayer::replayRelDetachDeletionRecord(const WALRecord& walRecord) cons
     const auto tableID = deletionRecord.tableID;
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<RelTable>();
     DASSERT(transaction::Transaction::Get(clientContext) &&
-              transaction::Transaction::Get(clientContext)->isRecovery());
+            transaction::Transaction::Get(clientContext)->isRecovery());
     const auto anchorState = deletionRecord.ownedSrcNodeIDVector->state;
     DASSERT(anchorState->getSelVector().getSelSize() == 1);
     const auto dstNodeIDVector =
@@ -526,14 +526,14 @@ void WALReplayer::replayRelUpdateRecord(const WALRecord& walRecord) const {
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<RelTable>();
     const auto anchorState = updateRecord.ownedRelIDVector->state;
     DASSERT(anchorState == updateRecord.ownedSrcNodeIDVector->state &&
-              anchorState == updateRecord.ownedSrcNodeIDVector->state &&
-              anchorState == updateRecord.ownedPropertyVector->state);
+            anchorState == updateRecord.ownedSrcNodeIDVector->state &&
+            anchorState == updateRecord.ownedPropertyVector->state);
     DASSERT(anchorState->getSelVector().getSelSize() == 1);
     const auto updateState = std::make_unique<RelTableUpdateState>(updateRecord.columnID,
         *updateRecord.ownedSrcNodeIDVector, *updateRecord.ownedDstNodeIDVector,
         *updateRecord.ownedRelIDVector, *updateRecord.ownedPropertyVector);
     DASSERT(transaction::Transaction::Get(clientContext) &&
-              transaction::Transaction::Get(clientContext)->isRecovery());
+            transaction::Transaction::Get(clientContext)->isRecovery());
     table.update(transaction::Transaction::Get(clientContext), *updateState);
 }
 

@@ -53,7 +53,8 @@ std::unique_ptr<TableFuncBindData> bindFuncHelper(main::ClientContext* context,
     std::vector<std::string> returnColumnNames;
     // only ICEBERG_SCAN uses scanInput
     if (functionName == "ICEBERG_SCAN") {
-        auto scanInput = dynamic_cast_checked<ExtraScanTableFuncBindInput*>(input->extraInput.get());
+        auto scanInput =
+            dynamic_cast_checked<ExtraScanTableFuncBindInput*>(input->extraInput.get());
         returnColumnNames = scanInput->expectedColumnNames;
         if (scanInput->expectedColumnNames.empty()) {
             for (auto name : result->names) {

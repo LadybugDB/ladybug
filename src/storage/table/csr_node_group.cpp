@@ -527,7 +527,7 @@ void CSRNodeGroup::checkpointInMemAndOnDisk(const UniqLock& lock, NodeGroupCheck
             // The left node offset of a region should always maintain stable across length and
             // offset changes.
             DASSERT(csrState.oldHeader->getStartCSROffset(region.leftNodeOffset) ==
-                      csrState.newHeader->getStartCSROffset(region.leftNodeOffset));
+                    csrState.newHeader->getStartCSROffset(region.leftNodeOffset));
         }
     }
 
@@ -735,7 +735,7 @@ static void writeCSRListNoPersistentDeletions(CheckpointReadCursor& readCursor,
                 [[maybe_unused]] auto [readSegmentData, readOffsetInSegment] =
                     readCursor.getDataToRead();
                 DASSERT(readSegmentData == segmentData.segmentData.get() &&
-                          readOffsetInSegment == offsetInSegment);
+                        readOffsetInSegment == offsetInSegment);
                 writeCursor.appendToCurrentSegment(segmentData.segmentData.get(), offsetInSegment,
                     lengthInSegment);
             }
@@ -861,7 +861,7 @@ std::vector<ChunkCheckpointState> CSRNodeGroup::checkpointColumnInRegion(const U
         const length_t numOldGaps = csrState.oldHeader->getGapSize(nodeOffset);
         // Gaps should only happen at the end of the CSR region.
         DASSERT(numGaps == 0 || (nodeOffset == region.rightNodeOffset - 1) ||
-                  (nodeOffset + 1) % StorageConfig::CSR_LEAF_REGION_SIZE == 0);
+                (nodeOffset + 1) % StorageConfig::CSR_LEAF_REGION_SIZE == 0);
         fillCSRGaps(readCursor, writeCursor, dummyChunkForNulls.get(), numOldGaps, numGaps);
     }
     writeCursor.finalize();
@@ -870,7 +870,7 @@ std::vector<ChunkCheckpointState> CSRNodeGroup::checkpointColumnInRegion(const U
         writeCursor.getCSROffset() == csrState.newHeader->getEndCSROffset(region.rightNodeOffset));
     // We can't skip writing appends as they need to be flushed to disk
     DASSERT(readCursor.getCSROffset() == writeCursor.getCSROffset() || ret.empty() ||
-              ret.back().startRow + ret.back().numRows == writeCursor.getCSROffset());
+            ret.back().startRow + ret.back().numRows == writeCursor.getCSROffset());
     return ret;
 }
 
@@ -1071,7 +1071,7 @@ void CSRNodeGroup::checkpointInMemOnly(const UniqLock& lock, NodeGroupCheckpoint
         while (gapSize > 0) {
             // Gaps should only happen at the end of the CSR region.
             DASSERT((offset == numNodes - 1) ||
-                      (offset + 1) % StorageConfig::CSR_LEAF_REGION_SIZE == 0);
+                    (offset + 1) % StorageConfig::CSR_LEAF_REGION_SIZE == 0);
             const auto numGapsToAppend = std::min(gapSize, DEFAULT_VECTOR_CAPACITY);
             DASSERT(dummyChunk.state->getSelVector().isUnfiltered());
             dummyChunk.state->getSelVectorUnsafe().setSelSize(numGapsToAppend);

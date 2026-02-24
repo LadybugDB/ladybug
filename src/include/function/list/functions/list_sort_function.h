@@ -22,8 +22,8 @@ struct ListSort : BaseListSortOperation {
     }
 
     static void operation(common::list_entry_t& input, common::string_t& sortOrder,
-        common::string_t& nullOrder, common::list_entry_t& result,
-        common::ValueVector& inputVector, common::ValueVector& resultVector) {
+        common::string_t& nullOrder, common::list_entry_t& result, common::ValueVector& inputVector,
+        common::ValueVector& resultVector) {
         sortValues<T>(input, result, inputVector, resultVector, isAscOrder(sortOrder.getAsString()),
             isNullFirst(nullOrder.getAsString()));
     }

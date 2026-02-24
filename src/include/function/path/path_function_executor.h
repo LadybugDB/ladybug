@@ -29,7 +29,7 @@ struct UnaryPathExecutor {
         common::ValueVector& result) {
         auto nodesFieldIdx = 0;
         DASSERT(nodesFieldIdx ==
-                  common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::NODES));
+                common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::NODES));
         auto nodesVector = common::StructVector::getFieldVector(&input, nodesFieldIdx).get();
         auto internalIDFieldIdx = 0;
         execute(inputSelVector, *nodesVector, internalIDFieldIdx, result);
@@ -39,7 +39,7 @@ struct UnaryPathExecutor {
         common::ValueVector& result) {
         auto relsFieldIdx = 1;
         DASSERT(relsFieldIdx ==
-                  common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::RELS));
+                common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::RELS));
         auto relsVector = common::StructVector::getFieldVector(&input, relsFieldIdx).get();
         auto internalIDFieldIdx = 3;
         execute(inputSelVector, *relsVector, internalIDFieldIdx, result);
@@ -49,7 +49,7 @@ struct UnaryPathExecutor {
         common::SelectionVector& selectionVector) {
         auto nodesFieldIdx = 0;
         DASSERT(nodesFieldIdx ==
-                  common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::NODES));
+                common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::NODES));
         auto nodesVector = common::StructVector::getFieldVector(&input, nodesFieldIdx).get();
         auto internalIDFieldIdx = 0;
         return select(input.state->getSelVector(), *nodesVector, internalIDFieldIdx,
@@ -59,7 +59,7 @@ struct UnaryPathExecutor {
     static bool selectRelIDs(common::ValueVector& input, common::SelectionVector& selectionVector) {
         auto relsFieldIdx = 1;
         DASSERT(relsFieldIdx ==
-                  common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::RELS));
+                common::StructType::getFieldIdx(input.dataType, common::InternalKeyword::RELS));
         auto relsVector = common::StructVector::getFieldVector(&input, relsFieldIdx).get();
         auto internalIDFieldIdx = 3;
         return select(input.state->getSelVector(), *relsVector, internalIDFieldIdx,
@@ -72,7 +72,7 @@ private:
         common::ValueVector& result) {
         auto listDataVector = common::ListVector::getDataVector(&listVector);
         DASSERT(fieldIdx == common::StructType::getFieldIdx(listDataVector->dataType,
-                                  common::InternalKeyword::ID));
+                                common::InternalKeyword::ID));
         auto internalIDsVector =
             common::StructVector::getFieldVector(listDataVector, fieldIdx).get();
         std::unordered_set<common::nodeID_t, InternalIDHasher> internalIDSet;
@@ -99,7 +99,7 @@ private:
         common::SelectionVector& selectionVector) {
         auto listDataVector = common::ListVector::getDataVector(&listVector);
         DASSERT(fieldIdx == common::StructType::getFieldIdx(listDataVector->dataType,
-                                  common::InternalKeyword::ID));
+                                common::InternalKeyword::ID));
         auto internalIDsVector =
             common::StructVector::getFieldVector(listDataVector, fieldIdx).get();
         std::unordered_set<common::nodeID_t, InternalIDHasher> internalIDSet;

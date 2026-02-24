@@ -112,7 +112,8 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) 
 }
 
 static double progressFunc(TableFuncSharedState* sharedState) {
-    PyArrowTableScanSharedState* state = dynamic_cast_checked<PyArrowTableScanSharedState*>(sharedState);
+    PyArrowTableScanSharedState* state =
+        dynamic_cast_checked<PyArrowTableScanSharedState*>(sharedState);
     if (state->chunks.size() == 0) {
         return 0.0;
     }

@@ -9,8 +9,8 @@ namespace function {
 
 struct Left {
 public:
-    static inline void operation(common::string_t& left, int64_t& right,
-        common::string_t& result, common::ValueVector& resultValueVector) {
+    static inline void operation(common::string_t& left, int64_t& right, common::string_t& result,
+        common::ValueVector& resultValueVector) {
         int64_t leftLen = 0;
         ListLen::operation(left, leftLen);
         int64_t len =

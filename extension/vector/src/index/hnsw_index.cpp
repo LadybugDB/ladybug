@@ -245,8 +245,8 @@ void InMemHNSWLayer::finalizeNodeGroup(common::node_group_idx_t nodeGroupIdx,
     const auto endNodeInGraph = selectedNodesMap.nodeToGraphOffset(endNodeOffset, false);
     for (auto offsetInGraph = startNodeInGraph; offsetInGraph < endNodeInGraph; offsetInGraph++) {
         DASSERT(offsetInGraph < selectedNodesMap.getNumNodesInGraph() &&
-                  selectedNodesMap.graphToNodeOffset(offsetInGraph) >= startNodeInGraph &&
-                  selectedNodesMap.graphToNodeOffset(offsetInGraph) < endNodeOffset);
+                selectedNodesMap.graphToNodeOffset(offsetInGraph) >= startNodeInGraph &&
+                selectedNodesMap.graphToNodeOffset(offsetInGraph) < endNodeOffset);
         const auto numNbrs = graph->getCSRLength(offsetInGraph);
         if (numNbrs <= info.maxDegree) {
             continue;
@@ -461,7 +461,7 @@ OnDiskHNSWIndex::OnDiskHNSWIndex(const main::ClientContext* context, IndexInfo i
       nodeTable{StorageManager::Get(*context)->getTable(indexInfo.tableID)->cast<NodeTable>()} {
     DASSERT(this->indexInfo.columnIDs.size() == 1);
     DASSERT(nodeTable.getColumn(this->indexInfo.columnIDs[0]).getDataType().getLogicalTypeID() ==
-              common::LogicalTypeID::ARRAY);
+            common::LogicalTypeID::ARRAY);
     const auto storageManager = StorageManager::Get(*context);
     const auto& hnswStorageInfo = this->storageInfo->cast<HNSWStorageInfo>();
     lowerRelTable = storageManager->getTable(hnswStorageInfo.lowerRelTableID)->ptrCast<RelTable>();

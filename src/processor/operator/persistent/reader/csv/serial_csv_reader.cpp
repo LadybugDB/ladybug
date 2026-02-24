@@ -135,7 +135,8 @@ void SerialCSVScanSharedState::initReader(main::ClientContext* context) {
 }
 
 static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
-    auto serialCSVScanSharedState = dynamic_cast_checked<SerialCSVScanSharedState*>(input.sharedState);
+    auto serialCSVScanSharedState =
+        dynamic_cast_checked<SerialCSVScanSharedState*>(input.sharedState);
     serialCSVScanSharedState->read(output.dataChunk);
     return output.dataChunk.state->getSelVector().getSelSize();
 }

@@ -128,8 +128,7 @@ void OverflowFileHandle::setStringOverflow(PageAllocator* pageAllocator, const c
     }
 }
 
-string_t OverflowFileHandle::writeString(PageAllocator* pageAllocator,
-    std::string_view rawString) {
+string_t OverflowFileHandle::writeString(PageAllocator* pageAllocator, std::string_view rawString) {
     string_t result;
     result.len = rawString.length();
     auto shortStrLen = string_t::SHORT_STR_LENGTH;

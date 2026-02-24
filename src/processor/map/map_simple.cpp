@@ -67,8 +67,7 @@ static void exportDatabaseCollectParallelFlags(const std::unique_ptr<DummySimple
     auto exportDB = sink->getChild(0)->ptrCast<ExportDB>();
     for (auto i = 1u; i < sink->getNumChildren(); ++i) {
         const auto& tableFuncCall = sink->getChild(i);
-        ASSERT(
-            tableFuncCall->getChild(0)->getOperatorType() == PhysicalOperatorType::COPY_TO);
+        ASSERT(tableFuncCall->getChild(0)->getOperatorType() == PhysicalOperatorType::COPY_TO);
         const auto& [file, parallelFlag] =
             tableFuncCall->getChild(0)->ptrCast<CopyTo>()->getParallelFlag();
         exportDB->addToParallelReaderMap(file, parallelFlag);

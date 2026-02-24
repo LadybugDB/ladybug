@@ -30,12 +30,12 @@ std::string getStemmerList() {
 }
 
 struct Stem {
-    static void operation(string_t& word, string_t& stemmer,
-        string_t& result, common::ValueVector& resultVector);
+    static void operation(string_t& word, string_t& stemmer, string_t& result,
+        common::ValueVector& resultVector);
 };
 
-void Stem::operation(string_t& word, string_t& stemmer,
-    string_t& result, common::ValueVector& resultVector) {
+void Stem::operation(string_t& word, string_t& stemmer, string_t& result,
+    common::ValueVector& resultVector) {
     if (stemmer.getAsString() == "none") {
         StringVector::addString(&resultVector, result, word);
         return;
@@ -58,17 +58,15 @@ void Stem::operation(string_t& word, string_t& stemmer,
 }
 
 struct StemStaticStemmer {
-    static void operation(string_t& word, string_t& /*stemmer*/,
-        string_t& result, common::ValueVector& /*leftValueVector*/,
-        common::ValueVector& /*rightValueVector*/, common::ValueVector& resultVector,
-        void* dataPtr);
+    static void operation(string_t& word, string_t& /*stemmer*/, string_t& result,
+        common::ValueVector& /*leftValueVector*/, common::ValueVector& /*rightValueVector*/,
+        common::ValueVector& resultVector, void* dataPtr);
 };
 
 struct StemWithoutStemmer {
-    static void operation(string_t& word, string_t& /*stemmer*/,
-        string_t& result, common::ValueVector& /*leftValueVector*/,
-        common::ValueVector& /*rightValueVector*/, common::ValueVector& resultVector,
-        void* dataPtr);
+    static void operation(string_t& word, string_t& /*stemmer*/, string_t& result,
+        common::ValueVector& /*leftValueVector*/, common::ValueVector& /*rightValueVector*/,
+        common::ValueVector& resultVector, void* dataPtr);
 };
 
 struct StemBindData final : public FunctionBindData {
@@ -96,9 +94,9 @@ struct StemBindData final : public FunctionBindData {
     }
 };
 
-void StemStaticStemmer::operation(string_t& word, string_t& /*stemmer*/,
-    string_t& result, common::ValueVector& /*leftValueVector*/,
-    common::ValueVector& /*rightValueVector*/, common::ValueVector& resultVector, void* dataPtr) {
+void StemStaticStemmer::operation(string_t& word, string_t& /*stemmer*/, string_t& result,
+    common::ValueVector& /*leftValueVector*/, common::ValueVector& /*rightValueVector*/,
+    common::ValueVector& resultVector, void* dataPtr) {
     auto stemBindData = reinterpret_cast<StemBindData*>(dataPtr);
     DASSERT(stemBindData->sbStemmer != nullptr);
     auto stemData = sb_stemmer_stem(stemBindData->sbStemmer,
@@ -107,10 +105,9 @@ void StemStaticStemmer::operation(string_t& word, string_t& /*stemmer*/,
         sb_stemmer_length(stemBindData->sbStemmer));
 }
 
-void StemWithoutStemmer::operation(string_t& word, string_t& /*stemmer*/,
-    string_t& result, common::ValueVector& /*leftValueVector*/,
-    common::ValueVector& /*rightValueVector*/, common::ValueVector& resultVector,
-    void* /*dataPtr*/) {
+void StemWithoutStemmer::operation(string_t& word, string_t& /*stemmer*/, string_t& result,
+    common::ValueVector& /*leftValueVector*/, common::ValueVector& /*rightValueVector*/,
+    common::ValueVector& resultVector, void* /*dataPtr*/) {
     common::StringVector::addString(&resultVector, result,
         reinterpret_cast<const char*>(word.getData()), word.len);
 }

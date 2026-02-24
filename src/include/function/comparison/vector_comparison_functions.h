@@ -121,8 +121,7 @@ private:
             func = BinaryComparisonExecFunction<uint8_t, uint8_t, uint8_t, FUNC>;
         } break;
         case common::PhysicalTypeID::STRING: {
-            func = BinaryComparisonExecFunction<common::string_t, common::string_t, uint8_t,
-                FUNC>;
+            func = BinaryComparisonExecFunction<common::string_t, common::string_t, uint8_t, FUNC>;
         } break;
         case common::PhysicalTypeID::INTERNAL_ID: {
             func = BinaryComparisonExecFunction<common::nodeID_t, common::nodeID_t, uint8_t, FUNC>;

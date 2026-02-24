@@ -114,7 +114,7 @@ uint32_t DecimalType::getScale(const LogicalType& type) {
 
 const LogicalType& ListType::getChildType(const lbug::common::LogicalType& type) {
     DASSERT(type.getPhysicalType() == PhysicalTypeID::LIST ||
-              type.getPhysicalType() == PhysicalTypeID::ARRAY);
+            type.getPhysicalType() == PhysicalTypeID::ARRAY);
     auto listTypeInfo = type.extraTypeInfo->constPtrCast<ListTypeInfo>();
     return listTypeInfo->getChildType();
 }

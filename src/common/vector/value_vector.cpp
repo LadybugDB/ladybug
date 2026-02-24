@@ -334,13 +334,15 @@ void ValueVector::resetAuxiliaryBuffer() {
     }
     case PhysicalTypeID::ARRAY:
     case PhysicalTypeID::LIST: {
-        auto listAuxiliaryBuffer = dynamic_cast_checked<ListAuxiliaryBuffer*>(auxiliaryBuffer.get());
+        auto listAuxiliaryBuffer =
+            dynamic_cast_checked<ListAuxiliaryBuffer*>(auxiliaryBuffer.get());
         listAuxiliaryBuffer->resetSize();
         listAuxiliaryBuffer->getDataVector()->resetAuxiliaryBuffer();
         return;
     }
     case PhysicalTypeID::STRUCT: {
-        auto structAuxiliaryBuffer = dynamic_cast_checked<StructAuxiliaryBuffer*>(auxiliaryBuffer.get());
+        auto structAuxiliaryBuffer =
+            dynamic_cast_checked<StructAuxiliaryBuffer*>(auxiliaryBuffer.get());
         for (auto& vector : structAuxiliaryBuffer->getFieldVectors()) {
             vector->resetAuxiliaryBuffer();
         }

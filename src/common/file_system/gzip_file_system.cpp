@@ -103,8 +103,8 @@ bool MiniZStreamWrapper::read(StreamData& sd) {
             auto xlen = (uint8_t)*bodyPtr | (uint8_t) * (bodyPtr + 1) << 8;
             bodyPtr += xlen + 2;
             DASSERT((common::idx_t)(GZipFileSystem::GZIP_FOOTER_SIZE +
-                                      GZipFileSystem::GZIP_HEADER_MINSIZE + 2 + xlen) <
-                      GZipFileSystem::GZIP_HEADER_MAXSIZE);
+                                    GZipFileSystem::GZIP_HEADER_MINSIZE + 2 + xlen) <
+                    GZipFileSystem::GZIP_HEADER_MAXSIZE);
         }
         if (gzipHdr[3] & GZipFileSystem::GZIP_FLAG_NAME) {
             char c = '\0';

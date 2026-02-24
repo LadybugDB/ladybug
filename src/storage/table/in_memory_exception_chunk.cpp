@@ -71,8 +71,7 @@ void InMemoryExceptionChunk<T>::finalize(SegmentState& state) {
         }
     }
 
-    DASSERT(
-        finalizedExceptionCount <= state.metadata.compMeta.floatMetadata()->exceptionCapacity);
+    DASSERT(finalizedExceptionCount <= state.metadata.compMeta.floatMetadata()->exceptionCapacity);
     state.metadata.compMeta.floatMetadata()->exceptionCount = finalizedExceptionCount;
 
     ExceptionInBuffer<T>* exceptionWordBuffer =

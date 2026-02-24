@@ -54,7 +54,7 @@ static void validateFileFlags(uint8_t flags) {
     DASSERT(isWrite || !(flags & FileFlags::CREATE_AND_TRUNCATE_IF_EXISTS));
     // CREATE_IF_NOT_EXISTS and CREATE_AND_TRUNCATE_IF_EXISTS flags cannot be combined.
     DASSERT(!(flags & FileFlags::CREATE_IF_NOT_EXISTS &&
-                flags & FileFlags::CREATE_AND_TRUNCATE_IF_EXISTS));
+              flags & FileFlags::CREATE_AND_TRUNCATE_IF_EXISTS));
 }
 
 std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, FileOpenFlags flags,

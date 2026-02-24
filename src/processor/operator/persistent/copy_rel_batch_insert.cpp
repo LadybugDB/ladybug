@@ -34,7 +34,7 @@ void CopyRelBatchInsert::populateCSRLengthsInternal(const storage::InMemChunkedC
     common::offset_t numNodes, storage::InMemChunkedNodeGroupCollection& partition,
     common::column_id_t boundNodeOffsetColumn) {
     DASSERT(numNodes == csrHeader.length->getNumValues() &&
-              numNodes == csrHeader.offset->getNumValues());
+            numNodes == csrHeader.offset->getNumValues());
     const auto lengthData = reinterpret_cast<common::length_t*>(csrHeader.length->getData());
     std::fill(lengthData, lengthData + numNodes, 0);
     for (auto& chunkedGroup : partition.getChunkedGroups()) {

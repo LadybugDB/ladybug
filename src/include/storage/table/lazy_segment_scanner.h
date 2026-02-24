@@ -70,7 +70,7 @@ private:
 
 inline LazySegmentData& LazySegmentScanner::Iterator::operator*() const {
     DASSERT(segmentIdx < segmentScanner.segments.size() &&
-              offsetInSegment < segmentScanner.segments[segmentIdx].length);
+            offsetInSegment < segmentScanner.segments[segmentIdx].length);
     return segmentScanner.segments[segmentIdx];
 }
 

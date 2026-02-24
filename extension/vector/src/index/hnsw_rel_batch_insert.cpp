@@ -71,7 +71,7 @@ void HNSWRelBatchInsert::populateCSRLengths(processor::RelBatchInsertExecutionSt
     storage::InMemChunkedCSRHeader& csrHeader, common::offset_t numNodes,
     const processor::RelBatchInsertInfo&) {
     DASSERT(numNodes == csrHeader.length->getNumValues() &&
-              numNodes == csrHeader.offset->getNumValues());
+            numNodes == csrHeader.offset->getNumValues());
     const auto& hnswExecutionState = executionState.constCast<HNSWRelBatchInsertExecutionState>();
     const auto& graph = hnswExecutionState.graph;
     const auto startNodeInGraph = hnswExecutionState.startNodeInGraph;

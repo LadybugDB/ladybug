@@ -39,9 +39,9 @@ function_set DateTruncFunction::getFunctionSet() {
 
 function_set DayNameFunction::getFunctionSet() {
     function_set result;
-    result.push_back(make_unique<ScalarFunction>(name,
-        std::vector<LogicalTypeID>{LogicalTypeID::DATE}, LogicalTypeID::STRING,
-        ScalarFunction::UnaryExecFunction<date_t, string_t, DayName>));
+    result.push_back(
+        make_unique<ScalarFunction>(name, std::vector<LogicalTypeID>{LogicalTypeID::DATE},
+            LogicalTypeID::STRING, ScalarFunction::UnaryExecFunction<date_t, string_t, DayName>));
     result.push_back(make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::TIMESTAMP}, LogicalTypeID::STRING,
         ScalarFunction::UnaryExecFunction<timestamp_t, string_t, DayName>));
@@ -95,9 +95,9 @@ function_set MakeDateFunction::getFunctionSet() {
 
 function_set MonthNameFunction::getFunctionSet() {
     function_set result;
-    result.push_back(make_unique<ScalarFunction>(name,
-        std::vector<LogicalTypeID>{LogicalTypeID::DATE}, LogicalTypeID::STRING,
-        ScalarFunction::UnaryExecFunction<date_t, string_t, MonthName>));
+    result.push_back(
+        make_unique<ScalarFunction>(name, std::vector<LogicalTypeID>{LogicalTypeID::DATE},
+            LogicalTypeID::STRING, ScalarFunction::UnaryExecFunction<date_t, string_t, MonthName>));
     result.push_back(make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::TIMESTAMP}, LogicalTypeID::STRING,
         ScalarFunction::UnaryExecFunction<timestamp_t, string_t, MonthName>));

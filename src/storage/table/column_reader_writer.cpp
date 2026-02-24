@@ -271,8 +271,8 @@ private:
         for (; curExceptionIdx < exceptionChunk->getExceptionCount(); ++curExceptionIdx) {
             const auto curException = exceptionChunk->getExceptionAt(curExceptionIdx);
             DASSERT(curExceptionIdx == 0 ||
-                      curException.posInChunk >
-                          exceptionChunk->getExceptionAt(curExceptionIdx - 1).posInChunk);
+                    curException.posInChunk >
+                        exceptionChunk->getExceptionAt(curExceptionIdx - 1).posInChunk);
             DASSERT(curException.posInChunk >= curExceptionIdx);
             if (curException.posInChunk >= startOffsetInChunk + numValuesToScan) {
                 break;
@@ -296,8 +296,8 @@ private:
         const read_value_from_page_func_t<OutputType>& readFunc) {
         RUNTIME_CHECK(const ColumnChunkMetadata& metadata = state.metadata);
         DASSERT(metadata.compMeta.compression == CompressionType::ALP ||
-                  metadata.compMeta.compression == CompressionType::CONSTANT ||
-                  metadata.compMeta.compression == CompressionType::UNCOMPRESSED);
+                metadata.compMeta.compression == CompressionType::CONSTANT ||
+                metadata.compMeta.compression == CompressionType::UNCOMPRESSED);
         std::optional<filter_func_t> filterFunc{};
         readCompressedValues(state, result, offsetInResult, offsetInSegment, 1, readFunc,
             filterFunc);
@@ -310,8 +310,8 @@ private:
         const std::optional<filter_func_t>& filterFunc) {
         const ColumnChunkMetadata& metadata = state.metadata;
         DASSERT(metadata.compMeta.compression == CompressionType::ALP ||
-                  metadata.compMeta.compression == CompressionType::CONSTANT ||
-                  metadata.compMeta.compression == CompressionType::UNCOMPRESSED);
+                metadata.compMeta.compression == CompressionType::CONSTANT ||
+                metadata.compMeta.compression == CompressionType::UNCOMPRESSED);
 
         const uint64_t numValuesScanned =
             defaultReader->readCompressedValues(state, result, startOffsetInResult,

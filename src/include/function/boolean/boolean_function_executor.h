@@ -137,8 +137,8 @@ struct BinaryBooleanFunctionExecutor {
         common::ValueVector& right, common::SelectionVector* rightSelVector,
         common::ValueVector& result, common::SelectionVector* resultSelVector) {
         DASSERT(left.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL &&
-                  right.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL &&
-                  result.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL);
+                right.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL &&
+                result.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL);
         if (left.state->isFlat() && right.state->isFlat()) {
             executeBothFlat<FUNC>(left, leftSelVector, right, rightSelVector, result,
                 resultSelVector);
@@ -247,7 +247,7 @@ struct BinaryBooleanFunctionExecutor {
     static bool select(common::ValueVector& left, common::ValueVector& right,
         common::SelectionVector& selVector) {
         DASSERT(left.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL &&
-                  right.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL);
+                right.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL);
         if (left.state->isFlat() && right.state->isFlat()) {
             return selectBothFlat<FUNC>(left, right);
         } else if (left.state->isFlat() && !right.state->isFlat()) {

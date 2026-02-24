@@ -8,8 +8,7 @@ namespace lbug {
 namespace processor {
 
 struct UUIDValueConversion {
-    static common::uuid dictRead(ByteBuffer& dict, uint32_t& offset,
-        ColumnReader& /*reader*/) {
+    static common::uuid dictRead(ByteBuffer& dict, uint32_t& offset, ColumnReader& /*reader*/) {
         return reinterpret_cast<common::uuid*>(dict.ptr)[offset];
     }
 

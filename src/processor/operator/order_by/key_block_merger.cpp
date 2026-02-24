@@ -139,7 +139,7 @@ std::unique_ptr<KeyBlockMergeMorsel> KeyBlockMergeTask::getMorsel() {
 
 void KeyBlockMerger::mergeKeyBlocks(KeyBlockMergeMorsel& keyBlockMergeMorsel) const {
     DASSERT(keyBlockMergeMorsel.leftKeyBlockStartIdx < keyBlockMergeMorsel.leftKeyBlockEndIdx ||
-              keyBlockMergeMorsel.rightKeyBlockStartIdx < keyBlockMergeMorsel.rightKeyBlockEndIdx);
+            keyBlockMergeMorsel.rightKeyBlockStartIdx < keyBlockMergeMorsel.rightKeyBlockEndIdx);
 
     auto leftBlockPtrInfo = BlockPtrInfo(keyBlockMergeMorsel.leftKeyBlockStartIdx,
         keyBlockMergeMorsel.leftKeyBlockEndIdx,
@@ -234,8 +234,8 @@ bool KeyBlockMerger::compareTuplePtrWithStringCol(uint8_t* leftTuplePtr,
                 factorizedTables[OrderByKeyEncoder::getEncodedFTIdx(rightTupleInfo)];
             auto leftStr = leftFactorizedTable->getData<string_t>(leftBlockIdx, leftBlockOffset,
                 strKeyColInfo.colOffsetInFT);
-            auto rightStr = rightFactorizedTable->getData<string_t>(rightBlockIdx,
-                rightBlockOffset, strKeyColInfo.colOffsetInFT);
+            auto rightStr = rightFactorizedTable->getData<string_t>(rightBlockIdx, rightBlockOffset,
+                strKeyColInfo.colOffsetInFT);
             result = (leftStr == rightStr);
             if (result) {
                 // If the tie can't be solved, we need to check the next string column.

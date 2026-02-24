@@ -12,13 +12,15 @@ std::string BoundAlterInfo::toString() const {
         break;
     }
     case common::AlterType::ADD_PROPERTY: {
-        auto addPropInfo = common::dynamic_cast_checked<BoundExtraAddPropertyInfo*>(extraInfo.get());
+        auto addPropInfo =
+            common::dynamic_cast_checked<BoundExtraAddPropertyInfo*>(extraInfo.get());
         result +=
             "Add Property " + addPropInfo->propertyDefinition.getName() + " to Table " + tableName;
         break;
     }
     case common::AlterType::DROP_PROPERTY: {
-        auto dropPropInfo = common::dynamic_cast_checked<BoundExtraDropPropertyInfo*>(extraInfo.get());
+        auto dropPropInfo =
+            common::dynamic_cast_checked<BoundExtraDropPropertyInfo*>(extraInfo.get());
         result += "Drop Property " + dropPropInfo->propertyName + " from Table " + tableName;
         break;
     }
