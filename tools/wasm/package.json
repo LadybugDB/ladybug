@@ -1,12 +1,12 @@
 {
-  "name": "lbug-wasm",
-  "version": "0.0.1",
+  "name": "lbug-wasm-core",
+  "version": "0.14.1",
   "description": "Official WebAssembly build of Lbug in-process property graph database management system.",
   "main": "index.js",
   "homepage": "https://ladybugdb.com/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lbugdb/lbug.git"
+    "url": "https://github.com/LadybugDB/ladybug"
   },
   "exports": {
     ".": {
