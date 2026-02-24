@@ -104,6 +104,7 @@ void TaskScheduler::runWorkerThread() {
     if (qosClass != QOS_CLASS_DEFAULT && qosClass != QOS_CLASS_UNSPECIFIED) {
         auto pthreadQosStatus = pthread_set_qos_class_self_np(qosClass, 0);
     }
+    UNUSED(pthreadQosStatus);
 #endif
     std::unique_lock<std::mutex> lck{taskSchedulerMtx, std::defer_lock};
     std::exception_ptr exceptionPtr = nullptr;
