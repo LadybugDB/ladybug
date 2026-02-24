@@ -10,7 +10,7 @@ struct PageRange {
         : startPageIdx(startPageIdx), numPages(numPages) {}
 
     PageRange subrange(common::page_idx_t newStartPage) const {
-        KU_ASSERT(newStartPage <= numPages);
+        LBUG_ASSERT(newStartPage <= numPages);
         return {startPageIdx + newStartPage, numPages - newStartPage};
     }
 

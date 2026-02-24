@@ -2,15 +2,15 @@
 
 #include <cstring>
 
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "function/list/functions/list_len_function.h"
 
 namespace lbug {
 namespace function {
 
 struct ArrayExtract {
-    static inline void operation(common::ku_string_t& str, int64_t& idx,
-        common::ku_string_t& result) {
+    static inline void operation(common::string_t& str, int64_t& idx,
+        common::string_t& result) {
         if (idx == 0) {
             result.len = 0;
             return;
@@ -50,8 +50,8 @@ struct ArrayExtract {
         }
     }
 
-    static inline void copySubstr(common::ku_string_t& src, int64_t start, int64_t len,
-        common::ku_string_t& result, bool isAscii) {
+    static inline void copySubstr(common::string_t& src, int64_t start, int64_t len,
+        common::string_t& result, bool isAscii) {
         result.len = std::min(len, src.len - start + 1);
         if (isAscii) {
             memcpy((uint8_t*)result.getData(), src.getData() + start - 1, result.len);

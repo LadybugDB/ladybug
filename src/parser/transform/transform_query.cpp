@@ -24,7 +24,7 @@ SingleQuery Transformer::transformSingleQuery(CypherParser::OC_SingleQueryContex
             transformSinglePartQuery(*ctx.oC_MultiPartQuery()->oC_SinglePartQuery()) :
             transformSinglePartQuery(*ctx.oC_SinglePartQuery());
     if (ctx.oC_MultiPartQuery()) {
-        for (auto queryPart : ctx.oC_MultiPartQuery()->kU_QueryPart()) {
+        for (auto queryPart : ctx.oC_MultiPartQuery()->iC_QueryPart()) {
             singleQuery.addQueryPart(transformQueryPart(*queryPart));
         }
     }
@@ -45,7 +45,7 @@ SingleQuery Transformer::transformSinglePartQuery(CypherParser::OC_SinglePartQue
     return singleQuery;
 }
 
-QueryPart Transformer::transformQueryPart(CypherParser::KU_QueryPartContext& ctx) {
+QueryPart Transformer::transformQueryPart(CypherParser::IC_QueryPartContext& ctx) {
     auto queryPart = QueryPart(transformWith(*ctx.oC_With()));
     for (auto& readingClause : ctx.oC_ReadingClause()) {
         queryPart.addReadingClause(transformReadingClause(*readingClause));

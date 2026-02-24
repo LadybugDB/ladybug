@@ -72,7 +72,7 @@ public:
 
     // If the database header hasn't been created yet, calling these methods will create + return
     // the header
-    common::ku_uuid_t getOrInitDatabaseID(const main::ClientContext& clientContext);
+    common::uuid getOrInitDatabaseID(const main::ClientContext& clientContext);
     const storage::DatabaseHeader* getOrInitDatabaseHeader(
         const main::ClientContext& clientContext);
 

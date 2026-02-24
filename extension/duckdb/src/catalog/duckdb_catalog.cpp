@@ -54,7 +54,7 @@ void DuckDBCatalog::init() {
         conversionFunc);
     conversionFunc(resultChunk->data[0], tableNamesVector, resultChunk->size());
     for (auto i = 0u; i < resultChunk->size(); i++) {
-        auto tableName = tableNamesVector.getValue<common::ku_string_t>(i).getAsString();
+        auto tableName = tableNamesVector.getValue<string_t>(i).getAsString();
         createForeignTable(tableName);
     }
 }
@@ -84,7 +84,7 @@ void DuckDBCatalog::createForeignTable(const std::string& tableName) {
         return;
     }
     auto extraInfo =
-        common::ku_dynamic_cast<BoundExtraCreateDuckDBTableInfo*>(info->extraInfo.get());
+        common::dynamic_cast_checked<BoundExtraCreateDuckDBTableInfo*>(info->extraInfo.get());
     std::vector<common::LogicalType> columnTypes;
     std::vector<std::string> columnNames;
     for (auto& definition : extraInfo->propertyDefinitions) {

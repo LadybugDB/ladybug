@@ -7,7 +7,7 @@
 #include "common/exception/runtime.h"
 #include "common/types/int128_t.h"
 #include "common/types/interval_t.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "common/types/uint128_t.h"
 
@@ -158,7 +158,7 @@ inline void Hash::operation(const std::string& key, common::hash_t& result) {
 }
 
 template<>
-inline void Hash::operation(const common::ku_string_t& key, common::hash_t& result) {
+inline void Hash::operation(const common::string_t& key, common::hash_t& result) {
     Hash::operation(key.getAsStringView(), result);
 }
 

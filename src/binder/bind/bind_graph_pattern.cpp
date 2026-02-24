@@ -98,16 +98,16 @@ std::shared_ptr<Expression> Binder::createPath(const std::string& pathName,
             auto& node = child->constCast<NodeExpression>();
             extraFieldFromStructType(node.getDataType(), nodeFieldNameSet, nodeFields);
         } else if (ExpressionUtil::isRelPattern(*child)) {
-            auto rel = ku_dynamic_cast<RelExpression*>(child.get());
+            auto rel = dynamic_cast_checked<RelExpression*>(child.get());
             extraFieldFromStructType(rel->getDataType(), relFieldNameSet, relFields);
         } else if (ExpressionUtil::isRecursiveRelPattern(*child)) {
-            auto recursiveRel = ku_dynamic_cast<RelExpression*>(child.get());
+            auto recursiveRel = dynamic_cast_checked<RelExpression*>(child.get());
             auto recursiveInfo = recursiveRel->getRecursiveInfo();
             extraFieldFromStructType(recursiveInfo->node->getDataType(), nodeFieldNameSet,
                 nodeFields);
             extraFieldFromStructType(recursiveInfo->rel->getDataType(), relFieldNameSet, relFields);
         } else {
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     }
     auto nodeType = LogicalType::NODE(std::move(nodeFields));
@@ -177,7 +177,7 @@ static void checkRelDirectionTypeAgainstStorageDirection(const RelExpression* re
         }
         break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -218,7 +218,7 @@ std::shared_ptr<RelExpression> Binder::bindQueryRel(const RelPattern& relPattern
         directionType = RelDirectionType::BOTH;
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     // bind variable length
     std::shared_ptr<RelExpression> queryRel;
@@ -263,7 +263,7 @@ static std::vector<StructField> getBaseRelStructFields() {
 
 static std::shared_ptr<PropertyExpression> construct(LogicalType type,
     const std::string& propertyName, const Expression& child) {
-    KU_ASSERT(child.expressionType == ExpressionType::PATTERN);
+    LBUG_ASSERT(child.expressionType == ExpressionType::PATTERN);
     auto& patternExpr = child.constCast<NodeOrRelExpression>();
     auto variableName = patternExpr.getVariableName();
     auto uniqueName = patternExpr.getUniqueName();
@@ -534,13 +534,13 @@ std::pair<uint64_t, uint64_t> Binder::bindVariableLengthRelBound(const RelPatter
     auto recursiveInfo = relPattern.getRecursiveInfo();
     uint32_t lowerBound = 0;
     function::CastString::operation(
-        ku_string_t{recursiveInfo->lowerBound.c_str(), recursiveInfo->lowerBound.length()},
+        string_t{recursiveInfo->lowerBound.c_str(), recursiveInfo->lowerBound.length()},
         lowerBound);
     auto maxDepth = clientContext->getClientConfig()->varLengthMaxDepth;
     auto upperBound = maxDepth;
     if (!recursiveInfo->upperBound.empty()) {
         function::CastString::operation(
-            ku_string_t{recursiveInfo->upperBound.c_str(), recursiveInfo->upperBound.length()},
+            string_t{recursiveInfo->upperBound.c_str(), recursiveInfo->upperBound.length()},
             upperBound);
     }
     if (lowerBound > upperBound) {

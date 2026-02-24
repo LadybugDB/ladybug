@@ -6,7 +6,7 @@
 namespace lbug {
 namespace function {
 
-void GenRandomUUID::operation(common::ku_uuid_t& input, void* dataPtr) {
+void GenRandomUUID::operation(common::uuid& input, void* dataPtr) {
     auto clientContext = static_cast<FunctionBindData*>(dataPtr)->clientContext;
     input = common::UUID::generateRandomUUID(common::RandomEngine::Get(*clientContext));
 }

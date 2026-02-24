@@ -8,15 +8,15 @@ namespace lbug {
 namespace processor {
 
 struct StringHash {
-    std::size_t operator()(const common::ku_string_t& k) const;
+    std::size_t operator()(const common::string_t& k) const;
 };
 
 struct StringEquality {
-    bool operator()(const common::ku_string_t& a, const common::ku_string_t& b) const;
+    bool operator()(const common::string_t& a, const common::string_t& b) const;
 };
 
 template<typename T>
-using string_map_t = std::unordered_map<common::ku_string_t, T, StringHash, StringEquality>;
+using string_map_t = std::unordered_map<common::string_t, T, StringHash, StringEquality>;
 
 class StringStatisticsState : public ColumnWriterStatistics {
 public:
@@ -28,7 +28,7 @@ public:
 public:
     bool hasValidStats() const { return hasStats; }
 
-    void update(const common::ku_string_t& val);
+    void update(const common::string_t& val);
 
     std::string getMin() override { return getMinValue(); }
     std::string getMax() override { return getMaxValue(); }
@@ -62,7 +62,7 @@ class StringWriterPageState : public ColumnWriterPageState {
 public:
     explicit StringWriterPageState(uint32_t bitWidth, const string_map_t<uint32_t>& values)
         : bitWidth(bitWidth), dictionary(values), encoder(bitWidth), writtenValue(false) {
-        KU_ASSERT(isDictionaryEncoded() || (bitWidth == 0 && dictionary.empty()));
+        LBUG_ASSERT(isDictionaryEncoded() || (bitWidth == 0 && dictionary.empty()));
     }
 
     inline bool isDictionaryEncoded() const { return bitWidth != 0; }
@@ -112,7 +112,7 @@ public:
 
     inline uint64_t dictionarySize(BasicColumnWriterState& writerState) override {
         auto& state = reinterpret_cast<StringColumnWriterState&>(writerState);
-        KU_ASSERT(state.isDictionaryEncoded());
+        LBUG_ASSERT(state.isDictionaryEncoded());
         return state.dictionary.size();
     }
 

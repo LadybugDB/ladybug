@@ -199,7 +199,7 @@ CatalogEntry* Catalog::createRelGroupEntry(Transaction* transaction,
     const BoundCreateTableInfo& info) {
     const auto extraInfo = info.extraInfo->ptrCast<BoundExtraCreateRelTableGroupInfo>();
     std::vector<RelTableCatalogInfo> relTableInfos;
-    KU_ASSERT(extraInfo->nodePairs.size() > 0);
+    LBUG_ASSERT(extraInfo->nodePairs.size() > 0);
     for (auto& nodePair : extraInfo->nodePairs) {
         relTableInfos.emplace_back(nodePair, tables->getNextOID());
     }
@@ -210,7 +210,7 @@ CatalogEntry* Catalog::createRelGroupEntry(Transaction* transaction,
     for (auto& definition : extraInfo->propertyDefinitions) {
         relGroupEntry->addProperty(definition);
     }
-    KU_ASSERT(info.hasParent == false);
+    LBUG_ASSERT(info.hasParent == false);
     relGroupEntry->setHasParent(info.hasParent);
     createSerialSequence(transaction, relGroupEntry.get(), info.isInternal);
     auto catalogSet = info.isInternal ? internalTables.get() : tables.get();
@@ -230,7 +230,7 @@ SequenceCatalogEntry* Catalog::getSequenceEntry(const Transaction* transaction,
     } else {
         entry = sequences->getEntry(transaction, sequenceName);
     }
-    KU_ASSERT(entry);
+    LBUG_ASSERT(entry);
     return entry->ptrCast<SequenceCatalogEntry>();
 }
 
@@ -240,7 +240,7 @@ SequenceCatalogEntry* Catalog::getSequenceEntry(const Transaction* transaction,
     if (entry == nullptr) {
         entry = sequences->getEntryOfOID(transaction, sequenceID);
     }
-    KU_ASSERT(entry);
+    LBUG_ASSERT(entry);
     return entry->ptrCast<SequenceCatalogEntry>();
 }
 
@@ -321,7 +321,7 @@ bool Catalog::containsType(const Transaction* transaction, const std::string& ty
 
 void Catalog::createIndex(Transaction* transaction,
     std::unique_ptr<CatalogEntry> indexCatalogEntry) {
-    KU_ASSERT(indexCatalogEntry->getType() == CatalogEntryType::INDEX_ENTRY);
+    LBUG_ASSERT(indexCatalogEntry->getType() == CatalogEntryType::INDEX_ENTRY);
     indexes->createEntry(transaction, std::move(indexCatalogEntry));
 }
 
@@ -466,7 +466,7 @@ std::vector<ScalarMacroCatalogEntry*> Catalog::getMacroEntries(
     const Transaction* transaction) const {
     std::vector<ScalarMacroCatalogEntry*> result;
     for (auto& [_, entry] : macros->getEntries(transaction)) {
-        KU_ASSERT(entry->getType() == CatalogEntryType::SCALAR_MACRO_ENTRY);
+        LBUG_ASSERT(entry->getType() == CatalogEntryType::SCALAR_MACRO_ENTRY);
         result.push_back(entry->ptrCast<ScalarMacroCatalogEntry>());
     }
     return result;
@@ -513,7 +513,7 @@ ScalarMacroCatalogEntry* Catalog::getScalarMacroCatalogEntry(const Transaction* 
 std::vector<std::string> Catalog::getMacroNames(const Transaction* transaction) const {
     std::vector<std::string> macroNames;
     for (auto& [_, function] : macros->getEntries(transaction)) {
-        KU_ASSERT(function->getType() == CatalogEntryType::SCALAR_MACRO_ENTRY);
+        LBUG_ASSERT(function->getType() == CatalogEntryType::SCALAR_MACRO_ENTRY);
         macroNames.push_back(function->getName());
     }
     return macroNames;
@@ -553,7 +553,7 @@ CatalogEntry* Catalog::createTableEntry(Transaction* transaction,
         return createRelGroupEntry(transaction, info);
     }
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -605,7 +605,7 @@ bool Catalog::containsGraph(const Transaction* transaction, const std::string& g
 GraphCatalogEntry* Catalog::getGraphEntry(const Transaction* transaction,
     const std::string& graphName) const {
     auto entry = graphs->getEntry(transaction, graphName);
-    KU_ASSERT(entry);
+    LBUG_ASSERT(entry);
     return entry->ptrCast<GraphCatalogEntry>();
 }
 

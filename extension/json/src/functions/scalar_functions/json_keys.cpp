@@ -25,7 +25,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
         auto isNull = param.isNull(paramPos);
         result.setNull(resultPos, isNull);
         if (!isNull) {
-            auto paramStr = param.getValue<ku_string_t>(paramPos).getAsString();
+            auto paramStr = param.getValue<string_t>(paramPos).getAsString();
             auto doc = JsonWrapper{
                 JSONCommon::readDocument(paramStr, JSONCommon::READ_FLAG, nullptr /* jsonAlc */)};
             auto numKeys = yyjson_obj_size(yyjson_doc_get_root(doc.ptr));
@@ -40,7 +40,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
 }
 
 static std::unique_ptr<FunctionBindData> bindFunc(ScalarBindFuncInput input) {
-    KU_ASSERT(input.arguments.size() == 1);
+    LBUG_ASSERT(input.arguments.size() == 1);
     auto type = input.arguments[0]->dataType.copy();
     if (type.getLogicalTypeID() == LogicalTypeID::ANY) {
         type = LogicalType::INT64();

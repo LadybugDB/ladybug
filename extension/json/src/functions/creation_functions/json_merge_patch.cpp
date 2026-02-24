@@ -24,8 +24,8 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
         auto isNull = param1.isNull(param1Pos) || param2.isNull(param2Pos);
         result.setNull(resultPos, isNull);
         if (!isNull) {
-            auto param1Str = param1.getValue<ku_string_t>(param1Pos).getAsString();
-            auto param2Str = param2.getValue<ku_string_t>(param2Pos).getAsString();
+            auto param1Str = param1.getValue<string_t>(param1Pos).getAsString();
+            auto param2Str = param2.getValue<string_t>(param2Pos).getAsString();
             StringVector::addString(&result, resultPos,
                 jsonToString(mergeJson(stringToJson(param1Str), stringToJson(param2Str))));
         }

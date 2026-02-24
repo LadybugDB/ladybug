@@ -22,7 +22,7 @@ struct DropProjectedGraphBindData final : TableFuncBindData {
 };
 
 static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput&) {
-    const auto bindData = ku_dynamic_cast<DropProjectedGraphBindData*>(input.bindData);
+    const auto bindData = dynamic_cast_checked<DropProjectedGraphBindData*>(input.bindData);
     auto graphEntrySet = graph::GraphEntrySet::Get(*input.context->clientContext);
     graphEntrySet->validateGraphExist(bindData->graphName);
     graphEntrySet->dropGraph(bindData->graphName);

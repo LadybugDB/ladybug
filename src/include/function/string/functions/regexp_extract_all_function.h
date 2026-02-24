@@ -9,7 +9,7 @@ namespace lbug {
 namespace function {
 
 struct RegexpExtractAll : BaseRegexpOperation {
-    static inline void operation(common::ku_string_t& value, common::ku_string_t& pattern,
+    static inline void operation(common::string_t& value, common::string_t& pattern,
         std::int64_t& group, common::list_entry_t& result, common::ValueVector& resultVector) {
         std::vector<std::string> matches =
             regexExtractAll(value.getAsString(), pattern.getAsString(), group);
@@ -18,15 +18,15 @@ struct RegexpExtractAll : BaseRegexpOperation {
         auto resultDataVector = common::ListVector::getDataVector(&resultVector);
         auto numBytesPerValue = resultDataVector->getNumBytesPerValue();
         for (const auto& match : matches) {
-            common::ku_string_t kuString;
-            copyToLbugString(match, kuString, *resultDataVector);
+            common::string_t str;
+            copyToLbugString(match, str, *resultDataVector);
             resultDataVector->copyFromVectorData(resultValues, resultDataVector,
-                reinterpret_cast<uint8_t*>(&kuString));
+                reinterpret_cast<uint8_t*>(&str));
             resultValues += numBytesPerValue;
         }
     }
 
-    static inline void operation(common::ku_string_t& value, common::ku_string_t& pattern,
+    static inline void operation(common::string_t& value, common::string_t& pattern,
         common::list_entry_t& result, common::ValueVector& resultVector) {
         int64_t defaultGroup = 0;
         operation(value, pattern, defaultGroup, result, resultVector);

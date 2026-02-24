@@ -53,7 +53,7 @@ std::unique_ptr<TableFuncBindData> bindFuncHelper(main::ClientContext* context,
     std::vector<std::string> returnColumnNames;
     // only ICEBERG_SCAN uses scanInput
     if (functionName == "ICEBERG_SCAN") {
-        auto scanInput = ku_dynamic_cast<ExtraScanTableFuncBindInput*>(input->extraInput.get());
+        auto scanInput = dynamic_cast_checked<ExtraScanTableFuncBindInput*>(input->extraInput.get());
         returnColumnNames = scanInput->expectedColumnNames;
         if (scanInput->expectedColumnNames.empty()) {
             for (auto name : result->names) {
@@ -70,7 +70,7 @@ std::unique_ptr<TableFuncBindData> bindFuncHelper(main::ClientContext* context,
             returnColumnNames.push_back(name);
         }
     }
-    KU_ASSERT(returnTypes.size() == returnColumnNames.size());
+    LBUG_ASSERT(returnTypes.size() == returnColumnNames.size());
     returnColumnNames =
         TableFunction::extractYieldVariables(returnColumnNames, input->yieldVariables);
     auto columns = input->binder->createVariables(returnColumnNames, returnTypes);

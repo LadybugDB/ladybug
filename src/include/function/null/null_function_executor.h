@@ -10,7 +10,7 @@ struct NullOperationExecutor {
     template<typename FUNC>
     static void execute(common::ValueVector& operand, common::SelectionVector& operandSelVector,
         common::ValueVector& result) {
-        KU_ASSERT(result.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL);
+        LBUG_ASSERT(result.dataType.getLogicalTypeID() == common::LogicalTypeID::BOOL);
         auto resultValues = (uint8_t*)result.getData();
         if (operand.state->isFlat()) {
             auto pos = operandSelVector[0];

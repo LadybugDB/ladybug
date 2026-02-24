@@ -109,11 +109,11 @@ std::string UUID::toString(int128_t input) {
     return std::string(buff, UUID_STRING_LENGTH);
 }
 
-std::string UUID::toString(ku_uuid_t val) {
+std::string UUID::toString(uuid val) {
     return toString(val.value);
 }
 
-ku_uuid_t UUID::generateRandomUUID(RandomEngine* engine) {
+uuid UUID::generateRandomUUID(RandomEngine* engine) {
     uint8_t bytes[16];
     for (int i = 0; i < 16; i += 4) {
         *reinterpret_cast<uint32_t*>(bytes + i) = engine->nextRandomInteger();
@@ -144,7 +144,7 @@ ku_uuid_t UUID::generateRandomUUID(RandomEngine* engine) {
     result.low |= ((uint64_t)bytes[13] << 16);
     result.low |= ((uint64_t)bytes[14] << 8);
     result.low |= bytes[15];
-    return ku_uuid_t{result};
+    return uuid{result};
 }
 
 const regex::RE2& UUID::regexPattern() {

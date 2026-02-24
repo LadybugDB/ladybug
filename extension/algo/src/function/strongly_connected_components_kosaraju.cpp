@@ -67,12 +67,12 @@ public:
     }
 
     void push(offset_t offset) {
-        KU_ASSERT(curData);
+        LBUG_ASSERT(curData);
         curData[size_++] = offset;
     }
 
     offset_t pop() {
-        KU_ASSERT(curData && size_ > 0);
+        LBUG_ASSERT(curData && size_ > 0);
         size_--;
         return curData[size_];
     }
@@ -89,12 +89,12 @@ class Kosaraju {
 public:
     Kosaraju(Graph* graph, KosarajuVisitedState& visitedState, KosarajuVisitedOrder& visitedOrder)
         : graph{graph}, visitedState{visitedState}, visitedOrder{visitedOrder} {
-        KU_ASSERT(graph->getNodeTableIDs().size() == 1);
+        LBUG_ASSERT(graph->getNodeTableIDs().size() == 1);
         nodeTableID = graph->getNodeTableIDs()[0];
         auto nbrInfos = graph->getRelInfos(nodeTableID);
-        KU_ASSERT(nbrInfos.size() == 1);
+        LBUG_ASSERT(nbrInfos.size() == 1);
         auto nbrInfo = nbrInfos[0];
-        KU_ASSERT(nbrInfo.srcTableID == nbrInfo.dstTableID);
+        LBUG_ASSERT(nbrInfo.srcTableID == nbrInfo.dstTableID);
         scanState = graph->prepareRelScan(*nbrInfo.relGroupEntry, nbrInfo.relTableID,
             nbrInfo.dstTableID, {});
     }
@@ -112,7 +112,7 @@ public:
             if (visitedState.visited(i)) { // Skip visited nodes
                 continue;
             }
-            KU_ASSERT(toProcess.empty());
+            LBUG_ASSERT(toProcess.empty());
             toProcess.push_back(i);
             forwardDFS(toProcess);
             // Update fwd progress
@@ -125,7 +125,7 @@ public:
             }
             auto offset = visitedOrder.pop();
             if (!visitedState.componentIDSet(offset)) {
-                KU_ASSERT(toProcess.empty());
+                LBUG_ASSERT(toProcess.empty());
                 toProcess.push_back(offset);
                 backwardsDFS(offset, toProcess);
                 // Update bwd progress
@@ -226,7 +226,7 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput&) {
     auto sharedState = input.sharedState->ptrCast<GDSFuncSharedState>();
     auto mm = MemoryManager::Get(*clientContext);
     auto graph = sharedState->graph.get();
-    KU_ASSERT(graph->getNodeTableIDs().size() == 1);
+    LBUG_ASSERT(graph->getNodeTableIDs().size() == 1);
     auto tableID = graph->getNodeTableIDs()[0];
     auto nodeMask = sharedState->getGraphNodeMaskMap();
     if (nodeMask) {

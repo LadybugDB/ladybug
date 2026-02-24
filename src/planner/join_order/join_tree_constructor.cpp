@@ -23,7 +23,7 @@ JoinTree JoinTreeConstructor::construct(std::shared_ptr<BoundJoinHintNode> root)
 
 static std::vector<std::shared_ptr<NodeExpression>> getJoinNodes(const SubqueryGraph& subgraph,
     const SubqueryGraph& otherSubgraph) {
-    KU_ASSERT(&subgraph.queryGraph == &otherSubgraph.queryGraph);
+    LBUG_ASSERT(&subgraph.queryGraph == &otherSubgraph.queryGraph);
     std::vector<std::shared_ptr<NodeExpression>> joinNodes;
     for (auto idx : subgraph.getNbrNodeIndices()) {
         if (otherSubgraph.queryNodesSelector[idx]) {
@@ -64,7 +64,7 @@ JoinTreeConstructor::IntermediateResult JoinTreeConstructor::constructTreeNode(
         if (ExpressionUtil::isNodePattern(*hintNode->nodeOrRel)) {
             return constructNodeScan(hintNode->nodeOrRel);
         } else {
-            KU_ASSERT(ExpressionUtil::isRelPattern(*hintNode->nodeOrRel) ||
+            LBUG_ASSERT(ExpressionUtil::isRelPattern(*hintNode->nodeOrRel) ||
                       ExpressionUtil::isRecursiveRelPattern(*hintNode->nodeOrRel));
             return constructRelScan(hintNode->nodeOrRel);
         }
@@ -101,7 +101,7 @@ JoinTreeConstructor::IntermediateResult JoinTreeConstructor::constructTreeNode(
         return {treeNode, newSubgraph};
     }
     // Construct multi-way join
-    KU_ASSERT(hintNode->isMultiWay());
+    LBUG_ASSERT(hintNode->isMultiWay());
     auto probe = constructTreeNode(hintNode->children[0]);
     auto newSubgraph = probe.subqueryGraph;
     std::vector<std::shared_ptr<JoinTreeNode>> childrenNodes;

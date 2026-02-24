@@ -156,7 +156,7 @@ void TopKBuffer::getSelectComparisonFunction(common::PhysicalTypeID typeID,
         typeID,
         [&selectFunc]<ComparableTypes T>(
             T) { selectFunc = function::BinaryFunctionExecutor::selectComparison<T, T, FUNC>; },
-        [](auto) { KU_UNREACHABLE; });
+        [](auto) { LBUG_UNREACHABLE; });
 }
 
 void TopKBuffer::initCompareFuncs() {
@@ -202,7 +202,7 @@ bool TopKBuffer::compareBoundaryValue(const std::vector<common::ValueVector*>& k
 }
 
 bool TopKBuffer::compareFlatKeys(idx_t vectorIdxToCompare, std::vector<ValueVector*> keyVectors) {
-    KU_ASSERT(!keyVectors.empty());
+    LBUG_ASSERT(!keyVectors.empty());
     auto selVector = std::make_shared<common::SelectionVector>(common::DEFAULT_VECTOR_CAPACITY);
     selVector->setToFiltered();
 

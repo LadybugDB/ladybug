@@ -54,7 +54,7 @@ void QueryProcessor::decomposePlanIntoTask(PhysicalOperator* op, Task* task,
         ProgressBar::Get(*context->clientContext)->addPipeline();
     }
     if (op->isSink()) {
-        auto childTask = std::make_unique<ProcessorTask>(ku_dynamic_cast<Sink*>(op), context);
+        auto childTask = std::make_unique<ProcessorTask>(dynamic_cast_checked<Sink*>(op), context);
         for (auto i = (int64_t)op->getNumChildren() - 1; i >= 0; --i) {
             decomposePlanIntoTask(op->getChild(i), childTask.get(), context);
         }
@@ -68,7 +68,7 @@ void QueryProcessor::decomposePlanIntoTask(PhysicalOperator* op, Task* task,
 }
 
 void QueryProcessor::initTask(Task* task) {
-    auto processorTask = ku_dynamic_cast<ProcessorTask*>(task);
+    auto processorTask = dynamic_cast_checked<ProcessorTask*>(task);
     PhysicalOperator* op = processorTask->sink;
     while (!op->isSource()) {
         if (!op->isParallel()) {

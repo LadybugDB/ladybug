@@ -33,7 +33,7 @@ static void constEvaluateFilterResult(const common::ValueVector& inputVector,
     const common::SelectionVector& filterSelVector, evaluator::ListSliceInfo* sliceInfo) {
     auto srcDataVector = ListVector::getDataVector(&inputVector);
     auto dstDataVector = ListVector::getDataVector(&result);
-    KU_ASSERT(!filterVector.isNull(filterSelVector[0]));
+    LBUG_ASSERT(!filterVector.isNull(filterSelVector[0]));
     auto filterResult = filterVector.getValue<bool>(filterSelVector[0]);
 
     // resolve data vector
@@ -64,7 +64,7 @@ static void evaluateFilterResult(const common::ValueVector& inputVector,
     common::ValueVector& result, const common::ValueVector& filterVector,
     [[maybe_unused]] const common::SelectionVector& filterSelVector,
     evaluator::ListSliceInfo* sliceInfo) {
-    KU_ASSERT(filterSelVector.isUnfiltered());
+    LBUG_ASSERT(filterSelVector.isUnfiltered());
     auto srcDataVector = ListVector::getDataVector(&inputVector);
     auto dstDataVector = ListVector::getDataVector(&result);
 
@@ -97,7 +97,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& in
         sliceInfo->overrideAndSaveParamStates(listLambdaBindData->lambdaParamEvaluators);
 
     listLambdaBindData->rootEvaluator->evaluate();
-    KU_ASSERT(input.size() == 2);
+    LBUG_ASSERT(input.size() == 2);
     auto& listInputSelVector = *inputSelVectors[0];
     auto& filterVector = *input[1];
     auto& filterSelVector = *inputSelVectors[1];

@@ -14,8 +14,8 @@ public:
         setOID(oid);
     }
 
-    void serialize(common::Serializer& /*serializer*/) const override { KU_UNREACHABLE; }
-    std::string toCypher(const ToCypherInfo& /*info*/) const override { KU_UNREACHABLE; }
+    void serialize(common::Serializer& /*serializer*/) const override { LBUG_UNREACHABLE; }
+    std::string toCypher(const ToCypherInfo& /*info*/) const override { LBUG_UNREACHABLE; }
 };
 
 } // namespace catalog

@@ -55,12 +55,12 @@ public:
 
     virtual std::unique_ptr<FileInfo> openFile(const std::string& /*path*/, FileOpenFlags /*flags*/,
         main::ClientContext* /*context*/ = nullptr) {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 
     virtual std::vector<std::string> glob(main::ClientContext* /*context*/,
         const std::string& /*path*/) const {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 
     virtual void overwriteFile(const std::string& from, const std::string& to);
@@ -84,7 +84,7 @@ public:
 
     static std::string getFileName(const std::filesystem::path& path);
 
-    virtual bool canHandleFile(const std::string_view /*path*/) const { KU_UNREACHABLE; }
+    virtual bool canHandleFile(const std::string_view /*path*/) const { LBUG_UNREACHABLE; }
 
     virtual void syncFile(const FileInfo& fileInfo) const = 0;
 
@@ -93,17 +93,17 @@ public:
     virtual bool handleFileViaFunction(const std::string& /*path*/) const { return false; }
 
     virtual function::TableFunction getHandleFunction(const std::string& /*path*/) const {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 
     template<class TARGET>
     TARGET* ptrCast() {
-        return common::ku_dynamic_cast<TARGET*>(this);
+        return common::dynamic_cast_checked<TARGET*>(this);
     }
 
     template<class TARGET>
     const TARGET* constPtrCast() const {
-        return common::ku_dynamic_cast<const TARGET*>(this);
+        return common::dynamic_cast_checked<const TARGET*>(this);
     }
 
     virtual void cleanUP(main::ClientContext* /*context*/) {}

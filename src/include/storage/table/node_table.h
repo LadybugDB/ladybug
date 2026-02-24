@@ -156,7 +156,7 @@ public:
     common::column_id_t getPKColumnID() const { return pkColumnID; }
     PrimaryKeyIndex* getPKIndex() const {
         const auto index = getIndex(PrimaryKeyIndex::DEFAULT_NAME);
-        KU_ASSERT(index.has_value());
+        LBUG_ASSERT(index.has_value());
         return &index.value()->cast<PrimaryKeyIndex>();
     }
     std::optional<std::reference_wrapper<IndexHolder>> getIndexHolder(const std::string& name);
@@ -165,11 +165,11 @@ public:
 
     common::column_id_t getNumColumns() const { return columns.size(); }
     Column& getColumn(common::column_id_t columnID) {
-        KU_ASSERT(columnID < columns.size());
+        LBUG_ASSERT(columnID < columns.size());
         return *columns[columnID];
     }
     const Column& getColumn(common::column_id_t columnID) const {
-        KU_ASSERT(columnID < columns.size());
+        LBUG_ASSERT(columnID < columns.size());
         return *columns[columnID];
     }
 

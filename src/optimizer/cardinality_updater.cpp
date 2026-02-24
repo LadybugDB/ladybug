@@ -79,7 +79,7 @@ void CardinalityUpdater::visitScanNodeTable(planner::LogicalOperator* op) {
 }
 
 void CardinalityUpdater::visitExtend(planner::LogicalOperator* op) {
-    KU_ASSERT(transaction);
+    LBUG_ASSERT(transaction);
     auto& extend = op->cast<planner::LogicalExtend&>();
     const auto extensionRate = cardinalityEstimator.getExtensionRate(*extend.getRel(),
         *extend.getBoundNode(), transaction);
@@ -89,7 +89,7 @@ void CardinalityUpdater::visitExtend(planner::LogicalOperator* op) {
 
 void CardinalityUpdater::visitHashJoin(planner::LogicalOperator* op) {
     auto& hashJoin = op->cast<planner::LogicalHashJoin&>();
-    KU_ASSERT(hashJoin.getNumChildren() >= 2);
+    LBUG_ASSERT(hashJoin.getNumChildren() >= 2);
     hashJoin.setCardinality(cardinalityEstimator.estimateHashJoin(hashJoin.getJoinConditions(),
         *hashJoin.getChild(0), *hashJoin.getChild(1)));
 }
@@ -101,7 +101,7 @@ void CardinalityUpdater::visitCrossProduct(planner::LogicalOperator* op) {
 
 void CardinalityUpdater::visitIntersect(planner::LogicalOperator* op) {
     auto& intersect = op->cast<planner::LogicalIntersect&>();
-    KU_ASSERT(intersect.getNumChildren() >= 2);
+    LBUG_ASSERT(intersect.getNumChildren() >= 2);
     std::vector<planner::LogicalOperator*> buildOps;
     for (uint32_t i = 1; i < intersect.getNumChildren(); ++i) {
         buildOps.push_back(intersect.getChild(i).get());

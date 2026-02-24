@@ -20,10 +20,10 @@ namespace lbug {
 namespace function {
 
 struct Label {
-    static void operation(internalID_t& left, list_entry_t& right, ku_string_t& result,
+    static void operation(internalID_t& left, list_entry_t& right, string_t& result,
         ValueVector& leftVector, ValueVector& rightVector, ValueVector& resultVector,
         uint64_t resPos) {
-        KU_ASSERT(left.tableID < right.size);
+        LBUG_ASSERT(left.tableID < right.size);
         ListExtract::operation(right, left.tableID + 1 /* listExtract requires 1-based index */,
             result, rightVector, leftVector, resultVector, resPos);
     }
@@ -32,8 +32,8 @@ struct Label {
 static void execFunction(const std::vector<std::shared_ptr<ValueVector>>& params,
     const std::vector<SelectionVector*>& paramSelVectors, ValueVector& result,
     SelectionVector* resultSelVector, void* dataPtr = nullptr) {
-    KU_ASSERT(params.size() == 2);
-    BinaryFunctionExecutor::executeSwitch<internalID_t, list_entry_t, ku_string_t, Label,
+    LBUG_ASSERT(params.size() == 2);
+    BinaryFunctionExecutor::executeSwitch<internalID_t, list_entry_t, string_t, Label,
         BinaryListExtractFunctionWrapper>(*params[0], paramSelVectors[0], *params[1],
         paramSelVectors[1], result, resultSelVector, dataPtr);
 }
@@ -81,7 +81,7 @@ static std::unordered_map<table_id_t, std::string> getRelTableIDToLabel(
 }
 
 std::shared_ptr<Expression> LabelFunction::rewriteFunc(const RewriteFunctionBindInput& input) {
-    KU_ASSERT(input.arguments.size() == 1);
+    LBUG_ASSERT(input.arguments.size() == 1);
     auto argument = input.arguments[0].get();
     auto expressionBinder = input.expressionBinder;
     if (ExpressionUtil::isNullLiteral(*argument)) {
@@ -124,7 +124,7 @@ std::shared_ptr<Expression> LabelFunction::rewriteFunc(const RewriteFunctionBind
         auto map = getRelTableIDToLabel(rel.getEntries());
         children.push_back(getLabelsAsLiteral(map, expressionBinder));
     }
-    KU_ASSERT(children.size() == 2);
+    LBUG_ASSERT(children.size() == 2);
     auto function = std::make_unique<ScalarFunction>(LabelFunction::name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::INT64},
         LogicalTypeID::STRING, execFunction);

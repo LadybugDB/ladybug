@@ -136,7 +136,7 @@ void WALReplayer::replay(bool throwOnWalReplayFailure, bool enableChecksums) con
             }
 
             while (getReadOffset(deserializer, enableChecksums) < offsetDeserialized) {
-                KU_ASSERT(!deserializer.finished());
+                LBUG_ASSERT(!deserializer.finished());
                 auto walRecord = WALRecord::deserialize(deserializer, clientContext);
                 replayWALRecord(*walRecord);
             }
@@ -176,7 +176,7 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
             finishedDeserializing = deserializer.finished();
             switch (walRecord->type) {
             case WALRecordType::CHECKPOINT_RECORD: {
-                KU_ASSERT(finishedDeserializing);
+                LBUG_ASSERT(finishedDeserializing);
                 // If we reach a checkpoint record, we can stop replaying.
                 isLastRecordCheckpoint = true;
                 finishedDeserializing = true;
@@ -248,10 +248,10 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
     case WALRecordType::CHECKPOINT_RECORD: {
         // This record should not be replayed. It is only used to indicate that the previous records
         // had been replayed and shadow files are created.
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -290,7 +290,7 @@ void WALReplayer::replayCreateCatalogEntryRecord(WALRecord& walRecord) const {
         catalog->createGraph(transaction, graphEntry.getName(), graphEntry.isAnyGraphType());
     } break;
     default: {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     }
 }
@@ -303,7 +303,7 @@ void WALReplayer::replayDropCatalogEntryRecord(const WALRecord& walRecord) const
     switch (dropEntryRecord.entryType) {
     case CatalogEntryType::NODE_TABLE_ENTRY:
     case CatalogEntryType::REL_GROUP_ENTRY: {
-        KU_ASSERT(Catalog::Get(clientContext));
+        LBUG_ASSERT(Catalog::Get(clientContext));
         catalog->dropTableEntry(transaction, entryID);
     } break;
     case CatalogEntryType::SEQUENCE_ENTRY: {
@@ -320,7 +320,7 @@ void WALReplayer::replayDropCatalogEntryRecord(const WALRecord& walRecord) const
         // We don't drop from catalog here since graph files are managed differently
     } break;
     default: {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     }
 }
@@ -347,7 +347,7 @@ void WALReplayer::replayAlterTableEntryRecord(const WALRecord& walRecord) const 
         const auto entry = catalog->getTableCatalogEntry(transaction, ownedAlterInfo->tableName);
         const auto& addedProp = entry->getProperty(addInfo->propertyDefinition.getName());
         TableAddColumnState state{addedProp, *defaultValueEvaluator};
-        KU_ASSERT(StorageManager::Get(clientContext));
+        LBUG_ASSERT(StorageManager::Get(clientContext));
         switch (entry->getTableType()) {
         case TableType::REL: {
             for (auto& relEntryInfo : entry->cast<RelGroupCatalogEntry>().getRelEntryInfos()) {
@@ -360,7 +360,7 @@ void WALReplayer::replayAlterTableEntryRecord(const WALRecord& walRecord) const 
                 ->addColumn(transaction, state, pageAllocator);
         } break;
         default: {
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
         }
     } break;
@@ -396,7 +396,7 @@ void WALReplayer::replayNodeTableInsertRecord(const WALRecord& walRecord) const 
     const auto& insertionRecord = walRecord.constCast<TableInsertionRecord>();
     const auto tableID = insertionRecord.tableID;
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<NodeTable>();
-    KU_ASSERT(!insertionRecord.ownedVectors.empty());
+    LBUG_ASSERT(!insertionRecord.ownedVectors.empty());
     const auto anchorState = insertionRecord.ownedVectors[0]->state;
     const auto numNodes = anchorState->getSelVector().getSelSize();
     for (auto i = 0u; i < insertionRecord.ownedVectors.size(); i++) {
@@ -406,13 +406,13 @@ void WALReplayer::replayNodeTableInsertRecord(const WALRecord& walRecord) const 
     for (auto i = 0u; i < insertionRecord.ownedVectors.size(); i++) {
         propertyVectors[i] = insertionRecord.ownedVectors[i].get();
     }
-    KU_ASSERT(table.getPKColumnID() < insertionRecord.ownedVectors.size());
+    LBUG_ASSERT(table.getPKColumnID() < insertionRecord.ownedVectors.size());
     auto& pkVector = *insertionRecord.ownedVectors[table.getPKColumnID()];
     const auto nodeIDVector = std::make_unique<ValueVector>(LogicalType::INTERNAL_ID());
     nodeIDVector->setState(anchorState);
     const auto insertState =
         std::make_unique<NodeTableInsertState>(*nodeIDVector, pkVector, propertyVectors);
-    KU_ASSERT(transaction::Transaction::Get(clientContext) &&
+    LBUG_ASSERT(transaction::Transaction::Get(clientContext) &&
               transaction::Transaction::Get(clientContext)->isRecovery());
     table.initInsertState(&clientContext, *insertState);
     anchorState->getSelVectorUnsafe().setToFiltered(1);
@@ -426,7 +426,7 @@ void WALReplayer::replayRelTableInsertRecord(const WALRecord& walRecord) const {
     const auto& insertionRecord = walRecord.constCast<TableInsertionRecord>();
     const auto tableID = insertionRecord.tableID;
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<RelTable>();
-    KU_ASSERT(!insertionRecord.ownedVectors.empty());
+    LBUG_ASSERT(!insertionRecord.ownedVectors.empty());
     const auto anchorState = insertionRecord.ownedVectors[0]->state;
     const auto numRels = anchorState->getSelVector().getSelSize();
     anchorState->getSelVectorUnsafe().setToFiltered(1);
@@ -444,7 +444,7 @@ void WALReplayer::replayRelTableInsertRecord(const WALRecord& walRecord) const {
     const auto insertState = std::make_unique<RelTableInsertState>(
         *insertionRecord.ownedVectors[LOCAL_BOUND_NODE_ID_COLUMN_ID],
         *insertionRecord.ownedVectors[LOCAL_NBR_NODE_ID_COLUMN_ID], propertyVectors);
-    KU_ASSERT(transaction::Transaction::Get(clientContext) &&
+    LBUG_ASSERT(transaction::Transaction::Get(clientContext) &&
               transaction::Transaction::Get(clientContext)->isRecovery());
     for (auto i = 0u; i < numRels; i++) {
         anchorState->getSelVectorUnsafe()[0] = i;
@@ -458,14 +458,14 @@ void WALReplayer::replayNodeDeletionRecord(const WALRecord& walRecord) const {
     const auto tableID = deletionRecord.tableID;
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<NodeTable>();
     const auto anchorState = deletionRecord.ownedPKVector->state;
-    KU_ASSERT(anchorState->getSelVector().getSelSize() == 1);
+    LBUG_ASSERT(anchorState->getSelVector().getSelSize() == 1);
     const auto nodeIDVector = std::make_unique<ValueVector>(LogicalType::INTERNAL_ID());
     nodeIDVector->setState(anchorState);
     nodeIDVector->setValue<internalID_t>(0,
         internalID_t{deletionRecord.nodeOffset, deletionRecord.tableID});
     const auto deleteState =
         std::make_unique<NodeTableDeleteState>(*nodeIDVector, *deletionRecord.ownedPKVector);
-    KU_ASSERT(transaction::Transaction::Get(clientContext) &&
+    LBUG_ASSERT(transaction::Transaction::Get(clientContext) &&
               transaction::Transaction::Get(clientContext)->isRecovery());
     table.delete_(transaction::Transaction::Get(clientContext), *deleteState);
 }
@@ -475,14 +475,14 @@ void WALReplayer::replayNodeUpdateRecord(const WALRecord& walRecord) const {
     const auto tableID = updateRecord.tableID;
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<NodeTable>();
     const auto anchorState = updateRecord.ownedPropertyVector->state;
-    KU_ASSERT(anchorState->getSelVector().getSelSize() == 1);
+    LBUG_ASSERT(anchorState->getSelVector().getSelSize() == 1);
     const auto nodeIDVector = std::make_unique<ValueVector>(LogicalType::INTERNAL_ID());
     nodeIDVector->setState(anchorState);
     nodeIDVector->setValue<internalID_t>(0,
         internalID_t{updateRecord.nodeOffset, updateRecord.tableID});
     const auto updateState = std::make_unique<NodeTableUpdateState>(updateRecord.columnID,
         *nodeIDVector, *updateRecord.ownedPropertyVector);
-    KU_ASSERT(transaction::Transaction::Get(clientContext) &&
+    LBUG_ASSERT(transaction::Transaction::Get(clientContext) &&
               transaction::Transaction::Get(clientContext)->isRecovery());
     table.update(transaction::Transaction::Get(clientContext), *updateState);
 }
@@ -492,11 +492,11 @@ void WALReplayer::replayRelDeletionRecord(const WALRecord& walRecord) const {
     const auto tableID = deletionRecord.tableID;
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<RelTable>();
     const auto anchorState = deletionRecord.ownedRelIDVector->state;
-    KU_ASSERT(anchorState->getSelVector().getSelSize() == 1);
+    LBUG_ASSERT(anchorState->getSelVector().getSelSize() == 1);
     const auto deleteState =
         std::make_unique<RelTableDeleteState>(*deletionRecord.ownedSrcNodeIDVector,
             *deletionRecord.ownedDstNodeIDVector, *deletionRecord.ownedRelIDVector);
-    KU_ASSERT(transaction::Transaction::Get(clientContext) &&
+    LBUG_ASSERT(transaction::Transaction::Get(clientContext) &&
               transaction::Transaction::Get(clientContext)->isRecovery());
     table.delete_(transaction::Transaction::Get(clientContext), *deleteState);
 }
@@ -505,10 +505,10 @@ void WALReplayer::replayRelDetachDeletionRecord(const WALRecord& walRecord) cons
     const auto& deletionRecord = walRecord.constCast<RelDetachDeleteRecord>();
     const auto tableID = deletionRecord.tableID;
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<RelTable>();
-    KU_ASSERT(transaction::Transaction::Get(clientContext) &&
+    LBUG_ASSERT(transaction::Transaction::Get(clientContext) &&
               transaction::Transaction::Get(clientContext)->isRecovery());
     const auto anchorState = deletionRecord.ownedSrcNodeIDVector->state;
-    KU_ASSERT(anchorState->getSelVector().getSelSize() == 1);
+    LBUG_ASSERT(anchorState->getSelVector().getSelSize() == 1);
     const auto dstNodeIDVector =
         std::make_unique<ValueVector>(LogicalType{LogicalTypeID::INTERNAL_ID});
     const auto relIDVector = std::make_unique<ValueVector>(LogicalType{LogicalTypeID::INTERNAL_ID});
@@ -525,14 +525,14 @@ void WALReplayer::replayRelUpdateRecord(const WALRecord& walRecord) const {
     const auto tableID = updateRecord.tableID;
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<RelTable>();
     const auto anchorState = updateRecord.ownedRelIDVector->state;
-    KU_ASSERT(anchorState == updateRecord.ownedSrcNodeIDVector->state &&
+    LBUG_ASSERT(anchorState == updateRecord.ownedSrcNodeIDVector->state &&
               anchorState == updateRecord.ownedSrcNodeIDVector->state &&
               anchorState == updateRecord.ownedPropertyVector->state);
-    KU_ASSERT(anchorState->getSelVector().getSelSize() == 1);
+    LBUG_ASSERT(anchorState->getSelVector().getSelSize() == 1);
     const auto updateState = std::make_unique<RelTableUpdateState>(updateRecord.columnID,
         *updateRecord.ownedSrcNodeIDVector, *updateRecord.ownedDstNodeIDVector,
         *updateRecord.ownedRelIDVector, *updateRecord.ownedPropertyVector);
-    KU_ASSERT(transaction::Transaction::Get(clientContext) &&
+    LBUG_ASSERT(transaction::Transaction::Get(clientContext) &&
               transaction::Transaction::Get(clientContext)->isRecovery());
     table.update(transaction::Transaction::Get(clientContext), *updateState);
 }

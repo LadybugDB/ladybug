@@ -69,7 +69,7 @@ private:
 };
 
 inline LazySegmentData& LazySegmentScanner::Iterator::operator*() const {
-    KU_ASSERT(segmentIdx < segmentScanner.segments.size() &&
+    LBUG_ASSERT(segmentIdx < segmentScanner.segments.size() &&
               offsetInSegment < segmentScanner.segments[segmentIdx].length);
     return segmentScanner.segments[segmentIdx];
 }

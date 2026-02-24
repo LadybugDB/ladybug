@@ -102,7 +102,7 @@ bool MiniZStreamWrapper::read(StreamData& sd) {
         if (gzipHdr[3] & GZipFileSystem::GZIP_FLAG_EXTRA) {
             auto xlen = (uint8_t)*bodyPtr | (uint8_t) * (bodyPtr + 1) << 8;
             bodyPtr += xlen + 2;
-            KU_ASSERT((common::idx_t)(GZipFileSystem::GZIP_FOOTER_SIZE +
+            LBUG_ASSERT((common::idx_t)(GZipFileSystem::GZIP_FOOTER_SIZE +
                                       GZipFileSystem::GZIP_HEADER_MINSIZE + 2 + xlen) <
                       GZipFileSystem::GZIP_HEADER_MAXSIZE);
         }
@@ -112,7 +112,7 @@ bool MiniZStreamWrapper::read(StreamData& sd) {
                 c = *bodyPtr;
                 bodyPtr++;
             } while (c != '\0' && bodyPtr < sd.inputBufEnd);
-            KU_ASSERT(bodyPtr - sd.inputBufStart < GZipFileSystem::GZIP_HEADER_MAXSIZE);
+            LBUG_ASSERT(bodyPtr - sd.inputBufStart < GZipFileSystem::GZIP_HEADER_MAXSIZE);
         }
         sd.inputBufStart = bodyPtr;
         if (sd.inputBufEnd - sd.inputBufStart < 1) {
@@ -141,7 +141,7 @@ bool MiniZStreamWrapper::read(StreamData& sd) {
     sd.inputBufStart = (uint8_t*)mzStreamPtr->next_in;
     sd.inputBufEnd = sd.inputBufStart + mzStreamPtr->avail_in;
     sd.outputBufEnd = (uint8_t*)mzStreamPtr->next_out;
-    KU_ASSERT(sd.outputBufEnd + mzStreamPtr->avail_out == sd.outputBuf.get() + sd.outputBufSize);
+    LBUG_ASSERT(sd.outputBufEnd + mzStreamPtr->avail_out == sd.outputBuf.get() + sd.outputBufSize);
 
     if (ret == miniz::MZ_STREAM_END) {
         sd.refresh = true;

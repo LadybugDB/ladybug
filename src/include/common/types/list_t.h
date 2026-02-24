@@ -5,9 +5,9 @@
 namespace lbug {
 namespace common {
 
-struct ku_list_t {
-    ku_list_t() : size{0}, overflowPtr{0} {}
-    ku_list_t(uint64_t size, uint64_t overflowPtr) : size{size}, overflowPtr{overflowPtr} {}
+struct list_t {
+    list_t() : size{0}, overflowPtr{0} {}
+    list_t(uint64_t size, uint64_t overflowPtr) : size{size}, overflowPtr{overflowPtr} {}
 
     void set(const uint8_t* values, const LogicalType& dataType) const;
 

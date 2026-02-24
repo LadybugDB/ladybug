@@ -11,7 +11,7 @@ using namespace common;
 static void jsonArrayLength(const std::vector<std::shared_ptr<common::ValueVector>>& parameters,
     const std::vector<common::SelectionVector*>& parameterSelVectors, common::ValueVector& result,
     common::SelectionVector* resultSelVector, void* /*dataPtr*/) {
-    KU_ASSERT(parameters.size() == 1);
+    LBUG_ASSERT(parameters.size() == 1);
     for (auto i = 0u; i < resultSelVector->getSelSize(); ++i) {
         auto inputPos = (*parameterSelVectors[0])[i];
         auto resultPos = (*resultSelVector)[i];
@@ -20,7 +20,7 @@ static void jsonArrayLength(const std::vector<std::shared_ptr<common::ValueVecto
         if (!isNull) {
             result.setValue<uint32_t>(resultPos,
                 jsonArraySize(
-                    stringToJson(parameters[0]->getValue<ku_string_t>(inputPos).getAsString())));
+                    stringToJson(parameters[0]->getValue<string_t>(inputPos).getAsString())));
         }
     }
 }

@@ -6,7 +6,7 @@
 namespace lbug::processor {
 void PartitionerSharedState::initialize(const common::logical_type_vec_t&,
     common::idx_t numPartitioners, const main::ClientContext* clientContext) {
-    KU_ASSERT(numPartitioners >= 1 && numPartitioners <= DIRECTIONS);
+    LBUG_ASSERT(numPartitioners >= 1 && numPartitioners <= DIRECTIONS);
     auto transaction = transaction::Transaction::Get(*clientContext);
     numNodes[0] = srcNodeTable->getNumTotalRows(transaction);
     if (numPartitioners > 1) {

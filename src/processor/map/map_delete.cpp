@@ -67,7 +67,7 @@ NodeTableDeleteInfo PlanMapper::getNodeTableDeleteInfo(const TableCatalogEntry& 
 
 std::unique_ptr<NodeDeleteExecutor> PlanMapper::getNodeDeleteExecutor(
     const BoundDeleteInfo& boundInfo, const Schema& schema) const {
-    KU_ASSERT(boundInfo.tableType == TableType::NODE);
+    LBUG_ASSERT(boundInfo.tableType == TableType::NODE);
     auto& node = boundInfo.pattern->constCast<NodeExpression>();
     auto nodeIDPos = getDataPos(*node.getInternalID(), schema);
     auto info = NodeDeleteInfo(boundInfo.deleteType, nodeIDPos);
@@ -84,7 +84,7 @@ std::unique_ptr<NodeDeleteExecutor> PlanMapper::getNodeDeleteExecutor(
         return std::make_unique<MultiLabelNodeDeleteExecutor>(std::move(info),
             std::move(tableInfos));
     }
-    KU_ASSERT(node.getNumEntries() == 1);
+    LBUG_ASSERT(node.getNumEntries() == 1);
     auto entry = node.getEntry(0);
     auto pkPos = getDataPos(*node.getPrimaryKey(entry->getTableID()), schema);
     auto extraInfo = getNodeTableDeleteInfo(*entry, pkPos);
@@ -101,7 +101,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapDelete(const LogicalOperator* l
         return mapDeleteRel(logicalOperator);
     }
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -147,7 +147,7 @@ std::unique_ptr<RelDeleteExecutor> PlanMapper::getRelDeleteExecutor(
         return std::make_unique<MultiLabelRelDeleteExecutor>(std::move(tableIDToTableMap),
             std::move(info));
     }
-    KU_ASSERT(rel.getNumEntries() == 1);
+    LBUG_ASSERT(rel.getNumEntries() == 1);
     auto& entry = rel.getEntry(0)->constCast<RelGroupCatalogEntry>();
     auto relEntryInfo = entry.getSingleRelEntryInfo();
     auto table = storageManager->getTable(relEntryInfo.oid)->ptrCast<RelTable>();

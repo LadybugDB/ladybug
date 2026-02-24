@@ -30,7 +30,7 @@ void HashJoinProbe::initLocalStateInternal(ResultSet* resultSet, ExecutionContex
     }
     // We only need to read nonKeys from the factorizedTable. Key columns are always kept as first k
     // columns in the factorizedTable, so we skip the first k columns.
-    KU_ASSERT(probeDataInfo.keysDataPos.size() + probeDataInfo.getNumPayloads() + 2 ==
+    LBUG_ASSERT(probeDataInfo.keysDataPos.size() + probeDataInfo.getNumPayloads() + 2 ==
               sharedState->getHashTable()->getTableSchema()->getNumColumns());
     columnIdxsToReadFrom.resize(probeDataInfo.getNumPayloads());
     iota(columnIdxsToReadFrom.begin(), columnIdxsToReadFrom.end(),
@@ -67,7 +67,7 @@ bool HashJoinProbe::getMatchedTuplesForFlatKey(ExecutionContext* context) {
 }
 
 bool HashJoinProbe::getMatchedTuplesForUnFlatKey(ExecutionContext* context) {
-    KU_ASSERT(keyVectors.size() == 1);
+    LBUG_ASSERT(keyVectors.size() == 1);
     auto keyVector = keyVectors[0];
     restoreSelVector(*keyVector->state);
     if (!children[0]->getNextTuple(context)) {
@@ -119,7 +119,7 @@ static void writeLeftJoinMarkVector(ValueVector* markVector, bool flag) {
     if (markVector == nullptr) {
         return;
     }
-    KU_ASSERT(markVector->state->getSelVector().getSelSize() == 1);
+    LBUG_ASSERT(markVector->state->getSelVector().getSelSize() == 1);
     auto pos = markVector->state->getSelVector()[0];
     markVector->setValue<bool>(pos, flag);
 }
@@ -133,7 +133,7 @@ uint64_t HashJoinProbe::getLeftJoinResult() {
         // clear, NULL keys should only be discarded for probe but should not reflect on the vector.
         // The following for loop is a temporary hack.
         for (auto& vector : keyVectors) {
-            KU_ASSERT(vector->state->isFlat());
+            LBUG_ASSERT(vector->state->isFlat());
             vector->state->getSelVectorUnsafe().setSelSize(1);
         }
         probeState->probedTuples[0] = nullptr;
@@ -145,7 +145,7 @@ uint64_t HashJoinProbe::getLeftJoinResult() {
 }
 
 uint64_t HashJoinProbe::getCountJoinResult() {
-    KU_ASSERT(vectorsToReadInto.size() == 1);
+    LBUG_ASSERT(vectorsToReadInto.size() == 1);
     if (getInnerJoinResult() == 0) {
         auto pos = vectorsToReadInto[0]->state->getSelVector()[0];
         vectorsToReadInto[0]->setValue<int64_t>(pos, 0);

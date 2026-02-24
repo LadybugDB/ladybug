@@ -12,7 +12,7 @@
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
 #include "common/type_utils.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "common/vector/value_vector.h"
 #include "fastpfor/bitpackinghelpers.h"
@@ -33,7 +33,7 @@ namespace storage {
 template<typename T>
 auto getTypedMinMax(std::span<const T> data, const NullMask* nullMask, uint64_t nullMaskOffset) {
     std::optional<StorageValue> min, max;
-    KU_ASSERT(data.size() > 0);
+    LBUG_ASSERT(data.size() > 0);
     if (!nullMask || nullMask->hasNoNullsGuarantee()) {
         auto [minRaw, maxRaw] = std::minmax_element(data.begin(), data.end());
         min = StorageValue(*minRaw);
@@ -70,7 +70,7 @@ uint32_t getDataTypeSizeInChunk(const common::PhysicalTypeID& dataType) {
     }
     default: {
         auto size = PhysicalTypeUtils::getFixedTypeSize(dataType);
-        KU_ASSERT(size <= LBUG_PAGE_SIZE);
+        LBUG_ASSERT(size <= LBUG_PAGE_SIZE);
         return size;
     }
     }
@@ -122,7 +122,7 @@ CompressionMetadata::CompressionMetadata(StorageValue min, StorageValue max,
 }
 
 const CompressionMetadata& CompressionMetadata::getChild(offset_t idx) const {
-    KU_ASSERT(idx < getChildCount(compression));
+    LBUG_ASSERT(idx < getChildCount(compression));
     return children[idx];
 }
 
@@ -157,7 +157,7 @@ void CompressionMetadata::serialize(Serializer& serializer) const {
         floatMetadata()->serialize(serializer);
     }
 
-    KU_ASSERT(children.size() == getChildCount(compression));
+    LBUG_ASSERT(children.size() == getChildCount(compression));
     for (size_t i = 0; i < children.size(); ++i) {
         children[i].serialize(serializer);
     }
@@ -405,7 +405,7 @@ std::optional<CompressionMetadata> ConstantCompression::analyze(const ColumnChun
     case PhysicalTypeID::INT128: {
         uint8_t size = chunk.getNumBytesPerValue();
         StorageValue value{};
-        KU_ASSERT(size <= sizeof(value.unsignedInt));
+        LBUG_ASSERT(size <= sizeof(value.unsignedInt));
         // If there are no values, or only one value, we will always use constant compression
         // since the loop won't execute
         for (auto i = 1u; i < chunk.getNumValues(); i++) {
@@ -448,7 +448,7 @@ std::string CompressionMetadata::toString(const PhysicalTypeID physicalType) con
                     getChild(BITPACKING_CHILD_IDX))
                     .bitWidth;
             },
-            [](auto) -> uint8_t { KU_UNREACHABLE; });
+            [](auto) -> uint8_t { LBUG_UNREACHABLE; });
         return std::format("FLOAT_COMPRESSION[{}], {} Exceptions", bitWidth,
             floatMetadata()->exceptionCount);
     }
@@ -458,10 +458,10 @@ std::string CompressionMetadata::toString(const PhysicalTypeID physicalType) con
             [&](common::internalID_t) {
                 return IntegerBitpacking<uint64_t>::getPackingInfo(*this).bitWidth;
             },
-            [](bool) -> uint8_t { KU_UNREACHABLE; },
+            [](bool) -> uint8_t { LBUG_UNREACHABLE; },
             [&]<numeric_utils::IsIntegral T>(
                 T) { return IntegerBitpacking<T>::getPackingInfo(*this).bitWidth; },
-            [](auto) -> uint8_t { KU_UNREACHABLE; });
+            [](auto) -> uint8_t { LBUG_UNREACHABLE; });
         return std::format("INTEGER_BITPACKING[{}]", bitWidth);
     }
     case CompressionType::BOOLEAN_BITPACKING: {
@@ -471,7 +471,7 @@ std::string CompressionMetadata::toString(const PhysicalTypeID physicalType) con
         return "CONSTANT";
     }
     default: {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     }
 }
@@ -580,7 +580,7 @@ bool IntegerBitpacking<T>::canUpdateInPlace(std::span<const T> values,
     uint64_t nullMaskOffset) {
     auto info = getPackingInfo(metadata);
     auto [min, max] = getTypedMinMax<T>(values, nullMask ? &*nullMask : nullptr, nullMaskOffset);
-    KU_ASSERT((min && max) || (!min && !max));
+    LBUG_ASSERT((min && max) || (!min && !max));
     // If all values are null update can trivially be done in-place
     if (!min) {
         return true;
@@ -641,7 +641,7 @@ template<IntegerBitpackingType T>
 void IntegerBitpacking<T>::setValuesFromUncompressed(const uint8_t* srcBuffer, offset_t posInSrc,
     uint8_t* dstBuffer, offset_t posInDst, offset_t numValues, const CompressionMetadata& metadata,
     const NullMask* nullMask) const {
-    KU_UNUSED(nullMask);
+    LBUG_UNUSED(nullMask);
 
     auto header = getPackingInfo(metadata);
 
@@ -649,7 +649,7 @@ void IntegerBitpacking<T>::setValuesFromUncompressed(const uint8_t* srcBuffer, o
     // non-zero offset However we don't care about the value stored for null values
     // Currently they will be mangled by storage+recovery (underflow in the subtraction
     // below)
-    KU_ASSERT(numValues == static_cast<offset_t>(std::ranges::count_if(
+    LBUG_ASSERT(numValues == static_cast<offset_t>(std::ranges::count_if(
                                std::ranges::iota_view{posInSrc, posInSrc + numValues},
                                [srcBuffer, &metadata, nullMask](offset_t i) {
                                    auto value = reinterpret_cast<const T*>(srcBuffer)[i];
@@ -697,7 +697,7 @@ template<IntegerBitpackingType T>
 void IntegerBitpacking<T>::getValues(const uint8_t* chunkStart, uint8_t pos, uint8_t* dst,
     uint8_t numValuesToRead, const BitpackInfo<T>& header) const {
     const size_t maxReadIndex = pos + numValuesToRead;
-    KU_ASSERT(maxReadIndex <= CHUNK_SIZE);
+    LBUG_ASSERT(maxReadIndex <= CHUNK_SIZE);
 
     for (size_t i = pos; i < maxReadIndex; i++) {
         // Always use unsigned version of unpacker to prevent sign-bit filling when right
@@ -741,7 +741,7 @@ uint64_t IntegerBitpacking<T>::compressNextPage(const uint8_t*& srcBuffer,
         return Uncompressed(sizeof(T)).compressNextPage(srcBuffer, numValuesRemaining, dstBuffer,
             dstBufferSize, metadata);
     }
-    KU_ASSERT(metadata.compression == CompressionType::INTEGER_BITPACKING);
+    LBUG_ASSERT(metadata.compression == CompressionType::INTEGER_BITPACKING);
     auto info = getPackingInfo(metadata);
     auto bitWidth = info.bitWidth;
 
@@ -752,8 +752,8 @@ uint64_t IntegerBitpacking<T>::compressNextPage(const uint8_t*& srcBuffer,
     // Round up to nearest byte
     auto sizeToCompress =
         numValuesToCompress * bitWidth / 8 + (numValuesToCompress * bitWidth % 8 != 0);
-    KU_ASSERT(dstBufferSize >= CHUNK_SIZE);
-    KU_ASSERT(dstBufferSize >= sizeToCompress);
+    LBUG_ASSERT(dstBufferSize >= CHUNK_SIZE);
+    LBUG_ASSERT(dstBufferSize >= sizeToCompress);
     // This might overflow the source buffer if there are fewer values remaining than the chunk
     // size so we stop at the end of the last full chunk and use a temporary array to avoid
     // overflow.
@@ -955,7 +955,7 @@ void ReadCompressedValuesFromPageToVector::operator()(const uint8_t* frame, Page
         return booleanBitpacking.decompressFromPage(frame, pageCursor.elemPosInPage,
             resultVector->getData(), posInVector, numValuesToRead, metadata);
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -1035,7 +1035,7 @@ void ReadCompressedValuesFromPage::operator()(const uint8_t* frame, PageCursor& 
         return booleanBitpacking.copyFromPage(frame, pageCursor.elemPosInPage, result,
             startPosInResult, numValuesToRead, metadata);
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -1082,7 +1082,7 @@ void WriteCompressedValuesToPage::operator()(uint8_t* frame, uint16_t posInFrame
             metadata);
 
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -1131,7 +1131,7 @@ bool StorageValue::gt(const StorageValue& other, common::PhysicalTypeID type) co
     case common::PhysicalTypeID::DOUBLE:
         return this->floatVal > other.floatVal;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -1185,7 +1185,7 @@ std::pair<std::optional<StorageValue>, std::optional<StorageValue>> getMinMaxSto
         },
         [&]<typename T>(T)
             requires(std::same_as<T, interval_t> || std::same_as<T, struct_entry_t> ||
-                     std::same_as<T, ku_string_t> || std::same_as<T, list_entry_t> ||
+                     std::same_as<T, string_t> || std::same_as<T, list_entry_t> ||
                      std::same_as<T, uint128_t>)
         {
             if (valueRequiredIfUnsupported) {
@@ -1234,7 +1234,7 @@ std::pair<std::optional<StorageValue>, std::optional<StorageValue>> getMinMaxSto
         },
         [&]<typename T>(T)
             requires(std::same_as<T, interval_t> || std::same_as<T, struct_entry_t> ||
-                     std::same_as<T, ku_string_t> || std::same_as<T, list_entry_t> ||
+                     std::same_as<T, string_t> || std::same_as<T, list_entry_t> ||
                      std::same_as<T, uint128_t>)
         {
             if (valueRequiredIfUnsupported) {

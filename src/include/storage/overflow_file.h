@@ -44,13 +44,13 @@ public:
     OverflowFileHandle(OverflowFileHandle&& other) = delete;
 
     std::string readString(transaction::TransactionType trxType,
-        const common::ku_string_t& str) const;
+        const common::string_t& str) const;
 
     bool equals(transaction::TransactionType trxType, std::string_view keyToLookup,
-        const common::ku_string_t& keyInEntry) const;
+        const common::string_t& keyInEntry) const;
 
-    common::ku_string_t writeString(PageAllocator* pageAllocator, std::string_view rawString);
-    common::ku_string_t writeString(PageAllocator* pageAllocator, const char* rawString) {
+    common::string_t writeString(PageAllocator* pageAllocator, std::string_view rawString);
+    common::string_t writeString(PageAllocator* pageAllocator, const char* rawString) {
         return writeString(pageAllocator, std::string_view(rawString));
     }
 
@@ -65,7 +65,7 @@ public:
 private:
     uint8_t* addANewPage(PageAllocator* pageAllocator);
     void setStringOverflow(PageAllocator* pageAllocator, const char* inMemSrcStr, uint64_t len,
-        common::ku_string_t& diskDstString);
+        common::string_t& diskDstString);
 
     void read(transaction::TransactionType trxType, common::page_idx_t pageIdx,
         const std::function<void(uint8_t*)>& func) const;
@@ -111,14 +111,14 @@ public:
     common::page_idx_t getHeaderPageIdx() const { return headerPageIdx; }
 
     OverflowFileHandle* addHandle() {
-        KU_ASSERT(handles.size() < NUM_HASH_INDEXES);
+        LBUG_ASSERT(handles.size() < NUM_HASH_INDEXES);
         handles.emplace_back(
             std::make_unique<OverflowFileHandle>(*this, header.entries[handles.size()]));
         return handles.back().get();
     }
 
     FileHandle* getFileHandle() const {
-        KU_ASSERT(fileHandle);
+        LBUG_ASSERT(fileHandle);
         return fileHandle;
     }
 

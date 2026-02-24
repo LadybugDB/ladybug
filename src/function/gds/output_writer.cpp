@@ -58,7 +58,7 @@ PathsOutputWriter::PathsOutputWriter(main::ClientContext* context,
 static void addListEntry(ValueVector* vector, uint64_t length) {
     vector->resetAuxiliaryBuffer();
     auto entry = ListVector::addList(vector, length);
-    KU_ASSERT(entry.offset == 0);
+    LBUG_ASSERT(entry.offset == 0);
     vector->setValue(0, entry);
 }
 
@@ -249,7 +249,7 @@ bool PathsOutputWriter::checkAppendSemantic(const std::vector<ParentList*>& path
     case PathSemantic::ACYCLIC:
         return isAppendAcyclic(path, candidate);
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -263,7 +263,7 @@ bool PathsOutputWriter::checkReplaceTopSemantic(const std::vector<ParentList*>& 
     case PathSemantic::ACYCLIC:
         return isReplaceTopAcyclic(path, candidate);
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -310,12 +310,12 @@ bool PathsOutputWriter::isReplaceTopAcyclic(const std::vector<ParentList*>& path
 }
 
 static void setLength(ValueVector* vector, uint16_t length) {
-    KU_ASSERT(vector->dataType.getLogicalTypeID() == LogicalTypeID::UINT16);
+    LBUG_ASSERT(vector->dataType.getLogicalTypeID() == LogicalTypeID::UINT16);
     vector->setValue<uint16_t>(0, length);
 }
 
 void PathsOutputWriter::beginWritePath(idx_t length) const {
-    KU_ASSERT(info.writePath);
+    LBUG_ASSERT(info.writePath);
     addListEntry(pathNodeIDsVector.get(), length > 1 ? length - 1 : 0);
     addListEntry(pathEdgeIDsVector.get(), length);
     if (info.writeEdgeDirection) {
@@ -382,7 +382,7 @@ void SPPathsOutputWriter::writeInternal(FactorizedTable& fTable, nodeID_t dstNod
         return;
     }
     if (dstNodeID == sourceNodeID_) { // Avoid writing source
-        KU_ASSERT(firstParent->getIter() == FRONTIER_INITIAL_VISITED);
+        LBUG_ASSERT(firstParent->getIter() == FRONTIER_INITIAL_VISITED);
         return;
     }
     if (!info.hasNodeMask() && info.semantic == PathSemantic::WALK) {

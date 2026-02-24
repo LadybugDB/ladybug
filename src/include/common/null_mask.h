@@ -106,7 +106,7 @@ public:
 
     static void setNull(uint64_t* nullEntries, uint32_t pos, bool isNull);
     inline void setNull(uint32_t pos, bool isNull) {
-        KU_ASSERT(pos < getNumNullBits(data));
+        LBUG_ASSERT(pos < getNumNullBits(data));
         setNull(data.data(), pos, isNull);
         if (isNull) {
             mayContainNulls = true;
@@ -123,7 +123,7 @@ public:
     }
 
     inline bool isNull(uint32_t pos) const {
-        KU_ASSERT(pos < getNumNullBits(data));
+        LBUG_ASSERT(pos < getNumNullBits(data));
         return isNull(data.data(), pos);
     }
 

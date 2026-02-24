@@ -64,25 +64,25 @@ struct SegmentState {
     }
 
     SegmentState& getChildState(common::idx_t childIdx) {
-        KU_ASSERT(childIdx < childrenStates.size());
+        LBUG_ASSERT(childIdx < childrenStates.size());
         return childrenStates[childIdx];
     }
     const SegmentState& getChildState(common::idx_t childIdx) const {
-        KU_ASSERT(childIdx < childrenStates.size());
+        LBUG_ASSERT(childIdx < childrenStates.size());
         return childrenStates[childIdx];
     }
 
     template<std::floating_point T>
     InMemoryExceptionChunk<T>* getExceptionChunk() {
         using GetType = std::unique_ptr<InMemoryExceptionChunk<T>>;
-        KU_ASSERT(std::holds_alternative<GetType>(alpExceptionChunk));
+        LBUG_ASSERT(std::holds_alternative<GetType>(alpExceptionChunk));
         return std::get<GetType>(alpExceptionChunk).get();
     }
 
     template<std::floating_point T>
     const InMemoryExceptionChunk<T>* getExceptionChunkConst() const {
         using GetType = std::unique_ptr<InMemoryExceptionChunk<T>>;
-        KU_ASSERT(std::holds_alternative<GetType>(alpExceptionChunk));
+        LBUG_ASSERT(std::holds_alternative<GetType>(alpExceptionChunk));
         return std::get<GetType>(alpExceptionChunk).get();
     }
 
@@ -114,14 +114,14 @@ public:
 
     template<typename T>
     T getValue(common::offset_t pos) const {
-        KU_ASSERT(pos < numValues);
-        KU_ASSERT(residencyState != ResidencyState::ON_DISK);
+        LBUG_ASSERT(pos < numValues);
+        LBUG_ASSERT(residencyState != ResidencyState::ON_DISK);
         return getData<T>()[pos];
     }
     template<typename T>
     void setValue(T val, common::offset_t pos) {
-        KU_ASSERT(pos < capacity);
-        KU_ASSERT(residencyState != ResidencyState::ON_DISK);
+        LBUG_ASSERT(pos < capacity);
+        LBUG_ASSERT(residencyState != ResidencyState::ON_DISK);
         getData<T>()[pos] = val;
         if (pos >= numValues) {
             numValues = pos + 1;
@@ -144,15 +144,15 @@ public:
     ResidencyState getResidencyState() const { return residencyState; }
     bool isCompressionEnabled() const { return enableCompression; }
     ColumnChunkMetadata& getMetadata() {
-        KU_ASSERT(residencyState == ResidencyState::ON_DISK);
+        LBUG_ASSERT(residencyState == ResidencyState::ON_DISK);
         return metadata;
     }
     const ColumnChunkMetadata& getMetadata() const {
-        KU_ASSERT(residencyState == ResidencyState::ON_DISK);
+        LBUG_ASSERT(residencyState == ResidencyState::ON_DISK);
         return metadata;
     }
     void setMetadata(const ColumnChunkMetadata& metadata_) {
-        KU_ASSERT(residencyState == ResidencyState::ON_DISK);
+        LBUG_ASSERT(residencyState == ResidencyState::ON_DISK);
         metadata = metadata_;
     }
 
@@ -210,7 +210,7 @@ public:
     void populateWithDefaultVal(evaluator::ExpressionEvaluator& defaultEvaluator,
         uint64_t& numValues_, ColumnStats* newColumnStats);
     virtual void finalize() {
-        KU_ASSERT(residencyState != ResidencyState::ON_DISK);
+        LBUG_ASSERT(residencyState != ResidencyState::ON_DISK);
         // DO NOTHING.
     }
 
@@ -256,11 +256,11 @@ public:
 
     template<typename TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
     template<typename TARGET>
     const TARGET& cast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
     MemoryManager& getMemoryManager() const;
 
@@ -324,8 +324,8 @@ protected:
 
 template<>
 inline void ColumnChunkData::setValue(bool val, common::offset_t pos) {
-    KU_ASSERT(pos < capacity);
-    KU_ASSERT(residencyState != ResidencyState::ON_DISK);
+    LBUG_ASSERT(pos < capacity);
+    LBUG_ASSERT(residencyState != ResidencyState::ON_DISK);
     // Buffer is rounded up to the nearest 8 bytes so that this cast is safe
     common::NullMask::setNull(getData<uint64_t>(), pos, val);
     if (pos >= numValues) {
@@ -407,7 +407,7 @@ public:
 
     void copyFromBuffer(const uint64_t* srcBuffer, uint64_t srcOffset, uint64_t dstOffset,
         uint64_t numBits) {
-        KU_ASSERT(numBits > 0);
+        LBUG_ASSERT(numBits > 0);
         common::NullMask::copyNullMask(srcBuffer, srcOffset, getData<uint64_t>(), dstOffset,
             numBits);
         auto [min, max] = common::NullMask::getMinMax(srcBuffer, srcOffset, numBits);

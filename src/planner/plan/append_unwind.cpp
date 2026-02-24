@@ -12,7 +12,7 @@ namespace lbug {
 namespace planner {
 
 void Planner::appendUnwind(const BoundReadingClause& readingClause, LogicalPlan& plan) {
-    auto& unwindClause = ku_dynamic_cast<const BoundUnwindClause&>(readingClause);
+    auto& unwindClause = dynamic_cast_checked<const BoundUnwindClause&>(readingClause);
     auto inExpr = unwindClause.getInExpr();
     if (ConstantExpressionVisitor::isConstant(*inExpr)) {
         auto value =

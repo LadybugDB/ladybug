@@ -26,8 +26,8 @@ struct RegexReplaceBindData : public FunctionBindData {
 };
 
 struct RegexpReplace {
-    static void operation(common::ku_string_t& value, common::ku_string_t& pattern,
-        common::ku_string_t& replacement, common::ku_string_t& result,
+    static void operation(string_t& value, string_t& pattern,
+        string_t& replacement, string_t& result,
         common::ValueVector& resultValueVector, void* dataPtr) {
         auto bindData = reinterpret_cast<RegexReplaceBindData*>(dataPtr);
         std::string resultStr = value.getAsString();
@@ -52,8 +52,8 @@ struct RegexReplaceBindDataStaticPattern : public RegexReplaceBindData {
 };
 
 struct RegexpReplaceStaticPattern {
-    static void operation(common::ku_string_t& value, common::ku_string_t& /*pattern*/,
-        common::ku_string_t& replacement, common::ku_string_t& result,
+    static void operation(string_t& value, string_t& /*pattern*/,
+        string_t& replacement, string_t& result,
         common::ValueVector& resultValueVector, void* dataPtr) {
         auto bindData = reinterpret_cast<RegexReplaceBindDataStaticPattern*>(dataPtr);
         auto resultStr = value.getAsString();
@@ -72,7 +72,7 @@ static re2_replace_func_t bindReplaceFunc(const binder::expression_vector& expr)
         result = RE2::GlobalReplace;
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     return result;
 }
@@ -82,8 +82,8 @@ scalar_func_exec_t getExecFunc(const binder::expression_vector& expr) {
     scalar_func_exec_t execFunc;
     switch (expr.size()) {
     case 3: {
-        execFunc = ScalarFunction::TernaryRegexExecFunction<ku_string_t, ku_string_t, ku_string_t,
-            ku_string_t, OP>;
+        execFunc = ScalarFunction::TernaryRegexExecFunction<string_t, string_t, string_t,
+            string_t, OP>;
     } break;
     case 4: {
         auto option = expr[3];
@@ -94,11 +94,11 @@ scalar_func_exec_t getExecFunc(const binder::expression_vector& expr) {
             throw common::BinderException{
                 "regex_replace can only support global replace option: g."};
         }
-        execFunc = ScalarFunction::TernaryRegexExecFunction<ku_string_t, ku_string_t, ku_string_t,
-            ku_string_t, OP>;
+        execFunc = ScalarFunction::TernaryRegexExecFunction<string_t, string_t, string_t,
+            string_t, OP>;
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     return execFunc;
 }

@@ -8,7 +8,7 @@
 #include "common/serializer/buffer_reader.h"
 #include "common/serializer/serializer.h"
 #include "common/type_utils.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "hash_index_header.h"
 #include "hash_index_slot.h"
@@ -89,7 +89,7 @@ public:
                   common::HashIndexConstants::SLOT_CAPACITY_BYTES / 2);
 
     using Key =
-        typename std::conditional<std::same_as<T, common::ku_string_t>, std::string_view, T>::type;
+        typename std::conditional<std::same_as<T, common::string_t>, std::string_view, T>::type;
     // For read transactions, local storage is skipped, lookups are performed on the persistent
     // storage. For write transactions, lookups are performed in the local storage first, then in
     // the persistent storage if necessary. In details, there are three cases for the local storage
@@ -107,7 +107,7 @@ public:
         if (localLookupState == HashIndexLocalLookupState::KEY_FOUND) {
             return true;
         }
-        KU_ASSERT(localLookupState == HashIndexLocalLookupState::KEY_NOT_EXIST);
+        LBUG_ASSERT(localLookupState == HashIndexLocalLookupState::KEY_NOT_EXIST);
         return lookupInPersistentIndex(transaction, key, result, isVisible);
     }
 
@@ -140,7 +140,7 @@ public:
     }
 
     using BufferKeyType =
-        typename std::conditional<std::same_as<T, common::ku_string_t>, std::string, T>::type;
+        typename std::conditional<std::same_as<T, common::string_t>, std::string, T>::type;
     // Appends the buffer to the index. Returns the number of values successfully inserted
     // Note that this function does not acquire locks internally, as the caller is expected to hold
     // the lock already.
@@ -283,7 +283,7 @@ private:
     }
 
     bool nextChainedSlot(const transaction::Transaction* transaction, SlotIterator& iter) const {
-        KU_ASSERT(iter.slotInfo.slotType == SlotType::PRIMARY ||
+        LBUG_ASSERT(iter.slotInfo.slotType == SlotType::PRIMARY ||
                   iter.slotInfo.slotId != iter.slot.header.nextOvfSlotId);
         if (iter.slot.header.nextOvfSlotId != SlotHeader::INVALID_OVERFLOW_SLOT_ID) {
             iter.slotInfo.slotId = iter.slot.header.nextOvfSlotId;
@@ -310,12 +310,12 @@ private:
 };
 
 template<>
-common::hash_t HashIndex<common::ku_string_t>::hashStored(
-    const transaction::Transaction* transaction, const common::ku_string_t& key) const;
+common::hash_t HashIndex<common::string_t>::hashStored(
+    const transaction::Transaction* transaction, const common::string_t& key) const;
 
 template<>
-bool HashIndex<common::ku_string_t>::equals(const transaction::Transaction* transaction,
-    std::string_view keyToLookup, const common::ku_string_t& keyInEntry) const;
+bool HashIndex<common::string_t>::equals(const transaction::Transaction* transaction,
+    std::string_view keyToLookup, const common::string_t& keyInEntry) const;
 
 struct PrimaryKeyIndexStorageInfo final : IndexStorageInfo {
     common::page_idx_t firstHeaderPage;
@@ -362,12 +362,12 @@ public:
 
     template<typename T>
     inline HashIndex<HashIndexType<T>>* getTypedHashIndex(T key) {
-        return common::ku_dynamic_cast<HashIndex<HashIndexType<T>>*>(
+        return common::dynamic_cast_checked<HashIndex<HashIndexType<T>>*>(
             hashIndices[HashIndexUtils::getHashIndexPosition(key)].get());
     }
     template<common::IndexHashable T>
     inline HashIndex<T>* getTypedHashIndexByPos(uint64_t indexPos) {
-        return common::ku_dynamic_cast<HashIndex<HashIndexType<T>>*>(hashIndices[indexPos].get());
+        return common::dynamic_cast_checked<HashIndex<HashIndexType<T>>*>(hashIndices[indexPos].get());
     }
 
     bool tryLockTypedIndex(uint64_t indexPos) { return hashIndices[indexPos]->tryLock(); }
@@ -375,14 +375,14 @@ public:
         return hashIndices[indexPos]->adoptLock();
     }
 
-    bool lookup(const transaction::Transaction* trx, common::ku_string_t key,
+    bool lookup(const transaction::Transaction* trx, common::string_t key,
         common::offset_t& result, visible_func isVisible) {
         return lookup(trx, key.getAsStringView(), result, isVisible);
     }
     template<common::IndexHashable T>
     inline bool lookup(const transaction::Transaction* trx, T key, common::offset_t& result,
         visible_func isVisible) {
-        KU_ASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
+        LBUG_ASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
         return getTypedHashIndex(key)->lookupInternal(trx, key, result, isVisible);
     }
 
@@ -399,14 +399,14 @@ public:
         // For hash index, we don't need to do anything here because the insertions are handled when
         // the transaction commits.
     }
-    bool insert(const transaction::Transaction* transaction, common::ku_string_t key,
+    bool insert(const transaction::Transaction* transaction, common::string_t key,
         common::offset_t value, visible_func isVisible) {
         return insert(transaction, key.getAsString(), value, isVisible);
     }
     template<common::IndexHashable T>
     inline bool insert(const transaction::Transaction* transaction, T key, common::offset_t value,
         visible_func isVisible) {
-        KU_ASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
+        LBUG_ASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
         return getTypedHashIndex(key)->insertInternal(transaction, std::move(key), value,
             isVisible);
     }
@@ -424,8 +424,8 @@ public:
     template<common::IndexHashable T>
     size_t appendWithIndexPosNoLock(const transaction::Transaction* transaction,
         IndexBuffer<T>& buffer, uint64_t bufferOffset, uint64_t indexPos, visible_func isVisible) {
-        KU_ASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
-        KU_ASSERT(std::all_of(buffer.begin(), buffer.end(), [&](auto& elem) {
+        LBUG_ASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
+        LBUG_ASSERT(std::all_of(buffer.begin(), buffer.end(), [&](auto& elem) {
             return HashIndexUtils::getHashIndexPosition(elem.first) == indexPos;
         }));
         return getTypedHashIndexByPos<HashIndexType<T>>(indexPos)->appendNoLock(transaction, buffer,
@@ -439,7 +439,7 @@ public:
         }
     }
 
-    void delete_(common::ku_string_t key) { return delete_(key.getAsStringView()); }
+    void delete_(common::string_t key) { return delete_(key.getAsStringView()); }
     std::unique_ptr<DeleteState> initDeleteState(const transaction::Transaction* /*transaction*/,
         MemoryManager* /*mm*/, visible_func /*isVisible*/) override {
         return std::make_unique<DeleteState>();
@@ -450,14 +450,14 @@ public:
     }
     template<common::IndexHashable T>
     inline void delete_(T key) {
-        KU_ASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
+        LBUG_ASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
         return getTypedHashIndex(key)->deleteInternal(key);
     }
 
-    bool discardLocal(common::ku_string_t key) { return discardLocal(key.getAsStringView()); }
+    bool discardLocal(common::string_t key) { return discardLocal(key.getAsStringView()); }
     template<common::IndexHashable T>
     inline bool discardLocal(T key) {
-        KU_ASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
+        LBUG_ASSERT(indexInfo.keyDataTypes[0] == common::TypeUtils::getPhysicalTypeIDForType<T>());
         return getTypedHashIndex(key)->discardLocal(key);
     }
 
@@ -470,7 +470,7 @@ public:
     void rollbackCheckpoint() override;
 
     common::PhysicalTypeID keyTypeID() const {
-        KU_ASSERT(indexInfo.keyDataTypes.size() == 1);
+        LBUG_ASSERT(indexInfo.keyDataTypes.size() == 1);
         return indexInfo.keyDataTypes[0];
     }
     void reclaimStorage(PageAllocator& pageAllocator) const;

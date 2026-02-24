@@ -27,7 +27,7 @@ struct ListAnyValue {
 };
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
-    auto scalarFunction = ku_dynamic_cast<ScalarFunction*>(input.definition);
+    auto scalarFunction = dynamic_cast_checked<ScalarFunction*>(input.definition);
     const auto& resultType = ListType::getChildType(input.arguments[0]->dataType);
     TypeUtils::visit(resultType.getPhysicalType(), [&scalarFunction]<typename T>(T) {
         scalarFunction->execFunc =

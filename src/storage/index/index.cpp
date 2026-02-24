@@ -75,13 +75,13 @@ IndexHolder::IndexHolder(IndexInfo indexInfo, std::unique_ptr<uint8_t[]> storage
 
 void IndexHolder::serialize(common::Serializer& ser) const {
     if (loaded) {
-        KU_ASSERT(index);
+        LBUG_ASSERT(index);
         index->serialize(ser);
     } else {
         indexInfo.serialize(ser);
         ser.write<uint64_t>(storageInfoBufferSize);
         if (storageInfoBufferSize > 0) {
-            KU_ASSERT(storageInfoBuffer);
+            LBUG_ASSERT(storageInfoBuffer);
             ser.write(storageInfoBuffer.get(), storageInfoBufferSize);
         }
     }
@@ -91,8 +91,8 @@ void IndexHolder::load(main::ClientContext* context, StorageManager* storageMana
     if (loaded) {
         return;
     }
-    KU_ASSERT(!index);
-    KU_ASSERT(storageInfoBuffer);
+    LBUG_ASSERT(!index);
+    LBUG_ASSERT(storageInfoBuffer);
     auto indexTypeOptional = StorageManager::Get(*context)->getIndexType(indexInfo.indexType);
     if (!indexTypeOptional.has_value()) {
         throw common::RuntimeException("No index type with name: " + indexInfo.indexType);

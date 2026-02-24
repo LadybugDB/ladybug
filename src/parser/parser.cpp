@@ -46,7 +46,7 @@ std::vector<std::shared_ptr<Statement>> Parser::parseQuery(std::string_view quer
     lbugCypherParser.addErrorListener(&parserErrorListener);
     lbugCypherParser.setErrorHandler(std::make_shared<ParserErrorStrategy>());
 
-    Transformer transformer(*lbugCypherParser.ku_Statements(), std::move(transformerExtensions));
+    Transformer transformer(*lbugCypherParser.iC_Statements(), std::move(transformerExtensions));
     return transformer.transform();
 }
 

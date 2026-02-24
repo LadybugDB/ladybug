@@ -228,7 +228,7 @@ static void writeRows(const ExportCSVBindData& exportCSVBindData, ExportCSVLocal
                 serializer->writeBufferData(ExportCSVConstants::DEFAULT_NULL_STR);
                 continue;
             }
-            auto strValue = vector->getValue<ku_string_t>(pos);
+            auto strValue = vector->getValue<string_t>(pos);
             // Note: we need blindly add quotes to LIST.
             writeString(serializer.get(), exportCSVBindData, strValue.getData(), strValue.len,
                 ExportCSVConstants::DEFAULT_FORCE_QUOTE ||

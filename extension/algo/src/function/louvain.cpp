@@ -495,7 +495,7 @@ void initInMemoryGraph(const table_id_t tableId, const offset_t numNodes, Graph*
     PhaseState& state) {
     const auto nbrTables = graph->getRelInfos(tableId);
     const auto nbrInfo = nbrTables[0];
-    KU_ASSERT(nbrInfo.srcTableID == nbrInfo.dstTableID);
+    LBUG_ASSERT(nbrInfo.srcTableID == nbrInfo.dstTableID);
     // Set randomLookup to false to enable caching during graph materialization.
     const auto scanState = graph->prepareRelScan(*nbrInfo.relGroupEntry, nbrInfo.relTableID,
         nbrInfo.dstTableID, {}, false /*randomLookup*/);
@@ -542,7 +542,7 @@ offset_t renumberCommunities(PhaseState& state) {
 
 void aggregateCommunities(const offset_t newCommCount, PhaseState& state, MemoryManager* mm,
     ExecutionContext* context) {
-    ku_vector_t<unordered_map<offset_t, weight_t>> commWeights(mm);
+    vector_t<unordered_map<offset_t, weight_t>> commWeights(mm);
     commWeights.resize(newCommCount);
     for (auto nodeId = 0u; nodeId < state.graph.numNodes; nodeId++) {
         const auto beginCSROffset = state.graph.csrOffsets[nodeId];
@@ -578,7 +578,7 @@ static common::offset_t tableFunc(const TableFuncInput& input, TableFuncOutput&)
     auto mm = MemoryManager::Get(*clientContext);
     const auto graph = sharedState->graph.get();
     auto maxOffsetMap = graph->getMaxOffsetMap(transaction);
-    KU_ASSERT(graph->getNodeTableIDs().size() == 1);
+    LBUG_ASSERT(graph->getNodeTableIDs().size() == 1);
     const auto tableID = graph->getNodeTableIDs()[0];
     const auto origNumNodes = graph->getMaxOffset(transaction, tableID);
 

@@ -31,7 +31,7 @@ void FTSIndexUtils::validateIndexExistence(const main::ClientContext& context,
         }
     } break;
     default: {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     }
 }

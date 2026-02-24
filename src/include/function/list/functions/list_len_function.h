@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "utf8proc.h"
 
 namespace lbug {
@@ -17,7 +17,7 @@ public:
 };
 
 template<>
-inline void ListLen::operation(common::ku_string_t& input, int64_t& result) {
+inline void ListLen::operation(common::string_t& input, int64_t& result) {
     auto totalByteLength = input.len;
     auto inputString = input.getAsString();
     for (auto i = 0u; i < totalByteLength; i++) {

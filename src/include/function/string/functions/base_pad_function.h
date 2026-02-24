@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/vector/value_vector.h"
 #include "utf8proc.h"
 
@@ -11,11 +11,11 @@ namespace function {
 // https://github.com/duckdb/duckdb/blob/master/src/function/scalar/string/pad.cpp
 struct BasePadOperation {
 public:
-    static inline void operation(common::ku_string_t& src, int64_t count,
-        common::ku_string_t& characterToPad, common::ku_string_t& result,
+    static inline void operation(common::string_t& src, int64_t count,
+        common::string_t& characterToPad, common::string_t& result,
         common::ValueVector& resultValueVector,
-        void (*padOperation)(common::ku_string_t& src, int64_t count,
-            common::ku_string_t& characterToPad, std::string& paddedResult)) {
+        void (*padOperation)(common::string_t& src, int64_t count,
+            common::string_t& characterToPad, std::string& paddedResult)) {
         if (count < 0) {
             count = 0;
         }
@@ -37,7 +37,7 @@ public:
         return {byteCount, charCount};
     }
 
-    static void insertPadding(uint32_t charCount, common::ku_string_t pad, std::string& result) {
+    static void insertPadding(uint32_t charCount, common::string_t pad, std::string& result) {
         auto padData = pad.getData();
         auto padSize = pad.len;
         uint32_t padByteCount = 0;

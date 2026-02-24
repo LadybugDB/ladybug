@@ -20,7 +20,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
         auto isNull = parameters[0]->isNull(paramPos);
         result.setNull(resultPos, isNull);
         if (!isNull) {
-            auto paramStr = param.getValue<ku_string_t>(paramPos).getAsString();
+            auto paramStr = param.getValue<string_t>(paramPos).getAsString();
             auto schema = jsonSchema(stringToJson(paramStr));
             result.setNull(resultPos, false /* isNull */);
             StringVector::addString(&result, resultPos, schema.toString());

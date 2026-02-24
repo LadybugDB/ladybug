@@ -137,15 +137,15 @@ inline void CastStringHelper::cast(const char* input, uint64_t len, interval_t& 
 
 // ---------------------- cast String to Blob ------------------------------ //
 template<>
-void CastString::operation(const ku_string_t& input, blob_t& result, ValueVector* resultVector,
+void CastString::operation(const string_t& input, blob_t& result, ValueVector* resultVector,
     uint64_t /*rowToAdd*/, const CSVOption* /*option*/) {
     result.value.len = Blob::getBlobSize(input);
-    if (!ku_string_t::isShortString(result.value.len)) {
+    if (!string_t::isShortString(result.value.len)) {
         auto overflowBuffer = StringVector::getInMemOverflowBuffer(resultVector);
         auto overflowPtr = overflowBuffer->allocateSpace(result.value.len);
         result.value.overflowPtr = reinterpret_cast<int64_t>(overflowPtr);
         Blob::fromString(reinterpret_cast<const char*>(input.getData()), input.len, overflowPtr);
-        memcpy(result.value.prefix, overflowPtr, ku_string_t::PREFIX_LENGTH);
+        memcpy(result.value.prefix, overflowPtr, string_t::PREFIX_LENGTH);
     } else {
         Blob::fromString(reinterpret_cast<const char*>(input.getData()), input.len,
             result.value.prefix);
@@ -163,14 +163,14 @@ void CastStringHelper::cast(const char* input, uint64_t len, blob_t& /*result*/,
 
 //---------------------- cast String to UUID ------------------------------ //
 template<>
-void CastString::operation(const ku_string_t& input, ku_uuid_t& result,
+void CastString::operation(const string_t& input, uuid& result,
     ValueVector* /*result_vector*/, uint64_t /*rowToAdd*/, const CSVOption* /*option*/) {
     result.value = UUID::fromString(input.getAsString());
 }
 
 // LCOV_EXCL_START
 template<>
-void CastStringHelper::cast(const char* input, uint64_t len, ku_uuid_t& result,
+void CastStringHelper::cast(const char* input, uint64_t len, uuid& result,
     ValueVector* /*vector*/, uint64_t /*rowToAdd*/, const CSVOption* /*option*/) {
     result.value = UUID::fromCString(input, len);
 }
@@ -183,7 +183,7 @@ static void skipWhitespace(const char*& input, const char* end) {
             // We only skip ASCII white spaces there.
             break;
         } else {
-            KU_ASSERT(*input >= -1);
+            LBUG_ASSERT(*input >= -1);
             if (!isspace(*input)) {
                 break;
             }
@@ -409,7 +409,7 @@ void CastStringHelper::cast(const char* input, uint64_t len, list_entry_t& /*res
 }
 
 template<>
-void CastString::operation(const ku_string_t& input, list_entry_t& result,
+void CastString::operation(const string_t& input, list_entry_t& result,
     ValueVector* resultVector, uint64_t rowToAdd, const CSVOption* option) {
     CastStringHelper::cast(reinterpret_cast<const char*>(input.getData()), input.len, result,
         resultVector, rowToAdd, option);
@@ -543,7 +543,7 @@ void CastStringHelper::cast(const char* input, uint64_t len, map_entry_t& /*resu
 }
 
 template<>
-void CastString::operation(const ku_string_t& input, map_entry_t& result, ValueVector* resultVector,
+void CastString::operation(const string_t& input, map_entry_t& result, ValueVector* resultVector,
     uint64_t rowToAdd, const CSVOption* option) {
     CastStringHelper::cast(reinterpret_cast<const char*>(input.getData()), input.len, result,
         resultVector, rowToAdd, option);
@@ -658,7 +658,7 @@ void CastStringHelper::cast(const char* input, uint64_t len, struct_entry_t& /*r
 }
 
 template<>
-void CastString::operation(const ku_string_t& input, struct_entry_t& result,
+void CastString::operation(const string_t& input, struct_entry_t& result,
     ValueVector* resultVector, uint64_t rowToAdd, const CSVOption* option) {
     CastStringHelper::cast(reinterpret_cast<const char*>(input.getData()), input.len, result,
         resultVector, rowToAdd, option);
@@ -769,7 +769,7 @@ static bool tryCastUnionField(ValueVector* vector, uint64_t rowToAdd, const char
             testAndSetValue(vector, rowToAdd, result, success);
         } break;
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     } break;
     case LogicalTypeID::DATE: {
@@ -852,7 +852,7 @@ void CastStringHelper::cast(const char* input, uint64_t len, union_entry_t& /*re
 }
 
 template<>
-void CastString::operation(const ku_string_t& input, union_entry_t& result,
+void CastString::operation(const string_t& input, union_entry_t& result,
     ValueVector* resultVector, uint64_t rowToAdd, const CSVOption* CSVOption) {
     CastStringHelper::cast(reinterpret_cast<const char*>(input.getData()), input.len, result,
         resultVector, rowToAdd, CSVOption);
@@ -961,7 +961,7 @@ void CastString::copyStringToVector(ValueVector* vector, uint64_t vectorPos,
             vector->setValue(vectorPos, val);
         } break;
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     } break;
     case LogicalTypeID::DOUBLE: {
@@ -979,7 +979,7 @@ void CastString::copyStringToVector(ValueVector* vector, uint64_t vectorPos,
         CastStringHelper::cast(strVal.data(), strVal.length(), val, vector, vectorPos, option);
     } break;
     case LogicalTypeID::UUID: {
-        ku_uuid_t val{};
+        uuid val{};
         CastStringHelper::cast(strVal.data(), strVal.length(), val);
         vector->setValue(vectorPos, val.value);
     } break;
@@ -1047,7 +1047,7 @@ void CastString::copyStringToVector(ValueVector* vector, uint64_t vectorPos,
         CastStringHelper::cast(strVal.data(), strVal.length(), val, vector, vectorPos, option);
     } break;
     default: {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     }
 }

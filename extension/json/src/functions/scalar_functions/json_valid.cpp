@@ -18,7 +18,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
         result.setNull(resultPos, isNull);
         if (!isNull) {
             result.setValue<bool>(resultPos,
-                stringToJsonNoError(parameters[0]->getValue<ku_string_t>(inputPos).getAsString())
+                stringToJsonNoError(parameters[0]->getValue<string_t>(inputPos).getAsString())
                         .ptr != nullptr);
         }
     }

@@ -62,7 +62,7 @@ public:
 
     uint64_t getNumColumns() const { return columnInfo.numColumns; }
     bool skipColumn(common::idx_t idx) const {
-        KU_ASSERT(idx < columnInfo.columnSkips.size());
+        LBUG_ASSERT(idx < columnInfo.columnSkips.size());
         return columnInfo.columnSkips[idx];
     }
     bool isEOF() const;

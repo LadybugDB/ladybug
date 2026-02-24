@@ -23,7 +23,7 @@ static void getMinMaxFunction(std::string name, function_set& set) {
                         MinMaxFunction<T>::template combine<FUNC>, MinMaxFunction<T>::finalize,
                         isDistinct);
                 },
-                [](auto) { KU_UNREACHABLE; });
+                [](auto) { LBUG_UNREACHABLE; });
             set.push_back(std::move(func));
         }
     }

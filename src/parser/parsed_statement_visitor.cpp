@@ -78,17 +78,17 @@ void StatementVisitor::visit(const Statement& statement) {
         visitExtensionClause(statement);
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
 void StatementVisitor::visitExplain(const Statement& statement) {
-    auto& explainStatement = ku_dynamic_cast<const ExplainStatement&>(statement);
+    auto& explainStatement = dynamic_cast_checked<const ExplainStatement&>(statement);
     visit(*explainStatement.getStatementToExplain());
 }
 
 void StatementVisitor::visitQuery(const Statement& statement) {
-    auto& regularQuery = ku_dynamic_cast<const RegularQuery&>(statement);
+    auto& regularQuery = dynamic_cast_checked<const RegularQuery&>(statement);
     for (auto i = 0u; i < regularQuery.getNumSingleQueries(); ++i) {
         visitSingleQuery(regularQuery.getSingleQuery(i));
     }
@@ -134,7 +134,7 @@ void StatementVisitor::visitReadingClause(const ReadingClause* readingClause) {
         visitLoadFrom(readingClause);
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -153,7 +153,7 @@ void StatementVisitor::visitUpdatingClause(const UpdatingClause* updatingClause)
         visitMerge(updatingClause);
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

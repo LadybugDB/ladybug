@@ -64,7 +64,7 @@ struct OptionalParams {
 
     template<class TARGET>
     const TARGET& constCast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
 
     virtual void evaluateParams(main::ClientContext* /*context*/) = 0;

@@ -39,7 +39,7 @@ struct BatchInsertInfo {
 
     template<class TARGET>
     TARGET* ptrCast() {
-        return common::ku_dynamic_cast<TARGET*>(this);
+        return common::dynamic_cast_checked<TARGET*>(this);
     }
 };
 
@@ -73,7 +73,7 @@ struct LBUG_API BatchInsertSharedState {
 
     template<class TARGET>
     TARGET* ptrCast() {
-        return common::ku_dynamic_cast<TARGET*>(this);
+        return common::dynamic_cast_checked<TARGET*>(this);
     }
 };
 
@@ -85,7 +85,7 @@ struct BatchInsertLocalState {
 
     template<class TARGET>
     TARGET* ptrCast() {
-        return common::ku_dynamic_cast<TARGET*>(this);
+        return common::dynamic_cast_checked<TARGET*>(this);
     }
 };
 

@@ -47,7 +47,7 @@ CSRRegion CSRRegion::upgradeLevel(const std::vector<CSRRegion>& leafRegions,
     const idx_t rightLeafRegionIdx = newRegion.getRightLeafRegionIdx();
     for (auto leafRegionIdx = leftLeafRegionIdx; leafRegionIdx <= rightLeafRegionIdx;
          leafRegionIdx++) {
-        KU_ASSERT(leafRegionIdx < leafRegions.size());
+        LBUG_ASSERT(leafRegionIdx < leafRegions.size());
         newRegion.sizeChange += leafRegions[leafRegionIdx].sizeChange;
         newRegion.hasPersistentDeletions |= leafRegions[leafRegionIdx].hasPersistentDeletions;
         newRegion.hasInsertions |= leafRegions[leafRegionIdx].hasInsertions;
@@ -152,7 +152,7 @@ offset_vec_t ChunkedCSRHeader::populateStartCSROffsetsFromLength(bool leaveGaps)
 
 void ChunkedCSRHeader::populateEndCSROffsetFromStartAndLength() const {
     [[maybe_unused]] const auto numNodes = length->getNumValues();
-    KU_ASSERT(offset->getNumValues() == numNodes);
+    LBUG_ASSERT(offset->getNumValues() == numNodes);
     // TODO(bmwinger): maybe there's a way of also vectorizing this for the length chunk, E.g. a
     // forEach over two values
     offset->mapValues<offset_t>(
@@ -163,7 +163,7 @@ void ChunkedCSRHeader::finalizeCSRRegionEndOffsets(
     const offset_vec_t& rightCSROffsetOfRegions) const {
     const auto numNodes = length->getNumValues();
     const auto numLeafRegions = getNumRegions();
-    KU_ASSERT(numLeafRegions == rightCSROffsetOfRegions.size());
+    LBUG_ASSERT(numLeafRegions == rightCSROffsetOfRegions.size());
     for (auto regionIdx = 0u; regionIdx < numLeafRegions; regionIdx++) {
         CSRRegion region{regionIdx, 0 /* level*/};
         const auto rightNodeOffset = std::min(region.rightNodeOffset, numNodes - 1);
@@ -173,14 +173,14 @@ void ChunkedCSRHeader::finalizeCSRRegionEndOffsets(
 
 idx_t ChunkedCSRHeader::getNumRegions() const {
     const auto numNodes = length->getNumValues();
-    KU_ASSERT(offset->getNumValues() == numNodes);
+    LBUG_ASSERT(offset->getNumValues() == numNodes);
     return (numNodes + StorageConfig::CSR_LEAF_REGION_SIZE - 1) /
            StorageConfig::CSR_LEAF_REGION_SIZE;
 }
 
 void ChunkedCSRHeader::populateRegionCSROffsets(const CSRRegion& region,
     const ChunkedCSRHeader& oldHeader) const {
-    KU_ASSERT(region.level <= CSRNodeGroup::DEFAULT_PACKED_CSR_INFO.calibratorTreeHeight);
+    LBUG_ASSERT(region.level <= CSRNodeGroup::DEFAULT_PACKED_CSR_INFO.calibratorTreeHeight);
     const auto leftNodeOffset = region.leftNodeOffset;
     const auto rightNodeOffset = region.rightNodeOffset;
     const auto leftCSROffset = oldHeader.getStartCSROffset(leftNodeOffset);
@@ -192,13 +192,13 @@ void ChunkedCSRHeader::populateRegionCSROffsets(const CSRRegion& region,
         offset->setValue<offset_t>(leftCSROffset + numRelsInRegion, i);
     }
     // We should keep the region stable and the old right CSR offset is the end of the region.
-    KU_ASSERT(offset->getValue<offset_t>(rightNodeOffset) <= oldRightCSROffset);
+    LBUG_ASSERT(offset->getValue<offset_t>(rightNodeOffset) <= oldRightCSROffset);
     offset->setValue(oldRightCSROffset, rightNodeOffset);
 }
 
 void ChunkedCSRHeader::populateEndCSROffsets(const offset_vec_t& gaps) const {
-    KU_ASSERT(offset->getNumValues() == length->getNumValues());
-    KU_ASSERT(offset->getNumValues() == gaps.size());
+    LBUG_ASSERT(offset->getNumValues() == length->getNumValues());
+    LBUG_ASSERT(offset->getNumValues() == gaps.size());
     offset->mapValues<offset_t>([&](offset_t& offset, auto i) { offset = gaps[i]; });
 }
 
@@ -218,7 +218,7 @@ std::unique_ptr<ChunkedNodeGroup> InMemChunkedCSRNodeGroup::flush(
     auto flushedChunkedGroup = std::make_unique<ChunkedCSRNodeGroup>(std::move(newCSRHeader),
         std::move(flushedChunks), 0 /*startRowIdx*/);
     flushedChunkedGroup->versionInfo = std::make_unique<VersionInfo>();
-    KU_ASSERT(numRows == flushedChunkedGroup->getNumRows());
+    LBUG_ASSERT(numRows == flushedChunkedGroup->getNumRows());
     flushedChunkedGroup->versionInfo->append(transaction->getID(), 0, numRows);
     return flushedChunkedGroup;
 }
@@ -240,17 +240,17 @@ void ChunkedCSRNodeGroup::scanCSRHeader(MemoryManager& memoryManager,
             false /*enableCompression*/, StorageConfig::NODE_GROUP_SIZE);
     }
     ChunkState headerChunkState;
-    KU_ASSERT(csrHeader.offset->getResidencyState() == ResidencyState::ON_DISK);
-    KU_ASSERT(csrHeader.length->getResidencyState() == ResidencyState::ON_DISK);
+    LBUG_ASSERT(csrHeader.offset->getResidencyState() == ResidencyState::ON_DISK);
+    LBUG_ASSERT(csrHeader.length->getResidencyState() == ResidencyState::ON_DISK);
     csrHeader.offset->initializeScanState(headerChunkState, csrState.csrOffsetColumn);
-    KU_ASSERT(csrState.csrOffsetColumn && csrState.csrLengthColumn);
+    LBUG_ASSERT(csrState.csrOffsetColumn && csrState.csrLengthColumn);
     csrState.csrOffsetColumn->scan(headerChunkState, csrState.oldHeader->offset.get());
     csrHeader.length->initializeScanState(headerChunkState, csrState.csrLengthColumn);
     csrState.csrLengthColumn->scan(headerChunkState, csrState.oldHeader->length.get());
 }
 
 void ChunkedCSRNodeGroup::serialize(Serializer& serializer) const {
-    KU_ASSERT(csrHeader.offset && csrHeader.length);
+    LBUG_ASSERT(csrHeader.offset && csrHeader.length);
     serializer.writeDebuggingInfo("csr_header_offset");
     csrHeader.offset->serialize(serializer);
     serializer.writeDebuggingInfo("csr_header_length");
@@ -299,7 +299,7 @@ void InMemChunkedCSRHeader::fillDefaultValues(const offset_t newNumValues) const
         offset->setValue<offset_t>(lastCSROffset, i);
         length->setValue<length_t>(0, i);
     }
-    KU_ASSERT(
+    LBUG_ASSERT(
         offset->getNumValues() >= newNumValues && length->getNumValues() == offset->getNumValues());
 }
 
@@ -366,9 +366,9 @@ bool InMemChunkedCSRHeader::sanityCheck() const {
 }
 
 void InMemChunkedCSRHeader::copyFrom(const InMemChunkedCSRHeader& other) const {
-    KU_ASSERT(offset->getNumValues() == length->getNumValues());
-    KU_ASSERT(other.offset->getNumValues() == other.length->getNumValues());
-    KU_ASSERT(other.offset->getCapacity() == offset->getCapacity());
+    LBUG_ASSERT(offset->getNumValues() == length->getNumValues());
+    LBUG_ASSERT(other.offset->getNumValues() == other.length->getNumValues());
+    LBUG_ASSERT(other.offset->getCapacity() == offset->getCapacity());
     const auto numOtherValues = other.offset->getNumValues();
     memcpy(offset->getData(), other.offset->getData(), numOtherValues * sizeof(offset_t));
     memcpy(length->getData(), other.length->getData(), numOtherValues * sizeof(length_t));
@@ -407,7 +407,7 @@ offset_vec_t InMemChunkedCSRHeader::populateStartCSROffsetsFromLength(bool leave
 
 void InMemChunkedCSRHeader::populateEndCSROffsetFromStartAndLength() const {
     const auto numNodes = length->getNumValues();
-    KU_ASSERT(offset->getNumValues() == numNodes);
+    LBUG_ASSERT(offset->getNumValues() == numNodes);
     const auto csrOffsets = reinterpret_cast<offset_t*>(offset->getData());
     const auto csrLengths = reinterpret_cast<length_t*>(length->getData());
     for (auto i = 0u; i < numNodes; i++) {
@@ -419,7 +419,7 @@ void InMemChunkedCSRHeader::finalizeCSRRegionEndOffsets(
     const offset_vec_t& rightCSROffsetOfRegions) const {
     const auto numNodes = length->getNumValues();
     const auto numLeafRegions = getNumRegions();
-    KU_ASSERT(numLeafRegions == rightCSROffsetOfRegions.size());
+    LBUG_ASSERT(numLeafRegions == rightCSROffsetOfRegions.size());
     for (auto regionIdx = 0u; regionIdx < numLeafRegions; regionIdx++) {
         CSRRegion region{regionIdx, 0 /* level*/};
         const auto rightNodeOffset = std::min(region.rightNodeOffset, numNodes - 1);
@@ -429,14 +429,14 @@ void InMemChunkedCSRHeader::finalizeCSRRegionEndOffsets(
 
 idx_t InMemChunkedCSRHeader::getNumRegions() const {
     const auto numNodes = length->getNumValues();
-    KU_ASSERT(offset->getNumValues() == numNodes);
+    LBUG_ASSERT(offset->getNumValues() == numNodes);
     return (numNodes + StorageConfig::CSR_LEAF_REGION_SIZE - 1) /
            StorageConfig::CSR_LEAF_REGION_SIZE;
 }
 
 void InMemChunkedCSRHeader::populateRegionCSROffsets(const CSRRegion& region,
     const InMemChunkedCSRHeader& oldHeader) const {
-    KU_ASSERT(region.level <= CSRNodeGroup::DEFAULT_PACKED_CSR_INFO.calibratorTreeHeight);
+    LBUG_ASSERT(region.level <= CSRNodeGroup::DEFAULT_PACKED_CSR_INFO.calibratorTreeHeight);
     const auto leftNodeOffset = region.leftNodeOffset;
     const auto rightNodeOffset = region.rightNodeOffset;
     const auto leftCSROffset = oldHeader.getStartCSROffset(leftNodeOffset);
@@ -449,14 +449,14 @@ void InMemChunkedCSRHeader::populateRegionCSROffsets(const CSRRegion& region,
         csrOffsets[i] = leftCSROffset + numRelsInRegion;
     }
     // We should keep the region stable and the old right CSR offset is the end of the region.
-    KU_ASSERT(csrOffsets[rightNodeOffset] <= oldRightCSROffset);
+    LBUG_ASSERT(csrOffsets[rightNodeOffset] <= oldRightCSROffset);
     csrOffsets[rightNodeOffset] = oldRightCSROffset;
 }
 
 void InMemChunkedCSRHeader::populateEndCSROffsets(const offset_vec_t& gaps) const {
     const auto csrOffsets = reinterpret_cast<offset_t*>(offset->getData());
-    KU_ASSERT(offset->getNumValues() == length->getNumValues());
-    KU_ASSERT(offset->getNumValues() == gaps.size());
+    LBUG_ASSERT(offset->getNumValues() == length->getNumValues());
+    LBUG_ASSERT(offset->getNumValues() == gaps.size());
     for (auto i = 0u; i < offset->getNumValues(); i++) {
         csrOffsets[i] += gaps[i];
     }

@@ -7,7 +7,7 @@ namespace lbug {
 namespace planner {
 
 void Planner::appendDistinct(const expression_vector& keys, LogicalPlan& plan) {
-    KU_ASSERT(!keys.empty());
+    LBUG_ASSERT(!keys.empty());
     auto distinct = make_shared<LogicalDistinct>(keys, plan.getLastOperator());
     appendFlattens(distinct->getGroupsPosToFlatten(), plan);
     distinct->setChild(0, plan.getLastOperator());

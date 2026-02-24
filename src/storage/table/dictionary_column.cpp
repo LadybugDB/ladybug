@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "common/vector/value_vector.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -111,16 +111,16 @@ void DictionaryColumn::scan(const SegmentState& offsetState, const SegmentState&
         auto startOffset = offsets[offsetsToScan[pos].first - firstOffsetToScan];
         auto endOffset = offsets[offsetsToScan[pos].first - firstOffsetToScan + 1];
         auto lengthToScan = endOffset - startOffset;
-        KU_ASSERT(endOffset >= startOffset);
+        LBUG_ASSERT(endOffset >= startOffset);
         scanValue(dataState, startOffset, lengthToScan, result, offsetsToScan[pos].second);
         // For each string which has the same index in the dictionary as the one we scanned,
         // copy the scanned string to its position in the result vector
         if constexpr (std::same_as<Result, ValueVector>) {
-            auto& scannedString = result->template getValue<ku_string_t>(offsetsToScan[pos].second);
+            auto& scannedString = result->template getValue<string_t>(offsetsToScan[pos].second);
             while (pos + 1 < offsetsToScan.size() &&
                    offsetsToScan[pos + 1].first == offsetsToScan[pos].first) {
                 pos++;
-                result->template setValue<ku_string_t>(offsetsToScan[pos].second, scannedString);
+                result->template setValue<string_t>(offsetsToScan[pos].second, scannedString);
             }
         } else {
             // When scanning to chunks de-duplication should be done prior to this function such
@@ -129,7 +129,7 @@ void DictionaryColumn::scan(const SegmentState& offsetState, const SegmentState&
             // The offset chunk cannot have multiple offsets pointing to the same data, even if
             // consecutive, since that would break the mechanism for calculating the size of a
             // string.
-            KU_ASSERT(pos == offsetsToScan.size() - 1 ||
+            LBUG_ASSERT(pos == offsetsToScan.size() - 1 ||
                       offsetsToScan[pos].first != offsetsToScan[pos + 1].first);
         }
     }
@@ -171,11 +171,11 @@ void DictionaryColumn::scanOffsets(const SegmentState& state,
 void DictionaryColumn::scanValue(const SegmentState& dataState, uint64_t startOffset,
     uint64_t length, ValueVector* resultVector, uint64_t offsetInVector) const {
     // Add string to vector first and read directly into the vector
-    auto& kuString = StringVector::reserveString(resultVector, offsetInVector, length);
-    dataColumn->scanSegment(dataState, startOffset, length, (uint8_t*)kuString.getData());
+    auto& str = StringVector::reserveString(resultVector, offsetInVector, length);
+    dataColumn->scanSegment(dataState, startOffset, length, (uint8_t*)str.getData());
     // Update prefix to match the scanned string data
-    if (!ku_string_t::isShortString(kuString.len)) {
-        memcpy(kuString.prefix, kuString.getData(), ku_string_t::PREFIX_LENGTH);
+    if (!string_t::isShortString(str.len)) {
+        memcpy(str.prefix, str.getData(), string_t::PREFIX_LENGTH);
     }
 }
 

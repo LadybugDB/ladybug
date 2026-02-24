@@ -26,7 +26,7 @@ static void jsonExtractSinglePath(
         auto isNull = param1.isNull(param1Pos) || param2.isNull(param2Pos);
         result.setNull(resultPos, isNull);
         if (!isNull) {
-            auto param1Str = param1.getValue<ku_string_t>(param1Pos).getAsString();
+            auto param1Str = param1.getValue<string_t>(param1Pos).getAsString();
             std::string output;
             if (param2.dataType.getLogicalTypeID() == LogicalTypeID::STRING) {
                 auto param2Str = param2.getAsValue(param2Pos)->toString();
@@ -35,7 +35,7 @@ static void jsonExtractSinglePath(
                 auto param2Int = param2.getValue<int64_t>(param2Pos);
                 output = jsonExtractToString(stringToJson(param1Str), param2Int);
             } else {
-                KU_UNREACHABLE;
+                LBUG_UNREACHABLE;
             }
             StringVector::addString(&result, resultPos, output);
         }
@@ -43,7 +43,7 @@ static void jsonExtractSinglePath(
 }
 
 static std::unique_ptr<FunctionBindData> bindJsonExtractSinglePath(ScalarBindFuncInput input) {
-    KU_ASSERT(input.arguments.size() == 2);
+    LBUG_ASSERT(input.arguments.size() == 2);
     std::vector<LogicalType> types;
     types.emplace_back(input.definition->parameterTypeIDs[0]);
     types.emplace_back(input.definition->parameterTypeIDs[1]);
@@ -68,13 +68,13 @@ static void jsonExtractMultiPath(
         auto isNull = param1.isNull(param1Pos) || param2.isNull(param2Pos);
         result.setNull(resultPos, isNull);
         if (!isNull) {
-            auto param1Str = param1.getValue<ku_string_t>(param1Pos).getAsString();
+            auto param1Str = param1.getValue<string_t>(param1Pos).getAsString();
             auto param2List = param2.getValue<list_entry_t>(param2Pos);
             auto resultList = ListVector::addList(&result, param2List.size);
             result.setValue<list_entry_t>(resultPos, resultList);
             for (auto i = 0u; i < resultList.size; ++i) {
                 auto curPath =
-                    param2DataVector->getValue<ku_string_t>(param2List.offset + i).getAsString();
+                    param2DataVector->getValue<string_t>(param2List.offset + i).getAsString();
                 resultDataVector->setNull(resultList.offset + i, false);
                 StringVector::addString(resultDataVector, resultList.offset + i,
                     jsonExtractToString(stringToJson(param1Str), curPath));
@@ -84,7 +84,7 @@ static void jsonExtractMultiPath(
 }
 
 static std::unique_ptr<FunctionBindData> bindJsonExtractMultiPath(ScalarBindFuncInput input) {
-    KU_ASSERT(input.arguments.size() == 2);
+    LBUG_ASSERT(input.arguments.size() == 2);
     if (ListType::getChildType(input.arguments[1]->getDataType()).getLogicalTypeID() !=
         LogicalTypeID::STRING) {
         throw BinderException("List passed to json_extract must contain type STRING");

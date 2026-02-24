@@ -43,7 +43,7 @@ FileTypeInfo getFileType(case_insensitive_map_t<Value>& options) {
 void bindExportTableData(ExportedTableData& tableData, const std::string& query,
     main::ClientContext* context, Binder* binder) {
     auto parsedStatement = Parser::parseQuery(query);
-    KU_ASSERT(parsedStatement.size() == 1);
+    LBUG_ASSERT(parsedStatement.size() == 1);
     auto parsedQuery = parsedStatement[0]->constPtrCast<RegularQuery>();
     context->setUseInternalCatalogEntry(true /* useInternalCatalogEntry */);
     auto boundQuery = binder->bindQuery(*parsedQuery);
@@ -108,7 +108,7 @@ static std::vector<ExportedTableData> getExportInfo(const Catalog& catalog,
         if (entry == nullptr) {
             continue;
         }
-        KU_ASSERT(entry->getTableType() == TableType::NODE);
+        LBUG_ASSERT(entry->getTableType() == TableType::NODE);
         tableData.tableName = entry->getName();
         tableData.fileName =
             entry->getName() + "." + StringUtils::getLower(fileTypeInfo.fileTypeStr);

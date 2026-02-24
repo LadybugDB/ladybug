@@ -7,7 +7,7 @@ using namespace lbug::testing;
 
 // This class starts database without initializing graph.
 class APIEmptyDBTest : public BaseGraphTest {
-    std::string getInputDir() override { KU_UNREACHABLE; }
+    std::string getInputDir() override { LBUG_UNREACHABLE; }
 };
 
 class CApiDatabaseTest : public APIEmptyDBTest {
@@ -97,7 +97,7 @@ TEST_F(CApiDatabaseTest, CreationHomeDir) {
     lbug_database database;
     lbug_connection connection;
     lbug_state state;
-    auto databasePathCStr = (char*)"~/ku_test.db";
+    auto databasePathCStr = (char*)"~/test.db";
     state = lbug_database_init(databasePathCStr, defaultSystemConfig, &database);
     ASSERT_EQ(state, LbugSuccess);
     state = lbug_connection_init(&database, &connection);
@@ -106,7 +106,7 @@ TEST_F(CApiDatabaseTest, CreationHomeDir) {
         getClientContext(*(Connection*)(connection._connection))->getClientConfig()->homeDirectory;
     lbug_connection_destroy(&connection);
     lbug_database_destroy(&database);
-    std::filesystem::remove_all(homePath + "/ku_test.db");
+    std::filesystem::remove_all(homePath + "/test.db");
 }
 #endif
 

@@ -34,11 +34,11 @@ struct LBUG_API PartitionerSharedState {
 
     template<class TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
     template<class TARGET>
     const TARGET& constCast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
 
     virtual void initialize(const common::logical_type_vec_t& columnTypes,

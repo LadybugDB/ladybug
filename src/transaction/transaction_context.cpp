@@ -45,7 +45,7 @@ void TransactionContext::beginRecoveryTransaction() {
 }
 
 void TransactionContext::validateManualTransaction(bool readOnlyStatement) const {
-    KU_ASSERT(hasActiveTransaction());
+    LBUG_ASSERT(hasActiveTransaction());
     if (activeTransaction->isReadOnly() && !readOnlyStatement) {
         throw TransactionManagerException(
             "Can not execute a write query inside a read-only transaction.");
@@ -79,7 +79,7 @@ TransactionContext* TransactionContext::Get(const main::ClientContext& context) 
 }
 
 void TransactionContext::beginTransactionInternal(TransactionType transactionType) {
-    KU_ASSERT(!activeTransaction);
+    LBUG_ASSERT(!activeTransaction);
     activeTransaction = clientContext.getDatabase()->getTransactionManager()->beginTransaction(
         clientContext, transactionType);
 }

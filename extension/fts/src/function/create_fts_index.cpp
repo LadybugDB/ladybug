@@ -128,7 +128,7 @@ static std::string createStopWordsTable([[maybe_unused]] const ClientContext& co
         query += std::format("COPY `{}` FROM '{}';", info.tableName, info.stopWords);
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     return query;
 }

@@ -25,7 +25,7 @@ void Planner::planReadingClause(const BoundReadingClause& readingClause, Logical
         planLoadFrom(readingClause, plan);
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -48,7 +48,7 @@ void Planner::planMatchClause(const BoundReadingClause& readingClause, LogicalPl
         planOptionalMatch(*queryGraphCollection, predicates, plan, boundMatchClause.getHint());
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -103,7 +103,7 @@ void Planner::planTableFunctionCall(const BoundReadingClause& readingClause, Log
     auto& boundCall = readingClause.constCast<BoundTableFunctionCall>();
     auto analyzer = PredicatesDependencyAnalyzer(boundCall.getBindData()->columns);
     analyzer.analyze(boundCall.getConjunctivePredicates());
-    KU_ASSERT(boundCall.getTableFunc().getLogicalPlanFunc);
+    LBUG_ASSERT(boundCall.getTableFunc().getLogicalPlanFunc);
     boundCall.getTableFunc().getLogicalPlanFunc(this, readingClause,
         analyzer.predicatesDependsOnlyOnOutputColumns, plan);
     if (!analyzer.predicatesWithOtherDependencies.empty()) {

@@ -70,7 +70,7 @@ public:
 
     // This function assumes the page is already LOCKED.
     void setLockedPageDirty(common::page_idx_t pageIdx) {
-        KU_ASSERT(pageIdx < numPages);
+        LBUG_ASSERT(pageIdx < numPages);
         pageStates[pageIdx].setDirty();
     }
 
@@ -79,7 +79,7 @@ public:
     PageState* getPageState(common::page_idx_t pageIdx) { return &pageStates[pageIdx]; }
 
     // Pages added through these APIs are not tracked by the FSM
-    // If allocating pages from the data.kz file it's recommended to do so using the PageManager
+    // If allocating pages from the data.lbug file it's recommended to do so using the PageManager
     common::page_idx_t addNewPage();
     common::page_idx_t addNewPages(common::page_idx_t numNewPages);
 
@@ -88,12 +88,12 @@ public:
     void flushAllDirtyPagesInFrames();
 
     void readPageFromDisk(uint8_t* frame, common::page_idx_t pageIdx) const {
-        KU_ASSERT(!isInMemoryMode());
-        KU_ASSERT(pageIdx < numPages);
+        LBUG_ASSERT(!isInMemoryMode());
+        LBUG_ASSERT(pageIdx < numPages);
         fileInfo->readFromFile(frame, getPageSize(), pageIdx * getPageSize());
     }
     void writePageToFile(const uint8_t* buffer, common::page_idx_t pageIdx) {
-        KU_ASSERT(pageIdx < numPages);
+        LBUG_ASSERT(pageIdx < numPages);
         writePagesToFile(buffer, getPageSize(), pageIdx);
     }
     void writePagesToFile(const uint8_t* buffer, uint64_t size, common::page_idx_t startPageIdx);
@@ -122,7 +122,7 @@ private:
         main::ClientContext* context);
     void constructTmpFileHandle(const std::string& path);
     common::frame_idx_t getFrameIdx(common::page_idx_t pageIdx) {
-        KU_ASSERT(pageIdx < pageCapacity);
+        LBUG_ASSERT(pageIdx < pageCapacity);
         return (frameGroupIdxes[pageIdx >> common::StorageConstants::PAGE_GROUP_SIZE_LOG2]
                    << common::StorageConstants::PAGE_GROUP_SIZE_LOG2) |
                (pageIdx & common::StorageConstants::PAGE_IDX_IN_GROUP_MASK);

@@ -544,7 +544,7 @@ lbug_state lbug_value_get_int128(lbug_value* value, lbug_int128_t* out_result) {
 lbug_state lbug_int128_t_from_string(const char* str, lbug_int128_t* out_result) {
     int128_t int128_val = 0;
     try {
-        lbug::function::CastString::operation(ku_string_t{str, strlen(str)}, int128_val);
+        lbug::function::CastString::operation(string_t{str, strlen(str)}, int128_val);
         out_result->low = int128_val.low;
         out_result->high = int128_val.high;
     } catch (ConversionException& e) {

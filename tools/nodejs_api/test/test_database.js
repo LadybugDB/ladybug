@@ -42,7 +42,7 @@ describe("Database constructor", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     assert.exists(testDb);
     assert.equal(testDb.constructor.name, "Database");
@@ -61,7 +61,7 @@ describe("Database constructor", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const testDb = new lbug.Database(dbPath);
     assert.exists(testDb);
     assert.equal(testDb.constructor.name, "Database");
@@ -86,7 +86,7 @@ describe("Database constructor", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const testDb = new lbug.Database(dbPath,
       1 << 28 /* 256MB */,
       true /* compression */,
@@ -113,7 +113,7 @@ describe("Database constructor", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const testDb = new lbug.Database(dbPath,
       1 << 28 /* 256MB */,
       true /* compression */,
@@ -141,7 +141,7 @@ describe("Database constructor", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const walPath = dbPath + ".wal";
     fs.writeFileSync(walPath, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     const testDb = new lbug.Database(dbPath,
@@ -172,7 +172,7 @@ describe("Database constructor", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     let testDb = new lbug.Database(dbPath,
       1 << 28 /* 256MB */,
       true /* compression */,
@@ -219,7 +219,7 @@ describe("Database constructor", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     assert.exists(testDb);
     assert.equal(testDb.constructor.name, "Database");
@@ -271,7 +271,7 @@ describe("Database constructor", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const testDb = new lbug.Database(
       dbPath,
       1 << 28 /* 256MB */,
@@ -386,7 +386,7 @@ describe("Database close", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     await testDb.init();
     // FIXME: doesn't work properly on windows
@@ -412,7 +412,7 @@ describe("Database close", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     await testDb.init();
     await testDb.close();
@@ -433,7 +433,7 @@ describe("Database close", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     await testDb.init();
     assert.isTrue(testDb._isInitialized);
@@ -452,7 +452,7 @@ describe("Database close", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     assert.isFalse(testDb._isInitialized);
     await testDb.close();
@@ -470,7 +470,7 @@ describe("Database close", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     await Promise.all([testDb.init(), testDb.close()]);
     assert.notExists(testDb._database);
@@ -487,7 +487,7 @@ describe("Database close", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.kz");
+    const dbPath = path.join(tmpDbPath, "db.lbug");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     await testDb.init();
     await Promise.all([testDb.close(), testDb.close(), testDb.close()]);

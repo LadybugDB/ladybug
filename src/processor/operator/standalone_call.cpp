@@ -22,7 +22,7 @@ bool StandaloneCall::getNextTuplesInternal(ExecutionContext* context) {
     switch (standaloneCallInfo.option->optionType) {
     case main::OptionType::CONFIGURATION: {
         const auto configurationOption =
-            common::ku_dynamic_cast<const main::ConfigurationOption*>(standaloneCallInfo.option);
+            common::dynamic_cast_checked<const main::ConfigurationOption*>(standaloneCallInfo.option);
         configurationOption->setContext(context->clientContext, standaloneCallInfo.optionValue);
         break;
     }

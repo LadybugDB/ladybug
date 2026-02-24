@@ -16,7 +16,7 @@ std::string DropTypeUtils::toString(DropType type) {
     case DropType::GRAPH:
         return "Graph";
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

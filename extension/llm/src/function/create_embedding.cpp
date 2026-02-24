@@ -80,7 +80,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
 
     result.resetAuxiliaryBuffer();
     for (auto selectedPos = 0u; selectedPos < resultSelVector->getSelSize(); ++selectedPos) {
-        auto text = parameters[0]->getValue<ku_string_t>(selectedPos).getAsString();
+        auto text = parameters[0]->getValue<string_t>(selectedPos).getAsString();
         JsonMutDoc payload = provider->getPayload(model, text);
         httplib::Headers headers = provider->getHeaders(model, payload);
         auto res = client.Post(path, headers, payload.toString(), "application/json");

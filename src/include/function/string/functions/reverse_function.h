@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common/api.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/vector/value_vector.h"
 
 namespace lbug {
@@ -9,7 +9,7 @@ namespace function {
 
 struct Reverse {
 public:
-    LBUG_API static void operation(common::ku_string_t& input, common::ku_string_t& result,
+    LBUG_API static void operation(common::string_t& input, common::string_t& result,
         common::ValueVector& resultValueVector);
 
 private:

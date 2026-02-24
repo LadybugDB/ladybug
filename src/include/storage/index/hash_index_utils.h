@@ -5,7 +5,7 @@
 
 #include "common/constants.h"
 #include "common/system_config.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "function/hash/hash_functions.h"
 #include "storage/index/hash_index_header.h"
@@ -46,9 +46,9 @@ public:
         SlotInfo{SlotHeader::INVALID_OVERFLOW_SLOT_ID, SlotType::OVF};
 
     static bool areStringPrefixAndLenEqual(std::string_view keyToLookup,
-        const common::ku_string_t& keyInEntry) {
+        const common::string_t& keyInEntry) {
         auto prefixLen =
-            std::min(static_cast<uint64_t>(keyInEntry.len), common::ku_string_t::PREFIX_LENGTH);
+            std::min(static_cast<uint64_t>(keyInEntry.len), common::string_t::PREFIX_LENGTH);
         return keyToLookup.length() == keyInEntry.len &&
                memcmp(keyToLookup.data(), keyInEntry.prefix, prefixLen) == 0;
     }

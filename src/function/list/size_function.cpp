@@ -44,7 +44,7 @@ function_set SizeFunction::getFunctionSet() {
     // size(string)
     auto strFunc =
         std::make_unique<ScalarFunction>(name, std::vector<LogicalTypeID>{LogicalTypeID::STRING},
-            LogicalTypeID::INT64, ScalarFunction::UnaryExecFunction<ku_string_t, int64_t, ListLen>);
+            LogicalTypeID::INT64, ScalarFunction::UnaryExecFunction<string_t, int64_t, ListLen>);
     strFunc->bindFunc = sizeBindFunc;
     result.push_back(std::move(strFunc));
     return result;

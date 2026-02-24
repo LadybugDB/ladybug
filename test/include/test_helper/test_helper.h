@@ -22,7 +22,7 @@ struct TestQueryConfig {
     bool compareResult = true;
 };
 
-static const std::string TESTING_DB_FILE_NAME = "db.kz";
+static const std::string TESTING_DB_FILE_NAME = "db.lbug";
 
 class TestHelper {
 public:

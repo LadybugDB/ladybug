@@ -19,7 +19,7 @@ public:
 
     bool hasGraph(const std::string& name) const { return nameToEntry.contains(name); }
     ParsedGraphEntry* getEntry(const std::string& name) const {
-        KU_ASSERT(hasGraph(name));
+        LBUG_ASSERT(hasGraph(name));
         return nameToEntry.at(name).get();
     }
     void addGraph(const std::string& name, std::unique_ptr<ParsedGraphEntry> entry) {

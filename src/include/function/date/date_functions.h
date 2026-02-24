@@ -2,7 +2,7 @@
 
 #include "common/assert.h"
 #include "common/types/date_t.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/types/timestamp_t.h"
 
 namespace lbug {
@@ -10,19 +10,19 @@ namespace function {
 
 struct DayName {
     template<class T>
-    static inline void operation(T& /*input*/, common::ku_string_t& /*result*/) {
-        KU_UNREACHABLE;
+    static inline void operation(T& /*input*/, common::string_t& /*result*/) {
+        LBUG_UNREACHABLE;
     }
 };
 
 template<>
-inline void DayName::operation(common::date_t& input, common::ku_string_t& result) {
+inline void DayName::operation(common::date_t& input, common::string_t& result) {
     std::string dayName = common::Date::getDayName(input);
     result.set(dayName);
 }
 
 template<>
-inline void DayName::operation(common::timestamp_t& input, common::ku_string_t& result) {
+inline void DayName::operation(common::timestamp_t& input, common::string_t& result) {
     common::dtime_t time{};
     common::date_t date{};
     common::Timestamp::convert(input, date, time);
@@ -32,19 +32,19 @@ inline void DayName::operation(common::timestamp_t& input, common::ku_string_t& 
 
 struct MonthName {
     template<class T>
-    static inline void operation(T& /*input*/, common::ku_string_t& /*result*/) {
-        KU_UNREACHABLE;
+    static inline void operation(T& /*input*/, common::string_t& /*result*/) {
+        LBUG_UNREACHABLE;
     }
 };
 
 template<>
-inline void MonthName::operation(common::date_t& input, common::ku_string_t& result) {
+inline void MonthName::operation(common::date_t& input, common::string_t& result) {
     std::string monthName = common::Date::getMonthName(input);
     result.set(monthName);
 }
 
 template<>
-inline void MonthName::operation(common::timestamp_t& input, common::ku_string_t& result) {
+inline void MonthName::operation(common::timestamp_t& input, common::string_t& result) {
     common::dtime_t time{};
     common::date_t date{};
     common::Timestamp::convert(input, date, time);
@@ -56,7 +56,7 @@ struct LastDay {
     template<class T>
 
     static inline void operation(T& /*input*/, common::date_t& /*result*/) {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 };
 
@@ -77,12 +77,12 @@ struct DatePart {
     template<class LEFT_TYPE, class RIGHT_TYPE>
     static inline void operation(LEFT_TYPE& /*partSpecifier*/, RIGHT_TYPE& /*input*/,
         int64_t& /*result*/) {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 };
 
 template<>
-inline void DatePart::operation(common::ku_string_t& partSpecifier, common::date_t& input,
+inline void DatePart::operation(common::string_t& partSpecifier, common::date_t& input,
     int64_t& result) {
     common::DatePartSpecifier specifier{};
     common::Interval::tryGetDatePartSpecifier(partSpecifier.getAsString(), specifier);
@@ -90,7 +90,7 @@ inline void DatePart::operation(common::ku_string_t& partSpecifier, common::date
 }
 
 template<>
-inline void DatePart::operation(common::ku_string_t& partSpecifier, common::timestamp_t& input,
+inline void DatePart::operation(common::string_t& partSpecifier, common::timestamp_t& input,
     int64_t& result) {
     common::DatePartSpecifier specifier{};
     common::Interval::tryGetDatePartSpecifier(partSpecifier.getAsString(), specifier);
@@ -98,7 +98,7 @@ inline void DatePart::operation(common::ku_string_t& partSpecifier, common::time
 }
 
 template<>
-inline void DatePart::operation(common::ku_string_t& partSpecifier, common::interval_t& input,
+inline void DatePart::operation(common::string_t& partSpecifier, common::interval_t& input,
     int64_t& result) {
     common::DatePartSpecifier specifier{};
     common::Interval::tryGetDatePartSpecifier(partSpecifier.getAsString(), specifier);
@@ -109,12 +109,12 @@ struct DateTrunc {
     template<class LEFT_TYPE, class RIGHT_TYPE>
     static inline void operation(LEFT_TYPE& /*partSpecifier*/, RIGHT_TYPE& /*input*/,
         RIGHT_TYPE& /*result*/) {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 };
 
 template<>
-inline void DateTrunc::operation(common::ku_string_t& partSpecifier, common::date_t& input,
+inline void DateTrunc::operation(common::string_t& partSpecifier, common::date_t& input,
     common::date_t& result) {
     common::DatePartSpecifier specifier{};
     common::Interval::tryGetDatePartSpecifier(partSpecifier.getAsString(), specifier);
@@ -122,7 +122,7 @@ inline void DateTrunc::operation(common::ku_string_t& partSpecifier, common::dat
 }
 
 template<>
-inline void DateTrunc::operation(common::ku_string_t& partSpecifier, common::timestamp_t& input,
+inline void DateTrunc::operation(common::string_t& partSpecifier, common::timestamp_t& input,
     common::timestamp_t& result) {
     common::DatePartSpecifier specifier{};
     common::Interval::tryGetDatePartSpecifier(partSpecifier.getAsString(), specifier);

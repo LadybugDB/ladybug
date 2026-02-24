@@ -34,7 +34,7 @@ struct ProjectGraphNativeBindData final : TableFuncBindData {
 };
 
 static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput&) {
-    const auto bindData = ku_dynamic_cast<ProjectGraphNativeBindData*>(input.bindData);
+    const auto bindData = dynamic_cast_checked<ProjectGraphNativeBindData*>(input.bindData);
     auto graphEntrySet = GraphEntrySet::Get(*input.context->clientContext);
     graphEntrySet->validateGraphNotExist(bindData->graphName);
     auto entry = std::make_unique<ParsedNativeGraphEntry>(bindData->nodeInfos, bindData->relInfos);

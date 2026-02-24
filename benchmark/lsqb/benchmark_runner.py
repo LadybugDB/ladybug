@@ -60,23 +60,23 @@ if serialized_base_dir is None:
     sys.exit(1)
 
 datasets_path = {
-    "lsqb-sf0.1-ku": os.path.join(csv_base_dir, "social-network-sf0.1-projected-fk"),
-    "lsqb-sf0.3-ku": os.path.join(csv_base_dir, "social-network-sf0.3-projected-fk"),
-    "lsqb-sf1-ku": os.path.join(csv_base_dir, "social-network-sf1-projected-fk"),
-    "lsqb-sf3-ku": os.path.join(csv_base_dir, "social-network-sf3-projected-fk"),
-    "lsqb-sf10-ku": os.path.join(csv_base_dir, "social-network-sf10-projected-fk"),
-    "lsqb-sf30-ku": os.path.join(csv_base_dir, "social-network-sf30-projected-fk"),
-    "lsqb-sf100-ku": os.path.join(csv_base_dir, "social-network-sf100-projected-fk"),
+    "lsqb-sf0.1": os.path.join(csv_base_dir, "social-network-sf0.1-projected-fk"),
+    "lsqb-sf0.3": os.path.join(csv_base_dir, "social-network-sf0.3-projected-fk"),
+    "lsqb-sf1": os.path.join(csv_base_dir, "social-network-sf1-projected-fk"),
+    "lsqb-sf3": os.path.join(csv_base_dir, "social-network-sf3-projected-fk"),
+    "lsqb-sf10": os.path.join(csv_base_dir, "social-network-sf10-projected-fk"),
+    "lsqb-sf30": os.path.join(csv_base_dir, "social-network-sf30-projected-fk"),
+    "lsqb-sf100": os.path.join(csv_base_dir, "social-network-sf100-projected-fk"),
 }
 
 serialized_graphs_path = {
-    "lsqb-sf0.1-ku": os.path.join(serialized_base_dir, "lsqb-sf0.1-serialized"),
-    "lsqb-sf0.3-ku": os.path.join(serialized_base_dir, "lsqb-sf0.3-serialized"),
-    "lsqb-sf1-ku": os.path.join(serialized_base_dir, "lsqb-sf1-serialized"),
-    "lsqb-sf3-ku": os.path.join(serialized_base_dir, "lsqb-sf3-serialized"),
-    "lsqb-sf10-ku": os.path.join(serialized_base_dir, "lsqb-sf10-serialized"),
-    "lsqb-sf30-ku": os.path.join(serialized_base_dir, "lsqb-sf30-serialized"),
-    "lsqb-sf100-ku": os.path.join(serialized_base_dir, "lsqb-sf100-serialized"),
+    "lsqb-sf0.1": os.path.join(serialized_base_dir, "lsqb-sf0.1-serialized"),
+    "lsqb-sf0.3": os.path.join(serialized_base_dir, "lsqb-sf0.3-serialized"),
+    "lsqb-sf1": os.path.join(serialized_base_dir, "lsqb-sf1-serialized"),
+    "lsqb-sf3": os.path.join(serialized_base_dir, "lsqb-sf3-serialized"),
+    "lsqb-sf10": os.path.join(serialized_base_dir, "lsqb-sf10-serialized"),
+    "lsqb-sf30": os.path.join(serialized_base_dir, "lsqb-sf30-serialized"),
+    "lsqb-sf100": os.path.join(serialized_base_dir, "lsqb-sf100-serialized"),
 }
 
 benchmark_result_dir = os.path.join("/tmp", "benchmark_result")
@@ -199,7 +199,7 @@ def run_lbug(sf, serialized_graph_path, num_threads):
 
 
 if __name__ == "__main__":
-    dataset_name = "lsqb-sf" + scale_factor + "-ku"
+    dataset_name = "lsqb-sf" + scale_factor
     dataset_path = datasets_path[dataset_name]
 
     logging.basicConfig(

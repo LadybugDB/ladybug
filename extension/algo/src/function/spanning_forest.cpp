@@ -139,7 +139,7 @@ public:
     // ID that the src node of each edge belongs to.
     void assignForestIds();
 
-    const ku_vector_t<resultEdge>& getForest() const { return forest; };
+    const vector_t<resultEdge>& getForest() const { return forest; };
 
     offset_t getForestSize() const { return forest.size(); };
 
@@ -155,14 +155,14 @@ private:
 
     const offset_t numNodes;
     // Stores the edges being processed.
-    ku_vector_t<weightedEdge> edges;
+    vector_t<weightedEdge> edges;
     // Stores the results.
-    ku_vector_t<resultEdge> forest;
+    vector_t<resultEdge> forest;
     // For each node, `parents[i]` points to a parent node in the same component, or to itself if
     // the node is the root of its component.
-    ku_vector_t<offset_t> parents;
+    vector_t<offset_t> parents;
     // Tracks the approximate height of each component's tree.
-    ku_vector_t<uint64_t> rank;
+    vector_t<uint64_t> rank;
 };
 
 KruskalCompute::KruskalCompute(storage::MemoryManager* mm, offset_t numNodes)
@@ -234,7 +234,7 @@ offset_t KruskalCompute::findComponent(const offset_t& nodeId) {
 }
 
 void KruskalCompute::mergeComponents(const offset_t& srcCompId, const offset_t& dstCompId) {
-    KU_ASSERT_UNCONDITIONAL(srcCompId != dstCompId);
+    LBUG_ASSERT_UNCONDITIONAL(srcCompId != dstCompId);
     // Merge with the larger component, based on the rank. If ranks are equal, use IDs to break
     // ties.
     if (rank[srcCompId] == rank[dstCompId]) {
@@ -254,7 +254,7 @@ void KruskalCompute::mergeComponents(const offset_t& srcCompId, const offset_t& 
 class WriteResultsSF final : public InMemResultParallelCompute {
 public:
     WriteResultsSF(MemoryManager* mm, GDSFuncSharedState* sharedState,
-        const ku_vector_t<resultEdge>& finalResults)
+        const vector_t<resultEdge>& finalResults)
         : InMemResultParallelCompute{mm, sharedState}, finalResults{finalResults} {
         relIdVector = createVector(LogicalType::INTERNAL_ID());
         srcIdVector = createVector(LogicalType::INTERNAL_ID());
@@ -264,7 +264,7 @@ public:
 
     void parallelCompute(const offset_t startOffset, const offset_t endOffset,
         const std::optional<table_id_t>& tableID) override {
-        KU_ASSERT(tableID.has_value());
+        LBUG_ASSERT(tableID.has_value());
         for (auto i = startOffset; i < endOffset; ++i) {
             const auto& [srcId, dstId, relId, forestId] = finalResults[i];
             relIdVector->setValue<relID_t>(0, relId);
@@ -280,7 +280,7 @@ public:
     }
 
 private:
-    const ku_vector_t<resultEdge>& finalResults;
+    const vector_t<resultEdge>& finalResults;
     std::unique_ptr<ValueVector> forestIdVector;
     std::unique_ptr<ValueVector> srcIdVector;
     std::unique_ptr<ValueVector> dstIdVector;
@@ -293,12 +293,12 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput&) {
     const auto clientContext = input.context->clientContext;
     auto sharedState = input.sharedState->ptrCast<GDSFuncSharedState>();
     auto graph = sharedState->graph.get();
-    KU_ASSERT(graph->getNodeTableIDs().size() == 1);
+    LBUG_ASSERT(graph->getNodeTableIDs().size() == 1);
     const auto tableId = graph->getNodeTableIDs()[0];
     auto mm = MemoryManager::Get(*clientContext);
     const auto nbrTables = graph->getRelInfos(tableId);
     const auto nbrInfo = nbrTables[0];
-    KU_ASSERT(nbrInfo.srcTableID == nbrInfo.dstTableID);
+    LBUG_ASSERT(nbrInfo.srcTableID == nbrInfo.dstTableID);
 
     auto spanningForestBindData = input.bindData->constPtrCast<SFBindData>();
     auto& config = spanningForestBindData->optionalParams->constCast<SFOptionalParams>();
@@ -405,7 +405,7 @@ static void getLogicalPlan(Planner* planner, const BoundReadingClause& readingCl
 
     for (auto i = 1u; i < 3; ++i) {
         auto nodeOutput = bindData->output[i]->ptrCast<NodeExpression>();
-        KU_ASSERT(nodeOutput != nullptr);
+        LBUG_ASSERT(nodeOutput != nullptr);
         planner->getCardinliatyEstimatorUnsafe().init(*nodeOutput);
         auto scanPlan = planner->getNodePropertyScanPlan(*nodeOutput);
         if (!scanPlan.isEmpty()) {
@@ -415,7 +415,7 @@ static void getLogicalPlan(Planner* planner, const BoundReadingClause& readingCl
         }
     }
     auto relOutput = bindData->output[0]->ptrCast<RelExpression>();
-    KU_ASSERT(relOutput != nullptr);
+    LBUG_ASSERT(relOutput != nullptr);
     auto scanPlan = LogicalPlan();
     auto boundNode = relOutput->getSrcNode();
     auto nbrNode = relOutput->getDstNode();

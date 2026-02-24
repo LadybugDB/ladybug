@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "function/list/functions/list_len_function.h"
 #include "substr_function.h"
 
@@ -9,8 +9,8 @@ namespace function {
 
 struct Left {
 public:
-    static inline void operation(common::ku_string_t& left, int64_t& right,
-        common::ku_string_t& result, common::ValueVector& resultValueVector) {
+    static inline void operation(common::string_t& left, int64_t& right,
+        common::string_t& result, common::ValueVector& resultValueVector) {
         int64_t leftLen = 0;
         ListLen::operation(left, leftLen);
         int64_t len =

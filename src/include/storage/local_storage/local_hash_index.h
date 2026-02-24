@@ -141,14 +141,14 @@ public:
         : keyDataTypeID{keyDataTypeID} {
         common::TypeUtils::visit(
             keyDataTypeID,
-            [&](common::ku_string_t) {
-                localIndex = std::make_unique<HashIndexLocalStorage<common::ku_string_t>>(
+            [&](common::string_t) {
+                localIndex = std::make_unique<HashIndexLocalStorage<common::string_t>>(
                     memoryManager, overflowFileHandle);
             },
             [&]<common::HashablePrimitive T>(T) {
                 localIndex = std::make_unique<HashIndexLocalStorage<T>>(memoryManager, nullptr);
             },
-            [&](auto) { KU_UNREACHABLE; });
+            [&](auto) { LBUG_UNREACHABLE; });
     }
 
     common::offset_t lookup(const common::ValueVector& keyVector, common::sel_t pos,
@@ -158,23 +158,23 @@ public:
             keyDataTypeID,
             [&]<common::IndexHashable T>(
                 T) { result = lookup(keyVector.getValue<T>(pos), isVisible); },
-            [](auto) { KU_UNREACHABLE; });
+            [](auto) { LBUG_UNREACHABLE; });
         return result;
     }
 
     common::offset_t lookup(const common::ValueVector& keyVector, visible_func isVisible) {
-        KU_ASSERT(keyVector.state->getSelVector().getSelSize() == 1);
+        LBUG_ASSERT(keyVector.state->getSelVector().getSelSize() == 1);
         auto pos = keyVector.state->getSelVector().getSelectedPositions()[0];
         return lookup(keyVector, pos, isVisible);
     }
 
-    common::offset_t lookup(const common::ku_string_t key, visible_func isVisible) {
+    common::offset_t lookup(const common::string_t key, visible_func isVisible) {
         return lookup(key.getAsStringView(), isVisible);
     }
     template<common::IndexHashable T>
     common::offset_t lookup(T key, visible_func isVisible) {
         common::offset_t result = common::INVALID_OFFSET;
-        common::ku_dynamic_cast<HashIndexLocalStorage<HashIndexType<T>>*>(localIndex.get())
+        common::dynamic_cast_checked<HashIndexLocalStorage<HashIndexType<T>>*>(localIndex.get())
             ->lookup(key, result, isVisible);
         return result;
     }
@@ -191,17 +191,17 @@ public:
                         insert(keyVector.getValue<T>(pos), startNodeOffset + i, isVisible);
                 }
             },
-            [](auto) { KU_UNREACHABLE; });
+            [](auto) { LBUG_UNREACHABLE; });
         return numInserted == keyVector.state->getSelVector().getSelSize();
     }
 
-    bool insert(const common::ku_string_t key, common::offset_t value, visible_func isVisible) {
+    bool insert(const common::string_t key, common::offset_t value, visible_func isVisible) {
         return insert(key.getAsString(), value, isVisible);
     }
     template<common::IndexHashable T>
     bool insert(T key, common::offset_t value, visible_func isVisible) {
-        KU_ASSERT(keyDataTypeID == common::TypeUtils::getPhysicalTypeIDForType<T>());
-        return common::ku_dynamic_cast<HashIndexLocalStorage<HashIndexType<T>>*>(localIndex.get())
+        LBUG_ASSERT(keyDataTypeID == common::TypeUtils::getPhysicalTypeIDForType<T>());
+        return common::dynamic_cast_checked<HashIndexLocalStorage<HashIndexType<T>>*>(localIndex.get())
             ->insert(std::move(key), value, isVisible);
     }
 
@@ -214,14 +214,14 @@ public:
                     delete_(keyVector.getValue<T>(pos));
                 }
             },
-            [](auto) { KU_UNREACHABLE; });
+            [](auto) { LBUG_UNREACHABLE; });
     }
 
-    void delete_(const common::ku_string_t key) { delete_(key.getAsStringView()); }
+    void delete_(const common::string_t key) { delete_(key.getAsStringView()); }
     template<common::IndexHashable T>
     void delete_(T key) {
-        KU_ASSERT(keyDataTypeID == common::TypeUtils::getPhysicalTypeIDForType<T>());
-        common::ku_dynamic_cast<HashIndexLocalStorage<HashIndexType<T>>*>(localIndex.get())
+        LBUG_ASSERT(keyDataTypeID == common::TypeUtils::getPhysicalTypeIDForType<T>());
+        common::dynamic_cast_checked<HashIndexLocalStorage<HashIndexType<T>>*>(localIndex.get())
             ->deleteKey(key);
     }
 

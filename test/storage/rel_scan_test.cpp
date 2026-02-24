@@ -4,7 +4,7 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/types/date_t.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "graph/graph_entry.h"
 #include "graph/on_disk_graph.h"
@@ -165,7 +165,7 @@ TEST_F(VertexScanTest, ScanVertexProperties) {
             for (auto chunk : graph->scanVertices(startNodeOffset, endNodeOffset, *scanState)) {
                 for (size_t i = 0; i < chunk.size(); i++) {
                     results.push_back(std::make_tuple(chunk.getNodeIDs()[i].offset,
-                        chunk.getProperties<common::ku_string_t>(0)[i].getAsString(),
+                        chunk.getProperties<string_t>(0)[i].getAsString(),
                         chunk.getProperties<float>(1)[i]));
                 }
             }

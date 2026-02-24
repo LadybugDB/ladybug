@@ -17,7 +17,7 @@ struct ProjectedGraphInfo {
 
     template<class TARGET>
     const TARGET& constCast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
 
     virtual std::unique_ptr<ProjectedGraphInfo> copy() const = 0;
@@ -94,7 +94,7 @@ static offset_t internalTableFunc(const TableFuncMorsel& morsel, const TableFunc
         return 1;
     }
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -122,7 +122,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
         returnTypes.emplace_back(LogicalType::STRING());
     } break;
     default: {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     }
     returnColumnNames =
@@ -149,7 +149,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
         projectedGraphInfo = std::make_unique<NativeProjectedGraphInfo>(std::move(tableInfo));
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     return std::make_unique<ProjectedGraphInfoBindData>(std::move(columns), graphEntry->type,
         std::move(projectedGraphInfo));

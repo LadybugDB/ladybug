@@ -204,7 +204,7 @@ interval_parse_number:
             goto interval_parse_time;
         } else {
             // finished the number, parse it from the string
-            function::CastString::operation(ku_string_t{str + startPos, pos - startPos}, number);
+            function::CastString::operation(string_t{str + startPos, pos - startPos}, number);
             fraction = 0;
             if (c == '.') {
                 // we expect some microseconds
@@ -449,7 +449,7 @@ int32_t Interval::getIntervalPart(DatePartSpecifier specifier, interval_t interv
     case DatePartSpecifier::HOUR:
         return interval.micros / Interval::MICROS_PER_HOUR;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

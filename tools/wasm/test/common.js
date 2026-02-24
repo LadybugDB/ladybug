@@ -20,7 +20,7 @@ const initTests = async () => {
     });
   });
 
-  const dbPath = path.join(tmpPath, "db.kz");
+  const dbPath = path.join(tmpPath, "db.lbug");
   await lbug.init();
   const db = new lbug.Database(dbPath, 1 << 30 /* 1GB */);
   const conn = new lbug.Connection(db, 4);

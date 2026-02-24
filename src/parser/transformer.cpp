@@ -37,54 +37,54 @@ std::vector<std::shared_ptr<Statement>> Transformer::transform() {
 std::unique_ptr<Statement> Transformer::transformStatement(CypherParser::OC_StatementContext& ctx) {
     if (ctx.oC_Query()) {
         return transformQuery(*ctx.oC_Query());
-    } else if (ctx.kU_CreateNodeTable()) {
-        return transformCreateNodeTable(*ctx.kU_CreateNodeTable());
-    } else if (ctx.kU_CreateRelTable()) {
-        return transformCreateRelGroup(*ctx.kU_CreateRelTable());
-    } else if (ctx.kU_CreateSequence()) {
-        return transformCreateSequence(*ctx.kU_CreateSequence());
-    } else if (ctx.kU_CreateType()) {
-        return transformCreateType(*ctx.kU_CreateType());
-    } else if (ctx.kU_CreateUser()) {
-        return transformExtensionStatement(ctx.kU_CreateUser());
-    } else if (ctx.kU_CreateRole()) {
-        return transformExtensionStatement(ctx.kU_CreateRole());
-    } else if (ctx.kU_Drop()) {
-        return transformDrop(*ctx.kU_Drop());
-    } else if (ctx.kU_AlterTable()) {
-        return transformAlterTable(*ctx.kU_AlterTable());
-    } else if (ctx.kU_CopyFromByColumn()) {
-        return transformCopyFromByColumn(*ctx.kU_CopyFromByColumn());
-    } else if (ctx.kU_CopyFrom()) {
-        return transformCopyFrom(*ctx.kU_CopyFrom());
-    } else if (ctx.kU_CopyTO()) {
-        return transformCopyTo(*ctx.kU_CopyTO());
-    } else if (ctx.kU_StandaloneCall()) {
-        return transformStandaloneCall(*ctx.kU_StandaloneCall());
-    } else if (ctx.kU_CreateMacro()) {
-        return transformCreateMacro(*ctx.kU_CreateMacro());
-    } else if (ctx.kU_CommentOn()) {
-        return transformCommentOn(*ctx.kU_CommentOn());
-    } else if (ctx.kU_Transaction()) {
-        return transformTransaction(*ctx.kU_Transaction());
-    } else if (ctx.kU_Extension()) {
-        return transformExtension(*ctx.kU_Extension());
-    } else if (ctx.kU_ExportDatabase()) {
-        return transformExportDatabase(*ctx.kU_ExportDatabase());
-    } else if (ctx.kU_ImportDatabase()) {
-        return transformImportDatabase(*ctx.kU_ImportDatabase());
-    } else if (ctx.kU_AttachDatabase()) {
-        return transformAttachDatabase(*ctx.kU_AttachDatabase());
-    } else if (ctx.kU_DetachDatabase()) {
-        return transformDetachDatabase(*ctx.kU_DetachDatabase());
-    } else if (ctx.kU_UseDatabase()) {
-        return transformUseDatabase(*ctx.kU_UseDatabase());
-    } else if (ctx.kU_CreateGraph()) {
-        return transformCreateGraph(*ctx.kU_CreateGraph());
-    } else if (ctx.kU_UseGraph()) {
-        return transformUseGraph(*ctx.kU_UseGraph());
+    } else if (ctx.iC_CreateNodeTable()) {
+        return transformCreateNodeTable(*ctx.iC_CreateNodeTable());
+    } else if (ctx.iC_CreateRelTable()) {
+        return transformCreateRelGroup(*ctx.iC_CreateRelTable());
+    } else if (ctx.iC_CreateSequence()) {
+        return transformCreateSequence(*ctx.iC_CreateSequence());
+    } else if (ctx.iC_CreateType()) {
+        return transformCreateType(*ctx.iC_CreateType());
+    } else if (ctx.iC_CreateUser()) {
+        return transformExtensionStatement(ctx.iC_CreateUser());
+    } else if (ctx.iC_CreateRole()) {
+        return transformExtensionStatement(ctx.iC_CreateRole());
+    } else if (ctx.iC_Drop()) {
+        return transformDrop(*ctx.iC_Drop());
+    } else if (ctx.iC_AlterTable()) {
+        return transformAlterTable(*ctx.iC_AlterTable());
+    } else if (ctx.iC_CopyFromByColumn()) {
+        return transformCopyFromByColumn(*ctx.iC_CopyFromByColumn());
+    } else if (ctx.iC_CopyFrom()) {
+        return transformCopyFrom(*ctx.iC_CopyFrom());
+    } else if (ctx.iC_CopyTO()) {
+        return transformCopyTo(*ctx.iC_CopyTO());
+    } else if (ctx.iC_StandaloneCall()) {
+        return transformStandaloneCall(*ctx.iC_StandaloneCall());
+    } else if (ctx.iC_CreateMacro()) {
+        return transformCreateMacro(*ctx.iC_CreateMacro());
+    } else if (ctx.iC_CommentOn()) {
+        return transformCommentOn(*ctx.iC_CommentOn());
+    } else if (ctx.iC_Transaction()) {
+        return transformTransaction(*ctx.iC_Transaction());
+    } else if (ctx.iC_Extension()) {
+        return transformExtension(*ctx.iC_Extension());
+    } else if (ctx.iC_ExportDatabase()) {
+        return transformExportDatabase(*ctx.iC_ExportDatabase());
+    } else if (ctx.iC_ImportDatabase()) {
+        return transformImportDatabase(*ctx.iC_ImportDatabase());
+    } else if (ctx.iC_AttachDatabase()) {
+        return transformAttachDatabase(*ctx.iC_AttachDatabase());
+    } else if (ctx.iC_DetachDatabase()) {
+        return transformDetachDatabase(*ctx.iC_DetachDatabase());
+    } else if (ctx.iC_UseDatabase()) {
+        return transformUseDatabase(*ctx.iC_UseDatabase());
+    } else if (ctx.iC_CreateGraph()) {
+        return transformCreateGraph(*ctx.iC_CreateGraph());
+    } else if (ctx.iC_UseGraph()) {
+        return transformUseGraph(*ctx.iC_UseGraph());
     } else {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -153,13 +153,13 @@ std::string Transformer::transformStringLiteral(antlr4::tree::TerminalNode& stri
                 if (next == 'u' || next == 'U') {
                     int hexDigits = (next == 'u') ? 4 : 8;
                     if (i + 1 + hexDigits > content.length()) {
-                        KU_UNREACHABLE;
+                        LBUG_UNREACHABLE;
                     }
                     std::string hexStr = content.substr(i + 2, hexDigits);
                     char* endPtr = nullptr;
                     long hexValue = std::strtol(hexStr.c_str(), &endPtr, 16);
                     if (endPtr != hexStr.c_str() + hexDigits) {
-                        KU_UNREACHABLE;
+                        LBUG_UNREACHABLE;
                     }
                     // Convert Unicode code point to UTF-8
                     if (hexValue <= 0x7F) {
@@ -177,13 +177,13 @@ std::string Transformer::transformStringLiteral(antlr4::tree::TerminalNode& stri
                         result += static_cast<char>(0x80 | ((hexValue >> 6) & 0x3F));
                         result += static_cast<char>(0x80 | (hexValue & 0x3F));
                     } else {
-                        KU_UNREACHABLE;
+                        LBUG_UNREACHABLE;
                     }
                     i += 1 + hexDigits;
                 }
             } break;
             default:
-                KU_UNREACHABLE;
+                LBUG_UNREACHABLE;
             }
         } else {
             result += content[i];
@@ -203,7 +203,7 @@ std::string Transformer::transformSymbolicName(CypherParser::OC_SymbolicNameCont
         // it such that we don't store the symbol with escape character.
         return escapedSymbolName.substr(1, escapedSymbolName.size() - 2);
     } else {
-        KU_ASSERT(ctx.HexLetter() || ctx.UnescapedSymbolicName() || ctx.kU_NonReservedKeywords());
+        LBUG_ASSERT(ctx.HexLetter() || ctx.UnescapedSymbolicName() || ctx.iC_NonReservedKeywords());
         return ctx.getText();
     }
 }

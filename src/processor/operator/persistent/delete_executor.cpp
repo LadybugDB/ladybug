@@ -72,7 +72,7 @@ void SingleLabelNodeDeleteExecutor::init(ResultSet* resultSet, ExecutionContext*
 }
 
 void SingleLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
-    KU_ASSERT(tableInfo.pkVector->state == info.nodeIDVector->state);
+    LBUG_ASSERT(tableInfo.pkVector->state == info.nodeIDVector->state);
     auto deleteState =
         std::make_unique<NodeTableDeleteState>(*info.nodeIDVector, *tableInfo.pkVector);
     auto transaction = Transaction::Get(*context->clientContext);
@@ -87,7 +87,7 @@ void SingleLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
         tableInfo.detachDeleteFromRelTable(transaction, detachDeleteState.get());
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -100,7 +100,7 @@ void MultiLabelNodeDeleteExecutor::init(ResultSet* resultSet, ExecutionContext* 
 
 void MultiLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
     auto& nodeIDSelVector = info.nodeIDVector->state->getSelVector();
-    KU_ASSERT(nodeIDSelVector.getSelSize() == 1);
+    LBUG_ASSERT(nodeIDSelVector.getSelSize() == 1);
     const auto pos = nodeIDSelVector[0];
     if (info.nodeIDVector->isNull(pos)) {
         return;
@@ -121,7 +121,7 @@ void MultiLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
         tableInfo.detachDeleteFromRelTable(transaction, detachDeleteState.get());
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -143,10 +143,10 @@ void SingleLabelRelDeleteExecutor::delete_(ExecutionContext* context) {
 
 void MultiLabelRelDeleteExecutor::delete_(ExecutionContext* context) {
     auto& idSelVector = info.relIDVector->state->getSelVector();
-    KU_ASSERT(idSelVector.getSelSize() == 1);
+    LBUG_ASSERT(idSelVector.getSelSize() == 1);
     const auto pos = idSelVector[0];
     const auto relID = info.relIDVector->getValue<internalID_t>(pos);
-    KU_ASSERT(tableIDToTableMap.contains(relID.tableID));
+    LBUG_ASSERT(tableIDToTableMap.contains(relID.tableID));
     auto table = tableIDToTableMap.at(relID.tableID);
     auto deleteState = std::make_unique<RelTableDeleteState>(*info.srcNodeIDVector,
         *info.dstNodeIDVector, *info.relIDVector);

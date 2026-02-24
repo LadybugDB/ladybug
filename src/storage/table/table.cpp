@@ -14,8 +14,8 @@ TableScanState::~TableScanState() = default;
 // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
 void TableScanState::resetOutVectors() {
     for (const auto& outputVector : outputVectors) {
-        KU_ASSERT(outputVector->state.get() == outState.get());
-        KU_UNUSED(outputVector);
+        LBUG_ASSERT(outputVector->state.get() == outState.get());
+        LBUG_UNUSED(outputVector);
         outputVector->resetAuxiliaryBuffer();
     }
     outState->getSelVectorUnsafe().setToUnfiltered();

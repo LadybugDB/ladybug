@@ -253,7 +253,7 @@ bool PathPropertyProbe::getNextTuplesInternal(ExecutionContext* context) {
                 continue;
             }
             if (nodeListEntry.size == 0) {
-                KU_ASSERT(relListEntry.size == 1);
+                LBUG_ASSERT(relListEntry.size == 1);
                 if (isCorrectOrder(directionDataVector, relListEntry.offset, info.extendFromLeft)) {
                     pathSrcNodeIDsDataVector->setValue(relListEntry.offset, leftNodeID);
                     pathDstNodeIDsDataVector->setValue(relListEntry.offset, rightNodeID);
@@ -281,7 +281,7 @@ bool PathPropertyProbe::getNextTuplesInternal(ExecutionContext* context) {
         }
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     return true;
 }
@@ -308,7 +308,7 @@ void PathPropertyProbe::probe(lbug::processor::JoinHashTable* hashTable, uint64_
             }
             localState.probedTuples[i] = *hashTable->getPrevTuple(currentTuple);
         }
-        KU_ASSERT(localState.matchedTuples[i] != nullptr);
+        LBUG_ASSERT(localState.matchedTuples[i] != nullptr);
     }
     // Scan table
     auto factorizedTable = hashTable->getFactorizedTable();

@@ -64,12 +64,12 @@ public:
     void setNumRows(common::offset_t numRows_);
 
     ColumnChunkData& getColumnChunk(const common::column_id_t columnID) {
-        KU_ASSERT(columnID < chunks.size());
+        LBUG_ASSERT(columnID < chunks.size());
         return *chunks[columnID];
     }
 
     const ColumnChunkData& getColumnChunk(const common::column_id_t columnID) const {
-        KU_ASSERT(columnID < chunks.size());
+        LBUG_ASSERT(columnID < chunks.size());
         return *chunks[columnID];
     }
 
@@ -96,7 +96,7 @@ public:
     }
 
     std::unique_ptr<ColumnChunkData> moveColumnChunk(const common::column_id_t columnID) {
-        KU_ASSERT(columnID < chunks.size());
+        LBUG_ASSERT(columnID < chunks.size());
         return std::move(chunks[columnID]);
     }
 
@@ -143,15 +143,15 @@ public:
     common::row_idx_t getStartRowIdx() const { return startRowIdx; }
     common::row_idx_t getNumRows() const { return numRows; }
     const ColumnChunk& getColumnChunk(const common::column_id_t columnID) const {
-        KU_ASSERT(columnID < chunks.size());
+        LBUG_ASSERT(columnID < chunks.size());
         return *chunks[columnID];
     }
     ColumnChunk& getColumnChunk(const common::column_id_t columnID) {
-        KU_ASSERT(columnID < chunks.size());
+        LBUG_ASSERT(columnID < chunks.size());
         return *chunks[columnID];
     }
     std::unique_ptr<ColumnChunk> moveColumnChunk(const common::column_id_t columnID) {
-        KU_ASSERT(columnID < chunks.size());
+        LBUG_ASSERT(columnID < chunks.size());
         return std::move(chunks[columnID]);
     }
     bool isFullOrOnDisk() const {
@@ -239,11 +239,11 @@ public:
 
     template<class TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
     template<class TARGET>
     const TARGET& cast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
 
 protected:

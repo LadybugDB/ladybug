@@ -22,14 +22,14 @@ struct RegexFullMatchBindData : public FunctionBindData {
 };
 
 struct RegexpFullMatch {
-    static void operation(common::ku_string_t& left, common::ku_string_t& right, uint8_t& result) {
+    static void operation(string_t& left, string_t& right, uint8_t& result) {
         result = RE2::FullMatch(left.getAsString(),
             BaseRegexpOperation::parseCypherPattern(right.getAsString()));
     }
 };
 
 struct RegexpFullMatchStaticPattern : BaseRegexpOperation {
-    static void operation(common::ku_string_t& left, common::ku_string_t& /*right*/,
+    static void operation(string_t& left, string_t& /*right*/,
         uint8_t& result, common::ValueVector& /*leftValueVector*/,
         common::ValueVector& /*rightValueVector*/, common::ValueVector& /*resultValueVector*/,
         void* dataPtr) {
@@ -43,10 +43,10 @@ static std::unique_ptr<FunctionBindData> regexFullMatchBindFunc(const ScalarBind
         auto value = evaluator::ExpressionEvaluatorUtils::evaluateConstantExpression(
             input.arguments[1], input.context);
         input.definition->ptrCast<ScalarFunction>()->execFunc =
-            ScalarFunction::BinaryExecWithBindData<ku_string_t, ku_string_t, uint8_t,
+            ScalarFunction::BinaryExecWithBindData<string_t, string_t, uint8_t,
                 RegexpFullMatchStaticPattern>;
         input.definition->ptrCast<ScalarFunction>()->selectFunc =
-            ScalarFunction::BinarySelectWithBindData<ku_string_t, ku_string_t,
+            ScalarFunction::BinarySelectWithBindData<string_t, string_t,
                 RegexpFullMatchStaticPattern>;
         auto patternInStr = value.getValue<std::string>();
         return std::make_unique<RegexFullMatchBindData>(
@@ -62,8 +62,8 @@ function_set RegexpFullMatchFunction::getFunctionSet() {
     auto scalarFunc = make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::STRING},
         LogicalTypeID::BOOL,
-        ScalarFunction::BinaryExecFunction<ku_string_t, ku_string_t, uint8_t, RegexpFullMatch>,
-        ScalarFunction::BinarySelectFunction<ku_string_t, ku_string_t, RegexpFullMatch>);
+        ScalarFunction::BinaryExecFunction<string_t, string_t, uint8_t, RegexpFullMatch>,
+        ScalarFunction::BinarySelectFunction<string_t, string_t, RegexpFullMatch>);
     scalarFunc->bindFunc = regexFullMatchBindFunc;
     functionSet.emplace_back(std::move(scalarFunc));
     return functionSet;

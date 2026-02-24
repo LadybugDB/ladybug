@@ -90,7 +90,7 @@ public:
         auto progressBar = common::ProgressBar::Get(*clientContext);
         auto trackProgress = progressBar->getProgressBarPrinting();
         auto display = progressBar->getDisplay().get();
-        NodeProgressBarDisplay* nodeDisplay = ku_dynamic_cast<NodeProgressBarDisplay*>(display);
+        NodeProgressBarDisplay* nodeDisplay = dynamic_cast_checked<NodeProgressBarDisplay*>(display);
         if (progressCallback) {
             nodeDisplay->setCallbackFunction(queryID, *progressCallback);
             progressBar->toggleProgressBarPrinting(true);
@@ -147,7 +147,7 @@ public:
         auto progressBar = common::ProgressBar::Get(*clientContext);
         auto trackProgress = progressBar->getProgressBarPrinting();
         auto display = progressBar->getDisplay().get();
-        NodeProgressBarDisplay* nodeDisplay = ku_dynamic_cast<NodeProgressBarDisplay*>(display);
+        NodeProgressBarDisplay* nodeDisplay = dynamic_cast_checked<NodeProgressBarDisplay*>(display);
         if (progressCallback) {
             nodeDisplay->setCallbackFunction(queryID, *progressCallback);
             progressBar->toggleProgressBarPrinting(true);

@@ -35,7 +35,7 @@ public:
 
     template<class TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
 };
 
@@ -199,7 +199,7 @@ public:
 
     template<class TARGET>
     TARGET* ptrCast() {
-        return common::ku_dynamic_cast<TARGET*>(this);
+        return common::dynamic_cast_checked<TARGET*>(this);
     }
 
 protected:
@@ -282,7 +282,7 @@ public:
     void beginNewIterationInternalNoLock() override;
 
     std::unordered_set<common::offset_t> getActiveNodesOnCurrentFrontier() override {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 
     void resetValue(processor::ExecutionContext* context, graph::Graph* graph, iteration_t val);

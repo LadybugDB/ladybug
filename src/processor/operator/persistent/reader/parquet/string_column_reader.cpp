@@ -1,7 +1,7 @@
 #include "processor/operator/persistent/reader/parquet/string_column_reader.h"
 
 #include "common/types/blob.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "parquet_types.h"
 #include "utf8proc_wrapper.h"
 
@@ -13,11 +13,11 @@ namespace processor {
 StringColumnReader::StringColumnReader(ParquetReader& reader, common::LogicalType type,
     const lbug_parquet::format::SchemaElement& schema, uint64_t schemaIdx, uint64_t maxDefine,
     uint64_t maxRepeat)
-    : TemplatedColumnReader<common::ku_string_t, StringParquetValueConversion>(reader,
+    : TemplatedColumnReader<common::string_t, StringParquetValueConversion>(reader,
           std::move(type), schema, schemaIdx, maxDefine, maxRepeat) {
     fixedWidthStringLength = 0;
     if (schema.type == Type::FIXED_LEN_BYTE_ARRAY) {
-        KU_ASSERT(schema.__isset.type_length);
+        LBUG_ASSERT(schema.__isset.type_length);
         fixedWidthStringLength = schema.type_length;
     }
 }
@@ -49,7 +49,7 @@ uint32_t StringColumnReader::verifyString(const char* strData, uint32_t strLen) 
 void StringColumnReader::dictionary(const std::shared_ptr<ResizeableBuffer>& data,
     uint64_t numEntries) {
     dict = data;
-    dictStrs = std::unique_ptr<common::ku_string_t[]>(new common::ku_string_t[numEntries]);
+    dictStrs = std::unique_ptr<common::string_t[]>(new common::string_t[numEntries]);
     for (auto dictIdx = 0u; dictIdx < numEntries; dictIdx++) {
         auto strLen = fixedWidthStringLength == 0 ? dict->read<uint32_t>() : fixedWidthStringLength;
         dict->available(strLen);
@@ -61,13 +61,13 @@ void StringColumnReader::dictionary(const std::shared_ptr<ResizeableBuffer>& dat
     }
 }
 
-common::ku_string_t StringParquetValueConversion::dictRead(ByteBuffer& /*dict*/, uint32_t& offset,
+common::string_t StringParquetValueConversion::dictRead(ByteBuffer& /*dict*/, uint32_t& offset,
     ColumnReader& reader) {
     auto& dictStrings = reinterpret_cast<StringColumnReader&>(reader).dictStrs;
     return dictStrings[offset];
 }
 
-common::ku_string_t StringParquetValueConversion::plainRead(ByteBuffer& plainData,
+common::string_t StringParquetValueConversion::plainRead(ByteBuffer& plainData,
     ColumnReader& reader) {
     auto& scr = reinterpret_cast<StringColumnReader&>(reader);
     uint32_t strLen =
@@ -76,7 +76,7 @@ common::ku_string_t StringParquetValueConversion::plainRead(ByteBuffer& plainDat
     auto plainStr = reinterpret_cast<char*>(plainData.ptr);
     auto actualStrLen =
         reinterpret_cast<StringColumnReader&>(reader).verifyString(plainStr, strLen);
-    auto retStr = common::ku_string_t();
+    auto retStr = common::string_t();
     retStr.setFromRawStr(plainStr, actualStrLen);
     plainData.inc(strLen);
     return retStr;

@@ -7,7 +7,7 @@
 #include "common/exception/copy.h"
 #include "common/exception/message.h"
 #include "common/type_utils.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "storage/index/hash_index_utils.h"
 #include "storage/table/node_table.h"
 #include "storage/table/string_chunk_data.h"
@@ -39,8 +39,8 @@ IndexBuilderGlobalQueues::IndexBuilderGlobalQueues(transaction::Transaction* tra
     NodeTable* nodeTable)
     : nodeTable(nodeTable), transaction{transaction} {
     TypeUtils::visit(
-        pkTypeID(), [&](ku_string_t) { queues.emplace<Queue<std::string>>(); },
-        [&]<HashablePrimitive T>(T) { queues.emplace<Queue<T>>(); }, [](auto) { KU_UNREACHABLE; });
+        pkTypeID(), [&](string_t) { queues.emplace<Queue<std::string>>(); },
+        [&]<HashablePrimitive T>(T) { queues.emplace<Queue<T>>(); }, [](auto) { LBUG_UNREACHABLE; });
 }
 
 PhysicalTypeID IndexBuilderGlobalQueues::pkTypeID() const {
@@ -104,9 +104,9 @@ IndexBuilderLocalBuffers::IndexBuilderLocalBuffers(IndexBuilderGlobalQueues& glo
     : globalQueues(&globalQueues) {
     TypeUtils::visit(
         globalQueues.pkTypeID(),
-        [&](ku_string_t) { buffers = std::make_unique<Buffers<std::string>>(); },
+        [&](string_t) { buffers = std::make_unique<Buffers<std::string>>(); },
         [&]<HashablePrimitive T>(T) { buffers = std::make_unique<Buffers<T>>(); },
-        [](auto) { KU_UNREACHABLE; });
+        [](auto) { LBUG_UNREACHABLE; });
 }
 
 void IndexBuilderLocalBuffers::flush(NodeBatchInsertErrorHandler& errorHandler) {
@@ -151,8 +151,8 @@ void IndexBuilder::insert(const ColumnChunkData& chunk,
                 }
             }
         },
-        [&](ku_string_t) {
-            auto& stringColumnChunk = ku_dynamic_cast<const StringChunkData&>(chunk);
+        [&](string_t) {
+            auto& stringColumnChunk = dynamic_cast_checked<const StringChunkData&>(chunk);
             for (auto i = 0u; i < numNodes; i++) {
                 if (checkNonNullConstraint(chunk, warningData, nodeOffset, i, errorHandler)) {
                     auto value = stringColumnChunk.getValue<std::string>(i);
@@ -192,7 +192,7 @@ bool IndexBuilder::checkNonNullConstraint(const ColumnChunkData& chunk,
             chunk.getDataType().getPhysicalType(),
             [&](struct_entry_t) {
                 // primary key cannot be struct
-                KU_UNREACHABLE;
+                LBUG_UNREACHABLE;
             },
             [&]<typename T>(T) {
                 errorHandler.handleError<T>({.message = ExceptionMessage::nullPKException(),

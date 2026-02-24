@@ -61,7 +61,7 @@ std::vector<std::pair<std::string, LogicalType>> SerialCSVReader::sniffCSV(
 }
 
 uint64_t SerialCSVReader::parseBlock(block_idx_t blockIdx, DataChunk& resultChunk) {
-    KU_ASSERT(nullptr != errorHandler);
+    LBUG_ASSERT(nullptr != errorHandler);
 
     if (blockIdx != currentBlockIdx) {
         resetNumRowsInCurrentBlock();
@@ -135,7 +135,7 @@ void SerialCSVScanSharedState::initReader(main::ClientContext* context) {
 }
 
 static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
-    auto serialCSVScanSharedState = ku_dynamic_cast<SerialCSVScanSharedState*>(input.sharedState);
+    auto serialCSVScanSharedState = dynamic_cast_checked<SerialCSVScanSharedState*>(input.sharedState);
     serialCSVScanSharedState->read(output.dataChunk);
     return output.dataChunk.state->getSelVector().getSelSize();
 }
@@ -169,7 +169,7 @@ static void bindColumnsFromFile(const ExtraScanTableFuncBindInput* bindInput, ui
 void SerialCSVScan::bindColumns(const ExtraScanTableFuncBindInput* bindInput,
     std::vector<std::string>& columnNames, std::vector<LogicalType>& columnTypes,
     DialectOption& detectedDialect, bool& detectedHeader, main::ClientContext* context) {
-    KU_ASSERT(bindInput->fileScanInfo.getNumFiles() > 0);
+    LBUG_ASSERT(bindInput->fileScanInfo.getNumFiles() > 0);
     bindColumnsFromFile(bindInput, 0, columnNames, columnTypes, detectedDialect, detectedHeader,
         context);
     for (auto i = 1u; i < bindInput->fileScanInfo.getNumFiles(); ++i) {
@@ -183,7 +183,7 @@ void SerialCSVScan::bindColumns(const ExtraScanTableFuncBindInput* bindInput,
 
 static std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
     const TableFuncBindInput* input) {
-    auto scanInput = ku_dynamic_cast<ExtraScanTableFuncBindInput*>(input->extraInput.get());
+    auto scanInput = dynamic_cast_checked<ExtraScanTableFuncBindInput*>(input->extraInput.get());
     if (scanInput->expectedColumnTypes.size() > 0) {
         scanInput->fileScanInfo.options.insert_or_assign("SAMPLE_SIZE",
             Value((int64_t)0)); // only scan headers
@@ -256,12 +256,12 @@ static std::unique_ptr<TableFuncSharedState> initSharedState(
 }
 
 static void finalizeFunc(const ExecutionContext* ctx, TableFuncSharedState* sharedState) {
-    auto state = ku_dynamic_cast<SerialCSVScanSharedState*>(sharedState);
+    auto state = dynamic_cast_checked<SerialCSVScanSharedState*>(sharedState);
     state->finalizeReader(ctx->clientContext);
 }
 
 static double progressFunc(TableFuncSharedState* sharedState) {
-    auto state = ku_dynamic_cast<SerialCSVScanSharedState*>(sharedState);
+    auto state = dynamic_cast_checked<SerialCSVScanSharedState*>(sharedState);
     if (state->totalSize == 0) {
         return 0.0;
     } else if (state->fileIdx >= state->fileScanInfo.getNumFiles()) {

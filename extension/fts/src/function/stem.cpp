@@ -4,7 +4,7 @@
 #include "common/exception/binder.h"
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "common/vector/value_vector.h"
 #include "expression_evaluator/expression_evaluator_utils.h"
@@ -30,12 +30,12 @@ std::string getStemmerList() {
 }
 
 struct Stem {
-    static void operation(common::ku_string_t& word, common::ku_string_t& stemmer,
-        common::ku_string_t& result, common::ValueVector& resultVector);
+    static void operation(string_t& word, string_t& stemmer,
+        string_t& result, common::ValueVector& resultVector);
 };
 
-void Stem::operation(common::ku_string_t& word, common::ku_string_t& stemmer,
-    common::ku_string_t& result, common::ValueVector& resultVector) {
+void Stem::operation(string_t& word, string_t& stemmer,
+    string_t& result, common::ValueVector& resultVector) {
     if (stemmer.getAsString() == "none") {
         StringVector::addString(&resultVector, result, word);
         return;
@@ -58,15 +58,15 @@ void Stem::operation(common::ku_string_t& word, common::ku_string_t& stemmer,
 }
 
 struct StemStaticStemmer {
-    static void operation(common::ku_string_t& word, common::ku_string_t& /*stemmer*/,
-        common::ku_string_t& result, common::ValueVector& /*leftValueVector*/,
+    static void operation(string_t& word, string_t& /*stemmer*/,
+        string_t& result, common::ValueVector& /*leftValueVector*/,
         common::ValueVector& /*rightValueVector*/, common::ValueVector& resultVector,
         void* dataPtr);
 };
 
 struct StemWithoutStemmer {
-    static void operation(common::ku_string_t& word, common::ku_string_t& /*stemmer*/,
-        common::ku_string_t& result, common::ValueVector& /*leftValueVector*/,
+    static void operation(string_t& word, string_t& /*stemmer*/,
+        string_t& result, common::ValueVector& /*leftValueVector*/,
         common::ValueVector& /*rightValueVector*/, common::ValueVector& resultVector,
         void* dataPtr);
 };
@@ -96,19 +96,19 @@ struct StemBindData final : public FunctionBindData {
     }
 };
 
-void StemStaticStemmer::operation(common::ku_string_t& word, common::ku_string_t& /*stemmer*/,
-    common::ku_string_t& result, common::ValueVector& /*leftValueVector*/,
+void StemStaticStemmer::operation(string_t& word, string_t& /*stemmer*/,
+    string_t& result, common::ValueVector& /*leftValueVector*/,
     common::ValueVector& /*rightValueVector*/, common::ValueVector& resultVector, void* dataPtr) {
     auto stemBindData = reinterpret_cast<StemBindData*>(dataPtr);
-    KU_ASSERT(stemBindData->sbStemmer != nullptr);
+    LBUG_ASSERT(stemBindData->sbStemmer != nullptr);
     auto stemData = sb_stemmer_stem(stemBindData->sbStemmer,
         reinterpret_cast<const sb_symbol*>(word.getData()), word.len);
     common::StringVector::addString(&resultVector, result, reinterpret_cast<const char*>(stemData),
         sb_stemmer_length(stemBindData->sbStemmer));
 }
 
-void StemWithoutStemmer::operation(common::ku_string_t& word, common::ku_string_t& /*stemmer*/,
-    common::ku_string_t& result, common::ValueVector& /*leftValueVector*/,
+void StemWithoutStemmer::operation(string_t& word, string_t& /*stemmer*/,
+    string_t& result, common::ValueVector& /*leftValueVector*/,
     common::ValueVector& /*rightValueVector*/, common::ValueVector& resultVector,
     void* /*dataPtr*/) {
     common::StringVector::addString(&resultVector, result,
@@ -121,11 +121,11 @@ static std::unique_ptr<FunctionBindData> stemBindFunc(const ScalarBindFuncInput&
             input.arguments[1], input.context);
         if (common::StringUtils::getLower(value.getValue<std::string>()) == "none") {
             input.definition->ptrCast<ScalarFunction>()->execFunc =
-                ScalarFunction::BinaryExecWithBindData<ku_string_t, ku_string_t, ku_string_t,
+                ScalarFunction::BinaryExecWithBindData<string_t, string_t, string_t,
                     StemWithoutStemmer>;
         } else {
             input.definition->ptrCast<ScalarFunction>()->execFunc =
-                ScalarFunction::BinaryExecWithBindData<ku_string_t, ku_string_t, ku_string_t,
+                ScalarFunction::BinaryExecWithBindData<string_t, string_t, string_t,
                     StemStaticStemmer>;
         }
         auto patternInStr = value.getValue<std::string>();
@@ -141,7 +141,7 @@ function::function_set StemFunction::getFunctionSet() {
     auto scalarFunction = std::make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::STRING},
         LogicalTypeID::STRING,
-        ScalarFunction::BinaryStringExecFunction<ku_string_t, ku_string_t, ku_string_t, Stem>);
+        ScalarFunction::BinaryStringExecFunction<string_t, string_t, string_t, Stem>);
     scalarFunction->bindFunc = stemBindFunc;
     result.push_back(std::move(scalarFunction));
     return result;

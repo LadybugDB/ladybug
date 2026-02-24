@@ -5,7 +5,7 @@
 
 namespace lbug::storage {
 void FileDBIDUtils::verifyDatabaseID(const common::FileInfo& fileInfo,
-    common::ku_uuid_t expectedDatabaseID, common::ku_uuid_t databaseID) {
+    common::uuid expectedDatabaseID, common::uuid databaseID) {
     if (expectedDatabaseID.value != databaseID.value) {
         throw common::RuntimeException(std::format(
             "Database ID for temporary file '{}' does not match the current database. This file "
@@ -15,7 +15,7 @@ void FileDBIDUtils::verifyDatabaseID(const common::FileInfo& fileInfo,
     }
 }
 
-void FileDBIDUtils::writeDatabaseID(common::Serializer& ser, common::ku_uuid_t databaseID) {
+void FileDBIDUtils::writeDatabaseID(common::Serializer& ser, common::uuid databaseID) {
     ser.write(databaseID);
 }
 } // namespace lbug::storage

@@ -69,7 +69,7 @@ void SequenceCatalogEntry::nextValNoLock() {
 
 // referenced from DuckDB
 void SequenceCatalogEntry::nextKVal(transaction::Transaction* transaction, const uint64_t& count) {
-    KU_ASSERT(count > 0);
+    LBUG_ASSERT(count > 0);
     SequenceRollbackData rollbackData{};
     {
         std::lock_guard lck(mtx);
@@ -83,7 +83,7 @@ void SequenceCatalogEntry::nextKVal(transaction::Transaction* transaction, const
 
 void SequenceCatalogEntry::nextKVal(transaction::Transaction* transaction, const uint64_t& count,
     ValueVector& resultVector) {
-    KU_ASSERT(count > 0);
+    LBUG_ASSERT(count > 0);
     SequenceRollbackData rollbackData{};
     {
         std::lock_guard lck(mtx);

@@ -165,12 +165,12 @@ void RelBatchInsert::appendNodeGroup(const RelGroupCatalogEntry& relGroupEntry, 
     populateCSRHeader(relGroupEntry, *executionState, startNodeOffset, relInfo, localState,
         numNodes, leaveGaps);
     const auto& csrHeader =
-        ku_dynamic_cast<InMemChunkedCSRNodeGroup&>(*localState.chunkedGroup).getCSRHeader();
+        dynamic_cast_checked<InMemChunkedCSRNodeGroup&>(*localState.chunkedGroup).getCSRHeader();
     impl->writeToTable(*executionState, csrHeader, localState, *sharedState, relInfo);
     // Reset num of rows in the chunked group to fill gaps at the end of the node group.
     const auto maxSize = csrHeader.getEndCSROffset(numNodes - 1);
     auto numGapsAtEnd = maxSize - localState.chunkedGroup->getNumRows();
-    KU_ASSERT(localState.chunkedGroup->getCapacity() >= maxSize);
+    LBUG_ASSERT(localState.chunkedGroup->getCapacity() >= maxSize);
     while (numGapsAtEnd > 0) {
         const auto numGapsToFill = std::min(numGapsAtEnd, DEFAULT_VECTOR_CAPACITY);
         localState.dummyAllNullDataChunk->state->getSelVectorUnsafe().setSelSize(numGapsToFill);
@@ -179,19 +179,19 @@ void RelBatchInsert::appendNodeGroup(const RelGroupCatalogEntry& relGroupEntry, 
             dummyVectors.push_back(&localState.dummyAllNullDataChunk->getValueVectorMutable(i));
         }
         const auto numGapsFilled = localState.chunkedGroup->append(dummyVectors, 0, numGapsToFill);
-        KU_ASSERT(numGapsFilled == numGapsToFill);
+        LBUG_ASSERT(numGapsFilled == numGapsToFill);
         numGapsAtEnd -= numGapsFilled;
     }
-    KU_ASSERT(localState.chunkedGroup->getNumRows() == maxSize);
+    LBUG_ASSERT(localState.chunkedGroup->getNumRows() == maxSize);
 
     auto* relTable = sharedState->table->ptrCast<RelTable>();
 
     InMemChunkedCSRNodeGroup sliceToWriteToDisk{
-        ku_dynamic_cast<InMemChunkedCSRNodeGroup&>(*localState.chunkedGroup),
+        dynamic_cast_checked<InMemChunkedCSRNodeGroup&>(*localState.chunkedGroup),
         relInfo.outputDataColumns};
     appendNewChunkedGroup(mm, transaction, relInfo.insertColumnIDs, sliceToWriteToDisk, *relTable,
         nodeGroup, relInfo.direction, *localState.optimisticAllocator);
-    ku_dynamic_cast<InMemChunkedCSRNodeGroup&>(*localState.chunkedGroup)
+    dynamic_cast_checked<InMemChunkedCSRNodeGroup&>(*localState.chunkedGroup)
         .mergeChunkedCSRGroup(sliceToWriteToDisk, relInfo.outputDataColumns);
 
     localState.chunkedGroup->resetToEmpty();
@@ -206,7 +206,7 @@ void RelBatchInsert::populateCSRHeader(const RelGroupCatalogEntry& relGroupEntry
     RelBatchInsertExecutionState& executionState, offset_t startNodeOffset,
     const RelBatchInsertInfo& relInfo, const RelBatchInsertLocalState& localState,
     offset_t numNodes, bool leaveGaps) {
-    auto& csrNodeGroup = ku_dynamic_cast<InMemChunkedCSRNodeGroup&>(*localState.chunkedGroup);
+    auto& csrNodeGroup = dynamic_cast_checked<InMemChunkedCSRNodeGroup&>(*localState.chunkedGroup);
     auto& csrHeader = csrNodeGroup.getCSRHeader();
     csrHeader.setNumValues(numNodes);
     // Populate lengths for each node and check multiplicity constraint.
@@ -218,7 +218,7 @@ void RelBatchInsert::populateCSRHeader(const RelGroupCatalogEntry& relGroupEntry
     // Resize csr data column chunks.
     localState.chunkedGroup->resizeChunks(csrHeader.getEndCSROffset(numNodes - 1));
     localState.chunkedGroup->resetToAllNull();
-    KU_ASSERT(csrHeader.sanityCheck());
+    LBUG_ASSERT(csrHeader.sanityCheck());
 }
 
 void RelBatchInsert::checkRelMultiplicityConstraint(const RelGroupCatalogEntry& relGroupEntry,
@@ -239,7 +239,7 @@ void RelBatchInsert::checkRelMultiplicityConstraint(const RelGroupCatalogEntry& 
 void RelBatchInsert::finalizeInternal(ExecutionContext* context) {
     const auto relInfo = info->ptrCast<RelBatchInsertInfo>();
     if (relInfo->direction == RelDataDirection::FWD) {
-        KU_ASSERT(relInfo->partitioningIdx == 0);
+        LBUG_ASSERT(relInfo->partitioningIdx == 0);
 
         auto outputMsg = std::format("{} tuples have been copied to the {} table.",
             sharedState->getNumRows(), relInfo->tableName);

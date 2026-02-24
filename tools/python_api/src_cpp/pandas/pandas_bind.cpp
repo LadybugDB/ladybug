@@ -26,7 +26,7 @@ public:
         getter = df.attr("__getitem__");
     }
     PandasBindColumn operator[](uint64_t index) const {
-        KU_ASSERT(index < names.size());
+        LBUG_ASSERT(index < names.size());
         auto column = py::reinterpret_borrow<py::object>(getter(names[index]));
         auto type = types[index];
         auto name = names[index];

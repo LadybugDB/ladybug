@@ -9,7 +9,7 @@ namespace lbug {
 namespace function {
 
 struct Decode {
-    static inline void operation(common::blob_t& input, common::ku_string_t& result,
+    static inline void operation(common::blob_t& input, common::string_t& result,
         common::ValueVector& resultVector) {
         if (utf8proc::Utf8Proc::analyze(reinterpret_cast<const char*>(input.value.getData()),
                 input.value.len) == utf8proc::UnicodeType::INVALID) {

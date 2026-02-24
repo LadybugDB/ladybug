@@ -69,7 +69,7 @@ yyjson_mut_val* jsonify(JsonMutWrapper& wrapper, const common::ValueVector& vec,
     if (vec.isNull(pos)) {
         result = yyjson_mut_null(wrapper.ptr);
     } else if (JsonType::isJson(vec.dataType)) {
-        auto strVal = vec.getValue<ku_string_t>(pos);
+        auto strVal = vec.getValue<string_t>(pos);
         auto strContent = strVal.getAsStringView();
 
         // Convert JSON string to an immutable JSON document using stringToJson
@@ -123,7 +123,7 @@ yyjson_mut_val* jsonify(JsonMutWrapper& wrapper, const common::ValueVector& vec,
             result = yyjson_mut_real(wrapper.ptr, vec.getValue<float>(pos));
             break;
         case LogicalTypeID::STRING: {
-            auto strVal = vec.getValue<ku_string_t>(pos);
+            auto strVal = vec.getValue<string_t>(pos);
             result = yyjson_mut_strncpy(wrapper.ptr, (const char*)strVal.getData(), strVal.len);
         } break;
         case LogicalTypeID::DATE: {
@@ -162,7 +162,7 @@ yyjson_mut_val* jsonify(JsonMutWrapper& wrapper, const common::ValueVector& vec,
             result = yyjson_mut_strcpy(wrapper.ptr, str.c_str());
         } break;
         case LogicalTypeID::UUID: {
-            auto uuidVal = vec.getValue<ku_uuid_t>(pos);
+            auto uuidVal = vec.getValue<uuid>(pos);
             auto str = UUID::toString(uuidVal);
             result = yyjson_mut_strcpy(wrapper.ptr, str.c_str());
         } break;
@@ -329,7 +329,7 @@ common::LogicalType jsonSchema(yyjson_val* val, int64_t depth, int64_t breadth) 
         case YYJSON_SUBTYPE_REAL:
             return LogicalType::DOUBLE();
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     case YYJSON_TYPE_STR: {
         auto value = yyjson_get_str(val);
@@ -346,7 +346,7 @@ common::LogicalType jsonSchema(yyjson_val* val, int64_t depth, int64_t breadth) 
         return LogicalType::STRING();
     }
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -571,7 +571,7 @@ static void readFromJsonNum(NUM_TYPE val, common::ValueVector& vec, uint64_t pos
             function::CastToDecimal::operation(val, vec.getValue<int128_t>(pos), vec, vec);
             break;
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
         break;
     case LogicalTypeID::JSON: {
@@ -643,14 +643,14 @@ void readJsonToValueVector(yyjson_val* val, common::ValueVector& vec, uint64_t p
             readFromJsonNum(yyjson_get_real(val), vec, pos);
             break;
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
         break;
     case YYJSON_TYPE_STR:
         readFromJsonStr(yyjson_get_str(val), vec, pos);
         break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

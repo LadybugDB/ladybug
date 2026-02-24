@@ -3,8 +3,8 @@
 #include <filesystem>
 
 #include "common/null_buffer.h"
-#include "common/types/ku_list.h"
-#include "common/types/ku_string.h"
+#include "common/types/list_t.h"
+#include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "main/client_context.h"
 #include "main/db_config.h"
@@ -68,11 +68,11 @@ std::string StorageUtils::expandPath(const main::ClientContext* context, const s
 uint32_t StorageUtils::getDataTypeSize(const LogicalType& type) {
     switch (type.getPhysicalType()) {
     case PhysicalTypeID::STRING: {
-        return sizeof(ku_string_t);
+        return sizeof(string_t);
     }
     case PhysicalTypeID::ARRAY:
     case PhysicalTypeID::LIST: {
-        return sizeof(ku_list_t);
+        return sizeof(list_t);
     }
     case PhysicalTypeID::STRUCT: {
         uint32_t size = 0;

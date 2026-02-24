@@ -91,7 +91,7 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitCrossProductRepla
             remainingPSet.addPredicate(p);
         }
     }
-    KU_ASSERT(op->getNumChildren() == 2);
+    LBUG_ASSERT(op->getNumChildren() == 2);
     // Push probe side
     auto probeOptimizer = FilterPushDownOptimizer(context, std::move(probePSet));
     op->setChild(0, probeOptimizer.visitOperator(op->getChild(0)));

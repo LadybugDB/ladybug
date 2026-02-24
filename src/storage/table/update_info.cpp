@@ -27,7 +27,7 @@ VectorUpdateInfo& UpdateInfo::update(MemoryManager& memoryManager, const Transac
     while (current) {
         if (current->version == transaction->getID()) {
             // Same transaction, we can update the existing vector info.
-            KU_ASSERT(current->version >= Transaction::START_TRANSACTION_ID);
+            LBUG_ASSERT(current->version >= Transaction::START_TRANSACTION_ID);
             vecUpdateInfo = current;
         } else if (current->version > transaction->getStartTS()) {
             // Potentially there can be conflicts. `current` can be uncommitted transaction (version
@@ -52,7 +52,7 @@ VectorUpdateInfo& UpdateInfo::update(MemoryManager& memoryManager, const Transac
         newInfo->prev = std::move(currentInfo);
         header.info = std::move(newInfo);
     }
-    KU_ASSERT(vecUpdateInfo);
+    LBUG_ASSERT(vecUpdateInfo);
     // Check if the row is already updated in this transaction.
     idx_t idxInUpdateData = INVALID_IDX;
     for (auto i = 0u; i < vecUpdateInfo->numRowsUpdated; i++) {
@@ -123,14 +123,14 @@ void UpdateInfo::iterateVectorInfo(const Transaction* transaction, idx_t idx,
     }
     // We lock the head of the chain to ensure that we can safely read from any part of the
     // chain.
-    KU_ASSERT(head);
+    LBUG_ASSERT(head);
     std::shared_lock chainLock{head->mtx};
     auto current = head->info.get();
-    KU_ASSERT(current);
+    LBUG_ASSERT(current);
     while (current) {
         if (current->version == transaction->getID() ||
             current->version <= transaction->getStartTS()) {
-            KU_ASSERT((current->version == transaction->getID() &&
+            LBUG_ASSERT((current->version == transaction->getID() &&
                           current->version >= Transaction::START_TRANSACTION_ID) ||
                       (current->version <= transaction->getStartTS() &&
                           current->version < Transaction::START_TRANSACTION_ID));
@@ -157,7 +157,7 @@ static bool validateUpdateChain(const UpdateNode& updatedNode, const VectorUpdat
 void UpdateInfo::commit(idx_t vectorIdx, VectorUpdateInfo* info, transaction_t commitTS) {
     auto& updateNode = getUpdateNode(vectorIdx);
     std::unique_lock chainLock{updateNode.mtx};
-    KU_ASSERT(validateUpdateChain(updateNode, info));
+    LBUG_ASSERT(validateUpdateChain(updateNode, info));
     info->version = commitTS;
 }
 
@@ -167,10 +167,10 @@ void UpdateInfo::rollback(idx_t vectorIdx, transaction_t version) {
     // head of the version chain. This is just a simplification and should be optimized later.
     {
         std::unique_lock lock{mtx};
-        KU_ASSERT(updates.size() > vectorIdx);
+        LBUG_ASSERT(updates.size() > vectorIdx);
         header = updates[vectorIdx].get();
     }
-    KU_ASSERT(header);
+    LBUG_ASSERT(header);
     std::unique_lock chainLock{header->mtx};
     // First check if this version is still in the chain. It might have been removed by
     // a previous rollback entry of the same transaction.
@@ -187,7 +187,7 @@ void UpdateInfo::rollback(idx_t vectorIdx, transaction_t version) {
                 }
                 newerVersion->setPrev(std::move(prevVersion));
             } else {
-                KU_ASSERT(header->info.get() == current);
+                LBUG_ASSERT(header->info.get() == current);
                 // This is the beginning of the version chain.
                 if (prevVersion) {
                     prevVersion->next = nullptr;

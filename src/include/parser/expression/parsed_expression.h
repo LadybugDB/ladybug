@@ -57,7 +57,7 @@ public:
     common::idx_t getNumChildren() const { return children.size(); }
     ParsedExpression* getChild(common::idx_t idx) const { return children[idx].get(); }
     void setChild(common::idx_t idx, std::unique_ptr<ParsedExpression> child) {
-        KU_ASSERT(idx < children.size());
+        LBUG_ASSERT(idx < children.size());
         children[idx] = std::move(child);
     }
 
@@ -73,15 +73,15 @@ public:
 
     template<class TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
     template<class TARGET>
     const TARGET& constCast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
     template<class TARGET>
     const TARGET* constPtrCast() const {
-        return common::ku_dynamic_cast<const TARGET*>(this);
+        return common::dynamic_cast_checked<const TARGET*>(this);
     }
 
 private:

@@ -1,18 +1,17 @@
 package com.ladybugdb;
 
-import org.junit.jupiter.api.io.TempDir;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.*;
-
-import java.nio.file.Path;
 
 public class DatabaseTest extends TestBase {
     @Test
     void DBCreationAndDestroyWithArgs() {
         String dbPath = "";
         try {
-            dbPath = tempDir.resolve("db1.kz").toString();
+            dbPath = tempDir.resolve("db1.lbug").toString();
         } catch (Exception e) {
             fail("Cannot get database path: " + e.getMessage());
         }
@@ -48,7 +47,7 @@ public class DatabaseTest extends TestBase {
     void DBCreationWithInvalidMaxDBSize() {
         String dbPath = "";
         try {
-            dbPath = tempDir.resolve("db2.kz").toString();
+            dbPath = tempDir.resolve("db2.lbug").toString();
         } catch (Exception e) {
             fail("Cannot get database path: " + e.getMessage());
         }
@@ -77,7 +76,7 @@ public class DatabaseTest extends TestBase {
     void DBCreationAndDestroyWithPathOnly() {
         String dbPath = "";
         try {
-            dbPath = tempDir.resolve("db3.kz").toString();
+            dbPath = tempDir.resolve("db3.lbug").toString();
         } catch (Exception e) {
             fail("Cannot get database path: " + e.getMessage());
         }
@@ -128,7 +127,7 @@ public class DatabaseTest extends TestBase {
     void DBCreationTestThrowOnWALReplayFailure() {
         String dbPath = "";
         try {
-            dbPath = tempDir.resolve("db4.kz").toString();
+            dbPath = tempDir.resolve("db4.lbug").toString();
         } catch (Exception e) {
             fail("Cannot get database path: " + e.getMessage());
         }
@@ -181,7 +180,7 @@ public class DatabaseTest extends TestBase {
     void DBCreationTestEnableChecksums() {
         String dbPath = "";
         try {
-            dbPath = tempDir.resolve("db5.kz").toString();
+            dbPath = tempDir.resolve("db5.lbug").toString();
         } catch (Exception e) {
             fail("Cannot get database path: " + e.getMessage());
         }

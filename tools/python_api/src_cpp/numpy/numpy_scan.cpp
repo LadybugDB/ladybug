@@ -22,11 +22,11 @@ void ScanNumpyColumn(py::array& npArray, uint64_t offset, ValueVector* outputVec
 template<class T>
 void scanNumpyMasked(PandasColumnBindData* bindData, uint64_t count, uint64_t offset,
     ValueVector* outputVector) {
-    KU_ASSERT(bindData->pandasCol->getBackEnd() == PandasColumnBackend::NUMPY);
+    LBUG_ASSERT(bindData->pandasCol->getBackEnd() == PandasColumnBackend::NUMPY);
     auto& npColumn = reinterpret_cast<PandasNumpyColumn&>(*bindData->pandasCol);
     ScanNumpyColumn<T>(npColumn.array, offset, outputVector, count);
     if (bindData->mask != nullptr) {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -52,7 +52,7 @@ static void appendPythonUnicode(T* codepoints, uint64_t codepointLength,
     uint64_t utf8StrLen = 0;
     for (auto i = 0u; i < codepointLength; i++) {
         auto len = utf8proc::Utf8Proc::codepointLength(int(codepoints[i]));
-        KU_ASSERT(len >= 1);
+        LBUG_ASSERT(len >= 1);
         utf8StrLen += len;
     }
     auto& strToAppend = StringVector::reserveString(vectorToAppend, pos, utf8StrLen);
@@ -63,17 +63,17 @@ static void appendPythonUnicode(T* codepoints, uint64_t codepointLength,
     auto dataToWrite = (char*)strToAppend.getData();
     for (auto i = 0u; i < codepointLength; i++) {
         utf8proc::Utf8Proc::codepointToUtf8(int(codepoints[i]), codePointLen, dataToWrite);
-        KU_ASSERT(codePointLen >= 1);
+        LBUG_ASSERT(codePointLen >= 1);
         dataToWrite += codePointLen;
     }
-    if (!ku_string_t::isShortString(utf8StrLen)) {
-        memcpy(strToAppend.prefix, strToAppend.getData(), ku_string_t::PREFIX_LENGTH);
+    if (!string_t::isShortString(utf8StrLen)) {
+        memcpy(strToAppend.prefix, strToAppend.getData(), string_t::PREFIX_LENGTH);
     }
 }
 
 void NumpyScan::scan(PandasColumnBindData* bindData, uint64_t count, uint64_t offset,
     common::ValueVector* outputVector) {
-    KU_ASSERT(bindData->pandasCol->getBackEnd() == PandasColumnBackend::NUMPY);
+    LBUG_ASSERT(bindData->pandasCol->getBackEnd() == PandasColumnBackend::NUMPY);
     auto& npCol = reinterpret_cast<PandasNumpyColumn&>(*bindData->pandasCol);
     auto& array = npCol.array;
 
@@ -151,7 +151,7 @@ void NumpyScan::scan(PandasColumnBindData* bindData, uint64_t count, uint64_t of
             scanObjectColumn(sourceData, count, offset, outputVector);
             return;
         }
-        auto dstData = reinterpret_cast<ku_string_t*>(outputVector->getData());
+        auto dstData = reinterpret_cast<string_t*>(outputVector->getData());
         py::gil_scoped_acquire gil;
         for (auto i = 0u; i < count; i++) {
             auto pos = i + offset;
@@ -176,12 +176,12 @@ void NumpyScan::scan(PandasColumnBindData* bindData, uint64_t count, uint64_t of
             }
             outputVector->setNull(i, false /* isNull */);
             if (PyStrUtil::isPyUnicodeCompatibleAscii(strHandle)) {
-                dstData[i] = ku_string_t{PyStrUtil::getUnicodeStrData(strHandle),
+                dstData[i] = string_t{PyStrUtil::getUnicodeStrData(strHandle),
                     PyStrUtil::getUnicodeStrLen(strHandle)};
             } else {
                 auto unicodeObj = reinterpret_cast<PyCompactUnicodeObject*>(val);
                 if (unicodeObj->utf8) {
-                    dstData[i] = ku_string_t(reinterpret_cast<const char*>(unicodeObj->utf8),
+                    dstData[i] = string_t(reinterpret_cast<const char*>(unicodeObj->utf8),
                         unicodeObj->utf8_length);
                 } else if (PyStrUtil::isPyUnicodeCompact(unicodeObj) &&
                            !PyStrUtil::isPyUnicodeASCII(unicodeObj)) {
@@ -200,7 +200,7 @@ void NumpyScan::scan(PandasColumnBindData* bindData, uint64_t count, uint64_t of
                             PyStrUtil::getUnicodeStrLen(strHandle), outputVector, i);
                         break;
                     default:
-                        KU_UNREACHABLE;
+                        LBUG_UNREACHABLE;
                     }
                 } else {
                     // LCOV_EXCL_START
@@ -212,7 +212,7 @@ void NumpyScan::scan(PandasColumnBindData* bindData, uint64_t count, uint64_t of
         break;
     }
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

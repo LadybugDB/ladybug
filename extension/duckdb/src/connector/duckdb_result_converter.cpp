@@ -27,7 +27,7 @@ void convertDuckDBVectorToVector<list_entry_t>(duckdb::Vector& duckDBVector, Val
     uint64_t numValuesToCopy);
 
 template<>
-void convertDuckDBVectorToVector<ku_string_t>(duckdb::Vector& duckDBVector, ValueVector& result,
+void convertDuckDBVectorToVector<string_t>(duckdb::Vector& duckDBVector, ValueVector& result,
     uint64_t numValuesToCopy) {
     auto strs = reinterpret_cast<duckdb::string_t*>(duckDBVector.GetData());
     auto validityMasks = duckdb::FlatVector::Validity(duckDBVector);
@@ -72,7 +72,7 @@ void convertDuckDBVectorToVector<list_entry_t>(duckdb::Vector& duckDBVector, Val
         }
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 
     ListVector::resizeDataVector(&result, numValuesInDataVec);
@@ -128,7 +128,7 @@ void DuckDBResultConverter::convertDuckDBResultToVector(duckdb::DataChunk& duckD
             }
             continue;
         }
-        KU_ASSERT(duckDBResult.data[duckdbResultColIdx].GetVectorType() ==
+        LBUG_ASSERT(duckDBResult.data[duckdbResultColIdx].GetVectorType() ==
                   duckdb::VectorType::FLAT_VECTOR);
         // Write to output vector at position i (the original column index)
         conversionFunctions[i](duckDBResult.data[duckdbResultColIdx],

@@ -67,7 +67,7 @@ std::unordered_set<std::string> PreparedStatement::getKnownParameters() {
 }
 
 void PreparedStatement::updateParameter(const std::string& name, Value* value) {
-    KU_ASSERT(parameterMap.contains(name));
+    LBUG_ASSERT(parameterMap.contains(name));
     validateParam(name, value, parameterMap.at(name).get());
     *parameterMap.at(name) = std::move(*value);
 }

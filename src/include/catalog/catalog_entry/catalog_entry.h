@@ -20,7 +20,7 @@ struct LBUG_API ToCypherInfo {
 
     template<class TARGET>
     const TARGET& constCast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
 };
 
@@ -51,7 +51,7 @@ public:
     void setOID(common::oid_t oid) { this->oid = oid; }
     common::oid_t getOID() const { return oid; }
     CatalogEntry* getPrev() const {
-        KU_ASSERT(prev);
+        LBUG_ASSERT(prev);
         return prev.get();
     }
     std::unique_ptr<CatalogEntry> movePrev() {
@@ -75,23 +75,23 @@ public:
     virtual void serialize(common::Serializer& serializer) const;
     static std::unique_ptr<CatalogEntry> deserialize(common::Deserializer& deserializer);
 
-    virtual std::string toCypher(const ToCypherInfo& /*info*/) const { KU_UNREACHABLE; }
+    virtual std::string toCypher(const ToCypherInfo& /*info*/) const { LBUG_UNREACHABLE; }
 
     template<class TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
     template<class TARGET>
     const TARGET& constCast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
     template<class TARGET>
     const TARGET* constPtrCast() const {
-        return common::ku_dynamic_cast<const TARGET*>(this);
+        return common::dynamic_cast_checked<const TARGET*>(this);
     }
     template<class TARGET>
     TARGET* ptrCast() {
-        return common::ku_dynamic_cast<TARGET*>(this);
+        return common::dynamic_cast_checked<TARGET*>(this);
     }
 
 protected:

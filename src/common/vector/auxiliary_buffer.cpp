@@ -44,7 +44,7 @@ void ListAuxiliaryBuffer::resize(uint64_t numValues) {
     bool needResizeDataVector = numValues > capacity;
     while (numValues > capacity) {
         capacity *= 2;
-        KU_ASSERT(capacity != 0);
+        LBUG_ASSERT(capacity != 0);
     }
     if (needResizeDataVector) {
         resizeDataVector(dataVector.get());

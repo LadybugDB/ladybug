@@ -12,7 +12,7 @@ std::string GraphEntryTypeUtils::toString(GraphEntryType type) {
     case GraphEntryType::CYPHER:
         return "CYPHER";
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

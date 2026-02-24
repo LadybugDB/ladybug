@@ -1,13 +1,13 @@
 #pragma once
 
 #include "base_str_function.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 
 namespace lbug {
 namespace function {
 
 struct Ltrim {
-    static inline void operation(common::ku_string_t& input, common::ku_string_t& result,
+    static inline void operation(common::string_t& input, common::string_t& result,
         common::ValueVector& resultValueVector) {
         BaseStrOperation::operation(input, result, resultValueVector, ltrim);
     }

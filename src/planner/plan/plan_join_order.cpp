@@ -42,7 +42,7 @@ static int32_t getConnectedQueryGraphIdx(const QueryGraphCollection& queryGraphC
 
 LogicalPlan Planner::planQueryGraphCollection(const QueryGraphCollection& queryGraphCollection,
     const QueryGraphPlanningInfo& info) {
-    KU_ASSERT(queryGraphCollection.getNumQueryGraphs() > 0);
+    LBUG_ASSERT(queryGraphCollection.getNumQueryGraphs() > 0);
     auto& corrExprs = info.corrExprs;
     int32_t queryGraphIdxToPlanExpressionsScan = -1;
     if (info.subqueryType == SubqueryPlanningType::CORRELATED) {
@@ -92,7 +92,7 @@ LogicalPlan Planner::planQueryGraphCollection(const QueryGraphCollection& queryG
             }
         } break;
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
         planPerQueryGraph.push_back(std::move(plan));
     }
@@ -155,7 +155,7 @@ LogicalPlan Planner::planQueryGraph(const QueryGraph& queryGraph,
 }
 
 void Planner::planLevel(uint32_t level) {
-    KU_ASSERT(level > 1);
+    LBUG_ASSERT(level > 1);
     if (level > MAX_LEVEL_TO_PLAN_EXACTLY) {
         planLevelApproximately(level);
     } else {
@@ -216,7 +216,7 @@ void Planner::planBaseTableScans(const QueryGraphPlanningInfo& info) {
         planCorrelatedExpressionsScan(info);
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     for (auto relPos = 0u; relPos < queryGraph->getNumQueryRels(); ++relPos) {
         planRelScan(relPos);
@@ -279,7 +279,7 @@ void Planner::planNodeIDScan(uint32_t nodePos) {
 
 static std::pair<std::shared_ptr<NodeExpression>, std::shared_ptr<NodeExpression>>
 getBoundAndNbrNodes(const RelExpression& rel, ExtendDirection direction) {
-    KU_ASSERT(direction != ExtendDirection::BOTH);
+    LBUG_ASSERT(direction != ExtendDirection::BOTH);
     auto boundNode = direction == ExtendDirection::FWD ? rel.getSrcNode() : rel.getDstNode();
     auto dstNode = direction == ExtendDirection::FWD ? rel.getDstNode() : rel.getSrcNode();
     return make_pair(boundNode, dstNode);
@@ -288,7 +288,7 @@ getBoundAndNbrNodes(const RelExpression& rel, ExtendDirection direction) {
 static ExtendDirection getExtendDirection(const binder::RelExpression& relExpression,
     const binder::NodeExpression& boundNode) {
     if (relExpression.getDirectionType() == binder::RelDirectionType::BOTH) {
-        KU_ASSERT(relExpression.getExtendDirections().size() == common::NUM_REL_DIRECTIONS);
+        LBUG_ASSERT(relExpression.getExtendDirections().size() == common::NUM_REL_DIRECTIONS);
         return ExtendDirection::BOTH;
     }
     if (relExpression.getSrcNodeName() == boundNode.getUniqueName()) {
@@ -334,7 +334,7 @@ void Planner::appendExtend(std::shared_ptr<NodeExpression> boundNode,
         appendRecursiveExtend(boundNode, nbrNode, rel, direction, plan);
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -367,7 +367,7 @@ populateIntersectRelCandidates(const QueryGraph& queryGraph, const SubqueryGraph
 }
 
 void Planner::planWCOJoin(uint32_t leftLevel, uint32_t rightLevel) {
-    KU_ASSERT(leftLevel <= rightLevel);
+    LBUG_ASSERT(leftLevel <= rightLevel);
     auto queryGraph = context.getQueryGraph();
     for (auto& rightSubgraph : context.subPlansTable->getSubqueryGraphs(rightLevel)) {
         auto candidates = populateIntersectRelCandidates(*queryGraph, rightSubgraph);
@@ -402,7 +402,7 @@ static bool isNodeSequentialOnPlan(const LogicalPlan& plan, const NodeExpression
     if (seqScan == nullptr) {
         return false;
     }
-    const auto sequentialScan = ku_dynamic_cast<LogicalScanNodeTable*>(seqScan);
+    const auto sequentialScan = dynamic_cast_checked<LogicalScanNodeTable*>(seqScan);
     return sequentialScan->getNodeID()->getUniqueName() == node.getInternalID()->getUniqueName();
 }
 
@@ -446,7 +446,7 @@ void Planner::planWCOJoin(const SubqueryGraph& subgraph,
         // fetch build plans for rel
         auto relSubgraph = context.getEmptySubqueryGraph();
         relSubgraph.addQueryRel(relPos);
-        KU_ASSERT(context.subPlansTable->containSubgraphPlans(relSubgraph));
+        LBUG_ASSERT(context.subPlansTable->containSubgraphPlans(relSubgraph));
         auto& relPlanCandidates = context.subPlansTable->getSubgraphPlans(relSubgraph);
         auto relPlan = getWCOJBuildPlanForRel(relPlanCandidates, *boundNode);
         if (relPlan.isEmpty()) { // Cannot find a suitable rel plan.
@@ -502,7 +502,7 @@ static bool needPruneImplicitJoins(const SubqueryGraph& leftSubgraph,
 }
 
 void Planner::planInnerJoin(uint32_t leftLevel, uint32_t rightLevel) {
-    KU_ASSERT(leftLevel <= rightLevel);
+    LBUG_ASSERT(leftLevel <= rightLevel);
     for (auto& rightSubgraph : context.subPlansTable->getSubqueryGraphs(rightLevel)) {
         for (auto& nbrSubgraph : rightSubgraph.getNbrSubgraphs(leftLevel)) {
             // E.g. MATCH (a)->(b) MATCH (b)->(c)
@@ -543,7 +543,7 @@ bool Planner::tryPlanINLJoin(const SubqueryGraph& subgraph, const SubqueryGraph&
             relPos = i;
         }
     }
-    KU_ASSERT(relPos != UINT32_MAX);
+    LBUG_ASSERT(relPos != UINT32_MAX);
     auto rel = context.queryGraph->getQueryRel(relPos);
     const auto& boundNode = joinNodes[0];
     auto nbrNode =

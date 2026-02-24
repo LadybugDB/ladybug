@@ -7,7 +7,7 @@
 #include "common/types/date_t.h"
 #include "common/types/int128_t.h"
 #include "common/types/interval_t.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/types/timestamp_t.h"
 #include "common/types/types.h"
 #include "common/types/uint128_t.h"
@@ -46,7 +46,7 @@ public:
     static inline std::string toString(const T& val, void* /*valueVector*/ = nullptr) {
         if constexpr (std::is_same_v<T, std::string>) {
             return val;
-        } else if constexpr (std::is_same_v<T, ku_string_t>) {
+        } else if constexpr (std::is_same_v<T, string_t>) {
             return val.getAsString();
         } else {
             static_assert(std::is_same<T, int64_t>::value || std::is_same<T, int32_t>::value ||
@@ -100,11 +100,11 @@ public:
             return common::PhysicalTypeID::INTERVAL;
         } else if constexpr (std::is_same_v<T, uint128_t>) {
             return common::PhysicalTypeID::UINT128;
-        } else if constexpr (std::same_as<T, ku_string_t> || std::same_as<T, std::string> ||
+        } else if constexpr (std::same_as<T, string_t> || std::same_as<T, std::string> ||
                              std::same_as<T, std::string_view>) {
             return common::PhysicalTypeID::STRING;
         } else {
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     }
 
@@ -116,25 +116,25 @@ public:
      *
      *  std::string result;
      *  visit(dataType, [&]<typename T>(T) {
-     *      if constexpr(std::is_same_v<T, ku_string_t>()) {
-     *          result = vector->getValue<ku_string_t>(0).getAsString();
+     *      if constexpr(std::is_same_v<T, string_t>()) {
+     *          result = vector->getValue<string_t>(0).getAsString();
      *      } else if (std::integral<T>) {
      *          result = std::to_string(vector->getValue<T>(0));
      *      } else {
-     *          KU_UNREACHABLE;
+     *          LBUG_UNREACHABLE;
      *      }
      *  });
      *
      * or
      *  std::string result;
      *  visit(dataType,
-     *      [&](ku_string_t) {
-     *          result = vector->getValue<ku_string_t>(0);
+     *      [&](string_t) {
+     *          result = vector->getValue<string_t>(0);
      *      },
      *      [&]<std::integral T>(T) {
      *          result = std::to_string(vector->getValue<T>(0));
      *      },
-     *      [](auto) { KU_UNREACHABLE; }
+     *      [](auto) { LBUG_UNREACHABLE; }
      *  );
      *
      * Note that when multiple functions are provided, at least one function must match all data
@@ -187,7 +187,7 @@ public:
             case PhysicalTypeID::INT128:
                 return func(int128_t());
             default:
-                KU_UNREACHABLE;
+                LBUG_UNREACHABLE;
             }
         case LogicalTypeID::INTERVAL:
             return func(interval_t());
@@ -196,7 +196,7 @@ public:
         case LogicalTypeID::UINT128:
             return func(uint128_t());
         case LogicalTypeID::STRING:
-            return func(ku_string_t());
+            return func(string_t());
         case LogicalTypeID::DATE:
             return func(date_t());
         case LogicalTypeID::TIMESTAMP_NS:
@@ -212,7 +212,7 @@ public:
         case LogicalTypeID::BLOB:
             return func(blob_t());
         case LogicalTypeID::UUID:
-            return func(ku_uuid_t());
+            return func(uuid());
         case LogicalTypeID::ARRAY:
         case LogicalTypeID::LIST:
             return func(list_entry_t());
@@ -228,7 +228,7 @@ public:
         /* NOLINTEND(bugprone-branch-clone)*/
         default:
             // Unsupported type
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     }
 
@@ -270,7 +270,7 @@ public:
         case PhysicalTypeID::UINT128:
             return func(uint128_t());
         case PhysicalTypeID::STRING:
-            return func(ku_string_t());
+            return func(string_t());
         case PhysicalTypeID::ARRAY:
         case PhysicalTypeID::LIST:
             return func(list_entry_t());
@@ -282,11 +282,11 @@ public:
         case PhysicalTypeID::ALP_EXCEPTION_DOUBLE:
         case PhysicalTypeID::ALP_EXCEPTION_FLOAT:
             // Unsupported type
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
             // Needed for return type deduction to work
             return func(uint8_t());
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     }
 };
@@ -315,11 +315,11 @@ std::string TypeUtils::toString(const timestamp_t& val, void* valueVector);
 template<>
 std::string TypeUtils::toString(const interval_t& val, void* valueVector);
 template<>
-std::string TypeUtils::toString(const ku_string_t& val, void* valueVector);
+std::string TypeUtils::toString(const string_t& val, void* valueVector);
 template<>
 std::string TypeUtils::toString(const blob_t& val, void* valueVector);
 template<>
-std::string TypeUtils::toString(const ku_uuid_t& val, void* valueVector);
+std::string TypeUtils::toString(const uuid& val, void* valueVector);
 template<>
 std::string TypeUtils::toString(const list_entry_t& val, void* valueVector);
 template<>

@@ -17,7 +17,7 @@ table_id_t FrontierTaskInfo::getBoundTableID() const {
     case ExtendDirection::BWD:
         return dstTableID;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -28,7 +28,7 @@ table_id_t FrontierTaskInfo::getNbrTableID() const {
     case ExtendDirection::BWD:
         return srcTableID;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -78,7 +78,7 @@ void FrontierTask::run() {
         }
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     if (numActiveNodes) {
         sharedState->frontierPair.setActiveNodesForNextIter();
@@ -114,7 +114,7 @@ void FrontierTask::runSparse() {
         }
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     if (numActiveNodes) {
         sharedState->frontierPair.setActiveNodesForNextIter();
@@ -142,7 +142,7 @@ void VertexComputeTask::run() {
 }
 
 void VertexComputeTask::runSparse() {
-    KU_ASSERT(!info.hasPropertiesToScan());
+    LBUG_ASSERT(!info.hasPropertiesToScan());
     auto localVc = info.vc.copy();
     localVc->vertexCompute(info.tableEntry->getTableID());
 }

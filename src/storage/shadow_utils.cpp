@@ -11,7 +11,7 @@ namespace storage {
 
 ShadowPageAndFrame ShadowUtils::createShadowVersionIfNecessaryAndPinPage(page_idx_t originalPage,
     bool skipReadingOriginalPage, FileHandle& fileHandle, ShadowFile& shadowFile) {
-    KU_ASSERT(!fileHandle.isInMemoryMode());
+    LBUG_ASSERT(!fileHandle.isInMemoryMode());
     const auto hasShadowPage = shadowFile.hasShadowPage(fileHandle.getFileIndex(), originalPage);
     auto shadowPage = shadowFile.getOrCreateShadowPage(fileHandle.getFileIndex(), originalPage);
     uint8_t* shadowFrame = nullptr;
@@ -50,15 +50,15 @@ std::pair<FileHandle*, page_idx_t> ShadowUtils::getFileHandleAndPhysicalPageIdxT
 
 void unpinShadowPage(page_idx_t originalPageIdx, page_idx_t shadowPageIdx,
     const ShadowFile& shadowFile) {
-    KU_ASSERT(originalPageIdx != INVALID_PAGE_IDX && shadowPageIdx != INVALID_PAGE_IDX);
-    KU_UNUSED(originalPageIdx);
+    LBUG_ASSERT(originalPageIdx != INVALID_PAGE_IDX && shadowPageIdx != INVALID_PAGE_IDX);
+    LBUG_UNUSED(originalPageIdx);
     shadowFile.getShadowingFH().unpinPage(shadowPageIdx);
 }
 
 void ShadowUtils::updatePage(FileHandle& fileHandle, page_idx_t originalPageIdx,
     bool skipReadingOriginalPage, ShadowFile& shadowFile,
     const std::function<void(uint8_t*)>& updateOp) {
-    KU_ASSERT(!fileHandle.isInMemoryMode());
+    LBUG_ASSERT(!fileHandle.isInMemoryMode());
     const auto shadowPageIdxAndFrame = createShadowVersionIfNecessaryAndPinPage(originalPageIdx,
         skipReadingOriginalPage, fileHandle, shadowFile);
     try {
@@ -74,8 +74,8 @@ void ShadowUtils::updatePage(FileHandle& fileHandle, page_idx_t originalPageIdx,
 
 void ShadowUtils::readShadowVersionOfPage(const FileHandle& fileHandle, page_idx_t originalPageIdx,
     const ShadowFile& shadowFile, const std::function<void(uint8_t*)>& readOp) {
-    KU_ASSERT(!fileHandle.isInMemoryMode());
-    KU_ASSERT(shadowFile.hasShadowPage(fileHandle.getFileIndex(), originalPageIdx));
+    LBUG_ASSERT(!fileHandle.isInMemoryMode());
+    LBUG_ASSERT(shadowFile.hasShadowPage(fileHandle.getFileIndex(), originalPageIdx));
     const page_idx_t shadowPageIdx =
         shadowFile.getShadowPage(fileHandle.getFileIndex(), originalPageIdx);
     const auto frame =

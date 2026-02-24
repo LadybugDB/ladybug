@@ -75,7 +75,7 @@ public:
         sizeColumnChunk->setToInMemory();
         offsetColumnChunk->setToInMemory();
         dataColumnChunk->setToInMemory();
-        KU_ASSERT(offsetColumnChunk->getNumValues() == numValues);
+        LBUG_ASSERT(offsetColumnChunk->getNumValues() == numValues);
     }
     void resize(uint64_t newCapacity) override {
         ColumnChunkData::resize(newCapacity);

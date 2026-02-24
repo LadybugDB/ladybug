@@ -26,7 +26,7 @@ struct LBUG_API ParsedGraphEntry {
 
     template<class TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
 };
 

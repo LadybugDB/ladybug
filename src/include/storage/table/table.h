@@ -64,22 +64,22 @@ struct LBUG_API TableScanState {
     // Note that `resetCachedBoundNodeSelVec` is only applicable to RelTable for now.
     virtual void initState(transaction::Transaction* transaction, NodeGroup* nodeGroup,
         bool /*resetCachedBoundNodeSelVev*/ = true) {
-        KU_ASSERT(nodeGroup);
+        LBUG_ASSERT(nodeGroup);
         this->nodeGroup = nodeGroup;
         this->nodeGroup->initializeScanState(transaction, *this);
     }
 
-    virtual bool scanNext(transaction::Transaction*) { KU_UNREACHABLE; }
+    virtual bool scanNext(transaction::Transaction*) { LBUG_UNREACHABLE; }
 
     void resetOutVectors();
 
     template<class TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
     template<class TARGET>
     const TARGET& cast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
 };
 
@@ -93,11 +93,11 @@ struct LBUG_API TableInsertState {
 
     template<typename T>
     const T& constCast() const {
-        return common::ku_dynamic_cast<const T&>(*this);
+        return common::dynamic_cast_checked<const T&>(*this);
     }
     template<typename T>
     T& cast() {
-        return common::ku_dynamic_cast<T&>(*this);
+        return common::dynamic_cast_checked<T&>(*this);
     }
 };
 
@@ -112,11 +112,11 @@ struct LBUG_API TableUpdateState {
 
     template<typename T>
     const T& constCast() const {
-        return common::ku_dynamic_cast<const T&>(*this);
+        return common::dynamic_cast_checked<const T&>(*this);
     }
     template<typename T>
     T& cast() {
-        return common::ku_dynamic_cast<T&>(*this);
+        return common::dynamic_cast_checked<T&>(*this);
     }
 };
 
@@ -129,11 +129,11 @@ struct LBUG_API TableDeleteState {
 
     template<typename T>
     const T& constCast() const {
-        return common::ku_dynamic_cast<const T&>(*this);
+        return common::dynamic_cast_checked<const T&>(*this);
     }
     template<typename T>
     T& cast() {
-        return common::ku_dynamic_cast<T&>(*this);
+        return common::dynamic_cast_checked<T&>(*this);
     }
 };
 
@@ -186,15 +186,15 @@ public:
 
     template<class TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
     template<class TARGET>
     const TARGET& cast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
     template<class TARGET>
     TARGET* ptrCast() {
-        return common::ku_dynamic_cast<TARGET*>(this);
+        return common::dynamic_cast_checked<TARGET*>(this);
     }
 
     static common::DataChunk constructDataChunk(MemoryManager* mm,

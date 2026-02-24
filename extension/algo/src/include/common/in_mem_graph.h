@@ -23,8 +23,8 @@ struct Neighbor {
 // Undirected edges should be explicitly inserted twice.
 // Note: modifying the in-memory graph is NOT thread-safe.
 struct InMemGraph {
-    function::ku_vector_t<common::offset_t> csrOffsets;
-    function::ku_vector_t<Neighbor> csrEdges;
+    function::vector_t<common::offset_t> csrOffsets;
+    function::vector_t<Neighbor> csrEdges;
     common::offset_t numNodes = 0;
     common::offset_t numEdges = 0;
 

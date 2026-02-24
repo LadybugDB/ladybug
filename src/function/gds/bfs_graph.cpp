@@ -134,7 +134,7 @@ bool DenseBFSGraph::tryAddSingleParentWithWeight(nodeID_t boundNodeID, relID_t e
 }
 
 ParentList* DenseBFSGraph::getParentListHead(offset_t offset) {
-    KU_ASSERT(curData);
+    LBUG_ASSERT(curData);
     return curData[offset].load(std::memory_order_relaxed);
 }
 
@@ -143,7 +143,7 @@ ParentList* DenseBFSGraph::getParentListHead(nodeID_t nodeID) {
 }
 
 void DenseBFSGraph::setParentList(offset_t offset, ParentList* parentList) {
-    KU_ASSERT(curData && getParentListHead(offset) == nullptr);
+    LBUG_ASSERT(curData && getParentListHead(offset) == nullptr);
     curData[offset].store(parentList, std::memory_order_relaxed);
 }
 
@@ -231,7 +231,7 @@ bool SparseBFSGraph::tryAddSingleParentWithWeight(nodeID_t boundNodeID, relID_t 
 }
 
 ParentList* SparseBFSGraph::getParentListHead(offset_t offset) {
-    KU_ASSERT(curData);
+    LBUG_ASSERT(curData);
     if (!curData->contains(offset)) {
         return nullptr;
     }
@@ -247,7 +247,7 @@ ParentList* SparseBFSGraph::getParentListHead(nodeID_t nodeID) {
 }
 
 void SparseBFSGraph::setParentList(offset_t offset, ParentList* parentList) {
-    KU_ASSERT(!curData->contains(offset));
+    LBUG_ASSERT(!curData->contains(offset));
     curData->insert({offset, parentList});
 }
 
@@ -259,7 +259,7 @@ BFSGraphManager::BFSGraphManager(table_id_map_t<offset_t> maxOffsetMap,
 }
 
 void BFSGraphManager::switchToDense(ExecutionContext* context, Graph* graph) {
-    KU_ASSERT(state == GDSDensityState::SPARSE);
+    LBUG_ASSERT(state == GDSDensityState::SPARSE);
     state = GDSDensityState::DENSE;
     denseBFSGraph->init(context, graph);
     denseBFSGraph->blocks = std::move(sparseBFSGraph->blocks);

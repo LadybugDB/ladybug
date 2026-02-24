@@ -12,7 +12,7 @@ namespace lbug {
 namespace function {
 
 struct CurrVal {
-    static void operation(ku_string_t& input, ValueVector& result, void* dataPtr) {
+    static void operation(string_t& input, ValueVector& result, void* dataPtr) {
         auto ctx = reinterpret_cast<FunctionBindData*>(dataPtr)->clientContext;
         auto catalog = catalog::Catalog::Get(*ctx);
         auto transaction = transaction::Transaction::Get(*ctx);
@@ -24,7 +24,7 @@ struct CurrVal {
 };
 
 struct NextVal {
-    static void operation(ku_string_t& input, ValueVector& result, void* dataPtr) {
+    static void operation(string_t& input, ValueVector& result, void* dataPtr) {
         auto ctx = reinterpret_cast<FunctionBindData*>(dataPtr)->clientContext;
         auto cnt = reinterpret_cast<FunctionBindData*>(dataPtr)->count;
         auto catalog = catalog::Catalog::Get(*ctx);
@@ -41,7 +41,7 @@ function_set CurrValFunction::getFunctionSet() {
     function_set functionSet;
     functionSet.push_back(make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING}, LogicalTypeID::INT64,
-        ScalarFunction::UnarySequenceExecFunction<ku_string_t, ValueVector, CurrVal>));
+        ScalarFunction::UnarySequenceExecFunction<string_t, ValueVector, CurrVal>));
     return functionSet;
 }
 
@@ -49,7 +49,7 @@ function_set NextValFunction::getFunctionSet() {
     function_set functionSet;
     auto func = make_unique<ScalarFunction>(name, std::vector<LogicalTypeID>{LogicalTypeID::STRING},
         LogicalTypeID::INT64,
-        ScalarFunction::UnarySequenceExecFunction<ku_string_t, ValueVector, NextVal>);
+        ScalarFunction::UnarySequenceExecFunction<string_t, ValueVector, NextVal>);
     func->isReadOnly = false;
     functionSet.push_back(std::move(func));
     return functionSet;

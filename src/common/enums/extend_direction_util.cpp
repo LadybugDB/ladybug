@@ -29,7 +29,7 @@ std::string ExtendDirectionUtil::toString(ExtendDirection direction) {
     case ExtendDirection::BOTH:
         return "both";
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

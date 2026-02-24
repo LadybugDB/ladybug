@@ -7,7 +7,7 @@
 namespace lbug {
 namespace processor {
 
-static void writeParquetUUID(common::ku_uuid_t input, uint8_t* result) {
+static void writeParquetUUID(common::uuid input, uint8_t* result) {
     uint64_t high_bytes = input.value.high ^ (int64_t(1) << 63);
     uint64_t low_bytes = input.value.low;
 
@@ -28,7 +28,7 @@ void UUIDColumnWriter::writeVector(common::Serializer& bufferedSerializer,
     for (auto i = chunkStart; i < chunkEnd; i++) {
         auto pos = getVectorPos(vector, i);
         if (!vector->isNull(pos)) {
-            writeParquetUUID(vector->getValue<common::ku_uuid_t>(pos), buffer);
+            writeParquetUUID(vector->getValue<common::uuid>(pos), buffer);
             bufferedSerializer.write(buffer, common::ParquetConstants::PARQUET_UUID_SIZE);
         }
     }

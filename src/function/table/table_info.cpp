@@ -23,7 +23,7 @@ struct ExtraPropertyInfo {
 
     template<class TARGET>
     TARGET* ptrCast() {
-        return common::ku_dynamic_cast<TARGET*>(this);
+        return common::dynamic_cast_checked<TARGET*>(this);
     }
 
     virtual std::unique_ptr<ExtraPropertyInfo> copy() const = 0;
@@ -192,7 +192,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
                 type = CatalogEntryType::REL_GROUP_ENTRY;
             } break;
             default:
-                KU_UNREACHABLE;
+                LBUG_UNREACHABLE;
             }
         } else {
             throw CatalogException(std::format("{} does not exist in catalog.", tableName));

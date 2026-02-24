@@ -74,12 +74,12 @@ struct LBUG_API IndexStorageInfo {
 
     template<typename TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
 
     template<typename TARGET>
     const TARGET& constCast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
 };
 
@@ -89,7 +89,7 @@ public:
         virtual ~InsertState();
         template<typename TARGET>
         TARGET& cast() {
-            return common::ku_dynamic_cast<TARGET&>(*this);
+            return common::dynamic_cast_checked<TARGET&>(*this);
         }
     };
 
@@ -97,7 +97,7 @@ public:
         virtual ~DeleteState();
         template<typename TARGET>
         TARGET& cast() {
-            return common::ku_dynamic_cast<TARGET&>(*this);
+            return common::dynamic_cast_checked<TARGET&>(*this);
         }
     };
 
@@ -105,7 +105,7 @@ public:
         virtual ~UpdateState();
         template<typename TARGET>
         TARGET& cast() {
-            return common::ku_dynamic_cast<TARGET&>(*this);
+            return common::dynamic_cast_checked<TARGET&>(*this);
         }
     };
 
@@ -134,12 +134,12 @@ public:
     }
     virtual std::unique_ptr<UpdateState> initUpdateState(main::ClientContext* /*context*/,
         common::column_id_t /*columnID*/, visible_func /*isVisible*/) {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     virtual void update(transaction::Transaction* /*transaction*/,
         const common::ValueVector& /*nodeIDVector*/, common::ValueVector& /*propertyVector*/,
         UpdateState& /*updateState*/) {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     virtual std::unique_ptr<DeleteState> initDeleteState(
         const transaction::Transaction* transaction, MemoryManager* mm, visible_func isVisible) = 0;
@@ -165,7 +165,7 @@ public:
     }
 
     std::span<uint8_t> getStorageBuffer() const {
-        KU_ASSERT(!loaded);
+        LBUG_ASSERT(!loaded);
         return std::span(storageInfoBuffer.get(), storageInfoBufferSize);
     }
     const IndexStorageInfo& getStorageInfo() const { return *storageInfo; }
@@ -175,7 +175,7 @@ public:
 
     template<typename TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
 
 protected:
@@ -201,27 +201,27 @@ public:
     // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
     void checkpoint(main::ClientContext* context, PageAllocator& pageAllocator) {
         if (loaded) {
-            KU_ASSERT(index);
+            LBUG_ASSERT(index);
             index->checkpoint(context, pageAllocator);
         }
     }
     // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
     void rollbackCheckpoint() {
         if (loaded) {
-            KU_ASSERT(index);
+            LBUG_ASSERT(index);
             index->rollbackCheckpoint();
         }
     }
     // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
     void finalize(main::ClientContext* context) {
         if (loaded) {
-            KU_ASSERT(index);
+            LBUG_ASSERT(index);
             index->finalize(context);
         }
     }
 
     Index* getIndex() const {
-        KU_ASSERT(index);
+        LBUG_ASSERT(index);
         return index.get();
     }
 

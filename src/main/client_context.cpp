@@ -94,7 +94,7 @@ DBConfig* ClientContext::getDBConfigUnsafe() const {
 }
 
 uint64_t ClientContext::getTimeoutRemainingInMS() const {
-    KU_ASSERT(hasTimeout());
+    LBUG_ASSERT(hasTimeout());
     const auto elapsed = activeQuery.timer.getElapsedTimeInMS();
     return elapsed >= clientConfig.timeoutInMS ? 0 : clientConfig.timeoutInMS - elapsed;
 }
@@ -274,7 +274,7 @@ void ClientContext::registerQueryStart() {
 
 void ClientContext::registerQueryEnd() {
     std::lock_guard lck{mtxForClose};
-    KU_ASSERT(activeQueryCount > 0);
+    LBUG_ASSERT(activeQueryCount > 0);
     activeQueryCount--;
     if (activeQueryCount == 0) {
         cvForClose.notify_all();
@@ -437,7 +437,7 @@ std::vector<std::shared_ptr<Statement>> ClientContext::parseQuery(std::string_vi
             parserTimer.stop();
             const auto avgRewriteParsingTime =
                 parserTimer.getElapsedTimeMS() / rewrittenStatements.size() / 1.0;
-            KU_ASSERT(rewrittenStatements.size() >= 1);
+            LBUG_ASSERT(rewrittenStatements.size() >= 1);
             for (auto j = 0u; j < rewrittenStatements.size() - 1; j++) {
                 rewrittenStatements[j]->setParsingTime(avgParsingTime + avgRewriteParsingTime);
                 rewrittenStatements[j]->setToInternal();
@@ -456,7 +456,7 @@ void ClientContext::validateTransaction(bool readOnly, bool requireTransaction) 
         throw ConnectionException("Cannot execute write operations in a read-only database!");
     }
     if (requireTransaction && transactionContext->hasActiveTransaction()) {
-        KU_ASSERT(!transactionContext->isAutoTransaction());
+        LBUG_ASSERT(!transactionContext->isAutoTransaction());
         transactionContext->validateManualTransaction(readOnly);
     }
 }
@@ -597,7 +597,7 @@ ClientContext::TransactionHelper::getAction(bool commitIfNew, bool commitIfAuto)
 void ClientContext::TransactionHelper::runFuncInTransaction(TransactionContext& context,
     const std::function<void()>& fun, bool readOnlyStatement, bool isTransactionStatement,
     TransactionCommitAction action) {
-    KU_ASSERT(context.isAutoTransaction() || context.hasActiveTransaction());
+    LBUG_ASSERT(context.isAutoTransaction() || context.hasActiveTransaction());
     const bool requireNewTransaction =
         context.isAutoTransaction() && !context.hasActiveTransaction() && !isTransactionStatement;
     if (requireNewTransaction) {

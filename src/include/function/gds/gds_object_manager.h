@@ -63,17 +63,17 @@ public:
     }
 
     void set(const common::offset_t pos, const T value) {
-        KU_ASSERT_UNCONDITIONAL(pos < size);
+        LBUG_ASSERT_UNCONDITIONAL(pos < size);
         data[pos] = value;
     }
 
     const T& get(const common::offset_t pos) const {
-        KU_ASSERT_UNCONDITIONAL(pos < size);
+        LBUG_ASSERT_UNCONDITIONAL(pos < size);
         return data[pos];
     }
 
     T& getUnsafe(const common::offset_t pos) {
-        KU_ASSERT_UNCONDITIONAL(pos < size);
+        LBUG_ASSERT_UNCONDITIONAL(pos < size);
         return data[pos];
     }
 
@@ -103,18 +103,18 @@ public:
 
     void set(common::offset_t pos, const T& value,
         std::memory_order order = std::memory_order_seq_cst) {
-        KU_ASSERT_UNCONDITIONAL(pos < array.size);
+        LBUG_ASSERT_UNCONDITIONAL(pos < array.size);
         array.data[pos].store(value, order);
     }
 
     T get(const common::offset_t pos, std::memory_order order = std::memory_order_seq_cst) {
-        KU_ASSERT_UNCONDITIONAL(pos < array.size);
+        LBUG_ASSERT_UNCONDITIONAL(pos < array.size);
         return array.data[pos].load(order);
     }
 
     void fetchAdd(common::offset_t pos, const T& value,
         std::memory_order order = std::memory_order_seq_cst) {
-        KU_ASSERT_UNCONDITIONAL(pos < array.size);
+        LBUG_ASSERT_UNCONDITIONAL(pos < array.size);
         array.data[pos].fetch_add(value, order);
     }
 
@@ -138,10 +138,10 @@ private:
 };
 
 template<typename T>
-class ku_vector_t {
+class vector_t {
 public:
-    explicit ku_vector_t(storage::MemoryManager* mm) : vec(storage::MmAllocator<T>(mm)) {}
-    ku_vector_t(storage::MemoryManager* mm, std::size_t size)
+    explicit vector_t(storage::MemoryManager* mm) : vec(storage::MmAllocator<T>(mm)) {}
+    vector_t(storage::MemoryManager* mm, std::size_t size)
         : vec(size, storage::MmAllocator<T>(mm)) {}
 
     void reserve(std::size_t size) { vec.reserve(size); }
@@ -194,7 +194,7 @@ public:
     }
 
     T* getData(common::table_id_t tableID) const {
-        KU_ASSERT(bufferPerTable.contains(tableID));
+        LBUG_ASSERT(bufferPerTable.contains(tableID));
         return reinterpret_cast<T*>(bufferPerTable.at(tableID)->getData());
     }
 
@@ -213,7 +213,7 @@ public:
     }
 
     void allocate(common::table_id_t tableID) {
-        KU_ASSERT(!mapPerTable.contains(tableID));
+        LBUG_ASSERT(!mapPerTable.contains(tableID));
         mapPerTable.insert({tableID, {}});
     }
 
@@ -222,7 +222,7 @@ public:
     }
 
     std::unordered_map<common::offset_t, T>* getMap(common::table_id_t tableID) {
-        KU_ASSERT(mapPerTable.contains(tableID));
+        LBUG_ASSERT(mapPerTable.contains(tableID));
         return &mapPerTable.at(tableID);
     }
 
@@ -230,7 +230,7 @@ public:
         if (!mapPerTable.contains(tableID)) {
             mapPerTable.insert({tableID, {}});
         }
-        KU_ASSERT(mapPerTable.contains(tableID));
+        LBUG_ASSERT(mapPerTable.contains(tableID));
         return &mapPerTable.at(tableID);
     }
 

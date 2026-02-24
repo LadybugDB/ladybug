@@ -89,7 +89,7 @@ void VectorVersionInfo::append(const transaction_t transactionID, const row_idx_
         sameInsertionVersion = INVALID_TRANSACTION;
     }
     for (auto i = 0u; i < numRows; i++) {
-        KU_ASSERT(insertedVersions->operator[](startRow + i) == INVALID_TRANSACTION);
+        LBUG_ASSERT(insertedVersions->operator[](startRow + i) == INVALID_TRANSACTION);
         insertedVersions->operator[](startRow + i) = transactionID;
     }
 }
@@ -126,7 +126,7 @@ void VectorVersionInfo::setInsertCommitTS(transaction_t commitTS, row_idx_t star
         sameInsertionVersion = commitTS;
         return;
     }
-    KU_ASSERT(insertedVersions);
+    LBUG_ASSERT(insertedVersions);
     for (auto rowIdx = startRow; rowIdx < startRow + numRows; rowIdx++) {
         insertedVersions->operator[](rowIdx) = commitTS;
     }
@@ -138,7 +138,7 @@ void VectorVersionInfo::setDeleteCommitTS(transaction_t commitTS, row_idx_t star
         sameDeletionVersion = commitTS;
         return;
     }
-    KU_ASSERT(deletedVersions);
+    LBUG_ASSERT(deletedVersions);
     for (auto rowIdx = startRow; rowIdx < startRow + numRows; rowIdx++) {
         deletedVersions->operator[](rowIdx) = commitTS;
     }
@@ -200,7 +200,7 @@ bool VectorVersionInfo::isDeleted(const transaction_t startTS, const transaction
         if (isSameDeletionVersion()) {
             deletion = sameDeletionVersion;
         } else {
-            KU_ASSERT(deletedVersions);
+            LBUG_ASSERT(deletedVersions);
             deletion = deletedVersions->operator[](rowIdx);
         }
         const auto isDeletedWithinSameTransaction = deletion == transactionID;
@@ -208,7 +208,7 @@ bool VectorVersionInfo::isDeleted(const transaction_t startTS, const transaction
         return isDeletedWithinSameTransaction || isDeletedByPrevCommittedTransaction;
     }
     default: {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     }
 }
@@ -227,7 +227,7 @@ bool VectorVersionInfo::isInserted(const transaction_t startTS, const transactio
         if (isSameInsertionVersion()) {
             insertion = sameInsertionVersion;
         } else {
-            KU_ASSERT(insertedVersions);
+            LBUG_ASSERT(insertedVersions);
             insertion = insertedVersions->operator[](rowIdx);
         }
         const auto isInsertedWithinSameTransaction = insertion == transactionID;
@@ -235,7 +235,7 @@ bool VectorVersionInfo::isInserted(const transaction_t startTS, const transactio
         return isInsertedWithinSameTransaction || isInsertedByPrevCommittedTransaction;
     }
     default: {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     }
 }
@@ -329,12 +329,12 @@ void VectorVersionInfo::serialize(Serializer& serializer) const {
     if (deletedVersions) {
         for (const auto deleted : *deletedVersions) {
             // Versions should be either INVALID_TRANSACTION or committed timestamps.
-            KU_ASSERT(deleted == INVALID_TRANSACTION ||
+            LBUG_ASSERT(deleted == INVALID_TRANSACTION ||
                       deleted < transaction::Transaction::START_TRANSACTION_ID);
-            KU_UNUSED(deleted);
+            LBUG_UNUSED(deleted);
         }
     }
-    KU_ASSERT(insertionStatus == InsertionStatus::NO_INSERTED ||
+    LBUG_ASSERT(insertionStatus == InsertionStatus::NO_INSERTED ||
               insertionStatus == InsertionStatus::ALWAYS_INSERTED);
     serializer.writeDebuggingInfo("insertion_status");
     serializer.serializeValue<InsertionStatus>(insertionStatus);
@@ -348,13 +348,13 @@ void VectorVersionInfo::serialize(Serializer& serializer) const {
         serializer.writeDebuggingInfo("same_deletion_version");
         serializer.serializeValue<transaction_t>(sameDeletionVersion);
         if (sameDeletionVersion == INVALID_TRANSACTION) {
-            KU_ASSERT(deletedVersions);
+            LBUG_ASSERT(deletedVersions);
             serializer.writeDebuggingInfo("deleted_versions");
             serializer.serializeArray<transaction_t, DEFAULT_VECTOR_CAPACITY>(*deletedVersions);
         }
     } break;
     default: {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     }
 }
@@ -364,7 +364,7 @@ std::unique_ptr<VectorVersionInfo> VectorVersionInfo::deSerialize(Deserializer& 
     auto vectorVersionInfo = std::make_unique<VectorVersionInfo>();
     deSer.validateDebuggingInfo(key, "insertion_status");
     deSer.deserializeValue<InsertionStatus>(vectorVersionInfo->insertionStatus);
-    KU_ASSERT(vectorVersionInfo->insertionStatus == InsertionStatus::NO_INSERTED ||
+    LBUG_ASSERT(vectorVersionInfo->insertionStatus == InsertionStatus::NO_INSERTED ||
               vectorVersionInfo->insertionStatus == InsertionStatus::ALWAYS_INSERTED);
     deSer.validateDebuggingInfo(key, "deletion_status");
     deSer.deserializeValue<DeletionStatus>(vectorVersionInfo->deletionStatus);
@@ -383,15 +383,15 @@ std::unique_ptr<VectorVersionInfo> VectorVersionInfo::deSerialize(Deserializer& 
         }
     } break;
     default: {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     }
     if (vectorVersionInfo->deletedVersions) {
         for (const auto deleted : *vectorVersionInfo->deletedVersions) {
             // Versions should be either INVALID_TRANSACTION or committed timestamps.
-            KU_ASSERT(deleted == INVALID_TRANSACTION ||
+            LBUG_ASSERT(deleted == INVALID_TRANSACTION ||
                       deleted < transaction::Transaction::START_TRANSACTION_ID);
-            KU_UNUSED(deleted);
+            LBUG_UNUSED(deleted);
         }
     }
     return vectorVersionInfo;
@@ -506,11 +506,11 @@ void VersionInfo::getSelVectorToScan(const transaction_t startTS, const transact
         outputPos += numRowsInVector;
         vectorIdx++;
     }
-    KU_ASSERT(outputPos <= DEFAULT_VECTOR_CAPACITY);
+    LBUG_ASSERT(outputPos <= DEFAULT_VECTOR_CAPACITY);
 }
 
 void VersionInfo::clearVectorInfo(const idx_t vectorIdx) {
-    KU_ASSERT(vectorIdx < vectorsInfo.size());
+    LBUG_ASSERT(vectorIdx < vectorsInfo.size());
     vectorsInfo[vectorIdx] = nullptr;
 }
 

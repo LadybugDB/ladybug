@@ -7,7 +7,7 @@ namespace function {
 using namespace lbug::common;
 
 struct StringSplit {
-    static void operation(ku_string_t& strToSplit, ku_string_t& separator, list_entry_t& result,
+    static void operation(string_t& strToSplit, string_t& separator, list_entry_t& result,
         ValueVector& resultVector) {
         auto splitStrVec = StringUtils::split(strToSplit.getAsString(), separator.getAsString());
         result = ListVector::addList(&resultVector, splitStrVec.size());
@@ -27,7 +27,7 @@ function_set StringSplitFunction::getFunctionSet() {
     auto function = std::make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::STRING},
         LogicalTypeID::LIST,
-        ScalarFunction::BinaryStringExecFunction<ku_string_t, ku_string_t, list_entry_t,
+        ScalarFunction::BinaryStringExecFunction<string_t, string_t, list_entry_t,
             StringSplit>);
     function->bindFunc = bindFunc;
     functionSet.emplace_back(std::move(function));

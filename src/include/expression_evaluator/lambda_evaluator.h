@@ -25,7 +25,7 @@ public:
 
     void evaluate() override {}
 
-    bool selectInternal(common::SelectionVector&) override { KU_UNREACHABLE; }
+    bool selectInternal(common::SelectionVector&) override { LBUG_UNREACHABLE; }
 
     std::unique_ptr<ExpressionEvaluator> copy() override {
         return std::make_unique<LambdaParamEvaluator>(expression);

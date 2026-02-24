@@ -36,7 +36,7 @@ std::string JsonPrinter::printBody(QueryResult& queryResult, MemoryManager& mm) 
         scanVectors.push_back(resultVector.get());
     }
     std::span<ValueVector*> vectorsToScan{scanVectors};
-    KU_ASSERT(queryResult.getType() == QueryResultType::FTABLE);
+    LBUG_ASSERT(queryResult.getType() == QueryResultType::FTABLE);
     auto& table = queryResult.constCast<MaterializedQueryResult>().getFactorizedTable();
     uint64_t numTuplesScanned = 0;
     auto maxNumTuplesToScanInBatch = table.hasUnflatCol() ? 1 : DEFAULT_VECTOR_CAPACITY;

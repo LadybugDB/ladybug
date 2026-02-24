@@ -83,7 +83,7 @@ static NumpyNullableType convertNumpyTypeInternal(const std::string& colTypeStr)
     if (colTypeStr == "object" || colTypeStr == "string") {
         return NumpyNullableType::OBJECT;
     }
-    KU_UNREACHABLE;
+    LBUG_UNREACHABLE;
 }
 
 NumpyType NumpyTypeUtils::convertNumpyType(const py::handle& colType) {
@@ -142,7 +142,7 @@ LogicalType NumpyTypeUtils::numpyToLogicalType(const NumpyType& col_type) {
     case NumpyNullableType::OBJECT:
         return LogicalType(LogicalTypeID::STRING);
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

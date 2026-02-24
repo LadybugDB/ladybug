@@ -32,7 +32,7 @@ void ExpressionEvaluatorVisitor::visitSwitch(ExpressionEvaluator* evaluator) {
         visitReference(evaluator);
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

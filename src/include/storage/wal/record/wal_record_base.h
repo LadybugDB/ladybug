@@ -43,7 +43,7 @@ enum class WALRecordType : uint8_t {
 };
 
 struct WALHeader {
-    common::ku_uuid_t databaseID;
+    common::uuid databaseID;
     bool enableChecksums;
 };
 
@@ -61,11 +61,11 @@ struct WALRecord {
 
     template<class TARGET>
     const TARGET& constCast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
     template<class TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
 };
 

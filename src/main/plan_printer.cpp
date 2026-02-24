@@ -58,12 +58,12 @@ uint32_t OpProfileBox::getAttributeMaxLen() const {
 }
 
 std::string OpProfileBox::getParamsName(uint32_t idx) const {
-    KU_ASSERT(idx < paramsNames.size());
+    LBUG_ASSERT(idx < paramsNames.size());
     return paramsNames[idx];
 }
 
 std::string OpProfileBox::getAttribute(uint32_t idx) const {
-    KU_ASSERT(idx < attributes.size());
+    LBUG_ASSERT(idx < attributes.size());
     return attributes[idx];
 }
 

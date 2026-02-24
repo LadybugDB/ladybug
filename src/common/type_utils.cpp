@@ -56,7 +56,7 @@ std::string TypeUtils::entryToString(const LogicalType& dataType, const uint8_t*
                 DecimalType::getScale(dataType));
         default:
             // decimals should always be backed by one of these four
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     case LogicalTypeID::DATE:
         return TypeUtils::toString(*reinterpret_cast<const date_t*>(value));
@@ -75,7 +75,7 @@ std::string TypeUtils::entryToString(const LogicalType& dataType, const uint8_t*
     case LogicalTypeID::BLOB:
         return TypeUtils::toString(*reinterpret_cast<const blob_t*>(value));
     case LogicalTypeID::STRING:
-        return TypeUtils::toString(*reinterpret_cast<const ku_string_t*>(value));
+        return TypeUtils::toString(*reinterpret_cast<const string_t*>(value));
     case LogicalTypeID::INTERNAL_ID:
         return TypeUtils::toString(*reinterpret_cast<const internalID_t*>(value));
     case LogicalTypeID::UINT128:
@@ -90,7 +90,7 @@ std::string TypeUtils::entryToString(const LogicalType& dataType, const uint8_t*
     case LogicalTypeID::UNION:
         return TypeUtils::toString(*reinterpret_cast<const union_entry_t*>(value), valueVector);
     case LogicalTypeID::UUID:
-        return TypeUtils::toString(*reinterpret_cast<const ku_uuid_t*>(value));
+        return TypeUtils::toString(*reinterpret_cast<const uuid*>(value));
     case LogicalTypeID::NODE:
         return TypeUtils::nodeToString(*reinterpret_cast<const struct_entry_t*>(value),
             valueVector);
@@ -166,7 +166,7 @@ std::string TypeUtils::toString(const interval_t& val, void* /*valueVector*/) {
 }
 
 template<>
-std::string TypeUtils::toString(const ku_string_t& val, void* /*valueVector*/) {
+std::string TypeUtils::toString(const string_t& val, void* /*valueVector*/) {
     return val.getAsString();
 }
 
@@ -176,7 +176,7 @@ std::string TypeUtils::toString(const blob_t& val, void* /*valueVector*/) {
 }
 
 template<>
-std::string TypeUtils::toString(const ku_uuid_t& val, void* /*valueVector*/) {
+std::string TypeUtils::toString(const uuid& val, void* /*valueVector*/) {
     return UUID::toString(val);
 }
 

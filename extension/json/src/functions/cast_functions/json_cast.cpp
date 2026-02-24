@@ -19,7 +19,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
     result.resetAuxiliaryBuffer();
     for (auto i = 0u; i < resultSelVector->getSelSize(); ++i) {
         auto resultPos = (*resultSelVector)[i];
-        auto str = parameters[0]->getValue<common::ku_string_t>(resultPos);
+        auto str = parameters[0]->getValue<string_t>(resultPos);
         yyjson_read_err error;
         auto doc = JSONCommon::readDocumentUnsafe(str.getDataUnsafe(), str.len,
             JSONCommon::READ_FLAG, nullptr /* alc */, &error);

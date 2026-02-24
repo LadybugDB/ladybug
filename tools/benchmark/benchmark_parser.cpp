@@ -37,26 +37,26 @@ std::vector<std::unique_ptr<ParsedBenchmark>> BenchmarkParser::parseBenchmarkFil
             result.push_back(std::move(config));
             currentConfig->name = line.substr(6, line.length());
         } else if (line.starts_with("-QUERY")) {
-            KU_ASSERT(currentConfig);
+            LBUG_ASSERT(currentConfig);
             currentConfig->query = line.substr(7, line.length());
             replaceVariables(currentConfig->query);
         } else if (line.starts_with("-PRERUN")) {
-            KU_ASSERT(currentConfig);
+            LBUG_ASSERT(currentConfig);
             currentConfig->preRun = line.substr(8, line.length());
             replaceVariables(currentConfig->preRun);
         } else if (line.starts_with("-POSTRUN")) {
-            KU_ASSERT(currentConfig);
+            LBUG_ASSERT(currentConfig);
             replaceVariables(currentConfig->postRun);
             currentConfig->postRun = line.substr(9, line.length());
         } else if (line.starts_with("-PARALLELISM")) {
-            KU_ASSERT(currentConfig);
+            LBUG_ASSERT(currentConfig);
             currentConfig->numThreads = stoi(line.substr(13, line.length()));
         } else if (line.starts_with("-SKIP_COMPARE_RESULT")) {
-            KU_ASSERT(currentConfig);
+            LBUG_ASSERT(currentConfig);
             currentConfig->compareResult = false;
         } else if (line.starts_with("----")) {
             uint64_t numTuples = stoi(line.substr(5, line.length()));
-            KU_ASSERT(currentConfig);
+            LBUG_ASSERT(currentConfig);
             currentConfig->expectedNumTuples = numTuples;
             if (currentConfig->compareResult) {
                 for (auto i = 0u; i < numTuples; i++) {

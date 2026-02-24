@@ -26,7 +26,7 @@ expression_vector PropertyCollector::getProperties() const {
 }
 
 void PropertyCollector::visitSingleQuerySkipNodeRel(const NormalizedSingleQuery& singleQuery) {
-    KU_ASSERT(singleQuery.getNumQueryParts() != 0);
+    LBUG_ASSERT(singleQuery.getNumQueryParts() != 0);
     auto numQueryParts = singleQuery.getNumQueryParts();
     for (auto i = 0u; i < numQueryParts - 1; ++i) {
         visitQueryPartSkipNodeRel(*singleQuery.getQueryPart(i));
@@ -82,7 +82,7 @@ void PropertyCollector::visitSet(const BoundUpdatingClause& updatingClause) {
     }
     for (const auto& info : boundSetClause.getRelInfos()) {
         auto& rel = info.pattern->constCast<RelExpression>();
-        KU_ASSERT(!rel.isEmpty() && rel.getRelType() == QueryRelType::NON_RECURSIVE);
+        LBUG_ASSERT(!rel.isEmpty() && rel.getRelType() == QueryRelType::NON_RECURSIVE);
         properties.insert(rel.getInternalID());
     }
 }

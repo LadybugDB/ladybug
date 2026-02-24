@@ -370,7 +370,7 @@ static bool compatible(const Value& value, const LogicalType& targetType) {
         const auto& valType = MapType::getValueType(targetType);
         for (auto i = 0u; i < NestedVal::getChildrenSize(&value); ++i) {
             auto childVal = NestedVal::getChildVal(&value, i);
-            KU_ASSERT(NestedVal::getChildrenSize(childVal) == 2);
+            LBUG_ASSERT(NestedVal::getChildrenSize(childVal) == 2);
             auto key = NestedVal::getChildVal(childVal, 0);
             auto val = NestedVal::getChildVal(childVal, 1);
             if (!compatible(*key, keyType) || !compatible(*val, valType)) {
@@ -441,7 +441,7 @@ bool ExpressionUtil::canEvaluateAsLiteral(const Expression& expr) {
 }
 
 Value ExpressionUtil::evaluateAsLiteralValue(const Expression& expr) {
-    KU_ASSERT(canEvaluateAsLiteral(expr));
+    LBUG_ASSERT(canEvaluateAsLiteral(expr));
     auto value = Value::createDefaultValue(expr.dataType);
     switch (expr.expressionType) {
     case ExpressionType::LITERAL: {
@@ -451,7 +451,7 @@ Value ExpressionUtil::evaluateAsLiteralValue(const Expression& expr) {
         value = expr.constCast<ParameterExpression>().getValue();
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     return value;
 }

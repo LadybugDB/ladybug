@@ -1,12 +1,12 @@
 #pragma once
 
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 
 namespace lbug {
 namespace common {
 
 struct blob_t {
-    ku_string_t value;
+    string_t value;
 };
 
 struct HexFormatConstants {
@@ -30,7 +30,7 @@ struct Blob {
         return toString(blob.value.getData(), blob.value.len);
     }
 
-    static uint64_t getBlobSize(const ku_string_t& blob);
+    static uint64_t getBlobSize(const string_t& blob);
 
     static uint64_t fromString(const char* str, uint64_t length, uint8_t* resultBuffer);
 

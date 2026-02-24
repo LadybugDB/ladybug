@@ -96,10 +96,10 @@ The 😂😃🧘🏻‍♂️🌍🌦️🍞🚗 movie
 12|height|DOUBLE|NULL
 13|u|UUID|NULL
 -LOG AttachPGWithNonDefaultSchema
--STATEMENT ATTACH 'dbname=pgscan user=ci host=localhost' as ku (dbtype POSTGRES, SCHEMA = 'lbug');
+-STATEMENT ATTACH 'dbname=pgscan user=ci host=localhost' as lbug (dbtype POSTGRES, SCHEMA = 'lbug');
 ---- 1
 Attached database successfully.
--STATEMENT LOAD FROM ku.user RETURN *;
+-STATEMENT LOAD FROM lbug.user RETURN *;
 ---- 3
 5|apple|4
 7|ms|5

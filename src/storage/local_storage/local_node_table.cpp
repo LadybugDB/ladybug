@@ -33,7 +33,7 @@ LocalNodeTable::LocalNodeTable(const catalog::TableCatalogEntry* tableEntry, Tab
 }
 
 void LocalNodeTable::initLocalHashIndex(MemoryManager& mm) {
-    auto& nodeTable = ku_dynamic_cast<const NodeTable&>(table);
+    auto& nodeTable = dynamic_cast_checked<const NodeTable&>(table);
     overflowFile = std::make_unique<InMemOverflowFile>(mm);
     overflowFileHandle = overflowFile->addHandle();
     hashIndex = std::make_unique<LocalHashIndex>(mm,
@@ -53,7 +53,7 @@ bool LocalNodeTable::isVisible(const Transaction* transaction, offset_t offset) 
 
 offset_t LocalNodeTable::validateUniquenessConstraint(const Transaction* transaction,
     const ValueVector& pkVector) const {
-    KU_ASSERT(pkVector.state->getSelVector().getSelSize() == 1);
+    LBUG_ASSERT(pkVector.state->getSelVector().getSelSize() == 1);
     return hashIndex->lookup(pkVector,
         [&](offset_t offset_) { return isVisible(transaction, offset_); });
 }
@@ -61,7 +61,7 @@ offset_t LocalNodeTable::validateUniquenessConstraint(const Transaction* transac
 bool LocalNodeTable::insert(Transaction* transaction, TableInsertState& insertState) {
     auto& nodeInsertState = insertState.constCast<NodeTableInsertState>();
     const auto nodeOffset = startOffset + nodeGroups.getNumTotalRows();
-    KU_ASSERT(nodeInsertState.pkVector.state->getSelVector().getSelSize() == 1);
+    LBUG_ASSERT(nodeInsertState.pkVector.state->getSelVector().getSelSize() == 1);
     if (!hashIndex->insert(nodeInsertState.pkVector, nodeOffset,
             [&](offset_t offset) { return isVisible(transaction, offset); })) {
         const auto val =
@@ -76,13 +76,13 @@ bool LocalNodeTable::insert(Transaction* transaction, TableInsertState& insertSt
 }
 
 bool LocalNodeTable::update(Transaction* transaction, TableUpdateState& updateState) {
-    KU_ASSERT(transaction->isDummy());
+    LBUG_ASSERT(transaction->isDummy());
     const auto& nodeUpdateState = updateState.cast<NodeTableUpdateState>();
-    KU_ASSERT(nodeUpdateState.nodeIDVector.state->getSelVector().getSelSize() == 1);
+    LBUG_ASSERT(nodeUpdateState.nodeIDVector.state->getSelVector().getSelSize() == 1);
     const auto pos = nodeUpdateState.nodeIDVector.state->getSelVector()[0];
     const auto offset = nodeUpdateState.nodeIDVector.readNodeOffset(pos);
-    KU_ASSERT(nodeUpdateState.columnID != table.cast<NodeTable>().getPKColumnID());
-    KU_ASSERT(offset >= startOffset);
+    LBUG_ASSERT(nodeUpdateState.columnID != table.cast<NodeTable>().getPKColumnID());
+    LBUG_ASSERT(offset >= startOffset);
     const auto [nodeGroupIdx, rowIdxInGroup] =
         StorageUtils::getQuotientRemainder(offset - startOffset, StorageConfig::NODE_GROUP_SIZE);
     const auto nodeGroup = nodeGroups.getNodeGroup(nodeGroupIdx);
@@ -92,12 +92,12 @@ bool LocalNodeTable::update(Transaction* transaction, TableUpdateState& updateSt
 }
 
 bool LocalNodeTable::delete_(Transaction* transaction, TableDeleteState& deleteState) {
-    KU_ASSERT(transaction->isDummy());
+    LBUG_ASSERT(transaction->isDummy());
     const auto& nodeDeleteState = deleteState.cast<NodeTableDeleteState>();
-    KU_ASSERT(nodeDeleteState.nodeIDVector.state->getSelVector().getSelSize() == 1);
+    LBUG_ASSERT(nodeDeleteState.nodeIDVector.state->getSelVector().getSelSize() == 1);
     const auto pos = nodeDeleteState.nodeIDVector.state->getSelVector()[0];
     const auto offset = nodeDeleteState.nodeIDVector.readNodeOffset(pos);
-    KU_ASSERT(offset >= startOffset);
+    LBUG_ASSERT(offset >= startOffset);
     hashIndex->delete_(nodeDeleteState.pkVector);
     const auto [nodeGroupIdx, rowIdxInGroup] =
         StorageUtils::getQuotientRemainder(offset - startOffset, StorageConfig::NODE_GROUP_SIZE);
@@ -111,7 +111,7 @@ bool LocalNodeTable::addColumn(TableAddColumnState& addColumnState) {
 }
 
 void LocalNodeTable::clear(MemoryManager& mm) {
-    auto& nodeTable = ku_dynamic_cast<const NodeTable&>(table);
+    auto& nodeTable = dynamic_cast_checked<const NodeTable&>(table);
     hashIndex = std::make_unique<LocalHashIndex>(mm,
         nodeTable.getColumn(nodeTable.getPKColumnID()).getDataType().getPhysicalType(),
         overflowFileHandle);

@@ -14,7 +14,7 @@ std::string ConflictActionUtil::toString(ConflictAction action) {
         return "ON_CONFLICT_DO_NOTHING";
     }
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

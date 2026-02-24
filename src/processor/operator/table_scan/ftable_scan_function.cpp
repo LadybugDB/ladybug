@@ -46,14 +46,14 @@ static std::unique_ptr<TableFuncOutput> initFTableScanOutput(
 }
 
 static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
-    auto sharedState = ku_dynamic_cast<FTableScanSharedState*>(input.sharedState);
-    auto bindData = ku_dynamic_cast<FTableScanBindData*>(input.bindData);
+    auto sharedState = dynamic_cast_checked<FTableScanSharedState*>(input.sharedState);
+    auto bindData = dynamic_cast_checked<FTableScanBindData*>(input.bindData);
     auto morsel = sharedState->getMorsel();
     if (morsel.endOffset <= morsel.startOffset) {
         return 0;
     }
     auto numTuples = morsel.endOffset - morsel.startOffset;
-    auto& output_ = ku_dynamic_cast<FTableScanTableFuncOutput&>(output);
+    auto& output_ = dynamic_cast_checked<FTableScanTableFuncOutput&>(output);
     sharedState->table->scan(output_.vectors, morsel.startOffset, numTuples,
         bindData->columnIndices);
     return numTuples;
@@ -61,7 +61,7 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) 
 
 static std::unique_ptr<TableFuncSharedState> initSharedState(
     const TableFuncInitSharedStateInput& input) {
-    auto bindData = ku_dynamic_cast<FTableScanBindData*>(input.bindData);
+    auto bindData = dynamic_cast_checked<FTableScanBindData*>(input.bindData);
     return std::make_unique<FTableScanSharedState>(bindData->table, bindData->morselSize);
 }
 

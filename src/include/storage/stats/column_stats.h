@@ -22,7 +22,7 @@ public:
 
     void merge(const ColumnStats& other) {
         if (hll) {
-            KU_ASSERT(other.hll);
+            LBUG_ASSERT(other.hll);
             hll->merge(*other.hll);
         };
     }

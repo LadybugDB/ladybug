@@ -8,7 +8,7 @@ namespace lbug {
 namespace function {
 
 struct RegexpSplitToArray : BaseRegexpOperation {
-    static void operation(common::ku_string_t& value, common::ku_string_t& regex,
+    static void operation(common::string_t& value, common::string_t& regex,
         common::list_entry_t& result, common::ValueVector& resultVector) {
         std::vector<std::string> matches =
             regexExtractAll(value.getAsString(), regex.getAsString());
@@ -16,11 +16,11 @@ struct RegexpSplitToArray : BaseRegexpOperation {
         auto resultValues = common::ListVector::getListValues(&resultVector, result);
         auto resultDataVector = common::ListVector::getDataVector(&resultVector);
         auto numBytesPerValue = resultDataVector->getNumBytesPerValue();
-        common::ku_string_t kuString;
+        common::string_t str;
         for (const auto& match : matches) {
-            copyToLbugString(match, kuString, *resultDataVector);
+            copyToLbugString(match, str, *resultDataVector);
             resultDataVector->copyFromVectorData(resultValues, resultDataVector,
-                reinterpret_cast<uint8_t*>(&kuString));
+                reinterpret_cast<uint8_t*>(&str));
             resultValues += numBytesPerValue;
         }
     }

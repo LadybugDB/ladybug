@@ -39,7 +39,7 @@ public:
 protected:
     std::vector<std::string> glob(main::ClientContext* /*context*/,
         const std::string& /*path*/) const override {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 
     void readFromFile(FileInfo& /*fileInfo*/, void* /*buffer*/, uint64_t /*numBytes*/,
@@ -49,13 +49,13 @@ protected:
 
     void writeFile(FileInfo& /*fileInfo*/, const uint8_t* /*buffer*/, uint64_t /*numBytes*/,
         uint64_t /*offset*/) const override {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 
     void reset(FileInfo& fileInfo) override;
 
     int64_t seek(FileInfo& /*fileInfo*/, uint64_t /*offset*/, int /*whence*/) const override {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 
     uint64_t getFileSize(const FileInfo& fileInfo) const override;

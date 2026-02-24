@@ -20,7 +20,7 @@ std::string TableTypeUtils::toString(TableType tableType) {
         return "ATTACHED";
     }
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

@@ -175,8 +175,8 @@ public:
         ~WriteIterator() { unpin(); }
 
         std::span<uint8_t> operator*() const {
-            KU_ASSERT(idx < diskArray.headerForWriteTrx.numElements);
-            KU_ASSERT(shadowPageAndFrame.originalPage != common::INVALID_PAGE_IDX);
+            LBUG_ASSERT(idx < diskArray.headerForWriteTrx.numElements);
+            LBUG_ASSERT(shadowPageAndFrame.originalPage != common::INVALID_PAGE_IDX);
             return std::span(shadowPageAndFrame.frame + apCursor.elemPosInPage, valueSize);
         }
 
@@ -392,7 +392,7 @@ public:
         // NOLINTNEXTLINE(readability-non-const-parameter) placement-new requires non-const ptr
         static constexpr auto defaultConstructor = [](uint8_t* data) {
             [[maybe_unused]] auto* p = new (data) U();
-            KU_ASSERT(p);
+            LBUG_ASSERT(p);
         };
         vector.resize(newNumElements, defaultConstructor);
     }

@@ -13,11 +13,11 @@ struct OffsetManager {
 
     void pinTableID(common::table_id_t tableID) { curOffset = getStartOffset(tableID); }
     common::offset_t getStartOffset(common::table_id_t tableID) const {
-        KU_ASSERT(tableIDToStartOffset.contains(tableID));
+        LBUG_ASSERT(tableIDToStartOffset.contains(tableID));
         return tableIDToStartOffset.at(tableID);
     }
     common::offset_t getCurrentOffset() const {
-        KU_ASSERT(curOffset != common::INVALID_OFFSET);
+        LBUG_ASSERT(curOffset != common::INVALID_OFFSET);
         return curOffset;
     }
 
@@ -34,12 +34,12 @@ public:
     void pinTableID(common::table_id_t tableID) { curData = denseObjects.getData(tableID); }
 
     void setComponentID(common::offset_t offset, common::offset_t componentID) {
-        KU_ASSERT(curData != nullptr);
+        LBUG_ASSERT(curData != nullptr);
         curData[offset] = componentID;
     }
 
     common::offset_t getComponentID(common::offset_t offset) const {
-        KU_ASSERT(curData != nullptr);
+        LBUG_ASSERT(curData != nullptr);
         return curData[offset];
     }
     bool hasValidComponentID(common::offset_t offset) const {

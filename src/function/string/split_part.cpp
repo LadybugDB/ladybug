@@ -7,8 +7,8 @@ namespace function {
 using namespace lbug::common;
 
 struct SplitPart {
-    static void operation(ku_string_t& strToSplit, ku_string_t& separator, int64_t idx,
-        ku_string_t& result, ValueVector& resultVector) {
+    static void operation(string_t& strToSplit, string_t& separator, int64_t idx,
+        string_t& result, ValueVector& resultVector) {
         auto splitStrVec = StringUtils::split(strToSplit.getAsString(), separator.getAsString());
         bool idxOutOfRange = idx <= 0 || (uint64_t)idx > splitStrVec.size();
         std::string resultStr = idxOutOfRange ? "" : splitStrVec[idx - 1];
@@ -26,7 +26,7 @@ function_set SplitPartFunction::getFunctionSet() {
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::STRING,
             LogicalTypeID::INT64},
         LogicalTypeID::STRING,
-        ScalarFunction::TernaryStringExecFunction<ku_string_t, ku_string_t, int64_t, ku_string_t,
+        ScalarFunction::TernaryStringExecFunction<string_t, string_t, int64_t, string_t,
             SplitPart>);
     function->bindFunc = bindFunc;
     functionSet.emplace_back(std::move(function));

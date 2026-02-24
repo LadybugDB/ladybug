@@ -41,7 +41,7 @@ SpillResult MemoryBuffer::setSpilledToDisk(uint64_t filePosition) {
 }
 
 void MemoryBuffer::prepareLoadFromDisk() {
-    KU_ASSERT(buffer.data() == nullptr && evicted);
+    LBUG_ASSERT(buffer.data() == nullptr && evicted);
     buffer = mm->mallocBuffer(false, buffer.size());
     evicted = false;
 }

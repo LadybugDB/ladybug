@@ -45,7 +45,7 @@ public:
 
     template<typename T>
     T* cast() {
-        return common::ku_dynamic_cast<T*>(this);
+        return common::dynamic_cast_checked<T*>(this);
     }
 
 private:
@@ -109,7 +109,7 @@ public:
     }
     bool shouldLogToWAL() const;
     storage::LocalWAL& getLocalWAL() const {
-        KU_ASSERT(localWAL);
+        LBUG_ASSERT(localWAL);
         return *localWAL;
     }
 

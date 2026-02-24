@@ -42,7 +42,7 @@ struct JSONWarningSourceData {
 
 JSONWarningSourceData JSONWarningSourceData::constructFrom(
     const processor::WarningSourceData& warningData) {
-    KU_ASSERT(warningData.numValues == JsonConstant::JSON_WARNING_DATA_NUM_COLUMNS);
+    LBUG_ASSERT(warningData.numValues == JsonConstant::JSON_WARNING_DATA_NUM_COLUMNS);
 
     JSONWarningSourceData ret{};
     warningData.dumpTo(ret.blockIdx, ret.offsetInBlock, ret.startByteOffset, ret.endByteOffset);
@@ -116,7 +116,7 @@ struct JSONScanSharedState : public TableFuncSharedState {
     processor::populate_func_t constructPopulateFunc() const {
         return [this](const processor::CopyFromFileError& error,
                    [[maybe_unused]] idx_t fileIdx) -> processor::PopulatedCopyFromError {
-            KU_ASSERT(fileIdx == JsonExtension::JSON_SCAN_FILE_IDX);
+            LBUG_ASSERT(fileIdx == JsonExtension::JSON_SCAN_FILE_IDX);
             const auto warningData = JSONWarningSourceData::constructFrom(error.warningData);
             const auto lineNumber =
                 sharedErrorHandler.getLineNumber(warningData.blockIdx, warningData.offsetInBlock);
@@ -348,7 +348,7 @@ idx_t JSONScanLocalState::getNewlineCount(uint64_t startByteOffset, uint64_t end
 
 processor::WarningSourceData JSONScanLocalState::getWarningData(uint64_t startByteOffset,
     uint64_t endByteOffset, uint64_t extraLineCount) const {
-    KU_ASSERT(currentBufferHandle);
+    LBUG_ASSERT(currentBufferHandle);
     return processor::WarningSourceData::constructFrom(currentBufferHandle->bufferIdx,
         lineCountInBuffer + extraLineCount, startByteOffset, endByteOffset);
 }
@@ -415,8 +415,8 @@ std::optional<uint64_t> JSONScanLocalState::parseJson(uint8_t* jsonStart, uint64
 
 void JSONScanLocalState::addValuesToWarningDataVectors(processor::WarningSourceData warningData,
     uint64_t recordNumber, const std::optional<std::vector<ValueVector*>>& warningDataVectors) {
-    KU_ASSERT(warningDataVectors);
-    KU_ASSERT(warningDataVectors->size() == warningData.numValues);
+    LBUG_ASSERT(warningDataVectors);
+    LBUG_ASSERT(warningDataVectors->size() == warningData.numValues);
     for (column_id_t i = 0; i < warningData.numValues; ++i) {
         auto* vectorToSet = (*warningDataVectors)[i];
         std::visit(
@@ -440,7 +440,7 @@ bool JSONScanLocalState::parseNextChunk(
         if (remaining == 0) {
             break;
         }
-        KU_ASSERT(format != JsonScanFormat::AUTO_DETECT);
+        LBUG_ASSERT(format != JsonScanFormat::AUTO_DETECT);
         idx_t lineCountInJson = 0;
         auto jsonEnd = format == JsonScanFormat::NEWLINE_DELIMITED ?
                            nextNewLine(jsonStart, remaining) :
@@ -527,7 +527,7 @@ static JsonScanFormat autoDetectFormat(uint8_t* buffer_ptr, uint64_t buffer_size
     auto doc = yyjson_read_opts(reinterpret_cast<char*>(buffer_ptr + buffer_offset), remaining,
         JSONCommon::READ_STOP_FLAG, alc, &error);
     if (error.code == YYJSON_READ_SUCCESS) {
-        KU_ASSERT(yyjson_is_arr(doc->root));
+        LBUG_ASSERT(yyjson_is_arr(doc->root));
         buffer_offset += yyjson_doc_get_read_size(doc);
         yyjson_doc_free(doc);
         skipWhitespace(buffer_ptr, buffer_offset, buffer_size);
@@ -589,7 +589,7 @@ bool JSONScanLocalState::readNextBuffer() {
             currentBufferHandle = nullptr;
             isLast = false;
         }
-        KU_ASSERT(!currentBufferHandle);
+        LBUG_ASSERT(!currentBufferHandle);
         errorHandler->finalize();
         return false;
     }
@@ -616,8 +616,8 @@ static uint8_t* previousNewLine(uint8_t* ptr, uint64_t size) {
 }
 
 bool JSONScanLocalState::reconstructFirstObject() {
-    KU_ASSERT(currentBufferHandle->bufferIdx != 0);
-    KU_ASSERT(currentReader->getFormat() == JsonScanFormat::NEWLINE_DELIMITED);
+    LBUG_ASSERT(currentBufferHandle->bufferIdx != 0);
+    LBUG_ASSERT(currentReader->getFormat() == JsonScanFormat::NEWLINE_DELIMITED);
 
     JsonScanBufferHandle* prevBufferHandle = nullptr;
     while (!prevBufferHandle) {
@@ -791,11 +791,11 @@ static JsonScanFormat autoDetect(main::ClientContext* context, const std::string
         yyjson_val *key = nullptr, *ele = nullptr;
         for (auto i = 0u; i < next; i++) {
             auto* doc = localState.docs[i];
-            KU_ASSERT(nullptr != doc);
+            LBUG_ASSERT(nullptr != doc);
             auto objIter = yyjson_obj_iter_with(doc->root);
             while ((key = yyjson_obj_iter_next(&objIter))) {
                 ele = yyjson_obj_iter_get_val(key);
-                KU_ASSERT(yyjson_get_type(doc->root) == YYJSON_TYPE_OBJ);
+                LBUG_ASSERT(yyjson_get_type(doc->root) == YYJSON_TYPE_OBJ);
                 auto keyPtr = unsafe_yyjson_get_str(key);
                 auto keyLen = unsafe_yyjson_get_len(key);
                 auto itr = colNameToIdx.find({keyPtr, keyLen});
@@ -821,7 +821,7 @@ static JsonScanFormat autoDetect(main::ClientContext* context, const std::string
 
 static std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
     const TableFuncBindInput* input) {
-    auto scanInput = ku_dynamic_cast<ExtraScanTableFuncBindInput*>(input->extraInput.get());
+    auto scanInput = dynamic_cast_checked<ExtraScanTableFuncBindInput*>(input->extraInput.get());
     std::vector<LogicalType> columnTypes;
     std::vector<std::string> columnNames;
     JsonScanConfig scanConfig(scanInput->fileScanInfo.options);
@@ -879,7 +879,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
 }
 
 static decltype(auto) getWarningDataVectors(const DataChunk& chunk, column_id_t numWarningColumns) {
-    KU_ASSERT(numWarningColumns <= chunk.getNumValueVectors());
+    LBUG_ASSERT(numWarningColumns <= chunk.getNumValueVectors());
 
     std::vector<ValueVector*> ret;
     for (column_id_t i = chunk.getNumValueVectors() - numWarningColumns;
@@ -911,7 +911,7 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) 
     yyjson_doc** docs = localState->docs;
     yyjson_val *key = nullptr, *ele = nullptr;
     for (auto i = 0u; i < count; i++) {
-        KU_ASSERT(nullptr != docs[i]);
+        LBUG_ASSERT(nullptr != docs[i]);
         auto objIter = yyjson_obj_iter_with(docs[i]->root);
         while ((key = yyjson_obj_iter_next(&objIter))) {
             ele = yyjson_obj_iter_get_val(key);

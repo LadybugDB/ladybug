@@ -21,7 +21,7 @@ void LogicalCrossProduct::computeFlatSchema() {
     auto probeSchema = children[0]->getSchema();
     auto buildSchema = children[1]->getSchema();
     schema = probeSchema->copy();
-    KU_ASSERT(schema->getNumGroups() == 1);
+    LBUG_ASSERT(schema->getNumGroups() == 1);
     for (auto& expression : buildSchema->getExpressionsInScope()) {
         schema->insertToGroupAndScope(expression, 0);
     }

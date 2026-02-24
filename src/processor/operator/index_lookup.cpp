@@ -96,14 +96,14 @@ void fillOffsetArraysFromVectorInternal(transaction::Transaction* transaction,
                 }
             }
         },
-        [&](auto) { KU_UNREACHABLE; });
+        [&](auto) { LBUG_UNREACHABLE; });
 }
 
 template<bool hasNoNullsGuarantee>
 void fillOffsetArraysFromVector(transaction::Transaction* transaction, const IndexLookupInfo& info,
     ValueVector* keyVector, ValueVector* resultVector,
     const std::vector<ValueVector*>& warningDataVectors, BatchInsertErrorHandler* errorHandler) {
-    KU_ASSERT(resultVector->dataType.getPhysicalType() == PhysicalTypeID::INT64);
+    LBUG_ASSERT(resultVector->dataType.getPhysicalType() == PhysicalTypeID::INT64);
     auto& selVector = keyVector->state->getSelVector();
     auto numKeys = selVector.getSelSize();
     if (selVector.isUnfiltered()) {

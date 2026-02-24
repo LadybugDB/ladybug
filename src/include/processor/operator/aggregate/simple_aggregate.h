@@ -117,7 +117,7 @@ private:
         function::AggregateState* state, common::InMemOverflowBuffer& overflowBuffer);
 
     SimpleAggregateSharedState& getSharedState() {
-        return common::ku_dynamic_cast<SimpleAggregateSharedState&>(*sharedState.get());
+        return common::dynamic_cast_checked<SimpleAggregateSharedState&>(*sharedState.get());
     }
 
 private:

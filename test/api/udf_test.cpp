@@ -169,7 +169,7 @@ TEST_F(ApiTest, UnaryUDFDouble) {
     sortAndCheckTestResults(actualResult, expectedResult);
 }
 
-static int16_t strDoubleLen(ku_string_t str) {
+static int16_t strDoubleLen(string_t str) {
     return str.len * 2;
 }
 
@@ -195,7 +195,7 @@ TEST_F(ApiTest, BinaryUDFFlatUnflat) {
     sortAndCheckTestResults(actualResult, expectedResult);
 }
 
-static int64_t computeStringLenPlus(ku_string_t str, int32_t y) {
+static int64_t computeStringLenPlus(string_t str, int32_t y) {
     return str.len + y;
 }
 
@@ -287,7 +287,7 @@ TEST_F(ApiTest, TernaryUDFInt) {
     sortAndCheckTestResults(actualResult, expectedResult);
 }
 
-int32_t ternaryLenTotal(ku_string_t a, blob_t b, ku_string_t c) {
+int32_t ternaryLenTotal(string_t a, blob_t b, string_t c) {
     return (int32_t)(a.len + b.value.len + c.len);
 }
 
@@ -363,7 +363,7 @@ TEST_F(ApiTest, TernaryUDFMoreParamType) {
 static void addFour(const std::vector<std::shared_ptr<common::ValueVector>>& parameters,
     const std::vector<common::SelectionVector*>& parameterSelVectors, common::ValueVector& result,
     common::SelectionVector*, void* /*dataPtr*/ = nullptr) {
-    KU_ASSERT(parameters.size() == 1);
+    LBUG_ASSERT(parameters.size() == 1);
     const auto& parameter = *parameters[0];
     const auto& parameterSelVector = *parameterSelVectors[0];
     result.resetAuxiliaryBuffer();
@@ -396,7 +396,7 @@ struct AddDate {
 static void addDate(const std::vector<std::shared_ptr<common::ValueVector>>& parameters,
     const std::vector<common::SelectionVector*>& parameterSelVectors, common::ValueVector& result,
     common::SelectionVector* resultSelVector, void* /*dataPtr*/ = nullptr) {
-    KU_ASSERT(parameters.size() == 2);
+    LBUG_ASSERT(parameters.size() == 2);
     function::BinaryFunctionExecutor::execute<date_t, int64_t, date_t, AddDate>(*parameters[0],
         parameterSelVectors[0], *parameters[1], parameterSelVectors[1], result, resultSelVector);
 }
@@ -412,10 +412,10 @@ TEST_F(ApiTest, vectorizedBinaryAddDate) {
     sortAndCheckTestResults(actualResult, expectedResult);
 }
 
-static void concat(const ku_string_t& left, const ku_string_t& right, ku_string_t& result,
+static void concat(const string_t& left, const string_t& right, string_t& result,
     ValueVector& resultValueVector) {
     result.len = left.len + right.len;
-    if (result.len <= ku_string_t::SHORT_STR_LENGTH /* concat result is short */) {
+    if (result.len <= string_t::SHORT_STR_LENGTH /* concat result is short */) {
         memcpy(result.prefix, left.getData(), left.len);
         memcpy(result.prefix + left.len, right.getData(), right.len);
     } else {
@@ -423,12 +423,12 @@ static void concat(const ku_string_t& left, const ku_string_t& right, ku_string_
         auto buffer = reinterpret_cast<char*>(result.overflowPtr);
         memcpy(buffer, left.getData(), left.len);
         memcpy(buffer + left.len, right.getData(), right.len);
-        memcpy(result.prefix, buffer, ku_string_t::PREFIX_LENGTH);
+        memcpy(result.prefix, buffer, string_t::PREFIX_LENGTH);
     }
 }
 
 struct ConditionalConcat {
-    static inline void operation(ku_string_t& a, bool& b, ku_string_t& c, ku_string_t& result,
+    static inline void operation(string_t& a, bool& b, string_t& c, string_t& result,
         ValueVector& resultVector) {
         // Concat a,c if b is true, otherwise concat c,a.
         if (b) {
@@ -442,15 +442,15 @@ struct ConditionalConcat {
 static void conditionalConcat(const std::vector<std::shared_ptr<common::ValueVector>>& parameters,
     const std::vector<common::SelectionVector*>& parameterSelVectors, common::ValueVector& result,
     common::SelectionVector* resultSelVector, void* dataPtr = nullptr) {
-    KU_ASSERT(parameters.size() == 3);
-    function::TernaryFunctionExecutor::executeSwitch<ku_string_t, bool, ku_string_t, ku_string_t,
+    LBUG_ASSERT(parameters.size() == 3);
+    function::TernaryFunctionExecutor::executeSwitch<string_t, bool, string_t, string_t,
         ConditionalConcat, function::TernaryStringFunctionWrapper>(*parameters[0],
         parameterSelVectors[0], *parameters[1], parameterSelVectors[1], *parameters[2],
         parameterSelVectors[2], result, resultSelVector, dataPtr);
 }
 
 TEST_F(ApiTest, vectorizedTernaryConditionalAdd) {
-    conn->createVectorizedFunction<ku_string_t, ku_string_t, bool, ku_string_t>("conditionalConcat",
+    conn->createVectorizedFunction<string_t, string_t, bool, string_t>("conditionalConcat",
         &conditionalConcat);
     auto actualResult = TestHelper::convertResultToString(
         *conn->query("MATCH (p:person)-[:knows]->(p1:person) return conditionalConcat(p.fName, "

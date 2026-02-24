@@ -68,7 +68,7 @@ std::unique_ptr<BoundStatement> Binder::bindExtension(const Statement& statement
         bindUninstallExtension(*auxInfo);
         break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     if (ExtensionUtils::isOfficialExtension(auxInfo->path)) {
         common::StringUtils::toLower(auxInfo->path);

@@ -35,7 +35,7 @@ std::string RelMultiplicityUtils::toString(RelMultiplicity multiplicity) {
     case RelMultiplicity::MANY:
         return "MANY";
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

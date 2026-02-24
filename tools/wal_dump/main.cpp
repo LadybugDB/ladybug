@@ -260,7 +260,7 @@ int main(int argc, char** argv) {
         lbug::main::ClientContext clientContext(contextDB.get());
 
         std::unique_ptr<Reader> reader;
-        if (fileSize >= sizeof(ku_uuid_t) + sizeof(uint8_t) + sizeof(uint64_t)) {
+        if (fileSize >= sizeof(uuid) + sizeof(uint8_t) + sizeof(uint64_t)) {
             reader = std::make_unique<ChecksumReader>(*fileInfo, *MemoryManager::Get(clientContext),
                 checksumMismatchMessage);
         } else {

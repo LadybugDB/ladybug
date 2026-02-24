@@ -49,7 +49,7 @@ void ProjectionPushDownOptimizer::visitOperator(LogicalOperator* op) {
 void ProjectionPushDownOptimizer::visitPathPropertyProbe(LogicalOperator* op) {
     auto& pathPropertyProbe = op->cast<LogicalPathPropertyProbe>();
     auto child = pathPropertyProbe.getChild(0);
-    KU_ASSERT(child->getOperatorType() == LogicalOperatorType::RECURSIVE_EXTEND);
+    LBUG_ASSERT(child->getOperatorType() == LogicalOperatorType::RECURSIVE_EXTEND);
     if (nodeOrRelInUse.contains(pathPropertyProbe.getRel())) {
         return; // Path is needed
     }
@@ -190,7 +190,7 @@ void ProjectionPushDownOptimizer::visitInsert(LogicalOperator* op) {
 void ProjectionPushDownOptimizer::visitDelete(LogicalOperator* op) {
     auto& delete_ = op->constCast<LogicalDelete>();
     auto& infos = delete_.getInfos();
-    KU_ASSERT(!infos.empty());
+    LBUG_ASSERT(!infos.empty());
     switch (infos[0].tableType) {
     case TableType::NODE: {
         for (auto& info : infos) {
@@ -206,14 +206,14 @@ void ProjectionPushDownOptimizer::visitDelete(LogicalOperator* op) {
             auto& rel = info.pattern->constCast<RelExpression>();
             collectExpressionsInUse(rel.getSrcNode()->getInternalID());
             collectExpressionsInUse(rel.getDstNode()->getInternalID());
-            KU_ASSERT(rel.getRelType() == QueryRelType::NON_RECURSIVE);
+            LBUG_ASSERT(rel.getRelType() == QueryRelType::NON_RECURSIVE);
             if (!rel.isEmpty()) {
                 collectExpressionsInUse(rel.getInternalID());
             }
         }
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -283,7 +283,7 @@ void ProjectionPushDownOptimizer::visitSetInfo(const binder::BoundSetPropertyInf
         collectExpressionsInUse(rel.getInternalID());
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     collectExpressionsInUse(info.columnData);
 }

@@ -23,7 +23,7 @@ static bool isRegularChar(char c) {
     return c >= 32 && c <= 126 && c != '\\' && c != '\'' && c != '"';
 }
 
-uint64_t Blob::getBlobSize(const ku_string_t& blob) {
+uint64_t Blob::getBlobSize(const string_t& blob) {
     uint64_t blobSize = 0;
     auto length = blob.len;
     auto blobStr = blob.getData();

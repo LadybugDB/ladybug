@@ -28,7 +28,7 @@ const initTests = async () => {
     });
   });
 
-  const dbPath = path.join(tmpPath, "db.kz");
+  const dbPath = path.join(tmpPath, "db.lbug");
   const db = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
   const conn = new lbug.Connection(db, 4);
   const tinysnbDir = "../../dataset/tinysnb/";

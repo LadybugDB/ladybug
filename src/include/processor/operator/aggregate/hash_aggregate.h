@@ -165,7 +165,7 @@ public:
     }
 
     const HashAggregateSharedState& getSharedStateReference() const {
-        return common::ku_dynamic_cast<const HashAggregateSharedState&>(*sharedState);
+        return common::dynamic_cast_checked<const HashAggregateSharedState&>(*sharedState);
     }
     std::shared_ptr<HashAggregateSharedState> getSharedState() const {
         return std::reinterpret_pointer_cast<HashAggregateSharedState>(sharedState);
@@ -186,7 +186,7 @@ public:
     bool isSource() const override { return true; }
 
     void executeInternal(ExecutionContext* /*context*/) override {
-        KU_ASSERT(sharedState->isReadyForFinalization());
+        LBUG_ASSERT(sharedState->isReadyForFinalization());
         sharedState->finalizePartitions();
     }
     void finalizeInternal(ExecutionContext* /*context*/) override {

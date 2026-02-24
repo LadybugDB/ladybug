@@ -14,15 +14,15 @@ struct ListSort : BaseListSortOperation {
             true /* nullFirst */);
     }
 
-    static void operation(common::list_entry_t& input, common::ku_string_t& sortOrder,
+    static void operation(common::list_entry_t& input, common::string_t& sortOrder,
         common::list_entry_t& result, common::ValueVector& inputVector,
         common::ValueVector& /*valueVector*/, common::ValueVector& resultVector) {
         sortValues<T>(input, result, inputVector, resultVector, isAscOrder(sortOrder.getAsString()),
             true /* nullFirst */);
     }
 
-    static void operation(common::list_entry_t& input, common::ku_string_t& sortOrder,
-        common::ku_string_t& nullOrder, common::list_entry_t& result,
+    static void operation(common::list_entry_t& input, common::string_t& sortOrder,
+        common::string_t& nullOrder, common::list_entry_t& result,
         common::ValueVector& inputVector, common::ValueVector& resultVector) {
         sortValues<T>(input, result, inputVector, resultVector, isAscOrder(sortOrder.getAsString()),
             isNullFirst(nullOrder.getAsString()));

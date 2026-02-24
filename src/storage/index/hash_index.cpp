@@ -6,7 +6,7 @@
 #include "common/exception/message.h"
 #include "common/serializer/deserializer.h"
 #include "common/types/int128_t.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "common/types/uint128_t.h"
 #include "main/client_context.h"
@@ -63,8 +63,8 @@ void HashIndex<T>::deleteFromPersistentIndex(const Transaction* transaction, Key
 }
 
 template<>
-inline hash_t HashIndex<ku_string_t>::hashStored(const Transaction* transaction,
-    const ku_string_t& key) const {
+inline hash_t HashIndex<string_t>::hashStored(const Transaction* transaction,
+    const string_t& key) const {
     hash_t hash = 0;
     const auto str = overflowFileHandle->readString(transaction->getType(), key);
     function::Hash::operation(str, hash);
@@ -104,7 +104,7 @@ bool HashIndex<T>::checkpointInMemory() {
     pSlots->checkpointInMemoryIfNecessary();
     oSlots->checkpointInMemoryIfNecessary();
     localStorage->clear();
-    if constexpr (std::same_as<ku_string_t, T>) {
+    if constexpr (std::same_as<string_t, T>) {
         overflowFileHandle->checkpointInMemory();
     }
     return true;
@@ -173,7 +173,7 @@ void HashIndex<T>::splitSlots(PageAllocator& pageAllocator, const Transaction* t
                 const hash_t hash = this->hashStored(transaction, key);
                 const auto newSlotId = hash & header.higherLevelHashMask;
                 if (newSlotId != header.nextSplitSlotId) {
-                    KU_ASSERT(newSlotId == newSlotIterator.idx());
+                    LBUG_ASSERT(newSlotId == newSlotIterator.idx());
                     newSlot->entries[newEntryPos] = originalSlot->entries[originalEntryPos];
                     newSlot->header.setEntryValid(newEntryPos,
                         originalSlot->header.fingerprints[originalEntryPos]);
@@ -329,7 +329,7 @@ void HashIndex<T>::mergeBulkInserts(PageAllocator& pageAllocator, const Transact
                     if (diskSlotId / NUM_SLOTS_PER_PAGE == diskSlotPage) {
                         auto merged = mergeSlot(pageAllocator, transaction, partitionedEntries[i],
                             diskSlotIterator, diskOverflowSlotIterator, diskSlotId);
-                        KU_ASSERT(merged <= partitionedEntries[i].size());
+                        LBUG_ASSERT(merged <= partitionedEntries[i].size());
                         partitionedEntries[i].resize(partitionedEntries[i].size() - merged);
                         if (partitionedEntries[i].empty()) {
                             done[i] = true;
@@ -343,7 +343,7 @@ void HashIndex<T>::mergeBulkInserts(PageAllocator& pageAllocator, const Transact
     }
     // TODO(Guodong): Fix this assertion statement which doesn't count the entries in
     // deleteLocalStorage.
-    //     KU_ASSERT(originalNumEntries + insertLocalStorage.getIndexHeader().numEntries ==
+    //     LBUG_ASSERT(originalNumEntries + insertLocalStorage.getIndexHeader().numEntries ==
     //               indexHeaderForWriteTrx.numEntries);
 }
 
@@ -357,7 +357,7 @@ size_t HashIndex<T>::mergeSlot(PageAllocator& pageAllocator, const Transaction* 
     // mergeSlot should only be called when there is at least one entry for the given disk slot id
     // in the slot to merge
     OnDiskSlotType* diskSlot = &*diskSlotIterator.seek(diskSlotId);
-    KU_ASSERT(diskSlot->header.nextOvfSlotId == SlotHeader::INVALID_OVERFLOW_SLOT_ID ||
+    LBUG_ASSERT(diskSlot->header.nextOvfSlotId == SlotHeader::INVALID_OVERFLOW_SLOT_ID ||
               diskOverflowSlotIterator.size() > diskSlot->header.nextOvfSlotId);
     // Merge slot from local storage to an existing slot.
     size_t merged = 0;
@@ -375,37 +375,37 @@ size_t HashIndex<T>::mergeSlot(PageAllocator& pageAllocator, const Transaction* 
                     diskSlot->header.nextOvfSlotId = diskOverflowSlotIterator.size();
                     // This may invalidate diskSlot
                     diskOverflowSlotIterator.pushBack(pageAllocator, transaction, OnDiskSlotType());
-                    KU_ASSERT(
+                    LBUG_ASSERT(
                         diskSlot->header.nextOvfSlotId == SlotHeader::INVALID_OVERFLOW_SLOT_ID ||
                         diskOverflowSlotIterator.size() > diskSlot->header.nextOvfSlotId);
                 } else {
                     diskOverflowSlotIterator.seek(diskSlot->header.nextOvfSlotId);
-                    KU_ASSERT(
+                    LBUG_ASSERT(
                         diskSlot->header.nextOvfSlotId == SlotHeader::INVALID_OVERFLOW_SLOT_ID ||
                         diskOverflowSlotIterator.size() > diskSlot->header.nextOvfSlotId);
                 }
                 diskSlot = &*diskOverflowSlotIterator;
                 // Check to make sure we're not looping
-                KU_ASSERT(diskOverflowSlotIterator.idx() != diskSlot->header.nextOvfSlotId);
+                LBUG_ASSERT(diskOverflowSlotIterator.idx() != diskSlot->header.nextOvfSlotId);
                 diskEntryPos = 0;
             }
         }
-        KU_ASSERT(diskEntryPos < PERSISTENT_SLOT_CAPACITY);
-        if constexpr (std::is_same_v<T, ku_string_t>) {
+        LBUG_ASSERT(diskEntryPos < PERSISTENT_SLOT_CAPACITY);
+        if constexpr (std::is_same_v<T, string_t>) {
             auto* inMemEntry = it->entry;
-            auto kuString = overflowFileHandle->writeString(&pageAllocator, inMemEntry->key);
-            diskSlot->entries[diskEntryPos] = SlotEntry<T>{kuString, inMemEntry->value};
+            auto str = overflowFileHandle->writeString(&pageAllocator, inMemEntry->key);
+            diskSlot->entries[diskEntryPos] = SlotEntry<T>{str, inMemEntry->value};
         } else {
             diskSlot->entries[diskEntryPos] = *it->entry;
         }
         diskSlot->header.setEntryValid(diskEntryPos, it->fingerprint);
-        KU_ASSERT([&]() {
+        LBUG_ASSERT([&]() {
             const auto& key = it->entry->key;
             const auto hash = hashStored(transaction, key);
             const auto primarySlot =
                 HashIndexUtils::getPrimarySlotIdForHash(indexHeaderForWriteTrx, hash);
-            KU_ASSERT(it->fingerprint == HashIndexUtils::getFingerprintForHash(hash));
-            KU_ASSERT(primarySlot == diskSlotId);
+            LBUG_ASSERT(it->fingerprint == HashIndexUtils::getFingerprintForHash(hash));
+            LBUG_ASSERT(primarySlot == diskSlotId);
             return true;
         }());
         indexHeaderForWriteTrx.numEntries++;
@@ -424,15 +424,15 @@ template<typename T>
 HashIndex<T>::~HashIndex() = default;
 
 template<>
-bool HashIndex<common::ku_string_t>::equals(const transaction::Transaction* transaction,
-    std::string_view keyToLookup, const common::ku_string_t& keyInEntry) const {
+bool HashIndex<string_t>::equals(const transaction::Transaction* transaction,
+    std::string_view keyToLookup, const string_t& keyInEntry) const {
     if (!HashIndexUtils::areStringPrefixAndLenEqual(keyToLookup, keyInEntry)) {
         return false;
     }
-    if (keyInEntry.len <= common::ku_string_t::PREFIX_LENGTH) {
+    if (keyInEntry.len <= string_t::PREFIX_LENGTH) {
         // For strings shorter than PREFIX_LENGTH, the result must be true.
         return true;
-    } else if (keyInEntry.len <= common::ku_string_t::SHORT_STR_LENGTH) {
+    } else if (keyInEntry.len <= string_t::SHORT_STR_LENGTH) {
         // For short strings, whose lengths are larger than PREFIX_LENGTH, check if their
         // actual values are equal.
         return memcmp(keyToLookup.data(), keyInEntry.prefix, keyInEntry.len) == 0;
@@ -454,7 +454,7 @@ template class HashIndex<double>;
 template class HashIndex<float>;
 template class HashIndex<int128_t>;
 template class HashIndex<uint128_t>;
-template class HashIndex<ku_string_t>;
+template class HashIndex<string_t>;
 
 std::unique_ptr<IndexStorageInfo> PrimaryKeyIndexStorageInfo::deserialize(
     std::unique_ptr<BufferReader> reader) {
@@ -480,7 +480,7 @@ PrimaryKeyIndex::PrimaryKeyIndex(IndexInfo indexInfo, std::unique_ptr<IndexStora
     : Index{std::move(indexInfo), std::move(storageInfo)}, shadowFile{*shadowFile} {
     auto& hashIndexStorageInfo = this->storageInfo->cast<PrimaryKeyIndexStorageInfo>();
     if (hashIndexStorageInfo.firstHeaderPage == INVALID_PAGE_IDX) {
-        KU_ASSERT(hashIndexStorageInfo.overflowHeaderPage == INVALID_PAGE_IDX);
+        LBUG_ASSERT(hashIndexStorageInfo.overflowHeaderPage == INVALID_PAGE_IDX);
         hashIndexHeadersForReadTrx.resize(NUM_HASH_INDEXES);
         hashIndexHeadersForWriteTrx.resize(NUM_HASH_INDEXES);
         hashIndexDiskArrays = std::make_unique<DiskArrayCollection>(*pageAllocator.getDataFH(),
@@ -514,7 +514,7 @@ PrimaryKeyIndex::PrimaryKeyIndex(IndexInfo indexInfo, std::unique_ptr<IndexStora
 
 void PrimaryKeyIndex::initOverflowAndSubIndices(bool inMemMode, MemoryManager& mm,
     PageAllocator& pageAllocator, PrimaryKeyIndexStorageInfo& storageInfo) {
-    KU_ASSERT(indexInfo.keyDataTypes.size() == 1);
+    LBUG_ASSERT(indexInfo.keyDataTypes.size() == 1);
     if (indexInfo.keyDataTypes[0] == PhysicalTypeID::STRING) {
         if (inMemMode) {
             overflowFile = std::make_unique<InMemOverflowFile>(mm);
@@ -526,9 +526,9 @@ void PrimaryKeyIndex::initOverflowAndSubIndices(bool inMemMode, MemoryManager& m
     hashIndices.reserve(NUM_HASH_INDEXES);
     TypeUtils::visit(
         indexInfo.keyDataTypes[0],
-        [&](ku_string_t) {
+        [&](string_t) {
             for (auto i = 0u; i < NUM_HASH_INDEXES; i++) {
-                hashIndices.push_back(std::make_unique<HashIndex<ku_string_t>>(mm,
+                hashIndices.push_back(std::make_unique<HashIndex<string_t>>(mm,
                     overflowFile->addHandle(), *hashIndexDiskArrays, i, &shadowFile,
                     hashIndexHeadersForReadTrx[i], hashIndexHeadersForWriteTrx[i]));
             }
@@ -540,26 +540,26 @@ void PrimaryKeyIndex::initOverflowAndSubIndices(bool inMemMode, MemoryManager& m
                     hashIndexHeadersForWriteTrx[i]));
             }
         },
-        [&](auto) { KU_UNREACHABLE; });
+        [&](auto) { LBUG_UNREACHABLE; });
 }
 
 bool PrimaryKeyIndex::lookup(const Transaction* trx, ValueVector* keyVector, uint64_t vectorPos,
     offset_t& result, visible_func isVisible) {
     bool retVal = false;
-    KU_ASSERT(indexInfo.keyDataTypes.size() == 1);
+    LBUG_ASSERT(indexInfo.keyDataTypes.size() == 1);
     TypeUtils::visit(
         indexInfo.keyDataTypes[0],
         [&]<IndexHashable T>(T) {
             T key = keyVector->getValue<T>(vectorPos);
             retVal = lookup(trx, key, result, isVisible);
         },
-        [](auto) { KU_UNREACHABLE; });
+        [](auto) { LBUG_UNREACHABLE; });
     return retVal;
 }
 
 void PrimaryKeyIndex::commitInsert(Transaction* transaction, const ValueVector& nodeIDVector,
     const std::vector<ValueVector*>& indexVectors, Index::InsertState& insertState) {
-    KU_ASSERT(indexVectors.size() == 1);
+    LBUG_ASSERT(indexVectors.size() == 1);
     const auto& pkVector = *indexVectors[0];
     const auto& pkInsertState = insertState.cast<InsertState>();
     for (auto i = 0u; i < nodeIDVector.state->getSelSize(); i++) {
@@ -579,19 +579,19 @@ void PrimaryKeyIndex::commitInsert(Transaction* transaction, const ValueVector& 
 bool PrimaryKeyIndex::insert(const Transaction* transaction, const ValueVector* keyVector,
     uint64_t vectorPos, offset_t value, visible_func isVisible) {
     bool result = false;
-    KU_ASSERT(indexInfo.keyDataTypes.size() == 1);
+    LBUG_ASSERT(indexInfo.keyDataTypes.size() == 1);
     TypeUtils::visit(
         indexInfo.keyDataTypes[0],
         [&]<IndexHashable T>(T) {
             T key = keyVector->getValue<T>(vectorPos);
             result = insert(transaction, key, value, isVisible);
         },
-        [](auto) { KU_UNREACHABLE; });
+        [](auto) { LBUG_UNREACHABLE; });
     return result;
 }
 
 void PrimaryKeyIndex::delete_(ValueVector* keyVector) {
-    KU_ASSERT(indexInfo.keyDataTypes.size() == 1);
+    LBUG_ASSERT(indexInfo.keyDataTypes.size() == 1);
     TypeUtils::visit(
         indexInfo.keyDataTypes[0],
         [&]<IndexHashable T>(T) {
@@ -604,7 +604,7 @@ void PrimaryKeyIndex::delete_(ValueVector* keyVector) {
                 delete_(key);
             }
         },
-        [](auto) { KU_UNREACHABLE; });
+        [](auto) { LBUG_UNREACHABLE; });
 }
 
 void PrimaryKeyIndex::checkpointInMemory() {
@@ -645,7 +645,7 @@ void PrimaryKeyIndex::writeHeaders(PageAllocator& pageAllocator) const {
                 }
             });
     }
-    KU_ASSERT(headerIdx == NUM_HASH_INDEXES);
+    LBUG_ASSERT(headerIdx == NUM_HASH_INDEXES);
 }
 
 void PrimaryKeyIndex::rollbackCheckpoint() {

@@ -144,7 +144,7 @@ void NullMask::resize(uint64_t capacity) {
 
 bool NullMask::copyFromNullBits(const uint64_t* srcNullEntries, uint64_t srcOffset,
     uint64_t dstOffset, uint64_t numBitsToCopy, bool invert) {
-    KU_ASSERT(dstOffset + numBitsToCopy <= getNumNullBits(data));
+    LBUG_ASSERT(dstOffset + numBitsToCopy <= getNumNullBits(data));
     if (copyNullMask(srcNullEntries, srcOffset, this->data.data(), dstOffset, numBitsToCopy,
             invert)) {
         this->mayContainNulls = true;
@@ -157,7 +157,7 @@ void NullMask::setNullFromRange(uint64_t offset, uint64_t numBitsToSet, bool isN
     if (isNull) {
         this->mayContainNulls = true;
     }
-    KU_ASSERT(offset + numBitsToSet <= getNumNullBits(data));
+    LBUG_ASSERT(offset + numBitsToSet <= getNumNullBits(data));
     setNullRange(data.data(), offset, numBitsToSet, isNull);
 }
 
@@ -207,7 +207,7 @@ void NullMask::setNullRange(uint64_t* nullEntries, uint64_t offset, uint64_t num
 }
 
 void NullMask::operator|=(const NullMask& other) {
-    KU_ASSERT(other.data.size() == data.size());
+    LBUG_ASSERT(other.data.size() == data.size());
     for (size_t i = 0; i < data.size(); i++) {
         data[i] |= other.getData()[i];
     }

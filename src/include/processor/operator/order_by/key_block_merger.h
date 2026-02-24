@@ -36,7 +36,7 @@ public:
     MergedKeyBlocks(uint32_t numBytesPerTuple, std::shared_ptr<DataBlock> keyBlock);
 
     inline uint8_t* getTuple(uint64_t tupleIdx) const {
-        KU_ASSERT(tupleIdx < numTuples);
+        LBUG_ASSERT(tupleIdx < numTuples);
         return keyBlocks[tupleIdx / numTuplesPerBlock]->getData() +
                numBytesPerTuple * (tupleIdx % numTuplesPerBlock);
     }
@@ -48,7 +48,7 @@ public:
     inline uint32_t getNumTuplesPerBlock() const { return numTuplesPerBlock; }
 
     inline uint8_t* getKeyBlockBuffer(uint32_t idx) const {
-        KU_ASSERT(idx < keyBlocks.size());
+        LBUG_ASSERT(idx < keyBlocks.size());
         return keyBlocks[idx]->getData();
     }
 

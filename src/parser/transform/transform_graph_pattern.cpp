@@ -53,8 +53,8 @@ NodePattern Transformer::transformNodePattern(CypherParser::OC_NodePatternContex
         nodeLabels = transformNodeLabels(*ctx.oC_NodeLabels());
     }
     auto properties = std::vector<std::pair<std::string, std::unique_ptr<ParsedExpression>>>{};
-    if (ctx.kU_Properties()) {
-        properties = transformProperties(*ctx.kU_Properties());
+    if (ctx.iC_Properties()) {
+        properties = transformProperties(*ctx.iC_Properties());
     }
     return NodePattern(std::move(variable), std::move(nodeLabels), std::move(properties));
 }
@@ -79,8 +79,8 @@ RelPattern Transformer::transformRelationshipPattern(
         if (relDetail->oC_RelationshipTypes()) {
             relTypes = transformRelTypes(*relDetail->oC_RelationshipTypes());
         }
-        if (relDetail->kU_Properties()) {
-            properties = transformProperties(*relDetail->kU_Properties());
+        if (relDetail->iC_Properties()) {
+            properties = transformProperties(*relDetail->iC_Properties());
         }
     }
     // Parse direction
@@ -96,10 +96,10 @@ RelPattern Transformer::transformRelationshipPattern(
     auto relType = QueryRelType::NON_RECURSIVE;
     auto recursiveInfo = RecursiveRelPatternInfo();
 
-    if (relDetail && relDetail->kU_RecursiveDetail()) {
-        auto recursiveDetail = relDetail->kU_RecursiveDetail();
+    if (relDetail && relDetail->iC_RecursiveDetail()) {
+        auto recursiveDetail = relDetail->iC_RecursiveDetail();
         // Parse recursive type
-        auto recursiveType = recursiveDetail->kU_RecursiveType();
+        auto recursiveType = recursiveDetail->iC_RecursiveType();
         if (recursiveType) {
             if (recursiveType->ALL()) {
                 if (recursiveType->WSHORTEST()) {
@@ -113,11 +113,11 @@ RelPattern Transformer::transformRelationshipPattern(
                 relType = QueryRelType::WEIGHTED_SHORTEST;
                 recursiveInfo.weightPropertyName =
                     transformPropertyKeyName(*recursiveType->oC_PropertyKeyName());
-            } else if (recursiveDetail->kU_RecursiveType()->SHORTEST()) {
+            } else if (recursiveDetail->iC_RecursiveType()->SHORTEST()) {
                 relType = QueryRelType::SHORTEST;
-            } else if (recursiveDetail->kU_RecursiveType()->TRAIL()) {
+            } else if (recursiveDetail->iC_RecursiveType()->TRAIL()) {
                 relType = QueryRelType::VARIABLE_LENGTH_TRAIL;
-            } else if (recursiveDetail->kU_RecursiveType()->ACYCLIC()) {
+            } else if (recursiveDetail->iC_RecursiveType()->ACYCLIC()) {
                 relType = QueryRelType::VARIABLE_LENGTH_ACYCLIC;
             } else {
                 relType = QueryRelType::VARIABLE_LENGTH_WALK;
@@ -144,23 +144,23 @@ RelPattern Transformer::transformRelationshipPattern(
         recursiveInfo.lowerBound = lowerBound;
         recursiveInfo.upperBound = upperBound;
         // Parse recursive comprehension
-        auto comprehension = recursiveDetail->kU_RecursiveComprehension();
+        auto comprehension = recursiveDetail->iC_RecursiveComprehension();
         if (comprehension) {
             recursiveInfo.relName = transformVariable(*comprehension->oC_Variable(0));
             recursiveInfo.nodeName = transformVariable(*comprehension->oC_Variable(1));
             if (comprehension->oC_Where()) {
                 recursiveInfo.whereExpression = transformWhere(*comprehension->oC_Where());
             }
-            if (!comprehension->kU_RecursiveProjectionItems().empty()) {
+            if (!comprehension->iC_RecursiveProjectionItems().empty()) {
                 recursiveInfo.hasProjection = true;
-                KU_ASSERT(comprehension->kU_RecursiveProjectionItems().size() == 2);
+                LBUG_ASSERT(comprehension->iC_RecursiveProjectionItems().size() == 2);
                 auto relProjectionList =
-                    comprehension->kU_RecursiveProjectionItems(0)->oC_ProjectionItems();
+                    comprehension->iC_RecursiveProjectionItems(0)->oC_ProjectionItems();
                 if (relProjectionList) {
                     recursiveInfo.relProjectionList = transformProjectionItems(*relProjectionList);
                 }
                 auto nodeProjectionList =
-                    comprehension->kU_RecursiveProjectionItems(1)->oC_ProjectionItems();
+                    comprehension->iC_RecursiveProjectionItems(1)->oC_ProjectionItems();
                 if (nodeProjectionList) {
                     recursiveInfo.nodeProjectionList =
                         transformProjectionItems(*nodeProjectionList);
@@ -173,9 +173,9 @@ RelPattern Transformer::transformRelationshipPattern(
 }
 
 std::vector<s_parsed_expr_pair> Transformer::transformProperties(
-    CypherParser::KU_PropertiesContext& ctx) {
+    CypherParser::IC_PropertiesContext& ctx) {
     std::vector<std::pair<std::string, std::unique_ptr<ParsedExpression>>> result;
-    KU_ASSERT(ctx.oC_PropertyKeyName().size() == ctx.oC_Expression().size());
+    LBUG_ASSERT(ctx.oC_PropertyKeyName().size() == ctx.oC_Expression().size());
     for (auto i = 0u; i < ctx.oC_PropertyKeyName().size(); ++i) {
         auto propertyKeyName = transformPropertyKeyName(*ctx.oC_PropertyKeyName(i));
         auto expression = transformExpression(*ctx.oC_Expression(i));

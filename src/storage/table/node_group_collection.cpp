@@ -27,9 +27,9 @@ NodeGroupCollection::NodeGroupCollection(MemoryManager& mm, const std::vector<Lo
 void NodeGroupCollection::append(const Transaction* transaction,
     const std::vector<ValueVector*>& vectors) {
     const auto numRowsToAppend = vectors[0]->state->getSelVector().getSelSize();
-    KU_ASSERT(numRowsToAppend == vectors[0]->state->getSelVector().getSelSize());
+    LBUG_ASSERT(numRowsToAppend == vectors[0]->state->getSelVector().getSelSize());
     for (auto i = 1u; i < vectors.size(); i++) {
-        KU_ASSERT(vectors[i]->state->getSelVector().getSelSize() == numRowsToAppend);
+        LBUG_ASSERT(vectors[i]->state->getSelVector().getSelSize() == numRowsToAppend);
     }
     const auto lock = nodeGroups.lock();
     if (nodeGroups.isEmpty(lock)) {
@@ -68,7 +68,7 @@ void NodeGroupCollection::append(const Transaction* transaction,
 
 void NodeGroupCollection::append(const Transaction* transaction,
     const std::vector<column_id_t>& columnIDs, const NodeGroup& nodeGroup) {
-    KU_ASSERT(nodeGroup.getDataTypes().size() == columnIDs.size());
+    LBUG_ASSERT(nodeGroup.getDataTypes().size() == columnIDs.size());
     const auto lock = nodeGroups.lock();
     if (nodeGroups.isEmpty(lock)) {
         auto newGroup =
@@ -149,7 +149,7 @@ std::pair<offset_t, offset_t> NodeGroupCollection::appendToLastNodeGroupAndFlush
         auto groupToMerge = std::make_unique<ChunkedNodeGroup>(mm, *flushedGroup,
             lastNodeGroup->getDataTypes(), columnIDs);
 
-        KU_ASSERT(lastNodeGroup->getNumChunkedGroups() == 0);
+        LBUG_ASSERT(lastNodeGroup->getNumChunkedGroups() == 0);
         lastNodeGroup->merge(transaction, std::move(groupToMerge));
     }
     return {startOffset, numToAppend};
@@ -174,13 +174,13 @@ NodeGroup* NodeGroupCollection::getOrCreateNodeGroup(const Transaction* transact
         // needed
         pushInsertInfo(transaction, nodeGroups.getLastGroup(lock), 0);
     }
-    KU_ASSERT(groupIdx < nodeGroups.getNumGroups(lock));
+    LBUG_ASSERT(groupIdx < nodeGroups.getNumGroups(lock));
     return nodeGroups.getGroup(lock, groupIdx);
 }
 
 void NodeGroupCollection::addColumn(TableAddColumnState& addColumnState,
     PageAllocator* pageAllocator) {
-    KU_ASSERT((pageAllocator == nullptr) == (residency == ResidencyState::IN_MEMORY));
+    LBUG_ASSERT((pageAllocator == nullptr) == (residency == ResidencyState::IN_MEMORY));
     const auto lock = nodeGroups.lock();
     auto& newColumnStats = stats.addNewColumn(addColumnState.propertyDefinition.getType());
     for (const auto& nodeGroup : nodeGroups.getAllGroups(lock)) {
@@ -201,7 +201,7 @@ uint64_t NodeGroupCollection::getEstimatedMemoryUsage() const {
 // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
 void NodeGroupCollection::checkpoint(MemoryManager& memoryManager,
     NodeGroupCheckpointState& state) {
-    KU_ASSERT(residency == ResidencyState::ON_DISK);
+    LBUG_ASSERT(residency == ResidencyState::ON_DISK);
     const auto lock = nodeGroups.lock();
     for (const auto& nodeGroup : nodeGroups.getAllGroups(lock)) {
         nodeGroup->checkpoint(memoryManager, state);
@@ -228,7 +228,7 @@ void NodeGroupCollection::rollbackInsert(row_idx_t numRows_, bool updateNumRows)
     nodeGroups.removeTrailingGroups(lock, numGroupsToRemove);
 
     if (updateNumRows) {
-        KU_ASSERT(numRows_ <= numTotalRows);
+        LBUG_ASSERT(numRows_ <= numTotalRows);
         numTotalRows -= numRows_;
     }
 }
@@ -261,7 +261,7 @@ void NodeGroupCollection::serialize(Serializer& ser) {
 void NodeGroupCollection::deserialize(Deserializer& deSer, MemoryManager& memoryManager) {
     std::string key;
     deSer.validateDebuggingInfo(key, "node_groups");
-    KU_ASSERT(residency == ResidencyState::ON_DISK);
+    LBUG_ASSERT(residency == ResidencyState::ON_DISK);
     nodeGroups.deserializeGroups(memoryManager, deSer, types);
     deSer.validateDebuggingInfo(key, "stats");
     stats.deserialize(deSer);

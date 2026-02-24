@@ -69,21 +69,21 @@ if jwt_token is None and not is_dry_run:
     sys.exit(1)
 
 datasets_path = {
-    'ldbc-sf10-ku': os.path.join(csv_base_dir, 'ldbc-10', 'csv'),
-    'ldbc-sf100-ku': os.path.join(csv_base_dir, 'ldbc-100', 'csv'),
-    'click-ku': os.path.join(csv_base_dir, 'click', 'hits'),
-    'graph500-27-ku': os.path.join(csv_base_dir, 'graph500-27', 'csv'),
-    'soc-livejournal-ku': os.path.join(csv_base_dir, 'soc-livejournal', 'csv'),
-    'datagen-sf10k-ku': os.path.join(csv_base_dir, 'datagen-sf10k', 'csv'),
+    'ldbc-sf10': os.path.join(csv_base_dir, 'ldbc-10', 'csv'),
+    'ldbc-sf100': os.path.join(csv_base_dir, 'ldbc-100', 'csv'),
+    'click': os.path.join(csv_base_dir, 'click', 'hits'),
+    'graph500-27': os.path.join(csv_base_dir, 'graph500-27', 'csv'),
+    'soc-livejournal': os.path.join(csv_base_dir, 'soc-livejournal', 'csv'),
+    'datagen-sf10k': os.path.join(csv_base_dir, 'datagen-sf10k', 'csv'),
 }
 
 serialized_graphs_path = {
-    'ldbc-sf10-ku': os.path.join(serialized_base_dir, 'ldbc-sf10-serialized'),
-    'ldbc-sf100-ku': os.path.join(serialized_base_dir, 'ldbc-sf100-serialized'),
-    'click-ku': os.path.join(serialized_base_dir, 'click-serialized'),
-    'graph500-27-ku': os.path.join(serialized_base_dir, 'graph500-27-serialized'),
-    'soc-livejournal-ku': os.path.join(serialized_base_dir, 'soc-livejournal-serialized'),
-    'datagen-sf10k-ku': os.path.join(serialized_base_dir, 'datagen-sf10k-serialized'),
+    'ldbc-sf10': os.path.join(serialized_base_dir, 'ldbc-sf10-serialized'),
+    'ldbc-sf100': os.path.join(serialized_base_dir, 'ldbc-sf100-serialized'),
+    'click': os.path.join(serialized_base_dir, 'click-serialized'),
+    'graph500-27': os.path.join(serialized_base_dir, 'graph500-27-serialized'),
+    'soc-livejournal': os.path.join(serialized_base_dir, 'soc-livejournal-serialized'),
+    'datagen-sf10k': os.path.join(serialized_base_dir, 'datagen-sf10k-serialized'),
 }
 
 benchmark_copy_log_dir = os.path.join("/tmp", 'benchmark_copy_logs')
@@ -244,7 +244,7 @@ def run_lbug(serialized_graph_path):
         is_current_group_error = False
         benchmark_cmd = [
             lbug_benchmark_tool,
-            '--dataset=' + serialized_graph_path + '/db.kz',
+            '--dataset=' + serialized_graph_path + '/db.lbug',
             '--benchmark=' + benchmark_files + '/' + group,
             '--warmup=' + str(num_warmup),
             '--run=' + str(num_run),
@@ -397,7 +397,7 @@ if __name__ == '__main__':
     args = parse_args()
     benchmark_log_dir = benchmark_log_dir
     benchmark_files = benchmark_files + '/' + args.dataset
-    dataset_path = datasets_path[args.dataset + '-ku']
+    dataset_path = datasets_path[args.dataset + '']
 
     logging.getLogger().setLevel(logging.INFO)
     logging.info("Running benchmark for dataset %s", args.dataset)
@@ -416,14 +416,14 @@ if __name__ == '__main__':
     logging.info("Benchmark server URL: %s", benchmark_server_url)
 
     # serialize dataset
-    serialize_dataset(args.dataset + '-ku')
+    serialize_dataset(args.dataset)
 
     # load benchmark
     benchmark_group = BenchmarkGroup(benchmark_files)
     benchmark_group.load()
 
     logging.info("Running benchmark...")
-    serialized_graph_path = serialized_graphs_path[args.dataset + '-ku']
+    serialized_graph_path = serialized_graphs_path[args.dataset]
     is_success = run_lbug(serialized_graph_path)
     logging.info("Benchmark finished")
     logging.info("Benchmark result: %s", "success" if is_success else "fail")

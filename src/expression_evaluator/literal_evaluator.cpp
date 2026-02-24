@@ -20,9 +20,9 @@ void LiteralExpressionEvaluator::evaluate(sel_t count) {
 }
 
 bool LiteralExpressionEvaluator::selectInternal(SelectionVector&) {
-    KU_ASSERT(resultVector->dataType.getLogicalTypeID() == LogicalTypeID::BOOL);
+    LBUG_ASSERT(resultVector->dataType.getLogicalTypeID() == LogicalTypeID::BOOL);
     auto pos = resultVector->state->getSelVector()[0];
-    KU_ASSERT(pos == 0u);
+    LBUG_ASSERT(pos == 0u);
     return resultVector->getValue<bool>(pos) && (!resultVector->isNull(pos));
 }
 

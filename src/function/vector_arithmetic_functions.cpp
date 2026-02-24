@@ -56,7 +56,7 @@ static std::unique_ptr<ScalarFunction> getUnaryFunction(std::string name,
     common::TypeUtils::visit(
         LogicalType(operandTypeID),
         [&]<NumericTypes T>(T) { execFunc = ScalarFunction::UnaryExecFunction<T, T, FUNC>; },
-        [](auto) { KU_UNREACHABLE; });
+        [](auto) { LBUG_UNREACHABLE; });
     return std::make_unique<ScalarFunction>(std::move(name),
         std::vector<LogicalTypeID>{operandTypeID}, operandTypeID, execFunc);
 }
@@ -77,7 +77,7 @@ static std::unique_ptr<ScalarFunction> getBinaryFunction(std::string name,
         common::LogicalType(operandTypeID),
         [&]<common::NumericTypes T>(
             T) { execFunc = ScalarFunction::BinaryExecFunction<T, T, T, FUNC>; },
-        [](auto) { KU_UNREACHABLE; });
+        [](auto) { LBUG_UNREACHABLE; });
     return std::make_unique<ScalarFunction>(std::move(name),
         std::vector<common::LogicalTypeID>{operandTypeID, operandTypeID}, operandTypeID, execFunc);
 }
@@ -688,7 +688,7 @@ static void getBinaryExecutionHelperB(const LogicalType& typeR, scalar_func_exec
         result = ScalarFunction::BinaryStringExecFunction<A, B, int128_t, FUNC>;
         break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -710,15 +710,15 @@ static void getBinaryExecutionHelperA(const LogicalType& typeB, const LogicalTyp
         getBinaryExecutionHelperB<FUNC, A, int128_t>(typeR, result);
         break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
 template<typename FUNC>
 static std::unique_ptr<FunctionBindData> genericBinaryArithmeticFunc(
     const binder::expression_vector& arguments, Function* func) {
-    auto asScalar = ku_dynamic_cast<ScalarFunction*>(func);
-    KU_ASSERT(asScalar != nullptr);
+    auto asScalar = dynamic_cast_checked<ScalarFunction*>(func);
+    LBUG_ASSERT(asScalar != nullptr);
     auto argADataType = arguments[0]->getDataType().copy();
     auto argBDataType = arguments[1]->getDataType().copy();
     if (argADataType.getLogicalTypeID() != LogicalTypeID::DECIMAL) {
@@ -743,7 +743,7 @@ static std::unique_ptr<FunctionBindData> genericBinaryArithmeticFunc(
             [&]<IntegerTypes T>(T) {
                 asScalar->execFunc = ScalarFunction::BinaryStringExecFunction<T, T, T, FUNC>;
             },
-            [](auto) { KU_UNREACHABLE; });
+            [](auto) { LBUG_UNREACHABLE; });
     } else {
         common::TypeUtils::visit(
             argumentAType.getPhysicalType(),
@@ -751,7 +751,7 @@ static std::unique_ptr<FunctionBindData> genericBinaryArithmeticFunc(
                 getBinaryExecutionHelperA<FUNC, T>(argumentBType, resultingType,
                     asScalar->execFunc);
             },
-            [](auto) { KU_UNREACHABLE; });
+            [](auto) { LBUG_UNREACHABLE; });
     }
     std::vector<LogicalType> resVec;
     resVec.push_back(std::move(argumentAType));
@@ -776,15 +776,15 @@ static void getUnaryExecutionHelper(const LogicalType& resultType, scalar_func_e
         result = ScalarFunction::UnaryExecNestedTypeFunction<ARG, int128_t, FUNC>;
         break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
 template<typename FUNC>
 static std::unique_ptr<FunctionBindData> genericUnaryArithmeticFunc(
     const binder::expression_vector& arguments, Function* func) {
-    auto asScalar = ku_dynamic_cast<ScalarFunction*>(func);
-    KU_ASSERT(asScalar != nullptr);
+    auto asScalar = dynamic_cast_checked<ScalarFunction*>(func);
+    LBUG_ASSERT(asScalar != nullptr);
     auto argPrecision = DecimalType::getPrecision(arguments[0]->getDataType());
     auto argScale = DecimalType::getScale(arguments[0]->getDataType());
     auto params = FUNC::resultingParams(argPrecision, argScale);
@@ -810,7 +810,7 @@ static std::unique_ptr<FunctionBindData> genericUnaryArithmeticFunc(
                 ScalarFunction::UnaryExecNestedTypeFunction<int128_t, int128_t, FUNC>;
             break;
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     } else {
         switch (argumentType.getPhysicalType()) {
@@ -827,7 +827,7 @@ static std::unique_ptr<FunctionBindData> genericUnaryArithmeticFunc(
             getUnaryExecutionHelper<FUNC, int128_t>(resultingType, asScalar->execFunc);
             break;
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     }
     std::vector<LogicalType> argTypes;

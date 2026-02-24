@@ -8,7 +8,7 @@ namespace processor {
 static PhysicalOperator* getTableScan(const PhysicalOperator* joinRoot) {
     auto op = joinRoot->getChild(0);
     while (op->getOperatorType() != PhysicalOperatorType::TABLE_FUNCTION_CALL) {
-        KU_ASSERT(op->getNumChildren() != 0);
+        LBUG_ASSERT(op->getNumChildren() != 0);
         op = op->getChild(0);
     }
     return op;

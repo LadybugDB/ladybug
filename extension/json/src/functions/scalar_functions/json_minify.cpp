@@ -21,7 +21,7 @@ static void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& pa
         if (!isNull) {
             StringVector::addString(&result, resultPos,
                 jsonToString(
-                    stringToJson(parameters[0]->getValue<ku_string_t>(inputPos).getAsString())));
+                    stringToJson(parameters[0]->getValue<string_t>(inputPos).getAsString())));
         }
     }
 }

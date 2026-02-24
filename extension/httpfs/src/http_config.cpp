@@ -7,7 +7,7 @@ namespace lbug {
 namespace httpfs_extension {
 
 HTTPConfig::HTTPConfig(main::ClientContext* context) {
-    KU_ASSERT(context != nullptr);
+    LBUG_ASSERT(context != nullptr);
     cacheFile =
         context->getCurrentSetting(HTTPCacheFileConfig::HTTP_CACHE_FILE_OPTION).getValue<bool>();
 }
@@ -18,7 +18,7 @@ void HTTPConfigEnvProvider::setOptionValue(main::ClientContext* context) {
     if (cacheFileOptionStrVal != "") {
         bool enableCacheFile = false;
         function::CastString::operation(
-            ku_string_t{cacheFileOptionStrVal.c_str(), cacheFileOptionStrVal.length()},
+            string_t{cacheFileOptionStrVal.c_str(), cacheFileOptionStrVal.length()},
             enableCacheFile);
         if (enableCacheFile && context->isInMemory()) {
             throw Exception("Cannot enable HTTP file cache when database is in memory");

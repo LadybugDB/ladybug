@@ -59,7 +59,7 @@ void RleBpEncoder::finishPrepare() {
 }
 
 uint64_t RleBpEncoder::getByteCount() const {
-    KU_ASSERT(byteCount != uint64_t(-1));
+    LBUG_ASSERT(byteCount != uint64_t(-1));
     return byteCount;
 }
 
@@ -73,7 +73,7 @@ void RleBpEncoder::writeRun(common::Serializer& writer) {
     // write the header of the run
     varintEncode(currentRunCount << 1, writer);
     // now write the value
-    KU_ASSERT(lastValue >> (byteWidth * 8) == 0);
+    LBUG_ASSERT(lastValue >> (byteWidth * 8) == 0);
     switch (byteWidth) {
     case 1:
         writer.write<uint8_t>(lastValue);
@@ -90,7 +90,7 @@ void RleBpEncoder::writeRun(common::Serializer& writer) {
         writer.write<uint32_t>(lastValue);
         break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     currentRunCount = 1;
 }

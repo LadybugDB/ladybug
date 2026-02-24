@@ -199,7 +199,7 @@ std::unique_ptr<lbug::common::Value> create_value_internal_id(uint64_t offset, u
 
 inline std::unique_ptr<lbug::common::Value> create_value_uuid_t(int64_t high, uint64_t low) {
     return std::make_unique<lbug::common::Value>(
-        lbug::common::ku_uuid_t{lbug::common::int128_t(low, high)});
+        lbug::common::uuid{lbug::common::int128_t(low, high)});
 }
 
 template<typename T>
@@ -218,7 +218,7 @@ inline std::unique_ptr<lbug::common::Value> create_value_decimal(int64_t high, u
         [&](int64_t) { value->val.int64Val = static_cast<int64_t>(i128); },
         [&](int32_t) { value->val.int32Val = static_cast<int32_t>(i128); },
         [&](int16_t) { value->val.int16Val = static_cast<int16_t>(i128); },
-        [](auto) { KU_UNREACHABLE; });
+        [](auto) { LBUG_UNREACHABLE; });
     return value;
 }
 

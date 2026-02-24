@@ -11,19 +11,19 @@ namespace processor {
 using namespace lbug::common;
 using namespace lbug_parquet::format;
 
-std::size_t StringHash::operator()(const ku_string_t& k) const {
+std::size_t StringHash::operator()(const string_t& k) const {
     hash_t result = 0;
     function::Hash::operation(k, result);
     return result;
 }
 
-bool StringEquality::operator()(const ku_string_t& a, const ku_string_t& b) const {
+bool StringEquality::operator()(const string_t& a, const string_t& b) const {
     uint8_t result = 0;
     function::Equals::operation(a, b, result, nullptr /* leftVector */, nullptr /* rightVector */);
     return result;
 }
 
-void StringStatisticsState::update(const ku_string_t& val) {
+void StringStatisticsState::update(const string_t& val) {
     if (valuesTooBig) {
         return;
     }
@@ -71,10 +71,10 @@ void StringColumnWriter::analyze(ColumnWriterState& writerState, ColumnWriterSta
         auto pos = getVectorPos(vector, vectorIdx);
         if (!vector->isNull(pos)) {
             runLen++;
-            const auto& value = vector->getValue<ku_string_t>(pos);
+            const auto& value = vector->getValue<string_t>(pos);
             // Try to insert into the dictionary. If it's already there, we get back the value
             // index.
-            ku_string_t valueToInsert;
+            string_t valueToInsert;
             StringVector::copyToRowData(vector, pos, reinterpret_cast<uint8_t*>(&valueToInsert),
                 state.overflowBuffer.get());
             auto found = state.dictionary.insert(
@@ -130,7 +130,7 @@ void StringColumnWriter::writeVector(common::Serializer& serializer,
             if (vector->isNull(pos)) {
                 continue;
             }
-            auto value_index = pageState->dictionary.at(vector->getValue<ku_string_t>(pos));
+            auto value_index = pageState->dictionary.at(vector->getValue<string_t>(pos));
             if (!pageState->writtenValue) {
                 // Write the bit-width as a one-byte entry.
                 serializer.write<uint8_t>(pageState->bitWidth);
@@ -147,7 +147,7 @@ void StringColumnWriter::writeVector(common::Serializer& serializer,
             if (vector->isNull(pos)) {
                 continue;
             }
-            auto& str = vector->getValue<ku_string_t>(pos);
+            auto& str = vector->getValue<string_t>(pos);
             stats->update(str);
             serializer.write<uint32_t>(str.len);
             serializer.write(str.getData(), str.len);
@@ -177,9 +177,9 @@ void StringColumnWriter::flushDictionary(BasicColumnWriterState& writerState,
         return;
     }
     // First we need to sort the values in index order.
-    auto values = std::vector<ku_string_t>(state.dictionary.size());
+    auto values = std::vector<string_t>(state.dictionary.size());
     for (const auto& entry : state.dictionary) {
-        KU_ASSERT(values[entry.second].len == 0);
+        LBUG_ASSERT(values[entry.second].len == 0);
         values[entry.second] = entry.first;
     }
     // First write the contents of the dictionary page to a temporary buffer.
@@ -202,7 +202,7 @@ uint64_t StringColumnWriter::getRowSize(ValueVector* vector, uint64_t index,
     if (state.isDictionaryEncoded()) {
         return (state.keyBitWidth + 7) / 8;
     } else {
-        return vector->getValue<ku_string_t>(getVectorPos(vector, index)).len;
+        return vector->getValue<string_t>(getVectorPos(vector, index)).len;
     }
 }
 

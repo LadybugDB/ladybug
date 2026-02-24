@@ -191,7 +191,7 @@ void HTTPFileSystem::readFromFile(common::FileInfo& fileInfo, void* buffer, uint
     while (numBytesToRead > 0) {
         auto buffer_read_len = std::min<uint64_t>(httpFileInfo.availableBuffer, numBytesToRead);
         if (buffer_read_len > 0) {
-            KU_ASSERT(httpFileInfo.bufferStartPos + httpFileInfo.bufferIdx + buffer_read_len <=
+            LBUG_ASSERT(httpFileInfo.bufferStartPos + httpFileInfo.bufferIdx + buffer_read_len <=
                       httpFileInfo.bufferEndPos);
             memcpy((char*)buffer + bufferOffset,
                 httpFileInfo.readBuffer.get() + httpFileInfo.bufferIdx, buffer_read_len);
@@ -371,7 +371,7 @@ std::unique_ptr<HTTPResponse> HTTPFileSystem::runRequestWithRetry(
 
 std::unique_ptr<HTTPResponse> HTTPFileSystem::headRequest(FileInfo* fileInfo,
     const std::string& url, HeaderMap headerMap) const {
-    auto httpFileInfo = ku_dynamic_cast<HTTPFileInfo*>(fileInfo);
+    auto httpFileInfo = dynamic_cast_checked<HTTPFileInfo*>(fileInfo);
     auto parsedURL = parseUrl(url);
     auto host = parsedURL.first;
     auto hostPath = parsedURL.second;
@@ -388,7 +388,7 @@ std::unique_ptr<HTTPResponse> HTTPFileSystem::headRequest(FileInfo* fileInfo,
 std::unique_ptr<HTTPResponse> HTTPFileSystem::getRangeRequest(FileInfo* fileInfo,
     const std::string& url, HeaderMap headerMap, uint64_t fileOffset, char* buffer,
     uint64_t bufferLen) const {
-    auto httpFileInfo = ku_dynamic_cast<HTTPFileInfo*>(fileInfo);
+    auto httpFileInfo = dynamic_cast_checked<HTTPFileInfo*>(fileInfo);
     auto parsedURL = parseUrl(url);
     auto host = parsedURL.first;
     auto hostPath = parsedURL.second;
@@ -452,7 +452,7 @@ std::unique_ptr<HTTPResponse> HTTPFileSystem::postRequest(common::FileInfo* file
     const std::string& url, HeaderMap headerMap, std::unique_ptr<uint8_t[]>& outputBuffer,
     uint64_t& outputBufferLen, const uint8_t* inputBuffer, uint64_t inputBufferLen,
     std::string /*params*/) const {
-    auto httpFileInfo = ku_dynamic_cast<HTTPFileInfo*>(fileInfo);
+    auto httpFileInfo = dynamic_cast_checked<HTTPFileInfo*>(fileInfo);
     auto hostPath = parseUrl(url).second;
     auto headers = getHTTPHeaders(headerMap);
     uint64_t outputBufferPos = 0;
@@ -487,7 +487,7 @@ std::unique_ptr<HTTPResponse> HTTPFileSystem::postRequest(common::FileInfo* file
 std::unique_ptr<HTTPResponse> HTTPFileSystem::putRequest(common::FileInfo* fileInfo,
     const std::string& url, HeaderMap headerMap, const uint8_t* inputBuffer,
     uint64_t inputBufferLen, std::string /*params*/) const {
-    auto httpFileInfo = ku_dynamic_cast<HTTPFileInfo*>(fileInfo);
+    auto httpFileInfo = dynamic_cast_checked<HTTPFileInfo*>(fileInfo);
     auto hostPath = parseUrl(url).second;
     auto headers = getHTTPHeaders(headerMap);
     std::function<httplib::Result(void)> request([&]() {

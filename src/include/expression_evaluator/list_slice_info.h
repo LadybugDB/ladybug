@@ -87,7 +87,7 @@ public:
     bool done() const;
 
     common::sel_t getSliceSize() const {
-        KU_ASSERT(sliceDataState->getSelSize() == sliceListEntryState->getSelSize());
+        LBUG_ASSERT(sliceDataState->getSelSize() == sliceListEntryState->getSelSize());
         return sliceDataState->getSelSize();
     }
 

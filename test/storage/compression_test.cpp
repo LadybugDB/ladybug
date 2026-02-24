@@ -19,9 +19,9 @@ using namespace lbug::storage;
  */
 
 TEST(CompressionTests, TestStorageValueEquality) {
-    KU_ASSERT(StorageValue{-1} == StorageValue{-2 + 1});
-    KU_ASSERT(StorageValue{5} == StorageValue{5U});
-    KU_ASSERT(
+    LBUG_ASSERT(StorageValue{-1} == StorageValue{-2 + 1});
+    LBUG_ASSERT(StorageValue{5} == StorageValue{5U});
+    LBUG_ASSERT(
         StorageValue{1} == StorageValue{StorageValue{(int128_t{1} << 100)}.get<int128_t>() >> 100});
 }
 

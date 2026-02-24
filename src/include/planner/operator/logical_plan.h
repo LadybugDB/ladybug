@@ -22,13 +22,13 @@ public:
 
     std::shared_ptr<LogicalOperator> getLastOperator() const { return lastOperator; }
     LogicalOperator& getLastOperatorRef() const {
-        KU_ASSERT(lastOperator);
+        LBUG_ASSERT(lastOperator);
         return *lastOperator;
     }
     Schema* getSchema() const { return lastOperator->getSchema(); }
 
     cardinality_t getCardinality() const {
-        KU_ASSERT(lastOperator);
+        LBUG_ASSERT(lastOperator);
         return lastOperator->getCardinality();
     }
 

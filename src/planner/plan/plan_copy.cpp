@@ -55,7 +55,7 @@ LogicalPlan Planner::planCopyFrom(const BoundStatement& statement) {
         return planCopyRelFrom(copyFromInfo);
     }
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 
@@ -78,7 +78,7 @@ LogicalPlan Planner::planCopyNodeFrom(const BoundCopyFromInfo* info) {
         }
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     appendCopyFrom(*info, plan);
     return plan;
@@ -105,7 +105,7 @@ LogicalPlan Planner::planCopyRelFrom(const BoundCopyFromInfo* info) {
             nullptr /* mark */, plan);
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     auto& extraInfo = info->extraInfo->constCast<ExtraBoundCopyRelInfo>();
     // If the table entry doesn't exist, assume both directions
@@ -130,7 +130,7 @@ LogicalPlan Planner::planCopyTo(const BoundStatement& statement) {
     for (auto& column : regularQuery->getStatementResult()->getColumns()) {
         columnNames.push_back(column->toString());
     }
-    KU_ASSERT(regularQuery->getStatementType() == StatementType::QUERY);
+    LBUG_ASSERT(regularQuery->getStatementType() == StatementType::QUERY);
     auto plan = planStatement(*regularQuery);
     auto copyTo = make_shared<LogicalCopyTo>(boundCopyTo.getBindData()->copy(),
         boundCopyTo.getExportFunc(), plan.getLastOperator());

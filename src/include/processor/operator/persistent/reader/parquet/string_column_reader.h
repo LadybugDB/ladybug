@@ -7,15 +7,15 @@ namespace lbug {
 namespace processor {
 
 struct StringParquetValueConversion {
-    static common::ku_string_t dictRead(ByteBuffer& dict, uint32_t& offset, ColumnReader& reader);
+    static common::string_t dictRead(ByteBuffer& dict, uint32_t& offset, ColumnReader& reader);
 
-    static common::ku_string_t plainRead(ByteBuffer& plainData, ColumnReader& reader);
+    static common::string_t plainRead(ByteBuffer& plainData, ColumnReader& reader);
 
     static void plainSkip(ByteBuffer& plainData, ColumnReader& reader);
 };
 
 class StringColumnReader
-    : public TemplatedColumnReader<common::ku_string_t, StringParquetValueConversion> {
+    : public TemplatedColumnReader<common::string_t, StringParquetValueConversion> {
 public:
     static constexpr const common::PhysicalTypeID TYPE = common::PhysicalTypeID::STRING;
 
@@ -24,7 +24,7 @@ public:
         const lbug_parquet::format::SchemaElement& schema, uint64_t schemaIdx, uint64_t maxDefine,
         uint64_t maxRepeat);
 
-    std::unique_ptr<common::ku_string_t[]> dictStrs;
+    std::unique_ptr<common::string_t[]> dictStrs;
     uint64_t fixedWidthStringLength;
 
 public:

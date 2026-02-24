@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/vector/value_vector.h"
 #include "utf8proc.h"
 
@@ -11,8 +11,8 @@ namespace function {
 
 struct SubStr {
 public:
-    static inline void operation(common::ku_string_t& src, int64_t start, int64_t len,
-        common::ku_string_t& result, common::ValueVector& resultValueVector) {
+    static inline void operation(common::string_t& src, int64_t start, int64_t len,
+        common::string_t& result, common::ValueVector& resultValueVector) {
         std::string srcStr = src.getAsString();
         bool isAscii = true;
         int64_t startPos = start - 1;
@@ -53,8 +53,8 @@ public:
         }
     }
 
-    static inline void copySubstr(common::ku_string_t& src, int64_t start, int64_t len,
-        common::ku_string_t& result, common::ValueVector& resultValueVector, bool isAscii) {
+    static inline void copySubstr(common::string_t& src, int64_t start, int64_t len,
+        common::string_t& result, common::ValueVector& resultValueVector, bool isAscii) {
         auto length = std::min(len, src.len - start + 1);
         if (isAscii) {
             // For normal ASCII char case, we get to the proper byte position to copy from by doing

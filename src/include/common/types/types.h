@@ -134,7 +134,7 @@ struct union_entry_t {
 
 struct int128_t;
 struct uint128_t;
-struct ku_string_t;
+struct string_t;
 
 template<typename T>
 concept SignedIntegerTypes =
@@ -156,7 +156,7 @@ template<typename T>
 concept NumericTypes = IntegerTypes<T> || std::floating_point<T>;
 
 template<typename T>
-concept ComparableTypes = NumericTypes<T> || std::is_same_v<T, ku_string_t> ||
+concept ComparableTypes = NumericTypes<T> || std::is_same_v<T, string_t> ||
                           std::is_same_v<T, interval_t> || std::is_same_v<T, bool>;
 
 template<typename T>
@@ -166,14 +166,14 @@ concept HashablePrimitive =
 template<typename T>
 concept IndexHashable = ((std::integral<T> && !std::is_same_v<T, bool>) || std::floating_point<T> ||
                          std::is_same_v<T, int128_t> || std::is_same_v<T, uint128_t> ||
-                         std::is_same_v<T, ku_string_t> || std::is_same_v<T, std::string_view> ||
+                         std::is_same_v<T, string_t> || std::is_same_v<T, std::string_view> ||
                          std::same_as<T, std::string>);
 
 template<typename T>
 concept HashableNonNestedTypes =
     (std::integral<T> || std::floating_point<T> || std::is_same_v<T, int128_t> ||
         std::is_same_v<T, uint128_t> || std::is_same_v<T, internalID_t> ||
-        std::is_same_v<T, interval_t> || std::is_same_v<T, ku_string_t>);
+        std::is_same_v<T, interval_t> || std::is_same_v<T, string_t>);
 
 template<typename T>
 concept HashableNestedTypes =
@@ -279,7 +279,7 @@ public:
 
     template<class TARGET>
     const TARGET* constPtrCast() const {
-        return common::ku_dynamic_cast<const TARGET*>(this);
+        return common::dynamic_cast_checked<const TARGET*>(this);
     }
 
 protected:

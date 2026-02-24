@@ -7,7 +7,7 @@ using namespace lbug::common;
 
 struct Levenshtein {
 public:
-    static void operation(common::ku_string_t& left, common::ku_string_t& right, int64_t& result) {
+    static void operation(string_t& left, string_t& right, int64_t& result) {
         // If one string is empty, the distance equals the length of the other string.
         if (left.len == 0 || right.len == 0) {
             result = left.len + right.len;
@@ -55,7 +55,7 @@ function_set LevenshteinFunction::getFunctionSet() {
     functionSet.emplace_back(make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::STRING},
         LogicalTypeID::INT64,
-        ScalarFunction::BinaryExecFunction<ku_string_t, ku_string_t, int64_t, Levenshtein>));
+        ScalarFunction::BinaryExecFunction<string_t, string_t, int64_t, Levenshtein>));
     return functionSet;
 }
 

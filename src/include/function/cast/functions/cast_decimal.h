@@ -95,7 +95,7 @@ struct CastBetweenDecimal {
 
 // DECIMAL TO STRING SPECIALIZATION
 template<>
-inline void CastDecimalTo::operation(int16_t& input, ku_string_t& output,
+inline void CastDecimalTo::operation(int16_t& input, string_t& output,
     const ValueVector& inputVec, ValueVector& resultVector) {
     auto scale = DecimalType::getScale(inputVec.dataType);
     auto str = DecimalType::insertDecimalPoint(std::to_string(input), scale);
@@ -103,7 +103,7 @@ inline void CastDecimalTo::operation(int16_t& input, ku_string_t& output,
 }
 
 template<>
-inline void CastDecimalTo::operation(int32_t& input, ku_string_t& output,
+inline void CastDecimalTo::operation(int32_t& input, string_t& output,
     const ValueVector& inputVec, ValueVector& resultVector) {
     auto scale = DecimalType::getScale(inputVec.dataType);
     auto str = DecimalType::insertDecimalPoint(std::to_string(input), scale);
@@ -111,7 +111,7 @@ inline void CastDecimalTo::operation(int32_t& input, ku_string_t& output,
 }
 
 template<>
-inline void CastDecimalTo::operation(int64_t& input, ku_string_t& output,
+inline void CastDecimalTo::operation(int64_t& input, string_t& output,
     const ValueVector& inputVec, ValueVector& resultVector) {
     auto scale = DecimalType::getScale(inputVec.dataType);
     auto str = DecimalType::insertDecimalPoint(std::to_string(input), scale);
@@ -119,7 +119,7 @@ inline void CastDecimalTo::operation(int64_t& input, ku_string_t& output,
 }
 
 template<>
-inline void CastDecimalTo::operation(common::int128_t& input, ku_string_t& output,
+inline void CastDecimalTo::operation(common::int128_t& input, string_t& output,
     const ValueVector& inputVec, ValueVector& resultVector) {
     auto scale = DecimalType::getScale(inputVec.dataType);
     auto str = DecimalType::insertDecimalPoint(common::Int128_t::toString(input), scale);
@@ -128,25 +128,25 @@ inline void CastDecimalTo::operation(common::int128_t& input, ku_string_t& outpu
 
 // STRING TO DECIMAL SPECIALIZATION
 template<>
-inline void CastToDecimal::operation(ku_string_t& input, int16_t& output, const ValueVector&,
+inline void CastToDecimal::operation(string_t& input, int16_t& output, const ValueVector&,
     const ValueVector& outputVec) {
     decimalCast((const char*)input.getData(), input.len, output, outputVec.dataType);
 }
 
 template<>
-inline void CastToDecimal::operation(ku_string_t& input, int32_t& output, const ValueVector&,
+inline void CastToDecimal::operation(string_t& input, int32_t& output, const ValueVector&,
     const ValueVector& outputVec) {
     decimalCast((const char*)input.getData(), input.len, output, outputVec.dataType);
 }
 
 template<>
-inline void CastToDecimal::operation(ku_string_t& input, int64_t& output, const ValueVector&,
+inline void CastToDecimal::operation(string_t& input, int64_t& output, const ValueVector&,
     const ValueVector& outputVec) {
     decimalCast((const char*)input.getData(), input.len, output, outputVec.dataType);
 }
 
 template<>
-inline void CastToDecimal::operation(ku_string_t& input, common::int128_t& output,
+inline void CastToDecimal::operation(string_t& input, common::int128_t& output,
     const ValueVector&, const ValueVector& outputVec) {
     decimalCast((const char*)input.getData(), input.len, output, outputVec.dataType);
 }

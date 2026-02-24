@@ -92,7 +92,7 @@ static std::unordered_set<std::string> getLabelsInNeo4j(httplib::Client& cli,
         query = "CALL db.relationshipTypes();";
     } break;
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     auto jsonStr = executeNeo4jQuery(cli, query);
     auto doc = yyjson_read(jsonStr.c_str(), jsonStr.size(), 0);
@@ -230,13 +230,13 @@ LogicalType convertFromNeo4jTypeStr(const std::string& neo4jTypeStr) {
 
 static LogicalType inferLbugType(yyjson_val* typesArr) {
     auto firstTypeStr = yyjson_get_str(yyjson_arr_get(typesArr, 0));
-    auto kuType = convertFromNeo4jTypeStr(firstTypeStr);
+    auto lbugType = convertFromNeo4jTypeStr(firstTypeStr);
     auto size = yyjson_arr_size(typesArr);
     for (auto i = 1u; i < size; i++) {
         auto typeStr = yyjson_get_str(yyjson_arr_get(typesArr, i));
-        kuType = LogicalTypeUtils::combineTypes(convertFromNeo4jTypeStr(typeStr), kuType);
+        lbugType = LogicalTypeUtils::combineTypes(convertFromNeo4jTypeStr(typeStr), lbugType);
     }
-    return kuType;
+    return lbugType;
 }
 
 std::pair<std::string, std::string> getCreateNodeTableQuery(httplib::Client& cli,
@@ -261,15 +261,15 @@ std::pair<std::string, std::string> getCreateNodeTableQuery(httplib::Client& cli
         }
         auto property = yyjson_get_str(propertyVal);
         auto typesArr = yyjson_arr_get(rowArr, 1);
-        auto kuType = inferLbugType(typesArr);
+        auto lbugType = inferLbugType(typesArr);
 
         char* typesJsonStr = yyjson_val_write(typesArr, 0, nullptr);
-        auto newNode = std::format("['{}','{}','{}','{}']", nodeName, property, kuType.toString(),
+        auto newNode = std::format("['{}','{}','{}','{}']", nodeName, property, lbugType.toString(),
             typesJsonStr);
         free(typesJsonStr);
         outputTables.emplace_back(std::move(newNode));
 
-        propertyDefinitions.emplace_back(property, kuType.copy());
+        propertyDefinitions.emplace_back(property, lbugType.copy());
     }
     yyjson_doc_free(doc);
     std::sort(propertyDefinitions.begin(), propertyDefinitions.end(),
@@ -341,12 +341,12 @@ std::string getCreateRelTableQuery(httplib::Client& cli, const std::string& relN
         auto rowArr = yyjson_obj_get(dataItem, "row");
         auto property = yyjson_get_str(yyjson_arr_get(rowArr, 0));
         auto typesArr = yyjson_arr_get(rowArr, 1);
-        auto kuType = inferLbugType(typesArr);
-        propertyTypes.emplace(property, kuType.toString());
+        auto lbugType = inferLbugType(typesArr);
+        propertyTypes.emplace(property, lbugType.toString());
         char* typesJsonStr = yyjson_val_write(typesArr, 0, nullptr);
         originalTypes.emplace(property, typesJsonStr);
         free(typesJsonStr);
-        propertyDefinitions.emplace_back(property, kuType.copy());
+        propertyDefinitions.emplace_back(property, lbugType.copy());
     }
     yyjson_doc_free(doc);
     std::sort(propertyDefinitions.begin(), propertyDefinitions.end(),

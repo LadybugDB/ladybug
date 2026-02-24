@@ -26,7 +26,7 @@ std::vector<EmbeddingHandle> InMemHNSWLayerInfo::getEmbeddings(
     offsets.reserve(offsetsInGraph.size());
     for (size_t i = 0; i < offsetsInGraph.size(); ++i) {
         auto& offsetInGraph = offsetsInGraph[i];
-        KU_ASSERT(offsetInGraph < numNodes);
+        LBUG_ASSERT(offsetInGraph < numNodes);
         offsets.push_back(offsetMap.graphToNodeOffset(offsetInGraph));
     }
     return embeddings->getEmbeddings(offsets, scanState);
@@ -76,13 +76,13 @@ common::offset_t InMemHNSWLayer::searchNN(const EmbeddingHandle& queryVector,
     auto minDist =
         info.metricFunc(queryVector.getPtr(), currNodeVector.getPtr(), info.getDimension());
 
-    KU_ASSERT(lastMinDist >= 0);
-    KU_ASSERT(minDist >= 0);
+    LBUG_ASSERT(lastMinDist >= 0);
+    LBUG_ASSERT(minDist >= 0);
     while (minDist < lastMinDist) {
         lastMinDist = minDist;
         auto nbrOffsets = getNodeOffsets(graph->getNeighbors(currentNodeOffset));
         auto nbrVectors = info.getEmbeddings(nbrOffsets, scanState);
-        KU_ASSERT(nbrOffsets.size() == nbrVectors.size());
+        LBUG_ASSERT(nbrOffsets.size() == nbrVectors.size());
         for (common::offset_t i = 0; i < nbrOffsets.size(); ++i) {
             const auto nbrOffset = nbrOffsets[i];
             const auto* nbrVector = nbrVectors[i].getPtr();
@@ -100,7 +100,7 @@ common::offset_t InMemHNSWLayer::searchNN(const EmbeddingHandle& queryVector,
 void InMemHNSWLayer::insertRel(common::offset_t srcNode, common::offset_t dstNode,
     GetEmbeddingsScanState& scanState) {
     const auto currentLen = graph->incrementCSRLength(srcNode);
-    KU_ASSERT(srcNode < info.numNodes);
+    LBUG_ASSERT(srcNode < info.numNodes);
     graph->setDstNode(srcNode * info.degreeThresholdToShrink + currentLen, dstNode);
     if (currentLen == info.degreeThresholdToShrink - 1) {
         shrinkForNode(info, graph.get(), srcNode, currentLen, scanState);
@@ -215,8 +215,8 @@ void InMemHNSWLayer::shrinkForNode(const InMemHNSWLayerInfo& info, InMemHNSWGrap
     for (auto i = 1u; i < nbrs.size(); i++) {
         bool keepNbr = true;
         for (auto j = i + 1; j < nbrs.size(); j++) {
-            KU_ASSERT(checkEmbeddingValidity(nbrs, i, info, scanState));
-            KU_ASSERT(checkEmbeddingValidity(nbrs, j, info, scanState));
+            LBUG_ASSERT(checkEmbeddingValidity(nbrs, i, info, scanState));
+            LBUG_ASSERT(checkEmbeddingValidity(nbrs, j, info, scanState));
             const auto dist = info.metricFunc(nbrs[i].embedding.getPtr(),
                 nbrs[j].embedding.getPtr(), info.getDimension());
             if (info.alpha * dist < nbrs[i].getDist()) {
@@ -244,7 +244,7 @@ void InMemHNSWLayer::finalizeNodeGroup(common::node_group_idx_t nodeGroupIdx,
     const auto startNodeInGraph = selectedNodesMap.nodeToGraphOffset(startNodeOffset, false);
     const auto endNodeInGraph = selectedNodesMap.nodeToGraphOffset(endNodeOffset, false);
     for (auto offsetInGraph = startNodeInGraph; offsetInGraph < endNodeInGraph; offsetInGraph++) {
-        KU_ASSERT(offsetInGraph < selectedNodesMap.getNumNodesInGraph() &&
+        LBUG_ASSERT(offsetInGraph < selectedNodesMap.getNumNodesInGraph() &&
                   selectedNodesMap.graphToNodeOffset(offsetInGraph) >= startNodeInGraph &&
                   selectedNodesMap.graphToNodeOffset(offsetInGraph) < endNodeOffset);
         const auto numNbrs = graph->getCSRLength(offsetInGraph);
@@ -289,7 +289,7 @@ int64_t HNSWIndex::getMaximumSupportedMl() {
 
 static common::ArrayTypeInfo getArrayTypeInfo(NodeTable& table, common::column_id_t columnID) {
     const auto& columnType = table.getColumn(columnID).getDataType();
-    KU_ASSERT(columnType.getLogicalTypeID() == common::LogicalTypeID::ARRAY);
+    LBUG_ASSERT(columnType.getLogicalTypeID() == common::LogicalTypeID::ARRAY);
     const auto typeInfo = columnType.getExtraTypeInfo()->constPtrCast<common::ArrayTypeInfo>();
     return common::ArrayTypeInfo{typeInfo->getChildType().copy(), typeInfo->getNumElements()};
 }
@@ -459,8 +459,8 @@ OnDiskHNSWIndex::OnDiskHNSWIndex(const main::ClientContext* context, IndexInfo i
               indexInfo.columnIDs[0])},
       mm{MemoryManager::Get(*context)},
       nodeTable{StorageManager::Get(*context)->getTable(indexInfo.tableID)->cast<NodeTable>()} {
-    KU_ASSERT(this->indexInfo.columnIDs.size() == 1);
-    KU_ASSERT(nodeTable.getColumn(this->indexInfo.columnIDs[0]).getDataType().getLogicalTypeID() ==
+    LBUG_ASSERT(this->indexInfo.columnIDs.size() == 1);
+    LBUG_ASSERT(nodeTable.getColumn(this->indexInfo.columnIDs[0]).getDataType().getLogicalTypeID() ==
               common::LogicalTypeID::ARRAY);
     const auto storageManager = StorageManager::Get(*context);
     const auto& hnswStorageInfo = this->storageInfo->cast<HNSWStorageInfo>();
@@ -561,15 +561,15 @@ public:
         : valueVector{valueVector} {}
 
     void* getEmbeddingPtr(const EmbeddingHandle& handle) override {
-        KU_ASSERT(!handle.isNull());
+        LBUG_ASSERT(!handle.isNull());
         void* val = nullptr;
         const auto dataVector = common::ListVector::getDataVector(valueVector);
         common::TypeUtils::visit(
             dataVector->dataType,
             [&]<VectorElementType T>(
                 T) { val = reinterpret_cast<T*>(dataVector->getData()) + handle.offsetInData; },
-            [&](auto) { KU_UNREACHABLE; });
-        KU_ASSERT(val != nullptr);
+            [&](auto) { LBUG_UNREACHABLE; });
+        LBUG_ASSERT(val != nullptr);
         return val;
     }
     void addEmbedding(const EmbeddingHandle&) override {
@@ -586,8 +586,8 @@ private:
 void OnDiskHNSWIndex::commitInsert(Transaction* transaction,
     const common::ValueVector& nodeIDVector, const std::vector<common::ValueVector*>& dataVectors,
     InsertState& insertState) {
-    KU_ASSERT(dataVectors.size() == 1);
-    KU_ASSERT(nodeIDVector.state->getSelSize() == dataVectors[0]->state->getSelSize());
+    LBUG_ASSERT(dataVectors.size() == 1);
+    LBUG_ASSERT(nodeIDVector.state->getSelSize() == dataVectors[0]->state->getSelSize());
     auto& hnswInsertState = insertState.cast<HNSWInsertState>();
     auto commitInsertScanState = std::make_unique<CommitInsertEmbeddingScanState>(dataVectors[0]);
     for (size_t i = 0; i < nodeIDVector.state->getSelSize(); ++i) {
@@ -763,7 +763,7 @@ std::vector<NodeWithDistance> OnDiskHNSWIndex::searchKNNInLayer(Transaction* tra
             blindTwoHopFilteredSearch(queryVector, neighborItr, searchState, candidates, results);
         } break;
         default: {
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
         }
     }
@@ -981,7 +981,7 @@ void OnDiskHNSWIndex::shrinkForNode(Transaction* transaction, common::offset_t o
     const auto& embeddings = *insertState.searchState.embeddings;
     auto& embeddingScanState = insertState.searchState.embeddingScanState;
     const auto vector = embeddings.getEmbedding(offset, embeddingScanState);
-    KU_ASSERT(!vector.isNull());
+    LBUG_ASSERT(!vector.isNull());
     const auto& searchState = insertState.searchState;
     const auto& graph = isUpperLayer ? searchState.upperGraph : searchState.lowerGraph;
     const auto relTableID = isUpperLayer ? storageInfo->cast<HNSWStorageInfo>().upperRelTableID :
@@ -1029,8 +1029,8 @@ void OnDiskHNSWIndex::shrinkForNode(Transaction* transaction, common::offset_t o
     for (auto i = 1u; i < nbrs.size(); i++) {
         bool keepNbr = true;
         for (auto j = i + 1; j < nbrs.size(); j++) {
-            KU_ASSERT(checkEmbeddingValidity(nbrs, i, embeddings, embeddingScanState));
-            KU_ASSERT(checkEmbeddingValidity(nbrs, j, embeddings, embeddingScanState));
+            LBUG_ASSERT(checkEmbeddingValidity(nbrs, i, embeddings, embeddingScanState));
+            LBUG_ASSERT(checkEmbeddingValidity(nbrs, j, embeddings, embeddingScanState));
             const auto dist = metricFunc(nbrs[i].embedding.getPtr(), nbrs[j].embedding.getPtr(),
                 embeddings.getDimension());
             if (config.alpha * dist < nbrs[i].getDist()) {

@@ -183,20 +183,20 @@ void HashAggregateSharedState::scan(std::span<uint8_t*> entries,
     auto [table, tableStartOffset] = getPartitionForOffset(startOffset);
     // Due to the way FactorizedTable::lookup works, it's necessary to read one partition
     // at a time.
-    KU_ASSERT(startOffset - tableStartOffset + numTuplesToScan <= table->getNumTuples());
+    LBUG_ASSERT(startOffset - tableStartOffset + numTuplesToScan <= table->getNumTuples());
     for (size_t pos = 0; pos < numTuplesToScan; pos++) {
         auto posInTable = startOffset + pos - tableStartOffset;
         entries[pos] = table->getTuple(posInTable);
     }
     table->lookup(keyVectors, columnIndices, entries.data(), 0, numTuplesToScan);
-    KU_ASSERT(true);
+    LBUG_ASSERT(true);
 }
 
 void HashAggregateSharedState::assertFinalized() const {
     RUNTIME_CHECK(for (const auto& partition
                        : globalPartitions) {
-        KU_ASSERT(partition.finalized);
-        KU_ASSERT(partition.queue->empty());
+        LBUG_ASSERT(partition.finalized);
+        LBUG_ASSERT(partition.queue->empty());
     });
 }
 
@@ -244,7 +244,7 @@ void HashAggregate::initLocalStateInternal(ResultSet* resultSet, ExecutionContex
     for (auto& info : aggInfos) {
         distinctAggKeyTypes.push_back(info.distinctAggKeyType.copy());
     }
-    localState.init(common::ku_dynamic_cast<HashAggregateSharedState*>(sharedState.get()),
+    localState.init(common::dynamic_cast_checked<HashAggregateSharedState*>(sharedState.get()),
         *resultSet, context->clientContext, aggregateFunctions, std::move(distinctAggKeyTypes));
 }
 

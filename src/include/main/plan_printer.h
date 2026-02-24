@@ -67,7 +67,7 @@ private:
     static std::string genHorizLine(uint32_t len);
 
     inline void validateRowIdxAndColIdx(uint32_t rowIdx, uint32_t colIdx) const {
-        KU_ASSERT(rowIdx < opProfileBoxes.size() && colIdx < opProfileBoxes[rowIdx].size());
+        LBUG_ASSERT(rowIdx < opProfileBoxes.size() && colIdx < opProfileBoxes[rowIdx].size());
         (void)rowIdx;
         (void)colIdx;
     }

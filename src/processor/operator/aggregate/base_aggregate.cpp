@@ -54,7 +54,7 @@ BaseAggregateSharedState::HashTableQueue::~HashTableQueue() {
 void BaseAggregateSharedState::HashTableQueue::appendTuple(std::span<uint8_t> tuple) {
     while (true) {
         auto* block = headBlock.load();
-        KU_ASSERT(tuple.size() == block->table.getTableSchema()->getNumBytesPerTuple());
+        LBUG_ASSERT(tuple.size() == block->table.getTableSchema()->getNumBytesPerTuple());
         auto posToWrite = block->numTuplesReserved++;
         if (posToWrite < numTuplesPerBlock) {
             memcpy(block->table.getTuple(posToWrite), tuple.data(), tuple.size());
@@ -81,9 +81,9 @@ void BaseAggregateSharedState::HashTableQueue::appendTuple(std::span<uint8_t> tu
 void BaseAggregateSharedState::HashTableQueue::mergeInto(AggregateHashTable& hashTable) {
     TupleBlock* partitionToMerge = nullptr;
     auto headBlock = this->headBlock.load();
-    KU_ASSERT(headBlock != nullptr);
+    LBUG_ASSERT(headBlock != nullptr);
     while (queuedTuples.pop(partitionToMerge)) {
-        KU_ASSERT(
+        LBUG_ASSERT(
             partitionToMerge->numTuplesWritten == partitionToMerge->table.getNumTuplesPerBlock());
         hashTable.merge(std::move(partitionToMerge->table));
         delete partitionToMerge;

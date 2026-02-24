@@ -14,7 +14,7 @@ namespace lbug {
 namespace binder {
 
 std::unique_ptr<BoundStatement> Binder::bindCreateMacro(const Statement& statement) const {
-    auto& createMacro = ku_dynamic_cast<const CreateMacro&>(statement);
+    auto& createMacro = dynamic_cast_checked<const CreateMacro&>(statement);
     auto macroName = createMacro.getMacroName();
     StringUtils::toUpper(macroName);
     if (catalog::Catalog::Get(*clientContext)

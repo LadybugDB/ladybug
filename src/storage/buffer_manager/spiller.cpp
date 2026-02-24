@@ -67,7 +67,7 @@ Spiller::~Spiller() {
 
 SpillResult Spiller::spillToDisk(ColumnChunkData& chunk) const {
     auto& buffer = *chunk.buffer;
-    KU_ASSERT(!buffer.evicted);
+    LBUG_ASSERT(!buffer.evicted);
     auto dataFH = getOrCreateDataFH();
     auto pageSize = dataFH->getPageSize();
     auto numPages = (buffer.buffer.size_bytes() + pageSize - 1) / pageSize;
@@ -81,7 +81,7 @@ void Spiller::loadFromDisk(ColumnChunkData& chunk) const {
     if (buffer.evicted) {
         buffer.prepareLoadFromDisk();
         auto dataFH = getDataFH();
-        KU_ASSERT(dataFH);
+        LBUG_ASSERT(dataFH);
         dataFH->getFileInfo()->readFromFile(buffer.buffer.data(), buffer.buffer.size(),
             buffer.filePosition);
     }

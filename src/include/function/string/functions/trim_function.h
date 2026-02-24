@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "ltrim_function.h"
 #include "rtrim_function.h"
 
@@ -9,7 +9,7 @@ namespace function {
 
 struct Trim : BaseStrOperation {
 public:
-    static inline void operation(common::ku_string_t& input, common::ku_string_t& result,
+    static inline void operation(common::string_t& input, common::string_t& result,
         common::ValueVector& resultValueVector) {
         BaseStrOperation::operation(input, result, resultValueVector, trim);
     }

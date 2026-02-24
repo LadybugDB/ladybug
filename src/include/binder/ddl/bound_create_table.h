@@ -19,7 +19,7 @@ public:
     void setCopyInfo(BoundCopyFromInfo copyInfo_) { copyInfo = std::move(copyInfo_); }
     bool hasCopyInfo() const { return copyInfo.has_value(); }
     const BoundCopyFromInfo& getCopyInfo() const {
-        KU_ASSERT(copyInfo.has_value());
+        LBUG_ASSERT(copyInfo.has_value());
         return copyInfo.value();
     }
 

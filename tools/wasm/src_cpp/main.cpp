@@ -46,7 +46,7 @@ Value valueFromEmscriptenValue(const val& value) {
     if (type == "bigint") {
         auto str = value.call<val>("toString").as<std::string>();
         int128_t int128_val = 0;
-        lbug::function::CastString::operation(ku_string_t{str.c_str(), str.size()}, int128_val);
+        lbug::function::CastString::operation(string_t{str.c_str(), str.size()}, int128_val);
         return Value(int128_val);
     }
     if (type == "number") {

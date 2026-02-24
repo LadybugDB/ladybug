@@ -16,11 +16,11 @@ public:
         const ColumnChunkMetadata& metadata);
 
     ColumnChunkData* getChild(common::idx_t childIdx) {
-        KU_ASSERT(childIdx < childChunks.size());
+        LBUG_ASSERT(childIdx < childChunks.size());
         return childChunks[childIdx].get();
     }
     std::unique_ptr<ColumnChunkData> moveChild(common::idx_t childIdx) {
-        KU_ASSERT(childIdx < childChunks.size());
+        LBUG_ASSERT(childIdx < childChunks.size());
         return std::move(childChunks[childIdx]);
     }
 
@@ -30,7 +30,7 @@ public:
 
     void resetNumValuesFromMetadata() override;
     void syncNumValues() override {
-        KU_ASSERT(!childChunks.empty());
+        LBUG_ASSERT(!childChunks.empty());
         numValues = childChunks[0]->getNumValues();
         metadata.numValues = numValues;
     }
@@ -40,11 +40,11 @@ public:
 
     common::idx_t getNumChildren() const { return childChunks.size(); }
     const ColumnChunkData& getChild(common::idx_t childIdx) const {
-        KU_ASSERT(childIdx < childChunks.size());
+        LBUG_ASSERT(childIdx < childChunks.size());
         return *childChunks[childIdx];
     }
     void setChild(common::idx_t childIdx, std::unique_ptr<ColumnChunkData> childChunk) {
-        KU_ASSERT(childIdx < childChunks.size());
+        LBUG_ASSERT(childIdx < childChunks.size());
         childChunks[childIdx] = std::move(childChunk);
     }
 

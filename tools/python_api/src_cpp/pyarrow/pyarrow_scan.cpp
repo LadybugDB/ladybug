@@ -27,7 +27,7 @@ static bool moduleIsLoaded() {
 
 static std::unique_ptr<TableFuncBindData> bindFunc(ClientContext*,
     const TableFuncBindInput* input) {
-    auto scanInput = ku_dynamic_cast<ExtraScanTableFuncBindInput*>(input->extraInput.get());
+    auto scanInput = dynamic_cast_checked<ExtraScanTableFuncBindInput*>(input->extraInput.get());
     // TODO: This binding step could use some drastic improvements.
     // Particularly when scanning from pandas or polars.
     // Possibly look into using the pycapsule interface.
@@ -43,7 +43,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(ClientContext*,
     std::vector<LogicalType> returnTypes;
     std::vector<std::string> names;
     if (py::isinstance<py::dict>(table)) {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     auto numRows = py::len(table);
     auto schema = Pyarrow::bind(table, returnTypes, names);
@@ -112,7 +112,7 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) 
 }
 
 static double progressFunc(TableFuncSharedState* sharedState) {
-    PyArrowTableScanSharedState* state = ku_dynamic_cast<PyArrowTableScanSharedState*>(sharedState);
+    PyArrowTableScanSharedState* state = dynamic_cast_checked<PyArrowTableScanSharedState*>(sharedState);
     if (state->chunks.size() == 0) {
         return 0.0;
     }

@@ -15,11 +15,11 @@ struct ExtraAlterInfo {
 
     template<class TARGET>
     const TARGET* constPtrCast() const {
-        return common::ku_dynamic_cast<const TARGET*>(this);
+        return common::dynamic_cast_checked<const TARGET*>(this);
     }
     template<class TARGET>
     TARGET* ptrCast() {
-        return common::ku_dynamic_cast<TARGET*>(this);
+        return common::dynamic_cast_checked<TARGET*>(this);
     }
 };
 

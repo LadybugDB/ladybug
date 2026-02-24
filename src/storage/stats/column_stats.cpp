@@ -19,7 +19,7 @@ void ColumnStats::update(const common::ValueVector* vector) {
         hashes->state = vector->state;
         function::VectorHashFunction::computeHash(*vector, vector->state->getSelVector(), *hashes,
             hashes->state->getSelVector());
-        KU_ASSERT(hashes->hasNoNullsGuarantee());
+        LBUG_ASSERT(hashes->hasNoNullsGuarantee());
         for (auto i = 0u; i < hashes->state->getSelVector().getSelSize(); i++) {
             hll->insertElement(hashes->getValue<common::hash_t>(i));
         }

@@ -1,14 +1,12 @@
 package com.ladybugdb;
 
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.io.TempDir;
-import org.junit.jupiter.api.AfterAll;
-
-import static org.junit.jupiter.api.Assertions.*;
-
+import java.io.IOException;
 import java.nio.file.Path;
 
-import java.io.IOException;
+import org.junit.jupiter.api.AfterAll;
+import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.io.TempDir;
 
 public class TestBase {
 
@@ -19,7 +17,7 @@ public class TestBase {
 
     @BeforeAll
     static void getDBandConn() throws IOException {
-        String dbPath = tempDir.resolve("db.kz").toString();
+        String dbPath = tempDir.resolve("db.lbug").toString();
         TestHelper.loadData(dbPath);
         db = TestHelper.getDatabase();
         conn = TestHelper.getConnection();

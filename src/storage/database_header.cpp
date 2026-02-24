@@ -87,7 +87,7 @@ DatabaseHeader DatabaseHeader::deserialize(common::Deserializer& deSer) {
     validateMagicBytes(deSer);
     validateStorageVersion(deSer);
     PageRange catalogPageRange{}, metaPageRange{};
-    common::ku_uuid_t databaseID{};
+    common::uuid databaseID{};
     std::string key;
     deSer.validateDebuggingInfo(key, "catalog");
     deSer.deserializeValue(catalogPageRange.startPageIdx);

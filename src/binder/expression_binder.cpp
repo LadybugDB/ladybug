@@ -146,7 +146,7 @@ std::string ExpressionBinder::getUniqueName(const std::string& name) const {
 }
 
 void ExpressionBinder::addParameter(const std::string& name, std::shared_ptr<Value> value) {
-    KU_ASSERT(!knownParameters.contains(name));
+    LBUG_ASSERT(!knownParameters.contains(name));
     knownParameters[name] = value;
 }
 

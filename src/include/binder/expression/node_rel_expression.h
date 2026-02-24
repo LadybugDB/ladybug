@@ -50,7 +50,7 @@ public:
     }
     std::shared_ptr<PropertyExpression> getPropertyExpression(
         const std::string& propertyName) const {
-        KU_ASSERT(propertyNameToIdx.contains(propertyName));
+        LBUG_ASSERT(propertyNameToIdx.contains(propertyName));
         return propertyExprs[propertyNameToIdx.at(propertyName)];
     }
     virtual std::shared_ptr<PropertyExpression> getInternalID() const = 0;
@@ -73,7 +73,7 @@ public:
         return propertyDataExprs.contains(propertyName);
     }
     std::shared_ptr<Expression> getPropertyDataExpr(const std::string& propertyName) const {
-        KU_ASSERT(propertyDataExprs.contains(propertyName));
+        LBUG_ASSERT(propertyDataExprs.contains(propertyName));
         return propertyDataExprs.at(propertyName);
     }
 

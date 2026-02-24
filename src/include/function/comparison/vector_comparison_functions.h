@@ -27,7 +27,7 @@ private:
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
         common::SelectionVector* resultSelVector, void* dataPtr = nullptr) {
-        KU_ASSERT(params.size() == 2);
+        LBUG_ASSERT(params.size() == 2);
         BinaryFunctionExecutor::executeSwitch<LEFT_TYPE, RIGHT_TYPE, RESULT_TYPE, FUNC,
             BinaryComparisonFunctionWrapper>(*params[0], paramSelVectors[0], *params[1],
             paramSelVectors[1], result, resultSelVector, dataPtr);
@@ -37,7 +37,7 @@ private:
     static bool BinaryComparisonSelectFunction(
         const std::vector<std::shared_ptr<common::ValueVector>>& params,
         common::SelectionVector& selVector, void* dataPtr = nullptr) {
-        KU_ASSERT(params.size() == 2);
+        LBUG_ASSERT(params.size() == 2);
         return BinaryFunctionExecutor::selectComparison<LEFT_TYPE, RIGHT_TYPE, FUNC>(*params[0],
             *params[1], selVector, dataPtr);
     }
@@ -121,7 +121,7 @@ private:
             func = BinaryComparisonExecFunction<uint8_t, uint8_t, uint8_t, FUNC>;
         } break;
         case common::PhysicalTypeID::STRING: {
-            func = BinaryComparisonExecFunction<common::ku_string_t, common::ku_string_t, uint8_t,
+            func = BinaryComparisonExecFunction<common::string_t, common::string_t, uint8_t,
                 FUNC>;
         } break;
         case common::PhysicalTypeID::INTERNAL_ID: {
@@ -154,7 +154,7 @@ private:
     template<typename FUNC>
     static void getSelectFunc(common::PhysicalTypeID leftTypeID, common::PhysicalTypeID rightTypeID,
         scalar_func_select_t& func) {
-        KU_ASSERT(leftTypeID == rightTypeID);
+        LBUG_ASSERT(leftTypeID == rightTypeID);
         switch (leftTypeID) {
         case common::PhysicalTypeID::INT64: {
             func = BinaryComparisonSelectFunction<int64_t, int64_t, FUNC>;
@@ -193,7 +193,7 @@ private:
             func = BinaryComparisonSelectFunction<uint8_t, uint8_t, FUNC>;
         } break;
         case common::PhysicalTypeID::STRING: {
-            func = BinaryComparisonSelectFunction<common::ku_string_t, common::ku_string_t, FUNC>;
+            func = BinaryComparisonSelectFunction<common::string_t, common::string_t, FUNC>;
         } break;
         case common::PhysicalTypeID::INTERNAL_ID: {
             func = BinaryComparisonSelectFunction<common::nodeID_t, common::nodeID_t, FUNC>;

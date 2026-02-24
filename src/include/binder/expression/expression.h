@@ -56,7 +56,7 @@ public:
 
     void setUniqueName(const std::string& name) { uniqueName = name; }
     std::string getUniqueName() const {
-        KU_ASSERT(!uniqueName.empty());
+        LBUG_ASSERT(!uniqueName.empty());
         return uniqueName;
     }
 
@@ -69,12 +69,12 @@ public:
 
     common::idx_t getNumChildren() const { return children.size(); }
     std::shared_ptr<Expression> getChild(common::idx_t idx) const {
-        KU_ASSERT(idx < children.size());
+        LBUG_ASSERT(idx < children.size());
         return children[idx];
     }
     expression_vector getChildren() const { return children; }
     void setChild(common::idx_t idx, std::shared_ptr<Expression> child) {
-        KU_ASSERT(idx < children.size());
+        LBUG_ASSERT(idx < children.size());
         children[idx] = std::move(child);
     }
 
@@ -86,19 +86,19 @@ public:
 
     template<class TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
     template<class TARGET>
     TARGET* ptrCast() {
-        return common::ku_dynamic_cast<TARGET*>(this);
+        return common::dynamic_cast_checked<TARGET*>(this);
     }
     template<class TARGET>
     const TARGET& constCast() const {
-        return common::ku_dynamic_cast<const TARGET&>(*this);
+        return common::dynamic_cast_checked<const TARGET&>(*this);
     }
     template<class TARGET>
     const TARGET* constPtrCast() const {
-        return common::ku_dynamic_cast<const TARGET*>(this);
+        return common::dynamic_cast_checked<const TARGET*>(this);
     }
 
 protected:

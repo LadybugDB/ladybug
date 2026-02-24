@@ -5,7 +5,7 @@
 #include "common/constants.h"
 #include "common/null_buffer.h"
 #include "common/type_utils.h"
-#include "common/types/ku_list.h"
+#include "common/types/list_t.h"
 #include "common/types/types.h"
 #include "common/utils.h"
 #include "function/comparison/comparison_functions.h"
@@ -69,8 +69,8 @@ static ft_compare_function_t getFactorizedTableCompareEntryFunc(const LogicalTyp
 template<>
 bool factorizedTableCompareEntry<list_entry_t>(const uint8_t* entry1, const uint8_t* entry2,
     const LogicalType& type) {
-    const auto* list1 = reinterpret_cast<const ku_list_t*>(entry1);
-    const auto* list2 = reinterpret_cast<const ku_list_t*>(entry2);
+    const auto* list1 = reinterpret_cast<const list_t*>(entry1);
+    const auto* list2 = reinterpret_cast<const list_t*>(entry2);
     if (list1->size != list2->size) {
         return false;
     }
@@ -105,7 +105,7 @@ const uint8_t* getFTStructNodeID(const uint8_t* structEntry, const LogicalType& 
 
 const uint8_t* getFTStructRelID(const uint8_t* structEntry, const LogicalType& type) {
     return getFTStructFirstField(structEntry, common::StructType::getNumFields(type)) +
-           sizeof(common::internalID_t) * 2 + sizeof(common::ku_string_t);
+           sizeof(common::internalID_t) * 2 + sizeof(string_t);
 }
 
 static bool compareFTNodeEntry(const uint8_t* entry1, const uint8_t* entry2,
@@ -154,7 +154,7 @@ template<>
     uint32_t vectorPos, const uint8_t* entry) {
     auto dataVector = ListVector::getDataVector(vector);
     auto listToCompare = vector->getValue<list_entry_t>(vectorPos);
-    auto listEntry = reinterpret_cast<const ku_list_t*>(entry);
+    auto listEntry = reinterpret_cast<const list_t*>(entry);
     auto entryNullBytes = reinterpret_cast<uint8_t*>(listEntry->overflowPtr);
     auto entryValues = entryNullBytes + NullBuffer::getNumBytesForNullValues(listEntry->size);
     auto rowLayoutSize = LogicalTypeUtils::getRowLayoutSize(dataVector->dataType);
@@ -179,7 +179,7 @@ template<>
 
 static bool compareNodeEntry(const common::ValueVector* vector, uint32_t vectorPos,
     const uint8_t* entry) {
-    KU_ASSERT(0 == common::StructType::getFieldIdx(vector->dataType, common::InternalKeyword::ID));
+    LBUG_ASSERT(0 == common::StructType::getFieldIdx(vector->dataType, common::InternalKeyword::ID));
     auto idVector = common::StructVector::getFieldVector(vector, 0).get();
     return compareEntry<common::internalID_t>(idVector, vectorPos,
         getFTStructNodeID(entry, vector->dataType));
@@ -187,7 +187,7 @@ static bool compareNodeEntry(const common::ValueVector* vector, uint32_t vectorP
 
 static bool compareRelEntry(const common::ValueVector* vector, uint32_t vectorPos,
     const uint8_t* entry) {
-    KU_ASSERT(3 == common::StructType::getFieldIdx(vector->dataType, common::InternalKeyword::ID));
+    LBUG_ASSERT(3 == common::StructType::getFieldIdx(vector->dataType, common::InternalKeyword::ID));
     auto idVector = common::StructVector::getFieldVector(vector, 3).get();
     return compareEntry<common::internalID_t>(idVector, vectorPos,
         getFTStructRelID(entry, vector->dataType));
@@ -227,7 +227,7 @@ static compare_function_t getCompareEntryFunc(const LogicalType& type) {
     default: {
         TypeUtils::visit(
             type.getPhysicalType(), [&]<HashableTypes T>(T) { func = compareEntry<T>; },
-            [](auto) { KU_UNREACHABLE; });
+            [](auto) { LBUG_UNREACHABLE; });
     }
     }
     return func;
@@ -246,7 +246,7 @@ static ft_compare_function_t getFactorizedTableCompareEntryFunc(const LogicalTyp
         TypeUtils::visit(
             type.getPhysicalType(),
             [&]<HashableTypes T>(T) { func = factorizedTableCompareEntry<T>; },
-            [](auto) { KU_UNREACHABLE; });
+            [](auto) { LBUG_UNREACHABLE; });
     }
     }
     return func;
@@ -264,8 +264,8 @@ bool BaseHashTable::matchFlatVecWithEntry(const std::vector<common::ValueVector*
     const uint8_t* entry) {
     for (auto i = 0u; i < keyVectors.size(); i++) {
         auto keyVector = keyVectors[i];
-        KU_ASSERT(keyVector->state->isFlat());
-        KU_ASSERT(keyVector->state->getSelVector().getSelSize() == 1);
+        LBUG_ASSERT(keyVector->state->isFlat());
+        LBUG_ASSERT(keyVector->state->getSelVector().getSelSize() == 1);
         auto pos = keyVector->state->getSelVector()[0];
         auto isKeyVectorNull = keyVector->isNull(pos);
         auto isEntryKeyNull =

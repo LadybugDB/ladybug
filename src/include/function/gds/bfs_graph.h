@@ -82,7 +82,7 @@ public:
 
     template<class TARGET>
     TARGET& cast() {
-        return common::ku_dynamic_cast<TARGET&>(*this);
+        return common::dynamic_cast_checked<TARGET&>(*this);
     }
 
 protected:
@@ -166,7 +166,7 @@ public:
         storage::MemoryManager* mm);
 
     BaseBFSGraph* getCurrentGraph() const {
-        KU_ASSERT(curGraph);
+        LBUG_ASSERT(curGraph);
         return curGraph;
     }
 

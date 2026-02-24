@@ -36,7 +36,7 @@ struct YieldVariable;
 
 class Transformer {
 public:
-    Transformer(CypherParser::Ku_StatementsContext& root,
+    Transformer(CypherParser::IC_StatementsContext& root,
         std::vector<extension::TransformerExtension*> transformerExtensions)
         : root{root}, transformerExtensions{std::move(transformerExtensions)} {}
 
@@ -53,28 +53,28 @@ public:
     std::string transformSchemaName(CypherParser::OC_SchemaNameContext& ctx);
     static std::string transformSymbolicName(CypherParser::OC_SymbolicNameContext& ctx);
     static std::string transformStringLiteral(antlr4::tree::TerminalNode& stringLiteral);
-    static common::ConflictAction transformConflictAction(CypherParser::KU_IfNotExistsContext* ctx);
+    static common::ConflictAction transformConflictAction(CypherParser::IC_IfNotExistsContext* ctx);
 
     // Transform copy statement.
-    std::unique_ptr<Statement> transformCopyTo(CypherParser::KU_CopyTOContext& ctx);
-    std::unique_ptr<Statement> transformCopyFrom(CypherParser::KU_CopyFromContext& ctx);
+    std::unique_ptr<Statement> transformCopyTo(CypherParser::IC_CopyTOContext& ctx);
+    std::unique_ptr<Statement> transformCopyFrom(CypherParser::IC_CopyFromContext& ctx);
     std::unique_ptr<Statement> transformCopyFromByColumn(
-        CypherParser::KU_CopyFromByColumnContext& ctx);
-    std::vector<std::string> transformColumnNames(CypherParser::KU_ColumnNamesContext& ctx);
+        CypherParser::IC_CopyFromByColumnContext& ctx);
+    std::vector<std::string> transformColumnNames(CypherParser::IC_ColumnNamesContext& ctx);
     std::vector<std::string> transformFilePaths(
         const std::vector<antlr4::tree::TerminalNode*>& stringLiteral);
-    std::unique_ptr<BaseScanSource> transformScanSource(CypherParser::KU_ScanSourceContext& ctx);
-    options_t transformOptions(CypherParser::KU_OptionsContext& ctx);
+    std::unique_ptr<BaseScanSource> transformScanSource(CypherParser::IC_ScanSourceContext& ctx);
+    options_t transformOptions(CypherParser::IC_OptionsContext& ctx);
 
-    std::unique_ptr<Statement> transformExportDatabase(CypherParser::KU_ExportDatabaseContext& ctx);
-    std::unique_ptr<Statement> transformImportDatabase(CypherParser::KU_ImportDatabaseContext& ctx);
+    std::unique_ptr<Statement> transformExportDatabase(CypherParser::IC_ExportDatabaseContext& ctx);
+    std::unique_ptr<Statement> transformImportDatabase(CypherParser::IC_ImportDatabaseContext& ctx);
 
     // Transform query statement.
     std::unique_ptr<Statement> transformQuery(CypherParser::OC_QueryContext& ctx);
     std::unique_ptr<Statement> transformRegularQuery(CypherParser::OC_RegularQueryContext& ctx);
     SingleQuery transformSingleQuery(CypherParser::OC_SingleQueryContext& ctx);
     SingleQuery transformSinglePartQuery(CypherParser::OC_SinglePartQueryContext& ctx);
-    QueryPart transformQueryPart(CypherParser::KU_QueryPartContext& ctx);
+    QueryPart transformQueryPart(CypherParser::IC_QueryPartContext& ctx);
 
     // Transform updating.
     std::unique_ptr<UpdatingClause> transformUpdatingClause(
@@ -91,9 +91,9 @@ public:
     std::unique_ptr<ReadingClause> transformMatch(CypherParser::OC_MatchContext& ctx);
     std::unique_ptr<ReadingClause> transformUnwind(CypherParser::OC_UnwindContext& ctx);
     std::vector<YieldVariable> transformYieldVariables(CypherParser::OC_YieldItemsContext& ctx);
-    std::unique_ptr<ReadingClause> transformInQueryCall(CypherParser::KU_InQueryCallContext& ctx);
-    std::unique_ptr<ReadingClause> transformLoadFrom(CypherParser::KU_LoadFromContext& ctx);
-    std::shared_ptr<JoinHintNode> transformJoinHint(CypherParser::KU_JoinNodeContext& ctx);
+    std::unique_ptr<ReadingClause> transformInQueryCall(CypherParser::IC_InQueryCallContext& ctx);
+    std::unique_ptr<ReadingClause> transformLoadFrom(CypherParser::IC_LoadFromContext& ctx);
+    std::shared_ptr<JoinHintNode> transformJoinHint(CypherParser::IC_JoinNodeContext& ctx);
 
     // Transform projection.
     WithClause transformWith(CypherParser::OC_WithContext& ctx);
@@ -113,7 +113,7 @@ public:
     PatternElementChain transformPatternElementChain(
         CypherParser::OC_PatternElementChainContext& ctx);
     RelPattern transformRelationshipPattern(CypherParser::OC_RelationshipPatternContext& ctx);
-    std::vector<s_parsed_expr_pair> transformProperties(CypherParser::KU_PropertiesContext& ctx);
+    std::vector<s_parsed_expr_pair> transformProperties(CypherParser::IC_PropertiesContext& ctx);
     std::vector<std::string> transformRelTypes(CypherParser::OC_RelationshipTypesContext& ctx);
     std::vector<std::string> transformNodeLabels(CypherParser::OC_NodeLabelsContext& ctx);
     std::string transformLabelName(CypherParser::OC_LabelNameContext& ctx);
@@ -132,11 +132,11 @@ public:
     std::unique_ptr<ParsedExpression> transformComparisonExpression(
         CypherParser::OC_ComparisonExpressionContext& ctx);
     std::unique_ptr<ParsedExpression> transformBitwiseOrOperatorExpression(
-        CypherParser::KU_BitwiseOrOperatorExpressionContext& ctx);
+        CypherParser::IC_BitwiseOrOperatorExpressionContext& ctx);
     std::unique_ptr<ParsedExpression> transformBitwiseAndOperatorExpression(
-        CypherParser::KU_BitwiseAndOperatorExpressionContext& ctx);
+        CypherParser::IC_BitwiseAndOperatorExpressionContext& ctx);
     std::unique_ptr<ParsedExpression> transformBitShiftOperatorExpression(
-        CypherParser::KU_BitShiftOperatorExpressionContext& ctx);
+        CypherParser::IC_BitShiftOperatorExpressionContext& ctx);
     std::unique_ptr<ParsedExpression> transformAddOrSubtractExpression(
         CypherParser::OC_AddOrSubtractExpressionContext& ctx);
     std::unique_ptr<ParsedExpression> transformMultiplyDivideModuloExpression(
@@ -165,7 +165,7 @@ public:
     std::unique_ptr<ParsedExpression> transformListLiteral(
         CypherParser::OC_ListLiteralContext& ctx);
     std::unique_ptr<ParsedExpression> transformStructLiteral(
-        CypherParser::KU_StructLiteralContext& ctx);
+        CypherParser::IC_StructLiteralContext& ctx);
     std::unique_ptr<ParsedExpression> transformParameterExpression(
         CypherParser::OC_ParameterContext& ctx);
     std::unique_ptr<ParsedExpression> transformParenthesizedExpression(
@@ -173,11 +173,11 @@ public:
     std::unique_ptr<ParsedExpression> transformFunctionInvocation(
         CypherParser::OC_FunctionInvocationContext& ctx);
     std::string transformFunctionName(CypherParser::OC_FunctionNameContext& ctx);
-    std::vector<std::string> transformLambdaVariables(CypherParser::KU_LambdaVarsContext& ctx);
+    std::vector<std::string> transformLambdaVariables(CypherParser::IC_LambdaVarsContext& ctx);
     std::unique_ptr<ParsedExpression> transformLambdaParameter(
-        CypherParser::KU_LambdaParameterContext& ctx);
+        CypherParser::IC_LambdaParameterContext& ctx);
     std::unique_ptr<ParsedExpression> transformFunctionParameterExpression(
-        CypherParser::KU_FunctionParameterContext& ctx);
+        CypherParser::IC_FunctionParameterContext& ctx);
     std::unique_ptr<ParsedExpression> transformPathPattern(
         CypherParser::OC_PathPatternsContext& ctx);
     std::unique_ptr<ParsedExpression> transformExistCountSubquery(
@@ -202,62 +202,62 @@ public:
         CypherParser::OC_DoubleLiteralContext& ctx, bool negative);
 
     // Transform ddl.
-    std::unique_ptr<Statement> transformAlterTable(CypherParser::KU_AlterTableContext& ctx);
+    std::unique_ptr<Statement> transformAlterTable(CypherParser::IC_AlterTableContext& ctx);
     std::unique_ptr<Statement> transformCreateNodeTable(
-        CypherParser::KU_CreateNodeTableContext& ctx);
-    std::unique_ptr<Statement> transformCreateRelGroup(CypherParser::KU_CreateRelTableContext& ctx);
-    std::unique_ptr<Statement> transformCreateSequence(CypherParser::KU_CreateSequenceContext& ctx);
-    std::unique_ptr<Statement> transformCreateType(CypherParser::KU_CreateTypeContext& ctx);
-    std::unique_ptr<Statement> transformDrop(CypherParser::KU_DropContext& ctx);
-    std::unique_ptr<Statement> transformRenameTable(CypherParser::KU_AlterTableContext& ctx);
+        CypherParser::IC_CreateNodeTableContext& ctx);
+    std::unique_ptr<Statement> transformCreateRelGroup(CypherParser::IC_CreateRelTableContext& ctx);
+    std::unique_ptr<Statement> transformCreateSequence(CypherParser::IC_CreateSequenceContext& ctx);
+    std::unique_ptr<Statement> transformCreateType(CypherParser::IC_CreateTypeContext& ctx);
+    std::unique_ptr<Statement> transformDrop(CypherParser::IC_DropContext& ctx);
+    std::unique_ptr<Statement> transformRenameTable(CypherParser::IC_AlterTableContext& ctx);
     std::unique_ptr<Statement> transformAddFromToConnection(
-        CypherParser::KU_AlterTableContext& ctx);
+        CypherParser::IC_AlterTableContext& ctx);
     std::unique_ptr<Statement> transformDropFromToConnection(
-        CypherParser::KU_AlterTableContext& ctx);
-    std::unique_ptr<Statement> transformAddProperty(CypherParser::KU_AlterTableContext& ctx);
-    std::unique_ptr<Statement> transformDropProperty(CypherParser::KU_AlterTableContext& ctx);
-    std::unique_ptr<Statement> transformRenameProperty(CypherParser::KU_AlterTableContext& ctx);
-    std::unique_ptr<Statement> transformCommentOn(CypherParser::KU_CommentOnContext& ctx);
-    std::string transformUnionType(CypherParser::KU_UnionTypeContext& ctx);
-    std::string transformStructType(CypherParser::KU_StructTypeContext& ctx);
-    std::string transformMapType(CypherParser::KU_MapTypeContext& ctx);
-    std::string transformDecimalType(CypherParser::KU_DecimalTypeContext& ctx);
-    std::string transformDataType(CypherParser::KU_DataTypeContext& ctx);
-    std::string getPKName(CypherParser::KU_CreateNodeTableContext& ctx);
-    std::string transformPrimaryKey(CypherParser::KU_CreateNodeConstraintContext& ctx);
-    std::string transformPrimaryKey(CypherParser::KU_ColumnDefinitionContext& ctx);
+        CypherParser::IC_AlterTableContext& ctx);
+    std::unique_ptr<Statement> transformAddProperty(CypherParser::IC_AlterTableContext& ctx);
+    std::unique_ptr<Statement> transformDropProperty(CypherParser::IC_AlterTableContext& ctx);
+    std::unique_ptr<Statement> transformRenameProperty(CypherParser::IC_AlterTableContext& ctx);
+    std::unique_ptr<Statement> transformCommentOn(CypherParser::IC_CommentOnContext& ctx);
+    std::string transformUnionType(CypherParser::IC_UnionTypeContext& ctx);
+    std::string transformStructType(CypherParser::IC_StructTypeContext& ctx);
+    std::string transformMapType(CypherParser::IC_MapTypeContext& ctx);
+    std::string transformDecimalType(CypherParser::IC_DecimalTypeContext& ctx);
+    std::string transformDataType(CypherParser::IC_DataTypeContext& ctx);
+    std::string getPKName(CypherParser::IC_CreateNodeTableContext& ctx);
+    std::string transformPrimaryKey(CypherParser::IC_CreateNodeConstraintContext& ctx);
+    std::string transformPrimaryKey(CypherParser::IC_ColumnDefinitionContext& ctx);
     std::vector<ParsedColumnDefinition> transformColumnDefinitions(
-        CypherParser::KU_ColumnDefinitionsContext& ctx);
-    ParsedColumnDefinition transformColumnDefinition(CypherParser::KU_ColumnDefinitionContext& ctx);
+        CypherParser::IC_ColumnDefinitionsContext& ctx);
+    ParsedColumnDefinition transformColumnDefinition(CypherParser::IC_ColumnDefinitionContext& ctx);
     std::vector<ParsedPropertyDefinition> transformPropertyDefinitions(
-        CypherParser::KU_PropertyDefinitionsContext& ctx);
+        CypherParser::IC_PropertyDefinitionsContext& ctx);
 
     // Transform standalone call.
-    std::unique_ptr<Statement> transformStandaloneCall(CypherParser::KU_StandaloneCallContext& ctx);
+    std::unique_ptr<Statement> transformStandaloneCall(CypherParser::IC_StandaloneCallContext& ctx);
 
     // Transform create macro.
-    std::unique_ptr<Statement> transformCreateMacro(CypherParser::KU_CreateMacroContext& ctx);
-    std::vector<std::string> transformPositionalArgs(CypherParser::KU_PositionalArgsContext& ctx);
+    std::unique_ptr<Statement> transformCreateMacro(CypherParser::IC_CreateMacroContext& ctx);
+    std::vector<std::string> transformPositionalArgs(CypherParser::IC_PositionalArgsContext& ctx);
 
     // Transform transaction.
-    std::unique_ptr<Statement> transformTransaction(CypherParser::KU_TransactionContext& ctx);
+    std::unique_ptr<Statement> transformTransaction(CypherParser::IC_TransactionContext& ctx);
 
     // Transform extension.
-    std::unique_ptr<Statement> transformExtension(CypherParser::KU_ExtensionContext& ctx);
+    std::unique_ptr<Statement> transformExtension(CypherParser::IC_ExtensionContext& ctx);
 
     // Transform attach/detach/use database.
-    std::unique_ptr<Statement> transformAttachDatabase(CypherParser::KU_AttachDatabaseContext& ctx);
-    std::unique_ptr<Statement> transformDetachDatabase(CypherParser::KU_DetachDatabaseContext& ctx);
-    std::unique_ptr<Statement> transformUseDatabase(CypherParser::KU_UseDatabaseContext& ctx);
+    std::unique_ptr<Statement> transformAttachDatabase(CypherParser::IC_AttachDatabaseContext& ctx);
+    std::unique_ptr<Statement> transformDetachDatabase(CypherParser::IC_DetachDatabaseContext& ctx);
+    std::unique_ptr<Statement> transformUseDatabase(CypherParser::IC_UseDatabaseContext& ctx);
 
     // Transform create/use graph.
-    std::unique_ptr<Statement> transformCreateGraph(CypherParser::KU_CreateGraphContext& ctx);
-    std::unique_ptr<Statement> transformUseGraph(CypherParser::KU_UseGraphContext& ctx);
+    std::unique_ptr<Statement> transformCreateGraph(CypherParser::IC_CreateGraphContext& ctx);
+    std::unique_ptr<Statement> transformUseGraph(CypherParser::IC_UseGraphContext& ctx);
 
     std::unique_ptr<Statement> transformExtensionStatement(antlr4::ParserRuleContext* ctx);
 
 private:
-    CypherParser::Ku_StatementsContext& root;
+    CypherParser::IC_StatementsContext& root;
     std::vector<extension::TransformerExtension*> transformerExtensions;
 };
 

@@ -18,7 +18,7 @@ void CountFunction::updateAll(uint8_t* state_, ValueVector* input, uint64_t mult
 }
 
 void CountFunction::paramRewriteFunc(expression_vector& arguments) {
-    KU_ASSERT(arguments.size() == 1);
+    LBUG_ASSERT(arguments.size() == 1);
     if (ExpressionUtil::isNodePattern(*arguments[0])) {
         arguments[0] = arguments[0]->constCast<NodeExpression>().getInternalID();
     } else if (ExpressionUtil::isRelPattern(*arguments[0])) {

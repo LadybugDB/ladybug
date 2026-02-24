@@ -185,7 +185,7 @@ void RadixSort::findStringTies(TieRange& keyBlockTie, uint8_t* keyBlockPtr,
                 // not equal.
                 break;
             }
-            if constexpr (std::is_same<TYPE, ku_string_t>::value) {
+            if constexpr (std::is_same<TYPE, string_t>::value) {
                 // We do an optimization here to minimize the number of times that we fetch
                 // tuples from factorizedTable. If both left and right string are short, they
                 // must equal to each other (since they have the same prefix). If one string is
@@ -269,14 +269,14 @@ void RadixSort::solveStringTies(TieRange& keyBlockTie, uint8_t* keyBlockPtr,
             const auto rightBlockIdx = OrderByKeyEncoder::getEncodedFTBlockIdx(rightTupleInfoPtr);
             const auto rightBlockOffset =
                 OrderByKeyEncoder::getEncodedFTBlockOffset(rightTupleInfoPtr);
-            auto leftStr = factorizedTable.getData<ku_string_t>(leftBlockIdx, leftBlockOffset,
+            auto leftStr = factorizedTable.getData<string_t>(leftBlockIdx, leftBlockOffset,
                 keyColInfo.colOffsetInFT);
-            auto rightStr = factorizedTable.getData<ku_string_t>(rightBlockIdx, rightBlockOffset,
+            auto rightStr = factorizedTable.getData<string_t>(rightBlockIdx, rightBlockOffset,
                 keyColInfo.colOffsetInFT);
             return keyColInfo.isAscOrder ? leftStr < rightStr : leftStr > rightStr;
         });
     reOrderKeyBlock(keyBlockTie, keyBlockPtr);
-    findStringTies<ku_string_t>(keyBlockTie, keyBlockPtr, ties, keyColInfo);
+    findStringTies<string_t>(keyBlockTie, keyBlockPtr, ties, keyColInfo);
 }
 
 } // namespace processor

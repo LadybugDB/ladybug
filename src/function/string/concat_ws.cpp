@@ -26,7 +26,7 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
 }
 
 using handle_separator_func_t = std::function<void()>;
-using handle_element_func_t = std::function<void(const ku_string_t&)>;
+using handle_element_func_t = std::function<void(const string_t&)>;
 
 static void iterateParams(const std::vector<std::shared_ptr<common::ValueVector>>& parameters,
     const std::vector<common::SelectionVector*>& parameterSelVectors, sel_t pos,
@@ -43,7 +43,7 @@ static void iterateParams(const std::vector<std::shared_ptr<common::ValueVector>
         if (i != 1u && !isPrevNull) {
             handleSeparatorFunc();
         }
-        handleElementFunc(parameter->getValue<ku_string_t>(paramPos));
+        handleElementFunc(parameter->getValue<string_t>(paramPos));
         isPrevNull = false;
     }
 }
@@ -59,12 +59,12 @@ void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& parameter
             result.setNull(pos, true /* isNull */);
             continue;
         }
-        auto separator = parameters[0]->getValue<ku_string_t>(separatorPos);
+        auto separator = parameters[0]->getValue<string_t>(separatorPos);
         auto len = 0u;
         bool isPrevNull = false;
         iterateParams(
             parameters, parameterSelVectors, pos, [&]() { len += separator.len; },
-            [&](const ku_string_t& str) { len += str.len; });
+            [&](const string_t& str) { len += str.len; });
         for (auto i = 1u; i < parameters.size(); i++) {
             const auto& parameter = parameters[i];
             const auto& parameterSelVector = *parameterSelVectors[i];
@@ -77,7 +77,7 @@ void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& parameter
 
             isPrevNull = false;
         }
-        common::ku_string_t resultStr;
+        string_t resultStr;
         StringVector::reserveString(&result, resultStr, len);
         auto resultBuffer = resultStr.getData();
         iterateParams(
@@ -86,13 +86,13 @@ void execFunc(const std::vector<std::shared_ptr<common::ValueVector>>& parameter
                 memcpy((void*)resultBuffer, (void*)separator.getData(), separator.len);
                 resultBuffer += separator.len;
             },
-            [&](const ku_string_t& str) {
+            [&](const string_t& str) {
                 memcpy((void*)resultBuffer, (void*)str.getData(), str.len);
                 resultBuffer += str.len;
             });
         memcpy(resultStr.prefix, resultStr.getData(),
-            std::min<uint64_t>(resultStr.len, ku_string_t::PREFIX_LENGTH));
-        KU_ASSERT(resultBuffer - resultStr.getData() == len);
+            std::min<uint64_t>(resultStr.len, string_t::PREFIX_LENGTH));
+        LBUG_ASSERT(resultBuffer - resultStr.getData() == len);
         result.setNull(pos, false /* isNull */);
         result.setValue(pos, resultStr);
     }

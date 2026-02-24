@@ -1,7 +1,7 @@
 #pragma once
 #include "common/exception/runtime.h"
 #include "common/type_utils.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/vector/value_vector.h"
 #include "function/string/functions/array_extract_function.h"
 #include <format>
@@ -40,8 +40,8 @@ public:
         }
     }
 
-    static inline void operation(common::ku_string_t& str, int64_t& idx,
-        common::ku_string_t& result) {
+    static inline void operation(common::string_t& str, int64_t& idx,
+        common::string_t& result) {
         if (str.len < idx) {
             result.set("", 0);
         } else {

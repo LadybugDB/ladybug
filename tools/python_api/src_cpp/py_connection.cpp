@@ -229,7 +229,7 @@ void PyConnection::getAllEdgesForTorchGeometric(py::array_t<int64_t>& npArray,
         if (!result->isSuccess()) {
             throw std::runtime_error(result->getErrorMessage());
         }
-        KU_ASSERT(result->getType() == QueryResultType::FTABLE);
+        LBUG_ASSERT(result->getType() == QueryResultType::FTABLE);
         auto& table = result->constCast<MaterializedQueryResult>().getFactorizedTable();
         auto tableSchema = table.getTableSchema();
         if (tableSchema->getColumn(0)->isFlat() && !tableSchema->getColumn(1)->isFlat()) {
@@ -641,7 +641,7 @@ Value PyConnection::transformPythonValueAs(const py::handle& val, const LogicalT
     case LogicalTypeID::UUID: {
         auto strVal = py::str(val).cast<std::string>();
         auto uuidVal = UUID::fromString(strVal);
-        ku_uuid_t uuidToAppend{uuidVal};
+        uuid uuidToAppend{uuidVal};
         return Value{uuidToAppend};
     }
     case LogicalTypeID::LIST: {
@@ -687,7 +687,7 @@ Value PyConnection::transformPythonValueAs(const py::handle& val, const LogicalT
     }
     // LCOV_EXCL_START
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
         // LCOV_EXCL_STOP
     }
 }

@@ -446,7 +446,7 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
             // STRING VIEW
             return scanArrowArrayBLOBView(array, outputVector, mask, srcOffset, dstOffset, count);
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     case 'd': {
         switch (outputVector.dataType.getPhysicalType()) {
@@ -463,7 +463,7 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
             return scanArrowArrayFixedSizePrimitive<int128_t>(array, outputVector, mask, srcOffset,
                 dstOffset, count);
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     }
     case 'w':
@@ -485,7 +485,7 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
             }
         case 't':
             // TODO pure time type
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         case 's':
             // TIMESTAMP
             return scanArrowArrayFixedSizePrimitive<int64_t>(array, outputVector, mask, srcOffset,
@@ -507,7 +507,7 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
                 return scanArrowArrayDurationScaledDown(array, outputVector, mask, 1000, srcOffset,
                     dstOffset, count);
             default:
-                KU_UNREACHABLE;
+                LBUG_UNREACHABLE;
             }
         case 'i':
             // INTERVAL
@@ -522,10 +522,10 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
                 return scanArrowArrayMonthDayNanoInterval(array, outputVector, mask, srcOffset,
                     dstOffset, count);
             default:
-                KU_UNREACHABLE;
+                LBUG_UNREACHABLE;
             }
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     case '+':
         switch (arrowType[1]) {
@@ -546,7 +546,7 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
             RUNTIME_CHECK({
                 auto arrowNumElements = std::stoul(arrowType + 3);
                 auto outputNumElements = ArrayType::getNumElements(outputVector.dataType);
-                KU_ASSERT(arrowNumElements == outputNumElements);
+                LBUG_ASSERT(arrowNumElements == outputNumElements);
             });
             return scanArrowArrayFixedList(schema, array, outputVector, mask, srcOffset, dstOffset,
                 count);
@@ -579,13 +579,13 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
                     dstOffset, count);
                 // LONG LIST VIEW
             default:
-                KU_UNREACHABLE;
+                LBUG_UNREACHABLE;
             }
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     default:
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
 }
 

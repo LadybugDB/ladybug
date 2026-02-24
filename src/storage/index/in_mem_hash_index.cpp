@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/disk_array.h"
@@ -124,7 +124,7 @@ void InMemHashIndex<T>::splitSlot() {
         for (auto entryPos = 0u; entryPos < SLOT_CAPACITY; entryPos++) {
             if (!originalSlot.slot->header.isEntryValid(entryPos)) {
                 // Check that this function leaves no gaps
-                KU_ASSERT(originalSlot.slot->header.numEntries() ==
+                LBUG_ASSERT(originalSlot.slot->header.numEntries() ==
                           std::countr_one(originalSlot.slot->header.validityMask));
                 // There should be no gaps, so when we encounter an invalid entry we can return
                 // early
@@ -141,7 +141,7 @@ void InMemHashIndex<T>::splitSlot() {
                     auto newOvfSlotId = allocateAOSlot();
                     newSlot.slot->header.nextOvfSlotId = newOvfSlotId;
                     [[maybe_unused]] bool hadNextSlot = nextChainedSlot(newSlot);
-                    KU_ASSERT(hadNextSlot);
+                    LBUG_ASSERT(hadNextSlot);
                     newSlotPos = 0;
                 }
                 newSlot.slot->entries[newSlotPos] = entry;
@@ -159,7 +159,7 @@ void InMemHashIndex<T>::splitSlot() {
                         // There should always be another slot since we can't split more entries
                         // than there were to begin with
                         [[maybe_unused]] bool hadNextSlot = nextChainedSlot(originalSlotForInsert);
-                        KU_ASSERT(hadNextSlot);
+                        LBUG_ASSERT(hadNextSlot);
                     }
                 }
                 originalSlotForInsert.slot->entries[entryPosToInsert] = entry;
@@ -167,7 +167,7 @@ void InMemHashIndex<T>::splitSlot() {
                 originalSlot.slot->header.setEntryInvalid(entryPos);
             }
         }
-        KU_ASSERT(originalSlot.slot->header.numEntries() ==
+        LBUG_ASSERT(originalSlot.slot->header.numEntries() ==
                   std::countr_one(originalSlot.slot->header.validityMask));
     } while (nextChainedSlot(originalSlot));
 
@@ -179,9 +179,9 @@ template<typename T>
 void InMemHashIndex<T>::addFreeOverflowSlot(InMemSlotType& overflowSlot, SlotInfo slotInfo) {
     // This function should only be called on slots that can be directly inserted into the free slot
     // list
-    KU_ASSERT(slotInfo.slotId != SlotHeader::INVALID_OVERFLOW_SLOT_ID);
-    KU_ASSERT(overflowSlot.header.nextOvfSlotId == SlotHeader::INVALID_OVERFLOW_SLOT_ID);
-    KU_ASSERT(slotInfo.slotType == SlotType::OVF);
+    LBUG_ASSERT(slotInfo.slotId != SlotHeader::INVALID_OVERFLOW_SLOT_ID);
+    LBUG_ASSERT(overflowSlot.header.nextOvfSlotId == SlotHeader::INVALID_OVERFLOW_SLOT_ID);
+    LBUG_ASSERT(slotInfo.slotType == SlotType::OVF);
     overflowSlot.header.nextOvfSlotId = indexHeader.firstFreeOverflowSlotId;
     indexHeader.firstFreeOverflowSlotId = slotInfo.slotId;
     numFreeSlots++;
@@ -205,7 +205,7 @@ void InMemHashIndex<T>::reclaimOverflowSlots(SlotIterator iter) {
         lastNonEmptySlot->header.nextOvfSlotId = SlotHeader::INVALID_OVERFLOW_SLOT_ID;
         while (iter.slotInfo != HashIndexUtils::INVALID_OVF_INFO) {
             // Remove empty overflow slots from slot chain
-            KU_ASSERT(iter.slot->header.numEntries() == 0);
+            LBUG_ASSERT(iter.slot->header.numEntries() == 0);
             auto slotInfo = iter.slotInfo;
             auto slot = clearNextOverflowAndAdvanceIter(iter);
             if (slotInfo.slotType == SlotType::OVF) {
@@ -249,9 +249,9 @@ uint32_t InMemHashIndex<T>::allocateAOSlot() {
         auto& slot = (*oSlots)[freeOSlotId];
         // Remove slot from the free slot chain
         indexHeader.firstFreeOverflowSlotId = slot.header.nextOvfSlotId;
-        KU_ASSERT(slot.header.numEntries() == 0);
+        LBUG_ASSERT(slot.header.numEntries() == 0);
         slot.header.nextOvfSlotId = SlotHeader::INVALID_OVERFLOW_SLOT_ID;
-        KU_ASSERT(numFreeSlots > 0);
+        LBUG_ASSERT(numFreeSlots > 0);
         numFreeSlots--;
         return freeOSlotId;
     }
@@ -283,7 +283,7 @@ template class InMemHashIndex<double>;
 template class InMemHashIndex<float>;
 template class InMemHashIndex<int128_t>;
 template class InMemHashIndex<uint128_t>;
-template class InMemHashIndex<ku_string_t>;
+template class InMemHashIndex<string_t>;
 
 } // namespace storage
 } // namespace lbug

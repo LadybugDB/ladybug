@@ -19,10 +19,10 @@ static scalar_func_exec_t getListSortExecFunction(const binder::expression_vecto
     if (arguments.size() == 1) {
         func = ScalarFunction::UnaryExecNestedTypeFunction<list_entry_t, list_entry_t, T>;
     } else if (arguments.size() == 2) {
-        func = ScalarFunction::BinaryExecListStructFunction<list_entry_t, ku_string_t, list_entry_t,
+        func = ScalarFunction::BinaryExecListStructFunction<list_entry_t, string_t, list_entry_t,
             T>;
     } else if (arguments.size() == 3) {
-        func = ScalarFunction::TernaryExecListStructFunction<list_entry_t, ku_string_t, ku_string_t,
+        func = ScalarFunction::TernaryExecListStructFunction<list_entry_t, string_t, string_t,
             list_entry_t, T>;
     } else {
         throw RuntimeException("Invalid number of arguments");
@@ -41,7 +41,7 @@ static std::unique_ptr<FunctionBindData> ListSortBindFunc(ScalarBindFuncInput in
         [&input, &scalarFunction]<ComparableTypes T>(T) {
             scalarFunction->execFunc = getListSortExecFunction<ListSort<T>>(input.arguments);
         },
-        [](auto) { KU_UNREACHABLE; });
+        [](auto) { LBUG_UNREACHABLE; });
     return FunctionBindData::getSimpleBindData(input.arguments, input.arguments[0]->getDataType());
 }
 
@@ -52,7 +52,7 @@ static std::unique_ptr<FunctionBindData> ListReverseSortBindFunc(const ScalarBin
         [&input, &scalarFunction]<ComparableTypes T>(T) {
             scalarFunction->execFunc = getListSortExecFunction<ListReverseSort<T>>(input.arguments);
         },
-        [](auto) { KU_UNREACHABLE; });
+        [](auto) { LBUG_UNREACHABLE; });
     return FunctionBindData::getSimpleBindData(input.arguments, input.arguments[0]->getDataType());
 }
 

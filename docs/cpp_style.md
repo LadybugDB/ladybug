@@ -43,10 +43,10 @@ Enforced by clang-format:
 
 ## Assertions
 
-- Use `KU_ASSERT(condition)` for debug assertions
-- Use `KU_ASSERT_UNCONDITIONAL(condition)` for always-on assertions
-- Use `KU_UNREACHABLE` for unreachable code paths
-- Use `KU_UNUSED(expr)` to mark intentionally unused variables
+- Use `LBUG_ASSERT(condition)` for debug assertions
+- Use `LBUG_ASSERT_UNCONDITIONAL(condition)` for always-on assertions
+- Use `LBUG_UNREACHABLE` for unreachable code paths
+- Use `LBUG_UNUSED(expr)` to mark intentionally unused variables
 
 ## Error Handling
 

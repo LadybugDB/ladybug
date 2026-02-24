@@ -4,7 +4,7 @@
 #include "common/exception/binder.h"
 #include "common/type_utils.h"
 #include "common/types/interval_t.h"
-#include "common/types/ku_string.h"
+#include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "function/table/bind_data.h"
 #include "function/table/bind_input.h"
@@ -90,7 +90,7 @@ static void appendStorageInfoForChunkData(StorageInfoLocalState* localState, Dat
         metadata = chunkData.getMetadata();
     } break;
     default: {
-        KU_UNREACHABLE;
+        LBUG_UNREACHABLE;
     }
     }
     auto& columnType = chunkData.getDataType();
@@ -113,7 +113,7 @@ static void appendStorageInfoForChunkData(StorageInfoLocalState* localState, Dat
     };
     auto physicalType = columnType.getPhysicalType();
     TypeUtils::visit(
-        physicalType, [&](ku_string_t) { customToString(uint32_t()); },
+        physicalType, [&](string_t) { customToString(uint32_t()); },
         [&](list_entry_t) { customToString(uint64_t()); },
         [&](internalID_t) { customToString(uint64_t()); },
         [&]<typename T>(T)
@@ -145,7 +145,7 @@ static void appendStorageInfoForChunkData(StorageInfoLocalState* localState, Dat
     switch (columnType.getPhysicalType()) {
     case PhysicalTypeID::STRUCT: {
         auto& structChunk = chunkData.cast<StructChunkData>();
-        const auto& structColumn = ku_dynamic_cast<const StructColumn&>(column);
+        const auto& structColumn = dynamic_cast_checked<const StructColumn&>(column);
         auto numChildren = structChunk.getNumChildren();
         for (auto i = 0u; i < numChildren; i++) {
             appendStorageInfoForChunkData(localState, outputChunk, outputData,
@@ -155,7 +155,7 @@ static void appendStorageInfoForChunkData(StorageInfoLocalState* localState, Dat
     case PhysicalTypeID::STRING: {
         auto& stringChunk = chunkData.cast<StringChunkData>();
         auto& dictionaryChunk = stringChunk.getDictionaryChunk();
-        const auto& stringColumn = ku_dynamic_cast<const StringColumn&>(column);
+        const auto& stringColumn = dynamic_cast_checked<const StringColumn&>(column);
         appendStorageInfoForChunkData(localState, outputChunk, outputData,
             *stringColumn.getIndexColumn(), *stringChunk.getIndexColumnChunk());
         appendStorageInfoForChunkData(localState, outputChunk, outputData,
@@ -166,7 +166,7 @@ static void appendStorageInfoForChunkData(StorageInfoLocalState* localState, Dat
     case PhysicalTypeID::ARRAY:
     case PhysicalTypeID::LIST: {
         auto& listChunk = chunkData.cast<ListChunkData>();
-        const auto& listColumn = ku_dynamic_cast<const ListColumn&>(column);
+        const auto& listColumn = dynamic_cast_checked<const ListColumn&>(column);
         appendStorageInfoForChunkData(localState, outputChunk, outputData,
             *listColumn.getOffsetColumn(), *listChunk.getOffsetColumnChunk());
         appendStorageInfoForChunkData(localState, outputChunk, outputData,
@@ -224,8 +224,8 @@ static void appendStorageInfoForNodeGroup(StorageInfoLocalState* localState, Dat
 
 static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
     auto& dataChunk = output.dataChunk;
-    auto localState = ku_dynamic_cast<StorageInfoLocalState*>(input.localState);
-    KU_ASSERT(dataChunk.state->getSelVector().isUnfiltered());
+    auto localState = dynamic_cast_checked<StorageInfoLocalState*>(input.localState);
+    LBUG_ASSERT(dataChunk.state->getSelVector().isUnfiltered());
     auto storageManager = StorageManager::Get(*input.context->clientContext);
     while (true) {
         if (localState->currChunkIdx < localState->dataChunkCollection->getNumChunks()) {
@@ -295,7 +295,7 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) 
             }
         } break;
         default: {
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
         }
         localState->dataChunkCollection->append(dataChunk);

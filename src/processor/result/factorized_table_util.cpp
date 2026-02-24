@@ -42,12 +42,12 @@ void FactorizedTableUtils::appendStringToTable(FactorizedTable* factorizedTable,
     const std::string& outputMsg, MemoryManager* memoryManager) {
     auto outputMsgVector = std::make_shared<ValueVector>(LogicalTypeID::STRING, memoryManager);
     outputMsgVector->state = DataChunkState::getSingleValueDataChunkState();
-    auto outputKUStr = ku_string_t();
-    outputKUStr.overflowPtr =
+    auto outputStr = string_t();
+    outputStr.overflowPtr =
         reinterpret_cast<uint64_t>(StringVector::getInMemOverflowBuffer(outputMsgVector.get())
                                        ->allocateSpace(outputMsg.length()));
-    outputKUStr.set(outputMsg);
-    outputMsgVector->setValue(0, outputKUStr);
+    outputStr.set(outputMsg);
+    outputMsgVector->setValue(0, outputStr);
     factorizedTable->append(std::vector<ValueVector*>{outputMsgVector.get()});
 }
 

@@ -31,11 +31,11 @@ struct LogicalPartitionerInfo {
 
     common::idx_t getNumInfos() const { return partitioningInfos.size(); }
     LogicalPartitioningInfo& getInfo(common::idx_t idx) {
-        KU_ASSERT(idx < partitioningInfos.size());
+        LBUG_ASSERT(idx < partitioningInfos.size());
         return partitioningInfos[idx];
     }
     const LogicalPartitioningInfo& getInfo(common::idx_t idx) const {
-        KU_ASSERT(idx < partitioningInfos.size());
+        LBUG_ASSERT(idx < partitioningInfos.size());
         return partitioningInfos[idx];
     }
 };

@@ -24,7 +24,7 @@ struct MinMaxFunction {
     template<class OP>
     static void updateAll(uint8_t* state_, common::ValueVector* input, uint64_t /*multiplicity*/,
         common::InMemOverflowBuffer* overflowBuffer) {
-        KU_ASSERT(!input->state->isFlat());
+        LBUG_ASSERT(!input->state->isFlat());
         auto* state = reinterpret_cast<MinMaxState*>(state_);
         input->forEachNonNull(
             [&](auto pos) { updateSingleValue<OP>(state, input, pos, overflowBuffer); });
@@ -78,11 +78,11 @@ struct MinMaxFunction {
 };
 
 template<>
-void MinMaxFunction<common::ku_string_t>::MinMaxState::setVal(const common::ku_string_t& val_,
+void MinMaxFunction<common::string_t>::MinMaxState::setVal(const common::string_t& val_,
     common::InMemOverflowBuffer* overflowBuffer) {
     // We only need to allocate memory if the new val_ is a long string and is longer
     // than the current val.
-    if (val_.len > common::ku_string_t::SHORT_STR_LENGTH && val_.len > val.len) {
+    if (val_.len > common::string_t::SHORT_STR_LENGTH && val_.len > val.len) {
         val.overflowPtr = reinterpret_cast<uint64_t>(overflowBuffer->allocateSpace(val_.len));
     }
     val.set(val_);

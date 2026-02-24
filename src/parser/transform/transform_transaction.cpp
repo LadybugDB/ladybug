@@ -9,7 +9,7 @@ namespace lbug {
 namespace parser {
 
 std::unique_ptr<Statement> Transformer::transformTransaction(
-    CypherParser::KU_TransactionContext& ctx) {
+    CypherParser::IC_TransactionContext& ctx) {
     if (ctx.TRANSACTION()) {
         if (ctx.READ()) {
             return std::make_unique<TransactionStatement>(TransactionAction::BEGIN_READ);
@@ -25,7 +25,7 @@ std::unique_ptr<Statement> Transformer::transformTransaction(
     if (ctx.CHECKPOINT()) {
         return std::make_unique<TransactionStatement>(TransactionAction::CHECKPOINT);
     }
-    KU_UNREACHABLE;
+    LBUG_UNREACHABLE;
 }
 
 } // namespace parser

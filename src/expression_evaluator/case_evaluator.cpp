@@ -50,9 +50,9 @@ void CaseExpressionEvaluator::evaluate() {
 
 bool CaseExpressionEvaluator::selectInternal(SelectionVector& selVector) {
     evaluate();
-    KU_ASSERT(resultVector->state->getSelVector().getSelSize() != 0);
-    KU_ASSERT(selVector.getSelSize() != 0);
-    KU_ASSERT(resultVector->state->getSelVector().getSelSize() == selVector.getSelSize());
+    LBUG_ASSERT(resultVector->state->getSelVector().getSelSize() != 0);
+    LBUG_ASSERT(selVector.getSelSize() != 0);
+    LBUG_ASSERT(resultVector->state->getSelVector().getSelSize() == selVector.getSelSize());
     auto numSelectedValues = 0u;
     auto selectedPosBuffer = selVector.getMutableBuffer();
     for (auto i = 0u; i < selVector.getSelSize(); ++i) {

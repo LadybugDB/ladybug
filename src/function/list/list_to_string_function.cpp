@@ -8,12 +8,12 @@ namespace lbug {
 namespace function {
 
 struct ListToString {
-    static void operation(ku_string_t& delim, list_entry_t& input, common::ku_string_t& result,
+    static void operation(string_t& delim, list_entry_t& input, string_t& result,
         common::ValueVector& inputVector, common::ValueVector& /*delimVector*/,
         common::ValueVector& resultVector);
 };
 
-void ListToString::operation(ku_string_t& delim, list_entry_t& input, ku_string_t& result,
+void ListToString::operation(string_t& delim, list_entry_t& input, string_t& result,
     ValueVector& /*delimVector*/, ValueVector& inputVector, ValueVector& resultVector) {
     std::string resultStr = "";
     bool outputDelim = false;
@@ -56,7 +56,7 @@ function_set ListToStringFunction::getFunctionSet() {
     auto function = std::make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::LIST},
         LogicalTypeID::STRING,
-        ScalarFunction::BinaryExecListStructFunction<ku_string_t, list_entry_t, ku_string_t,
+        ScalarFunction::BinaryExecListStructFunction<string_t, list_entry_t, string_t,
             ListToString>);
     function->bindFunc = bindFunc;
     result.push_back(std::move(function));

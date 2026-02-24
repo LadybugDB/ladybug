@@ -13,7 +13,7 @@ static void BinaryExecListExtractFunction(
     const std::vector<std::shared_ptr<common::ValueVector>>& params,
     const std::vector<common::SelectionVector*>& paramSelVectors, common::ValueVector& result,
     common::SelectionVector* resultSelVector, void* dataPtr = nullptr) {
-    KU_ASSERT(params.size() == 2);
+    LBUG_ASSERT(params.size() == 2);
     BinaryFunctionExecutor::executeSwitch<LEFT_TYPE, RIGHT_TYPE, RESULT_TYPE, FUNC,
         BinaryListExtractFunctionWrapper>(*params[0], paramSelVectors[0], *params[1],
         paramSelVectors[1], result, resultSelVector, dataPtr);
@@ -42,7 +42,7 @@ function_set ListExtractFunction::getFunctionSet() {
     func = std::make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::INT64},
         LogicalTypeID::STRING,
-        ScalarFunction::BinaryExecFunction<ku_string_t, int64_t, ku_string_t, ListExtract>);
+        ScalarFunction::BinaryExecFunction<string_t, int64_t, string_t, ListExtract>);
     result.push_back(std::move(func));
     func = std::make_unique<ScalarFunction>(name,
         std::vector<LogicalTypeID>{LogicalTypeID::ARRAY, LogicalTypeID::INT64}, LogicalTypeID::ANY);

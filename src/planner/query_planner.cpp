@@ -23,7 +23,7 @@ LogicalPlan Planner::planQuery(const BoundStatement& boundStatement) {
 
 LogicalPlan Planner::createUnionPlan(std::vector<LogicalPlan>& childrenPlans,
     const expression_vector& expressions, bool isUnionAll) {
-    KU_ASSERT(!childrenPlans.empty());
+    LBUG_ASSERT(!childrenPlans.empty());
     auto plan = LogicalPlan();
     std::vector<std::shared_ptr<LogicalOperator>> children;
     children.reserve(childrenPlans.size());
@@ -45,7 +45,7 @@ LogicalPlan Planner::createUnionPlan(std::vector<LogicalPlan>& childrenPlans,
 }
 
 expression_vector Planner::getProperties(const Expression& pattern) const {
-    KU_ASSERT(pattern.expressionType == ExpressionType::PATTERN);
+    LBUG_ASSERT(pattern.expressionType == ExpressionType::PATTERN);
     return propertyExprCollection.getProperties(pattern);
 }
 

@@ -33,7 +33,7 @@ public:
     void pinTableID(table_id_t tableID) override { curData = sparseObjects.getData(tableID); }
 
     void setCost(offset_t offset, double cost) override {
-        KU_ASSERT(curData != nullptr);
+        LBUG_ASSERT(curData != nullptr);
         if (curData->contains(offset)) {
             curData->at(offset) = cost;
         } else {
@@ -51,7 +51,7 @@ public:
     }
 
     double getCost(offset_t offset) override {
-        KU_ASSERT(curData != nullptr);
+        LBUG_ASSERT(curData != nullptr);
         if (curData->contains(offset)) {
             return curData->at(offset);
         }
@@ -71,7 +71,7 @@ public:
     void pinTableID(table_id_t tableID) override { curData = denseObjects.getData(tableID); }
 
     void setCost(offset_t offset, double cost) override {
-        KU_ASSERT(curData != nullptr);
+        LBUG_ASSERT(curData != nullptr);
         curData[offset].store(cost, std::memory_order_relaxed);
     }
 
@@ -86,7 +86,7 @@ public:
     }
 
     double getCost(offset_t offset) override {
-        KU_ASSERT(curData != nullptr);
+        LBUG_ASSERT(curData != nullptr);
         return curData[offset].load(std::memory_order_relaxed);
     }
 
@@ -121,7 +121,7 @@ public:
             curCosts = curDenseCosts.get();
         } break;
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     }
 
@@ -136,19 +136,19 @@ public:
             nextCosts = nextDenseCosts.get();
         } break;
         default:
-            KU_UNREACHABLE;
+            LBUG_UNREACHABLE;
         }
     }
 
     // CAS update nbrOffset if new path from boundOffset has a smaller cost.
     bool update(offset_t boundOffset, offset_t nbrOffset, double val) {
-        KU_ASSERT(curCosts && nextCosts);
+        LBUG_ASSERT(curCosts && nextCosts);
         auto newCost = curCosts->getCost(boundOffset) + val;
         return nextCosts->tryReplaceWithMinCost(nbrOffset, newCost);
     }
 
     void switchToDense(ExecutionContext* context) {
-        KU_ASSERT(densityState == GDSDensityState::SPARSE);
+        LBUG_ASSERT(densityState == GDSDensityState::SPARSE);
         densityState = GDSDensityState::DENSE;
         auto mm = MemoryManager::Get(*context->clientContext);
         for (auto& [tableID, maxOffset] : maxOffsetMap) {

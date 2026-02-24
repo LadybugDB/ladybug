@@ -17,7 +17,7 @@ void Serializer::writeDebuggingInfo(const std::string& value) {
     serializeValue<std::string>(value);
 #endif
     // DO NOTHING
-    KU_UNUSED(value);
+    LBUG_UNUSED(value);
 }
 
 } // namespace common
