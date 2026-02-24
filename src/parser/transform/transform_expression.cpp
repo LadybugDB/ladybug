@@ -93,7 +93,7 @@ std::unique_ptr<ParsedExpression> Transformer::transformComparisonExpression(
     }
     // Antlr parser throws error for conjunctive comparison.
     // Transformer should only handle the case of single comparison operator.
-    DASSERT(ctx.ComparisonOperator().size() == 1);
+    DASSERT(ctx.iC_ComparisonOperator().size() == 1);
     auto left = transformBitwiseOrOperatorExpression(*ctx.iC_BitwiseOrOperatorExpression(0));
     auto right = transformBitwiseOrOperatorExpression(*ctx.iC_BitwiseOrOperatorExpression(1));
     auto comparisonOperator = ctx.iC_ComparisonOperator()[0]->getText();
