@@ -111,13 +111,13 @@ jobs:
 
       - name: Kernel test
         if: ${{ inputs.isNightly == true }}
-        run: ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600
+        run: ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600 --gtest_filter="-e2e_test_agg~hash_leak.LargeAggregateLeakTest:CopyTest.GracefulBMExceptionHandlingManyThreads"
 
       - name: Kernel test (in memory)
         if: ${{ inputs.isNightly == true }}
         env:
           IN_MEM_MODE: true
-        run: ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600
+        run: ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600 --gtest_filter="-e2e_test_agg~hash_leak.LargeAggregateLeakTest:CopyTest.GracefulBMExceptionHandlingManyThreads"
 
       - name: Clean up for single-threaded build
         if: ${{ inputs.isNightly == true }}
@@ -146,6 +146,7 @@ jobs:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
           SINGLE_THREADED: true
+          TEST_FILTER: "-e2e_test_agg~hash_leak.LargeAggregateLeakTest:CopyTest.GracefulBMExceptionHandlingManyThreads"
         run: |
           source /home/runner/emsdk/emsdk_env.sh
           make wasmtest

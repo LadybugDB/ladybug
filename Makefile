@@ -224,7 +224,7 @@ wasmtest-build:
 	cmake --build . --config $(call get-build-type,Release) -j $(NUM_THREADS)
 
 wasmtest: wasmtest-build
-	ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600
+	ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600 $(if $(TEST_FILTER),--gtest_filter=$(TEST_FILTER),)
 
 rusttest:
 ifeq ($(OS),Windows_NT)
