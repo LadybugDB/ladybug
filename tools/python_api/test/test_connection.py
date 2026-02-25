@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 def test_connection_close(tmp_path: Path) -> None:
-    db_path = tmp_path / "test_connection_close.lbug"
+    db_path = tmp_path / "test_connection_close.lbdb"
     db = lb.Database(database_path=db_path, read_only=False)
     conn = lb.Connection(db)
     conn.close()
@@ -23,7 +23,7 @@ def test_connection_close(tmp_path: Path) -> None:
 
 
 def test_connection_close_context_manager(tmp_path: Path) -> None:
-    db_path = tmp_path / "test_connection_close_context_manager.lbug"
+    db_path = tmp_path / "test_connection_close_context_manager.lbdb"
     with lb.Database(database_path=db_path, read_only=False) as db:
         with lb.Connection(db) as conn:
             pass

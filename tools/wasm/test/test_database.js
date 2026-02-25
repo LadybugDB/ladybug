@@ -12,7 +12,7 @@ describe("Database constructor", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.lbug");
+    const dbPath = path.join(tmpDbPath, "db.lbdb");
     const testDb = new lbug.Database(dbPath, 1 << 28 /* 256MB */);
     assert.exists(testDb);
     assert.equal(testDb.constructor.name, "Database");
@@ -31,7 +31,7 @@ describe("Database constructor", function () {
         return resolve(path);
       });
     });
-    const dbPath = path.join(tmpDbPath, "db.lbug");
+    const dbPath = path.join(tmpDbPath, "db.lbdb");
     const testDb = new lbug.Database(dbPath);
     assert.exists(testDb);
     assert.equal(testDb.constructor.name, "Database");

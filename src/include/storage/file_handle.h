@@ -79,7 +79,7 @@ public:
     PageState* getPageState(common::page_idx_t pageIdx) { return &pageStates[pageIdx]; }
 
     // Pages added through these APIs are not tracked by the FSM
-    // If allocating pages from the data.lbug file it's recommended to do so using the PageManager
+    // If allocating pages from the data.lbdb file it's recommended to do so using the PageManager
     common::page_idx_t addNewPage();
     common::page_idx_t addNewPages(common::page_idx_t numNewPages);
 

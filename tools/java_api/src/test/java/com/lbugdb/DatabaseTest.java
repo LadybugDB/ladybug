@@ -11,7 +11,7 @@ public class DatabaseTest extends TestBase {
     void DBCreationAndDestroyWithArgs() {
         String dbPath = "";
         try {
-            dbPath = tempDir.resolve("db1.lbug").toString();
+            dbPath = tempDir.resolve("db1.lbdb").toString();
         } catch (Exception e) {
             fail("Cannot get database path: " + e.getMessage());
         }
@@ -47,7 +47,7 @@ public class DatabaseTest extends TestBase {
     void DBCreationWithInvalidMaxDBSize() {
         String dbPath = "";
         try {
-            dbPath = tempDir.resolve("db2.lbug").toString();
+            dbPath = tempDir.resolve("db2.lbdb").toString();
         } catch (Exception e) {
             fail("Cannot get database path: " + e.getMessage());
         }
@@ -76,7 +76,7 @@ public class DatabaseTest extends TestBase {
     void DBCreationAndDestroyWithPathOnly() {
         String dbPath = "";
         try {
-            dbPath = tempDir.resolve("db3.lbug").toString();
+            dbPath = tempDir.resolve("db3.lbdb").toString();
         } catch (Exception e) {
             fail("Cannot get database path: " + e.getMessage());
         }
@@ -127,7 +127,7 @@ public class DatabaseTest extends TestBase {
     void DBCreationTestThrowOnWALReplayFailure() {
         String dbPath = "";
         try {
-            dbPath = tempDir.resolve("db4.lbug").toString();
+            dbPath = tempDir.resolve("db4.lbdb").toString();
         } catch (Exception e) {
             fail("Cannot get database path: " + e.getMessage());
         }
@@ -180,7 +180,7 @@ public class DatabaseTest extends TestBase {
     void DBCreationTestEnableChecksums() {
         String dbPath = "";
         try {
-            dbPath = tempDir.resolve("db5.lbug").toString();
+            dbPath = tempDir.resolve("db5.lbdb").toString();
         } catch (Exception e) {
             fail("Cannot get database path: " + e.getMessage());
         }

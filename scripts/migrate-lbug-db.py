@@ -60,9 +60,9 @@ def read_lbug_storage_version(lbug_db_path: str) -> int:
     :return: Storage version code as an integer.
     """
     if os.path.isdir(lbug_db_path):
-        lbug_version_file_path = os.path.join(lbug_db_path, "catalog.lbug")
+        lbug_version_file_path = os.path.join(lbug_db_path, "catalog.lbdb")
         if not os.path.isfile(lbug_version_file_path):
-            raise FileNotFoundError("Lbug catalog.lbug file does not exist")
+            raise FileNotFoundError("Lbug catalog.lbdb file does not exist")
     else:
         lbug_version_file_path = lbug_db_path
 

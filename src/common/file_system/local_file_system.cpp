@@ -276,20 +276,20 @@ static bool isAllowedDeletionPath(const std::string& path, const std::string& db
     const auto dbExt = dbPathP.extension().string();
     const auto dbFileName = dbBase + dbExt;
 
-    // Main DB sidecars: db.lbug.{wal|shadow|tmp|lock}
+    // Main DB sidecars: db.lbdb.{wal|shadow|tmp|lock}
     if (extension == ".wal" || extension == ".shadow" || extension == ".tmp" ||
         extension == ".lock") {
         if (stemWithoutExt == dbFileName) {
             return true;
         }
         // Graph/copy sidecars can use either:
-        // - db.<graph>.lbug.{wal|shadow|tmp|lock}
-        // - db.lbug.<graph-or-tag>.{wal|shadow|tmp|lock}
+        // - db.<graph>.lbdb.{wal|shadow|tmp|lock}
+        // - db.lbdb.<graph-or-tag>.{wal|shadow|tmp|lock}
         return (stemWithoutExt.starts_with(dbBase + ".") && stemWithoutExt.ends_with(dbExt)) ||
                stemWithoutExt.starts_with(dbFileName + ".");
     }
 
-    // Graph DB file: db.<graph>.lbug
+    // Graph DB file: db.<graph>.lbdb
     if (extension == dbExt) {
         return fileName.starts_with(dbBase + ".") && fileName != dbFileName;
     }

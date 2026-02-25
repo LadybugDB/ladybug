@@ -60,7 +60,7 @@ Guelph|75000
 -LOG validateTableNotExists
 -STATEMENT CALL SHOW_TABLES() RETURN *
 ---- 0
--STATEMENT attach 'http://localhost/dataset/databases/tinysnb/db.lbug' as test (dbtype lbug)
+-STATEMENT attach 'http://localhost/dataset/databases/tinysnb/db.lbdb' as test (dbtype lbug)
 ---- ok
 -LOG validateTableExistsAfterAttach
 -STATEMENT CALL SHOW_TABLES() RETURN *
@@ -120,7 +120,7 @@ Binder exception: Table person does not exist.
 5
 -STATEMENT CALL HTTP_CACHE_FILE=FALSE
 -LOG AttachAgain
--STATEMENT attach 'http://localhost/dataset/databases/tinysnb/db.lbug' as tinysnb (dbtype lbug)
+-STATEMENT attach 'http://localhost/dataset/databases/tinysnb/db.lbdb' as tinysnb (dbtype lbug)
 ---- ok
 -LOG QueryRemoteNodeTable
 -STATEMENT match (p:person) return p.*
@@ -139,7 +139,7 @@ tinysnb|LBUG
 -STATEMENT detach tinysnb
 ---- ok
 -LOG AttachWithSlashStylePath
--STATEMENT attach 'http://localhost/dataset/databases/tinysnb/db.lbug' as tinysnb1 (dbtype lbug)
+-STATEMENT attach 'http://localhost/dataset/databases/tinysnb/db.lbdb' as tinysnb1 (dbtype lbug)
 ---- ok
 -STATEMENT call SHOW_ATTACHED_DATABASES() return *;
 ---- 1

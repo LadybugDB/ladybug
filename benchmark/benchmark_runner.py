@@ -244,7 +244,7 @@ def run_lbug(serialized_graph_path):
         is_current_group_error = False
         benchmark_cmd = [
             lbug_benchmark_tool,
-            '--dataset=' + serialized_graph_path + '/db.lbug',
+            '--dataset=' + serialized_graph_path + '/db.lbdb',
             '--benchmark=' + benchmark_files + '/' + group,
             '--warmup=' + str(num_warmup),
             '--run=' + str(num_run),

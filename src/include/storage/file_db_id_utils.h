@@ -8,7 +8,7 @@ namespace storage {
 struct FileDBIDUtils {
     // For some temporary DB files such as the WAL and shadow file
     // We want to verify that they actually match the current database before replaying
-    // We do this by adding a unique UUID to the header of the data.lbug file
+    // We do this by adding a unique UUID to the header of the data.lbdb file
     // And making sure they match the IDs of the temporary files
     static void verifyDatabaseID(const common::FileInfo& fileInfo, common::uuid expectedDatabaseID,
         common::uuid databaseID);

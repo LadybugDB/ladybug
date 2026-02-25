@@ -143,7 +143,7 @@ def serialize(dataset_name, dataset_path, serialized_graph_path):
     shutil.rmtree(serialized_graph_path, ignore_errors=True)
     os.mkdir(serialized_graph_path)
 
-    db = lbug.Database(os.path.join(serialized_graph_path, "db.lbug"))
+    db = lbug.Database(os.path.join(serialized_graph_path, "db.lbdb"))
     conn = lbug.Connection(db)
     logging.info("Successfully connected")
 

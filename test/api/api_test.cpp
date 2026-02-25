@@ -559,7 +559,7 @@ TEST_F(ApiTest, DBFileUnderNonExistingDir) {
     }
     database.reset();
     std::filesystem::remove(databasePath);
-    databasePath = databasePath + "/non_existing_dir/database.lbug";
+    databasePath = databasePath + "/non_existing_dir/database.lbdb";
     ASSERT_FALSE(std::filesystem::exists(databasePath));
     // Attempt to open the database with the empty file.
     ASSERT_THROW(std::make_unique<Database>(databasePath, *systemConfig), IOException);

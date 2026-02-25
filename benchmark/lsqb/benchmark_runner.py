@@ -125,7 +125,7 @@ def run_query(conn, query_spec):
 
 
 def run_lbug(sf, serialized_graph_path, num_threads):
-    db = lbug.Database(os.path.join(serialized_graph_path, "db.lbug"))
+    db = lbug.Database(os.path.join(serialized_graph_path, "db.lbdb"))
     conn = lbug.Connection(db, num_threads=num_threads)
     if timeout is not None:
         conn.set_query_timeout(timeout)

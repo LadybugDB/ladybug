@@ -40,7 +40,7 @@ def test_extension_install_httpfs(conn_db_readwrite: ConnDB, tmpdir: str, extens
     extension_path = (
         Path(userdir)
         .joinpath(
-            ".lbug",
+            ".lbdb",
             "extension",
             extension_version,
             extension_extension_dir_prefix,

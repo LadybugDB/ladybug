@@ -161,7 +161,7 @@ _POOL_SIZE_: int = 256 * 1024 * 1024
 
 def get_db_file_path(tmp_path: Path) -> Path:
     """Return the path to the database file."""
-    return tmp_path / "db.lbug"
+    return tmp_path / "db.lbdb"
 
 
 def init_db(path: Path) -> Path:

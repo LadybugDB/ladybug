@@ -28,7 +28,7 @@ def open_database_on_subprocess(tmp_path: Path, build_dir: Path) -> None:
 
 
 def test_database_close(tmp_path: Path, build_dir: Path) -> None:
-    db_path = tmp_path / "test_database_close.lbug"
+    db_path = tmp_path / "test_database_close.lbdb"
     db = lb.Database(database_path=db_path, read_only=False)
     assert not db.is_closed
     assert db._database is not None
@@ -56,7 +56,7 @@ def test_database_close(tmp_path: Path, build_dir: Path) -> None:
 
 
 def test_database_context_manager(tmp_path: Path, build_dir: Path) -> None:
-    db_path = tmp_path / "test_database_context_manager.lbug"
+    db_path = tmp_path / "test_database_context_manager.lbdb"
     with lb.Database(database_path=db_path, read_only=False) as db:
         assert not db.is_closed
         assert db._database is not None

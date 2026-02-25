@@ -185,7 +185,7 @@ const main::ExtensionOption* ClientContext::getExtensionOption(std::string optio
 }
 
 std::string ClientContext::getExtensionDir() const {
-    return std::format("{}/.lbug/extension/{}/{}/", clientConfig.homeDirectory,
+    return std::format("{}/.lbdb/extension/{}/{}/", clientConfig.homeDirectory,
         LBUG_EXTENSION_VERSION, extension::getPlatform());
 }
 

@@ -17,7 +17,7 @@ public class TestBase {
 
     @BeforeAll
     static void getDBandConn() throws IOException {
-        String dbPath = tempDir.resolve("db.lbug").toString();
+        String dbPath = tempDir.resolve("db.lbdb").toString();
         TestHelper.loadData(dbPath);
         db = TestHelper.getDatabase();
         conn = TestHelper.getConnection();

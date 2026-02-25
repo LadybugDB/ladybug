@@ -162,7 +162,7 @@ int main(int argc, char* argv[]) {
     if (pathToHistory.empty() && !std::filesystem::exists(historyFile)) {
         auto homeDir = ClientContext::getUserHomeDir();
         if (!homeDir.empty()) {
-            pathToHistory = std::string(homeDir) + "/.lbug/";
+            pathToHistory = std::string(homeDir) + "/.lbdb/";
             if (std::filesystem::create_directories(pathToHistory) != 0) {
                 std::cerr << "Warning: failed to create directory: " << pathToHistory << '\n';
                 pathToHistory = "";
