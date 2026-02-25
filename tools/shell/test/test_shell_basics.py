@@ -105,7 +105,7 @@ def test_multi_queries_one_line(temp_db) -> None:
     result = test.run()
     result.check_stdout(
         [
-            "Error: Parser exception: Invalid input < S>: expected rule Statements (line: 1, offset: 24)",
+            "Error: Parser exception: Invalid input < S>: expected rule iC_Statements (line: 1, offset: 24)",
             '"RETURN "databases rule" S a; RETURN s;"',
             "                         ^",
         ],
@@ -216,7 +216,7 @@ def test_lbugrc(temp_db) -> None:
     result.check_stdout("-- Processing: .lbugrc")
     result.check_stdout(
         [
-            "Error: Parser exception: Invalid input < S>: expected rule Statements (line: 1, offset: 24)",
+            "Error: Parser exception: Invalid input < S>: expected rule iC_Statements (line: 1, offset: 24)",
             '"RETURN "databases rule" S a; RETURN s;"',
             "                         ^",
         ],
