@@ -7,7 +7,7 @@
 -CASE Scenario1
 -STATEMENT RETURN 42 — 41;
 ---- error
-Parser exception: Invalid input < —>: expected rule Statements (line: 1, offset: 10)
+Parser exception: Invalid input < —>: expected rule iC_Statements (line: 1, offset: 10)
 "RETURN 42 — 41;"
            ^
 
