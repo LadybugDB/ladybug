@@ -5,6 +5,7 @@
 
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/exception/runtime.h"
+#include "common/mask.h"
 #include "common/types/internal_id_util.h"
 #include "storage/table/node_table.h"
 
@@ -86,6 +87,13 @@ protected:
         std::string tableName = nodeTableCatalogEntry->getName();
         return prefix + "_nodes_" + tableName + suffix;
     }
+
+public:
+    // Apply semi-mask filter to selection vector
+    // startNodeOffset: starting node offset in the table for this scan batch
+    // numRowsToScan: number of rows being scanned
+    void applySemiMaskFilter(const TableScanState& state, common::row_idx_t startNodeOffset,
+        common::row_idx_t numRowsToScan, common::SelectionVector& selVector) const;
 };
 
 } // namespace storage

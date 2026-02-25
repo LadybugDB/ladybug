@@ -9,6 +9,7 @@
 #include "storage/table/chunked_node_group.h"
 #include "storage/table/column_chunk.h"
 #include "storage/table/column_chunk_scanner.h"
+#include "storage/table/columnar_node_table_base.h"
 #include "storage/table/csr_chunked_node_group.h"
 #include "storage/table/csr_node_group.h"
 #include "storage/table/lazy_segment_scanner.h"
@@ -183,35 +184,6 @@ void NodeGroup::initializeScanState(const Transaction*, const UniqLock& lock,
     initializeScanStateForChunkedGroup(state, firstChunkedGroup);
 }
 
-void applySemiMaskFilter(const TableScanState& state, row_idx_t numRowsToScan,
-    SelectionVector& selVector) {
-    auto& nodeGroupScanState = *state.nodeGroupScanState;
-    const auto startNodeOffset = nodeGroupScanState.nextRowToScan +
-                                 StorageUtils::getStartOffsetOfNodeGroup(state.nodeGroupIdx);
-    const auto endNodeOffset = startNodeOffset + numRowsToScan;
-    const auto& arr = state.semiMask->range(startNodeOffset, endNodeOffset);
-    if (arr.empty()) {
-        selVector.setSelSize(0);
-    } else {
-        auto stat = selVector.getMutableBuffer();
-        uint64_t numSelectedValues = 0;
-        size_t i = 0, j = 0;
-        while (i < numRowsToScan && j < arr.size()) {
-            auto temp = arr[j] - startNodeOffset;
-            if (selVector[i] < temp) {
-                ++i;
-            } else if (selVector[i] > temp) {
-                ++j;
-            } else {
-                stat[numSelectedValues++] = temp;
-                ++i;
-                ++j;
-            }
-        }
-        selVector.setToFiltered(numSelectedValues);
-    }
-}
-
 NodeGroupScanResult NodeGroup::scan(const Transaction* transaction, TableScanState& state) const {
     // TODO(Guodong): Move the locked part of figuring out the chunked group to initScan.
     const auto lock = chunkedGroups.lock();
@@ -238,7 +210,12 @@ NodeGroupScanResult NodeGroup::scan(const Transaction* transaction, TableScanSta
     bool enableSemiMask =
         state.source == TableScanSource::COMMITTED && state.semiMask && state.semiMask->isEnabled();
     if (enableSemiMask) {
-        applySemiMaskFilter(state, numRowsToScan, state.outState->getSelVectorUnsafe());
+        auto& nodeGroupScanState = *state.nodeGroupScanState;
+        const auto startNodeOffset = nodeGroupScanState.nextRowToScan +
+                                     StorageUtils::getStartOffsetOfNodeGroup(state.nodeGroupIdx);
+        static_cast<const ColumnarNodeTableBase*>(state.table)
+            ->applySemiMaskFilter(state, startNodeOffset, numRowsToScan,
+                state.outState->getSelVectorUnsafe());
         if (state.outState->getSelVector().getSelSize() == 0) {
             state.nodeGroupScanState->nextRowToScan += numRowsToScan;
             return NodeGroupScanResult{nodeGroupScanState.nextRowToScan, 0};
@@ -256,7 +233,11 @@ NodeGroupScanResult NodeGroup::scan(Transaction* transaction, TableScanState& st
     bool enableSemiMask =
         state.source == TableScanSource::COMMITTED && state.semiMask && state.semiMask->isEnabled();
     if (enableSemiMask) {
-        applySemiMaskFilter(state, numRowsToScan, state.outState->getSelVectorUnsafe());
+        const auto startNodeOffset =
+            startOffsetInGroup + StorageUtils::getStartOffsetOfNodeGroup(state.nodeGroupIdx);
+        static_cast<const ColumnarNodeTableBase*>(state.table)
+            ->applySemiMaskFilter(state, startNodeOffset, numRowsToScan,
+                state.outState->getSelVectorUnsafe());
         if (state.outState->getSelVector().getSelSize() == 0) {
             state.nodeGroupScanState->nextRowToScan += numRowsToScan;
             return NodeGroupScanResult{state.nodeGroupScanState->nextRowToScan, 0};
