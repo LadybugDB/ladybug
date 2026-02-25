@@ -52,6 +52,10 @@ protected:
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
 
 private:
+    // Initialize scan state for a specific batch (assigned via shared state)
+    void initArrowScanForBatch(transaction::Transaction* transaction,
+        ArrowNodeTableScanState& scanState) const;
+
     void copyArrowBatchToOutputVectors(const ArrowArrayWrapper& batch,
         const size_t currentBatchOffset, const uint64_t numRowsToCopy,
         const std::vector<common::ValueVector*>& outputVectors,

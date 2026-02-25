@@ -54,7 +54,6 @@ void ArrowNodeTable::initScanState([[maybe_unused]] transaction::Transaction* tr
     // Note: We don't copy the schema/arrays as they are wrappers with release callbacks
     arrowScanState.initialized = false;
     arrowScanState.scanCompleted = true;
-    arrowScanState.currentBatchIdx = scanState.nodeGroupIdx;
     arrowScanState.currentBatchOffset = 0;
     arrowScanState.nextGlobalRowOffset = 0;
     arrowScanState.totalRows = totalRows;
@@ -72,15 +71,42 @@ void ArrowNodeTable::initScanState([[maybe_unused]] transaction::Transaction* tr
             }
         }
     }
-    if (scanState.source == TableScanSource::COMMITTED &&
-        scanState.nodeGroupIdx != common::INVALID_NODE_GROUP_IDX &&
-        scanState.nodeGroupIdx < arrays.size()) {
-        arrowScanState.scanCompleted = false;
-        arrowScanState.nextGlobalRowOffset = batchStartOffsets[scanState.nodeGroupIdx];
-    }
+
+    // Set nodeGroupIdx to invalid initially - will be assigned by getNextBatch via
+    // initArrowScanForBatch
+    arrowScanState.nodeGroupIdx = common::INVALID_NODE_GROUP_IDX;
+
+    // Initialize scan state for the current batch (assigned via shared state)
+    // This fetches the first batch from the shared state
+    initArrowScanForBatch(transaction, arrowScanState);
 
     // Each scan state needs to be able to read data independently for parallel scanning
     arrowScanState.initialized = true;
+}
+
+void ArrowNodeTable::initArrowScanForBatch([[maybe_unused]] transaction::Transaction* transaction,
+    ArrowNodeTableScanState& scanState) const {
+    // Use shared state to get the next available batch for this scan state
+    if (scanState.nodeGroupIdx == common::INVALID_NODE_GROUP_IDX) {
+        common::node_group_idx_t assignedBatchIdx;
+        if (sharedState->getNextBatch(assignedBatchIdx)) {
+            scanState.nodeGroupIdx = assignedBatchIdx;
+            scanState.currentBatchIdx = assignedBatchIdx;
+            scanState.currentBatchOffset = 0;
+            scanState.nextGlobalRowOffset = batchStartOffsets[assignedBatchIdx];
+            scanState.scanCompleted = false;
+        } else {
+            // No more batches available - mark scan as completed
+            scanState.scanCompleted = true;
+            return;
+        }
+    } else {
+        // Batch already assigned (e.g., by external morsel system or re-initialization)
+        scanState.currentBatchIdx = scanState.nodeGroupIdx;
+        scanState.currentBatchOffset = 0;
+        scanState.nextGlobalRowOffset = batchStartOffsets[scanState.nodeGroupIdx];
+        scanState.scanCompleted = false;
+    }
 }
 
 static void applySemiMaskFilter(const TableScanState& state, const size_t startOffset,
@@ -112,17 +138,25 @@ static void applySemiMaskFilter(const TableScanState& state, const size_t startO
 bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* transaction,
     TableScanState& scanState) {
     auto& arrowScanState = scanState.cast<ArrowNodeTableScanState>();
-    if (arrowScanState.scanCompleted || arrowScanState.currentBatchIdx >= arrays.size()) {
+    if (arrowScanState.scanCompleted) {
         return false;
+    }
+
+    // If current batch is exhausted, try to get the next batch from shared state
+    if (arrowScanState.currentBatchIdx >= arrays.size() ||
+        arrowScanState.currentBatchOffset >=
+            getArrowBatchLength(arrays[arrowScanState.currentBatchIdx])) {
+        // Reset nodeGroupIdx to invalid so getNextBatch will assign a new one
+        arrowScanState.nodeGroupIdx = common::INVALID_NODE_GROUP_IDX;
+        initArrowScanForBatch(transaction, arrowScanState);
+        if (arrowScanState.scanCompleted) {
+            return false; // No more batches available
+        }
     }
 
     scanState.resetOutVectors();
     const auto& batch = arrays[arrowScanState.currentBatchIdx];
     auto batchLength = getArrowBatchLength(batch);
-    if (arrowScanState.currentBatchOffset >= batchLength) {
-        arrowScanState.scanCompleted = true;
-        return false;
-    }
 
     auto outputSize = static_cast<uint64_t>(batchLength - arrowScanState.currentBatchOffset);
 
