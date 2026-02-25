@@ -13,21 +13,33 @@ execute_process(
   COMMAND ${NPX_CMD} cmake-js print-cmakejs-include
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   OUTPUT_VARIABLE CMAKE_JS_INC
+  ERROR_QUIET
 )
 execute_process(
   COMMAND ${NPX_CMD} cmake-js print-cmakejs-lib
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   OUTPUT_VARIABLE CMAKE_JS_LIB
+  ERROR_QUIET
 )
 execute_process(
   COMMAND ${NPX_CMD} cmake-js print-cmakejs-src
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   OUTPUT_VARIABLE CMAKE_JS_SRC
+  ERROR_QUIET
 )
 
 string(STRIP ${CMAKE_JS_INC} CMAKE_JS_INC)
 string(STRIP ${CMAKE_JS_LIB} CMAKE_JS_LIB)
 string(STRIP ${CMAKE_JS_SRC} CMAKE_JS_SRC)
+# Filter out cmake-js v8 INFO logs that pollute stdout
+string(REGEX REPLACE "INFO [^\n]*\n?" "" CMAKE_JS_INC "${CMAKE_JS_INC}")
+string(REGEX REPLACE "INFO [^\n]*\n?" "" CMAKE_JS_LIB "${CMAKE_JS_LIB}")
+string(REGEX REPLACE "INFO [^\n]*\n?" "" CMAKE_JS_SRC "${CMAKE_JS_SRC}")
+
+# Without this windows breaks with:  Invalid character escape '\P'.
+string(REPLACE "\\" "/" CMAKE_JS_INC "${CMAKE_JS_INC}")
+string(REPLACE "\\" "/" CMAKE_JS_LIB "${CMAKE_JS_LIB}")
+string(REPLACE "\\" "/" CMAKE_JS_SRC "${CMAKE_JS_SRC}")
 
 # Print CMAKE_JS variables
 message(STATUS "CMake.js configurations: LIB=${CMAKE_JS_LIB}, INC=${CMAKE_JS_INC}, SRC=${CMAKE_JS_SRC}")
