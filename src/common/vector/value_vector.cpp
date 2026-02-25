@@ -216,17 +216,27 @@ void ValueVector::copyFromValue(uint64_t pos, const Value& value) {
         auto dstDataVector = ListVector::getDataVector(this);
         for (auto i = 0u; i < numValues; ++i) {
             auto childVal = NestedVal::getChildVal(&value, i);
-            dstDataVector->setNull(listEntry->offset + i, childVal->isNull());
-            if (!childVal->isNull()) {
-                dstDataVector->copyFromValue(listEntry->offset + i,
-                    *NestedVal::getChildVal(&value, i));
+            if (childVal) {
+                dstDataVector->setNull(listEntry->offset + i, childVal->isNull());
+                if (!childVal->isNull()) {
+                    dstDataVector->copyFromValue(listEntry->offset + i, *childVal);
+                }
+            } else {
+                dstDataVector->setNull(listEntry->offset + i, true);
             }
         }
     } break;
     case PhysicalTypeID::STRUCT: {
         auto structFields = StructVector::getFieldVectors(this);
         for (auto i = 0u; i < structFields.size(); ++i) {
-            structFields[i]->copyFromValue(pos, *NestedVal::getChildVal(&value, i));
+            if (i < value.childrenSize) {
+                auto childVal = NestedVal::getChildVal(&value, i);
+                if (childVal) {
+                    structFields[i]->copyFromValue(pos, *childVal);
+                }
+            } else {
+                structFields[i]->setNull(pos, true);
+            }
         }
     } break;
     case PhysicalTypeID::INTERNAL_ID: {
