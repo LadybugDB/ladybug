@@ -56,6 +56,8 @@ void ArrowNodeTable::initScanState([[maybe_unused]] transaction::Transaction* tr
     arrowScanState.scanCompleted = true;
     arrowScanState.currentBatchOffset = 0;
     arrowScanState.nextGlobalRowOffset = 0;
+    arrowScanState.currentMorselStartOffset = 0;
+    arrowScanState.currentMorselEndOffset = 0;
     arrowScanState.totalRows = totalRows;
     arrowScanState.outputToArrowColumnIdx.assign(scanState.columnIDs.size(), -1);
     for (size_t outCol = 0; outCol < scanState.columnIDs.size(); ++outCol) {
@@ -95,6 +97,11 @@ void ArrowNodeTable::initArrowScanForBatch([[maybe_unused]] transaction::Transac
             scanState.currentBatchOffset = 0;
             scanState.nextGlobalRowOffset = batchStartOffsets[assignedBatchIdx];
             scanState.scanCompleted = false;
+
+            // Initialize morsel boundaries for the first morsel in this batch
+            auto batchLength = getArrowBatchLength(arrays[assignedBatchIdx]);
+            scanState.currentMorselStartOffset = 0;
+            scanState.currentMorselEndOffset = std::min(scanState.morselSize, batchLength);
         } else {
             // No more batches available - mark scan as completed
             scanState.scanCompleted = true;
@@ -106,6 +113,11 @@ void ArrowNodeTable::initArrowScanForBatch([[maybe_unused]] transaction::Transac
         scanState.currentBatchOffset = 0;
         scanState.nextGlobalRowOffset = batchStartOffsets[scanState.nodeGroupIdx];
         scanState.scanCompleted = false;
+
+        // Initialize morsel boundaries for the first morsel
+        auto batchLength = getArrowBatchLength(arrays[scanState.nodeGroupIdx]);
+        scanState.currentMorselStartOffset = 0;
+        scanState.currentMorselEndOffset = std::min(scanState.morselSize, batchLength);
     }
 }
 
@@ -142,23 +154,39 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
         return false;
     }
 
-    // If current batch is exhausted, try to get the next batch from shared state
-    if (arrowScanState.currentBatchIdx >= arrays.size() ||
-        arrowScanState.currentBatchOffset >=
-            getArrowBatchLength(arrays[arrowScanState.currentBatchIdx])) {
-        // Reset nodeGroupIdx to invalid so getNextBatch will assign a new one
+    // Check if we need to move to the next morsel or batch
+    if (arrowScanState.currentBatchIdx >= arrays.size()) {
+        arrowScanState.scanCompleted = true;
+        return false;
+    }
+
+    const auto& batch = arrays[arrowScanState.currentBatchIdx];
+    auto batchLength = getArrowBatchLength(batch);
+
+    // Check if current morsel is exhausted, advance to next morsel
+    if (arrowScanState.currentMorselStartOffset >= batchLength) {
+        // All morsels in current batch exhausted, try to get next batch
         arrowScanState.nodeGroupIdx = common::INVALID_NODE_GROUP_IDX;
         initArrowScanForBatch(transaction, arrowScanState);
         if (arrowScanState.scanCompleted) {
             return false; // No more batches available
         }
+        // Refresh batch reference after getting new batch
+        const auto& newBatch = arrays[arrowScanState.currentBatchIdx];
+        batchLength = getArrowBatchLength(newBatch);
     }
 
     scanState.resetOutVectors();
-    const auto& batch = arrays[arrowScanState.currentBatchIdx];
-    auto batchLength = getArrowBatchLength(batch);
 
-    auto outputSize = static_cast<uint64_t>(batchLength - arrowScanState.currentBatchOffset);
+    // Calculate the size of the current morsel
+    auto morselStart = arrowScanState.currentMorselStartOffset;
+    auto morselEnd = std::min(arrowScanState.currentMorselEndOffset, batchLength);
+    auto outputSize = static_cast<uint64_t>(morselEnd - morselStart);
+
+    // Update batch offset for this morsel
+    arrowScanState.currentBatchOffset = morselStart;
+    arrowScanState.nextGlobalRowOffset =
+        batchStartOffsets[arrowScanState.currentBatchIdx] + morselStart;
 
     scanState.outState->getSelVectorUnsafe().setSelSize(outputSize);
 
@@ -166,13 +194,14 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
         applySemiMaskFilter(scanState, arrowScanState.nextGlobalRowOffset, outputSize,
             scanState.outState->getSelVectorUnsafe());
         if (scanState.outState->getSelVector().getSelSize() == 0) {
-            arrowScanState.currentBatchOffset += outputSize;
-            arrowScanState.nextGlobalRowOffset += outputSize;
+            // Advance to next morsel
+            arrowScanState.currentMorselStartOffset = morselEnd;
+            arrowScanState.currentMorselEndOffset = morselEnd + arrowScanState.morselSize;
             return true;
         }
     }
 
-    KU_ASSERT(scanState.outputVectors.size() == arrowScanState.outputToArrowColumnIdx.size());
+    DASSERT(scanState.outputVectors.size() == arrowScanState.outputToArrowColumnIdx.size());
     copyArrowBatchToOutputVectors(batch, arrowScanState.currentBatchOffset, outputSize,
         scanState.outputVectors, arrowScanState.outputToArrowColumnIdx);
 
@@ -183,8 +212,9 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
         nodeID.offset = arrowScanState.nextGlobalRowOffset + i;
     }
 
-    arrowScanState.currentBatchOffset += outputSize;
-    arrowScanState.nextGlobalRowOffset += outputSize;
+    // Advance to next morsel
+    arrowScanState.currentMorselStartOffset = morselEnd;
+    arrowScanState.currentMorselEndOffset = morselEnd + arrowScanState.morselSize;
     return true;
 }
 

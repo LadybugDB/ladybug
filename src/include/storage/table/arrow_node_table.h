@@ -18,6 +18,10 @@ struct ArrowNodeTableScanState final : NodeTableScanState {
     size_t currentBatchIdx = 0;
     size_t currentBatchOffset = 0;
     size_t nextGlobalRowOffset = 0;
+    // For sub-batch morsel processing (Option B)
+    size_t morselSize = 2048;            // Default morsel size
+    size_t currentMorselStartOffset = 0; // Start of current morsel within batch
+    size_t currentMorselEndOffset = 0;   // End of current morsel within batch
     std::vector<int64_t> outputToArrowColumnIdx;
     bool initialized = false;
     bool scanCompleted = false;
