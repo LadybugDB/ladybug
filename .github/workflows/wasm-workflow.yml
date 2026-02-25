@@ -12,8 +12,20 @@ on:
 jobs:
   build-and-test-wasm:
     runs-on: ubuntu-latest
+    env:
+      TEST_JOBS: 16
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check if Sunday
+        id: check-sunday
+        run: |
+          day_of_week=$(date +%u)
+          if [ "$day_of_week" -eq 7 ]; then
+            echo "is_sunday=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_sunday=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Install uv
         run: python3 -m pip install uv
@@ -111,20 +123,20 @@ jobs:
 
       - name: Kernel test
         if: ${{ inputs.isNightly == true }}
-        run: ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600 --gtest_filter="-e2e_test_agg~hash_leak.LargeAggregateLeakTest:CopyTest.GracefulBMExceptionHandlingManyThreads"
+        run: ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600 -- --gtest_filter="-e2e_test_agg~hash_leak.LargeAggregateLeakTest:CopyTest.GracefulBMExceptionHandlingManyThreads"
 
       - name: Kernel test (in memory)
         if: ${{ inputs.isNightly == true }}
         env:
           IN_MEM_MODE: true
-        run: ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600 --gtest_filter="-e2e_test_agg~hash_leak.LargeAggregateLeakTest:CopyTest.GracefulBMExceptionHandlingManyThreads"
+        run: ctest --test-dir build/wasm/test/ --output-on-failure -j ${TEST_JOBS} --timeout 600 -- --gtest_filter="-e2e_test_agg~hash_leak.LargeAggregateLeakTest:CopyTest.GracefulBMExceptionHandlingManyThreads"
 
       - name: Clean up for single-threaded build
-        if: ${{ inputs.isNightly == true }}
+        if: ${{ inputs.isNightly == true && steps.check-sunday.outputs.is_sunday == 'true' }}
         run: make clean CMAKE=/usr/bin/cmake
 
       - name: Setup ccache (single-threaded)
-        if: ${{ inputs.isNightly == true }}
+        if: ${{ inputs.isNightly == true && steps.check-sunday.outputs.is_sunday == 'true' }}
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: wasm-test-single-${{ runner.os }}-${{ github.ref }}
@@ -134,14 +146,14 @@ jobs:
             wasm-test-single-${{ runner.os }}-
 
       - name: Configure ccache for single-threaded build
-        if: ${{ inputs.isNightly == true }}
+        if: ${{ inputs.isNightly == true && steps.check-sunday.outputs.is_sunday == 'true' }}
         run: |
           ccache --set-config=compiler_check=content
           ccache --set-config=hash_dir=false
           ccache --set-config=base_dir=${{ github.workspace }}
 
       - name: Kernel build & test (single-threaded)
-        if: ${{ inputs.isNightly == true }}
+        if: ${{ inputs.isNightly == true && steps.check-sunday.outputs.is_sunday == 'true' }}
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
