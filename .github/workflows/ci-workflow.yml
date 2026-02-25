@@ -1184,6 +1184,8 @@ jobs:
     needs: [ sanity-checks ]
     env:
       GEN: Ninja
+      TEST_JOBS: 4
+      NUM_THREADS: 4
     steps:
       - uses: actions/checkout@v4
 
