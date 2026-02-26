@@ -28,18 +28,25 @@ execute_process(
   ERROR_QUIET
 )
 
-string(STRIP "${CMAKE_JS_INC}" CMAKE_JS_INC)
-string(STRIP "${CMAKE_JS_LIB}" CMAKE_JS_LIB)
-string(STRIP "${CMAKE_JS_SRC}" CMAKE_JS_SRC)
-# Filter out cmake-js v8 INFO logs that pollute stdout
-string(REGEX REPLACE "INFO [^\n]*\n?" "" CMAKE_JS_INC "${CMAKE_JS_INC}")
-string(REGEX REPLACE "INFO [^\n]*\n?" "" CMAKE_JS_LIB "${CMAKE_JS_LIB}")
-string(REGEX REPLACE "INFO [^\n]*\n?" "" CMAKE_JS_SRC "${CMAKE_JS_SRC}")
-
 # Without this windows breaks with:  Invalid character escape '\P'.
 string(REPLACE "\\" "/" CMAKE_JS_INC "${CMAKE_JS_INC}")
 string(REPLACE "\\" "/" CMAKE_JS_LIB "${CMAKE_JS_LIB}")
 string(REPLACE "\\" "/" CMAKE_JS_SRC "${CMAKE_JS_SRC}")
+
+# cmake-js v8 pollutes stdout with multi-line log messages (INFO, WARN) before
+# printing the actual value. The actual value is always the LAST line of output
+# (from console.info(command) in bin/cmake-js). Some log messages are multi-line
+# (e.g. find-visualstudio emits "INFO ... found at:\n\"C:/path\"\nrun with --verbose")
+# so we can't simply strip lines starting with INFO/WARN.
+# Instead, extract only the last non-empty line which is the real value.
+# First strip trailing whitespace/newlines so the actual value is the last line
+# without a trailing \n, then remove all lines that DO end with \n (log lines).
+string(STRIP "${CMAKE_JS_INC}" CMAKE_JS_INC)
+string(STRIP "${CMAKE_JS_LIB}" CMAKE_JS_LIB)
+string(STRIP "${CMAKE_JS_SRC}" CMAKE_JS_SRC)
+string(REGEX REPLACE ".*\n" "" CMAKE_JS_INC "${CMAKE_JS_INC}")
+string(REGEX REPLACE ".*\n" "" CMAKE_JS_LIB "${CMAKE_JS_LIB}")
+string(REGEX REPLACE ".*\n" "" CMAKE_JS_SRC "${CMAKE_JS_SRC}")
 
 # Print CMAKE_JS variables
 message(STATUS "CMake.js configurations: LIB=${CMAKE_JS_LIB}, INC=${CMAKE_JS_INC}, SRC=${CMAKE_JS_SRC}")
@@ -58,7 +65,10 @@ file(GLOB JS_SOURCE_FILES
 # Copy all JS/TS files to build directory
 file(COPY ${JS_SOURCE_FILES} DESTINATION  "${CMAKE_CURRENT_SOURCE_DIR}/build")
 
-add_library(lbugjs SHARED ${CPP_SOURCE_FILES} ${CMAKE_JS_SRC})
+add_library(lbugjs SHARED ${CPP_SOURCE_FILES})
+if(CMAKE_JS_SRC)
+  target_sources(lbugjs PRIVATE "${CMAKE_JS_SRC}")
+endif()
 set_target_properties(lbugjs PROPERTIES PREFIX "" SUFFIX ".node")
 set_target_properties(lbugjs
   PROPERTIES
