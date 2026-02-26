@@ -28,9 +28,9 @@ execute_process(
   ERROR_QUIET
 )
 
-string(STRIP ${CMAKE_JS_INC} CMAKE_JS_INC)
-string(STRIP ${CMAKE_JS_LIB} CMAKE_JS_LIB)
-string(STRIP ${CMAKE_JS_SRC} CMAKE_JS_SRC)
+string(STRIP "${CMAKE_JS_INC}" CMAKE_JS_INC)
+string(STRIP "${CMAKE_JS_LIB}" CMAKE_JS_LIB)
+string(STRIP "${CMAKE_JS_SRC}" CMAKE_JS_SRC)
 # Filter out cmake-js v8 INFO logs that pollute stdout
 string(REGEX REPLACE "INFO [^\n]*\n?" "" CMAKE_JS_INC "${CMAKE_JS_INC}")
 string(REGEX REPLACE "INFO [^\n]*\n?" "" CMAKE_JS_LIB "${CMAKE_JS_LIB}")
