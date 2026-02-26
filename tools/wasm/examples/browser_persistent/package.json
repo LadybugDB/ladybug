@@ -11,6 +11,6 @@
   "description": "",
   "dependencies": {
     "express": "^4.21.2",
-    "lbug-wasm": "^0.8.0"
+    "@lbug/lbug-wasm": "^0.13.1"
   }
 }
