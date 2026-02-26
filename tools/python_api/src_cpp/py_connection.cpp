@@ -640,8 +640,7 @@ Value PyConnection::transformPythonValueAs(const py::handle& val, const LogicalT
     }
     case LogicalTypeID::UUID: {
         auto strVal = py::str(val).cast<std::string>();
-        auto uuidVal = UUID::fromString(strVal);
-        uuid uuidToAppend{uuidVal};
+        auto uuidToAppend = uuid::fromString(strVal);
         return Value{uuidToAppend};
     }
     case LogicalTypeID::LIST: {

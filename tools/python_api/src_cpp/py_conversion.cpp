@@ -18,7 +18,7 @@ PythonObjectType getPythonObjectType(py::handle& ele) {
     auto pyDateTime = importCache->datetime.datetime();
     auto pandasNat = importCache->pandas.NaT();
     auto pyDate = importCache->datetime.date();
-    auto uuid = importCache->uuid.UUID();
+    auto pyUUid = importCache->uuid.UUID();
     if (ele.is_none() || ele.is(pandasNa) || ele.is(pandasNat)) {
         return PythonObjectType::None;
     } else if (py::isinstance<py::bool_>(ele)) {
@@ -37,7 +37,7 @@ PythonObjectType getPythonObjectType(py::handle& ele) {
         return PythonObjectType::Bytes;
     } else if (py::isinstance<py::list>(ele)) {
         return PythonObjectType::List;
-    } else if (py::isinstance(ele, uuid)) {
+    } else if (py::isinstance(ele, pyUUid)) {
         return PythonObjectType::UUID;
     } else if (py::isinstance<py::dict>(ele)) {
         return PythonObjectType::Dict;
@@ -189,9 +189,9 @@ void transformPythonValue(common::ValueVector* outputVector, uint64_t pos, py::h
     } break;
     case PythonObjectType::UUID: {
         outputVector->setNull(pos, false /* isNull */);
-        int128_t result = 0;
-        UUID::fromString(ele.attr("hex").cast<std::string>(), result);
-        outputVector->setValue(pos, result);
+        uuid result = 0;
+        uuid::fromString(ele.attr("hex").cast<std::string>(), result);
+        outputVector->setValue(pos, result.value);
     } break;
     case PythonObjectType::Dict: {
         PyDictionary dict = PyDictionary(py::reinterpret_borrow<py::object>(ele));

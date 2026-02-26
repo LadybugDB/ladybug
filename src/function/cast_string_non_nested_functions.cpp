@@ -97,7 +97,7 @@ static bool isDate(std::string_view str) {
 }
 
 static bool isUUID(std::string_view str) {
-    return RE2::FullMatch(str, UUID::regexPattern());
+    return RE2::FullMatch(str, uuid::regexPattern());
 }
 
 static bool isInterval(std::string_view str) {

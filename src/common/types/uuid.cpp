@@ -7,12 +7,12 @@
 namespace lbug {
 namespace common {
 
-void UUID::byteToHex(char byteVal, char* buf, uint64_t& pos) {
+void uuid::byteToHex(char byteVal, char* buf, uint64_t& pos) {
     buf[pos++] = HEX_DIGITS[(byteVal >> 4) & 0xf];
     buf[pos++] = HEX_DIGITS[byteVal & 0xf];
 }
 
-unsigned char UUID::hex2Char(char ch) {
+unsigned char uuid::hex2Char(char ch) {
     if (ch >= '0' && ch <= '9') {
         return ch - '0';
     }
@@ -25,11 +25,11 @@ unsigned char UUID::hex2Char(char ch) {
     return 0;
 }
 
-bool UUID::isHex(char ch) {
+bool uuid::isHex(char ch) {
     return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
 }
 
-bool UUID::fromString(std::string str, int128_t& result) {
+bool uuid::fromString(std::string str, uuid& result) {
     if (str.empty()) {
         return false;
     }
@@ -43,8 +43,10 @@ bool UUID::fromString(std::string str, int128_t& result) {
     }
     // LCOV_EXCL_STOP
 
-    result.low = 0;
-    result.high = 0;
+    uint128_t& value = result.value;
+
+    value.low = 0;
+    value.high = 0;
     uint32_t count = 0;
     for (auto i = numBrackets; i < str.size() - numBrackets; ++i) {
         if (str[i] == '-') {
@@ -54,30 +56,30 @@ bool UUID::fromString(std::string str, int128_t& result) {
             return false;
         }
         if (count >= 16) {
-            result.low = (result.low << 4) | hex2Char(str[i]);
+            value.low = (value.low << 4) | hex2Char(str[i]);
         } else {
-            result.high = (result.high << 4) | hex2Char(str[i]);
+            value.high = (value.high << 4) | hex2Char(str[i]);
         }
         count++;
     }
     // Flip the first bit to make `order by uuid` same as `order by uuid::varchar`
-    result.high ^= (int64_t(1) << 63);
+    value.high ^= (int64_t(1) << 63);
     return count == 32;
 }
 
-int128_t UUID::fromString(std::string str) {
-    int128_t result = 0;
+uuid uuid::fromString(std::string str) {
+    uuid result = 0;
     if (!fromString(str, result)) {
         throw ConversionException("Invalid UUID: " + str);
     }
     return result;
 }
 
-int128_t UUID::fromCString(const char* str, uint64_t len) {
+uuid uuid::fromCString(const char* str, uint64_t len) {
     return fromString(std::string(str, len));
 }
 
-void UUID::toString(int128_t input, char* buf) {
+void uuid::toString(int128_t input, char* buf) {
     // Flip back before convert to string
     int64_t high = input.high ^ (int64_t(1) << 63);
     uint64_t pos = 0;
@@ -103,17 +105,17 @@ void UUID::toString(int128_t input, char* buf) {
     byteToHex(input.low & 0xFF, buf, pos);
 }
 
-std::string UUID::toString(int128_t input) {
+std::string uuid::toString(int128_t input) {
     char buff[UUID_STRING_LENGTH];
     toString(input, buff);
     return std::string(buff, UUID_STRING_LENGTH);
 }
 
-std::string UUID::toString(uuid val) {
+std::string uuid::toString(uuid val) {
     return toString(val.value);
 }
 
-uuid UUID::generateRandomUUID(RandomEngine* engine) {
+uuid uuid::generateRandomUUID(RandomEngine* engine) {
     uint8_t bytes[16];
     for (int i = 0; i < 16; i += 4) {
         *reinterpret_cast<uint32_t*>(bytes + i) = engine->nextRandomInteger();
@@ -147,7 +149,7 @@ uuid UUID::generateRandomUUID(RandomEngine* engine) {
     return uuid{result};
 }
 
-const regex::RE2& UUID::regexPattern() {
+const regex::RE2& uuid::regexPattern() {
     static regex::RE2 retval("(?i)[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}");
     return retval;
 }

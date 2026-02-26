@@ -335,7 +335,7 @@ void ArrowRowBatch::templateCopyNonNullValue<LogicalTypeID::UUID>(ArrowVector* v
         std::memcpy(vector->data.data() + pos * valSize, &val, valSize);
     } else {
         auto offsets = (std::uint32_t*)vector->data.data();
-        auto str = UUID::toString(value.val.int128Val);
+        auto str = uuid::toString(value.val.int128Val);
         auto strLength = str.length();
         if (pos == 0) {
             offsets[pos] = 0;

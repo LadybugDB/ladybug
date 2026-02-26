@@ -110,7 +110,7 @@ DatabaseHeader DatabaseHeader::deserialize(common::Deserializer& deSer) {
 
 DatabaseHeader DatabaseHeader::createInitialHeader(common::RandomEngine* randomEngine) {
     // We generate a random UUID to act as the database ID
-    return DatabaseHeader{{}, {}, 0, common::UUID::generateRandomUUID(randomEngine)};
+    return DatabaseHeader{{}, {}, 0, common::uuid::generateRandomUUID(randomEngine)};
 }
 
 std::optional<DatabaseHeader> DatabaseHeader::readDatabaseHeader(common::FileInfo& dataFileInfo) {

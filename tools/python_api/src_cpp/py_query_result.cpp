@@ -158,7 +158,7 @@ py::object PyQueryResult::convertValueToPyObject(const Value& value) {
     }
     case LogicalTypeID::UUID: {
         lbug::common::int128_t result = value.getValue<lbug::common::int128_t>();
-        std::string uuidString = lbug::common::UUID::toString(result);
+        std::string uuidString = lbug::common::uuid::toString(result);
         auto UUID = importCache->uuid.UUID();
         return UUID(uuidString);
     }
