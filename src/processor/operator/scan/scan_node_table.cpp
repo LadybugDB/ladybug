@@ -78,7 +78,7 @@ void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
     // ColumnarNodeTables handle morsel assignment internally
     // TODO: parquet tables https://github.com/LadybugDB/ladybug/issues/245
     if (auto arrowTable = dynamic_cast<ArrowNodeTable*>(this->table)) {
-        auto tableSharedState = arrowTable->getSharedState();
+        auto tableSharedState = arrowTable->getTableScanSharedState();
         if (tableSharedState->getNextMorsel(static_cast<ColumnarNodeTableScanState*>(&scanState))) {
             scanState.source = TableScanSource::COMMITTED;
         } else {

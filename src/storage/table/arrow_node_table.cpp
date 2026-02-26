@@ -50,7 +50,7 @@ ArrowNodeTable::~ArrowNodeTable() {
 }
 
 void ArrowNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
-    auto arrowScanSharedState = static_cast<ArrowNodeTableScanSharedState*>(sharedState.get());
+    auto arrowScanSharedState = static_cast<ArrowNodeTableScanSharedState*>(tableScanSharedState.get());
     auto batchSizes = getBatchSizes(transaction);
     arrowScanSharedState->reset(batchSizes);
 }
@@ -90,7 +90,7 @@ void ArrowNodeTable::initScanState([[maybe_unused]] transaction::Transaction* tr
 
 // First run always fails due to arrowScanState.scanCompleted == true because either scanState.source = NONE or
 // scanState.currentBatchIdx = INVALID_NODE_GROUP_IDX on the first run(look at initScanState function)
-// sharedState.nextMorsel will drive scanInternal completely
+// tableScanSharedState.nextMorsel will drive scanInternal completely
 bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* transaction,
     TableScanState& scanState) {
     auto& arrowScanState = scanState.cast<ArrowNodeTableScanState>();

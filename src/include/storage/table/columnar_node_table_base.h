@@ -36,8 +36,8 @@ struct ColumnarNodeTableScanSharedState {
 class ColumnarNodeTableBase : public NodeTable {
 public:
     ColumnarNodeTableBase(const StorageManager* storageManager,
-        const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager, std::unique_ptr<ColumnarNodeTableScanSharedState> sharedState)
-        : NodeTable{storageManager, nodeTableEntry, memoryManager}, nodeTableCatalogEntry{nodeTableEntry}, sharedState{std::move(sharedState)} {}
+        const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager, std::unique_ptr<ColumnarNodeTableScanSharedState> tableScanSharedState)
+        : NodeTable{storageManager, nodeTableEntry, memoryManager}, nodeTableCatalogEntry{nodeTableEntry}, tableScanSharedState{std::move(tableScanSharedState)} {}
 
     virtual ~ColumnarNodeTableBase() = default;
 
@@ -65,7 +65,7 @@ public:
 
 protected:
     const catalog::NodeTableCatalogEntry* nodeTableCatalogEntry;
-    mutable std::unique_ptr<ColumnarNodeTableScanSharedState> sharedState;
+    mutable std::unique_ptr<ColumnarNodeTableScanSharedState> tableScanSharedState;
 
     // Template method pattern: subclasses implement format-specific operations
     virtual std::string getColumnarFormatName() const = 0;
@@ -81,7 +81,7 @@ protected:
     }
 
 public:
-    ColumnarNodeTableScanSharedState* getSharedState() const { return sharedState.get(); }
+    ColumnarNodeTableScanSharedState* getTableScanSharedState() const { return tableScanSharedState.get(); }
 };
 
 } // namespace storage
