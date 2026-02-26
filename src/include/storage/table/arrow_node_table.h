@@ -16,9 +16,7 @@ namespace storage {
 struct ArrowNodeTableScanState final : NodeTableScanState {
     size_t totalRows = 0;
     size_t currentBatchIdx = 0;
-    size_t currentBatchOffset = 0;
     size_t nextGlobalRowOffset = 0;
-    // For sub-batch morsel processing (Option B)
     size_t morselSize = 2048;            // Default morsel size
     size_t currentMorselStartOffset = 0; // Start of current morsel within batch
     size_t currentMorselEndOffset = 0;   // End of current morsel within batch
@@ -60,8 +58,8 @@ private:
     void initArrowScanForBatch(transaction::Transaction* transaction,
         ArrowNodeTableScanState& scanState) const;
 
-    void copyArrowBatchToOutputVectors(const ArrowArrayWrapper& batch,
-        const size_t currentBatchOffset, const uint64_t numRowsToCopy,
+    void copyArrowMorselToOutputVectors(const ArrowArrayWrapper& batch,
+        const size_t currentMorselStartOffset, const uint64_t numRowsToCopy,
         const std::vector<common::ValueVector*>& outputVectors,
         const std::vector<int64_t>& outputToArrowColumnIdx) const;
 
