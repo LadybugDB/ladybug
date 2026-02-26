@@ -854,8 +854,8 @@ void NodeTable::deserialize(main::ClientContext* context, StorageManager* storag
     }
 }
 
-void NodeTable::applySemiMaskFilter(const TableScanState& state,
-    row_idx_t startOffset, row_idx_t numRowsToScan, SelectionVector& selVector) {
+void NodeTable::applySemiMaskFilter(const TableScanState& state, row_idx_t startOffset,
+    row_idx_t numRowsToScan, SelectionVector& selVector) {
     if (!state.semiMask || !state.semiMask->isEnabled()) {
         return;
     }

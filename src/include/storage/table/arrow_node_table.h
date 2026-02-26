@@ -24,7 +24,8 @@ struct ArrowNodeTableScanState final : ColumnarNodeTableScanState {
     ArrowNodeTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
-        : ColumnarNodeTableScanState{mm, nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {}
+        : ColumnarNodeTableScanState{mm, nodeIDVector, std::move(outputVectors),
+              std::move(outChunkState)} {}
 };
 
 struct ArrowNodeTableScanSharedState final : ColumnarNodeTableScanSharedState {
@@ -32,9 +33,8 @@ private:
     std::mutex mtx;
     std::vector<size_t> batchSizes;
     common::node_group_idx_t currentBatchIdx = 0;
-    const size_t morselSize = 2048;            // Default morsel size
+    const size_t morselSize = 2048; // Default morsel size
     size_t currentMorselStartOffset = 0;
-
 
 public:
     void reset(std::vector<size_t> batchSizes) {
@@ -54,7 +54,8 @@ public:
             if (currentMorselStartOffset < batchLength) {
                 arrowScanState->currentBatchIdx = currentBatchIdx;
                 arrowScanState->currentMorselStartOffset = currentMorselStartOffset;
-                arrowScanState->currentMorselEndOffset = std::min(currentMorselStartOffset + morselSize, batchLength);
+                arrowScanState->currentMorselEndOffset =
+                    std::min(currentMorselStartOffset + morselSize, batchLength);
                 this->currentMorselStartOffset = arrowScanState->currentMorselEndOffset;
 
                 return true;
@@ -94,7 +95,8 @@ protected:
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
 
 private:
-    std::vector<size_t> getBatchSizes([[maybe_unused]] const transaction::Transaction* transaction) const;
+    std::vector<size_t> getBatchSizes(
+        [[maybe_unused]] const transaction::Transaction* transaction) const;
 
     void copyArrowMorselToOutputVectors(const ArrowArrayWrapper& batch,
         const size_t currentMorselStartOffset, const uint64_t numRowsToCopy,

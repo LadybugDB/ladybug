@@ -24,7 +24,8 @@ struct ParquetNodeTableScanState final : ColumnarNodeTableScanState {
     ParquetNodeTableScanState([[maybe_unused]] MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
-        : ColumnarNodeTableScanState{mm, nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {
+        : ColumnarNodeTableScanState{mm, nodeIDVector, std::move(outputVectors),
+              std::move(outChunkState)} {
         parquetScanState = std::make_unique<processor::ParquetReaderScanState>();
     }
 };
@@ -53,9 +54,7 @@ public:
 
     // TODO : getNextBatch to be replaced with this
     // See: https://github.com/LadybugDB/ladybug/issues/245
-    bool getNextMorsel(ColumnarNodeTableScanState* scanState) override {
-        return false;
-    }
+    bool getNextMorsel(ColumnarNodeTableScanState*) override { return false; }
 };
 
 class ParquetNodeTable final : public ColumnarNodeTableBase {

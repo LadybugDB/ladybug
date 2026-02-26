@@ -27,7 +27,8 @@ static uint64_t getArrowBatchLength(const ArrowArrayWrapper& array) {
 ArrowNodeTable::ArrowNodeTable(const StorageManager* storageManager,
     const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
     ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays, std::string arrowId)
-    : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager, std::make_unique<ArrowNodeTableScanSharedState>()},
+    : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager,
+          std::make_unique<ArrowNodeTableScanSharedState>()},
       schema{std::move(schema)}, arrays{std::move(arrays)}, totalRows{0},
       arrowId{std::move(arrowId)} {
     // Note: release may be nullptr if schema is managed by registry
@@ -50,7 +51,8 @@ ArrowNodeTable::~ArrowNodeTable() {
 }
 
 void ArrowNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
-    auto arrowScanSharedState = static_cast<ArrowNodeTableScanSharedState*>(tableScanSharedState.get());
+    auto arrowScanSharedState =
+        static_cast<ArrowNodeTableScanSharedState*>(tableScanSharedState.get());
     auto batchSizes = getBatchSizes(transaction);
     arrowScanSharedState->reset(batchSizes);
 }
@@ -88,9 +90,10 @@ void ArrowNodeTable::initScanState([[maybe_unused]] transaction::Transaction* tr
     arrowScanState.initialized = true;
 }
 
-// First run always fails due to arrowScanState.scanCompleted == true because either scanState.source = NONE or
-// scanState.currentBatchIdx = INVALID_NODE_GROUP_IDX on the first run(look at initScanState function)
-// tableScanSharedState.nextMorsel will drive scanInternal completely
+// First run always fails due to arrowScanState.scanCompleted == true because either
+// scanState.source = NONE or scanState.currentBatchIdx = INVALID_NODE_GROUP_IDX on the first
+// run(look at initScanState function) tableScanSharedState.nextMorsel will drive scanInternal
+// completely
 bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* transaction,
     TableScanState& scanState) {
     auto& arrowScanState = scanState.cast<ArrowNodeTableScanState>();
@@ -118,7 +121,8 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
 
     scanState.outState->getSelVectorUnsafe().setSelSize(outputSize);
 
-    NodeTable::applySemiMaskFilter(scanState, nextGlobalRowOffset, outputSize, scanState.outState->getSelVectorUnsafe());
+    NodeTable::applySemiMaskFilter(scanState, nextGlobalRowOffset, outputSize,
+        scanState.outState->getSelVectorUnsafe());
 
     if (scanState.outState->getSelVector().getSelSize() == 0) {
         return false;

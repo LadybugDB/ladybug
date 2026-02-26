@@ -18,8 +18,8 @@ struct ColumnarNodeTableScanState : NodeTableScanState {
     size_t totalRows = 0;
     bool scanCompleted = false; // Track if this scan state has finished reading
 
-    ColumnarNodeTableScanState([[maybe_unused]] MemoryManager& mm, common::ValueVector* nodeIDVector,
-        std::vector<common::ValueVector*> outputVectors,
+    ColumnarNodeTableScanState([[maybe_unused]] MemoryManager& mm,
+        common::ValueVector* nodeIDVector, std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
         : NodeTableScanState{nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {}
 };
@@ -36,8 +36,11 @@ struct ColumnarNodeTableScanSharedState {
 class ColumnarNodeTableBase : public NodeTable {
 public:
     ColumnarNodeTableBase(const StorageManager* storageManager,
-        const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager, std::unique_ptr<ColumnarNodeTableScanSharedState> tableScanSharedState)
-        : NodeTable{storageManager, nodeTableEntry, memoryManager}, nodeTableCatalogEntry{nodeTableEntry}, tableScanSharedState{std::move(tableScanSharedState)} {}
+        const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
+        std::unique_ptr<ColumnarNodeTableScanSharedState> tableScanSharedState)
+        : NodeTable{storageManager, nodeTableEntry, memoryManager},
+          nodeTableCatalogEntry{nodeTableEntry},
+          tableScanSharedState{std::move(tableScanSharedState)} {}
 
     virtual ~ColumnarNodeTableBase() = default;
 
@@ -81,7 +84,9 @@ protected:
     }
 
 public:
-    ColumnarNodeTableScanSharedState* getTableScanSharedState() const { return tableScanSharedState.get(); }
+    ColumnarNodeTableScanSharedState* getTableScanSharedState() const {
+        return tableScanSharedState.get();
+    }
 };
 
 } // namespace storage

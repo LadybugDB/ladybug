@@ -16,7 +16,8 @@ namespace common {
 
 template<typename Func>
 static void rowIter(const ValueVector& outputVector, uint64_t count, Func&& func) {
-    // Use sel_vector only if it is unfiltered. For copying the first n elements, count param should be used instead
+    // Use sel_vector only if it is unfiltered. For copying the first n elements, count param should
+    // be used instead
     if (outputVector.state != nullptr && !outputVector.state->getSelVector().isUnfiltered()) {
         outputVector.state->getSelVector().forEach(func);
     } else {

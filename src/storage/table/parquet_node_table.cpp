@@ -25,7 +25,8 @@ namespace storage {
 
 ParquetNodeTable::ParquetNodeTable(const StorageManager* storageManager,
     const NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager)
-    : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager, std::make_unique<ParquetNodeTableScanSharedState>()} {
+    : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager,
+          std::make_unique<ParquetNodeTableScanSharedState>()} {
     std::string prefix = nodeTableEntry->getStorage();
     if (prefix.empty()) {
         throw RuntimeException("Parquet file prefix is empty for parquet-backed node table");
@@ -36,7 +37,8 @@ ParquetNodeTable::ParquetNodeTable(const StorageManager* storageManager,
 }
 
 void ParquetNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
-    auto parquetScanSharedState = static_cast<ParquetNodeTableScanSharedState*>(tableScanSharedState.get());
+    auto parquetScanSharedState =
+        static_cast<ParquetNodeTableScanSharedState*>(tableScanSharedState.get());
     auto numBatches = getNumBatches(transaction);
     parquetScanSharedState->reset(numBatches);
 }
@@ -129,7 +131,8 @@ void ParquetNodeTable::initParquetScanForRowGroup(Transaction* transaction,
     // Use shared state to get the next available row group for this scan state
     if (scanState.nodeGroupIdx == INVALID_NODE_GROUP_IDX) {
         common::node_group_idx_t assignedRowGroup;
-        if (dynamic_cast<ParquetNodeTableScanSharedState*>(tableScanSharedState.get())->getNextBatch(assignedRowGroup)) {
+        if (dynamic_cast<ParquetNodeTableScanSharedState*>(tableScanSharedState.get())
+                ->getNextBatch(assignedRowGroup)) {
             scanState.nodeGroupIdx = assignedRowGroup;
             groupsToRead.push_back(assignedRowGroup);
         } else {
