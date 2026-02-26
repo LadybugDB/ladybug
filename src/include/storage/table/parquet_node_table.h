@@ -13,22 +13,48 @@
 namespace lbug {
 namespace storage {
 
-struct ParquetNodeTableScanState final : NodeTableScanState {
+struct ParquetNodeTableScanState final : ColumnarNodeTableScanState {
     std::unique_ptr<processor::ParquetReader> parquetReader;
     std::unique_ptr<processor::ParquetReaderScanState> parquetScanState;
-    bool initialized = false;
-    bool scanCompleted = false; // Track if this scan state has finished reading
     bool dataRead = false;
     std::vector<std::vector<std::unique_ptr<common::Value>>> allData;
-    size_t totalRows = 0;
     size_t nextRowToDistribute = 0;
     uint64_t lastQueryId = 0; // Track the last query ID to detect new queries
 
     ParquetNodeTableScanState([[maybe_unused]] MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
-        : NodeTableScanState{nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {
+        : ColumnarNodeTableScanState{mm, nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {
         parquetScanState = std::make_unique<processor::ParquetReaderScanState>();
+    }
+};
+
+struct ParquetNodeTableScanSharedState final : ColumnarNodeTableScanSharedState {
+private:
+    std::mutex mtx;
+    common::node_group_idx_t currentBatchIdx = 0;
+    common::node_group_idx_t numBatches = 0;
+
+public:
+    void reset(common::node_group_idx_t totalBatches) {
+        std::lock_guard<std::mutex> lock(mtx);
+        currentBatchIdx = 0;
+        numBatches = totalBatches;
+    }
+
+    bool getNextBatch(common::node_group_idx_t& assignedBatchIdx) {
+        std::lock_guard<std::mutex> lock(mtx);
+        if (currentBatchIdx < numBatches) {
+            assignedBatchIdx = currentBatchIdx++;
+            return true;
+        }
+        return false;
+    }
+
+    // TODO : getNextBatch to be replaced with this
+    // See: https://github.com/LadybugDB/ladybug/issues/245
+    bool getNextMorsel(ColumnarNodeTableScanState* scanState) override {
+        return false;
     }
 };
 
@@ -36,6 +62,8 @@ class ParquetNodeTable final : public ColumnarNodeTableBase {
 public:
     ParquetNodeTable(const StorageManager* storageManager,
         const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager);
+
+    void initializeScanCoordination(const transaction::Transaction* transaction) override;
 
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,
         bool resetCachedBoundNodeSelVec = true) const override;

@@ -74,7 +74,20 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
 void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
     ScanNodeTableProgressSharedState& progressSharedState) {
     std::unique_lock lck{mtx};
-    // Cast to NodeTableScanState since we know this is for node tables
+
+    // ColumnarNodeTables handle morsel assignment internally
+    // TODO: parquet tables https://github.com/LadybugDB/ladybug/issues/245
+    if (auto arrowTable = dynamic_cast<ArrowNodeTable*>(this->table)) {
+        auto tableSharedState = arrowTable->getSharedState();
+        if (tableSharedState->getNextMorsel(static_cast<ColumnarNodeTableScanState*>(&scanState))) {
+            scanState.source = TableScanSource::COMMITTED;
+        } else {
+            scanState.source = TableScanSource::NONE;
+        }
+
+        return;
+    }
+
     auto& nodeScanState = scanState.cast<NodeTableScanState>();
     if (currentCommittedGroupIdx < numCommittedNodeGroups) {
         nodeScanState.nodeGroupIdx = currentCommittedGroupIdx++;

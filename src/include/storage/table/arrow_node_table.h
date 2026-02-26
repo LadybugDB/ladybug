@@ -13,21 +13,59 @@
 namespace lbug {
 namespace storage {
 
-struct ArrowNodeTableScanState final : NodeTableScanState {
-    size_t totalRows = 0;
-    size_t currentBatchIdx = 0;
-    size_t nextGlobalRowOffset = 0;
-    size_t morselSize = 2048;            // Default morsel size
+struct ArrowNodeTableScanState final : ColumnarNodeTableScanState {
+    size_t currentBatchIdx = common::INVALID_NODE_GROUP_IDX;
     size_t currentMorselStartOffset = 0; // Start of current morsel within batch
     size_t currentMorselEndOffset = 0;   // End of current morsel within batch
     std::vector<int64_t> outputToArrowColumnIdx;
     bool initialized = false;
     bool scanCompleted = false;
 
-    ArrowNodeTableScanState([[maybe_unused]] MemoryManager& mm, common::ValueVector* nodeIDVector,
+    ArrowNodeTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
-        : NodeTableScanState{nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {}
+        : ColumnarNodeTableScanState{mm, nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {}
+};
+
+struct ArrowNodeTableScanSharedState final : ColumnarNodeTableScanSharedState {
+private:
+    std::mutex mtx;
+    std::vector<size_t> batchSizes;
+    common::node_group_idx_t currentBatchIdx = 0;
+    const size_t morselSize = 2048;            // Default morsel size
+    size_t currentMorselStartOffset = 0;
+
+
+public:
+    void reset(std::vector<size_t> batchSizes) {
+        std::lock_guard<std::mutex> lock(mtx);
+        this->batchSizes = batchSizes;
+        this->currentBatchIdx = 0;
+        this->currentMorselStartOffset = 0;
+    }
+
+    bool getNextMorsel(ColumnarNodeTableScanState* scanState) override {
+        auto arrowScanState = static_cast<ArrowNodeTableScanState*>(scanState);
+        std::lock_guard<std::mutex> lock(mtx);
+
+        while (currentBatchIdx < batchSizes.size()) {
+            auto batchLength = batchSizes[currentBatchIdx];
+
+            if (currentMorselStartOffset < batchLength) {
+                arrowScanState->currentBatchIdx = currentBatchIdx;
+                arrowScanState->currentMorselStartOffset = currentMorselStartOffset;
+                arrowScanState->currentMorselEndOffset = std::min(currentMorselStartOffset + morselSize, batchLength);
+                this->currentMorselStartOffset = arrowScanState->currentMorselEndOffset;
+
+                return true;
+            }
+
+            this->currentBatchIdx++;
+            this->currentMorselStartOffset = 0;
+        }
+
+        return false;
+    }
 };
 
 class ArrowNodeTable final : public ColumnarNodeTableBase {
@@ -37,6 +75,8 @@ public:
         ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays, std::string arrowId);
 
     ~ArrowNodeTable();
+
+    void initializeScanCoordination(const transaction::Transaction* transaction) override;
 
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,
         bool resetCachedBoundNodeSelVec = true) const override;
@@ -54,9 +94,7 @@ protected:
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
 
 private:
-    // Initialize scan state for a specific batch (assigned via shared state)
-    void initArrowScanForBatch(transaction::Transaction* transaction,
-        ArrowNodeTableScanState& scanState) const;
+    std::vector<size_t> getBatchSizes([[maybe_unused]] const transaction::Transaction* transaction) const;
 
     void copyArrowMorselToOutputVectors(const ArrowArrayWrapper& batch,
         const size_t currentMorselStartOffset, const uint64_t numRowsToCopy,
