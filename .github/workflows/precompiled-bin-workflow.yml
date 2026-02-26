@@ -23,6 +23,7 @@ jobs:
             container: quay.io/pypa/manylinux_2_28_aarch64
           - os: macos-latest
           - os: windows-latest
+          - os: windows-11-arm
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
     steps:
@@ -67,11 +68,11 @@ jobs:
         if: runner.os == 'Windows'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: precompiled-bin-${{ runner.os }}-${{ github.ref }}
+          key: precompiled-bin-${{ runner.os }}-${{ runner.arch }}-${{ github.ref }}
           max-size: 2G
           restore-keys: |
-            precompiled-bin-${{ runner.os }}-refs/heads/master
-            precompiled-bin-${{ runner.os }}-
+            precompiled-bin-${{ runner.os }}-${{ runner.arch }}-refs/heads/master
+            precompiled-bin-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
@@ -126,7 +127,11 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          if "%RUNNER_ARCH%"=="X64" (
+            call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          ) else (
+            call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsarm64.bat"
+          )
           make GEN=Ninja
           make install
 
@@ -185,8 +190,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          powershell -Command "Compress-Archive -Path lbug.h, lbug.hpp, lbug_shared.dll, lbug_shared.lib -DestinationPath liblbug-windows-x86_64.zip"
-          powershell -Command "Compress-Archive -Path lbug.exe -DestinationPath lbug_cli-windows-x86_64.zip"
+          if "%RUNNER_ARCH%"=="X64" (
+            powershell -Command "Compress-Archive -Path lbug.h, lbug.hpp, lbug_shared.dll, lbug_shared.lib -DestinationPath liblbug-windows-x86_64.zip"
+            powershell -Command "Compress-Archive -Path lbug.exe -DestinationPath lbug_cli-windows-x86_64.zip"
+          ) else (
+            powershell -Command "Compress-Archive -Path lbug.h, lbug.hpp, lbug_shared.dll, lbug_shared.lib -DestinationPath liblbug-windows-arm64.zip"
+            powershell -Command "Compress-Archive -Path lbug.exe -DestinationPath lbug_cli-windows-arm64.zip"
+          )
 
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Linux'
@@ -215,11 +225,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: liblbug-windows-x86_64
-          path: liblbug-windows-x86_64.zip
+          name: ${{ runner.arch == 'X64' && 'liblbug-windows-x86_64' || 'liblbug-windows-arm64' }}
+          path: ${{ runner.arch == 'X64' && 'liblbug-windows-x86_64.zip' || 'liblbug-windows-arm64.zip' }}
 
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: lbug_cli-windows-x86_64
-          path: lbug_cli-windows-x86_64.zip
+          name: ${{ runner.arch == 'X64' && 'lbug_cli-windows-x86_64' || 'lbug_cli-windows-arm64' }}
+          path: ${{ runner.arch == 'X64' && 'lbug_cli-windows-x86_64.zip' || 'lbug_cli-windows-arm64.zip' }}

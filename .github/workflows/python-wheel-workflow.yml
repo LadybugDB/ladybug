@@ -89,7 +89,7 @@ jobs:
       CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
 
       # Let CIBW detect the arch from the runner
-      CIBW_ARCHS: ${{ matrix.os == 'windows' && 'AMD64' || 'auto' }}
+      CIBW_ARCHS: ${{ matrix.os == 'windows' && matrix.platform || 'auto' }}
 
       # Set the manylinux image based on the detected arch (Linux only)
       CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
@@ -170,16 +170,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: D:\c
-          key: ${{ runner.os }}-ccache-wheel-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-ccache-wheel-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
           restore-keys: |
-            ${{ runner.os }}-ccache-wheel-
+            ${{ runner.os }}-${{ runner.arch }}-ccache-wheel-
 
       - name: Build wheels on ${{ matrix.platform }} (Windows)
         if: matrix.os == 'windows'
         shell: cmd
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          if "%RUNNER_ARCH%"=="X64" (
+            call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          ) else (
+            call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsarm64.bat"
+          )
           ccache -s
           pipx run --spec cibuildwheel cibuildwheel %SDIST_FILE% --output-dir scripts\pip-package\wheelhouse
           ccache -s
