@@ -101,8 +101,8 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
         return false;
     }
 
-    // Check if we need to move to the next morsel or batch
-    if (arrowScanState.currentBatchIdx >= arrays.size()) {
+    if (arrowScanState.currentBatchIdx >= arrays.size() ||
+        arrowScanState.currentMorselStartOffset >= arrowScanState.currentMorselEndOffset) {
         arrowScanState.scanCompleted = true;
         return false;
     }
@@ -138,6 +138,8 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
         nodeID.tableID = tableID;
         nodeID.offset = nextGlobalRowOffset + i;
     }
+
+    arrowScanState.currentMorselStartOffset += outputSize;
 
     return true;
 }
