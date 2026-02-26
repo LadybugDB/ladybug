@@ -103,7 +103,8 @@ void ArrowNodeTable::initArrowScanForBatch([[maybe_unused]] transaction::Transac
             // Initialize morsel boundaries for the first morsel in this batch
             auto batchLength = getArrowBatchLength(arrays[assignedBatchIdx]);
             scanState.currentMorselStartOffset = 0;
-            scanState.currentMorselEndOffset = std::min(scanState.morselSize, batchLength);
+            scanState.currentMorselEndOffset =
+                std::min((uint64_t)scanState.morselSize, batchLength);
         } else {
             // No more batches available - mark scan as completed
             scanState.scanCompleted = true;
@@ -119,7 +120,7 @@ void ArrowNodeTable::initArrowScanForBatch([[maybe_unused]] transaction::Transac
         // Initialize morsel boundaries for the first morsel
         auto batchLength = getArrowBatchLength(arrays[scanState.nodeGroupIdx]);
         scanState.currentMorselStartOffset = 0;
-        scanState.currentMorselEndOffset = std::min(scanState.morselSize, batchLength);
+        scanState.currentMorselEndOffset = std::min((uint64_t)scanState.morselSize, batchLength);
     }
 }
 
@@ -156,7 +157,7 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
 
     // Calculate the size of the current morsel
     auto morselStart = arrowScanState.currentMorselStartOffset;
-    auto morselEnd = std::min(arrowScanState.currentMorselEndOffset, batchLength);
+    auto morselEnd = std::min((uint64_t)arrowScanState.currentMorselEndOffset, batchLength);
     auto outputSize = static_cast<uint64_t>(morselEnd - morselStart);
 
     // Update batch offset for this morsel
