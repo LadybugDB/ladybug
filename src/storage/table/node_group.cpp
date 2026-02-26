@@ -213,8 +213,7 @@ NodeGroupScanResult NodeGroup::scan(const Transaction* transaction, TableScanSta
         auto& nodeGroupScanState = *state.nodeGroupScanState;
         const auto startNodeOffset = nodeGroupScanState.nextRowToScan +
                                      StorageUtils::getStartOffsetOfNodeGroup(state.nodeGroupIdx);
-        static_cast<const ColumnarNodeTableBase*>(state.table)
-            ->applySemiMaskFilter(state, startNodeOffset, numRowsToScan,
+        NodeTable::applySemiMaskFilter(state, startNodeOffset, numRowsToScan,
                 state.outState->getSelVectorUnsafe());
         if (state.outState->getSelVector().getSelSize() == 0) {
             state.nodeGroupScanState->nextRowToScan += numRowsToScan;
@@ -235,8 +234,7 @@ NodeGroupScanResult NodeGroup::scan(Transaction* transaction, TableScanState& st
     if (enableSemiMask) {
         const auto startNodeOffset =
             startOffsetInGroup + StorageUtils::getStartOffsetOfNodeGroup(state.nodeGroupIdx);
-        static_cast<const ColumnarNodeTableBase*>(state.table)
-            ->applySemiMaskFilter(state, startNodeOffset, numRowsToScan,
+        NodeTable::applySemiMaskFilter(state, startNodeOffset, numRowsToScan,
                 state.outState->getSelVectorUnsafe());
         if (state.outState->getSelVector().getSelSize() == 0) {
             state.nodeGroupScanState->nextRowToScan += numRowsToScan;

@@ -81,12 +81,6 @@ protected:
     }
 
 public:
-    // Apply semi-mask filter to selection vector
-    // startOffset: startOffset of the morsel in the table
-    // numRowsToScan: number of rows being scanned
-    void applySemiMaskFilter(const TableScanState& state, common::row_idx_t startOffset,
-        common::row_idx_t numRowsToScan, common::SelectionVector& selVector) const;
-
     ColumnarNodeTableScanSharedState* getSharedState() const { return sharedState.get(); }
 };
 

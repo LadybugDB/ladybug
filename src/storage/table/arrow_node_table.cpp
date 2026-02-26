@@ -118,7 +118,7 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
 
     scanState.outState->getSelVectorUnsafe().setSelSize(outputSize);
 
-    applySemiMaskFilter(scanState, nextGlobalRowOffset, outputSize, scanState.outState->getSelVectorUnsafe());
+    NodeTable::applySemiMaskFilter(scanState, nextGlobalRowOffset, outputSize, scanState.outState->getSelVectorUnsafe());
 
     if (scanState.outState->getSelVector().getSelSize() == 0) {
         return false;

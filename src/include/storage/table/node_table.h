@@ -213,6 +213,12 @@ public:
     void deserialize(main::ClientContext* context, StorageManager* storageManager,
         common::Deserializer& deSer) override;
 
+    // Apply semi-mask filter to selection vector
+    // startOffset: startOffset of the morsel in the table
+    // numRowsToScan: number of rows being scanned
+    static void applySemiMaskFilter(const TableScanState& state, common::row_idx_t startOffset,
+        common::row_idx_t numRowsToScan, common::SelectionVector& selVector);
+
 private:
     void validatePkNotExists(const transaction::Transaction* transaction,
         common::ValueVector* pkVector) const;
