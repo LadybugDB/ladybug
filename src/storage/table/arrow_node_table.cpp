@@ -121,32 +121,6 @@ void ArrowNodeTable::initArrowScanForBatch([[maybe_unused]] transaction::Transac
     }
 }
 
-static void applySemiMaskFilter(const TableScanState& state, const size_t startOffset,
-    const uint64_t numRowsToScan, common::SelectionVector& selVector) {
-    const auto endOffset = startOffset + numRowsToScan;
-    const auto& arr = state.semiMask->range(startOffset, endOffset);
-    if (arr.empty()) {
-        selVector.setSelSize(0);
-    } else {
-        auto stat = selVector.getMutableBuffer();
-        uint64_t numSelectedValues = 0;
-        size_t i = 0, j = 0;
-        while (i < numRowsToScan && j < arr.size()) {
-            auto temp = arr[j] - startOffset;
-            if (selVector[i] < temp) {
-                ++i;
-            } else if (selVector[i] > temp) {
-                ++j;
-            } else {
-                stat[numSelectedValues++] = temp;
-                ++i;
-                ++j;
-            }
-        }
-        selVector.setToFiltered(numSelectedValues);
-    }
-}
-
 bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* transaction,
     TableScanState& scanState) {
     auto& arrowScanState = scanState.cast<ArrowNodeTableScanState>();
