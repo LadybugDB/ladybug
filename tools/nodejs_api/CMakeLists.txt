@@ -33,20 +33,34 @@ string(REPLACE "\\" "/" CMAKE_JS_INC "${CMAKE_JS_INC}")
 string(REPLACE "\\" "/" CMAKE_JS_LIB "${CMAKE_JS_LIB}")
 string(REPLACE "\\" "/" CMAKE_JS_SRC "${CMAKE_JS_SRC}")
 
-# cmake-js v8 pollutes stdout with multi-line log messages (INFO, WARN) before
-# printing the actual value. The actual value is always the LAST line of output
-# (from console.info(command) in bin/cmake-js). Some log messages are multi-line
-# (e.g. find-visualstudio emits "INFO ... found at:\n\"C:/path\"\nrun with --verbose")
+# cmake-js v8 pollutes stdout with log messages (INFO, WARN) before printing
+# the actual value. The actual value is always the LAST line of output (from
+# console.info() in bin/cmake-js). Some log messages span multiple lines (e.g.
+# find-visualstudio: "INFO ... found at:\n\"C:/path\"\nrun with --verbose"),
 # so we can't simply strip lines starting with INFO/WARN.
-# Instead, extract only the last non-empty line which is the real value.
-# First strip trailing whitespace/newlines so the actual value is the last line
-# without a trailing \n, then remove all lines that DO end with \n (log lines).
+#
+# Strategy: strip trailing whitespace, extract only the last line (everything
+# after the final \n), then clear any remaining value that isn't a valid path.
+# On Linux, when cmake-js returns an empty value, the only output is the INFO
+# log line itself (single line, no \n), which must also be cleared.
 string(STRIP "${CMAKE_JS_INC}" CMAKE_JS_INC)
 string(STRIP "${CMAKE_JS_LIB}" CMAKE_JS_LIB)
 string(STRIP "${CMAKE_JS_SRC}" CMAKE_JS_SRC)
+# Extract last line: remove everything up to and including the last newline.
 string(REGEX REPLACE ".*\n" "" CMAKE_JS_INC "${CMAKE_JS_INC}")
 string(REGEX REPLACE ".*\n" "" CMAKE_JS_LIB "${CMAKE_JS_LIB}")
 string(REGEX REPLACE ".*\n" "" CMAKE_JS_SRC "${CMAKE_JS_SRC}")
+# Clear any value that is not a valid path (e.g. a leftover single-line INFO/WARN log).
+# Valid cmake-js values are absolute paths starting with / or a drive letter (e.g. C:/).
+if(NOT CMAKE_JS_INC MATCHES "^(/|[A-Za-z]:)")
+  set(CMAKE_JS_INC "")
+endif()
+if(NOT CMAKE_JS_LIB MATCHES "^(/|[A-Za-z]:)")
+  set(CMAKE_JS_LIB "")
+endif()
+if(NOT CMAKE_JS_SRC MATCHES "^(/|[A-Za-z]:)")
+  set(CMAKE_JS_SRC "")
+endif()
 
 # Print CMAKE_JS variables
 message(STATUS "CMake.js configurations: LIB=${CMAKE_JS_LIB}, INC=${CMAKE_JS_INC}, SRC=${CMAKE_JS_SRC}")
