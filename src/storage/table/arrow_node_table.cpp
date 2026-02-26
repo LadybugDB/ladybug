@@ -1,5 +1,7 @@
 #include "storage/table/arrow_node_table.h"
 
+#include <algorithm>
+
 #include "common/arrow/arrow_converter.h"
 #include "common/arrow/arrow_nullmask_tree.h"
 #include "common/data_chunk/sel_vector.h"
