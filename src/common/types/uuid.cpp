@@ -43,10 +43,8 @@ bool uuid::fromString(std::string str, uuid& result) {
     }
     // LCOV_EXCL_STOP
 
-    uint128_t& value = result.value;
+    int128_t value(0, 0);
 
-    value.low = 0;
-    value.high = 0;
     uint32_t count = 0;
     for (auto i = numBrackets; i < str.size() - numBrackets; ++i) {
         if (str[i] == '-') {
@@ -64,11 +62,13 @@ bool uuid::fromString(std::string str, uuid& result) {
     }
     // Flip the first bit to make `order by uuid` same as `order by uuid::varchar`
     value.high ^= (int64_t(1) << 63);
+    result.value = value;
+
     return count == 32;
 }
 
 uuid uuid::fromString(std::string str) {
-    uuid result = 0;
+    uuid result;
     if (!fromString(str, result)) {
         throw ConversionException("Invalid UUID: " + str);
     }
