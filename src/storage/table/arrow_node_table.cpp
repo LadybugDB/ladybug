@@ -110,6 +110,11 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
     const auto& batch = arrays[arrowScanState.currentBatchIdx];
     auto batchLength = getArrowBatchLength(batch);
 
+    if (batchLength == 0 || !batch.children || !schema.children || batch.n_children <= 0) {
+        arrowScanState.scanCompleted = true;
+        return false;
+    }
+
     scanState.resetOutVectors();
 
     // Calculate the size of the current morsel
@@ -169,7 +174,7 @@ void ArrowNodeTable::copyArrowMorselToOutputVectors(const ArrowArrayWrapper& bat
     const size_t currentMorselStartOffset, const uint64_t numRowsToCopy,
     const std::vector<common::ValueVector*>& outputVectors,
     const std::vector<int64_t>& outputToArrowColumnIdx) const {
-    auto numChildren = batch.n_children < 0 ? 0u : static_cast<uint64_t>(batch.n_children);
+    auto numChildren = static_cast<uint64_t>(batch.n_children);
 
     for (uint64_t outCol = 0; outCol < outputVectors.size(); ++outCol) {
         if (!outputVectors[outCol]) {
@@ -177,8 +182,7 @@ void ArrowNodeTable::copyArrowMorselToOutputVectors(const ArrowArrayWrapper& bat
         }
         auto arrowColIdx = outputToArrowColumnIdx[outCol];
         if (arrowColIdx < 0 || static_cast<uint64_t>(arrowColIdx) >= numChildren ||
-            !batch.children || !schema.children || !batch.children[arrowColIdx] ||
-            !schema.children[arrowColIdx]) {
+            !batch.children[arrowColIdx] || !schema.children[arrowColIdx]) {
             continue;
         }
         auto& outputVector = *outputVectors[outCol];
