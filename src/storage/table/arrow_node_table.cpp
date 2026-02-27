@@ -28,7 +28,7 @@ ArrowNodeTable::ArrowNodeTable(const StorageManager* storageManager,
     const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
     ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays, std::string arrowId)
     : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager,
-          std::make_unique<ArrowNodeTableScanSharedState>()},
+          std::make_unique<ArrowNodeTableScanSharedState>(scanMorselSize)},
       schema{std::move(schema)}, arrays{std::move(arrays)}, totalRows{0},
       arrowId{std::move(arrowId)} {
     // Note: release may be nullptr if schema is managed by registry
@@ -168,6 +168,15 @@ std::vector<size_t> ArrowNodeTable::getBatchSizes(
     }
 
     return batchSizes;
+}
+
+size_t ArrowNodeTable::getNumScanMorsels([[maybe_unused]] const transaction::Transaction* transaction) const {
+    size_t numMorsels = 0;
+    for (const auto& array : arrays) {
+        auto batchLength = getArrowBatchLength(array);
+        numMorsels += (batchLength + scanMorselSize - 1) / scanMorselSize;
+    }
+    return numMorsels;
 }
 
 void ArrowNodeTable::copyArrowMorselToOutputVectors(const ArrowArrayWrapper& batch,

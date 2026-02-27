@@ -8,10 +8,10 @@ namespace lbug {
 namespace processor {
 
 struct ScanNodeTableProgressSharedState {
-    std::atomic<common::node_group_idx_t> numGroupsScanned;
-    common::node_group_idx_t numGroups;
+    std::atomic<common::node_group_idx_t> numMorselsScanned;
+    common::node_group_idx_t numMorsels;
 
-    ScanNodeTableProgressSharedState() : numGroupsScanned{0}, numGroups{0} {};
+    ScanNodeTableProgressSharedState() : numMorselsScanned{0}, numMorsels{0} {};
 };
 
 class ScanNodeTableSharedState {

@@ -33,10 +33,12 @@ private:
     std::mutex mtx;
     std::vector<size_t> batchSizes;
     common::node_group_idx_t currentBatchIdx = 0;
-    const size_t morselSize = 2048; // Default morsel size
     size_t currentMorselStartOffset = 0;
+    const size_t morselSize;
 
 public:
+    ArrowNodeTableScanSharedState(const size_t morselSize) :  ColumnarNodeTableScanSharedState(), morselSize(morselSize){}
+
     void reset(std::vector<size_t> batchSizes) {
         std::lock_guard<std::mutex> lock(mtx);
         this->batchSizes = batchSizes;
@@ -90,6 +92,8 @@ public:
     common::node_group_idx_t getNumBatches(
         const transaction::Transaction* transaction) const override;
 
+    size_t getNumScanMorsels(const transaction::Transaction* transaction) const;
+
 protected:
     std::string getColumnarFormatName() const override { return "Arrow"; }
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
@@ -109,6 +113,7 @@ private:
     std::vector<size_t> batchStartOffsets;
     size_t totalRows;
     std::string arrowId; // ID in registry for cleanup
+    const size_t scanMorselSize = 2048; // Default morsel size
 };
 
 } // namespace storage
