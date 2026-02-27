@@ -170,7 +170,8 @@ std::vector<size_t> ArrowNodeTable::getBatchSizes(
     return batchSizes;
 }
 
-size_t ArrowNodeTable::getNumScanMorsels([[maybe_unused]] const transaction::Transaction* transaction) const {
+size_t ArrowNodeTable::getNumScanMorsels(
+    [[maybe_unused]] const transaction::Transaction* transaction) const {
     size_t numMorsels = 0;
     for (const auto& array : arrays) {
         auto batchLength = getArrowBatchLength(array);

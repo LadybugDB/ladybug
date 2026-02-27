@@ -37,7 +37,8 @@ private:
     const size_t morselSize;
 
 public:
-    ArrowNodeTableScanSharedState(const size_t morselSize) :  ColumnarNodeTableScanSharedState(), morselSize(morselSize){}
+    ArrowNodeTableScanSharedState(const size_t morselSize)
+        : ColumnarNodeTableScanSharedState(), morselSize(morselSize) {}
 
     void reset(std::vector<size_t> batchSizes) {
         std::lock_guard<std::mutex> lock(mtx);
@@ -112,7 +113,7 @@ private:
     std::vector<ArrowArrayWrapper> arrays;
     std::vector<size_t> batchStartOffsets;
     size_t totalRows;
-    std::string arrowId; // ID in registry for cleanup
+    std::string arrowId;                // ID in registry for cleanup
     const size_t scanMorselSize = 2048; // Default morsel size
 };
 

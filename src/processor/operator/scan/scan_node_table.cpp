@@ -57,7 +57,8 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
         }
     } else if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(table)) {
         // For Arrow tables, set numCommittedNodeGroups to number of morsels
-        this->numCommittedNodeGroups = static_cast<common::node_group_idx_t>(arrowTable->getNumScanMorsels(transaction));
+        this->numCommittedNodeGroups =
+            static_cast<common::node_group_idx_t>(arrowTable->getNumScanMorsels(transaction));
     } else {
         this->numCommittedNodeGroups = table->getNumCommittedNodeGroups();
     }
