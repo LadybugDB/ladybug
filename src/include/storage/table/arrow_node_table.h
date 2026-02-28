@@ -113,8 +113,8 @@ private:
     std::vector<ArrowArrayWrapper> arrays;
     std::vector<size_t> batchStartOffsets;
     size_t totalRows;
-    std::string arrowId;                // ID in registry for cleanup
-    const size_t scanMorselSize = 2048; // Default morsel size
+    std::string arrowId;                           // ID in registry for cleanup
+    constexpr static size_t scanMorselSize = 2048; // Default morsel size
 };
 
 } // namespace storage
