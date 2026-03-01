@@ -215,6 +215,7 @@ val valueGetAsEmscriptenValue(const Value& value) {
     case LogicalTypeID::DOUBLE: {
         return val(value.getValue<double>());
     }
+    case LogicalTypeID::JSON:
     case LogicalTypeID::UUID:
     case LogicalTypeID::STRING: {
         return val(value.getValue<std::string>());
