@@ -81,7 +81,7 @@ void ArrowNodeTable::initScanState([[maybe_unused]] transaction::Transaction* tr
     }
 
     if (arrowScanState.source == TableScanSource::COMMITTED &&
-        arrowScanState.currentBatchIdx != common::INVALID_NODE_GROUP_IDX &&
+        arrowScanState.currentBatchIdx != static_cast<size_t>(common::INVALID_NODE_GROUP_IDX) &&
         arrowScanState.currentBatchIdx < arrays.size()) {
         arrowScanState.scanCompleted = false;
     }

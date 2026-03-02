@@ -14,7 +14,7 @@ namespace lbug {
 namespace storage {
 
 struct ArrowNodeTableScanState final : ColumnarNodeTableScanState {
-    size_t currentBatchIdx = common::INVALID_NODE_GROUP_IDX;
+    size_t currentBatchIdx = static_cast<size_t>(common::INVALID_NODE_GROUP_IDX);
     size_t currentMorselStartOffset = 0; // Start of current morsel within batch
     size_t currentMorselEndOffset = 0;   // End of current morsel within batch
     std::vector<int64_t> outputToArrowColumnIdx;
