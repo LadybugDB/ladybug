@@ -1,5 +1,7 @@
 #include "storage/table/node_table.h"
 
+#include <algorithm>
+
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/cast.h"
 #include "common/exception/message.h"
@@ -865,20 +867,35 @@ void NodeTable::applySemiMaskFilter(const TableScanState& state, row_idx_t start
         selVector.setSelSize(0);
     } else {
         auto stat = selVector.getMutableBuffer();
-        uint64_t numSelectedValues = 0;
-        size_t i = 0, j = 0;
-        while (i < numRowsToScan && j < arr.size()) {
-            auto temp = arr[j] - startOffset;
-            if (selVector[i] < temp) {
-                ++i;
-            } else if (selVector[i] > temp) {
-                ++j;
-            } else {
+        sel_t numSelectedValues = 0;
+
+        if (selVector.isUnfiltered()) {
+            for (size_t j = 0; j < arr.size(); ++j) {
+                auto temp = arr[j] - startOffset;
                 stat[numSelectedValues++] = temp;
-                ++i;
+            }
+        } else {
+            auto selectedPos = selVector.getSelectedPositions();
+            auto itr = selectedPos.begin();
+            auto end = selectedPos.end();
+            size_t j = 0;
+
+            while (itr != end && j < arr.size()) {
+                auto temp = arr[j] - startOffset;
+                itr = std::lower_bound(itr, end, temp);
+
+                if (itr == end) {
+                    break;
+                }
+
+                if (*itr == temp) {
+                    stat[numSelectedValues++] = temp;
+                    ++itr;
+                }
                 ++j;
             }
         }
+
         selVector.setToFiltered(numSelectedValues);
     }
 }
