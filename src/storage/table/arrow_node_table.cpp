@@ -50,6 +50,32 @@ ArrowNodeTable::~ArrowNodeTable() {
     }
 }
 
+void ArrowNodeTableScanState::setToTable(const transaction::Transaction* transaction, Table* table_,
+    std::vector<common::column_id_t> columnIDs_,
+    std::vector<ColumnPredicateSet> columnPredicateSets_, common::RelDataDirection) {
+    TableScanState::setToTable(transaction, table_, columnIDs_, std::move(columnPredicateSets_));
+
+    // populating outputToArrowColumnIdx for use in ArrowNodeTable scanInternal
+    this->outputToArrowColumnIdx.assign(columnIDs.size(), -1);
+    auto tableCatalogEntry = table->cast<ArrowNodeTable>().getCatalogEntry();
+
+    for (size_t col = 0; col < columnIDs.size(); ++col) {
+        const auto columnID = columnIDs[col];
+
+        if (columnID == common::INVALID_COLUMN_ID || columnID == common::ROW_IDX_COLUMN_ID) {
+            continue;
+        }
+
+        for (common::idx_t propIdx = 0; propIdx < tableCatalogEntry->getNumProperties();
+             ++propIdx) {
+            if (tableCatalogEntry->getColumnID(propIdx) == columnID) {
+                this->outputToArrowColumnIdx[col] = static_cast<int64_t>(propIdx);
+                break;
+            }
+        }
+    }
+}
+
 void ArrowNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
     auto arrowScanSharedState =
         static_cast<ArrowNodeTableScanSharedState*>(tableScanSharedState.get());
@@ -64,21 +90,6 @@ void ArrowNodeTable::initScanState([[maybe_unused]] transaction::Transaction* tr
     // Note: We don't copy the schema/arrays as they are wrappers with release callbacks
     arrowScanState.initialized = false;
     arrowScanState.scanCompleted = true;
-    arrowScanState.totalRows = totalRows;
-    arrowScanState.outputToArrowColumnIdx.assign(scanState.columnIDs.size(), -1);
-    for (size_t outCol = 0; outCol < scanState.columnIDs.size(); ++outCol) {
-        auto columnID = scanState.columnIDs[outCol];
-        if (columnID == common::INVALID_COLUMN_ID || columnID == common::ROW_IDX_COLUMN_ID) {
-            continue;
-        }
-        for (common::idx_t propIdx = 0; propIdx < nodeTableCatalogEntry->getNumProperties();
-             ++propIdx) {
-            if (nodeTableCatalogEntry->getColumnID(propIdx) == columnID) {
-                arrowScanState.outputToArrowColumnIdx[outCol] = static_cast<int64_t>(propIdx);
-                break;
-            }
-        }
-    }
 
     if (arrowScanState.source == TableScanSource::COMMITTED &&
         arrowScanState.currentBatchIdx != static_cast<size_t>(common::INVALID_NODE_GROUP_IDX) &&

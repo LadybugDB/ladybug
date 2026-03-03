@@ -26,6 +26,11 @@ struct ArrowNodeTableScanState final : ColumnarNodeTableScanState {
         std::shared_ptr<common::DataChunkState> outChunkState)
         : ColumnarNodeTableScanState{mm, nodeIDVector, std::move(outputVectors),
               std::move(outChunkState)} {}
+
+    void setToTable(const transaction::Transaction* transaction, Table* table_,
+        std::vector<common::column_id_t> columnIDs_,
+        std::vector<ColumnPredicateSet> columnPredicateSets_ = {},
+        common::RelDataDirection direction = common::RelDataDirection::INVALID) override;
 };
 
 struct ArrowNodeTableScanSharedState final : ColumnarNodeTableScanSharedState {
@@ -94,6 +99,8 @@ public:
         const transaction::Transaction* transaction) const override;
 
     size_t getNumScanMorsels(const transaction::Transaction* transaction) const;
+
+    const catalog::NodeTableCatalogEntry* getCatalogEntry() const { return nodeTableCatalogEntry; }
 
 protected:
     std::string getColumnarFormatName() const override { return "Arrow"; }
