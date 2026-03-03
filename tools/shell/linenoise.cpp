@@ -2361,9 +2361,10 @@ static void refreshMultiLine(struct linenoiseState* l) {
     /* First step: clear all the lines used before. To do so start by
      * going to the last row. */
     AppendBuffer append_buffer;
-    if (old_rows - l->oldpos > 0) {
-        lndebug("go down %d", old_rows - l->oldpos);
-        snprintf(seq, 64, "\x1b[%dB", old_rows - int(l->oldpos));
+    if (l->oldpos < static_cast<size_t>(old_rows)) {
+        const int rows_to_move_down = old_rows - static_cast<int>(l->oldpos);
+        lndebug("go down %d", rows_to_move_down);
+        snprintf(seq, 64, "\x1b[%dB", rows_to_move_down);
         append_buffer.abAppend(seq);
     }
 
@@ -2588,9 +2589,10 @@ static void refreshSearchMultiLine(struct linenoiseState* l, const char* searchP
         if (multi_old_rows < old_rows) {
             multi_old_rows = old_rows;
         }
-        if (multi_old_rows - l->oldpos > 0) {
-            lndebug("go down %d", multi_old_rows - l->oldpos);
-            snprintf(seq, 64, "\x1b[%dB", multi_old_rows - int(l->oldpos));
+        if (l->oldpos < static_cast<size_t>(multi_old_rows)) {
+            const int rows_to_move_down = multi_old_rows - static_cast<int>(l->oldpos);
+            lndebug("go down %d", rows_to_move_down);
+            snprintf(seq, 64, "\x1b[%dB", rows_to_move_down);
             append_buffer.abAppend(seq);
         }
 
