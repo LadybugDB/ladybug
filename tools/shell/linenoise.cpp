@@ -2416,9 +2416,9 @@ static void refreshMultiLine(struct linenoiseState* l) {
 
     /* Go up till we reach the expected positon. */
     // printf("rows - new_cursor_row %d\n", rows - new_cursor_row);
-    if (rows - new_cursor_row > 0) {
+    if (rows > new_cursor_row) {
         lndebug("go-up %d", rows - new_cursor_row);
-        snprintf(seq, 64, "\x1b[%ldA", rows - new_cursor_row);
+        snprintf(seq, 64, "\x1b[%ldA", (long)(rows - new_cursor_row));
         append_buffer.abAppend(seq);
     }
 
