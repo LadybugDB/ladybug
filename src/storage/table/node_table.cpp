@@ -878,10 +878,10 @@ void NodeTable::applySemiMaskFilter(const TableScanState& state, row_idx_t start
             auto selectedPos = selVector.getSelectedPositions();
             auto itr = selectedPos.begin();
             auto end = selectedPos.end();
-            size_t j = 0;
+            size_t i = 0;
 
-            while (itr != end && j < arr.size()) {
-                auto temp = arr[j] - startOffset;
+            while (itr != end && i < arr.size()) {
+                auto temp = arr[i] - startOffset;
                 itr = std::lower_bound(itr, end, temp);
 
                 if (itr == end) {
@@ -892,7 +892,7 @@ void NodeTable::applySemiMaskFilter(const TableScanState& state, row_idx_t start
                     stat[numSelectedValues++] = temp;
                     ++itr;
                 }
-                ++j;
+                ++i;
             }
         }
 
