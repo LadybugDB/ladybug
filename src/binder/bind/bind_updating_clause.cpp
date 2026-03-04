@@ -177,10 +177,10 @@ static void validatePrimaryKeyExistence(const NodeTableCatalogEntry* nodeTableEn
 
 void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
     std::vector<BoundInsertInfo>& infos) {
-    if (node->isMultiLabeled()) {
-        throw BinderException(
-            "Create node " + node->toString() + " with multiple node labels is not supported.");
-    }
+    auto transaction = transaction::Transaction::Get(*clientContext);
+    auto useInternal = clientContext->useInternalCatalogEntry();
+    auto dbManager = main::DatabaseManager::Get(*clientContext);
+    auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
     if (node->isEmpty()) {
         throw BinderException(
             "Create node " + node->toString() + " with empty node labels is not supported.");
@@ -188,6 +188,18 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
     DASSERT(node->getNumEntries() == 1);
     auto entry = node->getEntry(0);
     DASSERT(entry->getTableType() == TableType::NODE);
+    bool isAnyGraph = false;
+    if (defaultGraphCatalog != nullptr &&
+        defaultGraphCatalog->containsTable(transaction, "_nodes", useInternal)) {
+        isAnyGraph = entry->getTableID() ==
+                     defaultGraphCatalog->getTableCatalogEntry(transaction, "_nodes", useInternal)
+                         ->getTableID();
+    }
+    if (node->isMultiLabeled() && !isAnyGraph) {
+        throw BinderException(
+            "Create node " + node->toString() + " with multiple node labels is not supported.");
+    }
+
     auto insertInfo = BoundInsertInfo(TableType::NODE, node);
     for (auto& property : node->getPropertyExpressions()) {
         if (property->hasProperty(entry->getTableID())) {
@@ -195,18 +207,9 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
         }
     }
 
-    auto transaction = transaction::Transaction::Get(*clientContext);
-    auto useInternal = clientContext->useInternalCatalogEntry();
-    auto dbManager = main::DatabaseManager::Get(*clientContext);
-    auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
-    bool isAnyGraph =
-        defaultGraphCatalog != nullptr &&
-        entry->getTableID() ==
-            defaultGraphCatalog->getTableCatalogEntry(transaction, "_nodes", useInternal)
-                ->getTableID();
-
     if (isAnyGraph) {
-        // For ANY graphs, the _nodes table has columns: id (SERIAL), label (STRING), data (JSON)
+        // For ANY graphs, the _nodes table has columns: id (SERIAL), label (STRING[]), data
+        // (JSON)
         // The id is auto-populated by the serial default
         // We need to build columnDataExprs for: [id_default, label, data]
 
@@ -222,14 +225,19 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
         insertInfo.columnDataExprs.push_back(
             expressionBinder.implicitCastIfNecessary(idDefaultExpr, props[0].getType()));
 
-        // label column
+        // label column (STRING[])
         auto originalLabels = node->getOriginalLabels();
-        std::shared_ptr<Expression> boundLabelExpr;
+        std::vector<std::unique_ptr<Value>> labels;
         if (!originalLabels.empty()) {
-            boundLabelExpr = expressionBinder.createLiteralExpression(originalLabels[0]);
+            labels.reserve(originalLabels.size());
+            for (const auto& label : originalLabels) {
+                labels.push_back(std::make_unique<Value>(LogicalType::STRING(), label));
+            }
         } else {
-            boundLabelExpr = expressionBinder.createLiteralExpression(entry->getName());
+            labels.push_back(std::make_unique<Value>(LogicalType::STRING(), entry->getName()));
         }
+        auto labelValue = Value(LogicalType::LIST(LogicalType::STRING()), std::move(labels));
+        auto boundLabelExpr = expressionBinder.createLiteralExpression(std::move(labelValue));
         insertInfo.columnDataExprs.push_back(boundLabelExpr);
 
         // data column: build JSON from bound property expressions

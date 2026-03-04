@@ -25,12 +25,68 @@
 -LOG QueryAllNodes
 -STATEMENT MATCH (a) RETURN a.*
 ---- 2
-0|User|{"age":30,"name":"Alice"}
-1|City|{"population":8000000,"name":"New York"}
+0|[User]|{"age":30,"name":"Alice"}
+1|[City]|{"population":8000000,"name":"New York"}
 
 -LOG Cleanup
 -STATEMENT USE GRAPH main
 ---- ok
 
 -STATEMENT DROP GRAPH mygraph
+---- ok
+
+-CASE AnyGraphMultiNodeLabels
+-SKIP_FSM_LEAK_CHECK
+
+-LOG CreateAnyGraph
+-STATEMENT CREATE GRAPH mygraph ANY
+---- ok
+
+-LOG UseGraph
+-STATEMENT USE GRAPH mygraph
+---- ok
+
+-LOG InsertNodesWithDifferentLabelSets
+-STATEMENT CREATE (:Person:Employee {name: 'Alice'}), (:Person {name: 'Bob'}), (:Employee {name: 'Carol'})
+---- ok
+
+-LOG MatchSingleLabel
+-STATEMENT MATCH (n:Person) RETURN COUNT(*)
+---- 1
+2
+
+-LOG MatchConjunctiveLabels
+-STATEMENT MATCH (n:Person:Employee) RETURN COUNT(*)
+---- 1
+1
+
+-LOG MatchConjunctiveLabelsReturnNodeStar
+-STATEMENT MATCH (n:Person:Employee) RETURN n.*
+---- 1
+0|[Person,Employee]|{"name":"Alice"}
+
+-LOG Cleanup
+-STATEMENT USE GRAPH main
+---- ok
+
+-STATEMENT DROP GRAPH mygraph
+---- ok
+
+-CASE MainGraphCreateMultiNodeLabelsFails
+
+-LOG CreateNodeTables
+-STATEMENT CREATE NODE TABLE Person(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE NODE TABLE Employee(id INT64, PRIMARY KEY(id))
+---- ok
+
+-LOG VerifyMultiLabelCreateFailsInMainGraph
+-STATEMENT CREATE (a:Person:Employee {id: 1});
+---- error
+Binder exception: Create node a with multiple node labels is not supported.
+
+-LOG Cleanup
+-STATEMENT DROP TABLE Employee
+---- ok
+-STATEMENT DROP TABLE Person
 ---- ok

@@ -1,7 +1,13 @@
 #include "binder/binder.h"
+#include "binder/expression/expression_util.h"
+#include "binder/expression/node_expression.h"
 #include "binder/query/reading_clause/bound_match_clause.h"
 #include "common/exception/binder.h"
+#include "function/list/vector_list_functions.h"
+#include "main/client_context.h"
+#include "main/database_manager.h"
 #include "parser/query/reading_clause/match_clause.h"
+#include "transaction/transaction.h"
 #include <format>
 
 using namespace lbug::common;
@@ -33,6 +39,23 @@ static void validateHintCompleteness(const BoundJoinHintNode& root, const QueryG
                 std::format("Cannot find {} in join hint.", nodeOrRel->toString()));
         }
     }
+}
+
+static bool isAnyGraphNodePattern(const NodeOrRelExpression& pattern,
+    main::ClientContext* context) {
+    if (!ExpressionUtil::isNodePattern(pattern) || pattern.getNumEntries() != 1) {
+        return false;
+    }
+    auto transaction = transaction::Transaction::Get(*context);
+    auto useInternal = context->useInternalCatalogEntry();
+    auto defaultGraphCatalog = main::DatabaseManager::Get(*context)->getDefaultGraphCatalog();
+    if (defaultGraphCatalog == nullptr ||
+        !defaultGraphCatalog->containsTable(transaction, "_nodes", useInternal)) {
+        return false;
+    }
+    return pattern.getEntry(0)->getTableID() ==
+           defaultGraphCatalog->getTableCatalogEntry(transaction, "_nodes", useInternal)
+               ->getTableID();
 }
 
 std::unique_ptr<BoundReadingClause> Binder::bindMatchClause(const ReadingClause& readingClause) {
@@ -110,6 +133,22 @@ void Binder::rewriteMatchPattern(BoundGraphPattern& boundGraphPattern) {
     for (auto i = 0u; i < graphCollection.getNumQueryGraphs(); ++i) {
         auto queryGraph = graphCollection.getQueryGraphUnsafe(i);
         for (auto& pattern : queryGraph->getAllPatterns()) {
+            // In ANY graphs, labels are materialized in _nodes.label as STRING[].
+            // A node pattern like (n:A:B) should require all labels to be present.
+            if (isAnyGraphNodePattern(*pattern, clientContext)) {
+                const auto& labels = pattern->constCast<NodeExpression>().getOriginalLabels();
+                if (!labels.empty()) {
+                    auto labelExpr =
+                        expressionBinder.bindNodeOrRelPropertyExpression(*pattern, "label");
+                    for (const auto& label : labels) {
+                        auto containsExpr = expressionBinder.bindScalarFunctionExpression(
+                            {labelExpr, expressionBinder.createLiteralExpression(label)},
+                            function::ListContainsFunction::name);
+                        where = expressionBinder.combineBooleanExpressions(ExpressionType::AND,
+                            containsExpr, where);
+                    }
+                }
+            }
             for (auto& [propertyName, rhs] : pattern->getPropertyDataExprRef()) {
                 auto propertyExpr =
                     expressionBinder.bindNodeOrRelPropertyExpression(*pattern, propertyName);
