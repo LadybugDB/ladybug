@@ -375,15 +375,17 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
             // Use raw variable name for SQL query (e.g., 'a' instead of '_0_a')
             auto rawVarName = prop.getRawVariableName();
             auto propName = prop.getPropertyName();
+            auto uniqueName = col->getUniqueName();
 
             if (propName == InternalKeyword::ID) {
                 // Internal ID maps to id column in external table
                 colExpr = std::format("{}.id", rawVarName);
-                colName = std::format("{}_id", rawVarName);
             } else {
                 colExpr = std::format("{}.{}", rawVarName, propName);
-                colName = std::format("{}_{}", rawVarName, propName);
             }
+            // Keep aliases aligned with the bound unique name so upstream
+            // projections can map properties correctly.
+            colName = uniqueName;
         } else {
             // For non-property expressions, parse the unique name to extract table alias and column
             auto uniqueName = col->getUniqueName();
@@ -490,9 +492,86 @@ std::shared_ptr<LogicalOperator> ForeignJoinPushDownOptimizer::visitHashJoinRepl
     auto& info = patternInfo.value();
 
     // Build the SQL join query and get column names.
-    // Keep all columns currently in scope so downstream operators keep their
-    // expected expression identities after replacement.
-    auto outputColumns = info.outputSchema->getExpressionsInScope();
+    // Prefer canonical variable expressions while dropping helper columns like
+    // "a.id" when a canonical pattern-variable expression "_N_a.id" exists.
+    auto allColumns = info.outputSchema->getExpressionsInScope();
+    expression_vector outputColumns;
+    std::unordered_set<std::string> canonicalVarProps;
+
+    auto extractCanonicalVarProp = [](const std::string& uniqueName) -> std::string {
+        // "_N_var.prop" -> "var.prop"
+        if (uniqueName.empty() || uniqueName[0] != '_') {
+            return "";
+        }
+        auto dotPos = uniqueName.find('.');
+        if (dotPos == std::string::npos) {
+            return "";
+        }
+        auto prefix = uniqueName.substr(0, dotPos); // "_N_var"
+        auto secondUnderscore = prefix.find('_', 1);
+        if (secondUnderscore == std::string::npos || secondUnderscore + 1 >= prefix.size()) {
+            return "";
+        }
+        auto rawVar = prefix.substr(secondUnderscore + 1);
+        auto prop = uniqueName.substr(dotPos + 1);
+        if (rawVar.empty() || prop.empty()) {
+            return "";
+        }
+        return rawVar + "." + prop;
+    };
+
+    for (auto& col : allColumns) {
+        auto canonical = extractCanonicalVarProp(col->getUniqueName());
+        if (!canonical.empty()) {
+            canonicalVarProps.insert(canonical);
+        }
+    }
+
+    auto isCanonicalOrStandalone = [&](const std::string& uniqueName) {
+        if (uniqueName.empty() || uniqueName[0] == '_') {
+            return true;
+        }
+        // "var.prop" helper column; skip if canonical "_N_var.prop" exists.
+        return !canonicalVarProps.contains(uniqueName);
+    };
+
+    auto hasLowercaseID = [&](const std::string& uniqueName) {
+        static constexpr auto internalIDSuffix = "._ID";
+        static constexpr auto suffixLen = std::char_traits<char>::length(internalIDSuffix);
+        if (uniqueName.size() <= suffixLen) {
+            return false;
+        }
+        if (uniqueName.rfind(internalIDSuffix) != uniqueName.size() - suffixLen) {
+            return false;
+        }
+        auto lowercaseID = uniqueName.substr(0, uniqueName.size() - suffixLen);
+        lowercaseID += ".id";
+        for (auto& expr : allColumns) {
+            if (expr->getUniqueName() == lowercaseID) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    for (auto& col : allColumns) {
+        auto uniqueName = col->getUniqueName();
+        if (!isCanonicalOrStandalone(uniqueName)) {
+            continue;
+        }
+        if (hasLowercaseID(uniqueName)) {
+            continue;
+        }
+        outputColumns.push_back(col);
+    }
+
+    // Fallback: if no property/variable columns were identified, preserve
+    // original scope to avoid breaking operator replacement.
+    if (outputColumns.empty()) {
+        for (auto& col : allColumns) {
+            outputColumns.push_back(col);
+        }
+    }
 
     auto [joinQuery, columnNames] = buildJoinQuery(info, outputColumns, this->context);
 
