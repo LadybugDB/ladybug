@@ -450,25 +450,9 @@ static std::shared_ptr<LogicalOperator> createJoinTableFunctionCall(
         auto& col = outputColumns[i];
         auto dataType = col->getDataType().copy();
 
-        // The uniqueName needs to match the PropertyExpression's uniqueName format
-        // PropertyExpression uses format like "_0_a.id" (lowercase for user-facing names)
-        // even though internally it stores as "_ID"
-        std::string uniqueName;
-        if (col->expressionType == ExpressionType::PROPERTY) {
-            auto& prop = col->constCast<PropertyExpression>();
-            auto rawVar = prop.getRawVariableName();
-            auto propName = prop.getPropertyName();
-            auto varName = prop.getVariableName();
-
-            // Use lowercase "id" for the ID property to match user-facing format
-            if (propName == InternalKeyword::ID) {
-                uniqueName = std::format("{}.id", varName);
-            } else {
-                uniqueName = std::format("{}.{}", varName, propName);
-            }
-        } else {
-            uniqueName = col->getUniqueName();
-        }
+        // Preserve the exact unique name from the original bound expression so
+        // upstream projections can match and replace PropertyExpressions.
+        std::string uniqueName = col->getUniqueName();
 
         auto alias = columnNames[i];
 
@@ -505,15 +489,10 @@ std::shared_ptr<LogicalOperator> ForeignJoinPushDownOptimizer::visitHashJoinRepl
 
     auto& info = patternInfo.value();
 
-    // Build the SQL join query and get column names
-    // Only include PropertyExpressions (explicitly referenced columns), not all columns in scope
-    auto allColumns = info.outputSchema->getExpressionsInScope();
-    expression_vector outputColumns;
-    for (auto& col : allColumns) {
-        if (col->expressionType == ExpressionType::PROPERTY) {
-            outputColumns.push_back(col);
-        }
-    }
+    // Build the SQL join query and get column names.
+    // Keep all columns currently in scope so downstream operators keep their
+    // expected expression identities after replacement.
+    auto outputColumns = info.outputSchema->getExpressionsInScope();
 
     auto [joinQuery, columnNames] = buildJoinQuery(info, outputColumns, this->context);
 
