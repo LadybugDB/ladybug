@@ -81,6 +81,12 @@ def load_port(port_name: str) -> Optional[Port]:
                 key, value = line.split('=', 1)
                 variables[key.strip()] = value.strip().strip('"')
 
+    variables['SCRIPT_DIR'] = str(SCRIPT_DIR)
+    variables['WRKSRC'] = str(SCRIPT_DIR / 'work' / port_name / variables.get('SRCDIR', variables.get('DISTNAME', '') + '-' + variables.get('VERSION', '')))
+
+    for key in variables:
+        variables[key] = expand_variables(variables[key], variables)
+
     port = Port(
         name=port_name,
         version=variables.get('VERSION', ''),
@@ -229,6 +235,24 @@ def run_build(port: Port) -> bool:
     return True
 
 
+def get_source_files(srcdir: Path) -> set:
+    """Get all source files from the extracted source directory."""
+    files = set()
+    for base_dir in ['include', 'library', 'src', 'cpp', 'lib']:
+        base_path = srcdir / base_dir
+        if base_path.exists():
+            for root, _, filenames in os.walk(base_path):
+                for filename in filenames:
+                    if filename.endswith(('.h', '.hpp', '.c', '.cpp', '.cc', '.txt', '.md')):
+                        rel_path = Path(root).relative_to(srcdir) / filename
+                        files.add(str(rel_path))
+    for name in ['LICENSE', 'COPYING', 'COPYRIGHT', 'NOTICE', 'CMakeLists.txt']:
+        license_path = srcdir / name
+        if license_path.exists():
+            files.add(name)
+    return files
+
+
 def sync_files(port: Port) -> bool:
     """Sync generated files to third-party directory."""
     third_party_dir = SCRIPT_DIR / port.name
@@ -240,6 +264,10 @@ def sync_files(port: Port) -> bool:
         return False
 
     existing_files = get_existing_files(third_party_dir)
+
+    if not existing_files or len(existing_files) < 3:
+        print(f"  Third-party directory is empty or minimal, syncing all source files...")
+        existing_files = get_source_files(srcdir)
 
     print(f"  Syncing {len(existing_files)} files...")
 
