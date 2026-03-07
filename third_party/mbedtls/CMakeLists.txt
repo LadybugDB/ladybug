@@ -11,6 +11,7 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 add_library(mbedtls STATIC
         library/aesce.cpp
         library/aes.cpp
+        library/aesni.cpp
         library/aria.cpp
         library/asn1parse.cpp
         library/base64.cpp
