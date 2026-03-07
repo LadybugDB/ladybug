@@ -2,19 +2,7 @@
  *  ARIA implementation
  *
  *  Copyright The Mbed TLS Contributors
- *  SPDX-License-Identifier: Apache-2.0
- *
- *  Licensed under the Apache License, Version 2.0 (the "License"); you may
- *  not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- *  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
  */
 
 /*
@@ -30,27 +18,11 @@
 #include <string.h>
 
 #include "mbedtls/aria.h"
-
-#if defined(MBEDTLS_SELF_TEST)
-#if defined(MBEDTLS_PLATFORM_C)
 #include "mbedtls/platform.h"
-#else
-#include <stdio.h>
-#define mbedtls_printf printf
-#endif /* MBEDTLS_PLATFORM_C */
-#endif /* MBEDTLS_SELF_TEST */
 
 #if !defined(MBEDTLS_ARIA_ALT)
 
 #include "mbedtls/platform_util.h"
-
-#if (defined(__ARMCC_VERSION) || defined(_MSC_VER)) && !defined(inline) && !defined(__cplusplus)
-#define inline __inline
-#endif
-
-/* Parameter validation macros */
-#define ARIA_VALIDATE_RET(cond) MBEDTLS_INTERNAL_VALIDATE_RET(cond, MBEDTLS_ERR_ARIA_BAD_INPUT_DATA)
-#define ARIA_VALIDATE(cond) MBEDTLS_INTERNAL_VALIDATE(cond)
 
 /*
  * modify byte order: ( A B C D ) -> ( B A D C ), i.e. swap pairs of bytes
@@ -68,7 +40,7 @@
 static inline uint32_t aria_p1(uint32_t x) {
     uint32_t r;
     __asm("rev16 %0, %1" : "=l"(r) : "l"(x));
-    return (r);
+    return r;
 }
 #define ARIA_P1 aria_p1
 #elif defined(__ARMCC_VERSION) && __ARMCC_VERSION < 6000000 &&                                     \
@@ -76,7 +48,7 @@ static inline uint32_t aria_p1(uint32_t x) {
 static inline uint32_t aria_p1(uint32_t x) {
     uint32_t r;
     __asm("rev16 r, x");
-    return (r);
+    return r;
 }
 #define ARIA_P1 aria_p1
 #endif
@@ -103,42 +75,8 @@ static inline uint32_t aria_p1(uint32_t x) {
  * modify byte order: ( A B C D ) -> ( D C B A ), i.e. change endianness
  *
  * This is submatrix P3 in [1] Appendix B.1
- *
- * Some compilers fail to translate this to a single instruction,
- * so let's provide asm versions for common platforms with C fallback.
  */
-#if defined(MBEDTLS_HAVE_ASM)
-#if defined(__arm__) /* rev available from v6 up */
-/* armcc5 --gnu defines __GNUC__ but doesn't support GNU's extended asm */
-#if defined(__GNUC__) && (!defined(__ARMCC_VERSION) || __ARMCC_VERSION >= 6000000) &&              \
-    __ARM_ARCH >= 6
-static inline uint32_t aria_p3(uint32_t x) {
-    uint32_t r;
-    __asm("rev %0, %1" : "=l"(r) : "l"(x));
-    return (r);
-}
-#define ARIA_P3 aria_p3
-#elif defined(__ARMCC_VERSION) && __ARMCC_VERSION < 6000000 &&                                     \
-    (__TARGET_ARCH_ARM >= 6 || __TARGET_ARCH_THUMB >= 3)
-static inline uint32_t aria_p3(uint32_t x) {
-    uint32_t r;
-    __asm("rev r, x");
-    return (r);
-}
-#define ARIA_P3 aria_p3
-#endif
-#endif /* arm */
-#if defined(__GNUC__) && defined(__i386__) || defined(__amd64__) || defined(__x86_64__)
-static inline uint32_t aria_p3(uint32_t x) {
-    __asm("bswap %0" : "=r"(x) : "0"(x));
-    return (x);
-}
-#define ARIA_P3 aria_p3
-#endif /* x86 gnuc */
-#endif /* MBEDTLS_HAVE_ASM && GNUC */
-#if !defined(ARIA_P3)
-#define ARIA_P3(x) ARIA_P2(ARIA_P1(x))
-#endif
+#define ARIA_P3(x) MBEDTLS_BSWAP32(x)
 
 /*
  * ARIA Affine Transform
@@ -361,11 +299,10 @@ int mbedtls_aria_setkey_enc(mbedtls_aria_context* ctx, const unsigned char* key,
 
     int i;
     uint32_t w[4][4], *w2;
-    ARIA_VALIDATE_RET(ctx != NULL);
-    ARIA_VALIDATE_RET(key != NULL);
 
-    if (keybits != 128 && keybits != 192 && keybits != 256)
-        return (MBEDTLS_ERR_ARIA_BAD_INPUT_DATA);
+    if (keybits != 128 && keybits != 192 && keybits != 256) {
+        return MBEDTLS_ERR_ARIA_BAD_INPUT_DATA;
+    }
 
     /* Copy key to W0 (and potential remainder to W1) */
     w[0][0] = MBEDTLS_GET_UINT32_LE(key, 0);
@@ -392,8 +329,7 @@ int mbedtls_aria_setkey_enc(mbedtls_aria_context* ctx, const unsigned char* key,
     i = i < 2 ? i + 1 : 0;
     aria_fo_xor(w[3], w[2], rc[i], w[1]); // W3 = FO(W2, CK3) ^ W1
 
-    for (i = 0; i < 4; i++) // create round keys
-    {
+    for (i = 0; i < 4; i++) { // create round keys
         w2 = w[(i + 1) & 3];
         aria_rot128(ctx->rk[i], w[i], w2, 128 - 19);
         aria_rot128(ctx->rk[i + 4], w[i], w2, 128 - 31);
@@ -405,21 +341,21 @@ int mbedtls_aria_setkey_enc(mbedtls_aria_context* ctx, const unsigned char* key,
     /* w holds enough info to reconstruct the round keys */
     mbedtls_platform_zeroize(w, sizeof(w));
 
-    return (0);
+    return 0;
 }
 
 /*
  * Set decryption key
  */
+#if !defined(MBEDTLS_BLOCK_CIPHER_NO_DECRYPT)
 int mbedtls_aria_setkey_dec(mbedtls_aria_context* ctx, const unsigned char* key,
     unsigned int keybits) {
     int i, j, k, ret;
-    ARIA_VALIDATE_RET(ctx != NULL);
-    ARIA_VALIDATE_RET(key != NULL);
 
     ret = mbedtls_aria_setkey_enc(ctx, key, keybits);
-    if (ret != 0)
-        return (ret);
+    if (ret != 0) {
+        return ret;
+    }
 
     /* flip the order of round keys */
     for (i = 0, j = ctx->nr; i < j; i++, j--) {
@@ -435,8 +371,9 @@ int mbedtls_aria_setkey_dec(mbedtls_aria_context* ctx, const unsigned char* key,
         aria_a(&ctx->rk[i][0], &ctx->rk[i][1], &ctx->rk[i][2], &ctx->rk[i][3]);
     }
 
-    return (0);
+    return 0;
 }
+#endif /* !MBEDTLS_BLOCK_CIPHER_NO_DECRYPT */
 
 /*
  * Encrypt a block
@@ -447,9 +384,6 @@ int mbedtls_aria_crypt_ecb(mbedtls_aria_context* ctx,
     int i;
 
     uint32_t a, b, c, d;
-    ARIA_VALIDATE_RET(ctx != NULL);
-    ARIA_VALIDATE_RET(input != NULL);
-    ARIA_VALIDATE_RET(output != NULL);
 
     a = MBEDTLS_GET_UINT32_LE(input, 0);
     b = MBEDTLS_GET_UINT32_LE(input, 4);
@@ -474,8 +408,9 @@ int mbedtls_aria_crypt_ecb(mbedtls_aria_context* ctx,
         i++;
 
         aria_sl(&a, &b, &c, &d, aria_is1, aria_is2, aria_sb1, aria_sb2);
-        if (i >= ctx->nr)
+        if (i >= ctx->nr) {
             break;
+        }
         aria_a(&a, &b, &c, &d);
     }
 
@@ -490,19 +425,19 @@ int mbedtls_aria_crypt_ecb(mbedtls_aria_context* ctx,
     MBEDTLS_PUT_UINT32_LE(c, output, 8);
     MBEDTLS_PUT_UINT32_LE(d, output, 12);
 
-    return (0);
+    return 0;
 }
 
 /* Initialize context */
 void mbedtls_aria_init(mbedtls_aria_context* ctx) {
-    ARIA_VALIDATE(ctx != NULL);
     memset(ctx, 0, sizeof(mbedtls_aria_context));
 }
 
 /* Clear context */
 void mbedtls_aria_free(mbedtls_aria_context* ctx) {
-    if (ctx == NULL)
+    if (ctx == NULL) {
         return;
+    }
 
     mbedtls_platform_zeroize(ctx, sizeof(mbedtls_aria_context));
 }
@@ -513,25 +448,22 @@ void mbedtls_aria_free(mbedtls_aria_context* ctx) {
  */
 int mbedtls_aria_crypt_cbc(mbedtls_aria_context* ctx, int mode, size_t length,
     unsigned char iv[MBEDTLS_ARIA_BLOCKSIZE], const unsigned char* input, unsigned char* output) {
-    int i;
     unsigned char temp[MBEDTLS_ARIA_BLOCKSIZE];
 
-    ARIA_VALIDATE_RET(ctx != NULL);
-    ARIA_VALIDATE_RET(mode == MBEDTLS_ARIA_ENCRYPT || mode == MBEDTLS_ARIA_DECRYPT);
-    ARIA_VALIDATE_RET(length == 0 || input != NULL);
-    ARIA_VALIDATE_RET(length == 0 || output != NULL);
-    ARIA_VALIDATE_RET(iv != NULL);
+    if ((mode != MBEDTLS_ARIA_ENCRYPT) && (mode != MBEDTLS_ARIA_DECRYPT)) {
+        return MBEDTLS_ERR_ARIA_BAD_INPUT_DATA;
+    }
 
-    if (length % MBEDTLS_ARIA_BLOCKSIZE)
-        return (MBEDTLS_ERR_ARIA_INVALID_INPUT_LENGTH);
+    if (length % MBEDTLS_ARIA_BLOCKSIZE) {
+        return MBEDTLS_ERR_ARIA_INVALID_INPUT_LENGTH;
+    }
 
     if (mode == MBEDTLS_ARIA_DECRYPT) {
         while (length > 0) {
             memcpy(temp, input, MBEDTLS_ARIA_BLOCKSIZE);
             mbedtls_aria_crypt_ecb(ctx, input, output);
 
-            for (i = 0; i < MBEDTLS_ARIA_BLOCKSIZE; i++)
-                output[i] = (unsigned char)(output[i] ^ iv[i]);
+            mbedtls_xor(output, output, iv, MBEDTLS_ARIA_BLOCKSIZE);
 
             memcpy(iv, temp, MBEDTLS_ARIA_BLOCKSIZE);
 
@@ -541,8 +473,7 @@ int mbedtls_aria_crypt_cbc(mbedtls_aria_context* ctx, int mode, size_t length,
         }
     } else {
         while (length > 0) {
-            for (i = 0; i < MBEDTLS_ARIA_BLOCKSIZE; i++)
-                output[i] = (unsigned char)(input[i] ^ iv[i]);
+            mbedtls_xor(output, input, iv, MBEDTLS_ARIA_BLOCKSIZE);
 
             mbedtls_aria_crypt_ecb(ctx, output, output);
             memcpy(iv, output, MBEDTLS_ARIA_BLOCKSIZE);
@@ -553,7 +484,7 @@ int mbedtls_aria_crypt_cbc(mbedtls_aria_context* ctx, int mode, size_t length,
         }
     }
 
-    return (0);
+    return 0;
 }
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
@@ -566,25 +497,23 @@ int mbedtls_aria_crypt_cfb128(mbedtls_aria_context* ctx, int mode, size_t length
     unsigned char c;
     size_t n;
 
-    ARIA_VALIDATE_RET(ctx != NULL);
-    ARIA_VALIDATE_RET(mode == MBEDTLS_ARIA_ENCRYPT || mode == MBEDTLS_ARIA_DECRYPT);
-    ARIA_VALIDATE_RET(length == 0 || input != NULL);
-    ARIA_VALIDATE_RET(length == 0 || output != NULL);
-    ARIA_VALIDATE_RET(iv != NULL);
-    ARIA_VALIDATE_RET(iv_off != NULL);
+    if ((mode != MBEDTLS_ARIA_ENCRYPT) && (mode != MBEDTLS_ARIA_DECRYPT)) {
+        return MBEDTLS_ERR_ARIA_BAD_INPUT_DATA;
+    }
 
     n = *iv_off;
 
     /* An overly large value of n can lead to an unlimited
-     * buffer overflow. Therefore, guard against this
-     * outside of parameter validation. */
-    if (n >= MBEDTLS_ARIA_BLOCKSIZE)
-        return (MBEDTLS_ERR_ARIA_BAD_INPUT_DATA);
+     * buffer overflow. */
+    if (n >= MBEDTLS_ARIA_BLOCKSIZE) {
+        return MBEDTLS_ERR_ARIA_BAD_INPUT_DATA;
+    }
 
     if (mode == MBEDTLS_ARIA_DECRYPT) {
         while (length--) {
-            if (n == 0)
+            if (n == 0) {
                 mbedtls_aria_crypt_ecb(ctx, iv, iv);
+            }
 
             c = *input++;
             *output++ = c ^ iv[n];
@@ -594,8 +523,9 @@ int mbedtls_aria_crypt_cfb128(mbedtls_aria_context* ctx, int mode, size_t length
         }
     } else {
         while (length--) {
-            if (n == 0)
+            if (n == 0) {
                 mbedtls_aria_crypt_ecb(ctx, iv, iv);
+            }
 
             iv[n] = *output++ = (unsigned char)(iv[n] ^ *input++);
 
@@ -605,7 +535,7 @@ int mbedtls_aria_crypt_cfb128(mbedtls_aria_context* ctx, int mode, size_t length
 
     *iv_off = n;
 
-    return (0);
+    return 0;
 }
 #endif /* MBEDTLS_CIPHER_MODE_CFB */
 
@@ -620,27 +550,22 @@ int mbedtls_aria_crypt_ctr(mbedtls_aria_context* ctx, size_t length, size_t* nc_
     int c, i;
     size_t n;
 
-    ARIA_VALIDATE_RET(ctx != NULL);
-    ARIA_VALIDATE_RET(length == 0 || input != NULL);
-    ARIA_VALIDATE_RET(length == 0 || output != NULL);
-    ARIA_VALIDATE_RET(nonce_counter != NULL);
-    ARIA_VALIDATE_RET(stream_block != NULL);
-    ARIA_VALIDATE_RET(nc_off != NULL);
-
     n = *nc_off;
     /* An overly large value of n can lead to an unlimited
-     * buffer overflow. Therefore, guard against this
-     * outside of parameter validation. */
-    if (n >= MBEDTLS_ARIA_BLOCKSIZE)
-        return (MBEDTLS_ERR_ARIA_BAD_INPUT_DATA);
+     * buffer overflow. */
+    if (n >= MBEDTLS_ARIA_BLOCKSIZE) {
+        return MBEDTLS_ERR_ARIA_BAD_INPUT_DATA;
+    }
 
     while (length--) {
         if (n == 0) {
             mbedtls_aria_crypt_ecb(ctx, nonce_counter, stream_block);
 
-            for (i = MBEDTLS_ARIA_BLOCKSIZE; i > 0; i--)
-                if (++nonce_counter[i - 1] != 0)
+            for (i = MBEDTLS_ARIA_BLOCKSIZE; i > 0; i--) {
+                if (++nonce_counter[i - 1] != 0) {
                     break;
+                }
+            }
         }
         c = *input++;
         *output++ = (unsigned char)(c ^ stream_block[n]);
@@ -650,7 +575,7 @@ int mbedtls_aria_crypt_ctr(mbedtls_aria_context* ctx, size_t length, size_t* nc_
 
     *nc_off = n;
 
-    return (0);
+    return 0;
 }
 #endif /* MBEDTLS_CIPHER_MODE_CTR */
 #endif /* !MBEDTLS_ARIA_ALT */
@@ -802,16 +727,17 @@ static const uint8_t aria_test2_ctr_ct[3][48] =       // CTR ciphertext
             0xd7, 0xee, 0x41, 0xd7, 0x13, 0x47, 0xbb, 0x72, 0x61, 0xe3, 0x48, 0xf1}};
 #endif /* MBEDTLS_CIPHER_MODE_CFB */
 
-#define ARIA_SELF_TEST_IF_FAIL                                                                     \
-    {                                                                                              \
-        if (verbose)                                                                               \
-            mbedtls_printf("failed\n");                                                            \
-        goto exit;                                                                                 \
-    }                                                                                              \
-    else {                                                                                         \
-        if (verbose)                                                                               \
-            mbedtls_printf("passed\n");                                                            \
-    }
+#define ARIA_SELF_TEST_ASSERT(cond)                                                                \
+    do {                                                                                           \
+        if (cond) {                                                                                \
+            if (verbose)                                                                           \
+                mbedtls_printf("failed\n");                                                        \
+            goto exit;                                                                             \
+        } else {                                                                                   \
+            if (verbose)                                                                           \
+                mbedtls_printf("passed\n");                                                        \
+        }                                                                                          \
+    } while (0)
 
 /*
  * Checkup routine
@@ -838,116 +764,126 @@ int mbedtls_aria_self_test(int verbose) {
      */
     for (i = 0; i < 3; i++) {
         /* test ECB encryption */
-        if (verbose)
+        if (verbose) {
             mbedtls_printf("  ARIA-ECB-%d (enc): ", 128 + 64 * i);
+        }
         mbedtls_aria_setkey_enc(&ctx, aria_test1_ecb_key, 128 + 64 * i);
         mbedtls_aria_crypt_ecb(&ctx, aria_test1_ecb_pt, blk);
-        if (memcmp(blk, aria_test1_ecb_ct[i], MBEDTLS_ARIA_BLOCKSIZE) != 0)
-            ARIA_SELF_TEST_IF_FAIL;
+        ARIA_SELF_TEST_ASSERT(memcmp(blk, aria_test1_ecb_ct[i], MBEDTLS_ARIA_BLOCKSIZE) != 0);
 
         /* test ECB decryption */
-        if (verbose)
+        if (verbose) {
             mbedtls_printf("  ARIA-ECB-%d (dec): ", 128 + 64 * i);
+#if defined(MBEDTLS_BLOCK_CIPHER_NO_DECRYPT)
+            mbedtls_printf("skipped\n");
+#endif
+        }
+
+#if !defined(MBEDTLS_BLOCK_CIPHER_NO_DECRYPT)
         mbedtls_aria_setkey_dec(&ctx, aria_test1_ecb_key, 128 + 64 * i);
         mbedtls_aria_crypt_ecb(&ctx, aria_test1_ecb_ct[i], blk);
-        if (memcmp(blk, aria_test1_ecb_pt, MBEDTLS_ARIA_BLOCKSIZE) != 0)
-            ARIA_SELF_TEST_IF_FAIL;
+        ARIA_SELF_TEST_ASSERT(memcmp(blk, aria_test1_ecb_pt, MBEDTLS_ARIA_BLOCKSIZE) != 0);
+#endif
     }
-    if (verbose)
+    if (verbose) {
         mbedtls_printf("\n");
+    }
 
-        /*
-         * Test set 2
-         */
+    /*
+     * Test set 2
+     */
 #if defined(MBEDTLS_CIPHER_MODE_CBC)
     for (i = 0; i < 3; i++) {
         /* Test CBC encryption */
-        if (verbose)
+        if (verbose) {
             mbedtls_printf("  ARIA-CBC-%d (enc): ", 128 + 64 * i);
+        }
         mbedtls_aria_setkey_enc(&ctx, aria_test2_key, 128 + 64 * i);
         memcpy(iv, aria_test2_iv, MBEDTLS_ARIA_BLOCKSIZE);
         memset(buf, 0x55, sizeof(buf));
         mbedtls_aria_crypt_cbc(&ctx, MBEDTLS_ARIA_ENCRYPT, 48, iv, aria_test2_pt, buf);
-        if (memcmp(buf, aria_test2_cbc_ct[i], 48) != 0)
-            ARIA_SELF_TEST_IF_FAIL;
+        ARIA_SELF_TEST_ASSERT(memcmp(buf, aria_test2_cbc_ct[i], 48) != 0);
 
         /* Test CBC decryption */
-        if (verbose)
+        if (verbose) {
             mbedtls_printf("  ARIA-CBC-%d (dec): ", 128 + 64 * i);
+        }
         mbedtls_aria_setkey_dec(&ctx, aria_test2_key, 128 + 64 * i);
         memcpy(iv, aria_test2_iv, MBEDTLS_ARIA_BLOCKSIZE);
         memset(buf, 0xAA, sizeof(buf));
         mbedtls_aria_crypt_cbc(&ctx, MBEDTLS_ARIA_DECRYPT, 48, iv, aria_test2_cbc_ct[i], buf);
-        if (memcmp(buf, aria_test2_pt, 48) != 0)
-            ARIA_SELF_TEST_IF_FAIL;
+        ARIA_SELF_TEST_ASSERT(memcmp(buf, aria_test2_pt, 48) != 0);
     }
-    if (verbose)
+    if (verbose) {
         mbedtls_printf("\n");
+    }
 
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
 #if defined(MBEDTLS_CIPHER_MODE_CFB)
     for (i = 0; i < 3; i++) {
         /* Test CFB encryption */
-        if (verbose)
+        if (verbose) {
             mbedtls_printf("  ARIA-CFB-%d (enc): ", 128 + 64 * i);
+        }
         mbedtls_aria_setkey_enc(&ctx, aria_test2_key, 128 + 64 * i);
         memcpy(iv, aria_test2_iv, MBEDTLS_ARIA_BLOCKSIZE);
         memset(buf, 0x55, sizeof(buf));
         j = 0;
         mbedtls_aria_crypt_cfb128(&ctx, MBEDTLS_ARIA_ENCRYPT, 48, &j, iv, aria_test2_pt, buf);
-        if (memcmp(buf, aria_test2_cfb_ct[i], 48) != 0)
-            ARIA_SELF_TEST_IF_FAIL;
+        ARIA_SELF_TEST_ASSERT(memcmp(buf, aria_test2_cfb_ct[i], 48) != 0);
 
         /* Test CFB decryption */
-        if (verbose)
+        if (verbose) {
             mbedtls_printf("  ARIA-CFB-%d (dec): ", 128 + 64 * i);
+        }
         mbedtls_aria_setkey_enc(&ctx, aria_test2_key, 128 + 64 * i);
         memcpy(iv, aria_test2_iv, MBEDTLS_ARIA_BLOCKSIZE);
         memset(buf, 0xAA, sizeof(buf));
         j = 0;
         mbedtls_aria_crypt_cfb128(&ctx, MBEDTLS_ARIA_DECRYPT, 48, &j, iv, aria_test2_cfb_ct[i],
             buf);
-        if (memcmp(buf, aria_test2_pt, 48) != 0)
-            ARIA_SELF_TEST_IF_FAIL;
+        ARIA_SELF_TEST_ASSERT(memcmp(buf, aria_test2_pt, 48) != 0);
     }
-    if (verbose)
+    if (verbose) {
         mbedtls_printf("\n");
+    }
 #endif /* MBEDTLS_CIPHER_MODE_CFB */
 
 #if defined(MBEDTLS_CIPHER_MODE_CTR)
     for (i = 0; i < 3; i++) {
         /* Test CTR encryption */
-        if (verbose)
+        if (verbose) {
             mbedtls_printf("  ARIA-CTR-%d (enc): ", 128 + 64 * i);
+        }
         mbedtls_aria_setkey_enc(&ctx, aria_test2_key, 128 + 64 * i);
         memset(iv, 0, MBEDTLS_ARIA_BLOCKSIZE); // IV = 0
         memset(buf, 0x55, sizeof(buf));
         j = 0;
         mbedtls_aria_crypt_ctr(&ctx, 48, &j, iv, blk, aria_test2_pt, buf);
-        if (memcmp(buf, aria_test2_ctr_ct[i], 48) != 0)
-            ARIA_SELF_TEST_IF_FAIL;
+        ARIA_SELF_TEST_ASSERT(memcmp(buf, aria_test2_ctr_ct[i], 48) != 0);
 
         /* Test CTR decryption */
-        if (verbose)
+        if (verbose) {
             mbedtls_printf("  ARIA-CTR-%d (dec): ", 128 + 64 * i);
+        }
         mbedtls_aria_setkey_enc(&ctx, aria_test2_key, 128 + 64 * i);
         memset(iv, 0, MBEDTLS_ARIA_BLOCKSIZE); // IV = 0
         memset(buf, 0xAA, sizeof(buf));
         j = 0;
         mbedtls_aria_crypt_ctr(&ctx, 48, &j, iv, blk, aria_test2_ctr_ct[i], buf);
-        if (memcmp(buf, aria_test2_pt, 48) != 0)
-            ARIA_SELF_TEST_IF_FAIL;
+        ARIA_SELF_TEST_ASSERT(memcmp(buf, aria_test2_pt, 48) != 0);
     }
-    if (verbose)
+    if (verbose) {
         mbedtls_printf("\n");
+    }
 #endif /* MBEDTLS_CIPHER_MODE_CTR */
 
     ret = 0;
 
 exit:
     mbedtls_aria_free(&ctx);
-    return (ret);
+    return ret;
 }
 
 #endif /* MBEDTLS_SELF_TEST */

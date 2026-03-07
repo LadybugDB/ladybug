@@ -2,19 +2,7 @@
  *  Helper functions for the RSA module
  *
  *  Copyright The Mbed TLS Contributors
- *  SPDX-License-Identifier: Apache-2.0
- *
- *  Licensed under the Apache License, Version 2.0 (the "License"); you may
- *  not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- *  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
  *
  */
 
@@ -22,6 +10,7 @@
 
 #if defined(MBEDTLS_RSA_C)
 
+#include "bignum_internal.h"
 #include "mbedtls/bignum.h"
 #include "mbedtls/rsa.h"
 #include "rsa_alt_helpers.h"
@@ -77,13 +66,14 @@ int mbedtls_rsa_deduce_primes(mbedtls_mpi const* N, mbedtls_mpi const* E, mbedtl
 
     const size_t num_primes = sizeof(primes) / sizeof(*primes);
 
-    if (P == NULL || Q == NULL || P->p != NULL || Q->p != NULL)
-        return (MBEDTLS_ERR_MPI_BAD_INPUT_DATA);
+    if (P == NULL || Q == NULL || P->p != NULL || Q->p != NULL) {
+        return MBEDTLS_ERR_MPI_BAD_INPUT_DATA;
+    }
 
     if (mbedtls_mpi_cmp_int(N, 0) <= 0 || mbedtls_mpi_cmp_int(D, 1) <= 0 ||
         mbedtls_mpi_cmp_mpi(D, N) >= 0 || mbedtls_mpi_cmp_int(E, 1) <= 0 ||
         mbedtls_mpi_cmp_mpi(E, N) >= 0) {
-        return (MBEDTLS_ERR_MPI_BAD_INPUT_DATA);
+        return MBEDTLS_ERR_MPI_BAD_INPUT_DATA;
     }
 
     /*
@@ -111,31 +101,34 @@ int mbedtls_rsa_deduce_primes(mbedtls_mpi const* N, mbedtls_mpi const* E, mbedtl
 
     /* Skip trying 2 if N == 1 mod 8 */
     attempt = 0;
-    if (N->p[0] % 8 == 1)
+    if (N->p[0] % 8 == 1) {
         attempt = 1;
+    }
 
     for (; attempt < num_primes; ++attempt) {
-        mbedtls_mpi_lset(&K, primes[attempt]);
+        MBEDTLS_MPI_CHK(mbedtls_mpi_lset(&K, primes[attempt]));
 
         /* Check if gcd(K,N) = 1 */
-        MBEDTLS_MPI_CHK(mbedtls_mpi_gcd(P, &K, N));
-        if (mbedtls_mpi_cmp_int(P, 1) != 0)
+        MBEDTLS_MPI_CHK(mbedtls_mpi_gcd_modinv_odd(P, NULL, &K, N));
+        if (mbedtls_mpi_cmp_int(P, 1) != 0) {
             continue;
+        }
 
         /* Go through K^T + 1, K^(2T) + 1, K^(4T) + 1, ...
          * and check whether they have nontrivial GCD with N. */
-        MBEDTLS_MPI_CHK( mbedtls_mpi_exp_mod( &K, &K, &T, N,
-                             Q /* temporarily use Q for storing Montgomery
-                                * multiplication helper values */ ) );
+        MBEDTLS_MPI_CHK(mbedtls_mpi_exp_mod(&K, &K, &T, N,
+                                            Q /* temporarily use Q for storing Montgomery
+                                               * multiplication helper values */));
 
         for (iter = 1; iter <= order; ++iter) {
             /* If we reach 1 prematurely, there's no point
              * in continuing to square K */
-            if (mbedtls_mpi_cmp_int(&K, 1) == 0)
+            if (mbedtls_mpi_cmp_int(&K, 1) == 0) {
                 break;
+            }
 
             MBEDTLS_MPI_CHK(mbedtls_mpi_add_int(&K, &K, 1));
-            MBEDTLS_MPI_CHK(mbedtls_mpi_gcd(P, &K, N));
+            MBEDTLS_MPI_CHK(mbedtls_mpi_gcd_modinv_odd(P, NULL, &K, N));
 
             if (mbedtls_mpi_cmp_int(P, 1) == 1 && mbedtls_mpi_cmp_mpi(P, N) == -1) {
                 /*
@@ -170,7 +163,7 @@ cleanup:
 
     mbedtls_mpi_free(&K);
     mbedtls_mpi_free(&T);
-    return (ret);
+    return ret;
 }
 
 /*
@@ -182,12 +175,17 @@ int mbedtls_rsa_deduce_private_exponent(mbedtls_mpi const* P, mbedtls_mpi const*
     int ret = 0;
     mbedtls_mpi K, L;
 
-    if (D == NULL || mbedtls_mpi_cmp_int(D, 0) != 0)
-        return (MBEDTLS_ERR_MPI_BAD_INPUT_DATA);
+    if (D == NULL || mbedtls_mpi_cmp_int(D, 0) != 0) {
+        return MBEDTLS_ERR_MPI_BAD_INPUT_DATA;
+    }
 
     if (mbedtls_mpi_cmp_int(P, 1) <= 0 || mbedtls_mpi_cmp_int(Q, 1) <= 0 ||
         mbedtls_mpi_cmp_int(E, 0) == 0) {
-        return (MBEDTLS_ERR_MPI_BAD_INPUT_DATA);
+        return MBEDTLS_ERR_MPI_BAD_INPUT_DATA;
+    }
+
+    if (mbedtls_mpi_get_bit(E, 0) != 1) {
+        return MBEDTLS_ERR_MPI_NOT_ACCEPTABLE;
     }
 
     mbedtls_mpi_init(&K);
@@ -204,15 +202,18 @@ int mbedtls_rsa_deduce_private_exponent(mbedtls_mpi const* P, mbedtls_mpi const*
     MBEDTLS_MPI_CHK(mbedtls_mpi_mul_mpi(&K, &K, &L));
     MBEDTLS_MPI_CHK(mbedtls_mpi_div_mpi(&K, NULL, &K, D));
 
-    /* Compute modular inverse of E in LCM(P-1, Q-1) */
-    MBEDTLS_MPI_CHK(mbedtls_mpi_inv_mod(D, E, &K));
+    /* Compute modular inverse of E mod LCM(P-1, Q-1)
+     * This is FIPS 186-4 §B.3.1 criterion 3(b).
+     * This will return MBEDTLS_ERR_MPI_NOT_ACCEPTABLE if E is not coprime to
+     * (P-1)(Q-1), also validating FIPS 186-4 §B.3.1 criterion 2(a). */
+    MBEDTLS_MPI_CHK(mbedtls_mpi_inv_mod_even_in_range(D, E, &K));
 
 cleanup:
 
     mbedtls_mpi_free(&K);
     mbedtls_mpi_free(&L);
 
-    return (ret);
+    return ret;
 }
 
 int mbedtls_rsa_deduce_crt(const mbedtls_mpi* P, const mbedtls_mpi* Q, const mbedtls_mpi* D,
@@ -235,13 +236,13 @@ int mbedtls_rsa_deduce_crt(const mbedtls_mpi* P, const mbedtls_mpi* Q, const mbe
 
     /* QP = Q^{-1} mod P */
     if (QP != NULL) {
-        MBEDTLS_MPI_CHK(mbedtls_mpi_inv_mod(QP, Q, P));
+        MBEDTLS_MPI_CHK(mbedtls_mpi_inv_mod_odd(QP, Q, P));
     }
 
 cleanup:
     mbedtls_mpi_free(&K);
 
-    return (ret);
+    return ret;
 }
 
 /*
@@ -345,7 +346,7 @@ cleanup:
         ret += MBEDTLS_ERR_RSA_KEY_CHECK_FAILED;
     }
 
-    return (ret);
+    return ret;
 }
 
 /*
@@ -420,7 +421,7 @@ cleanup:
     mbedtls_mpi_free(&K);
     mbedtls_mpi_free(&L);
 
-    return (ret);
+    return ret;
 }
 
 #endif /* MBEDTLS_RSA_C */

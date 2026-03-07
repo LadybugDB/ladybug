@@ -6,52 +6,33 @@
  */
 /*
  *  Copyright The Mbed TLS Contributors
- *  SPDX-License-Identifier: Apache-2.0
- *
- *  Licensed under the Apache License, Version 2.0 (the "License"); you may
- *  not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- *  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
  */
 #ifndef MBEDTLS_PLATFORM_UTIL_H
 #define MBEDTLS_PLATFORM_UTIL_H
 
-#include <stddef.h>
-
 #include "mbedtls/build_info.h"
-#if defined(MBEDTLS_HAVE_TIME_DATE)
-#include <time.h>
 
+#include <stddef.h>
+#if defined(MBEDTLS_HAVE_TIME_DATE)
 #include "mbedtls/platform_time.h"
+#include <time.h>
 #endif /* MBEDTLS_HAVE_TIME_DATE */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Internal macros meant to be called only from within the library. */
-#define MBEDTLS_INTERNAL_VALIDATE_RET(cond, ret)                                                   \
-    do {                                                                                           \
-    } while (0)
-#define MBEDTLS_INTERNAL_VALIDATE(cond)                                                            \
-    do {                                                                                           \
-    } while (0)
-
 /* Internal helper macros for deprecating API constants. */
 #if !defined(MBEDTLS_DEPRECATED_REMOVED)
 #if defined(MBEDTLS_DEPRECATED_WARNING)
 #define MBEDTLS_DEPRECATED __attribute__((deprecated))
-MBEDTLS_DEPRECATED typedef char const* mbedtls_deprecated_string_constant_t;
-#define MBEDTLS_DEPRECATED_STRING_CONSTANT(VAL) ((mbedtls_deprecated_string_constant_t)(VAL))
+MBEDTLS_DEPRECATED typedef char const *mbedtls_deprecated_string_constant_t;
+#define MBEDTLS_DEPRECATED_STRING_CONSTANT(VAL)       \
+    ((mbedtls_deprecated_string_constant_t) (VAL))
 MBEDTLS_DEPRECATED typedef int mbedtls_deprecated_numeric_constant_t;
-#define MBEDTLS_DEPRECATED_NUMERIC_CONSTANT(VAL) ((mbedtls_deprecated_numeric_constant_t)(VAL))
+#define MBEDTLS_DEPRECATED_NUMERIC_CONSTANT(VAL)       \
+    ((mbedtls_deprecated_numeric_constant_t) (VAL))
 #else /* MBEDTLS_DEPRECATED_WARNING */
 #define MBEDTLS_DEPRECATED
 #define MBEDTLS_DEPRECATED_STRING_CONSTANT(VAL) VAL
@@ -125,7 +106,7 @@ MBEDTLS_DEPRECATED typedef int mbedtls_deprecated_numeric_constant_t;
  *
  * This macro has an empty expansion. It exists for documentation purposes:
  * a #MBEDTLS_CHECK_RETURN_OPTIONAL annotation indicates that the function
- * has been analyzed for return-check usefuless, whereas the lack of
+ * has been analyzed for return-check usefulness, whereas the lack of
  * an annotation indicates that the function has not been analyzed and its
  * return-check usefulness is unknown.
  */
@@ -145,9 +126,14 @@ MBEDTLS_DEPRECATED typedef int mbedtls_deprecated_numeric_constant_t;
  * https://stackoverflow.com/questions/40576003/ignoring-warning-wunused-result
  * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=66425#c34
  */
-#define MBEDTLS_IGNORE_RETURN(result) ((void)!(result))
+#define MBEDTLS_IGNORE_RETURN(result) ((void) !(result))
 #endif
 
+/* If the following macro is defined, the library is being built by the test
+ * framework, and the framework is going to provide a replacement
+ * mbedtls_platform_zeroize() using a preprocessor macro, so the function
+ * declaration should be omitted.  */
+#if !defined(MBEDTLS_TEST_DEFINES_ZEROIZE) //no-check-names
 /**
  * \brief       Securely zeroize a buffer
  *
@@ -170,7 +156,58 @@ MBEDTLS_DEPRECATED typedef int mbedtls_deprecated_numeric_constant_t;
  * \param len   Length of the buffer in bytes
  *
  */
-void mbedtls_platform_zeroize(void* buf, size_t len);
+void mbedtls_platform_zeroize(void *buf, size_t len);
+#endif
+
+/** \brief              The type of custom random generator (RNG) callbacks.
+ *
+ *                      Many Mbed TLS functions take two parameters
+ *                      `mbedtls_f_rng_t *f_rng, void *p_rng`. The
+ *                      library will call \c f_rng to generate
+ *                      random values.
+ *
+ * \note                This is typically one of the following:
+ *                      - mbedtls_ctr_drbg_random() with \c p_rng
+ *                        pointing to a #mbedtls_ctr_drbg_context;
+ *                      - mbedtls_hmac_drbg_random() with \c p_rng
+ *                        pointing to a #mbedtls_hmac_drbg_context;
+ *                      - mbedtls_psa_get_random() with
+ *                        `prng = MBEDTLS_PSA_RANDOM_STATE`.
+ *
+ * \note                Generally, given a call
+ *                      `mbedtls_foo(f_rng, p_rng, ....)`, the RNG callback
+ *                      and the context only need to remain valid until
+ *                      the call to `mbedtls_foo` returns. However, there
+ *                      are a few exceptions where the callback is stored
+ *                      in for future use. Check the documentation of
+ *                      the calling function.
+ *
+ * \warning             In a multithreaded environment, calling the
+ *                      function should be thread-safe. The standard
+ *                      functions provided by the library are thread-safe
+ *                      when #MBEDTLS_THREADING_C is enabled.
+ *
+ * \warning             This function must either provide as many
+ *                      bytes as requested of **cryptographic quality**
+ *                      random data, or return a negative error code.
+ *
+ * \param p_rng         The \c p_rng argument that was passed along \c f_rng.
+ *                      The library always passes \c p_rng unchanged.
+ *                      This is typically a pointer to the random generator
+ *                      state, or \c NULL if the custom random generator
+ *                      doesn't need a context-specific state.
+ * \param[out] output   On success, this must be filled with \p output_size
+ *                      bytes of cryptographic-quality random data.
+ * \param output_size   The number of bytes to output.
+ *
+ * \return              \c 0 on success, or a negative error code on failure.
+ *                      Library functions will generally propagate this
+ *                      error code, so \c MBEDTLS_ERR_xxx values are
+ *                      recommended. #MBEDTLS_ERR_ENTROPY_SOURCE_FAILED is
+ *                      typically sensible for RNG failures.
+ */
+typedef int mbedtls_f_rng_t(void *p_rng,
+                            unsigned char *output, size_t output_size);
 
 #if defined(MBEDTLS_HAVE_TIME_DATE)
 /**
@@ -199,7 +236,8 @@ void mbedtls_platform_zeroize(void* buf, size_t len);
  * \return      Pointer to an object of type struct tm on success, otherwise
  *              NULL
  */
-struct tm* mbedtls_platform_gmtime_r(const mbedtls_time_t* tt, struct tm* tm_buf);
+struct tm *mbedtls_platform_gmtime_r(const mbedtls_time_t *tt,
+                                     struct tm *tm_buf);
 #endif /* MBEDTLS_HAVE_TIME_DATE */
 
 #ifdef __cplusplus

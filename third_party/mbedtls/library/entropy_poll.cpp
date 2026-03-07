@@ -2,24 +2,14 @@
  *  Platform-specific and custom entropy polling functions
  *
  *  Copyright The Mbed TLS Contributors
- *  SPDX-License-Identifier: Apache-2.0
- *
- *  Licensed under the Apache License, Version 2.0 (the "License"); you may
- *  not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- *  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
  */
 
-#if defined(__linux__) && !defined(_GNU_SOURCE)
+#if defined(__linux__) || defined(__midipix__)
 /* Ensure that syscall() is available even when compiling with -std=c99 */
+#if !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
+#endif
 #endif
 
 #include <string.h>
@@ -35,44 +25,45 @@
 #if defined(MBEDTLS_TIMING_C)
 #include "mbedtls/timing.h"
 #endif
-#if defined(MBEDTLS_ENTROPY_NV_SEED)
 #include "mbedtls/platform.h"
-#endif
 
 #if !defined(MBEDTLS_NO_PLATFORM_ENTROPY)
 
 #if !defined(unix) && !defined(__unix__) && !defined(__unix) && !defined(__APPLE__) &&             \
-    !defined(_WIN32) && !defined(__QNXNTO__) && !defined(__HAIKU__) && !defined(__midipix__)
+    !defined(_WIN32) && !defined(__QNXNTO__) && !defined(__HAIKU__) && !defined(__midipix__) &&    \
+    !defined(__MVS__)
 #error                                                                                             \
     "Platform entropy sources only work on Unix and Windows, see MBEDTLS_NO_PLATFORM_ENTROPY in mbedtls_config.h"
 #endif
 
 #if defined(_WIN32) && !defined(EFIX64) && !defined(EFI32)
 
-#if !defined(_WIN32_WINNT)
-#define _WIN32_WINNT 0x0400
-#endif
-#include <wincrypt.h>
+#include <bcrypt.h>
+#include <intsafe.h>
 #include <windows.h>
 
 int mbedtls_platform_entropy_poll(void* data, unsigned char* output, size_t len, size_t* olen) {
-    HCRYPTPROV provider;
     ((void)data);
     *olen = 0;
 
-    if (CryptAcquireContext(&provider, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) == FALSE) {
-        return (MBEDTLS_ERR_ENTROPY_SOURCE_FAILED);
+    /*
+     * BCryptGenRandom takes ULONG for size, which is smaller than size_t on
+     * 64-bit Windows platforms. Extract entropy in chunks of len (dependent
+     * on ULONG_MAX) size.
+     */
+    while (len != 0) {
+        unsigned long ulong_bytes = (len > ULONG_MAX) ? ULONG_MAX : (unsigned long)len;
+
+        if (!BCRYPT_SUCCESS(
+                BCryptGenRandom(NULL, output, ulong_bytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG))) {
+            return MBEDTLS_ERR_ENTROPY_SOURCE_FAILED;
+        }
+
+        *olen += ulong_bytes;
+        len -= ulong_bytes;
     }
 
-    if (CryptGenRandom(provider, (DWORD)len, output) == FALSE) {
-        CryptReleaseContext(provider, 0);
-        return (MBEDTLS_ERR_ENTROPY_SOURCE_FAILED);
-    }
-
-    CryptReleaseContext(provider, 0);
-    *olen = len;
-
-    return (0);
+    return 0;
 }
 #else /* _WIN32 && !EFIX64 && !EFI32 */
 
@@ -96,7 +87,7 @@ static int getrandom_wrapper(void* buf, size_t buflen, unsigned int flags) {
     memset(buf, 0, buflen);
 #endif
 #endif
-    return (syscall(SYS_getrandom, buf, buflen, flags));
+    return (int)syscall(SYS_getrandom, buf, buflen, flags);
 }
 #endif /* SYS_getrandom */
 #endif /* __linux__ || __midipix__ */
@@ -110,7 +101,7 @@ static int getrandom_wrapper(void* buf, size_t buflen, unsigned int flags) {
 #include <sys/random.h>
 #define HAVE_GETRANDOM
 static int getrandom_wrapper(void* buf, size_t buflen, unsigned int flags) {
-    return getrandom(buf, buflen, flags);
+    return (int)getrandom(buf, buflen, flags);
 }
 #endif /* (__FreeBSD__ && __FreeBSD_version >= 1200000) ||                                         \
           (__DragonFly__ && __DragonFly_version >= 500700) */
@@ -139,12 +130,13 @@ static int sysctl_arnd_wrapper(unsigned char* buf, size_t buflen) {
 
     while (buflen > 0) {
         len = buflen > 256 ? 256 : buflen;
-        if (sysctl(name, 2, buf, &len, NULL, 0) == -1)
-            return (-1);
+        if (sysctl(name, 2, buf, &len, NULL, 0) == -1) {
+            return -1;
+        }
         buflen -= len;
         buf += len;
     }
-    return (0);
+    return 0;
 }
 #endif /* KERN_ARND */
 #endif /* __FreeBSD__ || __NetBSD__ */
@@ -160,11 +152,12 @@ int mbedtls_platform_entropy_poll(void* data, unsigned char* output, size_t len,
 #if defined(HAVE_GETRANDOM)
     ret = getrandom_wrapper(output, len, 0);
     if (ret >= 0) {
-        *olen = ret;
-        return (0);
-    } else if (errno != ENOSYS)
-        return (MBEDTLS_ERR_ENTROPY_SOURCE_FAILED);
-        /* Fall through if the system call isn't known. */
+        *olen = (size_t)ret;
+        return 0;
+    } else if (errno != ENOSYS) {
+        return MBEDTLS_ERR_ENTROPY_SOURCE_FAILED;
+    }
+    /* Fall through if the system call isn't known. */
 #else
     ((void)ret);
 #endif /* HAVE_GETRANDOM */
@@ -172,28 +165,33 @@ int mbedtls_platform_entropy_poll(void* data, unsigned char* output, size_t len,
 #if defined(HAVE_SYSCTL_ARND)
     ((void)file);
     ((void)read_len);
-    if (sysctl_arnd_wrapper(output, len) == -1)
-        return (MBEDTLS_ERR_ENTROPY_SOURCE_FAILED);
+    if (sysctl_arnd_wrapper(output, len) == -1) {
+        return MBEDTLS_ERR_ENTROPY_SOURCE_FAILED;
+    }
     *olen = len;
-    return (0);
+    return 0;
 #else
 
     *olen = 0;
 
     file = fopen("/dev/urandom", "rb");
-    if (file == NULL)
-        return (MBEDTLS_ERR_ENTROPY_SOURCE_FAILED);
+    if (file == NULL) {
+        return MBEDTLS_ERR_ENTROPY_SOURCE_FAILED;
+    }
+
+    /* Ensure no stdio buffering of secrets, as such buffers cannot be wiped. */
+    mbedtls_setbuf(file, NULL);
 
     read_len = fread(output, 1, len, file);
     if (read_len != len) {
         fclose(file);
-        return (MBEDTLS_ERR_ENTROPY_SOURCE_FAILED);
+        return MBEDTLS_ERR_ENTROPY_SOURCE_FAILED;
     }
 
     fclose(file);
     *olen = len;
 
-    return (0);
+    return 0;
 #endif /* HAVE_SYSCTL_ARND */
 }
 #endif /* _WIN32 && !EFIX64 && !EFI32 */
@@ -207,16 +205,18 @@ int mbedtls_nv_seed_poll(void* data, unsigned char* output, size_t len, size_t* 
 
     memset(buf, 0, MBEDTLS_ENTROPY_BLOCK_SIZE);
 
-    if (mbedtls_nv_seed_read(buf, MBEDTLS_ENTROPY_BLOCK_SIZE) < 0)
-        return (MBEDTLS_ERR_ENTROPY_SOURCE_FAILED);
+    if (mbedtls_nv_seed_read(buf, MBEDTLS_ENTROPY_BLOCK_SIZE) < 0) {
+        return MBEDTLS_ERR_ENTROPY_SOURCE_FAILED;
+    }
 
-    if (len < use_len)
+    if (len < use_len) {
         use_len = len;
+    }
 
     memcpy(output, buf, use_len);
     *olen = use_len;
 
-    return (0);
+    return 0;
 }
 #endif /* MBEDTLS_ENTROPY_NV_SEED */
 

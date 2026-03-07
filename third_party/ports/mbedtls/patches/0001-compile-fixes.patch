@@ -1,0 +1,1195 @@
+diff --color -urN mbedtls/library/asn1parse.cpp mbedtls.patched/library/asn1parse.cpp
+--- mbedtls/library/asn1parse.cpp	2026-03-06 15:01:37
++++ mbedtls.patched/library/asn1parse.cpp	2026-03-06 20:22:09
+@@ -279,7 +279,7 @@
+     mbedtls_asn1_sequence* cur = cb_ctx->cur;
+ 
+     if (cur->buf.p != NULL) {
+-        cur->next = mbedtls_calloc(1, sizeof(mbedtls_asn1_sequence));
++        cur->next = (mbedtls_asn1_sequence*)mbedtls_calloc(1, sizeof(mbedtls_asn1_sequence));
+ 
+         if (cur->next == NULL) {
+             return MBEDTLS_ERR_ASN1_ALLOC_FAILED;
+diff --color -urN mbedtls/library/bignum.cpp mbedtls.patched/library/bignum.cpp
+--- mbedtls/library/bignum.cpp	2026-03-06 15:01:38
++++ mbedtls.patched/library/bignum.cpp	2026-03-06 20:25:29
+@@ -79,7 +79,7 @@
+      */
+ 
+     /* This array is used to conditionally swap the pointers in const time */
+-    void* const p[2] = {X->p, Y->p};
++    const mbedtls_mpi_uint* const p[2] = {X->p, Y->p};
+     size_t i = mbedtls_ct_size_if_else_0(X_is_negative, 1);
+     mbedtls_ct_condition_t lt = mbedtls_mpi_core_lt_ct(p[i], p[i ^ 1], X->n);
+ 
+@@ -1722,19 +1722,21 @@
+         MBEDTLS_MPI_CHK(mbedtls_mpi_grow(I, N->n));
+     }
+ 
+-    T = mbedtls_calloc(sizeof(mbedtls_mpi_uint) * N->n, T_factor);
++    T = (mbedtls_mpi_uint*)mbedtls_calloc(sizeof(mbedtls_mpi_uint) * N->n, T_factor);
+     if (T == NULL) {
+         ret = MBEDTLS_ERR_MPI_ALLOC_FAILED;
+         goto cleanup;
+     }
+ 
+-    mbedtls_mpi_uint* Ip = I != NULL ? I->p : NULL;
+-    /* If A is 0 (null), then A->p would be null, and A->n would be 0,
+-     * which would be an issue if A->p and A->n were passed to
+-     * mbedtls_mpi_core_gcd_modinv_odd below. */
+-    const mbedtls_mpi_uint* Ap = A->p != NULL ? A->p : &zero;
+-    size_t An = A->n >= N->n ? N->n : A->p != NULL ? A->n : 1;
+-    mbedtls_mpi_core_gcd_modinv_odd(G->p, Ip, Ap, An, N->p, N->n, T);
++    {
++        mbedtls_mpi_uint* Ip = I != NULL ? I->p : NULL;
++        /* If A is 0 (null), then A->p would be null, and A->n would be 0,
++         * which would be an issue if A->p and A->n were passed to
++         * mbedtls_mpi_core_gcd_modinv_odd below. */
++        const mbedtls_mpi_uint* Ap = A->p != NULL ? A->p : &zero;
++        size_t An = A->n >= N->n ? N->n : A->p != NULL ? A->n : 1;
++        mbedtls_mpi_core_gcd_modinv_odd(G->p, Ip, Ap, An, N->p, N->n, T);
++    }
+ 
+     G->s = 1;
+     if (I != NULL) {
+@@ -1785,21 +1787,23 @@
+         goto cleanup;
+     }
+ 
+-    /* Make boths inputs odd by putting powers of 2 on the side */
+-    const size_t za = mbedtls_mpi_lsb(&TA);
+-    const size_t zb = mbedtls_mpi_lsb(&TB);
+-    MBEDTLS_MPI_CHK(mbedtls_mpi_shift_r(&TA, za));
+-    MBEDTLS_MPI_CHK(mbedtls_mpi_shift_r(&TB, zb));
++    {
++        /* Make boths inputs odd by putting powers of 2 on the side */
++        const size_t za = mbedtls_mpi_lsb(&TA);
++        const size_t zb = mbedtls_mpi_lsb(&TB);
++        MBEDTLS_MPI_CHK(mbedtls_mpi_shift_r(&TA, za));
++        MBEDTLS_MPI_CHK(mbedtls_mpi_shift_r(&TB, zb));
+ 
+-    /* Ensure A <= B: if B < A, swap them */
+-    mbedtls_ct_condition_t swap = mbedtls_mpi_core_lt_ct(TB.p, TA.p, TA.n);
+-    mbedtls_mpi_core_cond_swap(TA.p, TB.p, TA.n, swap);
++        /* Ensure A <= B: if B < A, swap them */
++        mbedtls_ct_condition_t swap = mbedtls_mpi_core_lt_ct(TB.p, TA.p, TA.n);
++        mbedtls_mpi_core_cond_swap(TA.p, TB.p, TA.n, swap);
+ 
+-    MBEDTLS_MPI_CHK(mbedtls_mpi_gcd_modinv_odd(G, NULL, &TA, &TB));
++        MBEDTLS_MPI_CHK(mbedtls_mpi_gcd_modinv_odd(G, NULL, &TA, &TB));
+ 
+-    /* Re-inject the power of 2 we had previously put aside */
+-    size_t zg = za > zb ? zb : za; // zg = min(za, zb)
+-    MBEDTLS_MPI_CHK(mbedtls_mpi_shift_l(G, zg));
++        /* Re-inject the power of 2 we had previously put aside */
++        size_t zg = za > zb ? zb : za; // zg = min(za, zb)
++        MBEDTLS_MPI_CHK(mbedtls_mpi_shift_l(G, zg));
++    }
+ 
+ cleanup:
+ 
+@@ -1937,19 +1941,21 @@
+     /* Bring A in the range [0, N). */
+     MBEDTLS_MPI_CHK(mbedtls_mpi_mod_mpi(&AA, A, N));
+ 
+-    /* We know A >= 0 but the next function wants A > 1 */
+-    int cmp = mbedtls_mpi_cmp_int(&AA, 1);
+-    if (cmp < 0) { // AA == 0
+-        ret = MBEDTLS_ERR_MPI_NOT_ACCEPTABLE;
+-        goto cleanup;
+-    }
+-    if (cmp == 0) { // AA = 1
+-        MBEDTLS_MPI_CHK(mbedtls_mpi_lset(X, 1));
+-        goto cleanup;
+-    }
++    {
++        /* We know A >= 0 but the next function wants A > 1 */
++        int cmp = mbedtls_mpi_cmp_int(&AA, 1);
++        if (cmp < 0) { // AA == 0
++            ret = MBEDTLS_ERR_MPI_NOT_ACCEPTABLE;
++            goto cleanup;
++        }
++        if (cmp == 0) { // AA = 1
++            MBEDTLS_MPI_CHK(mbedtls_mpi_lset(X, 1));
++            goto cleanup;
++        }
+ 
+-    /* Now we know 1 < A < N, N is even and AA is still odd */
+-    MBEDTLS_MPI_CHK(mbedtls_mpi_inv_mod_even_in_range(X, &AA, N));
++        /* Now we know 1 < A < N, N is even and AA is still odd */
++        MBEDTLS_MPI_CHK(mbedtls_mpi_inv_mod_even_in_range(X, &AA, N));
++    }
+ 
+ cleanup:
+     mbedtls_mpi_free(&AA);
+diff --color -urN mbedtls/library/bignum_internal.h mbedtls.patched/library/bignum_internal.h
+--- mbedtls/library/bignum_internal.h	2025-10-13 00:39:14
++++ mbedtls.patched/library/bignum_internal.h	2026-03-06 20:30:39
+@@ -14,6 +14,8 @@
+ #ifndef MBEDTLS_BIGNUM_INTERNAL_H
+ #define MBEDTLS_BIGNUM_INTERNAL_H
+ 
++#include "mbedtls/bignum.h"
++
+ /**
+  * \brief          Perform a modular exponentiation: X = A^E mod N
+  *
+@@ -43,9 +45,8 @@
+  * \return         Another negative error code on different kinds of failures.
+  *
+  */
+-int mbedtls_mpi_exp_mod_unsafe(mbedtls_mpi *X, const mbedtls_mpi *A,
+-                               const mbedtls_mpi *E, const mbedtls_mpi *N,
+-                               mbedtls_mpi *prec_RR);
++int mbedtls_mpi_exp_mod_unsafe(mbedtls_mpi* X, const mbedtls_mpi* A, const mbedtls_mpi* E,
++    const mbedtls_mpi* N, mbedtls_mpi* prec_RR);
+ 
+ /**
+  * \brief          A wrapper around a constant time function to compute
+@@ -76,10 +77,8 @@
+  * \return         #MBEDTLS_ERR_MPI_BAD_INPUT_DATA if preconditions were not
+  *                 met.
+  */
+-int mbedtls_mpi_gcd_modinv_odd(mbedtls_mpi *G,
+-                               mbedtls_mpi *I,
+-                               const mbedtls_mpi *A,
+-                               const mbedtls_mpi *N);
++int mbedtls_mpi_gcd_modinv_odd(mbedtls_mpi* G, mbedtls_mpi* I, const mbedtls_mpi* A,
++    const mbedtls_mpi* N);
+ 
+ /**
+  * \brief          Modular inverse: X = A^-1 mod N with N odd
+@@ -95,9 +94,7 @@
+  *                 met.
+  * \return         #MBEDTLS_ERR_MPI_NOT_ACCEPTABLE if A is not invertible mod N.
+  */
+-int mbedtls_mpi_inv_mod_odd(mbedtls_mpi *X,
+-                            const mbedtls_mpi *A,
+-                            const mbedtls_mpi *N);
++int mbedtls_mpi_inv_mod_odd(mbedtls_mpi* X, const mbedtls_mpi* A, const mbedtls_mpi* N);
+ 
+ /**
+  * \brief          Modular inverse: X = A^-1 mod N with N even,
+@@ -115,8 +112,6 @@
+  *                 met.
+  * \return         #MBEDTLS_ERR_MPI_NOT_ACCEPTABLE if A is not invertible mod N.
+  */
+-int mbedtls_mpi_inv_mod_even_in_range(mbedtls_mpi *X,
+-                                      mbedtls_mpi const *A,
+-                                      mbedtls_mpi const *N);
++int mbedtls_mpi_inv_mod_even_in_range(mbedtls_mpi* X, mbedtls_mpi const* A, mbedtls_mpi const* N);
+ 
+ #endif /* bignum_internal.h */
+diff --color -urN mbedtls/library/cipher.cpp mbedtls.patched/library/cipher.cpp
+--- mbedtls/library/cipher.cpp	2026-03-06 15:01:40
++++ mbedtls.patched/library/cipher.cpp	2026-03-06 20:24:29
+@@ -1351,15 +1351,15 @@
+ #if defined(MBEDTLS_GCM_C)
+     if (MBEDTLS_MODE_GCM == ((mbedtls_cipher_mode_t)ctx->cipher_info->mode)) {
+         *olen = ilen;
+-        return mbedtls_gcm_crypt_and_tag(ctx->cipher_ctx, MBEDTLS_GCM_ENCRYPT, ilen, iv, iv_len, ad,
+-            ad_len, input, output, tag_len, tag);
++        return mbedtls_gcm_crypt_and_tag((mbedtls_gcm_context*)ctx->cipher_ctx, MBEDTLS_GCM_ENCRYPT,
++            ilen, iv, iv_len, ad, ad_len, input, output, tag_len, tag);
+     }
+ #endif /* MBEDTLS_GCM_C */
+ #if defined(MBEDTLS_CCM_C)
+     if (MBEDTLS_MODE_CCM == ((mbedtls_cipher_mode_t)ctx->cipher_info->mode)) {
+         *olen = ilen;
+-        return mbedtls_ccm_encrypt_and_tag(ctx->cipher_ctx, ilen, iv, iv_len, ad, ad_len, input,
+-            output, tag, tag_len);
++        return mbedtls_ccm_encrypt_and_tag((mbedtls_ccm_context*)ctx->cipher_ctx, ilen, iv, iv_len,
++            ad, ad_len, input, output, tag, tag_len);
+     }
+ #endif /* MBEDTLS_CCM_C */
+ #if defined(MBEDTLS_CHACHAPOLY_C)
+@@ -1370,8 +1370,8 @@
+         }
+ 
+         *olen = ilen;
+-        return mbedtls_chachapoly_encrypt_and_tag(ctx->cipher_ctx, ilen, iv, ad, ad_len, input,
+-            output, tag);
++        return mbedtls_chachapoly_encrypt_and_tag((mbedtls_chachapoly_context*)ctx->cipher_ctx,
++            ilen, iv, ad, ad_len, input, output, tag);
+     }
+ #endif /* MBEDTLS_CHACHAPOLY_C */
+ 
+@@ -1419,8 +1419,8 @@
+         int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+ 
+         *olen = ilen;
+-        ret = mbedtls_gcm_auth_decrypt(ctx->cipher_ctx, ilen, iv, iv_len, ad, ad_len, tag, tag_len,
+-            input, output);
++        ret = mbedtls_gcm_auth_decrypt((mbedtls_gcm_context*)ctx->cipher_ctx, ilen, iv, iv_len, ad,
++            ad_len, tag, tag_len, input, output);
+ 
+         if (ret == MBEDTLS_ERR_GCM_AUTH_FAILED) {
+             ret = MBEDTLS_ERR_CIPHER_AUTH_FAILED;
+@@ -1434,8 +1434,8 @@
+         int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+ 
+         *olen = ilen;
+-        ret = mbedtls_ccm_auth_decrypt(ctx->cipher_ctx, ilen, iv, iv_len, ad, ad_len, input, output,
+-            tag, tag_len);
++        ret = mbedtls_ccm_auth_decrypt((mbedtls_ccm_context*)ctx->cipher_ctx, ilen, iv, iv_len, ad,
++            ad_len, input, output, tag, tag_len);
+ 
+         if (ret == MBEDTLS_ERR_CCM_AUTH_FAILED) {
+             ret = MBEDTLS_ERR_CIPHER_AUTH_FAILED;
+@@ -1454,8 +1454,8 @@
+         }
+ 
+         *olen = ilen;
+-        ret = mbedtls_chachapoly_auth_decrypt(ctx->cipher_ctx, ilen, iv, ad, ad_len, tag, input,
+-            output);
++        ret = mbedtls_chachapoly_auth_decrypt((mbedtls_chachapoly_context*)ctx->cipher_ctx, ilen,
++            iv, ad, ad_len, tag, input, output);
+ 
+         if (ret == MBEDTLS_ERR_CHACHAPOLY_AUTH_FAILED) {
+             ret = MBEDTLS_ERR_CIPHER_AUTH_FAILED;
+@@ -1497,7 +1497,8 @@
+         (void)iv;
+         (void)ad;
+ 
+-        return mbedtls_nist_kw_wrap(ctx->cipher_ctx, mode, input, ilen, output, olen, output_len);
++        return mbedtls_nist_kw_wrap((mbedtls_nist_kw_context*)ctx->cipher_ctx, mode, input, ilen,
++            output, olen, output_len);
+     }
+ #endif /* MBEDTLS_NIST_KW_C */
+ 
+@@ -1543,7 +1544,8 @@
+         (void)iv;
+         (void)ad;
+ 
+-        return mbedtls_nist_kw_unwrap(ctx->cipher_ctx, mode, input, ilen, output, olen, output_len);
++        return mbedtls_nist_kw_unwrap((mbedtls_nist_kw_context*)ctx->cipher_ctx, mode, input, ilen,
++            output, olen, output_len);
+     }
+ #endif /* MBEDTLS_NIST_KW_C */
+ 
+diff --color -urN mbedtls/library/cipher_wrap.cpp mbedtls.patched/library/cipher_wrap.cpp
+--- mbedtls/library/cipher_wrap.cpp	2026-03-06 15:01:37
++++ mbedtls.patched/library/cipher_wrap.cpp	2026-03-06 20:24:00
+@@ -128,7 +128,7 @@
+ }
+ 
+ static void gcm_ctx_free(void* ctx) {
+-    mbedtls_gcm_free(ctx);
++    mbedtls_gcm_free((mbedtls_gcm_context*)ctx);
+     mbedtls_free(ctx);
+ }
+ #endif /* MBEDTLS_GCM_C */
+@@ -147,7 +147,7 @@
+ }
+ 
+ static void ccm_ctx_free(void* ctx) {
+-    mbedtls_ccm_free(ctx);
++    mbedtls_ccm_free((mbedtls_ccm_context*)ctx);
+     mbedtls_free(ctx);
+ }
+ #endif /* MBEDTLS_CCM_C */
+@@ -193,7 +193,7 @@
+ #if defined(MBEDTLS_CIPHER_MODE_XTS)
+ static int aes_crypt_xts_wrap(void* ctx, mbedtls_operation_t operation, size_t length,
+     const unsigned char data_unit[16], const unsigned char* input, unsigned char* output) {
+-    mbedtls_aes_xts_context* xts_ctx = ctx;
++    mbedtls_aes_xts_context* xts_ctx = (mbedtls_aes_xts_context*)ctx;
+     int mode;
+ 
+     switch (operation) {
+@@ -222,7 +222,7 @@
+ }
+ 
+ static void* aes_ctx_alloc(void) {
+-    mbedtls_aes_context* aes = mbedtls_calloc(1, sizeof(mbedtls_aes_context));
++    mbedtls_aes_context* aes = (mbedtls_aes_context*)mbedtls_calloc(1, sizeof(mbedtls_aes_context));
+ 
+     if (aes == NULL) {
+         return NULL;
+@@ -343,17 +343,18 @@
+ 
+ #if defined(MBEDTLS_CIPHER_MODE_XTS)
+ static int xts_aes_setkey_enc_wrap(void* ctx, const unsigned char* key, unsigned int key_bitlen) {
+-    mbedtls_aes_xts_context* xts_ctx = ctx;
++    mbedtls_aes_xts_context* xts_ctx = (mbedtls_aes_xts_context*)ctx;
+     return mbedtls_aes_xts_setkey_enc(xts_ctx, key, key_bitlen);
+ }
+ 
+ static int xts_aes_setkey_dec_wrap(void* ctx, const unsigned char* key, unsigned int key_bitlen) {
+-    mbedtls_aes_xts_context* xts_ctx = ctx;
++    mbedtls_aes_xts_context* xts_ctx = (mbedtls_aes_xts_context*)ctx;
+     return mbedtls_aes_xts_setkey_dec(xts_ctx, key, key_bitlen);
+ }
+ 
+ static void* xts_aes_ctx_alloc(void) {
+-    mbedtls_aes_xts_context* xts_ctx = mbedtls_calloc(1, sizeof(*xts_ctx));
++    mbedtls_aes_xts_context* xts_ctx =
++        (mbedtls_aes_xts_context*)mbedtls_calloc(1, sizeof(*xts_ctx));
+ 
+     if (xts_ctx != NULL) {
+         mbedtls_aes_xts_init(xts_ctx);
+@@ -363,7 +364,7 @@
+ }
+ 
+ static void xts_aes_ctx_free(void* ctx) {
+-    mbedtls_aes_xts_context* xts_ctx = ctx;
++    mbedtls_aes_xts_context* xts_ctx = (mbedtls_aes_xts_context*)ctx;
+ 
+     if (xts_ctx == NULL) {
+         return;
+@@ -589,7 +590,7 @@
+ 
+ static void* camellia_ctx_alloc(void) {
+     mbedtls_camellia_context* ctx;
+-    ctx = mbedtls_calloc(1, sizeof(mbedtls_camellia_context));
++    ctx = (mbedtls_camellia_context*)mbedtls_calloc(1, sizeof(mbedtls_camellia_context));
+ 
+     if (ctx == NULL) {
+         return NULL;
+@@ -848,7 +849,7 @@
+ 
+ static void* aria_ctx_alloc(void) {
+     mbedtls_aria_context* ctx;
+-    ctx = mbedtls_calloc(1, sizeof(mbedtls_aria_context));
++    ctx = (mbedtls_aria_context*)mbedtls_calloc(1, sizeof(mbedtls_aria_context));
+ 
+     if (ctx == NULL) {
+         return NULL;
+@@ -1125,7 +1126,7 @@
+ }
+ 
+ static void* des_ctx_alloc(void) {
+-    mbedtls_des_context* des = mbedtls_calloc(1, sizeof(mbedtls_des_context));
++    mbedtls_des_context* des = (mbedtls_des_context*)mbedtls_calloc(1, sizeof(mbedtls_des_context));
+ 
+     if (des == NULL) {
+         return NULL;
+@@ -1143,7 +1144,7 @@
+ 
+ static void* des3_ctx_alloc(void) {
+     mbedtls_des3_context* des3;
+-    des3 = mbedtls_calloc(1, sizeof(mbedtls_des3_context));
++    des3 = (mbedtls_des3_context*)mbedtls_calloc(1, sizeof(mbedtls_des3_context));
+ 
+     if (des3 == NULL) {
+         return NULL;
+@@ -1270,7 +1271,7 @@
+     unsigned char* output) {
+     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+ 
+-    ret = mbedtls_chacha20_update(ctx, length, input, output);
++    ret = mbedtls_chacha20_update((mbedtls_chacha20_context*)ctx, length, input, output);
+     if (ret == MBEDTLS_ERR_CHACHA20_BAD_INPUT_DATA) {
+         return MBEDTLS_ERR_CIPHER_BAD_INPUT_DATA;
+     }
+@@ -1280,7 +1281,7 @@
+ 
+ static void* chacha20_ctx_alloc(void) {
+     mbedtls_chacha20_context* ctx;
+-    ctx = mbedtls_calloc(1, sizeof(mbedtls_chacha20_context));
++    ctx = (mbedtls_chacha20_context*)mbedtls_calloc(1, sizeof(mbedtls_chacha20_context));
+ 
+     if (ctx == NULL) {
+         return NULL;
+@@ -1341,7 +1342,7 @@
+ 
+ static void* chachapoly_ctx_alloc(void) {
+     mbedtls_chachapoly_context* ctx;
+-    ctx = mbedtls_calloc(1, sizeof(mbedtls_chachapoly_context));
++    ctx = (mbedtls_chachapoly_context*)mbedtls_calloc(1, sizeof(mbedtls_chachapoly_context));
+ 
+     if (ctx == NULL) {
+         return NULL;
+@@ -1452,7 +1453,7 @@
+ }
+ 
+ static void kw_ctx_free(void* ctx) {
+-    mbedtls_nist_kw_free(ctx);
++    mbedtls_nist_kw_free((mbedtls_nist_kw_context*)ctx);
+     mbedtls_free(ctx);
+ }
+ 
+diff --color -urN mbedtls/library/cmac.cpp mbedtls.patched/library/cmac.cpp
+--- mbedtls/library/cmac.cpp	2026-03-06 15:01:38
++++ mbedtls.patched/library/cmac.cpp	2026-03-06 20:40:19
+@@ -174,7 +174,7 @@
+ 
+     /* Allocated and initialise in the cipher context memory for the CMAC
+      * context */
+-    cmac_ctx = mbedtls_calloc(1, sizeof(mbedtls_cmac_context_t));
++    cmac_ctx = (mbedtls_cmac_context_t*)mbedtls_calloc(1, sizeof(mbedtls_cmac_context_t));
+     if (cmac_ctx == NULL) {
+         return MBEDTLS_ERR_CIPHER_ALLOC_FAILED;
+     }
+diff --color -urN mbedtls/library/constant_time.cpp mbedtls.patched/library/constant_time.cpp
+--- mbedtls/library/constant_time.cpp	2026-03-06 15:01:36
++++ mbedtls.patched/library/constant_time.cpp	2026-03-06 20:22:13
+@@ -140,7 +140,7 @@
+ #if defined(MBEDTLS_PKCS1_V15) && defined(MBEDTLS_RSA_C) && !defined(MBEDTLS_RSA_ALT)
+ 
+ void mbedtls_ct_memmove_left(void* start, size_t total, size_t offset) {
+-    volatile unsigned char* buf = start;
++    volatile unsigned char* buf = (volatile unsigned char*)start;
+     for (size_t i = 0; i < total; i++) {
+         mbedtls_ct_condition_t no_op = mbedtls_ct_uint_gt(total - offset, i);
+         /* The first `total - offset` passes are a no-op. The last
+diff --color -urN mbedtls/library/ctr_drbg.cpp mbedtls.patched/library/ctr_drbg.cpp
+--- mbedtls/library/ctr_drbg.cpp	2026-03-06 15:01:37
++++ mbedtls.patched/library/ctr_drbg.cpp	2026-03-06 20:40:29
+@@ -838,7 +838,7 @@
+ 
+ static size_t test_offset;
+ static int ctr_drbg_self_test_entropy(void* data, unsigned char* buf, size_t len) {
+-    const unsigned char* p = data;
++    const unsigned char* p = (const unsigned char*)data;
+     memcpy(buf, p + test_offset, len);
+     test_offset += len;
+     return 0;
+diff --color -urN mbedtls/library/ecp.cpp mbedtls.patched/library/ecp.cpp
+--- mbedtls/library/ecp.cpp	2026-03-06 15:01:39
++++ mbedtls.patched/library/ecp.cpp	2026-03-06 20:34:33
+@@ -1269,7 +1269,7 @@
+     size_t i;
+     mbedtls_mpi *c, t;
+ 
+-    if ((c = mbedtls_calloc(T_size, sizeof(mbedtls_mpi))) == NULL) {
++    if ((c = (mbedtls_mpi*)mbedtls_calloc(T_size, sizeof(mbedtls_mpi))) == NULL) {
+         return MBEDTLS_ERR_ECP_ALLOC_FAILED;
+     }
+ 
+@@ -2170,7 +2170,7 @@
+ #endif
+         /* Allocate table if we didn't have any */
+         {
+-            T = mbedtls_calloc(T_size, sizeof(mbedtls_ecp_point));
++            T = (mbedtls_ecp_point*)mbedtls_calloc(T_size, sizeof(mbedtls_ecp_point));
+             if (T == NULL) {
+                 ret = MBEDTLS_ERR_ECP_ALLOC_FAILED;
+                 goto cleanup;
+diff --color -urN mbedtls/library/hmac_drbg.cpp mbedtls.patched/library/hmac_drbg.cpp
+--- mbedtls/library/hmac_drbg.cpp	2026-03-06 15:01:37
++++ mbedtls.patched/library/hmac_drbg.cpp	2026-03-06 20:34:42
+@@ -498,7 +498,7 @@
+ /* "Entropy" from buffer */
+ static size_t test_offset;
+ static int hmac_drbg_self_test_entropy(void* data, unsigned char* buf, size_t len) {
+-    const unsigned char* p = data;
++    const unsigned char* p = (const unsigned char*)data;
+     memcpy(buf, p + test_offset, len);
+     test_offset += len;
+     return 0;
+diff --color -urN mbedtls/library/md.cpp mbedtls.patched/library/md.cpp
+--- mbedtls/library/md.cpp	2026-03-06 15:01:40
++++ mbedtls.patched/library/md.cpp	2026-03-06 20:27:18
+@@ -245,37 +245,37 @@
+             switch (ctx->md_info->type) {
+ #if defined(MBEDTLS_MD5_C)
+             case MBEDTLS_MD_MD5:
+-                mbedtls_md5_free(ctx->md_ctx);
++                mbedtls_md5_free((mbedtls_md5_context*)ctx->md_ctx);
+                 break;
+ #endif
+ #if defined(MBEDTLS_RIPEMD160_C)
+             case MBEDTLS_MD_RIPEMD160:
+-                mbedtls_ripemd160_free(ctx->md_ctx);
++                mbedtls_ripemd160_free((mbedtls_ripemd160_context*)ctx->md_ctx);
+                 break;
+ #endif
+ #if defined(MBEDTLS_SHA1_C)
+             case MBEDTLS_MD_SHA1:
+-                mbedtls_sha1_free(ctx->md_ctx);
++                mbedtls_sha1_free((mbedtls_sha1_context*)ctx->md_ctx);
+                 break;
+ #endif
+ #if defined(MBEDTLS_SHA224_C)
+             case MBEDTLS_MD_SHA224:
+-                mbedtls_sha256_free(ctx->md_ctx);
++                mbedtls_sha256_free((mbedtls_sha256_context*)ctx->md_ctx);
+                 break;
+ #endif
+ #if defined(MBEDTLS_SHA256_C)
+             case MBEDTLS_MD_SHA256:
+-                mbedtls_sha256_free(ctx->md_ctx);
++                mbedtls_sha256_free((mbedtls_sha256_context*)ctx->md_ctx);
+                 break;
+ #endif
+ #if defined(MBEDTLS_SHA384_C)
+             case MBEDTLS_MD_SHA384:
+-                mbedtls_sha512_free(ctx->md_ctx);
++                mbedtls_sha512_free((mbedtls_sha512_context*)ctx->md_ctx);
+                 break;
+ #endif
+ #if defined(MBEDTLS_SHA512_C)
+             case MBEDTLS_MD_SHA512:
+-                mbedtls_sha512_free(ctx->md_ctx);
++                mbedtls_sha512_free((mbedtls_sha512_context*)ctx->md_ctx);
+                 break;
+ #endif
+ #if defined(MBEDTLS_SHA3_C)
+@@ -283,7 +283,7 @@
+             case MBEDTLS_MD_SHA3_256:
+             case MBEDTLS_MD_SHA3_384:
+             case MBEDTLS_MD_SHA3_512:
+-                mbedtls_sha3_free(ctx->md_ctx);
++                mbedtls_sha3_free((mbedtls_sha3_context*)ctx->md_ctx);
+                 break;
+ #endif
+             default:
+@@ -326,37 +326,44 @@
+     switch (src->md_info->type) {
+ #if defined(MBEDTLS_MD5_C)
+     case MBEDTLS_MD_MD5:
+-        mbedtls_md5_clone(dst->md_ctx, src->md_ctx);
++        mbedtls_md5_clone((mbedtls_md5_context*)dst->md_ctx,
++            (const mbedtls_md5_context*)src->md_ctx);
+         break;
+ #endif
+ #if defined(MBEDTLS_RIPEMD160_C)
+     case MBEDTLS_MD_RIPEMD160:
+-        mbedtls_ripemd160_clone(dst->md_ctx, src->md_ctx);
++        mbedtls_ripemd160_clone((mbedtls_ripemd160_context*)dst->md_ctx,
++            (const mbedtls_ripemd160_context*)src->md_ctx);
+         break;
+ #endif
+ #if defined(MBEDTLS_SHA1_C)
+     case MBEDTLS_MD_SHA1:
+-        mbedtls_sha1_clone(dst->md_ctx, src->md_ctx);
++        mbedtls_sha1_clone((mbedtls_sha1_context*)dst->md_ctx,
++            (const mbedtls_sha1_context*)src->md_ctx);
+         break;
+ #endif
+ #if defined(MBEDTLS_SHA224_C)
+     case MBEDTLS_MD_SHA224:
+-        mbedtls_sha256_clone(dst->md_ctx, src->md_ctx);
++        mbedtls_sha256_clone((mbedtls_sha256_context*)dst->md_ctx,
++            (const mbedtls_sha256_context*)src->md_ctx);
+         break;
+ #endif
+ #if defined(MBEDTLS_SHA256_C)
+     case MBEDTLS_MD_SHA256:
+-        mbedtls_sha256_clone(dst->md_ctx, src->md_ctx);
++        mbedtls_sha256_clone((mbedtls_sha256_context*)dst->md_ctx,
++            (const mbedtls_sha256_context*)src->md_ctx);
+         break;
+ #endif
+ #if defined(MBEDTLS_SHA384_C)
+     case MBEDTLS_MD_SHA384:
+-        mbedtls_sha512_clone(dst->md_ctx, src->md_ctx);
++        mbedtls_sha512_clone((mbedtls_sha512_context*)dst->md_ctx,
++            (const mbedtls_sha512_context*)src->md_ctx);
+         break;
+ #endif
+ #if defined(MBEDTLS_SHA512_C)
+     case MBEDTLS_MD_SHA512:
+-        mbedtls_sha512_clone(dst->md_ctx, src->md_ctx);
++        mbedtls_sha512_clone((mbedtls_sha512_context*)dst->md_ctx,
++            (const mbedtls_sha512_context*)src->md_ctx);
+         break;
+ #endif
+ #if defined(MBEDTLS_SHA3_C)
+@@ -364,7 +371,8 @@
+     case MBEDTLS_MD_SHA3_256:
+     case MBEDTLS_MD_SHA3_384:
+     case MBEDTLS_MD_SHA3_512:
+-        mbedtls_sha3_clone(dst->md_ctx, src->md_ctx);
++        mbedtls_sha3_clone((mbedtls_sha3_context*)dst->md_ctx,
++            (const mbedtls_sha3_context*)src->md_ctx);
+         break;
+ #endif
+     default:
+@@ -379,7 +387,7 @@
+         ctx->md_ctx = mbedtls_calloc(1, sizeof(mbedtls_##type##_context));                         \
+         if (ctx->md_ctx == NULL)                                                                   \
+             return MBEDTLS_ERR_MD_ALLOC_FAILED;                                                    \
+-        mbedtls_##type##_init(ctx->md_ctx);                                                        \
++        mbedtls_##type##_init((mbedtls_##type##_context*)ctx->md_ctx);                             \
+     } while (0)
+ 
+ int mbedtls_md_setup(mbedtls_md_context_t* ctx, const mbedtls_md_info_t* md_info, int hmac) {
+@@ -492,41 +500,41 @@
+     switch (ctx->md_info->type) {
+ #if defined(MBEDTLS_MD5_C)
+     case MBEDTLS_MD_MD5:
+-        return mbedtls_md5_starts(ctx->md_ctx);
++        return mbedtls_md5_starts((mbedtls_md5_context*)ctx->md_ctx);
+ #endif
+ #if defined(MBEDTLS_RIPEMD160_C)
+     case MBEDTLS_MD_RIPEMD160:
+-        return mbedtls_ripemd160_starts(ctx->md_ctx);
++        return mbedtls_ripemd160_starts((mbedtls_ripemd160_context*)ctx->md_ctx);
+ #endif
+ #if defined(MBEDTLS_SHA1_C)
+     case MBEDTLS_MD_SHA1:
+-        return mbedtls_sha1_starts(ctx->md_ctx);
++        return mbedtls_sha1_starts((mbedtls_sha1_context*)ctx->md_ctx);
+ #endif
+ #if defined(MBEDTLS_SHA224_C)
+     case MBEDTLS_MD_SHA224:
+-        return mbedtls_sha256_starts(ctx->md_ctx, 1);
++        return mbedtls_sha256_starts((mbedtls_sha256_context*)ctx->md_ctx, 1);
+ #endif
+ #if defined(MBEDTLS_SHA256_C)
+     case MBEDTLS_MD_SHA256:
+-        return mbedtls_sha256_starts(ctx->md_ctx, 0);
++        return mbedtls_sha256_starts((mbedtls_sha256_context*)ctx->md_ctx, 0);
+ #endif
+ #if defined(MBEDTLS_SHA384_C)
+     case MBEDTLS_MD_SHA384:
+-        return mbedtls_sha512_starts(ctx->md_ctx, 1);
++        return mbedtls_sha512_starts((mbedtls_sha512_context*)ctx->md_ctx, 1);
+ #endif
+ #if defined(MBEDTLS_SHA512_C)
+     case MBEDTLS_MD_SHA512:
+-        return mbedtls_sha512_starts(ctx->md_ctx, 0);
++        return mbedtls_sha512_starts((mbedtls_sha512_context*)ctx->md_ctx, 0);
+ #endif
+ #if defined(MBEDTLS_SHA3_C)
+     case MBEDTLS_MD_SHA3_224:
+-        return mbedtls_sha3_starts(ctx->md_ctx, MBEDTLS_SHA3_224);
++        return mbedtls_sha3_starts((mbedtls_sha3_context*)ctx->md_ctx, MBEDTLS_SHA3_224);
+     case MBEDTLS_MD_SHA3_256:
+-        return mbedtls_sha3_starts(ctx->md_ctx, MBEDTLS_SHA3_256);
++        return mbedtls_sha3_starts((mbedtls_sha3_context*)ctx->md_ctx, MBEDTLS_SHA3_256);
+     case MBEDTLS_MD_SHA3_384:
+-        return mbedtls_sha3_starts(ctx->md_ctx, MBEDTLS_SHA3_384);
++        return mbedtls_sha3_starts((mbedtls_sha3_context*)ctx->md_ctx, MBEDTLS_SHA3_384);
+     case MBEDTLS_MD_SHA3_512:
+-        return mbedtls_sha3_starts(ctx->md_ctx, MBEDTLS_SHA3_512);
++        return mbedtls_sha3_starts((mbedtls_sha3_context*)ctx->md_ctx, MBEDTLS_SHA3_512);
+ #endif
+     default:
+         return MBEDTLS_ERR_MD_BAD_INPUT_DATA;
+@@ -550,38 +558,38 @@
+     switch (ctx->md_info->type) {
+ #if defined(MBEDTLS_MD5_C)
+     case MBEDTLS_MD_MD5:
+-        return mbedtls_md5_update(ctx->md_ctx, input, ilen);
++        return mbedtls_md5_update((mbedtls_md5_context*)ctx->md_ctx, input, ilen);
+ #endif
+ #if defined(MBEDTLS_RIPEMD160_C)
+     case MBEDTLS_MD_RIPEMD160:
+-        return mbedtls_ripemd160_update(ctx->md_ctx, input, ilen);
++        return mbedtls_ripemd160_update((mbedtls_ripemd160_context*)ctx->md_ctx, input, ilen);
+ #endif
+ #if defined(MBEDTLS_SHA1_C)
+     case MBEDTLS_MD_SHA1:
+-        return mbedtls_sha1_update(ctx->md_ctx, input, ilen);
++        return mbedtls_sha1_update((mbedtls_sha1_context*)ctx->md_ctx, input, ilen);
+ #endif
+ #if defined(MBEDTLS_SHA224_C)
+     case MBEDTLS_MD_SHA224:
+-        return mbedtls_sha256_update(ctx->md_ctx, input, ilen);
++        return mbedtls_sha256_update((mbedtls_sha256_context*)ctx->md_ctx, input, ilen);
+ #endif
+ #if defined(MBEDTLS_SHA256_C)
+     case MBEDTLS_MD_SHA256:
+-        return mbedtls_sha256_update(ctx->md_ctx, input, ilen);
++        return mbedtls_sha256_update((mbedtls_sha256_context*)ctx->md_ctx, input, ilen);
+ #endif
+ #if defined(MBEDTLS_SHA384_C)
+     case MBEDTLS_MD_SHA384:
+-        return mbedtls_sha512_update(ctx->md_ctx, input, ilen);
++        return mbedtls_sha512_update((mbedtls_sha512_context*)ctx->md_ctx, input, ilen);
+ #endif
+ #if defined(MBEDTLS_SHA512_C)
+     case MBEDTLS_MD_SHA512:
+-        return mbedtls_sha512_update(ctx->md_ctx, input, ilen);
++        return mbedtls_sha512_update((mbedtls_sha512_context*)ctx->md_ctx, input, ilen);
+ #endif
+ #if defined(MBEDTLS_SHA3_C)
+     case MBEDTLS_MD_SHA3_224:
+     case MBEDTLS_MD_SHA3_256:
+     case MBEDTLS_MD_SHA3_384:
+     case MBEDTLS_MD_SHA3_512:
+-        return mbedtls_sha3_update(ctx->md_ctx, input, ilen);
++        return mbedtls_sha3_update((mbedtls_sha3_context*)ctx->md_ctx, input, ilen);
+ #endif
+     default:
+         return MBEDTLS_ERR_MD_BAD_INPUT_DATA;
+@@ -606,38 +614,38 @@
+     switch (ctx->md_info->type) {
+ #if defined(MBEDTLS_MD5_C)
+     case MBEDTLS_MD_MD5:
+-        return mbedtls_md5_finish(ctx->md_ctx, output);
++        return mbedtls_md5_finish((mbedtls_md5_context*)ctx->md_ctx, output);
+ #endif
+ #if defined(MBEDTLS_RIPEMD160_C)
+     case MBEDTLS_MD_RIPEMD160:
+-        return mbedtls_ripemd160_finish(ctx->md_ctx, output);
++        return mbedtls_ripemd160_finish((mbedtls_ripemd160_context*)ctx->md_ctx, output);
+ #endif
+ #if defined(MBEDTLS_SHA1_C)
+     case MBEDTLS_MD_SHA1:
+-        return mbedtls_sha1_finish(ctx->md_ctx, output);
++        return mbedtls_sha1_finish((mbedtls_sha1_context*)ctx->md_ctx, output);
+ #endif
+ #if defined(MBEDTLS_SHA224_C)
+     case MBEDTLS_MD_SHA224:
+-        return mbedtls_sha256_finish(ctx->md_ctx, output);
++        return mbedtls_sha256_finish((mbedtls_sha256_context*)ctx->md_ctx, output);
+ #endif
+ #if defined(MBEDTLS_SHA256_C)
+     case MBEDTLS_MD_SHA256:
+-        return mbedtls_sha256_finish(ctx->md_ctx, output);
++        return mbedtls_sha256_finish((mbedtls_sha256_context*)ctx->md_ctx, output);
+ #endif
+ #if defined(MBEDTLS_SHA384_C)
+     case MBEDTLS_MD_SHA384:
+-        return mbedtls_sha512_finish(ctx->md_ctx, output);
++        return mbedtls_sha512_finish((mbedtls_sha512_context*)ctx->md_ctx, output);
+ #endif
+ #if defined(MBEDTLS_SHA512_C)
+     case MBEDTLS_MD_SHA512:
+-        return mbedtls_sha512_finish(ctx->md_ctx, output);
++        return mbedtls_sha512_finish((mbedtls_sha512_context*)ctx->md_ctx, output);
+ #endif
+ #if defined(MBEDTLS_SHA3_C)
+     case MBEDTLS_MD_SHA3_224:
+     case MBEDTLS_MD_SHA3_256:
+     case MBEDTLS_MD_SHA3_384:
+     case MBEDTLS_MD_SHA3_512:
+-        return mbedtls_sha3_finish(ctx->md_ctx, output, ctx->md_info->size);
++        return mbedtls_sha3_finish((mbedtls_sha3_context*)ctx->md_ctx, output, ctx->md_info->size);
+ #endif
+     default:
+         return MBEDTLS_ERR_MD_BAD_INPUT_DATA;
+diff --color -urN mbedtls/library/oid.cpp mbedtls.patched/library/oid.cpp
+--- mbedtls/library/oid.cpp	2026-03-06 15:01:38
++++ mbedtls.patched/library/oid.cpp	2026-03-06 20:27:42
+@@ -979,7 +979,7 @@
+      */
+     size_t bytes_per_subidentifier = (((sizeof(unsigned int) * 8) - 1) / 7) + 1;
+     size_t max_possible_bytes = num_dots * bytes_per_subidentifier;
+-    oid->p = mbedtls_calloc(max_possible_bytes, 1);
++    oid->p = (unsigned char*)mbedtls_calloc(max_possible_bytes, 1);
+     if (oid->p == NULL) {
+         return MBEDTLS_ERR_ASN1_ALLOC_FAILED;
+     }
+@@ -1049,7 +1049,7 @@
+     }
+ 
+     encoded_len = (size_t)(out_ptr - oid->p);
+-    resized_mem = mbedtls_calloc(encoded_len, 1);
++    resized_mem = (unsigned char*)mbedtls_calloc(encoded_len, 1);
+     if (resized_mem == NULL) {
+         ret = MBEDTLS_ERR_ASN1_ALLOC_FAILED;
+         goto error;
+diff --color -urN mbedtls/library/pem.cpp mbedtls.patched/library/pem.cpp
+--- mbedtls/library/pem.cpp	2026-03-06 15:01:38
++++ mbedtls.patched/library/pem.cpp	2026-03-06 20:28:00
+@@ -397,7 +397,7 @@
+         return MBEDTLS_ERR_PEM_BAD_INPUT_DATA;
+     }
+ 
+-    if ((buf = mbedtls_calloc(1, len)) == NULL) {
++    if ((buf = (unsigned char*)mbedtls_calloc(1, len)) == NULL) {
+         return MBEDTLS_ERR_PEM_ALLOC_FAILED;
+     }
+ 
+@@ -489,7 +489,7 @@
+         return MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL;
+     }
+ 
+-    if (use_len != 0 && ((encode_buf = mbedtls_calloc(1, use_len)) == NULL)) {
++    if (use_len != 0 && ((encode_buf = (unsigned char*)mbedtls_calloc(1, use_len)) == NULL)) {
+         return MBEDTLS_ERR_PEM_ALLOC_FAILED;
+     }
+ 
+diff --color -urN mbedtls/library/pk_wrap.cpp mbedtls.patched/library/pk_wrap.cpp
+--- mbedtls/library/pk_wrap.cpp	2026-03-06 15:01:36
++++ mbedtls.patched/library/pk_wrap.cpp	2026-03-06 20:28:24
+@@ -966,7 +966,7 @@
+     void* ctx = mbedtls_calloc(1, sizeof(mbedtls_ecp_keypair));
+ 
+     if (ctx != NULL) {
+-        mbedtls_ecp_keypair_init(ctx);
++        mbedtls_ecp_keypair_init((mbedtls_ecp_keypair*)ctx);
+     }
+ 
+     return ctx;
+@@ -1147,7 +1147,7 @@
+ }
+ 
+ static size_t rsa_alt_get_bitlen(mbedtls_pk_context* pk) {
+-    const mbedtls_rsa_alt_context* rsa_alt = pk->pk_ctx;
++    const mbedtls_rsa_alt_context* rsa_alt = (const mbedtls_rsa_alt_context*)pk->pk_ctx;
+ 
+     return 8 * rsa_alt->key_len_func(rsa_alt->key);
+ }
+@@ -1155,7 +1155,7 @@
+ static int rsa_alt_sign_wrap(mbedtls_pk_context* pk, mbedtls_md_type_t md_alg,
+     const unsigned char* hash, size_t hash_len, unsigned char* sig, size_t sig_size,
+     size_t* sig_len, int (*f_rng)(void*, unsigned char*, size_t), void* p_rng) {
+-    mbedtls_rsa_alt_context* rsa_alt = pk->pk_ctx;
++    mbedtls_rsa_alt_context* rsa_alt = (mbedtls_rsa_alt_context*)pk->pk_ctx;
+ 
+ #if SIZE_MAX > UINT_MAX
+     if (UINT_MAX < hash_len) {
+@@ -1178,7 +1178,7 @@
+ static int rsa_alt_decrypt_wrap(mbedtls_pk_context* pk, const unsigned char* input, size_t ilen,
+     unsigned char* output, size_t* olen, size_t osize, int (*f_rng)(void*, unsigned char*, size_t),
+     void* p_rng) {
+-    mbedtls_rsa_alt_context* rsa_alt = pk->pk_ctx;
++    mbedtls_rsa_alt_context* rsa_alt = (mbedtls_rsa_alt_context*)pk->pk_ctx;
+ 
+     ((void)f_rng);
+     ((void)p_rng);
+diff --color -urN mbedtls/library/pkparse.cpp mbedtls.patched/library/pkparse.cpp
+--- mbedtls/library/pkparse.cpp	2026-03-06 15:01:38
++++ mbedtls.patched/library/pkparse.cpp	2026-03-06 20:28:45
+@@ -1056,7 +1056,7 @@
+     if (pwdlen != 0) {
+         unsigned char* key_copy;
+ 
+-        if ((key_copy = mbedtls_calloc(1, keylen)) == NULL) {
++        if ((key_copy = (unsigned char*)mbedtls_calloc(1, keylen)) == NULL) {
+             return MBEDTLS_ERR_PK_ALLOC_FAILED;
+         }
+ 
+@@ -1259,7 +1259,7 @@
+ 
+     *n = (size_t)size;
+ 
+-    if (*n + 1 == 0 || (*buf = mbedtls_calloc(1, *n + 1)) == NULL) {
++    if (*n + 1 == 0 || (*buf = (unsigned char*)mbedtls_calloc(1, *n + 1)) == NULL) {
+         fclose(f);
+         return MBEDTLS_ERR_PK_ALLOC_FAILED;
+     }
+diff --color -urN mbedtls/library/psa_crypto.cpp mbedtls.patched/library/psa_crypto.cpp
+--- mbedtls/library/psa_crypto.cpp	2026-03-06 15:01:38
++++ mbedtls.patched/library/psa_crypto.cpp	2026-03-06 20:38:14
+@@ -680,7 +680,7 @@
+         return PSA_ERROR_ALREADY_EXISTS;
+     }
+ 
+-    slot->key.data = mbedtls_calloc(1, buffer_length);
++    slot->key.data = (uint8_t*)mbedtls_calloc(1, buffer_length);
+     if (slot->key.data == NULL) {
+         return PSA_ERROR_INSUFFICIENT_MEMORY;
+     }
+@@ -5709,7 +5709,7 @@
+ 
+     /* Note: This function is always called with *data == NULL and it
+      * allocates memory for the data buffer. */
+-    *data = mbedtls_calloc(1, m_bytes);
++    *data = (uint8_t*)mbedtls_calloc(1, m_bytes);
+     if (*data == NULL) {
+         ret = MBEDTLS_ERR_ASN1_ALLOC_FAILED;
+         goto cleanup;
+@@ -5790,7 +5790,7 @@
+         break;
+     }
+ 
+-    *data = mbedtls_calloc(1, output_length);
++    *data = (uint8_t*)mbedtls_calloc(1, output_length);
+ 
+     if (*data == NULL) {
+         return PSA_ERROR_INSUFFICIENT_MEMORY;
+@@ -5874,7 +5874,7 @@
+             if (bits % 8 != 0) {
+                 return PSA_ERROR_INVALID_ARGUMENT;
+             }
+-            data = mbedtls_calloc(1, bytes);
++            data = (uint8_t*)mbedtls_calloc(1, bytes);
+             if (data == NULL) {
+                 return PSA_ERROR_INSUFFICIENT_MEMORY;
+             }
+@@ -5981,7 +5981,8 @@
+     psa_key_derivation_operation_t* operation, const psa_key_production_parameters_t* params,
+     size_t params_data_length, mbedtls_svc_key_id_t* key) {
+     return psa_key_derivation_output_key_custom(attributes, operation,
+-        (const psa_custom_key_parameters_t*)params, params->data, params_data_length, key);
++        (const psa_custom_key_parameters_t*)params, (const uint8_t*)params + sizeof(uint32_t),
++        params_data_length, key);
+ }
+ 
+ psa_status_t psa_key_derivation_output_key(const psa_key_attributes_t* attributes,
+@@ -6313,7 +6314,7 @@
+         }
+         hkdf->info_length = data_length;
+         if (data_length != 0) {
+-            hkdf->info = mbedtls_calloc(1, data_length);
++            hkdf->info = (uint8_t*)mbedtls_calloc(1, data_length);
+             if (hkdf->info == NULL) {
+                 return PSA_ERROR_INSUFFICIENT_MEMORY;
+             }
+@@ -6335,7 +6336,7 @@
+     }
+ 
+     if (data_length != 0) {
+-        prf->seed = mbedtls_calloc(1, data_length);
++        prf->seed = (uint8_t*)mbedtls_calloc(1, data_length);
+         if (prf->seed == NULL) {
+             return PSA_ERROR_INSUFFICIENT_MEMORY;
+         }
+@@ -6357,7 +6358,7 @@
+     }
+ 
+     if (data_length != 0) {
+-        prf->secret = mbedtls_calloc(1, data_length);
++        prf->secret = (uint8_t*)mbedtls_calloc(1, data_length);
+         if (prf->secret == NULL) {
+             return PSA_ERROR_INSUFFICIENT_MEMORY;
+         }
+@@ -6378,7 +6379,7 @@
+     }
+ 
+     if (data_length != 0) {
+-        prf->label = mbedtls_calloc(1, data_length);
++        prf->label = (uint8_t*)mbedtls_calloc(1, data_length);
+         if (prf->label == NULL) {
+             return PSA_ERROR_INSUFFICIENT_MEMORY;
+         }
+@@ -6420,7 +6421,7 @@
+         return PSA_ERROR_INVALID_ARGUMENT;
+     }
+ 
+-    uint8_t* pms = mbedtls_calloc(1, pms_len);
++    uint8_t* pms = (uint8_t*)mbedtls_calloc(1, pms_len);
+     if (pms == NULL) {
+         return PSA_ERROR_INSUFFICIENT_MEMORY;
+     }
+@@ -6477,7 +6478,7 @@
+     }
+ 
+     if (data_length != 0) {
+-        prf->other_secret = mbedtls_calloc(1, data_length);
++        prf->other_secret = (uint8_t*)mbedtls_calloc(1, data_length);
+         if (prf->other_secret == NULL) {
+             return PSA_ERROR_INSUFFICIENT_MEMORY;
+         }
+@@ -7337,7 +7338,7 @@
+     const psa_key_production_parameters_t* params, size_t params_data_length,
+     mbedtls_svc_key_id_t* key) {
+     return psa_generate_key_custom(attributes, (const psa_custom_key_parameters_t*)params,
+-        params->data, params_data_length, key);
++        (const uint8_t*)params + sizeof(uint32_t), params_data_length, key);
+ }
+ 
+ psa_status_t psa_generate_key(const psa_key_attributes_t* attributes, mbedtls_svc_key_id_t* key) {
+@@ -7772,7 +7773,7 @@
+         goto exit;
+     }
+ 
+-    operation->data.inputs.password = mbedtls_calloc(1, slot->key.bytes);
++    operation->data.inputs.password = (uint8_t*)mbedtls_calloc(1, slot->key.bytes);
+     if (operation->data.inputs.password == NULL) {
+         status = PSA_ERROR_INSUFFICIENT_MEMORY;
+         goto exit;
+@@ -7810,7 +7811,7 @@
+         goto exit;
+     }
+ 
+-    operation->data.inputs.user = mbedtls_calloc(1, user_id_len);
++    operation->data.inputs.user = (uint8_t*)mbedtls_calloc(1, user_id_len);
+     if (operation->data.inputs.user == NULL) {
+         status = PSA_ERROR_INSUFFICIENT_MEMORY;
+         goto exit;
+@@ -7851,7 +7852,7 @@
+         goto exit;
+     }
+ 
+-    operation->data.inputs.peer = mbedtls_calloc(1, peer_id_len);
++    operation->data.inputs.peer = (uint8_t*)mbedtls_calloc(1, peer_id_len);
+     if (operation->data.inputs.peer == NULL) {
+         status = PSA_ERROR_INSUFFICIENT_MEMORY;
+         goto exit;
+@@ -8022,7 +8023,7 @@
+             /* End of a round, move to the next round */
+             stage->inputs = 0;
+             stage->outputs = 0;
+-            stage->round++;
++            stage->round = (psa_jpake_round_t)(stage->round + 1);
+         }
+         stage->step = PSA_PAKE_STEP_KEY_SHARE;
+     } else {
+@@ -8340,7 +8341,7 @@
+         return PSA_SUCCESS;
+     }
+ 
+-    local_input->buffer = mbedtls_calloc(input_len, 1);
++    local_input->buffer = (uint8_t*)mbedtls_calloc(input_len, 1);
+     if (local_input->buffer == NULL) {
+         /* Since we dealt with the zero-length case above, we know that
+          * a NULL return value means a failure of allocation. */
+@@ -8377,7 +8378,7 @@
+     if (output_len == 0) {
+         return PSA_SUCCESS;
+     }
+-    local_output->buffer = mbedtls_calloc(output_len, 1);
++    local_output->buffer = (uint8_t*)mbedtls_calloc(output_len, 1);
+     if (local_output->buffer == NULL) {
+         /* Since we dealt with the zero-length case above, we know that
+          * a NULL return value means a failure of allocation. */
+diff --color -urN mbedtls/library/psa_crypto_cipher.cpp mbedtls.patched/library/psa_crypto_cipher.cpp
+--- mbedtls/library/psa_crypto_cipher.cpp	2026-03-06 15:01:38
++++ mbedtls.patched/library/psa_crypto_cipher.cpp	2026-03-06 20:38:30
+@@ -524,8 +524,10 @@
+     }
+ 
+     status = mbedtls_ct_error_if_else_0(invalid_padding, PSA_ERROR_INVALID_PADDING);
+-    mbedtls_ct_condition_t buffer_too_small = mbedtls_ct_uint_lt(output_size, *output_length);
+-    status = mbedtls_ct_error_if(buffer_too_small, PSA_ERROR_BUFFER_TOO_SMALL, status);
++    {
++        mbedtls_ct_condition_t buffer_too_small = mbedtls_ct_uint_lt(output_size, *output_length);
++        status = mbedtls_ct_error_if(buffer_too_small, PSA_ERROR_BUFFER_TOO_SMALL, status);
++    }
+ 
+ exit:
+     mbedtls_platform_zeroize(temp_output_buffer, sizeof(temp_output_buffer));
+diff --color -urN mbedtls/library/psa_crypto_ecp.cpp mbedtls.patched/library/psa_crypto_ecp.cpp
+--- mbedtls/library/psa_crypto_ecp.cpp	2026-03-06 15:01:39
++++ mbedtls.patched/library/psa_crypto_ecp.cpp	2026-03-06 20:38:41
+@@ -125,7 +125,7 @@
+     }
+ 
+     /* Allocate and initialize a key representation. */
+-    ecp = mbedtls_calloc(1, sizeof(mbedtls_ecp_keypair));
++    ecp = (mbedtls_ecp_keypair*)mbedtls_calloc(1, sizeof(mbedtls_ecp_keypair));
+     if (ecp == NULL) {
+         return PSA_ERROR_INSUFFICIENT_MEMORY;
+     }
+diff --color -urN mbedtls/library/psa_crypto_pake.cpp mbedtls.patched/library/psa_crypto_pake.cpp
+--- mbedtls/library/psa_crypto_pake.cpp	2026-03-06 15:01:38
++++ mbedtls.patched/library/psa_crypto_pake.cpp	2026-03-06 20:40:46
+@@ -173,19 +173,19 @@
+         return status;
+     }
+ 
+-    operation->password = mbedtls_calloc(1, password_len);
++    operation->password = (uint8_t*)mbedtls_calloc(1, password_len);
+     if (operation->password == NULL) {
+         status = PSA_ERROR_INSUFFICIENT_MEMORY;
+         goto error;
+     }
+ 
+-    user = mbedtls_calloc(1, user_len);
++    user = (uint8_t*)mbedtls_calloc(1, user_len);
+     if (user == NULL) {
+         status = PSA_ERROR_INSUFFICIENT_MEMORY;
+         goto error;
+     }
+ 
+-    peer = mbedtls_calloc(1, peer_len);
++    peer = (uint8_t*)mbedtls_calloc(1, peer_len);
+     if (peer == NULL) {
+         status = PSA_ERROR_INSUFFICIENT_MEMORY;
+         goto error;
+diff --color -urN mbedtls/library/psa_crypto_rsa.cpp mbedtls.patched/library/psa_crypto_rsa.cpp
+--- mbedtls/library/psa_crypto_rsa.cpp	2026-03-06 15:01:37
++++ mbedtls.patched/library/psa_crypto_rsa.cpp	2026-03-06 20:38:52
+@@ -57,7 +57,7 @@
+     psa_status_t status;
+     size_t bits;
+ 
+-    *p_rsa = mbedtls_calloc(1, sizeof(mbedtls_rsa_context));
++    *p_rsa = (mbedtls_rsa_context*)mbedtls_calloc(1, sizeof(mbedtls_rsa_context));
+     if (*p_rsa == NULL) {
+         return PSA_ERROR_INSUFFICIENT_MEMORY;
+     }
+diff --color -urN mbedtls/library/psa_crypto_slot_management.cpp mbedtls.patched/library/psa_crypto_slot_management.cpp
+--- mbedtls/library/psa_crypto_slot_management.cpp	2026-03-06 15:01:36
++++ mbedtls.patched/library/psa_crypto_slot_management.cpp	2026-03-06 20:39:06
+@@ -391,8 +391,8 @@
+ 
+ psa_status_t psa_initialize_key_slots(void) {
+ #if defined(MBEDTLS_PSA_KEY_STORE_DYNAMIC)
+-    global_data.key_slices[KEY_SLOT_CACHE_SLICE_INDEX] = mbedtls_calloc(PERSISTENT_KEY_CACHE_COUNT,
+-        sizeof(*global_data.key_slices[KEY_SLOT_CACHE_SLICE_INDEX]));
++    global_data.key_slices[KEY_SLOT_CACHE_SLICE_INDEX] = (psa_key_slot_t*)mbedtls_calloc(
++        PERSISTENT_KEY_CACHE_COUNT, sizeof(*global_data.key_slices[KEY_SLOT_CACHE_SLICE_INDEX]));
+     if (global_data.key_slices[KEY_SLOT_CACHE_SLICE_INDEX] == NULL) {
+         return PSA_ERROR_INSUFFICIENT_MEMORY;
+     }
+@@ -470,7 +470,7 @@
+ 
+     if (global_data.key_slices[slice_idx] == NULL) {
+         global_data.key_slices[slice_idx] =
+-            mbedtls_calloc(key_slice_length(slice_idx), sizeof(psa_key_slot_t));
++            (psa_key_slot_t*)mbedtls_calloc(key_slice_length(slice_idx), sizeof(psa_key_slot_t));
+         if (global_data.key_slices[slice_idx] == NULL) {
+             return PSA_ERROR_INSUFFICIENT_MEMORY;
+         }
+diff --color -urN mbedtls/library/psa_crypto_storage.cpp mbedtls.patched/library/psa_crypto_storage.cpp
+--- mbedtls/library/psa_crypto_storage.cpp	2026-03-06 15:01:39
++++ mbedtls.patched/library/psa_crypto_storage.cpp	2026-03-06 20:39:24
+@@ -278,7 +278,7 @@
+     if (*key_data_length == 0) {
+         *key_data = NULL;
+     } else {
+-        *key_data = mbedtls_calloc(1, *key_data_length);
++        *key_data = (uint8_t*)mbedtls_calloc(1, *key_data_length);
+         if (*key_data == NULL) {
+             return PSA_ERROR_INSUFFICIENT_MEMORY;
+         }
+@@ -311,7 +311,7 @@
+     }
+     storage_data_length = data_length + sizeof(psa_persistent_key_storage_format);
+ 
+-    storage_data = mbedtls_calloc(1, storage_data_length);
++    storage_data = (uint8_t*)mbedtls_calloc(1, storage_data_length);
+     if (storage_data == NULL) {
+         return PSA_ERROR_INSUFFICIENT_MEMORY;
+     }
+@@ -341,7 +341,7 @@
+         return status;
+     }
+ 
+-    loaded_data = mbedtls_calloc(1, storage_data_length);
++    loaded_data = (uint8_t*)mbedtls_calloc(1, storage_data_length);
+ 
+     if (loaded_data == NULL) {
+         return PSA_ERROR_INSUFFICIENT_MEMORY;
+diff --color -urN mbedtls/library/rsa.cpp mbedtls.patched/library/rsa.cpp
+--- mbedtls/library/rsa.cpp	2026-03-06 15:01:37
++++ mbedtls.patched/library/rsa.cpp	2026-03-06 20:29:04
+@@ -2243,12 +2243,12 @@
+      * temporary buffer and check it before returning it.
+      */
+ 
+-    sig_try = mbedtls_calloc(1, ctx->len);
++    sig_try = (unsigned char*)mbedtls_calloc(1, ctx->len);
+     if (sig_try == NULL) {
+         return MBEDTLS_ERR_MPI_ALLOC_FAILED;
+     }
+ 
+-    verif = mbedtls_calloc(1, ctx->len);
++    verif = (unsigned char*)mbedtls_calloc(1, ctx->len);
+     if (verif == NULL) {
+         mbedtls_free(sig_try);
+         return MBEDTLS_ERR_MPI_ALLOC_FAILED;
+@@ -2450,8 +2450,8 @@
+      * Prepare expected PKCS1 v1.5 encoding of hash.
+      */
+ 
+-    if ((encoded = mbedtls_calloc(1, sig_len)) == NULL ||
+-        (encoded_expected = mbedtls_calloc(1, sig_len)) == NULL) {
++    if ((encoded = (unsigned char*)mbedtls_calloc(1, sig_len)) == NULL ||
++        (encoded_expected = (unsigned char*)mbedtls_calloc(1, sig_len)) == NULL) {
+         ret = MBEDTLS_ERR_MPI_ALLOC_FAILED;
+         goto cleanup;
+     }
+diff --color -urN mbedtls/library/sha256.cpp mbedtls.patched/library/sha256.cpp
+--- mbedtls/library/sha256.cpp	2026-03-06 15:01:39
++++ mbedtls.patched/library/sha256.cpp	2026-03-06 20:31:28
+@@ -883,7 +883,7 @@
+     sha_test_sum_t* sha_test_sum = sha224_test_sum;
+ #endif
+ 
+-    buf = mbedtls_calloc(1024, sizeof(unsigned char));
++    buf = (unsigned char*)mbedtls_calloc(1024, sizeof(unsigned char));
+     if (NULL == buf) {
+         if (verbose != 0) {
+             mbedtls_printf("Buffer allocation failed\n");
+diff --color -urN mbedtls/library/sha512.cpp mbedtls.patched/library/sha512.cpp
+--- mbedtls/library/sha512.cpp	2026-03-06 15:01:40
++++ mbedtls.patched/library/sha512.cpp	2026-03-06 20:31:40
+@@ -952,7 +952,7 @@
+     sha_test_sum_t* sha_test_sum = sha384_test_sum;
+ #endif
+ 
+-    buf = mbedtls_calloc(1024, sizeof(unsigned char));
++    buf = (unsigned char*)mbedtls_calloc(1024, sizeof(unsigned char));
+     if (NULL == buf) {
+         if (verbose != 0) {
+             mbedtls_printf("Buffer allocation failed\n");
