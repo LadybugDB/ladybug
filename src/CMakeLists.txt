@@ -1,5 +1,13 @@
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
+if(${PREFER_SYSTEM_DEPS})
+    find_package(mbedtls REQUIRED)
+    if(mbedtls_FOUND)
+        get_target_property(MBED_CRYPTO_INCLUDES MbedTLS::mbedcrypto INTERFACE_INCLUDE_DIRECTORIES)
+        include_directories(${MBED_CRYPTO_INCLUDES})
+    endif()
+endif()
+
 # Have to pass this down to every subdirectory, which actually adds the files.
 # This doesn't affect parent directories.
 add_compile_definitions(LBUG_EXPORTS)
@@ -23,7 +31,9 @@ add_subdirectory(extension)
 add_library(lbug STATIC ${ALL_OBJECT_FILES})
 add_library(lbug_shared SHARED ${ALL_OBJECT_FILES})
 
-set(LBUG_LIBRARIES antlr4_cypher antlr4_runtime brotlidec brotlicommon fast_float utf8proc re2 fastpfor parquet snappy thrift yyjson zstd miniz mbedtls lz4 roaring_bitmap simsimd)
+set(LBUG_INCLUDES $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include/c_api ${CMAKE_CURRENT_BINARY_DIR}/../src/include)
+
+set(LBUG_LIBRARIES antlr4_cypher antlr4_runtime brotlidec brotlicommon fast_float utf8proc re2 fastpfor parquet snappy thrift yyjson zstd miniz lz4 roaring_bitmap simsimd MbedTLS::mbedcrypto)
 if (NOT __SINGLE_THREADED__)
         set(LBUG_LIBRARIES ${LBUG_LIBRARIES} Threads::Threads)
 endif()
@@ -42,7 +52,6 @@ target_link_libraries(lbug PUBLIC ${LBUG_LIBRARIES})
 target_link_libraries(lbug_shared PUBLIC ${LBUG_LIBRARIES})
 unset(LBUG_LIBRARIES)
 
-set(LBUG_INCLUDES $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include/c_api ${CMAKE_CURRENT_BINARY_DIR}/../src/include)
 target_include_directories(lbug PUBLIC ${LBUG_INCLUDES})
 target_include_directories(lbug_shared PUBLIC ${LBUG_INCLUDES})
 unset(LBUG_INCLUDES)
