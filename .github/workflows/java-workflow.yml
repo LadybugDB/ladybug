@@ -108,7 +108,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install mbedtls
-        run: brew install mbedtls@3
+        run: |
+          brew install mbedtls@3
+          echo "CMAKE_PREFIX_PATH=/opt/homebrew/opt/mbedtls@3" >> $GITHUB_ENV
 
       - name: Install uv
         run: pip3 install uv

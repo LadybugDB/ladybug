@@ -45,7 +45,9 @@ jobs:
 
       - name: Install mbedtls (macOS)
         if: matrix.platform == 'darwin'
-        run: brew install mbedtls@3
+        run: |
+          brew install mbedtls@3
+          echo "CMAKE_PREFIX_PATH=/opt/homebrew/opt/mbedtls@3" >> $GITHUB_ENV
 
       - name: Install mbedtls (Windows)
         if: matrix.platform == 'win32'

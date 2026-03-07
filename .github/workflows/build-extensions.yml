@@ -31,7 +31,9 @@ jobs:
 
       - name: Install mbedtls (macOS)
         if: runner.os == 'macOS'
-        run: brew install mbedtls@3
+        run: |
+          brew install mbedtls@3
+          echo "CMAKE_PREFIX_PATH=/opt/homebrew/opt/mbedtls@3" >> $GITHUB_ENV
 
       - name: Install mbedtls (Windows)
         if: runner.os == 'Windows'

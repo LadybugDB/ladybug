@@ -91,7 +91,7 @@ jobs:
 
       # Set deployment target for macOS, and Windows MSVC setup
       CIBW_ENVIRONMENT_WINDOWS: ${{ matrix.os == 'windows' && format('DISTUTILS_USE_SDK=1 MSSdk=1 TMP={0} TEMP={0}', matrix.platform == 'arm64' && 'C:/t' || 'D:/t') || '' }}
-      CIBW_ENVIRONMENT_MACOS: ${{ matrix.os == 'macos' && format('MACOSX_DEPLOYMENT_TARGET={0}', matrix.deployment-target) || '' }}
+      CIBW_ENVIRONMENT_MACOS: ${{ matrix.os == 'macos' && format('MACOSX_DEPLOYMENT_TARGET={0} CMAKE_PREFIX_PATH=/opt/homebrew/opt/mbedtls@3', matrix.deployment-target) || '' }}
 
       # Install mbedtls before building wheels
       CIBW_BEFORE_BUILD_LINUX: dnf install -y mbedtls-devel || apt-get install -y libmbedtls-dev || true
