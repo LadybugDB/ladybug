@@ -35,6 +35,36 @@ jobs:
           dnf config-manager --set-enabled powertools
           dnf install -y cmake ninja-build python3 python3-pip git ccache gcc-toolset-13 mbedtls-devel
 
+      - name: Write mbedtls CMake config (Linux container)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p /usr/local/lib/cmake/mbedtls
+          printf '%s\n' \
+            'if(NOT TARGET MbedTLS::mbedcrypto)' \
+            '  add_library(MbedTLS::mbedcrypto STATIC IMPORTED)' \
+            '  set_target_properties(MbedTLS::mbedcrypto PROPERTIES' \
+            '    INTERFACE_INCLUDE_DIRECTORIES "/usr/include"' \
+            '    IMPORTED_LOCATION "/usr/lib64/libmbedcrypto.a"' \
+            '  )' \
+            'endif()' \
+            'if(NOT TARGET MbedTLS::mbedtls)' \
+            '  add_library(MbedTLS::mbedtls STATIC IMPORTED)' \
+            '  set_target_properties(MbedTLS::mbedtls PROPERTIES' \
+            '    INTERFACE_INCLUDE_DIRECTORIES "/usr/include"' \
+            '    IMPORTED_LOCATION "/usr/lib64/libmbedtls.a"' \
+            '  )' \
+            'endif()' \
+            'if(NOT TARGET MbedTLS::mbedx509)' \
+            '  add_library(MbedTLS::mbedx509 STATIC IMPORTED)' \
+            '  set_target_properties(MbedTLS::mbedx509 PROPERTIES' \
+            '    INTERFACE_INCLUDE_DIRECTORIES "/usr/include"' \
+            '    IMPORTED_LOCATION "/usr/lib64/libmbedx509.a"' \
+            '  )' \
+            'endif()' \
+            'set(mbedtls_FOUND TRUE)' \
+            > /usr/local/lib/cmake/mbedtls/mbedtlsConfig.cmake
+          echo "mbedtls_DIR=/usr/local/lib/cmake/mbedtls" >> $GITHUB_ENV
+
       - name: Install uv (Windows/Mac)
         if: runner.os != 'Linux'
         run: python3 -m pip install uv

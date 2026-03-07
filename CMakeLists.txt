@@ -336,6 +336,11 @@ if(${PREFER_SYSTEM_DEPS})
     find_package(mbedtls REQUIRED)
     if(mbedtls_FOUND)
         message(STATUS "Using system mbedtls")
+        # Prefer the static target when available (e.g. macOS Homebrew mbedtls@3
+        # exports MbedTLS::mbedcrypto_static alongside the dylib target).
+        if(TARGET MbedTLS::mbedcrypto_static)
+            add_library(MbedTLS::mbedcrypto ALIAS MbedTLS::mbedcrypto_static)
+        endif()
         get_target_property(MBED_INCS MbedTLS::mbedcrypto INTERFACE_INCLUDE_DIRECTORIES)
         message(STATUS "mbedcrypto includes: ${MBED_INCS}")
     endif()
