@@ -148,7 +148,8 @@ py::object PyQueryResult::convertValueToPyObject(const Value& value) {
         auto Decimal = importCache->decimal.Decimal();
         return Decimal(value.toString());
     }
-    case LogicalTypeID::STRING: {
+    case LogicalTypeID::STRING:
+    case LogicalTypeID::JSON: {
         return py::cast(value.getValue<std::string>());
     }
     case LogicalTypeID::BLOB: {

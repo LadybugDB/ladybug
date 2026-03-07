@@ -370,3 +370,12 @@ def test_large_array(conn_db_readwrite: ConnDB) -> None:
     sorted_df = df.sort_values(by="id").reset_index(drop=True)
     sorted_db_df = db_df.sort_values(by="id").reset_index(drop=True)
     assert sorted_df.equals(sorted_db_df)
+
+
+def test_json(conn_db_readonly: ConnDB) -> None:
+    conn, _ = conn_db_readonly
+    result = conn.execute('RETURN CAST(\'{"key": "value", "number": 42}\' AS JSON)')
+    assert result.has_next()
+    assert result.get_next() == [{"key": "value", "number": 42}]
+    assert not result.has_next()
+    result.close()
