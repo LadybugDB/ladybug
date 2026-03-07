@@ -39,6 +39,7 @@ class Port:
     extract_dir: str
     patch_dir: str
     configure_args: str
+    pre_patch_commands: str
     build_commands: str
     install_commands: str
 
@@ -94,12 +95,14 @@ def load_port(port_name: str) -> Optional[Port]:
         extract_dir=variables.get('SRCDIR', variables.get('DISTNAME', '') + '-' + variables.get('VERSION', '')),
         patch_dir=variables.get('PATCHDIR', f'patches'),
         configure_args=variables.get('CONFIGURE_ARGS', ''),
+        pre_patch_commands=variables.get('PRE_PATCH_COMMANDS', ''),
         build_commands=variables.get('BUILD_COMMANDS', ''),
         install_commands=variables.get('INSTALL_COMMANDS', ''),
     )
 
     port.url = expand_variables(port.url, variables)
     port.extract_dir = expand_variables(port.extract_dir, variables)
+    port.pre_patch_commands = expand_variables(port.pre_patch_commands, variables)
     port.build_commands = expand_variables(port.build_commands, variables)
 
     return port
@@ -202,6 +205,34 @@ def apply_patches(port: Port) -> bool:
         )
         if result.returncode != 0:
             print(f"    Patch failed: {result.stderr}")
+            return False
+
+    return True
+
+
+def run_pre_patch(port: Port) -> bool:
+    """Run pre-patch commands for the port (before patches are applied)."""
+    workdir = SCRIPT_DIR / 'work' / port.name
+    srcdir = workdir / port.extract_dir
+
+    if not port.pre_patch_commands:
+        return True
+
+    print(f"  Running pre-patch commands...")
+    for cmd in port.pre_patch_commands.split('&&'):
+        cmd = cmd.strip()
+        if not cmd:
+            continue
+        print(f"    {cmd}")
+        result = subprocess.run(
+            cmd,
+            cwd=str(srcdir),
+            shell=True,
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            print(f"    Pre-patch command failed: {result.stderr}")
             return False
 
     return True
@@ -366,9 +397,10 @@ def do_update(port_name: str) -> bool:
     success = (
         download_distfile(port) and
         extract_distfile(port) and
+        run_pre_patch(port) and
         apply_patches(port) and
-        run_build(port) and
-        sync_files(port)
+        sync_files(port) and
+        run_build(port)
     )
 
     if success:
