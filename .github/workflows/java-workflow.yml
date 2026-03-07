@@ -16,6 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install mbedtls
+        run: sudo apt-get install -y libmbedtls-dev
+
       - name: Install uv
         run: python3 -m pip install uv
 
@@ -41,6 +44,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install mbedtls
+        run: sudo apt-get install -y libmbedtls-dev
 
       - name: Install uv
         run: python3 -m pip install uv
@@ -101,6 +107,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install mbedtls
+        run: brew install mbedtls@3
+
       - name: Install uv
         run: pip3 install uv
 
@@ -129,6 +138,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install mbedtls
+        shell: cmd
+        run: vcpkg install mbedtls:x64-windows
 
       - name: Install uv
         run: pip3 install uv

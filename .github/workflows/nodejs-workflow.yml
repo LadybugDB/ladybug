@@ -39,6 +39,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install mbedtls (Linux)
+        if: matrix.platform == 'linux'
+        run: sudo apt-get install -y libmbedtls-dev
+
+      - name: Install mbedtls (macOS)
+        if: matrix.platform == 'darwin'
+        run: brew install mbedtls@3
+
+      - name: Install mbedtls (Windows)
+        if: matrix.platform == 'win32'
+        shell: cmd
+        run: vcpkg install mbedtls:x64-windows
+
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         run: |

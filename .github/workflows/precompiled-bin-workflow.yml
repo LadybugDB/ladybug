@@ -33,7 +33,7 @@ jobs:
         run: |
           dnf install -y 'dnf-command(config-manager)'
           dnf config-manager --set-enabled powertools
-          dnf install -y cmake ninja-build python3 python3-pip git ccache gcc-toolset-13
+          dnf install -y cmake ninja-build python3 python3-pip git ccache gcc-toolset-13 mbedtls-devel
 
       - name: Install uv (Windows/Mac)
         if: runner.os != 'Linux'
@@ -42,6 +42,15 @@ jobs:
       - name: Install uv (Manylinux)
         if: runner.os != 'Linux'
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install mbedtls (macOS)
+        if: runner.os == 'macOS'
+        run: brew install mbedtls@3
+
+      - name: Install mbedtls (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: vcpkg install mbedtls:x64-windows
 
       - name: Setup ccache (Linux)
         if: runner.os == 'Linux'

@@ -1189,6 +1189,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install mbedtls
+        run: sudo apt-get install -y libmbedtls-dev
+
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -1249,6 +1252,9 @@ jobs:
           haskell: true
           large-packages: true
           swap-storage: true
+
+      - name: Install mbedtls
+        run: sudo apt-get install -y libmbedtls-dev
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2

@@ -93,6 +93,10 @@ jobs:
       CIBW_ENVIRONMENT_WINDOWS: ${{ matrix.os == 'windows' && format('DISTUTILS_USE_SDK=1 MSSdk=1 TMP={0} TEMP={0}', matrix.platform == 'arm64' && 'C:/t' || 'D:/t') || '' }}
       CIBW_ENVIRONMENT_MACOS: ${{ matrix.os == 'macos' && format('MACOSX_DEPLOYMENT_TARGET={0}', matrix.deployment-target) || '' }}
 
+      # Install mbedtls before building wheels
+      CIBW_BEFORE_BUILD_LINUX: dnf install -y mbedtls-devel || apt-get install -y libmbedtls-dev || true
+      CIBW_BEFORE_BUILD_MACOS: brew install mbedtls@3
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -177,6 +181,11 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.platform }}-ccache-wheel-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.platform }}-ccache-wheel-
+
+      - name: Install mbedtls (Windows)
+        if: matrix.os == 'windows'
+        shell: cmd
+        run: vcpkg install mbedtls:x64-windows
 
       - name: Build wheels on ${{ matrix.platform }} (Windows)
         if: matrix.os == 'windows'
