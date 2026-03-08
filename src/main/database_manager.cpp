@@ -156,8 +156,8 @@ void DatabaseManager::createGraph(const std::string& graphName,
         nodeProperties.emplace_back(binder::PropertyDefinition(
             binder::ColumnDefinition("id", common::LogicalType::SERIAL()),
             std::move(serialDefault)));
-        nodeProperties.emplace_back(binder::PropertyDefinition(
-            binder::ColumnDefinition("label", common::LogicalType::STRING())));
+        nodeProperties.emplace_back(binder::PropertyDefinition(binder::ColumnDefinition("label",
+            common::LogicalType::LIST(common::LogicalType::STRING()))));
         nodeProperties.emplace_back(
             binder::PropertyDefinition(binder::ColumnDefinition("data", LogicalType::JSON())));
 
