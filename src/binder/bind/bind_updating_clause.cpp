@@ -185,6 +185,10 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
         throw BinderException(
             "Create node " + node->toString() + " with empty node labels is not supported.");
     }
+    if (node->isMultiLabeled()) {
+        throw BinderException(
+            "Create node " + node->toString() + " with multiple node labels is not supported.");
+    }
     DASSERT(node->getNumEntries() == 1);
     auto entry = node->getEntry(0);
     DASSERT(entry->getTableType() == TableType::NODE);
@@ -194,10 +198,6 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
         isAnyGraph = entry->getTableID() ==
                      defaultGraphCatalog->getTableCatalogEntry(transaction, "_nodes", useInternal)
                          ->getTableID();
-    }
-    if (node->isMultiLabeled() && !isAnyGraph) {
-        throw BinderException(
-            "Create node " + node->toString() + " with multiple node labels is not supported.");
     }
 
     auto insertInfo = BoundInsertInfo(TableType::NODE, node);
