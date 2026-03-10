@@ -5,7 +5,34 @@ add_library(lbug_storage_wal
         local_wal.cpp
         wal.cpp
         wal_record.cpp
-        wal_replayer.cpp)
+        wal_replayer.cpp
+        records/begin_transaction_record.cpp
+        records/commit_record.cpp
+        records/checkpoint_record.cpp
+        records/create_catalog_entry_record.cpp
+        records/drop_catalog_entry_record.cpp
+        records/alter_table_entry_record.cpp
+        records/copy_table_record.cpp
+        records/update_sequence_record.cpp
+        records/table_insertion_record.cpp
+        records/node_deletion_record.cpp
+        records/node_update_record.cpp
+        records/rel_deletion_record.cpp
+        records/rel_detach_delete_record.cpp
+        records/rel_update_record.cpp
+        records/load_extension_record.cpp
+        records/create_catalog_entry_record_replay.cpp
+        records/drop_catalog_entry_record_replay.cpp
+        records/alter_table_entry_record_replay.cpp
+        records/table_insertion_record_replay.cpp
+        records/node_deletion_record_replay.cpp
+        records/node_update_record_replay.cpp
+        records/rel_deletion_record_replay.cpp
+        records/rel_detach_delete_record_replay.cpp
+        records/rel_update_record_replay.cpp
+        records/copy_table_record_replay.cpp
+        records/update_sequence_record_replay.cpp
+        records/load_extension_record_replay.cpp)
 
 set(ALL_OBJECT_FILES
         ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_storage_wal>
