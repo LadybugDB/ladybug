@@ -14,7 +14,8 @@ void WALReplayer::replayRelUpdateRecord(const WALRecord& walRecord) const {
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<RelTable>();
     const auto anchorState = updateRecord.ownedRelIDVector->state;
     DASSERT(anchorState == updateRecord.ownedSrcNodeIDVector->state &&
-            anchorState == updateRecord.ownedSrcNodeIDVector->state &&
+            anchorState == updateRecord.ownedDstNodeIDVector->state &&
+            anchorState == updateRecord.ownedRelIDVector->state &&
             anchorState == updateRecord.ownedPropertyVector->state);
     DASSERT(anchorState->getSelVector().getSelSize() == 1);
     const auto updateState = std::make_unique<RelTableUpdateState>(updateRecord.columnID,

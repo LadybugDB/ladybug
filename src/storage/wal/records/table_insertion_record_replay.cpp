@@ -33,6 +33,7 @@ void WALReplayer::replayNodeTableInsertRecord(const WALRecord& walRecord) const 
     DASSERT(!insertionRecord.ownedVectors.empty());
     const auto anchorState = insertionRecord.ownedVectors[0]->state;
     const auto numNodes = anchorState->getSelVector().getSelSize();
+    DASSERT(insertionRecord.numRows == numNodes);
     for (auto i = 0u; i < insertionRecord.ownedVectors.size(); i++) {
         insertionRecord.ownedVectors[i]->setState(anchorState);
     }
@@ -63,6 +64,7 @@ void WALReplayer::replayRelTableInsertRecord(const WALRecord& walRecord) const {
     DASSERT(!insertionRecord.ownedVectors.empty());
     const auto anchorState = insertionRecord.ownedVectors[0]->state;
     const auto numRels = anchorState->getSelVector().getSelSize();
+    DASSERT(insertionRecord.numRows == numRels);
     anchorState->getSelVectorUnsafe().setToFiltered(1);
     for (auto i = 0u; i < insertionRecord.ownedVectors.size(); i++) {
         insertionRecord.ownedVectors[i]->setState(anchorState);
