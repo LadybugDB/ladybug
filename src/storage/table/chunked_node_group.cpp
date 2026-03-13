@@ -50,7 +50,8 @@ ChunkedNodeGroup::ChunkedNodeGroup(std::vector<std::unique_ptr<ColumnChunk>> chu
 ChunkedNodeGroup::ChunkedNodeGroup(ChunkedNodeGroup& base,
     const std::vector<column_id_t>& selectedColumns)
     : format{base.format}, residencyState{base.residencyState}, startRowIdx{base.startRowIdx},
-      capacity{base.capacity}, numRows{base.numRows.load()} {
+      capacity{base.capacity}, numRows{base.numRows.load()},
+      versionInfo{std::move(base.versionInfo)} {
     chunks.resize(selectedColumns.size());
     for (auto i = 0u; i < selectedColumns.size(); i++) {
         auto columnID = selectedColumns[i];
