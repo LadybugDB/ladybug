@@ -531,11 +531,14 @@ void CSRNodeGroup::checkpointInMemAndOnDisk(const UniqLock& lock, NodeGroupCheck
         }
     }
 
+    // Count tuples across ALL node offsets, not just the regions being checkpointed.
+    // A region may have no changes (so it is not in regionsToCheckpoint) yet still hold tuples.
+    // If we only count tuples in regionsToCheckpoint we may incorrectly conclude that the node
+    // group is empty and set persistentChunkGroup to nullptr, losing those untouched tuples.
     uint64_t numTuplesAfterCheckpoint = 0;
-    for (const auto& region : regionsToCheckpoint) {
-        for (auto i = region.leftNodeOffset; i <= region.rightNodeOffset; ++i) {
-            numTuplesAfterCheckpoint += csrState.newHeader->getCSRLength(i);
-        }
+    const auto numNodeOffsets = csrState.newHeader->length->getNumValues();
+    for (auto i = 0u; i < numNodeOffsets; ++i) {
+        numTuplesAfterCheckpoint += csrState.newHeader->getCSRLength(i);
     }
     if (numTuplesAfterCheckpoint == 0) {
         reclaimStorage(csrState.pageAllocator, lock);
