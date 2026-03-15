@@ -4,7 +4,7 @@
 namespace lbug {
 namespace testing {
 
-// Reproduces the "bad" case from pristine.js: open a fresh Database+Connection on every
+// Reproduces the "bad" case from issue 180: open a fresh Database+Connection on every
 // iteration of the completion loop.  After all 1,200 iterations every edge and every node
 // must have been deleted.
 class DetachDeleteTest : public EmptyDBTest {
@@ -13,7 +13,7 @@ protected:
         EmptyDBTest::SetUp();
         createDBAndConn();
 
-        // Create schema and seed data matching pristine.js::create()
+        // Create schema and seed data
         auto res = conn->query(R"(
             CREATE NODE TABLE D(id INT64 PRIMARY KEY);
             CREATE NODE TABLE E(id STRING DEFAULT gen_random_uuid(), PRIMARY KEY (id));
@@ -26,7 +26,7 @@ protected:
         ASSERT_TRUE(res->isSuccess()) << res->toString();
     }
 
-    // Build a LIST(INT64) Value containing a single element, matching the JS `$ids` parameter.
+    // Build a LIST(INT64) Value containing a single element
     static std::unique_ptr<common::Value> makeInt64ListValue(int64_t elem) {
         std::vector<std::unique_ptr<common::Value>> children;
         children.push_back(std::make_unique<common::Value>(elem));
@@ -89,6 +89,7 @@ TEST_F(DetachDeleteTest, BadCaseAllNodesAndEdgesDeleted) {
             }
         }
     }
+    createDBAndConn();
 
     // Final verification: all edges and all nodes must be gone.
     auto countEdgesT = conn->query("MATCH ()-[:t]->() RETURN count(*)");
