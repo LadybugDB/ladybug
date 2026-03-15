@@ -20,6 +20,8 @@ public:
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
     explicit NodeQueryResult(const Napi::CallbackInfo& info);
     void SetQueryResult(QueryResult* queryResult, bool isOwned);
+    void SetOwnedQueryResult(std::unique_ptr<QueryResult> queryResult);
+    std::unique_ptr<QueryResult> DetachNextQueryResult();
     ~NodeQueryResult() override;
 
 private:
@@ -43,8 +45,8 @@ private:
 
 private:
     QueryResult* queryResult = nullptr;
+    std::unique_ptr<QueryResult> ownedQueryResult = nullptr;
     std::unique_ptr<std::vector<std::string>> columnNames = nullptr;
-    bool isOwned = false;
 };
 
 enum GetColumnMetadataType { DATA_TYPE, NAME };
@@ -147,12 +149,21 @@ public:
 
     void Execute() override {
         try {
-            auto nextResult = currQueryResult->queryResult->getNextQueryResult();
+            nextOwnedResult = currQueryResult->DetachNextQueryResult();
+            auto nextResult =
+                nextOwnedResult ? nextOwnedResult.get() : currQueryResult->queryResult->getNextQueryResult();
+            if (nextResult == nullptr) {
+                return;
+            }
             if (!nextResult->isSuccess()) {
                 SetError(nextResult->getErrorMessage());
                 return;
             }
-            nextQueryResult->SetQueryResult(nextResult, false);
+            if (nextOwnedResult) {
+                nextQueryResult->SetOwnedQueryResult(std::move(nextOwnedResult));
+            } else {
+                nextQueryResult->SetQueryResult(nextResult, false);
+            }
         } catch (const std::exception& exc) {
             SetError(std::string(exc.what()));
         }
@@ -165,6 +176,7 @@ public:
 private:
     NodeQueryResult* currQueryResult;
     NodeQueryResult* nextQueryResult;
+    std::unique_ptr<QueryResult> nextOwnedResult;
 };
 
 class NodeQueryResultGetQuerySummaryAsyncWorker : public Napi::AsyncWorker {

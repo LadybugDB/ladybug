@@ -38,9 +38,27 @@ NodeQueryResult::~NodeQueryResult() {
     this->Close();
 }
 
+void NodeQueryResult::SetOwnedQueryResult(std::unique_ptr<QueryResult> queryResult) {
+    Close();
+    ownedQueryResult = std::move(queryResult);
+    this->queryResult = ownedQueryResult.get();
+}
+
 void NodeQueryResult::SetQueryResult(QueryResult* queryResult, bool isOwned) {
+    Close();
+    if (isOwned) {
+        ownedQueryResult.reset(queryResult);
+        this->queryResult = ownedQueryResult.get();
+        return;
+    }
     this->queryResult = queryResult;
-    this->isOwned = isOwned;
+}
+
+std::unique_ptr<QueryResult> NodeQueryResult::DetachNextQueryResult() {
+    if (ownedQueryResult == nullptr) {
+        return nullptr;
+    }
+    return ownedQueryResult->moveNextResult();
 }
 
 void NodeQueryResult::ResetIterator(const Napi::CallbackInfo& info) {
@@ -90,13 +108,22 @@ Napi::Value NodeQueryResult::GetNextQueryResultSync(const Napi::CallbackInfo& in
     Napi::Env env = info.Env();
     Napi::HandleScope scope(env);
     try {
-        auto nextResult = this->queryResult->getNextQueryResult();
+        auto nextOwnedResult = DetachNextQueryResult();
+        auto nextResult =
+            nextOwnedResult ? nextOwnedResult.get() : this->queryResult->getNextQueryResult();
+        if (nextResult == nullptr) {
+            return env.Undefined();
+        }
         if (!nextResult->isSuccess()) {
             Napi::Error::New(env, nextResult->getErrorMessage()).ThrowAsJavaScriptException();
         }
         auto nodeQueryResult =
             Napi::ObjectWrap<NodeQueryResult>::Unwrap(info[0].As<Napi::Object>());
-        nodeQueryResult->SetQueryResult(nextResult, false);
+        if (nextOwnedResult) {
+            nodeQueryResult->SetOwnedQueryResult(std::move(nextOwnedResult));
+        } else {
+            nodeQueryResult->SetQueryResult(nextResult, false);
+        }
     } catch (const std::exception& exc) {
         Napi::Error::New(env, std::string(exc.what())).ThrowAsJavaScriptException();
     }
@@ -235,8 +262,7 @@ void NodeQueryResult::Close(const Napi::CallbackInfo& info) {
 }
 
 void NodeQueryResult::Close() {
-    if (this->isOwned) {
-        delete this->queryResult;
-        this->queryResult = nullptr;
-    }
+    columnNames.reset();
+    ownedQueryResult.reset();
+    queryResult = nullptr;
 }
