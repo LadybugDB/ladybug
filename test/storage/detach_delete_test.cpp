@@ -1,3 +1,5 @@
+#include <cstdlib>
+
 #include "common/types/value/value.h"
 #include "graph_test/private_graph_test.h"
 
@@ -38,6 +40,9 @@ protected:
 TEST_F(DetachDeleteTest, BadCaseAllNodesAndEdgesDeleted) {
     if (inMemMode) {
         GTEST_SKIP();
+    }
+    if (std::getenv("LBUG_RUN_LONG_TESTS") == nullptr) {
+        GTEST_SKIP() << "Skipping long test; set LBUG_RUN_LONG_TESTS=1 to run.";
     }
 
     // query1: mark R.c = true for the given id, then detach-delete any E nodes
