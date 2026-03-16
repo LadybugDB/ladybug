@@ -23,6 +23,11 @@ add_subdirectory(extension)
 add_library(lbug STATIC ${ALL_OBJECT_FILES})
 add_library(lbug_shared SHARED ${ALL_OBJECT_FILES})
 
+set_target_properties(lbug_shared PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
+)
+
 set(LBUG_LIBRARIES antlr4_cypher antlr4_runtime brotlidec brotlicommon fast_float utf8proc re2 fastpfor parquet snappy thrift yyjson zstd miniz mbedtls lz4 roaring_bitmap simsimd)
 if (NOT __SINGLE_THREADED__)
         set(LBUG_LIBRARIES ${LBUG_LIBRARIES} Threads::Threads)
