@@ -273,7 +273,7 @@ int main(int argc, char** argv) {
         deserializer.getReader()->onObjectEnd();
 
         std::cout << "WAL Header:\n";
-        std::cout << "  Database ID: " << UUID::toString(walHeader.databaseID) << "\n";
+        std::cout << "  Database ID: " << uuid::toString(walHeader.databaseID) << "\n";
         std::cout << "  Checksums Enabled: " << (walHeader.enableChecksums ? "true" : "false")
                   << "\n";
         std::cout << "  File Size: " << fileSize << " bytes\n\n";

@@ -177,7 +177,7 @@ std::string TypeUtils::toString(const blob_t& val, void* /*valueVector*/) {
 
 template<>
 std::string TypeUtils::toString(const uuid& val, void* /*valueVector*/) {
-    return UUID::toString(val);
+    return uuid::toString(val);
 }
 
 template<>

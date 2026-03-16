@@ -8,7 +8,7 @@ namespace function {
 
 void GenRandomUUID::operation(common::uuid& input, void* dataPtr) {
     auto clientContext = static_cast<FunctionBindData*>(dataPtr)->clientContext;
-    input = common::UUID::generateRandomUUID(common::RandomEngine::Get(*clientContext));
+    input = common::uuid::generateRandomUUID(common::RandomEngine::Get(*clientContext));
 }
 
 } // namespace function

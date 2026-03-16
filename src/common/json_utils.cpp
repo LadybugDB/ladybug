@@ -163,7 +163,7 @@ yyjson_mut_val* jsonify(JsonMutWrapper& wrapper, const common::ValueVector& vec,
         } break;
         case LogicalTypeID::UUID: {
             auto uuidVal = vec.getValue<uuid>(pos);
-            auto str = UUID::toString(uuidVal);
+            auto str = uuid::toString(uuidVal);
             result = yyjson_mut_strcpy(wrapper.ptr, str.c_str());
         } break;
         case LogicalTypeID::LIST:

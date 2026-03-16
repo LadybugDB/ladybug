@@ -422,7 +422,7 @@ void Value::copyFromRowLayout(const uint8_t* value) {
     } break;
     case LogicalTypeID::UUID: {
         val.int128Val = ((uuid*)value)->value;
-        strVal = UUID::toString(*((uuid*)value));
+        strVal = uuid::toString(*((uuid*)value));
     } break;
     case LogicalTypeID::JSON:
     case LogicalTypeID::STRING: {
@@ -640,7 +640,7 @@ std::string Value::toString() const {
     case LogicalTypeID::BLOB:
         return Blob::toString(reinterpret_cast<const uint8_t*>(strVal.c_str()), strVal.length());
     case LogicalTypeID::UUID:
-        return UUID::toString(val.int128Val);
+        return uuid::toString(val.int128Val);
     case LogicalTypeID::JSON:
     case LogicalTypeID::STRING:
         return strVal;

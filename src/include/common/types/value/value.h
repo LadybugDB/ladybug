@@ -887,7 +887,7 @@ inline Value Value::createValue(uint8_t* val) {
 }
 
 /**
- * @param val the uuid_t* val
+ * @param val the uuid* val
  * @return a Value with UUID type and val val.
  */
 template<>

@@ -161,18 +161,18 @@ void CastStringHelper::cast(const char* input, uint64_t len, blob_t& /*result*/,
     BlobVector::addBlob(vector, rowToAdd, blobBuffer.get(), blobLen);
 }
 
-//---------------------- cast String to UUID ------------------------------ //
+//---------------------- cast String to uuid ------------------------------ //
 template<>
 void CastString::operation(const string_t& input, uuid& result, ValueVector* /*result_vector*/,
     uint64_t /*rowToAdd*/, const CSVOption* /*option*/) {
-    result.value = UUID::fromString(input.getAsString());
+    result = uuid::fromString(input.getAsString());
 }
 
 // LCOV_EXCL_START
 template<>
 void CastStringHelper::cast(const char* input, uint64_t len, uuid& result, ValueVector* /*vector*/,
     uint64_t /*rowToAdd*/, const CSVOption* /*option*/) {
-    result.value = UUID::fromCString(input, len);
+    result = uuid::fromCString(input, len);
 }
 // LCOV_EXCL_STOP
 
