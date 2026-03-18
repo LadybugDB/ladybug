@@ -365,19 +365,30 @@ jobs:
       - name: Upgrade npm
         run: npm install -g npm@latest
 
-      - name: Package Node.js API with prebuilt binaries
+      - name: Package Node.js API (main + per-platform sub-packages)
         run: node package
         working-directory: tools/nodejs_api
 
       - name: Show tarball contents
-        run: tar -tvf lbug-source.tar.gz
+        run: |
+          for f in lbug-source.tar.gz lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-win32-x64.tar.gz; do
+            if [ -f "$f" ]; then
+              echo "=== $f ==="; tar -tvf "$f"; echo
+            fi
+          done
         working-directory: tools/nodejs_api
 
-      - name: Upload tarball
+      - name: Upload main tarball
         uses: actions/upload-artifact@v4
         with:
           name: lbug-deploy-nodejs
           path: tools/nodejs_api/lbug-source.tar.gz
+
+      - name: Upload per-platform tarballs
+        uses: actions/upload-artifact@v4
+        with:
+          name: lbug-deploy-nodejs-platform-packages
+          path: tools/nodejs_api/lbug-*.tar.gz
 
       - name: Deploy to npm.js dry run
         if: ${{ github.event_name != 'schedule' && github.event.inputs.isDeploy != 'true' }}
@@ -386,39 +397,46 @@ jobs:
           if [ "${{ github.event.inputs.isNightly }}" = "true" ]; then
             TAG=next
           fi
-          PACKAGE_NAME="$(tar -xOf lbug-source.tar.gz package/package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.name)")"
-          PACKAGE_VERSION="$(tar -xOf lbug-source.tar.gz package/package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.version)")"
-          PACKAGE_REF="${PACKAGE_NAME}@${PACKAGE_VERSION}"
-          if npm view "${PACKAGE_REF}" version >/dev/null 2>&1; then
-            echo "Version ${PACKAGE_VERSION} already published; skipping dry-run publish."
-          else
-            npm publish lbug-source.tar.gz --access public --tag "${TAG}" --dry-run
-          fi
+          for tarball in lbug-source.tar.gz lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-win32-x64.tar.gz; do
+            [ -f "$tarball" ] || continue
+            PACKAGE_NAME="$(tar -xOf "$tarball" package/package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.name)")"
+            PACKAGE_VERSION="$(tar -xOf "$tarball" package/package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.version)")"
+            PACKAGE_REF="${PACKAGE_NAME}@${PACKAGE_VERSION}"
+            if npm view "${PACKAGE_REF}" version >/dev/null 2>&1; then
+              echo "${PACKAGE_REF} already published; skipping dry-run."
+            else
+              npm publish "$tarball" --access public --tag "${TAG}" --dry-run
+            fi
+          done
         working-directory: tools/nodejs_api
 
       - name: Deploy nightly to npm.js
         if: ${{ github.event_name == 'schedule' || (github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly == 'true') }}
         run: |
           NIGHTLY_TAG="nightly-$(date -u +%Y%m%d)"
-          PACKAGE_NAME="$(tar -xOf lbug-source.tar.gz package/package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.name)")"
-          PACKAGE_VERSION="$(tar -xOf lbug-source.tar.gz package/package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.version)")"
-          PACKAGE_REF="${PACKAGE_NAME}@${PACKAGE_VERSION}"
-          echo "Nightly tag: ${NIGHTLY_TAG}"
-          echo "Package ref: ${PACKAGE_REF}"
-
-          if npm view "${PACKAGE_REF}" version >/dev/null 2>&1; then
-            echo "Package version already exists on npm; updating dist-tags only."
-          else
-            npm publish lbug-source.tar.gz --access public --tag "${NIGHTLY_TAG}"
-          fi
-
-          npm dist-tag add "${PACKAGE_REF}" "${NIGHTLY_TAG}"
-          npm dist-tag add "${PACKAGE_REF}" next
+          for tarball in lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-win32-x64.tar.gz lbug-source.tar.gz; do
+            [ -f "$tarball" ] || continue
+            PACKAGE_NAME="$(tar -xOf "$tarball" package/package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.name)")"
+            PACKAGE_VERSION="$(tar -xOf "$tarball" package/package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.version)")"
+            PACKAGE_REF="${PACKAGE_NAME}@${PACKAGE_VERSION}"
+            echo "Nightly tag: ${NIGHTLY_TAG}, Package: ${PACKAGE_REF}"
+            if npm view "${PACKAGE_REF}" version >/dev/null 2>&1; then
+              echo "Already published; updating dist-tags only."
+            else
+              npm publish "$tarball" --access public --tag "${NIGHTLY_TAG}"
+            fi
+            npm dist-tag add "${PACKAGE_REF}" "${NIGHTLY_TAG}"
+            npm dist-tag add "${PACKAGE_REF}" next
+          done
         working-directory: tools/nodejs_api
 
       - name: Deploy to npm.js
         if: ${{ github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly != 'true' }}
-        run: npm publish lbug-source.tar.gz --access public --tag latest
+        run: |
+          for tarball in lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-win32-x64.tar.gz lbug-source.tar.gz; do
+            [ -f "$tarball" ] || continue
+            npm publish "$tarball" --access public --tag latest
+          done
         working-directory: tools/nodejs_api
   
   build-and-test-wasm:
