@@ -135,7 +135,7 @@ jobs:
         run: |
           mv install/include/lbug.h .
           mv install/include/lbug.hpp .
-          mv install/lib*/liblbug.so .
+          cp -L install/lib*/liblbug.so .
           mv install/bin/lbug .
 
       - name: Collect artifacts (macOS)
@@ -143,7 +143,7 @@ jobs:
         run: |
           mv install/include/lbug.h .
           mv install/include/lbug.hpp .
-          mv install/lib/liblbug.dylib .
+          cp -L install/lib/liblbug.dylib .
           mv install/bin/lbug .
 
       - name: Verify binary information (macOS)
