@@ -150,6 +150,9 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeInsertions) {
         GTEST_SKIP();
     }
     conn->query("CALL debug_enable_multi_writes=true;");
+    // Disable auto-checkpoint so checkpoint overhead doesn't interfere with
+    // concurrent write throughput measurements. Explicit CHECKPOINT at end.
+    conn->query("CALL auto_checkpoint=false;");
     auto numThreads = 4;
     auto numInsertsPerThread = 1000;
     conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
@@ -161,6 +164,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeInsertions) {
     for (auto& thread : threads) {
         thread.join();
     }
+    conn->query("CHECKPOINT;");
     auto numTotalInsertions = numThreads * numInsertsPerThread;
     auto res = conn->query("MATCH (a:test) RETURN COUNT(a) AS COUNT;");
     ASSERT_TRUE(res->isSuccess());
@@ -240,6 +244,9 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipInsertions) {
         GTEST_SKIP();
     }
     conn->query("CALL debug_enable_multi_writes=true;");
+    // Disable auto-checkpoint so checkpoint overhead doesn't interfere with
+    // concurrent write throughput measurements. Explicit CHECKPOINT at end.
+    conn->query("CALL auto_checkpoint=false;");
     auto numThreads = 4;
     auto numInsertsPerThread = 2000;
     auto numTotalInsertions = numThreads * numInsertsPerThread;
@@ -253,6 +260,8 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipInsertions) {
         ASSERT_TRUE(res->isSuccess());
     }
     conn->query("COMMIT;");
+    // Flush setup data before the concurrent phase so WAL is clean.
+    conn->query("CHECKPOINT;");
 
     std::vector<std::thread> threads;
     for (auto i = 0; i < numThreads; ++i) {
@@ -262,6 +271,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipInsertions) {
     for (auto& thread : threads) {
         thread.join();
     }
+    conn->query("CHECKPOINT;");
 
     auto res = conn->query("MATCH ()-[r:knows]->() RETURN COUNT(r) AS COUNT;");
     ASSERT_TRUE(res->isSuccess());
@@ -360,6 +370,9 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeUpdates) {
         GTEST_SKIP();
     }
     conn->query("CALL debug_enable_multi_writes=true;");
+    // Disable auto-checkpoint so checkpoint overhead doesn't interfere with
+    // concurrent write throughput measurements. Explicit CHECKPOINT at end.
+    conn->query("CALL auto_checkpoint=false;");
     auto numThreads = 4;
     auto numUpdatesPerThread = 3000;
     auto numTotalNodes = numThreads * numUpdatesPerThread;
@@ -378,6 +391,8 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeUpdates) {
     ASSERT_EQ(res->getNumTuples(), 1);
     auto initialCount = res->getNext()->getValue(0)->getValue<int64_t>();
     ASSERT_EQ(initialCount, numTotalNodes);
+    // Flush setup data before the concurrent phase so WAL is clean.
+    conn->query("CHECKPOINT;");
 
     // Update concurrently
     std::vector<std::thread> threads;
@@ -388,6 +403,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeUpdates) {
     for (auto& thread : threads) {
         thread.join();
     }
+    conn->query("CHECKPOINT;");
 
     // Verify all nodes were updated
     res =
@@ -495,6 +511,9 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdates) {
         GTEST_SKIP();
     }
     conn->query("CALL debug_enable_multi_writes=true;");
+    // Disable auto-checkpoint so checkpoint overhead doesn't interfere with
+    // concurrent write throughput measurements. Explicit CHECKPOINT at end.
+    conn->query("CALL auto_checkpoint=false;");
     auto numThreads = 4;
     auto numUpdatesPerThread = 1500;
     auto numTotalUpdates = numThreads * numUpdatesPerThread;
@@ -525,6 +544,8 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdates) {
     ASSERT_EQ(res->getNumTuples(), 1);
     auto initialCount = res->getNext()->getValue(0)->getValue<int64_t>();
     ASSERT_EQ(initialCount, numTotalUpdates);
+    // Flush setup data before the concurrent phase so WAL is clean.
+    conn->query("CHECKPOINT;");
 
     // Update relationships concurrently
     std::vector<std::thread> threads;
@@ -535,6 +556,7 @@ TEST_F(EmptyDBTransactionTest, ConcurrentRelationshipUpdates) {
     for (auto& thread : threads) {
         thread.join();
     }
+    conn->query("CHECKPOINT;");
 
     // Verify all relationships were updated (all weights should be >= 10.0)
     res = conn->query("MATCH ()-[r:knows]->() WHERE r.weight >= 10.0 RETURN COUNT(r) AS COUNT;");

@@ -1,0 +1,16 @@
+{
+  "label": "main (201a727ee)",
+  "timestamp": 1774570328,
+  "metrics": {
+    "single_writer_txn_per_sec": 303.5636704803174,
+    "checkpoint_latency_ms": 160.93875002115965,
+    "concurrent_write_txns_per_sec": 153.28166463887797,
+    "read_during_checkpoint_ops_per_sec": 0.0
+  },
+  "gtest_timings": {
+    "EmptyDBTransactionTest.ConcurrentNodeInsertions": 8.515,
+    "EmptyDBTransactionTest.ConcurrentRelationshipInsertions": 15.949,
+    "EmptyDBTransactionTest.ConcurrentNodeUpdates": 44.597,
+    "EmptyDBTransactionTest.ConcurrentRelationshipUpdates": 35.322
+  }
+}

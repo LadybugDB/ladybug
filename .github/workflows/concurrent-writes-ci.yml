@@ -1,0 +1,263 @@
+name: ladybug concurrent-writes CI
+# Validates the Vela-Engineering/kuzu concurrent-write port.
+# Produces:
+#   - JSONL test results (one record per test case)
+#   - Markdown test summary → GitHub Step Summary
+#   - Before/after benchmark JSON files
+#   - Benchmark comparison → PR comment + GitHub Step Summary
+
+on:
+  push:
+    branches: [feat/concurrent-writes]
+    paths:
+      ["src/**", "benchmarks/**", ".github/workflows/concurrent-writes-ci.yml"]
+  pull_request:
+    paths:
+      ["src/**", "benchmarks/**", ".github/workflows/concurrent-writes-ci.yml"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── Build ────────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build python3
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: build-${{ matrix.os }}-${{ hashFiles('CMakeLists.txt', 'src/**/*.h') }}
+          restore-keys: build-${{ matrix.os }}-
+
+      - name: Configure (CMake + Ninja)
+        run: |
+          cmake -B build/relwithdebinfo -G Ninja \
+                -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                -DBUILD_TESTS=TRUE \
+                -DENABLE_BACKTRACES=TRUE \
+                .
+
+      - name: Build
+        run: cmake --build build/relwithdebinfo --parallel 4
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ladybug-build-${{ matrix.os }}
+          path: build/relwithdebinfo
+          retention-days: 1
+
+  # ─── Test ─────────────────────────────────────────────────────────────────
+  test:
+    name: Test (${{ matrix.os }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build
+        uses: actions/download-artifact@v4
+        with:
+          name: ladybug-build-${{ matrix.os }}
+          path: build/relwithdebinfo
+
+      - name: Restore test binary permissions
+        run: find build/relwithdebinfo/test -type f | xargs chmod +x 2>/dev/null || true
+
+      - name: Fetch dataset (shallow)
+        # The dataset lives in a separate repo; we shallow-clone it directly
+        # to avoid submodule setup complexity.
+        run: |
+          git clone --depth=1 https://github.com/ladybugdb/dataset.git dataset
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run all tests (JSONL capture)
+        id: tests
+        run: |
+          python3 benchmarks/run_tests.py \
+            --build-dir   build/relwithdebinfo \
+            --dataset-dir dataset \
+            --output      benchmarks/test-results-${{ matrix.os }}.jsonl \
+            --summary     benchmarks/test-summary-${{ matrix.os }}.md \
+            --label       "${{ matrix.os }} / ${{ github.head_ref || github.ref_name }}"
+        continue-on-error: true
+
+      - name: Write test summary to GitHub Step Summary
+        run: cat benchmarks/test-summary-${{ matrix.os }}.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail job if any tests failed
+        if: steps.tests.outcome == 'failure'
+        run: |
+          echo "Tests failed — see summary above and JSONL artifact for details."
+          exit 1
+
+      - name: Upload JSONL results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: |
+            benchmarks/test-results-${{ matrix.os }}.jsonl
+            benchmarks/test-summary-${{ matrix.os }}.md
+          retention-days: 14
+
+  # ─── Benchmark ────────────────────────────────────────────────────────────
+  #
+  # Produces a before/after comparison:
+  #
+  #   baseline.json  — captured on main (unpatched ladybug)
+  #                    committed to the repo; CI reads it if present
+  #   branch-results.json — captured on this branch
+  #   comparison.md  — diff table posted as PR comment + Step Summary
+  #
+  # To capture a new baseline locally (e.g. after a significant ladybug update):
+  #
+  #   git checkout main
+  #   make relwithdebinfo   # or: cmake ... && cmake --build ...
+  #   python3 benchmarks/run_benchmarks.py \
+  #       --build-dir build/relwithdebinfo \
+  #       --dataset-dir dataset \
+  #       --output benchmarks/baseline.json --label main
+  #
+  #   # Also archive to results/ for posterity:
+  #   cp benchmarks/baseline.json \
+  #      benchmarks/results/main-$(git rev-parse --short HEAD)-$(date +%Y%m%d).json
+  #
+  #   git add benchmarks/baseline.json benchmarks/results/ \
+  #       && git commit -m "bench: capture baseline"
+  #
+  #   # Generate a history report:
+  #   python3 benchmarks/report.py --output benchmarks/results/report.md
+  #
+  benchmark:
+    name: Benchmark (ubuntu-latest)
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/feat/concurrent-writes'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build (ubuntu)
+        uses: actions/download-artifact@v4
+        with:
+          name: ladybug-build-ubuntu-latest
+          path: build/relwithdebinfo
+
+      - name: Restore binary permissions
+        run: |
+          find build/relwithdebinfo -type f | xargs chmod +x 2>/dev/null || true
+
+      - name: Fetch dataset (shallow)
+        run: |
+          git clone --depth=1 https://github.com/ladybugdb/dataset.git dataset
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run benchmarks (branch)
+        run: |
+          python3 benchmarks/run_benchmarks.py \
+            --build-dir build/relwithdebinfo \
+            --dataset-dir dataset \
+            --output    benchmarks/branch-results.json \
+            --label     "${{ github.head_ref || github.ref_name }}"
+
+      - name: Compare against baseline
+        id: compare
+        run: |
+          if [ -f benchmarks/baseline.json ]; then
+            python3 benchmarks/compare_benchmarks.py \
+              --baseline benchmarks/baseline.json \
+              --branch   benchmarks/branch-results.json \
+              --output   benchmarks/comparison.md
+            echo "has_baseline=true" >> "$GITHUB_OUTPUT"
+          else
+            python3 -c "open('benchmarks/comparison.md','w').write('## \u26a1 Concurrent-write benchmark comparison\n\n> **No baseline found.** To capture one, run on \`main\`:\n> \`\`\`\n> python3 benchmarks/run_benchmarks.py \\\\\n>     --build-dir build/relwithdebinfo \\\\\n>     --dataset-dir dataset \\\\\n>     --output benchmarks/baseline.json --label main\n> \`\`\`\n> Then commit \`benchmarks/baseline.json\` to the repo.\n')"
+            echo "has_baseline=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write benchmark comparison to Step Summary
+        run: cat benchmarks/comparison.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Post / update benchmark comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('benchmarks/comparison.md', 'utf8');
+            const marker = '<!-- concurrent-writes-bench -->';
+            const fullBody = marker + '\n' + body;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body: fullBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body: fullBody,
+              });
+            }
+
+      - name: Generate history report
+        if: always()
+        run: |
+          python3 benchmarks/report.py \
+            --results-dir benchmarks/results \
+            --output benchmarks/results/report.md 2>/dev/null || true
+
+      - name: Fail CI if regressions detected
+        if: steps.compare.outputs.has_baseline == 'true'
+        run: |
+          python3 benchmarks/compare_benchmarks.py \
+            --baseline benchmarks/baseline.json \
+            --branch   benchmarks/branch-results.json
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmarks/branch-results.json
+            benchmarks/comparison.md
+            benchmarks/results/
+          retention-days: 30

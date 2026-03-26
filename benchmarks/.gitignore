@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+# Transient CI output at repo root (proper results go in results/)
+branch-results.json
+comparison.md
+test-results-*.jsonl
+test-summary-*.md
+# Generated report (re-run report.py to regenerate)
+results/report.md

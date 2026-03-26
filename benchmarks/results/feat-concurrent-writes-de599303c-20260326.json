@@ -1,0 +1,16 @@
+{
+  "label": "feat/concurrent-writes (de599303c)",
+  "timestamp": 1774570479,
+  "metrics": {
+    "single_writer_txn_per_sec": 295.0207285961975,
+    "checkpoint_latency_ms": 93.6552919447422,
+    "concurrent_write_txns_per_sec": 149.6921954231611,
+    "read_during_checkpoint_ops_per_sec": 19.2
+  },
+  "gtest_timings": {
+    "EmptyDBTransactionTest.ConcurrentNodeInsertions": 7.807,
+    "EmptyDBTransactionTest.ConcurrentRelationshipInsertions": 15.864,
+    "EmptyDBTransactionTest.ConcurrentNodeUpdates": 50.188,
+    "EmptyDBTransactionTest.ConcurrentRelationshipUpdates": 33.027
+  }
+}
