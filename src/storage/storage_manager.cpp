@@ -54,7 +54,9 @@ void StorageManager::initDataFileHandle(VirtualFileSystem* vfs, main::ClientCont
     } else {
         auto flag = readOnly ? FileHandle::O_PERSISTENT_FILE_READ_ONLY :
                                FileHandle::O_PERSISTENT_FILE_CREATE_NOT_EXISTS;
-        flag |= FileHandle::O_LOCKED_PERSISTENT_FILE;
+        if (!readOnly) {
+            flag |= FileHandle::O_LOCKED_PERSISTENT_FILE;
+        }
         dataFH = memoryManager.getBufferManager()->getFileHandle(databasePath, flag, vfs, context);
         if (dataFH->getNumPages() == 0) {
             if (!readOnly) {
@@ -81,7 +83,7 @@ void StorageManager::closeFileHandle() {
 }
 
 Table* StorageManager::getTable(table_id_t tableID) {
-    std::lock_guard lck{mtx};
+    std::shared_lock lck{mtx};
     DASSERT(tables.contains(tableID));
     return tables.at(tableID).get();
 }
@@ -185,7 +187,7 @@ void StorageManager::createRelTableGroup(RelGroupCatalogEntry* entry) {
 }
 
 void StorageManager::createTable(TableCatalogEntry* entry) {
-    std::lock_guard lck{mtx};
+    std::unique_lock lck{mtx};
     switch (entry->getType()) {
     case CatalogEntryType::NODE_TABLE_ENTRY: {
         createNodeTable(entry->ptrCast<NodeTableCatalogEntry>());
@@ -210,6 +212,7 @@ ShadowFile& StorageManager::getShadowFile() const {
 }
 
 void StorageManager::reclaimDroppedTables(const Catalog& catalog) {
+    std::unique_lock lck{mtx};
     std::vector<table_id_t> droppedTables;
     for (const auto& [tableID, table] : tables) {
         switch (table->getTableType()) {
@@ -251,6 +254,7 @@ bool StorageManager::checkpoint(main::ClientContext* context, PageAllocator& pag
     const auto nodeTableEntries = catalog->getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     const auto relGroupEntries = catalog->getRelGroupEntries(&DUMMY_CHECKPOINT_TRANSACTION);
 
+    std::shared_lock lck{mtx};
     for (const auto entry : nodeTableEntries) {
         if (!tables.contains(entry->getTableID())) {
             throw RuntimeException(std::format(
@@ -270,8 +274,57 @@ bool StorageManager::checkpoint(main::ClientContext* context, PageAllocator& pag
         }
         entry->vacuumColumnIDs(1);
     }
+    lck.unlock();
     reclaimDroppedTables(*catalog);
     return hasChanges;
+}
+
+bool StorageManager::checkpoint(main::ClientContext* context, const Transaction& snapshotTxn,
+    PageAllocator& pageAllocator, const std::unordered_map<table_id_t, uint64_t>& epochWatermarks) {
+    bool hasChanges = false;
+    const auto catalog = Catalog::Get(*context);
+    const auto nodeTableEntries = catalog->getNodeTableEntries(&snapshotTxn);
+    const auto relGroupEntries = catalog->getRelGroupEntries(&snapshotTxn);
+
+    std::shared_lock lck{mtx};
+    for (const auto entry : nodeTableEntries) {
+        if (!tables.contains(entry->getTableID())) {
+            throw RuntimeException(std::format(
+                "Checkpoint failed: table {} not found in storage manager.", entry->getName()));
+        }
+        const auto watermarkIt = epochWatermarks.find(entry->getTableID());
+        const uint64_t watermark = watermarkIt != epochWatermarks.end() ? watermarkIt->second : 0;
+        hasChanges = tables.at(entry->getTableID())
+                         ->checkpoint(context, entry, pageAllocator, &snapshotTxn, watermark) ||
+                     hasChanges;
+    }
+    for (const auto entry : relGroupEntries) {
+        for (auto& info : entry->getRelEntryInfos()) {
+            if (!tables.contains(info.oid)) {
+                throw RuntimeException(std::format(
+                    "Checkpoint failed: table {} not found in storage manager.", entry->getName()));
+            }
+            const auto watermarkIt = epochWatermarks.find(info.oid);
+            const uint64_t watermark =
+                watermarkIt != epochWatermarks.end() ? watermarkIt->second : 0;
+            hasChanges = tables.at(info.oid)->checkpoint(context, entry, pageAllocator,
+                             &snapshotTxn, watermark) ||
+                         hasChanges;
+        }
+        entry->vacuumColumnIDs(1);
+    }
+    lck.unlock();
+    reclaimDroppedTables(*catalog);
+    return hasChanges;
+}
+
+std::unordered_map<table_id_t, uint64_t> StorageManager::captureChangeEpochs() const {
+    std::shared_lock lck{mtx};
+    std::unordered_map<table_id_t, uint64_t> epochs;
+    for (const auto& [id, table] : tables) {
+        epochs[id] = table->getChangeEpoch();
+    }
+    return epochs;
 }
 
 void StorageManager::finalizeCheckpoint() {
@@ -279,7 +332,7 @@ void StorageManager::finalizeCheckpoint() {
 }
 
 void StorageManager::rollbackCheckpoint(const Catalog& catalog) {
-    std::lock_guard lck{mtx};
+    std::unique_lock lck{mtx};
     const auto nodeTableEntries = catalog.getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     for (const auto tableEntry : nodeTableEntries) {
         DASSERT(tables.contains(tableEntry->getTableID()));
@@ -299,13 +352,47 @@ std::optional<std::reference_wrapper<const IndexType>> StorageManager::getIndexT
 }
 
 void StorageManager::serialize(const Catalog& catalog, Serializer& ser) {
-    std::lock_guard lck{mtx};
+    std::shared_lock lck{mtx};
     auto nodeTableEntries = catalog.getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     auto relGroupEntries = catalog.getRelGroupEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     std::sort(nodeTableEntries.begin(), nodeTableEntries.end(),
         [](const auto& a, const auto& b) { return a->getTableID() < b->getTableID(); });
     std::sort(relGroupEntries.begin(), relGroupEntries.end(),
         [](const auto& a, const auto& b) { return a->getTableID() < b->getTableID(); });
+    ser.writeDebuggingInfo("num_node_tables");
+    ser.write<uint64_t>(nodeTableEntries.size());
+    for (const auto tableEntry : nodeTableEntries) {
+        DASSERT(tables.contains(tableEntry->getTableID()));
+        ser.writeDebuggingInfo("table_id");
+        ser.write<table_id_t>(tableEntry->getTableID());
+        tables.at(tableEntry->getTableID())->serialize(ser);
+    }
+    ser.writeDebuggingInfo("num_rel_groups");
+    ser.write<uint64_t>(relGroupEntries.size());
+    for (const auto entry : relGroupEntries) {
+        const auto& relGroupEntry = entry->cast<RelGroupCatalogEntry>();
+        ser.writeDebuggingInfo("rel_group_id");
+        ser.write<table_id_t>(relGroupEntry.getTableID());
+        ser.writeDebuggingInfo("num_inner_rel_tables");
+        ser.write<uint64_t>(relGroupEntry.getNumRelTables());
+        for (auto& info : relGroupEntry.getRelEntryInfos()) {
+            DASSERT(tables.contains(info.oid));
+            info.serialize(ser);
+            tables.at(info.oid)->serialize(ser);
+        }
+    }
+}
+
+void StorageManager::serialize(const Catalog& catalog, const Transaction& snapshotTxn,
+    Serializer& ser) {
+    auto nodeTableEntries = catalog.getNodeTableEntries(&snapshotTxn);
+    auto relGroupEntries = catalog.getRelGroupEntries(&snapshotTxn);
+    std::sort(nodeTableEntries.begin(), nodeTableEntries.end(),
+        [](const auto& a, const auto& b) { return a->getTableID() < b->getTableID(); });
+    std::sort(relGroupEntries.begin(), relGroupEntries.end(),
+        [](const auto& a, const auto& b) { return a->getTableID() < b->getTableID(); });
+
+    std::shared_lock lck{mtx};
     ser.writeDebuggingInfo("num_node_tables");
     ser.write<uint64_t>(nodeTableEntries.size());
     for (const auto tableEntry : nodeTableEntries) {

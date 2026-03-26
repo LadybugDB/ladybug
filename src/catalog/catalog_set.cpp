@@ -266,6 +266,37 @@ void CatalogSet::serialize(Serializer serializer) const {
     }
 }
 
+void CatalogSet::serializeSnapshot(Serializer serializer, const Transaction* snapshotTxn) const {
+    std::shared_lock lck{mtx};
+    std::vector<CatalogEntry*> entriesToSerialize;
+    for (auto& [_, entry] : entries) {
+        switch (entry->getType()) {
+        case CatalogEntryType::SCALAR_FUNCTION_ENTRY:
+        case CatalogEntryType::REWRITE_FUNCTION_ENTRY:
+        case CatalogEntryType::AGGREGATE_FUNCTION_ENTRY:
+        case CatalogEntryType::COPY_FUNCTION_ENTRY:
+        case CatalogEntryType::TABLE_FUNCTION_ENTRY:
+        case CatalogEntryType::STANDALONE_TABLE_FUNCTION_ENTRY:
+        case CatalogEntryType::FOREIGN_TABLE_ENTRY:
+            continue;
+        default: {
+            auto visibleEntry = traverseVersionChainsForTransactionNoLock(snapshotTxn, entry.get());
+            if (visibleEntry && !visibleEntry->isDeleted()) {
+                entriesToSerialize.push_back(visibleEntry);
+            }
+        }
+        }
+    }
+    serializer.writeDebuggingInfo("nextOID");
+    serializer.serializeValue<oid_t>(nextOID);
+    serializer.writeDebuggingInfo("numEntries");
+    const uint64_t numEntriesToSerialize = entriesToSerialize.size();
+    serializer.serializeValue<uint64_t>(numEntriesToSerialize);
+    for (const auto entry : entriesToSerialize) {
+        entry->serialize(serializer);
+    }
+}
+
 std::unique_ptr<CatalogSet> CatalogSet::deserialize(Deserializer& deserializer) {
     std::string debuggingInfo;
     auto catalogSet = std::make_unique<CatalogSet>();

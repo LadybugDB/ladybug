@@ -121,8 +121,7 @@ public:
     explicit FlakyCheckpointerFailsOnFlushingShadow(main::ClientContext& context)
         : Checkpointer(context) {}
 
-    void logCheckpointAndApplyShadowPages() override {
-        // Simulate a failure during flushing the shadow pages.
+    void logCheckpointAndApplyShadowPages(bool /*walRotated*/) override {
         throw RuntimeException("checkpoint failed.");
     }
 };
@@ -143,12 +142,10 @@ public:
     explicit FlakyCheckpointerFailsOnLoggingCheckpoint(main::ClientContext& context)
         : Checkpointer(context) {}
 
-    void logCheckpointAndApplyShadowPages() override {
-        const auto storageManager = StorageManager::Get(clientContext);
+    void logCheckpointAndApplyShadowPages(bool /*walRotated*/) override {
+        const auto storageManager = mainStorageManager;
         auto& shadowFile = storageManager->getShadowFile();
-        // Flush the shadow file.
         shadowFile.flushAll(clientContext);
-        // Simulate a failure during logging the checkpoint.
         throw RuntimeException("checkpoint failed.");
     }
 };
@@ -169,19 +166,16 @@ public:
     explicit FlakyCheckpointerFailsOnApplyingShadow(main::ClientContext& context)
         : Checkpointer(context) {}
 
-    void logCheckpointAndApplyShadowPages() override {
-        const auto storageManager = StorageManager::Get(clientContext);
+    void logCheckpointAndApplyShadowPages(bool walRotated) override {
+        const auto storageManager = mainStorageManager;
         auto& shadowFile = storageManager->getShadowFile();
-        // Flush the shadow file.
         shadowFile.flushAll(clientContext);
         auto wal = WAL::Get(clientContext);
-        // Log the checkpoint to the WAL and flush WAL. This indicates that all shadow pages and
-        // files (snapshots of catalog and metadata) have been written to disk. The part that is not
-        // done is to replace them with the original pages or catalog and metadata files. If the
-        // system crashes before this point, the WAL can still be used to recover the system to a
-        // state where the checkpoint can be redone.
-        wal->logAndFlushCheckpoint(&clientContext);
-        // Simulate a failure during applying shadow pages.
+        if (walRotated) {
+            wal->logAndFlushCheckpointToFrozen(&clientContext);
+        } else {
+            wal->logAndFlushCheckpoint(&clientContext);
+        }
         throw RuntimeException("checkpoint failed.");
     }
 };
@@ -202,20 +196,17 @@ public:
     explicit FlakyCheckpointerFailsOnClearingFiles(main::ClientContext& context)
         : Checkpointer(context) {}
 
-    void logCheckpointAndApplyShadowPages() override {
-        const auto storageManager = StorageManager::Get(clientContext);
+    void logCheckpointAndApplyShadowPages(bool walRotated) override {
+        const auto storageManager = mainStorageManager;
         auto& shadowFile = storageManager->getShadowFile();
-        // Flush the shadow file.
         shadowFile.flushAll(clientContext);
         auto wal = WAL::Get(clientContext);
-        // Log the checkpoint to the WAL and flush WAL. This indicates that all shadow pages and
-        // files (snapshots of catalog and metadata) have been written to disk. The part that is not
-        // done is to replace them with the original pages or catalog and metadata files. If the
-        // system crashes before this point, the WAL can still be used to recover the system to a
-        // state where the checkpoint can be redone.
-        wal->logAndFlushCheckpoint(&clientContext);
+        if (walRotated) {
+            wal->logAndFlushCheckpointToFrozen(&clientContext);
+        } else {
+            wal->logAndFlushCheckpoint(&clientContext);
+        }
         shadowFile.applyShadowPages(*storageManager, clientContext);
-        // Simulate a failure during clearing the WAL and shadow files.
         throw RuntimeException("checkpoint failed.");
     }
 };
@@ -245,15 +236,17 @@ TEST_F(FlakyCheckpointerTest, ShadowFileDatabaseIDMismatchExistingDB) {
 
     std::filesystem::remove(databasePath);
 
-    // Temporarily rename the shadow file and wal file
+    // Temporarily rename the shadow file and frozen WAL file.
+    // With WAL rotation, the active .wal is renamed to .wal.checkpoint during checkpoint,
+    // so the frozen WAL is what survives after a failed checkpoint.
     auto shadowFilePath = StorageUtils::getShadowFilePath(databasePath);
-    auto walFilePath = StorageUtils::getWALFilePath(databasePath);
+    auto frozenWalFilePath = StorageUtils::getCheckpointWALFilePath(databasePath);
     auto tmpShadowFilePath = shadowFilePath + "1";
-    auto tmpWALFilePath = walFilePath + "1";
+    auto tmpFrozenWalFilePath = frozenWalFilePath + "1";
     ASSERT_TRUE(std::filesystem::exists(shadowFilePath));
-    ASSERT_TRUE(std::filesystem::exists(walFilePath));
+    ASSERT_TRUE(std::filesystem::exists(frozenWalFilePath));
     std::filesystem::rename(shadowFilePath, tmpShadowFilePath);
-    std::filesystem::rename(walFilePath, tmpWALFilePath);
+    std::filesystem::rename(frozenWalFilePath, tmpFrozenWalFilePath);
 
     // Recreate a new DB with the same path as before
     createDBAndConn();
@@ -265,7 +258,7 @@ TEST_F(FlakyCheckpointerTest, ShadowFileDatabaseIDMismatchExistingDB) {
 
     // Rename the files to the original names
     std::filesystem::rename(tmpShadowFilePath, shadowFilePath);
-    std::filesystem::rename(tmpWALFilePath, walFilePath);
+    std::filesystem::rename(tmpFrozenWalFilePath, frozenWalFilePath);
 
     // The shadow file replay should now fail
     EXPECT_THROW(createDBAndConn(), RuntimeException);

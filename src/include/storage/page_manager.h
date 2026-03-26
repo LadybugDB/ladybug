@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <mutex>
 
 #include "common/types/types.h"
@@ -23,9 +24,12 @@ public:
         : PageAllocator(fileHandle), freeSpaceManager(std::make_unique<FreeSpaceManager>()),
           fileHandle(fileHandle), version(0) {}
 
-    uint64_t getVersion() const { return version; }
-    bool changedSinceLastCheckpoint() const { return version != 0; }
-    void resetVersion() { version = 0; }
+    uint64_t getVersion() const { return version.load(std::memory_order_relaxed); }
+    bool changedSinceLastCheckpoint() const {
+        return version.load(std::memory_order_relaxed) != lastCheckpointVersion;
+    }
+    void resetVersion() { lastCheckpointVersion = version.load(std::memory_order_relaxed); }
+    void resetVersion(uint64_t checkpointedVersion) { lastCheckpointVersion = checkpointedVersion; }
 
     PageRange allocatePageRange(common::page_idx_t numPages) override;
     void freePageRange(PageRange block) override;
@@ -56,7 +60,8 @@ private:
     std::unique_ptr<FreeSpaceManager> freeSpaceManager;
     std::mutex mtx;
     FileHandle* fileHandle;
-    uint64_t version;
+    std::atomic<uint64_t> version;
+    uint64_t lastCheckpointVersion = 0;
 };
 } // namespace storage
 } // namespace lbug

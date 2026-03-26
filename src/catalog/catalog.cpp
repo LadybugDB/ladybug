@@ -640,6 +640,21 @@ void Catalog::serialize(Serializer& ser) const {
     graphs->serialize(ser);
 }
 
+void Catalog::serializeSnapshot(Serializer& ser, common::transaction_t snapshotTS) const {
+    const Transaction snapshotTxn(TransactionType::CHECKPOINT, Transaction::DUMMY_TRANSACTION_ID,
+        snapshotTS);
+    tables->serializeSnapshot(ser, &snapshotTxn);
+    sequences->serializeSnapshot(ser, &snapshotTxn);
+    functions->serializeSnapshot(ser, &snapshotTxn);
+    types->serializeSnapshot(ser, &snapshotTxn);
+    indexes->serializeSnapshot(ser, &snapshotTxn);
+    macros->serializeSnapshot(ser, &snapshotTxn);
+    internalTables->serializeSnapshot(ser, &snapshotTxn);
+    internalSequences->serializeSnapshot(ser, &snapshotTxn);
+    internalFunctions->serializeSnapshot(ser, &snapshotTxn);
+    graphs->serializeSnapshot(ser, &snapshotTxn);
+}
+
 void Catalog::deserialize(Deserializer& deSer) {
     tables = CatalogSet::deserialize(deSer);
     sequences = CatalogSet::deserialize(deSer);

@@ -135,7 +135,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         throw IOException(std::format("Cannot open file {}: {}", fullPath, posixErrMessage()));
     }
     if (flags.lockType != FileLockType::NO_LOCK) {
-        struct flock fl {};
+        struct flock fl{};
         memset(&fl, 0, sizeof fl);
         fl.l_type = flags.lockType == FileLockType::READ_LOCK ? F_RDLCK : F_WRLCK;
         fl.l_whence = SEEK_SET;
@@ -191,6 +191,15 @@ std::vector<std::string> LocalFileSystem::glob(main::ClientContext* context,
         }
     }
     return result;
+}
+
+void LocalFileSystem::renameFile(const std::string& from, const std::string& to) {
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    if (ec) {
+        throw IOException(
+            std::format("Error renaming file {} to {}. ErrorMessage: {}", from, to, ec.message()));
+    }
 }
 
 void LocalFileSystem::overwriteFile(const std::string& from, const std::string& to) {
@@ -278,7 +287,7 @@ static bool isAllowedDeletionPath(const std::string& path, const std::string& db
 
     // Main DB sidecars: db.lbdb.{wal|shadow|tmp|lock}
     if (extension == ".wal" || extension == ".shadow" || extension == ".tmp" ||
-        extension == ".lock") {
+        extension == ".lock" || extension == ".checkpoint") {
         if (stemWithoutExt == dbFileName) {
             return true;
         }
@@ -569,7 +578,7 @@ uint64_t LocalFileSystem::getFileSize(const FileInfo& fileInfo) const {
     }
     return size.QuadPart;
 #else
-    struct stat s {};
+    struct stat s{};
     if (fstat(localFileInfo->fd, &s) == -1) {
         throw IOException(std::format("Cannot read size of file. path: {} - Error {}: {}",
             fileInfo.path, errno, posixErrMessage()));

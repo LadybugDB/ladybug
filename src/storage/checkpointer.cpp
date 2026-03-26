@@ -14,6 +14,7 @@
 #include "storage/shadow_utils.h"
 #include "storage/storage_manager.h"
 #include "storage/wal/local_wal.h"
+#include "transaction/transaction.h"
 
 namespace lbug {
 namespace storage {
@@ -33,6 +34,37 @@ PageRange Checkpointer::serializeCatalog(const catalog::Catalog& catalog,
     catalog.serialize(catalogSerializer);
     auto pageAllocator = storageManager.getDataFH()->getPageManager();
     return catalogWriter->flush(*pageAllocator, storageManager.getShadowFile());
+}
+
+PageRange Checkpointer::serializeCatalogSnapshot(const catalog::Catalog& catalog,
+    StorageManager& storageManager) {
+    auto catalogWriter =
+        std::make_shared<common::InMemFileWriter>(*MemoryManager::Get(clientContext));
+    common::Serializer catalogSerializer(catalogWriter);
+    catalog.serializeSnapshot(catalogSerializer, snapshotTS);
+    auto pageAllocator = storageManager.getDataFH()->getPageManager();
+    return catalogWriter->flush(*pageAllocator, storageManager.getShadowFile());
+}
+
+PageRange Checkpointer::serializeMetadataSnapshot(const catalog::Catalog& catalog,
+    StorageManager& storageManager) {
+    auto metadataWriter =
+        std::make_shared<common::InMemFileWriter>(*MemoryManager::Get(clientContext));
+    common::Serializer metadataSerializer(metadataWriter);
+    const transaction::Transaction snapshotTxn(transaction::TransactionType::CHECKPOINT,
+        transaction::Transaction::DUMMY_TRANSACTION_ID, snapshotTS);
+    storageManager.serialize(catalog, snapshotTxn, metadataSerializer);
+
+    auto& pageManager = *storageManager.getDataFH()->getPageManager();
+    const auto pagesForPageManager = pageManager.estimatePagesNeededForSerialize();
+    auto pageAllocator = storageManager.getDataFH()->getPageManager();
+    const auto allocatedPages = pageAllocator->allocatePageRange(
+        metadataWriter->getNumPagesToFlush() + pagesForPageManager);
+    pageManager.serialize(metadataSerializer);
+
+    metadataWriter->flush(allocatedPages, pageAllocator->getDataFH(),
+        storageManager.getShadowFile());
+    return allocatedPages;
 }
 
 PageRange Checkpointer::serializeMetadata(const catalog::Catalog& catalog,
@@ -68,59 +100,110 @@ void Checkpointer::writeCheckpoint() {
         return;
     }
 
+    walRotated = mainStorageManager->getWAL().rotateForCheckpoint(&clientContext);
+
     auto databaseHeader = *mainStorageManager->getOrInitDatabaseHeader(clientContext);
-    // Checkpoint storage. Note that we first checkpoint storage before serializing the catalog, as
-    // checkpointing storage may overwrite columnIDs in the catalog.
-    bool hasStorageChanges = checkpointStorage();
-    serializeCatalogAndMetadata(databaseHeader, hasStorageChanges);
+    bool localHasStorageChanges = checkpointStorage();
+    serializeCatalogAndMetadata(databaseHeader, localHasStorageChanges);
     databaseHeader.dataFileNumPages = mainStorageManager->getDataFH()->getNumPages();
     writeDatabaseHeader(databaseHeader);
-    logCheckpointAndApplyShadowPages();
+    logCheckpointAndApplyShadowPages(walRotated);
 
-    // This function will evict all pages that were freed during this checkpoint
-    // It must be called before we remove all evicted candidates from the BM
-    // Or else the evicted pages may end up appearing multiple times in the eviction queue
+    // Snapshot versions while the write gate is still held.
+    catalogVersionAtCheckpoint = clientContext.getDatabase()->getCatalog()->getVersion();
+    pageManagerVersionAtCheckpoint =
+        mainStorageManager->getDataFH()->getPageManager()->getVersion();
+
+    postCheckpointCleanup();
+}
+
+void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp) {
+    if (isInMemory) {
+        return;
+    }
+
+    snapshotTS = snapshotTimestamp;
+
+    walRotated = mainStorageManager->getWAL().rotateForCheckpoint(&clientContext);
+
+    checkpointHeader = *mainStorageManager->getOrInitDatabaseHeader(clientContext);
+
+    // Capture versions while the write gate is still held.
+    catalogVersionAtCheckpoint = clientContext.getDatabase()->getCatalog()->getVersion();
+    pageManagerVersionAtCheckpoint =
+        mainStorageManager->getDataFH()->getPageManager()->getVersion();
+    tableEpochWatermarks = mainStorageManager->captureChangeEpochs();
+}
+
+void Checkpointer::checkpointStoragePhase() {
+    if (isInMemory) {
+        return;
+    }
+    hasStorageChanges = checkpointStorage();
+}
+
+void Checkpointer::finishCheckpoint() {
+    if (isInMemory) {
+        return;
+    }
+    serializeCatalogAndMetadata(checkpointHeader, hasStorageChanges);
+    checkpointHeader.dataFileNumPages = mainStorageManager->getDataFH()->getNumPages();
+    writeDatabaseHeader(checkpointHeader);
+    logCheckpointAndApplyShadowPages(walRotated);
+}
+
+void Checkpointer::postCheckpointCleanup() {
+    if (isInMemory) {
+        return;
+    }
+
     mainStorageManager->finalizeCheckpoint();
-    // When a page is freed by the FSM, it evicts it from the BM. However, if the page is freed,
-    // then reused over and over, it can be appended to the eviction queue multiple times. To
-    // prevent multiple entries of the same page from existing in the eviction queue, at the end of
-    // each checkpoint we remove any already-evicted pages.
     auto bufferManager = MemoryManager::Get(clientContext)->getBufferManager();
     bufferManager->removeEvictedCandidates();
 
-    catalog::Catalog::Get(clientContext)->resetVersion();
+    clientContext.getDatabase()->getCatalog()->resetVersion(catalogVersionAtCheckpoint);
     auto* dataFH = mainStorageManager->getDataFH();
-    dataFH->getPageManager()->resetVersion();
-    mainStorageManager->getWAL().reset();
+    dataFH->getPageManager()->resetVersion(pageManagerVersionAtCheckpoint);
+    if (walRotated) {
+        mainStorageManager->getWAL().clearFrozenWAL();
+    } else {
+        mainStorageManager->getWAL().reset();
+    }
     mainStorageManager->getShadowFile().reset();
 }
 
 bool Checkpointer::checkpointStorage() {
     auto pageAllocator = mainStorageManager->getDataFH()->getPageManager();
+    if (snapshotTS > 0) {
+        const transaction::Transaction snapshotTxn(transaction::TransactionType::CHECKPOINT,
+            transaction::Transaction::DUMMY_TRANSACTION_ID, snapshotTS);
+        return mainStorageManager->checkpoint(&clientContext, snapshotTxn, *pageAllocator,
+            tableEpochWatermarks);
+    }
     return mainStorageManager->checkpoint(&clientContext, *pageAllocator);
 }
 
 void Checkpointer::serializeCatalogAndMetadata(DatabaseHeader& databaseHeader,
-    bool hasStorageChanges) {
+    bool storageChanges) {
     // IMPORTANT: Always use the main database's catalog, not Catalog::Get()
     // which might return a graph's catalog if a default graph is set!
     const auto catalog = clientContext.getDatabase()->getCatalog();
     auto* dataFH = mainStorageManager->getDataFH();
+    const bool useSnapshot = snapshotTS > 0;
 
-    // Serialize the catalog if there are changes
     if (databaseHeader.catalogPageRange.startPageIdx == common::INVALID_PAGE_IDX ||
         catalog->changedSinceLastCheckpoint()) {
         databaseHeader.updateCatalogPageRange(*dataFH->getPageManager(),
-            serializeCatalog(*catalog, *mainStorageManager));
+            useSnapshot ? serializeCatalogSnapshot(*catalog, *mainStorageManager) :
+                          serializeCatalog(*catalog, *mainStorageManager));
     }
-    // Serialize the storage metadata if there are changes
     if (databaseHeader.metadataPageRange.startPageIdx == common::INVALID_PAGE_IDX ||
-        hasStorageChanges || catalog->changedSinceLastCheckpoint() ||
+        storageChanges || catalog->changedSinceLastCheckpoint() ||
         dataFH->getPageManager()->changedSinceLastCheckpoint()) {
-        // We must free the existing metadata page range before serializing
-        // So that the freed pages are serialized by the FSM
         databaseHeader.freeMetadataPageRange(*dataFH->getPageManager());
-        databaseHeader.metadataPageRange = serializeMetadata(*catalog, *mainStorageManager);
+        databaseHeader.metadataPageRange =
+            useSnapshot ? serializeMetadataSnapshot(*catalog, *mainStorageManager) :
+                          serializeMetadata(*catalog, *mainStorageManager);
     }
 }
 
@@ -143,21 +226,20 @@ void Checkpointer::writeDatabaseHeader(const DatabaseHeader& header) {
     mainStorageManager->setDatabaseHeader(std::make_unique<DatabaseHeader>(header));
 }
 
-void Checkpointer::logCheckpointAndApplyShadowPages() {
+void Checkpointer::logCheckpointAndApplyShadowPages(bool walRotated_) {
     auto& shadowFile = mainStorageManager->getShadowFile();
-    // Flush the shadow file.
     shadowFile.flushAll(clientContext);
     auto wal = WAL::Get(clientContext);
-    // Log the checkpoint to the WAL and flush WAL. This indicates that all shadow pages and
-    // files (snapshots of catalog and metadata) have been written to disk. The part that is not
-    // done is to replace them with the original pages or catalog and metadata files. If the
-    // system crashes before this point, the WAL can still be used to recover the system to a
-    // state where the checkpoint can be redone.
-    wal->logAndFlushCheckpoint(&clientContext);
+    if (walRotated_) {
+        wal->logAndFlushCheckpointToFrozen(&clientContext);
+    } else {
+        wal->logAndFlushCheckpoint(&clientContext);
+    }
     shadowFile.applyShadowPages(*mainStorageManager, clientContext);
-    // Clear the wal and also shadowing files.
     auto bufferManager = MemoryManager::Get(clientContext)->getBufferManager();
-    wal->clear();
+    if (!walRotated_) {
+        wal->clear();
+    }
     shadowFile.clear(*bufferManager);
 }
 

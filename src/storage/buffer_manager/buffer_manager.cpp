@@ -481,6 +481,29 @@ void BufferManager::updateFrameIfPageIsInFrameWithoutLock(file_idx_t fileIdx,
     }
 }
 
+void BufferManager::updateFrameIfPageIsInFrame(file_idx_t fileIdx, const uint8_t* newPage,
+    page_idx_t pageIdx) {
+    DASSERT(fileIdx < fileHandles.size());
+    auto& fileHandle = *fileHandles[fileIdx];
+    auto pageState = fileHandle.getPageState(pageIdx);
+    if (!pageState) {
+        return;
+    }
+    // Use a CAS loop that re-reads state each iteration to handle races with eviction
+    // and concurrent lock/unlock (which change the version).
+    while (true) {
+        auto currentStateAndVersion = pageState->getStateAndVersion();
+        if (PageState::getState(currentStateAndVersion) == PageState::EVICTED) {
+            return;
+        }
+        if (pageState->tryLock(currentStateAndVersion)) {
+            break;
+        }
+    }
+    memcpy(getFrame(fileHandle, pageIdx), newPage, LBUG_PAGE_SIZE);
+    pageState->unlock();
+}
+
 void BufferManager::removePageFromFrameIfNecessary(FileHandle& fileHandle, page_idx_t pageIdx) {
     if (pageIdx >= fileHandle.getNumPages()) {
         return;

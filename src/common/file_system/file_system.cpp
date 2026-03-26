@@ -1,12 +1,23 @@
 #include "common/file_system/file_system.h"
 
+#include "common/exception/io.h"
 #include "common/string_utils.h"
+#include <format>
 
 namespace lbug {
 namespace common {
 
 void FileSystem::overwriteFile(const std::string& /*from*/, const std::string& /*to*/) {
     UNREACHABLE_CODE;
+}
+
+void FileSystem::renameFile(const std::string& from, const std::string& to) {
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    if (ec) {
+        throw IOException(
+            std::format("Error renaming file {} to {}. ErrorMessage: {}", from, to, ec.message()));
+    }
 }
 
 void FileSystem::copyFile(const std::string& /*from*/, const std::string& /*to*/) {

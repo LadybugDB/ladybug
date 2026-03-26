@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/enums/rel_direction.h"
 #include "common/mask.h"
@@ -176,13 +178,15 @@ public:
     virtual void commit(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
         LocalTable* localTable) = 0;
     virtual bool checkpoint(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
-        PageAllocator& pageAllocator) = 0;
+        PageAllocator& pageAllocator, const transaction::Transaction* snapshotTxn = nullptr,
+        uint64_t epochWatermark = 0) = 0;
     virtual void rollbackCheckpoint() = 0;
     virtual void reclaimStorage(PageAllocator& pageAllocator) const = 0;
 
     virtual common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) = 0;
 
-    void setHasChanges() { hasChanges = true; }
+    void setHasChanges() { changeEpoch.fetch_add(1, std::memory_order_relaxed); }
+    uint64_t getChangeEpoch() const { return changeEpoch.load(std::memory_order_acquire); }
 
     template<class TARGET>
     TARGET& cast() {
@@ -214,7 +218,10 @@ protected:
     bool enableCompression;
     MemoryManager* memoryManager;
     ShadowFile* shadowFile;
-    std::atomic<bool> hasChanges;
+    std::atomic<uint64_t> changeEpoch;
+    // Epoch watermark of the last successful checkpoint for this table.
+    // Only written by the checkpoint thread.
+    uint64_t lastCheckpointedEpoch = 0;
 };
 
 } // namespace storage

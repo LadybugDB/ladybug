@@ -5,6 +5,12 @@
 namespace lbug {
 namespace storage {
 struct LazySegmentData {
+    LazySegmentData(std::unique_ptr<ColumnChunkData> segmentData,
+        common::offset_t startOffsetInSegment, common::offset_t length,
+        ColumnChunkScanner::scan_func_t scanFunc)
+        : segmentData{std::move(segmentData)}, startOffsetInSegment{startOffsetInSegment},
+          length{length}, scanFunc{std::move(scanFunc)} {}
+
     std::unique_ptr<ColumnChunkData> segmentData;
     common::offset_t startOffsetInSegment;
     common::offset_t length;

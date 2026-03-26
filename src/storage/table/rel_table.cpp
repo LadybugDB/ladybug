@@ -229,7 +229,7 @@ void RelTable::insert(Transaction* transaction, TableInsertState& insertState) {
         wal.logTableInsertion(tableID, TableType::REL,
             relInsertState.srcNodeIDVector.state->getSelVector().getSelSize(), vectorsToLog);
     }
-    hasChanges = true;
+    setHasChanges();
 }
 
 void RelTable::update(Transaction* transaction, TableUpdateState& updateState) {
@@ -255,7 +255,7 @@ void RelTable::update(Transaction* transaction, TableUpdateState& updateState) {
             &relUpdateState.dstNodeIDVector, &relUpdateState.relIDVector,
             &relUpdateState.propertyVector);
     }
-    hasChanges = true;
+    setHasChanges();
 }
 
 bool RelTable::delete_(Transaction* transaction, TableDeleteState& deleteState) {
@@ -279,7 +279,7 @@ bool RelTable::delete_(Transaction* transaction, TableDeleteState& deleteState) 
         }
     }
     if (isDeleted) {
-        hasChanges = true;
+        setHasChanges();
         if (deleteState.logToWAL && transaction->shouldLogToWAL()) {
             DASSERT(transaction->isWriteTransaction());
             auto& wal = transaction->getLocalWAL();
@@ -317,7 +317,7 @@ void RelTable::detachDelete(Transaction* transaction, RelTableDeleteState* delet
         auto& wal = transaction->getLocalWAL();
         wal.logRelDetachDelete(tableID, direction, &deleteState->srcNodeIDVector);
     }
-    hasChanges = true;
+    setHasChanges();
 }
 
 std::vector<RelDataDirection> RelTable::getStorageDirections() const {
@@ -401,7 +401,7 @@ void RelTable::addColumn(Transaction* transaction, TableAddColumnState& addColum
     for (auto& directedRelData : directedRelData) {
         directedRelData->addColumn(addColumnState, pageAllocator);
     }
-    hasChanges = true;
+    setHasChanges();
 }
 
 RelTableData* RelTable::getDirectedTableData(RelDataDirection direction) const {
@@ -521,21 +521,23 @@ void RelTable::prepareCommitForNodeGroup(const Transaction* transaction,
 }
 
 bool RelTable::checkpoint(main::ClientContext*, TableCatalogEntry* tableEntry,
-    PageAllocator& pageAllocator) {
-    bool ret = hasChanges;
-    if (hasChanges) {
-        // Deleted columns are vacuumed and not checkpointed or serialized.
-        std::vector<column_id_t> columnIDs;
-        columnIDs.push_back(0);
-        for (auto& property : tableEntry->getProperties()) {
-            columnIDs.push_back(tableEntry->getColumnID(property.getName()));
-        }
-        for (auto& directedRelData : directedRelData) {
-            directedRelData->checkpoint(columnIDs, pageAllocator);
-        }
-        hasChanges = false;
+    PageAllocator& pageAllocator, const Transaction* snapshotTxn, uint64_t epochWatermark) {
+    const auto effectiveEpoch =
+        epochWatermark > 0 ? epochWatermark : changeEpoch.load(std::memory_order_acquire);
+    if (effectiveEpoch <= lastCheckpointedEpoch) {
+        return false;
     }
-    return ret;
+    // Deleted columns are vacuumed and not checkpointed or serialized.
+    std::vector<column_id_t> columnIDs;
+    columnIDs.push_back(0);
+    for (auto& property : tableEntry->getProperties()) {
+        columnIDs.push_back(tableEntry->getColumnID(property.getName()));
+    }
+    for (auto& directedRelData : directedRelData) {
+        directedRelData->checkpoint(columnIDs, pageAllocator, snapshotTxn);
+    }
+    lastCheckpointedEpoch = effectiveEpoch;
+    return true;
 }
 
 row_idx_t RelTable::getNumTotalRows(const Transaction* transaction) {

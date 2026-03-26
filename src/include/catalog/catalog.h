@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "catalog/catalog_entry/function_catalog_entry.h"
 #include "catalog/catalog_entry/graph_catalog_entry.h"
 #include "catalog/catalog_entry/scalar_macro_catalog_entry.h"
@@ -220,10 +222,13 @@ public:
     // Drop graph entry with name.
     void dropGraph(transaction::Transaction* transaction, const std::string& name);
 
-    void incrementVersion() { version++; }
-    uint64_t getVersion() const { return version; }
-    bool changedSinceLastCheckpoint() const { return version != 0; }
-    void resetVersion() { version = 0; }
+    void incrementVersion() { version.fetch_add(1, std::memory_order_relaxed); }
+    uint64_t getVersion() const { return version.load(std::memory_order_relaxed); }
+    bool changedSinceLastCheckpoint() const {
+        return version.load(std::memory_order_relaxed) != lastCheckpointVersion;
+    }
+    void resetVersion() { lastCheckpointVersion = version.load(std::memory_order_relaxed); }
+    void resetVersion(uint64_t checkpointedVersion) { lastCheckpointVersion = checkpointedVersion; }
 
     void setCatalogName(const std::string& name) { catalogName = name; }
     std::string getCatalogName() const { return catalogName; }
@@ -234,6 +239,7 @@ public:
     }
 
     void serialize(common::Serializer& ser) const;
+    void serializeSnapshot(common::Serializer& ser, common::transaction_t snapshotTS) const;
     void deserialize(common::Deserializer& deSer);
 
     template<class TARGET>
@@ -274,8 +280,9 @@ private:
     std::unique_ptr<CatalogSet> graphs;
 
     // incremented whenever a change is made to the catalog
-    // reset to 0 at the end of each checkpoint
-    uint64_t version;
+    // reset to lastCheckpointVersion at the end of each checkpoint
+    std::atomic<uint64_t> version;
+    uint64_t lastCheckpointVersion = 0;
     std::string catalogName;
     std::unique_ptr<storage::StorageManager> storageManager;
 };

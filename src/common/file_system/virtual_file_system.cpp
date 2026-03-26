@@ -59,6 +59,10 @@ void VirtualFileSystem::overwriteFile(const std::string& from, const std::string
     findFileSystem(from)->overwriteFile(from, to);
 }
 
+void VirtualFileSystem::renameFile(const std::string& from, const std::string& to) {
+    defaultFS->renameFile(from, to);
+}
+
 void VirtualFileSystem::createDir(const std::string& dir) const {
     findFileSystem(dir)->createDir(dir);
 }

@@ -12,7 +12,7 @@ PageRange PageManager::allocatePageRange(common::page_idx_t numPages) {
         common::UniqLock lck{mtx};
         auto allocatedFreeChunk = freeSpaceManager->popFreePages(numPages);
         if (allocatedFreeChunk.has_value()) {
-            ++version;
+            version.fetch_add(1, std::memory_order_relaxed);
             return {*allocatedFreeChunk};
         }
     }
@@ -27,7 +27,7 @@ void PageManager::freePageRange(PageRange entry) {
         // Freed pages cannot be immediately reused to ensure checkpoint recovery works
         // Instead they are reusable after the end of the next checkpoint
         freeSpaceManager->addUncheckpointedFreePages(entry);
-        ++version;
+        version.fetch_add(1, std::memory_order_relaxed);
     }
 }
 
@@ -39,7 +39,7 @@ void PageManager::freeImmediatelyRewritablePageRange(FileHandle* fileHandle, Pag
     if constexpr (ENABLE_FSM) {
         common::UniqLock lck{mtx};
         freeSpaceManager->evictAndAddFreePages(fileHandle, entry);
-        ++version;
+        version.fetch_add(1, std::memory_order_relaxed);
     }
 }
 
@@ -52,6 +52,7 @@ void PageManager::deserialize(common::Deserializer& deSer) {
 }
 
 void PageManager::finalizeCheckpoint() {
+    common::UniqLock lck{mtx};
     freeSpaceManager->finalizeCheckpoint(fileHandle);
 }
 
@@ -63,7 +64,7 @@ void PageManager::mergeFreePages(FileHandle* fileHandle) {
     if constexpr (ENABLE_FSM) {
         common::UniqLock lck{mtx};
         freeSpaceManager->mergeFreePages(fileHandle);
-        ++version;
+        version.fetch_add(1, std::memory_order_relaxed);
     }
 }
 
@@ -81,7 +82,7 @@ void PageManager::reclaimTailPagesIfNeeded(common::page_idx_t checkpointNumPages
     common::UniqLock lck{mtx};
     const PageRange tail(checkpointNumPages, currentNumPages - checkpointNumPages);
     freeSpaceManager->evictAndAddFreePages(fileHandle, tail);
-    ++version;
+    version.fetch_add(1, std::memory_order_relaxed);
 }
 
 PageManager* PageManager::Get(const main::ClientContext& context) {

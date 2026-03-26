@@ -446,7 +446,7 @@ void NodeTable::insert(Transaction* transaction, TableInsertState& insertState) 
             nodeInsertState.nodeIDVector.state->getSelVector().getSelSize(),
             insertState.propertyVectors);
     }
-    hasChanges = true;
+    setHasChanges();
 }
 
 void NodeTable::initUpdateState(main::ClientContext* context, TableUpdateState& updateState) const {
@@ -507,7 +507,7 @@ void NodeTable::update(Transaction* transaction, TableUpdateState& updateState) 
         wal.logNodeUpdate(tableID, nodeUpdateState.columnID, nodeOffset,
             &nodeUpdateState.propertyVector);
     }
-    hasChanges = true;
+    setHasChanges();
 }
 
 bool NodeTable::delete_(Transaction* transaction, TableDeleteState& deleteState) {
@@ -538,7 +538,7 @@ bool NodeTable::delete_(Transaction* transaction, TableDeleteState& deleteState)
         }
     }
     if (isDeleted) {
-        hasChanges = true;
+        setHasChanges();
         if (deleteState.logToWAL && transaction->shouldLogToWAL()) {
             DASSERT(transaction->isWriteTransaction());
             auto& wal = transaction->getLocalWAL();
@@ -561,13 +561,13 @@ void NodeTable::addColumn(Transaction* transaction, TableAddColumnState& addColu
         localTable->addColumn(addColumnState);
     }
     nodeGroups->addColumn(addColumnState, &pageAllocator);
-    hasChanges = true;
+    setHasChanges();
 }
 
 std::pair<offset_t, offset_t> NodeTable::appendToLastNodeGroup(Transaction* transaction,
     const std::vector<column_id_t>& columnIDs, InMemChunkedNodeGroup& chunkedGroup,
     PageAllocator& pageAllocator) {
-    hasChanges = true;
+    setHasChanges();
     return nodeGroups->appendToLastNodeGroupAndFlushWhenFull(transaction, columnIDs, chunkedGroup,
         pageAllocator);
 }
@@ -601,7 +601,7 @@ void NodeTable::commit(main::ClientContext* context, TableCatalogEntry* tableEnt
     // 2. Set deleted flag for tuples that are deleted in local storage.
     row_idx_t numLocalRows = 0u;
     for (auto localNodeGroupIdx = 0u; localNodeGroupIdx < localNodeTable.getNumNodeGroups();
-         localNodeGroupIdx++) {
+        localNodeGroupIdx++) {
         const auto localNodeGroup = localNodeTable.getNodeGroup(localNodeGroupIdx);
         if (localNodeGroup->hasDeletions(transaction)) {
             // TODO(Guodong): Assume local storage is small here. Should optimize the loop away by
@@ -652,34 +652,38 @@ visible_func NodeTable::getVisibleFunc(const Transaction* transaction) const {
 }
 
 bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tableEntry,
-    PageAllocator& pageAllocator) {
-    const bool ret = hasChanges;
-    if (hasChanges) {
-        // Deleted columns are vacuumed and not checkpointed.
+    PageAllocator& pageAllocator, const Transaction* snapshotTxn, uint64_t epochWatermark) {
+    const auto effectiveEpoch =
+        epochWatermark > 0 ? epochWatermark : changeEpoch.load(std::memory_order_acquire);
+    if (effectiveEpoch <= lastCheckpointedEpoch) {
+        return false;
+    }
+    // Build column IDs and pointers under unique_lock to protect from concurrent readers.
+    std::vector<column_id_t> columnIDs;
+    std::vector<Column*> checkpointColumnPtrs;
+    {
+        std::unique_lock schemaLck{schemaMtx};
         std::vector<std::unique_ptr<Column>> checkpointColumns;
-        std::vector<column_id_t> columnIDs;
         for (auto& property : tableEntry->getProperties()) {
             auto columnID = tableEntry->getColumnID(property.getName());
             checkpointColumns.push_back(std::move(columns[columnID]));
             columnIDs.push_back(columnID);
         }
         columns = std::move(checkpointColumns);
-
-        std::vector<Column*> checkpointColumnPtrs;
         for (const auto& column : columns) {
             checkpointColumnPtrs.push_back(column.get());
         }
-
-        NodeGroupCheckpointState state{columnIDs, std::move(checkpointColumnPtrs), pageAllocator,
-            memoryManager};
-        nodeGroups->checkpoint(*memoryManager, state);
-        for (auto& index : indexes) {
-            index.checkpoint(context, pageAllocator);
-        }
-        tableEntry->vacuumColumnIDs(0 /*nextColumnID*/);
-        hasChanges = false;
     }
-    return ret;
+
+    NodeGroupCheckpointState state{columnIDs, std::move(checkpointColumnPtrs), pageAllocator,
+        memoryManager, snapshotTxn};
+    nodeGroups->checkpoint(*memoryManager, state);
+    for (auto& index : indexes) {
+        index.checkpoint(context, pageAllocator);
+    }
+    tableEntry->vacuumColumnIDs(0 /*nextColumnID*/);
+    lastCheckpointedEpoch = effectiveEpoch;
+    return true;
 }
 
 void NodeTable::rollbackPKIndexInsert(main::ClientContext* context, row_idx_t startRow,
@@ -752,7 +756,7 @@ void NodeTable::scanIndexColumns(main::ClientContext* context, IndexScanHelper& 
 
     const auto numNodeGroups = nodeGroups_.getNumNodeGroups();
     for (node_group_idx_t nodeGroupToScan = 0u; nodeGroupToScan < numNodeGroups;
-         ++nodeGroupToScan) {
+        ++nodeGroupToScan) {
         scanState->nodeGroup = nodeGroups_.getNodeGroupNoLock(nodeGroupToScan);
 
         // It is possible for the node group to have no chunked groups if we are rolling back due to
@@ -778,7 +782,7 @@ void NodeTable::addIndex(std::unique_ptr<Index> index) {
         throw RuntimeException("Index with name " + index->getName() + " already exists.");
     }
     indexes.push_back(IndexHolder{std::move(index)});
-    hasChanges = true;
+    setHasChanges();
 }
 
 void NodeTable::dropIndex(const std::string& name) {
@@ -787,7 +791,7 @@ void NodeTable::dropIndex(const std::string& name) {
         if (StringUtils::caseInsensitiveEquals(it->getName(), name)) {
             DASSERT(it->isLoaded());
             indexes.erase(it);
-            hasChanges = true;
+            setHasChanges();
             return;
         }
     }

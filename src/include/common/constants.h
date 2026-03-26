@@ -66,6 +66,7 @@ struct BufferPoolConstants {
 struct StorageConstants {
     static constexpr page_idx_t DB_HEADER_PAGE_IDX = 0;
     static constexpr char WAL_FILE_SUFFIX[] = "wal";
+    static constexpr char CHECKPOINT_WAL_FILE_SUFFIX[] = "wal.checkpoint";
     static constexpr char SHADOWING_SUFFIX[] = "shadow";
     static constexpr char TEMP_FILE_SUFFIX[] = "tmp";
 

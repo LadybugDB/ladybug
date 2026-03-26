@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "storage/stats/table_stats.h"
 #include "storage/table/group_collection.h"
 #include "storage/table/node_group.h"

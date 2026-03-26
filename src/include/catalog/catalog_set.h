@@ -42,6 +42,8 @@ public:
     CatalogEntry* getEntryOfOID(const transaction::Transaction* transaction, common::oid_t oid);
 
     void serialize(common::Serializer serializer) const;
+    void serializeSnapshot(common::Serializer serializer,
+        const transaction::Transaction* snapshotTxn) const;
     static std::unique_ptr<CatalogSet> deserialize(common::Deserializer& deserializer);
 
     common::oid_t getNextOID() {
@@ -83,7 +85,7 @@ public:
     static constexpr common::oid_t INTERNAL_CATALOG_SET_START_OID = 1LL << 63;
 
 private:
-    std::shared_mutex mtx;
+    mutable std::shared_mutex mtx;
     common::oid_t nextOID = 0;
     common::case_insensitive_map_t<std::unique_ptr<CatalogEntry>> entries;
 };

@@ -168,8 +168,7 @@ public:
     }
     common::column_id_t getNumColumns() const {
         DASSERT(directedRelData.size() >= 1);
-        RUNTIME_CHECK(for (const auto& relData
-                           : directedRelData) {
+        RUNTIME_CHECK(for (const auto& relData : directedRelData) {
             DASSERT(relData->getNumColumns() == directedRelData[0]->getNumColumns());
         });
         return directedRelData[0]->getNumColumns();
@@ -184,7 +183,8 @@ public:
     void commit(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
         LocalTable* localTable) override;
     bool checkpoint(main::ClientContext*, catalog::TableCatalogEntry* tableEntry,
-        PageAllocator& pageAllocator) override;
+        PageAllocator& pageAllocator, const transaction::Transaction* snapshotTxn = nullptr,
+        uint64_t epochWatermark = 0) override;
     void rollbackCheckpoint() override {};
     void reclaimStorage(PageAllocator& pageAllocator) const override;
 

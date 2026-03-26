@@ -1,5 +1,7 @@
 #pragma once
 
+#include <shared_mutex>
+
 #include "common/types/types.h"
 #include "storage/index/hash_index.h"
 #include "storage/table/node_group_collection.h"
@@ -163,12 +165,17 @@ public:
     std::optional<Index*> getIndex(const std::string& name) const;
     std::vector<IndexHolder>& getIndexes() { return indexes; }
 
-    common::column_id_t getNumColumns() const { return columns.size(); }
+    common::column_id_t getNumColumns() const {
+        std::shared_lock lck{schemaMtx};
+        return columns.size();
+    }
     Column& getColumn(common::column_id_t columnID) {
+        std::shared_lock lck{schemaMtx};
         DASSERT(columnID < columns.size());
         return *columns[columnID];
     }
     const Column& getColumn(common::column_id_t columnID) const {
+        std::shared_lock lck{schemaMtx};
         DASSERT(columnID < columns.size());
         return *columns[columnID];
     }
@@ -180,7 +187,8 @@ public:
     void commit(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
         LocalTable* localTable) override;
     bool checkpoint(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
-        PageAllocator& pageAllocator) override;
+        PageAllocator& pageAllocator, const transaction::Transaction* snapshotTxn = nullptr,
+        uint64_t epochWatermark = 0) override;
     void rollbackCheckpoint() override;
     void reclaimStorage(PageAllocator& pageAllocator) const override;
 
@@ -230,6 +238,10 @@ private:
         const NodeGroupCollection& nodeGroups_) const;
 
 private:
+    // Protects the `columns` vector from concurrent access during checkpoint
+    // column vacuum. Readers/writers take shared_lock; checkpoint takes
+    // unique_lock during the brief column swap.
+    mutable std::shared_mutex schemaMtx;
     std::vector<std::unique_ptr<Column>> columns;
     std::unique_ptr<NodeGroupCollection> nodeGroups;
     common::column_id_t pkColumnID;
