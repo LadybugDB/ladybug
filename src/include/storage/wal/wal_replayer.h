@@ -8,6 +8,7 @@ class ClientContext;
 } // namespace main
 
 namespace storage {
+class Checkpointer;
 class WALReplayer {
 public:
     explicit WALReplayer(main::ClientContext& clientContext);
@@ -43,6 +44,11 @@ private:
     WALReplayInfo dryReplay(common::FileInfo& fileInfo, bool throwOnWalReplayFailure,
         bool enableChecksums) const;
 
+    void replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalReplayFailure,
+        bool enableChecksums) const;
+    void replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalReplayFailure,
+        bool enableChecksums) const;
+
     void removeWALAndShadowFiles() const;
     void removeFileIfExists(const std::string& path) const;
 
@@ -53,6 +59,7 @@ private:
 private:
     main::ClientContext& clientContext;
     std::string walPath;
+    std::string checkpointWalPath;
     std::string shadowFilePath;
 };
 

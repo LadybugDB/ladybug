@@ -73,8 +73,9 @@ void ShadowFile::applyShadowPages(StorageManager& storageManager, ClientContext&
         shadowingFH->readPageFromDisk(pageBuffer.get(), shadowPageIdx++);
         dataFileInfo->writeFile(pageBuffer.get(), LBUG_PAGE_SIZE,
             record.originalPageIdx * LBUG_PAGE_SIZE);
-        // NOTE: We're not taking lock here, as we assume this is only called with a single thread.
-        MemoryManager::Get(context)->getBufferManager()->updateFrameIfPageIsInFrameWithoutLock(
+        // Acquire page state lock before updating the in-memory frame. This ensures concurrent
+        // optimistic readers will detect the version change and retry, seeing the new page data.
+        MemoryManager::Get(context)->getBufferManager()->updateFrameIfPageIsInFrame(
             record.originalFileIdx, pageBuffer.get(), record.originalPageIdx);
     }
     dataFileInfo->syncFile();

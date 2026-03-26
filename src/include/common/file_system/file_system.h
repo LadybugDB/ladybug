@@ -65,6 +65,8 @@ public:
 
     virtual void overwriteFile(const std::string& from, const std::string& to);
 
+    virtual void renameFile(const std::string& from, const std::string& to);
+
     virtual void copyFile(const std::string& from, const std::string& to);
 
     virtual void createDir(const std::string& dir) const;

@@ -193,6 +193,15 @@ std::vector<std::string> LocalFileSystem::glob(main::ClientContext* context,
     return result;
 }
 
+void LocalFileSystem::renameFile(const std::string& from, const std::string& to) {
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    if (ec) {
+        throw IOException(std::format("Error renaming file {} to {}. ErrorMessage: {}", from, to,
+            ec.message()));
+    }
+}
+
 void LocalFileSystem::overwriteFile(const std::string& from, const std::string& to) {
     if (!fileOrPathExists(from) || !fileOrPathExists(to)) {
         return;
@@ -278,7 +287,7 @@ static bool isAllowedDeletionPath(const std::string& path, const std::string& db
 
     // Main DB sidecars: db.lbdb.{wal|shadow|tmp|lock}
     if (extension == ".wal" || extension == ".shadow" || extension == ".tmp" ||
-        extension == ".lock") {
+        extension == ".lock" || extension == ".checkpoint") {
         if (stemWithoutExt == dbFileName) {
             return true;
         }

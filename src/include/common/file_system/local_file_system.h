@@ -37,6 +37,8 @@ public:
 
     void overwriteFile(const std::string& from, const std::string& to) override;
 
+    void renameFile(const std::string& from, const std::string& to) override;
+
     void copyFile(const std::string& from, const std::string& to) override;
 
     void createDir(const std::string& dir) const override;

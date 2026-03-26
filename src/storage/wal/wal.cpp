@@ -20,6 +20,7 @@ namespace storage {
 
 WAL::WAL(const std::string& dbPath, bool readOnly, bool enableChecksums, VirtualFileSystem* vfs)
     : walPath{StorageUtils::getWALFilePath(dbPath)},
+      checkpointWalPath{StorageUtils::getCheckpointWALFilePath(dbPath)},
       inMemory{main::DBConfig::isDBPathInMemory(dbPath)}, readOnly{readOnly}, vfs{vfs},
       enableChecksums(enableChecksums) {}
 
@@ -42,6 +43,47 @@ void WAL::logAndFlushCheckpoint(main::ClientContext* context) {
     CheckpointRecord walRecord;
     addNewWALRecordNoLock(walRecord);
     flushAndSyncNoLock();
+}
+
+bool WAL::rotateForCheckpoint(main::ClientContext* /*context*/) {
+    std::unique_lock lck{mtx};
+    if (inMemory) {
+        return false;
+    }
+    if (!serializer && !vfs->fileOrPathExists(walPath)) {
+        return false;
+    }
+    if (serializer) {
+        flushAndSyncNoLock();
+        fileInfo.reset();
+        serializer.reset();
+    }
+    vfs->renameFile(walPath, checkpointWalPath);
+    return true;
+}
+
+void WAL::logAndFlushCheckpointToFrozen(main::ClientContext* context) {
+    auto frozenFileInfo = vfs->openFile(checkpointWalPath,
+        FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE), context);
+
+    std::shared_ptr<Writer> writer = std::make_shared<BufferedFileWriter>(*frozenFileInfo);
+    auto& bufferedWriter = writer->cast<BufferedFileWriter>();
+    if (enableChecksums) {
+        writer = std::make_shared<ChecksumWriter>(std::move(writer), *MemoryManager::Get(*context));
+    }
+    auto frozenSerializer = std::make_unique<Serializer>(std::move(writer));
+    bufferedWriter.setFileOffset(frozenFileInfo->getFileSize());
+
+    CheckpointRecord walRecord;
+    frozenSerializer->getWriter()->onObjectBegin();
+    walRecord.serialize(*frozenSerializer);
+    frozenSerializer->getWriter()->onObjectEnd();
+    frozenSerializer->getWriter()->flush();
+    frozenSerializer->getWriter()->sync();
+}
+
+void WAL::clearFrozenWAL() {
+    vfs->removeFileIfExists(checkpointWalPath);
 }
 
 // NOLINTNEXTLINE(readability-make-member-function-const): semantically non-const function.

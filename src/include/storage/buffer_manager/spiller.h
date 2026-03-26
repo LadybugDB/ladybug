@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/file_handle.h"
 

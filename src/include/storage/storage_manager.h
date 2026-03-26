@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mutex>
+#include <shared_mutex>
 
 #include "shadow_file.h"
 #include "storage/index/index.h"
@@ -43,6 +44,13 @@ public:
         const catalog::RelTableCatalogInfo& info);
 
     bool checkpoint(main::ClientContext* context, PageAllocator& pageAllocator);
+    bool checkpoint(main::ClientContext* context, const transaction::Transaction& snapshotTxn,
+        PageAllocator& pageAllocator,
+        const std::unordered_map<common::table_id_t, uint64_t>& epochWatermarks);
+
+    // Capture the current changeEpoch for every table. Must be called under the
+    // write gate so that no active writers can bump epochs concurrently.
+    std::unordered_map<common::table_id_t, uint64_t> captureChangeEpochs() const;
     void finalizeCheckpoint();
     void rollbackCheckpoint(const catalog::Catalog& catalog);
 
@@ -61,6 +69,8 @@ public:
         const std::string& typeName) const;
 
     void serialize(const catalog::Catalog& catalog, common::Serializer& ser);
+    void serialize(const catalog::Catalog& catalog, const transaction::Transaction& snapshotTxn,
+        common::Serializer& ser);
     // We need to pass in the catalog and storageManager explicitly as they can be from
     // attachedDatabase.
     void deserialize(main::ClientContext* context, const catalog::Catalog* catalog,
@@ -88,7 +98,7 @@ private:
     void reclaimDroppedTables(const catalog::Catalog& catalog);
 
 private:
-    std::mutex mtx;
+    mutable std::shared_mutex mtx;
     std::string databasePath;
     std::unique_ptr<storage::DatabaseHeader> databaseHeader;
     bool readOnly;

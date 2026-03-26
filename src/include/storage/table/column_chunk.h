@@ -29,6 +29,11 @@ struct ChunkCheckpointState {
 };
 
 struct SegmentCheckpointState {
+    SegmentCheckpointState(const ColumnChunkData& chunkData, common::row_idx_t startRowInData,
+        common::row_idx_t offsetInSegment, common::row_idx_t numRows)
+        : chunkData{chunkData}, startRowInData{startRowInData},
+          offsetInSegment{offsetInSegment}, numRows{numRows} {}
+
     const ColumnChunkData& chunkData;
     common::row_idx_t startRowInData;
     common::row_idx_t offsetInSegment;
