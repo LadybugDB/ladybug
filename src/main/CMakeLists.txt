@@ -1,4 +1,5 @@
 add_subdirectory(query_result)
+add_subdirectory(service)
 
 add_library(lbug_main
         OBJECT
