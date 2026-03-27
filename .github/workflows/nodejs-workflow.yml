@@ -43,6 +43,12 @@ jobs:
             artifact_name: mac-nodejs-module-arm64
             node_name: lbugjs-darwin-arm64.node
             mac_env: true
+          - os: macos-15-intel
+            arch: x64
+            platform: darwin
+            artifact_name: mac-nodejs-module-x64
+            node_name: lbugjs-darwin-x64.node
+            mac_env: true
           - os: windows-latest
             arch: x64
             platform: win32
@@ -92,6 +98,8 @@ jobs:
         working-directory: tools/nodejs_api/package
         run: npm i
         env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.mac_env && '13.3' || '' }}
           ARCHFLAGS: ${{ matrix.mac_env && format('-arch {0}', matrix.arch) || '' }}
 
@@ -104,6 +112,16 @@ jobs:
         if: ${{ matrix.platform == 'win32' }}
         working-directory: tools/nodejs_api
         run: npm i
+
+      - name: Setup ccache (Linux/macOS)
+        if: ${{ matrix.platform != 'win32' }}
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: nodejs-${{ runner.os }}-${{ matrix.arch }}-${{ github.ref }}
+          max-size: 2G
+          restore-keys: |
+            nodejs-${{ runner.os }}-${{ matrix.arch }}-refs/heads/main
+            nodejs-${{ runner.os }}-${{ matrix.arch }}-
 
       - name: Enable long paths (Windows)
         if: ${{ matrix.platform == 'win32' }}
@@ -155,8 +173,13 @@ jobs:
       - name: Build Node.js native module (non-Windows)
         if: ${{ matrix.platform != 'win32' }}
         env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
           EXTRA_CMAKE_FLAGS: -DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_NODEJS_USE_PRECOMPILED_LIB=TRUE -DLBUG_NODEJS_PRECOMPILED_LIB_PATH=${{ env.LBUG_NODEJS_PRECOMPILED_LIB_PATH }}
-        run: make GEN=Ninja nodejs
+        run: |
+          ccache -s
+          make GEN=Ninja nodejs
+          ccache -s
 
       - name: Run Node.js tests
         working-directory: tools/nodejs_api
