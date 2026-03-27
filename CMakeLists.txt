@@ -405,7 +405,7 @@ function(add_lbug_api_test TEST_NAME)
 endfunction()
 
 # Windows doesn't support dynamic lookup, so we have to link extensions against lbug.
-if (MSVC AND (NOT BUILD_EXTENSIONS EQUAL ""))
+if (MSVC AND (NOT BUILD_EXTENSIONS EQUAL "") AND NOT LBUG_NODEJS_USE_PRECOMPILED_LIB)
     set(BUILD_LBUG TRUE)
 endif ()
 
