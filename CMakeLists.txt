@@ -336,6 +336,10 @@ set(LBUG_NODEJS_PRECOMPILED_LIB_PATH "" CACHE FILEPATH "Path to the precompiled 
 option(ENABLE_BACKTRACES "Enable backtrace printing for exceptions and segfaults" FALSE)
 option(PREFER_SYSTEM_DEPS "Only download certain deps if not found on the system" TRUE)
 
+if(LBUG_NODEJS_USE_PRECOMPILED_LIB)
+    set(BUILD_LBUG FALSE CACHE BOOL "Build Lbug." FORCE)
+endif()
+
 option(BUILD_LCOV "Build coverage report." FALSE)
 if(${BUILD_LCOV})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
