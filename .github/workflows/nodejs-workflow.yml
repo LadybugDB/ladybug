@@ -96,7 +96,7 @@ jobs:
       - name: Install Node.js dependencies (non-Windows)
         if: ${{ matrix.platform != 'win32' }}
         working-directory: tools/nodejs_api/package
-        run: npm i
+        run: npm i --ignore-scripts
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
@@ -106,12 +106,12 @@ jobs:
       - name: Install Node.js dependencies (non-Windows, tests)
         if: ${{ matrix.platform != 'win32' }}
         working-directory: tools/nodejs_api
-        run: npm i
+        run: npm i --ignore-scripts
 
       - name: Install Node.js dependencies (Windows)
         if: ${{ matrix.platform == 'win32' }}
         working-directory: tools/nodejs_api
-        run: npm i
+        run: npm i --ignore-scripts
 
       - name: Setup ccache (Linux/macOS)
         if: ${{ matrix.platform != 'win32' }}
