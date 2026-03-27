@@ -35,8 +35,12 @@ jobs:
           - os: ubuntu-24.04-arm
             variant: perf
             arch: aarch64
-          # macOS universal (x86_64 + arm64). Produces shared + static + CLI.
+          # macOS Intel (x86_64). Produces shared + static + CLI.
+          - os: macos-15-intel
+            arch: x86_64
+          # macOS Apple Silicon (arm64). Produces shared + static + CLI.
           - os: macos-latest
+            arch: arm64
           # Windows x86_64. Produces shared + static + CLI.
           - os: windows-latest
     runs-on: ${{ matrix.os }}
@@ -86,11 +90,11 @@ jobs:
         if: runner.os == 'macOS'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: precompiled-bin-${{ runner.os }}-${{ github.ref }}
+          key: precompiled-bin-${{ runner.os }}-${{ matrix.arch }}-${{ github.ref }}
           max-size: 2G
           restore-keys: |
-            precompiled-bin-${{ runner.os }}-refs/heads/main
-            precompiled-bin-${{ runner.os }}-
+            precompiled-bin-${{ runner.os }}-${{ matrix.arch }}-refs/heads/main
+            precompiled-bin-${{ runner.os }}-${{ matrix.arch }}-
 
       - name: Setup ccache (Windows)
         if: runner.os == 'Windows'
@@ -150,7 +154,6 @@ jobs:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
           MACOSX_DEPLOYMENT_TARGET: 13.3
-          CMAKE_OSX_ARCHITECTURES: "x86_64;arm64"
         run: |
           make GEN=Ninja
           make install
@@ -237,9 +240,9 @@ jobs:
       - name: Create tarballs (macOS)
         if: runner.os == 'macOS'
         run: |
-          tar -czvf liblbug-osx-universal.tar.gz lbug.h lbug.hpp liblbug.dylib
-          tar -czvf liblbug-static-osx-universal.tar.gz lbug.h lbug.hpp liblbug.a
-          tar -czvf lbug_cli-osx-universal.tar.gz lbug
+          tar -czvf liblbug-osx-${{ matrix.arch }}.tar.gz lbug.h lbug.hpp liblbug.dylib
+          tar -czvf liblbug-static-osx-${{ matrix.arch }}.tar.gz lbug.h lbug.hpp liblbug.a
+          tar -czvf lbug_cli-osx-${{ matrix.arch }}.tar.gz lbug
 
       - name: Create zip files (Windows)
         if: runner.os == 'Windows'
@@ -278,20 +281,20 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:
-          name: liblbug-osx-universal
-          path: liblbug-osx-universal.tar.gz
+          name: liblbug-osx-${{ matrix.arch }}
+          path: liblbug-osx-${{ matrix.arch }}.tar.gz
 
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:
-          name: liblbug-static-osx-universal
-          path: liblbug-static-osx-universal.tar.gz
+          name: liblbug-static-osx-${{ matrix.arch }}
+          path: liblbug-static-osx-${{ matrix.arch }}.tar.gz
 
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:
-          name: lbug_cli-osx-universal
-          path: lbug_cli-osx-universal.tar.gz
+          name: lbug_cli-osx-${{ matrix.arch }}
+          path: lbug_cli-osx-${{ matrix.arch }}.tar.gz
 
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
