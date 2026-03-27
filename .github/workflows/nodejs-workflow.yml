@@ -187,8 +187,8 @@ jobs:
 
       - name: Move Node.js native module (Linux)
         if: ${{ matrix.platform == 'linux' }}
-        working-directory: tools/nodejs_api/package
-        run: mv lbugjs.node ${{ matrix.node_name }}
+        working-directory: tools/nodejs_api
+        run: mv build/lbugjs.node ${{ matrix.node_name }}
 
       - name: Move Node.js native module (Mac)
         if: ${{ matrix.platform == 'darwin' }}
@@ -204,7 +204,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: tools/nodejs_api/${{ matrix.platform == 'linux' && 'package/' || matrix.platform == 'win32' && 'build/' || '' }}${{ matrix.node_name }}
+          path: tools/nodejs_api/${{ matrix.platform == 'win32' && 'build/' || '' }}${{ matrix.node_name }}
 
       - name: Clean up
         if: ${{ matrix.platform == 'darwin' }}
