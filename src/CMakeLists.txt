@@ -28,24 +28,8 @@ set_target_properties(lbug_shared PROPERTIES
     SOVERSION ${PROJECT_VERSION_MAJOR}
 )
 
-set(LBUG_LIBRARIES antlr4_cypher antlr4_runtime brotlidec brotlicommon fast_float utf8proc re2 fastpfor parquet snappy thrift yyjson zstd miniz mbedtls lz4 roaring_bitmap simsimd)
-if (NOT __SINGLE_THREADED__)
-        set(LBUG_LIBRARIES ${LBUG_LIBRARIES} Threads::Threads)
-endif()
-if(NOT WIN32)
-        set(LBUG_LIBRARIES dl ${LBUG_LIBRARIES})
-endif()
-# Seems to be needed for clang on linux only (not Windows: no atomic.lib with Clang+lld-link)
-# for compiling std::atomic<T>::compare_exchange_weak
-if ((NOT APPLE AND NOT WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang") AND NOT __WASM__ AND NOT __SINGLE_THREADED__)
-        set(LBUG_LIBRARIES atomic ${LBUG_LIBRARIES})
-endif()
-if (ENABLE_BACKTRACES)
-        set(LBUG_LIBRARIES ${LBUG_LIBRARIES} cpptrace::cpptrace)
-endif()
-target_link_libraries(lbug PUBLIC ${LBUG_LIBRARIES})
-target_link_libraries(lbug_shared PUBLIC ${LBUG_LIBRARIES})
-unset(LBUG_LIBRARIES)
+target_link_libraries(lbug PUBLIC lbug_link_deps)
+target_link_libraries(lbug_shared PUBLIC lbug_link_deps)
 
 set(LBUG_INCLUDES $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include/c_api ${CMAKE_CURRENT_BINARY_DIR}/../src/include)
 target_include_directories(lbug PUBLIC ${LBUG_INCLUDES})

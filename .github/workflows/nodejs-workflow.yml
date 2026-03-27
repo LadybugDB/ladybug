@@ -12,6 +12,10 @@ on:
 jobs:
   build-nodejs:
     runs-on: ${{ matrix.os }}
+    env:
+      LBUG_LINUX_VARIANT: compat
+      LBUG_NODEJS_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
+      LBUG_NODEJS_PRECOMPILED_LIB_PATH: ${{ matrix.platform == 'win32' && format('{0}/precompiled-liblbug/lbug.lib', github.workspace) || format('{0}/precompiled-liblbug/liblbug.a', github.workspace) }}
     strategy:
       matrix:
         include:
@@ -41,6 +45,15 @@ jobs:
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/nodejs_api dataset
+
+      - name: Download precompiled liblbug
+        shell: bash
+        env:
+          LBUG_LIB_KIND: static
+          LBUG_TARGET_DIR: ${{ env.LBUG_NODEJS_PRECOMPILED_DIR }}
+        run: |
+          rm -rf "$LBUG_TARGET_DIR"
+          ./scripts/download-liblbug.sh
 
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
@@ -120,6 +133,8 @@ jobs:
       - name: Build Node.js native module with ccache (Windows)
         if: ${{ matrix.platform == 'win32' }}
         shell: cmd
+        env:
+          EXTRA_CMAKE_FLAGS: -DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_NODEJS_USE_PRECOMPILED_LIB=TRUE -DLBUG_NODEJS_PRECOMPILED_LIB_PATH=${{ env.LBUG_NODEJS_PRECOMPILED_LIB_PATH }}
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
@@ -129,6 +144,8 @@ jobs:
 
       - name: Build Node.js native module (non-Windows)
         if: ${{ matrix.platform != 'win32' }}
+        env:
+          EXTRA_CMAKE_FLAGS: -DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_NODEJS_USE_PRECOMPILED_LIB=TRUE -DLBUG_NODEJS_PRECOMPILED_LIB_PATH=${{ env.LBUG_NODEJS_PRECOMPILED_LIB_PATH }}
         run: make GEN=Ninja nodejs
 
       - name: Run Node.js tests
