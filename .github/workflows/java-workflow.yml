@@ -1,23 +1,46 @@
 name: Build Java Lib
 on:
   workflow_dispatch:
+    inputs:
+      precompiledRunId:
+        description: "Run ID of the precompiled-bin job whose artifacts should be used"
+        required: true
+        type: string
   workflow_call:
     inputs:
       isNightly:
         type: boolean
         required: true
         default: false
+      precompiledRunId:
+        type: string
+        required: true
 env:
   PIP_BREAK_SYSTEM_PACKAGES: 1
 
 jobs:
   build-linux-java-x86_64:
     runs-on: ubuntu-latest
+    env:
+      LBUG_LINUX_VARIANT: compat
+      LBUG_JAVA_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
+      LBUG_JAVA_PRECOMPILED_LIB_PATH: ${{ github.workspace }}/precompiled-liblbug/liblbug.a
     steps:
       - uses: actions/checkout@v4
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/java_api
+
+      - name: Download precompiled liblbug
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LBUG_LIB_KIND: static
+          LBUG_PRECOMPILED_RUN_ID: ${{ inputs.precompiledRunId }}
+          LBUG_TARGET_DIR: ${{ env.LBUG_JAVA_PRECOMPILED_DIR }}
+        run: |
+          rm -rf "$LBUG_TARGET_DIR"
+          ./scripts/download-liblbug.sh
 
       - name: Install uv
         run: python3 -m pip install uv
@@ -32,6 +55,8 @@ jobs:
         working-directory: scripts
 
       - name: Build Java lib for Linux
+        env:
+          EXTRA_CMAKE_FLAGS: -DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_API_USE_PRECOMPILED_LIB=TRUE -DLBUG_API_PRECOMPILED_LIB_PATH=${{ env.LBUG_JAVA_PRECOMPILED_LIB_PATH }}
         run: |
           make GEN=Ninja java
 
@@ -41,12 +66,27 @@ jobs:
           path: tools/java_api/build/liblbug_java_native*
 
   build-linux-java-aarch64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
+    env:
+      LBUG_LINUX_VARIANT: compat
+      LBUG_JAVA_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
+      LBUG_JAVA_PRECOMPILED_LIB_PATH: ${{ github.workspace }}/precompiled-liblbug/liblbug.a
     steps:
       - uses: actions/checkout@v4
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/java_api
+
+      - name: Download precompiled liblbug
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LBUG_LIB_KIND: static
+          LBUG_PRECOMPILED_RUN_ID: ${{ inputs.precompiledRunId }}
+          LBUG_TARGET_DIR: ${{ env.LBUG_JAVA_PRECOMPILED_DIR }}
+        run: |
+          rm -rf "$LBUG_TARGET_DIR"
+          ./scripts/download-liblbug.sh
 
       - name: Install uv
         run: python3 -m pip install uv
@@ -61,6 +101,8 @@ jobs:
         working-directory: scripts
 
       - name: Build Java lib for Linux
+        env:
+          EXTRA_CMAKE_FLAGS: -DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_API_USE_PRECOMPILED_LIB=TRUE -DLBUG_API_PRECOMPILED_LIB_PATH=${{ env.LBUG_JAVA_PRECOMPILED_LIB_PATH }}
         run: make GEN=Ninja java
 
       - uses: actions/upload-artifact@v4
@@ -70,11 +112,25 @@ jobs:
 
   build-mac-java-arm:
     runs-on: macos-latest
+    env:
+      LBUG_JAVA_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
+      LBUG_JAVA_PRECOMPILED_LIB_PATH: ${{ github.workspace }}/precompiled-liblbug/liblbug.a
     steps:
       - uses: actions/checkout@v4
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/java_api
+
+      - name: Download precompiled liblbug
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LBUG_LIB_KIND: static
+          LBUG_PRECOMPILED_RUN_ID: ${{ inputs.precompiledRunId }}
+          LBUG_TARGET_DIR: ${{ env.LBUG_JAVA_PRECOMPILED_DIR }}
+        run: |
+          rm -rf "$LBUG_TARGET_DIR"
+          ./scripts/download-liblbug.sh
 
       - name: Install uv
         run: pip3 install uv
@@ -89,11 +145,12 @@ jobs:
         working-directory: scripts
 
       - name: Build Java lib for Apple Silicon
-        run: |
-          arch -arm64 env JAVA_HOME=$(/usr/libexec/java_home) make GEN=Ninja java
         env:
+          EXTRA_CMAKE_FLAGS: -DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_API_USE_PRECOMPILED_LIB=TRUE -DLBUG_API_PRECOMPILED_LIB_PATH=${{ env.LBUG_JAVA_PRECOMPILED_LIB_PATH }}
           MACOSX_DEPLOYMENT_TARGET: 13.3
           ARCHFLAGS: "-arch arm64"
+        run: |
+          arch -arm64 env JAVA_HOME=$(/usr/libexec/java_home) make GEN=Ninja java
 
       - uses: actions/upload-artifact@v4
         with:
@@ -102,11 +159,25 @@ jobs:
 
   build-windows-java:
     runs-on: windows-latest
+    env:
+      LBUG_JAVA_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
+      LBUG_JAVA_PRECOMPILED_LIB_PATH: ${{ github.workspace }}/precompiled-liblbug/lbug.lib
     steps:
       - uses: actions/checkout@v4
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/java_api
+
+      - name: Download precompiled liblbug
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LBUG_LIB_KIND: static
+          LBUG_PRECOMPILED_RUN_ID: ${{ inputs.precompiledRunId }}
+          LBUG_TARGET_DIR: ${{ env.LBUG_JAVA_PRECOMPILED_DIR }}
+        run: |
+          rm -rf "$LBUG_TARGET_DIR"
+          ./scripts/download-liblbug.sh
 
       - name: Install uv
         run: pip3 install uv
@@ -127,6 +198,8 @@ jobs:
 
       - name: Build Java lib for Windows
         shell: cmd
+        env:
+          EXTRA_CMAKE_FLAGS: -DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_API_USE_PRECOMPILED_LIB=TRUE -DLBUG_API_PRECOMPILED_LIB_PATH=${{ env.LBUG_JAVA_PRECOMPILED_LIB_PATH }}
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
