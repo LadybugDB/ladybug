@@ -2,12 +2,20 @@ name: Build Node.js Module
 
 on:
   workflow_dispatch:
+    inputs:
+      precompiledRunId:
+        description: "Run ID of the precompiled-bin job whose artifacts should be used"
+        required: true
+        type: string
   workflow_call:
     inputs:
       isNightly:
         type: boolean
         required: true
         default: false
+      precompiledRunId:
+        type: string
+        required: true
 
 jobs:
   build-nodejs:
@@ -49,7 +57,9 @@ jobs:
       - name: Download precompiled liblbug
         shell: bash
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LBUG_LIB_KIND: static
+          LBUG_PRECOMPILED_RUN_ID: ${{ inputs.precompiledRunId }}
           LBUG_TARGET_DIR: ${{ env.LBUG_NODEJS_PRECOMPILED_DIR }}
         run: |
           rm -rf "$LBUG_TARGET_DIR"

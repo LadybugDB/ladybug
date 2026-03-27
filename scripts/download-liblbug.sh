@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Download prebuilt liblbug archives from GitHub releases.
+# Download prebuilt liblbug archives from GitHub releases or workflow artifacts.
 set -euo pipefail
 
 LIB_KIND="${LBUG_LIB_KIND:-shared}"
 LINUX_VARIANT="${LBUG_LINUX_VARIANT:-compat}"
+REPOSITORY="${LBUG_GITHUB_REPOSITORY:-LadybugDB/ladybug}"
+RUN_ID="${LBUG_PRECOMPILED_RUN_ID:-}"
+VERSION_OVERRIDE="${LBUG_VERSION:-}"
 
 if [ "$LIB_KIND" != "shared" ] && [ "$LIB_KIND" != "static" ]; then
   echo "Unsupported LBUG_LIB_KIND: $LIB_KIND (expected 'shared' or 'static')" >&2
@@ -15,8 +18,6 @@ if [ "$LINUX_VARIANT" != "compat" ] && [ "$LINUX_VARIANT" != "perf" ]; then
   exit 1
 fi
 
-LBUG_VERSION=$(curl -sS https://api.github.com/repos/LadybugDB/ladybug/releases/latest | grep -o '"tag_name": "v\([^"]*\)"' | cut -d'"' -f4 | cut -c2-)
-RELEASE_URL="https://github.com/LadybugDB/ladybug/releases/download/v${LBUG_VERSION}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TARGET_DIR="${LBUG_TARGET_DIR:-$PROJECT_DIR/lib}"
@@ -36,9 +37,11 @@ case "$OS" in
     fi
     if [ "$LIB_KIND" = "static" ]; then
       ARCHIVE="liblbug-static-osx-${MACOS_ARCHIVE_ARCH}.tar.gz"
+      ARTIFACT_NAME="liblbug-static-osx-${MACOS_ARCHIVE_ARCH}"
       LIB_NAME="liblbug.a"
     else
       ARCHIVE="liblbug-osx-${MACOS_ARCHIVE_ARCH}.tar.gz"
+      ARTIFACT_NAME="liblbug-osx-${MACOS_ARCHIVE_ARCH}"
       LIB_NAME="liblbug.dylib"
     fi
     ;;
@@ -53,9 +56,11 @@ case "$OS" in
     fi
     if [ "$LIB_KIND" = "static" ]; then
       ARCHIVE="liblbug-static-linux-${LINUX_ARCHIVE_ARCH}-${LINUX_VARIANT}.tar.gz"
+      ARTIFACT_NAME="liblbug-static-linux-${LINUX_ARCHIVE_ARCH}-${LINUX_VARIANT}"
       LIB_NAME="liblbug.a"
     else
       ARCHIVE="liblbug-linux-${LINUX_ARCHIVE_ARCH}.tar.gz"
+      ARTIFACT_NAME="liblbug-linux-${LINUX_ARCHIVE_ARCH}"
       LIB_NAME="liblbug.so"
     fi
     ;;
@@ -68,9 +73,11 @@ case "$OS" in
     fi
     if [ "$LIB_KIND" = "static" ]; then
       ARCHIVE="liblbug-static-windows-${WINDOWS_ARCHIVE_ARCH}.zip"
+      ARTIFACT_NAME="liblbug-static-windows-${WINDOWS_ARCHIVE_ARCH}"
       LIB_NAME="lbug.lib"
     else
       ARCHIVE="liblbug-windows-${WINDOWS_ARCHIVE_ARCH}.zip"
+      ARTIFACT_NAME="liblbug-windows-${WINDOWS_ARCHIVE_ARCH}"
       LIB_NAME="lbug_shared.dll"
     fi
     ;;
@@ -80,23 +87,58 @@ case "$OS" in
     ;;
 esac
 
-DOWNLOAD_URL="${RELEASE_URL}/${ARCHIVE}"
-
 if [ -f "$TARGET_DIR/$LIB_NAME" ]; then
   echo "liblbug already exists in $TARGET_DIR"
   exit 0
 fi
 
 mkdir -p "$TARGET_DIR"
-TMPFILE="$(mktemp)"
-trap "rm -f '$TMPFILE'" EXIT
+TMPDIR="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR"' EXIT
 
-curl -fSL "$DOWNLOAD_URL" -o "$TMPFILE"
+fetch_release_archive() {
+  local version
+  if [ -n "$VERSION_OVERRIDE" ]; then
+    version="$VERSION_OVERRIDE"
+  else
+    version="$(curl -sS "https://api.github.com/repos/${REPOSITORY}/releases/latest" | grep -o '"tag_name": "v\([^"]*\)"' | cut -d'"' -f4 | cut -c2-)"
+  fi
+  local download_url="https://github.com/${REPOSITORY}/releases/download/v${version}/${ARCHIVE}"
+  curl -fSL "$download_url" -o "$TMPDIR/$ARCHIVE"
+  echo "release:v${version}"
+}
 
-if [[ "$ARCHIVE" == *.zip ]]; then
-  unzip -o "$TMPFILE" -d "$TARGET_DIR"
+fetch_run_artifact() {
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "gh CLI is required when LBUG_PRECOMPILED_RUN_ID is set" >&2
+    exit 1
+  fi
+  local artifact_id
+  artifact_id="$(gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts" --paginate --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | .id" | head -n1)"
+  if [ -z "$artifact_id" ]; then
+    echo "Could not find artifact ${ARTIFACT_NAME} in run ${RUN_ID}" >&2
+    exit 1
+  fi
+  gh api "repos/${REPOSITORY}/actions/artifacts/${artifact_id}/zip" > "$TMPDIR/artifact.zip"
+  unzip -o "$TMPDIR/artifact.zip" -d "$TMPDIR/artifact" >/dev/null
+  if [ ! -f "$TMPDIR/artifact/$ARCHIVE" ]; then
+    echo "Artifact ${ARTIFACT_NAME} does not contain ${ARCHIVE}" >&2
+    exit 1
+  fi
+  mv "$TMPDIR/artifact/$ARCHIVE" "$TMPDIR/$ARCHIVE"
+  echo "run:${RUN_ID}/${ARTIFACT_NAME}"
+}
+
+if [ -n "$RUN_ID" ]; then
+  SOURCE_DESC="$(fetch_run_artifact)"
 else
-  tar xzf "$TMPFILE" -C "$TARGET_DIR"
+  SOURCE_DESC="$(fetch_release_archive)"
 fi
 
-echo "Installed liblbug v${LBUG_VERSION} to $TARGET_DIR"
+if [[ "$ARCHIVE" == *.zip ]]; then
+  unzip -o "$TMPDIR/$ARCHIVE" -d "$TARGET_DIR"
+else
+  tar xzf "$TMPDIR/$ARCHIVE" -C "$TARGET_DIR"
+fi
+
+echo "Installed ${ARCHIVE} from ${SOURCE_DESC} to $TARGET_DIR"

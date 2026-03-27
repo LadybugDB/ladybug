@@ -305,9 +305,11 @@ jobs:
 
   build-nodejs:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipNodejs != 'true' }}
+    needs: [build-precompiled-bin]
     uses: ./.github/workflows/nodejs-workflow.yml
     with:
       isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      precompiledRunId: ${{ github.run_id }}
     secrets: inherit
 
   deploy-nodejs:
