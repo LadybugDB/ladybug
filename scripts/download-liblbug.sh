@@ -113,19 +113,14 @@ fetch_run_artifact() {
     echo "gh CLI is required when LBUG_PRECOMPILED_RUN_ID is set" >&2
     exit 1
   fi
-  local artifact_id
-  artifact_id="$(gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts" --paginate --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | .id" | head -n1)"
-  if [ -z "$artifact_id" ]; then
-    echo "Could not find artifact ${ARTIFACT_NAME} in run ${RUN_ID}" >&2
-    exit 1
-  fi
-  gh api "repos/${REPOSITORY}/actions/artifacts/${artifact_id}/zip" > "$TMPDIR/artifact.zip"
-  unzip -o "$TMPDIR/artifact.zip" -d "$TMPDIR/artifact" >/dev/null
-  if [ ! -f "$TMPDIR/artifact/$ARCHIVE" ]; then
+  gh run download "$RUN_ID" --repo "$REPOSITORY" --name "$ARTIFACT_NAME" --dir "$TMPDIR/artifact" >/dev/null
+  local extracted_archive
+  extracted_archive="$(find "$TMPDIR/artifact" -type f -name "$ARCHIVE" | head -n1)"
+  if [ -z "$extracted_archive" ]; then
     echo "Artifact ${ARTIFACT_NAME} does not contain ${ARCHIVE}" >&2
     exit 1
   fi
-  mv "$TMPDIR/artifact/$ARCHIVE" "$TMPDIR/$ARCHIVE"
+  mv "$extracted_archive" "$TMPDIR/$ARCHIVE"
   echo "run:${RUN_ID}/${ARTIFACT_NAME}"
 }
 
