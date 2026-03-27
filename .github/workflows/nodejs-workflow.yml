@@ -193,7 +193,7 @@ jobs:
       - name: Move Node.js native module (Mac)
         if: ${{ matrix.platform == 'darwin' }}
         working-directory: tools/nodejs_api
-        run: mv package/lbugjs.node ${{ matrix.node_name }}
+        run: mv build/lbugjs.node ${{ matrix.node_name }}
 
       - name: Move Node.js native module (Windows)
         if: ${{ matrix.platform == 'win32' }}
