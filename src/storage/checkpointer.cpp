@@ -111,7 +111,8 @@ void Checkpointer::writeCheckpoint() {
 
     // Snapshot versions while the write gate is still held.
     catalogVersionAtCheckpoint = clientContext.getDatabase()->getCatalog()->getVersion();
-    pageManagerVersionAtCheckpoint = mainStorageManager->getDataFH()->getPageManager()->getVersion();
+    pageManagerVersionAtCheckpoint =
+        mainStorageManager->getDataFH()->getPageManager()->getVersion();
 
     postCheckpointCleanup();
 }
@@ -129,7 +130,8 @@ void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp) {
 
     // Capture versions while the write gate is still held.
     catalogVersionAtCheckpoint = clientContext.getDatabase()->getCatalog()->getVersion();
-    pageManagerVersionAtCheckpoint = mainStorageManager->getDataFH()->getPageManager()->getVersion();
+    pageManagerVersionAtCheckpoint =
+        mainStorageManager->getDataFH()->getPageManager()->getVersion();
     tableEpochWatermarks = mainStorageManager->captureChangeEpochs();
 }
 
@@ -192,16 +194,16 @@ void Checkpointer::serializeCatalogAndMetadata(DatabaseHeader& databaseHeader,
     if (databaseHeader.catalogPageRange.startPageIdx == common::INVALID_PAGE_IDX ||
         catalog->changedSinceLastCheckpoint()) {
         databaseHeader.updateCatalogPageRange(*dataFH->getPageManager(),
-            useSnapshot ? serializeCatalogSnapshot(*catalog, *mainStorageManager)
-                        : serializeCatalog(*catalog, *mainStorageManager));
+            useSnapshot ? serializeCatalogSnapshot(*catalog, *mainStorageManager) :
+                          serializeCatalog(*catalog, *mainStorageManager));
     }
     if (databaseHeader.metadataPageRange.startPageIdx == common::INVALID_PAGE_IDX ||
         storageChanges || catalog->changedSinceLastCheckpoint() ||
         dataFH->getPageManager()->changedSinceLastCheckpoint()) {
         databaseHeader.freeMetadataPageRange(*dataFH->getPageManager());
         databaseHeader.metadataPageRange =
-            useSnapshot ? serializeMetadataSnapshot(*catalog, *mainStorageManager)
-                        : serializeMetadata(*catalog, *mainStorageManager);
+            useSnapshot ? serializeMetadataSnapshot(*catalog, *mainStorageManager) :
+                          serializeMetadata(*catalog, *mainStorageManager);
     }
 }
 

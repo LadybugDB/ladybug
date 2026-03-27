@@ -280,8 +280,7 @@ bool StorageManager::checkpoint(main::ClientContext* context, PageAllocator& pag
 }
 
 bool StorageManager::checkpoint(main::ClientContext* context, const Transaction& snapshotTxn,
-    PageAllocator& pageAllocator,
-    const std::unordered_map<table_id_t, uint64_t>& epochWatermarks) {
+    PageAllocator& pageAllocator, const std::unordered_map<table_id_t, uint64_t>& epochWatermarks) {
     bool hasChanges = false;
     const auto catalog = Catalog::Get(*context);
     const auto nodeTableEntries = catalog->getNodeTableEntries(&snapshotTxn);
@@ -295,10 +294,9 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Transaction&
         }
         const auto watermarkIt = epochWatermarks.find(entry->getTableID());
         const uint64_t watermark = watermarkIt != epochWatermarks.end() ? watermarkIt->second : 0;
-        hasChanges =
-            tables.at(entry->getTableID())->checkpoint(
-                context, entry, pageAllocator, &snapshotTxn, watermark)
-            || hasChanges;
+        hasChanges = tables.at(entry->getTableID())
+                         ->checkpoint(context, entry, pageAllocator, &snapshotTxn, watermark) ||
+                     hasChanges;
     }
     for (const auto entry : relGroupEntries) {
         for (auto& info : entry->getRelEntryInfos()) {
@@ -307,12 +305,11 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Transaction&
                     "Checkpoint failed: table {} not found in storage manager.", entry->getName()));
             }
             const auto watermarkIt = epochWatermarks.find(info.oid);
-            const uint64_t watermark = watermarkIt != epochWatermarks.end() ?
-                watermarkIt->second : 0;
-            hasChanges =
-                tables.at(info.oid)->checkpoint(
-                    context, entry, pageAllocator, &snapshotTxn, watermark)
-                || hasChanges;
+            const uint64_t watermark =
+                watermarkIt != epochWatermarks.end() ? watermarkIt->second : 0;
+            hasChanges = tables.at(info.oid)->checkpoint(context, entry, pageAllocator,
+                             &snapshotTxn, watermark) ||
+                         hasChanges;
         }
         entry->vacuumColumnIDs(1);
     }

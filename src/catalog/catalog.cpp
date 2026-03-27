@@ -641,8 +641,8 @@ void Catalog::serialize(Serializer& ser) const {
 }
 
 void Catalog::serializeSnapshot(Serializer& ser, common::transaction_t snapshotTS) const {
-    const Transaction snapshotTxn(TransactionType::CHECKPOINT,
-        Transaction::DUMMY_TRANSACTION_ID, snapshotTS);
+    const Transaction snapshotTxn(TransactionType::CHECKPOINT, Transaction::DUMMY_TRANSACTION_ID,
+        snapshotTS);
     tables->serializeSnapshot(ser, &snapshotTxn);
     sequences->serializeSnapshot(ser, &snapshotTxn);
     functions->serializeSnapshot(ser, &snapshotTxn);

@@ -28,12 +28,8 @@ public:
     bool changedSinceLastCheckpoint() const {
         return version.load(std::memory_order_relaxed) != lastCheckpointVersion;
     }
-    void resetVersion() {
-        lastCheckpointVersion = version.load(std::memory_order_relaxed);
-    }
-    void resetVersion(uint64_t checkpointedVersion) {
-        lastCheckpointVersion = checkpointedVersion;
-    }
+    void resetVersion() { lastCheckpointVersion = version.load(std::memory_order_relaxed); }
+    void resetVersion(uint64_t checkpointedVersion) { lastCheckpointVersion = checkpointedVersion; }
 
     PageRange allocatePageRange(common::page_idx_t numPages) override;
     void freePageRange(PageRange block) override;

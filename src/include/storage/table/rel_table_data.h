@@ -97,8 +97,7 @@ public:
     TableStats getStats() const { return nodeGroups->getStats(); }
 
     void reclaimStorage(PageAllocator& pageAllocator) const;
-    void checkpoint(const std::vector<common::column_id_t>& columnIDs,
-        PageAllocator& pageAllocator,
+    void checkpoint(const std::vector<common::column_id_t>& columnIDs, PageAllocator& pageAllocator,
         const transaction::Transaction* snapshotTxn = nullptr);
 
     void pushInsertInfo(const transaction::Transaction* transaction, const CSRNodeGroup& nodeGroup,

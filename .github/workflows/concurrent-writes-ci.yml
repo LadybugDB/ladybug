@@ -3,7 +3,7 @@ name: ladybug concurrent-writes CI
 # Produces:
 #   - JSONL test results (one record per test case)
 #   - Markdown test summary → GitHub Step Summary
-#   - Before/after benchmark JSON files
+#   - Before/after benchmark JSON files (both built on the same ubuntu runner)
 #   - Benchmark comparison → PR comment + GitHub Step Summary
 
 on:
@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ─── Build ────────────────────────────────────────────────────────────────
+  # ─── Build (branch) ───────────────────────────────────────────────────────
   build:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -64,6 +64,50 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ladybug-build-${{ matrix.os }}
+          path: build/relwithdebinfo
+          retention-days: 1
+
+  # ─── Build main (benchmark baseline) ─────────────────────────────────────
+  # Runs in parallel with the branch build. The build output is cached across
+  # workflow runs (main rarely changes) so this is typically ~1 min after the
+  # first run.
+  build-main:
+    name: Build main (benchmark baseline)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/feat/concurrent-writes'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build
+
+      - name: Cache CMake build (main)
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: build-main-ubuntu-latest-${{ hashFiles('CMakeLists.txt', 'src/**/*.h') }}
+          restore-keys: build-main-ubuntu-latest-
+
+      - name: Configure (CMake + Ninja)
+        run: |
+          cmake -B build/relwithdebinfo -G Ninja \
+                -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                -DBUILD_TESTS=TRUE \
+                -DENABLE_BACKTRACES=TRUE \
+                .
+
+      - name: Build
+        run: cmake --build build/relwithdebinfo --parallel 4
+
+      - name: Upload main build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ladybug-main-build-ubuntu-latest
           path: build/relwithdebinfo
           retention-days: 1
 
@@ -132,50 +176,38 @@ jobs:
 
   # ─── Benchmark ────────────────────────────────────────────────────────────
   #
-  # Produces a before/after comparison:
+  # Both main and feat/concurrent-writes are built on the same ubuntu-latest
+  # runner (in the build and build-main jobs above) so the comparison is
+  # apples-to-apples regardless of local hardware.
   #
-  #   baseline.json  — captured on main (unpatched ladybug)
-  #                    committed to the repo; CI reads it if present
-  #   branch-results.json — captured on this branch
-  #   comparison.md  — diff table posted as PR comment + Step Summary
-  #
-  # To capture a new baseline locally (e.g. after a significant ladybug update):
-  #
-  #   git checkout main
-  #   make relwithdebinfo   # or: cmake ... && cmake --build ...
-  #   python3 benchmarks/run_benchmarks.py \
-  #       --build-dir build/relwithdebinfo \
-  #       --dataset-dir dataset \
-  #       --output benchmarks/baseline.json --label main
-  #
-  #   # Also archive to results/ for posterity:
-  #   cp benchmarks/baseline.json \
-  #      benchmarks/results/main-$(git rev-parse --short HEAD)-$(date +%Y%m%d).json
-  #
-  #   git add benchmarks/baseline.json benchmarks/results/ \
-  #       && git commit -m "bench: capture baseline"
-  #
-  #   # Generate a history report:
-  #   python3 benchmarks/report.py --output benchmarks/results/report.md
+  # The main build is heavily cached — after the first run it typically
+  # restores in ~1 min. The branch build is downloaded as a pre-built artifact.
   #
   benchmark:
     name: Benchmark (ubuntu-latest)
-    needs: build
+    needs: [build, build-main]
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/feat/concurrent-writes'
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download build (ubuntu)
+      - name: Download branch build (ubuntu)
         uses: actions/download-artifact@v4
         with:
           name: ladybug-build-ubuntu-latest
           path: build/relwithdebinfo
 
+      - name: Download main build (ubuntu)
+        uses: actions/download-artifact@v4
+        with:
+          name: ladybug-main-build-ubuntu-latest
+          path: build-main/relwithdebinfo
+
       - name: Restore binary permissions
         run: |
-          find build/relwithdebinfo -type f | xargs chmod +x 2>/dev/null || true
+          find build/relwithdebinfo     -type f | xargs chmod +x 2>/dev/null || true
+          find build-main/relwithdebinfo -type f | xargs chmod +x 2>/dev/null || true
 
       - name: Fetch dataset (shallow)
         run: |
@@ -186,27 +218,32 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Benchmark main (in-runner baseline)
+        run: |
+          git fetch --depth=1 origin main
+          MAIN_SHA=$(git rev-parse --short FETCH_HEAD)
+          python3 benchmarks/run_benchmarks.py \
+            --build-dir   build-main/relwithdebinfo \
+            --dataset-dir dataset \
+            --output      benchmarks/ci-baseline.json \
+            --label       "main (${MAIN_SHA})"
+
       - name: Run benchmarks (branch)
         run: |
           python3 benchmarks/run_benchmarks.py \
             --build-dir build/relwithdebinfo \
             --dataset-dir dataset \
             --output    benchmarks/branch-results.json \
-            --label     "${{ github.head_ref || github.ref_name }}"
+            --label     "${{ github.head_ref || github.ref_name }} ($(git rev-parse --short HEAD))"
 
-      - name: Compare against baseline
+      - name: Compare branch vs main (same runner)
         id: compare
         run: |
-          if [ -f benchmarks/baseline.json ]; then
-            python3 benchmarks/compare_benchmarks.py \
-              --baseline benchmarks/baseline.json \
-              --branch   benchmarks/branch-results.json \
-              --output   benchmarks/comparison.md
-            echo "has_baseline=true" >> "$GITHUB_OUTPUT"
-          else
-            python3 -c "open('benchmarks/comparison.md','w').write('## \u26a1 Concurrent-write benchmark comparison\n\n> **No baseline found.** To capture one, run on \`main\`:\n> \`\`\`\n> python3 benchmarks/run_benchmarks.py \\\\\n>     --build-dir build/relwithdebinfo \\\\\n>     --dataset-dir dataset \\\\\n>     --output benchmarks/baseline.json --label main\n> \`\`\`\n> Then commit \`benchmarks/baseline.json\` to the repo.\n')"
-            echo "has_baseline=false" >> "$GITHUB_OUTPUT"
-          fi
+          python3 benchmarks/compare_benchmarks.py \
+            --baseline benchmarks/ci-baseline.json \
+            --branch   benchmarks/branch-results.json \
+            --output   benchmarks/comparison.md
+          echo "has_baseline=true" >> "$GITHUB_OUTPUT"
 
       - name: Write benchmark comparison to Step Summary
         run: cat benchmarks/comparison.md >> $GITHUB_STEP_SUMMARY
@@ -245,10 +282,9 @@ jobs:
             --output benchmarks/results/report.md 2>/dev/null || true
 
       - name: Fail CI if regressions detected
-        if: steps.compare.outputs.has_baseline == 'true'
         run: |
           python3 benchmarks/compare_benchmarks.py \
-            --baseline benchmarks/baseline.json \
+            --baseline benchmarks/ci-baseline.json \
             --branch   benchmarks/branch-results.json
 
       - name: Upload benchmark artifacts
@@ -257,6 +293,7 @@ jobs:
         with:
           name: benchmark-results
           path: |
+            benchmarks/ci-baseline.json
             benchmarks/branch-results.json
             benchmarks/comparison.md
             benchmarks/results/

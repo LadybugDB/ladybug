@@ -187,8 +187,7 @@ public:
     void commit(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
         LocalTable* localTable) override;
     bool checkpoint(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
-        PageAllocator& pageAllocator,
-        const transaction::Transaction* snapshotTxn = nullptr,
+        PageAllocator& pageAllocator, const transaction::Transaction* snapshotTxn = nullptr,
         uint64_t epochWatermark = 0) override;
     void rollbackCheckpoint() override;
     void reclaimStorage(PageAllocator& pageAllocator) const override;

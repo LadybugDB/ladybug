@@ -721,13 +721,12 @@ static bool canSkipWrite(CheckpointReadCursor& readCursor, CheckpointWriteCursor
     return readCursor.getCSROffset() == writeCursor.getCSROffset() && readCursor.canSkipRead();
 }
 
-static ChunkState scanCommittedUpdates(const Transaction* transaction,
-    ColumnChunk& persistentChunk, Column* column, LazySegmentScanner& scanner,
-    offset_t startCSROffset, offset_t numRowsToScan) {
+static ChunkState scanCommittedUpdates(const Transaction* transaction, ColumnChunk& persistentChunk,
+    Column* column, LazySegmentScanner& scanner, offset_t startCSROffset, offset_t numRowsToScan) {
     ChunkState chunkState;
     persistentChunk.initializeScanState(chunkState, column);
-    persistentChunk.scanCommitted<ResidencyState::ON_DISK>(transaction,
-        chunkState, scanner, startCSROffset, numRowsToScan);
+    persistentChunk.scanCommitted<ResidencyState::ON_DISK>(transaction, chunkState, scanner,
+        startCSROffset, numRowsToScan);
     return chunkState;
 }
 
@@ -749,8 +748,7 @@ static void writeCSRListNoPersistentDeletions(CheckpointReadCursor& readCursor,
 }
 
 static void writeCSRListWithPersistentDeletions(const Transaction* transaction,
-    CheckpointReadCursor& readCursor,
-    CheckpointWriteCursor& writeCursor, offset_t oldCSRLength,
+    CheckpointReadCursor& readCursor, CheckpointWriteCursor& writeCursor, offset_t oldCSRLength,
     const ChunkedNodeGroup& persistentChunkGroup) {
     // TODO(Guodong): Optimize the for loop away by appending in batch
     for (auto i = 0u; i < oldCSRLength; i++) {
@@ -766,9 +764,8 @@ static void writeCSRListWithPersistentDeletions(const Transaction* transaction,
 }
 
 static void writeInMemoryCSRInsertion(const Transaction* transaction,
-    CheckpointWriteCursor& writeCursor,
-    const ChunkedNodeGroup& chunkedGroup, row_idx_t rowInChunk, column_id_t columnID,
-    ChunkState& chunkState) {
+    CheckpointWriteCursor& writeCursor, const ChunkedNodeGroup& chunkedGroup, row_idx_t rowInChunk,
+    column_id_t columnID, ChunkState& chunkState) {
     DASSERT(!chunkedGroup.isDeleted(transaction, rowInChunk));
     chunkedGroup.getColumnChunk(columnID).scanCommitted<ResidencyState::IN_MEMORY>(transaction,
         chunkState, writeCursor.getCurrentSegmentForWrite(1), rowInChunk, 1);
@@ -809,8 +806,7 @@ static void fillCSRGaps(CheckpointReadCursor& readCursor, CheckpointWriteCursor&
 std::vector<ChunkCheckpointState> CSRNodeGroup::checkpointColumnInRegion(const UniqLock& lock,
     column_id_t columnID, const CSRNodeGroupCheckpointState& csrState,
     const CSRRegion& region) const {
-    const auto* txn =
-        csrState.transaction ? csrState.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
+    const auto* txn = csrState.transaction ? csrState.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
     const auto leftCSROffset = csrState.oldHeader->getStartCSROffset(region.leftNodeOffset);
     DASSERT(leftCSROffset == csrState.newHeader->getStartCSROffset(region.leftNodeOffset));
     const auto rightCSROffset = csrState.oldHeader->getEndCSROffset(region.rightNodeOffset);
@@ -833,7 +829,7 @@ std::vector<ChunkCheckpointState> CSRNodeGroup::checkpointColumnInRegion(const U
 
     // Copy per csr list from old chunk and merge with new insertions into the newChunkData.
     for (auto nodeOffset = region.leftNodeOffset; nodeOffset <= region.rightNodeOffset;
-         nodeOffset++) {
+        nodeOffset++) {
         const auto oldCSRLength = csrState.oldHeader->getCSRLength(nodeOffset);
 
         DASSERT(csrState.newHeader->getStartCSROffset(nodeOffset) == writeCursor.getCSROffset());
@@ -905,12 +901,11 @@ void CSRNodeGroup::collectRegionChangesAndUpdateHeaderLength(const UniqLock& loc
 
 void CSRNodeGroup::collectInMemRegionChangesAndUpdateHeaderLength(const UniqLock& lock,
     CSRRegion& region, const CSRNodeGroupCheckpointState& csrState) const {
-    const auto* txn =
-        csrState.transaction ? csrState.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
+    const auto* txn = csrState.transaction ? csrState.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
     row_idx_t numInsertionsInRegion = 0u;
     if (csrIndex) {
         for (auto nodeOffset = region.leftNodeOffset; nodeOffset <= region.rightNodeOffset;
-             nodeOffset++) {
+            nodeOffset++) {
             auto rows = csrIndex->indices[nodeOffset].getRows();
             row_idx_t numInsertedRows = rows.size();
             row_idx_t numInMemDeletionsInCSR = 0;
@@ -943,7 +938,7 @@ void CSRNodeGroup::collectOnDiskRegionChangesAndUpdateHeaderLength(const UniqLoc
     int64_t numDeletionsInRegion = 0u;
     if (persistentChunkGroup) {
         for (auto nodeOffset = region.leftNodeOffset; nodeOffset <= region.rightNodeOffset;
-             nodeOffset++) {
+            nodeOffset++) {
             const auto numDeletedRows =
                 getNumDeletionsForNodeInPersistentData(nodeOffset, csrState);
             if (numDeletedRows == 0) {
@@ -962,15 +957,14 @@ void CSRNodeGroup::collectOnDiskRegionChangesAndUpdateHeaderLength(const UniqLoc
 
 void CSRNodeGroup::collectPersistentUpdatesInRegion(CSRRegion& region,
     const CSRNodeGroupCheckpointState& csrState) const {
-    const auto* txn =
-        csrState.transaction ? csrState.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
+    const auto* txn = csrState.transaction ? csrState.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
     const auto leftCSROffset = csrState.oldHeader->getStartCSROffset(region.leftNodeOffset);
     const auto rightCSROffset = csrState.oldHeader->getEndCSROffset(region.rightNodeOffset);
     region.hasUpdates.resize(csrState.columnIDs.size(), false);
     for (auto i = 0u; i < csrState.columnIDs.size(); i++) {
         auto columnID = csrState.columnIDs[i];
-        if (persistentChunkGroup->hasAnyUpdates(txn, columnID,
-                leftCSROffset, rightCSROffset - leftCSROffset + 1)) {
+        if (persistentChunkGroup->hasAnyUpdates(txn, columnID, leftCSROffset,
+                rightCSROffset - leftCSROffset + 1)) {
             region.hasUpdates[i] = true;
         }
     }
@@ -978,8 +972,7 @@ void CSRNodeGroup::collectPersistentUpdatesInRegion(CSRRegion& region,
 
 row_idx_t CSRNodeGroup::getNumDeletionsForNodeInPersistentData(offset_t nodeOffset,
     const CSRNodeGroupCheckpointState& csrState) const {
-    const auto* txn =
-        csrState.transaction ? csrState.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
+    const auto* txn = csrState.transaction ? csrState.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
     const auto length = csrState.oldHeader->getCSRLength(nodeOffset);
     const auto startRow = csrState.oldHeader->getStartCSROffset(nodeOffset);
     return persistentChunkGroup->getNumDeletions(txn, startRow, length);
@@ -1000,8 +993,7 @@ static DataChunk initScanDataChunk(const CSRNodeGroupCheckpointState& csrState,
 }
 
 void CSRNodeGroup::checkpointInMemOnly(const UniqLock& lock, NodeGroupCheckpointState& state) {
-    const auto* txn =
-        state.transaction ? state.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
+    const auto* txn = state.transaction ? state.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
     auto numRels = 0u;
     for (auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
         numRels += chunkedGroup->getNumRows();
@@ -1116,8 +1108,7 @@ void CSRNodeGroup::checkpointInMemOnly(const UniqLock& lock, NodeGroupCheckpoint
 // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
 void CSRNodeGroup::populateCSRLengthInMemOnly(const UniqLock& lock, offset_t numNodes,
     const CSRNodeGroupCheckpointState& csrState) {
-    const auto* txn =
-        csrState.transaction ? csrState.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
+    const auto* txn = csrState.transaction ? csrState.transaction : &DUMMY_CHECKPOINT_TRANSACTION;
     for (auto offset = 0u; offset < numNodes; offset++) {
         auto rows = csrIndex->indices[offset].getRows();
         const length_t length = rows.size();

@@ -227,12 +227,8 @@ public:
     bool changedSinceLastCheckpoint() const {
         return version.load(std::memory_order_relaxed) != lastCheckpointVersion;
     }
-    void resetVersion() {
-        lastCheckpointVersion = version.load(std::memory_order_relaxed);
-    }
-    void resetVersion(uint64_t checkpointedVersion) {
-        lastCheckpointVersion = checkpointedVersion;
-    }
+    void resetVersion() { lastCheckpointVersion = version.load(std::memory_order_relaxed); }
+    void resetVersion(uint64_t checkpointedVersion) { lastCheckpointVersion = checkpointedVersion; }
 
     void setCatalogName(const std::string& name) { catalogName = name; }
     std::string getCatalogName() const { return catalogName; }

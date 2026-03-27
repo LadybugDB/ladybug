@@ -522,8 +522,8 @@ void RelTable::prepareCommitForNodeGroup(const Transaction* transaction,
 
 bool RelTable::checkpoint(main::ClientContext*, TableCatalogEntry* tableEntry,
     PageAllocator& pageAllocator, const Transaction* snapshotTxn, uint64_t epochWatermark) {
-    const auto effectiveEpoch = epochWatermark > 0 ? epochWatermark :
-        changeEpoch.load(std::memory_order_acquire);
+    const auto effectiveEpoch =
+        epochWatermark > 0 ? epochWatermark : changeEpoch.load(std::memory_order_acquire);
     if (effectiveEpoch <= lastCheckpointedEpoch) {
         return false;
     }

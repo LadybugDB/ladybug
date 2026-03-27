@@ -444,8 +444,8 @@ void NodeGroup::scanCommittedUpdatesForColumn(
     const auto numPersistentRows = firstColumnChunk.getNumValues();
     firstColumnChunk.initializeScanState(chunkState, column);
     for (auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
-        chunkedGroup->getColumnChunk(columnID).scanCommitted<ResidencyState::ON_DISK>(
-            transaction, chunkState, updateSegmentScanner);
+        chunkedGroup->getColumnChunk(columnID).scanCommitted<ResidencyState::ON_DISK>(transaction,
+            chunkState, updateSegmentScanner);
     }
     DASSERT(updateSegmentScanner.getNumValues() == numPersistentRows);
     updateSegmentScanner.rangeSegments(updateSegmentScanner.begin(), numPersistentRows,
@@ -474,8 +474,8 @@ std::unique_ptr<ChunkedNodeGroup> NodeGroup::checkpointInMemAndOnDisk(MemoryMana
         const auto columnID = state.columnIDs[i];
         // if has persistent data, scan updates from persistent chunked group;
         DASSERT(firstGroup && firstGroup->getResidencyState() == ResidencyState::ON_DISK);
-        const auto columnHasUpdates = firstGroup->hasAnyUpdates(txn,
-            columnID, 0, firstGroup->getNumRows());
+        const auto columnHasUpdates =
+            firstGroup->hasAnyUpdates(txn, columnID, 0, firstGroup->getNumRows());
         if (numInsertedRows == 0 && !columnHasUpdates) {
             continue;
         }
@@ -673,8 +673,7 @@ std::unique_ptr<InMemChunkedNodeGroup> NodeGroup::scanAllInsertedAndVersions(
     auto* mutableTxn = const_cast<Transaction*>(transaction);
     initializeScanState(transaction, lock, *scanState);
     for (auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
-        chunkedGroup->scanCommitted<RESIDENCY_STATE>(mutableTxn, *scanState,
-            *mergedInMemGroup);
+        chunkedGroup->scanCommitted<RESIDENCY_STATE>(mutableTxn, *scanState, *mergedInMemGroup);
     }
     for (auto i = 0u; i < columnIDs.size(); i++) {
         if (columnIDs[i] != 0) {

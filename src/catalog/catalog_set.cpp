@@ -266,8 +266,7 @@ void CatalogSet::serialize(Serializer serializer) const {
     }
 }
 
-void CatalogSet::serializeSnapshot(Serializer serializer,
-    const Transaction* snapshotTxn) const {
+void CatalogSet::serializeSnapshot(Serializer serializer, const Transaction* snapshotTxn) const {
     std::shared_lock lck{mtx};
     std::vector<CatalogEntry*> entriesToSerialize;
     for (auto& [_, entry] : entries) {
@@ -281,8 +280,7 @@ void CatalogSet::serializeSnapshot(Serializer serializer,
         case CatalogEntryType::FOREIGN_TABLE_ENTRY:
             continue;
         default: {
-            auto visibleEntry =
-                traverseVersionChainsForTransactionNoLock(snapshotTxn, entry.get());
+            auto visibleEntry = traverseVersionChainsForTransactionNoLock(snapshotTxn, entry.get());
             if (visibleEntry && !visibleEntry->isDeleted()) {
                 entriesToSerialize.push_back(visibleEntry);
             }

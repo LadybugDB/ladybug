@@ -178,8 +178,7 @@ public:
     virtual void commit(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
         LocalTable* localTable) = 0;
     virtual bool checkpoint(main::ClientContext* context, catalog::TableCatalogEntry* tableEntry,
-        PageAllocator& pageAllocator,
-        const transaction::Transaction* snapshotTxn = nullptr,
+        PageAllocator& pageAllocator, const transaction::Transaction* snapshotTxn = nullptr,
         uint64_t epochWatermark = 0) = 0;
     virtual void rollbackCheckpoint() = 0;
     virtual void reclaimStorage(PageAllocator& pageAllocator) const = 0;
