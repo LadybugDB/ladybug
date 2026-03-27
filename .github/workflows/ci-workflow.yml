@@ -96,14 +96,19 @@ jobs:
 
   clang-format:
     runs-on: ubuntu-24.04
+    container:
+      image: alpine:3.20
     steps:
+      - name: Install clang-format dependencies
+        run: apk add --no-cache git python3 clang18-extra-tools
+
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
 
-      - name: Clang Format (${{ matrix.directory }})
-        run: ./scripts/run-clang-format-docker.sh
+      - name: Clang Format
+        run: python3 scripts/run-clang-format.py --clang-format-executable /usr/lib/llvm18/bin/clang-format -r src/ test/ tools/ extension/
 
   minimal-test:
     name: minimal test
