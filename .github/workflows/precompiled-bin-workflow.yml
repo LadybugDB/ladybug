@@ -17,41 +17,70 @@ jobs:
     strategy:
       matrix:
         include:
+          # Linux compat: broad glibc compatibility via manylinux_2_28 containers,
+          # gcc-toolset-13 with -static-libstdc++. Produces shared + static + CLI.
           - os: ubuntu-latest
             container: quay.io/pypa/manylinux_2_28_x86_64
+            variant: compat
+            arch: x86_64
           - os: ubuntu-24.04-arm
             container: quay.io/pypa/manylinux_2_28_aarch64
+            variant: compat
+            arch: aarch64
+          # Linux perf: LLVM 21 on a modern runner. Static library only (for
+          # use by language bindings such as Node.js and Java).
+          - os: ubuntu-24.04
+            variant: perf
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            variant: perf
+            arch: aarch64
+          # macOS universal (x86_64 + arm64). Produces shared + static + CLI.
           - os: macos-latest
+          # Windows x86_64. Produces shared + static + CLI.
           - os: windows-latest
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build dependencies (Linux container)
-        if: runner.os == 'Linux'
+      # ---- Dependency installation ----
+
+      - name: Install build dependencies (Linux compat)
+        if: runner.os == 'Linux' && matrix.variant == 'compat'
         run: |
           dnf install -y 'dnf-command(config-manager)'
           dnf config-manager --set-enabled powertools
           dnf install -y cmake ninja-build python3 python3-pip git ccache gcc-toolset-13
 
-      - name: Install uv (Windows/Mac)
+      - name: Install build dependencies (Linux perf)
+        if: runner.os == 'Linux' && matrix.variant == 'perf'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y cmake ninja-build python3 python3-pip git ccache curl
+          curl -fsSL https://apt.llvm.org/llvm.sh | sudo bash -s -- 21
+
+      - name: Install uv (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install uv (macOS/Windows)
         if: runner.os != 'Linux'
         run: python3 -m pip install uv
 
-      - name: Install uv (Manylinux)
-        if: runner.os != 'Linux'
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      # ---- ccache ----
 
       - name: Setup ccache (Linux)
         if: runner.os == 'Linux'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: precompiled-bin-${{ runner.os }}-${{ runner.arch }}-${{ github.ref }}
+          key: precompiled-bin-${{ runner.os }}-${{ runner.arch }}-${{ matrix.variant }}-${{ github.ref }}
           max-size: 2G
           restore-keys: |
-            precompiled-bin-${{ runner.os }}-${{ runner.arch }}-refs/heads/main
-            precompiled-bin-${{ runner.os }}-${{ runner.arch }}-
+            precompiled-bin-${{ runner.os }}-${{ runner.arch }}-${{ matrix.variant }}-refs/heads/main
+            precompiled-bin-${{ runner.os }}-${{ runner.arch }}-${{ matrix.variant }}-
 
       - name: Setup ccache (macOS)
         if: runner.os == 'macOS'
@@ -73,6 +102,8 @@ jobs:
             precompiled-bin-${{ runner.os }}-refs/heads/main
             precompiled-bin-${{ runner.os }}-
 
+      # ---- Optional nightly version bump ----
+
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
         shell: bash
@@ -87,8 +118,10 @@ jobs:
           python3 update-nightly-build-version.py
         working-directory: scripts
 
-      - name: Build precompiled binaries (Linux)
-        if: runner.os == 'Linux'
+      # ---- Build ----
+
+      - name: Build (Linux compat)
+        if: runner.os == 'Linux' && matrix.variant == 'compat'
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
@@ -100,7 +133,18 @@ jobs:
           make GEN=Ninja
           make install
 
-      - name: Build precompiled binaries (macOS)
+      - name: Build (Linux perf)
+        if: runner.os == 'Linux' && matrix.variant == 'perf'
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          CC: clang-21
+          CXX: clang++-21
+        run: |
+          make GEN=Ninja
+          make install
+
+      - name: Build (macOS)
         if: runner.os == 'macOS'
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
@@ -113,12 +157,12 @@ jobs:
 
       - name: Enable long paths (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
           git config --system core.longpaths true
-        shell: pwsh
 
-      - name: Build precompiled binaries (Windows)
+      - name: Build (Windows)
         if: runner.os == 'Windows'
         shell: cmd
         env:
@@ -130,21 +174,32 @@ jobs:
           make GEN=Ninja
           make install
 
-      - name: Collect artifacts (Linux)
-        if: runner.os == 'Linux'
+      # ---- Collect artifacts ----
+
+      - name: Collect artifacts (Linux compat)
+        if: runner.os == 'Linux' && matrix.variant == 'compat'
         run: |
-          mv install/include/lbug.h .
-          mv install/include/lbug.hpp .
+          cp install/include/lbug.h .
+          cp install/include/lbug.hpp .
           cp -L install/lib*/liblbug.so .
-          mv install/bin/lbug .
+          cp -L install/lib*/liblbug.a .
+          cp install/bin/lbug .
+
+      - name: Collect artifacts (Linux perf)
+        if: runner.os == 'Linux' && matrix.variant == 'perf'
+        run: |
+          cp install/include/lbug.h .
+          cp install/include/lbug.hpp .
+          cp -L install/lib*/liblbug.a .
 
       - name: Collect artifacts (macOS)
         if: runner.os == 'macOS'
         run: |
-          mv install/include/lbug.h .
-          mv install/include/lbug.hpp .
+          cp install/include/lbug.h .
+          cp install/include/lbug.hpp .
           cp -L install/lib/liblbug.dylib .
-          mv install/bin/lbug .
+          cp -L install/lib/liblbug.a .
+          cp install/bin/lbug .
 
       - name: Verify binary information (macOS)
         if: runner.os == 'macOS'
@@ -156,55 +211,81 @@ jobs:
 
       - name: Collect artifacts (Windows)
         if: runner.os == 'Windows'
-        shell: cmd
+        shell: pwsh
         run: |
-          move install\include\lbug.h
-          move install\include\lbug.hpp
-          move install\bin\lbug_shared.dll
-          move install\lib\lbug_shared.lib
-          move install\bin\lbug_shell.exe lbug.exe
+          Copy-Item install\include\lbug.h .
+          Copy-Item install\include\lbug.hpp .
+          Copy-Item install\bin\lbug_shared.dll .
+          Copy-Item install\lib\lbug_shared.lib .
+          Copy-Item install\lib\lbug.lib .
+          Copy-Item install\bin\lbug_shell.exe lbug.exe
 
-      - name: Create tarball (Linux)
-        if: runner.os == 'Linux'
+      # ---- Create archives ----
+
+      - name: Create tarballs (Linux compat)
+        if: runner.os == 'Linux' && matrix.variant == 'compat'
         run: |
-          if [ "${{ runner.arch }}" = "ARM64" ]; then
-            ARCH="aarch64"
-          else
-            ARCH="x86_64"
-          fi
-          tar -czvf liblbug-linux-${ARCH}.tar.gz lbug.h lbug.hpp liblbug.so
-          tar -czvf lbug_cli-linux-${ARCH}.tar.gz lbug
+          tar -czvf liblbug-linux-${{ matrix.arch }}.tar.gz lbug.h lbug.hpp liblbug.so
+          tar -czvf liblbug-static-linux-${{ matrix.arch }}-compat.tar.gz lbug.h lbug.hpp liblbug.a
+          tar -czvf lbug_cli-linux-${{ matrix.arch }}.tar.gz lbug
 
-      - name: Create tarball (macOS)
+      - name: Create tarballs (Linux perf)
+        if: runner.os == 'Linux' && matrix.variant == 'perf'
+        run: |
+          tar -czvf liblbug-static-linux-${{ matrix.arch }}-perf.tar.gz lbug.h lbug.hpp liblbug.a
+
+      - name: Create tarballs (macOS)
         if: runner.os == 'macOS'
         run: |
           tar -czvf liblbug-osx-universal.tar.gz lbug.h lbug.hpp liblbug.dylib
+          tar -czvf liblbug-static-osx-universal.tar.gz lbug.h lbug.hpp liblbug.a
           tar -czvf lbug_cli-osx-universal.tar.gz lbug
 
       - name: Create zip files (Windows)
         if: runner.os == 'Windows'
-        shell: cmd
+        shell: pwsh
         run: |
-          powershell -Command "Compress-Archive -Path lbug.h, lbug.hpp, lbug_shared.dll, lbug_shared.lib -DestinationPath liblbug-windows-x86_64.zip"
-          powershell -Command "Compress-Archive -Path lbug.exe -DestinationPath lbug_cli-windows-x86_64.zip"
+          Compress-Archive -Path lbug.h, lbug.hpp, lbug_shared.dll, lbug_shared.lib -DestinationPath liblbug-windows-x86_64.zip
+          Compress-Archive -Path lbug.h, lbug.hpp, lbug.lib -DestinationPath liblbug-static-windows-x86_64.zip
+          Compress-Archive -Path lbug.exe -DestinationPath lbug_cli-windows-x86_64.zip
+
+      # ---- Upload artifacts ----
 
       - uses: actions/upload-artifact@v4
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.variant == 'compat'
         with:
-          name: liblbug-linux-${{ runner.arch == 'ARM64' && 'aarch64' || 'x86_64' }}
-          path: liblbug-linux-${{ runner.arch == 'ARM64' && 'aarch64' || 'x86_64' }}.tar.gz
+          name: liblbug-linux-${{ matrix.arch }}
+          path: liblbug-linux-${{ matrix.arch }}.tar.gz
 
       - uses: actions/upload-artifact@v4
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.variant == 'compat'
         with:
-          name: lbug_cli-linux-${{ runner.arch == 'ARM64' && 'aarch64' || 'x86_64' }}
-          path: lbug_cli-linux-${{ runner.arch == 'ARM64' && 'aarch64' || 'x86_64' }}.tar.gz
+          name: liblbug-static-linux-${{ matrix.arch }}-compat
+          path: liblbug-static-linux-${{ matrix.arch }}-compat.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux' && matrix.variant == 'compat'
+        with:
+          name: lbug_cli-linux-${{ matrix.arch }}
+          path: lbug_cli-linux-${{ matrix.arch }}.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux' && matrix.variant == 'perf'
+        with:
+          name: liblbug-static-linux-${{ matrix.arch }}-perf
+          path: liblbug-static-linux-${{ matrix.arch }}-perf.tar.gz
 
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:
           name: liblbug-osx-universal
           path: liblbug-osx-universal.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: liblbug-static-osx-universal
+          path: liblbug-static-osx-universal.tar.gz
 
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
@@ -217,6 +298,12 @@ jobs:
         with:
           name: liblbug-windows-x86_64
           path: liblbug-windows-x86_64.zip
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: liblbug-static-windows-x86_64
+          path: liblbug-static-windows-x86_64.zip
 
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
