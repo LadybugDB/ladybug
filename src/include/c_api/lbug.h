@@ -132,6 +132,10 @@ typedef struct {
     // The threshold of the WAL file size in bytes. When the size of the
     // WAL file exceeds this threshold, the database will checkpoint if auto_checkpoint is true.
     uint64_t checkpoint_threshold;
+    // If true, any WAL replay failure when loading the database will raise an error.
+    bool throw_on_wal_replay_failure;
+    // If true, checksums are enabled for WAL and storage pages.
+    bool enable_checksums;
 
 #if defined(__APPLE__)
     // The thread quality of service (QoS) for the worker threads.
@@ -808,6 +812,14 @@ LBUG_C_API bool lbug_data_type_equals(lbug_logical_type* data_type1, lbug_logica
  */
 LBUG_C_API lbug_data_type_id lbug_data_type_get_id(lbug_logical_type* data_type);
 /**
+ * @brief Returns the child type of the given ARRAY or LIST data type.
+ * @param data_type The ARRAY or LIST data type instance.
+ * @param[out] out_result The output parameter that will hold the child type.
+ * @return The state indicating the success or failure of the operation.
+ */
+LBUG_C_API lbug_state lbug_data_type_get_child_type(lbug_logical_type* data_type,
+    lbug_logical_type* out_result);
+/**
  * @brief Returns the number of elements for array.
  * @param data_type The data type instance to return.
  * @param[out] out_result The output parameter that will hold the number of elements in the array.
@@ -917,6 +929,15 @@ LBUG_C_API lbug_value* lbug_value_create_float(float val_);
  */
 LBUG_C_API lbug_value* lbug_value_create_double(double val_);
 /**
+ * @brief Creates a value with decimal type and the given string representation.
+ * Caller is responsible for destroying the returned value.
+ * @param val_ The decimal value to create.
+ * @param precision The decimal precision.
+ * @param scale The decimal scale.
+ */
+LBUG_C_API lbug_value* lbug_value_create_decimal(const char* val_, uint32_t precision,
+    uint32_t scale);
+/**
  * @brief Creates a value with internal_id type and the given internal_id value. Caller is
  * responsible for destroying the returned value.
  * @param val_ The internal_id value of the value to create.
@@ -970,6 +991,12 @@ LBUG_C_API lbug_value* lbug_value_create_interval(lbug_interval_t val_);
  * @param val_ The string value of the value to create.
  */
 LBUG_C_API lbug_value* lbug_value_create_string(const char* val_);
+/**
+ * @brief Creates a value with UUID type and the given string representation.
+ * Caller is responsible for destroying the returned value.
+ * @param val_ The UUID string value to create.
+ */
+LBUG_C_API lbug_value* lbug_value_create_uuid(const char* val_);
 /**
  * @brief Creates a list value with the given number of elements and the given elements.
  * The caller needs to make sure that all elements have the same type.
@@ -1062,6 +1089,15 @@ LBUG_C_API lbug_state lbug_value_get_struct_num_fields(lbug_value* value, uint64
  */
 LBUG_C_API lbug_state lbug_value_get_struct_field_name(lbug_value* value, uint64_t index,
     char** out_result);
+/**
+ * @brief Returns the field index for the given field name in the given struct value.
+ * @param value The STRUCT value to inspect.
+ * @param field_name The field name to look up.
+ * @param[out] out_result The output parameter that will hold the field index.
+ * @return The state indicating the success or failure of the operation.
+ */
+LBUG_C_API lbug_state lbug_value_get_struct_field_index(lbug_value* value, const char* field_name,
+    uint64_t* out_result);
 /**
  * @brief Returns the field value at index of the given struct value. The value must be of physical
  * type STRUCT (STRUCT, NODE, REL, RECURSIVE_REL, UNION).

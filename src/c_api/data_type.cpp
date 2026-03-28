@@ -55,6 +55,24 @@ lbug_data_type_id lbug_data_type_get_id(lbug_logical_type* data_type) {
     return static_cast<lbug_data_type_id>(data_type_id_u8);
 }
 
+lbug_state lbug_data_type_get_child_type(lbug_logical_type* data_type, lbug_logical_type* out_result) {
+    auto* parent_type = static_cast<LogicalType*>(data_type->_data_type);
+    try {
+        switch (parent_type->getLogicalTypeID()) {
+        case LogicalTypeID::ARRAY:
+            out_result->_data_type = new LogicalType(ArrayType::getChildType(*parent_type).copy());
+            return LbugSuccess;
+        case LogicalTypeID::LIST:
+            out_result->_data_type = new LogicalType(ListType::getChildType(*parent_type).copy());
+            return LbugSuccess;
+        default:
+            return LbugError;
+        }
+    } catch (Exception& e) {
+        return LbugError;
+    }
+}
+
 lbug_state lbug_data_type_get_num_elements_in_array(lbug_logical_type* data_type,
     uint64_t* out_result) {
     auto parent_type = static_cast<LogicalType*>(data_type->_data_type);
