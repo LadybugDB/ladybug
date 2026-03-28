@@ -168,7 +168,8 @@ public:
     }
     common::column_id_t getNumColumns() const {
         DASSERT(directedRelData.size() >= 1);
-        RUNTIME_CHECK(for (const auto& relData : directedRelData) {
+        RUNTIME_CHECK(for (const auto& relData
+                           : directedRelData) {
             DASSERT(relData->getNumColumns() == directedRelData[0]->getNumColumns());
         });
         return directedRelData[0]->getNumColumns();
