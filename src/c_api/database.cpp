@@ -1,5 +1,5 @@
-#include "c_api/lbug.h"
 #include "c_api/helpers.h"
+#include "c_api/lbug.h"
 #include "common/exception/exception.h"
 #include "main/lbug.h"
 using namespace lbug::main;

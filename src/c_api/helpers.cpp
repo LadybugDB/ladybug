@@ -1,7 +1,8 @@
 #include "c_api/helpers.h"
-#include "c_api/lbug.h"
 
 #include <cstring>
+
+#include "c_api/lbug.h"
 
 namespace {
 thread_local std::string lastCAPIErrorMessage;

@@ -202,8 +202,8 @@ lbug_value* lbug_value_create_string(const char* val_) {
 
 lbug_value* lbug_value_create_uuid(const char* val_) {
     auto* c_value = (lbug_value*)calloc(1, sizeof(lbug_value));
-    c_value->_value = new Value(
-        lbug::common::uuid{lbug::common::UUID::fromCString(val_, strlen(val_))});
+    c_value->_value =
+        new Value(lbug::common::uuid{lbug::common::UUID::fromCString(val_, strlen(val_))});
     return c_value;
 }
 
