@@ -24,8 +24,8 @@ env:
 
 jobs:
   # ─── Format check ─────────────────────────────────────────────────────────
-  # Mirrors the upstream Docker script (run-clang-format-docker.sh) using the
-  # same clang-18 version available on Ubuntu without requiring Docker-in-Docker.
+  # Uses the upstream run-clang-format-docker.sh script (Alpine + clang18-extra-tools)
+  # so CI uses the exact same binary as local dev — avoids Ubuntu apt clang-18 patches.
   format:
     name: clang-format-18 check
     runs-on: ubuntu-latest
@@ -34,11 +34,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # need history to diff against main
-
-      - name: Install clang-format-18
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y clang-format-18
 
       - name: Check formatting of changed C++ files
         run: |
@@ -49,9 +44,7 @@ jobs:
             exit 0
           fi
           echo "Checking $(echo "$CHANGED" | wc -l | tr -d ' ') files..."
-          python3 scripts/run-clang-format.py \
-            --clang-format-executable clang-format-18 \
-            $CHANGED
+          bash scripts/run-clang-format-docker.sh $CHANGED
 
   # ─── Build (branch) ───────────────────────────────────────────────────────
   build:
