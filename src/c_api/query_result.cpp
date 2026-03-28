@@ -96,11 +96,13 @@ lbug_state lbug_query_result_get_next_query_result(lbug_query_result* query_resu
 lbug_state lbug_query_result_get_next(lbug_query_result* query_result,
     lbug_flat_tuple* out_flat_tuple) {
     try {
+        clearLastCAPIErrorMessage();
         auto flat_tuple = static_cast<QueryResult*>(query_result->_query_result)->getNext();
         out_flat_tuple->_flat_tuple = flat_tuple.get();
         out_flat_tuple->_is_owned_by_cpp = true;
         return LbugSuccess;
     } catch (Exception& e) {
+        setLastCAPIErrorMessage(e.what());
         return LbugError;
     }
 }

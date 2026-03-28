@@ -1,4 +1,5 @@
 #include "c_api/lbug.h"
+#include "c_api/helpers.h"
 #include "common/exception/exception.h"
 #include "main/lbug.h"
 
@@ -66,6 +67,7 @@ lbug_state lbug_connection_query(lbug_connection* connection, const char* query,
         return LbugError;
     }
     try {
+        clearLastCAPIErrorMessage();
         auto query_result =
             static_cast<Connection*>(connection->_connection)->query(query).release();
         if (query_result == nullptr) {
@@ -73,11 +75,9 @@ lbug_state lbug_connection_query(lbug_connection* connection, const char* query,
         }
         out_query_result->_query_result = query_result;
         out_query_result->_is_owned_by_cpp = false;
-        if (!query_result->isSuccess()) {
-            return LbugError;
-        }
         return LbugSuccess;
     } catch (Exception& e) {
+        setLastCAPIErrorMessage(e.what());
         return LbugError;
     }
 }
@@ -88,6 +88,7 @@ lbug_state lbug_connection_prepare(lbug_connection* connection, const char* quer
         return LbugError;
     }
     try {
+        clearLastCAPIErrorMessage();
         auto prepared_statement =
             static_cast<Connection*>(connection->_connection)->prepare(query).release();
         if (prepared_statement == nullptr) {
@@ -98,6 +99,7 @@ lbug_state lbug_connection_prepare(lbug_connection* connection, const char* quer
             new std::unordered_map<std::string, std::unique_ptr<Value>>;
         return LbugSuccess;
     } catch (Exception& e) {
+        setLastCAPIErrorMessage(e.what());
         return LbugError;
     }
     return LbugSuccess;
@@ -111,6 +113,7 @@ lbug_state lbug_connection_execute(lbug_connection* connection,
         return LbugError;
     }
     try {
+        clearLastCAPIErrorMessage();
         auto prepared_statement_ptr =
             static_cast<PreparedStatement*>(prepared_statement->_prepared_statement);
         auto bound_values = static_cast<std::unordered_map<std::string, std::unique_ptr<Value>>*>(
@@ -132,11 +135,9 @@ lbug_state lbug_connection_execute(lbug_connection* connection,
         }
         out_query_result->_query_result = query_result;
         out_query_result->_is_owned_by_cpp = false;
-        if (!query_result->isSuccess()) {
-            return LbugError;
-        }
         return LbugSuccess;
     } catch (Exception& e) {
+        setLastCAPIErrorMessage(e.what());
         return LbugError;
     }
 }

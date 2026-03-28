@@ -1,4 +1,5 @@
 #include "c_api/lbug.h"
+#include "c_api/helpers.h"
 #include "common/exception/exception.h"
 #include "main/lbug.h"
 using namespace lbug::main;
@@ -7,6 +8,7 @@ using namespace lbug::common;
 lbug_state lbug_database_init(const char* database_path, lbug_system_config config,
     lbug_database* out_database) {
     try {
+        clearLastCAPIErrorMessage();
         std::string database_path_str = database_path;
         auto systemConfig = SystemConfig(config.buffer_pool_size, config.max_num_threads,
             config.enable_compression, config.read_only, config.max_db_size, config.auto_checkpoint,
@@ -19,6 +21,7 @@ lbug_state lbug_database_init(const char* database_path, lbug_system_config conf
         out_database->_database = new Database(database_path_str, systemConfig);
     } catch (Exception& e) {
         out_database->_database = nullptr;
+        setLastCAPIErrorMessage(e.what());
         return LbugError;
     }
     return LbugSuccess;
