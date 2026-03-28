@@ -2,6 +2,10 @@
 
 #include <cstring>
 
+namespace {
+thread_local std::string lastCAPIErrorMessage;
+}
+
 #ifdef _WIN32
 const uint64_t NS_TO_SEC = 10000000ULL;
 const uint64_t SEC_TO_UNIX_EPOCH = 11644473600ULL;
@@ -44,6 +48,23 @@ int32_t convertTimeToTm(time_t time, struct tm* out_tm) {
     return 0;
 }
 #endif
+
+void setLastCAPIErrorMessage(const std::string& message) {
+    lastCAPIErrorMessage = message;
+}
+
+void clearLastCAPIErrorMessage() {
+    lastCAPIErrorMessage.clear();
+}
+
+char* takeLastCAPIErrorMessage() {
+    if (lastCAPIErrorMessage.empty()) {
+        return nullptr;
+    }
+    auto* message = convertToOwnedCString(lastCAPIErrorMessage);
+    lastCAPIErrorMessage.clear();
+    return message;
+}
 
 char* convertToOwnedCString(const std::string& str) {
     size_t src_len = str.size();
