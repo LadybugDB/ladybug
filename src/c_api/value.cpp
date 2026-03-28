@@ -115,7 +115,26 @@ lbug_value* lbug_value_create_double(double val_) {
 
 lbug_value* lbug_value_create_decimal(const char* val_, uint32_t precision, uint32_t scale) {
     auto* c_value = (lbug_value*)calloc(1, sizeof(lbug_value));
-    c_value->_value = new Value(LogicalType::DECIMAL(precision, scale), val_);
+    auto decimalType = LogicalType::DECIMAL(precision, scale);
+    auto value = Value::createDefaultValue(decimalType);
+    switch (decimalType.getPhysicalType()) {
+    case PhysicalTypeID::INT16:
+        lbug::function::decimalCast(val_, strlen(val_), value.val.int16Val, decimalType);
+        break;
+    case PhysicalTypeID::INT32:
+        lbug::function::decimalCast(val_, strlen(val_), value.val.int32Val, decimalType);
+        break;
+    case PhysicalTypeID::INT64:
+        lbug::function::decimalCast(val_, strlen(val_), value.val.int64Val, decimalType);
+        break;
+    case PhysicalTypeID::INT128:
+        lbug::function::decimalCast(val_, strlen(val_), value.val.int128Val, decimalType);
+        break;
+    default:
+        free(c_value);
+        return nullptr;
+    }
+    c_value->_value = new Value(std::move(value));
     return c_value;
 }
 
@@ -784,8 +803,7 @@ lbug_state lbug_value_get_uuid(lbug_value* value, char** out_result) {
         return LbugError;
     }
     try {
-        *out_result =
-            convertToOwnedCString(static_cast<Value*>(value->_value)->getValue<std::string>());
+        *out_result = convertToOwnedCString(static_cast<Value*>(value->_value)->toString());
     } catch (Exception& e) {
         return LbugError;
     }
