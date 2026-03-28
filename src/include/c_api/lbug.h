@@ -1621,4 +1621,12 @@ LBUG_C_API char* lbug_get_version();
  * @brief Returns the storage version of the Lbug library.
  */
 LBUG_C_API uint64_t lbug_get_storage_version();
+
+// Error handling
+/**
+ * @brief Returns the last error message set by the C API, consuming it (subsequent calls return
+ * nullptr until another error occurs). The caller is responsible for freeing the returned string
+ * using lbug_destroy_string(). Returns nullptr if no error has been recorded.
+ */
+LBUG_C_API char* lbug_get_last_error();
 #undef LBUG_C_API

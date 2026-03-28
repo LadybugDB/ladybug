@@ -1,4 +1,5 @@
 #include "c_api/helpers.h"
+#include "c_api/lbug.h"
 
 #include <cstring>
 
@@ -72,4 +73,8 @@ char* convertToOwnedCString(const std::string& str) {
     memcpy(c_str, str.c_str(), src_len);
     c_str[src_len] = '\0';
     return c_str;
+}
+
+char* lbug_get_last_error() {
+    return takeLastCAPIErrorMessage();
 }
