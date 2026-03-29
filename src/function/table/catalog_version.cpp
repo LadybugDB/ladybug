@@ -12,7 +12,8 @@ static common::offset_t internalTableFunc(const TableFuncMorsel& /*morsel*/,
     const TableFuncInput& input, common::DataChunk& output) {
     auto& outputVector = output.getValueVectorMutable(0);
     auto pos = outputVector.state->getSelVector()[0];
-    outputVector.setValue(pos, catalog::Catalog::Get(*input.context->clientContext)->getVersion());
+    outputVector.setValue(pos,
+        catalog::Catalog::Get(*input.context->clientContext)->getVersionSinceCheckpoint());
     return 1;
 }
 

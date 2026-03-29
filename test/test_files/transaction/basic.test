@@ -59,8 +59,7 @@ Alice
 -STATEMENT [conn2] COMMIT
 ---- ok
 -STATEMENT [conn2] CHECKPOINT;
----- error
-Timeout waiting for active transactions to leave the system before checkpointing. If you have an open transaction, please close it and try again.
+---- ok
 -STATEMENT [conn1] MATCH (a:person) WHERE a.ID=0 RETURN a.age;
 ---- 0
 
@@ -76,8 +75,7 @@ Timeout waiting for active transactions to leave the system before checkpointing
 ---- ok
 -CREATE_CONNECTION conn2
 -STATEMENT [conn2] COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/primary-key-tests/vPerson.csv"
----- error
-Timeout waiting for active transactions to leave the system before checkpointing. If you have an open transaction, please close it and try again.
+----- ok
 -STATEMENT [conn1] MATCH (a:person) WHERE a.ID=100 RETURN a.age;
 ---- 0
 

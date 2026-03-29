@@ -224,6 +224,11 @@ public:
 
     void incrementVersion() { version.fetch_add(1, std::memory_order_relaxed); }
     uint64_t getVersion() const { return version.load(std::memory_order_relaxed); }
+    // Returns the number of catalog changes committed since the last checkpoint.
+    // Use this for user-visible version numbers (e.g. CALL catalog_version()).
+    uint64_t getVersionSinceCheckpoint() const {
+        return version.load(std::memory_order_relaxed) - lastCheckpointVersion;
+    }
     bool changedSinceLastCheckpoint() const {
         return version.load(std::memory_order_relaxed) != lastCheckpointVersion;
     }
