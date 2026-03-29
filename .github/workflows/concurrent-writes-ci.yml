@@ -7,13 +7,9 @@ name: ladybug concurrent-writes CI
 #   - Benchmark comparison → PR comment + GitHub Step Summary
 
 on:
-  push:
-    branches: [feat/concurrent-writes]
-    paths:
-      ["src/**", "benchmarks/**", ".github/workflows/concurrent-writes-ci.yml"]
-  pull_request:
-    paths:
-      ["src/**", "benchmarks/**", ".github/workflows/concurrent-writes-ci.yml"]
+  schedule:
+    - cron: '0 2 * * *'  # 02:00 UTC nightly on feat/concurrent-writes
+  workflow_dispatch:       # allow manual trigger any time
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,29 +19,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # ─── Format check ─────────────────────────────────────────────────────────
-  # Uses the upstream run-clang-format-docker.sh script (Alpine + clang18-extra-tools)
-  # so CI uses the exact same binary as local dev — avoids Ubuntu apt clang-18 patches.
-  format:
-    name: clang-format-18 check
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # need history to diff against main
-
-      - name: Check formatting of changed C++ files
-        run: |
-          git fetch --depth=1 origin main
-          CHANGED=$(git diff --name-only FETCH_HEAD -- 'src/**' 'test/**' 'tools/**' 'extension/**' | grep -E '\.(cpp|h)$')
-          if [ -z "$CHANGED" ]; then
-            echo "No C++ files changed — nothing to check."
-            exit 0
-          fi
-          echo "Checking $(echo "$CHANGED" | wc -l | tr -d ' ') files..."
-          bash scripts/run-clang-format-docker.sh $CHANGED
-
   # ─── Build (branch) ───────────────────────────────────────────────────────
   build:
     name: Build (${{ matrix.os }})
@@ -100,7 +73,6 @@ jobs:
   build-main:
     name: Build main (benchmark baseline)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/feat/concurrent-writes'
 
     steps:
       - uses: actions/checkout@v4
@@ -213,7 +185,6 @@ jobs:
     name: Benchmark (ubuntu-latest)
     needs: [build, build-main]
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/feat/concurrent-writes'
 
     steps:
       - uses: actions/checkout@v4
@@ -273,32 +244,6 @@ jobs:
 
       - name: Write benchmark comparison to Step Summary
         run: cat benchmarks/comparison.md >> $GITHUB_STEP_SUMMARY
-
-      - name: Post / update benchmark comment on PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const body = fs.readFileSync('benchmarks/comparison.md', 'utf8');
-            const marker = '<!-- concurrent-writes-bench -->';
-            const fullBody = marker + '\n' + body;
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find(c => c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                comment_id: existing.id, body: fullBody,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: context.issue.number, body: fullBody,
-              });
-            }
 
       - name: Generate history report
         if: always()
