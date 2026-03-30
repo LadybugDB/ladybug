@@ -146,6 +146,12 @@ void Checkpointer::finishCheckpoint() {
     if (isInMemory) {
         return;
     }
+    // NOTE: finishCheckpoint() runs after the write gate has been released (when WAL rotation
+    // occurred).  New DDL/write transactions may therefore be active, but they assign timestamps
+    // strictly greater than the snapshotTS captured under the gate in beginCheckpoint().
+    // serializeCatalogAndMetadata() uses snapshotTS > 0 to choose serializeCatalogSnapshot(),
+    // which serializes only catalog entries whose commit timestamp is <= snapshotTS, so no
+    // post-gate DDL mutation is visible in the serialized snapshot.
     serializeCatalogAndMetadata(checkpointHeader, hasStorageChanges);
     checkpointHeader.dataFileNumPages = mainStorageManager->getDataFH()->getNumPages();
     writeDatabaseHeader(checkpointHeader);

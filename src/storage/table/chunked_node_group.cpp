@@ -330,7 +330,7 @@ void ChunkedNodeGroup::scan(const Transaction* transaction, const TableScanState
 }
 
 template<ResidencyState SCAN_RESIDENCY_STATE>
-void ChunkedNodeGroup::scanCommitted(Transaction* transaction, TableScanState& scanState,
+void ChunkedNodeGroup::scanCommitted(const Transaction* transaction, TableScanState& scanState,
     InMemChunkedNodeGroup& output) const {
     if (residencyState != SCAN_RESIDENCY_STATE) {
         return;
@@ -342,10 +342,10 @@ void ChunkedNodeGroup::scanCommitted(Transaction* transaction, TableScanState& s
     }
 }
 
-template void ChunkedNodeGroup::scanCommitted<ResidencyState::ON_DISK>(Transaction* transaction,
-    TableScanState& scanState, InMemChunkedNodeGroup& output) const;
-template void ChunkedNodeGroup::scanCommitted<ResidencyState::IN_MEMORY>(Transaction* transaction,
-    TableScanState& scanState, InMemChunkedNodeGroup& output) const;
+template void ChunkedNodeGroup::scanCommitted<ResidencyState::ON_DISK>(
+    const Transaction* transaction, TableScanState& scanState, InMemChunkedNodeGroup& output) const;
+template void ChunkedNodeGroup::scanCommitted<ResidencyState::IN_MEMORY>(
+    const Transaction* transaction, TableScanState& scanState, InMemChunkedNodeGroup& output) const;
 
 bool ChunkedNodeGroup::hasDeletions(const Transaction* transaction) const {
     return versionInfo && versionInfo->hasDeletions(transaction);
@@ -464,7 +464,7 @@ std::unique_ptr<ColumnChunk> InMemChunkedNodeGroup::flushInternal(ColumnChunkDat
     }
 }
 
-std::unique_ptr<ChunkedNodeGroup> InMemChunkedNodeGroup::flush(Transaction* transaction,
+std::unique_ptr<ChunkedNodeGroup> InMemChunkedNodeGroup::flush(const Transaction* transaction,
     PageAllocator& pageAllocator) {
     std::vector<std::unique_ptr<ColumnChunk>> flushedChunks(getNumColumns());
     for (auto i = 0u; i < getNumColumns(); i++) {

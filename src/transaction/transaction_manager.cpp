@@ -213,7 +213,17 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     }
     auto checkpointer = initCheckpointerFunc(clientContext);
     try {
-        checkpointer->beginCheckpoint(lastTimestamp);
+        // Snapshot lastTimestamp under the public-function mutex to avoid a data race:
+        // commit() increments lastTimestamp under that mutex, and checkpointNoLock() runs
+        // without it.  The acquire/release pattern on activeWriteTransactionCount establishes
+        // happens-before ordering for the value itself, but accessing a non-atomic variable
+        // concurrently is still UB under the C++ memory model.
+        transaction_t snapshotTimestamp;
+        {
+            std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
+            snapshotTimestamp = lastTimestamp;
+        }
+        checkpointer->beginCheckpoint(snapshotTimestamp);
     } catch (std::exception& e) {
         checkpointer->rollback();
         throw CheckpointException{e};
