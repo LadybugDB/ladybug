@@ -300,6 +300,7 @@ extension-release:
 	$(call run-cmake-release, \
 		-DBUILD_EXTENSIONS="$(EXTENSION_LIST)" \
 		-DBUILD_LBUG=FALSE \
+		-DBUILD_SHELL=FALSE \
 	)
 
 shell:
