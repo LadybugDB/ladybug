@@ -207,7 +207,7 @@ length_t ChunkedCSRHeader::computeGapFromLength(length_t length) {
 }
 
 std::unique_ptr<ChunkedNodeGroup> InMemChunkedCSRNodeGroup::flush(
-    transaction::Transaction* transaction, PageAllocator& pageAllocator) {
+    const transaction::Transaction* transaction, PageAllocator& pageAllocator) {
     auto csrOffset = flushInternal(*csrHeader.offset, pageAllocator);
     auto csrLength = flushInternal(*csrHeader.length, pageAllocator);
     std::vector<std::unique_ptr<ColumnChunk>> flushedChunks(getNumColumns());
