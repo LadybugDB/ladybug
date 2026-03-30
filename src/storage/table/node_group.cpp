@@ -514,7 +514,7 @@ std::unique_ptr<ChunkedNodeGroup> NodeGroup::checkpointInMemOnly(MemoryManager& 
     }
     auto insertChunkedGroup = scanAllInsertedAndVersions<ResidencyState::IN_MEMORY>(memoryManager,
         lock, state.columnIDs, columnPtrs, txn);
-    return insertChunkedGroup->flush(const_cast<Transaction*>(txn), state.pageAllocator);
+    return insertChunkedGroup->flush(txn, state.pageAllocator);
 }
 
 std::unique_ptr<VersionInfo> NodeGroup::checkpointVersionInfo(const UniqLock& lock,
@@ -670,10 +670,9 @@ std::unique_ptr<InMemChunkedNodeGroup> NodeGroup::scanAllInsertedAndVersions(
         enableCompression, numResidentRows, chunkedGroups.getFirstGroup(lock)->getStartRowIdx());
     auto scanState = std::make_unique<TableScanState>(columnIDs, columns);
     scanState->nodeGroupScanState = std::make_unique<NodeGroupScanState>(columnIDs.size());
-    auto* mutableTxn = const_cast<Transaction*>(transaction);
     initializeScanState(transaction, lock, *scanState);
     for (auto& chunkedGroup : chunkedGroups.getAllGroups(lock)) {
-        chunkedGroup->scanCommitted<RESIDENCY_STATE>(mutableTxn, *scanState, *mergedInMemGroup);
+        chunkedGroup->scanCommitted<RESIDENCY_STATE>(transaction, *scanState, *mergedInMemGroup);
     }
     for (auto i = 0u; i < columnIDs.size(); i++) {
         if (columnIDs[i] != 0) {

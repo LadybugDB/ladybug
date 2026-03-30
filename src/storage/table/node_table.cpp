@@ -679,9 +679,17 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
         memoryManager, snapshotTxn};
     nodeGroups->checkpoint(*memoryManager, state);
     for (auto& index : indexes) {
+        // TODO: The hash index checkpoint currently operates on live index state rather than
+        // a snapshotTxn view. This is a pre-existing limitation; threading snapshotTxn through
+        // the full hash-index infrastructure is deferred to a follow-up.
         index.checkpoint(context, pageAllocator);
     }
-    tableEntry->vacuumColumnIDs(0 /*nextColumnID*/);
+    // vacuumColumnIDs modifies the catalog entry's column-ID set.  Guard it under schemaMtx so
+    // concurrent readers (which also take schemaMtx for the columns vector) see a consistent view.
+    {
+        std::unique_lock schemaLck{schemaMtx};
+        tableEntry->vacuumColumnIDs(0 /*nextColumnID*/);
+    }
     lastCheckpointedEpoch = effectiveEpoch;
     return true;
 }

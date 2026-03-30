@@ -100,7 +100,7 @@ public:
         return std::move(chunks[columnID]);
     }
 
-    virtual std::unique_ptr<ChunkedNodeGroup> flush(transaction::Transaction* transaction,
+    virtual std::unique_ptr<ChunkedNodeGroup> flush(const transaction::Transaction* transaction,
         PageAllocator& pageAllocator);
 
 protected:
@@ -188,7 +188,7 @@ public:
         common::length_t numRowsToScan) const;
 
     template<ResidencyState SCAN_RESIDENCY_STATE>
-    void scanCommitted(transaction::Transaction* transaction, TableScanState& scanState,
+    void scanCommitted(const transaction::Transaction* transaction, TableScanState& scanState,
         InMemChunkedNodeGroup& output) const;
 
     bool hasUpdates() const;
