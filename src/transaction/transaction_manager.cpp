@@ -228,8 +228,14 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
         checkpointer->rollback();
         throw CheckpointException{e};
     }
-    // Release the write gate early when WAL was rotated. New writers create a fresh active WAL,
-    // isolated from the frozen checkpoint WAL.
+    // Release the write gate early when WAL was rotated. New writers create a fresh active WAL
+    // isolated from the frozen checkpoint WAL, so node-data reads during checkpointStoragePhase
+    // remain bounded to snapshotTS.
+    // NOTE: HashIndexLocalStorage has no per-entry timestamps, so post-snapshotTS inserts that
+    // arrive after the gate is released may appear in the on-disk hash index while the
+    // corresponding node data was not included in this checkpoint.  This is a pre-existing
+    // limitation of the Vela design; fixing it requires adding timestamp-aware snapshotting
+    // to HashIndexLocalStorage (tracked as a follow-up).
     if (checkpointer->wasWalRotated()) {
         writeGate = {};
     }
