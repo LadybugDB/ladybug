@@ -501,5 +501,42 @@ TEST_F(ReviewFixesTest, ConcurrentReadsDuringCheckpointVacuum) {
 }
 #endif // __SINGLE_THREADED__
 
+// Hash index basic recovery
+//
+// HashIndexLocalStorage has no per-entry timestamps; a correct fix for post-snapshotTS
+// "ghost key" consistency requires timestamp-aware snapshotting inside the hash-index
+// infrastructure and is tracked as a follow-up (pre-existing Vela limitation).
+// This test validates the baseline: all rows committed before CHECKPOINT are recoverable
+// via PK lookup after a reload.
+TEST_F(ReviewFixesTest, HashIndexBasicRecoveryAfterCheckpoint) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CREATE NODE TABLE hicac(id INT64 PRIMARY KEY, val STRING);");
+
+    const int N = 20;
+    for (int i = 0; i < N; ++i) {
+        auto r = conn->query(std::format("CREATE (:hicac {{id: {}, val: 'v{}'}});", i, i));
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+    }
+
+    {
+        auto r = conn->query("CHECKPOINT;");
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+    }
+
+    createDBAndConn();
+
+    // All rows committed before the checkpoint must be recoverable via PK lookup.
+    for (int i = 0; i < N; ++i) {
+        auto r = conn->query(std::format("MATCH (n:hicac) WHERE n.id = {} RETURN n.val;", i));
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+        ASSERT_TRUE(r->hasNext()) << "Hash index missing entry for id=" << i;
+        EXPECT_EQ(r->getNext()->getValue(0)->getValue<std::string>(), "v" + std::to_string(i));
+        EXPECT_FALSE(r->hasNext());
+    }
+}
+
 } // namespace testing
 } // namespace lbug

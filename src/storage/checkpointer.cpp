@@ -162,7 +162,12 @@ void Checkpointer::postCheckpointCleanup() {
     if (isInMemory) {
         return;
     }
-
+    // NOTE: No try/catch here is intentional. By the time this runs, finishCheckpoint() has
+    // already persisted the checkpoint header and applied shadow pages — the database is
+    // durable.  Any exception in the in-memory cleanup below indicates a programming error;
+    // letting it propagate (and crash the process) is safer than continuing with partially
+    // reset in-memory state.  On the next startup the database loads from the stable
+    // on-disk checkpoint and is fully consistent.
     mainStorageManager->finalizeCheckpoint();
     auto bufferManager = MemoryManager::Get(clientContext)->getBufferManager();
     bufferManager->removeEvictedCandidates();
