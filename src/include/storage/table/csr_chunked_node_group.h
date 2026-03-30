@@ -204,7 +204,7 @@ public:
         chunks[chunkIdx]->write(data[vectorIdx].get(), &offsetChunk, common::RelMultiplicity::MANY);
     }
 
-    std::unique_ptr<ChunkedNodeGroup> flush(transaction::Transaction* transaction,
+    std::unique_ptr<ChunkedNodeGroup> flush(const transaction::Transaction* transaction,
         PageAllocator& pageAllocator) override;
 
 private:
