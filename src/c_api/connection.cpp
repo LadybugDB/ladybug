@@ -75,6 +75,9 @@ lbug_state lbug_connection_query(lbug_connection* connection, const char* query,
         }
         out_query_result->_query_result = query_result;
         out_query_result->_is_owned_by_cpp = false;
+        if (!query_result->isSuccess()) {
+            return LbugError;
+        }
         return LbugSuccess;
     } catch (Exception& e) {
         setLastCAPIErrorMessage(e.what());
@@ -135,6 +138,9 @@ lbug_state lbug_connection_execute(lbug_connection* connection,
         }
         out_query_result->_query_result = query_result;
         out_query_result->_is_owned_by_cpp = false;
+        if (!query_result->isSuccess()) {
+            return LbugError;
+        }
         return LbugSuccess;
     } catch (Exception& e) {
         setLastCAPIErrorMessage(e.what());
