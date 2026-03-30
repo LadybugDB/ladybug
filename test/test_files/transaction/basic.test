@@ -79,6 +79,34 @@ Alice
 -STATEMENT [conn1] MATCH (a:person) WHERE a.ID=100 RETURN a.age;
 ---- 0
 
+-CASE CheckpointWrittenDataPersistsOnReload
+# Regression test for Fix #1 (lastTimestamp snapshot) and Fix #2 (const_cast).
+# Verifies that all write transactions committed before CHECKPOINT are fully
+# materialized and visible after a database reload (cold open from disk only).
+-SKIP_IN_MEM
+-STATEMENT CALL auto_checkpoint=false
+---- ok
+-STATEMENT CREATE NODE TABLE ct_nodes(id INT64 PRIMARY KEY, val STRING);
+---- ok
+-STATEMENT CREATE (:ct_nodes {id: 1, val: 'a'});
+---- ok
+-STATEMENT CREATE (:ct_nodes {id: 2, val: 'b'});
+---- ok
+-STATEMENT CREATE (:ct_nodes {id: 3, val: 'c'});
+---- ok
+-STATEMENT MATCH (n:ct_nodes) RETURN count(n);
+---- 1
+3
+-STATEMENT CHECKPOINT;
+---- ok
+-RELOADDB
+-STATEMENT MATCH (n:ct_nodes) RETURN count(n);
+---- 1
+3
+-STATEMENT MATCH (n:ct_nodes) WHERE n.id = 2 RETURN n.val;
+---- 1
+b
+
 -CASE ForceCheckpointWhenClosingDB
 -SKIP_IN_MEM
 -STATEMENT CALL auto_checkpoint=false
