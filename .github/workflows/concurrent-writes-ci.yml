@@ -142,6 +142,12 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Suppress step summary on secondary OS
+        # Only ubuntu-latest writes the test table to the run-level summary;
+        # otherwise both matrix legs write identical-looking tables.
+        if: matrix.os != 'ubuntu-latest'
+        run: echo "GITHUB_STEP_SUMMARY=/dev/null" >> $GITHUB_ENV
+
       - name: Run all tests (JSONL capture)
         id: tests
         run: |
@@ -232,15 +238,13 @@ jobs:
 
       - name: Compare branch vs main (same runner)
         id: compare
+        continue-on-error: true
         run: |
           python3 benchmarks/compare_benchmarks.py \
             --baseline benchmarks/ci-baseline.json \
             --branch   benchmarks/branch-results.json \
             --output   benchmarks/comparison.md
           echo "has_baseline=true" >> "$GITHUB_OUTPUT"
-
-      - name: Write benchmark comparison to Step Summary
-        run: cat benchmarks/comparison.md >> $GITHUB_STEP_SUMMARY
 
       - name: Generate history report
         if: always()
@@ -250,10 +254,10 @@ jobs:
             --output benchmarks/results/report.md 2>/dev/null || true
 
       - name: Fail CI if regressions detected
+        if: steps.compare.outcome == 'failure'
         run: |
-          python3 benchmarks/compare_benchmarks.py \
-            --baseline benchmarks/ci-baseline.json \
-            --branch   benchmarks/branch-results.json
+          echo "Benchmark regressions detected — see comparison above."
+          exit 1
 
       - name: Upload benchmark artifacts
         if: always()
