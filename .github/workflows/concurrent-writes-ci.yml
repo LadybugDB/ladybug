@@ -8,8 +8,8 @@ name: ladybug concurrent-writes CI
 
 on:
   schedule:
-    - cron: '0 2 * * *'  # 02:00 UTC nightly on feat/concurrent-writes
-  workflow_dispatch:       # allow manual trigger any time
+    - cron: "0 2 * * *" # 02:00 UTC nightly on feat/concurrent-writes
+  workflow_dispatch: # allow manual trigger any time
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -152,9 +152,6 @@ jobs:
             --summary     benchmarks/test-summary-${{ matrix.os }}.md \
             --label       "${{ matrix.os }} / ${{ github.head_ref || github.ref_name }}"
         continue-on-error: true
-
-      - name: Write test summary to GitHub Step Summary
-        run: cat benchmarks/test-summary-${{ matrix.os }}.md >> $GITHUB_STEP_SUMMARY
 
       - name: Fail job if any tests failed
         if: steps.tests.outcome == 'failure'
