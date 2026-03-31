@@ -31,13 +31,13 @@ jobs:
           - os: ubuntu-latest
             arch: x64
             platform: linux
-            container: quay.io/pypa/manylinux_2_28_x86_64
+            container: ubuntu-22.04
             artifact_name: linux-nodejs-module-x86_64
             node_name: lbugjs-linux-x64.node
           - os: ubuntu-24.04-arm
             arch: arm64
             platform: linux
-            container: quay.io/pypa/manylinux_2_28_aarch64
+            container: ubuntu-22.04-arm
             artifact_name: linux-nodejs-module-aarch64
             node_name: lbugjs-linux-arm64.node
           - os: macos-latest
