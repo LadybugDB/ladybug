@@ -21,21 +21,23 @@ env:
 jobs:
   build-linux-java-x86_64:
     runs-on: ubuntu-latest
-    container: ubuntu-22.04
+    container: ubuntu:22.04
     env:
       LBUG_LINUX_VARIANT: compat
       LBUG_JAVA_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
       LBUG_JAVA_PRECOMPILED_LIB_PATH: ${{ github.workspace }}/precompiled-liblbug/liblbug.a
     steps:
+      - name: Install git (pre-checkout)
+        run: |
+          apt-get update && apt-get install -y git
+          git config --global --add safe.directory '*'
+
       - uses: actions/checkout@v4
 
       - name: Install build dependencies (Linux)
         run: |
-          dnf install -y 'dnf-command(config-manager)'
-          dnf config-manager --set-enabled powertools
-          dnf install -y cmake ninja-build python3 python3-pip git ccache gcc-toolset-13 java-17-openjdk-devel curl
-          dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
-          dnf install -y gh --nogpgcheck
+          apt-get update
+          apt-get install -y cmake ninja-build python3 python3-pip git ccache gcc g++ openjdk-17-jdk curl gh
 
       - name: Install uv
         run: |
@@ -68,12 +70,7 @@ jobs:
       - name: Build Java lib for Linux
         env:
           EXTRA_CMAKE_FLAGS: -DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_API_USE_PRECOMPILED_LIB=TRUE -DLBUG_API_PRECOMPILED_LIB_PATH=${{ env.LBUG_JAVA_PRECOMPILED_LIB_PATH }}
-        run: |
-          source /opt/rh/gcc-toolset-13/enable
-          export CC=gcc
-          export CXX=g++
-          export LDFLAGS="-static-libstdc++"
-          make GEN=Ninja java
+        run: make GEN=Ninja java
 
       - uses: actions/upload-artifact@v4
         with:
@@ -82,21 +79,23 @@ jobs:
 
   build-linux-java-aarch64:
     runs-on: ubuntu-24.04-arm
-    container: ubuntu-22.04-arm
+    container: ubuntu:22.04
     env:
       LBUG_LINUX_VARIANT: compat
       LBUG_JAVA_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
       LBUG_JAVA_PRECOMPILED_LIB_PATH: ${{ github.workspace }}/precompiled-liblbug/liblbug.a
     steps:
+      - name: Install git (pre-checkout)
+        run: |
+          apt-get update && apt-get install -y git
+          git config --global --add safe.directory '*'
+
       - uses: actions/checkout@v4
 
       - name: Install build dependencies (Linux)
         run: |
-          dnf install -y 'dnf-command(config-manager)'
-          dnf config-manager --set-enabled powertools
-          dnf install -y cmake ninja-build python3 python3-pip git ccache gcc-toolset-13 java-17-openjdk-devel curl
-          dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
-          dnf install -y gh --nogpgcheck
+          apt-get update
+          apt-get install -y cmake ninja-build python3 python3-pip git ccache gcc g++ openjdk-17-jdk curl gh
 
       - name: Install uv
         run: |
@@ -129,12 +128,7 @@ jobs:
       - name: Build Java lib for Linux
         env:
           EXTRA_CMAKE_FLAGS: -DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_API_USE_PRECOMPILED_LIB=TRUE -DLBUG_API_PRECOMPILED_LIB_PATH=${{ env.LBUG_JAVA_PRECOMPILED_LIB_PATH }}
-        run: |
-          source /opt/rh/gcc-toolset-13/enable
-          export CC=gcc
-          export CXX=g++
-          export LDFLAGS="-static-libstdc++"
-          make GEN=Ninja java
+        run: make GEN=Ninja java
 
       - uses: actions/upload-artifact@v4
         with:

@@ -31,13 +31,13 @@ jobs:
           - os: ubuntu-latest
             arch: x64
             platform: linux
-            container: ubuntu-22.04
+            container: ubuntu:22.04
             artifact_name: linux-nodejs-module-x86_64
             node_name: lbugjs-linux-x64.node
           - os: ubuntu-24.04-arm
             arch: arm64
             platform: linux
-            container: ubuntu-22.04-arm
+            container: ubuntu:22.04
             artifact_name: linux-nodejs-module-aarch64
             node_name: lbugjs-linux-arm64.node
           - os: macos-latest
@@ -58,17 +58,21 @@ jobs:
             artifact_name: windows-nodejs-module
             node_name: lbugjs-win32-x64.node
     steps:
+      - name: Install git (pre-checkout)
+        if: ${{ matrix.platform == 'linux' }}
+        run: |
+          apt-get update && apt-get install -y git
+          git config --global --add safe.directory '*'
+
       - uses: actions/checkout@v4
 
       - name: Install build dependencies (Linux)
         if: ${{ matrix.platform == 'linux' }}
         run: |
-          dnf install -y 'dnf-command(config-manager)'
-          dnf config-manager --set-enabled powertools
-          dnf module enable -y nodejs:20
-          dnf install -y cmake ninja-build python3 python3-pip git ccache gcc-toolset-13 nodejs npm curl
-          dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
-          dnf install -y gh --nogpgcheck
+          apt-get update
+          apt-get install -y cmake ninja-build python3 python3-pip git ccache gcc g++ curl gh
+          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          apt-get install -y nodejs
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/nodejs_api dataset
@@ -190,10 +194,6 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
           EXTRA_CMAKE_FLAGS: -DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_API_USE_PRECOMPILED_LIB=TRUE -DLBUG_API_PRECOMPILED_LIB_PATH=${{ env.LBUG_NODEJS_PRECOMPILED_LIB_PATH }}
         run: |
-          source /opt/rh/gcc-toolset-13/enable
-          export CC=gcc
-          export CXX=g++
-          export LDFLAGS="-static-libstdc++"
           ccache -s
           make GEN=Ninja nodejs
           ccache -s
