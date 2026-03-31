@@ -27,12 +27,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             arch: x64
             platform: linux
             artifact_name: linux-nodejs-module-x86_64
             node_name: lbugjs-linux-x64.node
-          - os: ubuntu-24.04-arm
+          - os: ubuntu-22.04-arm
             arch: arm64
             platform: linux
             artifact_name: linux-nodejs-module-aarch64
@@ -59,6 +59,15 @@ jobs:
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/nodejs_api dataset
+
+      - name: Install GCC 13 (Linux)
+        if: ${{ matrix.platform == 'linux' }}
+        run: |
+          sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
+          sudo apt-get update
+          sudo apt-get install -y gcc-13 g++-13
+          echo "CC=gcc-13" >> $GITHUB_ENV
+          echo "CXX=g++-13" >> $GITHUB_ENV
 
       - name: Download precompiled liblbug
         shell: bash
