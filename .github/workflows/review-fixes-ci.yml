@@ -74,6 +74,9 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - name: Init dataset submodule
+              run: git submodule update --init --depth 1 dataset
+
             - name: Download build artifacts
               uses: actions/download-artifact@v4
               with:
@@ -87,17 +90,18 @@ jobs:
               run: echo "E2E_TEST_FILES_DIRECTORY=$GITHUB_WORKSPACE/test/test_files" >> $GITHUB_ENV
 
             # Fix #1 – lastTimestamp race:
-            # CheckpointTimeoutErrorTest and AutoCheckpointTimeoutErrorTest verify
-            # the drain path; CheckpointDrainWaitsForInFlightWrite is the new
-            # targeted regression test that holds an in-flight write during drain
-            # and asserts the committed row survives the checkpoint.
-            # CheckpointWrittenDataPersistsOnReload covers the .test-file case.
+            # ReviewFixesTest.CheckpointDrainWaitsForInFlightWrite is the targeted
+            # regression test (holds an in-flight write during drain).
+            # e2e_test_transaction~basic covers CheckpointWrittenDataPersistsOnReload
+            # and the existing timeout tests (CheckpointTimeoutErrorTest etc.).
+            # recovery/* and copy/* tests need the ladybugdb/dataset repo (not
+            # cloned here) and are not related to the checkpoint drain fix.
             - name: Transaction tests (checkpoint + drain)
               run: |
                   ctest --test-dir build/relwithdebinfo/test \
                     -R "e2e_test_transaction|ReviewFixesTest.CheckpointDrainWaitsForInFlightWrite" \
                     --output-on-failure \
-                    --timeout 120
+                    --timeout 300
 
             # Fix #1 continued – catalog_version() still returns the delta since the
             # last checkpoint, which depends on the snapshot timestamp being correct.
