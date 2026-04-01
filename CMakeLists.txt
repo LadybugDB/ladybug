@@ -252,7 +252,14 @@ if(${BUILD_WASM})
         add_link_options(-sSINGLE_FILE=1)
         add_link_options(-sALLOW_MEMORY_GROWTH=1)
         add_link_options(-sMODULARIZE=1)
-        add_link_options(-sEXPORTED_RUNTIME_METHODS=FS,wasmMemory)
+        # Export the WasmFS OPFS backend factory and directory-creation helper so
+        # the JS wrapper can mount OPFS-backed directories at runtime.
+        # allocateUTF8 is needed to pass path strings across the JS/WASM boundary.
+        # Note: OPFS requires SharedArrayBuffer (cross-origin isolation) and
+        # pthreads; it is compiled into single-threaded builds for API
+        # completeness but will fail at runtime without multi-threading.
+        add_link_options(-sEXPORTED_RUNTIME_METHODS=FS,wasmMemory,allocateUTF8)
+        add_link_options("-sEXPORTED_FUNCTIONS=_free,_wasmfs_create_opfs_backend,_wasmfs_create_directory")
         add_link_options(-sEXPORT_NAME=lbug)
         add_link_options(-sMAXIMUM_MEMORY=4GB)
     endif()
