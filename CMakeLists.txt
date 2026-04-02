@@ -248,20 +248,23 @@ if(${BUILD_WASM})
     else()
         add_link_options(-sWASMFS)
         add_link_options(-lwasmfs)
-        add_link_options(-lopfs.js)
         add_link_options(-sSINGLE_FILE=1)
         add_link_options(-sALLOW_MEMORY_GROWTH=1)
         add_link_options(-sMODULARIZE=1)
-        # Export the WasmFS OPFS backend factory and directory-creation helper so
-        # the JS wrapper can mount OPFS-backed directories at runtime.
-        # allocateUTF8 is needed to pass path strings across the JS/WASM boundary.
-        # Note: OPFS requires SharedArrayBuffer (cross-origin isolation) and
-        # pthreads; it is compiled into single-threaded builds for API
-        # completeness but will fail at runtime without multi-threading.
-        add_link_options(-sEXPORTED_RUNTIME_METHODS=FS,wasmMemory,allocateUTF8)
-        add_link_options("-sEXPORTED_FUNCTIONS=_free,_wasmfs_create_opfs_backend,_wasmfs_create_directory")
         add_link_options(-sEXPORT_NAME=lbug)
         add_link_options(-sMAXIMUM_MEMORY=4GB)
+        if(NOT __SINGLE_THREADED__)
+            # OPFS requires pthreads — the Emscripten OPFS JS backend
+            # (-lopfs.js) internally uses _emscripten_proxy_finish which is
+            # only defined when pthreads are enabled.  Linking -lopfs.js
+            # without -pthread causes wasmfsOPFSProxyFinish to compile as a
+            # no-op, leading to UNREACHABLE at opfs_backend.cpp:292.
+            add_link_options(-lopfs.js)
+            add_link_options(-sEXPORTED_RUNTIME_METHODS=FS,wasmMemory,allocateUTF8)
+            add_link_options("-sEXPORTED_FUNCTIONS=_free,_wasmfs_create_opfs_backend,_wasmfs_create_directory")
+        else()
+            add_link_options(-sEXPORTED_RUNTIME_METHODS=FS,wasmMemory)
+        endif()
     endif()
     set(__WASM__ TRUE)
     add_compile_options(-fexceptions)
