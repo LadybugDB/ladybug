@@ -42,9 +42,10 @@ SystemConfig::SystemConfig(uint64_t bufferPoolSize_, uint64_t maxNumThreads, boo
 #endif
     )
     : maxNumThreads{maxNumThreads}, enableCompression{enableCompression}, readOnly{readOnly},
-      enableMultiWrites{enableMultiWrites}, autoCheckpoint{autoCheckpoint},
-      checkpointThreshold{checkpointThreshold}, forceCheckpointOnClose{forceCheckpointOnClose},
-      throwOnWalReplayFailure(throwOnWalReplayFailure), enableChecksums(enableChecksums) {
+      autoCheckpoint{autoCheckpoint}, checkpointThreshold{checkpointThreshold},
+      forceCheckpointOnClose{forceCheckpointOnClose},
+      throwOnWalReplayFailure(throwOnWalReplayFailure), enableChecksums(enableChecksums),
+      enableMultiWrites{enableMultiWrites} {
 #if defined(__APPLE__)
     this->threadQos = threadQos;
 #endif
