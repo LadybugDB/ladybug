@@ -7,6 +7,9 @@ name: ladybug concurrent-writes CI
 #   - Benchmark comparison → PR comment + GitHub Step Summary
 
 on:
+  push:
+    branches:
+      - feat/concurrent-writes
   schedule:
     - cron: "0 2 * * *" # 02:00 UTC nightly on feat/concurrent-writes
   workflow_dispatch: # allow manual trigger any time
@@ -66,48 +69,6 @@ jobs:
           path: build/relwithdebinfo
           retention-days: 1
 
-  # ─── Build main (benchmark baseline) ─────────────────────────────────────
-  # Runs in parallel with the branch build. The build output is cached across
-  # workflow runs (main rarely changes) so this is typically ~1 min after the
-  # first run.
-  build-main:
-    name: Build main (benchmark baseline)
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y cmake ninja-build
-
-      - name: Cache CMake build (main)
-        uses: actions/cache@v4
-        with:
-          path: build
-          key: build-main-ubuntu-latest-${{ hashFiles('CMakeLists.txt', 'src/**/*.h') }}
-          restore-keys: build-main-ubuntu-latest-
-
-      - name: Configure (CMake + Ninja)
-        run: |
-          cmake -B build/relwithdebinfo -G Ninja \
-                -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-                -DBUILD_TESTS=TRUE \
-                -DENABLE_BACKTRACES=TRUE \
-                .
-
-      - name: Build
-        run: cmake --build build/relwithdebinfo --parallel 4
-
-      - name: Upload main build
-        uses: actions/upload-artifact@v4
-        with:
-          name: ladybug-main-build-ubuntu-latest
-          path: build/relwithdebinfo
-          retention-days: 1
 
   # ─── Test ─────────────────────────────────────────────────────────────────
   test:
@@ -177,16 +138,13 @@ jobs:
 
   # ─── Benchmark ────────────────────────────────────────────────────────────
   #
-  # Both main and feat/concurrent-writes are built on the same ubuntu-latest
-  # runner (in the build and build-main jobs above) so the comparison is
-  # apples-to-apples regardless of local hardware.
-  #
-  # The main build is heavily cached — after the first run it typically
-  # restores in ~1 min. The branch build is downloaded as a pre-built artifact.
+  # The branch build runs on ubuntu-latest (downloaded from the build job).
+  # The baseline is pulled directly from benchmarks/baseline.json on main,
+  # avoiding a full main rebuild on every push.
   #
   benchmark:
     name: Benchmark (ubuntu-latest)
-    needs: [build, build-main]
+    needs: [build]
     runs-on: ubuntu-latest
 
     steps:
@@ -198,16 +156,14 @@ jobs:
           name: ladybug-build-ubuntu-latest
           path: build/relwithdebinfo
 
-      - name: Download main build (ubuntu)
-        uses: actions/download-artifact@v4
-        with:
-          name: ladybug-main-build-ubuntu-latest
-          path: build-main/relwithdebinfo
-
       - name: Restore binary permissions
         run: |
-          find build/relwithdebinfo     -type f | xargs chmod +x 2>/dev/null || true
-          find build-main/relwithdebinfo -type f | xargs chmod +x 2>/dev/null || true
+          find build/relwithdebinfo -type f | xargs chmod +x 2>/dev/null || true
+
+      - name: Pull baseline from main
+        run: |
+          git fetch --depth=1 origin main
+          git show origin/main:benchmarks/baseline.json > benchmarks/ci-baseline.json
 
       - name: Fetch dataset (shallow)
         run: |
@@ -217,16 +173,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Benchmark main (in-runner baseline)
-        run: |
-          git fetch --depth=1 origin main
-          MAIN_SHA=$(git rev-parse --short FETCH_HEAD)
-          python3 benchmarks/run_benchmarks.py \
-            --build-dir   build-main/relwithdebinfo \
-            --dataset-dir dataset \
-            --output      benchmarks/ci-baseline.json \
-            --label       "main (${MAIN_SHA})"
 
       - name: Run benchmarks (branch)
         run: |
