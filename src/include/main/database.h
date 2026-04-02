@@ -62,12 +62,14 @@ struct LBUG_API SystemConfig {
      * the error occured.
      * @param enableChecksums If true, the database will use checksums to detect corruption in the
      * WAL file.
+     * @param enableMultiWrites If true, multiple concurrent write transactions are allowed.
+     * Default to false.
      */
     explicit SystemConfig(uint64_t bufferPoolSize = -1u, uint64_t maxNumThreads = 0,
         bool enableCompression = true, bool readOnly = false, uint64_t maxDBSize = -1u,
         bool autoCheckpoint = true, uint64_t checkpointThreshold = 16777216 /* 16MB */,
         bool forceCheckpointOnClose = true, bool throwOnWalReplayFailure = true,
-        bool enableChecksums = true
+        bool enableChecksums = true, bool enableMultiWrites = false
 #if defined(__APPLE__)
         ,
         uint32_t threadQos = QOS_CLASS_DEFAULT
@@ -84,6 +86,7 @@ struct LBUG_API SystemConfig {
     bool forceCheckpointOnClose;
     bool throwOnWalReplayFailure;
     bool enableChecksums;
+    bool enableMultiWrites;
 #if defined(__APPLE__)
     uint32_t threadQos;
 #endif

@@ -27,7 +27,7 @@ static ConfigurationOption options[] = { // NOLINT(cert-err58-cpp):
 DBConfig::DBConfig(const SystemConfig& systemConfig)
     : bufferPoolSize{systemConfig.bufferPoolSize}, maxNumThreads{systemConfig.maxNumThreads},
       enableCompression{systemConfig.enableCompression}, readOnly{systemConfig.readOnly},
-      maxDBSize{systemConfig.maxDBSize}, enableMultiWrites{false},
+      maxDBSize{systemConfig.maxDBSize}, enableMultiWrites{systemConfig.enableMultiWrites},
       autoCheckpoint{systemConfig.autoCheckpoint},
       checkpointThreshold{systemConfig.checkpointThreshold},
       forceCheckpointOnClose{systemConfig.forceCheckpointOnClose},
