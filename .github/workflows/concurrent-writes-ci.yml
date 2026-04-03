@@ -22,34 +22,25 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # ─── Build (branch) ───────────────────────────────────────────────────────
+  # ─── Build branch (ubuntu) ──────────────────────────────────────────────
   build:
-    name: Build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    name: Build branch (ubuntu-latest)
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies (Ubuntu)
-        if: runner.os == 'Linux'
+      - name: Install dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y cmake ninja-build python3
 
-      - name: Install dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: brew install cmake ninja
-
-      - name: Cache CMake build
+      - name: Cache CMake build (branch)
         uses: actions/cache@v4
         with:
           path: build
-          key: build-${{ matrix.os }}-${{ hashFiles('CMakeLists.txt', 'src/**/*.h') }}
-          restore-keys: build-${{ matrix.os }}-
+          key: build-branch-ubuntu-${{ github.sha }}
+          restore-keys: build-branch-ubuntu-
 
       - name: Configure (CMake + Ninja)
         run: |
@@ -62,23 +53,61 @@ jobs:
       - name: Build
         run: cmake --build build/relwithdebinfo --parallel 4
 
-      - name: Upload build
+      - name: Upload branch build
         uses: actions/upload-artifact@v4
         with:
-          name: ladybug-build-${{ matrix.os }}
+          name: ladybug-build-branch
           path: build/relwithdebinfo
           retention-days: 1
 
+  # ─── Build main (live baseline) ───────────────────────────────────────────
+  # Runs in parallel with the branch build on the same class of runner so the
+  # benchmark comparison is apples-to-apples. Cached by CMakeLists + header
+  # hash so it's a no-op when main hasn't changed.
+  build-main:
+    name: Build main (ubuntu-latest)
+    runs-on: ubuntu-latest
 
-  # ─── Test ─────────────────────────────────────────────────────────────────
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build python3
+
+      - name: Cache CMake build (main)
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: build-main-ubuntu-${{ hashFiles('CMakeLists.txt', 'src/**/*.h') }}
+          restore-keys: build-main-ubuntu-
+
+      - name: Configure (CMake + Ninja)
+        run: |
+          cmake -B build/relwithdebinfo -G Ninja \
+                -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                -DBUILD_TESTS=TRUE \
+                -DENABLE_BACKTRACES=TRUE \
+                .
+
+      - name: Build
+        run: cmake --build build/relwithdebinfo --parallel 4
+
+      - name: Upload main build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ladybug-build-main
+          path: build/relwithdebinfo
+          retention-days: 1
+
+  # ─── Test (ubuntu) ───────────────────────────────────────────────────────
   test:
-    name: Test (${{ matrix.os }})
+    name: Test (ubuntu-latest)
     needs: build
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -86,15 +115,13 @@ jobs:
       - name: Download build
         uses: actions/download-artifact@v4
         with:
-          name: ladybug-build-${{ matrix.os }}
+          name: ladybug-build-branch
           path: build/relwithdebinfo
 
       - name: Restore test binary permissions
         run: find build/relwithdebinfo/test -type f | xargs chmod +x 2>/dev/null || true
 
       - name: Fetch dataset (shallow)
-        # The dataset lives in a separate repo; we shallow-clone it directly
-        # to avoid submodule setup complexity.
         run: |
           git clone --depth=1 https://github.com/ladybugdb/dataset.git dataset
 
@@ -103,21 +130,15 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Suppress step summary on secondary OS
-        # Only ubuntu-latest writes the test table to the run-level summary;
-        # otherwise both matrix legs write identical-looking tables.
-        if: matrix.os != 'ubuntu-latest'
-        run: echo "GITHUB_STEP_SUMMARY=/dev/null" >> $GITHUB_ENV
-
       - name: Run all tests (JSONL capture)
         id: tests
         run: |
           python3 benchmarks/run_tests.py \
             --build-dir   build/relwithdebinfo \
             --dataset-dir dataset \
-            --output      benchmarks/test-results-${{ matrix.os }}.jsonl \
-            --summary     benchmarks/test-summary-${{ matrix.os }}.md \
-            --label       "${{ matrix.os }} / ${{ github.head_ref || github.ref_name }}"
+            --output      benchmarks/test-results.jsonl \
+            --summary     benchmarks/test-summary.md \
+            --label       "ubuntu-latest / ${{ github.head_ref || github.ref_name }}"
         continue-on-error: true
 
       - name: Fail job if any tests failed
@@ -130,48 +151,42 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.os }}
+          name: test-results
           path: |
-            benchmarks/test-results-${{ matrix.os }}.jsonl
-            benchmarks/test-summary-${{ matrix.os }}.md
+            benchmarks/test-results.jsonl
+            benchmarks/test-summary.md
           retention-days: 14
 
   # ─── Benchmark ────────────────────────────────────────────────────────────
   #
-  # The branch build runs on ubuntu-latest (downloaded from the build job).
-  # The baseline is pulled directly from benchmarks/baseline.json on main,
-  # avoiding a full main rebuild on every push.
+  # Both main and the branch are built on ubuntu-latest (in parallel above).
+  # Running both on the same class of runner eliminates hardware variance so
+  # the comparison is genuinely apples-to-apples.
   #
   benchmark:
     name: Benchmark (ubuntu-latest)
-    needs: [build]
+    needs: [build, build-main]
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download branch build (ubuntu)
+      - name: Download branch build
         uses: actions/download-artifact@v4
         with:
-          name: ladybug-build-ubuntu-latest
+          name: ladybug-build-branch
           path: build/relwithdebinfo
+
+      - name: Download main build
+        uses: actions/download-artifact@v4
+        with:
+          name: ladybug-build-main
+          path: build-main/relwithdebinfo
 
       - name: Restore binary permissions
         run: |
-          find build/relwithdebinfo -type f | xargs chmod +x 2>/dev/null || true
-
-      - name: Pull baseline from main
-        # benchmarks/baseline.json is committed to this branch from a main build.
-        # Try origin/main first (in case it was pushed there); fall back to the
-        # committed copy which is always present on feat/concurrent-writes.
-        run: |
-          git fetch --depth=1 origin main 2>/dev/null || true
-          if git show origin/main:benchmarks/baseline.json > benchmarks/ci-baseline.json 2>/dev/null; then
-            echo "Loaded baseline from origin/main"
-          else
-            cp benchmarks/baseline.json benchmarks/ci-baseline.json
-            echo "Loaded baseline from committed benchmarks/baseline.json (main build)"
-          fi
+          find build/relwithdebinfo      -type f | xargs chmod +x 2>/dev/null || true
+          find build-main/relwithdebinfo -type f | xargs chmod +x 2>/dev/null || true
 
       - name: Fetch dataset (shallow)
         run: |
@@ -181,6 +196,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Benchmark main (live baseline)
+        run: |
+          MAIN_SHA=$(git rev-parse --short origin/main 2>/dev/null || echo "main")
+          python3 benchmarks/run_benchmarks.py \
+            --build-dir   build-main/relwithdebinfo \
+            --dataset-dir dataset \
+            --output      benchmarks/ci-baseline.json \
+            --label       "main (${MAIN_SHA})"
 
       - name: Run benchmarks (branch)
         run: |
