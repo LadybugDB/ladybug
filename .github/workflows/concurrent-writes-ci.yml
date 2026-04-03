@@ -161,9 +161,17 @@ jobs:
           find build/relwithdebinfo -type f | xargs chmod +x 2>/dev/null || true
 
       - name: Pull baseline from main
+        # benchmarks/baseline.json is committed to this branch from a main build.
+        # Try origin/main first (in case it was pushed there); fall back to the
+        # committed copy which is always present on feat/concurrent-writes.
         run: |
-          git fetch --depth=1 origin main
-          git show origin/main:benchmarks/baseline.json > benchmarks/ci-baseline.json
+          git fetch --depth=1 origin main 2>/dev/null || true
+          if git show origin/main:benchmarks/baseline.json > benchmarks/ci-baseline.json 2>/dev/null; then
+            echo "Loaded baseline from origin/main"
+          else
+            cp benchmarks/baseline.json benchmarks/ci-baseline.json
+            echo "Loaded baseline from committed benchmarks/baseline.json (main build)"
+          fi
 
       - name: Fetch dataset (shallow)
         run: |
