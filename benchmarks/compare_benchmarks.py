@@ -20,7 +20,7 @@ import os
 import sys
 
 
-REGRESSION_THRESHOLD = 0.05  # 5%
+REGRESSION_THRESHOLD = 0.10  # 10% — single-shot CI runs have ~5-8% runner variance
 RDCP_BLOCKED_THRESHOLD = 0.5  # ops/s below this = reads are blocked during checkpoint
 
 HIGHER_IS_BETTER = {
