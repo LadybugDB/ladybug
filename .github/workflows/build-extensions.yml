@@ -141,6 +141,7 @@ jobs:
           source /opt/rh/gcc-toolset-13/enable
           export CC=gcc
           export CXX=g++
+          export OPENSSL_ROOT_DIR=/usr
           make extension-release
 
       - name: Build precompiled extensions (macOS)
