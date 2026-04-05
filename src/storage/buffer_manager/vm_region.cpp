@@ -15,6 +15,10 @@
 
 #include "common/exception/buffer_manager.h"
 
+#ifndef MAP_NORESERVE
+#define MAP_NORESERVE 0
+#endif
+
 using namespace lbug::common;
 
 namespace lbug {
