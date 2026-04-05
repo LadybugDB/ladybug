@@ -141,7 +141,7 @@ jobs:
           source /opt/rh/gcc-toolset-13/enable
           export CC=gcc
           export CXX=g++
-          export PKG_CONFIG_PATH=/usr/lib64/pkgconfig
+          export EXTRA_CMAKE_FLAGS="-DOPENSSL_CRYPTO_LIBRARY=/usr/lib64/libcrypto.so -DOPENSSL_SSL_LIBRARY=/usr/lib64/libssl.so"
           make extension-release
 
       - name: Build precompiled extensions (macOS)
