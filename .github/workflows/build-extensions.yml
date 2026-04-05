@@ -10,9 +10,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            container: quay.io/pypa/manylinux_2_28_x86_64
             os_name: linux
             arch: x86_64
           - os: ubuntu-24.04-arm
+            container: quay.io/pypa/manylinux_2_28_aarch64
             os_name: linux
             arch: aarch64
           - os: macos-latest
@@ -22,11 +24,22 @@ jobs:
             os_name: win
             arch: x86_64
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Update submodules
         run: git submodule update --init extension
+
+      - name: Install build dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          dnf install -y 'dnf-command(config-manager)'
+          dnf config-manager --set-enabled powertools
+          dnf install -y cmake ninja-build python3 python3-pip git wget unzip gcc-toolset-13
+          # Running as root inside the container while the workspace is owned by the
+          # host runner user (uid 1001) triggers git's safe-directory check.
+          git config --global --add safe.directory '*'
 
       - name: Install DuckDB (Linux)
         if: runner.os == 'Linux'
@@ -38,13 +51,13 @@ jobs:
             wget https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-arm64.zip
             unzip libduckdb-linux-arm64.zip -d duckdb
           fi
-          sudo cp duckdb/duckdb.h /usr/local/include/
-          sudo cp duckdb/duckdb.hpp /usr/local/include/
-          sudo cp duckdb/libduckdb.so /usr/local/lib/
-          sudo ldconfig
+          cp duckdb/duckdb.h /usr/local/include/
+          cp duckdb/duckdb.hpp /usr/local/include/
+          cp duckdb/libduckdb.so /usr/local/lib/
+          ldconfig
           # Create CMake config files
-          sudo mkdir -p /usr/local/lib/cmake/DuckDB
-          sudo tee /usr/local/lib/cmake/DuckDB/DuckDBConfig.cmake > /dev/null << 'EOF'
+          mkdir -p /usr/local/lib/cmake/DuckDB
+          tee /usr/local/lib/cmake/DuckDB/DuckDBConfig.cmake > /dev/null << 'EOF'
           # DuckDB CMake configuration file
 
           if(NOT TARGET DuckDB::duckdb)
@@ -123,7 +136,11 @@ jobs:
 
       - name: Build precompiled extensions (Linux)
         if: runner.os == 'Linux'
-        run: make extension-release
+        run: |
+          source /opt/rh/gcc-toolset-13/enable
+          export CC=gcc
+          export CXX=g++
+          make extension-release
 
       - name: Build precompiled extensions (macOS)
         if: runner.os == 'macOS'
