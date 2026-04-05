@@ -28,6 +28,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Mark workspace safe for git (Linux container)
+        if: runner.os == 'Linux'
+        run: git config --global --add safe.directory '*'
+
       - name: Update submodules
         run: git submodule update --init extension
 
@@ -37,9 +41,6 @@ jobs:
           dnf install -y 'dnf-command(config-manager)'
           dnf config-manager --set-enabled powertools
           dnf install -y cmake ninja-build python3 python3-pip git wget unzip gcc-toolset-13
-          # Running as root inside the container while the workspace is owned by the
-          # host runner user (uid 1001) triggers git's safe-directory check.
-          git config --global --add safe.directory '*'
 
       - name: Install DuckDB (Linux)
         if: runner.os == 'Linux'
