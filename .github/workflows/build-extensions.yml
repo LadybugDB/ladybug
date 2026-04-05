@@ -40,7 +40,7 @@ jobs:
         run: |
           dnf install -y 'dnf-command(config-manager)'
           dnf config-manager --set-enabled powertools
-          dnf install -y cmake ninja-build python3 python3-pip git wget unzip gcc-toolset-13 openssl-devel
+          dnf install -y cmake ninja-build python3 python3-pip git wget unzip gcc-toolset-13 openssl-devel pkg-config
 
       - name: Install DuckDB (Linux)
         if: runner.os == 'Linux'
@@ -141,7 +141,7 @@ jobs:
           source /opt/rh/gcc-toolset-13/enable
           export CC=gcc
           export CXX=g++
-          export OPENSSL_ROOT_DIR=/usr
+          export PKG_CONFIG_PATH=/usr/lib64/pkgconfig
           make extension-release
 
       - name: Build precompiled extensions (macOS)
