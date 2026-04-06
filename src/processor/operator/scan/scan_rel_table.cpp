@@ -9,6 +9,7 @@
 #include "storage/local_storage/local_rel_table.h"
 #include "storage/table/arrow_rel_table.h"
 #include "storage/table/foreign_rel_table.h"
+#include "storage/table/ice_disk_rel_table.h"
 #include "storage/table/node_table.h"
 #include "storage/table/parquet_rel_table.h"
 
@@ -78,6 +79,7 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
     auto* arrowTable = dynamic_cast<storage::ArrowRelTable*>(tableInfo.table);
     auto* parquetTable = dynamic_cast<storage::ParquetRelTable*>(tableInfo.table);
     auto* foreignTable = dynamic_cast<storage::ForeignRelTable*>(tableInfo.table);
+    auto* iceDiskTable = dynamic_cast<storage::IceDiskRelTable*>(tableInfo.table);
     if (arrowTable) {
         scanState =
             std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
@@ -86,6 +88,9 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
         scanState =
             std::make_unique<storage::ParquetRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+    } else if (iceDiskTable) {
+        scanState = std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext), 
+            boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     } else if (foreignTable) {
         scanState =
             std::make_unique<storage::ForeignRelTableScanState>(*MemoryManager::Get(*clientContext),
@@ -94,6 +99,7 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
         scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
             boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     }
+    tableInfo.table->initializeScanCoordination(transaction::Transaction::Get(*clientContext));
     tableInfo.initScanState(*scanState, outVectors, clientContext);
     if (sourceMode) {
         currentSourceTableIdx = 0;

@@ -7,6 +7,7 @@
 #include "storage/local_storage/local_node_table.h"
 #include "storage/local_storage/local_storage.h"
 #include "storage/table/arrow_node_table.h"
+#include "storage/table/ice_disk_node_table.h"
 #include "storage/table/parquet_node_table.h"
 
 using namespace lbug::common;
@@ -55,6 +56,18 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
         } catch (const std::exception& e) {
             this->numCommittedNodeGroups = 1;
         }
+    } else if (const auto iceDiskTable = dynamic_cast<IceDiskNodeTable*>(table)) {
+        std::vector<bool> columnSkips;
+        try {
+            auto context = transaction->getClientContext();
+            auto resolvedPath =
+                common::VirtualFileSystem::resolvePath(context, iceDiskTable->getParquetFilePath());
+            auto tempReader =
+                std::make_unique<processor::ParquetReader>(resolvedPath, columnSkips, context);
+            this->numCommittedNodeGroups = tempReader->getNumRowsGroups();
+        } catch (const std::exception& e) {
+            this->numCommittedNodeGroups = 1;
+        }
     } else if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(table)) {
         // For Arrow tables, set numCommittedNodeGroups to number of morsels
         this->numCommittedNodeGroups =
@@ -89,6 +102,18 @@ void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
 
         return;
     }
+    if (const auto iceDiskTable = dynamic_cast<IceDiskNodeTable*>(this->table)) {
+        const auto tableSharedState = iceDiskTable->getTableScanSharedState();
+        if (tableSharedState->getNextMorsel(static_cast<IceDiskNodeTableScanState*>(&scanState))) {
+            scanState.source = TableScanSource::COMMITTED;
+            progressSharedState.numMorselsScanned++;
+        } else {
+            scanState.source = TableScanSource::NONE;
+        }
+
+        return;
+    }
+
 
     auto& nodeScanState = scanState.cast<NodeTableScanState>();
     if (currentCommittedGroupIdx < numCommittedNodeGroups) {
@@ -129,10 +154,14 @@ void ScanNodeTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContex
     // state
     auto* parquetTable = dynamic_cast<ParquetNodeTable*>(tableInfos[0].table);
     auto* arrowTable = dynamic_cast<ArrowNodeTable*>(tableInfos[0].table);
+    auto* iceDiskTable = dynamic_cast<IceDiskNodeTable*>(tableInfos[0].table);
     if (parquetTable) {
         scanState = std::make_unique<ParquetNodeTableScanState>(
             *MemoryManager::Get(*context->clientContext), nodeIDVector, outVectors,
             nodeIDVector->state);
+    } else if (iceDiskTable) {
+        scanState = std::make_unique<IceDiskNodeTableScanState>(
+            nodeIDVector, outVectors, nodeIDVector->state);
     } else if (arrowTable) {
         scanState =
             std::make_unique<ArrowNodeTableScanState>(*MemoryManager::Get(*context->clientContext),
@@ -150,9 +179,10 @@ void ScanNodeTable::initCurrentTable(ExecutionContext* context) {
     auto& currentInfo = tableInfos[currentTableIdx];
     currentInfo.initScanState(*scanState, outVectors, context->clientContext);
     scanState->semiMask = sharedStates[currentTableIdx]->getSemiMask();
-    // Call table->initScanState for ParquetNodeTable or ArrowNodeTable
+    // Call table->initScanState for ParquetNodeTable or ArrowNodeTable or IceDiskNodeTable
     if (dynamic_cast<ParquetNodeTable*>(tableInfos[currentTableIdx].table) ||
-        dynamic_cast<ArrowNodeTable*>(tableInfos[currentTableIdx].table)) {
+        dynamic_cast<ArrowNodeTable*>(tableInfos[currentTableIdx].table) ||
+        dynamic_cast<IceDiskNodeTable*>(tableInfos[currentTableIdx].table)) {
         auto transaction = transaction::Transaction::Get(*context->clientContext);
         tableInfos[currentTableIdx].table->initScanState(transaction, *scanState);
     }

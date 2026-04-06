@@ -24,6 +24,8 @@ void NodeTableCatalogEntry::serialize(common::Serializer& serializer) const {
     serializer.write(primaryKeyName);
     serializer.writeDebuggingInfo("storage");
     serializer.write(storage);
+    serializer.writeDebuggingInfo("tablePath");
+    serializer.write(tablePath);
 }
 
 std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
@@ -35,9 +37,13 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
     deserializer.deserializeValue(primaryKeyName);
     deserializer.validateDebuggingInfo(debuggingInfo, "storage");
     deserializer.deserializeValue(storage);
+    std::string tablePath;
+    deserializer.validateDebuggingInfo(debuggingInfo, "tablePath");
+    deserializer.deserializeValue(tablePath);
     auto nodeTableEntry = std::make_unique<NodeTableCatalogEntry>();
     nodeTableEntry->primaryKeyName = primaryKeyName;
     nodeTableEntry->storage = storage;
+    nodeTableEntry->tablePath = tablePath;
     return nodeTableEntry;
 }
 
@@ -66,6 +72,7 @@ std::unique_ptr<TableCatalogEntry> NodeTableCatalogEntry::copy() const {
     auto other = std::make_unique<NodeTableCatalogEntry>();
     other->primaryKeyName = primaryKeyName;
     other->storage = storage;
+    other->tablePath = tablePath;
     other->scanFunction = scanFunction;
     other->createBindDataFunc = createBindDataFunc;
     other->foreignDatabaseName = foreignDatabaseName;
@@ -76,7 +83,7 @@ std::unique_ptr<TableCatalogEntry> NodeTableCatalogEntry::copy() const {
 std::unique_ptr<BoundExtraCreateCatalogEntryInfo> NodeTableCatalogEntry::getBoundExtraCreateInfo(
     transaction::Transaction*) const {
     return std::make_unique<BoundExtraCreateNodeTableInfo>(primaryKeyName,
-        copyVector(getProperties()), storage);
+        copyVector(getProperties()), storage, tablePath);
 }
 
 } // namespace catalog
