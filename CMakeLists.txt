@@ -478,7 +478,7 @@ add_definitions(-DLBUG_ROOT_DIRECTORY="${PROJECT_SOURCE_DIR}")
 add_definitions(-DLBUG_CMAKE_VERSION="${CMAKE_PROJECT_VERSION}")
 add_definitions(-DLBUG_EXTENSION_VERSION="0.15.0")
 
-if(BUILD_LBUG)
+if(BUILD_LBUG OR LBUG_API_USE_PRECOMPILED_LIB)
 include_directories(
     src/include
     ${CMAKE_CURRENT_BINARY_DIR}/src/include

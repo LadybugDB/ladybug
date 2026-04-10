@@ -2,12 +2,20 @@ name: Build Python Wheels
 
 on:
   workflow_dispatch:
+    inputs:
+      precompiledRunId:
+        description: "Run ID of the precompiled-bin job whose artifacts should be used"
+        required: true
+        type: string
   workflow_call:
     inputs:
       isNightly:
         type: boolean
         required: true
         default: false
+      precompiledRunId:
+        type: string
+        required: true
 
 jobs:
   package-python-sdist:
@@ -84,6 +92,7 @@ jobs:
     env:
       CIBW_PLATFORM: ${{ matrix.os }}
       CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+      LBUG_PYTHON_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
 
       # Let CIBW detect the arch, except explicitly set Windows wheel arch per matrix
       CIBW_ARCHS: ${{ matrix.os == 'windows' && (matrix.platform == 'arm64' && 'ARM64' || 'AMD64') || 'auto' }}
@@ -91,10 +100,11 @@ jobs:
       # Set the manylinux image based on the detected arch (Linux only)
       CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
       CIBW_MANYLINUX_AARCH64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
+      CIBW_ENVIRONMENT_LINUX: ${{ matrix.os == 'linux' && 'LBUG_API_PRECOMPILED_LIB_PATH=/project/precompiled-liblbug/liblbug.a' || '' }}
 
       # Set deployment target for macOS, and Windows MSVC setup
-      CIBW_ENVIRONMENT_WINDOWS: ${{ matrix.os == 'windows' && format('DISTUTILS_USE_SDK=1 MSSdk=1 TMP={0} TEMP={0}', matrix.platform == 'arm64' && 'C:/t' || 'D:/t') || '' }}
-      CIBW_ENVIRONMENT_MACOS: ${{ matrix.os == 'macos' && format('MACOSX_DEPLOYMENT_TARGET={0}', matrix.deployment-target) || '' }}
+      CIBW_ENVIRONMENT_WINDOWS: ${{ matrix.os == 'windows' && format('DISTUTILS_USE_SDK=1 MSSdk=1 TMP={0} TEMP={0} LBUG_API_PRECOMPILED_LIB_PATH={1}/precompiled-liblbug/lbug.lib', matrix.platform == 'arm64' && 'C:/t' || 'D:/t', github.workspace) || '' }}
+      CIBW_ENVIRONMENT_MACOS: ${{ matrix.os == 'macos' && format('MACOSX_DEPLOYMENT_TARGET={0} LBUG_API_PRECOMPILED_LIB_PATH={1}/precompiled-liblbug/liblbug.a', matrix.deployment-target, github.workspace) || '' }}
 
     steps:
       - name: Check out repository
@@ -120,6 +130,18 @@ jobs:
 
       - name: Install uv
         run: python -m pip install uv
+
+      - name: Download precompiled liblbug
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LBUG_LIB_KIND: static
+          LBUG_LINUX_VARIANT: compat
+          LBUG_PRECOMPILED_RUN_ID: ${{ inputs.precompiledRunId }}
+          LBUG_TARGET_DIR: ${{ env.LBUG_PYTHON_PRECOMPILED_DIR }}
+        run: |
+          rm -rf "$LBUG_TARGET_DIR"
+          ./scripts/download-liblbug.sh
 
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}

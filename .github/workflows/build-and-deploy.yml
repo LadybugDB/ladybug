@@ -92,9 +92,11 @@ jobs:
 
   build-wheels:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipPython != 'true' }}
+    needs: [build-precompiled-bin]
     uses: ./.github/workflows/python-wheel-workflow.yml
     with:
       isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
+      precompiledRunId: ${{ github.run_id }}
     secrets: inherit
 
   deploy-python:
