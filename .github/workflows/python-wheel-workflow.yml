@@ -101,11 +101,12 @@ jobs:
       # Set the manylinux image based on the detected arch (Linux only)
       CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
       CIBW_MANYLINUX_AARCH64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
-      CIBW_ENVIRONMENT_LINUX: ${{ matrix.os == 'linux' && 'LBUG_API_PRECOMPILED_LIB_PATH=/project/precompiled-liblbug/liblbug.a' || '' }}
+      CIBW_BEFORE_ALL_LINUX: "dnf install -y ccache"
+      CIBW_ENVIRONMENT_LINUX: ${{ matrix.os == 'linux' && 'LBUG_API_PRECOMPILED_LIB_PATH=/project/precompiled-liblbug/liblbug.a CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache CCACHE_DIR=/project/.ccache' || '' }}
 
       # Set deployment target for macOS, and Windows MSVC setup
       CIBW_ENVIRONMENT_WINDOWS: ${{ matrix.os == 'windows' && format('DISTUTILS_USE_SDK=1 MSSdk=1 TMP={0} TEMP={0} LBUG_API_PRECOMPILED_LIB_PATH=$LBUG_API_PRECOMPILED_LIB_PATH', matrix.platform == 'arm64' && 'C:/t' || 'D:/t') || '' }}
-      CIBW_ENVIRONMENT_MACOS: ${{ matrix.os == 'macos' && format('MACOSX_DEPLOYMENT_TARGET={0} LBUG_API_PRECOMPILED_LIB_PATH={1}/precompiled-liblbug/liblbug.a', matrix.deployment-target, github.workspace) || '' }}
+      CIBW_ENVIRONMENT_MACOS: ${{ matrix.os == 'macos' && format('MACOSX_DEPLOYMENT_TARGET={0} LBUG_API_PRECOMPILED_LIB_PATH={1}/precompiled-liblbug/liblbug.a CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache CCACHE_DIR={1}/.ccache', matrix.deployment-target, github.workspace) || '' }}
 
     steps:
       - name: Check out repository
@@ -234,6 +235,19 @@ jobs:
           pipx run --spec cibuildwheel cibuildwheel %LBUG_PYTHON_CIBW_SOURCE_DIR% --output-dir scripts\pip-package\wheelhouse
           if errorlevel 1 exit /b 1
           ccache -s
+
+      - name: Install ccache (macOS)
+        if: matrix.os == 'macos'
+        run: brew install ccache
+
+      - name: Cache ccache directory (Linux/macOS)
+        if: matrix.os != 'windows'
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ${{ runner.os }}-${{ matrix.platform }}-ccache-wheel-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.platform }}-ccache-wheel-
 
       - name: Build wheels on ${{ matrix.platform }} (Linux/macOS)
         if: matrix.os != 'windows'
