@@ -1,5 +1,5 @@
-PYPI_URL = "https://pypi.org/pypi/real_ladybug/json"
-TEST_PYPI_URL = "https://test.pypi.org/pypi/real_ladybug/json"
+PYPI_URL = "https://pypi.org/pypi/ladybug/json"
+TEST_PYPI_URL = "https://test.pypi.org/pypi/ladybug/json"
 CMAKE_KEYWORD = "project(Lbug VERSION "
 CMAKE_SUFFIX = " LANGUAGES CXX C)\n"
 EXTENSION_KEYWORD = 'add_definitions(-DLBUG_EXTENSION_VERSION="'

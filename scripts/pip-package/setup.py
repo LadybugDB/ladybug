@@ -12,7 +12,7 @@ base_dir = os.path.dirname(__file__)
 
 
 def _get_lbug_version():
-    cmake_file = os.path.join(base_dir, 'real_ladybug-source', 'CMakeLists.txt')
+    cmake_file = os.path.join(base_dir, 'ladybug-source', 'CMakeLists.txt')
     with open(cmake_file) as f:
         for line in f:
             if line.startswith('project(Lbug VERSION'):
@@ -70,7 +70,7 @@ class CMakeBuild(build_ext):
                               deploy_target)
                 env_vars['CMAKE_OSX_DEPLOYMENT_TARGET'] = deploy_target
 
-        build_dir = os.path.join(ext.sourcedir, 'real_ladybug-source')
+        build_dir = os.path.join(ext.sourcedir, 'ladybug-source')
 
         # Clean the build directory.
         subprocess.run(['make', 'clean'], check=True, cwd=build_dir)
@@ -108,16 +108,16 @@ class BuildExtFirst(_build_py):
         return super().run()
 
 
-setup(name='real_ladybug',
+setup(name='ladybug',
       version=lbug_version,
       install_requires=[],
       ext_modules=[CMakeExtension(
-          name="real_ladybug", sourcedir=base_dir)],
+          name="ladybug", sourcedir=base_dir)],
       description='An in-process property graph database management system built for query speed and scalability.',
       license='MIT',
       long_description=open(os.path.join(base_dir, "README.md"), 'r').read(),
       long_description_content_type="text/markdown",
-      packages=["real_ladybug"],
+      packages=["ladybug"],
       zip_safe=True,
       include_package_data=True,
       cmdclass={

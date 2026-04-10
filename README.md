@@ -40,7 +40,7 @@ The database was formerly known as [Kuzu](https://github.com/kuzudb/kuzu).
 
 | Language | Installation                                                           |
 | -------- |------------------------------------------------------------------------|
-| Python   | `pip install real_ladybug`                                             |
+| Python   | `pip install ladybug`                                             |
 | NodeJS   | `npm install @ladybug/core`                                            |
 | Rust     | `cargo add lbug`                                                       |
 | Go       | `go get github.com/lbugdb/go-ladybug`                                     |
