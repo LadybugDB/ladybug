@@ -658,20 +658,19 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
     if (effectiveEpoch <= lastCheckpointedEpoch) {
         return false;
     }
-    // Build column IDs and pointers under unique_lock to protect from concurrent readers.
+    // Build column IDs and raw pointers for checkpoint WITHOUT moving columns yet.
+    // The destructive column move is deferred until after nodeGroups->checkpoint() succeeds.
+    // This ensures exception safety: if checkpoint fails, columns remain in their original
+    // state and a subsequent checkpoint (e.g., from Database::~Database) won't crash due to
+    // an inconsistency between the columns vector and the catalog's column IDs.
     std::vector<column_id_t> columnIDs;
     std::vector<Column*> checkpointColumnPtrs;
     {
         std::unique_lock schemaLck{schemaMtx};
-        std::vector<std::unique_ptr<Column>> checkpointColumns;
         for (auto& property : tableEntry->getProperties()) {
             auto columnID = tableEntry->getColumnID(property.getName());
-            checkpointColumns.push_back(std::move(columns[columnID]));
             columnIDs.push_back(columnID);
-        }
-        columns = std::move(checkpointColumns);
-        for (const auto& column : columns) {
-            checkpointColumnPtrs.push_back(column.get());
+            checkpointColumnPtrs.push_back(columns[columnID].get());
         }
     }
 
@@ -684,10 +683,16 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
         // the full hash-index infrastructure is deferred to a follow-up.
         index.checkpoint(context, pageAllocator);
     }
-    // vacuumColumnIDs modifies the catalog entry's column-ID set.  Guard it under schemaMtx so
-    // concurrent readers (which also take schemaMtx for the columns vector) see a consistent view.
+    // Checkpoint succeeded. Now vacuum dropped columns and update catalog IDs.
+    // Guard under schemaMtx so concurrent readers see a consistent view.
     {
         std::unique_lock schemaLck{schemaMtx};
+        std::vector<std::unique_ptr<Column>> checkpointColumns;
+        checkpointColumns.reserve(columnIDs.size());
+        for (auto columnID : columnIDs) {
+            checkpointColumns.push_back(std::move(columns[columnID]));
+        }
+        columns = std::move(checkpointColumns);
         tableEntry->vacuumColumnIDs(0 /*nextColumnID*/);
     }
     lastCheckpointedEpoch = effectiveEpoch;
