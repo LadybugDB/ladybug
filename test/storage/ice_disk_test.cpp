@@ -18,7 +18,7 @@ namespace testing {
 
 class IceDiskStorageTest : public DBTest {
 public:
-    std::string getInputDir() override { return "dataset/demo-db/icebug-disk/"; }
+    std::string getInputDir() override { return TestHelper::appendLbugRootPath("dataset/demo-db/icebug-disk/"); }
 
     void SetUp() override {
         DBTest::SetUp();
@@ -34,7 +34,7 @@ public:
 TEST_F(IceDiskStorageTest, NodeTableScanTest) {
     auto catalog = Catalog::Get(*context);
     auto transaction = Transaction::Get(*context);
-    auto tableEntry = catalog->getTableCatalogEntry(transaction, "user");
+    auto tableEntry = catalog->getTableCatalogEntry(transaction, "User");
     ASSERT_NE(tableEntry, nullptr);
     auto tableID = tableEntry->getTableID();
     auto table = storageManager->getTable(tableID);
@@ -76,7 +76,7 @@ TEST_F(IceDiskStorageTest, NodeTableScanTest) {
 TEST_F(IceDiskStorageTest, RelTableScanTest) {
     auto catalog = Catalog::Get(*context);
     auto transaction = Transaction::Get(*context);
-    auto relGroupEntry = dynamic_cast<RelGroupCatalogEntry*>(catalog->getTableCatalogEntry(transaction, "follows"));
+    auto relGroupEntry = dynamic_cast<RelGroupCatalogEntry*>(catalog->getTableCatalogEntry(transaction, "Follows"));
     
     ASSERT_NE(relGroupEntry, nullptr);
     
