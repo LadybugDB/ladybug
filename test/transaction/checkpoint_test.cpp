@@ -538,5 +538,153 @@ TEST_F(ReviewFixesTest, HashIndexBasicRecoveryAfterCheckpoint) {
     }
 }
 
+// Fix #4 – defer destructive column move until after nodeGroups->checkpoint()
+// ─────────────────────────────────────────────────────────────────────────────
+// NodeTable::checkpoint() used to move columns (vacuuming dropped column IDs)
+// BEFORE calling nodeGroups->checkpoint(). If nodeGroups->checkpoint() threw,
+// the columns vector was already shrunk but the catalog's column IDs were not
+// vacuumed, leaving the table in an inconsistent state.  A subsequent retry
+// (e.g., from Database::~Database forceCheckpointOnClose) would index out of
+// bounds and crash with a segfault.
+//
+// The fix defers the destructive column move until AFTER nodeGroups->checkpoint()
+// succeeds.  These tests exercise the affected code path with ALTER TABLE
+// ADD/DROP COLUMN, which triggers column-ID vacuum during checkpoint.
+
+TEST_F(ReviewFixesTest, CheckpointRecoveryAfterAddColumn) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CREATE NODE TABLE ckpt_add(id INT64 PRIMARY KEY, name STRING);");
+
+    const int N = 100;
+    for (int i = 0; i < N; ++i) {
+        auto r = conn->query(std::format("CREATE (:ckpt_add {{id: {}, name: 'n{}'}});", i, i));
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+    }
+
+    // Add a new column — this creates a new column ID that must be vacuumed at checkpoint.
+    {
+        auto r = conn->query("ALTER TABLE ckpt_add ADD extra INT64 DEFAULT 0;");
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+        // Set the new column on some rows.
+        r = conn->query("MATCH (n:ckpt_add) WHERE n.id < 10 SET n.extra = n.id * 10;");
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+        r = conn->query("CHECKPOINT;");
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+        // r destroyed here — before createDBAndConn() resets the database —
+        // so the FactorizedTable it holds is freed while the allocator is still alive.
+    }
+
+    createDBAndConn();
+
+    // Verify row count.
+    auto res = conn->query("MATCH (n:ckpt_add) RETURN count(n) AS c;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), N);
+
+    // Verify the new column exists and has correct values.
+    res = conn->query("MATCH (n:ckpt_add) WHERE n.id = 5 RETURN n.extra;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 50);
+
+    res = conn->query("MATCH (n:ckpt_add) WHERE n.id = 50 RETURN n.extra;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
+TEST_F(ReviewFixesTest, CheckpointRecoveryAfterAddAndDropColumn) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query(
+        "CREATE NODE TABLE ckpt_adddrop(id INT64 PRIMARY KEY, name STRING, age INT64);");
+
+    const int N = 100;
+    for (int i = 0; i < N; ++i) {
+        auto r = conn->query(
+            std::format("CREATE (:ckpt_adddrop {{id: {}, name: 'n{}', age: {}}});", i, i, 20 + i));
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+    }
+
+    // Add a column, then drop one — exercises both add and remove in the column-ID vacuum.
+    {
+        auto r = conn->query("ALTER TABLE ckpt_adddrop ADD extra STRING DEFAULT 'hello';");
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+        r = conn->query("ALTER TABLE ckpt_adddrop DROP name;");
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+        r = conn->query("CHECKPOINT;");
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+    }
+
+    createDBAndConn();
+
+    // Verify row count.
+    auto res = conn->query("MATCH (n:ckpt_adddrop) RETURN count(n) AS c;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), N);
+
+    // Verify dropped column is gone.
+    res = conn->query("MATCH (n:ckpt_adddrop) WHERE n.id = 0 RETURN n.name;");
+    ASSERT_FALSE(res->isSuccess());
+
+    // Verify remaining columns are correct.
+    res = conn->query("MATCH (n:ckpt_adddrop) WHERE n.id = 0 RETURN n.age, n.extra;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    auto row = res->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 20);
+    ASSERT_EQ(row->getValue(1)->getValue<std::string>(), "hello");
+}
+
+TEST_F(ReviewFixesTest, RecoverFromFailedCheckpointAfterAddColumn) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL force_checkpoint_on_close=false;");
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CREATE NODE TABLE ckpt_fail(id INT64 PRIMARY KEY, name STRING);");
+
+    const int N = 100;
+    for (int i = 0; i < N; ++i) {
+        auto r = conn->query(std::format("CREATE (:ckpt_fail {{id: {}, name: 'n{}'}});", i, i));
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+    }
+
+    // Add a column so the checkpoint path must vacuum column IDs.
+    {
+        auto r = conn->query("ALTER TABLE ckpt_fail ADD extra INT64 DEFAULT 42;");
+        ASSERT_TRUE(r->isSuccess()) << r->getErrorMessage();
+    }
+
+    // Inject a failure at checkpointStorage level.
+    auto context = getClientContext(*conn);
+    auto initFlakyCheckpointer = [](main::ClientContext& ctx) {
+        return std::make_unique<FlakyCheckpointerFailsOnCheckpointStorage>(ctx);
+    };
+    FlakyCheckpointer flakyCheckpointer(initFlakyCheckpointer);
+    flakyCheckpointer.setCheckpointer(*context);
+
+    // First checkpoint fails.
+    auto ckptRes = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(ckptRes->isSuccess());
+
+    // Reopen the database — WAL replay + fresh checkpoint must succeed.
+    // Before the fix, if a failure happened inside NodeTable::checkpoint() (between the
+    // column move and vacuumColumnIDs), the retry checkpoint in ~Database would crash.
+    createDBAndConn();
+
+    // Verify data survives WAL replay.
+    auto res = conn->query("MATCH (n:ckpt_fail) RETURN count(n) AS c;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), N);
+
+    // Verify the added column is present with its default value.
+    res = conn->query("MATCH (n:ckpt_fail) WHERE n.id = 0 RETURN n.extra;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 42);
+}
+
 } // namespace testing
 } // namespace lbug
