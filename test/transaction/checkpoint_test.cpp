@@ -599,8 +599,7 @@ TEST_F(ReviewFixesTest, CheckpointRecoveryAfterAddAndDropColumn) {
         GTEST_SKIP();
     }
     conn->query("CALL auto_checkpoint=false;");
-    conn->query(
-        "CREATE NODE TABLE ckpt_adddrop(id INT64 PRIMARY KEY, name STRING, age INT64);");
+    conn->query("CREATE NODE TABLE ckpt_adddrop(id INT64 PRIMARY KEY, name STRING, age INT64);");
 
     const int N = 100;
     for (int i = 0; i < N; ++i) {
