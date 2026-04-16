@@ -27,6 +27,17 @@ bool RelTableCollectionScanner::scan(main::ClientContext* context, RelTableScanS
     const std::vector<ValueVector*>& outVectors) {
     auto transaction = Transaction::Get(*context);
     while (true) {
+        if (currentTableIdx == common::INVALID_IDX) {
+            if (relInfos.empty()) {
+                return false;
+            }
+            currentTableIdx = 0;
+            nextTableIdx = 1;
+            auto& currentInfo = relInfos[currentTableIdx];
+            currentInfo.initScanState(scanState, outVectors, context);
+            currentInfo.table->initScanState(transaction, scanState,
+                true /* resetCachedBoundNodeSelVec */);
+        }
         auto& relInfo = relInfos[currentTableIdx];
         if (relInfo.table->scan(transaction, scanState)) {
             auto& selVector = scanState.outState->getSelVector();

@@ -30,7 +30,7 @@ public:
     bool empty() const { return relInfos.empty(); }
 
     void resetState() {
-        currentTableIdx = 0;
+        currentTableIdx = common::INVALID_IDX;
         nextTableIdx = 0;
     }
 
