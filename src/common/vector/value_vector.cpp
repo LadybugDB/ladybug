@@ -18,13 +18,6 @@ namespace common {
 ValueVector::ValueVector(LogicalType dataType, storage::MemoryManager* memoryManager,
     std::shared_ptr<DataChunkState> dataChunkState)
     : dataType{std::move(dataType)}, nullMask{DEFAULT_VECTOR_CAPACITY} {
-    if (this->dataType.getLogicalTypeID() == LogicalTypeID::ANY) {
-        // LCOV_EXCL_START
-        // Alternatively we can assign a default type here but I don't think it's a good practice.
-        throw RuntimeException("Trying to a create a vector with ANY type. This should not happen. "
-                               "Data type is expected to be resolved during binding.");
-        // LCOV_EXCL_STOP
-    }
     numBytesPerValue = getDataTypeSize(this->dataType);
     initializeValueBuffer();
     auxiliaryBuffer = AuxiliaryBufferFactory::getAuxiliaryBuffer(this->dataType, memoryManager);
@@ -374,6 +367,10 @@ uint32_t ValueVector::getDataTypeSize(const LogicalType& type) {
     case PhysicalTypeID::ARRAY:
     case PhysicalTypeID::LIST: {
         return sizeof(list_entry_t);
+    }
+    case PhysicalTypeID::ANY: {
+        // Likely JSON for which we couldn't figure out types
+        return sizeof(string_t);
     }
     default: {
         return PhysicalTypeUtils::getFixedTypeSize(type.getPhysicalType());
