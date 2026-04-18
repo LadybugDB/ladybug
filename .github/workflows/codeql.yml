@@ -1,0 +1,76 @@
+name: CodeQL Advanced
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 5'
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: C/C++
+            language: cpp
+            build-mode: manual
+            config: |
+              paths:
+                - src
+                - test
+                - tools/shell
+              paths-ignore:
+                - benchmark/**
+                - build/**
+                - dataset/**
+                - docs/**
+                - examples/**
+                - extension/**
+                - logo/**
+                - third_party/**
+                - tools/java_api/**
+                - tools/nodejs_api/**
+                - tools/python_api/**
+                - tools/rust_api/**
+                - tools/wasm/**
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended,security-and-quality
+          config: ${{ matrix.config }}
+
+      - name: Install native build dependencies
+        if: ${{ matrix.language == 'cpp' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache ninja-build
+
+      - name: Build native database targets
+        if: ${{ matrix.language == 'cpp' }}
+        env:
+          GEN: Ninja
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+        run: make test-build
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
