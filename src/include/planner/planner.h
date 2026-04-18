@@ -164,7 +164,7 @@ public:
     void planCorrelatedExpressionsScan(const QueryGraphPlanningInfo& info);
     void planNodeScan(uint32_t nodePos);
     void planNodeIDScan(uint32_t nodePos);
-    void planRelScan(uint32_t relPos);
+    void planRelScan(uint32_t relPos, const QueryGraphPlanningInfo& info);
     void appendExtend(std::shared_ptr<binder::NodeExpression> boundNode,
         std::shared_ptr<binder::NodeExpression> nbrNode, std::shared_ptr<binder::RelExpression> rel,
         common::ExtendDirection direction, const binder::expression_vector& properties,
@@ -347,6 +347,7 @@ private:
     PropertyExprCollection propertyExprCollection;
     CardinalityEstimator cardinalityEstimator;
     JoinOrderEnumeratorContext context;
+    const QueryGraphPlanningInfo* currentQueryGraphPlanningInfo = nullptr;
     std::vector<extension::PlannerExtension*> plannerExtensions;
 };
 

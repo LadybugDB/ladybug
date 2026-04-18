@@ -125,6 +125,8 @@ LogicalPlan Planner::planQueryGraphCollection(const QueryGraphCollection& queryG
 
 LogicalPlan Planner::planQueryGraph(const QueryGraph& queryGraph,
     const QueryGraphPlanningInfo& info) {
+    auto prevPlanningInfo = currentQueryGraphPlanningInfo;
+    currentQueryGraphPlanningInfo = &info;
     context.init(&queryGraph, info.predicates);
     cardinalityEstimator.init(queryGraph);
     if (info.hint != nullptr) {
@@ -132,6 +134,7 @@ LogicalPlan Planner::planQueryGraph(const QueryGraph& queryGraph,
             JoinTreeConstructor(queryGraph, propertyExprCollection, info.predicates, info);
         auto joinTree = constructor.construct(info.hint);
         auto plan = JoinPlanSolver(this).solve(joinTree);
+        currentQueryGraphPlanningInfo = prevPlanningInfo;
         return plan.copy();
     }
     planBaseTableScans(info);
@@ -151,6 +154,7 @@ LogicalPlan Planner::planQueryGraph(const QueryGraph& queryGraph,
     if (queryGraph.isEmpty()) {
         appendEmptyResult(bestPlan);
     }
+    currentQueryGraphPlanningInfo = prevPlanningInfo;
     return bestPlan;
 }
 
@@ -219,7 +223,7 @@ void Planner::planBaseTableScans(const QueryGraphPlanningInfo& info) {
         UNREACHABLE_CODE;
     }
     for (auto relPos = 0u; relPos < queryGraph->getNumQueryRels(); ++relPos) {
-        planRelScan(relPos);
+        planRelScan(relPos, info);
     }
 }
 
@@ -298,12 +302,35 @@ static ExtendDirection getExtendDirection(const binder::RelExpression& relExpres
     }
 }
 
-void Planner::planRelScan(uint32_t relPos) {
+void Planner::planRelScan(uint32_t relPos, const QueryGraphPlanningInfo& info) {
     const auto rel = context.queryGraph->getQueryRel(relPos);
     auto newSubgraph = context.getEmptySubqueryGraph();
     newSubgraph.addQueryRel(relPos);
     const auto predicates = getNewlyMatchedExprs(context.getEmptySubqueryGraph(), newSubgraph,
         context.getWhereExpressions());
+
+    const auto srcNode = rel->getSrcNode();
+    const auto dstNode = rel->getDstNode();
+    const auto srcCorrelated = info.containsCorrExpr(*srcNode->getInternalID());
+    const auto dstCorrelated = info.containsCorrExpr(*dstNode->getInternalID());
+
+    // In correlated planning, prefer anchoring rel scan on the correlated endpoint if
+    // exactly one endpoint is correlated. This keeps the planner/binder contract (semantic
+    // correlation info) while avoiding syntax-driven special handling.
+    if (info.subqueryType != SubqueryPlanningType::NONE) {
+        if (srcCorrelated != dstCorrelated) {
+            auto boundNode = srcCorrelated ? srcNode : dstNode;
+            auto nbrNode = srcCorrelated ? dstNode : srcNode;
+            auto plan = LogicalPlan();
+            const auto extendDirection = getExtendDirection(*rel, *boundNode);
+            appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan);
+            appendExtend(boundNode, nbrNode, rel, extendDirection, getProperties(*rel), plan);
+            appendFilters(predicates, plan);
+            context.addPlan(newSubgraph, std::move(plan));
+            return;
+        }
+    }
+
     for (const auto direction : rel->getExtendDirections()) {
         auto plan = LogicalPlan();
         auto [boundNode, nbrNode] = getBoundAndNbrNodes(*rel, direction);
@@ -549,6 +576,19 @@ bool Planner::tryPlanINLJoin(const SubqueryGraph& subgraph, const SubqueryGraph&
     auto nbrNode =
         boundNode->getUniqueName() == rel->getSrcNodeName() ? rel->getDstNode() : rel->getSrcNode();
     auto extendDirection = getExtendDirection(*rel, *boundNode);
+    if (currentQueryGraphPlanningInfo != nullptr &&
+        currentQueryGraphPlanningInfo->subqueryType != SubqueryPlanningType::NONE) {
+        const auto srcCorrelated =
+            currentQueryGraphPlanningInfo->containsCorrExpr(*rel->getSrcNode()->getInternalID());
+        const auto dstCorrelated =
+            currentQueryGraphPlanningInfo->containsCorrExpr(*rel->getDstNode()->getInternalID());
+        if (srcCorrelated != dstCorrelated) {
+            const auto expectedBoundNode = srcCorrelated ? rel->getSrcNode() : rel->getDstNode();
+            if (*boundNode != *expectedBoundNode) {
+                return false;
+            }
+        }
+    }
     if (extendDirection != common::ExtendDirection::BOTH &&
         !common::containsValue(rel->getExtendDirections(), extendDirection)) {
         return false;
