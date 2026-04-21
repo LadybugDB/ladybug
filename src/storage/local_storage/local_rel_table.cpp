@@ -38,37 +38,45 @@ LocalRelTable::LocalRelTable(const catalog::TableCatalogEntry* tableEntry, const
 
 bool LocalRelTable::insert(Transaction*, TableInsertState& state) {
     const auto& insertState = state.cast<RelTableInsertState>();
+    const auto numRowsToAppend = insertState.srcNodeIDVector.state->getSelVector().getSelSize();
 
-    std::vector<row_idx_vec_t*> rowIndicesToInsertTo;
-    for (auto& directedIndex : directedIndices) {
-        const auto& nodeIDVector = insertState.getBoundNodeIDVector(directedIndex.direction);
-        DASSERT(nodeIDVector.state->getSelVector().getSelSize() == 1);
-        auto nodePos = nodeIDVector.state->getSelVector()[0];
-        if (nodeIDVector.isNull(nodePos)) {
-            return false;
+    for (auto i = 0u; i < numRowsToAppend; i++) {
+        for (auto& directedIndex : directedIndices) {
+            const auto& nodeIDVector = insertState.getBoundNodeIDVector(directedIndex.direction);
+            const auto nodePos = nodeIDVector.state->getSelVector()[i];
+            if (nodeIDVector.isNull(nodePos)) {
+                return false;
+            }
         }
-        auto nodeOffset = nodeIDVector.readNodeOffset(nodePos);
-        rowIndicesToInsertTo.push_back(&directedIndex.index[nodeOffset]);
     }
 
-    const auto numRowsInLocalTable = localNodeGroup->getNumRows();
-    const auto relOffset = StorageConstants::MAX_NUM_ROWS_IN_TABLE + numRowsInLocalTable;
     const auto relIDVector = insertState.propertyVectors[0];
     DASSERT(relIDVector->dataType.getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
-    const auto relIDPos = relIDVector->state->getSelVector()[0];
-    relIDVector->setValue<internalID_t>(relIDPos, internalID_t{relOffset, table.getTableID()});
-    relIDVector->setNull(relIDPos, false);
+
+    const auto numRowsInLocalTable = localNodeGroup->getNumRows();
+    for (auto i = 0u; i < numRowsToAppend; i++) {
+        const auto selPos = insertState.srcNodeIDVector.state->getSelVector()[i];
+        const auto relOffset = StorageConstants::MAX_NUM_ROWS_IN_TABLE + numRowsInLocalTable + i;
+        relIDVector->setValue<internalID_t>(selPos, internalID_t{relOffset, table.getTableID()});
+        relIDVector->setNull(selPos, false);
+    }
+
     std::vector<ValueVector*> insertVectors;
     insertVectors.push_back(&insertState.srcNodeIDVector);
     insertVectors.push_back(&insertState.dstNodeIDVector);
     for (auto i = 0u; i < insertState.propertyVectors.size(); i++) {
         insertVectors.push_back(insertState.propertyVectors[i]);
     }
-    const auto numRowsToAppend = insertState.srcNodeIDVector.state->getSelVector().getSelSize();
     localNodeGroup->append(&DUMMY_TRANSACTION, insertVectors, 0, numRowsToAppend);
 
-    for (auto* rowIndexToInsertTo : rowIndicesToInsertTo) {
-        rowIndexToInsertTo->push_back(numRowsInLocalTable);
+    for (auto i = 0u; i < numRowsToAppend; i++) {
+        const auto rowToInsert = static_cast<row_idx_t>(numRowsInLocalTable + i);
+        for (auto& directedIndex : directedIndices) {
+            const auto& nodeIDVector = insertState.getBoundNodeIDVector(directedIndex.direction);
+            const auto nodePos = nodeIDVector.state->getSelVector()[i];
+            const auto nodeOffset = nodeIDVector.readNodeOffset(nodePos);
+            directedIndex.index[nodeOffset].push_back(rowToInsert);
+        }
     }
 
     return true;
