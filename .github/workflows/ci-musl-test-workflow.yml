@@ -69,6 +69,23 @@ jobs:
       - name: Install dependencies
         run: apk add --no-cache bash git python3
 
+      - name: Match container user/group to Ubuntu runner
+        run: |
+          RUNNER_UID="$(stat -c '%u' /__w)"
+          RUNNER_GID="$(stat -c '%g' /__w)"
+
+          if ! awk -F: -v gid="$RUNNER_GID" '$3 == gid { found=1 } END { exit !found }' /etc/group; then
+            addgroup -g "$RUNNER_GID" ubuntu
+          fi
+
+          RUNNER_GROUP="$(awk -F: -v gid="$RUNNER_GID" '$3 == gid { print $1; exit }' /etc/group)"
+
+          if ! awk -F: -v uid="$RUNNER_UID" '$3 == uid { found=1 } END { exit !found }' /etc/passwd; then
+            adduser -D -u "$RUNNER_UID" -G "$RUNNER_GROUP" ubuntu
+          fi
+
+          git config --system --add safe.directory /__w/ladybug/ladybug
+
       - uses: actions/checkout@v4
 
       - name: Check source headers for include guards
@@ -99,7 +116,24 @@ jobs:
       image: alpine:latest
     steps:
       - name: Install clang-format dependencies
-        run: apk add --no-cache git python3 clang-extra-tools
+        run: apk add --no-cache git python3 clang18-extra-tools
+
+      - name: Match container user/group to Ubuntu runner
+        run: |
+          RUNNER_UID="$(stat -c '%u' /__w)"
+          RUNNER_GID="$(stat -c '%g' /__w)"
+
+          if ! awk -F: -v gid="$RUNNER_GID" '$3 == gid { found=1 } END { exit !found }' /etc/group; then
+            addgroup -g "$RUNNER_GID" ubuntu
+          fi
+
+          RUNNER_GROUP="$(awk -F: -v gid="$RUNNER_GID" '$3 == gid { print $1; exit }' /etc/group)"
+
+          if ! awk -F: -v uid="$RUNNER_UID" '$3 == uid { found=1 } END { exit !found }' /etc/passwd; then
+            adduser -D -u "$RUNNER_UID" -G "$RUNNER_GROUP" ubuntu
+          fi
+
+          git config --system --add safe.directory /__w/ladybug/ladybug
 
       - uses: actions/checkout@v4
         with:
@@ -107,7 +141,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Clang Format
-        run: python3 scripts/run-clang-format.py --clang-format-executable clang-format -r src/ test/ tools/ extension/
+        run: python3 scripts/run-clang-format.py --clang-format-executable /usr/lib/llvm18/bin/clang-format -r src/ test/ tools/ extension/
 
   minimal-test:
     name: minimal test
@@ -121,13 +155,40 @@ jobs:
       NUM_THREADS: 4
     steps:
       - name: Install dependencies
-        run: apk add --no-cache bash git make cmake ninja build-base linux-headers ccache python3 py3-pip curl wget unzip
+        run: apk add --no-cache bash git make cmake ninja build-base linux-headers ccache python3 py3-pip curl wget unzip su-exec
+
+      - name: Match container user/group to Ubuntu runner
+        run: |
+          RUNNER_UID="$(stat -c '%u' /__w)"
+          RUNNER_GID="$(stat -c '%g' /__w)"
+
+          if ! awk -F: -v gid="$RUNNER_GID" '$3 == gid { found=1 } END { exit !found }' /etc/group; then
+            addgroup -g "$RUNNER_GID" ubuntu
+          fi
+
+          RUNNER_GROUP="$(awk -F: -v gid="$RUNNER_GID" '$3 == gid { print $1; exit }' /etc/group)"
+
+          if ! awk -F: -v uid="$RUNNER_UID" '$3 == uid { found=1 } END { exit !found }' /etc/passwd; then
+            adduser -D -u "$RUNNER_UID" -G "$RUNNER_GROUP" ubuntu
+          fi
+
+          RUNNER_USER="$(awk -F: -v uid="$RUNNER_UID" '$3 == uid { print $1; exit }' /etc/passwd)"
+          RUNNER_HOME="$(awk -F: -v uid="$RUNNER_UID" '$3 == uid { print $6; exit }' /etc/passwd)"
+
+          echo "RUN_AS_USER=$RUNNER_USER" >> "$GITHUB_ENV"
+          echo "RUN_AS_GROUP=$RUNNER_GROUP" >> "$GITHUB_ENV"
+          echo "RUN_AS_HOME=$RUNNER_HOME" >> "$GITHUB_ENV"
+
+          git config --system --add safe.directory /__w/ladybug/ladybug
+          su-exec "$RUNNER_USER:$RUNNER_GROUP" env HOME="$RUNNER_HOME" git config --global --add safe.directory /__w/ladybug/ladybug
 
       - uses: actions/checkout@v4
 
+      - name: Fix workspace ownership for non-root user
+        run: chown -R "$(id -u "$RUN_AS_USER")":"$(id -g "$RUN_AS_USER")" /__w/ladybug/ladybug
+
       - name: Checkout dataset and benchmarks
-        run: |
-          git submodule update --init dataset benchmark # needed for demo db
+        run: su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc 'git submodule update --init dataset benchmark' # needed for demo db
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -142,10 +203,10 @@ jobs:
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
-        run: make relwithdebinfo
+        run: su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc 'make relwithdebinfo'
 
       - name: Generate datasets
-        run: bash scripts/generate_binary_demo.sh --lbug-shell-mode relwithdebinfo
+        run: su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc 'bash scripts/generate_binary_demo.sh --lbug-shell-mode relwithdebinfo'
 
       - name: Install uv
         run: pip3 install uv
@@ -155,10 +216,12 @@ jobs:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
-          uv venv
-          . .venv/bin/activate
-          uv pip install pytest pexpect
-          make shell-test test
+          su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc '
+            uv venv
+            . .venv/bin/activate
+            uv pip install pytest pexpect
+            make shell-test test
+          '
 
   minimal-linux-extension-test:
     name: minimal linux extension test
@@ -167,6 +230,7 @@ jobs:
       image: alpine:latest
     env:
       GEN: Ninja
+      EXTRA_CMAKE_FLAGS: -DOPENSSL_ROOT_DIR=/usr -DOPENSSL_INCLUDE_DIR=/usr/include -DOPENSSL_CRYPTO_LIBRARY=/usr/lib/libcrypto.so -DOPENSSL_SSL_LIBRARY=/usr/lib/libssl.so
       UW_S3_ACCESS_KEY_ID: ${{ secrets.UW_S3_ACCESS_KEY_ID }}
       UW_S3_SECRET_ACCESS_KEY: ${{ secrets.UW_S3_SECRET_ACCESS_KEY }}
       AWS_S3_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY_ID }}
@@ -181,23 +245,40 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: apk add --no-cache bash git make cmake ninja build-base linux-headers ccache python3 py3-pip curl wget unzip nodejs npm
+        run: apk add --no-cache bash git make cmake ninja build-base linux-headers ccache python3 py3-pip curl wget unzip nodejs npm su-exec openssl-dev
+
+      - name: Match container user/group to Ubuntu runner
+        run: |
+          RUNNER_UID="$(stat -c '%u' /__w)"
+          RUNNER_GID="$(stat -c '%g' /__w)"
+
+          if ! awk -F: -v gid="$RUNNER_GID" '$3 == gid { found=1 } END { exit !found }' /etc/group; then
+            addgroup -g "$RUNNER_GID" ubuntu
+          fi
+
+          RUNNER_GROUP="$(awk -F: -v gid="$RUNNER_GID" '$3 == gid { print $1; exit }' /etc/group)"
+
+          if ! awk -F: -v uid="$RUNNER_UID" '$3 == uid { found=1 } END { exit !found }' /etc/passwd; then
+            adduser -D -u "$RUNNER_UID" -G "$RUNNER_GROUP" ubuntu
+          fi
+
+          RUNNER_USER="$(awk -F: -v uid="$RUNNER_UID" '$3 == uid { print $1; exit }' /etc/passwd)"
+          RUNNER_HOME="$(awk -F: -v uid="$RUNNER_UID" '$3 == uid { print $6; exit }' /etc/passwd)"
+
+          echo "RUN_AS_USER=$RUNNER_USER" >> "$GITHUB_ENV"
+          echo "RUN_AS_GROUP=$RUNNER_GROUP" >> "$GITHUB_ENV"
+          echo "RUN_AS_HOME=$RUNNER_HOME" >> "$GITHUB_ENV"
+
+          git config --system --add safe.directory /__w/ladybug/ladybug
+          su-exec "$RUNNER_USER:$RUNNER_GROUP" env HOME="$RUNNER_HOME" git config --global --add safe.directory /__w/ladybug/ladybug
 
       - uses: actions/checkout@v4
 
-      - name: Checkout extensions
-        run: |
-          git submodule update --init extension dataset benchmark
+      - name: Fix workspace ownership for non-root user
+        run: chown -R "$(id -u "$RUN_AS_USER")":"$(id -g "$RUN_AS_USER")" /__w/ladybug/ladybug
 
-      - name: Free disk space on Ubuntu runner
-        uses: kfir4444/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          swap-storage: true
+      - name: Checkout extensions
+        run: su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc 'git submodule update --init extension dataset benchmark'
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -215,22 +296,27 @@ jobs:
           SQL_FNAME: sql_query.test
           FIND: "localhost"
         run: |
-          node -e 'fs=require("fs");fs.readFile(process.env.PG_FNAME,"utf8",(err,data)=>{if(err!=null)throw err;fs.writeFile(process.env.PG_FNAME,data.replaceAll(process.env.FIND,process.env.PG_HOST),"utf8",e=>{if(e!=null)throw e;});});'
-          node -e 'fs=require("fs");fs.readFile(process.env.SQL_FNAME,"utf8",(err,data)=>{if(err!=null)throw err;fs.writeFile(process.env.SQL_FNAME,data.replaceAll(process.env.FIND,process.env.PG_HOST),"utf8",e=>{if(e!=null)throw e;});});'
+          su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc '
+            node -e '\''fs=require("fs");fs.readFile(process.env.PG_FNAME,"utf8",(err,data)=>{if(err!=null)throw err;fs.writeFile(process.env.PG_FNAME,data.replaceAll(process.env.FIND,process.env.PG_HOST),"utf8",e=>{if(e!=null)throw e;});});'\''
+            node -e '\''fs=require("fs");fs.readFile(process.env.SQL_FNAME,"utf8",(err,data)=>{if(err!=null)throw err;fs.writeFile(process.env.SQL_FNAME,data.replaceAll(process.env.FIND,process.env.PG_HOST),"utf8",e=>{if(e!=null)throw e;});});'\''
+          '
 
       - name: Install DuckDB (Linux)
         if: runner.os == 'Linux'
         run: |
           if [ "${{ runner.arch }}" = "X64" ]; then
-            wget https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-amd64.zip
-            unzip libduckdb-linux-amd64.zip -d duckdb
+            wget https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-amd64-musl.zip
+            unzip libduckdb-linux-amd64-musl.zip -d duckdb
           else
-            wget https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-arm64.zip
-            unzip libduckdb-linux-arm64.zip -d duckdb
+            wget https://github.com/duckdb/duckdb/releases/latest/download/libduckdb-linux-arm64-musl.zip
+            unzip libduckdb-linux-arm64-musl.zip -d duckdb
           fi
-          cp duckdb/duckdb.h /usr/local/include/
-          cp duckdb/duckdb.hpp /usr/local/include/
-          cp duckdb/libduckdb.so /usr/local/lib/
+
+          mkdir -p /usr/local/include /usr/local/lib
+          cp duckdb/duckdb.h /usr/local/include/duckdb.h
+          cp duckdb/duckdb.hpp /usr/local/include/duckdb.hpp
+          cp duckdb/libduckdb.so /usr/local/lib/libduckdb.so
+
           # Create CMake config files
           mkdir -p /usr/local/lib/cmake/DuckDB
           tee /usr/local/lib/cmake/DuckDB/DuckDBConfig.cmake > /dev/null << 'EOF'
@@ -252,29 +338,35 @@ jobs:
       - name: Install uv
         run: |
           pip3 install uv
-          uv venv
+          su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc 'uv venv'
 
       - name: Install dependencies
-        run: uv pip install rangehttpserver requests
+        run: su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc 'uv pip install rangehttpserver requests'
 
       # shell needs to be built first to generate the dataset provided by the server
       - name: Extension test build
         run: |
-          make relwithdebinfo
-          cp build/relwithdebinfo/tools/shell/lbug lbug.prod
-          make extension-test-build
-          cp lbug.prod build/relwithdebinfo/tools/shell/lbug
+          su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc '
+            make relwithdebinfo
+            cp build/relwithdebinfo/tools/shell/lbug lbug.prod
+            make extension-test-build
+            cp lbug.prod build/relwithdebinfo/tools/shell/lbug
+          '
 
       - name: Test dynamic extension loading
         run: |
-          cd tools/shell/test
-          uv venv
-          . .venv/bin/activate
-          uv pip install pytest pexpect
-          pytest test_dynamic_extension_loading.py -v
+          su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc '
+            cd tools/shell/test
+            uv venv
+            . .venv/bin/activate
+            uv pip install pytest pexpect
+            pytest test_dynamic_extension_loading.py -v
+          '
 
       - name: Extension test
         run: |
-          uv run scripts/generate-tinysnb.py
-          uv run scripts/setup-extension-repo.py &
-          make extension-test
+          su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc '
+            uv run scripts/generate-tinysnb.py
+            uv run scripts/setup-extension-repo.py &
+            make extension-test
+          '
