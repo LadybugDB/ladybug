@@ -38,27 +38,35 @@ LocalRelTable::LocalRelTable(const catalog::TableCatalogEntry* tableEntry, const
 
 bool LocalRelTable::insert(Transaction*, TableInsertState& state) {
     const auto& insertState = state.cast<RelTableInsertState>();
-    const auto numRowsToAppend = insertState.srcNodeIDVector.state->getSelVector().getSelSize();
+    const auto relIDVector = insertState.propertyVectors[0];
+    DASSERT(relIDVector->dataType.getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
+    const auto numRowsToAppend = relIDVector->state->getSelVector().getSelSize();
+
+    const auto getPosToRead = [numRowsToAppend](const ValueVector& vector, uint64_t i) -> sel_t {
+        const auto& selVector = vector.state->getSelVector();
+        if (vector.state->isFlat()) {
+            return selVector[0];
+        }
+        DASSERT(selVector.getSelSize() == numRowsToAppend);
+        return selVector[i];
+    };
 
     for (auto i = 0u; i < numRowsToAppend; i++) {
         for (auto& directedIndex : directedIndices) {
             const auto& nodeIDVector = insertState.getBoundNodeIDVector(directedIndex.direction);
-            const auto nodePos = nodeIDVector.state->getSelVector()[i];
+            const auto nodePos = getPosToRead(nodeIDVector, i);
             if (nodeIDVector.isNull(nodePos)) {
                 return false;
             }
         }
     }
 
-    const auto relIDVector = insertState.propertyVectors[0];
-    DASSERT(relIDVector->dataType.getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
-
     const auto numRowsInLocalTable = localNodeGroup->getNumRows();
     for (auto i = 0u; i < numRowsToAppend; i++) {
-        const auto selPos = insertState.srcNodeIDVector.state->getSelVector()[i];
+        const auto relIDPos = getPosToRead(*relIDVector, i);
         const auto relOffset = StorageConstants::MAX_NUM_ROWS_IN_TABLE + numRowsInLocalTable + i;
-        relIDVector->setValue<internalID_t>(selPos, internalID_t{relOffset, table.getTableID()});
-        relIDVector->setNull(selPos, false);
+        relIDVector->setValue<internalID_t>(relIDPos, internalID_t{relOffset, table.getTableID()});
+        relIDVector->setNull(relIDPos, false);
     }
 
     std::vector<ValueVector*> insertVectors;
@@ -73,7 +81,7 @@ bool LocalRelTable::insert(Transaction*, TableInsertState& state) {
         const auto rowToInsert = static_cast<row_idx_t>(numRowsInLocalTable + i);
         for (auto& directedIndex : directedIndices) {
             const auto& nodeIDVector = insertState.getBoundNodeIDVector(directedIndex.direction);
-            const auto nodePos = nodeIDVector.state->getSelVector()[i];
+            const auto nodePos = getPosToRead(nodeIDVector, i);
             const auto nodeOffset = nodeIDVector.readNodeOffset(nodePos);
             directedIndex.index[nodeOffset].push_back(rowToInsert);
         }
