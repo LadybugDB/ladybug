@@ -18,7 +18,7 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.name }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -26,25 +26,6 @@ jobs:
           - name: C/C++
             language: cpp
             build-mode: manual
-            config: |
-              paths:
-                - src
-                - test
-                - tools/shell
-              paths-ignore:
-                - benchmark/**
-                - build/**
-                - dataset/**
-                - docs/**
-                - examples/**
-                - extension/**
-                - logo/**
-                - third_party/**
-                - tools/java_api/**
-                - tools/nodejs_api/**
-                - tools/python_api/**
-                - tools/rust_api/**
-                - tools/wasm/**
     steps:
       - uses: actions/checkout@v4
 
@@ -54,21 +35,31 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended,security-and-quality
-          config: ${{ matrix.config }}
 
       - name: Install native build dependencies
         if: ${{ matrix.language == 'cpp' }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y ccache ninja-build
+          sudo apt-get install -y ninja-build
 
       - name: Build native database targets
         if: ${{ matrix.language == 'cpp' }}
-        env:
-          GEN: Ninja
-          CMAKE_C_COMPILER_LAUNCHER: ccache
-          CMAKE_CXX_COMPILER_LAUNCHER: ccache
-        run: make test-build
+        run: |
+          # For compiled CodeQL languages, analysis scope follows the traced build.
+          # Build only the shell and its core library dependencies.
+          cmake -B build/codeql -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DAUTO_UPDATE_GRAMMAR=FALSE \
+            -DBUILD_SINGLE_FILE_HEADER=FALSE \
+            -DBUILD_TESTS=FALSE \
+            -DBUILD_BENCHMARK=FALSE \
+            -DBUILD_EXAMPLES=FALSE \
+            -DBUILD_JAVA=FALSE \
+            -DBUILD_NODEJS=FALSE \
+            -DBUILD_PYTHON=FALSE \
+            -DBUILD_SHELL=TRUE \
+            .
+          cmake --build build/codeql --target lbug_shell
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
