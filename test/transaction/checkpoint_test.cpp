@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <future>
@@ -535,6 +536,59 @@ TEST_F(ReviewFixesTest, HashIndexBasicRecoveryAfterCheckpoint) {
         ASSERT_TRUE(r->hasNext()) << "Hash index missing entry for id=" << i;
         EXPECT_EQ(r->getNext()->getValue(0)->getValue<std::string>(), "v" + std::to_string(i));
         EXPECT_FALSE(r->hasNext());
+    }
+}
+
+// Fix #5 – reclaimTailPagesIfNeeded must not introduce overlap with existing FSM entries
+// ─────────────────────────────────────────────────────────────────────────────
+// reclaimTailPagesIfNeeded() is called after FSM deserialization during recovery. If it inserts
+// the tail directly into freeLists (without merge), it can create overlapping entries.
+//
+// This test exercises the exact overlap pattern deterministically:
+// 1) seed an existing free entry that starts at checkpointNumPages,
+// 2) reclaim tail [checkpointNumPages, currentNumPages),
+// 3) verify resulting FSM has no overlap.
+TEST_F(ReviewFixesTest, ReclaimTailMergesWithDeserializedFSMEntries) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CREATE NODE TABLE fsm_tail(id INT64 PRIMARY KEY, val STRING);");
+
+    auto* context = getClientContext(*conn);
+    auto* storageManager = StorageManager::Get(*context);
+    auto* dataFH = storageManager->getDataFH();
+    auto* pageManager = dataFH->getPageManager();
+
+    // Ensure we have enough physical pages to craft overlapping ranges.
+    dataFH->addNewPages(32);
+    const auto currentNumPages = dataFH->getNumPages();
+    const auto checkpointNumPages = currentNumPages - 8;
+
+    // Existing (deserialized-equivalent) free entry at tail start.
+    pageManager->freeImmediatelyRewritablePageRange(dataFH, PageRange(checkpointNumPages, 2));
+
+    // Recovery-time reclaim path under test.
+    pageManager->reclaimTailPagesIfNeeded(checkpointNumPages);
+
+    const auto numEntries = pageManager->getNumFreeEntries();
+    const auto freeEntries = pageManager->getFreeEntries(0, numEntries);
+
+    std::vector<std::pair<uint64_t, uint64_t>> entries;
+    entries.reserve(freeEntries.size());
+    for (const auto& entry : freeEntries) {
+        entries.emplace_back(entry.startPageIdx, entry.numPages);
+    }
+    std::sort(entries.begin(), entries.end(),
+        [](const auto& a, const auto& b) { return a.first < b.first; });
+
+    for (size_t i = 1; i < entries.size(); ++i) {
+        const auto prevEnd = entries[i - 1].first + entries[i - 1].second;
+        ASSERT_GE(entries[i].first, prevEnd)
+            << "Overlapping FSM entries after tail reclaim: [" << entries[i - 1].first << ", "
+            << prevEnd << ") and [" << entries[i].first << ", "
+            << (entries[i].first + entries[i].second) << ")";
     }
 }
 

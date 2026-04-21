@@ -81,7 +81,10 @@ void PageManager::reclaimTailPagesIfNeeded(common::page_idx_t checkpointNumPages
     }
     common::UniqLock lck{mtx};
     const PageRange tail(checkpointNumPages, currentNumPages - checkpointNumPages);
-    freeSpaceManager->evictAndAddFreePages(fileHandle, tail);
+    // Tail pages are beyond the checkpoint boundary. Add them as uncheckpointed first and merge
+    // with the deserialized FSM state so we don't leave overlapping entries after recovery.
+    freeSpaceManager->addUncheckpointedFreePages(tail);
+    freeSpaceManager->mergeFreePages(fileHandle);
     version.fetch_add(1, std::memory_order_relaxed);
 }
 

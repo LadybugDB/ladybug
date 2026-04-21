@@ -211,6 +211,7 @@ void FreeSpaceManager::mergeFreePages(FileHandle* fileHandle) {
         evictPages(fileHandle, entry);
     }
     mergePageRanges(std::move(uncheckpointedFreePageRanges), fileHandle);
+    uncheckpointedFreePageRanges.clear();
 }
 
 void FreeSpaceManager::resetFreeLists() {
