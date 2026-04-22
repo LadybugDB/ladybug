@@ -9,9 +9,15 @@ namespace lbug {
 namespace function {
 
 static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& input) {
-    const auto& keyType = ListType::getChildType(input.arguments[0]->dataType);
-    const auto& valueType = ListType::getChildType(input.arguments[1]->dataType);
-    auto resultType = LogicalType::MAP(keyType.copy(), valueType.copy());
+    auto keyType = ListType::getChildType(input.arguments[0]->dataType).copy();
+    auto valueType = ListType::getChildType(input.arguments[1]->dataType).copy();
+    if (keyType.containsAny()) {
+        keyType = LogicalType::JSON();
+    }
+    if (valueType.containsAny()) {
+        valueType = LogicalType::JSON();
+    }
+    auto resultType = LogicalType::MAP(std::move(keyType), std::move(valueType));
     return FunctionBindData::getSimpleBindData(input.arguments, resultType);
 }
 

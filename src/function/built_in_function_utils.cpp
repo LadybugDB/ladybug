@@ -79,7 +79,7 @@ uint32_t BuiltInFunctionsUtils::getCastCost(LogicalTypeID inputTypeID, LogicalTy
         // anything can be cast to ANY type for (almost no) cost
         return 1;
     }
-    if (targetTypeID == LogicalTypeID::STRING) {
+    if (targetTypeID == LogicalTypeID::STRING || targetTypeID == LogicalTypeID::JSON) {
         return castFromString(inputTypeID);
     }
     switch (inputTypeID) {

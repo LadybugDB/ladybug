@@ -59,6 +59,9 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
             combinedType = LogicalType::INT64();
         }
     }
+    if (combinedType.containsAny()) {
+        combinedType = LogicalType::JSON();
+    }
     auto resultType = LogicalType::LIST(combinedType.copy());
     auto bindData = std::make_unique<FunctionBindData>(std::move(resultType));
     for (auto& _ : input.arguments) {
