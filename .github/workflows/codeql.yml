@@ -59,7 +59,7 @@ jobs:
             -DBUILD_PYTHON=FALSE \
             -DBUILD_SHELL=TRUE \
             .
-          cmake --build build/codeql --target lbug_shell
+          cmake --build build/codeql --target lbug_shell -j $(nproc)
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
