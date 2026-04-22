@@ -150,7 +150,8 @@ std::unique_ptr<ColumnChunkData> Column::flushChunkData(const ColumnChunkData& c
     case PhysicalTypeID::STRUCT: {
         return StructColumn::flushChunkData(chunkData, pageAllocator);
     }
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         return StringColumn::flushChunkData(chunkData, pageAllocator);
     }
     case PhysicalTypeID::ARRAY:
@@ -557,7 +558,8 @@ std::unique_ptr<Column> ColumnFactory::createColumn(std::string name, LogicalTyp
     case PhysicalTypeID::INTERNAL_ID: {
         return std::make_unique<InternalIDColumn>(name, dataFH, mm, shadowFile, enableCompression);
     }
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         return std::make_unique<StringColumn>(name, std::move(dataType), dataFH, mm, shadowFile,
             enableCompression);
     }

@@ -25,6 +25,7 @@ ColumnChunkMetadata GetCompressionMetadata::operator()(std::span<const uint8_t> 
         return booleanGetMetadata(numValues, min, max);
     }
     case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON:
     case PhysicalTypeID::INT64:
     case PhysicalTypeID::INT32:
     case PhysicalTypeID::INT16:

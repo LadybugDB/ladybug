@@ -60,6 +60,7 @@ uint32_t getDataTypeSizeInChunk(const common::LogicalType& dataType) {
 uint32_t getDataTypeSizeInChunk(const common::PhysicalTypeID& dataType) {
     switch (dataType) {
     case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON:
     case PhysicalTypeID::ARRAY:
     case PhysicalTypeID::LIST:
     case PhysicalTypeID::STRUCT: {
@@ -1115,6 +1116,7 @@ bool StorageValue::gt(const StorageValue& other, common::PhysicalTypeID type) co
     case common::PhysicalTypeID::ARRAY:
     case common::PhysicalTypeID::INTERNAL_ID:
     case common::PhysicalTypeID::STRING:
+    case common::PhysicalTypeID::JSON:
     case common::PhysicalTypeID::UINT64:
     case common::PhysicalTypeID::UINT32:
     case common::PhysicalTypeID::UINT16:

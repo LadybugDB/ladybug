@@ -76,6 +76,7 @@ uint32_t OrderByKeyEncoder::getEncodingSize(const LogicalType& dataType) {
     // Add one more byte for null flag.
     switch (dataType.getPhysicalType()) {
     case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON:
         // 1 byte for null flag + 1 byte to indicate long/short string + 12 bytes for string prefix
         return 2 + string_t::SHORT_STR_LENGTH;
     default:
@@ -251,7 +252,8 @@ void OrderByKeyEncoder::getEncodingFunction(PhysicalTypeID physicalType, encode_
         func = encodeTemplate<float>;
         return;
     }
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         func = encodeTemplate<string_t>;
         return;
     }

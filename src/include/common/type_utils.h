@@ -196,6 +196,7 @@ public:
         case LogicalTypeID::UINT128:
             return func(uint128_t());
         case LogicalTypeID::STRING:
+        case LogicalTypeID::JSON:
             return func(string_t());
         case LogicalTypeID::DATE:
             return func(date_t());
@@ -270,6 +271,7 @@ public:
         case PhysicalTypeID::UINT128:
             return func(uint128_t());
         case PhysicalTypeID::STRING:
+        case PhysicalTypeID::JSON:
             return func(string_t());
         case PhysicalTypeID::ARRAY:
         case PhysicalTypeID::LIST:

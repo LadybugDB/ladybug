@@ -253,6 +253,7 @@ enum class PhysicalTypeID : uint8_t {
 
     // Variable size types.
     STRING = 20,
+    JSON = 21,
     LIST = 22,
     ARRAY = 23,
     STRUCT = 24,

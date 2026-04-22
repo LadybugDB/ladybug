@@ -155,7 +155,8 @@ private:
 class LBUG_API StringVector {
 public:
     static inline InMemOverflowBuffer* getInMemOverflowBuffer(ValueVector* vector) {
-        DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+        DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING ||
+                vector->dataType.getPhysicalType() == PhysicalTypeID::JSON);
         return dynamic_cast_checked<StringAuxiliaryBuffer*>(vector->auxiliaryBuffer.get())
             ->getOverflowBuffer();
     }

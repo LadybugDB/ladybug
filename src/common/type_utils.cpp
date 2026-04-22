@@ -75,6 +75,7 @@ std::string TypeUtils::entryToString(const LogicalType& dataType, const uint8_t*
     case LogicalTypeID::BLOB:
         return TypeUtils::toString(*reinterpret_cast<const blob_t*>(value));
     case LogicalTypeID::STRING:
+    case LogicalTypeID::JSON:
         return TypeUtils::toString(*reinterpret_cast<const string_t*>(value));
     case LogicalTypeID::INTERNAL_ID:
         return TypeUtils::toString(*reinterpret_cast<const internalID_t*>(value));

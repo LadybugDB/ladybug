@@ -55,7 +55,8 @@ static uint64_t countChunkDataPages(const ColumnChunkData& chunkData) {
             pages += countChunkDataPages(structChunk.getChild(i));
         }
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         auto& stringChunk = chunkData.cast<StringChunkData>();
         pages += countChunkDataPages(*stringChunk.getIndexColumnChunk());
         auto& dictionaryChunk = stringChunk.getDictionaryChunk();

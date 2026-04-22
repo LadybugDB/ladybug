@@ -265,6 +265,8 @@ std::string PhysicalTypeUtils::toString(PhysicalTypeID physicalType) {
         return "UINT128";
     case PhysicalTypeID::STRING:
         return "STRING";
+    case PhysicalTypeID::JSON:
+        return "JSON";
     case PhysicalTypeID::STRUCT:
         return "STRUCT";
     case PhysicalTypeID::LIST:
@@ -315,6 +317,8 @@ uint32_t PhysicalTypeUtils::getFixedTypeSize(PhysicalTypeID physicalType) {
         return sizeof(internalID_t);
     case PhysicalTypeID::UINT128:
         return sizeof(uint128_t);
+    case PhysicalTypeID::JSON:
+        return sizeof(string_t);
     case PhysicalTypeID::ALP_EXCEPTION_FLOAT:
         return storage::EncodeException<float>::sizeInBytes();
     case PhysicalTypeID::ALP_EXCEPTION_DOUBLE:
@@ -889,9 +893,11 @@ PhysicalTypeID LogicalType::getPhysicalType(LogicalTypeID typeID,
         return PhysicalTypeID::UINT128;
     }
     case LogicalTypeID::BLOB:
-    case LogicalTypeID::STRING:
-    case LogicalTypeID::JSON: {
+    case LogicalTypeID::STRING: {
         return PhysicalTypeID::STRING;
+    }
+    case LogicalTypeID::JSON: {
+        return PhysicalTypeID::JSON;
     }
     case LogicalTypeID::MAP:
     case LogicalTypeID::LIST: {
@@ -1086,7 +1092,8 @@ std::string LogicalTypeUtils::toString(const std::vector<LogicalTypeID>& dataTyp
 
 uint32_t LogicalTypeUtils::getRowLayoutSize(const LogicalType& type) {
     switch (type.getPhysicalType()) {
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         return sizeof(string_t);
     }
     case PhysicalTypeID::ARRAY:

@@ -14,7 +14,8 @@ void SortSharedState::init(const OrderByDataInfo& orderByDataInfo) {
     auto encodedKeyBlockColOffset = 0ul;
     for (auto i = 0u; i < orderByDataInfo.keysPos.size(); ++i) {
         const auto& dataType = orderByDataInfo.keyTypes[i];
-        if (PhysicalTypeID::STRING == dataType.getPhysicalType()) {
+        if (PhysicalTypeID::STRING == dataType.getPhysicalType() ||
+            PhysicalTypeID::JSON == dataType.getPhysicalType()) {
             // If this is a string column, we need to find the factorizedTable offset for this
             // column.
             auto ftColIdx = orderByDataInfo.keyInPayloadPos[i];

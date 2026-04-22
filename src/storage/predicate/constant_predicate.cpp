@@ -78,6 +78,7 @@ ZoneMapCheckResult ColumnConstantPredicate::checkZoneMap(
 std::string ColumnConstantPredicate::toString() {
     std::string valStr;
     if (value.getDataType().getPhysicalType() == PhysicalTypeID::STRING ||
+        value.getDataType().getPhysicalType() == PhysicalTypeID::JSON ||
         value.getDataType().getPhysicalType() == PhysicalTypeID::LIST ||
         value.getDataType().getPhysicalType() == PhysicalTypeID::ARRAY ||
         value.getDataType().getPhysicalType() == PhysicalTypeID::STRUCT ||

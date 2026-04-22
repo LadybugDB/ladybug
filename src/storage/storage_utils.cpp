@@ -67,7 +67,8 @@ std::string StorageUtils::expandPath(const main::ClientContext* context, const s
 
 uint32_t StorageUtils::getDataTypeSize(const LogicalType& type) {
     switch (type.getPhysicalType()) {
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         return sizeof(string_t);
     }
     case PhysicalTypeID::ARRAY:

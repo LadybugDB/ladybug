@@ -19,7 +19,8 @@ public:
 
     StringChunkData(MemoryManager& mm, common::LogicalType dataType, uint64_t capacity,
         bool enableCompression, ResidencyState residencyState);
-    StringChunkData(MemoryManager& mm, bool enableCompression, const ColumnChunkMetadata& metadata);
+    StringChunkData(MemoryManager& mm, common::LogicalType dataType, bool enableCompression,
+        const ColumnChunkMetadata& metadata);
     void resetToEmpty() override;
 
     void append(common::ValueVector* vector, const common::SelectionView& selView) override;

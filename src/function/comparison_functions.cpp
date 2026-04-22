@@ -71,7 +71,8 @@ static void executeNestedOperation(uint8_t& result, ValueVector* leftVector,
         OP::operation(leftVector->getValue<float>(leftPos), rightVector->getValue<float>(rightPos),
             result, nullptr /* left */, nullptr /* right */);
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         OP::operation(leftVector->getValue<string_t>(leftPos),
             rightVector->getValue<string_t>(rightPos), result, nullptr /* left */,
             nullptr /* right */);

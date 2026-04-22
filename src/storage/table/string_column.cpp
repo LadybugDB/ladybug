@@ -127,7 +127,8 @@ void StringColumn::scanSegment(const SegmentState& state, offset_t startOffsetIn
             offsetInResult);
     }
 
-    DASSERT(resultVector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(resultVector->dataType.getPhysicalType() == PhysicalTypeID::STRING ||
+            resultVector->dataType.getPhysicalType() == PhysicalTypeID::JSON);
     if (!resultVector->state || resultVector->state->getSelVector().isUnfiltered()) {
         scanUnfiltered(state, startOffsetInChunk, numValuesToScan, resultVector, offsetInResult);
     } else {
@@ -139,7 +140,8 @@ void StringColumn::scanSegment(const SegmentState& state, ColumnChunkData* resul
     common::offset_t startOffsetInSegment, common::row_idx_t numValuesToScan) const {
     auto startOffsetInResult = resultChunk->getNumValues();
     Column::scanSegment(state, resultChunk, startOffsetInSegment, numValuesToScan);
-    DASSERT(resultChunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(resultChunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING ||
+            resultChunk->getDataType().getPhysicalType() == PhysicalTypeID::JSON);
 
     auto* stringResultChunk = dynamic_cast_checked<StringChunkData*>(resultChunk);
     // Revert change to numValues from Column::scanSegment (see note in list_column.cpp)

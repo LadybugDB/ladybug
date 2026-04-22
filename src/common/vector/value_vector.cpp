@@ -98,7 +98,8 @@ void ValueVector::copyFromRowData(uint32_t pos, const uint8_t* rowData) {
     case PhysicalTypeID::LIST: {
         ListVector::copyFromRowData(this, pos, rowData);
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         StringVector::addString(this, pos, *(string_t*)rowData);
     } break;
     default: {
@@ -118,7 +119,8 @@ void ValueVector::copyToRowData(uint32_t pos, uint8_t* rowData,
     case PhysicalTypeID::LIST: {
         ListVector::copyToRowData(this, pos, rowData, rowOverflowBuffer);
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         StringVector::copyToRowData(this, pos, rowData, rowOverflowBuffer);
     } break;
     default: {
@@ -139,7 +141,8 @@ void ValueVector::copyFromVectorData(uint8_t* dstData, const ValueVector* srcVec
     case PhysicalTypeID::LIST: {
         ListVector::copyFromVectorData(this, dstData, srcVector, srcVectorData);
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         StringVector::addString(this, *(string_t*)dstData, *(string_t*)srcVectorData);
     } break;
     default: {
@@ -204,7 +207,8 @@ void ValueVector::copyFromValue(uint64_t pos, const Value& value) {
     case PhysicalTypeID::INTERVAL: {
         memcpy(dstValue, &value.val.intervalVal, numBytesPerValue);
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         StringVector::addString(this, *(string_t*)dstValue, value.strVal.data(),
             value.strVal.length());
     } break;
@@ -298,7 +302,8 @@ std::unique_ptr<Value> ValueVector::getAsValue(uint64_t pos) const {
     case PhysicalTypeID::INTERVAL: {
         value->val.intervalVal = getValue<interval_t>(pos);
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         value->strVal = getValue<string_t>(pos).getAsString();
     } break;
     case PhysicalTypeID::ARRAY:
@@ -338,7 +343,8 @@ std::unique_ptr<Value> ValueVector::getAsValue(uint64_t pos) const {
 
 void ValueVector::resetAuxiliaryBuffer() {
     switch (dataType.getPhysicalType()) {
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         dynamic_cast_checked<StringAuxiliaryBuffer*>(auxiliaryBuffer.get())->resetOverflowBuffer();
         return;
     }
@@ -365,7 +371,8 @@ void ValueVector::resetAuxiliaryBuffer() {
 
 uint32_t ValueVector::getDataTypeSize(const LogicalType& type) {
     switch (type.getPhysicalType()) {
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         return sizeof(string_t);
     }
     case PhysicalTypeID::STRUCT: {
@@ -476,7 +483,8 @@ void ValueVector::setNull(uint32_t pos, bool isNull) {
 }
 
 void StringVector::addString(ValueVector* vector, uint32_t vectorPos, string_t& srcStr) {
-    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING ||
+            vector->dataType.getPhysicalType() == PhysicalTypeID::JSON);
     auto stringBuffer = dynamic_cast_checked<StringAuxiliaryBuffer*>(vector->auxiliaryBuffer.get());
     auto& dstStr = vector->getValue<string_t>(vectorPos);
     if (string_t::isShortString(srcStr.len)) {
@@ -489,7 +497,8 @@ void StringVector::addString(ValueVector* vector, uint32_t vectorPos, string_t& 
 
 void StringVector::addString(ValueVector* vector, uint32_t vectorPos, const char* srcStr,
     uint64_t length) {
-    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING ||
+            vector->dataType.getPhysicalType() == PhysicalTypeID::JSON);
     auto stringBuffer = dynamic_cast_checked<StringAuxiliaryBuffer*>(vector->auxiliaryBuffer.get());
     auto& dstStr = vector->getValue<string_t>(vectorPos);
     if (string_t::isShortString(length)) {
@@ -505,7 +514,8 @@ void StringVector::addString(ValueVector* vector, uint32_t vectorPos, std::strin
 }
 
 string_t& StringVector::reserveString(ValueVector* vector, uint32_t vectorPos, uint64_t length) {
-    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING ||
+            vector->dataType.getPhysicalType() == PhysicalTypeID::JSON);
     auto stringBuffer = dynamic_cast_checked<StringAuxiliaryBuffer*>(vector->auxiliaryBuffer.get());
     auto& dstStr = vector->getValue<string_t>(vectorPos);
     dstStr.len = length;
@@ -516,7 +526,8 @@ string_t& StringVector::reserveString(ValueVector* vector, uint32_t vectorPos, u
 }
 
 void StringVector::reserveString(ValueVector* vector, string_t& dstStr, uint64_t length) {
-    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING ||
+            vector->dataType.getPhysicalType() == PhysicalTypeID::JSON);
     auto stringBuffer = dynamic_cast_checked<StringAuxiliaryBuffer*>(vector->auxiliaryBuffer.get());
     dstStr.len = length;
     if (!string_t::isShortString(length)) {
@@ -525,7 +536,8 @@ void StringVector::reserveString(ValueVector* vector, string_t& dstStr, uint64_t
 }
 
 void StringVector::addString(ValueVector* vector, string_t& dstStr, string_t& srcStr) {
-    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING ||
+            vector->dataType.getPhysicalType() == PhysicalTypeID::JSON);
     auto stringBuffer = dynamic_cast_checked<StringAuxiliaryBuffer*>(vector->auxiliaryBuffer.get());
     if (string_t::isShortString(srcStr.len)) {
         dstStr.setShortString(srcStr);
@@ -537,7 +549,8 @@ void StringVector::addString(ValueVector* vector, string_t& dstStr, string_t& sr
 
 void StringVector::addString(ValueVector* vector, string_t& dstStr, const char* srcStr,
     uint64_t length) {
-    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING ||
+            vector->dataType.getPhysicalType() == PhysicalTypeID::JSON);
     auto stringBuffer = dynamic_cast_checked<StringAuxiliaryBuffer*>(vector->auxiliaryBuffer.get());
     if (string_t::isShortString(length)) {
         dstStr.setShortString(srcStr, length);

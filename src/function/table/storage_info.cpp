@@ -152,7 +152,8 @@ static void appendStorageInfoForChunkData(StorageInfoLocalState* localState, Dat
                 *structColumn.getChild(i), structChunk.getChild(i));
         }
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         auto& stringChunk = chunkData.cast<StringChunkData>();
         auto& dictionaryChunk = stringChunk.getDictionaryChunk();
         const auto& stringColumn = dynamic_cast_checked<const StringColumn&>(column);

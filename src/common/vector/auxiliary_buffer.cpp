@@ -79,6 +79,7 @@ std::unique_ptr<AuxiliaryBuffer> AuxiliaryBufferFactory::getAuxiliaryBuffer(Logi
     storage::MemoryManager* memoryManager) {
     switch (type.getPhysicalType()) {
     case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON:
         return std::make_unique<StringAuxiliaryBuffer>(memoryManager);
     case PhysicalTypeID::STRUCT:
         return std::make_unique<StructAuxiliaryBuffer>(type, memoryManager);

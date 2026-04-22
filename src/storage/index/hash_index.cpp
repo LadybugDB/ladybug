@@ -515,7 +515,8 @@ PrimaryKeyIndex::PrimaryKeyIndex(IndexInfo indexInfo, std::unique_ptr<IndexStora
 void PrimaryKeyIndex::initOverflowAndSubIndices(bool inMemMode, MemoryManager& mm,
     PageAllocator& pageAllocator, PrimaryKeyIndexStorageInfo& storageInfo) {
     DASSERT(indexInfo.keyDataTypes.size() == 1);
-    if (indexInfo.keyDataTypes[0] == PhysicalTypeID::STRING) {
+    if (indexInfo.keyDataTypes[0] == PhysicalTypeID::STRING ||
+        indexInfo.keyDataTypes[0] == PhysicalTypeID::JSON) {
         if (inMemMode) {
             overflowFile = std::make_unique<InMemOverflowFile>(mm);
         } else {

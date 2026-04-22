@@ -25,9 +25,9 @@ StringChunkData::StringChunkData(MemoryManager& mm, LogicalType dataType, uint64
           std::make_unique<DictionaryChunk>(mm, capacity, enableCompression, residencyState)},
       needFinalize{false} {}
 
-StringChunkData::StringChunkData(MemoryManager& mm, bool enableCompression,
+StringChunkData::StringChunkData(MemoryManager& mm, LogicalType dataType, bool enableCompression,
     const ColumnChunkMetadata& metadata)
-    : ColumnChunkData{mm, LogicalType::STRING(), enableCompression, metadata, true /*hasNullData*/},
+    : ColumnChunkData{mm, std::move(dataType), enableCompression, metadata, true /*hasNullData*/},
       dictionaryChunk{
           std::make_unique<DictionaryChunk>(mm, 0, enableCompression, ResidencyState::IN_MEMORY)},
       needFinalize{false} {
@@ -74,7 +74,8 @@ void StringChunkData::resetToEmpty() {
 void StringChunkData::append(ValueVector* vector, const SelectionView& selView) {
     selView.forEach([&](auto pos) {
         // index is stored in main chunk, data is stored in the data chunk
-        DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+        DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING ||
+                vector->dataType.getPhysicalType() == PhysicalTypeID::JSON);
         // index is stored in main chunk, data is stored in the data chunk
         nullData->setNull(numValues, vector->isNull(pos));
         auto dstPos = numValues;
@@ -149,7 +150,8 @@ void StringChunkData::initializeScanState(SegmentState& state, const Column* col
 
 void StringChunkData::write(const ValueVector* vector, offset_t offsetInVector,
     offset_t offsetInChunk) {
-    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::STRING ||
+            vector->dataType.getPhysicalType() == PhysicalTypeID::JSON);
     if (!needFinalize && offsetInChunk < numValues) [[unlikely]] {
         needFinalize = true;
     }
@@ -164,7 +166,8 @@ void StringChunkData::write(const ValueVector* vector, offset_t offsetInVector,
 }
 
 void StringChunkData::write(ColumnChunkData* chunk, ColumnChunkData* dstOffsets, RelMultiplicity) {
-    DASSERT(chunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING &&
+    DASSERT((chunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING ||
+                chunk->getDataType().getPhysicalType() == PhysicalTypeID::JSON) &&
             dstOffsets->getDataType().getPhysicalType() == PhysicalTypeID::INTERNAL_ID &&
             chunk->getNumValues() == dstOffsets->getNumValues());
     auto& stringChunk = chunk->cast<StringChunkData>();
@@ -186,7 +189,8 @@ void StringChunkData::write(ColumnChunkData* chunk, ColumnChunkData* dstOffsets,
 
 void StringChunkData::write(const ColumnChunkData* srcChunk, offset_t srcOffsetInChunk,
     offset_t dstOffsetInChunk, offset_t numValuesToCopy) {
-    DASSERT(srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING);
+    DASSERT(srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::STRING ||
+            srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::JSON);
     if ((dstOffsetInChunk + numValuesToCopy) >= numValues) {
         updateNumValues(dstOffsetInChunk + numValuesToCopy);
     }

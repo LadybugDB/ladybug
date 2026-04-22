@@ -56,6 +56,7 @@ bool Value::operator==(const Value& rhs) const {
     case PhysicalTypeID::UINT128:
         return val.uint128Val == rhs.val.uint128Val;
     case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON:
         return strVal == rhs.strVal;
     case PhysicalTypeID::ARRAY:
     case PhysicalTypeID::LIST:
@@ -493,7 +494,8 @@ void Value::copyFromColLayout(const uint8_t* value, ValueVector* vector) {
     case PhysicalTypeID::INTERVAL: {
         val.intervalVal = *((interval_t*)value);
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         strVal = ((string_t*)value)->getAsString();
     } break;
     case PhysicalTypeID::ARRAY:
@@ -567,7 +569,8 @@ void Value::copyValueFrom(const Value& other) {
     case PhysicalTypeID::UINT128: {
         val.uint128Val = other.val.uint128Val;
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         strVal = other.strVal;
     } break;
     case PhysicalTypeID::ARRAY:
@@ -828,7 +831,8 @@ void Value::serialize(Serializer& serializer) const {
     case PhysicalTypeID::UINT128: {
         serializer.serializeValue(val.uint128Val);
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         serializer.serializeValue(strVal);
     } break;
     case PhysicalTypeID::ARRAY:
@@ -901,7 +905,8 @@ std::unique_ptr<Value> Value::deserialize(Deserializer& deserializer) {
     case PhysicalTypeID::UINT128: {
         deserializer.deserializeValue(val->val.uint128Val);
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         deserializer.deserializeValue(val->strVal);
     } break;
     case PhysicalTypeID::ARRAY:
@@ -1039,7 +1044,8 @@ uint64_t Value::computeHash() const {
     case PhysicalTypeID::UINT128: {
         function::Hash::operation(val.uint128Val, hashValue);
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         function::Hash::operation(strVal, hashValue);
     } break;
     case PhysicalTypeID::ARRAY:

@@ -120,7 +120,8 @@ private:
         case common::PhysicalTypeID::BOOL: {
             func = BinaryComparisonExecFunction<uint8_t, uint8_t, uint8_t, FUNC>;
         } break;
-        case common::PhysicalTypeID::STRING: {
+        case common::PhysicalTypeID::STRING:
+        case common::PhysicalTypeID::JSON: {
             func = BinaryComparisonExecFunction<common::string_t, common::string_t, uint8_t, FUNC>;
         } break;
         case common::PhysicalTypeID::INTERNAL_ID: {
@@ -191,7 +192,8 @@ private:
         case common::PhysicalTypeID::BOOL: {
             func = BinaryComparisonSelectFunction<uint8_t, uint8_t, FUNC>;
         } break;
-        case common::PhysicalTypeID::STRING: {
+        case common::PhysicalTypeID::STRING:
+        case common::PhysicalTypeID::JSON: {
             func = BinaryComparisonSelectFunction<common::string_t, common::string_t, FUNC>;
         } break;
         case common::PhysicalTypeID::INTERNAL_ID: {

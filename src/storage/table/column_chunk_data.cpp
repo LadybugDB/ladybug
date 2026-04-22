@@ -149,6 +149,7 @@ ColumnChunkData::flush_buffer_func_t ColumnChunkData::initializeFlushBufferFunct
         return uncompressedFlushBuffer;
     }
     case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON:
     case PhysicalTypeID::INT64:
     case PhysicalTypeID::INT32:
     case PhysicalTypeID::INT16:
@@ -618,7 +619,8 @@ std::unique_ptr<ColumnChunkData> ColumnChunkData::deserialize(MemoryManager& mem
     case PhysicalTypeID::STRUCT: {
         StructChunkData::deserialize(deSer, *chunkData);
     } break;
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         StringChunkData::deserialize(deSer, *chunkData);
     } break;
     case PhysicalTypeID::ARRAY:
@@ -921,7 +923,8 @@ std::unique_ptr<ColumnChunkData> ColumnChunkFactory::createColumnChunkData(Memor
         return std::make_unique<InternalIDChunkData>(mm, capacity, enableCompression,
             residencyState);
     }
-    case PhysicalTypeID::STRING: {
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
         return std::make_unique<StringChunkData>(mm, std::move(dataType), capacity,
             enableCompression, residencyState);
     }
@@ -967,8 +970,10 @@ std::unique_ptr<ColumnChunkData> ColumnChunkFactory::createColumnChunkData(Memor
         // INTERNAL_ID should never have nulls.
         return std::make_unique<InternalIDChunkData>(mm, enableCompression, metadata);
     }
-    case PhysicalTypeID::STRING: {
-        return std::make_unique<StringChunkData>(mm, enableCompression, metadata);
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::JSON: {
+        return std::make_unique<StringChunkData>(mm, std::move(dataType), enableCompression,
+            metadata);
     }
     case PhysicalTypeID::ARRAY:
     case PhysicalTypeID::LIST: {
