@@ -12,14 +12,15 @@ This plan covers security incidents affecting any of the following surfaces:
 |---------|----------|
 | Core releases | https://github.com/LadybugDB/ladybug/releases |
 | CLI binary | https://github.com/LadybugDB/ladybug/releases |
-| Python binding | PyPI — `ladybug` package |
-| Node.js binding | npm — `@ladybugdb/core` package (`tools/nodejs_api`) |
-| Java binding | Maven Central — `com.ladybugdb:ladybug` (`tools/java_api`) |
-| Rust binding | crates.io — `ladybug` crate (`tools/rust_api`) |
-| WASM binding | npm — `@ladybugdb/wasm-core` package (`tools/wasm`) |
+| Python binding | PyPI — `ladybug` package (`tools/python_api` submodule) |
+| Node.js binding | npm — `@ladybugdb/core` package (`tools/nodejs_api` submodule) |
+| Java binding | Maven Central — `com.ladybugdb:ladybug` (`tools/java_api` submodule) |
+| Rust binding | crates.io — `lbug` crate (`tools/rust_api` submodule) |
+| WASM binding | npm — `@ladybugdb/wasm-core` package (`tools/wasm` submodule) |
 | Go binding | https://github.com/LadybugDB/go-ladybug |
 | Swift binding | https://github.com/LadybugDB/swift-ladybug |
 | Explorer | https://github.com/LadybugDB/explorer |
+| bugscope | https://github.com/LadybugDB/bugscope |
 | Documentation site | https://docs.ladybugdb.com |
 | Main website | https://ladybugdb.com |
 
@@ -176,19 +177,12 @@ Announcement must include:
 
 ## Phase 6 — Post-Incident Review
 
-After the incident is fully resolved, write a document when one or more of the following apply:
-
-- An E2E or important test fails and the root cause is non-obvious or involves API or contract misuse.
-- A bug affects correctness or stability and the fix is worth explaining for future maintainers.
-- A production, CI, or security outage or regression occurs and you want a blameless record of what happened and how it was fixed.
-- The same class of bug could recur and you want to capture the lesson.
-
-You do not need a full document for trivial one-line fixes or typos unless they had notable impact.
+After the incident is fully resolved, write a document explaining the incident, its impact, root cause, resolution, and lessons learned
 
 ### Where to store documents
 
 - **Location:** `security/incidents/`
-- **Naming:** `YYYY-MM-DD-short-slug.md` for general incidents and `YYYY-MM-DD-security-<slug>.md` for security incidents.
+- **Naming:** `YYYY-MM-DD-security-<slug>.md`
 - **Format:** Markdown stored in the repo so the document is versioned and traceable from the fix commit.
 - **Index:** Add a row to the index table in this plan with a short description and link to the document.
 
@@ -199,22 +193,18 @@ Use these sections so reports are consistent and easy to scan:
 | Section | Purpose |
 |--------|--------|
 | **Author** | Optional. Your name or handle for attribution and traceability. |
+| **CVE / advisory reference:** | Link to the published GitHub Security Advisory. |
+| **Reporter credit** | Unless anonymity was requested. |
 | **Summary** | 2-4 sentences: what failed, where, and the one-line root cause. |
 | **Impact** | Who or what was affected (tests, users, CI) and severity. |
 | **Root cause** | Why it happened: code, API, contract, or operational mismatch. |
 | **Timeline** | Short chronology: when the failure was seen, when it was diagnosed, when the fix was applied. |
+| **Disclosure timeline:** | Dates of report → triage → patch → advisory → public disclosure. |
 | **Resolution** | What changed and how to verify it. |
+| **Registry / artifact impact:** | Which binding versions were yanked, when, and restored. |
 | **Lessons learned** | What to do differently next time. |
 | **Action items** | Optional follow-ups with owner and status if applicable. |
 | **References** | Links to files, tests, advisories, and commits that matter. |
-
-For security incidents, also include:
-| Section | Purpose |
-|--------|--------|
-| **CVE / advisory reference:** | Link to the published GitHub Security Advisory. |
-| **Disclosure timeline:** | Dates of report → triage → patch → advisory → public disclosure. |
-| **Reporter credit** | Unless anonymity was requested. |
-| **Registry / artifact impact:** | Which binding versions were yanked, when, and restored. |
 
 Keep reports blameless: focus on systems, APIs, automation, and process rather than individuals.
 
@@ -255,9 +245,5 @@ Keep reports blameless: focus on systems, APIs, automation, and process rather t
 
 | Date | Document | Short description |
 |------|----------|-------------------|
-| 2026-02-16 | [2026-02-16-copy-rel-segment-planner-schema-groups.md](2026-02-16-copy-rel-segment-planner-schema-groups.md) | CopyRelSegmentTest failure; wrong schema group check in `planCopyRelFrom` vs Partitioner’s single-group requirement. |
-| 2026-02-16 | [2026-02-16-connection-close-sigsegv.md](2026-02-16-connection-close-sigsegv.md) | SIGSEGV when Connection destroyed while query workers still running; fix: wait for in-flight queries before destroying ClientContext. |
-| 2026-02-17 | [2026-02-17-minimal-test-checkpoint-timeout.md](2026-02-17-minimal-test-checkpoint-timeout.md) | CI minimal test: CloseConnectionWithActiveTransaction fails in TearDown; checkpoint times out because Connection destructor skips rollback and transaction stays in manager. |
-| 2026-02-17 | [2026-02-17-fsm-leak-copy-rollback-recovery.md](2026-02-17-fsm-leak-copy-rollback-recovery.md) | FSM leak after COPY + ROLLBACK + RELOAD: two e2e tests see 95 used pages instead of 4; analysis and options (audit allocation paths, checkpoint/reload). |
 
 *(Add new rows here when you add a new incident document.)*
