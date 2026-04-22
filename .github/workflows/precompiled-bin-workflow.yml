@@ -183,7 +183,10 @@ jobs:
         run: |
           cp install/include/lbug.h .
           cp install/include/lbug.hpp .
-          cp -L install/lib*/liblbug.so .
+          # Preserve the versioned SONAME symlink chain so that consumers
+          # linking against liblbug.so can resolve the SONAME (liblbug.so.0)
+          # at load time. See precompiled-bin-workflow.yml SONAME check below.
+          cp -P install/lib*/liblbug.so install/lib*/liblbug.so.* .
           cp -L install/lib*/liblbug.a .
           cp install/bin/lbug .
 
@@ -199,7 +202,10 @@ jobs:
         run: |
           cp install/include/lbug.h .
           cp install/include/lbug.hpp .
-          cp -L install/lib/liblbug.dylib .
+          # Preserve the versioned install_name symlink chain so that consumers
+          # linking against liblbug.dylib can resolve @rpath/liblbug.0.dylib
+          # at load time. See precompiled-bin-workflow.yml install_name check below.
+          cp -P install/lib/liblbug.dylib install/lib/liblbug.*.dylib .
           cp -L install/lib/liblbug.a .
           cp install/bin/lbug .
 
@@ -227,7 +233,10 @@ jobs:
       - name: Create tarballs (Linux compat)
         if: runner.os == 'Linux' && matrix.variant == 'compat'
         run: |
-          tar -czvf liblbug-linux-${{ matrix.arch }}.tar.gz lbug.h lbug.hpp liblbug.so
+          # liblbug.so, liblbug.so.0, liblbug.so.0.15.3: unversioned link-time
+          # name, SONAME, and real file. The latter two are symlinks preserved
+          # by tar so that DT_NEEDED resolution works at load time.
+          tar -czvf liblbug-linux-${{ matrix.arch }}.tar.gz lbug.h lbug.hpp liblbug.so liblbug.so.*
           tar -czvf liblbug-static-linux-${{ matrix.arch }}-compat.tar.gz lbug.h lbug.hpp liblbug.a
           tar -czvf lbug_cli-linux-${{ matrix.arch }}.tar.gz lbug
 
@@ -239,7 +248,11 @@ jobs:
       - name: Create tarballs (macOS)
         if: runner.os == 'macOS'
         run: |
-          tar -czvf liblbug-osx-${{ matrix.arch }}.tar.gz lbug.h lbug.hpp liblbug.dylib
+          # liblbug.dylib, liblbug.0.dylib, liblbug.0.15.3.dylib: unversioned
+          # link-time name, install_name, and real file. The latter two are
+          # symlinks preserved by tar so that LC_LOAD_DYLIB resolution works
+          # at load time.
+          tar -czvf liblbug-osx-${{ matrix.arch }}.tar.gz lbug.h lbug.hpp liblbug.dylib liblbug.*.dylib
           tar -czvf liblbug-static-osx-${{ matrix.arch }}.tar.gz lbug.h lbug.hpp liblbug.a
           tar -czvf lbug_cli-osx-${{ matrix.arch }}.tar.gz lbug
 
@@ -250,6 +263,41 @@ jobs:
           Compress-Archive -Path lbug.h, lbug.hpp, lbug_shared.dll, lbug_shared.lib -DestinationPath liblbug-windows-x86_64.zip
           Compress-Archive -Path lbug.h, lbug.hpp, lbug.lib -DestinationPath liblbug-static-windows-x86_64.zip
           Compress-Archive -Path lbug.exe -DestinationPath lbug_cli-windows-x86_64.zip
+
+      # ---- Verify shared-library tarball self-consistency ----
+      # Guards against the class of bug where the tarball's on-disk filenames
+      # don't match the SONAME / install_name embedded in the shared library.
+      # A consumer linking -llbug resolves the link-time name (liblbug.so /
+      # liblbug.dylib) and stamps the SONAME / install_name into its own
+      # binary; that stamped name is what the dynamic loader then looks up at
+      # runtime, so it has to be present in the tarball too.
+
+      - name: Verify tarball SONAME consistency (Linux compat)
+        if: runner.os == 'Linux' && matrix.variant == 'compat'
+        run: |
+          set -euo pipefail
+          tarball=liblbug-linux-${{ matrix.arch }}.tar.gz
+          soname=$(readelf -d liblbug.so | awk '/\(SONAME\)/ {gsub(/[][]/,"",$NF); print $NF}')
+          entries=$(tar -tzf "$tarball" | sort)
+          printf 'SONAME: %s\n%s entries:\n%s\n' "$soname" "$tarball" "$entries"
+          if ! grep -Fxq "$soname" <<<"$entries"; then
+            echo "::error::SONAME '$soname' is not present as an entry in $tarball"
+            exit 1
+          fi
+
+      - name: Verify tarball install_name consistency (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          tarball=liblbug-osx-${{ matrix.arch }}.tar.gz
+          install_name=$(otool -D liblbug.dylib | awk 'NR==2')
+          base=$(basename "$install_name")
+          entries=$(tar -tzf "$tarball" | sort)
+          printf 'install_name: %s\nbasename: %s\n%s entries:\n%s\n' "$install_name" "$base" "$tarball" "$entries"
+          if ! grep -Fxq "$base" <<<"$entries"; then
+            echo "::error::install_name '$install_name' (basename '$base') is not present as an entry in $tarball"
+            exit 1
+          fi
 
       # ---- Upload artifacts ----
 
