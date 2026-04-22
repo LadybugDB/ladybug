@@ -9,7 +9,7 @@ In scope:
 - The core database engine and query execution runtime
 - On-disk database files, WAL, checkpoints, and recovery paths
 - Language bindings and shell entry points that expose Ladybug in-process
-- Official and user-provided extensions, including install/load flows
+- Official extensions, including install/load flows
 - File, connector, and remote data access surfaces exposed by core or extensions
 - The Wasm/browser and Node.js Wasm distributions
 
@@ -73,6 +73,8 @@ The main assets protected by this threat model are:
 ## Main attack surfaces
 
 - Cypher parsing, planning, optimization, and execution
+- Cypher injection
+- WAL and checkpoint replay, recovery, and rollback
 - `COPY`, `LOAD FROM`, `ATTACH`, `EXPORT`, and other file-backed operations
 - Database open/recovery/checkpoint/WAL replay on attacker-controlled files
 - Dynamic extension installation and loading
@@ -87,6 +89,7 @@ The main assets protected by this threat model are:
 | Memory corruption from malformed queries, data files, database files, or extension inputs | Ladybug runs in-process, so parser, execution, storage, or recovery bugs can crash or compromise the host application | Keep unsafe parsing and recovery paths heavily tested; use sanitizers in development builds; treat malformed files and query text as hostile inputs | **High** because the core is native C++ and parses complex formats |
 | Denial of service via expensive queries or large imports | Untrusted workloads can exhaust CPU, memory, disk, threads, or lock write progress | Transactions, WAL, and recovery are designed for correctness; host applications should set workload limits and isolate untrusted workloads | **High** for multi-tenant or user-facing embeddings without external limits |
 | Malicious or corrupted database/WAL/checkpoint files | Opening attacker-controlled database directories can trigger parser/recovery bugs or corrupt state | Recovery, rollback, and checkpoint correctness are part of the trusted computing base and should reject invalid state explicitly | **High** when opening files from untrusted origins |
+| Data leak via WAL files overstay | WAL files can contain uncommitted data and may persist after a crash | Recovery and checkpoint logic should aggressively truncate or reject stale WAL files; embedding applications should secure database directories | **Medium** if recovery logic is robust, **High** if stale WAL files can be accessed by untrusted parties |
 | Filesystem abuse through path-based features | `COPY`, `LOAD FROM`, `ATTACH`, `EXPORT`, and extensions can read or write attacker-selected paths | Path access is an intended feature, not a sandbox; deployments must rely on OS/container permissions and careful API exposure | **High** if the host exposes these features to untrusted users |
 | Remote code execution through extensions | `LOAD EXTENSION` loads native libraries with process privileges, and `INSTALL` downloads extension artifacts before loading them | Only load trusted extensions from trusted repos; official extensions reduce but do not eliminate risk | **Critical** because extension code executes natively in-process |
 | Supply-chain compromise of extension or release artifacts | A compromised artifact can execute code during install/load or leak data | Secure release provenance, artifact signing/checksumming, and least-privilege extension repos are required operational controls | **High** until strong provenance verification is enforced everywhere |
