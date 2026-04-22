@@ -128,9 +128,6 @@ static LogicalType inferMapOrStruct(std::string_view str) {
             childValueType =
                 LogicalTypeUtils::combineTypes(childValueType, inferMinimalTypeFromString(value));
         }
-        if (childKeyType.containsAny() || childValueType.containsAny()) {
-            return LogicalType::JSON();
-        }
         return LogicalType::MAP(std::move(childKeyType), std::move(childValueType));
     } else if (isStruct) {
         std::vector<StructField> fields;
@@ -145,11 +142,6 @@ static LogicalType inferMapOrStruct(std::string_view str) {
             }
             auto fieldType = inferMinimalTypeFromString(split[1]);
             fields.emplace_back(std::string(fieldKey), std::move(fieldType));
-        }
-        for (const auto& field : fields) {
-            if (field.getType().containsAny()) {
-                return LogicalType::JSON();
-            }
         }
         return LogicalType::STRUCT(std::move(fields));
     } else {
@@ -266,9 +258,6 @@ LogicalType inferMinimalTypeFromString(std::string_view str) {
         auto childType = LogicalType::ANY();
         for (auto& ele : split) {
             childType = LogicalTypeUtils::combineTypes(childType, inferMinimalTypeFromString(ele));
-        }
-        if (childType.containsAny()) {
-            return LogicalType::JSON();
         }
         return LogicalType::LIST(std::move(childType));
     }
