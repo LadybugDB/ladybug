@@ -80,6 +80,18 @@ if __name__ == "__main__":
             "../../tools/python_api/pyproject.toml",
             os.path.join(tempdir, "pyproject.toml"),
         )
+        # The Python submodule now declares package metadata relative to the
+        # project root, so stage the package sources into the sdist root.
+        shutil.copytree(
+            "../../tools/python_api/src_py",
+            os.path.join(tempdir, "src_py"),
+            dirs_exist_ok=True,
+        )
+        shutil.copytree(
+            "../../tools/python_api/test",
+            os.path.join(tempdir, "test"),
+            dirs_exist_ok=True,
+        )
         # Update the version in pyproject.toml
         with open(os.path.join(tempdir, "pyproject.toml"), "r") as f:
             lines = f.readlines()
