@@ -1,6 +1,7 @@
 #include "planner/operator/persistent/logical_merge.h"
 
 #include "binder/expression/node_expression.h"
+#include "binder/expression/rel_expression.h"
 #include "common/cast.h"
 #include "planner/operator/factorization/flatten_resolver.h"
 
@@ -21,6 +22,14 @@ void LogicalMerge::computeFactorizedSchema() {
             schema->insertToGroupAndScope(node->getInternalID(), groupPos);
         }
     }
+    for (auto& info : insertRelInfos) {
+        auto rel = dynamic_cast_checked<RelExpression*>(info.pattern.get());
+        if (!schema->isExpressionInScope(*rel->getInternalID())) {
+            auto groupPos = schema->createGroup();
+            schema->setGroupAsSingleState(groupPos);
+            schema->insertToGroupAndScope(rel->getInternalID(), groupPos);
+        }
+    }
 }
 
 void LogicalMerge::computeFlatSchema() {
@@ -28,6 +37,10 @@ void LogicalMerge::computeFlatSchema() {
     for (auto& info : insertNodeInfos) {
         auto node = dynamic_cast_checked<NodeExpression*>(info.pattern.get());
         schema->insertToGroupAndScopeMayRepeat(node->getInternalID(), 0);
+    }
+    for (auto& info : insertRelInfos) {
+        auto rel = dynamic_cast_checked<RelExpression*>(info.pattern.get());
+        schema->insertToGroupAndScopeMayRepeat(rel->getInternalID(), 0);
     }
 }
 

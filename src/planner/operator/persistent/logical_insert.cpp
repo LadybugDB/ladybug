@@ -1,6 +1,7 @@
 #include "planner/operator/persistent/logical_insert.h"
 
 #include "binder/expression/node_expression.h"
+#include "binder/expression/rel_expression.h"
 #include "common/cast.h"
 #include "planner/operator/factorization/flatten_resolver.h"
 
@@ -23,6 +24,9 @@ void LogicalInsert::computeFactorizedSchema() {
         if (info.tableType == TableType::NODE) {
             auto node = dynamic_cast_checked<NodeExpression*>(info.pattern.get());
             schema->insertToGroupAndScopeMayRepeat(node->getInternalID(), groupPos);
+        } else if (info.tableType == TableType::REL) {
+            auto rel = dynamic_cast_checked<RelExpression*>(info.pattern.get());
+            schema->insertToGroupAndScopeMayRepeat(rel->getInternalID(), groupPos);
         }
     }
 }
@@ -38,6 +42,9 @@ void LogicalInsert::computeFlatSchema() {
         if (info.tableType == TableType::NODE) {
             auto node = dynamic_cast_checked<NodeExpression*>(info.pattern.get());
             schema->insertToGroupAndScopeMayRepeat(node->getInternalID(), 0);
+        } else if (info.tableType == TableType::REL) {
+            auto rel = dynamic_cast_checked<RelExpression*>(info.pattern.get());
+            schema->insertToGroupAndScopeMayRepeat(rel->getInternalID(), 0);
         }
     }
 }
