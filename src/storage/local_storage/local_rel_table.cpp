@@ -42,12 +42,11 @@ bool LocalRelTable::insert(Transaction*, TableInsertState& state) {
     DASSERT(relIDVector->dataType.getPhysicalType() == PhysicalTypeID::INTERNAL_ID);
     const auto numRowsToAppend = relIDVector->state->getSelVector().getSelSize();
 
-    const auto getPosToRead = [numRowsToAppend](const ValueVector& vector, uint64_t i) -> sel_t {
+    const auto getPosToRead = [](const ValueVector& vector, uint64_t i) -> sel_t {
         const auto& selVector = vector.state->getSelVector();
         if (vector.state->isFlat()) {
             return selVector[0];
         }
-        DASSERT(selVector.getSelSize() == numRowsToAppend);
         return selVector[i];
     };
 
@@ -246,7 +245,8 @@ bool LocalRelTable::scan(const Transaction* transaction, TableScanState& state) 
             localScanState.rowIdxVector->setValue<row_idx_t>(i,
                 localScanState.rowIndices[localScanState.nextRowToScan + i]);
         }
-        localScanState.rowIdxVector->state->getSelVectorUnsafe().setSelSize(numToScan);
+        localScanState.outState->setToUnflat();
+        localScanState.rowIdxVector->state->getSelVectorUnsafe().setToUnfiltered(numToScan);
         [[maybe_unused]] auto lookupRes =
             localNodeGroup->lookupMultiple(transaction, localScanState);
         localScanState.nextRowToScan += numToScan;
