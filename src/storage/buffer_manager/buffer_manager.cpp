@@ -118,9 +118,9 @@ uint8_t* BufferManager::pin(FileHandle& fileHandle, page_idx_t pageIdx,
         auto currStateAndVersion = pageState->getStateAndVersion();
         switch (PageState::getState(currStateAndVersion)) {
         case PageState::EVICTED: {
-            if (auto lock = pageState->tryScopedLock(currStateAndVersion)) {
+            if (pageState->tryLock(currStateAndVersion)) {
                 if (!claimAFrame(fileHandle, pageIdx, pageReadPolicy)) {
-                    lock->resetToEvicted();
+                    pageState->resetToEvicted();
                     throw BufferManagerException("Unable to allocate memory! The buffer pool is "
                                                  "full and no memory could be freed!");
                 }
@@ -128,7 +128,6 @@ uint8_t* BufferManager::pin(FileHandle& fileHandle, page_idx_t pageIdx,
                     throw BufferManagerException(
                         "Eviction queue is full! This should be impossible.");
                 }
-                lock->releaseWithoutUnlock();
 #if BM_MALLOC
                 DASSERT(pageState->getPage());
                 return pageState->getPage();
@@ -139,8 +138,7 @@ uint8_t* BufferManager::pin(FileHandle& fileHandle, page_idx_t pageIdx,
         } break;
         case PageState::UNLOCKED:
         case PageState::MARKED: {
-            if (auto lock = pageState->tryScopedLock(currStateAndVersion)) {
-                lock->releaseWithoutUnlock();
+            if (pageState->tryLock(currStateAndVersion)) {
                 return getFrame(fileHandle, pageIdx);
             }
         } break;
@@ -289,9 +287,9 @@ uint64_t BufferManager::evictPages() {
                 } else if (evictionCandidate.isEvicted(pageStateAndVersion)) {
                     // Remove evicted candidate from queue. Lock page before clearing to avoid
                     // data races with other threads that might re-add or evict the same slot.
-                    if (auto lock = pageState->tryScopedLock(pageStateAndVersion)) {
+                    if (pageState->tryLock(pageStateAndVersion)) {
                         evictionQueue.clear(candidate);
-                        lock->unlock();
+                        pageState->unlock();
                     }
                 }
                 continue;
@@ -420,11 +418,7 @@ uint64_t BufferManager::tryEvictPage(std::atomic<EvictionCandidate>& _candidate)
     auto currStateAndVersion = pageState.getStateAndVersion();
     // We check if the page is evictable again. Note that if the page's state or version has
     // changed after the check, `tryLock` will fail, and we will abort the eviction of this page.
-    if (!candidate.isEvictable(currStateAndVersion)) {
-        return 0;
-    }
-    auto lock = pageState.tryScopedLock(currStateAndVersion);
-    if (!lock) {
+    if (!candidate.isEvictable(currStateAndVersion) || !pageState.tryLock(currStateAndVersion)) {
         return 0;
     }
     // The pageState was locked, but another thread already evicted this candidate and unlocked it
@@ -436,10 +430,12 @@ uint64_t BufferManager::tryEvictPage(std::atomic<EvictionCandidate>& _candidate)
         || pageState.getReaderCount() > 0
 #endif
     ) {
+        pageState.unlockUnchanged();
         return 0;
     }
     if (fileHandles[candidate.fileIdx]->isInMemoryMode()) {
         // Cannot flush pages under in memory mode.
+        pageState.unlockUnchanged();
         return 0;
     }
     // At this point, the page is LOCKED, and we have exclusive access to the eviction candidate.
@@ -449,7 +445,7 @@ uint64_t BufferManager::tryEvictPage(std::atomic<EvictionCandidate>& _candidate)
     fileHandle.flushPageIfDirtyWithoutLock(candidate.pageIdx);
     auto numBytesFreed = fileHandle.getPageSize();
     releaseFrameForPage(fileHandle, candidate.pageIdx);
-    lock->resetToEvicted();
+    pageState.resetToEvicted();
     evictionQueue.clear(_candidate);
     return numBytesFreed;
 }
@@ -501,12 +497,12 @@ void BufferManager::updateFrameIfPageIsInFrame(file_idx_t fileIdx, const uint8_t
         if (PageState::getState(currentStateAndVersion) == PageState::EVICTED) {
             return;
         }
-        if (auto lock = pageState->tryScopedLock(currentStateAndVersion)) {
-            memcpy(getFrame(fileHandle, pageIdx), newPage, LBUG_PAGE_SIZE);
-            lock->unlock();
+        if (pageState->tryLock(currentStateAndVersion)) {
             break;
         }
     }
+    memcpy(getFrame(fileHandle, pageIdx), newPage, LBUG_PAGE_SIZE);
+    pageState->unlock();
 }
 
 void BufferManager::removePageFromFrameIfNecessary(FileHandle& fileHandle, page_idx_t pageIdx) {
@@ -523,13 +519,13 @@ void BufferManager::removePageFromFrame(FileHandle& fileHandle, page_idx_t pageI
     if (PageState::getState(pageState->getStateAndVersion()) == PageState::EVICTED) {
         return;
     }
-    auto lock = pageState->spinScopedLock(pageState->getStateAndVersion());
+    pageState->spinLock(pageState->getStateAndVersion());
     if (shouldFlush) {
         fileHandle.flushPageIfDirtyWithoutLock(pageIdx);
     }
     releaseFrameForPage(fileHandle, pageIdx);
     freeUsedMemory(fileHandle.getPageSize());
-    lock.resetToEvicted();
+    pageState->resetToEvicted();
 }
 
 uint64_t BufferManager::freeUsedMemory(uint64_t size) {
