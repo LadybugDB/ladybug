@@ -435,6 +435,7 @@ uint64_t BufferManager::tryEvictPage(std::atomic<EvictionCandidate>& _candidate)
     }
     if (fileHandles[candidate.fileIdx]->isInMemoryMode()) {
         // Cannot flush pages under in memory mode.
+        pageState.unlockUnchanged();
         return 0;
     }
     // At this point, the page is LOCKED, and we have exclusive access to the eviction candidate.
