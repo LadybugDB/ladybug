@@ -1,6 +1,8 @@
 #pragma once
 
 #include <atomic>
+#include <optional>
+#include <utility>
 
 #include "common/assert.h"
 
@@ -21,6 +23,68 @@ class PageState {
     static constexpr uint64_t NUM_BITS_TO_SHIFT_FOR_STATE = 56;
 
 public:
+    class ScopedLock {
+    public:
+        ScopedLock() = default;
+        explicit ScopedLock(PageState* pageState) : pageState{pageState} {}
+        ScopedLock(const ScopedLock&) = delete;
+        ScopedLock& operator=(const ScopedLock&) = delete;
+        ScopedLock(ScopedLock&& other) noexcept
+            : pageState{std::exchange(other.pageState, nullptr)}, action{other.action} {}
+        ScopedLock& operator=(ScopedLock&& other) noexcept {
+            if (this != &other) {
+                release();
+                pageState = std::exchange(other.pageState, nullptr);
+                action = other.action;
+            }
+            return *this;
+        }
+        ~ScopedLock() { release(); }
+
+        explicit operator bool() const { return pageState != nullptr; }
+
+        void unlock() {
+            action = Action::UNLOCK;
+            release();
+        }
+        void unlockUnchanged() {
+            action = Action::UNLOCK_UNCHANGED;
+            release();
+        }
+        void resetToEvicted() {
+            action = Action::RESET_TO_EVICTED;
+            release();
+        }
+        void releaseWithoutUnlock() { pageState = nullptr; }
+
+    private:
+        enum class Action : uint8_t { UNLOCK, UNLOCK_UNCHANGED, RESET_TO_EVICTED };
+
+        void release() {
+            if (!pageState) {
+                return;
+            }
+            switch (action) {
+            case Action::UNLOCK:
+                pageState->unlock();
+                break;
+            case Action::UNLOCK_UNCHANGED:
+                pageState->unlockUnchanged();
+                break;
+            case Action::RESET_TO_EVICTED:
+                pageState->resetToEvicted();
+                break;
+            default:
+                UNREACHABLE_CODE;
+            }
+            pageState = nullptr;
+        }
+
+    private:
+        PageState* pageState = nullptr;
+        Action action = Action::UNLOCK_UNCHANGED;
+    };
+
     static constexpr uint64_t UNLOCKED = 0;
     static constexpr uint64_t LOCKED = 1;
     static constexpr uint64_t MARKED = 2;
@@ -47,9 +111,21 @@ public:
             }
         }
     }
+    // Prefer a scoped lock wrapper at call sites where possible. The raw tryLock/unlock APIs are
+    // easy to misuse on early-return paths.
     bool tryLock(uint64_t oldStateAndVersion) {
         return stateAndVersion.compare_exchange_strong(oldStateAndVersion,
             updateStateWithSameVersion(oldStateAndVersion, LOCKED));
+    }
+    std::optional<ScopedLock> tryScopedLock(uint64_t oldStateAndVersion) {
+        if (!tryLock(oldStateAndVersion)) {
+            return std::nullopt;
+        }
+        return ScopedLock{this};
+    }
+    ScopedLock spinScopedLock(uint64_t oldStateAndVersion) {
+        spinLock(oldStateAndVersion);
+        return ScopedLock{this};
     }
     void unlock() {
         // TODO(Keenan / Guodong): Track down this rare bug and re-enable the assert. Ref #2289.
