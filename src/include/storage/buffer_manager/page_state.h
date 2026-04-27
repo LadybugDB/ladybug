@@ -87,7 +87,7 @@ public:
     uint64_t getStateAndVersion() const { return stateAndVersion.load(); }
 
     void resetToEvicted() {
-        stateAndVersion.store(EVICTED << NUM_BITS_TO_SHIFT_FOR_STATE);
+        stateAndVersion.store(updateStateAndIncrementVersion(stateAndVersion.load(), EVICTED));
 #if BM_MALLOC
         page.reset();
 #endif

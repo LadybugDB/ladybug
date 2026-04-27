@@ -64,6 +64,16 @@ void EvictionQueue::clear(std::atomic<EvictionCandidate>& candidate) {
     UNREACHABLE_CODE;
 }
 
+bool EvictionQueue::tryClear(std::atomic<EvictionCandidate>& candidate,
+    const EvictionCandidate& expected) {
+    auto current = expected;
+    if (candidate.compare_exchange_strong(current, EMPTY)) {
+        size--;
+        return true;
+    }
+    return false;
+}
+
 BufferManager::BufferManager(const std::string& databasePath, const std::string& spillToDiskPath,
     uint64_t bufferPoolSize, uint64_t maxDBSize, VirtualFileSystem* vfs, bool readOnly)
     : bufferPoolSize{bufferPoolSize}, evictionQueue{bufferPoolSize / LBUG_PAGE_SIZE},
@@ -288,8 +298,8 @@ uint64_t BufferManager::evictPages() {
                     // Remove evicted candidate from queue. Lock page before clearing to avoid
                     // data races with other threads that might re-add or evict the same slot.
                     if (pageState->tryLock(pageStateAndVersion)) {
-                        evictionQueue.clear(candidate);
-                        pageState->unlock();
+                        evictionQueue.tryClear(candidate, evictionCandidate);
+                        pageState->resetToEvicted();
                     }
                 }
                 continue;
@@ -445,8 +455,8 @@ uint64_t BufferManager::tryEvictPage(std::atomic<EvictionCandidate>& _candidate)
     fileHandle.flushPageIfDirtyWithoutLock(candidate.pageIdx);
     auto numBytesFreed = fileHandle.getPageSize();
     releaseFrameForPage(fileHandle, candidate.pageIdx);
-    pageState.resetToEvicted();
     evictionQueue.clear(_candidate);
+    pageState.resetToEvicted();
     return numBytesFreed;
 }
 

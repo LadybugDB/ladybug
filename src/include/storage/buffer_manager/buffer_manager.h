@@ -79,6 +79,7 @@ public:
     // locking the page state to make sure there wasn't a data race
     std::span<std::atomic<EvictionCandidate>, BATCH_SIZE> next();
     void clear(std::atomic<EvictionCandidate>& candidate);
+    bool tryClear(std::atomic<EvictionCandidate>& candidate, const EvictionCandidate& expected);
 
     uint64_t getSize() const { return size; }
     uint64_t getEvictionCursor() const { return evictionCursor; }
