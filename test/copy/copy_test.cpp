@@ -236,6 +236,10 @@ TEST_F(CopyTest, RelCopyBMExceptionRecoverySameConnection) {
             },
         .executeFunc =
             [this](main::Connection* conn, int i) {
+                // This test calibrates injected BM failures against the historical 2-thread COPY
+                // schedule. Keep the query-local parallelism fixed so flexible pool sizing in the
+                // rest of the system does not make the failure point nondeterministic.
+                conn->setMaxNumThreadForExec(2);
                 // there are many allocations in the partitioning phase
                 // we scale the failure frequency linearly so that we trigger at least one
                 // allocation failure in the batch insert phase
