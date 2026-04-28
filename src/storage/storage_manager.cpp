@@ -35,9 +35,10 @@ namespace lbug {
 namespace storage {
 
 StorageManager::StorageManager(const std::string& databasePath, bool readOnly, bool enableChecksums,
-    MemoryManager& memoryManager, bool enableCompression, VirtualFileSystem* vfs)
+    MemoryManager& memoryManager, bool enableCompression, bool enableDefaultHashIndex,
+    VirtualFileSystem* vfs)
     : databasePath{databasePath}, readOnly{readOnly}, dataFH{nullptr}, memoryManager{memoryManager},
-      enableCompression{enableCompression} {
+      enableCompression{enableCompression}, enableDefaultHashIndex{enableDefaultHashIndex} {
     wal = std::make_unique<WAL>(databasePath, readOnly, enableChecksums, vfs);
     shadowFile =
         std::make_unique<ShadowFile>(*memoryManager.getBufferManager(), vfs, this->databasePath);

@@ -4,6 +4,7 @@
 
 #include "common/types/types.h"
 #include "storage/index/hash_index.h"
+#include "storage/predicate/column_predicate.h"
 #include "storage/table/node_group_collection.h"
 #include "storage/table/table.h"
 
@@ -156,10 +157,11 @@ public:
     void dropIndex(const std::string& name);
 
     common::column_id_t getPKColumnID() const { return pkColumnID; }
+    PrimaryKeyIndex* tryGetPKIndex() const;
     PrimaryKeyIndex* getPKIndex() const {
-        const auto index = getIndex(PrimaryKeyIndex::DEFAULT_NAME);
-        DASSERT(index.has_value());
-        return &index.value()->cast<PrimaryKeyIndex>();
+        auto* index = tryGetPKIndex();
+        DASSERT(index);
+        return index;
     }
     std::optional<std::reference_wrapper<IndexHolder>> getIndexHolder(const std::string& name);
     std::optional<Index*> getIndex(const std::string& name) const;
@@ -234,6 +236,8 @@ private:
     visible_func getVisibleFunc(const transaction::Transaction* transaction) const;
     common::DataChunk constructDataChunkForColumns(
         const std::vector<common::column_id_t>& columnIDs) const;
+    bool scanPKColumn(const transaction::Transaction* transaction, const common::Value& keyToLookup,
+        std::vector<ColumnPredicateSet> columnPredicateSets, common::offset_t& result) const;
     void scanIndexColumns(main::ClientContext* context, IndexScanHelper& scanHelper,
         const NodeGroupCollection& nodeGroups_) const;
 

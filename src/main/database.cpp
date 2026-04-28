@@ -35,7 +35,7 @@ namespace main {
 SystemConfig::SystemConfig(uint64_t bufferPoolSize_, uint64_t maxNumThreads, bool enableCompression,
     bool readOnly, uint64_t maxDBSize, bool autoCheckpoint, uint64_t checkpointThreshold,
     bool forceCheckpointOnClose, bool throwOnWalReplayFailure, bool enableChecksums,
-    bool enableMultiWrites
+    bool enableMultiWrites, bool enableDefaultHashIndex
 #if defined(__APPLE__)
     ,
     uint32_t threadQos
@@ -45,7 +45,7 @@ SystemConfig::SystemConfig(uint64_t bufferPoolSize_, uint64_t maxNumThreads, boo
       autoCheckpoint{autoCheckpoint}, checkpointThreshold{checkpointThreshold},
       forceCheckpointOnClose{forceCheckpointOnClose},
       throwOnWalReplayFailure(throwOnWalReplayFailure), enableChecksums(enableChecksums),
-      enableMultiWrites{enableMultiWrites} {
+      enableMultiWrites{enableMultiWrites}, enableDefaultHashIndex{enableDefaultHashIndex} {
 #if defined(__APPLE__)
     this->threadQos = threadQos;
 #endif
@@ -123,8 +123,9 @@ void Database::initMembers(std::string_view dbPath, construct_bm_func_t initBmFu
 #endif
 
     catalog = std::make_unique<Catalog>();
-    storageManager = std::make_unique<StorageManager>(databasePath, dbConfig.readOnly,
-        dbConfig.enableChecksums, *memoryManager, dbConfig.enableCompression, vfs.get());
+    storageManager =
+        std::make_unique<StorageManager>(databasePath, dbConfig.readOnly, dbConfig.enableChecksums,
+            *memoryManager, dbConfig.enableCompression, dbConfig.enableDefaultHashIndex, vfs.get());
     transactionManager = std::make_unique<TransactionManager>(storageManager->getWAL());
     databaseManager = std::make_unique<DatabaseManager>();
 

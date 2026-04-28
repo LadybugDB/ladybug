@@ -1,10 +1,18 @@
 #include "api_test/api_test.h"
+#include "catalog/catalog.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/exception/buffer_manager.h"
 #include "common/system_config.h"
+#include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
+#include "transaction/transaction.h"
 
 using namespace lbug::common;
+using namespace lbug::catalog;
+using namespace lbug::storage;
 using namespace lbug::testing;
 using namespace lbug::main;
+using namespace lbug::transaction;
 
 class SystemConfigTest : public ApiTest {
     void SetUp() override { BaseGraphTest::SetUp(); }
@@ -104,4 +112,39 @@ TEST_F(SystemConfigTest, testBufferPoolSize) {
     }
     systemConfig->bufferPoolSize = TestHelper::DEFAULT_BUFFER_POOL_SIZE_FOR_TESTING;
     EXPECT_NO_THROW(auto db = std::make_unique<Database>(databasePath, *systemConfig));
+}
+
+TEST_F(SystemConfigTest, testDisableDefaultHashIndexFromSystemConfig) {
+    systemConfig->enableDefaultHashIndex = false;
+    auto db = std::make_unique<Database>(databasePath, *systemConfig);
+    auto con = std::make_unique<Connection>(db.get());
+    assertQuery(*con->query("CREATE NODE TABLE PersonNoIdx(name STRING, PRIMARY KEY(name))"));
+    assertQuery(*con->query("CREATE (:PersonNoIdx {name: 'Alice'})"));
+
+    auto result = con->query("CALL current_setting('enable_default_hash_index') RETURN *");
+    ASSERT_TRUE(result->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*result), std::vector<std::string>{"False"});
+
+    auto* entry = db->getCatalog()
+                      ->getTableCatalogEntry(&DUMMY_CHECKPOINT_TRANSACTION, "PersonNoIdx")
+                      ->ptrCast<NodeTableCatalogEntry>();
+    auto& nodeTable = db->getStorageManager()->getTable(entry->getTableID())->cast<NodeTable>();
+    ASSERT_EQ(nodeTable.tryGetPKIndex(), nullptr);
+}
+
+TEST_F(SystemConfigTest, testDisableDefaultHashIndexFromDBConfig) {
+    auto db = std::make_unique<Database>(databasePath, *systemConfig);
+    auto con = std::make_unique<Connection>(db.get());
+    assertQuery(*con->query("CALL enable_default_hash_index=false;"));
+    assertQuery(*con->query("CREATE NODE TABLE PersonNoIdx2(name STRING, PRIMARY KEY(name))"));
+    assertQuery(*con->query("CREATE (:PersonNoIdx2 {name: 'Alice'})"));
+    auto result = con->query("CALL current_setting('enable_default_hash_index') RETURN *");
+    ASSERT_TRUE(result->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*result), std::vector<std::string>{"False"});
+
+    auto* entry = db->getCatalog()
+                      ->getTableCatalogEntry(&DUMMY_CHECKPOINT_TRANSACTION, "PersonNoIdx2")
+                      ->ptrCast<NodeTableCatalogEntry>();
+    auto& nodeTable = db->getStorageManager()->getTable(entry->getTableID())->cast<NodeTable>();
+    ASSERT_EQ(nodeTable.tryGetPKIndex(), nullptr);
 }

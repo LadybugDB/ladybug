@@ -2,7 +2,10 @@
 
 #include "common/exception/runtime.h"
 #include "common/task_system/progress_bar.h"
+#include "main/attached_database.h"
 #include "main/client_context.h"
+#include "main/database.h"
+#include "main/database_manager.h"
 #include "main/db_config.h"
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -10,6 +13,25 @@
 
 namespace lbug {
 namespace main {
+
+namespace {
+
+void setDefaultHashIndexEnabledOnStorageManagers(ClientContext* context, bool enabled) {
+    context->getDatabase()->getStorageManager()->setDefaultHashIndexEnabled(enabled);
+    auto* databaseManager = context->getDatabase()->getDatabaseManager();
+    for (auto* graphCatalog : databaseManager->getGraphs()) {
+        if (auto* storageManager = graphCatalog->getStorageManager()) {
+            storageManager->setDefaultHashIndexEnabled(enabled);
+        }
+    }
+    for (auto* attachedDatabase : databaseManager->getAttachedDatabases()) {
+        if (auto* attachedLbugDatabase = dynamic_cast<AttachedLbugDatabase*>(attachedDatabase)) {
+            attachedLbugDatabase->getStorageManager()->setDefaultHashIndexEnabled(enabled);
+        }
+    }
+}
+
+} // namespace
 
 void ThreadsSetting::setContext(ClientContext* context, const common::Value& parameter) {
     parameter.validateType(inputType);
@@ -176,6 +198,18 @@ void ForceCheckpointClosingDBSetting::setContext(ClientContext* context,
 
 common::Value ForceCheckpointClosingDBSetting::getSetting(const ClientContext* context) {
     return common::Value(context->getDBConfig()->forceCheckpointOnClose);
+}
+
+void EnableDefaultHashIndexSetting::setContext(ClientContext* context,
+    const common::Value& parameter) {
+    parameter.validateType(inputType);
+    const auto enabled = parameter.getValue<bool>();
+    context->getDBConfigUnsafe()->enableDefaultHashIndex = enabled;
+    setDefaultHashIndexEnabledOnStorageManagers(context, enabled);
+}
+
+common::Value EnableDefaultHashIndexSetting::getSetting(const ClientContext* context) {
+    return common::Value(context->getDBConfig()->enableDefaultHashIndex);
 }
 
 void EnableOptimizerSetting::setContext(ClientContext* context, const common::Value& parameter) {
