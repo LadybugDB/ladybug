@@ -72,6 +72,7 @@ jobs:
           mkdir -p extension-artifacts/linux_amd64
           mkdir -p extension-artifacts/linux_arm64
           mkdir -p extension-artifacts/linux_x86
+          mkdir -p extension-artifacts/osx_amd64
           mkdir -p extension-artifacts/osx_arm64
           mkdir -p extension-artifacts/win_amd64
 
@@ -92,6 +93,12 @@ jobs:
         with:
           name: lbug-extensions-osx-arm64
           path: extension-artifacts/osx_arm64
+
+      - name: Download built artifacts for osx-x86_64
+        uses: actions/download-artifact@v4
+        with:
+          name: lbug-extensions-osx-x86_64
+          path: extension-artifacts/osx_amd64
 
       - name: Download built artifacts for windows-x86_64
         uses: actions/download-artifact@v4

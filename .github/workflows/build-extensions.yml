@@ -20,6 +20,11 @@ jobs:
           - os: macos-latest
             os_name: osx
             arch: arm64
+            cmake_osx_architectures: arm64
+          - os: macos-15-intel
+            os_name: osx
+            arch: x86_64
+            cmake_osx_architectures: x86_64
           - os: windows-latest
             os_name: win
             arch: x86_64
@@ -149,7 +154,7 @@ jobs:
         run: make extension-release
         env:
           MACOSX_DEPLOYMENT_TARGET: 13.3
-          CMAKE_OSX_ARCHITECTURES: "arm64"
+          CMAKE_OSX_ARCHITECTURES: ${{ matrix.cmake_osx_architectures }}
 
       - name: Enable long paths (Windows)
         if: runner.os == 'Windows'
