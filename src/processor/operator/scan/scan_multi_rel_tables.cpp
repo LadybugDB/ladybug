@@ -3,6 +3,7 @@
 #include "processor/execution_context.h"
 #include "storage/local_storage/local_storage.h"
 #include "storage/table/arrow_rel_table.h"
+#include "storage/table/ice_disk_rel_table.h"
 #include "storage/table/parquet_rel_table.h"
 
 using namespace lbug::common;
@@ -69,6 +70,7 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
     // Check if any table in any scanner is an external rel table with a custom scan state.
     bool hasArrowTable = false;
     bool hasParquetTable = false;
+    bool hasIceDiskTable = false;
     for (auto& [_, scanner] : scanners) {
         for (auto& relInfo : scanner.relInfos) {
             if (dynamic_cast<storage::ArrowRelTable*>(relInfo.table) != nullptr) {
@@ -79,8 +81,12 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
                 hasParquetTable = true;
                 break;
             }
+            if (dynamic_cast<storage::IceDiskRelTable*>(relInfo.table) != nullptr) {
+                hasIceDiskTable = true;
+                break;
+            }
         }
-        if (hasArrowTable || hasParquetTable) {
+        if (hasArrowTable || hasParquetTable || hasIceDiskTable) {
             break;
         }
     }
@@ -95,6 +101,9 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
         scanState =
             std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+    } else if (hasIceDiskTable) {
+        scanState = std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext), 
+            boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     } else {
         scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
             boundNodeIDVector, outVectors, nbrNodeIDVector->state);

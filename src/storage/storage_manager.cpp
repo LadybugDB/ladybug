@@ -19,6 +19,8 @@
 #include "storage/table/arrow_rel_table.h"
 #include "storage/table/arrow_table_support.h"
 #include "storage/table/foreign_rel_table.h"
+#include "storage/table/ice_disk_node_table.h"
+#include "storage/table/ice_disk_rel_table.h"
 #include "storage/table/node_table.h"
 #include "storage/table/parquet_node_table.h"
 #include "storage/table/parquet_rel_table.h"
@@ -98,19 +100,15 @@ void StorageManager::recover(main::ClientContext& clientContext, bool throwOnWal
 void StorageManager::createNodeTable(NodeTableCatalogEntry* entry) {
     tableNameCache[entry->getTableID()] = entry->getName();
     if (!entry->getStorage().empty()) {
-        // Check if storage is Arrow backed
-        if (entry->getStorage().substr(0, 8) == "arrow://") {
-            // Extract Arrow ID from storage string
+        if (entry->getStorage().find("icebug-disk") != std::string::npos) {
+            tables[entry->getTableID()] = std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager);
+        } else if (entry->getStorage().substr(0, 8) == "arrow://") {
             std::string arrowId = entry->getStorage().substr(8);
-
-            // Retrieve Arrow data from registry (as pointers to registry data)
             ArrowSchemaWrapper* schema = nullptr;
             std::vector<ArrowArrayWrapper>* arrays = nullptr;
             if (!ArrowTableSupport::getArrowData(arrowId, schema, arrays)) {
                 throw common::RuntimeException("Failed to retrieve Arrow data for ID: " + arrowId);
             }
-
-            // Create wrappers that reference registry memory while registry keeps ownership.
             ArrowSchemaWrapper schemaCopy = createShallowCopy(*schema);
             std::vector<ArrowArrayWrapper> arraysCopy;
             arraysCopy.reserve(arrays->size());
@@ -169,6 +167,9 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
             tables[info.oid] = std::make_unique<ArrowRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, fromNodeTable, toNodeTable,
                 std::move(schemaCopy), std::move(arraysCopy), arrowId);
+        } else if (entry->getStorage().find("icebug-disk") != std::string::npos) {
+            tables[info.oid] = std::make_unique<IceDiskRelTable>(entry, info.nodePair.srcTableID,
+                info.nodePair.dstTableID, this, &memoryManager);
         } else {
             // Create parquet-backed rel table
             tables[info.oid] = std::make_unique<ParquetRelTable>(entry, info.nodePair.srcTableID,
@@ -437,8 +438,12 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
                               ->ptrCast<NodeTableCatalogEntry>();
         tableNameCache[tableID] = tableEntry->getName();
         if (!tableEntry->getStorage().empty()) {
-            // Create parquet-backed node table
-            tables[tableID] = std::make_unique<ParquetNodeTable>(this, tableEntry, &memoryManager);
+            if (tableEntry->getStorage().find("icebug-disk") != std::string::npos) {
+                tables[tableID] = std::make_unique<IceDiskNodeTable>(this, tableEntry, &memoryManager);
+            } else {
+                // Create parquet-backed node table
+                tables[tableID] = std::make_unique<ParquetNodeTable>(this, tableEntry, &memoryManager);
+            }
         } else {
             // Create regular node table
             tables[tableID] = std::make_unique<NodeTable>(this, tableEntry, &memoryManager);
@@ -465,9 +470,14 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
             RelTableCatalogInfo info = RelTableCatalogInfo::deserialize(deSer);
             DASSERT(!tables.contains(info.oid));
             if (!relGroupEntry->getStorage().empty()) {
-                // Create parquet-backed rel table
-                tables[info.oid] = std::make_unique<ParquetRelTable>(relGroupEntry,
-                    info.nodePair.srcTableID, info.nodePair.dstTableID, this, &memoryManager);
+                if (relGroupEntry->getStorage().find("icebug-disk") != std::string::npos) {
+                    tables[info.oid] = std::make_unique<IceDiskRelTable>(relGroupEntry,
+                        info.nodePair.srcTableID, info.nodePair.dstTableID, this, &memoryManager);
+                } else {
+                    // Create parquet-backed rel table
+                    tables[info.oid] = std::make_unique<ParquetRelTable>(relGroupEntry,
+                        info.nodePair.srcTableID, info.nodePair.dstTableID, this, &memoryManager);
+                }
             } else {
                 // Create regular rel table
                 tables[info.oid] = std::make_unique<RelTable>(relGroupEntry,

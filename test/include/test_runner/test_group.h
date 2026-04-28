@@ -116,7 +116,8 @@ struct TestGroup {
         LBUG,
         JSON,
         CSV_TO_JSON,
-        GRAPH_STD
+        GRAPH_STD,
+        ICE_DISK
     };
     DatasetType datasetType;
 

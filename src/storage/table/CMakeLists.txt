@@ -19,6 +19,8 @@ add_library(lbug_storage_store
         dictionary_chunk.cpp
         dictionary_column.cpp
         foreign_rel_table.cpp
+        ice_disk_node_table.cpp
+        ice_disk_rel_table.cpp
         in_mem_chunked_node_group_collection.cpp
         in_memory_exception_chunk.cpp
         lazy_segment_scanner.cpp
