@@ -375,6 +375,11 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          name: mac-nodejs-module-x64
+          path: tools/nodejs_api/prebuilt
+
+      - uses: actions/download-artifact@v4
+        with:
           name: linux-nodejs-module-x86_64
           path: tools/nodejs_api/prebuilt
 
@@ -399,7 +404,7 @@ jobs:
 
       - name: Show tarball contents
         run: |
-          for f in lbug-source.tar.gz lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-win32-x64.tar.gz; do
+          for f in lbug-source.tar.gz lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-darwin-x64.tar.gz lbug-win32-x64.tar.gz; do
             if [ -f "$f" ]; then
               echo "=== $f ==="; tar -tvf "$f"; echo
             fi
