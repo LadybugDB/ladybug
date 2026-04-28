@@ -19,6 +19,15 @@ ArrowQueryResult::ArrowQueryResult(std::vector<ArrowArray> arrays, int64_t chunk
     }
 }
 
+ArrowQueryResult::ArrowQueryResult(std::vector<ArrowArray> arrays, int64_t chunkSize,
+    CSRMetadata csrMetadata)
+    : QueryResult{type_}, arrays{std::move(arrays)}, chunkSize_{chunkSize},
+      csrMetadata{std::move(csrMetadata)} {
+    for (auto& array : this->arrays) {
+        numTuples += array.length;
+    }
+}
+
 ArrowQueryResult::ArrowQueryResult(std::vector<std::string> columnNames,
     std::vector<LogicalType> columnTypes, FactorizedTable& table, int64_t chunkSize)
     : QueryResult{type_, std::move(columnNames), std::move(columnTypes)}, chunkSize_{chunkSize} {
