@@ -27,6 +27,7 @@ struct DBConfig {
     bool forceCheckpointOnClose;
     bool throwOnWalReplayFailure;
     bool enableChecksums;
+    bool enableDefaultHashIndex;
     bool enableSpillingToDisk;
 #if defined(__APPLE__)
     uint32_t threadQos;

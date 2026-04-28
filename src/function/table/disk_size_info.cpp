@@ -204,7 +204,7 @@ static std::vector<DiskSizeEntry> collectDiskSizeInfo(const ClientContext* conte
             {"node_table", tableEntry->getName(), tablePages, tablePages * LBUG_PAGE_SIZE});
 
         // Count primary key index header pages (rough estimate for overhead)
-        auto* pkIndex = nodeTable.getPKIndex();
+        auto* pkIndex = nodeTable.tryGetPKIndex();
         uint64_t indexPages = estimateHashIndexPages(pkIndex);
         if (indexPages > 0) {
             entries.push_back({"pk_index_overhead", tableEntry->getName() + "_pk", indexPages,
