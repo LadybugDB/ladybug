@@ -430,7 +430,7 @@ jobs:
           if [ "${{ github.event.inputs.isNightly }}" = "true" ]; then
             TAG=next
           fi
-          for tarball in lbug-source.tar.gz lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-win32-x64.tar.gz; do
+          for tarball in lbug-source.tar.gz lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-darwin-x64.tar.gz lbug-win32-x64.tar.gz; do
             [ -f "$tarball" ] || continue
             PACKAGE_NAME="$(tar -xOf "$tarball" package/package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.name)")"
             PACKAGE_VERSION="$(tar -xOf "$tarball" package/package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.version)")"
@@ -447,7 +447,7 @@ jobs:
         if: ${{ github.event_name == 'schedule' || (github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly == 'true') }}
         run: |
           NIGHTLY_TAG="nightly-$(date -u +%Y%m%d)"
-          for tarball in lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-win32-x64.tar.gz lbug-source.tar.gz; do
+          for tarball in lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-darwin-x64.tar.gz lbug-win32-x64.tar.gz lbug-source.tar.gz; do
             [ -f "$tarball" ] || continue
             PACKAGE_NAME="$(tar -xOf "$tarball" package/package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.name)")"
             PACKAGE_VERSION="$(tar -xOf "$tarball" package/package.json | node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(pkg.version)")"
@@ -466,7 +466,7 @@ jobs:
       - name: Deploy to npm.js
         if: ${{ github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly != 'true' }}
         run: |
-          for tarball in lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-win32-x64.tar.gz lbug-source.tar.gz; do
+          for tarball in lbug-linux-x64.tar.gz lbug-linux-arm64.tar.gz lbug-darwin-arm64.tar.gz lbug-darwin-x64.tar.gz lbug-win32-x64.tar.gz lbug-source.tar.gz; do
             [ -f "$tarball" ] || continue
             npm publish "$tarball" --access public --tag latest
           done

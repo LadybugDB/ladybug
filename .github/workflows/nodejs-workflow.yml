@@ -32,10 +32,6 @@ on:
 
 jobs:
   build-nodejs:
-    # Temporary: macOS x64 does not have binary extensions published yet.
-    # Keep that matrix leg visible, but do not fail the overall workflow until
-    # the next release fills the server-side gap.
-    continue-on-error: ${{ matrix.os == 'macos-15-intel' }}
     runs-on: ${{ matrix.os }}
     env:
       LBUG_LINUX_VARIANT: compat
