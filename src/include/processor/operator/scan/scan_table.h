@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "binder/expression/expression.h"
 #include "processor/operator/physical_operator.h"
 #include "storage/table/table.h"
@@ -30,7 +32,11 @@ public:
     EXPLICIT_COPY_DEFAULT_MOVE(ColumnCaster);
 
     void setCastExpr(std::shared_ptr<binder::Expression> expr) { castExpr = std::move(expr); }
+    void setJSONExtract(std::string propertyName) {
+        jsonExtractPropertyName = std::move(propertyName);
+    }
     bool hasCast() const { return castExpr != nullptr; }
+    bool hasJSONExtract() const { return jsonExtractPropertyName.has_value(); }
 
     // Generate temporary vectors for scanning
     void init(common::ValueVector* vectorAfterCasting, storage::MemoryManager* memoryManager);
@@ -41,10 +47,12 @@ public:
 
 private:
     ColumnCaster(const ColumnCaster& other)
-        : columnType{other.columnType.copy()}, castExpr{other.castExpr} {}
+        : columnType{other.columnType.copy()}, castExpr{other.castExpr},
+          jsonExtractPropertyName{other.jsonExtractPropertyName} {}
 
     common::LogicalType columnType;
     std::shared_ptr<binder::Expression> castExpr;
+    std::optional<std::string> jsonExtractPropertyName;
 
     // vector for scanning; same data type as column
     std::shared_ptr<common::ValueVector> vectorBeforeCasting = nullptr;

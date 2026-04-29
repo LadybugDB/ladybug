@@ -28,6 +28,11 @@
 0|[User]|{"age":30,"name":"Alice"}
 1|[City]|{"population":8000000,"name":"New York"}
 
+-LOG QueryDynamicProperties
+-STATEMENT MATCH (u:User)-[:LivesIn]->(c:City) RETURN u.name, c.name
+---- 1
+"Alice"|"New York"
+
 -LOG Cleanup
 -STATEMENT USE GRAPH main
 ---- ok

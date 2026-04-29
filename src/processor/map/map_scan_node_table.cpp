@@ -44,6 +44,14 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapScanNodeTable(
             auto& property = expr->constCast<PropertyExpression>();
             if (property.hasProperty(tableEntry->getTableID())) {
                 auto propertyName = property.getPropertyName();
+                if (!tableEntry->containsProperty(propertyName) &&
+                    tableEntry->containsProperty("data")) {
+                    auto columnCaster = ColumnCaster(LogicalType::JSON());
+                    columnCaster.setJSONExtract(propertyName);
+                    tableInfo.addColumnInfo(tableEntry->getColumnID("data"),
+                        std::move(columnCaster));
+                    continue;
+                }
                 auto& columnType = tableEntry->getProperty(propertyName).getType();
                 auto columnCaster = ColumnCaster(columnType.copy());
                 if (property.getDataType() != columnType) {
