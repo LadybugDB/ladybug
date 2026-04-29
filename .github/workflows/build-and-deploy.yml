@@ -169,6 +169,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      LBUG_SOURCE_DIR: ${{ github.workspace }}
+      LBUG_RUST_BUILD_FROM_SOURCE: 1
     steps:
       - uses: actions/checkout@v4
 
