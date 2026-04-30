@@ -19,8 +19,7 @@ endif
 	python3 -m venv $(VENV)
 
 requirements: .venv
-	$(VENV_BIN)/python -m pip install -U uv \
-	&& $(VENV_BIN)/uv pip install pytest pexpect ruff
+	$(VENV_BIN)/python -m pip install -U uv pytest pexpect ruff
 
 # Create a history file for use in the tests. Otherwise test queries will be written to ~/.lbdb/history.txt
 historyfile:
@@ -30,7 +29,7 @@ test: historyfile
 	python3 -m pytest -v .
 
 test-venv: requirements historyfile
-	$(VENV_BIN)/python3 -m pytest -v .
+	$(VENV_BIN)/python -m pytest -v .
 
 check: requirements
 	$(VENV_BIN)/uv run ruff check

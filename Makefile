@@ -319,7 +319,7 @@ shell-test:
 	$(call run-cmake-relwithdebinfo, \
 		-DBUILD_SHELL=TRUE \
 	)
-	$(MAKE) -C tools/shell/test test
+	$(MAKE) -C tools/shell/test test-venv
 
 # Clang-related tools and checks
 

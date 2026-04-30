@@ -9,6 +9,16 @@ on:
       - main
   workflow_dispatch:
     inputs:
+      platform:
+        description: 'Platform to run minimal test on'
+        required: false
+        default: linux
+        type: choice
+        options:
+          - linux
+          - macos
+          - windows
+
       auto_checkpoint:
         description: 'Database config - auto checkpoint'
         required: false
@@ -111,14 +121,22 @@ jobs:
         run: python3 scripts/run-clang-format.py --clang-format-executable /usr/lib/llvm18/bin/clang-format -r src/ test/ tools/ extension/
 
   minimal-test:
-    name: minimal test
-    runs-on: ubuntu-latest
+    name: minimal test (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
     needs: [ sanity-checks ]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON((github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'macos' && '{"include":[{"platform":"macos","runner":"macos-latest"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'windows' && '{"include":[{"platform":"windows","runner":"windows-latest"}]}') || '{"include":[{"platform":"linux","runner":"ubuntu-latest"}]}') }}
     env:
       GEN: Ninja
       TEST_JOBS: 4
       NUM_THREADS: 4
+      WERROR: ${{ matrix.platform == 'windows' && '0' || '1' }}
+      EXTRA_CMAKE_FLAGS: ${{ matrix.platform == 'windows' && '-DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded' || '' }}
     steps:
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.platform == 'windows'
+
       - uses: actions/checkout@v4
 
       - name: Checkout dataset and benchmarks
@@ -134,6 +152,13 @@ jobs:
             minimal-test-${{ runner.os }}-refs/heads/main
             minimal-test-${{ runner.os }}-
 
+      - name: Enable long paths (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+          git config --system core.longpaths true
+
       - name: Build
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
@@ -141,16 +166,30 @@ jobs:
         run: make relwithdebinfo
 
       - name: Generate datasets
+        if: matrix.platform != 'windows'
         run: bash scripts/generate_binary_demo.sh --lbug-shell-mode relwithdebinfo
+
+      - name: Generate datasets (Windows)
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: |
+          LBUG_SHELL="$(find build -path '*/src/lbug_shell.exe' -print -quit)"
+          test -n "$LBUG_SHELL"
+          bash scripts/generate_binary_demo.sh --lbug-shell "$LBUG_SHELL"
 
       - name: Install uv
         run: pip3 install uv
 
       - name: Test
+        shell: bash
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            make test
+            exit
+          fi
           uv venv
           source .venv/bin/activate
           uv pip install pytest pexpect
@@ -159,6 +198,7 @@ jobs:
   minimal-linux-extension-test:
     name: minimal linux extension test
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'linux' }}
     env:
       GEN: Ninja
       UW_S3_ACCESS_KEY_ID: ${{ secrets.UW_S3_ACCESS_KEY_ID }}
