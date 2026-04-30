@@ -4,13 +4,14 @@
 #include <cstdint>
 #include <string_view>
 
+#include "common/api.h"
 #include "common/array_utils.h"
 #include "common/types/types.h"
 
 namespace lbug {
 namespace common {
 
-extern const char* LBUG_VERSION;
+extern LBUG_API const char* LBUG_VERSION;
 
 constexpr double DEFAULT_HT_LOAD_FACTOR = 1.5;
 

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "common/api.h"
 #include "common/arrow/arrow.h"
 #include "main/connection.h"
 
@@ -15,7 +16,7 @@ struct ArrowTableCreationResult {
     std::string arrowId;
 };
 
-class ArrowTableSupport {
+class LBUG_API ArrowTableSupport {
 public:
     // Register Arrow data and return an ID
     static std::string registerArrowData(ArrowSchemaWrapper schema,

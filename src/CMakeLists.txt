@@ -27,6 +27,9 @@ set_target_properties(lbug_shared PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR}
 )
+if(WIN32)
+    set_target_properties(lbug_shared PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
 
 target_link_libraries(lbug PUBLIC lbug_link_deps)
 target_link_libraries(lbug_shared PUBLIC lbug_link_deps)
