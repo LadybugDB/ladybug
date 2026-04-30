@@ -37,7 +37,14 @@ jobs:
           run-id: ${{ inputs.run_id }}
 
       - name: Upload to Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           files: artifacts/**/*
+          draft: true
+
+      - name: Publish it and mark as immutable
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          draft: false
