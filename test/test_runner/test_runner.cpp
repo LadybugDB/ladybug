@@ -4,6 +4,7 @@
 
 #include "common/assert.h"
 #include "common/exception/test.h"
+#include "common/json_utils.h"
 #include "common/md5.h"
 #include "common/string_utils.h"
 #include "graph_test/base_graph_test.h"
@@ -18,6 +19,71 @@ using namespace lbug::common;
 
 namespace lbug {
 namespace testing {
+
+static std::string canonicalizeJsonValue(yyjson_val* val) {
+    if (yyjson_is_obj(val)) {
+        std::vector<std::pair<std::string, std::string>> fields;
+        yyjson_obj_iter iter;
+        yyjson_obj_iter_init(val, &iter);
+        yyjson_val* key = nullptr;
+        while ((key = yyjson_obj_iter_next(&iter))) {
+            auto fieldVal = yyjson_obj_iter_get_val(key);
+            fields.emplace_back(yyjson_get_str(key), canonicalizeJsonValue(fieldVal));
+        }
+        std::ranges::sort(fields, {}, &std::pair<std::string, std::string>::first);
+        std::string result = "{";
+        for (auto i = 0u; i < fields.size(); ++i) {
+            if (i > 0) {
+                result += ",";
+            }
+            result += "\"" + fields[i].first + "\":" + fields[i].second;
+        }
+        result += "}";
+        return result;
+    }
+    if (yyjson_is_arr(val)) {
+        std::string result = "[";
+        yyjson_arr_iter iter;
+        yyjson_arr_iter_init(val, &iter);
+        yyjson_val* elem = nullptr;
+        auto i = 0u;
+        while ((elem = yyjson_arr_iter_next(&iter))) {
+            if (i++ > 0) {
+                result += ",";
+            }
+            result += canonicalizeJsonValue(elem);
+        }
+        result += "]";
+        return result;
+    }
+    return json_extension::jsonToString(val);
+}
+
+static std::string canonicalizeJsonField(const std::string& field) {
+    if (field.empty() || (field[0] != '{' && field[0] != '[')) {
+        return field;
+    }
+    auto json = json_extension::stringToJsonNoError(field);
+    if (json.ptr == nullptr) {
+        return field;
+    }
+    return canonicalizeJsonValue(yyjson_doc_get_root(json.ptr));
+}
+
+static std::string canonicalizeTupleJsonFields(const std::string& tuple) {
+    auto fields = StringUtils::split(tuple, "|");
+    for (auto& field : fields) {
+        field = canonicalizeJsonField(field);
+    }
+    return StringUtils::join(fields, "|");
+}
+
+static std::vector<std::string> canonicalizeTupleJsonFields(std::vector<std::string> tuples) {
+    for (auto& tuple : tuples) {
+        tuple = canonicalizeTupleJsonFields(tuple);
+    }
+    return tuples;
+}
 
 template<typename T>
 static bool precisionEqual(T x, T y) {
@@ -187,7 +253,10 @@ void TestRunner::checkPlanResult(Connection& conn, QueryResult* result, TestStat
         if (!statement.checkOutputOrder) {
             std::ranges::sort(testAnswer.expectedResult);
         }
-        if (resultTuples == testAnswer.expectedResult) {
+        const auto normalizedResultTuples = canonicalizeTupleJsonFields(resultTuples);
+        const auto normalizedExpectedResult =
+            canonicalizeTupleJsonFields(testAnswer.expectedResult);
+        if (normalizedResultTuples == normalizedExpectedResult) {
             spdlog::info("QUERY PASSED.");
         } else {
             outputFailedPlan(conn, statement);
@@ -196,12 +265,12 @@ void TestRunner::checkPlanResult(Connection& conn, QueryResult* result, TestStat
                     spdlog::info(tuple);
                 }
                 for (auto i = 0u; i < resultTuples.size(); i++) {
-                    EXPECT_EQ(resultTuples[i], testAnswer.expectedResult[i])
+                    EXPECT_EQ(normalizedResultTuples[i], normalizedExpectedResult[i])
                         << "Result tuple at index " << i << " did not match the expected value";
                 }
             } else {
                 EXPECT_EQ(resultTuples.size(), actualNumTuples);
-                ASSERT_EQ(resultTuples, testAnswer.expectedResult);
+                ASSERT_EQ(normalizedResultTuples, normalizedExpectedResult);
             }
         }
     }

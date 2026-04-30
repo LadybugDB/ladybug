@@ -275,7 +275,8 @@ bool ParquetRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
         indicesChunk.insert(colIdx, vector);
     }
 
-    // Scan the row groups and collect relationships for bound nodes
+    // Scan the row groups and collect relationships for bound nodes.
+    const auto isFwd = parquetRelScanState.direction != RelDataDirection::BWD;
     uint64_t totalRowsCollected = 0;
     const uint64_t maxRowsPerCall = DEFAULT_VECTOR_CAPACITY;
     uint64_t currentGlobalRowIdx = 0;
@@ -296,27 +297,28 @@ bool ParquetRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
 
         for (size_t i = 0; i < selSize && totalRowsCollected < maxRowsPerCall;
              ++i, ++currentGlobalRowIdx) {
-            // Find which source node this row belongs to
-            common::offset_t sourceNodeOffset = findSourceNodeForRow(currentGlobalRowIdx);
+            // Find which source node this row belongs to.
+            const auto sourceNodeOffset = findSourceNodeForRow(currentGlobalRowIdx);
             if (sourceNodeOffset == common::INVALID_OFFSET) {
                 continue; // Invalid row
             }
 
-            // Check if this source node is in our bound nodes
-            if (boundNodeOffsets.find(sourceNodeOffset) == boundNodeOffsets.end()) {
+            // Column 0 in indices file is the destination node offset.
+            const auto dstOffset = indicesChunk.getValueVector(0).getValue<common::offset_t>(i);
+            const auto boundOffset = isFwd ? sourceNodeOffset : dstOffset;
+            if (boundNodeOffsets.find(boundOffset) == boundNodeOffsets.end()) {
                 continue; // Not a bound node, skip
             }
 
             // This row belongs to a bound node, collect the relationship
 
-            // Column 0 in indices file is the target/destination node ID
-            // Read as offset_t and convert to INTERNAL_ID
-            auto dstOffset = indicesChunk.getValueVector(0).getValue<common::offset_t>(i);
-            auto dstNodeID = internalID_t(dstOffset, getToNodeTableID());
+            const auto nbrOffset = isFwd ? dstOffset : sourceNodeOffset;
+            const auto nbrTableID = isFwd ? getToNodeTableID() : getFromNodeTableID();
+            auto nbrNodeID = internalID_t(nbrOffset, nbrTableID);
 
-            // outputVectors[0] is the neighbor node ID (destination), if requested
+            // outputVectors[0] is the neighbor node ID, if requested.
             if (!parquetRelScanState.outputVectors.empty()) {
-                parquetRelScanState.outputVectors[0]->setValue(totalRowsCollected, dstNodeID);
+                parquetRelScanState.outputVectors[0]->setValue(totalRowsCollected, nbrNodeID);
             }
 
             // If there are additional columns (e.g., weight), copy them to subsequent output
