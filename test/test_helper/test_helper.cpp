@@ -14,6 +14,11 @@ using namespace lbug::main;
 namespace lbug {
 namespace testing {
 
+static std::string normalizePathForCypher(std::string path) {
+    std::replace(path.begin(), path.end(), '\\', '/');
+    return path;
+}
+
 std::vector<std::string> TestHelper::convertResultToString(QueryResult& queryResult,
     bool checkOutputOrder) {
     std::vector<std::string> actualOutput;
@@ -78,6 +83,7 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
                     fullPath = appendLbugRootPath(csvFilePath);
                 }
             }
+            fullPath = normalizePathForCypher(std::move(fullPath));
             line.replace(line.find(csvFilePath), csvFilePath.length(), fullPath);
         }
         // Also handle storage = 'path' for parquet tables
@@ -106,6 +112,7 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
                     fullPath = appendLbugRootPath(storagePath);
                 }
             }
+            fullPath = normalizePathForCypher(std::move(fullPath));
 
             size_t pos = line.find(storagePath);
             if (pos != std::string::npos) {

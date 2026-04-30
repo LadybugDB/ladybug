@@ -1,6 +1,10 @@
 #include "storage/storage_utils.h"
 
 #include <filesystem>
+#ifdef _WIN32
+#include <cctype>
+#include <string_view>
+#endif
 
 #include "common/null_buffer.h"
 #include "common/types/list_t.h"
@@ -15,6 +19,22 @@ using namespace lbug::common;
 
 namespace lbug {
 namespace storage {
+
+namespace {
+
+#ifdef _WIN32
+static bool isWindowsDrivePath(std::string_view path) {
+    return path.length() >= 2 && std::isalpha(static_cast<unsigned char>(path[0])) &&
+           path[1] == ':';
+}
+
+static bool isWindowsUNCPath(std::string_view path) {
+    return path.length() >= 2 &&
+           ((path[0] == '\\' && path[1] == '\\') || (path[0] == '/' && path[1] == '/'));
+}
+#endif
+
+} // namespace
 
 std::string StorageUtils::getColumnName(const std::string& propertyName, ColumnType type,
     const std::string& prefix) {
@@ -60,8 +80,21 @@ std::string StorageUtils::expandPath(const main::ClientContext* context, const s
             context->getCurrentSetting(main::HomeDirectorySetting::name).getValue<std::string>() +
             fullPath.substr(1);
     }
-    // Normalize the path to resolve '.' and '..'
-    std::filesystem::path normalizedPath = std::filesystem::absolute(fullPath).lexically_normal();
+    // Normalize the path to resolve '.' and '..'. Avoid std::filesystem::absolute
+    // when the input already names a Windows drive/UNC path because absolute may
+    // consult current_path(), which can fail if the process cwd has been deleted.
+    std::filesystem::path normalizedPath;
+    std::filesystem::path filePath{fullPath};
+    auto shouldAvoidAbsolute = filePath.is_absolute();
+#ifdef _WIN32
+    shouldAvoidAbsolute =
+        shouldAvoidAbsolute || isWindowsDrivePath(fullPath) || isWindowsUNCPath(fullPath);
+#endif
+    if (shouldAvoidAbsolute) {
+        normalizedPath = filePath.lexically_normal();
+    } else {
+        normalizedPath = std::filesystem::absolute(filePath).lexically_normal();
+    }
     return normalizedPath.string();
 }
 
