@@ -21,25 +21,6 @@ namespace {
 
 constexpr int64_t REL_ID_OUTPUT_COLUMN = -2;
 
-std::string resolveIceDiskPath(const std::string& storageRoot, const std::string& configuredPath,
-    const std::string& fallbackPath) {
-    if (configuredPath.empty()) {
-        return fallbackPath;
-    }
-    auto configured = std::filesystem::path{configuredPath};
-    if (configured.is_absolute()) {
-        return configured.lexically_normal().string();
-    }
-    if (storageRoot.empty()) {
-        return configured.lexically_normal().string();
-    }
-    auto baseDir = std::filesystem::path{storageRoot}.parent_path();
-    if (baseDir.empty()) {
-        return configured.lexically_normal().string();
-    }
-    return (baseDir / configured).lexically_normal().string();
-}
-
 std::string getRelPropertyNameForColumnID(const RelGroupCatalogEntry& entry, column_id_t columnID) {
     for (const auto& property : entry.getProperties()) {
         if (entry.getColumnID(property.getName()) == columnID) {
@@ -161,15 +142,16 @@ IceDiskRelTable::IceDiskRelTable(RelGroupCatalogEntry* relGroupEntry, common::ta
     MemoryManager* memoryManager)
     : RelTable{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
       relGroupCatalogEntry{relGroupEntry} {
-    auto storage = relGroupEntry->getStorage();
-    indicesFilePath = resolveIceDiskPath(storage, relGroupEntry->getIndicesPath(),
-        storage + "_indices_" + relGroupEntry->getName() + ".parquet");
-    indptrFilePath = resolveIceDiskPath(storage, relGroupEntry->getIndptrPath(),
-        storage + "_indptr_" + relGroupEntry->getName() + ".parquet");
-    if (indicesFilePath.empty() || indptrFilePath.empty()) {
-        throw RuntimeException("Invalid icebug-disk storage configuration for rel table: " +
-                               relGroupEntry->getName());
+    if (relGroupEntry->getIndicesPath().empty()) {
+        throw RuntimeException("Indices file path is empty for icebug-disk-backed rel table");
     }
+
+    if (relGroupEntry->getIndptrPath().empty()) {
+        throw RuntimeException("Indptr file path is empty for icebug-disk-backed rel table");
+    }
+
+    indicesFilePath = relGroupEntry->getIndicesPath();
+    indptrFilePath = relGroupEntry->getIndptrPath();
     tableScanSharedState = std::make_unique<IceDiskRelTableScanSharedState>();
 }
 

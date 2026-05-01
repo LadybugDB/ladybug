@@ -22,33 +22,6 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace storage {
 
-namespace {
-
-std::string resolveIceDiskPath(const std::string& storageRoot, const std::string& configuredPath,
-    const std::string& fallbackPath) {
-    if (configuredPath.empty()) {
-        return fallbackPath;
-    }
-    auto configured = std::filesystem::path{configuredPath};
-    if (configured.is_absolute()) {
-        return configured.lexically_normal().string();
-    }
-    if (storageRoot.empty()) {
-        return configured.lexically_normal().string();
-    }
-    auto baseDir = std::filesystem::path{storageRoot}.parent_path();
-    if (baseDir.empty()) {
-        return configured.lexically_normal().string();
-    }
-    return (baseDir / configured).lexically_normal().string();
-}
-
-} // namespace
-
-const NodeTableCatalogEntry* IceDiskNodeTableScanState::getNodeTableCatalogEntry() const {
-    return table->cast<IceDiskNodeTable>().getNodeTableCatalogEntry();
-}
-
 void IceDiskNodeTableScanState::setToTable(const Transaction* transaction, Table* table_,
     std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
     RelDataDirection /*direction*/) {
@@ -66,7 +39,7 @@ void IceDiskNodeTableScanState::setToTable(const Transaction* transaction, Table
     tempReader->initializeScan(tempState, dummyGroups, VirtualFileSystem::GetUnsafe(*context));
     columnSkips.assign(tempReader->getNumColumns(), true);
 
-    auto entry = iceDiskTable.getNodeTableCatalogEntry();
+    auto entry = iceDiskTable.getCatalogEntry();
     for (auto columnID : columnIDs) {
         if (columnID == INVALID_COLUMN_ID || columnID == ROW_IDX_COLUMN_ID) {
             continue;
@@ -91,8 +64,11 @@ IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
     : NodeTable{storageManager, nodeTableEntry, memoryManager},
       nodeTableCatalogEntry{nodeTableEntry},
       tableScanSharedState{std::make_unique<IceDiskNodeTableScanSharedState>()} {
-    parquetFilePath = resolveIceDiskPath(nodeTableEntry->getStorage(), nodeTableEntry->getTablePath(),
-        nodeTableEntry->getStorage() + "_nodes_" + nodeTableEntry->getName() + ".parquet");
+    if (nodeTableEntry->getTablePath().empty()) {
+        throw RuntimeException("Parquet file path is empty for icebug-disk-backed node table");
+    }
+
+    parquetFilePath = nodeTableEntry->getTablePath();
 }
 
 void IceDiskNodeTable::initializeScanCoordination(const Transaction* transaction) {

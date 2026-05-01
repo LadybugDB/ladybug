@@ -116,6 +116,7 @@ void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
 
         return;
     }
+
     if (const auto iceDiskTable = dynamic_cast<IceDiskNodeTable*>(this->table)) {
         const auto tableSharedState = iceDiskTable->getTableScanSharedState();
         if (tableSharedState->getNextMorsel(static_cast<IceDiskNodeTableScanState*>(&scanState))) {

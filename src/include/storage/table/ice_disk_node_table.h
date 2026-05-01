@@ -27,8 +27,6 @@ struct IceDiskNodeTableScanState : public TableScanState {
         parquetScanState = std::make_unique<processor::ParquetReaderScanState>();
     }
 
-    const catalog::NodeTableCatalogEntry* getNodeTableCatalogEntry() const;
-
     void setToTable(const transaction::Transaction* transaction, Table* table_,
         std::vector<common::column_id_t> columnIDs_,
         std::vector<ColumnPredicateSet> columnPredicateSets_ = {},
@@ -97,13 +95,13 @@ public:
     common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) override;
 
     const std::string& getParquetFilePath() const { return parquetFilePath; }
-    const catalog::NodeTableCatalogEntry* getNodeTableCatalogEntry() const { return nodeTableCatalogEntry; }
+    const catalog::NodeTableCatalogEntry* getCatalogEntry() const { return nodeTableCatalogEntry; }
     IceDiskNodeTableScanSharedState* getTableScanSharedState() const { return tableScanSharedState.get(); }
 
 private:
     std::string parquetFilePath;
     const catalog::NodeTableCatalogEntry* nodeTableCatalogEntry;
-    mutable std::unique_ptr<IceDiskNodeTableScanSharedState> tableScanSharedState;
+    std::unique_ptr<IceDiskNodeTableScanSharedState> tableScanSharedState;
 };
 
 } // namespace storage

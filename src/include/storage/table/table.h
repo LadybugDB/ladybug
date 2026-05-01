@@ -164,7 +164,6 @@ public:
     // Note that `resetCachedBoundNodeIDs` is only applicable to RelTable for now.
     virtual void initScanState(transaction::Transaction* transaction, TableScanState& readState,
         bool resetCachedBoundNodeSelVec = true) const = 0;
-    virtual void initializeScanCoordination(const transaction::Transaction* /*transaction*/) {}
     bool scan(transaction::Transaction* transaction, TableScanState& scanState);
 
     virtual void initInsertState(main::ClientContext* context, TableInsertState& insertState) = 0;
