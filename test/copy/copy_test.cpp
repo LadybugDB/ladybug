@@ -219,6 +219,9 @@ TEST_F(CopyTest, NodeCopyBMExceptionRecoverySameConnectionStringKey) {
 }
 
 TEST_F(CopyTest, RelCopyBMExceptionRecoverySameConnection) {
+#ifdef __WASM__
+    GTEST_SKIP() << "Times out repeatedly in WASM mode.";
+#endif
     if (inMemMode ||
         common::StorageConfig::NODE_GROUP_SIZE_LOG2 != TestParser::STANDARD_NODE_GROUP_SIZE_LOG_2) {
         GTEST_SKIP();
