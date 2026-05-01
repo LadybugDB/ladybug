@@ -218,10 +218,8 @@ TEST_F(CopyTest, NodeCopyBMExceptionRecoverySameConnectionStringKey) {
     BMExceptionRecoveryTest(cfg);
 }
 
+#ifndef __WASM__
 TEST_F(CopyTest, RelCopyBMExceptionRecoverySameConnection) {
-#ifdef __WASM__
-    GTEST_SKIP() << "Times out repeatedly in WASM mode.";
-#endif
     if (inMemMode ||
         common::StorageConfig::NODE_GROUP_SIZE_LOG2 != TestParser::STANDARD_NODE_GROUP_SIZE_LOG_2) {
         GTEST_SKIP();
@@ -273,6 +271,7 @@ TEST_F(CopyTest, RelCopyBMExceptionRecoverySameConnection) {
         .checkResult = 2420766};
     BMExceptionRecoveryTest(cfg);
 }
+#endif
 
 TEST_F(CopyTest, NodeInsertBMExceptionDuringCommitRecovery) {
     static constexpr uint64_t numValues = 200000;
