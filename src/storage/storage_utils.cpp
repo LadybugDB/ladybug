@@ -1,7 +1,7 @@
 #include "storage/storage_utils.h"
 
 #include <filesystem>
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__EMSCRIPTEN__)
 #include <cctype>
 #include <string_view>
 #endif
@@ -22,7 +22,7 @@ namespace storage {
 
 namespace {
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__EMSCRIPTEN__)
 static bool isWindowsDrivePath(std::string_view path) {
     return path.length() >= 2 && std::isalpha(static_cast<unsigned char>(path[0])) &&
            path[1] == ':';
@@ -80,13 +80,22 @@ std::string StorageUtils::expandPath(const main::ClientContext* context, const s
             context->getCurrentSetting(main::HomeDirectorySetting::name).getValue<std::string>() +
             fullPath.substr(1);
     }
+#ifdef __EMSCRIPTEN__
+    if (isWindowsDrivePath(fullPath) || isWindowsUNCPath(fullPath)) {
+        for (auto& ch : fullPath) {
+            if (ch == '\\') {
+                ch = '/';
+            }
+        }
+    }
+#endif
     // Normalize the path to resolve '.' and '..'. Avoid std::filesystem::absolute
     // when the input already names a Windows drive/UNC path because absolute may
     // consult current_path(), which can fail if the process cwd has been deleted.
     std::filesystem::path normalizedPath;
     std::filesystem::path filePath{fullPath};
     auto shouldAvoidAbsolute = filePath.is_absolute();
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__EMSCRIPTEN__)
     shouldAvoidAbsolute =
         shouldAvoidAbsolute || isWindowsDrivePath(fullPath) || isWindowsUNCPath(fullPath);
 #endif

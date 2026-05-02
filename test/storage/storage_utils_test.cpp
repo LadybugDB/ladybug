@@ -4,7 +4,7 @@
 #include "gtest/gtest.h"
 #include "storage/storage_utils.h"
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
 namespace {
 
 class CurrentPathGuard {
@@ -26,9 +26,10 @@ private:
 using namespace lbug::storage;
 
 TEST(StorageUtilsTest, WindowsDrivePathDoesNotNeedCurrentDirectory) {
-#ifndef _WIN32
-    GTEST_SKIP() << "Windows path semantics regression test.";
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+    GTEST_SKIP() << "Windows host path semantics regression test.";
 #else
+#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
     CurrentPathGuard guard;
     const auto deletedCwd =
         std::filesystem::temp_directory_path() / "lbug_storage_utils_deleted_cwd";
@@ -37,13 +38,22 @@ TEST(StorageUtilsTest, WindowsDrivePathDoesNotNeedCurrentDirectory) {
     std::filesystem::current_path(deletedCwd);
     std::error_code removeError;
     std::filesystem::remove_all(deletedCwd, removeError);
+#endif
 
     const auto expanded =
         StorageUtils::expandPath(nullptr, R"(C:\adham\lbug-test\..\db_wasm_iso.lbug)");
+#ifdef __EMSCRIPTEN__
+    EXPECT_EQ("C:/adham/db_wasm_iso.lbug", expanded);
+#else
     EXPECT_EQ(std::filesystem::path{R"(C:\adham\db_wasm_iso.lbug)"}.string(), expanded);
+#endif
 
     const auto expandedDrivePath =
         StorageUtils::expandPath(nullptr, R"(C:adham\lbug-test\..\db_wasm_iso.lbug)");
+#ifdef __EMSCRIPTEN__
+    EXPECT_EQ("C:adham/db_wasm_iso.lbug", expandedDrivePath);
+#else
     EXPECT_EQ(std::filesystem::path{R"(C:adham\db_wasm_iso.lbug)"}.string(), expandedDrivePath);
+#endif
 #endif
 }
