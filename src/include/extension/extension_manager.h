@@ -1,6 +1,7 @@
 #pragma once
 
 #include "loaded_extension.h"
+#include "main/option.h"
 #include "storage/storage_extension.h"
 
 namespace lbug {

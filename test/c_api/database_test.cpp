@@ -102,7 +102,7 @@ TEST_F(CApiDatabaseTest, CreationWithEnableMultiWrites) {
     ASSERT_NE(database._database, nullptr);
 
     auto databaseCpp = static_cast<Database*>(database._database);
-    ASSERT_TRUE(databaseCpp->getConfig().enableMultiWrites);
+    ASSERT_TRUE(databaseCpp->isMultiWritesEnabled());
     lbug_database_destroy(&database);
 }
 

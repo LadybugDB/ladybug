@@ -520,7 +520,7 @@ std::string decodeEscapeSequences(const std::string& input) {
 
 void EmbeddedShell::checkConfidentialStatement(const std::string& query, QueryResult* queryResult,
     std::string& input) {
-    if (queryResult->isSuccess() && !database->getConfig().readOnly &&
+    if (queryResult->isSuccess() && !database->isReadOnly() &&
         queryResult->getQuerySummary()->getStatementType() == StatementType::STANDALONE_CALL) {
         auto clientContext = conn->getClientContext();
         auto parsedQueries = clientContext->parseQuery(query);

@@ -1,7 +1,10 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #if defined(__APPLE__)
@@ -10,8 +13,9 @@
 
 #include "common/api.h"
 #include "common/database_lifecycle_manager.h"
+#include "common/types/types.h"
+#include "common/types/value/value.h"
 #include "lbug_fwd.h"
-#include "main/db_config.h"
 
 namespace lbug {
 namespace common {
@@ -31,6 +35,7 @@ class StorageExtension;
 } // namespace storage
 
 namespace main {
+struct DBConfig;
 class DatabaseManager;
 /**
  * @brief Stores runtime configuration for creating or opening a Database
@@ -144,7 +149,8 @@ public:
 
     catalog::Catalog* getCatalog() { return catalog.get(); }
 
-    const DBConfig& getConfig() const { return dbConfig; }
+    LBUG_API bool isReadOnly() const;
+    LBUG_API bool isMultiWritesEnabled() const;
 
     std::vector<storage::StorageExtension*> getStorageExtensions();
 
@@ -184,7 +190,7 @@ private:
 
 private:
     std::string databasePath;
-    DBConfig dbConfig;
+    std::unique_ptr<DBConfig> dbConfig;
     std::unique_ptr<common::VirtualFileSystem> vfs;
     std::unique_ptr<storage::BufferManager> bufferManager;
     std::unique_ptr<storage::MemoryManager> memoryManager;

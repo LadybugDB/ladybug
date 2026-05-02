@@ -90,14 +90,14 @@ Database::Database(std::string_view databasePath, SystemConfig systemConfig)
 
 Database::Database(std::string_view databasePath, SystemConfig systemConfig,
     construct_bm_func_t constructBMFunc)
-    : dbConfig(systemConfig) {
+    : dbConfig{std::make_unique<DBConfig>(systemConfig)} {
     initMembers(databasePath, constructBMFunc);
 }
 
 std::unique_ptr<BufferManager> Database::initBufferManager(const Database& db) {
     return std::make_unique<BufferManager>(db.databasePath,
-        StorageUtils::getTmpFilePath(db.databasePath), db.dbConfig.bufferPoolSize,
-        db.dbConfig.maxDBSize, db.vfs.get(), db.dbConfig.readOnly);
+        StorageUtils::getTmpFilePath(db.databasePath), db.dbConfig->bufferPoolSize,
+        db.dbConfig->maxDBSize, db.vfs.get(), db.dbConfig->readOnly);
 }
 
 void Database::initMembers(std::string_view dbPath, construct_bm_func_t initBmFunc) {
@@ -117,14 +117,14 @@ void Database::initMembers(std::string_view dbPath, construct_bm_func_t initBmFu
     memoryManager = std::make_unique<MemoryManager>(bufferManager.get(), vfs.get());
 #if defined(__APPLE__)
     queryProcessor =
-        std::make_unique<processor::QueryProcessor>(dbConfig.maxNumThreads, dbConfig.threadQos);
+        std::make_unique<processor::QueryProcessor>(dbConfig->maxNumThreads, dbConfig->threadQos);
 #else
-    queryProcessor = std::make_unique<processor::QueryProcessor>(dbConfig.maxNumThreads);
+    queryProcessor = std::make_unique<processor::QueryProcessor>(dbConfig->maxNumThreads);
 #endif
 
     catalog = std::make_unique<Catalog>();
-    storageManager = std::make_unique<StorageManager>(databasePath, dbConfig.readOnly,
-        dbConfig.enableChecksums, *memoryManager, dbConfig.enableCompression, vfs.get());
+    storageManager = std::make_unique<StorageManager>(databasePath, dbConfig->readOnly,
+        dbConfig->enableChecksums, *memoryManager, dbConfig->enableCompression, vfs.get());
     transactionManager = std::make_unique<TransactionManager>(storageManager->getWAL());
     databaseManager = std::make_unique<DatabaseManager>();
 
@@ -135,15 +135,15 @@ void Database::initMembers(std::string_view dbPath, construct_bm_func_t initBmFu
         extensionManager->autoLoadLinkedExtensions(&clientContext);
         return;
     }
-    StorageManager::recover(clientContext, dbConfig.throwOnWalReplayFailure,
-        dbConfig.enableChecksums);
+    StorageManager::recover(clientContext, dbConfig->throwOnWalReplayFailure,
+        dbConfig->enableChecksums);
 
     // Load graphs from system catalog
     databaseManager->loadGraphsFromCatalog(memoryManager.get(), &clientContext);
 }
 
 Database::~Database() {
-    if (!dbConfig.readOnly && dbConfig.forceCheckpointOnClose) {
+    if (!dbConfig->readOnly && dbConfig->forceCheckpointOnClose) {
         try {
             ClientContext clientContext(this);
             transactionManager->checkpoint(clientContext);
@@ -224,8 +224,16 @@ std::vector<StorageExtension*> Database::getStorageExtensions() {
     return extensionManager->getStorageExtensions();
 }
 
+bool Database::isReadOnly() const {
+    return dbConfig->readOnly;
+}
+
+bool Database::isMultiWritesEnabled() const {
+    return dbConfig->enableMultiWrites;
+}
+
 void Database::validatePathInReadOnly() const {
-    if (dbConfig.readOnly) {
+    if (dbConfig->readOnly) {
         if (DBConfig::isDBPathInMemory(databasePath)) {
             throw Exception("Cannot open an in-memory database under READ ONLY mode.");
         }

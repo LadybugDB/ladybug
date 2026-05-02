@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/types/types.h"
 #include "database.h"
 
 namespace lbug {
