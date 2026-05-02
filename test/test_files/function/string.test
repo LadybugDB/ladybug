@@ -603,6 +603,26 @@ False
 ---- 1
 True
 
+-LOG ReplaceString
+-STATEMENT Return replace('hello world', 'world', 'ladybug');
+---- 1
+hello ladybug
+
+-LOG ReplaceAllString
+-STATEMENT Return replace('aaaa', 'aa', 'b');
+---- 1
+bb
+
+-LOG ReplaceMissingString
+-STATEMENT Return replace('abc', 'd', 'x');
+---- 1
+abc
+
+-LOG ReplaceEmptySourceString
+-STATEMENT Return replace('hello', '', 'x');
+---- 1
+hello
+
 -LOG RegexpReplaceSeq1
 -STATEMENT Return REGEXP_REPLACE('hello', '[lo]', '-');
 ---- 1

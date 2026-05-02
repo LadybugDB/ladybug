@@ -100,6 +100,12 @@ struct RepeatFunction : public VectorStringFunction {
     static function_set getFunctionSet();
 };
 
+struct ReplaceFunction : public VectorStringFunction {
+    static constexpr const char* name = "REPLACE";
+
+    static function_set getFunctionSet();
+};
+
 struct ReverseFunction : public VectorStringFunction {
     static constexpr const char* name = "REVERSE";
 

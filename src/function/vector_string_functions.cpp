@@ -194,6 +194,46 @@ function_set RepeatFunction::getFunctionSet() {
     return functionSet;
 }
 
+struct Replace {
+    static void operation(string_t& input, string_t& source, string_t& target, string_t& result,
+        ValueVector& resultValueVector) {
+        if (source.len == 0) {
+            StringVector::addString(&resultValueVector, result, input);
+            return;
+        }
+
+        auto inputStr = input.getAsString();
+        auto sourceStr = source.getAsString();
+        auto targetStr = target.getAsString();
+        std::string resultStr;
+        resultStr.reserve(inputStr.length());
+
+        size_t start = 0;
+        while (true) {
+            auto pos = inputStr.find(sourceStr, start);
+            if (pos == std::string::npos) {
+                resultStr.append(inputStr, start, std::string::npos);
+                break;
+            }
+            resultStr.append(inputStr, start, pos - start);
+            resultStr.append(targetStr);
+            start = pos + sourceStr.length();
+        }
+        StringVector::addString(&resultValueVector, result, resultStr.data(), resultStr.length());
+    }
+};
+
+function_set ReplaceFunction::getFunctionSet() {
+    function_set functionSet;
+    functionSet.emplace_back(make_unique<ScalarFunction>(name,
+        std::vector<LogicalTypeID>{LogicalTypeID::STRING, LogicalTypeID::STRING,
+            LogicalTypeID::STRING},
+        LogicalTypeID::STRING,
+        ScalarFunction::TernaryStringExecFunction<string_t, string_t, string_t, string_t,
+            Replace>));
+    return functionSet;
+}
+
 function_set RightFunction::getFunctionSet() {
     function_set functionSet;
     functionSet.emplace_back(make_unique<ScalarFunction>(name,
