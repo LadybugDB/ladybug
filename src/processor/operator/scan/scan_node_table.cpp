@@ -71,17 +71,7 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
             this->numCommittedNodeGroups = 1;
         }
     } else if (const auto iceDiskTable = dynamic_cast<IceDiskNodeTable*>(table)) {
-        std::vector<bool> columnSkips;
-        try {
-            auto context = transaction->getClientContext();
-            auto resolvedPath =
-                common::VirtualFileSystem::resolvePath(context, iceDiskTable->getParquetFilePath());
-            auto tempReader =
-                std::make_unique<processor::ParquetReader>(resolvedPath, columnSkips, context);
-            this->numCommittedNodeGroups = tempReader->getNumRowsGroups();
-        } catch (const std::exception& e) {
-            this->numCommittedNodeGroups = 1;
-        }
+        this->numCommittedNodeGroups = iceDiskTable->getNumScanMorsels(transaction);
     } else if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(table)) {
         // For Arrow tables, set numCommittedNodeGroups to number of morsels
         this->numCommittedNodeGroups =
@@ -103,7 +93,8 @@ void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
     ScanNodeTableProgressSharedState& progressSharedState) {
     std::unique_lock lck{mtx};
 
-    // ColumnarNodeTables handle morsel assignment internally
+    // Columnar/Icebug NodeTables handle morsel assignment internally
+
     // TODO: parquet tables https://github.com/LadybugDB/ladybug/issues/245
     if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(this->table)) {
         const auto tableSharedState = arrowTable->getTableScanSharedState();

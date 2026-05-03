@@ -22,43 +22,6 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace storage {
 
-void IceDiskNodeTableScanState::setToTable(const Transaction* transaction, Table* table_,
-    std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
-    RelDataDirection /*direction*/) {
-    table = table_;
-    columnIDs = std::move(columnIDs_);
-    columnPredicateSets = std::move(columnPredicateSets_);
-
-    auto& iceDiskTable = table->cast<IceDiskNodeTable>();
-    auto context = transaction->getClientContext();
-    auto resolvedPath = VirtualFileSystem::resolvePath(context, iceDiskTable.getParquetFilePath());
-    std::vector<bool> dummySkips;
-    auto tempReader = std::make_unique<processor::ParquetReader>(resolvedPath, dummySkips, context);
-    processor::ParquetReaderScanState tempState;
-    std::vector<uint64_t> dummyGroups;
-    tempReader->initializeScan(tempState, dummyGroups, VirtualFileSystem::GetUnsafe(*context));
-    columnSkips.assign(tempReader->getNumColumns(), true);
-
-    auto entry = iceDiskTable.getCatalogEntry();
-    for (auto columnID : columnIDs) {
-        if (columnID == INVALID_COLUMN_ID || columnID == ROW_IDX_COLUMN_ID) {
-            continue;
-        }
-
-        auto propertyName = entry->getProperty(columnID).getName();
-        for (uint32_t j = 0; j < tempReader->getNumColumns(); ++j) {
-            if (tempReader->getColumnName(j) == propertyName) {
-                columnSkips[j] = false;
-                break;
-            }
-        }
-    }
-
-    parquetReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
-    processor::ParquetReaderScanState scanState;
-    parquetReader->initializeScan(scanState, dummyGroups, VirtualFileSystem::GetUnsafe(*context));
-}
-
 IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
     const NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager)
     : NodeTable{storageManager, nodeTableEntry, memoryManager},
@@ -72,24 +35,10 @@ IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
 }
 
 void IceDiskNodeTable::initializeScanCoordination(const Transaction* transaction) {
-    std::vector<size_t> rowGroupRows;
-    std::vector<size_t> rowGroupStartRows;
-    auto context = transaction->getClientContext();
-    if (context) {
-        std::vector<bool> dummySkips;
-        auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
-        auto tempReader = std::make_unique<ParquetReader>(resolvedPath, dummySkips, context);
-        auto metadata = tempReader->getMetadata();
-        if (metadata) {
-            uint64_t currentStartRow = 0;
-            for (size_t i = 0; i < metadata->row_groups.size(); ++i) {
-                rowGroupRows.push_back(metadata->row_groups[i].num_rows);
-                rowGroupStartRows.push_back(currentStartRow);
-                currentStartRow += metadata->row_groups[i].num_rows;
-            }
-        }
-    }
-    tableScanSharedState->reset(std::move(rowGroupRows), std::move(rowGroupStartRows));
+    auto iceDiskScanSharedState =
+        static_cast<IceDiskNodeTableScanSharedState*>(tableScanSharedState.get());
+    auto numRowGroups = getNumRowGroups(transaction);
+    iceDiskScanSharedState->reset(numRowGroups);
 }
 
 void IceDiskNodeTable::initScanState(Transaction* /*transaction*/, TableScanState& scanState,
@@ -196,6 +145,29 @@ common::row_idx_t IceDiskNodeTable::getNumTotalRows(const Transaction* transacti
         // If parquet file is corrupted or invalid, return 0 instead of crashing
         return 0;
     }
+}
+
+size_t IceDiskNodeTable::getNumRowGroups(const transaction::Transaction* transaction) const {
+    auto context = transaction->getClientContext();
+
+    if (!context) {
+        return 0;
+    }
+
+    std::vector<bool> columnSkips;
+
+    try {
+        auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
+        auto tempReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
+        return tempReader ? tempReader->getNumRowGroups() : 0;
+    } catch (const std::exception& e) {
+        // If parquet file is corrupted or invalid, return 0 instead of crashing
+        return 0;
+    }
+}
+
+size_t IceDiskNodeTable::getNumScanMorsels(const transaction::Transaction* transaction) const {
+    return getNumRowGroups(transaction);
 }
 
 } // namespace storage

@@ -11,14 +11,37 @@ namespace storage {
 
 class IceDiskNodeTable;
 
+struct IceDiskNodeTableScanSharedState {
+private:
+    std::mutex mtx;
+    common::node_group_idx_t currentRowGroupIdx = 0;
+    common::node_group_idx_t numRowGroups = 0;
+
+public:
+    void reset(common::node_group_idx_t totalRowGroups) {
+        std::lock_guard<std::mutex> lock(mtx);
+        currentRowGroupIdx = 0;
+        numRowGroups = totalRowGroups;
+    }
+
+
+    bool getNextMorsel(IceDiskNodeTableScanState* scanState) {
+        std::lock_guard<std::mutex> lock(mtx);
+        if (currentRowGroupIdx < numRowGroups) {
+            scanState->currentRowGroupIdx = currentRowGroupIdx++;
+            return true;
+        }
+        return false;
+     }
+};
+
 struct IceDiskNodeTableScanState : public TableScanState {
     std::unique_ptr<processor::ParquetReader> parquetReader;
     std::unique_ptr<processor::ParquetReaderScanState> parquetScanState;
     std::vector<bool> columnSkips;
     bool scanCompleted = false;
-    uint64_t currentStartRow = 0;
-    uint64_t currentNumRows = 0;
-    uint64_t currentRowOffset = 0;
+    common::node_group_idx_t currentRowGroupIdx = 0;
+
 
     IceDiskNodeTableScanState(common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
@@ -26,48 +49,6 @@ struct IceDiskNodeTableScanState : public TableScanState {
         : TableScanState{nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {
         parquetScanState = std::make_unique<processor::ParquetReaderScanState>();
     }
-
-    void setToTable(const transaction::Transaction* transaction, Table* table_,
-        std::vector<common::column_id_t> columnIDs_,
-        std::vector<ColumnPredicateSet> columnPredicateSets_ = {},
-        common::RelDataDirection direction = common::RelDataDirection::FWD) override;
-};
-
-struct IceDiskNodeTableScanSharedState {
-private:
-    std::mutex mtx;
-    std::vector<size_t> rowGroupRows;
-    std::vector<size_t> rowGroupStartRows;
-    common::node_group_idx_t currentMorselIdx = 0;
-
-public:
-    IceDiskNodeTableScanSharedState() {}
-
-    void reset(std::vector<size_t> rows, std::vector<size_t> startRows) {
-        std::lock_guard<std::mutex> lock(mtx);
-        this->rowGroupRows = std::move(rows);
-        this->rowGroupStartRows = std::move(startRows);
-        this->currentMorselIdx = 0;
-    }
-
-    bool getNextMorsel(IceDiskNodeTableScanState* scanState) {
-        std::lock_guard<std::mutex> lock(mtx);
-        if (currentMorselIdx < rowGroupRows.size()) {
-            scanState->nodeGroupIdx = currentMorselIdx;
-            scanState->currentNumRows = rowGroupRows[currentMorselIdx];
-            scanState->currentStartRow = rowGroupStartRows[currentMorselIdx];
-            currentMorselIdx++;
-            return true;
-        }
-        return false;
-    }
-
-    void resetMorsel() {
-        std::lock_guard<std::mutex> lock(mtx);
-        currentMorselIdx = 0;
-    }
-
-    size_t getNumMorsels() const { return rowGroupRows.size(); }
 };
 
 class IceDiskNodeTable final : public NodeTable {
@@ -97,6 +78,11 @@ public:
     const std::string& getParquetFilePath() const { return parquetFilePath; }
     const catalog::NodeTableCatalogEntry* getCatalogEntry() const { return nodeTableCatalogEntry; }
     IceDiskNodeTableScanSharedState* getTableScanSharedState() const { return tableScanSharedState.get(); }
+
+    size_t getNumScanMorsels(const transaction::Transaction* transaction) const;
+
+private:
+    size_t getNumRowGroups(const transaction::Transaction* transaction) const;
 
 private:
     std::string parquetFilePath;
