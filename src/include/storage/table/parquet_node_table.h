@@ -81,7 +81,6 @@ protected:
 private:
     std::string parquetFilePath;
 
-    void initializeParquetReader(transaction::Transaction* transaction) const;
     void initParquetScanForRowGroup(transaction::Transaction* transaction,
         ParquetNodeTableScanState& scanState) const;
 };

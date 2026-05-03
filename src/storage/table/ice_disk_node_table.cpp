@@ -175,10 +175,27 @@ bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
 
 common::row_idx_t IceDiskNodeTable::getNumTotalRows(const Transaction* transaction) {
     auto context = transaction->getClientContext();
-    auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
-    std::vector<bool> dummySkips;
-    processor::ParquetReader reader(resolvedPath, dummySkips, context);
-    return reader.getMetadata()->num_rows;
+
+    if (!context) {
+        return 0;
+    }
+
+    std::vector<bool> columnSkips;
+
+    try {
+        auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
+        auto tempReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
+
+        if (!tempReader) {
+            return 0;
+        }
+
+        auto metadata = tempReader->getMetadata();
+        return metadata ? metadata->num_rows : 0;
+    } catch (const std::exception& e) {
+        // If parquet file is corrupted or invalid, return 0 instead of crashing
+        return 0;
+    }
 }
 
 } // namespace storage
