@@ -31,7 +31,26 @@
 -LOG QueryDynamicProperties
 -STATEMENT MATCH (u:User)-[:LivesIn]->(c:City) RETURN u.name, c.name
 ---- 1
-"Alice"|"New York"
+Alice|New York
+
+-LOG InlineIntPropertyFilter
+-STATEMENT MATCH (a:User {age: 30}) RETURN a.name
+---- 1
+Alice
+
+-LOG InlineStringPropertyFilter
+-STATEMENT MATCH (a:User {name: 'Alice'}) RETURN a.age
+---- 1
+30
+
+-LOG InlinePropertyFilterReturnStar
+-STATEMENT MATCH (a:User {age: 30}) RETURN a.*
+---- 1
+0|[User]|{"age":30,"name":"Alice"}
+
+-LOG InlinePropertyFilterNoMatch
+-STATEMENT MATCH (a:User {age: 99}) RETURN a.name
+---- 0
 
 -LOG Cleanup
 -STATEMENT USE GRAPH main

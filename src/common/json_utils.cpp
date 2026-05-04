@@ -702,7 +702,7 @@ std::string jsonExtractToString(const JsonWrapper& wrapper, uint64_t pos) {
     return jsonToString(yyjson_arr_get(yyjson_doc_get_root(wrapper.ptr), pos));
 }
 
-std::string jsonExtractToString(const JsonWrapper& wrapper, std::string path) {
+static yyjson_val* jsonNavigatePath(const JsonWrapper& wrapper, const std::string& path) {
     std::vector<std::string> actualPath;
     for (auto i = 0u, prvDelim = 0u; i <= path.size(); i++) {
         if (i == path.size() || path[i] == '/' || path[i] == '.') {
@@ -720,14 +720,39 @@ std::string jsonExtractToString(const JsonWrapper& wrapper, std::string path) {
         } else {
             int32_t idx = -1;
             if (!function::trySimpleIntegerCast(item.c_str(), item.length(), idx)) {
-                return "";
+                return nullptr;
             }
             ptr = yyjson_arr_get(ptr, idx);
         }
         if (ptr == nullptr) {
-            return "";
+            return nullptr;
         }
     }
+    return ptr;
+}
+
+std::string jsonExtractToString(const JsonWrapper& wrapper, std::string path) {
+    auto ptr = jsonNavigatePath(wrapper, path);
+    if (ptr == nullptr) {
+        return "";
+    }
+    return jsonToString(ptr);
+}
+
+std::string jsonExtractScalarToString(const JsonWrapper& wrapper, std::string path) {
+    auto ptr = jsonNavigatePath(wrapper, path);
+
+    if (ptr == nullptr) {
+        return "";
+    }
+
+    // For JSON string values return the raw string content (without JSON quote delimiters) so
+    // comparisons match what CAST(T -> JSON/STRING) produces on the RHS of a filter predicate.
+    if (yyjson_get_type(ptr) == YYJSON_TYPE_STR) {
+        auto raw = yyjson_get_str(ptr);
+        return raw ? std::string(raw) : "";
+    }
+
     return jsonToString(ptr);
 }
 

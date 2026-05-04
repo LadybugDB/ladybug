@@ -66,6 +66,9 @@ LBUG_API JsonWrapper mergeJson(const JsonWrapper& A, const JsonWrapper& B);
 
 LBUG_API std::string jsonExtractToString(const JsonWrapper& wrapper, uint64_t pos);
 LBUG_API std::string jsonExtractToString(const JsonWrapper& wrapper, std::string path);
+// Like jsonExtractToString but returns the raw scalar value for JSON strings (no JSON delimiters),
+// matching what CAST(T -> JSON/STRING) produces. Used for inline property filter comparisons.
+LBUG_API std::string jsonExtractScalarToString(const JsonWrapper& wrapper, std::string path);
 
 LBUG_API uint32_t jsonArraySize(const JsonWrapper& wrapper);
 
