@@ -98,7 +98,7 @@ common::node_group_idx_t ParquetNodeTable::getNumBatches(const Transaction* tran
     try {
         auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
         auto tempReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
-        return tempReader->getNumRowsGroups();
+        return tempReader->getNumRowGroups();
     } catch (const std::exception& e) {
         return 1; // Fallback
     }

@@ -98,7 +98,7 @@ public:
         common::table_id_t toTableID, const StorageManager* storageManager,
         MemoryManager* memoryManager);
 
-    void initializeScanCoordination(const transaction::Transaction* transaction) override;
+    void initializeScanCoordination(const transaction::Transaction* transaction);
 
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,
         bool resetCachedBoundNodeSelVec = true) const override;

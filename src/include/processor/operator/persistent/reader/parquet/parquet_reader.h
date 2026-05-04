@@ -48,7 +48,7 @@ public:
         common::VirtualFileSystem* vfs);
     bool scanInternal(ParquetReaderScanState& state, common::DataChunk& result);
     void scan(ParquetReaderScanState& state, common::DataChunk& result);
-    uint64_t getNumRowsGroups() { return metadata->row_groups.size(); }
+    uint64_t getNumRowGroups() { return metadata->row_groups.size(); }
 
     uint32_t getNumColumns() const { return columnNames.size(); }
     std::string getColumnName(uint32_t idx) const { return columnNames[idx]; }

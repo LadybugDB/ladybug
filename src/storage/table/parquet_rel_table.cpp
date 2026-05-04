@@ -107,7 +107,7 @@ void ParquetRelTable::initScanState(Transaction* transaction, TableScanState& sc
     // For now, assign all row groups to this scan state (will be partitioned by the scan operator)
     parquetRelScanState.startRowGroup = 0;
     parquetRelScanState.endRowGroup = parquetRelScanState.indicesReader ?
-                                          parquetRelScanState.indicesReader->getNumRowsGroups() :
+                                          parquetRelScanState.indicesReader->getNumRowGroups() :
                                           0;
     parquetRelScanState.currentRowGroup = parquetRelScanState.startRowGroup;
     parquetRelScanState.nextRowToProcess = 0;
@@ -149,7 +149,7 @@ void ParquetRelTable::loadIndptrData(Transaction* transaction) const {
             auto context = transaction->getClientContext();
             auto vfs = VirtualFileSystem::GetUnsafe(*context);
             std::vector<uint64_t> groupsToRead;
-            for (uint64_t i = 0; i < indptrReader->getNumRowsGroups(); ++i) {
+            for (uint64_t i = 0; i < indptrReader->getNumRowGroups(); ++i) {
                 groupsToRead.push_back(i);
             }
 
