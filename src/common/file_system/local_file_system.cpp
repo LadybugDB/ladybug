@@ -145,7 +145,8 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         fl.l_len = 0;
         int rc = fcntl(fd, F_SETLK, &fl);
         if (rc == -1) {
-            if (errno == EAGAIN || errno == EACCES) {
+            int original_errno = errno;
+            if (original_errno == EAGAIN || original_errno == EACCES) {
                 struct flock get_fl {};
                 memset(&get_fl, 0, sizeof get_fl);
                 get_fl.l_type = flags.lockType == FileLockType::READ_LOCK ? F_RDLCK : F_WRLCK;
@@ -162,6 +163,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
                     }
                 }
             }
+            errno = original_errno;
             throw IOException("Could not set lock on file : " + fullPath +
                               " (Error: " + posixErrMessage() + ")\n" +
                               "See the docs: https://docs.ladybugdb.com/concurrency for more "
