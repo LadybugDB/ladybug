@@ -702,7 +702,9 @@ std::string jsonExtractToString(const JsonWrapper& wrapper, uint64_t pos) {
     return jsonToString(yyjson_arr_get(yyjson_doc_get_root(wrapper.ptr), pos));
 }
 
-std::string jsonExtractToString(const JsonWrapper& wrapper, std::string path) {
+namespace {
+
+yyjson_val* extractJsonByPath(const JsonWrapper& wrapper, const std::string& path) {
     std::vector<std::string> actualPath;
     for (auto i = 0u, prvDelim = 0u; i <= path.size(); i++) {
         if (i == path.size() || path[i] == '/' || path[i] == '.') {
@@ -720,13 +722,34 @@ std::string jsonExtractToString(const JsonWrapper& wrapper, std::string path) {
         } else {
             int32_t idx = -1;
             if (!function::trySimpleIntegerCast(item.c_str(), item.length(), idx)) {
-                return "";
+                return nullptr;
             }
             ptr = yyjson_arr_get(ptr, idx);
         }
         if (ptr == nullptr) {
-            return "";
+            return nullptr;
         }
+    }
+    return ptr;
+}
+
+} // namespace
+
+std::string jsonExtractToString(const JsonWrapper& wrapper, std::string path) {
+    auto ptr = extractJsonByPath(wrapper, path);
+    if (ptr == nullptr) {
+        return "";
+    }
+    return jsonToString(ptr);
+}
+
+std::string jsonExtractScalarToString(const JsonWrapper& wrapper, std::string path) {
+    auto ptr = extractJsonByPath(wrapper, path);
+    if (ptr == nullptr) {
+        return "";
+    }
+    if (yyjson_is_str(ptr)) {
+        return yyjson_get_str(ptr);
     }
     return jsonToString(ptr);
 }

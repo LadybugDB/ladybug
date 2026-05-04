@@ -33,7 +33,8 @@ void ColumnCaster::cast() {
                 vectorAfterCasting->setNull(pos, true);
                 continue;
             }
-            auto extracted = json_extension::jsonExtractToString(json, *jsonExtractPropertyName);
+            auto extracted =
+                json_extension::jsonExtractScalarToString(json, *jsonExtractPropertyName);
             if (extracted.empty()) {
                 vectorAfterCasting->setNull(pos, true);
                 continue;

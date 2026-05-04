@@ -19,7 +19,7 @@
 ---- ok
 
 -LOG CreateNodesAndRelationship
--STATEMENT CREATE (:User {name: 'Alice', age: 30})-[:LivesIn]->(:City {name: 'New York', population: 8000000})
+-STATEMENT CREATE (:User {name: 'Alice', age: 30})-[:LivesIn {since: 2020}]->(:City {name: 'New York', population: 8000000})
 ---- ok
 
 -LOG QueryAllNodes
@@ -31,7 +31,37 @@
 -LOG QueryDynamicProperties
 -STATEMENT MATCH (u:User)-[:LivesIn]->(c:City) RETURN u.name, c.name
 ---- 1
-"Alice"|"New York"
+Alice|New York
+
+-LOG QueryDynamicNodePropertyInPatternFilter
+-STATEMENT MATCH (u:User {age: 30}) RETURN u.name, u.age
+---- 1
+Alice|30
+
+-LOG QueryDynamicStringNodePropertyInPatternFilter
+-STATEMENT MATCH (u:User {name: 'Alice'}) RETURN u.name, u.age
+---- 1
+Alice|30
+
+-LOG QueryDynamicNodePropertyInWhereFilter
+-STATEMENT MATCH (u:User) WHERE u.age = 30 RETURN u.*
+---- 1
+0|[User]|{"age":30,"name":"Alice"}
+
+-LOG QueryDynamicStringNodePropertyInWhereFilter
+-STATEMENT MATCH (u:User) WHERE u.name = 'Alice' RETURN u.name, u.age
+---- 1
+Alice|30
+
+-LOG QueryDynamicRelPropertyInPatternFilter
+-STATEMENT MATCH (:User)-[e:LivesIn {since: 2020}]->(:City) RETURN e.since
+---- 1
+2020
+
+-LOG QueryDynamicRelPropertyInWhereFilter
+-STATEMENT MATCH (:User)-[e:LivesIn]->(:City) WHERE e.since = 2020 RETURN e.since
+---- 1
+2020
 
 -LOG Cleanup
 -STATEMENT USE GRAPH main

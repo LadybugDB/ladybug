@@ -137,6 +137,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
             while (tableInfo.table->scan(transaction, *scanState)) {
                 const auto outputSize = scanState->outState->getSelVector().getSelSize();
                 if (outputSize > 0) {
+                    tableInfo.castColumns();
                     metrics->numOutputTuple.increase(outputSize);
                     return true;
                 }
@@ -150,7 +151,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
         while (tableInfo.table->scan(transaction, *scanState)) {
             const auto outputSize = scanState->outState->getSelVector().getSelSize();
             if (outputSize > 0) {
-                // No need to perform column cast because this is single table scan.
+                tableInfo.castColumns();
                 metrics->numOutputTuple.increase(outputSize);
                 return true;
             }

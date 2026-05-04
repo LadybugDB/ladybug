@@ -66,6 +66,7 @@ LBUG_API JsonWrapper mergeJson(const JsonWrapper& A, const JsonWrapper& B);
 
 LBUG_API std::string jsonExtractToString(const JsonWrapper& wrapper, uint64_t pos);
 LBUG_API std::string jsonExtractToString(const JsonWrapper& wrapper, std::string path);
+LBUG_API std::string jsonExtractScalarToString(const JsonWrapper& wrapper, std::string path);
 
 LBUG_API uint32_t jsonArraySize(const JsonWrapper& wrapper);
 

@@ -168,6 +168,9 @@ static std::optional<cardinality_t> getTableStatsIfPossible(main::ClientContext*
             auto transaction = Transaction::Get(*context);
             auto entry =
                 catalog::Catalog::Get(*context)->getTableCatalogEntry(transaction, tableID);
+            if (!entry->containsProperty(propertyExpr.getPropertyName())) {
+                return {};
+            }
             auto columnID = entry->getColumnID(propertyExpr.getPropertyName());
             if (columnID != INVALID_COLUMN_ID && columnID != ROW_IDX_COLUMN_ID) {
                 auto& stats = nodeTableStats.at(tableID);
