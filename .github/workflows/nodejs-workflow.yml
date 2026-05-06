@@ -12,6 +12,11 @@ on:
         required: false
         default: "22"
         type: string
+      linuxBuilderImage:
+        description: "Ubuntu 22.04 image with GCC 13 for Linux builds"
+        required: false
+        default: "ghcr.io/ladybugdb/ubuntu-22.04-gcc13:latest"
+        type: string
   workflow_call:
     inputs:
       isNightly:
@@ -29,10 +34,15 @@ on:
         type: string
         required: false
         default: ""
+      linuxBuilderImage:
+        type: string
+        required: false
+        default: "ghcr.io/ladybugdb/ubuntu-22.04-gcc13:latest"
 
 jobs:
   build-nodejs:
     runs-on: ${{ matrix.os }}
+    container: ${{ fromJSON(matrix.platform == 'linux' && format('{{"image":"{0}"}}', inputs.linuxBuilderImage) || 'null') }}
     env:
       LBUG_LINUX_VARIANT: compat
       LBUG_NODEJS_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
@@ -70,6 +80,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Mark workspace safe for git (Linux container)
+        if: ${{ matrix.platform == 'linux' }}
+        run: git config --global --add safe.directory '*'
+
       - name: Update submodules
         run: git submodule update --init --recursive tools/nodejs_api dataset
 
@@ -85,12 +99,9 @@ jobs:
         with:
           node-version: ${{ inputs.nodeVersion }}
 
-      - name: Install GCC 13 (Linux)
+      - name: Select GCC 13 (Linux)
         if: ${{ matrix.platform == 'linux' }}
         run: |
-          sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
-          sudo apt-get update
-          sudo apt-get install -y gcc-13 g++-13
           echo "CC=gcc-13" >> $GITHUB_ENV
           echo "CXX=g++-13" >> $GITHUB_ENV
 

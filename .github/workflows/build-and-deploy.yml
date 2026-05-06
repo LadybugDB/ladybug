@@ -213,11 +213,12 @@ jobs:
 
   build-java:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipJava != 'true' }}
-    needs: [build-precompiled-bin]
+    needs: [build-precompiled-bin, build-linux-builder-image]
     uses: ./.github/workflows/java-workflow.yml
     with:
       isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
       precompiledRunId: ${{ github.run_id }}
+      linuxBuilderImage: ${{ needs.build-linux-builder-image.outputs.image }}
     secrets: inherit
 
   deploy-java:
@@ -322,7 +323,7 @@ jobs:
 
   build-nodejs:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipNodejs != 'true' }}
-    needs: [build-precompiled-bin]
+    needs: [build-precompiled-bin, build-linux-builder-image]
     strategy:
       fail-fast: false
       matrix:
@@ -342,6 +343,7 @@ jobs:
       precompiledRunId: ${{ github.run_id }}
       nodeVersion: ${{ matrix.node-version }}
       artifactSuffix: ${{ matrix.artifact-suffix }}
+      linuxBuilderImage: ${{ needs.build-linux-builder-image.outputs.image }}
     secrets: inherit
 
   deploy-nodejs:
@@ -548,3 +550,61 @@ jobs:
     with:
       isNightly: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
     secrets: inherit
+
+  build-linux-builder-image:
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.skipJava != 'true' || github.event.inputs.skipNodejs != 'true' }}
+    runs-on: ubuntu-22.04
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select builder image tag
+        id: image
+        shell: bash
+        run: |
+          DOCKERFILE=".github/docker/ubuntu-22.04-gcc13/Dockerfile"
+          IMAGE_NAME="ghcr.io/ladybugdb/ubuntu-22.04-gcc13"
+          IMAGE_TAG="sha-$(sha256sum "$DOCKERFILE" | cut -c1-12)"
+          echo "image=${IMAGE_NAME}:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_name=${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for existing builder image
+        id: image-exists
+        shell: bash
+        run: |
+          if docker buildx imagetools inspect "${{ steps.image.outputs.image }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up QEMU
+        if: ${{ steps.image-exists.outputs.exists != 'true' }}
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: ${{ steps.image-exists.outputs.exists != 'true' }}
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push builder image
+        if: ${{ steps.image-exists.outputs.exists != 'true' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: .github/docker/ubuntu-22.04-gcc13/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Ubuntu 22.04 builder image with GCC 13 for Ladybug Java and Node.js release builds
+          tags: |
+            ${{ steps.image.outputs.image }}
+            ${{ steps.image.outputs.image_name }}:latest

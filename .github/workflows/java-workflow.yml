@@ -6,6 +6,11 @@ on:
         description: "Run ID of the precompiled-bin job whose artifacts should be used"
         required: true
         type: string
+      linuxBuilderImage:
+        description: "Ubuntu 22.04 image with GCC 13 for Linux builds"
+        required: false
+        default: "ghcr.io/ladybugdb/ubuntu-22.04-gcc13:latest"
+        type: string
   workflow_call:
     inputs:
       isNightly:
@@ -15,12 +20,24 @@ on:
       precompiledRunId:
         type: string
         required: true
+      linuxBuilderImage:
+        type: string
+        required: false
+        default: "ghcr.io/ladybugdb/ubuntu-22.04-gcc13:latest"
 env:
   PIP_BREAK_SYSTEM_PACKAGES: 1
 
 jobs:
   build-linux-java-x86_64:
     runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: ${{ inputs.linuxBuilderImage }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     env:
       LBUG_LINUX_VARIANT: compat
       LBUG_JAVA_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
@@ -28,11 +45,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install GCC 13
-        run: |
-          sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
-          sudo apt-get update
-          sudo apt-get install -y gcc-13 g++-13
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory '*'
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/java_api
@@ -75,6 +89,14 @@ jobs:
 
   build-linux-java-aarch64:
     runs-on: ubuntu-22.04-arm
+    defaults:
+      run:
+        shell: bash
+    container:
+      image: ${{ inputs.linuxBuilderImage }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     env:
       LBUG_LINUX_VARIANT: compat
       LBUG_JAVA_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
@@ -82,11 +104,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install GCC 13
-        run: |
-          sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
-          sudo apt-get update
-          sudo apt-get install -y gcc-13 g++-13
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory '*'
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/java_api
