@@ -92,7 +92,7 @@ public:
 private:
     void probe(JoinHashTable* hashTable, uint64_t sizeProbed, uint64_t sizeToProbe,
         common::ValueVector* idVector, const std::vector<common::ValueVector*>& propertyVectors,
-        const std::vector<ft_col_idx_t>& colIndicesToScan) const;
+        const std::vector<ft_col_idx_t>& colIndicesToScan, const char* pathElementType) const;
 
 private:
     PathPropertyProbeInfo info;

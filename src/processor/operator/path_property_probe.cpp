@@ -1,7 +1,9 @@
 #include "processor/operator/path_property_probe.h"
 
 #include "common/constants.h"
+#include "common/exception/runtime.h"
 #include "function/hash/hash_functions.h"
+#include <format>
 
 using namespace lbug::common;
 
@@ -112,7 +114,7 @@ bool PathPropertyProbe::getNextTuplesInternal(ExecutionContext* context) {
             auto sizeToProbe =
                 std::min<uint64_t>(DEFAULT_VECTOR_CAPACITY, nodeDataSize - sizeProbed);
             probe(nodeHashTable, sizeProbed, sizeToProbe, pathNodeIDsDataVector,
-                pathNodesPropertyDataVectors, info.nodeTableColumnIndices);
+                pathNodesPropertyDataVectors, info.nodeTableColumnIndices, "node");
             sizeProbed += sizeToProbe;
         }
     }
@@ -132,7 +134,7 @@ bool PathPropertyProbe::getNextTuplesInternal(ExecutionContext* context) {
             auto sizeToProbe =
                 std::min<uint64_t>(DEFAULT_VECTOR_CAPACITY, relDataSize - sizeProbed);
             probe(relHashTable, sizeProbed, sizeToProbe, pathRelIDsDataVector,
-                pathRelsPropertyDataVectors, info.relTableColumnIndices);
+                pathRelsPropertyDataVectors, info.relTableColumnIndices, "rel");
             sizeProbed += sizeToProbe;
         }
     }
@@ -288,7 +290,7 @@ bool PathPropertyProbe::getNextTuplesInternal(ExecutionContext* context) {
 
 void PathPropertyProbe::probe(lbug::processor::JoinHashTable* hashTable, uint64_t sizeProbed,
     uint64_t sizeToProbe, ValueVector* idVector, const std::vector<ValueVector*>& propertyVectors,
-    const std::vector<ft_col_idx_t>& colIndicesToScan) const {
+    const std::vector<ft_col_idx_t>& colIndicesToScan, const char* pathElementType) const {
     // Hash
     for (auto i = 0u; i < sizeToProbe; ++i) {
         function::Hash::operation(idVector->getValue<internalID_t>(sizeProbed + i),
@@ -300,15 +302,25 @@ void PathPropertyProbe::probe(lbug::processor::JoinHashTable* hashTable, uint64_
     }
     // Match value
     for (auto i = 0u; i < sizeToProbe; ++i) {
+        localState.matchedTuples[i] = nullptr;
+        auto id = idVector->getValue<internalID_t>(sizeProbed + i);
         while (localState.probedTuples[i]) {
             auto currentTuple = localState.probedTuples[i];
-            if (*(internalID_t*)currentTuple == idVector->getValue<internalID_t>(sizeProbed + i)) {
+            if (*(internalID_t*)currentTuple == id) {
                 localState.matchedTuples[i] = currentTuple;
                 break;
             }
             localState.probedTuples[i] = *hashTable->getPrevTuple(currentTuple);
         }
-        DASSERT(localState.matchedTuples[i] != nullptr);
+        if (localState.matchedTuples[i] == nullptr) {
+            throw RuntimeException(std::format(
+                "PathPropertyProbe failed to find {} property tuple for path element id "
+                "{{tableID: {}, offset: {}}}. This indicates the {} property hash table is "
+                "missing an ID produced by recursive path enumeration. hashTableEntries={}, "
+                "pathDataOffset={}, probeBatchOffset={}.",
+                pathElementType, id.tableID, id.offset, pathElementType, hashTable->getNumEntries(),
+                sizeProbed + i, i));
+        }
     }
     // Scan table
     auto factorizedTable = hashTable->getFactorizedTable();
