@@ -9,6 +9,7 @@
 #include "storage/local_storage/local_storage.h"
 #include "storage/table/column.h"
 #include "storage/table/column_chunk_data.h"
+#include "storage/table/columnar_rel_table_base.h"
 #include "storage/table/csr_chunked_node_group.h"
 #include "storage/table/csr_node_group.h"
 #include "storage/table/rel_table_data.h"
@@ -38,6 +39,11 @@ bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
     auto* memoryManager = context->clientContext->getDatabase()->getMemoryManager();
 
     for (auto* relTable : relTables) {
+        if (dynamic_cast<ColumnarRelTableBase*>(relTable) != nullptr) {
+            totalCount += relTable->getNumTotalRows(transaction);
+            continue;
+        }
+
         // Get the RelTableData for the specified direction
         auto* relTableData = relTable->getDirectedTableData(direction);
         auto numNodeGroups = relTableData->getNumNodeGroups();

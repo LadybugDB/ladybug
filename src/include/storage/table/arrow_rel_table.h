@@ -14,16 +14,6 @@ namespace lbug {
 namespace storage {
 
 struct ArrowRelTableScanState final : RelTableScanState {
-    size_t currentBatchIdx = 0;
-    size_t currentBatchOffset = 0;
-    std::vector<int64_t> outputToArrowColumnIdx;
-    std::unordered_map<common::offset_t, common::sel_t> boundNodeOffsetToSelPos;
-    std::unique_ptr<common::ValueVector> srcKeyVector;
-    std::unique_ptr<common::ValueVector> dstKeyVector;
-    // ScanRelTable invokes scan() once before the first initScanState() call for a bound node.
-    // Start as completed so this pre-init call returns safely.
-    bool scanCompleted = true;
-
     ArrowRelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
@@ -55,6 +45,9 @@ protected:
 private:
     int64_t fromColumnIdx = -1;
     int64_t toColumnIdx = -1;
+    std::vector<int64_t> getOutputToArrowColumnIdx(
+        const std::vector<common::column_id_t>& columnIDs) const;
+
     const NodeTable* fromNodeTable;
     const NodeTable* toNodeTable;
     ArrowSchemaWrapper schema;

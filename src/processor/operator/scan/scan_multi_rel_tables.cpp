@@ -1,6 +1,5 @@
 #include "processor/operator/scan/scan_multi_rel_tables.h"
 
-#include "common/exception/runtime.h"
 #include "processor/execution_context.h"
 #include "storage/local_storage/local_storage.h"
 #include "storage/table/arrow_rel_table.h"
@@ -77,18 +76,15 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
         }
     }
 
-    // Create appropriate scan state type
-    if (hasArrowTable && hasParquetTable) {
-        throw RuntimeException(
-            "Scanning mixed Arrow-backed and Parquet-backed rel tables in one operator is not "
-            "supported");
+    // Parquet scan state extends the common rel scan state and Arrow stores its per-table state
+    // there, so one scan state can now cover Parquet, Arrow, and native rel tables.
+    if (hasParquetTable) {
+        scanState =
+            std::make_unique<storage::ParquetRelTableScanState>(*MemoryManager::Get(*clientContext),
+                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     } else if (hasArrowTable) {
         scanState =
             std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
-                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
-    } else if (hasParquetTable) {
-        scanState =
-            std::make_unique<storage::ParquetRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     } else {
         scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),

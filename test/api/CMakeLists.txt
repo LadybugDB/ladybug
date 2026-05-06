@@ -3,6 +3,7 @@ add_lbug_api_test(api_test
         system_config_test.cpp
         arrow_test.cpp
         arrow_node_table_test.cpp
+        arrow_rel_table_test.cpp
         arrow_table_function_test.cpp
         prepare_test.cpp
         result_value_test.cpp

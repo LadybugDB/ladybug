@@ -124,7 +124,7 @@ ArrowRelTable::~ArrowRelTable() {
 
 void ArrowRelTable::initScanState([[maybe_unused]] transaction::Transaction* transaction,
     TableScanState& scanState, bool resetCachedBoundNodeSelVec) const {
-    auto& relScanState = scanState.cast<ArrowRelTableScanState>();
+    auto& relScanState = scanState.cast<RelTableScanState>();
     relScanState.source = TableScanSource::COMMITTED;
     relScanState.nodeGroup = nullptr;
     relScanState.nodeGroupIdx = INVALID_NODE_GROUP_IDX;
@@ -142,39 +142,26 @@ void ArrowRelTable::initScanState([[maybe_unused]] transaction::Transaction* tra
             relScanState.nodeIDVector->state->getSelVector().getSelSize());
     }
 
-    relScanState.boundNodeOffsetToSelPos.clear();
+    relScanState.arrowBoundNodeOffsetToSelPos.clear();
     for (uint64_t i = 0; i < relScanState.cachedBoundNodeSelVector.getSelSize(); ++i) {
         auto boundNodeIdx = relScanState.cachedBoundNodeSelVector[i];
         const auto boundNodeID = relScanState.nodeIDVector->getValue<nodeID_t>(boundNodeIdx);
-        relScanState.boundNodeOffsetToSelPos.emplace(boundNodeID.offset, boundNodeIdx);
+        relScanState.arrowBoundNodeOffsetToSelPos.emplace(boundNodeID.offset, boundNodeIdx);
     }
 
-    relScanState.outputToArrowColumnIdx.assign(scanState.columnIDs.size(), -1);
-    for (size_t outCol = 0; outCol < scanState.columnIDs.size(); ++outCol) {
-        auto columnID = scanState.columnIDs[outCol];
-        if (columnID == NBR_ID_COLUMN_ID || columnID == INVALID_COLUMN_ID ||
-            columnID == ROW_IDX_COLUMN_ID) {
-            continue;
-        }
-        if (propertyColumnToArrowColumnIdx.contains(columnID)) {
-            relScanState.outputToArrowColumnIdx[outCol] =
-                propertyColumnToArrowColumnIdx.at(columnID);
-        }
-    }
-
-    relScanState.currentBatchIdx = 0;
-    relScanState.currentBatchOffset = 0;
-    relScanState.scanCompleted = arrays.empty();
+    relScanState.arrowCurrentBatchIdx = 0;
+    relScanState.arrowCurrentBatchOffset = 0;
+    relScanState.arrowScanCompleted = arrays.empty();
 
     auto srcPKType = fromNodeTable->getColumn(fromNodeTable->getPKColumnID()).getDataType().copy();
     auto dstPKType = toNodeTable->getColumn(toNodeTable->getPKColumnID()).getDataType().copy();
     auto singleValueState = DataChunkState::getSingleValueDataChunkState();
-    relScanState.srcKeyVector =
+    relScanState.arrowSrcKeyVector =
         std::make_unique<ValueVector>(std::move(srcPKType), memoryManager, singleValueState);
-    relScanState.dstKeyVector =
+    relScanState.arrowDstKeyVector =
         std::make_unique<ValueVector>(std::move(dstPKType), memoryManager, singleValueState);
-    relScanState.srcKeyVector->state->setToFlat();
-    relScanState.dstKeyVector->state->setToFlat();
+    relScanState.arrowSrcKeyVector->state->setToFlat();
+    relScanState.arrowDstKeyVector->state->setToFlat();
 }
 
 static void readSingleArrowValue(const ArrowSchema* schema, const ArrowArray* array,
@@ -184,8 +171,9 @@ static void readSingleArrowValue(const ArrowSchema* schema, const ArrowArray* ar
 }
 
 bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableScanState& scanState) {
-    auto& relScanState = scanState.cast<ArrowRelTableScanState>();
-    if (relScanState.scanCompleted || !relScanState.srcKeyVector || !relScanState.dstKeyVector) {
+    auto& relScanState = scanState.cast<RelTableScanState>();
+    if (relScanState.arrowScanCompleted || !relScanState.arrowSrcKeyVector ||
+        !relScanState.arrowDstKeyVector) {
         return false;
     }
 
@@ -195,24 +183,25 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
     auto activeBoundSelPos = INVALID_SEL;
     auto activeBoundOffset = INVALID_OFFSET;
     auto hasActiveBound = false;
+    const auto outputToArrowColumnIdx = getOutputToArrowColumnIdx(scanState.columnIDs);
 
-    while (outputCount < maxRowsPerCall && relScanState.currentBatchIdx < arrays.size()) {
-        const auto& batch = arrays[relScanState.currentBatchIdx];
+    while (outputCount < maxRowsPerCall && relScanState.arrowCurrentBatchIdx < arrays.size()) {
+        const auto& batch = arrays[relScanState.arrowCurrentBatchIdx];
         auto batchLength = getArrowBatchLength(batch);
-        if (relScanState.currentBatchOffset >= batchLength) {
-            relScanState.currentBatchIdx++;
-            relScanState.currentBatchOffset = 0;
+        if (relScanState.arrowCurrentBatchOffset >= batchLength) {
+            relScanState.arrowCurrentBatchIdx++;
+            relScanState.arrowCurrentBatchOffset = 0;
             continue;
         }
 
-        auto srcOffsetInBatch = relScanState.currentBatchOffset;
+        auto srcOffsetInBatch = relScanState.arrowCurrentBatchOffset;
         auto numChildren = batch.n_children < 0 ? 0u : static_cast<uint64_t>(batch.n_children);
         if (numChildren == 0 || !batch.children || !schema.children ||
             static_cast<uint64_t>(fromColumnIdx) >= numChildren ||
             static_cast<uint64_t>(toColumnIdx) >= numChildren || !batch.children[fromColumnIdx] ||
             !batch.children[toColumnIdx] || !schema.children[fromColumnIdx] ||
             !schema.children[toColumnIdx]) {
-            relScanState.currentBatchOffset++;
+            relScanState.arrowCurrentBatchOffset++;
             continue;
         }
 
@@ -222,37 +211,37 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
         auto* dstChildSchema = schema.children[toColumnIdx];
         auto srcOffsetToRead = srcChildArray->offset + srcOffsetInBatch;
         auto dstOffsetToRead = dstChildArray->offset + srcOffsetInBatch;
-        readSingleArrowValue(srcChildSchema, srcChildArray, *relScanState.srcKeyVector,
+        readSingleArrowValue(srcChildSchema, srcChildArray, *relScanState.arrowSrcKeyVector,
             srcOffsetToRead, 0);
-        if (relScanState.srcKeyVector->isNull(0)) {
-            relScanState.currentBatchOffset++;
+        if (relScanState.arrowSrcKeyVector->isNull(0)) {
+            relScanState.arrowCurrentBatchOffset++;
             continue;
         }
-        readSingleArrowValue(dstChildSchema, dstChildArray, *relScanState.dstKeyVector,
+        readSingleArrowValue(dstChildSchema, dstChildArray, *relScanState.arrowDstKeyVector,
             dstOffsetToRead, 0);
-        if (relScanState.dstKeyVector->isNull(0)) {
-            relScanState.currentBatchOffset++;
+        if (relScanState.arrowDstKeyVector->isNull(0)) {
+            relScanState.arrowCurrentBatchOffset++;
             continue;
         }
 
         offset_t srcNodeOffset = INVALID_OFFSET;
         offset_t dstNodeOffset = INVALID_OFFSET;
-        if (!fromNodeTable->lookupPK(transaction, relScanState.srcKeyVector.get(), 0,
+        if (!fromNodeTable->lookupPK(transaction, relScanState.arrowSrcKeyVector.get(), 0,
                 srcNodeOffset)) {
-            relScanState.currentBatchOffset++;
+            relScanState.arrowCurrentBatchOffset++;
             continue;
         }
-        if (!toNodeTable->lookupPK(transaction, relScanState.dstKeyVector.get(), 0,
+        if (!toNodeTable->lookupPK(transaction, relScanState.arrowDstKeyVector.get(), 0,
                 dstNodeOffset)) {
-            relScanState.currentBatchOffset++;
+            relScanState.arrowCurrentBatchOffset++;
             continue;
         }
 
         auto isFwd = relScanState.direction != RelDataDirection::BWD;
         auto boundOffset = isFwd ? srcNodeOffset : dstNodeOffset;
-        auto boundIt = relScanState.boundNodeOffsetToSelPos.find(boundOffset);
-        if (boundIt == relScanState.boundNodeOffsetToSelPos.end()) {
-            relScanState.currentBatchOffset++;
+        auto boundIt = relScanState.arrowBoundNodeOffsetToSelPos.find(boundOffset);
+        if (boundIt == relScanState.arrowBoundNodeOffsetToSelPos.end()) {
+            relScanState.arrowCurrentBatchOffset++;
             continue;
         }
         if (!hasActiveBound) {
@@ -265,7 +254,7 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
 
         auto nbrOffset = isFwd ? dstNodeOffset : srcNodeOffset;
         auto nbrTableID = isFwd ? getToNodeTableID() : getFromNodeTableID();
-        auto relOffset = batchStartOffsets[relScanState.currentBatchIdx] + srcOffsetInBatch;
+        auto relOffset = batchStartOffsets[relScanState.arrowCurrentBatchIdx] + srcOffsetInBatch;
         if (!relScanState.outputVectors.empty()) {
             relScanState.outputVectors[0]->setValue<internalID_t>(outputCount,
                 internalID_t{nbrOffset, nbrTableID});
@@ -281,10 +270,10 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
                     internalID_t{relOffset, getTableID()});
                 continue;
             }
-            if (outCol >= relScanState.outputToArrowColumnIdx.size()) {
+            if (outCol >= outputToArrowColumnIdx.size()) {
                 continue;
             }
-            auto arrowColIdx = relScanState.outputToArrowColumnIdx[outCol];
+            auto arrowColIdx = outputToArrowColumnIdx[outCol];
             if (arrowColIdx < 0 || static_cast<uint64_t>(arrowColIdx) >= numChildren ||
                 !batch.children[arrowColIdx] || !schema.children[arrowColIdx]) {
                 continue;
@@ -295,11 +284,11 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
                 childArray->offset + srcOffsetInBatch, outputCount);
         }
         outputCount++;
-        relScanState.currentBatchOffset++;
+        relScanState.arrowCurrentBatchOffset++;
     }
 
     if (outputCount == 0) {
-        relScanState.scanCompleted = relScanState.currentBatchIdx >= arrays.size();
+        relScanState.arrowScanCompleted = relScanState.arrowCurrentBatchIdx >= arrays.size();
         auto selVector = std::make_shared<SelectionVector>(0);
         relScanState.outState->setSelVector(selVector);
         return false;
@@ -312,8 +301,24 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
         (*selVector)[i] = i;
     }
     relScanState.outState->setSelVector(selVector);
-    relScanState.scanCompleted = relScanState.currentBatchIdx >= arrays.size();
+    relScanState.arrowScanCompleted = relScanState.arrowCurrentBatchIdx >= arrays.size();
     return true;
+}
+
+std::vector<int64_t> ArrowRelTable::getOutputToArrowColumnIdx(
+    const std::vector<column_id_t>& columnIDs) const {
+    std::vector<int64_t> outputToArrowColumnIdx(columnIDs.size(), -1);
+    for (size_t outCol = 0; outCol < columnIDs.size(); ++outCol) {
+        auto columnID = columnIDs[outCol];
+        if (columnID == NBR_ID_COLUMN_ID || columnID == INVALID_COLUMN_ID ||
+            columnID == ROW_IDX_COLUMN_ID) {
+            continue;
+        }
+        if (propertyColumnToArrowColumnIdx.contains(columnID)) {
+            outputToArrowColumnIdx[outCol] = propertyColumnToArrowColumnIdx.at(columnID);
+        }
+    }
+    return outputToArrowColumnIdx;
 }
 
 row_idx_t ArrowRelTable::getTotalRowCount(

@@ -50,32 +50,6 @@ ArrowNodeTable::~ArrowNodeTable() {
     }
 }
 
-void ArrowNodeTableScanState::setToTable(const transaction::Transaction* transaction, Table* table_,
-    std::vector<common::column_id_t> columnIDs_,
-    std::vector<ColumnPredicateSet> columnPredicateSets_, common::RelDataDirection) {
-    TableScanState::setToTable(transaction, table_, columnIDs_, std::move(columnPredicateSets_));
-
-    // populating outputToArrowColumnIdx for use in ArrowNodeTable scanInternal
-    this->outputToArrowColumnIdx.assign(columnIDs.size(), -1);
-    auto tableCatalogEntry = table->cast<ArrowNodeTable>().getCatalogEntry();
-
-    for (size_t col = 0; col < columnIDs.size(); ++col) {
-        const auto columnID = columnIDs[col];
-
-        if (columnID == common::INVALID_COLUMN_ID || columnID == common::ROW_IDX_COLUMN_ID) {
-            continue;
-        }
-
-        for (common::idx_t propIdx = 0; propIdx < tableCatalogEntry->getNumProperties();
-             ++propIdx) {
-            if (tableCatalogEntry->getColumnID(propIdx) == columnID) {
-                this->outputToArrowColumnIdx[col] = static_cast<int64_t>(propIdx);
-                break;
-            }
-        }
-    }
-}
-
 void ArrowNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
     auto arrowScanSharedState =
         static_cast<ArrowNodeTableScanSharedState*>(tableScanSharedState.get());
@@ -144,9 +118,10 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
         return false;
     }
 
-    DASSERT(scanState.outputVectors.size() == arrowScanState.outputToArrowColumnIdx.size());
+    const auto outputToArrowColumnIdx = getOutputToArrowColumnIdx(scanState.columnIDs);
+    DASSERT(scanState.outputVectors.size() == outputToArrowColumnIdx.size());
     copyArrowMorselToOutputVectors(batch, arrowScanState.currentMorselStartOffset, outputSize,
-        scanState.outputVectors, arrowScanState.outputToArrowColumnIdx);
+        scanState.outputVectors, outputToArrowColumnIdx);
 
     auto tableID = this->getTableID();
     for (uint64_t i = 0; i < outputSize; ++i) {
@@ -191,6 +166,25 @@ size_t ArrowNodeTable::getNumScanMorsels(
     return numMorsels;
 }
 
+std::vector<int64_t> ArrowNodeTable::getOutputToArrowColumnIdx(
+    const std::vector<common::column_id_t>& columnIDs) const {
+    std::vector<int64_t> outputToArrowColumnIdx(columnIDs.size(), -1);
+    for (size_t col = 0; col < columnIDs.size(); ++col) {
+        const auto columnID = columnIDs[col];
+        if (columnID == common::INVALID_COLUMN_ID || columnID == common::ROW_IDX_COLUMN_ID) {
+            continue;
+        }
+        for (common::idx_t propIdx = 0; propIdx < nodeTableCatalogEntry->getNumProperties();
+             ++propIdx) {
+            if (nodeTableCatalogEntry->getColumnID(propIdx) == columnID) {
+                outputToArrowColumnIdx[col] = static_cast<int64_t>(propIdx);
+                break;
+            }
+        }
+    }
+    return outputToArrowColumnIdx;
+}
+
 void ArrowNodeTable::copyArrowMorselToOutputVectors(const ArrowArrayWrapper& batch,
     const size_t currentMorselStartOffset, const uint64_t numRowsToCopy,
     const std::vector<common::ValueVector*>& outputVectors,
@@ -214,6 +208,68 @@ void ArrowNodeTable::copyArrowMorselToOutputVectors(const ArrowArrayWrapper& bat
         common::ArrowConverter::fromArrowArray(childSchema, childArray, outputVector, &nullMask,
             childArray->offset + currentMorselStartOffset, 0, numRowsToCopy);
     }
+}
+
+bool ArrowNodeTable::lookupPK([[maybe_unused]] const transaction::Transaction* transaction,
+    common::ValueVector* keyVector, uint64_t vectorPos, common::offset_t& result) const {
+    if (keyVector->isNull(vectorPos)) {
+        return false;
+    }
+
+    int64_t pkArrowColumnIdx = -1;
+    for (common::idx_t propIdx = 0; propIdx < nodeTableCatalogEntry->getNumProperties();
+         ++propIdx) {
+        if (nodeTableCatalogEntry->getColumnID(propIdx) == getPKColumnID()) {
+            pkArrowColumnIdx = static_cast<int64_t>(propIdx);
+            break;
+        }
+    }
+    if (pkArrowColumnIdx < 0 || !schema.children || pkArrowColumnIdx >= schema.n_children ||
+        !schema.children[pkArrowColumnIdx]) {
+        return false;
+    }
+
+    auto keyToLookup = keyVector->getAsValue(vectorPos);
+    auto pkType = getColumn(getPKColumnID()).getDataType().copy();
+    auto singleValueState = common::DataChunkState::getSingleValueDataChunkState();
+    auto arrowPKVector =
+        std::make_unique<common::ValueVector>(std::move(pkType), memoryManager, singleValueState);
+    arrowPKVector->state->setToFlat();
+
+    for (size_t batchIdx = 0; batchIdx < arrays.size(); ++batchIdx) {
+        const auto& batch = arrays[batchIdx];
+        const auto batchLength = getArrowBatchLength(batch);
+        if (batchLength == 0 || !batch.children || pkArrowColumnIdx >= batch.n_children ||
+            !batch.children[pkArrowColumnIdx]) {
+            continue;
+        }
+        auto* pkChildArray = batch.children[pkArrowColumnIdx];
+        auto* pkChildSchema = schema.children[pkArrowColumnIdx];
+        common::ArrowNullMaskTree nullMask(pkChildSchema, pkChildArray, pkChildArray->offset,
+            pkChildArray->length);
+        for (uint64_t rowIdx = 0; rowIdx < batchLength; ++rowIdx) {
+            common::ArrowConverter::fromArrowArray(pkChildSchema, pkChildArray, *arrowPKVector,
+                &nullMask, pkChildArray->offset + rowIdx, 0, 1);
+            if (arrowPKVector->isNull(0)) {
+                continue;
+            }
+            if (*arrowPKVector->getAsValue(0) == *keyToLookup) {
+                result = batchStartOffsets[batchIdx] + rowIdx;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool ArrowNodeTable::isVisible([[maybe_unused]] const transaction::Transaction* transaction,
+    common::offset_t offset) const {
+    return offset < totalRows;
+}
+
+bool ArrowNodeTable::isVisibleNoLock([[maybe_unused]] const transaction::Transaction* transaction,
+    common::offset_t offset) const {
+    return offset < totalRows;
 }
 
 } // namespace storage

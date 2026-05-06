@@ -17,7 +17,6 @@ struct ArrowNodeTableScanState final : ColumnarNodeTableScanState {
     size_t currentBatchIdx = static_cast<size_t>(common::INVALID_NODE_GROUP_IDX);
     size_t currentMorselStartOffset = 0; // Start of current morsel within batch
     size_t currentMorselEndOffset = 0;   // End of current morsel within batch
-    std::vector<int64_t> outputToArrowColumnIdx;
     bool initialized = false;
     bool scanCompleted = false;
 
@@ -26,11 +25,6 @@ struct ArrowNodeTableScanState final : ColumnarNodeTableScanState {
         std::shared_ptr<common::DataChunkState> outChunkState)
         : ColumnarNodeTableScanState{mm, nodeIDVector, std::move(outputVectors),
               std::move(outChunkState)} {}
-
-    void setToTable(const transaction::Transaction* transaction, Table* table_,
-        std::vector<common::column_id_t> columnIDs_,
-        std::vector<ColumnPredicateSet> columnPredicateSets_ = {},
-        common::RelDataDirection direction = common::RelDataDirection::INVALID) override;
 };
 
 struct ArrowNodeTableScanSharedState final : ColumnarNodeTableScanSharedState {
@@ -92,6 +86,14 @@ public:
 
     bool scanInternal(transaction::Transaction* transaction, TableScanState& scanState) override;
 
+    bool lookupPK(const transaction::Transaction* transaction, common::ValueVector* keyVector,
+        uint64_t vectorPos, common::offset_t& result) const override;
+
+    bool isVisible(const transaction::Transaction* transaction,
+        common::offset_t offset) const override;
+    bool isVisibleNoLock(const transaction::Transaction* transaction,
+        common::offset_t offset) const override;
+
     const ArrowSchemaWrapper& getArrowSchema() const { return schema; }
     const std::vector<ArrowArrayWrapper>& getArrowArrays() const { return arrays; }
 
@@ -109,6 +111,9 @@ protected:
 private:
     std::vector<size_t> getBatchSizes(
         [[maybe_unused]] const transaction::Transaction* transaction) const;
+
+    std::vector<int64_t> getOutputToArrowColumnIdx(
+        const std::vector<common::column_id_t>& columnIDs) const;
 
     void copyArrowMorselToOutputVectors(const ArrowArrayWrapper& batch,
         const size_t currentMorselStartOffset, const uint64_t numRowsToCopy,

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_map>
+
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "storage/table/rel_table_data.h"
 #include "storage/table/table.h"
@@ -26,6 +28,15 @@ struct RelTableScanState : TableScanState {
     common::SelectionVector cachedBoundNodeSelVector;
 
     std::unique_ptr<LocalRelTableScanState> localTableScanState;
+
+    // Optional state used by Arrow-backed relationship tables. Keep it on the common scan state so
+    // a single multi-rel scan state can scan native, Parquet-backed, and Arrow-backed tables.
+    size_t arrowCurrentBatchIdx = 0;
+    size_t arrowCurrentBatchOffset = 0;
+    std::unordered_map<common::offset_t, common::sel_t> arrowBoundNodeOffsetToSelPos;
+    std::unique_ptr<common::ValueVector> arrowSrcKeyVector;
+    std::unique_ptr<common::ValueVector> arrowDstKeyVector;
+    bool arrowScanCompleted = true;
 
     RelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,

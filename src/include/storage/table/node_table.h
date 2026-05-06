@@ -146,12 +146,13 @@ public:
 
     void addColumn(transaction::Transaction* transaction, TableAddColumnState& addColumnState,
         PageAllocator& pageAllocator) override;
-    bool isVisible(const transaction::Transaction* transaction, common::offset_t offset) const;
-    bool isVisibleNoLock(const transaction::Transaction* transaction,
+    virtual bool isVisible(const transaction::Transaction* transaction,
+        common::offset_t offset) const;
+    virtual bool isVisibleNoLock(const transaction::Transaction* transaction,
         common::offset_t offset) const;
 
-    bool lookupPK(const transaction::Transaction* transaction, common::ValueVector* keyVector,
-        uint64_t vectorPos, common::offset_t& result) const;
+    virtual bool lookupPK(const transaction::Transaction* transaction,
+        common::ValueVector* keyVector, uint64_t vectorPos, common::offset_t& result) const;
 
     void addIndex(std::unique_ptr<Index> index);
     void dropIndex(const std::string& name);
