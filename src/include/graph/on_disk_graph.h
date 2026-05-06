@@ -63,7 +63,8 @@ public:
             return tableScanState->outState->getSelVector();
         }
 
-        bool next(evaluator::ExpressionEvaluator* predicate, common::SemiMask* nbrNodeMask);
+        bool next(evaluator::ExpressionEvaluator* predicate, common::SemiMask* nbrNodeMask,
+            storage::NodeTable* nbrNodeTable);
         void initScan() const;
 
         common::RelDataDirection getDirection() const { return tableScanState->direction; }
@@ -83,6 +84,7 @@ private:
 
     std::unique_ptr<evaluator::ExpressionEvaluator> relPredicateEvaluator;
     common::SemiMask* nbrNodeMask = nullptr;
+    storage::NodeTable* nbrNodeTable = nullptr;
 
     std::vector<InnerIterator> directedIterators;
     InnerIterator* currentIter = nullptr;

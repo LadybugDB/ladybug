@@ -7,6 +7,8 @@
 #include "function/gds/gds_function_collection.h"
 #include "function/gds/gds_utils.h"
 #include "processor/execution_context.h"
+#include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -94,7 +96,13 @@ void RecursiveExtend::executeInternal(ExecutionContext* context) {
         totalNumNodes = inputNodeMaskMap->getNumMaskedNode();
     } else {
         for (auto& tableID : graph->getNodeTableIDs()) {
-            totalNumNodes += graph->getMaxOffset(transaction, tableID);
+            auto nodeTable = storage::StorageManager::Get(*clientContext)
+                                 ->getTable(tableID)
+                                 ->ptrCast<storage::NodeTable>();
+            auto maxOffset = graph->getMaxOffset(transaction, tableID);
+            for (auto offset = 0u; offset < maxOffset; ++offset) {
+                totalNumNodes += nodeTable->isVisible(transaction, offset);
+            }
         }
     }
     std::vector<std::string> propertyNames;
@@ -143,7 +151,13 @@ void RecursiveExtend::executeInternal(ExecutionContext* context) {
                 }
             }
         } else {
+            auto nodeTable = storage::StorageManager::Get(*clientContext)
+                                 ->getTable(tableID)
+                                 ->ptrCast<storage::NodeTable>();
             for (auto offset = 0u; offset < maxOffset; ++offset) {
+                if (!nodeTable->isVisible(transaction, offset)) {
+                    continue;
+                }
                 calcFunc(offset);
                 progressBar->updateProgress(context->queryID,
                     getRJProgress(totalNumNodes, completedNumNodes++));
