@@ -1,6 +1,9 @@
 name: CI Workflow
 
 on:
+  schedule:
+    # GitHub schedules use UTC.
+    - cron: '0 3 * * *'
   pull_request:
     branches:
       - main
@@ -126,7 +129,7 @@ jobs:
     needs: [ sanity-checks ]
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON((github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'macos' && '{"include":[{"platform":"macos","runner":"macos-latest"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'windows' && '{"include":[{"platform":"windows","runner":"windows-latest"}]}') || '{"include":[{"platform":"linux","runner":"ubuntu-latest"}]}') }}
+      matrix: ${{ fromJSON((github.event_name == 'schedule' && '{"include":[{"platform":"linux","runner":"ubuntu-latest"},{"platform":"macos","runner":"macos-latest"},{"platform":"windows","runner":"windows-latest"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'macos' && '{"include":[{"platform":"macos","runner":"macos-latest"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'windows' && '{"include":[{"platform":"windows","runner":"windows-latest"}]}') || '{"include":[{"platform":"linux","runner":"ubuntu-latest"}]}') }}
     env:
       GEN: Ninja
       TEST_JOBS: 4
@@ -144,6 +147,7 @@ jobs:
           git submodule update --init dataset benchmark # needed for demo db
 
       - name: Setup ccache
+        if: matrix.platform != 'windows'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: minimal-test-${{ runner.os }}-${{ github.ref }}
@@ -151,6 +155,22 @@ jobs:
           restore-keys: |
             minimal-test-${{ runner.os }}-refs/heads/main
             minimal-test-${{ runner.os }}-
+
+      - name: Setup ccache (Windows)
+        if: matrix.platform == 'windows'
+        shell: cmd
+        run: |
+          choco install ccache -y
+          echo CMAKE_C_COMPILER_LAUNCHER=ccache>> %GITHUB_ENV%
+          echo CMAKE_CXX_COMPILER_LAUNCHER=ccache>> %GITHUB_ENV%
+          echo CCACHE_DIR=D:\c>> %GITHUB_ENV%
+          echo CCACHE_TEMPDIR=D:\t>> %GITHUB_ENV%
+          if not exist D:\c mkdir D:\c
+          if not exist D:\t mkdir D:\t
+          ccache --set-config=max_size=2G
+          ccache --set-config=compression=true
+          ccache --set-config=cache_dir=D:\c
+          ccache --set-config=temporary_dir=D:\t
 
       - name: Enable long paths (Windows)
         if: matrix.platform == 'windows'
@@ -191,7 +211,11 @@ jobs:
             exit
           fi
           uv venv
-          source .venv/bin/activate
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            source .venv/Scripts/activate
+          else
+            source .venv/bin/activate
+          fi
           uv pip install pytest pexpect
           make shell-test test
 
