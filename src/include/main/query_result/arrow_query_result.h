@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 
 #include "main/query_result.h"
@@ -17,6 +18,45 @@ public:
         std::vector<int64_t> indices;
         std::vector<int64_t> edgeIDs;
         bool hasEdgeIDs = false;
+    };
+
+    struct CSRArrowArray {
+        ArrowArray array{};
+        ArrowSchema schema{};
+
+        CSRArrowArray() = default;
+        ~CSRArrowArray() { release(); }
+        CSRArrowArray(CSRArrowArray&& other) noexcept : array{other.array}, schema{other.schema} {
+            other.array.release = nullptr;
+            other.schema.release = nullptr;
+        }
+        CSRArrowArray& operator=(CSRArrowArray&& other) noexcept {
+            if (this != &other) {
+                release();
+                array = other.array;
+                schema = other.schema;
+                other.array.release = nullptr;
+                other.schema.release = nullptr;
+            }
+            return *this;
+        }
+        CSRArrowArray(const CSRArrowArray&) = delete;
+        CSRArrowArray& operator=(const CSRArrowArray&) = delete;
+
+        void release() {
+            if (schema.release) {
+                schema.release(&schema);
+            }
+            if (array.release) {
+                array.release(&array);
+            }
+        }
+    };
+
+    struct CSRArrowArrays {
+        CSRArrowArray indptr;
+        CSRArrowArray indices;
+        std::optional<CSRArrowArray> edgeIDs;
     };
 
     ArrowQueryResult(std::vector<ArrowArray> arrays, int64_t chunkSize);
@@ -39,8 +79,9 @@ public:
 
     std::unique_ptr<ArrowArray> getNextArrowChunk(int64_t chunkSize) override;
 
-    bool hasCSRMetadata() const { return csrMetadata.has_value(); }
+    bool hasCSRMetadata() const { return csrMetadata != nullptr; }
     const CSRMetadata& getCSRMetadata() const { return *csrMetadata; }
+    CSRArrowArrays getCSRArrowArrays() const;
 
 private:
     ArrowArray getArray(processor::FactorizedTableIterator& iterator, int64_t chunkSize);
@@ -50,7 +91,7 @@ private:
     int64_t chunkSize_;
     uint64_t numTuples = 0;
     uint64_t cursor = 0;
-    std::optional<CSRMetadata> csrMetadata;
+    std::shared_ptr<const CSRMetadata> csrMetadata;
 };
 
 } // namespace main

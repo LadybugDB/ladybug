@@ -8,6 +8,36 @@ using namespace lbug::testing;
 
 class ArrowTest : public ApiTest {};
 
+static void releaseCSRArrowArray(ArrowQueryResult::CSRArrowArray& array) {
+    array.release();
+}
+
+TEST(ArrowQueryResultTest, exportsCSRMetadataAsZeroCopyArrowArrays) {
+    ArrowQueryResult::CSRMetadata metadata;
+    metadata.indptr = {0, 2, 3};
+    metadata.indices = {4, 5, 6};
+    metadata.edgeIDs = {10, 11, 12};
+    metadata.hasEdgeIDs = true;
+
+    ArrowQueryResult result{{}, 8, std::move(metadata)};
+    const auto& storedMetadata = result.getCSRMetadata();
+    auto csrArrays = result.getCSRArrowArrays();
+
+    ASSERT_STREQ(csrArrays.indptr.schema.format, "l");
+    ASSERT_STREQ(csrArrays.indices.schema.format, "l");
+    ASSERT_TRUE(csrArrays.edgeIDs.has_value());
+    ASSERT_STREQ(csrArrays.edgeIDs->schema.format, "l");
+    ASSERT_EQ(csrArrays.indptr.array.length, static_cast<int64_t>(storedMetadata.indptr.size()));
+    ASSERT_EQ(csrArrays.indices.array.length, static_cast<int64_t>(storedMetadata.indices.size()));
+    ASSERT_EQ(csrArrays.edgeIDs->array.length, static_cast<int64_t>(storedMetadata.edgeIDs.size()));
+    ASSERT_EQ(csrArrays.indptr.array.buffers[0], nullptr);
+    ASSERT_EQ(csrArrays.indices.array.buffers[0], nullptr);
+    ASSERT_EQ(csrArrays.edgeIDs->array.buffers[0], nullptr);
+    ASSERT_EQ(csrArrays.indptr.array.buffers[1], storedMetadata.indptr.data());
+    ASSERT_EQ(csrArrays.indices.array.buffers[1], storedMetadata.indices.data());
+    ASSERT_EQ(csrArrays.edgeIDs->array.buffers[1], storedMetadata.edgeIDs.data());
+}
+
 TEST_F(ArrowTest, resultToArrow) {
     auto query = "MATCH (a:person) WHERE a.fName = 'Bob' RETURN a.fName";
     auto result = conn->query(query);
@@ -101,6 +131,21 @@ TEST_F(ArrowTest, queryAsArrowTracksCSRMetadataWithoutRelIDs) {
     ASSERT_FALSE(metadata.hasEdgeIDs);
     ASSERT_TRUE(metadata.edgeIDs.empty());
 
+    auto csrArrays = arrowResult->getCSRArrowArrays();
+    ASSERT_STREQ(csrArrays.indptr.schema.format, "l");
+    ASSERT_STREQ(csrArrays.indices.schema.format, "l");
+    ASSERT_EQ(csrArrays.indptr.array.length, static_cast<int64_t>(metadata.indptr.size()));
+    ASSERT_EQ(csrArrays.indices.array.length, static_cast<int64_t>(metadata.indices.size()));
+    ASSERT_EQ(csrArrays.indptr.array.null_count, 0);
+    ASSERT_EQ(csrArrays.indices.array.null_count, 0);
+    ASSERT_EQ(csrArrays.indptr.array.buffers[0], nullptr);
+    ASSERT_EQ(csrArrays.indices.array.buffers[0], nullptr);
+    ASSERT_EQ(csrArrays.indptr.array.buffers[1], metadata.indptr.data());
+    ASSERT_EQ(csrArrays.indices.array.buffers[1], metadata.indices.data());
+    ASSERT_FALSE(csrArrays.edgeIDs.has_value());
+    releaseCSRArrowArray(csrArrays.indptr);
+    releaseCSRArrowArray(csrArrays.indices);
+
     std::vector<std::pair<int64_t, int64_t>> reconstructed;
     ASSERT_GE(metadata.indptr.size(), 1);
     for (auto srcRowID = 0u; srcRowID + 1 < metadata.indptr.size(); ++srcRowID) {
@@ -132,6 +177,15 @@ TEST_F(ArrowTest, queryAsArrowTracksCSRMetadataWithRelIDsAndExtraColumns) {
     const auto& metadata = arrowResult->getCSRMetadata();
     ASSERT_TRUE(metadata.hasEdgeIDs);
     ASSERT_EQ(metadata.indices.size(), metadata.edgeIDs.size());
+
+    auto csrArrays = arrowResult->getCSRArrowArrays();
+    ASSERT_TRUE(csrArrays.edgeIDs.has_value());
+    ASSERT_EQ(csrArrays.edgeIDs->array.length, static_cast<int64_t>(metadata.edgeIDs.size()));
+    ASSERT_EQ(csrArrays.edgeIDs->array.buffers[0], nullptr);
+    ASSERT_EQ(csrArrays.edgeIDs->array.buffers[1], metadata.edgeIDs.data());
+    releaseCSRArrowArray(csrArrays.indptr);
+    releaseCSRArrowArray(csrArrays.indices);
+    releaseCSRArrowArray(*csrArrays.edgeIDs);
 
     std::vector<std::tuple<int64_t, int64_t, int64_t>> reconstructed;
     ASSERT_GE(metadata.indptr.size(), 1);
