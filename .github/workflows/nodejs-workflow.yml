@@ -253,18 +253,31 @@ jobs:
         if: ${{ inputs.useBuiltExtensions == true && matrix.platform != 'win32' }}
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p nodejs-extension-server
           cp -R nodejs-extension-repo/releases/. nodejs-extension-server/
           if [ -d nodejs-extension-repo/dataset ]; then
             cp -R nodejs-extension-repo/dataset nodejs-extension-server/dataset
           fi
-          if [ "$(id -u)" -eq 0 ]; then
-            echo "127.0.0.1 extension.ladybugdb.com" >> /etc/hosts
-          else
-            sudo sh -c 'echo "127.0.0.1 extension.ladybugdb.com" >> /etc/hosts'
-          fi
-          python3 -m http.server 80 --directory nodejs-extension-server &
-          sleep 1
+          extension_server="$PWD/nodejs-extension-server"
+          python3 -m http.server 8000 --bind 127.0.0.1 --directory "$extension_server" > nodejs-extension-server.log 2>&1 &
+          case "${{ matrix.platform }}-${{ matrix.arch }}" in
+            darwin-x64) platform_dir="osx_amd64" ;;
+            darwin-arm64) platform_dir="osx_arm64" ;;
+            linux-x64) platform_dir="linux_amd64" ;;
+            linux-arm64) platform_dir="linux_arm64" ;;
+            *) echo "Unsupported extension test platform: ${{ matrix.platform }}-${{ matrix.arch }}" && exit 1 ;;
+          esac
+          extension_version="$(grep 'DLBUG_EXTENSION_VERSION' CMakeLists.txt | cut -d '"' -f 2)"
+          extension_url="http://127.0.0.1:8000/v${extension_version}/${platform_dir}/json/libjson.lbug_extension"
+          for _ in {1..10}; do
+            if curl --fail --silent --show-error --noproxy '*' "$extension_url" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat nodejs-extension-server.log
+          exit 1
 
       - name: Start built extension repository for tests (Windows)
         if: ${{ inputs.useBuiltExtensions == true && matrix.platform == 'win32' }}
@@ -275,10 +288,26 @@ jobs:
           if (Test-Path nodejs-extension-repo\dataset) {
             Copy-Item -Recurse nodejs-extension-repo\dataset nodejs-extension-server\dataset
           }
-          Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value "`n127.0.0.1 extension.ladybugdb.com"
           $extensionServer = Join-Path $PWD "nodejs-extension-server"
-          Start-Process -FilePath python -ArgumentList "-m", "http.server", "80", "--directory", $extensionServer -WindowStyle Hidden
-          Start-Sleep -Seconds 1
+          Start-Process -FilePath python -ArgumentList "-m", "http.server", "8000", "--bind", "127.0.0.1", "--directory", $extensionServer -WindowStyle Hidden
+          $platform = "win_amd64"
+          $extensionVersion = (Select-String -Path CMakeLists.txt -Pattern 'DLBUG_EXTENSION_VERSION="([^"]+)"').Matches[0].Groups[1].Value
+          $url = "http://127.0.0.1:8000/v$extensionVersion/$platform/json/libjson.lbug_extension"
+          for ($i = 0; $i -lt 10; $i++) {
+            try {
+              Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2 | Out-Null
+              exit 0
+            } catch {
+              Start-Sleep -Seconds 1
+            }
+          }
+          Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 2
+
+      - name: Use built extension repository in Node.js tests
+        if: ${{ inputs.useBuiltExtensions == true }}
+        shell: bash
+        run: |
+          sed -i.bak "s|INSTALL JSON|INSTALL JSON FROM 'http://127.0.0.1:8000/'|" tools/nodejs_api/test/test_data_type.js
 
       - name: Run Node.js tests
         working-directory: tools/nodejs_api
