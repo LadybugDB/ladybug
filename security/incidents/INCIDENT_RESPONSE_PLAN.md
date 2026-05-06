@@ -121,7 +121,7 @@ After yanking, publish a patched version as quickly as possible (see Phase 3).
 
 1. Develop the fix on a **private fork or branch** — do not push to a public branch until the advisory is ready to publish.
 2. Write a targeted regression test that fails before the fix and passes after.
-3. Build and test all affected platforms via the relevant CI workflows (`ci-workflow.yml`, `multiplatform-build-test.yml`, binding workflows, etc).
+3. Build and test all affected platforms via the relevant CI workflows (`ci-workflow.yml`, binding workflows, etc).
 4. Have at least one other engineer review the fix before merge.
 
 ### 3.2 Coordinated release
