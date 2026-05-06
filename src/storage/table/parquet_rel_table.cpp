@@ -214,8 +214,7 @@ bool ParquetRelTable::scanInternalByRowGroups(Transaction* transaction,
     // Check if we have any row groups left to process
     if (parquetRelScanState.currentRowGroup >= parquetRelScanState.endRowGroup) {
         // No more row groups to process
-        auto newSelVector = std::make_shared<SelectionVector>(0);
-        parquetRelScanState.outState->setSelVector(newSelVector);
+        parquetRelScanState.outState->getSelVectorUnsafe().setToFiltered(0);
         return false;
     }
 
@@ -336,18 +335,16 @@ bool ParquetRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
 
     // Set up the output state
     if (totalRowsCollected > 0) {
-        auto selVector = std::make_shared<SelectionVector>(totalRowsCollected);
-        selVector->setToFiltered(totalRowsCollected);
+        auto& selVector = parquetRelScanState.outState->getSelVectorUnsafe();
+        selVector.setToFiltered(totalRowsCollected);
         for (uint64_t i = 0; i < totalRowsCollected; ++i) {
-            (*selVector)[i] = i;
+            selVector[i] = i;
         }
-        parquetRelScanState.outState->setSelVector(selVector);
 
         return true;
     } else {
         // No data found
-        auto selVector = std::make_shared<SelectionVector>(0);
-        parquetRelScanState.outState->setSelVector(selVector);
+        parquetRelScanState.outState->getSelVectorUnsafe().setToFiltered(0);
         return false;
     }
 }

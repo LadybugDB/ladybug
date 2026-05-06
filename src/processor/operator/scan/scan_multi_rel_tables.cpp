@@ -25,6 +25,20 @@ bool DirectionInfo::needFlip(RelDataDirection relDataDirection) const {
 bool RelTableCollectionScanner::scan(main::ClientContext* context, RelTableScanState& scanState,
     const std::vector<ValueVector*>& outVectors) {
     auto transaction = Transaction::Get(*context);
+    auto initNextTable = [&]() -> bool {
+        currentTableIdx = nextTableIdx;
+        if (currentTableIdx == relInfos.size()) {
+            return false;
+        }
+        auto& currentInfo = relInfos[currentTableIdx];
+        currentInfo.initScanState(scanState, outVectors, context);
+        currentInfo.table->initScanState(transaction, scanState, currentTableIdx == 0);
+        nextTableIdx++;
+        return true;
+    };
+    if (currentTableIdx == INVALID_IDX && !initNextTable()) {
+        return false;
+    }
     while (true) {
         auto& relInfo = relInfos[currentTableIdx];
         if (relInfo.table->scan(transaction, scanState)) {
@@ -39,14 +53,9 @@ bool RelTableCollectionScanner::scan(main::ClientContext* context, RelTableScanS
                 return true;
             }
         } else {
-            currentTableIdx = nextTableIdx;
-            if (currentTableIdx == relInfos.size()) {
+            if (!initNextTable()) {
                 return false;
             }
-            auto& currentInfo = relInfos[currentTableIdx];
-            currentInfo.initScanState(scanState, outVectors, context);
-            currentInfo.table->initScanState(transaction, scanState, currentTableIdx == 0);
-            nextTableIdx++;
         }
     }
 }

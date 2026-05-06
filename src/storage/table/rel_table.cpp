@@ -172,8 +172,10 @@ void RelTable::initScanState(Transaction* transaction, TableScanState& scanState
     auto& relScanState = scanState.cast<RelTableScanState>();
     // Note there we directly read node at pos 0 here regardless the selVector is filtered or not.
     // This is because we're assuming the nodeIDVector is always a sequence here.
-    const auto boundNodeID = relScanState.nodeIDVector->getValue<nodeID_t>(
-        relScanState.nodeIDVector->state->getSelVector()[0]);
+    const auto boundNodePos = resetCachedBoundNodeSelVec ?
+                                  relScanState.nodeIDVector->state->getSelVector()[0] :
+                                  relScanState.cachedBoundNodeSelVector[0];
+    const auto boundNodeID = relScanState.nodeIDVector->getValue<nodeID_t>(boundNodePos);
     NodeGroup* nodeGroup = nullptr;
     // Check if the node group idx is same as previous scan.
     const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(boundNodeID.offset);

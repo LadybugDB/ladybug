@@ -3,15 +3,21 @@
 #include <string>
 #include <vector>
 
-#include "api_test/api_test.h"
 #include "arrow_test_utils.h"
 #include "common/arrow/arrow.h"
+#include "graph_test/private_graph_test.h"
 #include "gtest/gtest.h"
 #include "storage/table/arrow_table_support.h"
 
 using namespace lbug;
 
-class ArrowRelTableTest : public lbug::testing::ApiTest {};
+class ArrowRelTableTest : public lbug::testing::EmptyDBTest {
+protected:
+    void SetUp() override {
+        EmptyDBTest::SetUp();
+        createDBAndConn();
+    }
+};
 
 static ArrowArrayWrapper createStructArray(int64_t length,
     const std::vector<std::function<void(ArrowArray*)>>& childBuilders) {
@@ -62,17 +68,17 @@ static void createArrowPersonTable(main::Connection& connection) {
         {[&](ArrowArray* array) { createInt64Array(array, ids); },
             [&](ArrowArray* array) { createStringArray(array, names); }}));
 
-    auto result = ArrowTableSupport::createViewFromArrowTable(connection, "person",
+    auto result = ArrowTableSupport::createViewFromArrowTable(connection, "arrow_rel_person",
         std::move(schema), std::move(arrays));
     ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
 }
 
 static void createNativePersonTable(main::Connection& connection) {
-    auto result =
-        connection.query("CREATE NODE TABLE person(id INT64, name STRING, PRIMARY KEY(id));"
-                         "CREATE (:person {id: 1, name: 'Alice'});"
-                         "CREATE (:person {id: 2, name: 'Bob'});"
-                         "CREATE (:person {id: 3, name: 'Carol'});");
+    auto result = connection.query(
+        "CREATE NODE TABLE arrow_rel_person(id INT64, name STRING, PRIMARY KEY(id));"
+        "CREATE (:arrow_rel_person {id: 1, name: 'Alice'});"
+        "CREATE (:arrow_rel_person {id: 2, name: 'Bob'});"
+        "CREATE (:arrow_rel_person {id: 3, name: 'Carol'});");
     ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
 }
 
@@ -93,8 +99,8 @@ static void createArrowKnowsTable(main::Connection& connection) {
             [&](ArrowArray* array) { createInt64Array(array, to); },
             [&](ArrowArray* array) { createInt64Array(array, weight); }}));
 
-    auto result = ArrowTableSupport::createRelTableFromArrowTable(connection, "knows", "person",
-        "person", std::move(schema), std::move(arrays));
+    auto result = ArrowTableSupport::createRelTableFromArrowTable(connection, "arrow_rel_knows",
+        "arrow_rel_person", "arrow_rel_person", std::move(schema), std::move(arrays));
     ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
 }
 
@@ -102,26 +108,30 @@ TEST_F(ArrowRelTableTest, ScanArrowRelTableOverArrowNodeTable) {
     createArrowPersonTable(*conn);
     createArrowKnowsTable(*conn);
 
-    auto countResult = conn->query("MATCH (:person)-[:knows]->(:person) RETURN count(*)");
+    auto countResult = conn->query(
+        "MATCH (:arrow_rel_person)-[:arrow_rel_knows]->(:arrow_rel_person) RETURN count(*)");
     ASSERT_TRUE(countResult->isSuccess()) << countResult->getErrorMessage();
     ASSERT_EQ(countResult->getNext()->getValue(0)->getValue<int64_t>(), 3);
 
-    auto sumResult = conn->query("MATCH (:person)-[e:knows]->(:person) RETURN sum(e.weight)");
+    auto sumResult = conn->query(
+        "MATCH (:arrow_rel_person)-[e:arrow_rel_knows]->(:arrow_rel_person) RETURN sum(e.weight)");
     ASSERT_TRUE(sumResult->isSuccess()) << sumResult->getErrorMessage();
-    ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<int64_t>(), 60);
+    ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<common::int128_t>(), 60);
 }
 
 TEST_F(ArrowRelTableTest, ScanArrowRelTableOverNativeNodeTable) {
     createNativePersonTable(*conn);
     createArrowKnowsTable(*conn);
 
-    auto countResult = conn->query("MATCH (:person)-[:knows]->(:person) RETURN count(*)");
+    auto countResult = conn->query(
+        "MATCH (:arrow_rel_person)-[:arrow_rel_knows]->(:arrow_rel_person) RETURN count(*)");
     ASSERT_TRUE(countResult->isSuccess()) << countResult->getErrorMessage();
     ASSERT_EQ(countResult->getNext()->getValue(0)->getValue<int64_t>(), 3);
 
-    auto sumResult = conn->query("MATCH (:person)-[e:knows]->(:person) RETURN sum(e.weight)");
+    auto sumResult = conn->query(
+        "MATCH (:arrow_rel_person)-[e:arrow_rel_knows]->(:arrow_rel_person) RETURN sum(e.weight)");
     ASSERT_TRUE(sumResult->isSuccess()) << sumResult->getErrorMessage();
-    ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<int64_t>(), 60);
+    ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<common::int128_t>(), 60);
 }
 
 TEST_F(ArrowRelTableTest, ScanMixedArrowAndNativeRelTables) {
@@ -129,9 +139,11 @@ TEST_F(ArrowRelTableTest, ScanMixedArrowAndNativeRelTables) {
     createArrowKnowsTable(*conn);
 
     auto createNativeTables =
-        conn->query("CREATE NODE TABLE account(id INT64, PRIMARY KEY(id));"
-                    "CREATE REL TABLE transfer(FROM account TO account);"
-                    "CREATE (:account {id: 10})-[:transfer]->(:account {id: 20});");
+        conn->query("CREATE NODE TABLE arrow_node_account(id INT64, PRIMARY KEY(id));"
+                    "CREATE REL TABLE arrow_rel_transfer(FROM arrow_node_account TO "
+                    "arrow_node_account);"
+                    "CREATE (:arrow_node_account {id: 10})-[:arrow_rel_transfer]->"
+                    "(:arrow_node_account {id: 20});");
     ASSERT_TRUE(createNativeTables->isSuccess()) << createNativeTables->getErrorMessage();
 
     auto result = conn->query("MATCH ()-[]->() RETURN count(*)");

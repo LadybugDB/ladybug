@@ -289,18 +289,16 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
 
     if (outputCount == 0) {
         relScanState.arrowScanCompleted = relScanState.arrowCurrentBatchIdx >= arrays.size();
-        auto selVector = std::make_shared<SelectionVector>(0);
-        relScanState.outState->setSelVector(selVector);
+        relScanState.outState->getSelVectorUnsafe().setToFiltered(0);
         return false;
     }
 
     relScanState.setNodeIDVectorToFlat(activeBoundSelPos);
-    auto selVector = std::make_shared<SelectionVector>(outputCount);
-    selVector->setToFiltered(outputCount);
+    auto& selVector = relScanState.outState->getSelVectorUnsafe();
+    selVector.setToFiltered(outputCount);
     for (uint64_t i = 0; i < outputCount; ++i) {
-        (*selVector)[i] = i;
+        selVector[i] = i;
     }
-    relScanState.outState->setSelVector(selVector);
     relScanState.arrowScanCompleted = relScanState.arrowCurrentBatchIdx >= arrays.size();
     return true;
 }

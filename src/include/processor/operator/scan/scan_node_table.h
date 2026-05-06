@@ -83,7 +83,7 @@ public:
         std::unique_ptr<OPPrintInfo> printInfo,
         std::shared_ptr<ScanNodeTableProgressSharedState> progressSharedState)
         : ScanTable{type_, std::move(opInfo), id, std::move(printInfo)}, currentTableIdx{0},
-          scanState{nullptr}, tableInfos{std::move(tableInfos)},
+          scanState{nullptr}, nodeIDVector{nullptr}, tableInfos{std::move(tableInfos)},
           sharedStates{std::move(sharedStates)},
           progressSharedState{std::move(progressSharedState)} {
         DASSERT(this->tableInfos.size() == this->sharedStates.size());
@@ -117,6 +117,7 @@ private:
 private:
     common::idx_t currentTableIdx;
     std::unique_ptr<storage::TableScanState> scanState;
+    common::ValueVector* nodeIDVector;
     std::vector<ScanNodeTableInfo> tableInfos;
     std::vector<std::shared_ptr<ScanNodeTableSharedState>> sharedStates;
     std::shared_ptr<ScanNodeTableProgressSharedState> progressSharedState;
