@@ -35,12 +35,14 @@ private:
     std::mutex mtx;
     std::size_t currentRowGroupIdx = 0;
     std::size_t numRowGroups = 0;
+    std::vector<std::size_t> rowGroupStartOffsets; // Starting row offset for each row group in the parquet file
 
 public:
-    void reset(common::node_group_idx_t totalRowGroups) {
+    void reset(common::node_group_idx_t totalRowGroups, std::vector<std::size_t> rowGroupStartOffsets) {
         std::lock_guard<std::mutex> lock(mtx);
         currentRowGroupIdx = 0;
         numRowGroups = totalRowGroups;
+        this->rowGroupStartOffsets = std::move(rowGroupStartOffsets);
     }
 
 
@@ -92,8 +94,7 @@ private:
 private:
     std::string parquetFilePath;
     const catalog::NodeTableCatalogEntry* nodeTableCatalogEntry;
-    std::unique_ptr<IceDiskNodeTableScanSharedState> tableScanSharedState;
-    std::vector<std::size_t> rowGroupStartOffsets; // Starting row offset for each row group in the parquet file
+    mutable std::unique_ptr<IceDiskNodeTableScanSharedState> tableScanSharedState;
     constexpr static std::size_t scanRowGroupBatchSize = 2048; // Default batch size
 };
 
