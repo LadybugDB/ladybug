@@ -55,9 +55,17 @@ std::unique_ptr<PhysicalOperator> PlanMapper::createArrowResultCollector(
         columnTypes.push_back(expr->getDataType().copy());
     }
     auto sharedState = std::make_shared<ArrowResultCollectorSharedState>();
+    auto csrTrackingInfo = getCSRTrackingInfo(expressions);
     auto opInfo = ArrowResultCollectorInfo(arrowConfig.chunkSize, columnDataPos,
-        std::move(columnTypes), getCSRTrackingInfo(expressions));
+        std::move(columnTypes), csrTrackingInfo);
     auto printInfo = OPPrintInfo::EmptyInfo();
+    if (csrTrackingInfo.enabled() &&
+        (expressions.size() == 2 || (expressions.size() == 3 && csrTrackingInfo.hasRelRowID()))) {
+        auto op = std::make_unique<DirectArrowResultCollector>(sharedState, std::move(opInfo),
+            std::move(prevOperator), getOperatorID(), std::move(printInfo));
+        op->setDescriptor(std::make_unique<ResultSetDescriptor>(schema));
+        return op;
+    }
     auto op = std::make_unique<ArrowResultCollector>(sharedState, std::move(opInfo),
         std::move(prevOperator), getOperatorID(), std::move(printInfo));
     op->setDescriptor(std::make_unique<ResultSetDescriptor>(schema));

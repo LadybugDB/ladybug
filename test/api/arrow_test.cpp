@@ -111,6 +111,58 @@ TEST_F(ArrowTest, getArrowSchema) {
     schema->release(schema.get());
 }
 
+TEST_F(ArrowTest, queryAsArrowDirectCSRRowIDProjection) {
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE DirectPerson(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE DirectKnows(FROM DirectPerson TO DirectPerson);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:DirectPerson {id: 0});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:DirectPerson {id: 1});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:DirectPerson {id: 2});")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:DirectPerson {id: 0}), (b:DirectPerson {id: 1}) "
+                            "CREATE (a)-[:DirectKnows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:DirectPerson {id: 0}), (b:DirectPerson {id: 2}) "
+                            "CREATE (a)-[:DirectKnows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:DirectPerson {id: 1}), (b:DirectPerson {id: 2}) "
+                            "CREATE (a)-[:DirectKnows]->(b);")
+                    ->isSuccess());
+
+    auto query =
+        "MATCH (a:DirectPerson)-[r:DirectKnows]->(b:DirectPerson) RETURN a.rowid, r.rowid, b.rowid";
+    auto rowResult = conn->query(query);
+    std::vector<std::tuple<int64_t, int64_t, int64_t>> expected;
+    while (rowResult->hasNext()) {
+        auto tuple = rowResult->getNext();
+        expected.emplace_back(tuple->getValue(0)->getValue<int64_t>(),
+            tuple->getValue(1)->getValue<int64_t>(), tuple->getValue(2)->getValue<int64_t>());
+    }
+
+    auto result = conn->queryAsArrow(query, 2);
+    auto* arrowResult = dynamic_cast<ArrowQueryResult*>(result.get());
+    ASSERT_NE(arrowResult, nullptr);
+    ASSERT_TRUE(arrowResult->hasCSRMetadata());
+
+    ASSERT_TRUE(arrowResult->hasNextArrowChunk());
+    auto arrowArray = arrowResult->getNextArrowChunk(2);
+    ASSERT_EQ(arrowArray->n_children, 3);
+    ASSERT_EQ(arrowArray->length, 2);
+    ASSERT_EQ(arrowArray->children[0]->n_buffers, 2);
+    ASSERT_EQ(arrowArray->children[0]->buffers[0], nullptr);
+    arrowArray->release(arrowArray.get());
+
+    const auto& metadata = arrowResult->getCSRMetadata();
+    std::vector<std::tuple<int64_t, int64_t, int64_t>> reconstructed;
+    for (auto srcRowID = 0u; srcRowID + 1 < metadata.indptr.size(); ++srcRowID) {
+        for (auto idx = metadata.indptr[srcRowID]; idx < metadata.indptr[srcRowID + 1]; ++idx) {
+            reconstructed.emplace_back(static_cast<int64_t>(srcRowID), metadata.edgeIDs[idx],
+                metadata.indices[idx]);
+        }
+    }
+    ASSERT_EQ(reconstructed, expected);
+}
+
 TEST_F(ArrowTest, queryAsArrowTracksCSRMetadataWithoutRelIDs) {
     auto query =
         "MATCH (a:person)-[:knows]->(b:person) RETURN a.rowid, b.rowid ORDER BY a.rowid, b.rowid";

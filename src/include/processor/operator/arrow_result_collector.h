@@ -103,5 +103,33 @@ private:
     ArrowResultCollectorLocalState localState;
 };
 
+class DirectArrowResultCollector final : public Sink {
+    static constexpr PhysicalOperatorType type_ = PhysicalOperatorType::RESULT_COLLECTOR;
+
+public:
+    DirectArrowResultCollector(std::shared_ptr<ArrowResultCollectorSharedState> sharedState,
+        ArrowResultCollectorInfo info, std::unique_ptr<PhysicalOperator> child, physical_op_id id,
+        std::unique_ptr<OPPrintInfo> printInfo)
+        : Sink{type_, std::move(child), id, std::move(printInfo)},
+          sharedState{std::move(sharedState)}, info{std::move(info)} {}
+
+    std::unique_ptr<main::QueryResult> getQueryResult() const override;
+
+    void executeInternal(ExecutionContext* context) override;
+
+    std::unique_ptr<PhysicalOperator> copy() override {
+        return std::make_unique<DirectArrowResultCollector>(sharedState, info.copy(),
+            children[0]->copy(), id, printInfo->copy());
+    }
+
+private:
+    void initLocalStateInternal(ResultSet* resultSet, ExecutionContext*) override;
+
+private:
+    std::shared_ptr<ArrowResultCollectorSharedState> sharedState;
+    ArrowResultCollectorInfo info;
+    ArrowResultCollectorLocalState localState;
+};
+
 } // namespace processor
 } // namespace lbug
