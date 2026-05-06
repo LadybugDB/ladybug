@@ -154,12 +154,11 @@ bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
         }
     }
 
-    auto tableID = this->getTableID();
     for (std::size_t i = 0; i < outputSize; ++i) {
         auto& nodeID = scanState.nodeIDVector->getValue<common::nodeID_t>(i);
         nodeID.tableID = tableID;
         // assign parquet rowIndex
-        nodeID.offset = this->tableScanSharedState->rowGroupStartOffsets[iceDiskNodeScanState.currentRowGroupIdx] + iceDiskNodeScanState.currentRowGroupBatchOffset + i;
+        nodeID.offset = tableScanSharedState->rowGroupStartOffsets[iceDiskNodeScanState.currentRowGroupIdx] + iceDiskNodeScanState.currentRowGroupBatchOffset + i;
     }
 
     iceDiskNodeScanState.currentRowGroupBatchOffset += outputSize;
@@ -216,16 +215,15 @@ void IceDiskNodeTable::readParquetData(Transaction* transaction, TableScanState&
                 // Get parquet column name and find its corresponding column ID
                 std::string parquetColumnName =
                     iceDiskNodeScanState.parquetReader->getColumnName(parquetCol);
-                auto nodeTableEntry = this->nodeTableCatalogEntry;
 
                 // Check if the column exists first before calling getColumnID
-                if (!nodeTableEntry->containsProperty(parquetColumnName)) {
+                if (!nodeTableCatalogEntry->containsProperty(parquetColumnName)) {
                     // Column doesn't exist in table schema, skip it
                     continue;
                 }
 
                 // Find the column ID for this property name
-                column_id_t parquetColumnID = nodeTableEntry->getColumnID(parquetColumnName);
+                column_id_t parquetColumnID = nodeTableCatalogEntry->getColumnID(parquetColumnName);
 
                 // Find which output vector position corresponds to this column ID
                 std::size_t outputCol = INVALID_COLUMN_ID;
