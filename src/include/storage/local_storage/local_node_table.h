@@ -41,13 +41,13 @@ public:
 
     TableStats getStats() const { return nodeGroups.getStats(); }
     common::offset_t getStartOffset() const { return startOffset; }
+    bool isVisible(const transaction::Transaction* transaction, common::offset_t offset) const;
 
     static std::vector<common::LogicalType> getNodeTableColumnTypes(
         const catalog::TableCatalogEntry& table);
 
 private:
     void initLocalHashIndex(MemoryManager& mm);
-    bool isVisible(const transaction::Transaction* transaction, common::offset_t offset) const;
 
 private:
     // This is equivalent to the num of committed nodes in the table.

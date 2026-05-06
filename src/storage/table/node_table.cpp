@@ -740,12 +740,25 @@ TableStats NodeTable::getStats(const Transaction* transaction) const {
 }
 
 bool NodeTable::isVisible(const Transaction* transaction, offset_t offset) const {
+    if (transaction && transaction->isUnCommitted(tableID, offset)) {
+        const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+        DASSERT(localTable);
+        return localTable->cast<LocalNodeTable>().isVisible(transaction, offset);
+    }
     auto [nodeGroupIdx, offsetInGroup] = StorageUtils::getNodeGroupIdxAndOffsetInChunk(offset);
+    if (nodeGroupIdx >= nodeGroups->getNumNodeGroups()) {
+        return false;
+    }
     const auto* nodeGroup = getNodeGroup(nodeGroupIdx);
     return nodeGroup->isVisible(transaction, offsetInGroup);
 }
 
 bool NodeTable::isVisibleNoLock(const Transaction* transaction, offset_t offset) const {
+    if (transaction && transaction->isUnCommitted(tableID, offset)) {
+        const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+        DASSERT(localTable);
+        return localTable->cast<LocalNodeTable>().isVisible(transaction, offset);
+    }
     auto [nodeGroupIdx, offsetInGroup] = StorageUtils::getNodeGroupIdxAndOffsetInChunk(offset);
     if (nodeGroupIdx >= nodeGroups->getNumNodeGroupsNoLock()) {
         return false;
