@@ -1,8 +1,8 @@
 #include "storage/storage_utils.h"
 
+#include <cctype>
 #include <filesystem>
 #if defined(_WIN32) || defined(__EMSCRIPTEN__)
-#include <cctype>
 #include <string_view>
 #endif
 
