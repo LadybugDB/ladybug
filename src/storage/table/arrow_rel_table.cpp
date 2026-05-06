@@ -6,6 +6,7 @@
 #include "common/arrow/arrow_nullmask_tree.h"
 #include "common/data_chunk/sel_vector.h"
 #include "common/exception/runtime.h"
+#include "common/system_config.h"
 #include "common/types/internal_id_util.h"
 #include "storage/table/arrow_table_support.h"
 #include "storage/table/csr_node_group.h"
@@ -190,7 +191,10 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
 
     scanState.resetOutVectors();
     auto outputCount = 0u;
-    constexpr uint64_t maxRowsPerCall = 1;
+    constexpr uint64_t maxRowsPerCall = DEFAULT_VECTOR_CAPACITY;
+    auto activeBoundSelPos = INVALID_SEL;
+    auto activeBoundOffset = INVALID_OFFSET;
+    auto hasActiveBound = false;
 
     while (outputCount < maxRowsPerCall && relScanState.currentBatchIdx < arrays.size()) {
         const auto& batch = arrays[relScanState.currentBatchIdx];
@@ -201,13 +205,14 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
             continue;
         }
 
-        auto srcOffsetInBatch = relScanState.currentBatchOffset++;
+        auto srcOffsetInBatch = relScanState.currentBatchOffset;
         auto numChildren = batch.n_children < 0 ? 0u : static_cast<uint64_t>(batch.n_children);
         if (numChildren == 0 || !batch.children || !schema.children ||
             static_cast<uint64_t>(fromColumnIdx) >= numChildren ||
             static_cast<uint64_t>(toColumnIdx) >= numChildren || !batch.children[fromColumnIdx] ||
             !batch.children[toColumnIdx] || !schema.children[fromColumnIdx] ||
             !schema.children[toColumnIdx]) {
+            relScanState.currentBatchOffset++;
             continue;
         }
 
@@ -220,11 +225,13 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
         readSingleArrowValue(srcChildSchema, srcChildArray, *relScanState.srcKeyVector,
             srcOffsetToRead, 0);
         if (relScanState.srcKeyVector->isNull(0)) {
+            relScanState.currentBatchOffset++;
             continue;
         }
         readSingleArrowValue(dstChildSchema, dstChildArray, *relScanState.dstKeyVector,
             dstOffsetToRead, 0);
         if (relScanState.dstKeyVector->isNull(0)) {
+            relScanState.currentBatchOffset++;
             continue;
         }
 
@@ -232,19 +239,29 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
         offset_t dstNodeOffset = INVALID_OFFSET;
         if (!fromNodeTable->lookupPK(transaction, relScanState.srcKeyVector.get(), 0,
                 srcNodeOffset)) {
+            relScanState.currentBatchOffset++;
             continue;
         }
         if (!toNodeTable->lookupPK(transaction, relScanState.dstKeyVector.get(), 0,
                 dstNodeOffset)) {
+            relScanState.currentBatchOffset++;
             continue;
         }
 
         auto isFwd = relScanState.direction != RelDataDirection::BWD;
         auto boundOffset = isFwd ? srcNodeOffset : dstNodeOffset;
-        if (!relScanState.boundNodeOffsetToSelPos.contains(boundOffset)) {
+        auto boundIt = relScanState.boundNodeOffsetToSelPos.find(boundOffset);
+        if (boundIt == relScanState.boundNodeOffsetToSelPos.end()) {
+            relScanState.currentBatchOffset++;
             continue;
         }
-        relScanState.setNodeIDVectorToFlat(relScanState.boundNodeOffsetToSelPos.at(boundOffset));
+        if (!hasActiveBound) {
+            hasActiveBound = true;
+            activeBoundOffset = boundOffset;
+            activeBoundSelPos = boundIt->second;
+        } else if (boundOffset != activeBoundOffset) {
+            break;
+        }
 
         auto nbrOffset = isFwd ? dstNodeOffset : srcNodeOffset;
         auto nbrTableID = isFwd ? getToNodeTableID() : getFromNodeTableID();
@@ -278,6 +295,7 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
                 childArray->offset + srcOffsetInBatch, outputCount);
         }
         outputCount++;
+        relScanState.currentBatchOffset++;
     }
 
     if (outputCount == 0) {
@@ -287,6 +305,7 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
         return false;
     }
 
+    relScanState.setNodeIDVectorToFlat(activeBoundSelPos);
     auto selVector = std::make_shared<SelectionVector>(outputCount);
     selVector->setToFiltered(outputCount);
     for (uint64_t i = 0; i < outputCount; ++i) {
