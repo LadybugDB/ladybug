@@ -65,12 +65,12 @@ public:
     const catalog::RelGroupCatalogEntry* getRelGroupCatalogEntry() const { return relGroupCatalogEntry; }
 
 private:
-    std::vector<std::size_t> getIndicesRowGroupStartOffsets(const transaction::Transaction* transaction) const;
-    std::vector<std::size_t> readIndptrData(transaction::Transaction* transaction) const;
+    void loadIndicesRowGroupStartOffsets(const transaction::Transaction* transaction);
+    void loadIndptrData(transaction::Transaction* transaction);
     void copyCachedBoundNodeSelVector(RelTableScanState& relScanState) const;
     bool scanRowGroupForBoundNodes(transaction::Transaction* transaction,
     IceDiskRelTableScanState& iceDiskScanState, const std::vector<std::size_t>& rowGroupsToProcess,
-    const std::unordered_set<common::offset_t>& boundNodeOffsets);
+    const std::unordered_set<common::offset_t>& boundNodeOffsets) const;
     std::size_t findSourceNodeForRow(std::size_t globalRowIdx) const;
 
 private:

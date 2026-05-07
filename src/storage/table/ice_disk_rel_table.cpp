@@ -56,8 +56,8 @@ IceDiskRelTable::IceDiskRelTable(RelGroupCatalogEntry* relGroupEntry, common::ta
 }
 
 void IceDiskRelTable::initializeScanCoordination(Transaction* transaction) {
-    indicesRowGroupStartOffsets = getIndicesRowGroupStartOffsets(transaction);
-    indptrData = readIndptrData(transaction);
+    loadIndicesRowGroupStartOffsets(transaction);
+    loadIndptrData(transaction);
 }
 
 void IceDiskRelTable::initScanState(Transaction* transaction, TableScanState& scanState,
@@ -112,7 +112,7 @@ bool IceDiskRelTable::scanInternal(Transaction* transaction, TableScanState& sca
 
 bool IceDiskRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
     IceDiskRelTableScanState& iceDiskScanState, const std::vector<std::size_t>& rowGroupsToProcess,
-    const std::unordered_set<common::offset_t>& boundNodeOffsets) {
+    const std::unordered_set<common::offset_t>& boundNodeOffsets) const {
     if (!iceDiskScanState.indicesReader) {
         return false;
     }
@@ -210,31 +210,29 @@ common::row_idx_t IceDiskRelTable::getNumTotalRows(const Transaction* transactio
     return reader.getMetadata()->num_rows;
 }
 
-std::vector<std::size_t> IceDiskRelTable::getIndicesRowGroupStartOffsets(const transaction::Transaction* transaction) const {
+void IceDiskRelTable::loadIndicesRowGroupStartOffsets(const transaction::Transaction* transaction) {
     auto context = transaction->getClientContext();
     auto resolvedPath = VirtualFileSystem::resolvePath(context, indicesFilePath);
     processor::ParquetReader reader(resolvedPath, std::vector<bool>(), context);
     
     auto metadata = reader.getMetadata();
-    std::vector<std::size_t> startOffsets;
     std::size_t currentOffset = 0;
     
     for (auto i = 0u; i < metadata->row_groups.size(); ++i) {
-        startOffsets.push_back(currentOffset);
+        indicesRowGroupStartOffsets.push_back(currentOffset);
         currentOffset += metadata->row_groups[i].num_rows;
     }
-
-    return startOffsets;
 }
 
-std::vector<std::size_t> IceDiskRelTable::readIndptrData(Transaction* transaction) const {
+void IceDiskRelTable::loadIndptrData(Transaction* transaction) {
+    indptrData.clear();
+
     auto context = transaction->getClientContext();
     auto vfs = VirtualFileSystem::GetUnsafe(*context);
     auto resolvedPath = VirtualFileSystem::resolvePath(context, indptrFilePath);
     auto indptrReader = std::make_unique<processor::ParquetReader>(resolvedPath, std::vector<bool>(), context);
     processor::ParquetReaderScanState scanState;
     std::vector<uint64_t> groupsToRead;
-    std::vector<std::size_t> indptrData;
 
     for (uint64_t i = 0; i < indptrReader->getMetadata()->row_groups.size(); ++i) {
         groupsToRead.push_back(i);
@@ -271,8 +269,6 @@ std::vector<std::size_t> IceDiskRelTable::readIndptrData(Transaction* transactio
             indptrData.push_back(value);
         }
     }
-
-    return indptrData;
 }
 
 void IceDiskRelTable::copyCachedBoundNodeSelVector(RelTableScanState& relScanState) const {

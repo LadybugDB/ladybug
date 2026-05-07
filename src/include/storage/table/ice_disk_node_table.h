@@ -28,26 +28,35 @@ struct IceDiskNodeTableScanState : public TableScanState {
         : TableScanState{nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {
         parquetScanState = std::make_unique<processor::ParquetReaderScanState>();
     }
+
+    void setToTable(const transaction::Transaction* transaction, Table* table_,
+        std::vector<common::column_id_t> columnIDs_,
+        std::vector<ColumnPredicateSet> columnPredicateSets_ = {},
+        common::RelDataDirection direction = common::RelDataDirection::INVALID) override;
 };
 
 // Shared state for morsel assignment across parallel scan threads
 struct IceDiskNodeTableScanSharedState {
 private:
+    std::mutex mtx;
     std::size_t numRowGroups = 0;
-    std::atomic<std::size_t> currentRowGroupIdx{0};
+    std::size_t currentRowGroupIdx = 0;
 
 public:
     void reset(std::size_t totalRowGroups) {
         numRowGroups = totalRowGroups;
-        currentRowGroupIdx.store(0, std::memory_order_relaxed);
+        currentRowGroupIdx = 0;
     }
 
     bool getNextMorsel(IceDiskNodeTableScanState* scanState) {
-        auto idx = currentRowGroupIdx.fetch_add(1, std::memory_order_relaxed);
-        if (idx < numRowGroups) {
-            scanState->currentRowGroupIdx = idx;
+        std::lock_guard<std::mutex> lock(mtx);
+
+        if (currentRowGroupIdx < numRowGroups) {
+            scanState->currentRowGroupIdx = currentRowGroupIdx;
+            currentRowGroupIdx++;
             return true;
         }
+
         return false;
     }
 };

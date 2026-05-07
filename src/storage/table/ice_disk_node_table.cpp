@@ -22,6 +22,18 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace storage {
 
+void IceDiskNodeTableScanState::setToTable(const transaction::Transaction* /*transaction*/, Table* table_,
+    std::vector<common::column_id_t> columnIDs_,
+    std::vector<ColumnPredicateSet> columnPredicateSets_,
+    common::RelDataDirection /*direction*/) {
+    // TableScanState::setToTable(transaction, table_, columnIDs_, std::move(columnPredicateSets_));
+    table = table_;
+    columnIDs = std::move(columnIDs_);
+    columnPredicateSets = std::move(columnPredicateSets_);
+    // IceDisk node tables don't use NodeGroup infrastructure; skip the base class
+    // which would dereference the uninitialized nodeGroupScanState.
+}
+
 IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
     const NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager)
     : NodeTable{storageManager, nodeTableEntry, memoryManager},
@@ -56,7 +68,7 @@ void IceDiskNodeTable::initScanState(Transaction* transaction, TableScanState& s
     bool /*resetCachedBoundNodeSelVec*/) const {
     auto& iceDiskNodeScanState = static_cast<IceDiskNodeTableScanState&>(scanState);
 
-    if(iceDiskNodeScanState.currentRowGroupIdx != static_cast<std::size_t>(common::INVALID_NODE_GROUP_IDX)) {
+    if(iceDiskNodeScanState.currentRowGroupIdx == static_cast<std::size_t>(common::INVALID_NODE_GROUP_IDX)) {
         iceDiskNodeScanState.scanCompleted = true;
         return;
     }
@@ -116,9 +128,6 @@ void IceDiskNodeTable::initIceDiskScanForRowGroup(Transaction* transaction,
 }
 
 
-// First run always fails due to iceDiskNodeScanState.scanCompleted == true as
-// scanState.currentRowGroupIdx = INVALID_NODE_GROUP_IDX on the first
-// run(look at initScanState function) tableScanSharedState.nextMorsel will drive the morsel assignment
 bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& scanState) {
     auto& iceDiskNodeScanState = static_cast<IceDiskNodeTableScanState&>(scanState);
     if (iceDiskNodeScanState.scanCompleted) {
@@ -127,7 +136,7 @@ bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
 
     scanState.resetOutVectors();
 
-    // Read all data once into scan state
+    // Read data for the current row group if not yet done
     if (!iceDiskNodeScanState.dataReadCompleted) {
         readParquetData(transaction, scanState);
     }
