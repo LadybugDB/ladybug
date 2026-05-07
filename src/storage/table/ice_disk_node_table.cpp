@@ -41,14 +41,14 @@ void IceDiskNodeTable::initializeScanCoordination(const Transaction* transaction
         auto tempReader = std::make_unique<ParquetReader>(resolvedPath, std::vector<bool>(), context);
         auto metadata = tempReader->getMetadata();
         uint64_t currentStartOffset = 0;
-        std::vector<std::size_t> rowGroupStartOffsets;
 
+        rowGroupStartOffsets.clear();
         for (std::size_t i = 0; i < metadata->row_groups.size(); ++i) {
             rowGroupStartOffsets.push_back(currentStartOffset);
             currentStartOffset += metadata->row_groups[i].num_rows;
         }
 
-         tableScanSharedState->reset(tempReader->getNumRowGroups(), std::move(rowGroupStartOffsets));
+        tableScanSharedState->reset(tempReader->getNumRowGroups());
     }
 }
 
@@ -158,7 +158,7 @@ bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
         auto& nodeID = scanState.nodeIDVector->getValue<common::nodeID_t>(i);
         nodeID.tableID = tableID;
         // assign parquet rowIndex
-        nodeID.offset = tableScanSharedState->getRowGroupStartOffsets()[iceDiskNodeScanState.currentRowGroupIdx] + iceDiskNodeScanState.currentRowGroupBatchOffset + i;
+        nodeID.offset = rowGroupStartOffsets[iceDiskNodeScanState.currentRowGroupIdx] + iceDiskNodeScanState.currentRowGroupBatchOffset + i;
     }
 
     iceDiskNodeScanState.currentRowGroupBatchOffset += outputSize;

@@ -36,30 +36,6 @@ public:
     void initializeIndicesReader(transaction::Transaction* transaction);
 };
 
-struct IceDiskRelTableScanSharedState {
-private:
-    std::mutex mtx;
-    std::vector<std::size_t> indicesRowGroupStartOffsets; // Starting row offset for each row group in the parquet file
-    std::vector<std::size_t> indptrData; // Cached indptr data shared across morsels to avoid redundant I/O
-
-public:
-    IceDiskRelTableScanSharedState() {}
-
-    void reset(std::vector<std::size_t> indicesRowGroupStartOffsets, std::vector<std::size_t> indptrData) {
-        std::lock_guard<std::mutex> lock(mtx);
-        this->indicesRowGroupStartOffsets = std::move(indicesRowGroupStartOffsets);
-        this->indptrData = std::move(indptrData);
-    }
-
-    const std::vector<std::size_t>& getIndicesRowGroupStartOffsets() const {
-        return indicesRowGroupStartOffsets;
-    }
-
-    const std::vector<std::size_t>& getIndptrData() const {
-        return indptrData;
-    }
-};
-
 class IceDiskRelTable final : public RelTable {
 public:
     IceDiskRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, common::table_id_t fromTableID,
@@ -87,7 +63,6 @@ public:
     const std::string& getIndicesFilePath() const { return indicesFilePath; }
     const std::string& getIndptrFilePath() const { return indptrFilePath; }
     const catalog::RelGroupCatalogEntry* getRelGroupCatalogEntry() const { return relGroupCatalogEntry; }
-    IceDiskRelTableScanSharedState* getTableScanSharedState() const { return tableScanSharedState.get(); }
 
 private:
     std::vector<std::size_t> getIndicesRowGroupStartOffsets(const transaction::Transaction* transaction) const;
@@ -102,7 +77,10 @@ private:
     std::string indicesFilePath;
     std::string indptrFilePath;
     const catalog::RelGroupCatalogEntry* relGroupCatalogEntry;
-    std::unique_ptr<IceDiskRelTableScanSharedState> tableScanSharedState;
+    // Row group start offsets derived from Parquet metadata; stable for the lifetime of the table.
+    std::vector<std::size_t> indicesRowGroupStartOffsets;
+    // Full CSR indptr array loaded once from disk; stable for the lifetime of the table.
+    std::vector<std::size_t> indptrData;
     constexpr static std::size_t scanRowGroupBatchSize = 2048; // Default batch size
 };
 

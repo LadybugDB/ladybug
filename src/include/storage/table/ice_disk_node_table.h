@@ -1,6 +1,6 @@
 #pragma once
 
-#include <mutex>
+#include <atomic>
 #include <vector>
 
 #include "storage/table/node_table.h"
@@ -30,33 +30,25 @@ struct IceDiskNodeTableScanState : public TableScanState {
     }
 };
 
+// Shared state for morsel assignment across parallel scan threads
 struct IceDiskNodeTableScanSharedState {
 private:
-    std::mutex mtx;
-    std::size_t currentRowGroupIdx = 0;
     std::size_t numRowGroups = 0;
-    std::vector<std::size_t> rowGroupStartOffsets; // Starting row offset for each row group in the parquet file
+    std::atomic<std::size_t> currentRowGroupIdx{0};
 
 public:
-    void reset(common::node_group_idx_t totalRowGroups, std::vector<std::size_t> rowGroupStartOffsets) {
-        std::lock_guard<std::mutex> lock(mtx);
-        currentRowGroupIdx = 0;
+    void reset(std::size_t totalRowGroups) {
         numRowGroups = totalRowGroups;
-        this->rowGroupStartOffsets = std::move(rowGroupStartOffsets);
+        currentRowGroupIdx.store(0, std::memory_order_relaxed);
     }
 
-
     bool getNextMorsel(IceDiskNodeTableScanState* scanState) {
-        std::lock_guard<std::mutex> lock(mtx);
-        if (currentRowGroupIdx < numRowGroups) {
-            scanState->currentRowGroupIdx = currentRowGroupIdx++;
+        auto idx = currentRowGroupIdx.fetch_add(1, std::memory_order_relaxed);
+        if (idx < numRowGroups) {
+            scanState->currentRowGroupIdx = idx;
             return true;
         }
         return false;
-     }
-
-    const std::vector<std::size_t>& getRowGroupStartOffsets() const {
-        return rowGroupStartOffsets;
     }
 };
 
@@ -98,6 +90,7 @@ private:
 private:
     std::string parquetFilePath;
     const catalog::NodeTableCatalogEntry* nodeTableCatalogEntry;
+    std::vector<std::size_t> rowGroupStartOffsets;
     mutable std::unique_ptr<IceDiskNodeTableScanSharedState> tableScanSharedState;
     constexpr static std::size_t scanRowGroupBatchSize = 2048; // Default batch size
 };

@@ -53,14 +53,11 @@ IceDiskRelTable::IceDiskRelTable(RelGroupCatalogEntry* relGroupEntry, common::ta
 
     indicesFilePath = relGroupEntry->getIndicesPath();
     indptrFilePath = relGroupEntry->getIndptrPath();
-    tableScanSharedState = std::make_unique<IceDiskRelTableScanSharedState>();
 }
 
 void IceDiskRelTable::initializeScanCoordination(Transaction* transaction) {
-    auto indicesRowGroupStartOffsets = getIndicesRowGroupStartOffsets(transaction);
-    auto indptrData = readIndptrData(transaction);
-    
-    tableScanSharedState->reset(indicesRowGroupStartOffsets, indptrData);
+    indicesRowGroupStartOffsets = getIndicesRowGroupStartOffsets(transaction);
+    indptrData = readIndptrData(transaction);
 }
 
 void IceDiskRelTable::initScanState(Transaction* transaction, TableScanState& scanState,
@@ -85,7 +82,7 @@ bool IceDiskRelTable::scanInternal(Transaction* transaction, TableScanState& sca
     scanState.resetOutVectors();
 
     // Check if we have any row groups left to process
-    if (iceDiskScanState.currentRowGroupIdx >= tableScanSharedState->getIndicesRowGroupStartOffsets().size()) {
+    if (iceDiskScanState.currentRowGroupIdx >= indicesRowGroupStartOffsets.size()) {
         // No more row groups to process
         auto newSelVector = std::make_shared<SelectionVector>(0);
         iceDiskScanState.outState->setSelVector(newSelVector);
@@ -146,7 +143,7 @@ bool IceDiskRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
 
     // Calculate the starting global row index for the first row group
     if (!rowGroupsToProcess.empty()) {
-        currentGlobalRowIdx = tableScanSharedState->getIndicesRowGroupStartOffsets()[rowGroupsToProcess[0]];
+        currentGlobalRowIdx = indicesRowGroupStartOffsets[rowGroupsToProcess[0]];
     }
 
     while (totalRowsCollected < IceDiskRelTable::scanRowGroupBatchSize &&
@@ -292,7 +289,6 @@ void IceDiskRelTable::copyCachedBoundNodeSelVector(RelTableScanState& relScanSta
 }
 
 std::size_t IceDiskRelTable::findSourceNodeForRow(std::size_t globalRowIdx) const {
-    const auto& indptrData = tableScanSharedState->getIndptrData();
     if (indptrData.empty()) {
         throw RuntimeException("Indptr data not loaded for CSR format");
     }
