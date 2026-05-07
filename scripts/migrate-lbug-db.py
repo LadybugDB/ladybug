@@ -10,11 +10,13 @@ This script helps migrate Lbug databases between versions.
 - If `delete-old` is enabled, the source database will be deleted
 
 Usage Examples:
-    # Basic migration from 0.9.0 to 0.11.0
-    python migrate-lbug-db.py --old-version 0.9.0 --new-version 0.11.0 --old-db /path/to/old/database --new-db /path/to/new/database
+    # Basic migration from 0.9.0 to a current release
+    uv run python scripts/migrate-lbug-db.py --old-version 0.9.0 --new-version 0.16.1 --old-db /path/to/old/database --new-db /path/to/new/database
 
 Notes:
-- Can only be used to migrate to newer Lbug versions, from 0.11.0 onwards
+- Can only be used to migrate to newer Lbug versions, from 0.11.0 onwards.
+- Automatic old-version detection maps storage versions to the oldest PyPI release known to
+  read that storage format. Pass --old-version when you need a specific patch release.
 """
 
 import tempfile
@@ -29,7 +31,8 @@ import os
 LBUG_FILE_EXTENSIONS = ["", ".wal", ".shadow"]
 
 
-# FIXME: Replace this with a Lbug query to get the mapping when available.
+# Maps storage version codes to the oldest Lbug release known to read that storage format.
+# Storage version 40 intentionally covers 0.12.0 through 0.16.x.
 lbug_version_mapping = {
     34: "0.7.0",
     35: "0.7.1",
@@ -37,9 +40,11 @@ lbug_version_mapping = {
     37: "0.9.0",
     38: "0.10.1",
     39: "0.11.0",
+    40: "0.12.0",
 }
 
 minimum_lbug_migration_version = "0.11.0"
+MIGRATION_PYTHON_VERSION = "3.12"
 
 
 def lbug_version_comparison(version: str, target: str) -> bool:
@@ -49,15 +54,27 @@ def lbug_version_comparison(version: str, target: str) -> bool:
     # tuple part to be 0 (transform it to 0.11.0.0)
     target = tuple(int(part) if part.isdigit() else 0 for part in target.split("."))
     current = tuple(int(part) if part.isdigit() else 0 for part in version.split("."))
+    max_len = max(len(current), len(target))
+    current = current + (0,) * (max_len - len(current))
+    target = target + (0,) * (max_len - len(target))
     return current >= target
 
 
-def read_lbug_storage_version(lbug_db_path: str) -> int:
+def package_for_lbug_version(version: str) -> tuple[str, str]:
+    """Return the PyPI package and Python module for a released database version."""
+    if lbug_version_comparison(version=version, target="0.16.0"):
+        return "ladybug", "ladybug"
+    if not lbug_version_comparison(version=version, target="0.11.3"):
+        return "kuzu", "kuzu"
+    return "real_ladybug", "real_ladybug"
+
+
+def read_lbug_storage_version(lbug_db_path: str) -> str:
     """
     Reads the Lbug storage version.
 
     :param lbug_db_path: Path to the Lbug database file/directory.
-    :return: Storage version code as an integer.
+    :return: Oldest Lbug release known to read the storage version code.
     """
     if os.path.isdir(lbug_db_path):
         lbug_version_file_path = os.path.join(lbug_db_path, "catalog.lbdb")
@@ -82,37 +99,48 @@ def read_lbug_storage_version(lbug_db_path: str) -> int:
         raise ValueError(f"Could not map version_code {version_code} to proper Lbug version.")
 
 
-def ensure_env(version: str, export_dir) -> str:
+def ensure_env(version: str, export_dir) -> tuple[str, str]:
     """
-    Creates a venv at `{export_dir}/.lbug_envs/{version}` and installs `lbug=={version}`
-    Returns the venv's python executable path.
+    Creates a venv at `{export_dir}/.lbug_envs/{version}` and installs the package
+    matching that database version. Returns the venv's python executable path and
+    module name.
     """
+    package_name, module_name = package_for_lbug_version(version)
     # Use temp directory to create venv
     lbug_envs_dir = os.path.join(export_dir, ".lbug_envs")
 
     # venv base under the script directory
     base = os.path.join(lbug_envs_dir, version)
-    py_bin = os.path.join(base, "bin", "python")
+    py_bin = os.path.join(base, "Scripts" if os.name == "nt" else "bin", "python")
     # If environment already exists clean it
     if os.path.isdir(base):
         shutil.rmtree(base)
 
-    print(f"→ Setting up venv for Lbug {version}...", file=sys.stderr)
-    # Create venv
-    # NOTE: Running python in debug mode can cause issues with creating a virtual environment from that python instance
-    subprocess.run([sys.executable, "-m", "venv", base], check=True)
-    # Install the specific Lbug version
+    print(
+        f"→ Setting up Python {MIGRATION_PYTHON_VERSION} venv for Lbug {version}...",
+        file=sys.stderr,
+    )
+    # Create venv with Python 3.12 because released Lbug wheels are not available
+    # for every interpreter that may be running this script.
+    subprocess.run(
+        ["uv", "venv", "--python", MIGRATION_PYTHON_VERSION, "--seed", base],
+        check=True,
+    )
+    # Install the specific version
     subprocess.run([py_bin, "-m", "pip", "install", "--upgrade", "pip"], check=True)
-    subprocess.run([py_bin, "-m", "pip", "install", f"lbug=={version}"], check=True)
-    return py_bin
+    subprocess.run(
+        [py_bin, "-m", "pip", "install", f"{package_name}=={version}"],
+        check=True,
+    )
+    return py_bin, module_name
 
 
-def run_migration_step(python_exe: str, db_path: str, cypher: str):
+def run_migration_step(python_exe: str, module_name: str, db_path: str, cypher: str):
     """
     Uses `python_exe` to connect to the Lbug database at `db_path` and run the `cypher` query.
     """
     snippet = f"""
-import lbug
+import {module_name} as lbug
 db = lbug.Database(r"{db_path}")
 conn = lbug.Connection(db)
 conn.execute(r\"\"\"{cypher}\"\"\")
@@ -121,6 +149,41 @@ conn.execute(r\"\"\"{cypher}\"\"\")
     if proc.returncode != 0:
         print(f"Error: query failed:\n{cypher}\n{proc.stderr}", file=sys.stderr)
         sys.exit(proc.returncode)
+
+
+def resolve_export_dir(export_file: str) -> str:
+    """
+    Returns the directory containing schema.cypher after EXPORT DATABASE.
+
+    Older Kuzu releases can create an extra directory named after the export path's
+    basename, e.g. EXPORT DATABASE '/tmp/foo' writes '/tmp/foo/foo/schema.cypher'.
+    """
+    candidates = [
+        export_file,
+        os.path.join(export_file, os.path.basename(export_file.rstrip(os.sep))),
+    ]
+    for candidate in candidates:
+        schema_file = os.path.join(candidate, "schema.cypher")
+        if os.path.exists(schema_file):
+            return candidate
+    search_root = os.path.dirname(export_file)
+    for root, dirs, files in os.walk(search_root):
+        if ".lbug_envs" in dirs:
+            dirs.remove(".lbug_envs")
+        if "schema.cypher" in files:
+            return root
+    raise ValueError(
+        "Schema file not found in exported database directories: "
+        + ", ".join(os.path.join(candidate, "schema.cypher") for candidate in candidates)
+    )
+
+
+def get_migration_temp_dir() -> str | None:
+    """Use a stable writable temp root for subprocesses when available."""
+    private_tmp = "/private/tmp"
+    if os.path.isdir(private_tmp) and os.access(private_tmp, os.W_OK):
+        return private_tmp
+    return None
 
 
 def lbug_migration(
@@ -166,25 +229,26 @@ def lbug_migration(
         )
 
     # Use temp directory for all processing, it will be cleaned up after with statement
-    with tempfile.TemporaryDirectory() as export_dir:
+    with tempfile.TemporaryDirectory(dir=get_migration_temp_dir()) as export_dir:
         # Set up environments
         print(f"Setting up Lbug {old_version} environment...", file=sys.stderr)
-        old_py = ensure_env(old_version, export_dir)
+        old_py, old_module = ensure_env(old_version, export_dir)
         print(f"Setting up Lbug {new_version} environment...", file=sys.stderr)
-        new_py = ensure_env(new_version, export_dir)
+        new_py, new_module = ensure_env(new_version, export_dir)
 
         export_file = os.path.join(export_dir, "lbug_export")
         print(f"Exporting old DB → {export_dir}", file=sys.stderr)
-        run_migration_step(old_py, old_db, f"EXPORT DATABASE '{export_file}'")
+        run_migration_step(
+            old_py, old_module, old_db, f"EXPORT DATABASE '{export_file}'"
+        )
         print("Export complete.", file=sys.stderr)
 
-        # Check if export files were created and have content
-        schema_file = os.path.join(export_file, "schema.cypher")
-        if not os.path.exists(schema_file) or os.path.getsize(schema_file) == 0:
-            raise ValueError(f"Schema file not found: {schema_file}")
+        export_file = resolve_export_dir(export_file)
 
         print(f"Importing into new DB at {new_db}", file=sys.stderr)
-        run_migration_step(new_py, new_db, f"IMPORT DATABASE '{export_file}'")
+        run_migration_step(
+            new_py, new_module, new_db, f"IMPORT DATABASE '{export_file}'"
+        )
         print("Import complete.", file=sys.stderr)
 
     # Rename new lbug database to old lbug database name if enabled
@@ -254,11 +318,11 @@ def main():
         description="Migrate Lbug DB via PyPI versions",
         epilog="""
 Examples:
-  %(prog)s --old-version 0.9.0 --new-version 0.11.0 \\
+  uv run python %(prog)s --old-version 0.9.0 --new-version 0.16.1 \\
     --old-db /path/to/old/db --new-db /path/to/new/db --overwrite
 
-Note: This script will create temporary virtual environments in .lbug_envs/ directory
-to isolate different Lbug versions.
+Note: Run this script with uv from the repository root. The script creates temporary
+virtual environments in .lbug_envs/ to isolate different Lbug versions.
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -269,7 +333,7 @@ to isolate different Lbug versions.
         help="Source Lbug version (e.g., 0.9.0). If not provided, automatic lbug version detection will be attempted.",
     )
     p.add_argument(
-        "--new-version", required=True, help="Target Lbug version (e.g., 0.11.0)"
+        "--new-version", required=True, help="Target Lbug version (e.g., 0.16.1)"
     )
     p.add_argument("--old-db", required=True, help="Path to source database directory")
     p.add_argument(
