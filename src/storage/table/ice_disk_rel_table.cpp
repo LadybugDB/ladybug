@@ -17,124 +17,25 @@ using namespace lbug::catalog;
 namespace lbug {
 namespace storage {
 
-namespace {
-
-constexpr int64_t REL_ID_OUTPUT_COLUMN = -2;
-
-std::string getRelPropertyNameForColumnID(const RelGroupCatalogEntry& entry, column_id_t columnID) {
-    for (const auto& property : entry.getProperties()) {
-        if (entry.getColumnID(property.getName()) == columnID) {
-            return property.getName();
-        }
-    }
-    throw RuntimeException("Column ID " + std::to_string(columnID) +
-                           " does not map to an icebug-disk rel property.");
-}
-
-void copyCachedBoundNodeSelVector(RelTableScanState& relScanState) {
-    if (relScanState.nodeIDVector->state->getSelVector().isUnfiltered()) {
-        relScanState.cachedBoundNodeSelVector.setToUnfiltered();
-    } else {
-        relScanState.cachedBoundNodeSelVector.setToFiltered();
-        memcpy(relScanState.cachedBoundNodeSelVector.getMutableBuffer().data(),
-            relScanState.nodeIDVector->state->getSelVector().getMutableBuffer().data(),
-            relScanState.nodeIDVector->state->getSelVector().getSelSize() * sizeof(sel_t));
-    }
-    relScanState.cachedBoundNodeSelVector.setSelSize(
-        relScanState.nodeIDVector->state->getSelVector().getSelSize());
-}
-
-void emitPendingRow(IceDiskRelTableScanState& scanState) {
-    auto& row = scanState.pendingRows[scanState.nextPendingRowIdx++];
-    scanState.setNodeIDVectorToFlat(row.boundNodeSelPos);
-    for (size_t outCol = 0; outCol < scanState.columnIDs.size(); ++outCol) {
-        auto columnID = scanState.columnIDs[outCol];
-        if (columnID == INVALID_COLUMN_ID || columnID == ROW_IDX_COLUMN_ID) {
-            continue;
-        }
-        if (columnID == NBR_ID_COLUMN_ID) {
-            scanState.outputVectors[outCol]->setValue<internalID_t>(0, row.nbrNodeID);
-        } else if (columnID == REL_ID_COLUMN_ID) {
-            scanState.outputVectors[outCol]->setValue<internalID_t>(0, row.relID);
-        } else if (outCol < row.propertyValues.size() && row.propertyValues[outCol]) {
-            scanState.outputVectors[outCol]->copyFromValue(0, *row.propertyValues[outCol]);
-        }
-    }
-    scanState.outState->getSelVectorUnsafe().setToUnfiltered(1);
-    if (scanState.nextPendingRowIdx >= scanState.pendingRows.size()) {
-        scanState.pendingRows.clear();
-        scanState.nextPendingRowIdx = 0;
-    }
-}
-
-} // namespace
-
 void IceDiskRelTableScanState::setToTable(const Transaction* transaction, Table* table_,
     std::vector<common::column_id_t> columnIDs_,
     std::vector<ColumnPredicateSet> columnPredicateSets_,
     common::RelDataDirection direction_) {
-    table = table_;
-    columnIDs = std::move(columnIDs_);
-    columnPredicateSets = std::move(columnPredicateSets_);
+    // Call base class implementation but skip local table setup
+    TableScanState::setToTable(transaction, table_, std::move(columnIDs_),
+        std::move(columnPredicateSets_));
     direction = direction_;
+}
 
-    auto& iceDiskRelTable = table_->cast<IceDiskRelTable>();
-    auto context = transaction->getClientContext();
-    auto resolvedPath = VirtualFileSystem::resolvePath(context, iceDiskRelTable.getIndicesFilePath());
+void IceDiskRelTableScanState::initializeIndicesReader(Transaction* transaction) {
+    if (!indicesReader) {
+        std::lock_guard<std::mutex> lock(mtx);
 
-    std::vector<bool> dummySkips;
-    indicesReader = std::make_unique<processor::ParquetReader>(resolvedPath, dummySkips, context);
-    auto tempState = std::make_unique<processor::ParquetReaderScanState>();
-    std::vector<uint64_t> dummyGroups;
-    indicesReader->initializeScan(*tempState, dummyGroups, VirtualFileSystem::GetUnsafe(*context));
-
-    auto entry = iceDiskRelTable.getRelGroupCatalogEntry();
-    outputColumnIdx.assign(columnIDs.size(), INVALID_COLUMN_ID);
-    columnSkips.assign(indicesReader->getNumColumns(), true);
-
-    for (size_t outputCol = 0; outputCol < columnIDs.size(); ++outputCol) {
-        auto columnID = columnIDs[outputCol];
-        if (columnID == INVALID_COLUMN_ID || columnID == ROW_IDX_COLUMN_ID) {
-            continue;
-        }
-        if (columnID == NBR_ID_COLUMN_ID) {
-            bool found = false;
-            for (uint32_t i = 0; i < indicesReader->getNumColumns(); i++) {
-                if (indicesReader->getColumnName(i) == "nbr_id" || i == 0) {
-                    outputColumnIdx[outputCol] = static_cast<int64_t>(i);
-                    columnSkips[i] = false;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                throw RuntimeException("nbr_id column not found in indices parquet");
-            }
-            continue;
-        }
-        if (columnID == REL_ID_COLUMN_ID) {
-            outputColumnIdx[outputCol] = REL_ID_OUTPUT_COLUMN;
-            continue;
-        }
-
-        auto propertyName = getRelPropertyNameForColumnID(*entry, columnID);
-        bool found = false;
-        for (uint32_t i = 0; i < indicesReader->getNumColumns(); i++) {
-            if (indicesReader->getColumnName(i) == propertyName) {
-                outputColumnIdx[outputCol] = static_cast<int64_t>(i);
-                columnSkips[i] = false;
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            throw RuntimeException("Property " + propertyName + " not found in parquet file");
+        if(!indicesReader) { // Double-checked locking to avoid redundant initialization
+            auto* iceDiskRelTable = static_cast<IceDiskRelTable*>(table);
+            indicesReader = std::make_unique<processor::ParquetReader>(iceDiskRelTable->getIndicesFilePath(), std::vector<bool>(), transaction->getClientContext());
         }
     }
-
-    indicesReader = std::make_unique<processor::ParquetReader>(resolvedPath, columnSkips, context);
-    processor::ParquetReaderScanState initializedState;
-    indicesReader->initializeScan(initializedState, dummyGroups, VirtualFileSystem::GetUnsafe(*context));
 }
 
 IceDiskRelTable::IceDiskRelTable(RelGroupCatalogEntry* relGroupEntry, common::table_id_t fromTableID,
@@ -155,218 +56,153 @@ IceDiskRelTable::IceDiskRelTable(RelGroupCatalogEntry* relGroupEntry, common::ta
     tableScanSharedState = std::make_unique<IceDiskRelTableScanSharedState>();
 }
 
-void IceDiskRelTable::initializeScanCoordination(const Transaction* transaction) {
-    auto context = transaction->getClientContext();
-    auto resolvedPath = VirtualFileSystem::resolvePath(context, indicesFilePath);
-    std::vector<bool> dummySkips;
-    processor::ParquetReader reader(resolvedPath, dummySkips, context);
+void IceDiskRelTable::initializeScanCoordination(Transaction* transaction) {
+    auto indicesRowGroupStartOffsets = getIndicesRowGroupStartOffsets(transaction);
+    auto indptrData = readIndptrData(transaction);
     
-    auto metadata = reader.getMetadata();
-    std::vector<size_t> rowGroupStartRows;
-    std::vector<size_t> rowGroupNumRows;
-    size_t currentOffset = 0;
-    
-    for (auto i = 0u; i < metadata->row_groups.size(); ++i) {
-        rowGroupStartRows.push_back(currentOffset);
-        rowGroupNumRows.push_back(metadata->row_groups[i].num_rows);
-        currentOffset += metadata->row_groups[i].num_rows;
-    }
-    
-    tableScanSharedState->reset(rowGroupStartRows, rowGroupNumRows);
+    tableScanSharedState->reset(indicesRowGroupStartOffsets, indptrData);
 }
 
-void IceDiskRelTable::initScanState(Transaction* /*transaction*/, TableScanState& scanState,
+void IceDiskRelTable::initScanState(Transaction* transaction, TableScanState& scanState,
     bool resetCachedBoundNodeSelVec) const {
     auto& relScanState = scanState.cast<RelTableScanState>();
-    relScanState.source = TableScanSource::COMMITTED;
-    relScanState.nodeGroup = nullptr;
-    relScanState.nodeGroupIdx = INVALID_NODE_GROUP_IDX;
+    
+    // For morsel-driven parallelism, each scan state maintains its own bound node processing state
+    // No shared state needed between threads
     if (resetCachedBoundNodeSelVec) {
+        // Copy the cached bound node selection vector from the scan state
         copyCachedBoundNodeSelVector(relScanState);
     }
 
     auto& iceDiskScanState = static_cast<IceDiskRelTableScanState&>(relScanState);
-    iceDiskScanState.scanCompleted = false;
-    iceDiskScanState.currentStartRow = 0;
-    iceDiskScanState.currentNumRows = 0;
-    iceDiskScanState.currentGlobalRowIdx = 0;
-    iceDiskScanState.nextRowGroupIdx = 0;
-    iceDiskScanState.pendingRows.clear();
-    iceDiskScanState.nextPendingRowIdx = 0;
-}
-
-void IceDiskRelTable::loadIndptrData(Transaction* transaction) const {
-    std::lock_guard<std::mutex> lock(indptrDataMutex);
-    if (!indptrData.empty()) {
-        return;
-    }
-
-    auto context = transaction->getClientContext();
-    auto vfs = VirtualFileSystem::GetUnsafe(*context);
-    auto resolvedPath = VirtualFileSystem::resolvePath(context, indptrFilePath);
-    std::vector<bool> dummySkips;
-    auto indptrReader = std::make_unique<processor::ParquetReader>(resolvedPath, dummySkips, context);
-    
-    auto scanState = std::make_unique<processor::ParquetReaderScanState>();
-    std::vector<uint64_t> groupsToRead;
-    for (uint64_t i = 0; i < indptrReader->getMetadata()->row_groups.size(); ++i) {
-        groupsToRead.push_back(i);
-    }
-    indptrReader->initializeScan(*scanState, groupsToRead, vfs);
-    
-    DataChunk dataChunk(1);
-    dataChunk.insert(0, std::make_shared<ValueVector>(LogicalType::UINT64(), MemoryManager::Get(*context)));
-    
-    while (indptrReader->scanInternal(*scanState, dataChunk)) {
-        auto selSize = dataChunk.state->getSelVector().getSelSize();
-        auto& vector = dataChunk.getValueVectorMutable(0);
-        for (size_t i = 0; i < selSize; ++i) {
-             indptrData.push_back(((uint64_t*)vector.getData())[dataChunk.state->getSelVector()[i]]);
-        }
-    }
-}
-
-common::offset_t IceDiskRelTable::findSourceNodeForRow(common::offset_t globalRowIdx) const {
-    auto it = std::upper_bound(indptrData.cbegin(), indptrData.cend(), (common::offset_t)globalRowIdx);
-    if (it == indptrData.cbegin()) {
-        return INVALID_OFFSET;
-    }
-    return std::distance(indptrData.cbegin(), it) - 1;
+    iceDiskScanState.initializeIndicesReader(transaction);
+    iceDiskScanState.currentRowGroupIdx = 0;
 }
 
 bool IceDiskRelTable::scanInternal(Transaction* transaction, TableScanState& scanState) {
     auto& iceDiskScanState = static_cast<IceDiskRelTableScanState&>(scanState);
-    if (iceDiskScanState.scanCompleted) {
+
+    scanState.resetOutVectors();
+
+    // Check if we have any row groups left to process
+    if (iceDiskScanState.currentRowGroupIdx >= tableScanSharedState->getIndicesRowGroupStartOffsets().size()) {
+        // No more row groups to process
+        auto newSelVector = std::make_shared<SelectionVector>(0);
+        iceDiskScanState.outState->setSelVector(newSelVector);
         return false;
     }
 
-    if (iceDiskScanState.nextPendingRowIdx < iceDiskScanState.pendingRows.size()) {
-        emitPendingRow(iceDiskScanState);
-        return true;
-    }
+    // Process the current row group
+    std::vector<uint64_t> rowGroupsToProcess = {iceDiskScanState.currentRowGroupIdx};
 
-    loadIndptrData(transaction);
-    scanState.resetOutVectors();
-
-    std::unordered_map<offset_t, sel_t> boundNodeSelPosByOffset;
-    boundNodeSelPosByOffset.reserve(iceDiskScanState.cachedBoundNodeSelVector.getSelSize());
+    // Create a set of bound node IDs for fast lookup
+    std::unordered_set<common::offset_t> boundNodeOffsets;
     for (size_t i = 0; i < iceDiskScanState.cachedBoundNodeSelVector.getSelSize(); ++i) {
-        auto pos = iceDiskScanState.cachedBoundNodeSelVector[i];
-        boundNodeSelPosByOffset.emplace(
-            ((nodeID_t*)iceDiskScanState.nodeIDVector->getData())[pos].offset, pos);
+        common::sel_t boundNodeIdx = iceDiskScanState.cachedBoundNodeSelVector[i];
+        const auto boundNodeID = iceDiskScanState.nodeIDVector->getValue<nodeID_t>(boundNodeIdx);
+        boundNodeOffsets.insert(boundNodeID.offset);
     }
 
+    // Scan the current row group and collect relationships for bound nodes
+    bool hasData = scanRowGroupForBoundNodes(transaction, iceDiskScanState, rowGroupsToProcess,
+        boundNodeOffsets);
+
+    // Move to next row group for next call
+    iceDiskScanState.currentRowGroupIdx++;
+
+    return hasData;
+}
+
+bool IceDiskRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
+    IceDiskRelTableScanState& iceDiskScanState, const std::vector<std::size_t>& rowGroupsToProcess,
+    const std::unordered_set<common::offset_t>& boundNodeOffsets) {
+    if (!iceDiskScanState.indicesReader) {
+        return false;
+    }
+
+    // Initialize scan state for the assigned row groups
     auto context = transaction->getClientContext();
-        auto vfs = VirtualFileSystem::GetUnsafe(*context);
-        auto numColumns = iceDiskScanState.indicesReader->getNumColumns();
-        DataChunk indicesChunk(numColumns);
-    uint32_t nbrColumnIdx = 0;
-    for (uint32_t i = 0; i < numColumns; ++i) {
-        if (iceDiskScanState.indicesReader->getColumnName(i) == "nbr_id") {
-            nbrColumnIdx = i;
-            break;
-        }
+    auto vfs = VirtualFileSystem::GetUnsafe(*context);
+    iceDiskScanState.indicesReader->initializeScan(*iceDiskScanState.parquetScanState,
+        rowGroupsToProcess, vfs);
+
+    // Create DataChunk matching the indices parquet file schema
+    auto numIndicesColumns = iceDiskScanState.indicesReader->getNumColumns();
+    DataChunk indicesChunk(numIndicesColumns);
+
+    // Insert value vectors for all columns in the parquet file
+    auto memoryManager = MemoryManager::Get(*context);
+    for (uint32_t colIdx = 0; colIdx < numIndicesColumns; ++colIdx) {
+        const auto& columnTypeRef = iceDiskScanState.indicesReader->getColumnType(colIdx);
+        auto columnType = columnTypeRef.copy();
+        auto vector = std::make_shared<ValueVector>(std::move(columnType), memoryManager);
+        indicesChunk.insert(colIdx, vector);
     }
-    for (uint32_t i = 0; i < numColumns; ++i) {
-        indicesChunk.insert(i, std::make_shared<ValueVector>(
-                               iceDiskScanState.indicesReader->getColumnType(i).copy(),
-                               MemoryManager::Get(*context)));
+
+    // Scan the row groups and collect relationships for bound nodes.
+    const auto isFwd = iceDiskScanState.direction != RelDataDirection::BWD;
+    uint64_t totalRowsCollected = 0;
+    uint64_t currentGlobalRowIdx = 0;
+
+    // Calculate the starting global row index for the first row group
+    if (!rowGroupsToProcess.empty()) {
+        currentGlobalRowIdx = tableScanSharedState->getIndicesRowGroupStartOffsets()[rowGroupsToProcess[0]];
     }
-    const auto nbrTableID =
-        iceDiskScanState.direction == RelDataDirection::BWD ? getFromNodeTableID() : getToNodeTableID();
 
-    while (true) {
-        if (iceDiskScanState.nodeGroupIdx == INVALID_NODE_GROUP_IDX) {
-            uint64_t startRow = 0;
-            uint64_t numRows = 0;
-            if (!tableScanSharedState->getMorsel(
-                    static_cast<common::node_group_idx_t>(iceDiskScanState.nextRowGroupIdx),
-                    startRow, numRows)) {
-                iceDiskScanState.scanCompleted = true;
-                return false;
-            }
-            iceDiskScanState.nodeGroupIdx =
-                static_cast<common::node_group_idx_t>(iceDiskScanState.nextRowGroupIdx++);
-            bool overlap = iceDiskScanState.direction == RelDataDirection::BWD;
-            if (!overlap) {
-                auto startNode = findSourceNodeForRow(startRow);
-                auto endNode = findSourceNodeForRow(startRow + numRows - 1);
-                for (const auto& [boundOffset, _] : boundNodeSelPosByOffset) {
-                    if (boundOffset >= startNode &&
-                        (startNode == endNode ||
-                            (endNode != INVALID_OFFSET && boundOffset <= endNode))) {
-                        overlap = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!overlap) {
-                iceDiskScanState.nodeGroupIdx = INVALID_NODE_GROUP_IDX;
-                continue;
-            }
-
-            iceDiskScanState.currentStartRow = startRow;
-            iceDiskScanState.currentNumRows = numRows;
-            iceDiskScanState.currentGlobalRowIdx = startRow;
-            std::vector<uint64_t> groupsToRead = {iceDiskScanState.nodeGroupIdx};
-            iceDiskScanState.indicesReader->initializeScan(*iceDiskScanState.parquetScanState,
-                groupsToRead, vfs);
-        }
-
-        indicesChunk.state->getSelVectorUnsafe().setSelSize(0);
-        iceDiskScanState.indicesReader->scan(*iceDiskScanState.parquetScanState, indicesChunk);
-        if (indicesChunk.state->getSelVector().getSelSize() == 0) {
-            iceDiskScanState.nodeGroupIdx = INVALID_NODE_GROUP_IDX;
-            continue;
-        }
+    while (totalRowsCollected < IceDiskRelTable::scanRowGroupBatchSize &&
+           iceDiskScanState.indicesReader->scanInternal(*iceDiskScanState.parquetScanState,
+               indicesChunk)) {
 
         auto selSize = indicesChunk.state->getSelVector().getSelSize();
-        for (size_t i = 0; i < selSize; ++i) {
-            auto pos = indicesChunk.state->getSelVector()[i];
-            auto globalRowIdx = iceDiskScanState.currentGlobalRowIdx + i;
-            auto srcOffset = findSourceNodeForRow(globalRowIdx);
-            auto& nbrVec = indicesChunk.getValueVectorMutable(nbrColumnIdx);
-            auto dstOffset = nbrVec.getValue<offset_t>(pos);
-            const auto boundOffset =
-                iceDiskScanState.direction == RelDataDirection::BWD ? dstOffset : srcOffset;
-            if (!boundNodeSelPosByOffset.contains(boundOffset)) {
+
+        for (size_t i = 0; i < selSize && totalRowsCollected < IceDiskRelTable::scanRowGroupBatchSize;
+             ++i, ++currentGlobalRowIdx) {
+            // Find which source node this row belongs to.
+            const auto sourceNodeOffset = findSourceNodeForRow(currentGlobalRowIdx);
+
+            // Column 0 in indices file is the destination node offset.
+            const auto dstOffset = indicesChunk.getValueVector(0).getValue<std::size_t>(i);
+            const auto boundOffset = isFwd ? sourceNodeOffset : dstOffset;
+            
+            // not a bound node, skip
+            if (boundNodeOffsets.find(boundOffset) == boundNodeOffsets.end()) {
                 continue;
             }
 
-            PendingIceDiskRelRow row;
-            row.boundNodeSelPos = boundNodeSelPosByOffset.at(boundOffset);
-            row.relID = internalID_t{globalRowIdx, getTableID()};
-            row.propertyValues.resize(iceDiskScanState.columnIDs.size());
-            for (size_t outCol = 0; outCol < iceDiskScanState.columnIDs.size(); ++outCol) {
-                auto columnID = iceDiskScanState.columnIDs[outCol];
-                if (columnID == INVALID_COLUMN_ID || columnID == ROW_IDX_COLUMN_ID ||
-                    columnID == REL_ID_COLUMN_ID) {
-                    continue;
-                }
-                auto parquetColIdx = iceDiskScanState.outputColumnIdx[outCol];
-                if (parquetColIdx < 0) {
-                    continue;
-                }
-                auto& vec = indicesChunk.getValueVectorMutable(static_cast<uint32_t>(parquetColIdx));
-                if (columnID == NBR_ID_COLUMN_ID) {
-                    auto nbrOffset =
-                        iceDiskScanState.direction == RelDataDirection::BWD ? srcOffset : dstOffset;
-                    row.nbrNodeID = internalID_t{nbrOffset, nbrTableID};
-                } else {
-                    row.propertyValues[outCol] = vec.getAsValue(pos);
-                }
-            }
-            iceDiskScanState.pendingRows.push_back(std::move(row));
-        }
+            const auto nbrOffset = isFwd ? dstOffset : sourceNodeOffset;
+            const auto nbrTableID = isFwd ? getToNodeTableID() : getFromNodeTableID();
+            auto nbrNodeID = internalID_t(nbrOffset, nbrTableID);
 
-        iceDiskScanState.currentGlobalRowIdx += selSize;
-        if (iceDiskScanState.pendingRows.empty()) {
-            continue;
+            // outputVectors[0] is the neighbor node ID, if requested.
+            if (!iceDiskScanState.outputVectors.empty()) {
+                iceDiskScanState.outputVectors[0]->setValue(totalRowsCollected, nbrNodeID);
+            }
+
+            // If there are additional columns (e.g., weight), copy them to subsequent output
+            // vectors These are property columns and should have matching types
+            for (uint32_t colIdx = 1;
+                 colIdx < numIndicesColumns && colIdx < iceDiskScanState.outputVectors.size();
+                 ++colIdx) {
+                iceDiskScanState.outputVectors[colIdx]->copyFromVectorData(totalRowsCollected,
+                    &indicesChunk.getValueVector(colIdx), i);
+            }
+
+            totalRowsCollected++;
         }
-        emitPendingRow(iceDiskScanState);
-        return true;
     }
+
+    // No data found
+    if (totalRowsCollected <= 0) {
+        auto selVector = std::make_shared<SelectionVector>(0);
+        iceDiskScanState.outState->setSelVector(selVector);
+        return false;
+    }
+
+    auto selVector = std::make_shared<SelectionVector>(totalRowsCollected);
+    selVector->setToUnfiltered(totalRowsCollected);
+    iceDiskScanState.outState->setSelVector(selVector);
+
+    return true;
 }
 
 common::row_idx_t IceDiskRelTable::getNumTotalRows(const Transaction* transaction) {
@@ -375,6 +211,101 @@ common::row_idx_t IceDiskRelTable::getNumTotalRows(const Transaction* transactio
     std::vector<bool> dummySkips;
     processor::ParquetReader reader(resolvedPath, dummySkips, context);
     return reader.getMetadata()->num_rows;
+}
+
+std::vector<std::size_t> IceDiskRelTable::getIndicesRowGroupStartOffsets(const transaction::Transaction* transaction) const {
+    auto context = transaction->getClientContext();
+    auto resolvedPath = VirtualFileSystem::resolvePath(context, indicesFilePath);
+    processor::ParquetReader reader(resolvedPath, std::vector<bool>(), context);
+    
+    auto metadata = reader.getMetadata();
+    std::vector<std::size_t> startOffsets;
+    std::size_t currentOffset = 0;
+    
+    for (auto i = 0u; i < metadata->row_groups.size(); ++i) {
+        startOffsets.push_back(currentOffset);
+        currentOffset += metadata->row_groups[i].num_rows;
+    }
+
+    return startOffsets;
+}
+
+std::vector<std::size_t> IceDiskRelTable::readIndptrData(Transaction* transaction) const {
+    auto context = transaction->getClientContext();
+    auto vfs = VirtualFileSystem::GetUnsafe(*context);
+    auto resolvedPath = VirtualFileSystem::resolvePath(context, indptrFilePath);
+    auto indptrReader = std::make_unique<processor::ParquetReader>(resolvedPath, std::vector<bool>(), context);
+    processor::ParquetReaderScanState scanState;
+    std::vector<uint64_t> groupsToRead;
+    std::vector<std::size_t> indptrData;
+
+    for (uint64_t i = 0; i < indptrReader->getMetadata()->row_groups.size(); ++i) {
+        groupsToRead.push_back(i);
+    }
+
+    indptrReader->initializeScan(scanState, groupsToRead, vfs);
+
+    // Check if the indptr file has any columns after scan initialization
+    auto numColumns = indptrReader->getNumColumns();
+    if (numColumns == 0) {
+        throw RuntimeException("Indptr parquet file has no columns");
+    }
+
+    // Validate column type for indptr
+    const auto& indptrType = indptrReader->getColumnType(0);
+    if (!LogicalTypeUtils::isIntegral(indptrType.getLogicalTypeID())) {
+        throw RuntimeException(
+            "Indptr parquet file column must be integer type (column 0)");
+    }
+
+    DataChunk dataChunk(1);
+    const auto& columnTypeRef = indptrReader->getColumnType(0);
+    auto columnType = columnTypeRef.copy();
+    auto vector = std::make_shared<ValueVector>(std::move(columnType), MemoryManager::Get(*context));
+    dataChunk.insert(0, vector);
+    
+    while (indptrReader->scanInternal(scanState, dataChunk)) {
+        auto selVector = dataChunk.state->getSelVectorShared();
+        auto selSize = selVector->getSelSize();
+        auto& valVector = dataChunk.getValueVector(0);
+
+        for (std::size_t i = 0; i < selSize; ++i) {
+            auto value = valVector.getValue<std::size_t>((*selVector)[i]);
+            indptrData.push_back(value);
+        }
+    }
+
+    return indptrData;
+}
+
+void IceDiskRelTable::copyCachedBoundNodeSelVector(RelTableScanState& relScanState) const {
+    if (relScanState.nodeIDVector->state->getSelVector().isUnfiltered()) {
+        relScanState.cachedBoundNodeSelVector.setToUnfiltered();
+    } else {
+        relScanState.cachedBoundNodeSelVector.setToFiltered();
+        memcpy(relScanState.cachedBoundNodeSelVector.getMutableBuffer().data(),
+            relScanState.nodeIDVector->state->getSelVector().getMutableBuffer().data(),
+            relScanState.nodeIDVector->state->getSelVector().getSelSize() * sizeof(sel_t));
+    }
+    relScanState.cachedBoundNodeSelVector.setSelSize(
+        relScanState.nodeIDVector->state->getSelVector().getSelSize());
+}
+
+std::size_t IceDiskRelTable::findSourceNodeForRow(std::size_t globalRowIdx) const {
+    const auto& indptrData = tableScanSharedState->getIndptrData();
+    if (indptrData.empty()) {
+        throw RuntimeException("Indptr data not loaded for CSR format");
+    }
+
+    // Binary search to find the source node
+    // indptrData[i] contains the start row index for source node i
+    // Find the largest i where indptrData[i] <= globalRowIdx
+    auto it = std::upper_bound(indptrData.begin(), indptrData.end(), globalRowIdx);
+    if (it == indptrData.begin()) {
+        throw RuntimeException("Invalid global row index: " + std::to_string(globalRowIdx));
+    }
+    --it;
+    return static_cast<std::size_t>(std::distance(indptrData.begin(), it));
 }
 
 } // namespace storage

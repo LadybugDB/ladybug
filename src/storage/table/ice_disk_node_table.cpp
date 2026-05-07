@@ -158,7 +158,7 @@ bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
         auto& nodeID = scanState.nodeIDVector->getValue<common::nodeID_t>(i);
         nodeID.tableID = tableID;
         // assign parquet rowIndex
-        nodeID.offset = tableScanSharedState->rowGroupStartOffsets[iceDiskNodeScanState.currentRowGroupIdx] + iceDiskNodeScanState.currentRowGroupBatchOffset + i;
+        nodeID.offset = tableScanSharedState->getRowGroupStartOffsets()[iceDiskNodeScanState.currentRowGroupIdx] + iceDiskNodeScanState.currentRowGroupBatchOffset + i;
     }
 
     iceDiskNodeScanState.currentRowGroupBatchOffset += outputSize;

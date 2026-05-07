@@ -70,6 +70,12 @@ void ScanRelTableInfo::initScanState(TableScanState& scanState,
     initScanStateVectors(scanState, outVectors, MemoryManager::Get(*context));
 }
 
+void ScanRelTable::initGlobalStateInternal(ExecutionContext* context) {
+    if (const auto iceDiskRelTable = dynamic_cast<storage::IceDiskRelTable*>(tableInfo.table)) {
+        iceDiskRelTable->initializeScanCoordination(transaction::Transaction::Get(*context->clientContext));
+    }
+}
+
 void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     ScanTable::initLocalStateInternal(resultSet, context);
     auto clientContext = context->clientContext;
@@ -80,6 +86,7 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
     auto* parquetTable = dynamic_cast<storage::ParquetRelTable*>(tableInfo.table);
     auto* foreignTable = dynamic_cast<storage::ForeignRelTable*>(tableInfo.table);
     auto* iceDiskTable = dynamic_cast<storage::IceDiskRelTable*>(tableInfo.table);
+
     if (arrowTable) {
         scanState =
             std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
@@ -99,7 +106,6 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
         scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
             boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     }
-    tableInfo.table->initializeScanCoordination(transaction::Transaction::Get(*clientContext));
     tableInfo.initScanState(*scanState, outVectors, clientContext);
     if (sourceMode) {
         currentSourceTableIdx = 0;

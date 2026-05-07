@@ -80,6 +80,7 @@ public:
     bool isSource() const override { return sourceMode; }
     bool isParallel() const override { return !sourceMode; }
 
+    void initGlobalStateInternal(ExecutionContext* context) override;
     void initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) override;
 
     bool getNextTuplesInternal(ExecutionContext* context) override;

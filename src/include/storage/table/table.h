@@ -60,7 +60,7 @@ struct LBUG_API TableScanState {
 
     virtual void setToTable(const transaction::Transaction* transaction, Table* table_,
         std::vector<common::column_id_t> columnIDs_,
-        std::vector<ColumnPredicateSet> columnPredicateSets_,
+        std::vector<ColumnPredicateSet> columnPredicateSets_ = {},
         common::RelDataDirection direction = common::RelDataDirection::INVALID);
 
     // Note that `resetCachedBoundNodeSelVec` is only applicable to RelTable for now.

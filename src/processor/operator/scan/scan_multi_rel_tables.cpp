@@ -61,6 +61,25 @@ bool RelTableCollectionScanner::scan(main::ClientContext* context, RelTableScanS
     }
 }
 
+// only for icebug disk table for now as they have shared state
+void ScanMultiRelTable::initGlobalStateInternal(ExecutionContext* context) {
+    auto transaction = Transaction::Get(*context->clientContext);
+    for (auto& [_, scanner] : scanners) {
+        bool hasIceDiskTable = false;
+        for (auto& relInfo : scanner.relInfos) {
+            if (const auto iceDiskRelTable = dynamic_cast<storage::IceDiskRelTable*>(relInfo.table)) {
+                iceDiskRelTable->initializeScanCoordination(transaction);
+                hasIceDiskTable = true;
+                break;
+            }
+        }
+
+        if (hasIceDiskTable) {
+            break;
+        }
+    }
+}
+
 void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     ScanTable::initLocalStateInternal(resultSet, context);
     auto clientContext = context->clientContext;

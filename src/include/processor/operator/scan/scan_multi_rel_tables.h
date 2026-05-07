@@ -67,6 +67,7 @@ public:
           directionInfo{std::move(directionInfo)}, scanState{nullptr}, boundNodeIDVector{nullptr},
           scanners{std::move(scanners)}, currentScanner{nullptr} {}
 
+    void initGlobalStateInternal(ExecutionContext* context) override;
     void initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) override;
 
     bool getNextTuplesInternal(ExecutionContext* context) override;

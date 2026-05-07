@@ -54,6 +54,10 @@ public:
         }
         return false;
      }
+
+    const std::vector<std::size_t>& getRowGroupStartOffsets() const {
+        return rowGroupStartOffsets;
+    }
 };
 
 class IceDiskNodeTable final : public NodeTable {
