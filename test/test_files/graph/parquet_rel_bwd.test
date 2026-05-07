@@ -1,0 +1,39 @@
+-DATASET GRAPH-STD parquet-rel-bwd-test
+
+--
+
+-CASE ParquetRelBwdScan
+-SKIP
+-LOG FwdScanAll
+-STATEMENT MATCH (u:user)-[:wrote]->(p:post) RETURN u.name, p.title ORDER BY u.name, p.title
+---- 5
+Adam|p0
+Adam|p1
+Karissa|p1
+Karissa|p2
+Zhang|p3
+
+-LOG BwdScanAll
+-STATEMENT MATCH (p:post)<-[:wrote]-(u:user) RETURN u.name, p.title ORDER BY u.name, p.title
+---- 5
+Adam|p0
+Adam|p1
+Karissa|p1
+Karissa|p2
+Zhang|p3
+
+-LOG BwdScanBoundOnPost
+-STATEMENT MATCH (p:post {title: 'p0'})<-[:wrote]-(u:user) RETURN u.name
+---- 1
+Adam
+
+-LOG BwdScanBoundOnPostMultiple
+-STATEMENT MATCH (p:post {title: 'p1'})<-[:wrote]-(u:user) RETURN u.name ORDER BY u.name
+---- 2
+Adam
+Karissa
+
+-LOG BwdScanBoundOnPostLast
+-STATEMENT MATCH (p:post {title: 'p3'})<-[:wrote]-(u:user) RETURN u.name
+---- 1
+Zhang
