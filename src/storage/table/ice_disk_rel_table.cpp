@@ -211,6 +211,7 @@ common::row_idx_t IceDiskRelTable::getNumTotalRows(const Transaction* transactio
 }
 
 void IceDiskRelTable::loadIndicesRowGroupStartOffsets(const transaction::Transaction* transaction) {
+    indicesRowGroupStartOffsets.clear();
     auto context = transaction->getClientContext();
     auto resolvedPath = VirtualFileSystem::resolvePath(context, indicesFilePath);
     processor::ParquetReader reader(resolvedPath, std::vector<bool>(), context);
