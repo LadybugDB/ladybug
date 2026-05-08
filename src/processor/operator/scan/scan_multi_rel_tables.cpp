@@ -67,7 +67,8 @@ void ScanMultiRelTable::initGlobalStateInternal(ExecutionContext* context) {
     for (auto& [_, scanner] : scanners) {
         bool hasIceDiskTable = false;
         for (auto& relInfo : scanner.relInfos) {
-            if (const auto iceDiskRelTable = dynamic_cast<storage::IceDiskRelTable*>(relInfo.table)) {
+            if (const auto iceDiskRelTable =
+                    dynamic_cast<storage::IceDiskRelTable*>(relInfo.table)) {
                 iceDiskRelTable->initializeScanCoordination(transaction);
                 hasIceDiskTable = true;
                 break;
@@ -121,8 +122,9 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
             std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     } else if (hasIceDiskTable) {
-        scanState = std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext), 
-            boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+        scanState =
+            std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext),
+                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     } else {
         scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
             boundNodeIDVector, outVectors, nbrNodeIDVector->state);

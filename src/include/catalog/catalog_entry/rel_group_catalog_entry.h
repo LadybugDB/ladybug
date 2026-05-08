@@ -39,14 +39,12 @@ public:
     RelGroupCatalogEntry(std::string tableName, common::RelMultiplicity srcMultiplicity,
         common::RelMultiplicity dstMultiplicity, common::ExtendDirection storageDirection,
         std::vector<RelTableCatalogInfo> relTableInfos, std::string storage = "",
-        std::string indicesPath = "", std::string indptrPath = "",
         std::optional<function::TableFunction> scanFunction = std::nullopt,
         std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData = std::nullopt,
         std::string foreignDatabaseName = "")
         : TableCatalogEntry{type_, std::move(tableName)}, srcMultiplicity{srcMultiplicity},
           dstMultiplicity{dstMultiplicity}, storageDirection{storageDirection},
           relTableInfos{std::move(relTableInfos)}, storage{std::move(storage)},
-          indicesPath{std::move(indicesPath)}, indptrPath{std::move(indptrPath)},
           scanFunction{std::move(scanFunction)}, scanBindData{std::move(scanBindData)},
           foreignDatabaseName{std::move(foreignDatabaseName)} {
         propertyCollection =
@@ -65,8 +63,6 @@ public:
 
     common::ExtendDirection getStorageDirection() const { return storageDirection; }
     const std::string& getStorage() const { return storage; }
-    const std::string& getIndicesPath() const { return indicesPath; }
-    const std::string& getIndptrPath() const { return indptrPath; }
     std::optional<function::TableFunction> getScanFunction() const override { return scanFunction; }
     const std::optional<std::shared_ptr<function::TableFuncBindData>>& getScanBindData() const {
         return scanBindData;
@@ -117,8 +113,6 @@ private:
     common::ExtendDirection storageDirection = common::ExtendDirection::BOTH;
     std::vector<RelTableCatalogInfo> relTableInfos;
     std::string storage;
-    std::string indicesPath;
-    std::string indptrPath;
     std::optional<function::TableFunction> scanFunction;
     std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData;
     std::string foreignDatabaseName; // Database name for foreign-backed rel tables

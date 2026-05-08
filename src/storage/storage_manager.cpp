@@ -4,6 +4,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/arrow/arrow.h"
+#include "common/constants.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/random_engine.h"
 #include "common/serializer/in_mem_file_writer.h"
@@ -100,8 +101,9 @@ void StorageManager::recover(main::ClientContext& clientContext, bool throwOnWal
 void StorageManager::createNodeTable(NodeTableCatalogEntry* entry) {
     tableNameCache[entry->getTableID()] = entry->getName();
     if (!entry->getStorage().empty()) {
-        if (entry->getStorage().find("icebug-disk") != std::string::npos) {
-            tables[entry->getTableID()] = std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager);
+        if (TableOptionConstants::isIceBugDiskStorage(entry->getStorage())) {
+            tables[entry->getTableID()] =
+                std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager);
         } else if (entry->getStorage().substr(0, 8) == "arrow://") {
             std::string arrowId = entry->getStorage().substr(8);
             ArrowSchemaWrapper* schema = nullptr;
@@ -167,7 +169,7 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
             tables[info.oid] = std::make_unique<ArrowRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, fromNodeTable, toNodeTable,
                 std::move(schemaCopy), std::move(arraysCopy), arrowId);
-        } else if (entry->getStorage().find("icebug-disk") != std::string::npos) {
+        } else if (TableOptionConstants::isIceBugDiskStorage(entry->getStorage())) {
             tables[info.oid] = std::make_unique<IceDiskRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager);
         } else {
@@ -438,11 +440,13 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
                               ->ptrCast<NodeTableCatalogEntry>();
         tableNameCache[tableID] = tableEntry->getName();
         if (!tableEntry->getStorage().empty()) {
-            if (tableEntry->getStorage().find("icebug-disk") != std::string::npos) {
-                tables[tableID] = std::make_unique<IceDiskNodeTable>(this, tableEntry, &memoryManager);
+            if (TableOptionConstants::isIceBugDiskStorage(tableEntry->getStorage())) {
+                tables[tableID] =
+                    std::make_unique<IceDiskNodeTable>(this, tableEntry, &memoryManager);
             } else {
                 // Create parquet-backed node table
-                tables[tableID] = std::make_unique<ParquetNodeTable>(this, tableEntry, &memoryManager);
+                tables[tableID] =
+                    std::make_unique<ParquetNodeTable>(this, tableEntry, &memoryManager);
             }
         } else {
             // Create regular node table
@@ -470,7 +474,7 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
             RelTableCatalogInfo info = RelTableCatalogInfo::deserialize(deSer);
             DASSERT(!tables.contains(info.oid));
             if (!relGroupEntry->getStorage().empty()) {
-                if (relGroupEntry->getStorage().find("icebug-disk") != std::string::npos) {
+                if (TableOptionConstants::isIceBugDiskStorage(relGroupEntry->getStorage())) {
                     tables[info.oid] = std::make_unique<IceDiskRelTable>(relGroupEntry,
                         info.nodePair.srcTableID, info.nodePair.dstTableID, this, &memoryManager);
                 } else {

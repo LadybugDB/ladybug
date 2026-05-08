@@ -98,10 +98,6 @@ void RelGroupCatalogEntry::serialize(Serializer& serializer) const {
     serializer.serializeValue(storageDirection);
     serializer.writeDebuggingInfo("storage");
     serializer.serializeValue(storage);
-    serializer.writeDebuggingInfo("indicesPath");
-    serializer.serializeValue(indicesPath);
-    serializer.writeDebuggingInfo("indptrPath");
-    serializer.serializeValue(indptrPath);
     serializer.writeDebuggingInfo("scanFunction");
     serializer.serializeValue(scanFunction.has_value());
     if (scanFunction.has_value()) {
@@ -127,12 +123,6 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     deserializer.deserializeValue(storageDirection);
     deserializer.validateDebuggingInfo(debuggingInfo, "storage");
     deserializer.deserializeValue(storage);
-    std::string indicesPath;
-    deserializer.validateDebuggingInfo(debuggingInfo, "indicesPath");
-    deserializer.deserializeValue(indicesPath);
-    std::string indptrPath;
-    deserializer.validateDebuggingInfo(debuggingInfo, "indptrPath");
-    deserializer.deserializeValue(indptrPath);
     deserializer.validateDebuggingInfo(debuggingInfo, "scanFunction");
     bool hasScanFunction;
     deserializer.deserializeValue(hasScanFunction);
@@ -147,8 +137,6 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     relGroupEntry->dstMultiplicity = dstMultiplicity;
     relGroupEntry->storageDirection = storageDirection;
     relGroupEntry->storage = storage;
-    relGroupEntry->indicesPath = indicesPath;
-    relGroupEntry->indptrPath = indptrPath;
     relGroupEntry->scanFunction = scanFunction;
     relGroupEntry->relTableInfos = relTableInfos;
     return relGroupEntry;
@@ -210,8 +198,6 @@ std::unique_ptr<TableCatalogEntry> RelGroupCatalogEntry::copy() const {
     other->dstMultiplicity = dstMultiplicity;
     other->storageDirection = storageDirection;
     other->storage = storage;
-    other->indicesPath = indicesPath;
-    other->indptrPath = indptrPath;
     other->scanFunction = scanFunction;
     other->scanBindData = std::nullopt; // TODO: implement copy for bindData if needed
     other->foreignDatabaseName = foreignDatabaseName;
@@ -228,7 +214,7 @@ RelGroupCatalogEntry::getBoundExtraCreateInfo(transaction::Transaction*) const {
     }
     return std::make_unique<binder::BoundExtraCreateRelTableGroupInfo>(
         copyVector(propertyCollection.getDefinitions()), srcMultiplicity, dstMultiplicity,
-        storageDirection, std::move(nodePairs), storage, indicesPath, indptrPath);
+        storageDirection, std::move(nodePairs), storage);
 }
 
 } // namespace catalog

@@ -10,6 +10,7 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
+#include "common/constants.h"
 #include "common/enums/extend_direction_util.h"
 #include "common/exception/binder.h"
 #include "common/exception/message.h"
@@ -174,30 +175,6 @@ static std::string getStorage(const case_insensitive_map_t<Value>& options) {
     return "";
 }
 
-static std::string getTablePath(const case_insensitive_map_t<Value>& options) {
-    if (options.contains(TableOptionConstants::TABLE_PATH)) {
-        return options.at(TableOptionConstants::TABLE_PATH).toString();
-    }
-
-    return "";
-}
-
-static std::string getIndicesPath(const case_insensitive_map_t<Value>& options) {
-    if (options.contains(TableOptionConstants::INDICES_OPTION)) {
-        return options.at(TableOptionConstants::INDICES_OPTION).toString();
-    }
-
-    return "";
-}
-
-static std::string getIndptrPath(const case_insensitive_map_t<Value>& options) {
-    if (options.contains(TableOptionConstants::INDPTR_OPTION)) {
-        return options.at(TableOptionConstants::INDPTR_OPTION).toString();
-    }
-
-    return "";
-}
-
 static ExtendDirection getStorageDirection(const case_insensitive_map_t<Value>& options) {
     if (options.contains(TableOptionConstants::REL_STORAGE_DIRECTION_OPTION)) {
         return ExtendDirectionUtil::fromString(
@@ -212,9 +189,8 @@ BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info
     validatePrimaryKey(extraInfo.pKName, propertyDefinitions);
     auto boundOptions = bindParsingOptions(extraInfo.options);
     auto storage = getStorage(boundOptions);
-    auto tablePath = getTablePath(boundOptions);
     auto boundExtraInfo = std::make_unique<BoundExtraCreateNodeTableInfo>(extraInfo.pKName,
-        std::move(propertyDefinitions), std::move(storage), std::move(tablePath));
+        std::move(propertyDefinitions), std::move(storage));
     return BoundCreateTableInfo(CatalogEntryType::NODE_TABLE_ENTRY, info->tableName,
         info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());
 }
@@ -237,8 +213,6 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     auto boundOptions = bindParsingOptions(extraInfo.options);
     auto storageDirection = getStorageDirection(boundOptions);
     auto storage = getStorage(boundOptions);
-    auto indicesPath = getIndicesPath(boundOptions);
-    auto indptrPath = getIndptrPath(boundOptions);
     std::optional<function::TableFunction> scanFunction = std::nullopt;
     std::optional<std::unique_ptr<function::TableFuncBindData>> scanBindData = std::nullopt;
     std::string foreignDatabaseName;
@@ -338,13 +312,14 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
             }
         }
 
-        // For icebug-disk rel tables, validate that FROM and TO are icebug-disk tables
-        if (storage.find("icebug-disk") != std::string::npos) {
+        // For icebug-disk rel tables, validate that FROM and TO are icebug-disk node tables
+        if (TableOptionConstants::isIceBugDiskStorage(storage)) {
             auto srcNodeEntry = srcEntry->ptrCast<NodeTableCatalogEntry>();
             auto dstNodeEntry = dstEntry->ptrCast<NodeTableCatalogEntry>();
-            if (srcNodeEntry->getStorage().find("icebug-disk") == std::string::npos ||
-                dstNodeEntry->getStorage().find("icebug-disk") == std::string::npos) {
-                throw BinderException("icebug-disk rel tables require both FROM and TO tables to be icebug-disk node tables.");
+            if (!TableOptionConstants::isIceBugDiskStorage(srcNodeEntry->getStorage()) ||
+                !TableOptionConstants::isIceBugDiskStorage(dstNodeEntry->getStorage())) {
+                throw BinderException("icebug-disk rel tables require both FROM and TO tables to "
+                                      "be icebug-disk node tables.");
             }
         }
 
@@ -362,7 +337,7 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     }
     auto boundExtraInfo = std::make_unique<BoundExtraCreateRelTableGroupInfo>(
         std::move(propertyDefinitions), srcMultiplicity, dstMultiplicity, storageDirection,
-        std::move(nodePairs), std::move(storage), std::move(indicesPath), std::move(indptrPath), std::move(scanFunction), std::move(scanBindData),
+        std::move(nodePairs), std::move(storage), std::move(scanFunction), std::move(scanBindData),
         std::move(foreignDatabaseName));
     return BoundCreateTableInfo(CatalogEntryType::REL_GROUP_ENTRY, info->tableName,
         info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());

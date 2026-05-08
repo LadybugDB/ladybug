@@ -4,6 +4,7 @@
 #include <mutex>
 
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "common/constants.h"
 #include "common/data_chunk/sel_vector.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
@@ -12,6 +13,7 @@
 #include "processor/operator/persistent/reader/parquet/parquet_reader.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/storage_manager.h"
+#include "storage/table/ice_disk_utils.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::catalog;
@@ -22,10 +24,9 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace storage {
 
-void IceDiskNodeTableScanState::setToTable(const transaction::Transaction* /*transaction*/, Table* table_,
-    std::vector<common::column_id_t> columnIDs_,
-    std::vector<ColumnPredicateSet> columnPredicateSets_,
-    common::RelDataDirection /*direction*/) {
+void IceDiskNodeTableScanState::setToTable(const transaction::Transaction* /*transaction*/,
+    Table* table_, std::vector<common::column_id_t> columnIDs_,
+    std::vector<ColumnPredicateSet> columnPredicateSets_, common::RelDataDirection /*direction*/) {
     // TableScanState::setToTable(transaction, table_, columnIDs_, std::move(columnPredicateSets_));
     table = table_;
     columnIDs = std::move(columnIDs_);
@@ -37,20 +38,18 @@ void IceDiskNodeTableScanState::setToTable(const transaction::Transaction* /*tra
 IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
     const NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager)
     : NodeTable{storageManager, nodeTableEntry, memoryManager},
+      parquetFilePath{IceDiskUtils::constructNodeTablePath(
+          IceDiskUtils::getBasePath(nodeTableEntry->getStorage()), nodeTableEntry->getName(),
+          ".parquet")},
       nodeTableCatalogEntry{nodeTableEntry},
-      tableScanSharedState{std::make_unique<IceDiskNodeTableScanSharedState>()} {
-    if (nodeTableEntry->getTablePath().empty()) {
-        throw RuntimeException("Parquet file path is empty for icebug-disk-backed node table");
-    }
-
-    parquetFilePath = nodeTableEntry->getTablePath();
-}
+      tableScanSharedState{std::make_unique<IceDiskNodeTableScanSharedState>()} {}
 
 void IceDiskNodeTable::initializeScanCoordination(const Transaction* transaction) {
     auto context = transaction->getClientContext();
     if (context) {
         auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
-        auto tempReader = std::make_unique<ParquetReader>(resolvedPath, std::vector<bool>(), context);
+        auto tempReader =
+            std::make_unique<ParquetReader>(resolvedPath, std::vector<bool>(), context);
         auto metadata = tempReader->getMetadata();
         uint64_t currentStartOffset = 0;
 
@@ -68,7 +67,8 @@ void IceDiskNodeTable::initScanState(Transaction* transaction, TableScanState& s
     bool /*resetCachedBoundNodeSelVec*/) const {
     auto& iceDiskNodeScanState = static_cast<IceDiskNodeTableScanState&>(scanState);
 
-    if(iceDiskNodeScanState.currentRowGroupIdx == static_cast<std::size_t>(common::INVALID_NODE_GROUP_IDX)) {
+    if (iceDiskNodeScanState.currentRowGroupIdx ==
+        static_cast<std::size_t>(common::INVALID_NODE_GROUP_IDX)) {
         iceDiskNodeScanState.scanCompleted = true;
         return;
     }
@@ -124,9 +124,9 @@ void IceDiskNodeTable::initIceDiskScanForRowGroup(Transaction* transaction,
 
     // Re-initialize scan for the specific row groups
     // Note: initializeScan can be called multiple times; the first call populates column metadata
-    scanState.parquetReader->initializeScan(*scanState.parquetScanState, {scanState.currentRowGroupIdx}, vfs);
+    scanState.parquetReader->initializeScan(*scanState.parquetScanState,
+        {scanState.currentRowGroupIdx}, vfs);
 }
-
 
 bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& scanState) {
     auto& iceDiskNodeScanState = static_cast<IceDiskNodeTableScanState&>(scanState);
@@ -146,15 +146,17 @@ bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
         return false;
     }
 
-    auto outputSize = std::min(scanRowGroupBatchSize, iceDiskNodeScanState.data.size() - iceDiskNodeScanState.currentRowGroupBatchOffset);
-    auto numColumns =
-        std::min(scanState.outputVectors.size(), iceDiskNodeScanState.data[iceDiskNodeScanState.currentRowGroupBatchOffset].size());
+    auto outputSize = std::min(scanRowGroupBatchSize,
+        iceDiskNodeScanState.data.size() - iceDiskNodeScanState.currentRowGroupBatchOffset);
+    auto numColumns = std::min(scanState.outputVectors.size(),
+        iceDiskNodeScanState.data[iceDiskNodeScanState.currentRowGroupBatchOffset].size());
 
     for (std::size_t col = 0; col < numColumns; ++col) {
         auto& dstVector = *scanState.outputVectors[col];
 
         for (std::size_t i = 0; i < outputSize; ++i) {
-            auto& value = *iceDiskNodeScanState.data[iceDiskNodeScanState.currentRowGroupBatchOffset + i][col];
+            auto& value = *iceDiskNodeScanState
+                               .data[iceDiskNodeScanState.currentRowGroupBatchOffset + i][col];
             if (value.isNull()) {
                 dstVector.setNull(i, true);
             } else {
@@ -167,7 +169,8 @@ bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
         auto& nodeID = scanState.nodeIDVector->getValue<common::nodeID_t>(i);
         nodeID.tableID = tableID;
         // assign parquet rowIndex
-        nodeID.offset = rowGroupStartOffsets[iceDiskNodeScanState.currentRowGroupIdx] + iceDiskNodeScanState.currentRowGroupBatchOffset + i;
+        nodeID.offset = rowGroupStartOffsets[iceDiskNodeScanState.currentRowGroupIdx] +
+                        iceDiskNodeScanState.currentRowGroupBatchOffset + i;
     }
 
     iceDiskNodeScanState.currentRowGroupBatchOffset += outputSize;
@@ -198,7 +201,8 @@ void IceDiskNodeTable::readParquetData(Transaction* transaction, TableScanState&
     }
 
     // Read from parquet
-    iceDiskNodeScanState.parquetReader->scan(*iceDiskNodeScanState.parquetScanState, parquetDataChunk);
+    iceDiskNodeScanState.parquetReader->scan(*iceDiskNodeScanState.parquetScanState,
+        parquetDataChunk);
 
     auto selSize = parquetDataChunk.state->getSelVector().getSelSize();
     if (selSize > 0) {
@@ -275,7 +279,8 @@ std::size_t IceDiskNodeTable::getNumTotalRows(const Transaction* transaction) {
 
     try {
         auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
-        auto tempReader = std::make_unique<ParquetReader>(resolvedPath, std::vector<bool>(), context);
+        auto tempReader =
+            std::make_unique<ParquetReader>(resolvedPath, std::vector<bool>(), context);
 
         return tempReader->getMetadata()->num_rows;
     } catch (const std::exception& e) {
@@ -293,7 +298,8 @@ std::size_t IceDiskNodeTable::getNumRowGroups(const transaction::Transaction* tr
 
     try {
         auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
-        auto tempReader = std::make_unique<ParquetReader>(resolvedPath, std::vector<bool>(), context);
+        auto tempReader =
+            std::make_unique<ParquetReader>(resolvedPath, std::vector<bool>(), context);
 
         return tempReader->getNumRowGroups();
     } catch (const std::exception& e) {

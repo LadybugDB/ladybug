@@ -3,8 +3,8 @@
 #include <atomic>
 #include <vector>
 
-#include "storage/table/node_table.h"
 #include "processor/operator/persistent/reader/parquet/parquet_reader.h"
+#include "storage/table/node_table.h"
 
 namespace lbug {
 namespace storage {
@@ -20,7 +20,6 @@ struct IceDiskNodeTableScanState : public TableScanState {
     bool dataReadCompleted = false;
     std::vector<std::vector<std::unique_ptr<common::Value>>> data; // data[rowGroup][column]
     std::size_t currentRowGroupBatchOffset = 0; // offset of current rowGroupBatch
-
 
     IceDiskNodeTableScanState([[maybe_unused]] MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
@@ -87,17 +86,20 @@ public:
 
     const std::string& getParquetFilePath() const { return parquetFilePath; }
     const catalog::NodeTableCatalogEntry* getCatalogEntry() const { return nodeTableCatalogEntry; }
-    IceDiskNodeTableScanSharedState* getTableScanSharedState() const { return tableScanSharedState.get(); }
+    IceDiskNodeTableScanSharedState* getTableScanSharedState() const {
+        return tableScanSharedState.get();
+    }
 
     std::size_t getNumScanMorsels(const transaction::Transaction* transaction) const;
 
 private:
     std::size_t getNumRowGroups(const transaction::Transaction* transaction) const;
-    void initIceDiskScanForRowGroup(transaction::Transaction* transaction, IceDiskNodeTableScanState& scanState) const;
+    void initIceDiskScanForRowGroup(transaction::Transaction* transaction,
+        IceDiskNodeTableScanState& scanState) const;
     void readParquetData(transaction::Transaction* transaction, TableScanState& scanState) const;
 
 private:
-    std::string parquetFilePath;
+    const std::string parquetFilePath;
     const catalog::NodeTableCatalogEntry* nodeTableCatalogEntry;
     std::vector<std::size_t> rowGroupStartOffsets;
     mutable std::unique_ptr<IceDiskNodeTableScanSharedState> tableScanSharedState;

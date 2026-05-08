@@ -72,7 +72,8 @@ void ScanRelTableInfo::initScanState(TableScanState& scanState,
 
 void ScanRelTable::initGlobalStateInternal(ExecutionContext* context) {
     if (const auto iceDiskRelTable = dynamic_cast<storage::IceDiskRelTable*>(tableInfo.table)) {
-        iceDiskRelTable->initializeScanCoordination(transaction::Transaction::Get(*context->clientContext));
+        iceDiskRelTable->initializeScanCoordination(
+            transaction::Transaction::Get(*context->clientContext));
     }
 }
 
@@ -96,8 +97,9 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
             std::make_unique<storage::ParquetRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     } else if (iceDiskTable) {
-        scanState = std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext), 
-            boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+        scanState =
+            std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext),
+                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     } else if (foreignTable) {
         scanState =
             std::make_unique<storage::ForeignRelTableScanState>(*MemoryManager::Get(*clientContext),

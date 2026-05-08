@@ -105,7 +105,32 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
             storageIndex = end + 1;
         }
         for (auto& storagePath : storagePaths) {
-            if(storagePath.find("icebug-disk") != std::string::npos) {
+            static constexpr std::string_view iceBugPrefix = "icebug-disk";
+
+            if (storagePath.starts_with(iceBugPrefix)) {
+                // Strip "icebug-disk" prefix and optional ':' separator.
+                std::string basePath = storagePath.substr(iceBugPrefix.size());
+                if (!basePath.empty() && basePath[0] == ':') {
+                    basePath = basePath.substr(1);
+                }
+                // Resolve empty or relative paths relative to the schema's directory.
+                // Absolute paths and object-store URLs (contain "://") are left unchanged.
+                if (basePath.empty()) {
+                    basePath = normalizePathForCypher(cypherDir.string());
+                } else if (basePath.find("://") == std::string::npos &&
+                           std::filesystem::path(basePath).is_relative()) {
+                    basePath = normalizePathForCypher((cypherDir / basePath).string());
+                }
+                std::string resolvedStorage = std::string(iceBugPrefix) + ":" + basePath;
+                size_t pos = line.find(storagePath);
+                if (pos != std::string::npos) {
+                    line.replace(pos, storagePath.length(), resolvedStorage);
+                }
+                continue;
+            }
+
+            if (storagePath.find("://") != std::string::npos) {
+                // Non-icebug-disk URI — do not modify.
                 continue;
             }
 

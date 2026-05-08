@@ -126,7 +126,6 @@ void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
         return;
     }
 
-
     auto& nodeScanState = scanState.cast<NodeTableScanState>();
     if (currentCommittedGroupIdx < numCommittedNodeGroups) {
         nodeScanState.nodeGroupIdx = currentCommittedGroupIdx++;

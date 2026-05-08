@@ -4,12 +4,14 @@
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/assert.h"
+#include "common/constants.h"
 #include "common/data_chunk/data_chunk.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/types/internal_id_util.h"
 #include "processor/operator/persistent/reader/parquet/parquet_reader.h"
 #include "storage/storage_manager.h"
+#include "storage/table/ice_disk_utils.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -21,26 +23,21 @@ namespace storage {
 
 void IceDiskRelTableScanState::setToTable(const Transaction* transaction, Table* table_,
     std::vector<common::column_id_t> columnIDs_,
-    std::vector<ColumnPredicateSet> columnPredicateSets_,
-    common::RelDataDirection direction_) {
+    std::vector<ColumnPredicateSet> columnPredicateSets_, common::RelDataDirection direction_) {
     TableScanState::setToTable(transaction, table_, std::move(columnIDs_),
         std::move(columnPredicateSets_));
     direction = direction_;
 }
 
-IceDiskRelTable::IceDiskRelTable(RelGroupCatalogEntry* relGroupEntry, common::table_id_t fromTableID,
-    common::table_id_t toTableID, const StorageManager* storageManager,
-    MemoryManager* memoryManager)
+IceDiskRelTable::IceDiskRelTable(RelGroupCatalogEntry* relGroupEntry,
+    common::table_id_t fromTableID, common::table_id_t toTableID,
+    const StorageManager* storageManager, MemoryManager* memoryManager)
     : RelTable{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
       relGroupCatalogEntry{relGroupEntry} {
-    if (relGroupEntry->getIndicesPath().empty()) {
-        throw RuntimeException("Indices file path is empty for icebug-disk-backed rel table");
-    }
-    if (relGroupEntry->getIndptrPath().empty()) {
-        throw RuntimeException("Indptr file path is empty for icebug-disk-backed rel table");
-    }
-    indicesFilePath = relGroupEntry->getIndicesPath();
-    indptrFilePath = relGroupEntry->getIndptrPath();
+    const auto base = IceDiskUtils::getBasePath(relGroupEntry->getStorage());
+    auto paths = IceDiskUtils::constructCSRPaths(base, relGroupEntry->getName(), ".parquet");
+    indicesFilePath = paths.indices;
+    indptrFilePath = paths.indptr;
 }
 
 void IceDiskRelTable::initializeScanCoordination(Transaction* transaction) {
@@ -92,15 +89,15 @@ bool IceDiskRelTable::scanInternal(Transaction* transaction, TableScanState& sca
                 iceState.activeEdgeEnd = 0;
                 continue;
             }
-            iceState.activeEdgePos    = range->start;
-            iceState.activeEdgeEnd    = range->end;
-            iceState.activeSelPos     = selPos;
+            iceState.activeEdgePos = range->start;
+            iceState.activeEdgeEnd = range->end;
+            iceState.activeSelPos = selPos;
             iceState.activeNodeOffset = nodeOffset;
         }
 
-        const auto [count, nextEdgePos] = collectNodeEdges(state, iceState,
-            {iceState.activeEdgePos, iceState.activeEdgeEnd},
-            iceState.activeNodeOffset, isFwd, nbrTableID, vfs);
+        const auto [count, nextEdgePos] =
+            collectNodeEdges(state, iceState, {iceState.activeEdgePos, iceState.activeEdgeEnd},
+                iceState.activeNodeOffset, isFwd, nbrTableID, vfs);
         iceState.activeEdgePos = nextEdgePos;
 
         if (count == 0) {
@@ -133,22 +130,23 @@ void IceDiskRelTable::initIndicesReaderIfNeeded(IceDiskRelTableScanState& iceSta
     iceState.scanBatch = std::make_unique<DataChunk>(numCols);
     for (uint32_t col = 0; col < numCols; ++col) {
         iceState.scanBatch->insert(col,
-            std::make_shared<ValueVector>(iceState.indicesReader->getColumnType(col).copy(), memMgr));
+            std::make_shared<ValueVector>(iceState.indicesReader->getColumnType(col).copy(),
+                memMgr));
     }
 }
 
-std::optional<IceDiskRelTable::EdgeRange> IceDiskRelTable::getEdgeRange(
-    offset_t nodeOffset, bool isFwd) const {
+std::optional<IceDiskRelTable::EdgeRange> IceDiskRelTable::getEdgeRange(offset_t nodeOffset,
+    bool isFwd) const {
     uint64_t start, end;
     if (isFwd) {
         if (nodeOffset + 1 >= indptrData.size()) {
             return std::nullopt;
         }
         start = indptrData[nodeOffset];
-        end   = indptrData[nodeOffset + 1];
+        end = indptrData[nodeOffset + 1];
     } else {
         start = 0;
-        end   = indicesRGStarts.empty() ? 0 : indicesRGStarts.back();
+        end = indicesRGStarts.empty() ? 0 : indicesRGStarts.back();
     }
     if (start >= end) {
         return std::nullopt;
@@ -185,12 +183,13 @@ IceDiskRelTable::EdgeScanProgress IceDiskRelTable::collectNodeEdges(RelTableScan
     bool done = false;
 
     while (!done) {
-        if (!iceState.indicesReader->scanInternal(*iceState.indicesScanState, *iceState.scanBatch)) {
+        if (!iceState.indicesReader->scanInternal(*iceState.indicesScanState,
+                *iceState.scanBatch)) {
             break;
         }
-        const auto& batchSel  = iceState.scanBatch->state->getSelVector();
-        const auto  batchSize = batchSel.getSelSize();
-        const auto& batch     = *iceState.scanBatch;
+        const auto& batchSel = iceState.scanBatch->state->getSelVector();
+        const auto batchSize = batchSel.getSelSize();
+        const auto& batch = *iceState.scanBatch;
 
         for (uint64_t i = 0; i < batchSize; ++i) {
             const uint64_t globalRow = batchStart + i;
@@ -202,7 +201,7 @@ IceDiskRelTable::EdgeScanProgress IceDiskRelTable::collectNodeEdges(RelTableScan
                 break;
             }
 
-            const auto physIdx    = batchSel[static_cast<sel_t>(i)];
+            const auto physIdx = batchSel[static_cast<sel_t>(i)];
             const auto destOffset = batch.getValueVector(0).getValue<offset_t>(physIdx);
 
             if (isFwd) {
