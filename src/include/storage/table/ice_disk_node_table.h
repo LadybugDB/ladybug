@@ -22,7 +22,7 @@ struct IceDiskNodeTableScanState : public TableScanState {
     std::size_t currentRowGroupBatchOffset = 0; // offset of current rowGroupBatch
 
 
-    IceDiskNodeTableScanState(common::ValueVector* nodeIDVector,
+    IceDiskNodeTableScanState([[maybe_unused]] MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
         : TableScanState{nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {

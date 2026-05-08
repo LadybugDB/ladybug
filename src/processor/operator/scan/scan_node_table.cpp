@@ -26,6 +26,12 @@ static std::unique_ptr<TableScanState> createNodeTableScanState(NodeTable* table
         return std::make_unique<ArrowNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
             nodeIDVector->state);
     }
+
+    if (dynamic_cast<IceDiskNodeTable*>(table) != nullptr) {
+        return std::make_unique<IceDiskNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
+            nodeIDVector->state);
+    }
+
     return std::make_unique<NodeTableScanState>(nodeIDVector, outVectors, nodeIDVector->state);
 }
 
@@ -154,28 +160,7 @@ void ScanNodeTableInfo::initScanState(TableScanState& scanState,
 
 void ScanNodeTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     ScanTable::initLocalStateInternal(resultSet, context);
-    auto nodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
-
-    // Check if the first table is a ParquetNodeTable or ArrowNodeTable and create appropriate scan
-    // state
-    auto* parquetTable = dynamic_cast<ParquetNodeTable*>(tableInfos[0].table);
-    auto* arrowTable = dynamic_cast<ArrowNodeTable*>(tableInfos[0].table);
-    auto* iceDiskTable = dynamic_cast<IceDiskNodeTable*>(tableInfos[0].table);
-    if (parquetTable) {
-        scanState = std::make_unique<ParquetNodeTableScanState>(
-            *MemoryManager::Get(*context->clientContext), nodeIDVector, outVectors,
-            nodeIDVector->state);
-    } else if (iceDiskTable) {
-        scanState = std::make_unique<IceDiskNodeTableScanState>(
-            nodeIDVector, outVectors, nodeIDVector->state);
-    } else if (arrowTable) {
-        scanState =
-            std::make_unique<ArrowNodeTableScanState>(*MemoryManager::Get(*context->clientContext),
-                nodeIDVector, outVectors, nodeIDVector->state);
-    } else {
-        scanState =
-            std::make_unique<NodeTableScanState>(nodeIDVector, outVectors, nodeIDVector->state);
-    }
+    nodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
 
     currentTableIdx = 0;
     initCurrentTable(context);
