@@ -355,7 +355,20 @@ TEST(CApiValueTestEmptyDB, CreateListDifferentTypes) {
     lbug_value* elements[] = {value1, value2};
     lbug_value* value = nullptr;
     lbug_state state = lbug_value_create_list(2, elements, &value);
-    ASSERT_EQ(state, LbugError);
+    ASSERT_EQ(state, LbugSuccess);
+    lbug_value listElement;
+    char* strResult = nullptr;
+    ASSERT_EQ(lbug_value_get_list_element(value, 0, &listElement), LbugSuccess);
+    ASSERT_EQ(lbug_value_get_string(&listElement, &strResult), LbugSuccess);
+    ASSERT_STREQ(strResult, "123");
+    lbug_destroy_string(strResult);
+    lbug_value_destroy(&listElement);
+    ASSERT_EQ(lbug_value_get_list_element(value, 1, &listElement), LbugSuccess);
+    ASSERT_EQ(lbug_value_get_string(&listElement, &strResult), LbugSuccess);
+    ASSERT_STREQ(strResult, "abcdefg");
+    lbug_destroy_string(strResult);
+    lbug_value_destroy(&listElement);
+    lbug_value_destroy(value);
     lbug_value_destroy(value1);
     lbug_value_destroy(value2);
 }
@@ -364,7 +377,31 @@ TEST(CApiValueTestEmptyDB, CreateListEmpty) {
     lbug_value* elements[] = {nullptr}; // Must be non-empty
     lbug_value* value = nullptr;
     lbug_state state = lbug_value_create_list(0, elements, &value);
-    ASSERT_EQ(state, LbugError);
+    ASSERT_EQ(state, LbugSuccess);
+    ASSERT_FALSE(value->_is_owned_by_cpp);
+    auto cppValue = static_cast<Value*>(value->_value);
+    ASSERT_EQ(cppValue->getDataType().getLogicalTypeID(), LogicalTypeID::LIST);
+    ASSERT_EQ(ListType::getChildType(cppValue->getDataType()).getLogicalTypeID(),
+        LogicalTypeID::ANY);
+    ASSERT_EQ(NestedVal::getChildrenSize(cppValue), 0);
+    lbug_value_destroy(value);
+}
+
+TEST(CApiValueTestEmptyDB, CreateListWithNull) {
+    lbug_value* value1 = lbug_value_create_null();
+    lbug_value* value2 = lbug_value_create_int64(123);
+    lbug_value* elements[] = {value1, value2};
+    lbug_value* value = nullptr;
+    lbug_state state = lbug_value_create_list(2, elements, &value);
+    ASSERT_EQ(state, LbugSuccess);
+    auto cppValue = static_cast<Value*>(value->_value);
+    ASSERT_EQ(ListType::getChildType(cppValue->getDataType()).getLogicalTypeID(),
+        LogicalTypeID::INT64);
+    ASSERT_TRUE(NestedVal::getChildVal(cppValue, 0)->isNull());
+    ASSERT_EQ(NestedVal::getChildVal(cppValue, 1)->getValue<int64_t>(), 123);
+    lbug_value_destroy(value1);
+    lbug_value_destroy(value2);
+    lbug_value_destroy(value);
 }
 
 TEST_F(CApiValueTest, CreateListNested) {
@@ -709,7 +746,45 @@ TEST(CApiValueTestEmptyDB, CreateMapEmpty) {
     lbug_value* values[] = {nullptr}; // Must be non-empty
     lbug_value* map = nullptr;
     lbug_state state = lbug_value_create_map(0, keys, values, &map);
-    ASSERT_EQ(state, LbugError);
+    ASSERT_EQ(state, LbugSuccess);
+    ASSERT_FALSE(map->_is_owned_by_cpp);
+    auto cppValue = static_cast<Value*>(map->_value);
+    ASSERT_EQ(cppValue->getDataType().getLogicalTypeID(), LogicalTypeID::MAP);
+    ASSERT_EQ(MapType::getKeyType(cppValue->getDataType()).getLogicalTypeID(), LogicalTypeID::ANY);
+    ASSERT_EQ(MapType::getValueType(cppValue->getDataType()).getLogicalTypeID(),
+        LogicalTypeID::ANY);
+    ASSERT_EQ(NestedVal::getChildrenSize(cppValue), 0);
+    lbug_value_destroy(map);
+}
+
+TEST(CApiValueTestEmptyDB, CreateMapWithNull) {
+    lbug_value* key1 = lbug_value_create_null();
+    lbug_value* key2 = lbug_value_create_int64(2);
+    lbug_value* value1 = lbug_value_create_string((char*)"one");
+    lbug_value* value2 = lbug_value_create_null();
+    lbug_value* keys[] = {key1, key2};
+    lbug_value* values[] = {value1, value2};
+    lbug_value* map = nullptr;
+    lbug_state state = lbug_value_create_map(2, keys, values, &map);
+    ASSERT_EQ(state, LbugSuccess);
+    auto cppValue = static_cast<Value*>(map->_value);
+    ASSERT_EQ(MapType::getKeyType(cppValue->getDataType()).getLogicalTypeID(),
+        LogicalTypeID::INT64);
+    ASSERT_EQ(MapType::getValueType(cppValue->getDataType()).getLogicalTypeID(),
+        LogicalTypeID::STRING);
+    lbug_value mapKey;
+    lbug_value mapValue;
+    ASSERT_EQ(lbug_value_get_map_key(map, 0, &mapKey), LbugSuccess);
+    ASSERT_EQ(lbug_value_get_map_value(map, 1, &mapValue), LbugSuccess);
+    ASSERT_TRUE(lbug_value_is_null(&mapKey));
+    ASSERT_TRUE(lbug_value_is_null(&mapValue));
+    lbug_value_destroy(&mapKey);
+    lbug_value_destroy(&mapValue);
+    lbug_value_destroy(key1);
+    lbug_value_destroy(key2);
+    lbug_value_destroy(value1);
+    lbug_value_destroy(value2);
+    lbug_value_destroy(map);
 }
 
 TEST(CApiValueTestEmptyDB, Clone) {

@@ -32,6 +32,7 @@ void lbug_connection_destroy(lbug_connection* connection) {
     }
     if (connection->_connection != nullptr) {
         delete static_cast<Connection*>(connection->_connection);
+        connection->_connection = nullptr;
     }
 }
 

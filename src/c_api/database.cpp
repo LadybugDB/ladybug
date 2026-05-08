@@ -33,6 +33,7 @@ void lbug_database_destroy(lbug_database* database) {
     }
     if (database->_database != nullptr) {
         delete static_cast<Database*>(database->_database);
+        database->_database = nullptr;
     }
 }
 

@@ -21,10 +21,12 @@ void lbug_prepared_statement_destroy(lbug_prepared_statement* prepared_statement
     }
     if (prepared_statement->_prepared_statement != nullptr) {
         delete static_cast<PreparedStatement*>(prepared_statement->_prepared_statement);
+        prepared_statement->_prepared_statement = nullptr;
     }
     if (prepared_statement->_bound_values != nullptr) {
         delete static_cast<std::unordered_map<std::string, std::unique_ptr<Value>>*>(
             prepared_statement->_bound_values);
+        prepared_statement->_bound_values = nullptr;
     }
 }
 

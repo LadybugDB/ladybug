@@ -41,6 +41,7 @@ void lbug_data_type_destroy(lbug_logical_type* data_type) {
     }
     if (data_type->_data_type != nullptr) {
         delete static_cast<LogicalType*>(data_type->_data_type);
+        data_type->_data_type = nullptr;
     }
 }
 

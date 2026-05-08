@@ -12,6 +12,118 @@
 
 using namespace lbug::common;
 
+static bool isEmptyNestedWithAny(const Value& value) {
+    if (!value.getDataType().containsAny()) {
+        return false;
+    }
+    switch (value.getDataType().getPhysicalType()) {
+    case PhysicalTypeID::LIST:
+    case PhysicalTypeID::ARRAY:
+    case PhysicalTypeID::STRUCT:
+        return NestedVal::getChildrenSize(const_cast<Value*>(&value)) == 0;
+    default:
+        return false;
+    }
+}
+
+static bool tryGetMaxParameterType(const LogicalType& left, const LogicalType& right,
+    LogicalType& result) {
+    if (left.getLogicalTypeID() == LogicalTypeID::STRING ||
+        right.getLogicalTypeID() == LogicalTypeID::STRING) {
+        result = LogicalType::STRING();
+        return true;
+    }
+    return LogicalTypeUtils::tryGetMaxLogicalType(left, right, result);
+}
+
+static bool canCopyValueForNested(const Value& value, const LogicalType& targetType) {
+    if (value.getDataType() == targetType) {
+        return true;
+    }
+    if (value.isNull() && value.getDataType().getLogicalTypeID() == LogicalTypeID::ANY) {
+        return true;
+    }
+    if (isEmptyNestedWithAny(value)) {
+        return true;
+    }
+    if (targetType.getLogicalTypeID() == LogicalTypeID::STRING ||
+        targetType.getLogicalTypeID() == LogicalTypeID::DOUBLE ||
+        targetType.getLogicalTypeID() == LogicalTypeID::FLOAT) {
+        return true;
+    }
+    return value.getDataType().getLogicalTypeID() == targetType.getLogicalTypeID() &&
+           value.getDataType().containsAny();
+}
+
+static std::string incompatibleParameterTypeMessage(const LogicalType& left,
+    const LogicalType& right) {
+    return std::format("Runtime exception: Cannot convert Python object to Lbug value : {}  is "
+                       "incompatible with {}",
+        left.toString(), right.toString());
+}
+
+static lbug_value* createCAPIValue(std::unique_ptr<Value> value) {
+    auto* c_value = (lbug_value*)calloc(1, sizeof(lbug_value));
+    c_value->_value = value.release();
+    c_value->_is_owned_by_cpp = false;
+    return c_value;
+}
+
+static std::unique_ptr<Value> copyValueForNested(const Value& value,
+    const LogicalType& targetType) {
+    if (value.isNull() && value.getDataType().getLogicalTypeID() == LogicalTypeID::ANY) {
+        return std::make_unique<Value>(Value::createNullValue(targetType));
+    }
+    if (value.getDataType() != targetType && isEmptyNestedWithAny(value)) {
+        return std::make_unique<Value>(Value::createDefaultValue(targetType));
+    }
+    if (value.getDataType() != targetType &&
+        targetType.getLogicalTypeID() == LogicalTypeID::STRING) {
+        return std::make_unique<Value>(Value::createValue<std::string>(value.toString()));
+    }
+    if (value.getDataType() != targetType &&
+        targetType.getLogicalTypeID() == LogicalTypeID::DOUBLE) {
+        return std::make_unique<Value>(std::stod(value.toString()));
+    }
+    if (value.getDataType() != targetType &&
+        targetType.getLogicalTypeID() == LogicalTypeID::FLOAT) {
+        return std::make_unique<Value>(static_cast<float>(std::stof(value.toString())));
+    }
+    if (value.getDataType() != targetType &&
+        value.getDataType().getLogicalTypeID() == LogicalTypeID::LIST &&
+        targetType.getLogicalTypeID() == LogicalTypeID::LIST) {
+        std::vector<std::unique_ptr<Value>> children;
+        const auto& childType = ListType::getChildType(targetType);
+        for (auto i = 0u; i < NestedVal::getChildrenSize(const_cast<Value*>(&value)); ++i) {
+            children.push_back(copyValueForNested(
+                *NestedVal::getChildVal(const_cast<Value*>(&value), i), childType));
+        }
+        return std::make_unique<Value>(targetType.copy(), std::move(children));
+    }
+    if (value.getDataType() != targetType &&
+        value.getDataType().getLogicalTypeID() == LogicalTypeID::MAP &&
+        targetType.getLogicalTypeID() == LogicalTypeID::MAP) {
+        std::vector<std::unique_ptr<Value>> children;
+        const auto& keyType = MapType::getKeyType(targetType);
+        const auto& valueType = MapType::getValueType(targetType);
+        for (auto i = 0u; i < NestedVal::getChildrenSize(const_cast<Value*>(&value)); ++i) {
+            auto* mapEntry = NestedVal::getChildVal(const_cast<Value*>(&value), i);
+            std::vector<StructField> fields;
+            fields.emplace_back(InternalKeyword::MAP_KEY, keyType.copy());
+            fields.emplace_back(InternalKeyword::MAP_VALUE, valueType.copy());
+            std::vector<std::unique_ptr<Value>> structValues;
+            structValues.push_back(
+                copyValueForNested(*NestedVal::getChildVal(mapEntry, 0), keyType));
+            structValues.push_back(
+                copyValueForNested(*NestedVal::getChildVal(mapEntry, 1), valueType));
+            children.push_back(std::make_unique<Value>(LogicalType::STRUCT(std::move(fields)),
+                std::move(structValues)));
+        }
+        return std::make_unique<Value>(targetType.copy(), std::move(children));
+    }
+    return value.copy();
+}
+
 lbug_value* lbug_value_create_null() {
     auto* c_value = (lbug_value*)calloc(1, sizeof(lbug_value));
     c_value->_value = new Value(Value::createNullValue());
@@ -200,6 +312,12 @@ lbug_value* lbug_value_create_string(const char* val_) {
     return c_value;
 }
 
+lbug_value* lbug_value_create_json(const char* val_) {
+    auto* c_value = (lbug_value*)calloc(1, sizeof(lbug_value));
+    c_value->_value = new Value(LogicalType::JSON(), val_);
+    return c_value;
+}
+
 lbug_value* lbug_value_create_uuid(const char* val_) {
     auto* c_value = (lbug_value*)calloc(1, sizeof(lbug_value));
     c_value->_value =
@@ -209,10 +327,17 @@ lbug_value* lbug_value_create_uuid(const char* val_) {
 
 lbug_state lbug_value_create_list(uint64_t num_elements, lbug_value** elements,
     lbug_value** out_value) {
-    if (num_elements == 0) {
+    if (out_value == nullptr) {
         return LbugError;
     }
-    auto* c_value = (lbug_value*)calloc(1, sizeof(lbug_value));
+    if (num_elements == 0) {
+        *out_value = createCAPIValue(std::make_unique<Value>(LogicalType::LIST(LogicalType::ANY()),
+            std::vector<std::unique_ptr<Value>>{}));
+        return LbugSuccess;
+    }
+    if (elements == nullptr) {
+        return LbugError;
+    }
     std::vector<std::unique_ptr<Value>> children;
 
     auto first_element = static_cast<Value*>(elements[0]->_value);
@@ -220,23 +345,33 @@ lbug_state lbug_value_create_list(uint64_t num_elements, lbug_value** elements,
 
     for (uint64_t i = 0; i < num_elements; ++i) {
         auto child = static_cast<Value*>(elements[i]->_value);
-        if (child->getDataType() != type) {
-            free(c_value);
+        LogicalType resultType;
+        if (!tryGetMaxParameterType(type, child->getDataType(), resultType)) {
+            setLastCAPIErrorMessage(incompatibleParameterTypeMessage(type, child->getDataType()));
             return LbugError;
         }
-        // Copy the value to the list value to transfer ownership to the C++ side.
-        children.push_back(child->copy());
+        type = std::move(resultType);
     }
-    auto list_type = LogicalType::LIST(first_element->getDataType().copy());
-    c_value->_value = new Value(list_type.copy(), std::move(children));
-    c_value->_is_owned_by_cpp = false;
+    for (uint64_t i = 0; i < num_elements; ++i) {
+        auto child = static_cast<Value*>(elements[i]->_value);
+        if (!canCopyValueForNested(*child, type)) {
+            setLastCAPIErrorMessage(incompatibleParameterTypeMessage(child->getDataType(), type));
+            return LbugError;
+        }
+        children.push_back(copyValueForNested(*child, type));
+    }
+    auto* c_value = createCAPIValue(
+        std::make_unique<Value>(LogicalType::LIST(type.copy()), std::move(children)));
     *out_value = c_value;
     return LbugSuccess;
 }
 
 lbug_state lbug_value_create_struct(uint64_t num_fields, const char** field_names,
     lbug_value** field_values, lbug_value** out_value) {
-    if (num_fields == 0) {
+    if (out_value == nullptr) {
+        return LbugError;
+    }
+    if (num_fields == 0 || field_names == nullptr || field_values == nullptr) {
         return LbugError;
     }
     auto* c_value = (lbug_value*)calloc(1, sizeof(lbug_value));
@@ -258,10 +393,18 @@ lbug_state lbug_value_create_struct(uint64_t num_fields, const char** field_name
 
 lbug_state lbug_value_create_map(uint64_t num_fields, lbug_value** keys, lbug_value** values,
     lbug_value** out_value) {
-    if (num_fields == 0) {
+    if (out_value == nullptr) {
         return LbugError;
     }
-    auto* c_value = (lbug_value*)calloc(1, sizeof(lbug_value));
+    if (num_fields == 0) {
+        *out_value = createCAPIValue(
+            std::make_unique<Value>(LogicalType::MAP(LogicalType::ANY(), LogicalType::ANY()),
+                std::vector<std::unique_ptr<Value>>{}));
+        return LbugSuccess;
+    }
+    if (keys == nullptr || values == nullptr) {
+        return LbugError;
+    }
     std::vector<std::unique_ptr<Value>> children;
 
     auto first_key = static_cast<Value*>(keys[0]->_value);
@@ -272,23 +415,44 @@ lbug_state lbug_value_create_map(uint64_t num_fields, lbug_value** keys, lbug_va
     for (uint64_t i = 0; i < num_fields; ++i) {
         auto key = static_cast<Value*>(keys[i]->_value);
         auto value = static_cast<Value*>(values[i]->_value);
-        if (key->getDataType() != key_type || value->getDataType() != value_type) {
-            free(c_value);
+        LogicalType resultKeyType;
+        LogicalType resultValueType;
+        if (!tryGetMaxParameterType(key_type, key->getDataType(), resultKeyType)) {
+            setLastCAPIErrorMessage(incompatibleParameterTypeMessage(key_type, key->getDataType()));
+            return LbugError;
+        }
+        if (!tryGetMaxParameterType(value_type, value->getDataType(), resultValueType)) {
+            setLastCAPIErrorMessage(
+                incompatibleParameterTypeMessage(value_type, value->getDataType()));
+            return LbugError;
+        }
+        key_type = std::move(resultKeyType);
+        value_type = std::move(resultValueType);
+    }
+    for (uint64_t i = 0; i < num_fields; ++i) {
+        auto key = static_cast<Value*>(keys[i]->_value);
+        auto value = static_cast<Value*>(values[i]->_value);
+        if (!canCopyValueForNested(*key, key_type)) {
+            setLastCAPIErrorMessage(incompatibleParameterTypeMessage(key->getDataType(), key_type));
+            return LbugError;
+        }
+        if (!canCopyValueForNested(*value, value_type)) {
+            setLastCAPIErrorMessage(
+                incompatibleParameterTypeMessage(value->getDataType(), value_type));
             return LbugError;
         }
         std::vector<StructField> struct_fields;
         struct_fields.emplace_back(InternalKeyword::MAP_KEY, key_type.copy());
         struct_fields.emplace_back(InternalKeyword::MAP_VALUE, value_type.copy());
         std::vector<std::unique_ptr<Value>> struct_values;
-        struct_values.push_back(key->copy());
-        struct_values.push_back(value->copy());
+        struct_values.push_back(copyValueForNested(*key, key_type));
+        struct_values.push_back(copyValueForNested(*value, value_type));
         auto struct_type = LogicalType::STRUCT(std::move(struct_fields));
         auto struct_value = new Value(std::move(struct_type), std::move(struct_values));
         children.push_back(std::unique_ptr<Value>(struct_value));
     }
-    auto map_type = LogicalType::MAP(key_type.copy(), value_type.copy());
-    c_value->_value = new Value(map_type.copy(), std::move(children));
-    c_value->_is_owned_by_cpp = false;
+    auto* c_value = createCAPIValue(std::make_unique<Value>(
+        LogicalType::MAP(key_type.copy(), value_type.copy()), std::move(children)));
     *out_value = c_value;
     return LbugSuccess;
 }

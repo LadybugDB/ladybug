@@ -996,6 +996,12 @@ LBUG_C_API lbug_value* lbug_value_create_interval(lbug_interval_t val_);
  */
 LBUG_C_API lbug_value* lbug_value_create_string(const char* val_);
 /**
+ * @brief Creates a value with JSON type and the given JSON string representation.
+ * Caller is responsible for destroying the returned value.
+ * @param val_ The JSON string value to create.
+ */
+LBUG_C_API lbug_value* lbug_value_create_json(const char* val_);
+/**
  * @brief Creates a value with UUID type and the given string representation.
  * Caller is responsible for destroying the returned value.
  * @param val_ The UUID string value to create.
