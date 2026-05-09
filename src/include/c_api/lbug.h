@@ -418,6 +418,31 @@ LBUG_C_API lbug_state lbug_connection_prepare(lbug_connection* connection, const
 LBUG_C_API lbug_state lbug_connection_execute(lbug_connection* connection,
     lbug_prepared_statement* prepared_statement, lbug_query_result* out_query_result);
 /**
+ * @brief Creates an Arrow memory-backed node table from Arrow C Data Interface data.
+ *
+ * Ownership of schema and arrays is transferred to lbug on success or failure. The caller must not
+ * release them after this call.
+ */
+LBUG_C_API lbug_state lbug_connection_create_arrow_table(lbug_connection* connection,
+    const char* table_name, struct ArrowSchema* schema, struct ArrowArray* arrays,
+    uint64_t num_arrays, lbug_query_result* out_query_result);
+/**
+ * @brief Creates an Arrow memory-backed relationship table from Arrow C Data Interface data.
+ *
+ * The Arrow table must contain endpoint columns named "from" and "to". Ownership of schema and
+ * arrays is transferred to lbug on success or failure. The caller must not release them after this
+ * call.
+ */
+LBUG_C_API lbug_state lbug_connection_create_arrow_rel_table(lbug_connection* connection,
+    const char* table_name, const char* src_table_name, const char* dst_table_name,
+    struct ArrowSchema* schema, struct ArrowArray* arrays, uint64_t num_arrays,
+    lbug_query_result* out_query_result);
+/**
+ * @brief Drops an Arrow memory-backed table.
+ */
+LBUG_C_API lbug_state lbug_connection_drop_arrow_table(lbug_connection* connection,
+    const char* table_name, lbug_query_result* out_query_result);
+/**
  * @brief Interrupts the current query execution in the connection.
  * @param connection The connection instance to interrupt.
  */

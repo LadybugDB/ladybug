@@ -1,7 +1,12 @@
+#include <mutex>
+#include <string>
+#include <unordered_map>
+
 #include "c_api/helpers.h"
 #include "c_api/lbug.h"
 #include "common/exception/exception.h"
 #include "main/lbug.h"
+#include "storage/table/arrow_table_support.h"
 
 namespace lbug {
 namespace common {
@@ -11,6 +16,72 @@ class Value;
 
 using namespace lbug::common;
 using namespace lbug::main;
+
+static std::mutex arrowTableIDMutex;
+static std::unordered_map<Connection*, std::unordered_map<std::string, std::string>> arrowTableIDs;
+
+static void rememberArrowTableID(Connection* connection, const char* tableName,
+    std::string arrowId) {
+    std::lock_guard<std::mutex> lock(arrowTableIDMutex);
+    arrowTableIDs[connection][tableName] = std::move(arrowId);
+}
+
+static std::string getRememberedArrowTableID(Connection* connection, const char* tableName) {
+    std::lock_guard<std::mutex> lock(arrowTableIDMutex);
+    if (!arrowTableIDs.contains(connection) || !arrowTableIDs.at(connection).contains(tableName)) {
+        return "";
+    }
+    return arrowTableIDs.at(connection).at(tableName);
+}
+
+static void forgetArrowTableID(Connection* connection, const char* tableName) {
+    std::lock_guard<std::mutex> lock(arrowTableIDMutex);
+    if (!arrowTableIDs.contains(connection)) {
+        return;
+    }
+    arrowTableIDs.at(connection).erase(tableName);
+    if (arrowTableIDs.at(connection).empty()) {
+        arrowTableIDs.erase(connection);
+    }
+}
+
+static void forgetArrowTableIDs(Connection* connection) {
+    std::lock_guard<std::mutex> lock(arrowTableIDMutex);
+    arrowTableIDs.erase(connection);
+}
+
+static ArrowSchemaWrapper takeArrowSchema(ArrowSchema* schema) {
+    ArrowSchemaWrapper wrapper;
+    static_cast<ArrowSchema&>(wrapper) = *schema;
+    schema->release = nullptr;
+    return wrapper;
+}
+
+static std::vector<ArrowArrayWrapper> takeArrowArrays(ArrowArray* arrays, uint64_t numArrays) {
+    std::vector<ArrowArrayWrapper> wrappers;
+    wrappers.reserve(numArrays);
+    for (auto i = 0u; i < numArrays; ++i) {
+        ArrowArrayWrapper wrapper;
+        static_cast<ArrowArray&>(wrapper) = arrays[i];
+        arrays[i].release = nullptr;
+        wrappers.push_back(std::move(wrapper));
+    }
+    return wrappers;
+}
+
+static lbug_state setQueryResult(std::unique_ptr<QueryResult> queryResult,
+    lbug_query_result* outQueryResult) {
+    if (queryResult == nullptr) {
+        return LbugError;
+    }
+    auto queryResultPtr = queryResult.release();
+    outQueryResult->_query_result = queryResultPtr;
+    outQueryResult->_is_owned_by_cpp = false;
+    if (!queryResultPtr->isSuccess()) {
+        return LbugError;
+    }
+    return LbugSuccess;
+}
 
 lbug_state lbug_connection_init(lbug_database* database, lbug_connection* out_connection) {
     if (database == nullptr || database->_database == nullptr) {
@@ -31,7 +102,9 @@ void lbug_connection_destroy(lbug_connection* connection) {
         return;
     }
     if (connection->_connection != nullptr) {
-        delete static_cast<Connection*>(connection->_connection);
+        auto connectionPtr = static_cast<Connection*>(connection->_connection);
+        forgetArrowTableIDs(connectionPtr);
+        delete connectionPtr;
         connection->_connection = nullptr;
     }
 }
@@ -148,6 +221,82 @@ lbug_state lbug_connection_execute(lbug_connection* connection,
         return LbugError;
     }
 }
+
+lbug_state lbug_connection_create_arrow_table(lbug_connection* connection, const char* table_name,
+    ArrowSchema* schema, ArrowArray* arrays, uint64_t num_arrays,
+    lbug_query_result* out_query_result) {
+    if (connection == nullptr || connection->_connection == nullptr || table_name == nullptr ||
+        schema == nullptr || arrays == nullptr || out_query_result == nullptr) {
+        return LbugError;
+    }
+    try {
+        clearLastCAPIErrorMessage();
+        auto result = lbug::ArrowTableSupport::createViewFromArrowTable(
+            *static_cast<Connection*>(connection->_connection), table_name, takeArrowSchema(schema),
+            takeArrowArrays(arrays, num_arrays));
+        auto state = setQueryResult(std::move(result.queryResult), out_query_result);
+        if (state == LbugSuccess) {
+            rememberArrowTableID(static_cast<Connection*>(connection->_connection), table_name,
+                std::move(result.arrowId));
+        }
+        return state;
+    } catch (Exception& e) {
+        setLastCAPIErrorMessage(e.what());
+        return LbugError;
+    }
+}
+
+lbug_state lbug_connection_create_arrow_rel_table(lbug_connection* connection,
+    const char* table_name, const char* src_table_name, const char* dst_table_name,
+    ArrowSchema* schema, ArrowArray* arrays, uint64_t num_arrays,
+    lbug_query_result* out_query_result) {
+    if (connection == nullptr || connection->_connection == nullptr || table_name == nullptr ||
+        src_table_name == nullptr || dst_table_name == nullptr || schema == nullptr ||
+        arrays == nullptr || out_query_result == nullptr) {
+        return LbugError;
+    }
+    try {
+        clearLastCAPIErrorMessage();
+        auto result = lbug::ArrowTableSupport::createRelTableFromArrowTable(
+            *static_cast<Connection*>(connection->_connection), table_name, src_table_name,
+            dst_table_name, takeArrowSchema(schema), takeArrowArrays(arrays, num_arrays));
+        auto state = setQueryResult(std::move(result.queryResult), out_query_result);
+        if (state == LbugSuccess) {
+            rememberArrowTableID(static_cast<Connection*>(connection->_connection), table_name,
+                std::move(result.arrowId));
+        }
+        return state;
+    } catch (Exception& e) {
+        setLastCAPIErrorMessage(e.what());
+        return LbugError;
+    }
+}
+
+lbug_state lbug_connection_drop_arrow_table(lbug_connection* connection, const char* table_name,
+    lbug_query_result* out_query_result) {
+    if (connection == nullptr || connection->_connection == nullptr || table_name == nullptr ||
+        out_query_result == nullptr) {
+        return LbugError;
+    }
+    try {
+        clearLastCAPIErrorMessage();
+        auto connectionPtr = static_cast<Connection*>(connection->_connection);
+        auto arrowId = getRememberedArrowTableID(connectionPtr, table_name);
+        auto result = lbug::ArrowTableSupport::unregisterArrowTable(*connectionPtr, table_name);
+        auto state = setQueryResult(std::move(result), out_query_result);
+        if (state == LbugSuccess) {
+            if (!arrowId.empty()) {
+                lbug::ArrowTableSupport::unregisterArrowData(arrowId);
+            }
+            forgetArrowTableID(connectionPtr, table_name);
+        }
+        return state;
+    } catch (Exception& e) {
+        setLastCAPIErrorMessage(e.what());
+        return LbugError;
+    }
+}
+
 void lbug_connection_interrupt(lbug_connection* connection) {
     static_cast<Connection*>(connection->_connection)->interrupt();
 }
