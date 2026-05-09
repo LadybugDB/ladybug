@@ -75,3 +75,205 @@ Adam|Karissa|40
 ---- 2
 Adam|Karissa
 Adam|Zhang
+
+-LOG CountStarUsers
+-STATEMENT MATCH (u:user) RETURN count(*);
+---- 1
+4
+
+-LOG CountStarEdgesFollows
+-STATEMENT MATCH ()-[:follows]->() RETURN count(*);
+---- 1
+4
+
+-LOG CountStarEdgesLivesIn
+-STATEMENT MATCH ()-[:livesin]->() RETURN count(*);
+---- 1
+4
+
+-LOG AggregateAvgAge
+-STATEMENT MATCH (u:user) RETURN avg(u.age);
+---- 1
+36.250000
+
+-LOG AggregateMinMaxAge
+-STATEMENT MATCH (u:user) RETURN min(u.age), max(u.age);
+---- 1
+25|50
+
+-LOG AggregateSumSince
+-STATEMENT MATCH ()-[f:follows]->() RETURN sum(f.since);
+---- 1
+8083
+
+-LOG AggregateAvgFolloweeAge
+-STATEMENT MATCH (u:user)-[:follows]->(v) RETURN u.name, avg(v.age) ORDER BY u.name;
+---- 3
+Adam|45.000000
+Karissa|50.000000
+Zhang|25.000000
+
+-LOG OutDegreePerUser
+-STATEMENT MATCH (u:user)-[:follows]->(v) RETURN u.name, count(v) ORDER BY u.name;
+---- 3
+Adam|2
+Karissa|1
+Zhang|1
+
+-LOG TwoHopForward
+-STATEMENT MATCH (a:user {id: 100})-[:follows]->(b)-[:follows]->(c) RETURN a.name, b.name, c.name ORDER BY b.name;
+---- 2
+Adam|Karissa|Zhang
+Adam|Zhang|Noura
+
+-LOG TwoHopCrossRel
+-STATEMENT MATCH (a:user {id: 100})-[:follows]->(b)-[:livesin]->(c:city) RETURN b.name, c.name ORDER BY b.name;
+---- 2
+Karissa|Waterloo
+Zhang|Kitchener
+
+-LOG TwoHopCount
+-STATEMENT MATCH (a:user {id: 100})-[:follows]->(b)-[:follows]->(c) RETURN count(c);
+---- 1
+2
+
+-LOG BackwardInNeighbors
+-STATEMENT MATCH (u)<-[:follows]-(v) WHERE u.id = 300 RETURN v.name ORDER BY v.name;
+---- 2
+Adam
+Karissa
+
+-LOG BackwardInDegree
+-STATEMENT MATCH (u)<-[:follows]-(v) WHERE u.id = 300 RETURN count(v);
+---- 1
+2
+
+-LOG OptionalMatchFollows
+-STATEMENT MATCH (u:user) OPTIONAL MATCH (u)-[:follows]->(v:user) RETURN u.name, v.name ORDER BY u.name, v.name;
+---- 5
+Adam|Karissa
+Adam|Zhang
+Karissa|Zhang
+Noura|
+Zhang|Noura
+
+-LOG UndirectedFollows
+-STATEMENT MATCH (a:user)-[:follows]-(b:user) RETURN count(*);
+---- 1
+8
+
+-LOG UndirectedLivesIn
+-STATEMENT MATCH (a:user)-[:livesin]-(c:city) RETURN a.name, c.name ORDER BY a.name;
+---- 4
+Adam|Waterloo
+Karissa|Waterloo
+Noura|Guelph
+Zhang|Kitchener
+
+-LOG FilterRelProperty
+-STATEMENT MATCH (a:user)-[e:follows {since: 2020}]->(b:user) RETURN a.name, b.name ORDER BY b.name;
+---- 2
+Adam|Karissa
+Adam|Zhang
+
+-LOG ReturnDistinctSince
+-STATEMENT MATCH (a:user)-[e:follows]->(b:user) RETURN DISTINCT e.since ORDER BY e.since;
+---- 3
+2020
+2021
+2022
+
+-LOG CountDistinctId
+-STATEMENT MATCH (a:user {id: 100})-[:follows]->(b)-[:follows]->(c) RETURN count(DISTINCT c.id);
+---- 1
+2
+
+-LOG SkipRows
+-STATEMENT MATCH (u:user) RETURN u.name ORDER BY u.age SKIP 2;
+---- 2
+Karissa
+Zhang
+
+-LOG WithPipeline
+-STATEMENT MATCH (u:user) WITH avg(u.age) AS avgAge MATCH (b:user) WHERE b.age > avgAge RETURN b.name ORDER BY b.name;
+---- 2
+Karissa
+Zhang
+
+-LOG UnionAll
+-STATEMENT MATCH (u:user)-[:livesin]->(c:city) WHERE c.name = 'Waterloo' RETURN u.name UNION ALL MATCH (u2:user)-[:livesin]->(c2:city) WHERE c2.name = 'Kitchener' RETURN u2.name;
+---- 3
+Zhang
+Adam
+Karissa
+
+-LOG UnionAllAge
+-STATEMENT MATCH (u:user)-[:follows]->(v:user) WHERE v.name = 'Zhang' RETURN u.age UNION ALL MATCH (u2:user)-[:follows]->(v2:user) WHERE v2.name = 'Karissa' RETURN u2.age;
+---- 3
+30
+40
+30
+
+-LOG UnionDistinct
+-STATEMENT MATCH (u:user)-[:follows]->(v:user) WHERE v.name = 'Zhang' RETURN u.age UNION MATCH (u2:user)-[:follows]->(v2:user) WHERE v2.name = 'Karissa' RETURN u2.age;
+---- 2
+30
+40
+
+-LOG Unwind1
+-STATEMENT UNWIND ['Amy', 'Bob', 'Carol'] AS x RETURN 'name' AS label, x;
+---- 3
+name|Amy
+name|Bob
+name|Carol
+
+-LOG Unwind2
+-STATEMENT UNWIND [['Amy'], ['Bob', 'Carol']] AS x RETURN x;
+---- 2
+[Amy]
+[Bob,Carol]
+
+-LOG WhereOR
+-STATEMENT MATCH (a:user) WHERE a.age > 45 OR starts_with(a.name, 'Kar') RETURN a.name ORDER BY a.name;
+---- 2
+Karissa
+Zhang
+
+-LOG WhereIsNotNull
+-STATEMENT MATCH (a:user) WHERE a.age IS NOT NULL AND starts_with(a.name, 'Kar') RETURN a.name;
+---- 1
+Karissa
+
+-LOG WhereExists
+-STATEMENT MATCH (u:user) WHERE EXISTS { MATCH (u)-[:follows]->(v) } RETURN u.name ORDER BY u.name;
+---- 3
+Adam
+Karissa
+Zhang
+
+-LOG WhereExistsWithFilter
+-STATEMENT MATCH (a:user) WHERE EXISTS { MATCH (a)-[:follows]->(b:user) WHERE b.age > 45 } RETURN a.name ORDER BY a.name;
+---- 2
+Adam
+Karissa
+
+-LOG CyclicTriangle
+-STATEMENT MATCH (a:user)-[:follows]->(b:user)-[:follows]->(c:user), (a)-[:follows]->(c) RETURN a.name, b.name, c.name;
+---- 1
+Adam|Karissa|Zhang
+
+-LOG VarLenOneToTwo
+-STATEMENT MATCH (a:user)-[:follows*1..2]->(b:user) RETURN a.name, b.name ORDER BY a.name, b.name;
+---- 7
+Adam|Karissa
+Adam|Noura
+Adam|Zhang
+Adam|Zhang
+Karissa|Noura
+Karissa|Zhang
+Zhang|Noura
+
+-LOG VarLenThreeHop
+-STATEMENT MATCH (a:user)-[:follows*3..3]->(b:user) RETURN a.name, b.name ORDER BY a.name, b.name;
+---- 1
+Adam|Noura

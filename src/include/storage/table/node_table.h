@@ -154,6 +154,11 @@ public:
     virtual bool lookupPK(const transaction::Transaction* transaction,
         common::ValueVector* keyVector, uint64_t vectorPos, common::offset_t& result) const;
 
+    // Returns true if this table supports efficient PK index-based lookup (PRIMARY_KEY_SCAN).
+    // Tables without a hash index (e.g. IceDisk) must return false so the optimizer falls back
+    // to a FILTER+SCAN plan instead of generating PRIMARY_KEY_SCAN nodes.
+    virtual bool supportsPrimaryKeyScan() const { return tryGetPKIndex() != nullptr; }
+
     void addIndex(std::unique_ptr<Index> index);
     void dropIndex(const std::string& name);
 

@@ -44,6 +44,7 @@ public:
 
     virtual ~ColumnarNodeTableBase() = default;
 
+    bool supportsPrimaryKeyScan() const override { return false; }
     // Columnar tables don't support modifications
     void insert([[maybe_unused]] transaction::Transaction* transaction,
         [[maybe_unused]] TableInsertState& insertState) final {

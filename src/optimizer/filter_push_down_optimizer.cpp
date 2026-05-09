@@ -4,12 +4,15 @@
 #include "binder/expression/property_expression.h"
 #include "binder/expression/scalar_function_expression.h"
 #include "main/client_context.h"
+#include "main/database.h"
 #include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/logical_empty_result.h"
 #include "planner/operator/logical_filter.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_table_function_call.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
+#include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -194,13 +197,22 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableRepl
     }
     if (primaryKeyEqualityComparison != nullptr) { // Try rewrite index scan
         auto rhs = primaryKeyEqualityComparison->getChild(1);
+        bool canDoPKScan = false;
         if (isConstantExpression(rhs)) {
-            auto extraInfo = std::make_unique<PrimaryKeyScanInfo>(rhs);
+            auto* nodeTable = context->getDatabase()
+                                  ->getStorageManager()
+                                  ->getTable(tableIDs[0])
+                                  ->ptrCast<NodeTable>();
+            canDoPKScan = nodeTable->supportsPrimaryKeyScan();
+        }
+        if (canDoPKScan) {
+            auto extraInfo = std::make_unique<PrimaryKeyScanInfo>(
+                primaryKeyEqualityComparison->getChild(1));
             scan.setScanType(LogicalScanNodeTableType::PRIMARY_KEY_SCAN);
             scan.setExtraInfo(std::move(extraInfo));
             scan.computeFlatSchema();
         } else {
-            // Cannot rewrite and add predicate back.
+            // Cannot rewrite (no PK hash index or non-constant RHS); add predicate back.
             predicateSet.addPredicate(primaryKeyEqualityComparison);
         }
     }

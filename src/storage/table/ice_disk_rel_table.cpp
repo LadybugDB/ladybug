@@ -157,10 +157,6 @@ std::optional<IceDiskRelTable::EdgeRange> IceDiskRelTable::getEdgeRange(offset_t
 IceDiskRelTable::EdgeScanProgress IceDiskRelTable::collectNodeEdges(RelTableScanState& state,
     IceDiskRelTableScanState& iceState, EdgeRange range, offset_t nodeOffset, bool isFwd,
     table_id_t nbrTableID, VirtualFileSystem* vfs) const {
-    // Reset selSize so the parquet reader's "setup" return (true, no data read) is not
-    // mistaken for a batch of stale data left over from the previous node's scan.
-    iceState.scanBatch->state->getSelVectorUnsafe().setSelSize(0);
-
     // Locate the first row group containing range.start.
     auto it = std::upper_bound(indicesRGStarts.begin(), indicesRGStarts.end(), range.start);
     DASSERT(it != indicesRGStarts.begin());
@@ -183,6 +179,10 @@ IceDiskRelTable::EdgeScanProgress IceDiskRelTable::collectNodeEdges(RelTableScan
     bool done = false;
 
     while (!done) {
+        // Reset selSize before each scanInternal call: on a row-group transition scanInternal
+        // returns true without writing data and without updating selSize, so the stale value
+        // from the previous batch would otherwise be misread as real data.
+        iceState.scanBatch->state->getSelVectorUnsafe().setSelSize(0);
         if (!iceState.indicesReader->scanInternal(*iceState.indicesScanState,
                 *iceState.scanBatch)) {
             break;
@@ -274,7 +274,13 @@ void IceDiskRelTable::loadIndptrData(Transaction* transaction) {
     DataChunk chunk(1);
     chunk.insert(0, std::make_shared<ValueVector>(reader->getColumnType(0).copy()));
 
-    while (reader->scanInternal(scanState, chunk)) {
+    while (true) {
+        // Reset selSize before each call so row-group transition calls (which return true
+        // without updating selSize) are not mistaken for a stale data batch.
+        chunk.state->getSelVectorUnsafe().setSelSize(0);
+        if (!reader->scanInternal(scanState, chunk)) {
+            break;
+        }
         auto& sel = chunk.state->getSelVector();
         for (size_t i = 0; i < sel.getSelSize(); ++i) {
             indptrData.push_back(chunk.getValueVector(0).getValue<std::size_t>(sel[i]));

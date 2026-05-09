@@ -187,81 +187,58 @@ void IceDiskNodeTable::readParquetData(Transaction* transaction, TableScanState&
         throw RuntimeException("Parquet file '" + parquetFilePath + "' has no columns");
     }
 
-    // Create vectors with parquet types
-    // Always create the data chunk to match the exact number of parquet columns
-    // to prevent crashes in the parquet reader when accessing result vectors
-    DataChunk parquetDataChunk(numColumns, scanState.outState);
-
+    // Fresh DataChunk with its own state — do NOT share scanState.outState; we accumulate
+    // rows across batches while the output state is managed by scanInternal() above.
+    DataChunk parquetDataChunk(numColumns);
+    auto* memMgr = MemoryManager::Get(*transaction->getClientContext());
     for (uint32_t i = 0; i < numColumns; ++i) {
-        const auto& parquetColumnType = iceDiskNodeScanState.parquetReader->getColumnType(i);
-        auto columnType = parquetColumnType.copy();
-        auto vector = std::make_shared<ValueVector>(std::move(columnType),
-            MemoryManager::Get(*transaction->getClientContext()), scanState.outState);
-        parquetDataChunk.insert(i, vector);
+        auto columnType = iceDiskNodeScanState.parquetReader->getColumnType(i).copy();
+        parquetDataChunk.insert(i, std::make_shared<ValueVector>(std::move(columnType), memMgr));
     }
 
-    // Read from parquet
-    iceDiskNodeScanState.parquetReader->scan(*iceDiskNodeScanState.parquetScanState,
-        parquetDataChunk);
+    // Pre-compute parquet-column → output-column mapping once.
+    const auto numCols = static_cast<std::size_t>(parquetDataChunk.getNumValueVectors());
+    std::vector<std::size_t> colMap(numCols, INVALID_COLUMN_ID);
+    for (std::size_t pc = 0; pc < numCols; ++pc) {
+        const auto& name = iceDiskNodeScanState.parquetReader->getColumnName(pc);
+        if (!nodeTableCatalogEntry->containsProperty(name)) {
+            continue;
+        }
+        const auto colID = nodeTableCatalogEntry->getColumnID(name);
+        for (std::size_t oc = 0; oc < scanState.columnIDs.size(); ++oc) {
+            if (scanState.columnIDs[oc] == colID) {
+                colMap[pc] = oc;
+                break;
+            }
+        }
+    }
 
-    auto selSize = parquetDataChunk.state->getSelVector().getSelSize();
-    if (selSize > 0) {
-        iceDiskNodeScanState.data.resize(selSize);
-        for (std::size_t row = 0; row < selSize; ++row) {
-            iceDiskNodeScanState.data[row].resize(
-                scanState.outputVectors
-                    .size()); // Use output vector count, not parquet column count
+    // scanInternal() returns true on the initial row-group setup call (batchSize == 0) and on
+    // each data batch; returns false when the row group is exhausted. Loop to read ALL rows.
+    while (iceDiskNodeScanState.parquetReader->scanInternal(
+        *iceDiskNodeScanState.parquetScanState, parquetDataChunk)) {
+        const auto batchSize = parquetDataChunk.state->getSelVector().getSelSize();
+        if (batchSize == 0) {
+            continue; // row-group setup call — no data yet
+        }
 
-            // Map parquet columns to correct output vector positions by name
-            // Defensive check: ensure we don't access more columns than available in the chunk
-            auto maxParquetCol = std::min(static_cast<std::size_t>(numColumns),
-                static_cast<std::size_t>(parquetDataChunk.getNumValueVectors()));
+        const auto base = iceDiskNodeScanState.data.size();
+        iceDiskNodeScanState.data.resize(base + batchSize);
 
-            for (std::size_t parquetCol = 0; parquetCol < maxParquetCol; ++parquetCol) {
-                // Defensive check: ensure the column index is valid for the data chunk
-                if (parquetCol >= parquetDataChunk.getNumValueVectors()) {
+        for (std::size_t row = 0; row < batchSize; ++row) {
+            iceDiskNodeScanState.data[base + row].resize(scanState.outputVectors.size());
+            for (std::size_t pc = 0; pc < numCols; ++pc) {
+                const auto oc = colMap[pc];
+                if (oc == INVALID_COLUMN_ID || oc >= iceDiskNodeScanState.data[base + row].size()) {
                     continue;
                 }
-
-                auto& srcVector = parquetDataChunk.getValueVectorMutable(parquetCol);
-
-                // Get parquet column name and find its corresponding column ID
-                std::string parquetColumnName =
-                    iceDiskNodeScanState.parquetReader->getColumnName(parquetCol);
-
-                // Check if the column exists first before calling getColumnID
-                if (!nodeTableCatalogEntry->containsProperty(parquetColumnName)) {
-                    // Column doesn't exist in table schema, skip it
-                    continue;
-                }
-
-                // Find the column ID for this property name
-                column_id_t parquetColumnID = nodeTableCatalogEntry->getColumnID(parquetColumnName);
-
-                // Find which output vector position corresponds to this column ID
-                std::size_t outputCol = INVALID_COLUMN_ID;
-                for (std::size_t outCol = 0; outCol < scanState.columnIDs.size(); ++outCol) {
-                    if (scanState.columnIDs[outCol] == parquetColumnID) {
-                        outputCol = outCol;
-                        break;
-                    }
-                }
-
-                // Only copy data if we found a matching output position
-                if (outputCol != INVALID_COLUMN_ID &&
-                    outputCol < iceDiskNodeScanState.data[row].size()) {
-                    // Defensive check: ensure the row index is valid for the source vector
-                    if (row >= srcVector.state->getSelVector().getSelSize()) {
-                        continue;
-                    }
-
-                    if (srcVector.isNull(row)) {
-                        iceDiskNodeScanState.data[row][outputCol] =
-                            std::make_unique<Value>(Value::createNullValue());
-                    } else {
-                        iceDiskNodeScanState.data[row][outputCol] =
-                            std::make_unique<Value>(*srcVector.getAsValue(row));
-                    }
+                auto& srcVector = parquetDataChunk.getValueVectorMutable(pc);
+                if (srcVector.isNull(row)) {
+                    iceDiskNodeScanState.data[base + row][oc] =
+                        std::make_unique<Value>(Value::createNullValue());
+                } else {
+                    iceDiskNodeScanState.data[base + row][oc] =
+                        std::make_unique<Value>(*srcVector.getAsValue(row));
                 }
             }
         }

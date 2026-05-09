@@ -10,6 +10,7 @@
 #include "storage/table/column.h"
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/columnar_rel_table_base.h"
+#include "storage/table/ice_disk_rel_table.h"
 #include "storage/table/csr_chunked_node_group.h"
 #include "storage/table/csr_node_group.h"
 #include "storage/table/rel_table_data.h"
@@ -39,7 +40,7 @@ bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
     auto* memoryManager = context->clientContext->getDatabase()->getMemoryManager();
 
     for (auto* relTable : relTables) {
-        if (dynamic_cast<ColumnarRelTableBase*>(relTable) != nullptr) {
+        if (dynamic_cast<ColumnarRelTableBase*>(relTable) != nullptr || dynamic_cast<IceDiskRelTable*>(relTable) != nullptr) {
             totalCount += relTable->getNumTotalRows(transaction);
             continue;
         }

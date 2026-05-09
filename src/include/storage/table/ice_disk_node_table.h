@@ -72,6 +72,8 @@ public:
 
     bool scanInternal(transaction::Transaction* transaction, TableScanState& scanState) override;
 
+    bool supportsPrimaryKeyScan() const override { return false; }
+
     void insert(transaction::Transaction*, TableInsertState&) override {
         throw common::RuntimeException("Cannot insert into icebug-disk-backed node table");
     }
