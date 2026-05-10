@@ -35,6 +35,11 @@ Adam|Zhang|2020
 Karissa|Zhang|2021
 Zhang|Noura|2022
 
+-LOG CountRelTableFollows
+-STATEMENT MATCH ()-[:follows]->() RETURN COUNT(*);
+---- 1
+4
+
 -LOG MatchLivesInWithCityPopulation
 -STATEMENT MATCH (u:user)-[l:livesin]->(c:city) RETURN u.name, c.name, c.population ORDER BY c.population DESC;
 ---- 4
@@ -114,18 +119,31 @@ Zhang|Kitchener
 ---- 1
 Adam|Karissa|Zhang
 
--LOG VarLenOneToTwo
--STATEMENT MATCH (a:user)-[:follows*1..2]->(b:user) RETURN a.name, b.name ORDER BY a.name, b.name;
----- 7
-Adam|Karissa
-Adam|Noura
-Adam|Zhang
-Adam|Zhang
-Karissa|Noura
-Karissa|Zhang
-Zhang|Noura
+-LOG SemiMaskerVarLen
+-STATEMENT MATCH (a:user {id: 100})-[:follows*1..2 (r, n | WHERE n.age > 40)]->(b:user) RETURN b.name ORDER BY b.name;
+---- 3
+Karissa
+Zhang
+Noura
 
 -LOG VarLenThreeHop
 -STATEMENT MATCH (a:user)-[:follows*3..3]->(b:user) RETURN a.name, b.name ORDER BY a.name, b.name;
 ---- 1
 Adam|Noura
+
+-LOG FlattenMultiPartMatch
+-STATEMENT MATCH (a:user)-[:follows]->(b:user) WITH a, b MATCH (b)-[:livesin]->(c:city) RETURN a.name, b.name, c.name ORDER BY a.name, b.name;
+---- 4
+Adam|Karissa|Waterloo
+Adam|Zhang|Kitchener
+Karissa|Zhang|Kitchener
+Zhang|Noura|Guelph
+
+-LOG HashJoinSharedFollowee
+-STATEMENT MATCH (a:user)-[:follows]->(b:user), (c:user)-[:follows]->(b) WHERE a.id < c.id RETURN a.name, b.name, c.name;
+---- 1
+Adam|Zhang|Karissa
+
+-LOG ProfileQuery
+-STATEMENT PROFILE MATCH (u:user)-[:follows]->(v:user) RETURN u.name, v.name;
+---- ok
