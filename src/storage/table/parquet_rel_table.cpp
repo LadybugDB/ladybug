@@ -101,7 +101,12 @@ void ParquetRelTable::initScanState(Transaction* transaction, TableScanState& sc
             relScanState.nodeIDVector->state->getSelVector().getSelSize());
     }
 
-    parquetRelScanState.currBoundNodeIdx = 0;
+    // Initialize row group ranges for morsel-driven parallelism
+    // For now, assign all row groups to this scan state (will be partitioned by the scan operator)
+    parquetRelScanState.currentRowGroup = 0;
+    parquetRelScanState.endRowGroup = parquetRelScanState.indicesReader ?
+                                          parquetRelScanState.indicesReader->getNumRowGroups() :
+                                          0;
 }
 
 void ParquetRelTable::initializeParquetReaders(Transaction* transaction) const {
@@ -199,54 +204,35 @@ bool ParquetRelTable::scanInternal(Transaction* transaction, TableScanState& sca
 
 bool ParquetRelTable::scanInternalByRowGroups(Transaction* transaction,
     ParquetRelTableScanState& parquetRelScanState) {
-    auto& relScanState = static_cast<RelTableScanState&>(parquetRelScanState);
-    const auto numBoundNodes = parquetRelScanState.cachedBoundNodeSelVector.getSelSize();
-    const bool isFwd = parquetRelScanState.direction != RelDataDirection::BWD;
+    // True morsel-driven parallelism: process assigned row groups and collect relationships for
+    // bound nodes
 
-    auto numRowGroups = parquetRelScanState.indicesReader ?
-                            parquetRelScanState.indicesReader->getNumRowGroups() :
-                            0;
-    // Build list of all row groups to scan once
-    std::vector<uint64_t> allRowGroups;
-    for (uint64_t rg = 0; rg < numRowGroups; ++rg) {
-        allRowGroups.push_back(rg);
-    }
-    if (allRowGroups.empty()) {
+    // Check if we have any row groups left to process
+    if (parquetRelScanState.currentRowGroup >= parquetRelScanState.endRowGroup) {
+        // No more row groups to process
         parquetRelScanState.outState->getSelVectorUnsafe().setToFiltered(0);
         return false;
     }
 
-    // Iterate sources one at a time; factorized execution requires FLAT source per scan() call.
-    while (relScanState.currBoundNodeIdx < numBoundNodes) {
-        const sel_t selPos =
-            parquetRelScanState.cachedBoundNodeSelVector[relScanState.currBoundNodeIdx];
-        relScanState.currBoundNodeIdx++;
+    // Process the current row group
+    std::vector<uint64_t> rowGroupsToProcess = {parquetRelScanState.currentRowGroup};
 
-        const auto sourceNodeID = parquetRelScanState.nodeIDVector->getValue<nodeID_t>(selPos);
-        const offset_t boundOffset = sourceNodeID.offset;
-
-        // For FWD, skip sources with no outgoing edges using the preloaded CSR indptr.
-        if (isFwd && !indptrData.empty()) {
-            if (boundOffset + 1 >= indptrData.size() ||
-                indptrData[boundOffset] >= indptrData[boundOffset + 1]) {
-                continue;
-            }
-        }
-
-        std::unordered_set<offset_t> boundNodeOffsets = {boundOffset};
-        bool hasData = scanRowGroupForBoundNodes(transaction, parquetRelScanState, allRowGroups,
-            boundNodeOffsets);
-
-        if (hasData) {
-            // Make the source node ID flat so downstream operators (IntersectBuild, etc.)
-            // see exactly one source key per scan() call.
-            relScanState.setNodeIDVectorToFlat(selPos);
-            return true;
-        }
+    // Create a set of bound node IDs for fast lookup
+    std::unordered_map<common::offset_t, common::sel_t> boundNodeOffsets;
+    for (size_t i = 0; i < parquetRelScanState.cachedBoundNodeSelVector.getSelSize(); ++i) {
+        common::sel_t boundNodeIdx = parquetRelScanState.cachedBoundNodeSelVector[i];
+        const auto boundNodeID = parquetRelScanState.nodeIDVector->getValue<nodeID_t>(boundNodeIdx);
+        boundNodeOffsets.insert({boundNodeID.offset, boundNodeIdx});
     }
 
-    parquetRelScanState.outState->getSelVectorUnsafe().setToFiltered(0);
-    return false;
+    // Scan the current row group and collect relationships for bound nodes
+    bool hasData = scanRowGroupForBoundNodes(transaction, parquetRelScanState, rowGroupsToProcess,
+        boundNodeOffsets);
+
+    // Move to next row group for next call
+    parquetRelScanState.currentRowGroup++;
+
+    return hasData;
 }
 
 common::offset_t ParquetRelTable::findSourceNodeForRow(common::offset_t globalRowIdx) const {
@@ -256,7 +242,7 @@ common::offset_t ParquetRelTable::findSourceNodeForRow(common::offset_t globalRo
 
 bool ParquetRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
     ParquetRelTableScanState& parquetRelScanState, const std::vector<uint64_t>& rowGroupsToProcess,
-    const std::unordered_set<common::offset_t>& boundNodeOffsets) {
+    const std::unordered_map<common::offset_t, common::sel_t>& boundNodeOffsets) {
 
     // Initialize readers if needed
     initializeParquetReaders(transaction);
@@ -285,6 +271,9 @@ bool ParquetRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
     uint64_t totalRowsCollected = 0;
     const uint64_t maxRowsPerCall = DEFAULT_VECTOR_CAPACITY;
     uint64_t currentGlobalRowIdx = 0;
+    auto activeBoundSelPos = INVALID_SEL;
+    auto activeBoundOffset = INVALID_OFFSET;
+    auto hasActiveBound = false;
 
     // Calculate the starting global row index for the first row group
     if (!rowGroupsToProcess.empty()) {
@@ -313,6 +302,14 @@ bool ParquetRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
             const auto boundOffset = isFwd ? sourceNodeOffset : dstOffset;
             if (boundNodeOffsets.find(boundOffset) == boundNodeOffsets.end()) {
                 continue; // Not a bound node, skip
+            }
+
+            if (!hasActiveBound) {
+                hasActiveBound = true;
+                activeBoundOffset = boundOffset;
+                activeBoundSelPos = boundNodeOffsets.at(boundOffset);
+            } else if (boundOffset != activeBoundOffset) {
+                break;
             }
 
             // This row belongs to a bound node, collect the relationship
@@ -346,6 +343,7 @@ bool ParquetRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
         for (uint64_t i = 0; i < totalRowsCollected; ++i) {
             selVector[i] = i;
         }
+        parquetRelScanState.setNodeIDVectorToFlat(activeBoundSelPos);
 
         return true;
     } else {

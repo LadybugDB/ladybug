@@ -13,6 +13,10 @@ namespace storage {
 struct ParquetRelTableScanState final : RelTableScanState {
     std::unique_ptr<processor::ParquetReaderScanState> parquetScanState;
 
+    // Row group range for morsel-driven parallelism
+    uint64_t currentRowGroup = 0;
+    uint64_t endRowGroup = 0;
+
     // Per-scan-state readers for thread safety
     std::unique_ptr<processor::ParquetReader> indicesReader;
     std::unique_ptr<processor::ParquetReader> indptrReader;
@@ -63,7 +67,7 @@ private:
     bool scanRowGroupForBoundNodes(transaction::Transaction* transaction,
         ParquetRelTableScanState& parquetRelScanState,
         const std::vector<uint64_t>& rowGroupsToProcess,
-        const std::unordered_set<common::offset_t>& boundNodeOffsets);
+        const std::unordered_map<common::offset_t, common::sel_t>& boundNodeOffsets);
     common::offset_t findSourceNodeForRow(common::offset_t globalRowIdx) const;
 };
 
