@@ -84,6 +84,9 @@ void Drop::dropTable(const main::ClientContext* context) {
     case CatalogEntryType::NODE_TABLE_ENTRY: {
         for (auto& indexEntry : catalog->getIndexEntries(transaction)) {
             if (indexEntry->getTableID() == entry->getTableID()) {
+                if (StringUtils::caseInsensitiveEquals(indexEntry->getIndexType(), "HASH")) {
+                    continue;
+                }
                 throw BinderException(
                     std::format("Cannot delete node table {} because it is referenced by index {}.",
                         entry->getName(), indexEntry->getIndexName()));

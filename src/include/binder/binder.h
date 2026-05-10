@@ -26,6 +26,7 @@ class ReadingClause;
 class QueryPart;
 class SingleQuery;
 struct CreateTableInfo;
+struct CreateIndexInfo;
 struct BaseScanSource;
 struct JoinHintNode;
 class Statement;
@@ -100,6 +101,7 @@ public:
     BoundCreateTableInfo bindCreateRelTableGroupInfo(const parser::CreateTableInfo* info);
     std::unique_ptr<BoundStatement> bindCreateTable(const parser::Statement& statement);
     std::unique_ptr<BoundStatement> bindCreateTableAs(const parser::Statement& createTable);
+    std::unique_ptr<BoundStatement> bindCreateIndex(const parser::Statement& statement);
     std::unique_ptr<BoundStatement> bindCreateType(const parser::Statement& statement) const;
     std::unique_ptr<BoundStatement> bindCreateSequence(const parser::Statement& statement) const;
 

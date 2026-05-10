@@ -123,6 +123,22 @@ struct RollbackPKDeleter final : IndexScanHelper {
     std::unique_ptr<SemiMask> semiMask;
 };
 
+struct CommittedIndexInserter final : IndexScanHelper {
+    CommittedIndexInserter(NodeTable* table, Index* index, visible_func isVisible)
+        : IndexScanHelper(table, index), nodeIDVector(LogicalType::INTERNAL_ID()),
+          isVisible(std::move(isVisible)) {}
+
+    std::unique_ptr<NodeTableScanState> initScanState(const Transaction* transaction,
+        DataChunk& dataChunk) override;
+
+    bool processScanOutput(main::ClientContext* context, NodeGroupScanResult scanResult,
+        const std::vector<ValueVector*>& scannedVectors) override;
+
+    ValueVector nodeIDVector;
+    visible_func isVisible;
+    std::unique_ptr<Index::InsertState> insertState;
+};
+
 std::unique_ptr<NodeTableScanState> UncommittedIndexInserter::initScanState(
     const Transaction* transaction, DataChunk& dataChunk) {
     auto scanState = IndexScanHelper::initScanState(transaction, dataChunk);
@@ -145,6 +161,32 @@ bool UncommittedIndexInserter::processScanOutput(main::ClientContext* context,
     index->commitInsert(transaction::Transaction::Get(*context), nodeIDVector, {scannedVectors},
         *insertState);
     startNodeOffset += scanResult.numRows;
+    return true;
+}
+
+std::unique_ptr<NodeTableScanState> CommittedIndexInserter::initScanState(
+    const Transaction* transaction, DataChunk& dataChunk) {
+    auto scanState = IndexScanHelper::initScanState(transaction, dataChunk);
+    nodeIDVector.setState(dataChunk.state);
+    scanState->source = TableScanSource::COMMITTED;
+    return scanState;
+}
+
+bool CommittedIndexInserter::processScanOutput(main::ClientContext* context,
+    NodeGroupScanResult scanResult, const std::vector<ValueVector*>& scannedVectors) {
+    if (scanResult == NODE_GROUP_SCAN_EMPTY_RESULT) {
+        return false;
+    }
+    const auto startOffset =
+        StorageUtils::getStartOffsetOfNodeGroup(currentNodeGroupIdx) + scanResult.startRow;
+    for (auto i = 0u; i < scanResult.numRows; i++) {
+        nodeIDVector.setValue(i, nodeID_t{startOffset + i, table->getTableID()});
+    }
+    if (!insertState) {
+        insertState = index->initInsertState(context, isVisible);
+    }
+    index->commitInsert(transaction::Transaction::Get(*context), nodeIDVector, {scannedVectors},
+        *insertState);
     return true;
 }
 
@@ -770,6 +812,16 @@ bool NodeTable::isVisibleNoLock(const Transaction* transaction, offset_t offset)
 PrimaryKeyIndex* NodeTable::tryGetPKIndex() const {
     const auto index = getIndex(PrimaryKeyIndex::DEFAULT_NAME);
     if (!index.has_value()) {
+        for (auto& indexHolder : indexes) {
+            if (!indexHolder.isLoaded()) {
+                continue;
+            }
+            auto* loadedIndex = indexHolder.getIndex();
+            if (loadedIndex->isPrimary() &&
+                loadedIndex->getIndexInfo().indexType == PrimaryKeyIndex::getIndexType().typeName) {
+                return &loadedIndex->cast<PrimaryKeyIndex>();
+            }
+        }
         return nullptr;
     }
     return &index.value()->cast<PrimaryKeyIndex>();
@@ -856,6 +908,7 @@ void NodeTable::scanIndexColumns(main::ClientContext* context, IndexScanHelper& 
         // an exception that is thrown before any chunked groups could be appended to the node group
         if (scanState->nodeGroup->getNumChunkedGroups() > 0) {
             scanState->nodeGroupIdx = nodeGroupToScan;
+            scanHelper.currentNodeGroupIdx = nodeGroupToScan;
             DASSERT(scanState->nodeGroup);
             scanState->nodeGroup->initializeScanState(transaction::Transaction::Get(*context),
                 *scanState);
@@ -874,6 +927,17 @@ void NodeTable::addIndex(std::unique_ptr<Index> index) {
     if (getIndex(index->getName()).has_value()) {
         throw RuntimeException("Index with name " + index->getName() + " already exists.");
     }
+    indexes.push_back(IndexHolder{std::move(index)});
+    setHasChanges();
+}
+
+void NodeTable::buildIndexAndAdd(main::ClientContext* context, std::unique_ptr<Index> index) {
+    if (getIndex(index->getName()).has_value()) {
+        throw RuntimeException("Index with name " + index->getName() + " already exists.");
+    }
+    CommittedIndexInserter indexInserter{this, index.get(),
+        getVisibleFunc(transaction::Transaction::Get(*context))};
+    scanIndexColumns(context, indexInserter, *nodeGroups);
     indexes.push_back(IndexHolder{std::move(index)});
     setHasChanges();
 }

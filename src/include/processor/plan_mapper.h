@@ -98,6 +98,8 @@ public:
         const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapCreateTable(
         const planner::LogicalOperator* logicalOperator);
+    std::unique_ptr<PhysicalOperator> mapCreateIndex(
+        const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapCreateType(
         const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapCrossProduct(

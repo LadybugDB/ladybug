@@ -30,6 +30,9 @@ std::unique_ptr<BoundStatement> Binder::bind(const Statement& statement) {
     case StatementType::CREATE_TABLE: {
         boundStatement = bindCreateTable(statement);
     } break;
+    case StatementType::CREATE_INDEX: {
+        boundStatement = bindCreateIndex(statement);
+    } break;
     case StatementType::CREATE_TYPE: {
         boundStatement = bindCreateType(statement);
     } break;

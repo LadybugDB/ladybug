@@ -48,6 +48,15 @@ struct LBUG_API IndexAuxInfo {
     }
 };
 
+struct LBUG_API BuiltinIndexAuxInfo final : IndexAuxInfo {
+    std::unique_ptr<IndexAuxInfo> copy() override {
+        return std::make_unique<BuiltinIndexAuxInfo>();
+    }
+
+    std::string toCypher(const IndexCatalogEntry& indexEntry,
+        const ToCypherInfo& info) const override;
+};
+
 class LBUG_API IndexCatalogEntry final : public CatalogEntry {
 public:
     static std::string getInternalIndexName(common::table_id_t tableID, std::string indexName) {

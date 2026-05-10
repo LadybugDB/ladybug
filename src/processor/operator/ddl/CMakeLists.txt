@@ -1,6 +1,7 @@
 add_library(lbug_processor_operator_ddl
         OBJECT
         alter.cpp
+        create_index.cpp
         create_table.cpp
         create_type.cpp
         drop.cpp

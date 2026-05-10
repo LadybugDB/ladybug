@@ -24,6 +24,7 @@ enum class StatementType : uint8_t {
     DETACH_DATABASE = 35,
     USE_DATABASE = 36,
     CREATE_SEQUENCE = 37,
+    CREATE_INDEX = 38,
     CREATE_TYPE = 39,
     EXTENSION_CLAUSE = 40,
     CREATE_GRAPH = 41,

@@ -31,6 +31,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "COUNT_REL_TABLE";
     case PhysicalOperatorType::CREATE_MACRO:
         return "CREATE_MACRO";
+    case PhysicalOperatorType::CREATE_INDEX:
+        return "CREATE_INDEX";
     case PhysicalOperatorType::CREATE_SEQUENCE:
         return "CREATE_SEQUENCE";
     case PhysicalOperatorType::CREATE_TABLE:

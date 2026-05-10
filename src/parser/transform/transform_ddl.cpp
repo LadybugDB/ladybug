@@ -1,5 +1,6 @@
 #include "common/exception/parser.h"
 #include "parser/ddl/alter.h"
+#include "parser/ddl/create_index.h"
 #include "parser/ddl/create_sequence.h"
 #include "parser/ddl/create_table.h"
 #include "parser/ddl/create_type.h"
@@ -124,6 +125,44 @@ std::unique_ptr<Statement> Transformer::transformCreateRelGroup(
     } else {
         return std::make_unique<CreateTable>(std::move(createTableInfo));
     }
+}
+
+std::unique_ptr<Statement> Transformer::transformCreateIndex(
+    CypherParser::IC_CreateIndexContext& ctx) {
+    auto indexType = std::string("HASH");
+    if (ctx.oC_SymbolicName()) {
+        indexType = transformSymbolicName(*ctx.oC_SymbolicName());
+    }
+    auto indexName = std::string();
+    if (ctx.oC_SchemaName()) {
+        indexName = transformSchemaName(*ctx.oC_SchemaName());
+    }
+    const auto indexPattern = ctx.iC_IndexPattern();
+    if (indexPattern->iC_IndexRelationshipPattern()) {
+        throw ParserException("CREATE INDEX on relationship patterns is not supported yet.");
+    }
+    const auto nodePattern = indexPattern->iC_IndexNodePattern();
+    auto variableName = std::string();
+    if (nodePattern->oC_Variable()) {
+        variableName = transformVariable(*nodePattern->oC_Variable());
+    }
+    auto tableName = transformLabelName(*nodePattern->oC_LabelName());
+    const auto propertyPattern = ctx.iC_IndexPropertyPattern();
+    auto propertyVariable = transformVariable(*propertyPattern->oC_Variable());
+    if (!variableName.empty() && variableName != propertyVariable) {
+        throw ParserException("Index property pattern variable must match the indexed pattern.");
+    }
+    if (variableName.empty()) {
+        variableName = std::move(propertyVariable);
+    }
+    auto propertyName = transformPropertyKeyName(*propertyPattern->oC_PropertyKeyName());
+    options_t options;
+    if (ctx.iC_Options()) {
+        options = transformOptions(*ctx.iC_Options());
+    }
+    return std::make_unique<CreateIndex>(CreateIndexInfo{std::move(indexType), std::move(indexName),
+        std::move(tableName), std::move(variableName), std::move(propertyName),
+        transformConflictAction(ctx.iC_IfNotExists()), std::move(options)});
 }
 
 std::unique_ptr<Statement> Transformer::transformCreateSequence(

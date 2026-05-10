@@ -24,6 +24,7 @@ enum class PhysicalOperatorType : uint8_t {
     COPY_TO,
     COUNT_REL_TABLE,
     CREATE_GRAPH,
+    CREATE_INDEX,
     CREATE_MACRO,
     CREATE_SEQUENCE,
     CREATE_TABLE,

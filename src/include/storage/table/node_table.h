@@ -92,6 +92,7 @@ struct IndexScanHelper {
 
     NodeTable* table;
     Index* index;
+    common::node_group_idx_t currentNodeGroupIdx = common::INVALID_NODE_GROUP_IDX;
 };
 
 class NodeTableVersionRecordHandler final : public VersionRecordHandler {
@@ -155,6 +156,7 @@ public:
         common::ValueVector* keyVector, uint64_t vectorPos, common::offset_t& result) const;
 
     void addIndex(std::unique_ptr<Index> index);
+    void buildIndexAndAdd(main::ClientContext* context, std::unique_ptr<Index> index);
     void dropIndex(const std::string& name);
 
     common::column_id_t getPKColumnID() const { return pkColumnID; }

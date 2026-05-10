@@ -2,6 +2,7 @@
 
 #include "binder/binder.h"
 #include "binder/ddl/bound_alter.h"
+#include "binder/ddl/bound_create_index.h"
 #include "binder/ddl/bound_create_sequence.h"
 #include "binder/ddl/bound_create_table.h"
 #include "binder/ddl/bound_create_type.h"
@@ -13,6 +14,7 @@
 #include "common/enums/extend_direction_util.h"
 #include "common/exception/binder.h"
 #include "common/exception/message.h"
+#include "common/string_utils.h"
 #include "common/system_config.h"
 #include "common/types/types.h"
 #include "function/cast/functions/cast_from_string_functions.h"
@@ -21,6 +23,7 @@
 #include "main/client_context.h"
 #include "main/database_manager.h"
 #include "parser/ddl/alter.h"
+#include "parser/ddl/create_index.h"
 #include "parser/ddl/create_sequence.h"
 #include "parser/ddl/create_table.h"
 #include "parser/ddl/create_table_info.h"
@@ -28,6 +31,8 @@
 #include "parser/ddl/drop.h"
 #include "parser/expression/parsed_function_expression.h"
 #include "parser/expression/parsed_literal_expression.h"
+#include "storage/index/hash_index.h"
+#include "storage/storage_manager.h"
 #include "transaction/transaction.h"
 #include <format>
 
@@ -37,6 +42,10 @@ using namespace lbug::catalog;
 
 namespace lbug {
 namespace binder {
+
+std::string BoundCreateIndexInfo::toString() const {
+    return std::format("{} INDEX {} ON {}({})", indexType, indexName, tableName, propertyName);
+}
 
 static void validatePropertyName(const std::vector<PropertyDefinition>& definitions) {
     case_insensitve_set_t nameSet;
@@ -338,6 +347,46 @@ std::unique_ptr<BoundStatement> Binder::bindCreateTable(const Statement& stateme
     auto boundCreateInfo = bindCreateTableInfo(createTable.getInfo());
     return std::make_unique<BoundCreateTable>(std::move(boundCreateInfo),
         BoundStatementResult::createSingleStringColumnResult());
+}
+
+std::unique_ptr<BoundStatement> Binder::bindCreateIndex(const Statement& statement) {
+    auto& createIndex = statement.constCast<CreateIndex>();
+    auto& info = createIndex.getInfo();
+    auto indexType = info.indexType;
+    StringUtils::toUpper(indexType);
+    auto indexTypeOptional = storage::StorageManager::Get(*clientContext)->getIndexType(indexType);
+    if (!indexTypeOptional.has_value()) {
+        throw BinderException(std::format("Index type {} does not exist.", info.indexType));
+    }
+    if (indexType != storage::PrimaryKeyIndex::getIndexType().typeName) {
+        throw BinderException(std::format("Only HASH indexes are supported by CREATE INDEX."));
+    }
+    auto catalog = Catalog::Get(*clientContext);
+    auto transaction = transaction::Transaction::Get(*clientContext);
+    validateTableExistence(*clientContext, info.tableName);
+    auto tableEntry = catalog->getTableCatalogEntry(transaction, info.tableName);
+    validateNodeTableType(tableEntry);
+    validateColumnExistence(tableEntry, info.propertyName);
+    auto nodeTableEntry = tableEntry->ptrCast<NodeTableCatalogEntry>();
+    if (!StringUtils::caseInsensitiveEquals(nodeTableEntry->getPrimaryKeyName(),
+            info.propertyName)) {
+        throw BinderException("HASH indexes are currently supported only on node primary keys.");
+    }
+    auto boundOptions = bindParsingOptions(info.options);
+    if (!boundOptions.empty()) {
+        throw BinderException("CREATE HASH INDEX does not support OPTIONS.");
+    }
+    auto& property = tableEntry->getProperty(info.propertyName);
+    std::vector<PropertyDefinition> propertyDefinitions;
+    propertyDefinitions.push_back(property.copy());
+    validatePrimaryKey(property.getName(), propertyDefinitions);
+    auto indexName = info.indexName.empty() ? std::string(storage::PrimaryKeyIndex::DEFAULT_NAME) :
+                                              info.indexName;
+    BoundCreateIndexInfo boundInfo{indexType, std::move(indexName), info.tableName,
+        tableEntry->getTableID(), property.getName(), tableEntry->getPropertyID(property.getName()),
+        tableEntry->getColumnID(property.getName()), property.getType().getPhysicalType(),
+        info.onConflict};
+    return std::make_unique<BoundCreateIndex>(std::move(boundInfo));
 }
 
 std::unique_ptr<BoundStatement> Binder::bindCreateTableAs(const Statement& statement) {

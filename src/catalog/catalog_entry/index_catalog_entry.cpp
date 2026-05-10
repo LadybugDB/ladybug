@@ -1,7 +1,10 @@
 #include "catalog/catalog_entry/index_catalog_entry.h"
 
+#include "catalog/catalog.h"
+#include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "common/serializer/buffer_writer.h"
+#include "transaction/transaction.h"
 #include <format>
 
 namespace lbug {
@@ -15,6 +18,21 @@ void IndexCatalogEntry::setAuxInfo(std::unique_ptr<IndexAuxInfo> auxInfo_) {
     auxInfo = std::move(auxInfo_);
     auxBuffer = nullptr;
     auxBufferSize = 0;
+}
+
+std::string BuiltinIndexAuxInfo::toCypher(const IndexCatalogEntry& indexEntry,
+    const ToCypherInfo& info) const {
+    auto& indexInfo = common::dynamic_cast_checked<const IndexToCypherInfo&>(info);
+    auto catalog = Catalog::Get(*indexInfo.context);
+    auto transaction = transaction::Transaction::Get(*indexInfo.context);
+    auto tableEntry = catalog->getTableCatalogEntry(transaction, indexEntry.getTableID());
+    const auto propertyIDs = indexEntry.getPropertyIDs();
+    if (propertyIDs.empty()) {
+        return "";
+    }
+    auto propertyName = tableEntry->getProperty(propertyIDs[0]).getName();
+    return std::format("CREATE {} INDEX `{}` FOR (n:`{}`) ON (n.`{}`);", indexEntry.getIndexType(),
+        indexEntry.getIndexName(), tableEntry->getName(), propertyName);
 }
 
 bool IndexCatalogEntry::containsPropertyID(common::property_id_t propertyID) const {

@@ -206,6 +206,7 @@ public:
     std::unique_ptr<Statement> transformCreateNodeTable(
         CypherParser::IC_CreateNodeTableContext& ctx);
     std::unique_ptr<Statement> transformCreateRelGroup(CypherParser::IC_CreateRelTableContext& ctx);
+    std::unique_ptr<Statement> transformCreateIndex(CypherParser::IC_CreateIndexContext& ctx);
     std::unique_ptr<Statement> transformCreateSequence(CypherParser::IC_CreateSequenceContext& ctx);
     std::unique_ptr<Statement> transformCreateType(CypherParser::IC_CreateTypeContext& ctx);
     std::unique_ptr<Statement> transformDrop(CypherParser::IC_DropContext& ctx);

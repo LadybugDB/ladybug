@@ -64,6 +64,8 @@ void FSMLeakChecker::checkForLeakedPages(main::Connection* conn) {
             dropQuery = std::format("CALL DROP_FTS_INDEX('{}', '{}');", tableName, indexName);
         } else if (indexType == "HNSW") {
             dropQuery = std::format("CALL DROP_VECTOR_INDEX('{}', '{}');", tableName, indexName);
+        } else if (indexType == "HASH") {
+            continue;
         } else {
             EXPECT_TRUE(false) << "Unknown index type: " << indexType << " (table=" << tableName
                                << ", index=" << indexName << ")" << std::endl;

@@ -11,6 +11,7 @@ oC_Statement
         | iC_CreateRole
         | iC_CreateNodeTable
         | iC_CreateRelTable
+        | iC_CreateIndex
         | iC_CreateSequence
         | iC_CreateType
         | iC_Drop
@@ -114,6 +115,22 @@ iC_CreateRelTable
             ')'
             | ')' SP AS SP oC_Query )
          ( SP WITH SP? '(' SP? iC_Options SP? ')')? ;
+
+iC_CreateIndex
+    : CREATE (SP oC_SymbolicName)? SP INDEX (SP oC_SchemaName)? (SP iC_IfNotExists)? SP FOR SP iC_IndexPattern SP ON SP iC_IndexPropertyPattern (SP OPTIONS SP? '{' SP? iC_Options? SP? '}')? ;
+
+iC_IndexPattern
+    : iC_IndexNodePattern
+        | iC_IndexRelationshipPattern ;
+
+iC_IndexNodePattern
+    : '(' SP? oC_Variable? SP? ':' SP? oC_LabelName SP? ')' ;
+
+iC_IndexRelationshipPattern
+    : '(' SP? ')' SP? oC_RelationshipPattern SP? '(' SP? ')' ;
+
+iC_IndexPropertyPattern
+    : '(' SP? oC_Variable SP? '.' SP? oC_PropertyKeyName SP? ')' ;
 
 iC_FromToConnections
     : iC_FromToConnection ( SP? ',' SP? iC_FromToConnection )* ;

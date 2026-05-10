@@ -9,12 +9,14 @@
 #include "binder/bound_transaction_statement.h"
 #include "binder/bound_use_database.h"
 #include "binder/ddl/bound_alter.h"
+#include "binder/ddl/bound_create_index.h"
 #include "binder/ddl/bound_create_sequence.h"
 #include "binder/ddl/bound_create_table.h"
 #include "binder/ddl/bound_create_type.h"
 #include "binder/ddl/bound_drop.h"
 #include "extension/planner_extension.h"
 #include "planner/operator/ddl/logical_alter.h"
+#include "planner/operator/ddl/logical_create_index.h"
 #include "planner/operator/ddl/logical_create_sequence.h"
 #include "planner/operator/ddl/logical_create_table.h"
 #include "planner/operator/ddl/logical_create_type.h"
@@ -68,6 +70,12 @@ LogicalPlan Planner::planCreateTable(const BoundStatement& statement) {
         return getSimplePlan(std::move(noop));
     }
     auto op = std::make_shared<LogicalCreateTable>(info.copy());
+    return getSimplePlan(std::move(op));
+}
+
+LogicalPlan Planner::planCreateIndex(const BoundStatement& statement) {
+    auto& createIndex = statement.constCast<BoundCreateIndex>();
+    auto op = std::make_shared<LogicalCreateIndex>(createIndex.getInfo().copy());
     return getSimplePlan(std::move(op));
 }
 

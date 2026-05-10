@@ -43,6 +43,7 @@ private:
     virtual void visitCreateSequence(const Statement& /*statement*/) {}
     virtual void visitDrop(const Statement& /*statement*/) {}
     virtual void visitCreateTable(const Statement& /*statement*/) {}
+    virtual void visitCreateIndex(const Statement& /*statement*/) {}
     virtual void visitCreateType(const Statement& /*statement*/) {}
     virtual void visitAlter(const Statement& /*statement*/) {}
     virtual void visitCopyFrom(const Statement& /*statement*/) {}

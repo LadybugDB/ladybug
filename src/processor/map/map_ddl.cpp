@@ -1,10 +1,12 @@
 #include "planner/operator/ddl/logical_alter.h"
+#include "planner/operator/ddl/logical_create_index.h"
 #include "planner/operator/ddl/logical_create_sequence.h"
 #include "planner/operator/ddl/logical_create_table.h"
 #include "planner/operator/ddl/logical_create_type.h"
 #include "planner/operator/ddl/logical_drop.h"
 #include "processor/expression_mapper.h"
 #include "processor/operator/ddl/alter.h"
+#include "processor/operator/ddl/create_index.h"
 #include "processor/operator/ddl/create_sequence.h"
 #include "processor/operator/ddl/create_table.h"
 #include "processor/operator/ddl/create_type.h"
@@ -28,6 +30,16 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCreateTable(
         storage::MemoryManager::Get(*clientContext));
     auto sharedState = std::make_shared<CreateTableSharedState>();
     return std::make_unique<CreateTable>(createTable.getInfo()->copy(), messageTable, sharedState,
+        getOperatorID(), std::move(printInfo));
+}
+
+std::unique_ptr<PhysicalOperator> PlanMapper::mapCreateIndex(
+    const LogicalOperator* logicalOperator) {
+    auto& createIndex = logicalOperator->constCast<LogicalCreateIndex>();
+    auto printInfo = std::make_unique<LogicalCreateIndexPrintInfo>(createIndex.getInfo()->copy());
+    auto messageTable = FactorizedTableUtils::getSingleStringColumnFTable(
+        storage::MemoryManager::Get(*clientContext));
+    return std::make_unique<CreateIndex>(createIndex.getInfo()->copy(), std::move(messageTable),
         getOperatorID(), std::move(printInfo));
 }
 

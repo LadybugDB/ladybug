@@ -26,6 +26,8 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
         return "COUNT_REL_TABLE";
     case LogicalOperatorType::CREATE_MACRO:
         return "CREATE_MACRO";
+    case LogicalOperatorType::CREATE_INDEX:
+        return "CREATE_INDEX";
     case LogicalOperatorType::CREATE_SEQUENCE:
         return "CREATE_SEQUENCE";
     case LogicalOperatorType::CREATE_TABLE:

@@ -17,6 +17,7 @@ private:
     void visitCreateSequence(const Statement& /*statement*/) override { readOnly = false; }
     void visitDrop(const Statement& /*statement*/) override { readOnly = false; }
     void visitCreateTable(const Statement& /*statement*/) override { readOnly = false; }
+    void visitCreateIndex(const Statement& /*statement*/) override { readOnly = false; }
     void visitCreateType(const Statement& /*statement*/) override { readOnly = false; }
     void visitAlter(const Statement& /*statement*/) override { readOnly = false; }
     void visitCopyFrom(const Statement& /*statement*/) override { readOnly = false; }
