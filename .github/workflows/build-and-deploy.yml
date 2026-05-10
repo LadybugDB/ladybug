@@ -142,7 +142,7 @@ jobs:
         working-directory: dist
 
       - name: Clean up existing attestation files
-        run: rm -f dist/*.publish.attestation
+        run: rm -f *.publish.attestation
         working-directory: dist
 
       - name: Upload wheels
@@ -157,6 +157,11 @@ jobs:
         with:
           repository-url: https://test.pypi.org/legacy/
           skip-existing: true
+
+      - name: Clean up TestPyPI attestation files
+        if: ${{ github.event_name != 'workflow_dispatch' && github.event.inputs.isDeploy != 'true' }}
+        run: rm -f *.publish.attestation
+        working-directory: dist
 
       - name: Deploy to PyPI
         if: ${{ github.event_name == 'schedule' || github.event.inputs.isDeploy == 'true' }}
