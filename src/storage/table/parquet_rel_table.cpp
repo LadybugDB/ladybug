@@ -323,13 +323,28 @@ bool ParquetRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
                 parquetRelScanState.outputVectors[0]->setValue(totalRowsCollected, nbrNodeID);
             }
 
-            // If there are additional columns (e.g., weight), copy them to subsequent output
-            // vectors These are property columns and should have matching types
-            for (uint32_t colIdx = 1;
-                 colIdx < numIndicesColumns && colIdx < parquetRelScanState.outputVectors.size();
-                 ++colIdx) {
-                parquetRelScanState.outputVectors[colIdx]->copyFromVectorData(totalRowsCollected,
-                    &indicesChunk.getValueVector(colIdx), i);
+            // Copy edge properties to output vectors.
+            // Catalog col IDs: NBR_ID=0, REL_ID=1 (virtual), user props=2,3,...
+            // Parquet cols:     target=0,              user props=1,2,...
+            // So parquet_col = catalog_col_id - 1 for user properties.
+            for (uint64_t outCol = 1; outCol < parquetRelScanState.outputVectors.size(); ++outCol) {
+                if (outCol >= parquetRelScanState.columnIDs.size()) {
+                    continue;
+                }
+                const auto colID = parquetRelScanState.columnIDs[outCol];
+                if (colID == INVALID_COLUMN_ID || colID == ROW_IDX_COLUMN_ID ||
+                    colID == NBR_ID_COLUMN_ID) {
+                    continue;
+                }
+                if (colID == REL_ID_COLUMN_ID) {
+                    // REL_ID is not stored in parquet; synthesize from the global row index.
+                    parquetRelScanState.outputVectors[outCol]->setValue<internalID_t>(
+                        totalRowsCollected, internalID_t{currentGlobalRowIdx, getTableID()});
+                    continue;
+                }
+
+                parquetRelScanState.outputVectors[outCol]->copyFromVectorData(totalRowsCollected,
+                    &indicesChunk.getValueVector(colID - 1), i);
             }
 
             totalRowsCollected++;
