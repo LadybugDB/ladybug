@@ -29,6 +29,24 @@ TEST_F(CApiPreparedStatementTest, IsSuccess) {
     lbug_prepared_statement_destroy(&preparedStatement);
 }
 
+TEST_F(CApiPreparedStatementTest, IsReadOnly) {
+    lbug_prepared_statement preparedStatement;
+    auto connection = getConnection();
+
+    auto state = lbug_connection_prepare(connection, "RETURN 1", &preparedStatement);
+    ASSERT_EQ(state, LbugSuccess);
+    ASSERT_TRUE(lbug_prepared_statement_is_success(&preparedStatement));
+    ASSERT_TRUE(lbug_prepared_statement_is_read_only(&preparedStatement));
+    lbug_prepared_statement_destroy(&preparedStatement);
+
+    state = lbug_connection_prepare(connection,
+        "CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))", &preparedStatement);
+    ASSERT_EQ(state, LbugSuccess);
+    ASSERT_TRUE(lbug_prepared_statement_is_success(&preparedStatement));
+    ASSERT_FALSE(lbug_prepared_statement_is_read_only(&preparedStatement));
+    lbug_prepared_statement_destroy(&preparedStatement);
+}
+
 TEST_F(CApiPreparedStatementTest, GetErrorMessage) {
     lbug_prepared_statement preparedStatement;
     lbug_state state;

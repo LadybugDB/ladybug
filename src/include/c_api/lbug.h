@@ -467,6 +467,10 @@ LBUG_C_API void lbug_prepared_statement_destroy(lbug_prepared_statement* prepare
  */
 LBUG_C_API bool lbug_prepared_statement_is_success(lbug_prepared_statement* prepared_statement);
 /**
+ * @return true if the prepared statement only performs read operations.
+ */
+LBUG_C_API bool lbug_prepared_statement_is_read_only(lbug_prepared_statement* prepared_statement);
+/**
  * @brief Returns the error message if the prepared statement is not prepared successfully.
  * The caller is responsible for freeing the returned string with `lbug_destroy_string`.
  * @param prepared_statement The prepared statement instance.

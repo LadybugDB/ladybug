@@ -34,6 +34,10 @@ bool lbug_prepared_statement_is_success(lbug_prepared_statement* prepared_statem
     return static_cast<PreparedStatement*>(prepared_statement->_prepared_statement)->isSuccess();
 }
 
+bool lbug_prepared_statement_is_read_only(lbug_prepared_statement* prepared_statement) {
+    return static_cast<PreparedStatement*>(prepared_statement->_prepared_statement)->isReadOnly();
+}
+
 char* lbug_prepared_statement_get_error_message(lbug_prepared_statement* prepared_statement) {
     auto error_message =
         static_cast<PreparedStatement*>(prepared_statement->_prepared_statement)->getErrorMessage();
