@@ -98,7 +98,7 @@ common::node_group_idx_t ParquetNodeTable::getNumBatches(const Transaction* tran
     try {
         auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
         auto tempReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
-        return tempReader->getNumRowsGroups();
+        return tempReader->getNumRowGroups();
     } catch (const std::exception& e) {
         return 1; // Fallback
     }
@@ -313,6 +313,10 @@ bool ParquetNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
 }
 
 row_idx_t ParquetNodeTable::getTotalRowCount(const Transaction* transaction) const {
+    const auto cached = cachedRowCount.load(std::memory_order_relaxed);
+    if (cached != INVALID_ROW_IDX) {
+        return cached;
+    }
     // Create a temporary reader to get metadata
     auto context = transaction->getClientContext();
     if (!context) {
@@ -328,11 +332,23 @@ row_idx_t ParquetNodeTable::getTotalRowCount(const Transaction* transaction) con
             return 0;
         }
         auto metadata = tempReader->getMetadata();
-        return metadata ? metadata->num_rows : 0;
+        const auto count = metadata ? metadata->num_rows : 0;
+        cachedRowCount.store(static_cast<row_idx_t>(count), std::memory_order_relaxed);
+        return count;
     } catch (const std::exception& e) {
         // If parquet file is corrupted or invalid, return 0 instead of crashing
         return 0;
     }
+}
+
+bool ParquetNodeTable::isVisible(const transaction::Transaction* transaction,
+    common::offset_t offset) const {
+    return offset < getTotalRowCount(transaction);
+}
+
+bool ParquetNodeTable::isVisibleNoLock(const transaction::Transaction* transaction,
+    common::offset_t offset) const {
+    return offset < getTotalRowCount(transaction);
 }
 
 } // namespace storage

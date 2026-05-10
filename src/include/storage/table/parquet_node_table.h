@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <mutex>
 #include <vector>
 
@@ -69,6 +70,11 @@ public:
 
     bool scanInternal(transaction::Transaction* transaction, TableScanState& scanState) override;
 
+    bool isVisible(const transaction::Transaction* transaction,
+        common::offset_t offset) const override;
+    bool isVisibleNoLock(const transaction::Transaction* transaction,
+        common::offset_t offset) const override;
+
     const std::string& getParquetFilePath() const { return parquetFilePath; }
 
 protected:
@@ -80,6 +86,7 @@ protected:
 
 private:
     std::string parquetFilePath;
+    mutable std::atomic<common::row_idx_t> cachedRowCount{common::INVALID_ROW_IDX};
 
     void initializeParquetReader(transaction::Transaction* transaction) const;
     void initParquetScanForRowGroup(transaction::Transaction* transaction,

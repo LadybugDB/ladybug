@@ -65,7 +65,7 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
                 common::VirtualFileSystem::resolvePath(context, parquetTable->getParquetFilePath());
             auto tempReader =
                 std::make_unique<processor::ParquetReader>(resolvedPath, columnSkips, context);
-            this->numCommittedNodeGroups = tempReader->getNumRowsGroups();
+            this->numCommittedNodeGroups = tempReader->getNumRowGroups();
         } catch (const std::exception& e) {
             this->numCommittedNodeGroups = 1;
         }

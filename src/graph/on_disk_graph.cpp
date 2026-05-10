@@ -19,6 +19,7 @@
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
 #include "storage/table/node_table.h"
+#include "storage/table/parquet_rel_table.h"
 #include "storage/table/rel_table.h"
 
 using namespace lbug::catalog;
@@ -126,8 +127,16 @@ OnDiskGraphNbrScanState::OnDiskGraphNbrScanState(ClientContext* context,
             auto pos = DataPos(schema.getExpressionPos(*property));
             outVectors.push_back(resultSet.getValueVector(pos).get());
         }
-        auto scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*context),
-            srcNodeIDVector.get(), outVectors, dstNodeIDVector->state, randomLookup);
+
+        std::unique_ptr<RelTableScanState> scanState;
+        if (dynamic_cast<ParquetRelTable*>(table) != nullptr) {
+            scanState = std::make_unique<ParquetRelTableScanState>(*mm, srcNodeIDVector.get(),
+                outVectors, state);
+        } else {
+            scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*context),
+                srcNodeIDVector.get(), outVectors, dstNodeIDVector->state, randomLookup);
+        }
+
         scanState->setToTable(transaction::Transaction::Get(*context), table, columnIDs, {},
             dataDirection);
         directedIterators.emplace_back(context, table, std::move(scanState));

@@ -596,7 +596,7 @@ ParquetScanSharedState::ParquetScanSharedState(FileScanInfo fileScanInfo, uint64
     for (auto i = fileIdx.load(); i < this->fileScanInfo.getNumFiles(); i++) {
         auto reader =
             std::make_unique<ParquetReader>(this->fileScanInfo.filePaths[i], columnSkips, context);
-        totalRowsGroups += reader->getNumRowsGroups();
+        totalRowsGroups += reader->getNumRowGroups();
     }
     numBlocksReadByFiles = 0;
 }
@@ -608,7 +608,7 @@ static bool parquetSharedStateNext(ParquetScanLocalState& localState,
         if (sharedState.fileIdx >= sharedState.fileScanInfo.getNumFiles()) {
             return false;
         }
-        if (sharedState.blockIdx < sharedState.readers[sharedState.fileIdx]->getNumRowsGroups()) {
+        if (sharedState.blockIdx < sharedState.readers[sharedState.fileIdx]->getNumRowGroups()) {
             localState.reader = sharedState.readers[sharedState.fileIdx].get();
             localState.reader->initializeScan(*localState.state, {sharedState.blockIdx},
                 VirtualFileSystem::GetUnsafe(*sharedState.context));
@@ -616,7 +616,7 @@ static bool parquetSharedStateNext(ParquetScanLocalState& localState,
             return true;
         } else {
             sharedState.numBlocksReadByFiles +=
-                sharedState.readers[sharedState.fileIdx]->getNumRowsGroups();
+                sharedState.readers[sharedState.fileIdx]->getNumRowGroups();
             sharedState.blockIdx = 0;
             sharedState.fileIdx++;
             if (sharedState.fileIdx >= sharedState.fileScanInfo.getNumFiles()) {

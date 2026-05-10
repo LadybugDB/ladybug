@@ -1,7 +1,5 @@
 #include "storage/table/parquet_rel_table.h"
 
-#include <thread>
-
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/data_chunk/sel_vector.h"
 #include "common/exception/runtime.h"
@@ -103,14 +101,7 @@ void ParquetRelTable::initScanState(Transaction* transaction, TableScanState& sc
             relScanState.nodeIDVector->state->getSelVector().getSelSize());
     }
 
-    // Initialize row group ranges for morsel-driven parallelism
-    // For now, assign all row groups to this scan state (will be partitioned by the scan operator)
-    parquetRelScanState.startRowGroup = 0;
-    parquetRelScanState.endRowGroup = parquetRelScanState.indicesReader ?
-                                          parquetRelScanState.indicesReader->getNumRowsGroups() :
-                                          0;
-    parquetRelScanState.currentRowGroup = parquetRelScanState.startRowGroup;
-    parquetRelScanState.nextRowToProcess = 0;
+    parquetRelScanState.currBoundNodeIdx = 0;
 }
 
 void ParquetRelTable::initializeParquetReaders(Transaction* transaction) const {
@@ -149,7 +140,7 @@ void ParquetRelTable::loadIndptrData(Transaction* transaction) const {
             auto context = transaction->getClientContext();
             auto vfs = VirtualFileSystem::GetUnsafe(*context);
             std::vector<uint64_t> groupsToRead;
-            for (uint64_t i = 0; i < indptrReader->getNumRowsGroups(); ++i) {
+            for (uint64_t i = 0; i < indptrReader->getNumRowGroups(); ++i) {
                 groupsToRead.push_back(i);
             }
 
@@ -208,35 +199,54 @@ bool ParquetRelTable::scanInternal(Transaction* transaction, TableScanState& sca
 
 bool ParquetRelTable::scanInternalByRowGroups(Transaction* transaction,
     ParquetRelTableScanState& parquetRelScanState) {
-    // True morsel-driven parallelism: process assigned row groups and collect relationships for
-    // bound nodes
+    auto& relScanState = static_cast<RelTableScanState&>(parquetRelScanState);
+    const auto numBoundNodes = parquetRelScanState.cachedBoundNodeSelVector.getSelSize();
+    const bool isFwd = parquetRelScanState.direction != RelDataDirection::BWD;
 
-    // Check if we have any row groups left to process
-    if (parquetRelScanState.currentRowGroup >= parquetRelScanState.endRowGroup) {
-        // No more row groups to process
+    auto numRowGroups = parquetRelScanState.indicesReader ?
+                            parquetRelScanState.indicesReader->getNumRowGroups() :
+                            0;
+    // Build list of all row groups to scan once
+    std::vector<uint64_t> allRowGroups;
+    for (uint64_t rg = 0; rg < numRowGroups; ++rg) {
+        allRowGroups.push_back(rg);
+    }
+    if (allRowGroups.empty()) {
         parquetRelScanState.outState->getSelVectorUnsafe().setToFiltered(0);
         return false;
     }
 
-    // Process the current row group
-    std::vector<uint64_t> rowGroupsToProcess = {parquetRelScanState.currentRowGroup};
+    // Iterate sources one at a time; factorized execution requires FLAT source per scan() call.
+    while (relScanState.currBoundNodeIdx < numBoundNodes) {
+        const sel_t selPos =
+            parquetRelScanState.cachedBoundNodeSelVector[relScanState.currBoundNodeIdx];
+        relScanState.currBoundNodeIdx++;
 
-    // Create a set of bound node IDs for fast lookup
-    std::unordered_set<common::offset_t> boundNodeOffsets;
-    for (size_t i = 0; i < parquetRelScanState.cachedBoundNodeSelVector.getSelSize(); ++i) {
-        common::sel_t boundNodeIdx = parquetRelScanState.cachedBoundNodeSelVector[i];
-        const auto boundNodeID = parquetRelScanState.nodeIDVector->getValue<nodeID_t>(boundNodeIdx);
-        boundNodeOffsets.insert(boundNodeID.offset);
+        const auto sourceNodeID = parquetRelScanState.nodeIDVector->getValue<nodeID_t>(selPos);
+        const offset_t boundOffset = sourceNodeID.offset;
+
+        // For FWD, skip sources with no outgoing edges using the preloaded CSR indptr.
+        if (isFwd && !indptrData.empty()) {
+            if (boundOffset + 1 >= indptrData.size() ||
+                indptrData[boundOffset] >= indptrData[boundOffset + 1]) {
+                continue;
+            }
+        }
+
+        std::unordered_set<offset_t> boundNodeOffsets = {boundOffset};
+        bool hasData = scanRowGroupForBoundNodes(transaction, parquetRelScanState, allRowGroups,
+            boundNodeOffsets);
+
+        if (hasData) {
+            // Make the source node ID flat so downstream operators (IntersectBuild, etc.)
+            // see exactly one source key per scan() call.
+            relScanState.setNodeIDVectorToFlat(selPos);
+            return true;
+        }
     }
 
-    // Scan the current row group and collect relationships for bound nodes
-    bool hasData = scanRowGroupForBoundNodes(transaction, parquetRelScanState, rowGroupsToProcess,
-        boundNodeOffsets);
-
-    // Move to next row group for next call
-    parquetRelScanState.currentRowGroup++;
-
-    return hasData;
+    parquetRelScanState.outState->getSelVectorUnsafe().setToFiltered(0);
+    return false;
 }
 
 common::offset_t ParquetRelTable::findSourceNodeForRow(common::offset_t globalRowIdx) const {
@@ -250,10 +260,6 @@ bool ParquetRelTable::scanRowGroupForBoundNodes(Transaction* transaction,
 
     // Initialize readers if needed
     initializeParquetReaders(transaction);
-
-    if (!parquetRelScanState.indicesReader) {
-        return false;
-    }
 
     // Initialize scan state for the assigned row groups
     auto context = transaction->getClientContext();

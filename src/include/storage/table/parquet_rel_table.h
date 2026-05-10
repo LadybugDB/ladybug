@@ -12,13 +12,6 @@ namespace storage {
 
 struct ParquetRelTableScanState final : RelTableScanState {
     std::unique_ptr<processor::ParquetReaderScanState> parquetScanState;
-    // For CSR format: store matching rows for current bound node
-    size_t nextRowToProcess = 0;
-
-    // Row group range for morsel-driven parallelism
-    uint64_t startRowGroup = 0;
-    uint64_t endRowGroup = 0;
-    uint64_t currentRowGroup = 0;
 
     // Per-scan-state readers for thread safety
     std::unique_ptr<processor::ParquetReader> indicesReader;

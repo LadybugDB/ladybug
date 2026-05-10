@@ -43,6 +43,12 @@ Adam|Waterloo|150000
 Karissa|Waterloo|150000
 Noura|Guelph|75000
 
+-LOG MatchLivesInFilterById
+-STATEMENT MATCH (u:user)-[l:livesin]->(c:city) WHERE c.id = 700 RETURN u.name, c.name;
+---- 2
+Adam|Waterloo
+Karissa|Waterloo
+
 -LOG MatchLivesInFilterByCity
 -STATEMENT MATCH (u:user)-[l:livesin]->(c:city) WHERE c.name = 'Waterloo' RETURN u.name, u.age;
 ---- 2
@@ -75,3 +81,51 @@ Adam|Karissa|40
 ---- 2
 Adam|Karissa
 Adam|Zhang
+
+-LOG AggregateAvgFolloweeAge
+-STATEMENT MATCH (u:user)-[:follows]->(v) RETURN u.name, avg(v.age) ORDER BY u.name;
+---- 3
+Adam|45.000000
+Karissa|50.000000
+Zhang|25.000000
+
+-LOG TwoHopCrossRel
+-STATEMENT MATCH (a:user {id: 100})-[:follows]->(b)-[:livesin]->(c:city) RETURN b.name, c.name ORDER BY b.name;
+---- 2
+Karissa|Waterloo
+Zhang|Kitchener
+
+-LOG BackwardInNeighbors
+-STATEMENT MATCH (u)<-[:follows]-(v) WHERE u.id = 300 RETURN v.name ORDER BY v.name;
+---- 2
+Adam
+Karissa
+
+-LOG UndirectedLivesIn
+-STATEMENT MATCH (a:user)-[:livesin]-(c:city) RETURN a.name, c.name ORDER BY a.name;
+---- 4
+Adam|Waterloo
+Karissa|Waterloo
+Noura|Guelph
+Zhang|Kitchener
+
+-LOG CyclicTriangle
+-STATEMENT MATCH (a:user)-[:follows]->(b:user)-[:follows]->(c:user), (a)-[:follows]->(c) RETURN a.name, b.name, c.name;
+---- 1
+Adam|Karissa|Zhang
+
+-LOG VarLenOneToTwo
+-STATEMENT MATCH (a:user)-[:follows*1..2]->(b:user) RETURN a.name, b.name ORDER BY a.name, b.name;
+---- 7
+Adam|Karissa
+Adam|Noura
+Adam|Zhang
+Adam|Zhang
+Karissa|Noura
+Karissa|Zhang
+Zhang|Noura
+
+-LOG VarLenThreeHop
+-STATEMENT MATCH (a:user)-[:follows*3..3]->(b:user) RETURN a.name, b.name ORDER BY a.name, b.name;
+---- 1
+Adam|Noura
