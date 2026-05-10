@@ -40,7 +40,7 @@ static int64_t findColumnIdx(const ArrowSchemaWrapper& schema, const std::string
 void ArrowRelTableScanState::setToTable(const transaction::Transaction* transaction, Table* table_,
     std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
     RelDataDirection direction_) {
-    // Same behavior as ParquetRelTable: no local table for external data sources.
+    // Same behavior as IceDiskRelTable: no local table for external data sources.
     TableScanState::setToTable(transaction, table_, std::move(columnIDs_),
         std::move(columnPredicateSets_));
     columns.resize(columnIDs.size());

@@ -1,8 +1,8 @@
--DATASET GRAPH-STD demo-db/icebug-disk
+-DATASET ICEBUG-DISK demo-db/icebug-disk
 
 --
 
--CASE DemoDBGraphStdTest
+-CASE DemoDBIcebugDiskTest
 
 -LOG MatchUserLivesInCity
 -STATEMENT MATCH (u:user)-[l:livesin]->(c:city) RETURN u.name, u.age, c.name;

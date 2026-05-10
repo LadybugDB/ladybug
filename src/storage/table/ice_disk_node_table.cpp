@@ -1,5 +1,6 @@
-#include "storage/table/parquet_node_table.h"
+#include "storage/table/ice_disk_node_table.h"
 
+#include <filesystem>
 #include <mutex>
 
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
@@ -13,6 +14,7 @@
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
 #include "storage/table/column.h"
+#include "storage/table/ice_disk_utils.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::catalog;
@@ -23,27 +25,27 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace storage {
 
-ParquetNodeTable::ParquetNodeTable(const StorageManager* storageManager,
+IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
     const NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager)
     : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager,
-          std::make_unique<ParquetNodeTableScanSharedState>()} {
-    std::string prefix = nodeTableEntry->getStorage();
-    if (prefix.empty()) {
-        throw RuntimeException("Parquet file prefix is empty for parquet-backed node table");
-    }
-
-    // Use base class helper to construct storage path
-    parquetFilePath = constructStoragePath(prefix, ".parquet");
+          std::make_unique<IceDiskNodeTableScanSharedState>()} {
+    auto file = IceDiskUtils::constructNodeTablePath(
+        IceDiskUtils::getBasePath(nodeTableEntry->getStorage()), nodeTableEntry->getName(),
+        ".parquet");
+    const auto dbDir =
+        std::filesystem::path(storageManager->getDatabasePath()).parent_path().string();
+    IceDiskUtils::checkVersionCompatibility(storageManager->getVFS(), dbDir, file);
+    parquetFilePath = file;
 }
 
-void ParquetNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
-    auto parquetScanSharedState =
-        static_cast<ParquetNodeTableScanSharedState*>(tableScanSharedState.get());
+void IceDiskNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
+    auto iceDiskScanSharedState =
+        static_cast<IceDiskNodeTableScanSharedState*>(tableScanSharedState.get());
     auto numBatches = getNumBatches(transaction);
-    parquetScanSharedState->reset(numBatches);
+    iceDiskScanSharedState->reset(numBatches);
 }
 
-void ParquetNodeTable::initScanState(Transaction* transaction, TableScanState& scanState,
+void IceDiskNodeTable::initScanState(Transaction* transaction, TableScanState& scanState,
     [[maybe_unused]] bool resetCachedBoundNodeSelVec) const {
     // Set up the scan state similar to how NodeTable does it
     auto& nodeScanState = scanState.cast<NodeTableScanState>();
@@ -51,19 +53,19 @@ void ParquetNodeTable::initScanState(Transaction* transaction, TableScanState& s
 
     // Note: Don't set nodeGroupIdx here - it's set by the morsel-driven parallelism system
 
-    auto& parquetNodeScanState = static_cast<ParquetNodeTableScanState&>(nodeScanState);
+    auto& iceDiskScanState = static_cast<IceDiskNodeTableScanState&>(nodeScanState);
 
     // Reset scan state for each scan to allow multiple scans of the same table in one query
-    parquetNodeScanState.dataRead = false;
-    parquetNodeScanState.allData.clear();
-    parquetNodeScanState.totalRows = 0;
-    parquetNodeScanState.nextRowToDistribute = 0;
+    iceDiskScanState.dataRead = false;
+    iceDiskScanState.allData.clear();
+    iceDiskScanState.totalRows = 0;
+    iceDiskScanState.nextRowToDistribute = 0;
 
     // Reset scan completion flag for this scan state
-    parquetNodeScanState.scanCompleted = false;
+    iceDiskScanState.scanCompleted = false;
 
     // Each scan state gets its own parquet reader for thread safety
-    if (!parquetNodeScanState.initialized) {
+    if (!iceDiskScanState.initialized) {
         auto context = transaction->getClientContext();
         if (!context) {
             throw RuntimeException("Invalid client context for parquet scan state initialization");
@@ -72,9 +74,9 @@ void ParquetNodeTable::initScanState(Transaction* transaction, TableScanState& s
         std::vector<bool> columnSkips;
         try {
             auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
-            parquetNodeScanState.parquetReader =
+            iceDiskScanState.parquetReader =
                 std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
-            parquetNodeScanState.initialized = true;
+            iceDiskScanState.initialized = true;
         } catch (const std::exception& e) {
             throw RuntimeException("Failed to initialize parquet reader for file '" +
                                    parquetFilePath + "': " + e.what());
@@ -82,13 +84,13 @@ void ParquetNodeTable::initScanState(Transaction* transaction, TableScanState& s
     }
 
     // Set nodeGroupIdx to invalid initially - will be assigned by getNextBatch
-    parquetNodeScanState.nodeGroupIdx = INVALID_NODE_GROUP_IDX;
+    iceDiskScanState.nodeGroupIdx = INVALID_NODE_GROUP_IDX;
 
     // Initialize scan state for the current row group (assigned via shared state)
-    initParquetScanForRowGroup(transaction, parquetNodeScanState);
+    initParquetScanForRowGroup(transaction, iceDiskScanState);
 }
 
-common::node_group_idx_t ParquetNodeTable::getNumBatches(const Transaction* transaction) const {
+common::node_group_idx_t IceDiskNodeTable::getNumBatches(const Transaction* transaction) const {
     auto context = transaction->getClientContext();
     if (!context) {
         return 1;
@@ -104,8 +106,8 @@ common::node_group_idx_t ParquetNodeTable::getNumBatches(const Transaction* tran
     }
 }
 
-void ParquetNodeTable::initParquetScanForRowGroup(Transaction* transaction,
-    ParquetNodeTableScanState& scanState) const {
+void IceDiskNodeTable::initParquetScanForRowGroup(Transaction* transaction,
+    IceDiskNodeTableScanState& iceDiskScanState) const {
     auto context = transaction->getClientContext();
     if (!context) {
         return;
@@ -117,60 +119,62 @@ void ParquetNodeTable::initParquetScanForRowGroup(Transaction* transaction,
     }
 
     // Defensive check: ensure parquet reader exists
-    if (!scanState.parquetReader) {
+    if (!iceDiskScanState.parquetReader) {
         return;
     }
 
     // Defensive check: ensure parquet scan state exists
-    if (!scanState.parquetScanState) {
+    if (!iceDiskScanState.parquetScanState) {
         return;
     }
 
     std::vector<uint64_t> groupsToRead;
 
     // Use shared state to get the next available row group for this scan state
-    if (scanState.nodeGroupIdx == INVALID_NODE_GROUP_IDX) {
+    if (iceDiskScanState.nodeGroupIdx == INVALID_NODE_GROUP_IDX) {
         common::node_group_idx_t assignedRowGroup;
-        if (dynamic_cast<ParquetNodeTableScanSharedState*>(tableScanSharedState.get())
+        if (dynamic_cast<IceDiskNodeTableScanSharedState*>(tableScanSharedState.get())
                 ->getNextBatch(assignedRowGroup)) {
-            scanState.nodeGroupIdx = assignedRowGroup;
+            iceDiskScanState.nodeGroupIdx = assignedRowGroup;
             groupsToRead.push_back(assignedRowGroup);
         } else {
             // No more row groups available - mark scan as completed
-            scanState.scanCompleted = true;
+            iceDiskScanState.scanCompleted = true;
             // Still need to initialize the scan state with empty groups so reader is in valid state
-            scanState.parquetReader->initializeScan(*scanState.parquetScanState, groupsToRead, vfs);
+            iceDiskScanState.parquetReader->initializeScan(*iceDiskScanState.parquetScanState,
+                groupsToRead, vfs);
             return;
         }
     } else {
         // Row group already assigned (e.g., by external morsel system or re-initialization)
-        groupsToRead.push_back(scanState.nodeGroupIdx);
+        groupsToRead.push_back(iceDiskScanState.nodeGroupIdx);
     }
 
     // Re-initialize scan for the specific row groups
     // Note: initializeScan can be called multiple times; the first call populates column metadata
-    scanState.parquetReader->initializeScan(*scanState.parquetScanState, groupsToRead, vfs);
+    iceDiskScanState.parquetReader->initializeScan(*iceDiskScanState.parquetScanState, groupsToRead,
+        vfs);
 }
 
-bool ParquetNodeTable::scanInternal(Transaction* transaction, TableScanState& scanState) {
-    auto& parquetScanState = static_cast<ParquetNodeTableScanState&>(scanState);
+bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& scanState) {
+    auto& iceDiskScanState = static_cast<IceDiskNodeTableScanState&>(scanState);
 
     // Check if this particular scan state has already completed
-    if (parquetScanState.scanCompleted) {
+    if (iceDiskScanState.scanCompleted) {
         return false;
     }
 
     scanState.resetOutVectors();
 
     // Read all data once into scan state
-    if (!parquetScanState.dataRead) {
+    if (!iceDiskScanState.dataRead) {
         // Only the first thread reads the parquet data
-        if (!parquetScanState.initialized) {
+        if (!iceDiskScanState.initialized) {
             return false;
         }
 
         // Create a data chunk for reading parquet data
-        auto numColumns = parquetScanState.parquetReader->getNumColumns();
+        auto numColumns = iceDiskScanState.parquetReader->getNumColumns();
 
         // Defensive check: ensure parquet file has at least one column
         if (numColumns == 0) {
@@ -184,7 +188,7 @@ bool ParquetNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
         // Always create the data chunk to match the exact number of parquet columns
         // to prevent crashes in the parquet reader when accessing result vectors
         for (uint32_t i = 0; i < numColumns; ++i) {
-            const auto& parquetColumnType = parquetScanState.parquetReader->getColumnType(i);
+            const auto& parquetColumnType = iceDiskScanState.parquetReader->getColumnType(i);
             auto columnType = parquetColumnType.copy();
             auto vector = std::make_shared<ValueVector>(std::move(columnType),
                 MemoryManager::Get(*transaction->getClientContext()), scanState.outState);
@@ -192,13 +196,13 @@ bool ParquetNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
         }
 
         // Read from parquet
-        parquetScanState.parquetReader->scan(*parquetScanState.parquetScanState, parquetDataChunk);
+        iceDiskScanState.parquetReader->scan(*iceDiskScanState.parquetScanState, parquetDataChunk);
 
         auto selSize = parquetDataChunk.state->getSelVector().getSelSize();
         if (selSize > 0) {
-            parquetScanState.allData.resize(selSize);
+            iceDiskScanState.allData.resize(selSize);
             for (size_t row = 0; row < selSize; ++row) {
-                parquetScanState.allData[row].resize(
+                iceDiskScanState.allData[row].resize(
                     scanState.outputVectors
                         .size()); // Use output vector count, not parquet column count
 
@@ -217,7 +221,7 @@ bool ParquetNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
 
                     // Get parquet column name and find its corresponding column ID
                     std::string parquetColumnName =
-                        parquetScanState.parquetReader->getColumnName(parquetCol);
+                        iceDiskScanState.parquetReader->getColumnName(parquetCol);
                     auto nodeTableEntry = this->nodeTableCatalogEntry;
 
                     // Check if the column exists first before calling getColumnID
@@ -240,44 +244,44 @@ bool ParquetNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
 
                     // Only copy data if we found a matching output position
                     if (outputCol != INVALID_COLUMN_ID &&
-                        outputCol < parquetScanState.allData[row].size()) {
+                        outputCol < iceDiskScanState.allData[row].size()) {
                         // Defensive check: ensure the row index is valid for the source vector
                         if (row >= srcVector.state->getSelVector().getSelSize()) {
                             continue;
                         }
 
                         if (srcVector.isNull(row)) {
-                            parquetScanState.allData[row][outputCol] =
+                            iceDiskScanState.allData[row][outputCol] =
                                 std::make_unique<Value>(Value::createNullValue());
                         } else {
-                            parquetScanState.allData[row][outputCol] =
+                            iceDiskScanState.allData[row][outputCol] =
                                 std::make_unique<Value>(*srcVector.getAsValue(row));
                         }
                     }
                 }
             }
-            parquetScanState.totalRows = selSize;
+            iceDiskScanState.totalRows = selSize;
         }
-        parquetScanState.dataRead = true;
+        iceDiskScanState.dataRead = true;
     }
 
     // Now distribute one row to this scan state
-    if (parquetScanState.nextRowToDistribute >= parquetScanState.totalRows) {
-        parquetScanState.scanCompleted = true;
+    if (iceDiskScanState.nextRowToDistribute >= iceDiskScanState.totalRows) {
+        iceDiskScanState.scanCompleted = true;
         return false; // No more rows to distribute
     }
 
-    size_t rowIndex = parquetScanState.nextRowToDistribute++;
+    size_t rowIndex = iceDiskScanState.nextRowToDistribute++;
 
     // Copy one row to output vectors
     // Defensive checks: ensure valid row index and handle empty data gracefully
-    if (rowIndex >= parquetScanState.allData.size()) {
-        parquetScanState.scanCompleted = true;
+    if (rowIndex >= iceDiskScanState.allData.size()) {
+        iceDiskScanState.scanCompleted = true;
         return false;
     }
 
     auto numColumns =
-        std::min(scanState.outputVectors.size(), parquetScanState.allData[rowIndex].size());
+        std::min(scanState.outputVectors.size(), iceDiskScanState.allData[rowIndex].size());
     for (size_t col = 0; col < numColumns; ++col) {
         // Defensive check: ensure output vector exists
         if (col >= scanState.outputVectors.size() || !scanState.outputVectors[col]) {
@@ -287,13 +291,13 @@ bool ParquetNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
         auto& dstVector = *scanState.outputVectors[col];
 
         // Defensive check: ensure value exists for this column
-        if (col >= parquetScanState.allData[rowIndex].size() ||
-            !parquetScanState.allData[rowIndex][col]) {
+        if (col >= iceDiskScanState.allData[rowIndex].size() ||
+            !iceDiskScanState.allData[rowIndex][col]) {
             dstVector.setNull(0, true);
             continue;
         }
 
-        auto& value = *parquetScanState.allData[rowIndex][col];
+        auto& value = *iceDiskScanState.allData[rowIndex][col];
 
         if (value.isNull()) {
             dstVector.setNull(0, true);
@@ -312,7 +316,7 @@ bool ParquetNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
     return true;
 }
 
-row_idx_t ParquetNodeTable::getTotalRowCount(const Transaction* transaction) const {
+row_idx_t IceDiskNodeTable::getTotalRowCount(const Transaction* transaction) const {
     const auto cached = cachedRowCount.load(std::memory_order_relaxed);
     if (cached != INVALID_ROW_IDX) {
         return cached;
@@ -341,12 +345,12 @@ row_idx_t ParquetNodeTable::getTotalRowCount(const Transaction* transaction) con
     }
 }
 
-bool ParquetNodeTable::isVisible(const transaction::Transaction* transaction,
+bool IceDiskNodeTable::isVisible(const transaction::Transaction* transaction,
     common::offset_t offset) const {
     return offset < getTotalRowCount(transaction);
 }
 
-bool ParquetNodeTable::isVisibleNoLock(const transaction::Transaction* transaction,
+bool IceDiskNodeTable::isVisibleNoLock(const transaction::Transaction* transaction,
     common::offset_t offset) const {
     return offset < getTotalRowCount(transaction);
 }

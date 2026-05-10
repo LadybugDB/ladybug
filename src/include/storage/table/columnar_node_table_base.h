@@ -32,7 +32,7 @@ struct ColumnarNodeTableScanSharedState {
     virtual bool getNextMorsel(ColumnarNodeTableScanState* scanState) = 0;
 };
 
-// Abstract base class for columnar-format node tables (Parquet, Arrow, etc.)
+// Abstract base class for columnar-format node tables (Icebug-Disk, Arrow, etc.)
 class ColumnarNodeTableBase : public NodeTable {
 public:
     ColumnarNodeTableBase(const StorageManager* storageManager,
@@ -76,12 +76,6 @@ protected:
         const transaction::Transaction* transaction) const = 0;
     virtual common::row_idx_t getTotalRowCount(
         const transaction::Transaction* transaction) const = 0;
-
-    // Helper for constructing storage paths
-    std::string constructStoragePath(const std::string& prefix, const std::string& suffix) const {
-        std::string tableName = nodeTableCatalogEntry->getName();
-        return prefix + "_nodes_" + tableName + suffix;
-    }
 
 public:
     ColumnarNodeTableScanSharedState* getTableScanSharedState() const {

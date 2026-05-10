@@ -45,6 +45,8 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
     }
     std::string line;
     while (getline(file, line)) {
+        // replace single quote with double
+        std::replace(line.begin(), line.end(), '\'', '"');
         // If this is a COPY statement, we need to append the LBUG_ROOT_DIRECTORY to the csv
         // file path. There maybe multiple csv files in the line, so we need to find all of them.
         std::vector<std::string> csvFilePaths;
@@ -86,16 +88,17 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
             fullPath = normalizePathForCypher(std::move(fullPath));
             line.replace(line.find(csvFilePath), csvFilePath.length(), fullPath);
         }
-        // Also handle storage = 'path' for parquet tables
+
+        // Also handle storage = 'path' for icebug-disk tables
         std::vector<std::string> storagePaths;
         size_t storageIndex = 0;
         while (true) {
-            size_t start = line.find("storage = '", storageIndex);
+            size_t start = line.find("storage = \"", storageIndex);
             if (start == std::string::npos) {
                 break;
             }
-            start += 11; // length of "storage = '"
-            size_t end = line.find("'", start);
+            start += 11; // length of "storage = \""
+            size_t end = line.find("\"", start);
             if (end == std::string::npos) {
                 break;
             }
@@ -104,6 +107,35 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
             storageIndex = end + 1;
         }
         for (auto& storagePath : storagePaths) {
+            static constexpr std::string_view iceBugPrefix = "icebug-disk";
+
+            if (storagePath.starts_with(iceBugPrefix)) {
+                // Strip "icebug-disk" prefix and optional ':' separator.
+                std::string basePath = storagePath.substr(iceBugPrefix.size());
+                if (!basePath.empty() && basePath[0] == ':') {
+                    basePath = basePath.substr(1);
+                }
+                // Resolve empty or relative paths relative to the schema's directory.
+                // Absolute paths and object-store URLs (contain "://") are left unchanged.
+                if (basePath.empty()) {
+                    basePath = normalizePathForCypher(cypherDir.string());
+                } else if (basePath.find("://") == std::string::npos &&
+                           std::filesystem::path(basePath).is_relative()) {
+                    basePath = normalizePathForCypher((cypherDir / basePath).string());
+                }
+                std::string resolvedStorage = std::string(iceBugPrefix) + ":" + basePath;
+                size_t pos = line.find(storagePath);
+                if (pos != std::string::npos) {
+                    line.replace(pos, storagePath.length(), resolvedStorage);
+                }
+                continue;
+            }
+
+            if (storagePath.find("://") != std::string::npos) {
+                // Non-icebug-disk URI — do not modify.
+                continue;
+            }
+
             auto fullPath = storagePath;
             if (std::filesystem::path(storagePath).is_relative()) {
                 if (std::filesystem::path(storagePath).parent_path().empty()) {

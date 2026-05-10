@@ -7,7 +7,7 @@
 #include "storage/local_storage/local_node_table.h"
 #include "storage/local_storage/local_storage.h"
 #include "storage/table/arrow_node_table.h"
-#include "storage/table/parquet_node_table.h"
+#include "storage/table/ice_disk_node_table.h"
 
 using namespace lbug::common;
 using namespace lbug::storage;
@@ -17,8 +17,8 @@ namespace processor {
 static std::unique_ptr<TableScanState> createNodeTableScanState(NodeTable* table,
     ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
     MemoryManager* memoryManager) {
-    if (dynamic_cast<ParquetNodeTable*>(table) != nullptr) {
-        return std::make_unique<ParquetNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
+    if (dynamic_cast<IceDiskNodeTable*>(table) != nullptr) {
+        return std::make_unique<IceDiskNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
             nodeIDVector->state);
     }
     if (dynamic_cast<ArrowNodeTable*>(table) != nullptr) {
@@ -53,16 +53,16 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
     this->currentCommittedGroupIdx = 0;
     this->currentUnCommittedGroupIdx = 0;
 
-    // Initialize table-specific scan coordination (e.g., for ParquetNodeTable)
+    // Initialize table-specific scan coordination (e.g., for IceDiskNodeTable)
     table->initializeScanCoordination(transaction);
 
-    if (const auto parquetTable = dynamic_cast<ParquetNodeTable*>(table)) {
-        // For parquet tables, set numCommittedNodeGroups to number of row groups
+    if (const auto iceDiskTable = dynamic_cast<IceDiskNodeTable*>(table)) {
+        // For ice-disk tables, set numCommittedNodeGroups to number of row groups
         std::vector<bool> columnSkips;
         try {
             auto context = transaction->getClientContext();
             auto resolvedPath =
-                common::VirtualFileSystem::resolvePath(context, parquetTable->getParquetFilePath());
+                common::VirtualFileSystem::resolvePath(context, iceDiskTable->getParquetFilePath());
             auto tempReader =
                 std::make_unique<processor::ParquetReader>(resolvedPath, columnSkips, context);
             this->numCommittedNodeGroups = tempReader->getNumRowGroups();
@@ -91,7 +91,7 @@ void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
     std::unique_lock lck{mtx};
 
     // ColumnarNodeTables handle morsel assignment internally
-    // TODO: parquet tables https://github.com/LadybugDB/ladybug/issues/245
+    // TODO: icebug-disk tables https://github.com/LadybugDB/ladybug/issues/245
     if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(this->table)) {
         const auto tableSharedState = arrowTable->getTableScanSharedState();
         if (tableSharedState->getNextMorsel(static_cast<ColumnarNodeTableScanState*>(&scanState))) {
@@ -149,8 +149,8 @@ void ScanNodeTable::initCurrentTable(ExecutionContext* context) {
         outVectors, MemoryManager::Get(*context->clientContext));
     currentInfo.initScanState(*scanState, outVectors, context->clientContext);
     scanState->semiMask = sharedStates[currentTableIdx]->getSemiMask();
-    // Call table->initScanState for ParquetNodeTable or ArrowNodeTable
-    if (dynamic_cast<ParquetNodeTable*>(tableInfos[currentTableIdx].table) ||
+    // Call table->initScanState for IceDiskNodeTable or ArrowNodeTable
+    if (dynamic_cast<IceDiskNodeTable*>(tableInfos[currentTableIdx].table) ||
         dynamic_cast<ArrowNodeTable*>(tableInfos[currentTableIdx].table)) {
         auto transaction = transaction::Transaction::Get(*context->clientContext);
         tableInfos[currentTableIdx].table->initScanState(transaction, *scanState);

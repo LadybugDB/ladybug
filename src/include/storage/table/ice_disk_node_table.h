@@ -14,7 +14,7 @@
 namespace lbug {
 namespace storage {
 
-struct ParquetNodeTableScanState final : ColumnarNodeTableScanState {
+struct IceDiskNodeTableScanState final : ColumnarNodeTableScanState {
     std::unique_ptr<processor::ParquetReader> parquetReader;
     std::unique_ptr<processor::ParquetReaderScanState> parquetScanState;
     bool dataRead = false;
@@ -22,7 +22,7 @@ struct ParquetNodeTableScanState final : ColumnarNodeTableScanState {
     size_t nextRowToDistribute = 0;
     uint64_t lastQueryId = 0; // Track the last query ID to detect new queries
 
-    ParquetNodeTableScanState([[maybe_unused]] MemoryManager& mm, common::ValueVector* nodeIDVector,
+    IceDiskNodeTableScanState([[maybe_unused]] MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
         : ColumnarNodeTableScanState{mm, nodeIDVector, std::move(outputVectors),
@@ -31,7 +31,7 @@ struct ParquetNodeTableScanState final : ColumnarNodeTableScanState {
     }
 };
 
-struct ParquetNodeTableScanSharedState final : ColumnarNodeTableScanSharedState {
+struct IceDiskNodeTableScanSharedState final : ColumnarNodeTableScanSharedState {
 private:
     std::mutex mtx;
     common::node_group_idx_t currentBatchIdx = 0;
@@ -58,9 +58,9 @@ public:
     bool getNextMorsel(ColumnarNodeTableScanState*) override { return false; }
 };
 
-class ParquetNodeTable final : public ColumnarNodeTableBase {
+class IceDiskNodeTable final : public ColumnarNodeTableBase {
 public:
-    ParquetNodeTable(const StorageManager* storageManager,
+    IceDiskNodeTable(const StorageManager* storageManager,
         const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager);
 
     void initializeScanCoordination(const transaction::Transaction* transaction) override;
@@ -79,7 +79,7 @@ public:
 
 protected:
     // Implement ColumnarNodeTableBase interface
-    std::string getColumnarFormatName() const override { return "Parquet"; }
+    std::string getColumnarFormatName() const override { return "icebug-"; }
     common::node_group_idx_t getNumBatches(
         const transaction::Transaction* transaction) const override;
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
@@ -90,7 +90,7 @@ private:
 
     void initializeParquetReader(transaction::Transaction* transaction) const;
     void initParquetScanForRowGroup(transaction::Transaction* transaction,
-        ParquetNodeTableScanState& scanState) const;
+        IceDiskNodeTableScanState& iceDiskScanState) const;
 };
 
 } // namespace storage

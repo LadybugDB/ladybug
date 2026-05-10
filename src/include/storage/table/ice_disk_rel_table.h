@@ -10,7 +10,7 @@
 namespace lbug {
 namespace storage {
 
-struct ParquetRelTableScanState final : RelTableScanState {
+struct IceDiskRelTableScanState final : RelTableScanState {
     std::unique_ptr<processor::ParquetReaderScanState> parquetScanState;
 
     // Row group range for morsel-driven parallelism
@@ -21,7 +21,7 @@ struct ParquetRelTableScanState final : RelTableScanState {
     std::unique_ptr<processor::ParquetReader> indicesReader;
     std::unique_ptr<processor::ParquetReader> indptrReader;
 
-    ParquetRelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
+    IceDiskRelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
         : RelTableScanState{mm, nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {
@@ -34,9 +34,9 @@ struct ParquetRelTableScanState final : RelTableScanState {
         common::RelDataDirection direction_) override;
 };
 
-class ParquetRelTable final : public ColumnarRelTableBase {
+class IceDiskRelTable final : public ColumnarRelTableBase {
 public:
-    ParquetRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, common::table_id_t fromTableID,
+    IceDiskRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, common::table_id_t fromTableID,
         common::table_id_t toTableID, const StorageManager* storageManager,
         MemoryManager* memoryManager);
 
@@ -47,7 +47,7 @@ public:
 
 protected:
     // Implement ColumnarRelTableBase interface
-    std::string getColumnarFormatName() const override { return "Parquet"; }
+    std::string getColumnarFormatName() const override { return "icebug-disk"; }
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
 
 private:
@@ -63,10 +63,9 @@ private:
     void initializeIndptrReader(transaction::Transaction* transaction) const;
     void loadIndptrData(transaction::Transaction* transaction) const;
     bool scanInternalByRowGroups(transaction::Transaction* transaction,
-        ParquetRelTableScanState& parquetRelScanState);
+        IceDiskRelTableScanState& iceDiskScanState);
     bool scanRowGroupForBoundNodes(transaction::Transaction* transaction,
-        ParquetRelTableScanState& parquetRelScanState,
-        const std::vector<uint64_t>& rowGroupsToProcess,
+        IceDiskRelTableScanState& iceDiskScanState, const std::vector<uint64_t>& rowGroupsToProcess,
         const std::unordered_map<common::offset_t, common::sel_t>& boundNodeOffsets);
     common::offset_t findSourceNodeForRow(common::offset_t globalRowIdx) const;
 };

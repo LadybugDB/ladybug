@@ -219,6 +219,43 @@ void ParquetReader::initMetadata() {
     metadata->read(proto.get());
 }
 
+std::unique_ptr<FileMetaData> ParquetReader::readMetadata(const std::string& filePath,
+    VirtualFileSystem* vfs) {
+    auto fileInfo = vfs->openFile(filePath, FileOpenFlags(FileFlags::READ_ONLY), nullptr);
+    auto proto =
+        std::make_unique<lbug_apache::thrift::protocol::TCompactProtocolT<ThriftFileTransport>>(
+            std::make_shared<ThriftFileTransport>(fileInfo.get(), false));
+    auto& transport = dynamic_cast_checked<ThriftFileTransport&>(*proto->getTransport());
+    auto fileSize = transport.GetSize();
+    if (fileSize < 12) {
+        throw CopyException{
+            std::format("File {} is too small to be a Parquet file", filePath.c_str())};
+    }
+
+    ResizeableBuffer buf;
+    buf.resize(8);
+    buf.zero();
+
+    transport.SetLocation(fileSize - 8);
+    transport.read((uint8_t*)buf.ptr, 8);
+
+    if (memcmp(buf.ptr + 4, "PAR1", 4) != 0) {
+        throw CopyException{
+            std::format("No magic bytes found at the end of file {}", filePath.c_str())};
+    }
+    auto footerLen = *reinterpret_cast<uint32_t*>(buf.ptr);
+    if (footerLen == 0 || fileSize < 12 + footerLen) {
+        throw CopyException{std::format("Footer length error in file {}", filePath.c_str())};
+    }
+    auto metadataPos = fileSize - (footerLen + 8);
+    transport.SetLocation(metadataPos);
+    transport.Prefetch(metadataPos, footerLen);
+
+    auto result = std::make_unique<FileMetaData>();
+    result->read(proto.get());
+    return result;
+}
+
 std::unique_ptr<ColumnReader> ParquetReader::createReaderRecursive(uint64_t depth,
     uint64_t maxDefine, uint64_t maxRepeat, uint64_t& nextSchemaIdx, uint64_t& nextFileIdx) {
     DASSERT(nextSchemaIdx < metadata->schema.size());

@@ -18,8 +18,8 @@
 #include "storage/local_storage/local_storage.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
+#include "storage/table/ice_disk_rel_table.h"
 #include "storage/table/node_table.h"
-#include "storage/table/parquet_rel_table.h"
 #include "storage/table/rel_table.h"
 
 using namespace lbug::catalog;
@@ -129,8 +129,8 @@ OnDiskGraphNbrScanState::OnDiskGraphNbrScanState(ClientContext* context,
         }
 
         std::unique_ptr<RelTableScanState> scanState;
-        if (dynamic_cast<ParquetRelTable*>(table) != nullptr) {
-            scanState = std::make_unique<ParquetRelTableScanState>(*mm, srcNodeIDVector.get(),
+        if (dynamic_cast<IceDiskRelTable*>(table) != nullptr) {
+            scanState = std::make_unique<IceDiskRelTableScanState>(*mm, srcNodeIDVector.get(),
                 outVectors, state);
         } else {
             scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*context),

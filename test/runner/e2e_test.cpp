@@ -39,8 +39,8 @@ public:
         }
         createDB(checkpointWaitTimeout);
         createConns(connNames);
-        if (datasetType == TestGroup::DatasetType::GRAPH_STD) {
-            // For GRAPH_STD, only run schema.cypher (which contains WITH storage = ... clauses)
+        if (datasetType == TestGroup::DatasetType::ICEBUG_DISK) {
+            // For ICEBUG_DISK, only run schema.cypher (which contains WITH storage = ... clauses)
             // No copy.cypher needed as data is in external parquet files
             lbug::main::Connection* connection =
                 conn ? conn.get() : (connMap.begin()->second).get();

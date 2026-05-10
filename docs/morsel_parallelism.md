@@ -2,7 +2,7 @@
 
 ## Overview
 
-Morsel-driven parallelism is ladybug's approach to parallel query execution where work is divided into small, independently processable chunks called "morsels." This document explains how it works for native node tables versus columnar formats (Arrow, Parquet).
+Morsel-driven parallelism is ladybug's approach to parallel query execution where work is divided into small, independently processable chunks called "morsels." This document explains how it works for native node tables versus columnar formats (Arrow, Icebug Disk).
 
 ## Architecture
 

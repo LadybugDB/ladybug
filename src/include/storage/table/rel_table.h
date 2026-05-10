@@ -30,7 +30,7 @@ struct RelTableScanState : TableScanState {
     std::unique_ptr<LocalRelTableScanState> localTableScanState;
 
     // Optional state used by Arrow-backed relationship tables. Keep it on the common scan state so
-    // a single multi-rel scan state can scan native, Parquet-backed, and Arrow-backed tables.
+    // a single multi-rel scan state can scan native, icebug-disk-backed, and Arrow-backed tables.
     size_t arrowCurrentBatchIdx = 0;
     size_t arrowCurrentBatchOffset = 0;
     std::unordered_map<common::offset_t, common::sel_t> arrowBoundNodeOffsetToSelPos;

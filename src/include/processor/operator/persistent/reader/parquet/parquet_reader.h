@@ -56,6 +56,11 @@ public:
 
     lbug_parquet::format::FileMetaData* getMetadata() const { return metadata.get(); }
 
+    // Read only the parquet footer metadata from a file without requiring a ClientContext.
+    // Used for version checks at table construction time when no context is available.
+    static std::unique_ptr<lbug_parquet::format::FileMetaData> readMetadata(
+        const std::string& filePath, common::VirtualFileSystem* vfs);
+
 private:
     std::unique_ptr<lbug_apache::thrift::protocol::TProtocol> createThriftProtocol(
         common::FileInfo* fileInfo_, bool prefetch_mode) {

@@ -3,7 +3,7 @@
 #include "processor/execution_context.h"
 #include "storage/local_storage/local_storage.h"
 #include "storage/table/arrow_rel_table.h"
-#include "storage/table/parquet_rel_table.h"
+#include "storage/table/ice_disk_rel_table.h"
 
 using namespace lbug::common;
 using namespace lbug::storage;
@@ -68,28 +68,28 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
 
     // Check if any table in any scanner is an external rel table with a custom scan state.
     bool hasArrowTable = false;
-    bool hasParquetTable = false;
+    bool hasIceDiskTable = false;
     for (auto& [_, scanner] : scanners) {
         for (auto& relInfo : scanner.relInfos) {
             if (dynamic_cast<storage::ArrowRelTable*>(relInfo.table) != nullptr) {
                 hasArrowTable = true;
                 break;
             }
-            if (dynamic_cast<storage::ParquetRelTable*>(relInfo.table) != nullptr) {
-                hasParquetTable = true;
+            if (dynamic_cast<storage::IceDiskRelTable*>(relInfo.table) != nullptr) {
+                hasIceDiskTable = true;
                 break;
             }
         }
-        if (hasArrowTable || hasParquetTable) {
+        if (hasArrowTable || hasIceDiskTable) {
             break;
         }
     }
 
-    // Parquet scan state extends the common rel scan state and Arrow stores its per-table state
-    // there, so one scan state can now cover Parquet, Arrow, and native rel tables.
-    if (hasParquetTable) {
+    // IceDisk scan state extends the common rel scan state and Arrow stores its per-table state
+    // there, so one scan state can now cover IceDisk, Arrow, and native rel tables.
+    if (hasIceDiskTable) {
         scanState =
-            std::make_unique<storage::ParquetRelTableScanState>(*MemoryManager::Get(*clientContext),
+            std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     } else if (hasArrowTable) {
         scanState =

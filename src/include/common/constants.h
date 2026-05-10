@@ -86,6 +86,12 @@ struct StorageConstants {
 struct TableOptionConstants {
     static constexpr char REL_STORAGE_DIRECTION_OPTION[] = "STORAGE_DIRECTION";
     static constexpr char REL_STORAGE_OPTION[] = "STORAGE";
+
+    static constexpr std::string_view ICEBUG_DISK_PREFIX = "icebug-disk";
+
+    static bool isIceBugDiskStorage(const std::string& storage) {
+        return storage.starts_with(ICEBUG_DISK_PREFIX);
+    }
 };
 
 // Hash Index Configurations

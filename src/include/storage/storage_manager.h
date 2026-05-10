@@ -12,6 +12,10 @@ namespace main {
 class Database;
 } // namespace main
 
+namespace common {
+class VirtualFileSystem;
+} // namespace common
+
 namespace catalog {
 class CatalogEntry;
 class Catalog;
@@ -65,6 +69,8 @@ public:
     bool defaultHashIndexEnabled() const { return enableDefaultHashIndex; }
     void setDefaultHashIndexEnabled(bool enabled) { enableDefaultHashIndex = enabled; }
 
+    common::VirtualFileSystem* getVFS() const { return vfs_; }
+
     void registerIndexType(IndexType indexType) {
         registeredIndexTypes.push_back(std::move(indexType));
     }
@@ -115,6 +121,7 @@ private:
     bool inMemory;
     std::vector<IndexType> registeredIndexTypes;
     std::unordered_map<common::table_id_t, std::string> tableNameCache;
+    common::VirtualFileSystem* vfs_; // non-owning, owned by Database
 };
 
 } // namespace storage

@@ -4,6 +4,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/arrow/arrow.h"
+#include "common/constants.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/random_engine.h"
 #include "common/serializer/in_mem_file_writer.h"
@@ -19,9 +20,9 @@
 #include "storage/table/arrow_rel_table.h"
 #include "storage/table/arrow_table_support.h"
 #include "storage/table/foreign_rel_table.h"
+#include "storage/table/ice_disk_node_table.h"
+#include "storage/table/ice_disk_rel_table.h"
 #include "storage/table/node_table.h"
-#include "storage/table/parquet_node_table.h"
-#include "storage/table/parquet_rel_table.h"
 #include "storage/table/rel_table.h"
 #include "storage/wal/wal_replayer.h"
 #include "transaction/transaction.h"
@@ -38,7 +39,8 @@ StorageManager::StorageManager(const std::string& databasePath, bool readOnly, b
     MemoryManager& memoryManager, bool enableCompression, bool enableDefaultHashIndex,
     VirtualFileSystem* vfs)
     : databasePath{databasePath}, readOnly{readOnly}, dataFH{nullptr}, memoryManager{memoryManager},
-      enableCompression{enableCompression}, enableDefaultHashIndex{enableDefaultHashIndex} {
+      enableCompression{enableCompression}, enableDefaultHashIndex{enableDefaultHashIndex},
+      vfs_{vfs} {
     wal = std::make_unique<WAL>(databasePath, readOnly, enableChecksums, vfs);
     shadowFile =
         std::make_unique<ShadowFile>(*memoryManager.getBufferManager(), vfs, this->databasePath);
@@ -122,9 +124,9 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry) {
             tables[entry->getTableID()] = std::make_unique<ArrowNodeTable>(this, entry,
                 &memoryManager, std::move(schemaCopy), std::move(arraysCopy), arrowId);
         } else {
-            // Create parquet-backed node table
+            // Create icebug-disk-backed node table
             tables[entry->getTableID()] =
-                std::make_unique<ParquetNodeTable>(this, entry, &memoryManager);
+                std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager);
         }
     } else {
         // Create regular node table
@@ -170,8 +172,8 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
                 info.nodePair.dstTableID, this, &memoryManager, fromNodeTable, toNodeTable,
                 std::move(schemaCopy), std::move(arraysCopy), arrowId);
         } else {
-            // Create parquet-backed rel table
-            tables[info.oid] = std::make_unique<ParquetRelTable>(entry, info.nodePair.srcTableID,
+            // Create icebug-disk-backed rel table
+            tables[info.oid] = std::make_unique<IceDiskRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager);
         }
     } else {
@@ -437,8 +439,8 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
                               ->ptrCast<NodeTableCatalogEntry>();
         tableNameCache[tableID] = tableEntry->getName();
         if (!tableEntry->getStorage().empty()) {
-            // Create parquet-backed node table
-            tables[tableID] = std::make_unique<ParquetNodeTable>(this, tableEntry, &memoryManager);
+            // Create icebug-disk-backed node table
+            tables[tableID] = std::make_unique<IceDiskNodeTable>(this, tableEntry, &memoryManager);
         } else {
             // Create regular node table
             tables[tableID] = std::make_unique<NodeTable>(this, tableEntry, &memoryManager);
@@ -465,8 +467,8 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
             RelTableCatalogInfo info = RelTableCatalogInfo::deserialize(deSer);
             DASSERT(!tables.contains(info.oid));
             if (!relGroupEntry->getStorage().empty()) {
-                // Create parquet-backed rel table
-                tables[info.oid] = std::make_unique<ParquetRelTable>(relGroupEntry,
+                // Create icebug-disk-backed rel table
+                tables[info.oid] = std::make_unique<IceDiskRelTable>(relGroupEntry,
                     info.nodePair.srcTableID, info.nodePair.dstTableID, this, &memoryManager);
             } else {
                 // Create regular rel table

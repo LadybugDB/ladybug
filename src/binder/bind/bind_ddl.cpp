@@ -11,6 +11,7 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
+#include "common/constants.h"
 #include "common/enums/extend_direction_util.h"
 #include "common/exception/binder.h"
 #include "common/exception/message.h"
@@ -316,6 +317,30 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
                     std::format("Cannot create rel table with FROM and TO tables from different "
                                 "databases. FROM is from '{}', TO is from '{}'.",
                         srcDbName, dstDbName));
+            }
+        }
+
+        // We only allow icebug-disk rel tables to connect icebug-disk node tables
+        if (TableOptionConstants::isIceBugDiskStorage(storage)) {
+            auto srcNodeEntry = srcEntry->ptrCast<NodeTableCatalogEntry>();
+            auto dstNodeEntry = dstEntry->ptrCast<NodeTableCatalogEntry>();
+
+            if (!TableOptionConstants::isIceBugDiskStorage(srcNodeEntry->getStorage()) ||
+                !TableOptionConstants::isIceBugDiskStorage(dstNodeEntry->getStorage())) {
+                throw BinderException("icebug-disk rel tables require both FROM and TO tables to "
+                                      "be icebug-disk node tables.");
+            }
+        }
+
+        // Non-icebug-disk rel tables cannot connect to icebug-disk node tables
+        if (!TableOptionConstants::isIceBugDiskStorage(storage)) {
+            auto srcNodeEntry = srcEntry->ptrCast<NodeTableCatalogEntry>();
+            auto dstNodeEntry = dstEntry->ptrCast<NodeTableCatalogEntry>();
+
+            if (TableOptionConstants::isIceBugDiskStorage(srcNodeEntry->getStorage()) ||
+                TableOptionConstants::isIceBugDiskStorage(dstNodeEntry->getStorage())) {
+                throw BinderException("Rel tables with non-icebug-disk storage do not support "
+                                      "icebug-disk node tables as FROM or TO tables.");
             }
         }
 

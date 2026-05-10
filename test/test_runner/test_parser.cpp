@@ -88,8 +88,8 @@ void TestParser::extractDataset() {
             testGroup->datasetType = TestGroup::DatasetType::JSON;
             testGroup->dataset = currentToken.params[2];
         }
-    } else if (datasetType == "GRAPH-STD") {
-        testGroup->datasetType = TestGroup::DatasetType::GRAPH_STD;
+    } else if (datasetType == "ICEBUG-DISK") {
+        testGroup->datasetType = TestGroup::DatasetType::ICEBUG_DISK;
         testGroup->dataset = currentToken.params[2];
     } else {
         throw TestException(

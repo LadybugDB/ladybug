@@ -214,7 +214,7 @@ RelGroupCatalogEntry::getBoundExtraCreateInfo(transaction::Transaction*) const {
     }
     return std::make_unique<binder::BoundExtraCreateRelTableGroupInfo>(
         copyVector(propertyCollection.getDefinitions()), srcMultiplicity, dstMultiplicity,
-        storageDirection, std::move(nodePairs));
+        storageDirection, std::move(nodePairs), storage);
 }
 
 } // namespace catalog
