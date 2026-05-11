@@ -34,6 +34,21 @@ endif()
 target_link_libraries(lbug PUBLIC lbug_link_deps)
 target_link_libraries(lbug_shared PUBLIC lbug_link_deps)
 
+set(LBUG_STATIC_ARCHIVE_PATHS)
+foreach(LIBRARY IN LISTS LBUG_STATIC_ARCHIVE_LIBRARIES)
+        list(APPEND LBUG_STATIC_ARCHIVE_PATHS "$<TARGET_FILE:${LIBRARY}>")
+endforeach()
+list(JOIN LBUG_STATIC_ARCHIVE_PATHS "|" LBUG_STATIC_ARCHIVE_PATH_EXPR)
+add_custom_command(TARGET lbug POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+                "-DOUTPUT=$<TARGET_FILE:lbug>"
+                "-DMAIN_LIBRARY=$<TARGET_FILE:lbug>"
+                "-DSTATIC_LIBRARIES=${LBUG_STATIC_ARCHIVE_PATH_EXPR}"
+                "-DAR_EXECUTABLE=${CMAKE_AR}"
+                "-DRANLIB_EXECUTABLE=${CMAKE_RANLIB}"
+                -P "${PROJECT_SOURCE_DIR}/cmake/BundleStaticLibrary.cmake"
+        VERBATIM)
+
 set(LBUG_INCLUDES $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include/c_api ${CMAKE_CURRENT_BINARY_DIR}/../src/include)
 target_include_directories(lbug PUBLIC ${LBUG_INCLUDES})
 target_include_directories(lbug_shared PUBLIC ${LBUG_INCLUDES})
