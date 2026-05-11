@@ -130,26 +130,6 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
                 }
                 continue;
             }
-
-            if (storagePath.find("://") != std::string::npos) {
-                // Non-icebug-disk URI — do not modify.
-                continue;
-            }
-
-            auto fullPath = storagePath;
-            if (std::filesystem::path(storagePath).is_relative()) {
-                if (std::filesystem::path(storagePath).parent_path().empty()) {
-                    fullPath = (cypherDir / storagePath).string();
-                } else {
-                    fullPath = appendLbugRootPath(storagePath);
-                }
-            }
-            fullPath = normalizePathForCypher(std::move(fullPath));
-
-            size_t pos = line.find(storagePath);
-            if (pos != std::string::npos) {
-                line.replace(pos, storagePath.length(), fullPath);
-            }
         }
 #ifdef __STATIC_LINK_EXTENSION_TEST__
         if (line.starts_with("load extension")) {

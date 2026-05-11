@@ -4,31 +4,31 @@
 -CASE IceDiskNonExistentDirNodeFails
 
 -LOG IceDiskNonExistentDirMissingParquet
--STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY) WITH (STORAGE = 'icebug-disk:/nonexistent/dir/that/does/not/exist')
+-STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY) WITH (storage = 'icebug-disk:/nonexistent/dir/that/does/not/exist')
 ---- error(regex)
 .*[Nn]o such file.*|.*[Cc]annot open.*|.*nodes_t\.parquet.*
 
 -CASE IceDiskURINodeFails
 
 -LOG IceDiskURIMissingParquet
--STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY) WITH (STORAGE = 'icebug-disk:https://example.com/path')
+-STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY) WITH (storage = 'icebug-disk:https://example.com/path')
 ---- error(regex)
 .*[Nn]o such file.*|.*[Cc]annot open.*|.*nodes_t\.parquet.*
 
 -CASE IceDiskPrefixOnlyRelFails
 
 -LOG IceDiskPrefixOnlyRelMissingParquet
--STATEMENT CREATE NODE TABLE upperversion(id INT64 PRIMARY KEY) WITH (STORAGE = 'icebug-disk:${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures')
+-STATEMENT CREATE NODE TABLE upperversion(id INT64 PRIMARY KEY) WITH (storage = 'icebug-disk:${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures')
 ---- ok
--STATEMENT CREATE REL TABLE rel(FROM upperversion TO upperversion) WITH (STORAGE = 'icebug-disk')
+-STATEMENT CREATE REL TABLE rel(FROM upperversion TO upperversion) WITH (storage = 'icebug-disk')
 ---- error(regex)
 .*[Nn]o such file.*|.*[Cc]annot open.*|.*indices_rel\.parquet.*
 
 -CASE IceDiskPrefixWithColonRelFails
 
 -LOG IceDiskPrefixColonRelMissingParquet
--STATEMENT CREATE NODE TABLE upperversion(id INT64 PRIMARY KEY) WITH (STORAGE = 'icebug-disk:${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures')
+-STATEMENT CREATE NODE TABLE upperversion(id INT64 PRIMARY KEY) WITH (storage = 'icebug-disk:${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures')
 ---- ok
--STATEMENT CREATE REL TABLE rel(FROM upperversion TO upperversion) WITH (STORAGE = 'icebug-disk:')
+-STATEMENT CREATE REL TABLE rel(FROM upperversion TO upperversion) WITH (storage = 'icebug-disk:')
 ---- error(regex)
 .*[Nn]o such file.*|.*[Cc]annot open.*|.*indices_rel\.parquet.*

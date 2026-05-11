@@ -26,9 +26,6 @@ public:
     // Parses "icebug-disk", "icebug-disk:", or "icebug-disk:<path>" and returns the path
     // component. Returns empty string for the first two forms (caller interprets as current dir)
     static std::string getBasePath(const std::string& storage) {
-        if (!storage.starts_with(common::TableOptionConstants::ICEBUG_DISK_PREFIX)) {
-            return "";
-        }
         std::string_view rest = std::string_view(storage).substr(
             common::TableOptionConstants::ICEBUG_DISK_PREFIX.size());
         // Strip the optional ':' separator.
