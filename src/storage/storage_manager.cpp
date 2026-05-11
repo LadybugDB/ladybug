@@ -97,7 +97,7 @@ void StorageManager::recover(main::ClientContext& clientContext, bool throwOnWal
     walReplayer->replay(throwOnWalReplayFailure, enableChecksums);
 }
 
-void StorageManager::createNodeTable(NodeTableCatalogEntry* entry) {
+void StorageManager::createNodeTable(NodeTableCatalogEntry* entry, main::ClientContext* context) {
     tableNameCache[entry->getTableID()] = entry->getName();
     if (!entry->getStorage().empty()) {
         // Check if storage is Arrow backed
@@ -126,7 +126,7 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry) {
         } else if (TableOptionConstants::isIceBugDiskStorage(entry->getStorage())) {
             // Create icebug-disk-backed node table
             tables[entry->getTableID()] =
-                std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager);
+                std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager, context);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage option for node table: " + entry->getStorage());
@@ -140,7 +140,8 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry) {
 // TODO(Guodong): This API is added since storageManager doesn't provide an API to add a single
 // rel table. We may have to refactor the existing StorageManager::createTable(TableCatalogEntry*
 // entry).
-void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCatalogInfo& info) {
+void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCatalogInfo& info,
+    main::ClientContext* context) {
     if (entry->getScanFunction().has_value()) {
         // Create foreign-backed rel table
         tables[info.oid] = std::make_unique<ForeignRelTable>(entry, info.nodePair.srcTableID,
@@ -177,7 +178,7 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
         } else if (TableOptionConstants::isIceBugDiskStorage(entry->getStorage())) {
             // Create icebug-disk-backed rel table
             tables[info.oid] = std::make_unique<IceDiskRelTable>(entry, info.nodePair.srcTableID,
-                info.nodePair.dstTableID, this, &memoryManager);
+                info.nodePair.dstTableID, this, &memoryManager, context);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage option for rel table: " + entry->getStorage());
@@ -189,20 +190,21 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
     }
 }
 
-void StorageManager::createRelTableGroup(RelGroupCatalogEntry* entry) {
+void StorageManager::createRelTableGroup(RelGroupCatalogEntry* entry,
+    main::ClientContext* context) {
     for (auto& info : entry->getRelEntryInfos()) {
-        addRelTable(entry, info);
+        addRelTable(entry, info, context);
     }
 }
 
-void StorageManager::createTable(TableCatalogEntry* entry) {
+void StorageManager::createTable(TableCatalogEntry* entry, main::ClientContext* context) {
     std::unique_lock lck{mtx};
     switch (entry->getType()) {
     case CatalogEntryType::NODE_TABLE_ENTRY: {
-        createNodeTable(entry->ptrCast<NodeTableCatalogEntry>());
+        createNodeTable(entry->ptrCast<NodeTableCatalogEntry>(), context);
     } break;
     case CatalogEntryType::REL_GROUP_ENTRY: {
-        createRelTableGroup(entry->ptrCast<RelGroupCatalogEntry>());
+        createRelTableGroup(entry->ptrCast<RelGroupCatalogEntry>(), context);
     } break;
     default: {
         UNREACHABLE_CODE;
@@ -446,7 +448,8 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
         tableNameCache[tableID] = tableEntry->getName();
         if (!tableEntry->getStorage().empty()) {
             // Create icebug-disk-backed node table
-            tables[tableID] = std::make_unique<IceDiskNodeTable>(this, tableEntry, &memoryManager);
+            tables[tableID] =
+                std::make_unique<IceDiskNodeTable>(this, tableEntry, &memoryManager, context);
         } else {
             // Create regular node table
             tables[tableID] = std::make_unique<NodeTable>(this, tableEntry, &memoryManager);
@@ -475,8 +478,9 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
             if (!relGroupEntry->getStorage().empty() &&
                 TableOptionConstants::isIceBugDiskStorage(relGroupEntry->getStorage())) {
                 // Create icebug-disk-backed rel table
-                tables[info.oid] = std::make_unique<IceDiskRelTable>(relGroupEntry,
-                    info.nodePair.srcTableID, info.nodePair.dstTableID, this, &memoryManager);
+                tables[info.oid] =
+                    std::make_unique<IceDiskRelTable>(relGroupEntry, info.nodePair.srcTableID,
+                        info.nodePair.dstTableID, this, &memoryManager, context);
             } else {
                 // Create regular rel table
                 tables[info.oid] = std::make_unique<RelTable>(relGroupEntry,

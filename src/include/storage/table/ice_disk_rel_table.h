@@ -8,6 +8,9 @@
 #include "transaction/transaction.h"
 
 namespace lbug {
+namespace main {
+class ClientContext;
+} // namespace main
 namespace storage {
 
 struct IceDiskRelTableScanState final : RelTableScanState {
@@ -38,7 +41,7 @@ class IceDiskRelTable final : public ColumnarRelTableBase {
 public:
     IceDiskRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, common::table_id_t fromTableID,
         common::table_id_t toTableID, const StorageManager* storageManager,
-        MemoryManager* memoryManager);
+        MemoryManager* memoryManager, main::ClientContext* context = nullptr);
 
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,
         bool resetCachedBoundNodeSelVec = true) const override;

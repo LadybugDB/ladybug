@@ -80,15 +80,30 @@ public:
     }
 
     // Validates that the parquet file at `path` carries the expected icebug_disk_version metadata.
-    // `dbDirectory` is used to anchor relative paths (typically parent of the .ladybug file).
-    static void checkVersionCompatibility(common::VirtualFileSystem* vfs,
-        const std::string& dbDirectory, const std::string& path) {
+    // `dbDirectory` is used to anchor relative paths (typically parent of the .lbdb file).
+    // When the resolved path does not exist and `context` is provided, falls back to VFS
+    // search-path resolution (fileSearchPath) so that `lbug -i schema.cypher` can find parquet
+    // files located in the same directory as the schema file.
+    // Returns the final resolved path that was successfully validated.
+    static std::string checkVersionCompatibility(common::VirtualFileSystem* vfs,
+        const std::string& dbDirectory, const std::string& path,
+        main::ClientContext* context = nullptr) {
         if (!vfs) {
             throw common::RuntimeException(
                 "No VirtualFileSystem available for IceDisk version check: " + path);
         }
 
-        const auto resolvedPath = resolveIceDiskPath(path, dbDirectory);
+        auto resolvedPath = resolveIceDiskPath(path, dbDirectory);
+
+        // When the primary (DB-relative) path does not exist and the caller provides a
+        // client context, try resolving through the VFS file-search path (e.g. the directory
+        // added by addInitFileDirToSearchPath when -i <schema> is used).
+        if (context && !vfs->fileOrPathExists(resolvedPath)) {
+            auto found = vfs->glob(context, path);
+            if (!found.empty()) {
+                resolvedPath = found.front();
+            }
+        }
 
         auto metadata = processor::ParquetReader::readMetadata(resolvedPath, vfs);
         if (!metadata) {
@@ -123,6 +138,7 @@ public:
             throw common::RuntimeException(
                 "Current ladybug version does not support icebug_disk_version: " + versionValue);
         }
+        return resolvedPath;
     }
 };
 

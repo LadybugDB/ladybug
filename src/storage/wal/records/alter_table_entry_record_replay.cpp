@@ -61,7 +61,7 @@ void WALReplayer::replayAlterTableEntryRecord(const WALRecord& walRecord) const 
                                  ->ptrCast<RelGroupCatalogEntry>();
         auto relEntryInfo =
             relGroupEntry->getRelEntryInfo(extraInfo->fromTableID, extraInfo->toTableID);
-        storageManager->addRelTable(relGroupEntry, *relEntryInfo);
+        storageManager->addRelTable(relGroupEntry, *relEntryInfo, &clientContext);
     } break;
     default:
         break;

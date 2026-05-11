@@ -43,18 +43,18 @@ void IceDiskRelTableScanState::setToTable(const Transaction* transaction, Table*
 }
 
 IceDiskRelTable::IceDiskRelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
-    table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager)
+    table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager,
+    main::ClientContext* context)
     : ColumnarRelTableBase{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager} {
     const auto base = IceDiskUtils::getBasePath(relGroupEntry->getStorage());
     auto paths = IceDiskUtils::constructCSRPaths(base, relGroupEntry->getName(), ".parquet");
 
     const auto dbDir =
         std::filesystem::path(storageManager->getDatabasePath()).parent_path().string();
-    IceDiskUtils::checkVersionCompatibility(storageManager->getVFS(), dbDir, paths.indices);
-    IceDiskUtils::checkVersionCompatibility(storageManager->getVFS(), dbDir, paths.indptr);
-
-    indicesFilePath = paths.indices;
-    indptrFilePath = paths.indptr;
+    indicesFilePath = IceDiskUtils::checkVersionCompatibility(storageManager->getVFS(), dbDir,
+        paths.indices, context);
+    indptrFilePath = IceDiskUtils::checkVersionCompatibility(storageManager->getVFS(), dbDir,
+        paths.indptr, context);
 }
 
 void IceDiskRelTable::initScanState(Transaction* transaction, TableScanState& scanState,

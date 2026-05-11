@@ -346,7 +346,7 @@ void Alter::alterTable(main::ClientContext* clientContext, const TableCatalogEnt
         auto connectionInfo = alterInfo.extraInfo->constPtrCast<BoundExtraAlterFromToConnection>();
         auto relEntryInfo =
             relGroupEntry->getRelEntryInfo(connectionInfo->fromTableID, connectionInfo->toTableID);
-        storageManager->addRelTable(relGroupEntry, *relEntryInfo);
+        storageManager->addRelTable(relGroupEntry, *relEntryInfo, clientContext);
     } break;
     default:
         break;

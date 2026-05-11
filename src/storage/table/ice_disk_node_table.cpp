@@ -26,7 +26,8 @@ namespace lbug {
 namespace storage {
 
 IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
-    const NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager)
+    const NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
+    main::ClientContext* context)
     : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager,
           std::make_unique<IceDiskNodeTableScanSharedState>()} {
     auto file = IceDiskUtils::constructNodeTablePath(
@@ -34,8 +35,8 @@ IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
         ".parquet");
     const auto dbDir =
         std::filesystem::path(storageManager->getDatabasePath()).parent_path().string();
-    IceDiskUtils::checkVersionCompatibility(storageManager->getVFS(), dbDir, file);
-    parquetFilePath = file;
+    parquetFilePath =
+        IceDiskUtils::checkVersionCompatibility(storageManager->getVFS(), dbDir, file, context);
 }
 
 void IceDiskNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {

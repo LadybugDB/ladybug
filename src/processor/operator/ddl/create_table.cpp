@@ -42,7 +42,8 @@ void CreateTable::executeInternal(ExecutionContext* context) {
     default:
         UNREACHABLE_CODE;
     }
-    storage::StorageManager::Get(*clientContext)->createTable(entry->ptrCast<TableCatalogEntry>());
+    storage::StorageManager::Get(*clientContext)
+        ->createTable(entry->ptrCast<TableCatalogEntry>(), clientContext);
     appendMessage(std::format("Table {} has been created.", info.tableName), memoryManager);
     sharedState->tableCreated = true;
 }

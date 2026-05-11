@@ -12,6 +12,9 @@
 #include "storage/table/columnar_node_table_base.h"
 
 namespace lbug {
+namespace main {
+class ClientContext;
+} // namespace main
 namespace storage {
 
 struct IceDiskNodeTableScanState final : ColumnarNodeTableScanState {
@@ -61,7 +64,8 @@ public:
 class IceDiskNodeTable final : public ColumnarNodeTableBase {
 public:
     IceDiskNodeTable(const StorageManager* storageManager,
-        const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager);
+        const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
+        main::ClientContext* context = nullptr);
 
     void initializeScanCoordination(const transaction::Transaction* transaction) override;
 

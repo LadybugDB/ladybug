@@ -24,7 +24,7 @@ void WALReplayer::replayCreateCatalogEntryRecord(WALRecord& walRecord) const {
         auto& entry = record.ownedCatalogEntry->constCast<TableCatalogEntry>();
         auto newEntry = catalog->createTableEntry(transaction,
             entry.getBoundCreateTableInfo(transaction, record.isInternal));
-        storageManager->createTable(newEntry->ptrCast<TableCatalogEntry>());
+        storageManager->createTable(newEntry->ptrCast<TableCatalogEntry>(), &clientContext);
     } break;
     case CatalogEntryType::SCALAR_MACRO_ENTRY: {
         auto& macroEntry = record.ownedCatalogEntry->constCast<ScalarMacroCatalogEntry>();

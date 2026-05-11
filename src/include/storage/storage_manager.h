@@ -44,9 +44,9 @@ public:
     static void recover(main::ClientContext& clientContext, bool throwOnWalReplayFailure,
         bool enableChecksums);
 
-    void createTable(catalog::TableCatalogEntry* entry);
-    void addRelTable(catalog::RelGroupCatalogEntry* entry,
-        const catalog::RelTableCatalogInfo& info);
+    void createTable(catalog::TableCatalogEntry* entry, main::ClientContext* context = nullptr);
+    void addRelTable(catalog::RelGroupCatalogEntry* entry, const catalog::RelTableCatalogInfo& info,
+        main::ClientContext* context = nullptr);
 
     bool checkpoint(main::ClientContext* context, PageAllocator& pageAllocator);
     bool checkpoint(main::ClientContext* context, const transaction::Transaction& snapshotTxn,
@@ -100,9 +100,11 @@ public:
     static StorageManager* Get(const main::ClientContext& context);
 
 private:
-    void createNodeTable(catalog::NodeTableCatalogEntry* entry);
+    void createNodeTable(catalog::NodeTableCatalogEntry* entry,
+        main::ClientContext* context = nullptr);
 
-    void createRelTableGroup(catalog::RelGroupCatalogEntry* entry);
+    void createRelTableGroup(catalog::RelGroupCatalogEntry* entry,
+        main::ClientContext* context = nullptr);
 
     void reclaimDroppedTables(const catalog::Catalog& catalog);
 
