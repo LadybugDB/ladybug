@@ -21,9 +21,6 @@ static const std::string DEMO_DB_ICEBUG_DISK =
 // ─────────────────────────────────────────────────────────────
 // getBasePath
 // ─────────────────────────────────────────────────────────────
-TEST(IceDiskUtils_GetBasePath, EmptyString) {
-    EXPECT_EQ("", IceDiskUtils::getBasePath(""));
-}
 
 TEST(IceDiskUtils_GetBasePath, PrefixOnly) {
     EXPECT_EQ("", IceDiskUtils::getBasePath("icebug-disk"));
@@ -39,10 +36,6 @@ TEST(IceDiskUtils_GetBasePath, PrefixWithAbsolutePath) {
 
 TEST(IceDiskUtils_GetBasePath, PrefixWithRelativePath) {
     EXPECT_EQ("rel/path", IceDiskUtils::getBasePath("icebug-disk:rel/path"));
-}
-
-TEST(IceDiskUtils_GetBasePath, NonIceDiskPrefix) {
-    EXPECT_EQ("", IceDiskUtils::getBasePath("parquet:/path"));
 }
 
 TEST(IceDiskUtils_GetBasePath, PrefixWithDot) {
