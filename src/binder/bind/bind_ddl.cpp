@@ -227,9 +227,10 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     if (!storage.empty()) {
         auto dotPos = storage.find('.');
         // Check if storage is database.table format by verifying the attached database exists
+        // Handle special case where icebug-disk storage could contain a dot
         // Otherwise, treat as file path (e.g., "dataset/demo-db/icebug-disk/demo" or
         // "data.parquet")
-        if (dotPos != std::string::npos) {
+        if (!TableOptionConstants::isIceBugDiskStorage(storage) && dotPos != std::string::npos) {
             std::string dbName = storage.substr(0, dotPos);
             std::string tableName = storage.substr(dotPos + 1);
             if (!dbName.empty()) {

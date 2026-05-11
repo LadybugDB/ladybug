@@ -1,0 +1,31 @@
+-DATASET CSV empty
+--
+
+-CASE RelIceDiskNodeRegular
+
+-LOG CreateRegularNodeTable
+-STATEMENT CREATE NODE TABLE person(id INT64 PRIMARY KEY, name STRING)
+---- ok
+
+-LOG IceDiskRelWithRegularNodeFails
+-STATEMENT CREATE REL TABLE rel(FROM person TO person) WITH (STORAGE = 'icebug-disk:${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures')
+---- error
+Binder exception: icebug-disk rel tables require both FROM and TO tables to be icebug-disk node tables.
+
+-CASE NodeIceDiskRelRegular
+
+-LOG CreateIceDiskNodeTable
+-STATEMENT CREATE NODE TABLE upperversion(id INT64 PRIMARY KEY) WITH (STORAGE = 'icebug-disk:${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures')
+---- ok
+
+-LOG RegularRelWithIceDiskNodeFails
+-STATEMENT CREATE NODE TABLE person(id INT64 PRIMARY KEY, name STRING)
+-STATEMENT CREATE REL TABLE rel(FROM person TO upperversion)
+---- error
+Binder exception: Rel tables with non-icebug-disk storage do not support icebug-disk node tables as FROM or TO tables.
+
+-LOG RegularRelWithBothIceDiskNodeFails
+-STATEMENT CREATE REL TABLE rel(FROM person TO upperversion)
+-STATEMENT CREATE REL TABLE rel(FROM upperversion TO upperversion)
+---- error
+Binder exception: Rel tables with non-icebug-disk storage do not support icebug-disk node tables as FROM or TO tables.
