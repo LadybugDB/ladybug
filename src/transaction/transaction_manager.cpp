@@ -42,9 +42,6 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
         }
         auto transaction =
             std::make_unique<Transaction>(clientContext, type, ++lastTransactionID, lastTimestamp);
-        if (transaction->shouldLogToWAL()) {
-            transaction->getLocalWAL().logBeginTransaction();
-        }
         activeWriteTransactionCount.fetch_add(1, std::memory_order_release);
         activeTransactions.push_back(std::move(transaction));
         return activeTransactions.back().get();

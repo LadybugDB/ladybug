@@ -45,7 +45,6 @@ public:
 
     void logLoadExtension(std::string path);
 
-    void logBeginTransaction();
     void logCommit();
 
     void clear();
@@ -53,11 +52,13 @@ public:
 
 private:
     void addNewWALRecord(const WALRecord& walRecord);
+    void addNewWALRecordNoLock(const WALRecord& walRecord);
 
 private:
     std::mutex mtx;
     std::shared_ptr<common::InMemFileWriter> inMemWriter;
     common::Serializer serializer;
+    bool hasLoggedBegin = false;
 };
 
 } // namespace storage

@@ -76,6 +76,18 @@ TEST_F(WalTest, NoWALAfterCheckpoint) {
     ASSERT_FALSE(std::filesystem::exists(walFilePath));
 }
 
+TEST_F(WalTest, EmptyWriteTransactionDoesNotCreateWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL force_checkpoint_on_close=false");
+    auto walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+    ASSERT_FALSE(std::filesystem::exists(walFilePath));
+    auto result = conn->query("CALL THREADS=1");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_FALSE(std::filesystem::exists(walFilePath));
+}
+
 TEST_F(WalTest, ShadowFileExistsWithoutWAL) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();

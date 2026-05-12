@@ -18,14 +18,13 @@ LocalWAL::LocalWAL(MemoryManager& mm, bool enableChecksums)
       serializer(enableChecksums ? std::make_shared<ChecksumWriter>(inMemWriter, mm) :
                                    std::static_pointer_cast<Writer>(inMemWriter)) {}
 
-void LocalWAL::logBeginTransaction() {
-    BeginTransactionRecord walRecord;
-    addNewWALRecord(walRecord);
-}
-
 void LocalWAL::logCommit() {
+    std::unique_lock lck{mtx};
+    if (!hasLoggedBegin) {
+        return;
+    }
     CommitRecord walRecord;
-    addNewWALRecord(walRecord);
+    addNewWALRecordNoLock(walRecord);
 }
 
 void LocalWAL::logCreateCatalogEntryRecord(CatalogEntry* catalogEntry, bool isInternal) {
@@ -93,6 +92,7 @@ void LocalWAL::logLoadExtension(std::string path) {
 void LocalWAL::clear() {
     std::unique_lock lck{mtx};
     serializer.getWriter()->clear();
+    hasLoggedBegin = false;
 }
 
 uint64_t LocalWAL::getSize() {
@@ -103,6 +103,17 @@ uint64_t LocalWAL::getSize() {
 // NOLINTNEXTLINE(readability-make-member-function-const): semantically non-const function.
 void LocalWAL::addNewWALRecord(const WALRecord& walRecord) {
     std::unique_lock lck{mtx};
+    if (!hasLoggedBegin && walRecord.type != WALRecordType::BEGIN_TRANSACTION_RECORD &&
+        walRecord.type != WALRecordType::COMMIT_RECORD) {
+        BeginTransactionRecord beginRecord;
+        addNewWALRecordNoLock(beginRecord);
+        hasLoggedBegin = true;
+    }
+    addNewWALRecordNoLock(walRecord);
+}
+
+// NOLINTNEXTLINE(readability-make-member-function-const): semantically non-const function.
+void LocalWAL::addNewWALRecordNoLock(const WALRecord& walRecord) {
     DASSERT(walRecord.type != WALRecordType::INVALID_RECORD);
     serializer.getWriter()->onObjectBegin();
     walRecord.serialize(serializer);

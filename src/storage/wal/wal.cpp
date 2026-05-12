@@ -107,6 +107,12 @@ void WAL::flushAndSyncNoLock() {
 
 uint64_t WAL::getFileSize() {
     std::unique_lock lck{mtx};
+    if (!serializer) {
+        if (inMemory || !vfs->fileOrPathExists(walPath)) {
+            return 0;
+        }
+        return vfs->openFile(walPath, FileOpenFlags(FileFlags::READ_ONLY))->getFileSize();
+    }
     return serializer->getWriter()->getSize();
 }
 
