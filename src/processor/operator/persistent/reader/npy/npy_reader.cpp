@@ -261,7 +261,7 @@ NpyScanSharedState::NpyScanSharedState(FileScanInfo fileScanInfo, uint64_t numRo
 
 static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
     auto sharedState = reinterpret_cast<NpyScanSharedState*>(input.sharedState);
-    auto [_, blockIdx] = sharedState->getNext();
+    auto blockIdx = sharedState->getNext().second;
     sharedState->npyMultiFileReader->readBlock(blockIdx, output.dataChunk);
     return output.dataChunk.state->getSelVector().getSelSize();
 }

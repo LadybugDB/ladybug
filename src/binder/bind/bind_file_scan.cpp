@@ -189,6 +189,11 @@ static TableFunction getObjectScanFunc(const std::string& dbName, const std::str
     main::ClientContext* clientContext) {
     // Bind external database table
     auto attachedDB = main::DatabaseManager::Get(*clientContext)->getAttachedDatabase(dbName);
+
+    if (attachedDB == nullptr) {
+        throw BinderException(std::format("No attached database named {}.", dbName));
+    }
+
     auto attachedCatalog = attachedDB->getCatalog();
     auto entry = attachedCatalog->getTableCatalogEntry(
         transaction::Transaction::Get(*clientContext), tableName);
@@ -201,8 +206,7 @@ BoundTableScanInfo bindTableScanSourceInfo(Binder& binder, TableFunction func,
     const std::string& sourceName, std::unique_ptr<TableFuncBindData> bindData,
     const std::vector<std::string>& columnNames, const std::vector<LogicalType>& columnTypes) {
     expression_vector columns;
-    if (columnTypes.empty()) {
-    } else {
+    if (!columnTypes.empty()) {
         if (bindData->getNumColumns() != columnTypes.size()) {
             throw BinderException(std::format("{} has {} columns but {} columns were expected.",
                 sourceName, bindData->getNumColumns(), columnTypes.size()));
@@ -238,12 +242,19 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindParameterScanSource(
     // Bind external object as table
     auto replacementData =
         clientContext->tryReplaceByHandle(scanSourceValue.getValue<scan_replace_handle_t>());
+
+    if (replacementData == nullptr) {
+        throw BinderException(
+            std::format("Cannot find scan replacement for parameter expression."));
+    }
+
     func = replacementData->func;
     auto replaceExtraInput = std::make_unique<ExtraScanTableFuncBindInput>();
     replaceExtraInput->fileScanInfo.options = bindParsingOptions(options);
-    replacementData->bindInput.extraInput = std::move(replaceExtraInput);
-    replacementData->bindInput.binder = this;
-    bindData = func.bindFunc(clientContext, &replacementData->bindInput);
+    auto localBindInput = std::move(replacementData->bindInput);
+    localBindInput.extraInput = std::move(replaceExtraInput);
+    localBindInput.binder = this;
+    bindData = func.bindFunc(clientContext, &localBindInput);
     auto info = bindTableScanSourceInfo(*this, func, paramExpr->toString(), std::move(bindData),
         columnNames, columnTypes);
     return std::make_unique<BoundTableScanSource>(ScanSourceType::OBJECT, std::move(info));
@@ -266,9 +277,10 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindObjectScanSource(const BaseScan
             func = replacementData->func;
             auto replaceExtraInput = std::make_unique<ExtraScanTableFuncBindInput>();
             replaceExtraInput->fileScanInfo.options = bindParsingOptions(options);
-            replacementData->bindInput.extraInput = std::move(replaceExtraInput);
-            replacementData->bindInput.binder = this;
-            bindData = func.bindFunc(clientContext, &replacementData->bindInput);
+            auto localBindInput = std::move(replacementData->bindInput);
+            localBindInput.extraInput = std::move(replaceExtraInput);
+            localBindInput.binder = this;
+            bindData = func.bindFunc(clientContext, &localBindInput);
         } else if (main::DatabaseManager::Get(*clientContext)->hasDefaultDatabase()) {
             auto dbName = main::DatabaseManager::Get(*clientContext)->getDefaultDatabase();
             func = getObjectScanFunc(dbName, objectSource->objectNames[0], clientContext);

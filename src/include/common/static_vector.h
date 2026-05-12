@@ -55,7 +55,12 @@ public:
         DASSERT(i < len);
         return items[i].assumeInit();
     }
-    void push_back(T elem) {
+    void push_back(const T& elem) {
+        DASSERT(len < N);
+        new (items[len].ptr()) T(elem);
+        len++;
+    }
+    void push_back(T&& elem) {
         DASSERT(len < N);
         new (items[len].ptr()) T(std::move(elem));
         len++;

@@ -210,7 +210,6 @@ NodeGroupScanResult NodeGroup::scan(const Transaction* transaction, TableScanSta
     bool enableSemiMask =
         state.source == TableScanSource::COMMITTED && state.semiMask && state.semiMask->isEnabled();
     if (enableSemiMask) {
-        auto& nodeGroupScanState = *state.nodeGroupScanState;
         const auto startNodeOffset = nodeGroupScanState.nextRowToScan +
                                      StorageUtils::getStartOffsetOfNodeGroup(state.nodeGroupIdx);
         NodeTable::applySemiMaskFilter(state, startNodeOffset, numRowsToScan,
@@ -265,7 +264,7 @@ NodeGroupScanResult NodeGroup::scanInternal(const UniqLock& lock, Transaction* t
     auto& nodeGroupScanState = *state.nodeGroupScanState;
     nodeGroupScanState.nextRowToScan = startOffsetInGroup;
 
-    auto [newChunkedGroupIdx, _] = findChunkedGroupIdxFromRowIdxNoLock(startOffsetInGroup);
+    const auto newChunkedGroupIdx = findChunkedGroupIdxFromRowIdxNoLock(startOffsetInGroup).first;
     DASSERT(newChunkedGroupIdx != INVALID_CHUNKED_GROUP_IDX);
 
     const auto* chunkedGroupToScan = chunkedGroups.getGroup(lock, newChunkedGroupIdx);
@@ -472,7 +471,7 @@ std::unique_ptr<ChunkedNodeGroup> NodeGroup::checkpointInMemAndOnDisk(MemoryMana
     const auto numInsertedRows = insertChunkedGroup->getNumRows();
     for (auto i = 0u; i < state.columnIDs.size(); i++) {
         const auto columnID = state.columnIDs[i];
-        // if has persistent data, scan updates from persistent chunked group;
+        // Scan updates from the persistent chunked group when persistent data exists.
         DASSERT(firstGroup && firstGroup->getResidencyState() == ResidencyState::ON_DISK);
         const auto columnHasUpdates =
             firstGroup->hasAnyUpdates(txn, columnID, 0, firstGroup->getNumRows());
@@ -629,8 +628,7 @@ std::pair<idx_t, row_idx_t> NodeGroup::findChunkedGroupIdxFromRowIdxNoLock(row_i
 
 ChunkedNodeGroup* NodeGroup::findChunkedGroupFromRowIdx(const UniqLock& lock,
     row_idx_t rowIdx) const {
-    const auto [chunkedGroupIdx, rowIdxInChunkedGroup] =
-        findChunkedGroupIdxFromRowIdxNoLock(rowIdx);
+    const auto chunkedGroupIdx = findChunkedGroupIdxFromRowIdxNoLock(rowIdx).first;
     if (chunkedGroupIdx == INVALID_CHUNKED_GROUP_IDX) {
         return nullptr;
     }
@@ -638,8 +636,7 @@ ChunkedNodeGroup* NodeGroup::findChunkedGroupFromRowIdx(const UniqLock& lock,
 }
 
 ChunkedNodeGroup* NodeGroup::findChunkedGroupFromRowIdxNoLock(row_idx_t rowIdx) const {
-    const auto [chunkedGroupIdx, rowIdxInChunkedGroup] =
-        findChunkedGroupIdxFromRowIdxNoLock(rowIdx);
+    const auto chunkedGroupIdx = findChunkedGroupIdxFromRowIdxNoLock(rowIdx).first;
     if (chunkedGroupIdx == INVALID_CHUNKED_GROUP_IDX) {
         return nullptr;
     }
