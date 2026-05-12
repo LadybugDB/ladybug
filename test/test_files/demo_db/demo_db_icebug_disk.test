@@ -4,6 +4,46 @@
 
 -CASE DemoDBIcebugDiskTest
 
+-LOG RenameUserNodeTableFails
+-STATEMENT ALTER TABLE user RENAME TO user2
+---- error
+Binder exception: Cannot alter table user: icebug-disk tables are immutable.
+
+-LOG RenameFollowsRelTableFails
+-STATEMENT ALTER TABLE follows RENAME TO follows2
+---- error
+Binder exception: Cannot alter table follows: icebug-disk tables are immutable.
+
+-LOG InsertIntoUserNodeTableFails
+-STATEMENT CREATE (u:user {id: 350, name: 'Alice', age: 35});
+---- error(regex)
+^Runtime exception: Cannot insert.*
+
+-LOG InsertIntoFollowsRelTableFails
+-STATEMENT MATCH (u1:User), (u2:User) WHERE u1.name = 'Adam' AND u2.name = 'Noura' CREATE (u1)-[:Follows {since: 2011}]->(u2);
+---- error(regex)
+^Runtime exception: Cannot insert.*
+
+-LOG UpdateUserNodeFails
+-STATEMENT MATCH (u:user {name: 'Adam'}) SET u.age = 31
+---- error(regex)
+^Runtime exception: Cannot update.*
+
+-LOG UpdateFollowsRelFails
+-STATEMENT MATCH (u1:User)-[f:Follows]->(u2:User) WHERE u1.name = 'Adam' AND u2.name = 'Karissa' SET f.since = 2011
+---- error(regex)
+^Runtime exception: Cannot update.*
+
+-LOG DeleteUserNodeFails
+-STATEMENT MATCH (u:user {name: 'Adam'}) DELETE u
+---- error(regex)
+^Runtime exception: Cannot delete.*
+
+-LOG DeleteFollowsRelFails
+-STATEMENT MATCH (u1:User)-[f:Follows]->(u2:User) WHERE u1.name = 'Adam' AND u2.name = 'Karissa' DELETE f
+---- error(regex)
+^Runtime exception: Cannot delete.*
+
 -LOG MatchUserLivesInCity
 -STATEMENT MATCH (u:user)-[l:livesin]->(c:city) RETURN u.name, u.age, c.name;
 ---- 4

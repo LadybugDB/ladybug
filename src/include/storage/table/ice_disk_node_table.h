@@ -83,7 +83,7 @@ public:
 
 protected:
     // Implement ColumnarNodeTableBase interface
-    std::string getColumnarFormatName() const override { return "icebug-"; }
+    std::string getColumnarFormatName() const override { return "icebug-disk"; }
     common::node_group_idx_t getNumBatches(
         const transaction::Transaction* transaction) const override;
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;

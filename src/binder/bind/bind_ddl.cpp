@@ -10,6 +10,7 @@
 #include "binder/expression_visitor.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "common/constants.h"
 #include "common/enums/extend_direction_util.h"
@@ -560,8 +561,36 @@ std::unique_ptr<BoundStatement> Binder::bindDrop(const Statement& statement) {
     return std::make_unique<BoundDrop>(drop.getDropInfo());
 }
 
+static void validateNotIceDiskTable(main::ClientContext* clientContext,
+    const std::string& tableName) {
+    auto catalog = Catalog::Get(*clientContext);
+    auto transaction = transaction::Transaction::Get(*clientContext);
+
+    if (!catalog->containsTable(transaction, tableName)) {
+        return;
+    }
+
+    auto tableEntry = catalog->getTableCatalogEntry(transaction, tableName);
+    std::string storage;
+
+    if (tableEntry->getTableType() == common::TableType::NODE) {
+        storage = tableEntry->ptrCast<NodeTableCatalogEntry>()->getStorage();
+    } else if (tableEntry->getTableType() == common::TableType::REL) {
+        storage = tableEntry->ptrCast<RelGroupCatalogEntry>()->getStorage();
+    }
+
+    if (TableOptionConstants::isIceBugDiskStorage(storage)) {
+        throw BinderException(
+            std::format("Cannot alter table {}: icebug-disk tables are immutable.", tableName));
+    }
+}
+
 std::unique_ptr<BoundStatement> Binder::bindAlter(const Statement& statement) {
     auto& alter = statement.constCast<Alter>();
+
+    // we don't support alter operations on icebug-disk tables
+    validateNotIceDiskTable(clientContext, alter.getInfo()->tableName);
+
     switch (alter.getInfo()->type) {
     case AlterType::RENAME: {
         return bindRenameTable(statement);

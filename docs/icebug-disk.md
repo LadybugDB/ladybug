@@ -33,6 +33,8 @@ If the directory is moved, the affected tables must be dropped and re-created wi
 
 Mixed tables are not supported — `CREATE REL TABLE` queries involving both `icebug-disk` and non-`icebug-disk` tables will throw a `BinderException`.
 
+Note: Icebug-disk tables are **immutable**: `ALTER TABLE` operations, Data insertions, updates, and deletions are not supported.
+
 ### Node tables
 
 For each node table, there is a corresponding Parquet file named `nodes_{tableName}.parquet` containing a primary key column and one column per property as declared in the schema.
