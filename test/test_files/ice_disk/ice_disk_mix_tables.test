@@ -8,14 +8,14 @@
 ---- ok
 
 -LOG IceDiskRelWithRegularNodeFails
--STATEMENT CREATE REL TABLE rel(FROM person TO person) WITH (STORAGE = 'icebug-disk:${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures')
+-STATEMENT CREATE REL TABLE rel(FROM person TO person) WITH (storage = '${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures', format = 'icebug-disk')
 ---- error
 Binder exception: Cannot mix icebug-disk tables with non-icebug-disk tables in CREATE REL TABLE.
 
 -CASE NodeIceDiskRelRegular
 
 -LOG CreateIceDiskNodeTable
--STATEMENT CREATE NODE TABLE upperversion(id INT64 PRIMARY KEY) WITH (STORAGE = 'icebug-disk:${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures')
+-STATEMENT CREATE NODE TABLE upperversion(id INT64 PRIMARY KEY) WITH (storage = '${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures', format = 'icebug-disk')
 ---- ok
 
 -LOG CreateRegularNodeTable

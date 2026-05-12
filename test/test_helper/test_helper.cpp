@@ -89,46 +89,51 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
             line.replace(line.find(csvFilePath), csvFilePath.length(), fullPath);
         }
 
-        // Also handle storage = 'path' for icebug-disk tables
-        std::vector<std::string> storagePaths;
-        size_t storageIndex = 0;
-        while (true) {
-            size_t start = line.find("storage = \"", storageIndex);
-            if (start == std::string::npos) {
-                break;
-            }
-            start += 11; // length of "storage = \""
-            size_t end = line.find("\"", start);
-            if (end == std::string::npos) {
-                break;
-            }
-            std::string storagePath = line.substr(start, end - start);
-            storagePaths.push_back(storagePath);
-            storageIndex = end + 1;
-        }
-        for (auto& storagePath : storagePaths) {
-            static constexpr std::string_view iceBugPrefix = "icebug-disk";
-
-            if (storagePath.starts_with(iceBugPrefix)) {
-                // Strip "icebug-disk" prefix and optional ':' separator.
-                std::string basePath = storagePath.substr(iceBugPrefix.size());
-                if (!basePath.empty() && basePath[0] == ':') {
-                    basePath = basePath.substr(1);
+        // handle icebug-disk storage format: resolve storage = "<path>" for icebug-disk tables
+        {
+            size_t fmtStart = line.find("format = \"", 0);
+            if (fmtStart != std::string::npos) {
+                fmtStart += 10; // length of "format = \""
+                size_t fmtEnd = line.find("\"", fmtStart);
+                if (fmtEnd != std::string::npos) {
+                    std::string storageFormat = line.substr(fmtStart, fmtEnd - fmtStart);
+                    if (storageFormat.find("icebug-disk") != std::string::npos) {
+                        std::vector<std::string> storagePaths;
+                        size_t storageIndex = 0;
+                        while (true) {
+                            size_t sStart = line.find("storage = \"", storageIndex);
+                            if (sStart == std::string::npos) {
+                                break;
+                            }
+                            sStart += 11; // length of "storage = \""
+                            size_t sEnd = line.find("\"", sStart);
+                            if (sEnd == std::string::npos) {
+                                break;
+                            }
+                            storagePaths.push_back(line.substr(sStart, sEnd - sStart));
+                            storageIndex = sEnd + 1;
+                        }
+                        for (auto& storagePath : storagePaths) {
+                            // Remote URIs (e.g. s3://, https://) are passed through unchanged.
+                            if (storagePath.find("://") != std::string::npos) {
+                                continue;
+                            }
+                            auto fullPath = storagePath;
+                            if (std::filesystem::path(storagePath).is_relative()) {
+                                if (std::filesystem::path(storagePath).parent_path().empty()) {
+                                    fullPath = (cypherDir / storagePath).string();
+                                } else {
+                                    fullPath = appendLbugRootPath(storagePath);
+                                }
+                            }
+                            fullPath = normalizePathForCypher(std::move(fullPath));
+                            size_t pos = line.find(storagePath);
+                            if (pos != std::string::npos) {
+                                line.replace(pos, storagePath.length(), fullPath);
+                            }
+                        }
+                    }
                 }
-                // Resolve empty or relative paths relative to the schema's directory.
-                // Absolute paths and object-store URLs (contain "://") are left unchanged.
-                if (basePath.empty()) {
-                    basePath = normalizePathForCypher(cypherDir.string());
-                } else if (basePath.find("://") == std::string::npos &&
-                           std::filesystem::path(basePath).is_relative()) {
-                    basePath = normalizePathForCypher((cypherDir / basePath).string());
-                }
-                std::string resolvedStorage = std::string(iceBugPrefix) + ":" + basePath;
-                size_t pos = line.find(storagePath);
-                if (pos != std::string::npos) {
-                    line.replace(pos, storagePath.length(), resolvedStorage);
-                }
-                continue;
             }
         }
 #ifdef __STATIC_LINK_EXTENSION_TEST__

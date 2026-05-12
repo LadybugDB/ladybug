@@ -105,6 +105,8 @@ void RelGroupCatalogEntry::serialize(Serializer& serializer) const {
     }
     serializer.writeDebuggingInfo("relTableInfos");
     serializer.serializeVector(relTableInfos);
+    serializer.writeDebuggingInfo("storageFormat");
+    serializer.serializeValue(storageFormat);
 }
 
 std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
@@ -114,6 +116,7 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     auto dstMultiplicity = RelMultiplicity::MANY;
     auto storageDirection = ExtendDirection::BOTH;
     std::string storage;
+    std::string storageFormat;
     std::vector<RelTableCatalogInfo> relTableInfos;
     deserializer.validateDebuggingInfo(debuggingInfo, "srcMultiplicity");
     deserializer.deserializeValue(srcMultiplicity);
@@ -132,11 +135,14 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     }
     deserializer.validateDebuggingInfo(debuggingInfo, "relTableInfos");
     deserializer.deserializeVector(relTableInfos);
+    deserializer.validateDebuggingInfo(debuggingInfo, "storageFormat");
+    deserializer.deserializeValue(storageFormat);
     auto relGroupEntry = std::make_unique<RelGroupCatalogEntry>();
     relGroupEntry->srcMultiplicity = srcMultiplicity;
     relGroupEntry->dstMultiplicity = dstMultiplicity;
     relGroupEntry->storageDirection = storageDirection;
     relGroupEntry->storage = storage;
+    relGroupEntry->storageFormat = storageFormat;
     relGroupEntry->scanFunction = scanFunction;
     relGroupEntry->relTableInfos = relTableInfos;
     return relGroupEntry;
@@ -171,7 +177,17 @@ std::string RelGroupCatalogEntry::toCypher(const ToCypherInfo& info) const {
             getFromToStr(relTableInfos[i].nodePair, catalog, transaction, storage));
     }
     ss << ", " << propertyCollection.toCypher() << RelMultiplicityUtils::toString(srcMultiplicity)
-       << "_" << RelMultiplicityUtils::toString(dstMultiplicity) << ");";
+       << "_" << RelMultiplicityUtils::toString(dstMultiplicity) << ")";
+
+    if (!storage.empty()) {
+        ss << std::format(" WITH (STORAGE = '{}'", storage);
+        if (!storageFormat.empty()) {
+            ss << std::format(", FORMAT = '{}'", storageFormat);
+        }
+        ss << ")";
+    }
+    ss << ";";
+
     return ss.str();
 }
 
@@ -198,6 +214,7 @@ std::unique_ptr<TableCatalogEntry> RelGroupCatalogEntry::copy() const {
     other->dstMultiplicity = dstMultiplicity;
     other->storageDirection = storageDirection;
     other->storage = storage;
+    other->storageFormat = storageFormat;
     other->scanFunction = scanFunction;
     other->scanBindData = std::nullopt; // TODO: implement copy for bindData if needed
     other->foreignDatabaseName = foreignDatabaseName;
@@ -214,7 +231,7 @@ RelGroupCatalogEntry::getBoundExtraCreateInfo(transaction::Transaction*) const {
     }
     return std::make_unique<binder::BoundExtraCreateRelTableGroupInfo>(
         copyVector(propertyCollection.getDefinitions()), srcMultiplicity, dstMultiplicity,
-        storageDirection, std::move(nodePairs), storage);
+        storageDirection, std::move(nodePairs), storage, storageFormat);
 }
 
 } // namespace catalog

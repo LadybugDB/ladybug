@@ -46,15 +46,16 @@ IceDiskRelTable::IceDiskRelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t
     table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager,
     main::ClientContext* context)
     : ColumnarRelTableBase{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager} {
-    const auto base = IceDiskUtils::getBasePath(relGroupEntry->getStorage());
-    auto paths = IceDiskUtils::constructCSRPaths(base, relGroupEntry->getName(), ".parquet");
+    auto paths = IceDiskUtils::constructCSRPaths(relGroupEntry->getStorage(),
+        relGroupEntry->getName(), ".parquet");
 
-    const auto dbDir =
-        std::filesystem::path(storageManager->getDatabasePath()).parent_path().string();
-    indicesFilePath = IceDiskUtils::checkVersionCompatibility(storageManager->getVFS(), dbDir,
-        paths.indices, context);
-    indptrFilePath = IceDiskUtils::checkVersionCompatibility(storageManager->getVFS(), dbDir,
-        paths.indptr, context);
+    auto resolvedIndicesPath = VirtualFileSystem::resolvePath(context, paths.indices);
+    IceDiskUtils::checkVersionCompatibility(context, resolvedIndicesPath);
+
+    auto resolvedIndptrPath = VirtualFileSystem::resolvePath(context, paths.indptr);
+    IceDiskUtils::checkVersionCompatibility(context, resolvedIndptrPath);
+    indicesFilePath = resolvedIndicesPath;
+    indptrFilePath = resolvedIndptrPath;
 }
 
 void IceDiskRelTable::initScanState(Transaction* transaction, TableScanState& scanState,
@@ -72,16 +73,14 @@ void IceDiskRelTable::initScanState(Transaction* transaction, TableScanState& sc
     if (!iceDiskScanState.indicesReader) {
         std::vector<bool> columnSkips; // Read all columns
         auto context = transaction->getClientContext();
-        auto resolvedPath = VirtualFileSystem::resolvePath(context, indicesFilePath);
         iceDiskScanState.indicesReader =
-            std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
+            std::make_unique<ParquetReader>(indicesFilePath, columnSkips, context);
     }
     if (!indptrFilePath.empty() && !iceDiskScanState.indptrReader) {
         std::vector<bool> columnSkips; // Read all columns
         auto context = transaction->getClientContext();
-        auto resolvedPath = VirtualFileSystem::resolvePath(context, indptrFilePath);
         iceDiskScanState.indptrReader =
-            std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
+            std::make_unique<ParquetReader>(indptrFilePath, columnSkips, context);
     }
 
     // Load shared indptr data - thread-safe to read
@@ -118,8 +117,7 @@ void IceDiskRelTable::initializeParquetReaders(Transaction* transaction) const {
         if (!indicesReader) {
             std::vector<bool> columnSkips; // Read all columns
             auto context = transaction->getClientContext();
-            auto resolvedPath = VirtualFileSystem::resolvePath(context, indicesFilePath);
-            indicesReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
+            indicesReader = std::make_unique<ParquetReader>(indicesFilePath, columnSkips, context);
         }
     }
 }
@@ -130,8 +128,7 @@ void IceDiskRelTable::initializeIndptrReader(Transaction* transaction) const {
         if (!indptrReader) {
             std::vector<bool> columnSkips; // Read all columns
             auto context = transaction->getClientContext();
-            auto resolvedPath = VirtualFileSystem::resolvePath(context, indptrFilePath);
-            indptrReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
+            indptrReader = std::make_unique<ParquetReader>(indptrFilePath, columnSkips, context);
         }
     }
 }

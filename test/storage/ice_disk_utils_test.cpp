@@ -5,11 +5,16 @@
 #include "common/exception/io.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
+#include "graph_test/private_graph_test.h"
 #include "gtest/gtest.h"
+#include "main/client_context.h"
+#include "main/connection.h"
+#include "main/database.h"
 #include "storage/table/ice_disk_utils.h"
 #include "test_helper/test_helper.h"
 
 using namespace lbug::common;
+using namespace lbug::main;
 using namespace lbug::storage;
 using namespace lbug::testing;
 
@@ -17,30 +22,6 @@ static const std::string FIXTURES_DIR =
     TestHelper::appendLbugRootPath("dataset/ice-disk-test/fixtures");
 static const std::string DEMO_DB_ICEBUG_DISK =
     TestHelper::appendLbugRootPath("dataset/demo-db/icebug-disk");
-
-// ─────────────────────────────────────────────────────────────
-// getBasePath
-// ─────────────────────────────────────────────────────────────
-
-TEST(IceDiskUtils_GetBasePath, PrefixOnly) {
-    EXPECT_EQ("", IceDiskUtils::getBasePath("icebug-disk"));
-}
-
-TEST(IceDiskUtils_GetBasePath, PrefixWithColonOnly) {
-    EXPECT_EQ("", IceDiskUtils::getBasePath("icebug-disk:"));
-}
-
-TEST(IceDiskUtils_GetBasePath, PrefixWithAbsolutePath) {
-    EXPECT_EQ("/some/path", IceDiskUtils::getBasePath("icebug-disk:/some/path"));
-}
-
-TEST(IceDiskUtils_GetBasePath, PrefixWithRelativePath) {
-    EXPECT_EQ("rel/path", IceDiskUtils::getBasePath("icebug-disk:rel/path"));
-}
-
-TEST(IceDiskUtils_GetBasePath, PrefixWithDot) {
-    EXPECT_EQ(".", IceDiskUtils::getBasePath("icebug-disk:."));
-}
 
 // ─────────────────────────────────────────────────────────────
 // joinPath
@@ -61,6 +42,16 @@ TEST(IceDiskUtils_JoinPath, BaseWithBackslash) {
     EXPECT_EQ("base\\file.parquet", IceDiskUtils::joinPath("base\\", "file.parquet"));
 }
 
+TEST(IceDiskUtils_JoinPath, S3URI) {
+    EXPECT_EQ("s3://bucket/prefix/file.parquet",
+        IceDiskUtils::joinPath("s3://bucket/prefix", "file.parquet"));
+}
+
+TEST(IceDiskUtils_JoinPath, HttpsURI) {
+    EXPECT_EQ("https://host/path/file.parquet",
+        IceDiskUtils::joinPath("https://host/path", "file.parquet"));
+}
+
 // ─────────────────────────────────────────────────────────────
 // constructNodeTablePath
 // ─────────────────────────────────────────────────────────────
@@ -71,6 +62,11 @@ TEST(IceDiskUtils_ConstructNodeTablePath, EmptyDir) {
 TEST(IceDiskUtils_ConstructNodeTablePath, WithDir) {
     EXPECT_EQ("/some/dir/nodes_user.parquet",
         IceDiskUtils::constructNodeTablePath("/some/dir", "user", ".parquet"));
+}
+
+TEST(IceDiskUtils_ConstructNodeTablePath, S3URI) {
+    EXPECT_EQ("s3://bucket/data/nodes_user.parquet",
+        IceDiskUtils::constructNodeTablePath("s3://bucket/data", "user", ".parquet"));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -88,63 +84,48 @@ TEST(IceDiskUtils_ConstructCSRPaths, WithDir) {
     EXPECT_EQ("/some/dir/indptr_knows.parquet", paths.indptr);
 }
 
-// ─────────────────────────────────────────────────────────────
-// resolveIceDiskPath
-// ─────────────────────────────────────────────────────────────
-TEST(IceDiskUtils_ResolveIceDiskPath, AbsolutePathUnchanged) {
-    EXPECT_EQ("/abs/path/file.parquet",
-        IceDiskUtils::resolveIceDiskPath("/abs/path/file.parquet", "/dbdir"));
-}
-
-TEST(IceDiskUtils_ResolveIceDiskPath, RelativePathJoinedWithDbDir) {
-    auto result = IceDiskUtils::resolveIceDiskPath("rel/file.parquet", "/dbdir");
-    // std::filesystem normalizes the path, so check it ends with rel/file.parquet
-    EXPECT_TRUE(result.find("rel/file.parquet") != std::string::npos);
-    EXPECT_TRUE(std::filesystem::path(result).is_absolute());
-}
-
-TEST(IceDiskUtils_ResolveIceDiskPath, EmptyPathUsesDbDir) {
-    auto result = IceDiskUtils::resolveIceDiskPath("", "/dbdir");
-    EXPECT_TRUE(std::filesystem::path(result).is_absolute());
-}
-
-TEST(IceDiskUtils_ResolveIceDiskPath, DotPathNormalized) {
-    auto result = IceDiskUtils::resolveIceDiskPath(".", "/dbdir");
-    // "." relative to /dbdir should resolve to /dbdir (with possible trailing slash on some impls)
-    EXPECT_TRUE(result == "/dbdir" || result == "/dbdir/");
+TEST(IceDiskUtils_ConstructCSRPaths, S3URI) {
+    auto paths = IceDiskUtils::constructCSRPaths("s3://bucket/data", "follows", ".parquet");
+    EXPECT_EQ("s3://bucket/data/indices_follows.parquet", paths.indices);
+    EXPECT_EQ("s3://bucket/data/indptr_follows.parquet", paths.indptr);
 }
 
 // ─────────────────────────────────────────────────────────────
 // checkVersionCompatibility
 // ─────────────────────────────────────────────────────────────
-class IceDiskCheckVersionTest : public ::testing::Test {
+class IceDiskCheckVersionTest : public EmptyDBTest {
 protected:
-    VirtualFileSystem vfs;
+    void SetUp() override {
+        EmptyDBTest::SetUp();
+        createDBAndConn();
+        context = conn->getClientContext();
+    }
+
+    ClientContext* context = nullptr;
     const std::string dbDir = FIXTURES_DIR;
 };
 
-TEST_F(IceDiskCheckVersionTest, NullVfs) {
-    EXPECT_THROW(IceDiskUtils::checkVersionCompatibility(nullptr, dbDir,
+TEST_F(IceDiskCheckVersionTest, NullContext) {
+    EXPECT_THROW(IceDiskUtils::checkVersionCompatibility(nullptr,
                      DEMO_DB_ICEBUG_DISK + "/nodes_person.parquet"),
         RuntimeException);
 }
 
 TEST_F(IceDiskCheckVersionTest, FileDoesNotExist) {
-    EXPECT_THROW(IceDiskUtils::checkVersionCompatibility(&vfs, dbDir,
+    EXPECT_THROW(IceDiskUtils::checkVersionCompatibility(context,
                      FIXTURES_DIR + "/nodes_nonexistent.parquet"),
         IOException);
 }
 
 TEST_F(IceDiskCheckVersionTest, NotAParquetFile) {
-    EXPECT_THROW(IceDiskUtils::checkVersionCompatibility(&vfs, dbDir,
+    EXPECT_THROW(IceDiskUtils::checkVersionCompatibility(context,
                      FIXTURES_DIR + "/nodes_notparquet.parquet"),
         CopyException);
 }
 
 TEST_F(IceDiskCheckVersionTest, MissingVersionKey) {
     try {
-        IceDiskUtils::checkVersionCompatibility(&vfs, dbDir,
-            FIXTURES_DIR + "/nodes_noversion.parquet");
+        IceDiskUtils::checkVersionCompatibility(context, FIXTURES_DIR + "/nodes_noversion.parquet");
         FAIL() << "Expected RuntimeException for missing version key";
     } catch (const RuntimeException& e) {
         EXPECT_TRUE(std::string(e.what()).find("missing icebug_disk_version") != std::string::npos);
@@ -153,7 +134,7 @@ TEST_F(IceDiskCheckVersionTest, MissingVersionKey) {
 
 TEST_F(IceDiskCheckVersionTest, WrongVersionValue) {
     try {
-        IceDiskUtils::checkVersionCompatibility(&vfs, dbDir,
+        IceDiskUtils::checkVersionCompatibility(context,
             FIXTURES_DIR + "/nodes_wrongversion.parquet");
         FAIL() << "Expected RuntimeException for wrong version";
     } catch (const RuntimeException& e) {
@@ -164,11 +145,11 @@ TEST_F(IceDiskCheckVersionTest, WrongVersionValue) {
 
 TEST_F(IceDiskCheckVersionTest, UppercaseVersionSucceeds) {
     // "V1" should match "v1" case-insensitively
-    EXPECT_NO_THROW(IceDiskUtils::checkVersionCompatibility(&vfs, dbDir,
+    EXPECT_NO_THROW(IceDiskUtils::checkVersionCompatibility(context,
         FIXTURES_DIR + "/nodes_upperversion.parquet"));
 }
 
 TEST_F(IceDiskCheckVersionTest, ValidV1Succeeds) {
-    EXPECT_NO_THROW(IceDiskUtils::checkVersionCompatibility(&vfs, dbDir,
+    EXPECT_NO_THROW(IceDiskUtils::checkVersionCompatibility(context,
         DEMO_DB_ICEBUG_DISK + "/nodes_user.parquet"));
 }

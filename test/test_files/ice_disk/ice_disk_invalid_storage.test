@@ -4,31 +4,29 @@
 -CASE IceDiskNonExistentDirNodeFails
 
 -LOG IceDiskNonExistentDirMissingParquet
--STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY) WITH (storage = 'icebug-disk:/nonexistent/dir/that/does/not/exist')
+-STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY) WITH (storage = '/nonexistent/dir/that/does/not/exist', format = 'icebug-disk')
 ---- error(regex)
 .*[Nn]o such file.*|.*[Cc]annot open.*|.*nodes_t\.parquet.*
 
--CASE IceDiskURINodeFails
+-CASE IceDiskRemoteURINodeFails
 
--LOG IceDiskURIMissingParquet
--STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY) WITH (storage = 'icebug-disk:https://example.com/path')
+-LOG IceDiskRemoteURIMissingParquet
+-STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY) WITH (storage = 'https://example.com/path', format = 'icebug-disk')
 ---- error(regex)
 .*[Nn]o such file.*|.*[Cc]annot open.*|.*nodes_t\.parquet.*
 
--CASE IceDiskPrefixOnlyRelFails
+-CASE IceDiskS3URINodeFails
 
--LOG IceDiskPrefixOnlyRelMissingParquet
--STATEMENT CREATE NODE TABLE upperversion(id INT64 PRIMARY KEY) WITH (storage = 'icebug-disk:${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures')
----- ok
--STATEMENT CREATE REL TABLE rel(FROM upperversion TO upperversion) WITH (storage = 'icebug-disk')
+-LOG IceDiskS3URIMissingParquet
+-STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY) WITH (storage = 's3://my-bucket/data', format = 'icebug-disk')
 ---- error(regex)
-.*[Nn]o such file.*|.*[Cc]annot open.*|.*indices_rel\.parquet.*
+.*[Nn]o such file.*|.*[Cc]annot open.*|.*nodes_t\.parquet.*
 
--CASE IceDiskPrefixWithColonRelFails
+-CASE IceDiskNoStorageRelFails
 
--LOG IceDiskPrefixColonRelMissingParquet
--STATEMENT CREATE NODE TABLE upperversion(id INT64 PRIMARY KEY) WITH (storage = 'icebug-disk:${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures')
+-LOG IceDiskNoStorageRelMissingParquet
+-STATEMENT CREATE NODE TABLE upperversion(id INT64 PRIMARY KEY) WITH (storage = '${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures', format = 'icebug-disk')
 ---- ok
--STATEMENT CREATE REL TABLE rel(FROM upperversion TO upperversion) WITH (storage = 'icebug-disk:')
+-STATEMENT CREATE REL TABLE rel(FROM upperversion TO upperversion) WITH (format = 'icebug-disk')
 ---- error(regex)
 .*[Nn]o such file.*|.*[Cc]annot open.*|.*indices_rel\.parquet.*

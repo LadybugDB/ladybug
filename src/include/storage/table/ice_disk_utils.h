@@ -23,18 +23,6 @@ struct CSRFilePaths {
 
 class IceDiskUtils {
 public:
-    // Parses "icebug-disk", "icebug-disk:", or "icebug-disk:<path>" and returns the path
-    // component. Returns empty string for the first two forms (caller interprets as current dir)
-    static std::string getBasePath(const std::string& storage) {
-        std::string_view rest = std::string_view(storage).substr(
-            common::TableOptionConstants::ICEBUG_DISK_PREFIX.size());
-        // Strip the optional ':' separator.
-        if (!rest.empty() && rest[0] == ':') {
-            rest = rest.substr(1);
-        }
-        return std::string(rest); // empty means "current directory"
-    }
-
     // Joins a base path with a filename. When base is empty the filename is returned
     // as-is (i.e. relative to the current working directory)
     static std::string joinPath(const std::string& base, const std::string& part) {
@@ -62,50 +50,22 @@ public:
             IceDiskUtils::joinPath(dir, "indptr_" + name + suffix)};
     }
 
-    // Resolves a potentially relative or ~-prefixed path against dbDirectory.
-    static std::string resolveIceDiskPath(const std::string& path, const std::string& dbDirectory) {
-        std::string expanded = path;
-        if (!expanded.empty() && expanded[0] == '~') {
-            const char* home = std::getenv("HOME");
-            if (!home) {
-                throw common::RuntimeException(
-                    "Cannot expand '~' in IceDisk path without HOME set: " + path);
-            }
-            expanded = std::string(home) + expanded.substr(1);
-        }
-        if (!std::filesystem::path(expanded).is_absolute()) {
-            expanded = (std::filesystem::path(dbDirectory) / expanded).lexically_normal().string();
-        }
-        return expanded;
-    }
-
     // Validates that the parquet file at `path` carries the expected icebug_disk_version metadata.
-    // `dbDirectory` is used to anchor relative paths (typically parent of the .lbdb file).
-    // When the resolved path does not exist and `context` is provided, falls back to VFS
-    // search-path resolution (fileSearchPath) so that `lbug -i schema.cypher` can find parquet
-    // files located in the same directory as the schema file.
-    // Returns the final resolved path that was successfully validated.
-    static std::string checkVersionCompatibility(common::VirtualFileSystem* vfs,
-        const std::string& dbDirectory, const std::string& path,
-        main::ClientContext* context = nullptr) {
-        if (!vfs) {
+    // Note: path is already resolved by VFS
+    static void checkVersionCompatibility(main::ClientContext* context, const std::string& path) {
+        if (!context) {
             throw common::RuntimeException(
-                "No VirtualFileSystem available for IceDisk version check: " + path);
+                path + ": failed to read parquet metadata for version check");
         }
 
-        auto resolvedPath = resolveIceDiskPath(path, dbDirectory);
-
-        // When the primary (DB-relative) path does not exist and the caller provides a
-        // client context, try resolving through the VFS file-search path (e.g. the directory
-        // added by addInitFileDirToSearchPath when -i <schema> is used).
-        if (context && !vfs->fileOrPathExists(resolvedPath)) {
-            auto found = vfs->glob(context, path);
-            if (!found.empty()) {
-                resolvedPath = found.front();
-            }
+        auto tempReader =
+            std::make_unique<processor::ParquetReader>(path, std::vector<bool>{}, context);
+        if (!tempReader) {
+            throw common::RuntimeException(
+                path + ": failed to read parquet metadata for version check");
         }
 
-        auto metadata = processor::ParquetReader::readMetadata(resolvedPath, vfs);
+        auto metadata = tempReader->getMetadata();
         if (!metadata) {
             throw common::RuntimeException(
                 path + ": failed to read parquet metadata for version check");
@@ -136,9 +96,9 @@ public:
 
         if (!versionMatches) {
             throw common::RuntimeException(
-                "Current ladybug version does not support icebug_disk_version: " + versionValue);
+                path +
+                ": current ladybug version does not support icebug_disk_version: " + versionValue);
         }
-        return resolvedPath;
     }
 };
 

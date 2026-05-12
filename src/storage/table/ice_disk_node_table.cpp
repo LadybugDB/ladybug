@@ -30,13 +30,11 @@ IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
     main::ClientContext* context)
     : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager,
           std::make_unique<IceDiskNodeTableScanSharedState>()} {
-    auto file = IceDiskUtils::constructNodeTablePath(
-        IceDiskUtils::getBasePath(nodeTableEntry->getStorage()), nodeTableEntry->getName(),
-        ".parquet");
-    const auto dbDir =
-        std::filesystem::path(storageManager->getDatabasePath()).parent_path().string();
-    parquetFilePath =
-        IceDiskUtils::checkVersionCompatibility(storageManager->getVFS(), dbDir, file, context);
+    auto resolvedPath = common::VirtualFileSystem::resolvePath(context,
+        IceDiskUtils::constructNodeTablePath(nodeTableEntry->getStorage(),
+            nodeTableEntry->getName(), ".parquet"));
+    IceDiskUtils::checkVersionCompatibility(context, resolvedPath);
+    parquetFilePath = resolvedPath;
 }
 
 void IceDiskNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
@@ -74,9 +72,8 @@ void IceDiskNodeTable::initScanState(Transaction* transaction, TableScanState& s
 
         std::vector<bool> columnSkips;
         try {
-            auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
             iceDiskScanState.parquetReader =
-                std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
+                std::make_unique<ParquetReader>(parquetFilePath, columnSkips, context);
             iceDiskScanState.initialized = true;
         } catch (const std::exception& e) {
             throw RuntimeException("Failed to initialize parquet reader for file '" +
@@ -99,8 +96,7 @@ common::node_group_idx_t IceDiskNodeTable::getNumBatches(const Transaction* tran
 
     std::vector<bool> columnSkips;
     try {
-        auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
-        auto tempReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
+        auto tempReader = std::make_unique<ParquetReader>(parquetFilePath, columnSkips, context);
         return tempReader->getNumRowGroups();
     } catch (const std::exception& e) {
         return 1; // Fallback
@@ -331,8 +327,7 @@ row_idx_t IceDiskNodeTable::getTotalRowCount(const Transaction* transaction) con
     std::vector<bool> columnSkips;
 
     try {
-        auto resolvedPath = VirtualFileSystem::resolvePath(context, parquetFilePath);
-        auto tempReader = std::make_unique<ParquetReader>(resolvedPath, columnSkips, context);
+        auto tempReader = std::make_unique<ParquetReader>(parquetFilePath, columnSkips, context);
         if (!tempReader) {
             return 0;
         }

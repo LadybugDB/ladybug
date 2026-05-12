@@ -203,10 +203,11 @@ CatalogEntry* Catalog::createRelGroupEntry(Transaction* transaction,
     for (auto& nodePair : extraInfo->nodePairs) {
         relTableInfos.emplace_back(nodePair, tables->getNextOID());
     }
-    auto relGroupEntry = std::make_unique<RelGroupCatalogEntry>(info.tableName,
-        extraInfo->srcMultiplicity, extraInfo->dstMultiplicity, extraInfo->storageDirection,
-        std::move(relTableInfos), extraInfo->storage, extraInfo->scanFunction,
-        std::move(extraInfo->scanBindData), extraInfo->foreignDatabaseName);
+    auto relGroupEntry =
+        std::make_unique<RelGroupCatalogEntry>(info.tableName, extraInfo->srcMultiplicity,
+            extraInfo->dstMultiplicity, extraInfo->storageDirection, std::move(relTableInfos),
+            extraInfo->storage, extraInfo->storageFormat, extraInfo->scanFunction,
+            std::move(extraInfo->scanBindData), extraInfo->foreignDatabaseName);
     for (auto& definition : extraInfo->propertyDefinitions) {
         relGroupEntry->addProperty(definition);
     }
@@ -561,7 +562,7 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
     const BoundCreateTableInfo& info) {
     const auto extraInfo = info.extraInfo->constPtrCast<BoundExtraCreateNodeTableInfo>();
     auto entry = std::make_unique<NodeTableCatalogEntry>(info.tableName, extraInfo->primaryKeyName,
-        extraInfo->storage);
+        extraInfo->storage, extraInfo->storageFormat);
     for (auto& definition : extraInfo->propertyDefinitions) {
         entry->addProperty(definition);
     }

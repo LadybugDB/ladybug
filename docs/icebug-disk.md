@@ -17,15 +17,17 @@ Version is stored in each file's metadata footer as a key-value pair: `icebug_di
 The graph schema is declared in a `schema.cypher`, which can be loaded using `lbug -i schema.cypher` to create tables in Ladybug.
 
 ```cypher
-CREATE NODE TABLE city(id INT32, name STRING, population INT64, PRIMARY KEY(id)) WITH (storage = 'icebug-disk:<path-to-dir>');
-CREATE NODE TABLE user(id INT32, name STRING, age INT64, PRIMARY KEY(id)) WITH (storage = 'icebug-disk:<path-to-dir>');
-CREATE REL TABLE follows(FROM user TO user, since INT32) WITH (storage = 'icebug-disk:<path-to-dir>');
-CREATE REL TABLE livesin(FROM user TO city) WITH (storage = 'icebug-disk:<path-to-dir>');
+CREATE NODE TABLE city(id INT32, name STRING, population INT64, PRIMARY KEY(id)) WITH (storage = '<path-to-dir>', format = 'icebug-disk');
+CREATE NODE TABLE user(id INT32, name STRING, age INT64, PRIMARY KEY(id)) WITH (storage = '<path-to-dir>', format = 'icebug-disk');
+CREATE REL TABLE follows(FROM user TO user, since INT32) WITH (storage = '<path-to-dir>', format = 'icebug-disk');
+CREATE REL TABLE livesin(FROM user TO city) WITH (storage = '<path-to-dir>', format = 'icebug-disk');
 ```
 
 File paths can be relative or absolute and are resolved as `<path-to-dir>/nodes_{tableName}.parquet` for node tables, and `<path-to-dir>/indices_{tableName}.parquet` and `<path-to-dir>/indptr_{tableName}.parquet` for relationship tables.
 
-`storage = 'icebug-disk'` and `storage = 'icebug-disk:'` both resolve to the current working directory.
+Object-store URIs (e.g. `s3://bucket/path`, `https://host/path`) are supported as `storage` values and are passed through unchanged.
+
+If `storage` is omitted when `format = 'icebug-disk'` is set, files are resolved relative to the current working directory.
 
 Tables can also be created by manually running the above queries in the Ladybug CLI.
 

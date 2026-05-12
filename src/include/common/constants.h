@@ -86,11 +86,12 @@ struct StorageConstants {
 struct TableOptionConstants {
     static constexpr char REL_STORAGE_DIRECTION_OPTION[] = "STORAGE_DIRECTION";
     static constexpr char REL_STORAGE_OPTION[] = "STORAGE";
+    static constexpr char STORAGE_FORMAT_OPTION[] = "FORMAT";
 
-    static constexpr std::string_view ICEBUG_DISK_PREFIX = "icebug-disk";
+    static constexpr std::string_view ICEBUG_DISK_FORMAT = "icebug-disk";
 
-    static bool isIceBugDiskStorage(const std::string& storage) {
-        return storage.starts_with(ICEBUG_DISK_PREFIX);
+    static bool isIceBugDiskFormat(const std::string& format) {
+        return format.find(ICEBUG_DISK_FORMAT) != std::string::npos;
     }
 };
 
