@@ -10,7 +10,7 @@
 -LOG IceDiskRelWithRegularNodeFails
 -STATEMENT CREATE REL TABLE rel(FROM person TO person) WITH (STORAGE = 'icebug-disk:${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures')
 ---- error
-Binder exception: icebug-disk rel tables require both FROM and TO tables to be icebug-disk node tables.
+Binder exception: Cannot mix icebug-disk tables with non-icebug-disk tables in CREATE REL TABLE.
 
 -CASE NodeIceDiskRelRegular
 
@@ -25,9 +25,9 @@ Binder exception: icebug-disk rel tables require both FROM and TO tables to be i
 -LOG RegularRelWithIceDiskNodeFails
 -STATEMENT CREATE REL TABLE rel(FROM person TO upperversion)
 ---- error
-Binder exception: Rel tables with non-icebug-disk storage do not support icebug-disk node tables as FROM or TO tables.
+Binder exception: Cannot mix icebug-disk tables with non-icebug-disk tables in CREATE REL TABLE.
 
 -LOG RegularRelWithBothIceDiskNodeFails
 -STATEMENT CREATE REL TABLE rel(FROM upperversion TO upperversion)
 ---- error
-Binder exception: Rel tables with non-icebug-disk storage do not support icebug-disk node tables as FROM or TO tables.
+Binder exception: Cannot mix icebug-disk tables with non-icebug-disk tables in CREATE REL TABLE.

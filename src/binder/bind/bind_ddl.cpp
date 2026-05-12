@@ -322,28 +322,22 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
             }
         }
 
+        bool isSrcIcebugDisk = srcEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
+                                   TableOptionConstants::isIceBugDiskStorage(
+                                       srcEntry->ptrCast<NodeTableCatalogEntry>()->getStorage()) :
+                                   false;
+        bool isDstIcebugDisk = dstEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
+                                   TableOptionConstants::isIceBugDiskStorage(
+                                       dstEntry->ptrCast<NodeTableCatalogEntry>()->getStorage()) :
+                                   false;
+        bool isRelIcebugDisk = TableOptionConstants::isIceBugDiskStorage(storage);
+
+        // We don't allow mixing icebug-disk tables with non-icebug-disk tables
         // We only allow icebug-disk rel tables to connect icebug-disk node tables
-        if (TableOptionConstants::isIceBugDiskStorage(storage)) {
-            auto srcNodeEntry = srcEntry->ptrCast<NodeTableCatalogEntry>();
-            auto dstNodeEntry = dstEntry->ptrCast<NodeTableCatalogEntry>();
-
-            if (!TableOptionConstants::isIceBugDiskStorage(srcNodeEntry->getStorage()) ||
-                !TableOptionConstants::isIceBugDiskStorage(dstNodeEntry->getStorage())) {
-                throw BinderException("icebug-disk rel tables require both FROM and TO tables to "
-                                      "be icebug-disk node tables.");
-            }
-        }
-
-        // Non-icebug-disk rel tables cannot connect to icebug-disk node tables
-        if (!TableOptionConstants::isIceBugDiskStorage(storage)) {
-            auto srcNodeEntry = srcEntry->ptrCast<NodeTableCatalogEntry>();
-            auto dstNodeEntry = dstEntry->ptrCast<NodeTableCatalogEntry>();
-
-            if (TableOptionConstants::isIceBugDiskStorage(srcNodeEntry->getStorage()) ||
-                TableOptionConstants::isIceBugDiskStorage(dstNodeEntry->getStorage())) {
-                throw BinderException("Rel tables with non-icebug-disk storage do not support "
-                                      "icebug-disk node tables as FROM or TO tables.");
-            }
+        if ((!isRelIcebugDisk && (isSrcIcebugDisk || isDstIcebugDisk)) ||
+            (isRelIcebugDisk && (!isSrcIcebugDisk || !isDstIcebugDisk))) {
+            throw BinderException(
+                "Cannot mix icebug-disk tables with non-icebug-disk tables in CREATE REL TABLE.");
         }
 
         // Use the actual shadow table IDs, not FOREIGN_TABLE_ID
