@@ -9,6 +9,7 @@
 #include "binder/ddl/bound_drop.h"
 #include "binder/expression_visitor.h"
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
@@ -47,6 +48,16 @@ namespace binder {
 
 std::string BoundCreateIndexInfo::toString() const {
     return std::format("{} INDEX {} ON {}({})", indexType, indexName, tableName, propertyName);
+}
+
+static std::string getExistingIndexName(Catalog* catalog, transaction::Transaction* transaction,
+    common::table_id_t tableID, common::property_id_t propertyID) {
+    for (auto* indexEntry : catalog->getIndexEntries(transaction, tableID)) {
+        if (indexEntry->containsPropertyID(propertyID)) {
+            return indexEntry->getIndexName();
+        }
+    }
+    return "";
 }
 
 static void validatePropertyName(const std::vector<PropertyDefinition>& definitions) {
@@ -402,6 +413,9 @@ std::unique_ptr<BoundStatement> Binder::bindCreateIndex(const Statement& stateme
     validateNodeTableType(tableEntry);
     validateColumnExistence(tableEntry, info.propertyName);
     auto nodeTableEntry = tableEntry->ptrCast<NodeTableCatalogEntry>();
+    if (!nodeTableEntry->getStorage().empty()) {
+        throw BinderException("CREATE INDEX is only supported on native node tables.");
+    }
     if (!StringUtils::caseInsensitiveEquals(nodeTableEntry->getPrimaryKeyName(),
             info.propertyName)) {
         throw BinderException("HASH indexes are currently supported only on node primary keys.");
@@ -416,6 +430,20 @@ std::unique_ptr<BoundStatement> Binder::bindCreateIndex(const Statement& stateme
     validatePrimaryKey(property.getName(), propertyDefinitions);
     auto indexName = info.indexName.empty() ? std::string(storage::PrimaryKeyIndex::DEFAULT_NAME) :
                                               info.indexName;
+    if (info.onConflict == ConflictAction::ON_CONFLICT_THROW) {
+        const auto indexNameExists =
+            catalog->containsIndex(transaction, tableEntry->getTableID(), indexName);
+        const auto indexedPropertyExists = catalog->containsIndex(transaction,
+            tableEntry->getTableID(), tableEntry->getPropertyID(property.getName()));
+        if (indexNameExists || indexedPropertyExists) {
+            const auto existingIndexName =
+                indexNameExists ?
+                    indexName :
+                    getExistingIndexName(catalog, transaction, tableEntry->getTableID(),
+                        tableEntry->getPropertyID(property.getName()));
+            throw BinderException(existingIndexName + " already exists in catalog.");
+        }
+    }
     BoundCreateIndexInfo boundInfo{indexType, std::move(indexName), info.tableName,
         tableEntry->getTableID(), property.getName(), tableEntry->getPropertyID(property.getName()),
         tableEntry->getColumnID(property.getName()), property.getType().getPhysicalType(),

@@ -1,6 +1,28 @@
 -DATASET CSV empty
 --
 
+-CASE CreateHashIndexWithDefaultPKIndex
+-STATEMENT CREATE NODE TABLE idx_default_person (ID INT64, name STRING, PRIMARY KEY(ID));
+---- 1
+Table idx_default_person has been created.
+-STATEMENT CREATE (:idx_default_person {ID: 1, name: 'Alice'});
+---- ok
+-STATEMENT CREATE INDEX idx_default_person_pk IF NOT EXISTS FOR (p:idx_default_person) ON (p.ID);
+---- 1
+Index idx_default_person_pk has been created.
+-STATEMENT CALL SHOW_INDEXES() RETURN table_name, index_name, property_names;
+---- 1
+idx_default_person|idx_default_person_pk|[ID]
+-STATEMENT CREATE INDEX idx_default_person_pk IF NOT EXISTS FOR (p:idx_default_person) ON (p.ID);
+---- 1
+Index idx_default_person_pk already exists.
+-STATEMENT CREATE INDEX idx_default_person_pk2 FOR (p:idx_default_person) ON (p.ID);
+---- error
+Binder exception: idx_default_person_pk already exists in catalog.
+-STATEMENT CREATE INDEX idx_default_person_pk2 IF NOT EXISTS FOR (p:idx_default_person) ON (p.ID);
+---- 1
+Index idx_default_person_pk already exists.
+
 -CASE CreateHashIndex
 -STATEMENT CALL enable_default_hash_index=false;
 ---- ok
@@ -21,6 +43,12 @@ Index idx_person_pk has been created.
 ---- 1
 1
 -STATEMENT CREATE INDEX idx_person_pk IF NOT EXISTS FOR (p:idx_person) ON (p.ID);
+---- 1
+Index idx_person_pk already exists.
+-STATEMENT CREATE HASH INDEX idx_person_pk2 FOR (p:idx_person) ON (p.ID);
+---- error
+Binder exception: idx_person_pk already exists in catalog.
+-STATEMENT CREATE HASH INDEX idx_person_pk2 IF NOT EXISTS FOR (p:idx_person) ON (p.ID);
 ---- 1
 Index idx_person_pk already exists.
 -STATEMENT MATCH (p:idx_person) WHERE p.ID = 2 RETURN p.name;
