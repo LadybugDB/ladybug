@@ -6,6 +6,7 @@
 #include "common/cast.h"
 #include "common/exception/message.h"
 #include "common/exception/runtime.h"
+#include "common/type_utils.h"
 #include "common/types/types.h"
 #include "main/client_context.h"
 #include "storage/local_storage/local_node_table.h"

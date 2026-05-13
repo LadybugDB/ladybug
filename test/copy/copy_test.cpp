@@ -1,3 +1,8 @@
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
+
+#include "common/file_system/local_file_system.h"
 #include "common/file_system/virtual_file_system.h"
 #include "graph_test/base_graph_test.h"
 #include "main/database.h"
@@ -111,6 +116,20 @@ public:
     }
     std::string getInputDir() override { UNREACHABLE_CODE; }
     void BMExceptionRecoveryTest(BMExceptionRecoveryTestConfig cfg);
+    std::string writeCSV(const std::string& fileName, const std::vector<std::string>& rows) {
+        auto tempDir = TestHelper::getTempDir(getTestGroupAndName());
+        auto filePath = common::LocalFileSystem::joinPath(tempDir, fileName);
+#if defined(_WIN32)
+        std::replace(filePath.begin(), filePath.end(), '\\', '/');
+#endif
+        std::filesystem::create_directories(tempDir);
+        std::ofstream file(filePath);
+        for (const auto& row : rows) {
+            file << row << "\n";
+        }
+        file.close();
+        return filePath;
+    }
     std::atomic<uint64_t> failureFrequency;
     FlakyBufferManager* currentBM;
 };
@@ -164,6 +183,77 @@ void CopyTest::BMExceptionRecoveryTest(BMExceptionRecoveryTestConfig cfg) {
     if (!inMemMode && !cfg.canFailDuringCheckpoint) {
         FSMLeakChecker::checkForLeakedPages(conn.get());
     }
+}
+
+TEST_F(CopyTest, NodeCopyWithoutDefaultHashIndexSorted) {
+    createDBAndConn();
+    auto result = conn->query("CALL enable_default_hash_index=false");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE Account(id INT64, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    const auto filePath = writeCSV("sorted.csv", {"1", "2", "3"});
+    result = conn->query(std::format("COPY Account FROM '{}'", filePath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query("MATCH (a:Account) RETURN COUNT(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
+}
+
+TEST_F(CopyTest, NodeCopyWithoutDefaultHashIndexRejectsDuplicate) {
+    createDBAndConn();
+    auto result = conn->query("CALL enable_default_hash_index=false");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE Account(id INT64, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    const auto filePath = writeCSV("duplicate.csv", {"1", "2", "2"});
+    result = conn->query(std::format("COPY Account FROM '{}'", filePath));
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_NE(result->getErrorMessage().find("duplicated primary key"), std::string::npos);
+
+    result = conn->query("MATCH (a:Account) RETURN COUNT(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
+TEST_F(CopyTest, NodeCopyWithoutDefaultHashIndexRejectsNull) {
+    createDBAndConn();
+    auto result = conn->query("CALL enable_default_hash_index=false");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE Account(id INT64, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    const auto filePath = writeCSV("null.csv", {"1", "", "3"});
+    result = conn->query(std::format("COPY Account FROM '{}'", filePath));
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_NE(result->getErrorMessage().find("violates the non-null constraint"),
+        std::string::npos);
+
+    result = conn->query("MATCH (a:Account) RETURN COUNT(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
+TEST_F(CopyTest, NodeCopyWithoutDefaultHashIndexAllowsUnsortedUniqueNodeGroup) {
+    createDBAndConn();
+    auto result = conn->query("CALL enable_default_hash_index=false");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE Account(id INT64, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    const auto filePath = writeCSV("unsorted.csv", {"2", "1", "3"});
+    result = conn->query(std::format("COPY Account FROM '{}'", filePath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query("MATCH (a:Account) RETURN COUNT(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
 }
 
 TEST_F(CopyTest, NodeCopyBMExceptionRecoverySameConnection) {

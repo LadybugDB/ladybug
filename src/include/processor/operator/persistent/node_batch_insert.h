@@ -10,14 +10,21 @@
 
 namespace lbug {
 namespace storage {
+class ColumnChunkData;
 class MemoryManager;
-}
+} // namespace storage
 namespace transaction {
 class Transaction;
 } // namespace transaction
 
 namespace processor {
 struct ExecutionContext;
+
+struct NoIndexPKValidator {
+    virtual ~NoIndexPKValidator() = default;
+    virtual void validate(const storage::ColumnChunkData& pkChunk, common::offset_t startOffset,
+        common::length_t numValues) = 0;
+};
 
 struct NodeBatchInsertPrintInfo final : OPPrintInfo {
     std::string tableName;
@@ -59,6 +66,7 @@ struct NodeBatchInsertSharedState final : BatchInsertSharedState {
     common::column_id_t pkColumnID;
     common::LogicalType pkType;
     std::optional<IndexBuilder> globalIndexBuilder;
+    std::unique_ptr<NoIndexPKValidator> noIndexPKValidator;
 
     function::TableFuncSharedState* tableFuncSharedState;
 
@@ -70,8 +78,8 @@ struct NodeBatchInsertSharedState final : BatchInsertSharedState {
 
     explicit NodeBatchInsertSharedState(std::shared_ptr<FactorizedTable> fTable)
         : BatchInsertSharedState{std::move(fTable)}, pkColumnID{0},
-          globalIndexBuilder(std::nullopt), tableFuncSharedState{nullptr},
-          sharedNodeGroup{nullptr} {}
+          globalIndexBuilder(std::nullopt), noIndexPKValidator{nullptr},
+          tableFuncSharedState{nullptr}, sharedNodeGroup{nullptr} {}
 
     void initPKIndex(const ExecutionContext* context);
 };
