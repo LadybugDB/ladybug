@@ -48,20 +48,8 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
 }
 
 std::string NodeTableCatalogEntry::toCypher(const ToCypherInfo& /*info*/) const {
-    std::stringstream ss;
-    ss << std::format("CREATE NODE TABLE `{}` ({} PRIMARY KEY(`{}`))", getName(),
+    return std::format("CREATE NODE TABLE `{}` ({} PRIMARY KEY(`{}`));", getName(),
         propertyCollection.toCypher(), primaryKeyName);
-
-    if (!storage.empty()) {
-        ss << std::format(" WITH (STORAGE = '{}'", storage);
-        if (!storageFormat.empty()) {
-            ss << std::format(", FORMAT = '{}'", storageFormat);
-        }
-        ss << ")";
-    }
-
-    ss << ";";
-    return ss.str();
 }
 
 std::optional<function::TableFunction> NodeTableCatalogEntry::getScanFunction() const {

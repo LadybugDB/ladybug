@@ -177,17 +177,7 @@ std::string RelGroupCatalogEntry::toCypher(const ToCypherInfo& info) const {
             getFromToStr(relTableInfos[i].nodePair, catalog, transaction, storage));
     }
     ss << ", " << propertyCollection.toCypher() << RelMultiplicityUtils::toString(srcMultiplicity)
-       << "_" << RelMultiplicityUtils::toString(dstMultiplicity) << ")";
-
-    if (!storage.empty()) {
-        ss << std::format(" WITH (STORAGE = '{}'", storage);
-        if (!storageFormat.empty()) {
-            ss << std::format(", FORMAT = '{}'", storageFormat);
-        }
-        ss << ")";
-    }
-    ss << ";";
-
+       << "_" << RelMultiplicityUtils::toString(dstMultiplicity) << ");";
     return ss.str();
 }
 
