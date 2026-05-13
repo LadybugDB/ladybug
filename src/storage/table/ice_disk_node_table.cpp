@@ -7,6 +7,7 @@
 #include "common/data_chunk/sel_vector.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
+#include "common/string_utils.h"
 #include "common/types/value/value.h"
 #include "main/client_context.h"
 #include "processor/operator/persistent/reader/parquet/parquet_reader.h"
@@ -30,9 +31,12 @@ IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
     main::ClientContext* context)
     : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager,
           std::make_unique<IceDiskNodeTableScanSharedState>()} {
-    auto resolvedPath = common::VirtualFileSystem::resolvePath(context,
-        IceDiskUtils::constructNodeTablePath(nodeTableEntry->getStorage(),
-            nodeTableEntry->getName(), ".parquet"));
+    const auto& storage = nodeTableEntry->getStorage();
+    auto path =
+        common::StringUtils::getLower(storage).ends_with("parquet") ?
+            storage :
+            IceDiskUtils::constructNodeTablePath(storage, nodeTableEntry->getName(), ".parquet");
+    auto resolvedPath = common::VirtualFileSystem::resolvePath(context, path);
     IceDiskUtils::checkVersionCompatibility(context, resolvedPath);
     parquetFilePath = resolvedPath;
 }

@@ -13,6 +13,7 @@
 #include "storage/database_header.h"
 #include "storage/shadow_utils.h"
 #include "storage/storage_manager.h"
+#include "storage/storage_version_info.h"
 #include "storage/wal/local_wal.h"
 #include "transaction/transaction.h"
 
@@ -103,6 +104,9 @@ void Checkpointer::writeCheckpoint() {
     walRotated = mainStorageManager->getWAL().rotateForCheckpoint(&clientContext);
 
     auto databaseHeader = *mainStorageManager->getOrInitDatabaseHeader(clientContext);
+    const auto oldStorageVersion = databaseHeader.storageVersion;
+    databaseHeader.storageVersion = StorageVersionInfo::getStorageVersion();
+    hasStorageVersionUpgrade = oldStorageVersion != databaseHeader.storageVersion;
     bool localHasStorageChanges = checkpointStorage();
     serializeCatalogAndMetadata(databaseHeader, localHasStorageChanges);
     databaseHeader.dataFileNumPages = mainStorageManager->getDataFH()->getNumPages();
@@ -127,6 +131,9 @@ void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp) {
     walRotated = mainStorageManager->getWAL().rotateForCheckpoint(&clientContext);
 
     checkpointHeader = *mainStorageManager->getOrInitDatabaseHeader(clientContext);
+    const auto oldStorageVersion = checkpointHeader.storageVersion;
+    checkpointHeader.storageVersion = StorageVersionInfo::getStorageVersion();
+    hasStorageVersionUpgrade = oldStorageVersion != checkpointHeader.storageVersion;
 
     // Capture versions while the write gate is still held.
     catalogVersionAtCheckpoint = clientContext.getDatabase()->getCatalog()->getVersion();
@@ -203,7 +210,7 @@ void Checkpointer::serializeCatalogAndMetadata(DatabaseHeader& databaseHeader,
     const bool useSnapshot = snapshotTS > 0;
 
     if (databaseHeader.catalogPageRange.startPageIdx == common::INVALID_PAGE_IDX ||
-        catalog->changedSinceLastCheckpoint()) {
+        catalog->changedSinceLastCheckpoint() || hasStorageVersionUpgrade) {
         databaseHeader.updateCatalogPageRange(*dataFH->getPageManager(),
             useSnapshot ? serializeCatalogSnapshot(*catalog, *mainStorageManager) :
                           serializeCatalog(*catalog, *mainStorageManager));

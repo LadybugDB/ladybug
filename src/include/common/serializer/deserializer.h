@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <string>
@@ -19,6 +20,9 @@ public:
     explicit Deserializer(std::unique_ptr<Reader> reader) : reader(std::move(reader)) {}
 
     bool finished() const { return reader->finished(); }
+
+    void setStorageVersion(uint64_t version) { storageVersion = version; }
+    uint64_t getStorageVersion() const { return storageVersion; }
 
     template<typename T>
         requires std::is_trivially_destructible_v<T> || std::is_same_v<std::string, T>
@@ -139,6 +143,7 @@ public:
 
 private:
     std::unique_ptr<Reader> reader;
+    uint64_t storageVersion = std::numeric_limits<uint64_t>::max();
 };
 
 template<>

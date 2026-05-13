@@ -14,19 +14,21 @@
 #include <format>
 
 namespace lbug::storage {
-static void validateStorageVersion(common::Deserializer& deSer) {
+static storage_version_t validateStorageVersion(common::Deserializer& deSer) {
     std::string key;
     deSer.validateDebuggingInfo(key, "storage_version");
     storage_version_t savedStorageVersion = 0;
     deSer.deserializeValue(savedStorageVersion);
     const auto storageVersion = StorageVersionInfo::getStorageVersion();
-    if (savedStorageVersion != storageVersion) {
+    if (!StorageVersionInfo::canReadStorageVersion(savedStorageVersion)) {
         // TODO(Guodong): Add a test case for this.
         throw common::RuntimeException(
             std::format("Trying to read a database file with a different version. "
                         "Database file version: {}, Current build storage version: {}",
                 savedStorageVersion, storageVersion));
     }
+    deSer.setStorageVersion(savedStorageVersion);
+    return savedStorageVersion;
 }
 
 static void validateMagicBytes(common::Deserializer& deSer) {
@@ -69,7 +71,7 @@ static void writeMagicBytes(common::Serializer& serializer) {
 void DatabaseHeader::serialize(common::Serializer& ser) const {
     writeMagicBytes(ser);
     ser.writeDebuggingInfo("storage_version");
-    ser.serializeValue(StorageVersionInfo::getStorageVersion());
+    ser.serializeValue(storageVersion);
     ser.writeDebuggingInfo("catalog");
     ser.serializeValue(catalogPageRange.startPageIdx);
     ser.serializeValue(catalogPageRange.numPages);
@@ -85,7 +87,7 @@ void DatabaseHeader::serialize(common::Serializer& ser) const {
 
 DatabaseHeader DatabaseHeader::deserialize(common::Deserializer& deSer) {
     validateMagicBytes(deSer);
-    validateStorageVersion(deSer);
+    const auto savedStorageVersion = validateStorageVersion(deSer);
     PageRange catalogPageRange{}, metaPageRange{};
     common::uuid databaseID{};
     std::string key;
@@ -105,12 +107,13 @@ DatabaseHeader DatabaseHeader::deserialize(common::Deserializer& deSer) {
     if (headerFormatVersion == HEADER_FORMAT_VERSION_WITH_DATAFILE_NUM_PAGES) {
         deSer.deserializeValue(dataFileNumPages);
     }
-    return {catalogPageRange, metaPageRange, dataFileNumPages, databaseID};
+    return {catalogPageRange, metaPageRange, dataFileNumPages, databaseID, savedStorageVersion};
 }
 
 DatabaseHeader DatabaseHeader::createInitialHeader(common::RandomEngine* randomEngine) {
     // We generate a random UUID to act as the database ID
-    return DatabaseHeader{{}, {}, 0, common::UUID::generateRandomUUID(randomEngine)};
+    return DatabaseHeader{{}, {}, 0, common::UUID::generateRandomUUID(randomEngine),
+        StorageVersionInfo::getStorageVersion()};
 }
 
 std::optional<DatabaseHeader> DatabaseHeader::readDatabaseHeader(common::FileInfo& dataFileInfo) {

@@ -1,14 +1,50 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 
 #include "binder/ddl/bound_create_table_info.h"
+#include "common/constants.h"
+#include "common/serializer/buffered_file.h"
 #include "common/serializer/deserializer.h"
 #include "common/string_utils.h"
+#include "storage/storage_version_info.h"
 #include <format>
 
 using namespace lbug::binder;
 
 namespace lbug {
 namespace catalog {
+
+static void upgradeLegacyStorageFormat(const std::string& storage, std::string& storageFormat) {
+    const auto lowerStorage = common::StringUtils::getLower(storage);
+    if (lowerStorage.ends_with("parquet")) {
+        storageFormat = std::string(common::TableOptionConstants::ICEBUG_DISK_FORMAT);
+    }
+}
+
+static bool tryDeserializeStorageFormat(common::Deserializer& deserializer,
+    std::string& storageFormat) {
+    auto* reader = dynamic_cast<common::BufferedFileReader*>(deserializer.getReader());
+    if (reader == nullptr) {
+        deserializer.deserializeValue(storageFormat);
+        return true;
+    }
+    const auto readOffset = reader->getReadOffset();
+    uint64_t valueLength = 0;
+    deserializer.deserializeValue(valueLength);
+    constexpr uint64_t MAX_STORAGE_FORMAT_LENGTH = 1024;
+    if (valueLength > MAX_STORAGE_FORMAT_LENGTH) {
+        reader->resetReadOffset(readOffset);
+        return false;
+    }
+    storageFormat.resize(valueLength);
+    deserializer.read(reinterpret_cast<uint8_t*>(storageFormat.data()), valueLength);
+    if (!storageFormat.empty() &&
+        !common::TableOptionConstants::isIceBugDiskFormat(storageFormat)) {
+        reader->resetReadOffset(readOffset);
+        storageFormat.clear();
+        return false;
+    }
+    return true;
+}
 
 void NodeTableCatalogEntry::renameProperty(const std::string& propertyName,
     const std::string& newName) {
@@ -38,8 +74,15 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
     deserializer.deserializeValue(primaryKeyName);
     deserializer.validateDebuggingInfo(debuggingInfo, "storage");
     deserializer.deserializeValue(storage);
-    deserializer.validateDebuggingInfo(debuggingInfo, "storageFormat");
-    deserializer.deserializeValue(storageFormat);
+    if (deserializer.getStorageVersion() >=
+        ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_41) {
+        deserializer.validateDebuggingInfo(debuggingInfo, "storageFormat");
+        if (!tryDeserializeStorageFormat(deserializer, storageFormat)) {
+            upgradeLegacyStorageFormat(storage, storageFormat);
+        }
+    } else {
+        upgradeLegacyStorageFormat(storage, storageFormat);
+    }
     auto nodeTableEntry = std::make_unique<NodeTableCatalogEntry>();
     nodeTableEntry->primaryKeyName = primaryKeyName;
     nodeTableEntry->storage = storage;

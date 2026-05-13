@@ -4,6 +4,7 @@
 
 #include "common/types/uuid.h"
 #include "storage/page_range.h"
+#include "storage/storage_version_info.h"
 
 namespace lbug {
 namespace storage {
@@ -18,6 +19,8 @@ struct DatabaseHeader {
     // An ID that is unique between lbug databases
     // Used to ensure that files such as the WAL match the current database
     common::uuid databaseID{0};
+
+    storage_version_t storageVersion{StorageVersionInfo::getStorageVersion()};
 
     void updateCatalogPageRange(PageManager& pageManager, PageRange newPageRange);
     void freeMetadataPageRange(PageManager& pageManager) const;

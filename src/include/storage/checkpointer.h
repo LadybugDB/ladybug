@@ -80,6 +80,8 @@ protected:
     DatabaseHeader checkpointHeader{};
     // Whether storage had changes during checkpointStoragePhase.
     bool hasStorageChanges = false;
+    // Whether this checkpoint upgrades the durable catalog/header storage layout.
+    bool hasStorageVersionUpgrade = false;
     // Versions captured at the end of writeCheckpoint() while the write gate is still held.
     uint64_t catalogVersionAtCheckpoint = 0;
     uint64_t pageManagerVersionAtCheckpoint = 0;

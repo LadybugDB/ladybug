@@ -4,7 +4,11 @@
 
 #include "binder/ddl/bound_create_table_info.h"
 #include "catalog/catalog.h"
+#include "common/constants.h"
+#include "common/serializer/buffered_file.h"
 #include "common/serializer/deserializer.h"
+#include "common/string_utils.h"
+#include "storage/storage_version_info.h"
 #include "transaction/transaction.h"
 #include <format>
 
@@ -13,6 +17,38 @@ using namespace lbug::main;
 
 namespace lbug {
 namespace catalog {
+
+static void upgradeLegacyStorageFormat(const std::string& storage, std::string& storageFormat) {
+    const auto lowerStorage = common::StringUtils::getLower(storage);
+    if (lowerStorage.ends_with("parquet")) {
+        storageFormat = std::string(common::TableOptionConstants::ICEBUG_DISK_FORMAT);
+    }
+}
+
+static bool tryDeserializeStorageFormat(Deserializer& deserializer, std::string& storageFormat) {
+    auto* reader = dynamic_cast<common::BufferedFileReader*>(deserializer.getReader());
+    if (reader == nullptr) {
+        deserializer.deserializeValue(storageFormat);
+        return true;
+    }
+    const auto readOffset = reader->getReadOffset();
+    uint64_t valueLength = 0;
+    deserializer.deserializeValue(valueLength);
+    constexpr uint64_t MAX_STORAGE_FORMAT_LENGTH = 1024;
+    if (valueLength > MAX_STORAGE_FORMAT_LENGTH) {
+        reader->resetReadOffset(readOffset);
+        return false;
+    }
+    storageFormat.resize(valueLength);
+    deserializer.read(reinterpret_cast<uint8_t*>(storageFormat.data()), valueLength);
+    if (!storageFormat.empty() &&
+        !common::TableOptionConstants::isIceBugDiskFormat(storageFormat)) {
+        reader->resetReadOffset(readOffset);
+        storageFormat.clear();
+        return false;
+    }
+    return true;
+}
 
 void RelGroupCatalogEntry::addFromToConnection(table_id_t srcTableID, table_id_t dstTableID,
     oid_t oid) {
@@ -135,8 +171,15 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     }
     deserializer.validateDebuggingInfo(debuggingInfo, "relTableInfos");
     deserializer.deserializeVector(relTableInfos);
-    deserializer.validateDebuggingInfo(debuggingInfo, "storageFormat");
-    deserializer.deserializeValue(storageFormat);
+    if (deserializer.getStorageVersion() >=
+        ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_41) {
+        deserializer.validateDebuggingInfo(debuggingInfo, "storageFormat");
+        if (!tryDeserializeStorageFormat(deserializer, storageFormat)) {
+            upgradeLegacyStorageFormat(storage, storageFormat);
+        }
+    } else {
+        upgradeLegacyStorageFormat(storage, storageFormat);
+    }
     auto relGroupEntry = std::make_unique<RelGroupCatalogEntry>();
     relGroupEntry->srcMultiplicity = srcMultiplicity;
     relGroupEntry->dstMultiplicity = dstMultiplicity;
