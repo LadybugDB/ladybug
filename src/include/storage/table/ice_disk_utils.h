@@ -22,7 +22,6 @@ struct CSRFilePaths {
 };
 
 class IceDiskUtils {
-public:
     // Joins a base path with a filename. When base is empty the filename is returned
     // as-is (i.e. relative to the current working directory)
     static std::string joinPath(const std::string& base, const std::string& part) {
@@ -37,6 +36,7 @@ public:
         return base + "/" + part;
     }
 
+public:
     // Get the file path for a given node table's parquet file
     static std::string constructNodeTablePath(const std::string& dir, const std::string& name,
         const std::string& suffix) {

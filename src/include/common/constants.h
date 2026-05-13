@@ -91,7 +91,7 @@ struct TableOptionConstants {
     static constexpr std::string_view ICEBUG_DISK_FORMAT = "icebug-disk";
 
     static bool isIceBugDiskFormat(const std::string& format) {
-        return format.find(ICEBUG_DISK_FORMAT) != std::string::npos;
+        return format == ICEBUG_DISK_FORMAT;
     }
 };
 
