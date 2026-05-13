@@ -343,7 +343,7 @@ option(LBUG_API_USE_PRECOMPILED_LIB "Link language bindings against a precompile
 set(LBUG_API_PRECOMPILED_LIB_PATH "" CACHE FILEPATH "Path to the precompiled static liblbug archive used by language bindings.")
 option(LBUG_NODEJS_USE_PRECOMPILED_LIB "Deprecated alias for LBUG_API_USE_PRECOMPILED_LIB." FALSE)
 set(LBUG_NODEJS_PRECOMPILED_LIB_PATH "" CACHE FILEPATH "Deprecated alias for LBUG_API_PRECOMPILED_LIB_PATH.")
-option(ENABLE_BACKTRACES "Enable backtrace printing for exceptions and segfaults" FALSE)
+option(ENABLE_BACKTRACES "Enable backtrace printing for fatal signals and termination" FALSE)
 option(PREFER_SYSTEM_DEPS "Only download certain deps if not found on the system" TRUE)
 
 if(LBUG_NODEJS_USE_PRECOMPILED_LIB)
