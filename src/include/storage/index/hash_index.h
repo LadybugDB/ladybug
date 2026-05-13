@@ -43,7 +43,6 @@ public:
     virtual bool checkpointInMemory() = 0;
     virtual bool rollbackInMemory() = 0;
     virtual void rollbackCheckpoint() = 0;
-    virtual void bulkReserve(uint64_t numValuesToAppend) = 0;
     virtual void reclaimStorage(PageAllocator& pageAllocator) = 0;
     virtual bool tryLock() = 0;
     virtual std::unique_lock<std::shared_mutex> adoptLock() = 0;
@@ -232,8 +231,6 @@ private:
     void splitSlots(PageAllocator& pageAllocator, const transaction::Transaction* transaction,
         HashIndexHeader& header, slot_id_t numSlotsToSplit);
 
-    // Resizes the local storage to support the given number of new entries
-    void bulkReserve(uint64_t newEntries) override;
     // Resizes the on-disk index to support the given number of new entries
     void reserve(PageAllocator& pageAllocator, const transaction::Transaction* transaction,
         uint64_t newEntries);
@@ -431,13 +428,6 @@ public:
         }));
         return getTypedHashIndexByPos<HashIndexType<T>>(indexPos)->appendNoLock(transaction, buffer,
             bufferOffset, isVisible);
-    }
-
-    void bulkReserve(uint64_t numValuesToAppend) {
-        uint32_t eachSize = numValuesToAppend / NUM_HASH_INDEXES + 1;
-        for (auto i = 0u; i < NUM_HASH_INDEXES; i++) {
-            hashIndices[i]->bulkReserve(eachSize);
-        }
     }
 
     void delete_(common::string_t key) { return delete_(key.getAsStringView()); }

@@ -416,11 +416,6 @@ size_t HashIndex<T>::mergeSlot(PageAllocator& pageAllocator, const Transaction* 
 }
 
 template<typename T>
-void HashIndex<T>::bulkReserve(uint64_t newEntries) {
-    return localStorage->reserveInserts(newEntries);
-}
-
-template<typename T>
 HashIndex<T>::~HashIndex() = default;
 
 template<>

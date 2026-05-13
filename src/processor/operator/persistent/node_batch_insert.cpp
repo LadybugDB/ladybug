@@ -39,11 +39,6 @@ void NodeBatchInsertSharedState::initPKIndex(const ExecutionContext* context) {
             "COPY into node tables requires enable_default_hash_index=true for primary-key "
             "validation.");
     }
-    uint64_t numRows = 0;
-    if (tableFuncSharedState != nullptr) {
-        numRows = tableFuncSharedState->getNumRows();
-    }
-    pkIndex->bulkReserve(numRows);
     globalIndexBuilder = IndexBuilder(std::make_shared<IndexBuilderSharedState>(
         Transaction::Get(*context->clientContext), nodeTable));
 }
