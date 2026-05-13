@@ -91,7 +91,7 @@ size_t DiskArrayCollection::addDiskArray() {
     auto oldSize = numHeaders++;
     // This may not be the last header page. If we rollback there may be header pages which are
     // empty
-    auto pageIdx = numHeaders % HeaderPage::NUM_HEADERS_PER_PAGE;
+    auto pageIdx = oldSize / HeaderPage::NUM_HEADERS_PER_PAGE;
     if (pageIdx >= headersForWriteTrx.size()) {
 
         headersForWriteTrx.emplace_back(std::make_unique<HeaderPage>());
