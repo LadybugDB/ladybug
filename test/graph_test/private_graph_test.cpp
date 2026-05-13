@@ -1,5 +1,7 @@
 #include "graph_test/private_graph_test.h"
 
+#include <fstream>
+
 #include "common/exception/test.h"
 #include "graph_test/base_graph_test.h"
 #include "spdlog/spdlog.h"
@@ -54,6 +56,38 @@ static void removeFile(const std::string& path) {
     }
 }
 
+static uint64_t readStorageVersionFromHeader(const std::string& databasePath) {
+    std::ifstream dbFile{databasePath, std::ios::binary};
+    if (!dbFile.is_open()) {
+        throw TestException("Failed to open database file: " + databasePath);
+    }
+    char magic[5];
+    dbFile.read(magic, 4);
+    magic[4] = '\0';
+    if (std::string(magic) != "LBUG") {
+        throw TestException("Invalid database magic bytes: " + databasePath);
+    }
+    uint64_t storageVersion = 0;
+    dbFile.read(reinterpret_cast<char*>(&storageVersion), sizeof(storageVersion));
+    return storageVersion;
+}
+
+static void writeStorageVersionToHeader(const std::string& databasePath, uint64_t storageVersion) {
+    std::fstream dbFile{databasePath, std::ios::in | std::ios::out | std::ios::binary};
+    if (!dbFile.is_open()) {
+        throw TestException("Failed to open database file: " + databasePath);
+    }
+    char magic[5];
+    dbFile.read(magic, 4);
+    magic[4] = '\0';
+    if (std::string(magic) != "LBUG") {
+        throw TestException("Invalid database magic bytes: " + databasePath);
+    }
+    dbFile.seekp(4);
+    dbFile.write(reinterpret_cast<const char*>(&storageVersion), sizeof(storageVersion));
+    dbFile.flush();
+}
+
 void DBTest::runTest(std::vector<TestStatement>& statements, uint64_t checkpointWaitTimeout,
     std::set<std::string> connNames) {
     for (const auto& connName : connNames) {
@@ -86,6 +120,24 @@ void DBTest::runTest(std::vector<TestStatement>& statements, uint64_t checkpoint
                         connMap.erase(name);
                     }
                 }
+                createDB(checkpointWaitTimeout);
+                createConns(connNames);
+            }
+            continue;
+        }
+        if (statement.expectedStorageVersion.has_value()) {
+            if (!inMemMode) {
+                ASSERT_EQ(readStorageVersionFromHeader(databasePath),
+                    statement.expectedStorageVersion.value());
+            }
+            continue;
+        }
+        if (statement.storageVersionToSet.has_value()) {
+            if (!inMemMode) {
+                conn.reset();
+                connMap.clear();
+                database.reset();
+                writeStorageVersionToHeader(databasePath, statement.storageVersionToSet.value());
                 createDB(checkpointWaitTimeout);
                 createConns(connNames);
             }

@@ -27,6 +27,7 @@ add_library(lbug_table_function
         show_tables.cpp
         show_warnings.cpp
         stats_info.cpp
+        storage_version.cpp
         storage_info.cpp
         simple_table_function.cpp
         table_function.cpp

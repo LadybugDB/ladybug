@@ -72,6 +72,8 @@ struct TestStatement {
     std::optional<std::string> connName;
     bool reloadDBFlag = false;
     bool importDBFlag = false;
+    std::optional<uint64_t> expectedStorageVersion;
+    std::optional<uint64_t> storageVersionToSet;
     ConcurrentStatusFlag connectionsStatusFlag = ConcurrentStatusFlag::NONE;
 
     // for export and import db

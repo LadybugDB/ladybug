@@ -68,6 +68,12 @@ struct DBVersionFunction final {
     static function_set getFunctionSet();
 };
 
+struct StorageVersionFunction final {
+    static constexpr const char* name = "STORAGE_VERSION";
+
+    static function_set getFunctionSet();
+};
+
 struct ShowTablesFunction final {
     static constexpr const char* name = "SHOW_TABLES";
 

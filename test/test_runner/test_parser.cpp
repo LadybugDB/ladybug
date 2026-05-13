@@ -328,6 +328,16 @@ TestStatement TestParser::parseStatement(const std::string& testCaseName) {
             statement.type = TestStatementType::VALID;
             return statement;
         }
+        case TokenType::CHECK_STORAGE_VERSION: {
+            statement.expectedStorageVersion = stoll(getParam(1));
+            statement.type = TestStatementType::VALID;
+            return statement;
+        }
+        case TokenType::SET_STORAGE_VERSION: {
+            statement.storageVersionToSet = stoll(getParam(1));
+            statement.type = TestStatementType::VALID;
+            return statement;
+        }
         case TokenType::CREATE_DATASET_SCHEMA: {
             validateStatement(statement, testCaseName, line);
             statement.dataset = getParam(1);

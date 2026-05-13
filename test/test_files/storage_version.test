@@ -1,0 +1,27 @@
+-DATASET CSV empty
+-SKIP_IN_MEM
+--
+
+-CASE StorageVersionFunctionAndUpgrade
+-STATEMENT CALL storage_version() RETURN *;
+---- 1
+41
+-CHECK_STORAGE_VERSION 41
+-SET_STORAGE_VERSION 40
+-STATEMENT CALL storage_version() RETURN *;
+---- 1
+40
+-STATEMENT CREATE NODE TABLE users(id INT64, name STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE (:users {id: 1, name: 'Alice'});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-CHECK_STORAGE_VERSION 41
+-RELOADDB
+-STATEMENT CALL storage_version() RETURN *;
+---- 1
+41
+-STATEMENT MATCH (u:users) RETURN u.id, u.name;
+---- 1
+1|Alice
