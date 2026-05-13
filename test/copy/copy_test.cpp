@@ -256,6 +256,54 @@ TEST_F(CopyTest, NodeCopyWithoutDefaultHashIndexAllowsUnsortedUniqueNodeGroup) {
     ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
 }
 
+TEST_F(CopyTest, RelCopyWithoutDefaultHashIndex) {
+    createDBAndConn();
+    auto result = conn->query("CALL enable_default_hash_index=false");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE Account(id INT64, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE REL TABLE Follows(FROM Account TO Account)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    const auto nodePath = writeCSV("rel_nodes.csv", {"1", "2", "3"});
+    result = conn->query(std::format("COPY Account FROM '{}'", nodePath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    const auto relPath = writeCSV("rels.csv", {"1,2", "2,3", "3,1"});
+    result = conn->query(std::format("COPY Follows FROM '{}'", relPath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query("MATCH (:Account)-[f:Follows]->(:Account) RETURN COUNT(f)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
+}
+
+TEST_F(CopyTest, RelCopyWithoutDefaultHashIndexRejectsMissingEndpoint) {
+    createDBAndConn();
+    auto result = conn->query("CALL enable_default_hash_index=false");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE Account(id INT64, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE REL TABLE Follows(FROM Account TO Account)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    const auto nodePath = writeCSV("missing_endpoint_nodes.csv", {"1", "2"});
+    result = conn->query(std::format("COPY Account FROM '{}'", nodePath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    const auto relPath = writeCSV("missing_endpoint_rels.csv", {"1,2", "2,3"});
+    result = conn->query(std::format("COPY Follows FROM '{}'", relPath));
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_NE(result->getErrorMessage().find("Unable to find primary key value"),
+        std::string::npos);
+
+    result = conn->query("MATCH (:Account)-[f:Follows]->(:Account) RETURN COUNT(f)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
 TEST_F(CopyTest, NodeCopyBMExceptionRecoverySameConnection) {
     if (inMemMode) {
         GTEST_SKIP();

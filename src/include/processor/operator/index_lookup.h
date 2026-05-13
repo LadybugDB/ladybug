@@ -6,6 +6,12 @@
 #include "processor/operator/physical_operator.h"
 
 namespace lbug {
+namespace main {
+class ClientContext;
+} // namespace main
+namespace common {
+class ValueVector;
+} // namespace common
 namespace transaction {
 class Transaction;
 }
@@ -15,22 +21,31 @@ class NodeTable;
 namespace processor {
 
 struct BatchInsertSharedState;
+struct NoIndexLookupCache {
+    virtual ~NoIndexLookupCache() = default;
+    virtual void buildIfNeeded(storage::NodeTable* nodeTable, transaction::Transaction* transaction,
+        main::ClientContext* context) = 0;
+    virtual bool lookup(common::ValueVector* keyVector, common::sel_t pos,
+        common::offset_t& result) const = 0;
+};
+
 struct IndexLookupInfo {
     storage::NodeTable* nodeTable;
     std::unique_ptr<evaluator::ExpressionEvaluator> keyEvaluator;
     DataPos resultVectorPos;
+    std::shared_ptr<NoIndexLookupCache> noIndexLookupCache;
 
     IndexLookupInfo(storage::NodeTable* nodeTable,
         std::unique_ptr<evaluator::ExpressionEvaluator> keyEvaluator,
         const DataPos& resultVectorPos)
         : nodeTable{nodeTable}, keyEvaluator{std::move(keyEvaluator)},
-          resultVectorPos{resultVectorPos} {}
+          resultVectorPos{resultVectorPos}, noIndexLookupCache{nullptr} {}
     EXPLICIT_COPY_DEFAULT_MOVE(IndexLookupInfo);
 
 private:
     IndexLookupInfo(const IndexLookupInfo& other)
         : nodeTable{other.nodeTable}, keyEvaluator{other.keyEvaluator->copy()},
-          resultVectorPos{other.resultVectorPos} {}
+          resultVectorPos{other.resultVectorPos}, noIndexLookupCache{other.noIndexLookupCache} {}
 };
 
 struct IndexLookupPrintInfo final : OPPrintInfo {
@@ -63,9 +78,7 @@ class IndexLookup final : public PhysicalOperator {
 public:
     IndexLookup(std::vector<IndexLookupInfo> infos, std::vector<DataPos> warningDataVectorPos,
         std::unique_ptr<PhysicalOperator> child, common::idx_t id,
-        std::unique_ptr<OPPrintInfo> printInfo)
-        : PhysicalOperator{type_, std::move(child), id, std::move(printInfo)},
-          infos{std::move(infos)}, warningDataVectorPos{std::move(warningDataVectorPos)} {}
+        std::unique_ptr<OPPrintInfo> printInfo);
 
     void initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) override;
 
