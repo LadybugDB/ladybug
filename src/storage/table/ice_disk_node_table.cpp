@@ -307,11 +307,21 @@ bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
         }
     }
 
+    // calc current global row index based on assigned row group and local row index within that
+    // group
+    auto metadata = iceDiskScanState.parquetReader->getMetadata();
+    offset_t startOffset = 0;
+
+    for (common::node_group_idx_t rg = 0;
+         rg < iceDiskScanState.nodeGroupIdx && rg < metadata->row_groups.size(); ++rg) {
+        startOffset += metadata->row_groups[rg].num_rows;
+    }
+
     // Set node ID for this row
     auto tableID = this->getTableID();
     auto& nodeID = scanState.nodeIDVector->getValue<nodeID_t>(0);
     nodeID.tableID = tableID;
-    nodeID.offset = rowIndex; // Use the actual row index from parquet
+    nodeID.offset = startOffset + rowIndex; // Use the actual row index from parquet
 
     scanState.outState->getSelVectorUnsafe().setSelSize(1); // Return exactly one row
     return true;
