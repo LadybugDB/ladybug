@@ -86,6 +86,8 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
         scanState =
             std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+        auto transaction = transaction::Transaction::Get(*context->clientContext);
+        iceDiskTable->initScanState(transaction, *scanState);
     } else if (foreignTable) {
         scanState =
             std::make_unique<storage::ForeignRelTableScanState>(*MemoryManager::Get(*clientContext),

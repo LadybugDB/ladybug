@@ -16,9 +16,14 @@ namespace storage {
 struct IceDiskRelTableScanState final : RelTableScanState {
     std::unique_ptr<processor::ParquetReaderScanState> parquetScanState;
 
-    // Row group range for morsel-driven parallelism
-    uint64_t currentRowGroup = 0;
-    uint64_t endRowGroup = 0;
+    // cached data for the current batch in current row group
+    std::unique_ptr<common::DataChunk> cachedBatchData;
+    common::offset_t currentBatchStartOffset =
+        0; // Global row index of the start of the current batch of the current row group
+    common::offset_t currentLocalRowIdx =
+        0; // Row index within the current batch of the current row group
+    std::unordered_map<common::offset_t, common::sel_t>
+        boundNodeOffsets; // Map from bound node offset to selection vector index
 
     // Per-scan-state readers for thread safety
     std::unique_ptr<processor::ParquetReader> indicesReader;
@@ -35,6 +40,15 @@ struct IceDiskRelTableScanState final : RelTableScanState {
         std::vector<common::column_id_t> columnIDs_,
         std::vector<ColumnPredicateSet> columnPredicateSets_,
         common::RelDataDirection direction_) override;
+
+    void reset(std::unordered_map<common::offset_t, common::sel_t> boundNodeOffsets_) {
+        cachedBatchData = nullptr;
+        currentBatchStartOffset = 0;
+        currentLocalRowIdx = 0;
+        boundNodeOffsets = std::move(boundNodeOffsets_);
+    }
+
+    void reloadCachedBatchData(transaction::Transaction* transaction);
 };
 
 class IceDiskRelTable final : public ColumnarRelTableBase {
@@ -65,11 +79,6 @@ private:
     void initializeParquetReaders(transaction::Transaction* transaction) const;
     void initializeIndptrReader(transaction::Transaction* transaction) const;
     void loadIndptrData(transaction::Transaction* transaction) const;
-    bool scanInternalByRowGroups(transaction::Transaction* transaction,
-        IceDiskRelTableScanState& iceDiskScanState);
-    bool scanRowGroupForBoundNodes(transaction::Transaction* transaction,
-        IceDiskRelTableScanState& iceDiskScanState, const std::vector<uint64_t>& rowGroupsToProcess,
-        const std::unordered_map<common::offset_t, common::sel_t>& boundNodeOffsets);
     common::offset_t findSourceNodeForRow(common::offset_t globalRowIdx) const;
 };
 
