@@ -5,6 +5,7 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/arrow/arrow.h"
 #include "common/constants.h"
+#include "common/enums/storage_format.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/random_engine.h"
 #include "common/serializer/in_mem_file_writer.h"
@@ -102,14 +103,14 @@ void StorageManager::recover(main::ClientContext& clientContext, bool throwOnWal
 void StorageManager::createNodeTable(NodeTableCatalogEntry* entry, main::ClientContext* context) {
     tableNameCache[entry->getTableID()] = entry->getName();
 
-    if (!entry->getStorageFormat().empty()) {
-        if (TableOptionConstants::isIceBugDiskFormat(entry->getStorageFormat())) {
+    if (entry->getStorageFormat() != StorageFormat::NONE) {
+        if (entry->getStorageFormat() == StorageFormat::ICEBUG_DISK) {
             // Create icebug-disk-backed node table
             tables[entry->getTableID()] =
                 std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager, context);
         } else {
-            throw common::RuntimeException(
-                "Unsupported storage format option for node table: " + entry->getStorageFormat());
+            throw common::RuntimeException("Unsupported storage format option for node table: " +
+                                           StorageFormatUtils::toString(entry->getStorageFormat()));
         }
     } else if (!entry->getStorage().empty()) {
         // Check if storage is Arrow backed
@@ -155,14 +156,14 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
         tables[info.oid] = std::make_unique<ForeignRelTable>(entry, info.nodePair.srcTableID,
             info.nodePair.dstTableID, this, &memoryManager, *entry->getScanFunction(),
             std::move(entry->getScanBindData().value()));
-    } else if (!entry->getStorageFormat().empty()) {
-        if (TableOptionConstants::isIceBugDiskFormat(entry->getStorageFormat())) {
+    } else if (entry->getStorageFormat() != StorageFormat::NONE) {
+        if (entry->getStorageFormat() == StorageFormat::ICEBUG_DISK) {
             // Create icebug-disk-backed rel table
             tables[info.oid] = std::make_unique<IceDiskRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, context);
         } else {
-            throw common::RuntimeException(
-                "Unsupported storage format option for rel table: " + entry->getStorageFormat());
+            throw common::RuntimeException("Unsupported storage format option for rel table: " +
+                                           StorageFormatUtils::toString(entry->getStorageFormat()));
         }
     } else if (!entry->getStorage().empty()) {
         if (entry->getStorage().substr(0, 8) == "arrow://") {
@@ -459,7 +460,7 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
         auto tableEntry = catalog->getTableCatalogEntry(&DUMMY_TRANSACTION, tableID)
                               ->ptrCast<NodeTableCatalogEntry>();
         tableNameCache[tableID] = tableEntry->getName();
-        if (TableOptionConstants::isIceBugDiskFormat(tableEntry->getStorageFormat())) {
+        if (tableEntry->getStorageFormat() == StorageFormat::ICEBUG_DISK) {
             // Create icebug-disk-backed node table
             tables[tableID] =
                 std::make_unique<IceDiskNodeTable>(this, tableEntry, &memoryManager, context);
@@ -488,7 +489,7 @@ void StorageManager::deserialize(main::ClientContext* context, const Catalog* ca
         for (auto k = 0u; k < numInnerRelTables; k++) {
             RelTableCatalogInfo info = RelTableCatalogInfo::deserialize(deSer);
             DASSERT(!tables.contains(info.oid));
-            if (TableOptionConstants::isIceBugDiskFormat(relGroupEntry->getStorageFormat())) {
+            if (relGroupEntry->getStorageFormat() == StorageFormat::ICEBUG_DISK) {
                 // Create icebug-disk-backed rel table
                 tables[info.oid] =
                     std::make_unique<IceDiskRelTable>(relGroupEntry, info.nodePair.srcTableID,

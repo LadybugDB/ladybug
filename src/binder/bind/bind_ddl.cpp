@@ -15,6 +15,7 @@
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "common/constants.h"
 #include "common/enums/extend_direction_util.h"
+#include "common/enums/storage_format.h"
 #include "common/exception/binder.h"
 #include "common/exception/message.h"
 #include "common/string_utils.h"
@@ -203,12 +204,12 @@ static ExtendDirection getStorageDirection(const case_insensitive_map_t<Value>& 
     return DEFAULT_EXTEND_DIRECTION;
 }
 
-static std::string getStorageFormat(const case_insensitive_map_t<Value>& options) {
+static StorageFormat getStorageFormat(const case_insensitive_map_t<Value>& options) {
     if (options.contains(TableOptionConstants::STORAGE_FORMAT_OPTION)) {
-        return options.at(TableOptionConstants::STORAGE_FORMAT_OPTION).toString();
+        return StorageFormatUtils::fromString(
+            options.at(TableOptionConstants::STORAGE_FORMAT_OPTION).toString());
     }
-
-    return "";
+    return StorageFormat::NONE;
 }
 
 BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info) {
@@ -252,8 +253,7 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
         // Handle special case where icebug-disk storage could contain a dot
         // Otherwise, treat as file path (e.g., "dataset/demo-db/icebug-disk/demo" or
         // "data.parquet")
-        if (!TableOptionConstants::isIceBugDiskFormat(storageFormat) &&
-            dotPos != std::string::npos) {
+        if (storageFormat != StorageFormat::ICEBUG_DISK && dotPos != std::string::npos) {
             std::string dbName = storage.substr(0, dotPos);
             std::string tableName = storage.substr(dotPos + 1);
             if (!dbName.empty()) {
@@ -344,17 +344,15 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
             }
         }
 
-        bool isSrcIcebugDisk =
-            srcEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
-                TableOptionConstants::isIceBugDiskFormat(
-                    srcEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat()) :
-                false;
-        bool isDstIcebugDisk =
-            dstEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
-                TableOptionConstants::isIceBugDiskFormat(
-                    dstEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat()) :
-                false;
-        bool isRelIcebugDisk = TableOptionConstants::isIceBugDiskFormat(storageFormat);
+        bool isSrcIcebugDisk = srcEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
+                                   srcEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
+                                       StorageFormat::ICEBUG_DISK :
+                                   false;
+        bool isDstIcebugDisk = dstEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
+                                   dstEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
+                                       StorageFormat::ICEBUG_DISK :
+                                   false;
+        bool isRelIcebugDisk = (storageFormat == StorageFormat::ICEBUG_DISK);
 
         // We don't allow mixing icebug-disk tables with non-icebug-disk tables
         // We only allow icebug-disk rel tables to connect icebug-disk node tables
@@ -609,7 +607,7 @@ static void validateNotIceDiskTable(main::ClientContext* clientContext,
     }
 
     auto tableEntry = catalog->getTableCatalogEntry(transaction, tableName);
-    std::string storageFormat;
+    StorageFormat storageFormat = StorageFormat::NONE;
 
     if (tableEntry->getTableType() == common::TableType::NODE) {
         storageFormat = tableEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat();
@@ -617,7 +615,7 @@ static void validateNotIceDiskTable(main::ClientContext* clientContext,
         storageFormat = tableEntry->ptrCast<RelGroupCatalogEntry>()->getStorageFormat();
     }
 
-    if (TableOptionConstants::isIceBugDiskFormat(storageFormat)) {
+    if (storageFormat == StorageFormat::ICEBUG_DISK) {
         throw BinderException(
             std::format("Cannot alter table {}: icebug-disk tables are immutable.", tableName));
     }

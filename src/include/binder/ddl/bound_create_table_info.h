@@ -7,6 +7,7 @@
 #include "common/enums/conflict_action.h"
 #include "common/enums/extend_direction.h"
 #include "common/enums/rel_multiplicity.h"
+#include "common/enums/storage_format.h"
 #include "function/table/bind_data.h"
 #include "function/table/table_function.h"
 #include "property_definition.h"
@@ -76,14 +77,14 @@ struct LBUG_API BoundExtraCreateTableInfo : BoundExtraCreateCatalogEntryInfo {
 struct BoundExtraCreateNodeTableInfo final : BoundExtraCreateTableInfo {
     std::string primaryKeyName;
     std::string storage;
-    std::string storageFormat;
+    common::StorageFormat storageFormat = common::StorageFormat::NONE;
 
     BoundExtraCreateNodeTableInfo(std::string primaryKeyName,
         std::vector<PropertyDefinition> definitions, std::string storage = "",
-        std::string storageFormat = "")
+        common::StorageFormat storageFormat = common::StorageFormat::NONE)
         : BoundExtraCreateTableInfo{std::move(definitions)},
           primaryKeyName{std::move(primaryKeyName)}, storage{std::move(storage)},
-          storageFormat{std::move(storageFormat)} {}
+          storageFormat{storageFormat} {}
     BoundExtraCreateNodeTableInfo(const BoundExtraCreateNodeTableInfo& other)
         : BoundExtraCreateTableInfo{copyVector(other.propertyDefinitions)},
           primaryKeyName{other.primaryKeyName}, storage{other.storage},
@@ -100,7 +101,7 @@ struct BoundExtraCreateRelTableGroupInfo final : BoundExtraCreateTableInfo {
     common::ExtendDirection storageDirection;
     std::vector<catalog::NodeTableIDPair> nodePairs;
     std::string storage;
-    std::string storageFormat;
+    common::StorageFormat storageFormat = common::StorageFormat::NONE;
     std::optional<function::TableFunction> scanFunction;
     std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData;
     std::string foreignDatabaseName;
@@ -108,14 +109,14 @@ struct BoundExtraCreateRelTableGroupInfo final : BoundExtraCreateTableInfo {
     explicit BoundExtraCreateRelTableGroupInfo(std::vector<PropertyDefinition> definitions,
         common::RelMultiplicity srcMultiplicity, common::RelMultiplicity dstMultiplicity,
         common::ExtendDirection storageDirection, std::vector<catalog::NodeTableIDPair> nodePairs,
-        std::string storage = "", std::string storageFormat = "",
+        std::string storage = "", common::StorageFormat storageFormat = common::StorageFormat::NONE,
         std::optional<function::TableFunction> scanFunction = std::nullopt,
         std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData = std::nullopt,
         std::string foreignDatabaseName = "")
         : BoundExtraCreateTableInfo{std::move(definitions)}, srcMultiplicity{srcMultiplicity},
           dstMultiplicity{dstMultiplicity}, storageDirection{storageDirection},
           nodePairs{std::move(nodePairs)}, storage{std::move(storage)},
-          storageFormat{std::move(storageFormat)}, scanFunction{std::move(scanFunction)},
+          storageFormat{storageFormat}, scanFunction{std::move(scanFunction)},
           scanBindData{std::move(scanBindData)},
           foreignDatabaseName{std::move(foreignDatabaseName)} {}
 

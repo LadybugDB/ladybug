@@ -6,6 +6,7 @@
 #include "common/enums/extend_direction.h"
 #include "common/enums/rel_direction.h"
 #include "common/enums/rel_multiplicity.h"
+#include "common/enums/storage_format.h"
 #include "function/table/bind_data.h"
 #include "function/table/table_function.h"
 #include "node_table_id_pair.h"
@@ -39,14 +40,14 @@ public:
     RelGroupCatalogEntry(std::string tableName, common::RelMultiplicity srcMultiplicity,
         common::RelMultiplicity dstMultiplicity, common::ExtendDirection storageDirection,
         std::vector<RelTableCatalogInfo> relTableInfos, std::string storage = "",
-        std::string storageFormat = "",
+        common::StorageFormat storageFormat = common::StorageFormat::NONE,
         std::optional<function::TableFunction> scanFunction = std::nullopt,
         std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData = std::nullopt,
         std::string foreignDatabaseName = "")
         : TableCatalogEntry{type_, std::move(tableName)}, srcMultiplicity{srcMultiplicity},
           dstMultiplicity{dstMultiplicity}, storageDirection{storageDirection},
           relTableInfos{std::move(relTableInfos)}, storage{std::move(storage)},
-          storageFormat{std::move(storageFormat)}, scanFunction{std::move(scanFunction)},
+          storageFormat{storageFormat}, scanFunction{std::move(scanFunction)},
           scanBindData{std::move(scanBindData)},
           foreignDatabaseName{std::move(foreignDatabaseName)} {
         propertyCollection =
@@ -65,7 +66,7 @@ public:
 
     common::ExtendDirection getStorageDirection() const { return storageDirection; }
     const std::string& getStorage() const { return storage; }
-    const std::string& getStorageFormat() const { return storageFormat; }
+    common::StorageFormat getStorageFormat() const { return storageFormat; }
     std::optional<function::TableFunction> getScanFunction() const override { return scanFunction; }
     const std::optional<std::shared_ptr<function::TableFuncBindData>>& getScanBindData() const {
         return scanBindData;
@@ -116,7 +117,7 @@ private:
     common::ExtendDirection storageDirection = common::ExtendDirection::BOTH;
     std::vector<RelTableCatalogInfo> relTableInfos;
     std::string storage;
-    std::string storageFormat;
+    common::StorageFormat storageFormat = common::StorageFormat::NONE;
     std::optional<function::TableFunction> scanFunction;
     std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData;
     std::string foreignDatabaseName; // Database name for foreign-backed rel tables

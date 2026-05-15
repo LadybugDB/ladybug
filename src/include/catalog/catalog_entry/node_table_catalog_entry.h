@@ -3,6 +3,7 @@
 #include <functional>
 #include <optional>
 
+#include "common/enums/storage_format.h"
 #include "function/table/table_function.h"
 #include "table_catalog_entry.h"
 
@@ -28,9 +29,9 @@ class LBUG_API NodeTableCatalogEntry final : public TableCatalogEntry {
 public:
     NodeTableCatalogEntry() = default;
     NodeTableCatalogEntry(std::string name, std::string primaryKeyName, std::string storage = "",
-        std::string storageFormat = "")
+        common::StorageFormat storageFormat = common::StorageFormat::NONE)
         : TableCatalogEntry{entryType_, std::move(name)}, primaryKeyName{std::move(primaryKeyName)},
-          storage{std::move(storage)}, storageFormat{std::move(storageFormat)} {}
+          storage{std::move(storage)}, storageFormat{storageFormat} {}
 
     // Constructor for foreign-backed tables
     NodeTableCatalogEntry(std::string name, std::string primaryKeyName,
@@ -57,7 +58,7 @@ public:
         return getProperty(primaryKeyName);
     }
     const std::string& getStorage() const { return storage; }
-    const std::string& getStorageFormat() const { return storageFormat; }
+    common::StorageFormat getStorageFormat() const { return storageFormat; }
     std::optional<function::TableFunction> getScanFunction() const override;
     const CreateBindDataFunc& getCreateBindDataFunc() const { return createBindDataFunc; }
     const std::string& getForeignDatabaseName() const { return foreignDatabaseName; }
@@ -84,7 +85,7 @@ private:
 private:
     std::string primaryKeyName;
     std::string storage;
-    std::string storageFormat;
+    common::StorageFormat storageFormat = common::StorageFormat::NONE;
     std::optional<function::TableFunction> scanFunction;
     CreateBindDataFunc createBindDataFunc; // Callback to create bind data
     std::string foreignDatabaseName;
