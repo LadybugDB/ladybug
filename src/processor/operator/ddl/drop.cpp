@@ -84,7 +84,8 @@ void Drop::dropTable(const main::ClientContext* context) {
     case CatalogEntryType::NODE_TABLE_ENTRY: {
         for (auto& indexEntry : catalog->getIndexEntries(transaction)) {
             if (indexEntry->getTableID() == entry->getTableID()) {
-                if (StringUtils::caseInsensitiveEquals(indexEntry->getIndexType(), "HASH")) {
+                if (StringUtils::caseInsensitiveEquals(indexEntry->getIndexType(), "HASH") ||
+                    StringUtils::caseInsensitiveEquals(indexEntry->getIndexType(), "ART")) {
                     continue;
                 }
                 throw BinderException(

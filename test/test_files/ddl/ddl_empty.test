@@ -57,6 +57,40 @@ Bob
 -STATEMENT CALL enable_default_hash_index=true;
 ---- ok
 
+-CASE CreateArtIndex
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CREATE NODE TABLE art_person (ID INT64, name STRING, PRIMARY KEY(ID));
+---- 1
+Table art_person has been created.
+-STATEMENT CREATE (:art_person {ID: 1, name: 'Ada'});
+---- ok
+-STATEMENT CREATE (:art_person {ID: 2, name: 'Grace'});
+---- ok
+-STATEMENT CREATE ART INDEX art_person_pk FOR (p:art_person) ON (p.ID);
+---- 1
+Index art_person_pk has been created.
+-STATEMENT CALL SHOW_INDEXES() RETURN table_name, index_name, index_type, property_names;
+---- 1
+art_person|art_person_pk|ART|[ID]
+-STATEMENT MATCH (p:art_person) WHERE p.ID = 2 RETURN p.name;
+---- 1
+Grace
+-STATEMENT CREATE (:art_person {ID: 2, name: 'Duplicate'});
+---- error
+Runtime exception: Found duplicated primary key value 2, which violates the uniqueness constraint of the primary key column.
+-STATEMENT CHECKPOINT;
+---- ok
+-RELOADDB
+-STATEMENT MATCH (p:art_person) WHERE p.ID = 1 RETURN p.name;
+---- 1
+Ada
+-STATEMENT CREATE (:art_person {ID: 1, name: 'DuplicateAfterReload'});
+---- error
+Runtime exception: Found duplicated primary key value 1, which violates the uniqueness constraint of the primary key column.
+-STATEMENT CALL enable_default_hash_index=true;
+---- ok
+
 # Check to see if Count() correctly handles full vectors that are all null
 -CASE AddInt64PropertyWithoutDefault
 -STATEMENT create node table Comment (id int64, creationDate INT64, locationIP STRING, browserUsed STRING, content STRING, length INT32, PRIMARY KEY (id));

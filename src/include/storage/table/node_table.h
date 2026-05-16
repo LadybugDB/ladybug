@@ -160,6 +160,7 @@ public:
     void dropIndex(const std::string& name);
 
     common::column_id_t getPKColumnID() const { return pkColumnID; }
+    Index* tryGetPrimaryKeyIndex() const;
     PrimaryKeyIndex* tryGetPKIndex() const;
     PrimaryKeyIndex* getPKIndex() const {
         auto* index = tryGetPKIndex();

@@ -3,7 +3,9 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "common/exception/binder.h"
+#include "common/string_utils.h"
 #include "processor/execution_context.h"
+#include "storage/index/art_index.h"
 #include "storage/index/hash_index.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
@@ -53,17 +55,37 @@ void CreateIndex::executeInternal(ExecutionContext* context) {
     }
     auto* table = storageManager->getTable(info.tableID)->ptrCast<storage::NodeTable>();
     const auto storageIndexNameExists = table->getIndex(info.indexName).has_value();
-    auto storagePKIndexExists = table->tryGetPKIndex() != nullptr;
+    auto storagePKIndexExists = table->tryGetPrimaryKeyIndex() != nullptr;
     const auto canCreatePhysicalIndex = !storagePKIndexExists && !storageIndexNameExists;
-    auto indexType = storage::PrimaryKeyIndex::getIndexType();
+    auto indexTypeOptional = storageManager->getIndexType(info.indexType);
+    if (!indexTypeOptional.has_value()) {
+        throw BinderException(std::format("Index type {} does not exist.", info.indexType));
+    }
+    const auto& indexType = indexTypeOptional.value().get();
+    if (storagePKIndexExists &&
+        table->tryGetPrimaryKeyIndex()->getIndexInfo().indexType != indexType.typeName) {
+        throw BinderException(std::format(
+            "Cannot create {} index because the table already has a {} primary-key index.",
+            indexType.typeName, table->tryGetPrimaryKeyIndex()->getIndexInfo().indexType));
+    }
     if (canCreatePhysicalIndex) {
         storage::IndexInfo indexInfo{info.indexName, indexType.typeName, info.tableID,
             {info.columnID}, {info.keyDataType},
             indexType.constraintType == storage::IndexConstraintType::PRIMARY,
             indexType.definitionType == storage::IndexDefinitionType::BUILTIN};
-        auto index = storage::PrimaryKeyIndex::createNewIndex(std::move(indexInfo),
-            storageManager->isInMemory(), *memoryManager,
-            *storageManager->getDataFH()->getPageManager(), &storageManager->getShadowFile());
+        std::unique_ptr<storage::Index> index;
+        if (StringUtils::caseInsensitiveEquals(indexType.typeName,
+                storage::PrimaryKeyIndex::getIndexType().typeName)) {
+            index = storage::PrimaryKeyIndex::createNewIndex(std::move(indexInfo),
+                storageManager->isInMemory(), *memoryManager,
+                *storageManager->getDataFH()->getPageManager(), &storageManager->getShadowFile());
+        } else if (StringUtils::caseInsensitiveEquals(indexType.typeName,
+                       storage::ArtPrimaryKeyIndex::getIndexType().typeName)) {
+            index = storage::ArtPrimaryKeyIndex::createNewIndex(std::move(indexInfo));
+        } else {
+            throw BinderException(
+                std::format("Index type {} is not supported by CREATE INDEX.", indexType.typeName));
+        }
         table->buildIndexAndAdd(clientContext, std::move(index));
         storagePKIndexExists = true;
     }

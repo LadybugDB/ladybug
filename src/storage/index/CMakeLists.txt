@@ -1,5 +1,6 @@
 add_library(lbug_storage_index
         OBJECT
+        art_index.cpp
         hash_index.cpp
         in_mem_hash_index.cpp
         index.cpp)

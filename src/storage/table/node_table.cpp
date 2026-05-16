@@ -108,7 +108,7 @@ struct UncommittedIndexInserter final : IndexScanHelper {
 
 struct RollbackPKDeleter final : IndexScanHelper {
     RollbackPKDeleter(row_idx_t startNodeOffset, row_idx_t numRows, NodeTable* table,
-        PrimaryKeyIndex* pkIndex)
+        Index* pkIndex)
         : IndexScanHelper(table, pkIndex),
           semiMask(SemiMaskUtil::createMask(startNodeOffset + numRows)) {
         semiMask->maskRange(startNodeOffset, startNodeOffset + numRows);
@@ -199,9 +199,6 @@ std::unique_ptr<NodeTableScanState> RollbackPKDeleter::initScanState(const Trans
     return scanState;
 }
 
-template<typename T>
-concept notIndexHashable = !IndexHashable<T>;
-
 bool RollbackPKDeleter::processScanOutput(main::ClientContext* context,
     NodeGroupScanResult scanResult, const std::vector<ValueVector*>& scannedVectors) {
     if (scanResult == NODE_GROUP_SCAN_EMPTY_RESULT) {
@@ -209,22 +206,7 @@ bool RollbackPKDeleter::processScanOutput(main::ClientContext* context,
     }
     DASSERT(scannedVectors.size() == 1);
     auto& scannedVector = *scannedVectors[0];
-    auto& pkIndex = index->cast<PrimaryKeyIndex>();
-    const auto rollbackFunc = [&]<IndexHashable T>(T) {
-        for (idx_t i = 0; i < scannedVector.state->getSelSize(); ++i) {
-            const auto pos = scannedVector.state->getSelVector()[i];
-            T key = scannedVector.getValue<T>(pos);
-            static constexpr auto isVisible = [](offset_t) { return true; };
-            if (offset_t lookupOffset = 0; pkIndex.lookup(transaction::Transaction::Get(*context),
-                    key, lookupOffset, isVisible)) {
-                // If we delete the key then it will not be visible to future transactions within
-                // this process
-                pkIndex.discardLocal(key);
-            }
-        }
-    };
-    TypeUtils::visit(scannedVector.dataType.getPhysicalType(), std::cref(rollbackFunc),
-        []<notIndexHashable T>(T) { UNREACHABLE_CODE; });
+    index->discardPrimaryKey(&scannedVector);
     return true;
 }
 } // namespace
@@ -744,7 +726,7 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
 
 void NodeTable::rollbackPKIndexInsert(main::ClientContext* context, row_idx_t startRow,
     row_idx_t numRows_, node_group_idx_t nodeGroupIdx_) {
-    auto* pkIndex = tryGetPKIndex();
+    auto* pkIndex = tryGetPrimaryKeyIndex();
     if (!pkIndex) {
         return;
     }
@@ -825,7 +807,26 @@ PrimaryKeyIndex* NodeTable::tryGetPKIndex() const {
         }
         return nullptr;
     }
+    if (index.value()->getIndexInfo().indexType != PrimaryKeyIndex::getIndexType().typeName) {
+        return nullptr;
+    }
     return &index.value()->cast<PrimaryKeyIndex>();
+}
+
+Index* NodeTable::tryGetPrimaryKeyIndex() const {
+    if (auto* pkIndex = tryGetPKIndex()) {
+        return pkIndex;
+    }
+    for (auto& indexHolder : indexes) {
+        if (!indexHolder.isLoaded()) {
+            continue;
+        }
+        auto* loadedIndex = indexHolder.getIndex();
+        if (loadedIndex->isPrimary()) {
+            return loadedIndex;
+        }
+    }
+    return nullptr;
 }
 
 bool NodeTable::lookupPK(const Transaction* transaction, ValueVector* keyVector, uint64_t vectorPos,
@@ -837,8 +838,8 @@ bool NodeTable::lookupPK(const Transaction* transaction, ValueVector* keyVector,
             return true;
         }
     }
-    if (auto* pkIndex = tryGetPKIndex()) {
-        return pkIndex->lookup(transaction, keyVector, vectorPos, result,
+    if (auto* pkIndex = tryGetPrimaryKeyIndex()) {
+        return pkIndex->lookupPrimaryKey(transaction, keyVector, vectorPos, result,
             [&](offset_t offset) { return isVisibleNoLock(transaction, offset); });
     }
     auto keyToLookup = keyVector->getAsValue(vectorPos);

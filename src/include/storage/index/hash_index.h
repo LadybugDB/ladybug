@@ -386,6 +386,11 @@ public:
 
     bool lookup(const transaction::Transaction* trx, common::ValueVector* keyVector,
         uint64_t vectorPos, common::offset_t& result, visible_func isVisible);
+    bool lookupPrimaryKey(const transaction::Transaction* transaction,
+        common::ValueVector* keyVector, uint64_t vectorPos, common::offset_t& result,
+        visible_func isVisible) override {
+        return lookup(transaction, keyVector, vectorPos, result, std::move(isVisible));
+    }
 
     std::unique_ptr<Index::InsertState> initInsertState(main::ClientContext*,
         visible_func isVisible) override {
@@ -453,6 +458,7 @@ public:
     }
 
     void delete_(common::ValueVector* keyVector);
+    void discardPrimaryKey(common::ValueVector* keyVector) override { delete_(keyVector); }
 
     void checkpointInMemory() override;
     void checkpoint(main::ClientContext*, storage::PageAllocator& pageAllocator) override;

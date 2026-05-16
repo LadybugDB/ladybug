@@ -16,6 +16,7 @@
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/checkpointer.h"
+#include "storage/index/art_index.h"
 #include "storage/table/arrow_node_table.h"
 #include "storage/table/arrow_rel_table.h"
 #include "storage/table/arrow_table_support.h"
@@ -46,6 +47,7 @@ StorageManager::StorageManager(const std::string& databasePath, bool readOnly, b
         std::make_unique<ShadowFile>(*memoryManager.getBufferManager(), vfs, this->databasePath);
     inMemory = main::DBConfig::isDBPathInMemory(databasePath);
     registerIndexType(PrimaryKeyIndex::getIndexType());
+    registerIndexType(ArtPrimaryKeyIndex::getIndexType());
 }
 
 StorageManager::~StorageManager() = default;

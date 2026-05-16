@@ -77,6 +77,9 @@ std::unique_ptr<IndexCatalogEntry> IndexCatalogEntry::deserialize(
     indexEntry->auxBuffer = std::make_unique<uint8_t[]>(auxBufferSize);
     indexEntry->auxBufferSize = auxBufferSize;
     deserializer.read(indexEntry->auxBuffer.get(), auxBufferSize);
+    if (type == "HASH" || type == "ART") {
+        indexEntry->setAuxInfo(std::make_unique<BuiltinIndexAuxInfo>());
+    }
     return indexEntry;
 }
 

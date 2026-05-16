@@ -403,8 +403,10 @@ std::unique_ptr<BoundStatement> Binder::bindCreateIndex(const Statement& stateme
     if (!indexTypeOptional.has_value()) {
         throw BinderException(std::format("Index type {} does not exist.", info.indexType));
     }
-    if (indexType != storage::PrimaryKeyIndex::getIndexType().typeName) {
-        throw BinderException(std::format("Only HASH indexes are supported by CREATE INDEX."));
+    const auto& registeredIndexType = indexTypeOptional.value().get();
+    if (registeredIndexType.constraintType != storage::IndexConstraintType::PRIMARY) {
+        throw BinderException(
+            std::format("Only primary-key indexes are supported by CREATE INDEX."));
     }
     auto catalog = Catalog::Get(*clientContext);
     auto transaction = transaction::Transaction::Get(*clientContext);
@@ -418,11 +420,12 @@ std::unique_ptr<BoundStatement> Binder::bindCreateIndex(const Statement& stateme
     }
     if (!StringUtils::caseInsensitiveEquals(nodeTableEntry->getPrimaryKeyName(),
             info.propertyName)) {
-        throw BinderException("HASH indexes are currently supported only on node primary keys.");
+        throw BinderException(std::format(
+            "{} indexes are currently supported only on node primary keys.", indexType));
     }
     auto boundOptions = bindParsingOptions(info.options);
     if (!boundOptions.empty()) {
-        throw BinderException("CREATE HASH INDEX does not support OPTIONS.");
+        throw BinderException(std::format("CREATE {} INDEX does not support OPTIONS.", indexType));
     }
     auto& property = tableEntry->getProperty(info.propertyName);
     std::vector<PropertyDefinition> propertyDefinitions;
