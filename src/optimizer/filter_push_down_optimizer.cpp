@@ -10,6 +10,9 @@
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_table_function_call.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
+#include "storage/index/art_index.h"
+#include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -203,6 +206,22 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableRepl
             // Cannot rewrite and add predicate back.
             predicateSet.addPredicate(primaryKeyEqualityComparison);
         }
+    } else if (tableIDs.size() == 1) {
+        auto* table =
+            StorageManager::Get(*context)->getTable(tableIDs[0])->ptrCast<storage::NodeTable>();
+        auto* pkIndex = table->tryGetPrimaryKeyIndex();
+        if (pkIndex != nullptr && pkIndex->getIndexInfo().indexType ==
+                                      storage::ArtPrimaryKeyIndex::getIndexType().typeName) {
+            auto primaryKeyRangeComparison = predicateSet.popNodePKRangeComparison(*nodeID);
+            if (primaryKeyRangeComparison.hasBound()) {
+                auto extraInfo = std::make_unique<PrimaryKeyScanInfo>(
+                    primaryKeyRangeComparison.lowerBound, primaryKeyRangeComparison.lowerInclusive,
+                    primaryKeyRangeComparison.upperBound, primaryKeyRangeComparison.upperInclusive);
+                scan.setScanType(LogicalScanNodeTableType::PRIMARY_KEY_SCAN);
+                scan.setExtraInfo(std::move(extraInfo));
+                scan.computeFlatSchema();
+            }
+        }
     }
     return finishPushDown(op);
 }
@@ -319,6 +338,51 @@ std::shared_ptr<Expression> PredicateSet::popNodePKEqualityComparison(const Expr
         return result;
     }
     return nullptr;
+}
+
+PrimaryKeyRangePredicate PredicateSet::popNodePKRangeComparison(const Expression& nodeID) {
+    PrimaryKeyRangePredicate result;
+    for (auto i = 0u; i < nonEqualityPredicates.size(); ++i) {
+        auto predicate = nonEqualityPredicates[i];
+        if (!ExpressionTypeUtil::isComparison(predicate->expressionType) ||
+            predicate->expressionType == ExpressionType::NOT_EQUALS) {
+            continue;
+        }
+        auto comparisonType = predicate->expressionType;
+        std::shared_ptr<Expression> bound;
+        if (isNodePrimaryKey(*predicate->getChild(0), nodeID)) {
+            bound = predicate->getChild(1);
+        } else if (isNodePrimaryKey(*predicate->getChild(1), nodeID)) {
+            bound = predicate->getChild(0);
+            comparisonType = ExpressionTypeUtil::reverseComparisonDirection(comparisonType);
+        } else {
+            continue;
+        }
+        if (!isConstantExpression(bound)) {
+            continue;
+        }
+        switch (comparisonType) {
+        case ExpressionType::GREATER_THAN:
+            result.lowerBound = bound;
+            result.lowerInclusive = false;
+            break;
+        case ExpressionType::GREATER_THAN_EQUALS:
+            result.lowerBound = bound;
+            result.lowerInclusive = true;
+            break;
+        case ExpressionType::LESS_THAN:
+            result.upperBound = bound;
+            result.upperInclusive = false;
+            break;
+        case ExpressionType::LESS_THAN_EQUALS:
+            result.upperBound = bound;
+            result.upperInclusive = true;
+            break;
+        default:
+            break;
+        }
+    }
+    return result;
 }
 
 expression_vector PredicateSet::getAllPredicates() {

@@ -1,5 +1,10 @@
 #include "storage/index/art_index.h"
 
+#include <algorithm>
+#include <cstring>
+#include <limits>
+#include <type_traits>
+
 #include "common/exception/message.h"
 #include "common/exception/runtime.h"
 #include "common/serializer/buffer_reader.h"
@@ -17,14 +22,42 @@ namespace storage {
 namespace {
 
 template<typename T>
-void appendRaw(std::vector<uint8_t>& bytes, const T& value) {
-    const auto* data = reinterpret_cast<const uint8_t*>(&value);
-    bytes.insert(bytes.end(), data, data + sizeof(T));
+void appendBigEndian(std::vector<uint8_t>& bytes, T value) {
+    using U = std::make_unsigned_t<T>;
+    auto unsignedValue = static_cast<U>(value);
+    for (auto i = 0u; i < sizeof(T); ++i) {
+        const auto shift = (sizeof(T) - i - 1) * 8;
+        bytes.push_back(static_cast<uint8_t>(unsignedValue >> shift));
+    }
 }
 
 template<typename T>
-void appendFixed(std::vector<uint8_t>& bytes, T value) {
-    appendRaw(bytes, value);
+void appendIntegral(std::vector<uint8_t>& bytes, T value) {
+    using U = std::make_unsigned_t<T>;
+    auto encoded = static_cast<U>(value);
+    if constexpr (std::is_signed_v<T>) {
+        encoded ^= (U{1} << (sizeof(T) * 8 - 1));
+    }
+    appendBigEndian(bytes, encoded);
+}
+
+template<typename T>
+void appendFloat(std::vector<uint8_t>& bytes, T value) {
+    using U = std::conditional_t<sizeof(T) == sizeof(uint32_t), uint32_t, uint64_t>;
+    U encoded = 0;
+    std::memcpy(&encoded, &value, sizeof(T));
+    const auto signBit = U{1} << (sizeof(T) * 8 - 1);
+    encoded = (encoded & signBit) != 0 ? ~encoded : encoded ^ signBit;
+    appendBigEndian(bytes, encoded);
+}
+
+void appendUInt128(std::vector<uint8_t>& bytes, uint64_t high, uint64_t low) {
+    appendBigEndian(bytes, high);
+    appendBigEndian(bytes, low);
+}
+
+void appendInt128(std::vector<uint8_t>& bytes, int64_t high, uint64_t low) {
+    appendUInt128(bytes, static_cast<uint64_t>(high) ^ (uint64_t{1} << 63), low);
 }
 
 void appendString(std::vector<uint8_t>& bytes, std::string_view value) {
@@ -132,12 +165,18 @@ ArtKey ArtKey::encode(ValueVector* vector, uint64_t vectorPos) {
     TypeUtils::visit(vector->dataType.getPhysicalType(), [&]<typename T>(T) {
         if constexpr (std::same_as<T, string_t>) {
             appendString(bytes, vector->getValue<string_t>(vectorPos).getAsStringView());
-        } else if constexpr (std::same_as<T, int128_t> || std::same_as<T, uint128_t>) {
+        } else if constexpr (std::same_as<T, int128_t>) {
             const auto value = vector->getValue<T>(vectorPos);
-            appendRaw(bytes, value.low);
-            appendRaw(bytes, value.high);
-        } else if constexpr (std::integral<T> || std::floating_point<T>) {
-            appendFixed(bytes, vector->getValue<T>(vectorPos));
+            appendInt128(bytes, value.high, value.low);
+        } else if constexpr (std::same_as<T, uint128_t>) {
+            const auto value = vector->getValue<T>(vectorPos);
+            appendUInt128(bytes, value.high, value.low);
+        } else if constexpr (std::same_as<T, bool>) {
+            bytes.push_back(vector->getValue<T>(vectorPos) ? 1 : 0);
+        } else if constexpr (std::integral<T>) {
+            appendIntegral(bytes, vector->getValue<T>(vectorPos));
+        } else if constexpr (std::floating_point<T>) {
+            appendFloat(bytes, vector->getValue<T>(vectorPos));
         } else {
             UNREACHABLE_CODE;
         }
@@ -265,6 +304,86 @@ bool ArtPrimaryKeyIndex::lookupPrimaryKey(const transaction::Transaction*, Value
     uint64_t vectorPos, offset_t& result, visible_func isVisible) {
     const auto key = ArtKey::encode(keyVector, vectorPos);
     return lookup(key, result, std::move(isVisible));
+}
+
+static int compareKeys(const std::vector<uint8_t>& left, const std::vector<uint8_t>& right) {
+    const auto cmpSize = std::min(left.size(), right.size());
+    for (auto i = 0u; i < cmpSize; ++i) {
+        if (left[i] < right[i]) {
+            return -1;
+        }
+        if (left[i] > right[i]) {
+            return 1;
+        }
+    }
+    if (left.size() == right.size()) {
+        return 0;
+    }
+    return left.size() < right.size() ? -1 : 1;
+}
+
+static bool satisfiesLowerBound(const std::vector<uint8_t>& key, const ArtKey* lowerBound,
+    bool lowerInclusive) {
+    if (lowerBound == nullptr) {
+        return true;
+    }
+    const auto cmp = compareKeys(key, lowerBound->getBytes());
+    return lowerInclusive ? cmp >= 0 : cmp > 0;
+}
+
+static bool satisfiesUpperBound(const std::vector<uint8_t>& key, const ArtKey* upperBound,
+    bool upperInclusive) {
+    if (upperBound == nullptr) {
+        return true;
+    }
+    const auto cmp = compareKeys(key, upperBound->getBytes());
+    return upperInclusive ? cmp <= 0 : cmp < 0;
+}
+
+void ArtPrimaryKeyIndex::collectRange(const Node& node, std::vector<uint8_t>& key,
+    const ArtKey* lowerBound, bool lowerInclusive, const ArtKey* upperBound, bool upperInclusive,
+    idx_t maxResults, std::vector<offset_t>& results, visible_func isVisible) const {
+    if (results.size() >= maxResults) {
+        return;
+    }
+    if (node.offset.has_value() && satisfiesLowerBound(key, lowerBound, lowerInclusive) &&
+        satisfiesUpperBound(key, upperBound, upperInclusive) && isVisible(node.offset.value())) {
+        results.push_back(node.offset.value());
+    }
+    for (auto byte = 0u; byte <= std::numeric_limits<uint8_t>::max(); ++byte) {
+        auto* child = node.getChild(static_cast<uint8_t>(byte));
+        if (child == nullptr) {
+            continue;
+        }
+        key.push_back(static_cast<uint8_t>(byte));
+        if (satisfiesUpperBound(key, upperBound, true)) {
+            collectRange(*child, key, lowerBound, lowerInclusive, upperBound, upperInclusive,
+                maxResults, results, isVisible);
+        }
+        key.pop_back();
+        if (results.size() >= maxResults) {
+            return;
+        }
+    }
+}
+
+bool ArtPrimaryKeyIndex::scanPrimaryKeyRange(ValueVector* lowerBoundVector, uint64_t lowerBoundPos,
+    bool lowerInclusive, ValueVector* upperBoundVector, uint64_t upperBoundPos, bool upperInclusive,
+    idx_t maxResults, std::vector<offset_t>& results, visible_func isVisible) {
+    auto lowerBound =
+        lowerBoundVector == nullptr ? ArtKey{} : ArtKey::encode(lowerBoundVector, lowerBoundPos);
+    auto upperBound =
+        upperBoundVector == nullptr ? ArtKey{} : ArtKey::encode(upperBoundVector, upperBoundPos);
+    const auto* lowerBoundPtr = lowerBoundVector == nullptr ? nullptr : &lowerBound;
+    const auto* upperBoundPtr = upperBoundVector == nullptr ? nullptr : &upperBound;
+    if ((lowerBoundVector != nullptr && lowerBound.empty()) ||
+        (upperBoundVector != nullptr && upperBound.empty())) {
+        return true;
+    }
+    std::vector<uint8_t> key;
+    collectRange(root, key, lowerBoundPtr, lowerInclusive, upperBoundPtr, upperInclusive,
+        maxResults, results, std::move(isVisible));
+    return true;
 }
 
 void ArtPrimaryKeyIndex::discardPrimaryKey(ValueVector* keyVector) {

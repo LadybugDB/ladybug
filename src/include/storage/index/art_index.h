@@ -80,6 +80,10 @@ public:
     bool lookupPrimaryKey(const transaction::Transaction* transaction,
         common::ValueVector* keyVector, uint64_t vectorPos, common::offset_t& result,
         visible_func isVisible) override;
+    bool scanPrimaryKeyRange(common::ValueVector* lowerBoundVector, uint64_t lowerBoundPos,
+        bool lowerInclusive, common::ValueVector* upperBoundVector, uint64_t upperBoundPos,
+        bool upperInclusive, common::idx_t maxResults, std::vector<common::offset_t>& results,
+        visible_func isVisible) override;
     void discardPrimaryKey(common::ValueVector* keyVector) override;
 
     void checkpoint(main::ClientContext*, PageAllocator&) override;
@@ -116,6 +120,10 @@ private:
     bool insertInternal(const ArtKey& key, common::offset_t offset, visible_func isVisible);
     bool lookup(const ArtKey& key, common::offset_t& result, visible_func isVisible) const;
     void erase(const ArtKey& key);
+    void collectRange(const Node& node, std::vector<uint8_t>& key, const ArtKey* lowerBound,
+        bool lowerInclusive, const ArtKey* upperBound, bool upperInclusive,
+        common::idx_t maxResults, std::vector<common::offset_t>& results,
+        visible_func isVisible) const;
     void collectEntries(const Node& node, std::vector<uint8_t>& key,
         std::vector<std::pair<std::vector<uint8_t>, common::offset_t>>& entries) const;
     void loadEntries(const ArtPrimaryKeyIndexStorageInfo& storageInfo);

@@ -18,12 +18,16 @@ The ART index currently supports Ladybug's primary-key index workflow:
 - building the index from an existing node table during `CREATE ART INDEX`
 - checking uniqueness for committed inserts
 - primary-key lookup through `NodeTable::lookupPK`
+- bounded primary-key range scans for constant inequality predicates
 - rollback cleanup for failed insert batches
 - checkpoint and reload
 
-It does not currently provide secondary-index scans, range scans, prefix
-compression, duplicate row-id leaves, or DuckDB's parallel local-ART merge
-builder.
+It does not currently provide secondary indexes, prefix compression, duplicate
+row-id leaves, or DuckDB's parallel local-ART merge builder. Range scans are
+used only for single-table constant predicates over an ART-backed primary key.
+The optimizer keeps the original range predicates as residual filters, so the
+range scan is an access-path optimization rather than a replacement for general
+predicate evaluation.
 
 ## Key Encoding
 
@@ -35,9 +39,17 @@ Strings are encoded using the same escaping idea as DuckDB's ART keys:
 - bytes `0x00` and `0x01` are prefixed with `0x01`
 - a trailing `0x00` terminator is appended
 
-Fixed-width numeric values are encoded as their in-memory bytes. This is enough
-for the current equality-only primary-key lookup path. If ART is later extended
-to ordered scans, numeric encodings will need to become order-preserving.
+Fixed-width numeric values are encoded in order-preserving byte order:
+
+- unsigned integers use big-endian bytes
+- signed integers flip the sign bit and then use big-endian bytes
+- floating-point values transform IEEE bytes so negative values sort before
+  positive values, then use big-endian bytes
+- `INT128` and `UINT128` use high-word then low-word big-endian encoding, with
+  the signed high-word sign bit flipped for `INT128`
+
+This makes lexicographic key order match value order for supported scalar
+primary-key types.
 
 ## Tree Shape
 
@@ -52,6 +64,11 @@ set of byte-labeled children. Children use adaptive layouts:
 Nodes grow as children are inserted. Lookups walk one encoded key byte at a time
 from the root to a terminal node and then verify visibility before returning the
 stored offset.
+
+Range scans traverse children in byte order and collect terminal offsets whose
+encoded keys fall between the requested lower and upper bounds. The scan returns
+candidate row offsets in key order, but query output order is not guaranteed;
+queries still need `ORDER BY` for ordered results.
 
 ## Inserts And Uniqueness
 
@@ -72,6 +89,11 @@ and returns the offset only if the supplied visibility function accepts it.
 
 This keeps the planner and table lookup path independent of whether the physical
 primary-key index is `HASH` or `ART`.
+
+For constant primary-key inequalities such as `p.ID > 10` or
+`p.ID >= 10 AND p.ID < 20`, the filter pushdown optimizer can select the ART
+range path when the table has an ART primary-key index. Hash indexes remain
+equality-only.
 
 ## Checkpoint And Reload
 

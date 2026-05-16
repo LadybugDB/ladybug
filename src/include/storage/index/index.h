@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <vector>
 
 #include "common/serializer/buffer_writer.h"
 #include "common/types/types.h"
@@ -148,6 +149,13 @@ public:
     virtual bool lookupPrimaryKey(const transaction::Transaction* /*transaction*/,
         common::ValueVector* /*keyVector*/, uint64_t /*vectorPos*/, common::offset_t& /*result*/,
         visible_func /*isVisible*/) {
+        return false;
+    }
+    virtual bool scanPrimaryKeyRange(common::ValueVector* /*lowerBoundVector*/,
+        uint64_t /*lowerBoundPos*/, bool /*lowerInclusive*/,
+        common::ValueVector* /*upperBoundVector*/, uint64_t /*upperBoundPos*/,
+        bool /*upperInclusive*/, common::idx_t /*maxResults*/,
+        std::vector<common::offset_t>& /*results*/, visible_func /*isVisible*/) {
         return false;
     }
     virtual void discardPrimaryKey(common::ValueVector* /*keyVector*/) {

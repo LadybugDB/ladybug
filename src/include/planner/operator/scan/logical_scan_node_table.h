@@ -24,10 +24,23 @@ struct ExtraScanNodeTableInfo {
 
 struct PrimaryKeyScanInfo final : ExtraScanNodeTableInfo {
     std::shared_ptr<binder::Expression> key;
+    std::shared_ptr<binder::Expression> lowerBound;
+    std::shared_ptr<binder::Expression> upperBound;
+    bool lowerInclusive = true;
+    bool upperInclusive = true;
+    bool isRange = false;
 
     explicit PrimaryKeyScanInfo(std::shared_ptr<binder::Expression> key) : key{std::move(key)} {}
+    PrimaryKeyScanInfo(std::shared_ptr<binder::Expression> lowerBound, bool lowerInclusive,
+        std::shared_ptr<binder::Expression> upperBound, bool upperInclusive)
+        : lowerBound{std::move(lowerBound)}, upperBound{std::move(upperBound)},
+          lowerInclusive{lowerInclusive}, upperInclusive{upperInclusive}, isRange{true} {}
 
     std::unique_ptr<ExtraScanNodeTableInfo> copy() const override {
+        if (isRange) {
+            return std::make_unique<PrimaryKeyScanInfo>(lowerBound, lowerInclusive, upperBound,
+                upperInclusive);
+        }
         return std::make_unique<PrimaryKeyScanInfo>(key);
     }
 };

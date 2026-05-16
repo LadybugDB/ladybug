@@ -67,6 +67,10 @@ Table art_person has been created.
 ---- ok
 -STATEMENT CREATE (:art_person {ID: 2, name: 'Grace'});
 ---- ok
+-STATEMENT CREATE (:art_person {ID: -1, name: 'Edsger'});
+---- ok
+-STATEMENT CREATE (:art_person {ID: 10, name: 'Barbara'});
+---- ok
 -STATEMENT CREATE ART INDEX art_person_pk FOR (p:art_person) ON (p.ID);
 ---- 1
 Index art_person_pk has been created.
@@ -76,6 +80,14 @@ art_person|art_person_pk|ART|[ID]
 -STATEMENT MATCH (p:art_person) WHERE p.ID = 2 RETURN p.name;
 ---- 1
 Grace
+-STATEMENT MATCH (p:art_person) WHERE p.ID >= 1 AND p.ID < 10 RETURN p.ID, p.name ORDER BY p.ID;
+---- 2
+1|Ada
+2|Grace
+-STATEMENT MATCH (p:art_person) WHERE p.ID < 2 RETURN p.ID, p.name ORDER BY p.ID;
+---- 2
+-1|Edsger
+1|Ada
 -STATEMENT CREATE (:art_person {ID: 2, name: 'Duplicate'});
 ---- error
 Runtime exception: Found duplicated primary key value 2, which violates the uniqueness constraint of the primary key column.
@@ -85,6 +97,11 @@ Runtime exception: Found duplicated primary key value 2, which violates the uniq
 -STATEMENT MATCH (p:art_person) WHERE p.ID = 1 RETURN p.name;
 ---- 1
 Ada
+-STATEMENT MATCH (p:art_person) WHERE p.ID > -1 AND p.ID <= 10 RETURN p.ID, p.name ORDER BY p.ID;
+---- 3
+1|Ada
+2|Grace
+10|Barbara
 -STATEMENT CREATE (:art_person {ID: 1, name: 'DuplicateAfterReload'});
 ---- error
 Runtime exception: Found duplicated primary key value 1, which violates the uniqueness constraint of the primary key column.

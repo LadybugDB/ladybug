@@ -43,11 +43,15 @@ class PrimaryKeyScanNodeTable : public ScanTable {
 public:
     PrimaryKeyScanNodeTable(ScanOpInfo opInfo, std::vector<ScanNodeTableInfo> tableInfos,
         std::unique_ptr<evaluator::ExpressionEvaluator> indexEvaluator,
+        std::unique_ptr<evaluator::ExpressionEvaluator> upperBoundEvaluator, bool isRange,
+        bool lowerInclusive, bool upperInclusive,
         std::shared_ptr<PrimaryKeyScanSharedState> sharedState, physical_op_id id,
         std::unique_ptr<OPPrintInfo> printInfo)
         : ScanTable{type_, std::move(opInfo), id, std::move(printInfo)}, scanState{nullptr},
           tableInfos{std::move(tableInfos)}, indexEvaluator{std::move(indexEvaluator)},
-          sharedState{std::move(sharedState)} {}
+          upperBoundEvaluator{std::move(upperBoundEvaluator)}, sharedState{std::move(sharedState)},
+          isRange{isRange}, lowerInclusive{lowerInclusive}, upperInclusive{upperInclusive},
+          currentRangeTableIdx{0}, rangeOffsetCursor{0} {}
 
     bool isSource() const override { return true; }
 
@@ -59,14 +63,26 @@ public:
 
     std::unique_ptr<PhysicalOperator> copy() override {
         return std::make_unique<PrimaryKeyScanNodeTable>(opInfo.copy(), copyVector(tableInfos),
-            indexEvaluator->copy(), sharedState, id, printInfo->copy());
+            indexEvaluator == nullptr ? nullptr : indexEvaluator->copy(),
+            upperBoundEvaluator == nullptr ? nullptr : upperBoundEvaluator->copy(), isRange,
+            lowerInclusive, upperInclusive, sharedState, id, printInfo->copy());
     }
+
+private:
+    bool lookupRange(ExecutionContext* context);
 
 private:
     std::unique_ptr<storage::NodeTableScanState> scanState;
     std::vector<ScanNodeTableInfo> tableInfos;
     std::unique_ptr<evaluator::ExpressionEvaluator> indexEvaluator;
+    std::unique_ptr<evaluator::ExpressionEvaluator> upperBoundEvaluator;
     std::shared_ptr<PrimaryKeyScanSharedState> sharedState;
+    bool isRange;
+    bool lowerInclusive;
+    bool upperInclusive;
+    common::idx_t currentRangeTableIdx;
+    std::vector<common::offset_t> rangeOffsets;
+    common::idx_t rangeOffsetCursor;
 };
 
 } // namespace processor

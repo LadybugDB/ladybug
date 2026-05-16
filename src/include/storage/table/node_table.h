@@ -154,6 +154,10 @@ public:
 
     virtual bool lookupPK(const transaction::Transaction* transaction,
         common::ValueVector* keyVector, uint64_t vectorPos, common::offset_t& result) const;
+    bool lookupPKRange(const transaction::Transaction* transaction,
+        common::ValueVector* lowerBoundVector, uint64_t lowerBoundPos, bool lowerInclusive,
+        common::ValueVector* upperBoundVector, uint64_t upperBoundPos, bool upperInclusive,
+        common::idx_t maxResults, std::vector<common::offset_t>& results) const;
 
     void addIndex(std::unique_ptr<Index> index);
     void buildIndexAndAdd(main::ClientContext* context, std::unique_ptr<Index> index);

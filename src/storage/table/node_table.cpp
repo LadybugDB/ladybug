@@ -201,6 +201,7 @@ std::unique_ptr<NodeTableScanState> RollbackPKDeleter::initScanState(const Trans
 
 bool RollbackPKDeleter::processScanOutput(main::ClientContext* context,
     NodeGroupScanResult scanResult, const std::vector<ValueVector*>& scannedVectors) {
+    (void)context;
     if (scanResult == NODE_GROUP_SCAN_EMPTY_RESULT) {
         return false;
     }
@@ -849,6 +850,19 @@ bool NodeTable::lookupPK(const Transaction* transaction, ValueVector* keyVector,
     std::vector<ColumnPredicateSet> predicateSets;
     predicateSets.push_back(std::move(predicateSet));
     return scanPKColumn(transaction, *keyToLookup, std::move(predicateSets), result);
+}
+
+bool NodeTable::lookupPKRange(const Transaction* transaction, ValueVector* lowerBoundVector,
+    uint64_t lowerBoundPos, bool lowerInclusive, ValueVector* upperBoundVector,
+    uint64_t upperBoundPos, bool upperInclusive, idx_t maxResults,
+    std::vector<offset_t>& results) const {
+    auto* pkIndex = tryGetPrimaryKeyIndex();
+    if (pkIndex == nullptr) {
+        return false;
+    }
+    return pkIndex->scanPrimaryKeyRange(lowerBoundVector, lowerBoundPos, lowerInclusive,
+        upperBoundVector, upperBoundPos, upperInclusive, maxResults, results,
+        [&](offset_t offset) { return isVisibleNoLock(transaction, offset); });
 }
 
 bool NodeTable::scanPKColumn(const Transaction* transaction, const Value& keyToLookup,

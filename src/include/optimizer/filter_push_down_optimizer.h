@@ -8,6 +8,15 @@ class ClientContext;
 }
 namespace optimizer {
 
+struct PrimaryKeyRangePredicate {
+    std::shared_ptr<binder::Expression> lowerBound;
+    std::shared_ptr<binder::Expression> upperBound;
+    bool lowerInclusive = true;
+    bool upperInclusive = true;
+
+    bool hasBound() const { return lowerBound != nullptr || upperBound != nullptr; }
+};
+
 struct PredicateSet {
     binder::expression_vector equalityPredicates;
     binder::expression_vector nonEqualityPredicates;
@@ -24,6 +33,7 @@ struct PredicateSet {
     void addPredicate(std::shared_ptr<binder::Expression> predicate);
     std::shared_ptr<binder::Expression> popNodePKEqualityComparison(
         const binder::Expression& nodeID);
+    PrimaryKeyRangePredicate popNodePKRangeComparison(const binder::Expression& nodeID);
     binder::expression_vector getAllPredicates();
 
 private:
