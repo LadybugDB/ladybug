@@ -73,8 +73,12 @@ cardinality_t CardinalityEstimator::getNodeIDDom(const std::string& nodeIDName) 
 uint64_t CardinalityEstimator::estimateScanNode(const LogicalOperator& op) const {
     const auto& scan = op.constCast<const LogicalScanNodeTable&>();
     switch (scan.getScanType()) {
-    case LogicalScanNodeTableType::PRIMARY_KEY_SCAN:
-        return 1;
+    case LogicalScanNodeTableType::PRIMARY_KEY_SCAN: {
+        auto& primaryKeyScanInfo = scan.getExtraInfo()->constCast<PrimaryKeyScanInfo>();
+        return primaryKeyScanInfo.isRange ?
+                   atLeastOne(getNodeIDDom(scan.getNodeID()->getUniqueName())) :
+                   1;
+    }
     default:
         return atLeastOne(getNodeIDDom(scan.getNodeID()->getUniqueName()));
     }

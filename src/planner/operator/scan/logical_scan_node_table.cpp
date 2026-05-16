@@ -23,7 +23,10 @@ void LogicalScanNodeTable::computeFactorizedSchema() {
     }
     switch (scanType) {
     case LogicalScanNodeTableType::PRIMARY_KEY_SCAN: {
-        schema->setGroupAsSingleState(groupPos);
+        auto& primaryKeyScanInfo = extraInfo->constCast<PrimaryKeyScanInfo>();
+        if (!primaryKeyScanInfo.isRange) {
+            schema->setGroupAsSingleState(groupPos);
+        }
     } break;
     default:
         break;
