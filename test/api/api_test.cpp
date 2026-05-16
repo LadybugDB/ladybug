@@ -113,6 +113,38 @@ TEST_F(ApiTest, Explain) {
     ASSERT_TRUE(result->isSuccess());
 }
 
+TEST_F(ApiTest, ExplainPrimaryKeyIndexChoice) {
+    ASSERT_TRUE(conn->query("CALL enable_default_hash_index=false")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE ExplainNoIndex(id INT64, PRIMARY KEY(id));"
+                            "CREATE (:ExplainNoIndex {id: 1});")
+                    ->isSuccess());
+    auto noIndexPlan =
+        conn->query("EXPLAIN MATCH (n:ExplainNoIndex) WHERE n.id = 1 RETURN n.id")->toString();
+    EXPECT_NE(noIndexPlan.find("FILTER"), std::string::npos);
+    EXPECT_NE(noIndexPlan.find("SCAN_NODE_TABLE"), std::string::npos);
+    EXPECT_EQ(noIndexPlan.find("PRIMARY_KEY_SCAN_NODE_TABLE"), std::string::npos);
+
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE ExplainHashIndex(id INT64, PRIMARY KEY(id));"
+                            "CREATE (:ExplainHashIndex {id: 1});"
+                            "CREATE HASH INDEX explain_hash_pk FOR (n:ExplainHashIndex) ON "
+                            "(n.id);")
+                    ->isSuccess());
+    auto hashPlan =
+        conn->query("EXPLAIN MATCH (n:ExplainHashIndex) WHERE n.id = 1 RETURN n.id")->toString();
+    EXPECT_NE(hashPlan.find("PRIMARY_KEY_SCAN_NODE_TABLE"), std::string::npos);
+    EXPECT_NE(hashPlan.find("Index: HASH"), std::string::npos);
+
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE ExplainArtIndex(id INT64, PRIMARY KEY(id));"
+                            "CREATE (:ExplainArtIndex {id: 1});"
+                            "CREATE ART INDEX explain_art_pk FOR (n:ExplainArtIndex) ON "
+                            "(n.id);")
+                    ->isSuccess());
+    auto artPlan =
+        conn->query("EXPLAIN MATCH (n:ExplainArtIndex) WHERE n.id = 1 RETURN n.id")->toString();
+    EXPECT_NE(artPlan.find("PRIMARY_KEY_SCAN_NODE_TABLE"), std::string::npos);
+    EXPECT_NE(artPlan.find("Index: ART"), std::string::npos);
+}
+
 TEST_F(ApiTest, Profile) {
     auto result =
         conn->query("EXPLAIN MATCH (a:person) WHERE EXISTS { MATCH (a)-[:knows]->(b:person) WHERE "

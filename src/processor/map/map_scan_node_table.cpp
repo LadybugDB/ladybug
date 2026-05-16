@@ -100,8 +100,15 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapScanNodeTable(
             primaryKeyScanInfo.key != nullptr        ? primaryKeyScanInfo.key->toString() :
             primaryKeyScanInfo.lowerBound != nullptr ? primaryKeyScanInfo.lowerBound->toString() :
                                                        primaryKeyScanInfo.upperBound->toString();
-        auto printInfo =
-            std::make_unique<PrimaryKeyScanPrintInfo>(scan.getProperties(), keyString, alias);
+        std::string indexType = "NONE";
+        if (tableInfos.size() == 1) {
+            auto& nodeTable = tableInfos[0].table->cast<storage::NodeTable>();
+            if (auto* pkIndex = nodeTable.tryGetPrimaryKeyIndex()) {
+                indexType = pkIndex->getIndexInfo().indexType;
+            }
+        }
+        auto printInfo = std::make_unique<PrimaryKeyScanPrintInfo>(scan.getProperties(), keyString,
+            alias, indexType);
         return std::make_unique<PrimaryKeyScanNodeTable>(std::move(scanInfo), std::move(tableInfos),
             std::move(evaluator), std::move(upperBoundEvaluator), primaryKeyScanInfo.isRange,
             primaryKeyScanInfo.lowerInclusive, primaryKeyScanInfo.upperInclusive,

@@ -196,8 +196,10 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableRepl
         primaryKeyEqualityComparison = predicateSet.popNodePKEqualityComparison(*nodeID);
     }
     if (primaryKeyEqualityComparison != nullptr) { // Try rewrite index scan
+        auto* table =
+            StorageManager::Get(*context)->getTable(tableIDs[0])->ptrCast<storage::NodeTable>();
         auto rhs = primaryKeyEqualityComparison->getChild(1);
-        if (isConstantExpression(rhs)) {
+        if (table->tryGetPrimaryKeyIndex() != nullptr && isConstantExpression(rhs)) {
             auto extraInfo = std::make_unique<PrimaryKeyScanInfo>(rhs);
             scan.setScanType(LogicalScanNodeTableType::PRIMARY_KEY_SCAN);
             scan.setExtraInfo(std::move(extraInfo));

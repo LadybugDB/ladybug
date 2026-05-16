@@ -18,6 +18,10 @@ std::string PrimaryKeyScanPrintInfo::toString() const {
         result += ",Alias: ";
         result += alias;
     }
+    if (!indexType.empty()) {
+        result += ", Index: ";
+        result += indexType;
+    }
     result += ", Expressions: ";
     result += binder::ExpressionUtil::toString(expressions);
     return result;
