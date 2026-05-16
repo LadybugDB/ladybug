@@ -256,7 +256,7 @@ IndexLookup::IndexLookup(std::vector<IndexLookupInfo> infos,
       warningDataVectorPos{std::move(warningDataVectorPos)} {
     std::unordered_map<NodeTable*, std::shared_ptr<NoIndexLookupCache>> noIndexLookupCaches;
     for (auto& info : this->infos) {
-        if (!info.nodeTable->tryGetPKIndex()) {
+        if (!info.nodeTable->tryGetPrimaryKeyIndex()) {
             auto& cache = noIndexLookupCaches[info.nodeTable];
             if (!cache) {
                 cache = createNoIndexLookupCache(
