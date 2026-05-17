@@ -25,7 +25,7 @@
 -CASE IceDiskNoStorageRelFails
 
 -LOG IceDiskNoStorageRelMissingParquet
--STATEMENT CREATE NODE TABLE upperversion(id INT64 PRIMARY KEY) WITH (storage = '${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/fixtures', format = 'icebug-disk')
+-STATEMENT CREATE NODE TABLE upperversion(id INT64 PRIMARY KEY) WITH (storage = '${LBUG_ROOT_DIRECTORY}/dataset/ice-disk-test/', format = 'icebug-disk')
 ---- ok
 -STATEMENT CREATE REL TABLE rel(FROM upperversion TO upperversion) WITH (format = 'icebug-disk')
 ---- error(regex)

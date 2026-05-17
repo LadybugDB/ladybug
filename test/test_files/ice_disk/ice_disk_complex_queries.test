@@ -1,0 +1,102 @@
+-DATASET ICEBUG-DISK ice-disk-test
+--
+
+-CASE IceDiskComplexQueries
+
+-LOG TwoHopCrossRel
+-STATEMENT MATCH (a:user {id: 100})-[:follows]->(b)-[:livesin]->(c:city) RETURN b.name, c.name ORDER BY b.name;
+---- 3
+Adam|Waterloo
+Karissa|Waterloo
+Zhang|Kitchener
+
+-LOG BackwardInNeighbors
+-STATEMENT MATCH (u)<-[:follows]-(v) WHERE u.id = 300 RETURN v.name ORDER BY v.name;
+---- 2
+Adam
+Karissa
+
+-LOG UndirectedLivesIn
+-STATEMENT MATCH (a:user)-[:livesin]-(c:city) RETURN a.name, c.name ORDER BY a.name;
+---- 4
+Adam|Waterloo
+Karissa|Waterloo
+Noura|Guelph
+Zhang|Kitchener
+
+-LOG CyclicTriangle
+-STATEMENT MATCH (a:user)-[:follows]->(b:user)-[:follows]->(c:user), (a)-[:follows]->(c) WHERE a.id <> b.id AND b.id <> c.id AND a.id <> c.id RETURN a.name, b.name, c.name ORDER BY a.name, b.name;
+---- 2
+Adam|Karissa|Zhang
+Karissa|Adam|Zhang
+
+-LOG SemiMaskerVarLen
+-STATEMENT MATCH (a:user {id: 100})-[:follows*1..2 (r, n | WHERE n.age > 40)]->(b:user) RETURN b.name ORDER BY b.name;
+---- 4
+Adam
+Karissa
+Noura
+Zhang
+
+-LOG VarLenThreeHop
+-STATEMENT MATCH (a:user {id: 100})-[:follows*3..3]->(b:user) RETURN DISTINCT b.name ORDER BY b.name;
+---- 4
+Adam
+Karissa
+Noura
+Zhang
+
+-LOG FlattenMultiPartMatch
+-STATEMENT MATCH (a:user)-[:follows]->(b:user) WITH a, b MATCH (b)-[:livesin]->(c:city) RETURN a.name, b.name, c.name ORDER BY a.name, b.name;
+---- 7
+Adam|Adam|Waterloo
+Adam|Karissa|Waterloo
+Adam|Zhang|Kitchener
+Karissa|Adam|Waterloo
+Karissa|Zhang|Kitchener
+Noura|Adam|Waterloo
+Zhang|Noura|Guelph
+
+-LOG HashJoinSharedFollowee
+-STATEMENT MATCH (a:user)-[:follows]->(b:user), (c:user)-[:follows]->(b) WHERE a.id < c.id RETURN a.name, b.name, c.name ORDER BY a.name, b.name, c.name;
+---- 4
+Adam|Adam|Karissa
+Adam|Zhang|Karissa
+Noura|Adam|Adam
+Noura|Adam|Karissa
+
+-LOG ProfileQuery
+-STATEMENT PROFILE MATCH (u:user)-[:follows]->(v:user) RETURN u.name, v.name;
+---- ok
+
+-LOG SelfLoopFollows
+-STATEMENT MATCH (a:user)-[:follows]->(a) RETURN a.name;
+---- 1
+Adam
+
+-LOG SelfLoopExcluded
+-STATEMENT MATCH (a:user)-[:follows]->(b:user) WHERE a.id <> b.id RETURN COUNT(*);
+---- 1
+6
+
+-LOG BackwardMultiHopCityUserUser
+-STATEMENT MATCH (c:city)<-[:livesin]-(u:user)<-[:follows]-(f:user) RETURN f.name, u.name, c.name ORDER BY f.name, u.name;
+---- 7
+Adam|Adam|Waterloo
+Adam|Karissa|Waterloo
+Adam|Zhang|Kitchener
+Karissa|Adam|Waterloo
+Karissa|Zhang|Kitchener
+Noura|Adam|Waterloo
+Zhang|Noura|Guelph
+
+-LOG CrossRelCityFollowsCity
+-STATEMENT MATCH (c1:city)<-[:livesin]-(u:user)-[:follows]->(v:user)-[:livesin]->(c2:city) RETURN c1.name, u.name, v.name, c2.name ORDER BY u.name, v.name;
+---- 7
+Waterloo|Adam|Adam|Waterloo
+Waterloo|Adam|Karissa|Waterloo
+Waterloo|Adam|Zhang|Kitchener
+Waterloo|Karissa|Adam|Waterloo
+Waterloo|Karissa|Zhang|Kitchener
+Guelph|Noura|Adam|Waterloo
+Kitchener|Zhang|Noura|Guelph

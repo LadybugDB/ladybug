@@ -18,10 +18,7 @@ using namespace lbug::main;
 using namespace lbug::storage;
 using namespace lbug::testing;
 
-static const std::string FIXTURES_DIR =
-    TestHelper::appendLbugRootPath("dataset/ice-disk-test/fixtures");
-static const std::string DEMO_DB_ICEBUG_DISK =
-    TestHelper::appendLbugRootPath("dataset/demo-db/icebug-disk");
+static const std::string DATASET_DIR = TestHelper::appendLbugRootPath("dataset/ice-disk-test/");
 
 // ─────────────────────────────────────────────────────────────
 // joinPath
@@ -102,30 +99,29 @@ protected:
     }
 
     ClientContext* context = nullptr;
-    const std::string dbDir = FIXTURES_DIR;
 };
 
 TEST_F(IceDiskCheckVersionTest, NullContext) {
-    EXPECT_THROW(IceDiskUtils::checkVersionCompatibility(nullptr,
-                     DEMO_DB_ICEBUG_DISK + "/nodes_person.parquet"),
+    EXPECT_THROW(
+        IceDiskUtils::checkVersionCompatibility(nullptr, DATASET_DIR + "/nodes_user.parquet"),
         RuntimeException);
 }
 
 TEST_F(IceDiskCheckVersionTest, FileDoesNotExist) {
     EXPECT_THROW(IceDiskUtils::checkVersionCompatibility(context,
-                     FIXTURES_DIR + "/nodes_nonexistent.parquet"),
+                     DATASET_DIR + "/nodes_nonexistent.parquet"),
         IOException);
 }
 
 TEST_F(IceDiskCheckVersionTest, NotAParquetFile) {
-    EXPECT_THROW(IceDiskUtils::checkVersionCompatibility(context,
-                     FIXTURES_DIR + "/nodes_notparquet.parquet"),
+    EXPECT_THROW(
+        IceDiskUtils::checkVersionCompatibility(context, DATASET_DIR + "/nodes_notparquet.parquet"),
         CopyException);
 }
 
 TEST_F(IceDiskCheckVersionTest, MissingVersionKey) {
     try {
-        IceDiskUtils::checkVersionCompatibility(context, FIXTURES_DIR + "/nodes_noversion.parquet");
+        IceDiskUtils::checkVersionCompatibility(context, DATASET_DIR + "/nodes_noversion.parquet");
         FAIL() << "Expected RuntimeException for missing version key";
     } catch (const RuntimeException& e) {
         EXPECT_TRUE(std::string(e.what()).find("missing icebug_disk_version") != std::string::npos);
@@ -135,7 +131,7 @@ TEST_F(IceDiskCheckVersionTest, MissingVersionKey) {
 TEST_F(IceDiskCheckVersionTest, WrongVersionValue) {
     try {
         IceDiskUtils::checkVersionCompatibility(context,
-            FIXTURES_DIR + "/nodes_wrongversion.parquet");
+            DATASET_DIR + "/nodes_wrongversion.parquet");
         FAIL() << "Expected RuntimeException for wrong version";
     } catch (const RuntimeException& e) {
         EXPECT_TRUE(std::string(e.what()).find("does not support icebug_disk_version: v99") !=
@@ -146,10 +142,10 @@ TEST_F(IceDiskCheckVersionTest, WrongVersionValue) {
 TEST_F(IceDiskCheckVersionTest, UppercaseVersionSucceeds) {
     // "V1" should match "v1" case-insensitively
     EXPECT_NO_THROW(IceDiskUtils::checkVersionCompatibility(context,
-        FIXTURES_DIR + "/nodes_upperversion.parquet"));
+        DATASET_DIR + "/nodes_upperversion.parquet"));
 }
 
 TEST_F(IceDiskCheckVersionTest, ValidV1Succeeds) {
-    EXPECT_NO_THROW(IceDiskUtils::checkVersionCompatibility(context,
-        DEMO_DB_ICEBUG_DISK + "/nodes_user.parquet"));
+    EXPECT_NO_THROW(
+        IceDiskUtils::checkVersionCompatibility(context, DATASET_DIR + "/nodes_user.parquet"));
 }
