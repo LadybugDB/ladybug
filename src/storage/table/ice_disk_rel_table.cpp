@@ -221,6 +221,12 @@ bool IceDiskRelTable::scanInternal(Transaction* transaction, TableScanState& sca
 
     scanState.resetOutVectors();
 
+    if (iceDiskScanState.boundNodeOffsets.empty()) {
+        // No bound nodes, return empty result
+        iceDiskScanState.outState->getSelVectorUnsafe().setToFiltered(0);
+        return false;
+    }
+
     // Load shared indptr data - thread-safe to read
     loadIndptrData(transaction);
 
@@ -232,9 +238,9 @@ bool IceDiskRelTable::scanInternal(Transaction* transaction, TableScanState& sca
     auto activeBoundSelPos = INVALID_SEL;
     auto activeBoundOffset = INVALID_OFFSET;
     auto hasActiveBound = false;
+    auto differentBoundNodeEncountered = false;
 
     while (totalRowsCollected < maxRowsPerCall) {
-
         if (!iceDiskScanState.cachedBatchData ||
             iceDiskScanState.currentLocalRowIdx ==
                 iceDiskScanState.cachedBatchData->state->getSelVector().getSelSize()) {
@@ -276,6 +282,7 @@ bool IceDiskRelTable::scanInternal(Transaction* transaction, TableScanState& sca
                 activeBoundOffset = boundOffset;
                 activeBoundSelPos = iceDiskScanState.boundNodeOffsets.at(boundOffset);
             } else if (boundOffset != activeBoundOffset) {
+                differentBoundNodeEncountered = true;
                 break;
             }
 
@@ -315,6 +322,10 @@ bool IceDiskRelTable::scanInternal(Transaction* transaction, TableScanState& sca
             }
 
             totalRowsCollected++;
+        }
+
+        if (differentBoundNodeEncountered) {
+            break;
         }
     }
 

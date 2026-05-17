@@ -14,16 +14,5 @@ StorageFormat StorageFormatUtils::fromString(const std::string& str) {
         std::format("Unsupported storage format '{}'. Valid options are: icebug-disk.", str));
 }
 
-std::string StorageFormatUtils::toString(StorageFormat format) {
-    switch (format) {
-    case StorageFormat::NONE:
-        return "";
-    case StorageFormat::ICEBUG_DISK:
-        return "icebug-disk";
-    default:
-        return "";
-    }
-}
-
 } // namespace common
 } // namespace lbug

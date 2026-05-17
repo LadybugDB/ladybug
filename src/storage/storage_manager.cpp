@@ -109,8 +109,9 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry, main::ClientC
             tables[entry->getTableID()] =
                 std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager, context);
         } else {
-            throw common::RuntimeException("Unsupported storage format option for node table: " +
-                                           StorageFormatUtils::toString(entry->getStorageFormat()));
+            throw common::RuntimeException(
+                "Unsupported storage format option for node table: " +
+                std::to_string(static_cast<int>(entry->getStorageFormat())));
         }
     } else if (!entry->getStorage().empty()) {
         // Check if storage is Arrow backed
@@ -162,8 +163,9 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
             tables[info.oid] = std::make_unique<IceDiskRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, context);
         } else {
-            throw common::RuntimeException("Unsupported storage format option for rel table: " +
-                                           StorageFormatUtils::toString(entry->getStorageFormat()));
+            throw common::RuntimeException(
+                "Unsupported storage format option for rel table: " +
+                std::to_string(static_cast<int>(entry->getStorageFormat())));
         }
     } else if (!entry->getStorage().empty()) {
         if (entry->getStorage().substr(0, 8) == "arrow://") {
