@@ -23,11 +23,17 @@ The ART index currently supports Ladybug's primary-key index workflow:
 - checkpoint and reload
 
 It does not currently provide secondary indexes, prefix compression, duplicate
-row-id leaves, or DuckDB's parallel local-ART merge builder. Range scans are
-used only for single-table constant predicates over an ART-backed primary key.
-The optimizer keeps the original range predicates as residual filters, so the
-range scan is an access-path optimization rather than a replacement for general
-predicate evaluation.
+row-id leaves, multi-key indexes, partial indexes, expression indexes, or
+DuckDB's parallel local-ART merge builder. `CREATE ART INDEX` is intentionally
+limited to one native node-table primary-key property. Unsupported index shapes
+are rejected during index creation instead of being accepted and failing later
+in lookup or insert paths.
+
+Range scans are used only for single-table constant predicates over an
+ART-backed primary key. The optimizer uses the range path only after validating
+that the query has at most one constant lower-bound predicate and at most one
+constant upper-bound predicate. Multiple predicates for the same bound,
+non-constant bounds, and complex predicates remain regular filters.
 
 ## Key Encoding
 
