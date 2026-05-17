@@ -88,6 +88,14 @@ Grace
 ---- 2
 -1|Edsger
 1|Ada
+-STATEMENT MATCH (p:art_person) WHERE p.ID > 1 AND p.ID >= -1 RETURN p.ID, p.name ORDER BY p.ID;
+---- 2
+2|Grace
+10|Barbara
+-STATEMENT MATCH (p:art_person) WHERE p.ID > 1 + 0 RETURN p.ID, p.name ORDER BY p.ID;
+---- 2
+2|Grace
+10|Barbara
 -STATEMENT CREATE (:art_person {ID: 2, name: 'Duplicate'});
 ---- error
 Runtime exception: Found duplicated primary key value 2, which violates the uniqueness constraint of the primary key column.

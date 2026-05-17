@@ -1,5 +1,9 @@
 #include "optimizer/filter_push_down_optimizer.h"
 
+#include <algorithm>
+#include <array>
+#include <functional>
+
 #include "binder/expression/literal_expression.h"
 #include "binder/expression/property_expression.h"
 #include "binder/expression/scalar_function_expression.h"
@@ -344,6 +348,8 @@ std::shared_ptr<Expression> PredicateSet::popNodePKEqualityComparison(const Expr
 
 PrimaryKeyRangePredicate PredicateSet::popNodePKRangeComparison(const Expression& nodeID) {
     PrimaryKeyRangePredicate result;
+    auto lowerPredicateIdx = INVALID_IDX;
+    auto upperPredicateIdx = INVALID_IDX;
     for (auto i = 0u; i < nonEqualityPredicates.size(); ++i) {
         auto predicate = nonEqualityPredicates[i];
         if (!ExpressionTypeUtil::isComparison(predicate->expressionType) ||
@@ -365,23 +371,46 @@ PrimaryKeyRangePredicate PredicateSet::popNodePKRangeComparison(const Expression
         }
         switch (comparisonType) {
         case ExpressionType::GREATER_THAN:
+            if (lowerPredicateIdx != INVALID_IDX) {
+                return {};
+            }
             result.lowerBound = bound;
             result.lowerInclusive = false;
+            lowerPredicateIdx = i;
             break;
         case ExpressionType::GREATER_THAN_EQUALS:
+            if (lowerPredicateIdx != INVALID_IDX) {
+                return {};
+            }
             result.lowerBound = bound;
             result.lowerInclusive = true;
+            lowerPredicateIdx = i;
             break;
         case ExpressionType::LESS_THAN:
+            if (upperPredicateIdx != INVALID_IDX) {
+                return {};
+            }
             result.upperBound = bound;
             result.upperInclusive = false;
+            upperPredicateIdx = i;
             break;
         case ExpressionType::LESS_THAN_EQUALS:
+            if (upperPredicateIdx != INVALID_IDX) {
+                return {};
+            }
             result.upperBound = bound;
             result.upperInclusive = true;
+            upperPredicateIdx = i;
             break;
         default:
             break;
+        }
+    }
+    std::array<idx_t, 2> predicateIndices{lowerPredicateIdx, upperPredicateIdx};
+    std::sort(predicateIndices.begin(), predicateIndices.end(), std::greater<>());
+    for (auto predicateIdx : predicateIndices) {
+        if (predicateIdx != INVALID_IDX) {
+            nonEqualityPredicates.erase(nonEqualityPredicates.begin() + predicateIdx);
         }
     }
     return result;
