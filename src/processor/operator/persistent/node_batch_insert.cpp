@@ -6,10 +6,12 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/cast.h"
+#include "common/data_chunk/data_chunk_state.h"
 #include "common/exception/message.h"
 #include "common/exception/runtime.h"
 #include "common/finally_wrapper.h"
 #include "common/type_utils.h"
+#include "common/vector/value_vector.h"
 #include "processor/execution_context.h"
 #include "processor/operator/persistent/index_builder.h"
 #include "processor/result/factorized_table_util.h"
@@ -107,6 +109,12 @@ void NodeBatchInsertSharedState::initPKIndex(const ExecutionContext* context) {
     auto* nodeTable = dynamic_cast_checked<NodeTable*>(table);
     auto* pkIndex = nodeTable->tryGetPKIndex();
     if (!pkIndex) {
+        if (nodeTable->tryGetPrimaryKeyIndex() != nullptr) {
+            globalIndexBuilder.reset();
+            noIndexPKValidator.reset();
+            usePrimaryKeyIndexCommitInsert = true;
+            return;
+        }
         if (nodeTable->getNumTotalRows(Transaction::Get(*context->clientContext)) != 0) {
             throw RuntimeException(
                 "COPY into a non-empty primary-key node table without a hash index is not "
@@ -114,12 +122,14 @@ void NodeBatchInsertSharedState::initPKIndex(const ExecutionContext* context) {
         }
         globalIndexBuilder.reset();
         noIndexPKValidator = createNoIndexPKValidator(pkType);
+        usePrimaryKeyIndexCommitInsert = false;
         if (!noIndexPKValidator) {
             throw RuntimeException(ExceptionMessage::invalidPKType(pkType.toString()));
         }
         return;
     }
     noIndexPKValidator.reset();
+    usePrimaryKeyIndexCommitInsert = false;
     globalIndexBuilder = IndexBuilder(std::make_shared<IndexBuilderSharedState>(
         Transaction::Get(*context->clientContext), nodeTable));
 }
@@ -261,6 +271,27 @@ NodeBatchInsertErrorHandler NodeBatchInsert::createErrorHandler(ExecutionContext
         sharedState->numErroredRows, &sharedState->erroredRowMutex};
 }
 
+static void commitPrimaryKeyIndexInsertions(Transaction* transaction, NodeTable& nodeTable,
+    Index& index, const ColumnChunkData& pkChunk, offset_t nodeOffset, length_t numRows,
+    main::ClientContext* context) {
+    auto state = std::make_shared<DataChunkState>();
+    ValueVector nodeIDVector{LogicalType::INTERNAL_ID()};
+    ValueVector pkVector{pkChunk.getDataType().copy(), MemoryManager::Get(*context), state};
+    nodeIDVector.setState(state);
+    auto insertState = index.initInsertState(context, [&nodeTable, transaction](offset_t offset) {
+        return nodeTable.isVisible(transaction, offset);
+    });
+    for (auto start = 0u; start < numRows; start += DEFAULT_VECTOR_CAPACITY) {
+        const auto size = std::min<length_t>(DEFAULT_VECTOR_CAPACITY, numRows - start);
+        state->getSelVectorUnsafe().setToUnfiltered(size);
+        pkChunk.scan(pkVector, start, size);
+        for (auto i = 0u; i < size; ++i) {
+            nodeIDVector.setValue<nodeID_t>(i, {nodeOffset + start + i, nodeTable.getTableID()});
+        }
+        index.commitInsert(transaction, nodeIDVector, {&pkVector}, *insertState);
+    }
+}
+
 void NodeBatchInsert::clearToIndex(MemoryManager* mm,
     std::unique_ptr<InMemChunkedNodeGroup>& nodeGroup, offset_t startIndexInGroup) const {
     // Create a new chunked node group and move the unwritten values to it
@@ -312,6 +343,12 @@ void NodeBatchInsert::writeAndResetNodeGroup(transaction::Transaction* transacti
         }
         indexBuilder->insert(nodeGroup->getColumnChunk(nodeSharedState->pkColumnID),
             warningChunkData, nodeOffset, numRowsWritten, errorHandler);
+    } else if (nodeSharedState->usePrimaryKeyIndexCommitInsert) {
+        auto* index = nodeTable->tryGetPrimaryKeyIndex();
+        DASSERT(index != nullptr);
+        commitPrimaryKeyIndexInsertions(transaction, *nodeTable, *index,
+            nodeGroup->getColumnChunk(nodeSharedState->pkColumnID), nodeOffset, numRowsWritten,
+            transaction->getClientContext());
     } else if (nodeSharedState->noIndexPKValidator) {
         nodeSharedState->noIndexPKValidator->validate(
             nodeGroup->getColumnChunk(nodeSharedState->pkColumnID), 0, numRowsWritten);

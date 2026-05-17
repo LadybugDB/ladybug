@@ -108,6 +108,33 @@ Runtime exception: Found duplicated primary key value 1, which violates the uniq
 -STATEMENT CALL enable_default_hash_index=true;
 ---- ok
 
+-CASE ArtIndexCopyFrom
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CREATE NODE TABLE art_copy_person (ID INT64, name STRING, PRIMARY KEY(ID));
+---- 1
+Table art_copy_person has been created.
+-STATEMENT CREATE ART INDEX art_copy_person_pk FOR (p:art_copy_person) ON (p.ID);
+---- 1
+Index art_copy_person_pk has been created.
+-STATEMENT COPY art_copy_person FROM "${LBUG_ROOT_DIRECTORY}/test/test_files/ddl/art_index_person.csv";
+---- 1
+4 tuples have been copied to the art_copy_person table.
+-STATEMENT MATCH (p:art_copy_person) WHERE p.ID = 2 RETURN p.name;
+---- 1
+Grace
+-STATEMENT MATCH (p:art_copy_person) WHERE p.ID >= 1 AND p.ID <= 10 RETURN p.ID, p.name ORDER BY p.ID;
+---- 3
+1|Ada
+2|Grace
+10|Barbara
+-STATEMENT MATCH (p:art_copy_person) WHERE p.ID < 2 RETURN p.ID, p.name ORDER BY p.ID;
+---- 2
+-1|Edsger
+1|Ada
+-STATEMENT CALL enable_default_hash_index=true;
+---- ok
+
 # Check to see if Count() correctly handles full vectors that are all null
 -CASE AddInt64PropertyWithoutDefault
 -STATEMENT create node table Comment (id int64, creationDate INT64, locationIP STRING, browserUsed STRING, content STRING, length INT32, PRIMARY KEY (id));

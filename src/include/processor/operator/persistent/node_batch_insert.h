@@ -67,6 +67,7 @@ struct NodeBatchInsertSharedState final : BatchInsertSharedState {
     common::LogicalType pkType;
     std::optional<IndexBuilder> globalIndexBuilder;
     std::unique_ptr<NoIndexPKValidator> noIndexPKValidator;
+    bool usePrimaryKeyIndexCommitInsert;
 
     function::TableFuncSharedState* tableFuncSharedState;
 
@@ -79,7 +80,8 @@ struct NodeBatchInsertSharedState final : BatchInsertSharedState {
     explicit NodeBatchInsertSharedState(std::shared_ptr<FactorizedTable> fTable)
         : BatchInsertSharedState{std::move(fTable)}, pkColumnID{0},
           globalIndexBuilder(std::nullopt), noIndexPKValidator{nullptr},
-          tableFuncSharedState{nullptr}, sharedNodeGroup{nullptr} {}
+          usePrimaryKeyIndexCommitInsert{false}, tableFuncSharedState{nullptr},
+          sharedNodeGroup{nullptr} {}
 
     void initPKIndex(const ExecutionContext* context);
 };
