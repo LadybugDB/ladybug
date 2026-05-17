@@ -101,20 +101,33 @@ private:
         static constexpr uint8_t EMPTY_MARKER = UINT8_MAX;
 
         enum class Kind : uint8_t { NODE4 = 0, NODE16 = 1, NODE48 = 2, NODE256 = 3 };
+        struct SmallChildren {
+            std::array<uint8_t, 16> keys{};
+            std::array<Node*, 16> children{};
+        };
+        struct Node48Children {
+            std::array<uint8_t, 256> childIndex{};
+            std::array<Node*, 48> children{};
+        };
+        struct Node256Children {
+            std::array<Node*, 256> children{};
+        };
 
         std::optional<common::offset_t> offset;
         Kind kind = Kind::NODE4;
         uint16_t count = 0;
-        std::array<uint8_t, 16> keys{};
-        std::array<std::unique_ptr<Node>, 16> smallChildren{};
-        std::array<uint8_t, 256> childIndex{};
-        std::array<std::unique_ptr<Node>, 48> node48Children{};
-        std::array<std::unique_ptr<Node>, 256> node256Children{};
+        union {
+            SmallChildren small;
+            Node48Children node48;
+            Node256Children node256;
+        };
 
         Node();
+        ~Node();
         Node* getChild(uint8_t byte) const;
         Node* getOrInsertChild(uint8_t byte);
         void removeChild(uint8_t byte);
+        void moveChildrenTo(std::vector<Node*>& children);
         bool empty() const { return !offset.has_value() && count == 0; }
     };
 
@@ -122,10 +135,12 @@ private:
     bool lookup(const ArtKey& key, common::offset_t& result, visible_func isVisible) const;
     bool eraseInternal(Node& node, const std::vector<uint8_t>& key, uint64_t depth);
     void erase(const ArtKey& key);
+    static void deleteTree(Node* root);
     void collectRange(const Node& node, std::vector<uint8_t>& key, const ArtKey* lowerBound,
         bool lowerInclusive, const ArtKey* upperBound, bool upperInclusive,
         common::idx_t maxResults, std::vector<common::offset_t>& results,
         visible_func isVisible) const;
+    void clear();
     void collectEntries(const Node& node, std::vector<uint8_t>& key,
         std::vector<std::pair<std::vector<uint8_t>, common::offset_t>>& entries) const;
     void loadEntries(const ArtPrimaryKeyIndexStorageInfo& storageInfo);
