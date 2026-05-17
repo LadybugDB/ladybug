@@ -143,6 +143,21 @@ Grace
 -STATEMENT CALL enable_default_hash_index=true;
 ---- ok
 
+-CASE ArtIndexUnsupportedCreate
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CREATE NODE TABLE art_bad_person (ID INT64, name STRING, PRIMARY KEY(ID));
+---- 1
+Table art_bad_person has been created.
+-STATEMENT CREATE ART INDEX art_bad_person_name FOR (p:art_bad_person) ON (p.name);
+---- error
+Binder exception: ART indexes are currently supported only on node primary keys.
+-STATEMENT CREATE ART INDEX art_bad_person_pk FOR (p:art_bad_person) ON (p.ID) OPTIONS {foo=true};
+---- error
+Binder exception: CREATE ART INDEX does not support OPTIONS.
+-STATEMENT CALL enable_default_hash_index=true;
+---- ok
+
 # Check to see if Count() correctly handles full vectors that are all null
 -CASE AddInt64PropertyWithoutDefault
 -STATEMENT create node table Comment (id int64, creationDate INT64, locationIP STRING, browserUsed STRING, content STRING, length INT32, PRIMARY KEY (id));
