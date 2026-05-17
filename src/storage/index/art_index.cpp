@@ -1,7 +1,11 @@
 #include "storage/index/art_index.h"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <new>
 #include <type_traits>
 
 #include "common/exception/message.h"
@@ -70,26 +74,40 @@ void appendString(std::vector<uint8_t>& bytes, std::string_view value) {
     bytes.push_back(0);
 }
 
+bool shouldPrintDestructorStats() {
+    const auto* value = std::getenv("LBUG_ART_INDEX_DESTRUCTOR_STATS");
+    return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
+}
+
 } // namespace
 
 ArtPrimaryKeyIndex::Node::Node() {
     new (&small) SmallChildren();
 }
 
-ArtPrimaryKeyIndex::Node::~Node() = default;
+ArtPrimaryKeyIndex::NodeBlock::NodeBlock()
+    : nodes{static_cast<Node*>(::operator new(sizeof(Node) * NODE_BLOCK_CAPACITY))} {}
 
-void ArtPrimaryKeyIndex::deleteTree(Node* root) {
-    if (root == nullptr) {
-        return;
+ArtPrimaryKeyIndex::NodeBlock::~NodeBlock() {
+    ::operator delete(nodes);
+}
+
+ArtPrimaryKeyIndex::NodeBlock::NodeBlock(NodeBlock&& other) noexcept
+    : nodes{other.nodes}, used{other.used} {
+    other.nodes = nullptr;
+    other.used = 0;
+}
+
+ArtPrimaryKeyIndex::NodeBlock& ArtPrimaryKeyIndex::NodeBlock::operator=(
+    NodeBlock&& other) noexcept {
+    if (this != &other) {
+        ::operator delete(nodes);
+        nodes = other.nodes;
+        used = other.used;
+        other.nodes = nullptr;
+        other.used = 0;
     }
-    std::vector<Node*> stack;
-    stack.push_back(root);
-    while (!stack.empty()) {
-        auto* node = stack.back();
-        stack.pop_back();
-        node->moveChildrenTo(stack);
-        delete node;
-    }
+    return *this;
 }
 
 ArtPrimaryKeyIndex::Node* ArtPrimaryKeyIndex::Node::getChild(uint8_t byte) const {
@@ -114,14 +132,15 @@ ArtPrimaryKeyIndex::Node* ArtPrimaryKeyIndex::Node::getChild(uint8_t byte) const
     }
 }
 
-ArtPrimaryKeyIndex::Node* ArtPrimaryKeyIndex::Node::getOrInsertChild(uint8_t byte) {
+ArtPrimaryKeyIndex::Node* ArtPrimaryKeyIndex::Node::getOrInsertChild(ArtPrimaryKeyIndex& index,
+    uint8_t byte) {
     if (auto* child = getChild(byte)) {
         return child;
     }
     switch (kind) {
     case Kind::NODE4:
         if (count == 4) {
-            kind = Kind::NODE16;
+            index.recordKindChange(*this, Kind::NODE16);
         }
         break;
     case Kind::NODE16:
@@ -133,7 +152,7 @@ ArtPrimaryKeyIndex::Node* ArtPrimaryKeyIndex::Node::getOrInsertChild(uint8_t byt
                 children.children[i] = small.children[i];
             }
             new (&node48) Node48Children(children);
-            kind = Kind::NODE48;
+            index.recordKindChange(*this, Kind::NODE48);
         }
         break;
     case Kind::NODE48:
@@ -147,7 +166,7 @@ ArtPrimaryKeyIndex::Node* ArtPrimaryKeyIndex::Node::getOrInsertChild(uint8_t byt
                 }
             }
             new (&node256) Node256Children(children);
-            kind = Kind::NODE256;
+            index.recordKindChange(*this, Kind::NODE256);
         }
         break;
     case Kind::NODE256:
@@ -160,16 +179,16 @@ ArtPrimaryKeyIndex::Node* ArtPrimaryKeyIndex::Node::getOrInsertChild(uint8_t byt
     case Kind::NODE4:
     case Kind::NODE16: {
         small.keys[count] = byte;
-        small.children[count] = new Node();
+        small.children[count] = index.allocateNode();
         return small.children[count++];
     }
     case Kind::NODE48: {
         node48.childIndex[byte] = static_cast<uint8_t>(count);
-        node48.children[count] = new Node();
+        node48.children[count] = index.allocateNode();
         return node48.children[count++];
     }
     case Kind::NODE256:
-        node256.children[byte] = new Node();
+        node256.children[byte] = index.allocateNode();
         ++count;
         return node256.children[byte];
     default:
@@ -185,7 +204,6 @@ void ArtPrimaryKeyIndex::Node::removeChild(uint8_t byte) {
             if (small.keys[i] != byte) {
                 continue;
             }
-            ArtPrimaryKeyIndex::deleteTree(small.children[i]);
             for (auto j = i + 1; j < count; ++j) {
                 small.keys[j - 1] = small.keys[j];
                 small.children[j - 1] = small.children[j];
@@ -202,7 +220,6 @@ void ArtPrimaryKeyIndex::Node::removeChild(uint8_t byte) {
             return;
         }
         const auto lastPos = count - 1;
-        ArtPrimaryKeyIndex::deleteTree(node48.children[removedPos]);
         node48.childIndex[byte] = EMPTY_MARKER;
         if (removedPos != lastPos) {
             for (auto i = 0u; i < node48.childIndex.size(); ++i) {
@@ -219,7 +236,6 @@ void ArtPrimaryKeyIndex::Node::removeChild(uint8_t byte) {
     }
     case Kind::NODE256:
         if (node256.children[byte]) {
-            ArtPrimaryKeyIndex::deleteTree(node256.children[byte]);
             node256.children[byte] = nullptr;
             --count;
         }
@@ -227,35 +243,6 @@ void ArtPrimaryKeyIndex::Node::removeChild(uint8_t byte) {
     default:
         UNREACHABLE_CODE;
     }
-}
-
-void ArtPrimaryKeyIndex::Node::moveChildrenTo(std::vector<Node*>& children) {
-    switch (kind) {
-    case Kind::NODE4:
-    case Kind::NODE16:
-        for (auto i = 0u; i < count; ++i) {
-            children.push_back(small.children[i]);
-            small.children[i] = nullptr;
-        }
-        break;
-    case Kind::NODE48:
-        for (auto i = 0u; i < count; ++i) {
-            children.push_back(node48.children[i]);
-            node48.children[i] = nullptr;
-        }
-        break;
-    case Kind::NODE256:
-        for (auto i = 0u; i < node256.children.size(); ++i) {
-            if (node256.children[i]) {
-                children.push_back(node256.children[i]);
-                node256.children[i] = nullptr;
-            }
-        }
-        break;
-    default:
-        UNREACHABLE_CODE;
-    }
-    count = 0;
 }
 
 ArtKey ArtKey::encode(ValueVector* vector, uint64_t vectorPos) {
@@ -327,19 +314,58 @@ ArtPrimaryKeyIndex::ArtPrimaryKeyIndex(IndexInfo indexInfo,
 }
 
 ArtPrimaryKeyIndex::~ArtPrimaryKeyIndex() {
+    if (!shouldPrintDestructorStats()) {
+        clear();
+        return;
+    }
+    const auto allocatedNodes = numAllocatedNodes;
+    const auto numBlocks = nodeBlocks.size();
+    const auto numNode4 = numNodesByKind[0];
+    const auto numNode16 = numNodesByKind[1];
+    const auto numNode48 = numNodesByKind[2];
+    const auto numNode256 = numNodesByKind[3];
+    const auto start = std::chrono::steady_clock::now();
     clear();
+    const auto end = std::chrono::steady_clock::now();
+    const auto elapsedMs =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    std::fprintf(stderr,
+        "ART destructor index=%s table=%llu allocated_nodes=%llu arena_nodes=%llu blocks=%llu "
+        "node4=%llu node16=%llu node48=%llu node256=%llu elapsed_ms=%lld\n",
+        indexInfo.name.c_str(), static_cast<unsigned long long>(indexInfo.tableID),
+        static_cast<unsigned long long>(allocatedNodes),
+        static_cast<unsigned long long>(allocatedNodes - 1),
+        static_cast<unsigned long long>(numBlocks), static_cast<unsigned long long>(numNode4),
+        static_cast<unsigned long long>(numNode16), static_cast<unsigned long long>(numNode48),
+        static_cast<unsigned long long>(numNode256), static_cast<long long>(elapsedMs));
 }
 
 void ArtPrimaryKeyIndex::clear() {
-    std::vector<Node*> children;
-    root.moveChildrenTo(children);
-    for (auto* child : children) {
-        deleteTree(child);
-    }
+    nodeBlocks.clear();
     root.offset.reset();
     root.kind = Node::Kind::NODE4;
     root.count = 0;
     new (&root.small) Node::SmallChildren();
+    numAllocatedNodes = 1;
+    numNodesByKind = {1, 0, 0, 0};
+}
+
+ArtPrimaryKeyIndex::Node* ArtPrimaryKeyIndex::allocateNode() {
+    if (nodeBlocks.empty() || nodeBlocks.back().used == NODE_BLOCK_CAPACITY) {
+        nodeBlocks.emplace_back();
+    }
+    auto& block = nodeBlocks.back();
+    auto* node = block.nodes + block.used++;
+    new (node) Node();
+    ++numAllocatedNodes;
+    ++numNodesByKind[static_cast<uint8_t>(Node::Kind::NODE4)];
+    return node;
+}
+
+void ArtPrimaryKeyIndex::recordKindChange(Node& node, Node::Kind newKind) {
+    --numNodesByKind[static_cast<uint8_t>(node.kind)];
+    node.kind = newKind;
+    ++numNodesByKind[static_cast<uint8_t>(node.kind)];
 }
 
 std::unique_ptr<Index::InsertState> ArtPrimaryKeyIndex::initInsertState(main::ClientContext*,
@@ -385,7 +411,7 @@ bool ArtPrimaryKeyIndex::insertInternal(const ArtKey& key, offset_t offset,
     DASSERT(!key.empty());
     auto* node = &root;
     for (const auto byte : key.getBytes()) {
-        node = node->getOrInsertChild(byte);
+        node = node->getOrInsertChild(*this, byte);
     }
     if (node->offset.has_value() && isVisible(node->offset.value())) {
         return false;

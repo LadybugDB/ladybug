@@ -110,3 +110,10 @@ serialized into the existing index catalog storage-info buffer.
 On reload, the ART index deserializes the key/offset pairs and rebuilds the
 in-memory tree. Built-in `ART` catalog entries are marked as loaded in the same
 way as built-in `HASH` entries so inserts can continue after reload.
+
+The persisted ART is not currently page-backed or demand loaded. Opening a
+database with an ART index materializes the full in-memory tree by replaying all
+stored key/offset entries. Memory use is therefore O(number of indexed keys),
+not O(number of queried index pages or blocks). A production disk-backed ART
+would need buffer-managed index pages and lazy traversal instead of loading the
+entire index at startup.

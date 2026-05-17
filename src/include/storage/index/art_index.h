@@ -123,19 +123,32 @@ private:
         };
 
         Node();
-        ~Node();
         Node* getChild(uint8_t byte) const;
-        Node* getOrInsertChild(uint8_t byte);
+        Node* getOrInsertChild(ArtPrimaryKeyIndex& index, uint8_t byte);
         void removeChild(uint8_t byte);
-        void moveChildrenTo(std::vector<Node*>& children);
         bool empty() const { return !offset.has_value() && count == 0; }
+    };
+
+    static constexpr uint64_t NODE_BLOCK_CAPACITY = 16 * 1024;
+
+    struct NodeBlock {
+        Node* nodes = nullptr;
+        uint64_t used = 0;
+
+        NodeBlock();
+        ~NodeBlock();
+        NodeBlock(const NodeBlock&) = delete;
+        NodeBlock& operator=(const NodeBlock&) = delete;
+        NodeBlock(NodeBlock&& other) noexcept;
+        NodeBlock& operator=(NodeBlock&& other) noexcept;
     };
 
     bool insertInternal(const ArtKey& key, common::offset_t offset, visible_func isVisible);
     bool lookup(const ArtKey& key, common::offset_t& result, visible_func isVisible) const;
     bool eraseInternal(Node& node, const std::vector<uint8_t>& key, uint64_t depth);
     void erase(const ArtKey& key);
-    static void deleteTree(Node* root);
+    Node* allocateNode();
+    void recordKindChange(Node& node, Node::Kind newKind);
     void collectRange(const Node& node, std::vector<uint8_t>& key, const ArtKey* lowerBound,
         bool lowerInclusive, const ArtKey* upperBound, bool upperInclusive,
         common::idx_t maxResults, std::vector<common::offset_t>& results,
@@ -147,6 +160,9 @@ private:
 
 private:
     Node root;
+    std::vector<NodeBlock> nodeBlocks;
+    uint64_t numAllocatedNodes = 1;
+    std::array<uint64_t, 4> numNodesByKind{1, 0, 0, 0};
     mutable std::mutex mutex;
 };
 
