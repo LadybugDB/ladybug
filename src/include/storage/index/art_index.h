@@ -2,6 +2,7 @@
 
 #include <array>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <vector>
 
@@ -60,9 +61,7 @@ public:
     static std::unique_ptr<ArtPrimaryKeyIndex> createNewIndex(IndexInfo indexInfo);
 
     std::unique_ptr<Index::InsertState> initInsertState(main::ClientContext*,
-        visible_func isVisible) override {
-        return std::make_unique<InsertState>(std::move(isVisible));
-    }
+        visible_func isVisible) override;
     bool needCommitInsert() const override { return true; }
     void commitInsert(transaction::Transaction* transaction,
         const common::ValueVector& nodeIDVector,
@@ -88,8 +87,8 @@ public:
 
     void checkpoint(main::ClientContext*, PageAllocator&) override;
 
-    static std::unique_ptr<Index> load(main::ClientContext* context, StorageManager* storageManager,
-        IndexInfo indexInfo, std::span<uint8_t> storageInfoBuffer);
+    static LBUG_API std::unique_ptr<Index> load(main::ClientContext* context,
+        StorageManager* storageManager, IndexInfo indexInfo, std::span<uint8_t> storageInfoBuffer);
 
     static IndexType getIndexType() {
         static const IndexType ART_INDEX_TYPE{"ART", IndexConstraintType::PRIMARY,
@@ -115,10 +114,13 @@ private:
         Node();
         Node* getChild(uint8_t byte) const;
         Node* getOrInsertChild(uint8_t byte);
+        void removeChild(uint8_t byte);
+        bool empty() const { return !offset.has_value() && count == 0; }
     };
 
     bool insertInternal(const ArtKey& key, common::offset_t offset, visible_func isVisible);
     bool lookup(const ArtKey& key, common::offset_t& result, visible_func isVisible) const;
+    bool eraseInternal(Node& node, const std::vector<uint8_t>& key, uint64_t depth);
     void erase(const ArtKey& key);
     void collectRange(const Node& node, std::vector<uint8_t>& key, const ArtKey* lowerBound,
         bool lowerInclusive, const ArtKey* upperBound, bool upperInclusive,
@@ -130,6 +132,7 @@ private:
 
 private:
     Node root;
+    mutable std::mutex mutex;
 };
 
 } // namespace storage

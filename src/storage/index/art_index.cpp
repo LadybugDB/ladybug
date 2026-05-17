@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <limits>
 #include <type_traits>
 
 #include "common/exception/message.h"
@@ -157,6 +156,55 @@ ArtPrimaryKeyIndex::Node* ArtPrimaryKeyIndex::Node::getOrInsertChild(uint8_t byt
     }
 }
 
+void ArtPrimaryKeyIndex::Node::removeChild(uint8_t byte) {
+    switch (kind) {
+    case Kind::NODE4:
+    case Kind::NODE16: {
+        for (auto i = 0u; i < count; ++i) {
+            if (keys[i] != byte) {
+                continue;
+            }
+            for (auto j = i + 1; j < count; ++j) {
+                keys[j - 1] = keys[j];
+                smallChildren[j - 1] = std::move(smallChildren[j]);
+            }
+            smallChildren[count - 1].reset();
+            --count;
+            return;
+        }
+        return;
+    }
+    case Kind::NODE48: {
+        const auto removedPos = childIndex[byte];
+        if (removedPos == EMPTY_MARKER) {
+            return;
+        }
+        const auto lastPos = count - 1;
+        childIndex[byte] = EMPTY_MARKER;
+        if (removedPos != lastPos) {
+            for (auto i = 0u; i < childIndex.size(); ++i) {
+                if (childIndex[i] == lastPos) {
+                    childIndex[i] = removedPos;
+                    break;
+                }
+            }
+            node48Children[removedPos] = std::move(node48Children[lastPos]);
+        }
+        node48Children[lastPos].reset();
+        --count;
+        return;
+    }
+    case Kind::NODE256:
+        if (node256Children[byte]) {
+            node256Children[byte].reset();
+            --count;
+        }
+        return;
+    default:
+        UNREACHABLE_CODE;
+    }
+}
+
 ArtKey ArtKey::encode(ValueVector* vector, uint64_t vectorPos) {
     if (vector->isNull(vectorPos)) {
         return ArtKey{};
@@ -227,7 +275,40 @@ ArtPrimaryKeyIndex::ArtPrimaryKeyIndex(IndexInfo indexInfo,
 
 ArtPrimaryKeyIndex::~ArtPrimaryKeyIndex() = default;
 
+std::unique_ptr<Index::InsertState> ArtPrimaryKeyIndex::initInsertState(main::ClientContext*,
+    visible_func isVisible) {
+    return std::make_unique<InsertState>(std::move(isVisible));
+}
+
+static void validateIndexInfo(const IndexInfo& indexInfo) {
+    if (!indexInfo.isPrimary || !indexInfo.isBuiltin) {
+        throw RuntimeException("ART indexes currently support only built-in primary-key indexes.");
+    }
+    if (indexInfo.columnIDs.size() != 1 || indexInfo.keyDataTypes.size() != 1) {
+        throw RuntimeException("ART indexes currently support exactly one primary-key property.");
+    }
+    switch (indexInfo.keyDataTypes[0]) {
+    case PhysicalTypeID::UINT8:
+    case PhysicalTypeID::UINT16:
+    case PhysicalTypeID::UINT32:
+    case PhysicalTypeID::UINT64:
+    case PhysicalTypeID::INT8:
+    case PhysicalTypeID::INT16:
+    case PhysicalTypeID::INT32:
+    case PhysicalTypeID::INT64:
+    case PhysicalTypeID::INT128:
+    case PhysicalTypeID::UINT128:
+    case PhysicalTypeID::STRING:
+    case PhysicalTypeID::FLOAT:
+    case PhysicalTypeID::DOUBLE:
+        return;
+    default:
+        throw RuntimeException("ART indexes do not support this primary-key type.");
+    }
+}
+
 std::unique_ptr<ArtPrimaryKeyIndex> ArtPrimaryKeyIndex::createNewIndex(IndexInfo indexInfo) {
+    validateIndexInfo(indexInfo);
     return std::make_unique<ArtPrimaryKeyIndex>(std::move(indexInfo),
         std::make_unique<ArtPrimaryKeyIndexStorageInfo>());
 }
@@ -265,24 +346,33 @@ bool ArtPrimaryKeyIndex::lookup(const ArtKey& key, offset_t& result, visible_fun
     return true;
 }
 
+bool ArtPrimaryKeyIndex::eraseInternal(Node& node, const std::vector<uint8_t>& key,
+    uint64_t depth) {
+    if (depth == key.size()) {
+        node.offset.reset();
+        return node.empty();
+    }
+    const auto byte = key[depth];
+    auto* child = node.getChild(byte);
+    if (child == nullptr) {
+        return false;
+    }
+    if (eraseInternal(*child, key, depth + 1)) {
+        node.removeChild(byte);
+    }
+    return node.empty();
+}
+
 void ArtPrimaryKeyIndex::erase(const ArtKey& key) {
-    if (key.empty()) {
-        return;
+    if (!key.empty()) {
+        eraseInternal(root, key.getBytes(), 0);
     }
-    auto* node = &root;
-    for (const auto byte : key.getBytes()) {
-        auto* child = node->getChild(byte);
-        if (child == nullptr) {
-            return;
-        }
-        node = child;
-    }
-    node->offset.reset();
 }
 
 void ArtPrimaryKeyIndex::commitInsert(transaction::Transaction*, const ValueVector& nodeIDVector,
     const std::vector<ValueVector*>& indexVectors, Index::InsertState& insertState) {
     DASSERT(indexVectors.size() == 1);
+    std::lock_guard lck{mutex};
     auto& keyVector = *indexVectors[0];
     const auto& artInsertState = insertState.cast<InsertState>();
     for (auto i = 0u; i < nodeIDVector.state->getSelSize(); i++) {
@@ -302,6 +392,7 @@ void ArtPrimaryKeyIndex::commitInsert(transaction::Transaction*, const ValueVect
 
 bool ArtPrimaryKeyIndex::lookupPrimaryKey(const transaction::Transaction*, ValueVector* keyVector,
     uint64_t vectorPos, offset_t& result, visible_func isVisible) {
+    std::lock_guard lck{mutex};
     const auto key = ArtKey::encode(keyVector, vectorPos);
     return lookup(key, result, std::move(isVisible));
 }
@@ -350,26 +441,64 @@ void ArtPrimaryKeyIndex::collectRange(const Node& node, std::vector<uint8_t>& ke
         satisfiesUpperBound(key, upperBound, upperInclusive) && isVisible(node.offset.value())) {
         results.push_back(node.offset.value());
     }
-    for (auto byte = 0u; byte <= std::numeric_limits<uint8_t>::max(); ++byte) {
-        auto* child = node.getChild(static_cast<uint8_t>(byte));
-        if (child == nullptr) {
-            continue;
-        }
-        key.push_back(static_cast<uint8_t>(byte));
+    auto visitChild = [&](uint8_t byte, const Node& child) {
+        key.push_back(byte);
         if (satisfiesUpperBound(key, upperBound, true)) {
-            collectRange(*child, key, lowerBound, lowerInclusive, upperBound, upperInclusive,
+            collectRange(child, key, lowerBound, lowerInclusive, upperBound, upperInclusive,
                 maxResults, results, isVisible);
         }
         key.pop_back();
-        if (results.size() >= maxResults) {
-            return;
+    };
+    switch (node.kind) {
+    case Node::Kind::NODE4:
+    case Node::Kind::NODE16: {
+        std::array<uint16_t, 16> childOrder{};
+        for (auto i = 0u; i < node.count; ++i) {
+            childOrder[i] = i;
         }
+        std::sort(childOrder.begin(), childOrder.begin() + node.count,
+            [&node](auto left, auto right) { return node.keys[left] < node.keys[right]; });
+        for (auto i = 0u; i < node.count; ++i) {
+            const auto pos = childOrder[i];
+            visitChild(node.keys[pos], *node.smallChildren[pos]);
+            if (results.size() >= maxResults) {
+                return;
+            }
+        }
+        break;
+    }
+    case Node::Kind::NODE48:
+        for (auto byte = 0u; byte < node.childIndex.size(); ++byte) {
+            const auto pos = node.childIndex[byte];
+            if (pos == Node::EMPTY_MARKER) {
+                continue;
+            }
+            visitChild(static_cast<uint8_t>(byte), *node.node48Children[pos]);
+            if (results.size() >= maxResults) {
+                return;
+            }
+        }
+        break;
+    case Node::Kind::NODE256:
+        for (auto byte = 0u; byte < node.node256Children.size(); ++byte) {
+            if (!node.node256Children[byte]) {
+                continue;
+            }
+            visitChild(static_cast<uint8_t>(byte), *node.node256Children[byte]);
+            if (results.size() >= maxResults) {
+                return;
+            }
+        }
+        break;
+    default:
+        UNREACHABLE_CODE;
     }
 }
 
 bool ArtPrimaryKeyIndex::scanPrimaryKeyRange(ValueVector* lowerBoundVector, uint64_t lowerBoundPos,
     bool lowerInclusive, ValueVector* upperBoundVector, uint64_t upperBoundPos, bool upperInclusive,
     idx_t maxResults, std::vector<offset_t>& results, visible_func isVisible) {
+    std::lock_guard lck{mutex};
     auto lowerBound =
         lowerBoundVector == nullptr ? ArtKey{} : ArtKey::encode(lowerBoundVector, lowerBoundPos);
     auto upperBound =
@@ -387,6 +516,7 @@ bool ArtPrimaryKeyIndex::scanPrimaryKeyRange(ValueVector* lowerBoundVector, uint
 }
 
 void ArtPrimaryKeyIndex::discardPrimaryKey(ValueVector* keyVector) {
+    std::lock_guard lck{mutex};
     for (auto i = 0u; i < keyVector->state->getSelSize(); ++i) {
         const auto pos = keyVector->state->getSelVector()[i];
         erase(ArtKey::encode(keyVector, pos));
@@ -434,6 +564,7 @@ void ArtPrimaryKeyIndex::collectEntries(const Node& node, std::vector<uint8_t>& 
 }
 
 void ArtPrimaryKeyIndex::checkpoint(main::ClientContext*, PageAllocator&) {
+    std::lock_guard lck{mutex};
     std::vector<std::pair<std::vector<uint8_t>, offset_t>> entries;
     std::vector<uint8_t> key;
     collectEntries(root, key, entries);
@@ -449,6 +580,7 @@ void ArtPrimaryKeyIndex::loadEntries(const ArtPrimaryKeyIndexStorageInfo& storag
 
 std::unique_ptr<Index> ArtPrimaryKeyIndex::load(main::ClientContext*, StorageManager*,
     IndexInfo indexInfo, std::span<uint8_t> storageInfoBuffer) {
+    validateIndexInfo(indexInfo);
     auto storageInfoBufferReader =
         std::make_unique<BufferReader>(storageInfoBuffer.data(), storageInfoBuffer.size());
     auto storageInfo =
