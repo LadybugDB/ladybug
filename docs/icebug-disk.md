@@ -25,6 +25,8 @@ CREATE REL TABLE livesin(FROM user TO city) WITH (storage = '<path-to-dir>', for
 
 File paths can be relative or absolute and are resolved as `<path-to-dir>/nodes_{tableName}.parquet` for node tables, and `<path-to-dir>/indices_{tableName}.parquet` and `<path-to-dir>/indptr_{tableName}.parquet` for relationship tables.
 
+Object-store URIs (e.g. `s3://bucket/path`, `https://host/path`) are also supported as `storage` values.
+
 If `storage` is omitted when `format = 'icebug-disk'` is set, files are resolved relative to the current working directory.
 
 Tables can also be created by manually running the above queries in the Ladybug CLI.
