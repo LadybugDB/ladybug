@@ -14,16 +14,6 @@
 namespace lbug {
 namespace storage {
 
-static uint64_t getArrowBatchLength(const ArrowArrayWrapper& array) {
-    if (array.length > 0) {
-        return array.length;
-    }
-    if (array.n_children > 0 && array.children && array.children[0]) {
-        return array.children[0]->length;
-    }
-    return 0;
-}
-
 IceMemNodeTable::IceMemNodeTable(const StorageManager* storageManager,
     const catalog::NodeTableCatalogEntry* entry, MemoryManager* memoryManager)
     : ColumnarNodeTableBase{storageManager, entry, memoryManager,
@@ -37,7 +27,8 @@ IceMemNodeTable::IceMemNodeTable(const StorageManager* storageManager,
     ArrowSchemaWrapper* schemaCopy = nullptr;
     std::vector<ArrowArrayWrapper>* arraysCopy = nullptr;
     if (!ArrowTableSupport::getArrowData(arrowId, schemaCopy, arraysCopy)) {
-        throw common::RuntimeException("Failed to retrieve arrow data table with ID: " + arrowId);
+        throw common::RuntimeException(
+            "Failed to retrieve icebug-memory node table with ID: " + arrowId);
     }
 
     // Create wrappers that reference registry memory while registry keeps ownership.
@@ -49,14 +40,14 @@ IceMemNodeTable::IceMemNodeTable(const StorageManager* storageManager,
     }
 
     if (!this->schema.format) {
-        throw common::RuntimeException("IceMemNodeTable Arrow schema format cannot be null");
+        throw common::RuntimeException("icebug-memory node table schema format cannot be null");
     }
 
     batchStartOffsets.reserve(this->arrays.size());
 
     for (const auto& array : this->arrays) {
         batchStartOffsets.push_back(totalRows);
-        totalRows += getArrowBatchLength(array);
+        totalRows += ArrowUtils::getArrowBatchLength(array);
     }
 }
 
@@ -71,7 +62,7 @@ IceMemNodeTable::~IceMemNodeTable() {
 void IceMemNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
     auto iceMemScanSharedState =
         static_cast<IceMemNodeTableScanSharedState*>(tableScanSharedState.get());
-    auto batchSizes = getBatchSizes(transaction);
+    auto batchSizes = ArrowUtils::getBatchSizes(arrays);
     iceMemScanSharedState->reset(batchSizes);
 }
 
@@ -111,7 +102,7 @@ bool IceMemNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tr
     }
 
     const auto& batch = arrays[iceMemScanState.currentBatchIdx];
-    auto batchLength = getArrowBatchLength(batch);
+    auto batchLength = ArrowUtils::getArrowBatchLength(batch);
 
     if (batchLength == 0 || !batch.children || !schema.children || batch.n_children <= 0) {
         iceMemScanState.scanCompleted = true;
@@ -164,22 +155,11 @@ common::row_idx_t IceMemNodeTable::getTotalRowCount(
     return totalRows;
 }
 
-std::vector<size_t> IceMemNodeTable::getBatchSizes(
-    [[maybe_unused]] const transaction::Transaction* transaction) const {
-    std::vector<size_t> batchSizes;
-
-    for (const auto& array : arrays) {
-        batchSizes.push_back(getArrowBatchLength(array));
-    }
-
-    return batchSizes;
-}
-
 size_t IceMemNodeTable::getNumScanMorsels(
     [[maybe_unused]] const transaction::Transaction* transaction) const {
     size_t numMorsels = 0;
     for (const auto& array : arrays) {
-        auto batchLength = getArrowBatchLength(array);
+        auto batchLength = ArrowUtils::getArrowBatchLength(array);
         numMorsels += (batchLength + scanMorselSize - 1) / scanMorselSize;
     }
     return numMorsels;

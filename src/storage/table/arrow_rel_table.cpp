@@ -3,12 +3,12 @@
 #include <cstring>
 
 #include "common/arrow/arrow_converter.h"
-#include "common/arrow/arrow_nullmask_tree.h"
 #include "common/data_chunk/sel_vector.h"
 #include "common/exception/runtime.h"
 #include "common/system_config.h"
 #include "common/types/internal_id_util.h"
 #include "storage/table/arrow_table_support.h"
+#include "storage/table/arrow_utils.h"
 #include "storage/table/csr_node_group.h"
 #include "transaction/transaction.h"
 
@@ -16,26 +16,6 @@ namespace lbug {
 namespace storage {
 
 using namespace common;
-
-static uint64_t getArrowBatchLength(const ArrowArrayWrapper& array) {
-    if (array.length > 0) {
-        return array.length;
-    }
-    if (array.n_children > 0 && array.children && array.children[0]) {
-        return array.children[0]->length;
-    }
-    return 0;
-}
-
-static int64_t findColumnIdx(const ArrowSchemaWrapper& schema, const std::string& colName) {
-    for (int64_t i = 0; i < schema.n_children; ++i) {
-        if (schema.children && schema.children[i] && schema.children[i]->name &&
-            colName == schema.children[i]->name) {
-            return i;
-        }
-    }
-    return -1;
-}
 
 void ArrowRelTableScanState::setToTable(const transaction::Transaction* transaction, Table* table_,
     std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
@@ -73,8 +53,8 @@ ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table
             "Arrow relationship table requires source and destination node tables");
     }
 
-    fromColumnIdx = findColumnIdx(this->schema, "from");
-    toColumnIdx = findColumnIdx(this->schema, "to");
+    fromColumnIdx = ArrowUtils::findColumnIdx(this->schema, "from");
+    toColumnIdx = ArrowUtils::findColumnIdx(this->schema, "to");
     if (fromColumnIdx < 0 || toColumnIdx < 0) {
         throw RuntimeException("Arrow relationship table requires 'from' and 'to' columns");
     }
@@ -102,7 +82,7 @@ ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table
         if (columnID == NBR_ID_COLUMN_ID || columnID == REL_ID_COLUMN_ID) {
             continue;
         }
-        auto arrowColIdx = findColumnIdx(this->schema, prop.getName());
+        auto arrowColIdx = ArrowUtils::findColumnIdx(this->schema, prop.getName());
         if (arrowColIdx < 0) {
             throw RuntimeException(
                 "Missing property column '" + prop.getName() + "' in Arrow relationship data");
@@ -112,7 +92,7 @@ ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table
 
     for (const auto& array : this->arrays) {
         batchStartOffsets.push_back(totalRows);
-        totalRows += getArrowBatchLength(array);
+        totalRows += ArrowUtils::getArrowBatchLength(array);
     }
 }
 
@@ -164,12 +144,6 @@ void ArrowRelTable::initScanState([[maybe_unused]] transaction::Transaction* tra
     relScanState.arrowDstKeyVector->state->setToFlat();
 }
 
-static void readSingleArrowValue(const ArrowSchema* schema, const ArrowArray* array,
-    ValueVector& outputVector, uint64_t srcOffset, uint64_t dstOffset) {
-    ArrowNullMaskTree nullMask(schema, array, array->offset, array->length);
-    ArrowConverter::fromArrowArray(schema, array, outputVector, &nullMask, srcOffset, dstOffset, 1);
-}
-
 bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableScanState& scanState) {
     auto& relScanState = scanState.cast<RelTableScanState>();
     if (relScanState.arrowScanCompleted || !relScanState.arrowSrcKeyVector ||
@@ -187,7 +161,7 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
 
     while (outputCount < maxRowsPerCall && relScanState.arrowCurrentBatchIdx < arrays.size()) {
         const auto& batch = arrays[relScanState.arrowCurrentBatchIdx];
-        auto batchLength = getArrowBatchLength(batch);
+        auto batchLength = ArrowUtils::getArrowBatchLength(batch);
         if (relScanState.arrowCurrentBatchOffset >= batchLength) {
             relScanState.arrowCurrentBatchIdx++;
             relScanState.arrowCurrentBatchOffset = 0;
@@ -211,14 +185,14 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
         auto* dstChildSchema = schema.children[toColumnIdx];
         auto srcOffsetToRead = srcChildArray->offset + srcOffsetInBatch;
         auto dstOffsetToRead = dstChildArray->offset + srcOffsetInBatch;
-        readSingleArrowValue(srcChildSchema, srcChildArray, *relScanState.arrowSrcKeyVector,
-            srcOffsetToRead, 0);
+        ArrowUtils::readArrowValues(srcChildSchema, srcChildArray, *relScanState.arrowSrcKeyVector,
+            srcOffsetToRead, 0, 1);
         if (relScanState.arrowSrcKeyVector->isNull(0)) {
             relScanState.arrowCurrentBatchOffset++;
             continue;
         }
-        readSingleArrowValue(dstChildSchema, dstChildArray, *relScanState.arrowDstKeyVector,
-            dstOffsetToRead, 0);
+        ArrowUtils::readArrowValues(dstChildSchema, dstChildArray, *relScanState.arrowDstKeyVector,
+            dstOffsetToRead, 0, 1);
         if (relScanState.arrowDstKeyVector->isNull(0)) {
             relScanState.arrowCurrentBatchOffset++;
             continue;
@@ -280,8 +254,9 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
             }
             auto* childArray = batch.children[arrowColIdx];
             auto* childSchema = schema.children[arrowColIdx];
-            readSingleArrowValue(childSchema, childArray, *relScanState.outputVectors[outCol],
-                childArray->offset + srcOffsetInBatch, outputCount);
+            ArrowUtils::readArrowValues(childSchema, childArray,
+                *relScanState.outputVectors[outCol], childArray->offset + srcOffsetInBatch,
+                outputCount, 1);
         }
         outputCount++;
         relScanState.arrowCurrentBatchOffset++;

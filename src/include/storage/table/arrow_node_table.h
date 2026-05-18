@@ -108,9 +108,6 @@ protected:
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
 
 private:
-    std::vector<size_t> getBatchSizes(
-        [[maybe_unused]] const transaction::Transaction* transaction) const;
-
     std::vector<int64_t> getOutputToArrowColumnIdx(
         const std::vector<common::column_id_t>& columnIDs) const;
 

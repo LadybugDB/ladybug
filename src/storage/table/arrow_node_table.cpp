@@ -15,16 +15,6 @@
 namespace lbug {
 namespace storage {
 
-static uint64_t getArrowBatchLength(const ArrowArrayWrapper& array) {
-    if (array.length > 0) {
-        return array.length;
-    }
-    if (array.n_children > 0 && array.children && array.children[0]) {
-        return array.children[0]->length;
-    }
-    return 0;
-}
-
 ArrowNodeTable::ArrowNodeTable(const StorageManager* storageManager,
     const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
     ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays, std::string arrowId)
@@ -39,7 +29,7 @@ ArrowNodeTable::ArrowNodeTable(const StorageManager* storageManager,
     batchStartOffsets.reserve(this->arrays.size());
     for (const auto& array : this->arrays) {
         batchStartOffsets.push_back(totalRows);
-        totalRows += getArrowBatchLength(array);
+        totalRows += ArrowUtils::getArrowBatchLength(array);
     }
 }
 
@@ -54,7 +44,7 @@ ArrowNodeTable::~ArrowNodeTable() {
 void ArrowNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
     auto arrowScanSharedState =
         static_cast<ArrowNodeTableScanSharedState*>(tableScanSharedState.get());
-    auto batchSizes = getBatchSizes(transaction);
+    auto batchSizes = ArrowUtils::getBatchSizes(arrays);
     arrowScanSharedState->reset(batchSizes);
 }
 
@@ -94,7 +84,7 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
     }
 
     const auto& batch = arrays[arrowScanState.currentBatchIdx];
-    auto batchLength = getArrowBatchLength(batch);
+    auto batchLength = ArrowUtils::getArrowBatchLength(batch);
 
     if (batchLength == 0 || !batch.children || !schema.children || batch.n_children <= 0) {
         arrowScanState.scanCompleted = true;
@@ -147,22 +137,11 @@ common::row_idx_t ArrowNodeTable::getTotalRowCount(
     return totalRows;
 }
 
-std::vector<size_t> ArrowNodeTable::getBatchSizes(
-    [[maybe_unused]] const transaction::Transaction* transaction) const {
-    std::vector<size_t> batchSizes;
-
-    for (const auto& array : arrays) {
-        batchSizes.push_back(getArrowBatchLength(array));
-    }
-
-    return batchSizes;
-}
-
 size_t ArrowNodeTable::getNumScanMorsels(
     [[maybe_unused]] const transaction::Transaction* transaction) const {
     size_t numMorsels = 0;
     for (const auto& array : arrays) {
-        auto batchLength = getArrowBatchLength(array);
+        auto batchLength = ArrowUtils::getArrowBatchLength(array);
         numMorsels += (batchLength + scanMorselSize - 1) / scanMorselSize;
     }
     return numMorsels;
@@ -215,7 +194,7 @@ bool ArrowNodeTable::lookupPK([[maybe_unused]] const transaction::Transaction* t
 
     for (size_t batchIdx = 0; batchIdx < arrays.size(); ++batchIdx) {
         const auto& batch = arrays[batchIdx];
-        const auto batchLength = getArrowBatchLength(batch);
+        const auto batchLength = ArrowUtils::getArrowBatchLength(batch);
         if (batchLength == 0 || !batch.children || pkArrowColumnIdx >= batch.n_children ||
             !batch.children[pkArrowColumnIdx]) {
             continue;

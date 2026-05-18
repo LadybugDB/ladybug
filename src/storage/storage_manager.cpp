@@ -25,6 +25,7 @@
 #include "storage/table/ice_disk_node_table.h"
 #include "storage/table/ice_disk_rel_table.h"
 #include "storage/table/ice_mem_node_table.h"
+#include "storage/table/ice_mem_rel_table.h"
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
 #include "storage/wal/wal_replayer.h"
@@ -167,6 +168,10 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
             // Create icebug-disk-backed rel table
             tables[info.oid] = std::make_unique<IceDiskRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, context);
+        } else if (TableOptionConstants::isIceBugDiskFormat(entry->getStorageFormat())) {
+            // Create icebug-memory-backed rel table
+            tables[info.oid] = std::make_unique<IceMemRelTable>(entry, info.nodePair.srcTableID,
+                info.nodePair.dstTableID, this, &memoryManager);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage format option for rel table: " +

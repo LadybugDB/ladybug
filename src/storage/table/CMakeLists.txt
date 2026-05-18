@@ -31,6 +31,7 @@ add_library(lbug_storage_store
         ice_disk_node_table.cpp
         ice_disk_rel_table.cpp
         ice_mem_node_table.cpp
+        ice_mem_rel_table.cpp
         rel_table.cpp
         rel_table_data.cpp
         string_chunk_data.cpp
