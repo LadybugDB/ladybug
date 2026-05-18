@@ -8,6 +8,7 @@
 #include "storage/local_storage/local_storage.h"
 #include "storage/table/arrow_node_table.h"
 #include "storage/table/ice_disk_node_table.h"
+#include "storage/table/ice_mem_node_table.h"
 
 using namespace lbug::common;
 using namespace lbug::storage;
@@ -17,6 +18,11 @@ namespace processor {
 static std::unique_ptr<TableScanState> createNodeTableScanState(NodeTable* table,
     ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
     MemoryManager* memoryManager) {
+    if (dynamic_cast<IceMemNodeTable*>(table) != nullptr) {
+        return std::make_unique<IceMemNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
+            nodeIDVector->state);
+    }
+
     if (dynamic_cast<IceDiskNodeTable*>(table) != nullptr) {
         return std::make_unique<IceDiskNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
             nodeIDVector->state);
@@ -69,6 +75,10 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
         } catch (const std::exception& e) {
             this->numCommittedNodeGroups = 1;
         }
+    } else if (const auto iceMemTable = dynamic_cast<IceMemNodeTable*>(table)) {
+        // For IceMem tables, set numCommittedNodeGroups to number of morsels
+        this->numCommittedNodeGroups =
+            static_cast<common::node_group_idx_t>(iceMemTable->getNumScanMorsels(transaction));
     } else if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(table)) {
         // For Arrow tables, set numCommittedNodeGroups to number of morsels
         this->numCommittedNodeGroups =
@@ -94,6 +104,18 @@ void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
     // TODO: icebug-disk tables https://github.com/LadybugDB/ladybug/issues/245
     if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(this->table)) {
         const auto tableSharedState = arrowTable->getTableScanSharedState();
+        if (tableSharedState->getNextMorsel(static_cast<ColumnarNodeTableScanState*>(&scanState))) {
+            scanState.source = TableScanSource::COMMITTED;
+            progressSharedState.numMorselsScanned++;
+        } else {
+            scanState.source = TableScanSource::NONE;
+        }
+
+        return;
+    }
+
+    if (const auto iceMemTable = dynamic_cast<IceMemNodeTable*>(this->table)) {
+        const auto tableSharedState = iceMemTable->getTableScanSharedState();
         if (tableSharedState->getNextMorsel(static_cast<ColumnarNodeTableScanState*>(&scanState))) {
             scanState.source = TableScanSource::COMMITTED;
             progressSharedState.numMorselsScanned++;
@@ -149,8 +171,10 @@ void ScanNodeTable::initCurrentTable(ExecutionContext* context) {
         outVectors, MemoryManager::Get(*context->clientContext));
     currentInfo.initScanState(*scanState, outVectors, context->clientContext);
     scanState->semiMask = sharedStates[currentTableIdx]->getSemiMask();
-    // Call table->initScanState for IceDiskNodeTable or ArrowNodeTable
+
+    // Call table->initScanState for IceDiskNodeTable, IceMemNodeTable, or ArrowNodeTable
     if (dynamic_cast<IceDiskNodeTable*>(tableInfos[currentTableIdx].table) ||
+        dynamic_cast<IceMemNodeTable*>(tableInfos[currentTableIdx].table) ||
         dynamic_cast<ArrowNodeTable*>(tableInfos[currentTableIdx].table)) {
         auto transaction = transaction::Transaction::Get(*context->clientContext);
         tableInfos[currentTableIdx].table->initScanState(transaction, *scanState);

@@ -12,8 +12,9 @@ namespace lbug {
 // Global registry for Arrow table data
 // Memory Management:
 // - Registry owns the Arrow data (ArrowSchemaWrapper/ArrowArrayWrapper with release callbacks)
-// - ArrowNodeTable stores shallow copies (no release callbacks) and the arrowId
-// - When a table is dropped (via DROP TABLE or unregisterArrowTable), ArrowNodeTable's
+// - Arrow backed node tables(ArrowNodeTable/IceMemNodeTable) stores shallow copies (no release
+// callbacks) and the arrowId
+// - When a table is dropped (via DROP TABLE or unregisterArrowTable), Arrow table's
 //   destructor automatically calls unregisterArrowData to clean up the registry entry
 // - The wrappers' destructors call the release callbacks to free the actual Arrow memory
 static std::mutex g_arrowRegistryMutex;
@@ -173,7 +174,7 @@ ArrowTableCreationResult ArrowTableSupport::createRelTableFromArrowTable(
 std::unique_ptr<main::QueryResult> ArrowTableSupport::unregisterArrowTable(
     main::Connection& connection, const std::string& tableName) {
 
-    // Drop the table - this will trigger ArrowNodeTable destructor which unregisters the data
+    // Drop the table - this will trigger Arrow backed table's destructor which unregisters the data
     std::string dropStatement = "DROP TABLE " + tableName;
     return connection.query(dropStatement);
 }

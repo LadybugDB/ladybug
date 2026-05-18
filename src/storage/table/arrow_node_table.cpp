@@ -9,6 +9,7 @@
 #include "common/types/types.h"
 #include "storage/storage_manager.h"
 #include "storage/table/arrow_table_support.h"
+#include "storage/table/arrow_utils.h"
 #include "transaction/transaction.h"
 
 namespace lbug {
@@ -120,8 +121,9 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
 
     const auto outputToArrowColumnIdx = getOutputToArrowColumnIdx(scanState.columnIDs);
     DASSERT(scanState.outputVectors.size() == outputToArrowColumnIdx.size());
-    copyArrowMorselToOutputVectors(batch, arrowScanState.currentMorselStartOffset, outputSize,
-        scanState.outputVectors, outputToArrowColumnIdx);
+    ArrowUtils::copyArrowMorselToOutputVectors(batch, schema,
+        arrowScanState.currentMorselStartOffset, outputSize, scanState.outputVectors,
+        outputToArrowColumnIdx);
 
     auto tableID = this->getTableID();
     for (uint64_t i = 0; i < outputSize; ++i) {
@@ -183,31 +185,6 @@ std::vector<int64_t> ArrowNodeTable::getOutputToArrowColumnIdx(
         }
     }
     return outputToArrowColumnIdx;
-}
-
-void ArrowNodeTable::copyArrowMorselToOutputVectors(const ArrowArrayWrapper& batch,
-    const size_t currentMorselStartOffset, const uint64_t numRowsToCopy,
-    const std::vector<common::ValueVector*>& outputVectors,
-    const std::vector<int64_t>& outputToArrowColumnIdx) const {
-    auto numChildren = static_cast<uint64_t>(batch.n_children);
-
-    for (uint64_t outCol = 0; outCol < outputVectors.size(); ++outCol) {
-        if (!outputVectors[outCol]) {
-            continue;
-        }
-        auto arrowColIdx = outputToArrowColumnIdx[outCol];
-        if (arrowColIdx < 0 || static_cast<uint64_t>(arrowColIdx) >= numChildren ||
-            !batch.children[arrowColIdx] || !schema.children[arrowColIdx]) {
-            continue;
-        }
-        auto& outputVector = *outputVectors[outCol];
-        auto* childArray = batch.children[arrowColIdx];
-        auto* childSchema = schema.children[arrowColIdx];
-        common::ArrowNullMaskTree nullMask(childSchema, childArray, childArray->offset,
-            childArray->length);
-        common::ArrowConverter::fromArrowArray(childSchema, childArray, outputVector, &nullMask,
-            childArray->offset + currentMorselStartOffset, 0, numRowsToCopy);
-    }
 }
 
 bool ArrowNodeTable::lookupPK([[maybe_unused]] const transaction::Transaction* transaction,

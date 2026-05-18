@@ -24,6 +24,7 @@
 #include "storage/table/foreign_rel_table.h"
 #include "storage/table/ice_disk_node_table.h"
 #include "storage/table/ice_disk_rel_table.h"
+#include "storage/table/ice_mem_node_table.h"
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
 #include "storage/wal/wal_replayer.h"
@@ -108,6 +109,10 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry, main::ClientC
             // Create icebug-disk-backed node table
             tables[entry->getTableID()] =
                 std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager, context);
+        } else if (TableOptionConstants::isIceBugDiskFormat(entry->getStorageFormat())) {
+            // Create icebug-mem-backed node table
+            tables[entry->getTableID()] =
+                std::make_unique<IceMemNodeTable>(this, entry, &memoryManager);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage format option for node table: " +

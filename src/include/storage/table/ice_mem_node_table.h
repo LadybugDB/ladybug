@@ -14,19 +14,19 @@
 namespace lbug {
 namespace storage {
 
-struct ArrowNodeTableScanState final : ColumnarNodeTableScanState {
+struct IceMemNodeTableScanState final : ColumnarNodeTableScanState {
     size_t currentBatchIdx = static_cast<size_t>(common::INVALID_NODE_GROUP_IDX);
     size_t currentMorselStartOffset = 0;
     size_t currentMorselEndOffset = 0;
 
-    ArrowNodeTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
+    IceMemNodeTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
         : ColumnarNodeTableScanState{mm, nodeIDVector, std::move(outputVectors),
               std::move(outChunkState)} {}
 };
 
-struct ArrowNodeTableScanSharedState final : ColumnarNodeTableScanSharedState {
+struct IceMemNodeTableScanSharedState final : ColumnarNodeTableScanSharedState {
 private:
     std::mutex mtx;
     std::vector<size_t> batchSizes;
@@ -35,7 +35,7 @@ private:
     const size_t morselSize;
 
 public:
-    ArrowNodeTableScanSharedState(const size_t morselSize)
+    IceMemNodeTableScanSharedState(const size_t morselSize)
         : ColumnarNodeTableScanSharedState(), morselSize(morselSize) {}
 
     void reset(std::vector<size_t> batchSizes) {
@@ -46,18 +46,18 @@ public:
     }
 
     bool getNextMorsel(ColumnarNodeTableScanState* scanState) override {
-        auto* arrowScanState = common::dynamic_cast_checked<ArrowNodeTableScanState*>(scanState);
+        auto* iceMemScanState = common::dynamic_cast_checked<IceMemNodeTableScanState*>(scanState);
         std::lock_guard<std::mutex> lock(mtx);
 
         while (currentBatchIdx < batchSizes.size()) {
             auto batchLength = batchSizes[currentBatchIdx];
 
             if (currentMorselStartOffset < batchLength) {
-                arrowScanState->currentBatchIdx = currentBatchIdx;
-                arrowScanState->currentMorselStartOffset = currentMorselStartOffset;
-                arrowScanState->currentMorselEndOffset =
+                iceMemScanState->currentBatchIdx = currentBatchIdx;
+                iceMemScanState->currentMorselStartOffset = currentMorselStartOffset;
+                iceMemScanState->currentMorselEndOffset =
                     std::min(currentMorselStartOffset + morselSize, batchLength);
-                this->currentMorselStartOffset = arrowScanState->currentMorselEndOffset;
+                this->currentMorselStartOffset = iceMemScanState->currentMorselEndOffset;
 
                 return true;
             }
@@ -70,13 +70,12 @@ public:
     }
 };
 
-class ArrowNodeTable final : public ColumnarNodeTableBase {
+class IceMemNodeTable final : public ColumnarNodeTableBase {
 public:
-    ArrowNodeTable(const StorageManager* storageManager,
-        const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
-        ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays, std::string arrowId);
+    IceMemNodeTable(const StorageManager* storageManager,
+        const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager);
 
-    ~ArrowNodeTable();
+    ~IceMemNodeTable();
 
     void initializeScanCoordination(const transaction::Transaction* transaction) override;
 
@@ -85,16 +84,10 @@ public:
 
     bool scanInternal(transaction::Transaction* transaction, TableScanState& scanState) override;
 
-    bool lookupPK(const transaction::Transaction* transaction, common::ValueVector* keyVector,
-        uint64_t vectorPos, common::offset_t& result) const override;
-
     bool isVisible(const transaction::Transaction* transaction,
         common::offset_t offset) const override;
     bool isVisibleNoLock(const transaction::Transaction* transaction,
         common::offset_t offset) const override;
-
-    const ArrowSchemaWrapper& getArrowSchema() const { return schema; }
-    const std::vector<ArrowArrayWrapper>& getArrowArrays() const { return arrays; }
 
     common::node_group_idx_t getNumBatches(
         const transaction::Transaction* transaction) const override;
@@ -104,7 +97,7 @@ public:
     const catalog::NodeTableCatalogEntry* getCatalogEntry() const { return nodeTableCatalogEntry; }
 
 protected:
-    std::string getColumnarFormatName() const override { return "Arrow"; }
+    std::string getColumnarFormatName() const override { return "icebug-memory"; }
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
 
 private:
