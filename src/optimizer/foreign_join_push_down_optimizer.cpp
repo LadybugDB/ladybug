@@ -1,6 +1,7 @@
 #include "optimizer/foreign_join_push_down_optimizer.h"
 
 #include <algorithm>
+#include <cctype>
 
 #include "binder/expression/property_expression.h"
 #include "binder/expression/variable_expression.h"
@@ -140,6 +141,17 @@ struct ForeignJoinPatternInfo {
     std::string dbName; // Foreign database name
 };
 
+static std::string getUnqualifiedTableName(std::string tableName) {
+    auto dotPos = tableName.rfind('.');
+    if (dotPos != std::string::npos) {
+        tableName = tableName.substr(dotPos + 1);
+    }
+    if (tableName.size() >= 2 && tableName.front() == '"' && tableName.back() == '"') {
+        tableName = tableName.substr(1, tableName.size() - 2);
+    }
+    return tableName;
+}
+
 // Try to match the foreign join pattern and extract info
 static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator* op,
     main::ClientContext* context) {
@@ -258,11 +270,6 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
         if (spacePos != std::string::npos) {
             tableName = tableName.substr(0, spacePos);
         }
-        // Strip the db prefix for foreign tables
-        auto dotPos = tableName.find('.');
-        if (dotPos != std::string::npos) {
-            tableName = tableName.substr(dotPos + 1);
-        }
         return tableName;
     };
 
@@ -297,12 +304,6 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
         info.relTable = relStorage;
     }
 
-    // Strip the db prefix from relTable for query execution in attached db context
-    auto relDotPos = info.relTable.find('.');
-    if (relDotPos != std::string::npos) {
-        info.relTable = info.relTable.substr(relDotPos + 1);
-    }
-
     if (info.relTable.empty()) {
         return std::nullopt;
     }
@@ -321,10 +322,28 @@ static std::vector<std::string> getForeignTableColumnNames(const std::string& db
     return attachedDB->getTableColumnNames(tableName);
 }
 
-// Build the SQL join query string and collect column names for result mapping
-static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
-    const ForeignJoinPatternInfo& info, const expression_vector& outputColumns,
-    main::ClientContext* context) {
+struct JoinQueryInfo {
+    std::string query;
+    std::vector<std::string> columnNames;
+    std::vector<std::string> displayNames;
+};
+
+static std::string sanitizeSQLAlias(std::string alias) {
+    for (auto& ch : alias) {
+        if (!std::isalnum(static_cast<unsigned char>(ch)) && ch != '_') {
+            ch = '_';
+        }
+    }
+    if (alias.empty() || std::isdigit(static_cast<unsigned char>(alias[0]))) {
+        alias = "col_" + alias;
+    }
+    return alias;
+}
+
+// Build the SQL join query string and collect column names for result mapping.
+// Keep result column names SQL-safe while using display names that preserve the user's labels.
+static JoinQueryInfo buildJoinQuery(const ForeignJoinPatternInfo& info,
+    const expression_vector& outputColumns, main::ClientContext* context) {
     auto extend = info.extend;
     auto srcNode = extend->getBoundNode();
     auto dstNode = extend->getNbrNode();
@@ -337,7 +356,8 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
 
     // Determine join columns based on direction and foreign table schema
     std::string srcJoinCol, dstJoinCol;
-    auto tableColumnNames = getForeignTableColumnNames(info.dbName, info.relTable, context);
+    auto tableColumnNames =
+        getForeignTableColumnNames(info.dbName, getUnqualifiedTableName(info.relTable), context);
     if (tableColumnNames.size() < 2) {
         throw RuntimeException(std::format(
             "Foreign join push down optimizer: unable to retrieve column names for table '{}.{}', "
@@ -355,19 +375,25 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
         dstJoinCol = firstCol;
     }
 
-    // Build SELECT clause from output columns and collect column names
-    std::string selectClause = "SELECT ";
+    auto getNodeIDColumn = [&](const std::string& tableName) {
+        auto columnNames =
+            getForeignTableColumnNames(info.dbName, getUnqualifiedTableName(tableName), context);
+        if (columnNames.empty()) {
+            return std::string{InternalKeyword::ID};
+        }
+        return columnNames[0];
+    };
+    auto srcIDCol = getNodeIDColumn(info.srcTable);
+    auto dstIDCol = getNodeIDColumn(info.dstTable);
+
+    // Build SELECT items from output columns and collect column names
     std::vector<std::string> columnNames;
-    bool first = true;
+    std::vector<std::string> displayNames;
 
     for (auto& col : outputColumns) {
-        if (!first) {
-            selectClause += ", ";
-        }
-        first = false;
-
         std::string colExpr;
         std::string colName;
+        std::string displayName;
 
         // Determine which table the column comes from based on variable name
         if (col->expressionType == ExpressionType::PROPERTY) {
@@ -375,23 +401,20 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
             // Use raw variable name for SQL query (e.g., 'a' instead of '_0_a')
             auto rawVarName = prop.getRawVariableName();
             auto propName = prop.getPropertyName();
-            auto uniqueName = col->getUniqueName();
 
             if (propName == InternalKeyword::ID) {
-                // Internal ID maps to id column in external table
-                colExpr = std::format("{}.id", rawVarName);
+                auto idColumn = rawVarName == srcAlias ? srcIDCol : dstIDCol;
+                colExpr = std::format("{}.{}", rawVarName, idColumn);
             } else {
                 colExpr = std::format("{}.{}", rawVarName, propName);
             }
-            // Keep aliases aligned with the bound unique name so upstream
-            // projections can map properties correctly.
-            colName = uniqueName;
+            colName = sanitizeSQLAlias(std::format("{}_{}", rawVarName, propName));
+            displayName = std::format("{}.{}", rawVarName, propName);
         } else {
             // For non-property expressions, parse the unique name to extract table alias and column
             auto uniqueName = col->getUniqueName();
 
-            // Parse format: "_N_varname.columnname" -> "varname.columnname AS
-            // _N_varname_columnname"
+            // Parse format: "_N_varname.columnname" -> "varname.columnname".
             auto dotPos = uniqueName.find('.');
             if (dotPos != std::string::npos) {
                 auto prefix = uniqueName.substr(0, dotPos);       // "_N_varname"
@@ -403,45 +426,42 @@ static std::pair<std::string, std::vector<std::string>> buildJoinQuery(
                 if (underscorePos != std::string::npos) {
                     auto rawVar = prefix.substr(underscorePos + 1); // "a", "c", etc.
                     colExpr = std::format("{}.{}", rawVar, colNamePart);
+                    colName = sanitizeSQLAlias(std::format("{}_{}", rawVar, colNamePart));
+                    displayName = std::format("{}.{}", rawVar, colNamePart);
                 } else {
                     // Fallback: use the whole prefix
                     colExpr = std::format("{}.{}", prefix, colNamePart);
+                    colName = sanitizeSQLAlias(uniqueName);
+                    displayName = uniqueName;
                 }
-
-                // Column name is the sanitized unique name
-                colName = uniqueName;
-                std::replace(colName.begin(), colName.end(), '.', '_');
             } else {
                 // No dot, use as-is
                 colExpr = uniqueName;
-                colName = uniqueName;
+                colName = sanitizeSQLAlias(uniqueName);
+                displayName = uniqueName;
             }
         }
 
-        // Ensure column name is valid SQL (replace dots with underscores)
-        std::replace(colName.begin(), colName.end(), '.', '_');
-
-        // Add AS clause to ensure consistent column naming
-        selectClause += std::format("{} AS {}", colExpr, colName);
-        columnNames.push_back(colName);
+        columnNames.push_back(std::format("{} AS {}", colExpr, colName));
+        displayNames.push_back(displayName);
     }
 
     // Build the full query with proper JOIN syntax
-    // Join on id columns: srcNode.id = rel.first/second column and rel.second/first column =
-    // dstNode.id
-    std::string query = std::format("{} FROM {} {} "
-                                    "JOIN {} {} ON {}.id = {}.{} "
-                                    "JOIN {} {} ON {}.{} = {}.id",
-        selectClause, info.srcTable, srcAlias, info.relTable, relAlias, srcAlias, relAlias,
-        srcJoinCol, info.dstTable, dstAlias, relAlias, dstJoinCol, dstAlias);
+    // Join on each node table's external ID column and the relationship table endpoint columns.
+    std::string query = std::format("SELECT {{}} FROM {} {} "
+                                    "JOIN {} {} ON {}.{} = {}.{} "
+                                    "JOIN {} {} ON {}.{} = {}.{}",
+        info.srcTable, srcAlias, info.relTable, relAlias, srcAlias, srcIDCol, relAlias, srcJoinCol,
+        info.dstTable, dstAlias, relAlias, dstJoinCol, dstAlias, dstIDCol);
 
-    return {query, columnNames};
+    return {std::move(query), std::move(columnNames), std::move(displayNames)};
 }
 
 // Create a new TABLE_FUNCTION_CALL with the join query
 static std::shared_ptr<LogicalOperator> createJoinTableFunctionCall(
     const ForeignJoinPatternInfo& info, const std::string& joinQuery,
-    const std::vector<std::string>& columnNames, const expression_vector& outputColumns) {
+    const std::vector<std::string>& columnNames, const std::vector<std::string>& displayNames,
+    const expression_vector& outputColumns) {
     // Copy the table function from the source node's scan
     auto tableFunc = info.srcTableFunc->getTableFunc();
 
@@ -456,7 +476,7 @@ static std::shared_ptr<LogicalOperator> createJoinTableFunctionCall(
         // upstream projections can match and replace PropertyExpressions.
         std::string uniqueName = col->getUniqueName();
 
-        auto alias = columnNames[i];
+        auto alias = displayNames[i];
 
         resultColumns.push_back(
             std::make_shared<VariableExpression>(std::move(dataType), uniqueName, alias));
@@ -573,10 +593,11 @@ std::shared_ptr<LogicalOperator> ForeignJoinPushDownOptimizer::visitHashJoinRepl
         }
     }
 
-    auto [joinQuery, columnNames] = buildJoinQuery(info, outputColumns, this->context);
+    auto joinQueryInfo = buildJoinQuery(info, outputColumns, this->context);
 
     // Create the optimized table function call
-    auto result = createJoinTableFunctionCall(info, joinQuery, columnNames, outputColumns);
+    auto result = createJoinTableFunctionCall(info, joinQueryInfo.query, joinQueryInfo.columnNames,
+        joinQueryInfo.displayNames, outputColumns);
     if (!result) {
         // Extension doesn't support query modification, return original
         return op;
