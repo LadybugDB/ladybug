@@ -312,13 +312,18 @@ lbug_state lbug_connection_create_arrow_csr_rel_table(lbug_connection* connectio
         fwd_indptr_arrays == nullptr || out_query_result == nullptr) {
         return LbugError;
     }
-    // BWD must be all-or-none.
-    bool hasBwdIndices = (bwd_indices_schema != nullptr);
-    bool hasBwdIndptr = (bwd_indptr_schema != nullptr);
-    if (hasBwdIndices != hasBwdIndptr) {
-        setLastCAPIErrorMessage("bwd_indices and bwd_indptr must both be provided or both be null");
+    // BWD must be all-or-none across both schemas and array batches.
+    bool hasAnyBwd = bwd_indices_schema != nullptr || bwd_indices_arrays != nullptr ||
+                     bwd_indices_num_arrays != 0 || bwd_indptr_schema != nullptr ||
+                     bwd_indptr_arrays != nullptr || bwd_indptr_num_arrays != 0;
+    bool hasAllBwd = bwd_indices_schema != nullptr && bwd_indices_arrays != nullptr &&
+                     bwd_indptr_schema != nullptr && bwd_indptr_arrays != nullptr;
+    if (hasAnyBwd && !hasAllBwd) {
+        setLastCAPIErrorMessage("bwd_indices_schema, bwd_indices_arrays, bwd_indptr_schema, and "
+                                "bwd_indptr_arrays must all be provided together or all be null");
         return LbugError;
     }
+
     try {
         clearLastCAPIErrorMessage();
         auto connPtr = static_cast<Connection*>(connection->_connection);
@@ -326,12 +331,14 @@ lbug_state lbug_connection_create_arrow_csr_rel_table(lbug_connection* connectio
         std::optional<std::vector<ArrowArrayWrapper>> bwdIdxArrays;
         std::optional<ArrowSchemaWrapper> bwdIpSchema;
         std::optional<std::vector<ArrowArrayWrapper>> bwdIpArrays;
-        if (hasBwdIndices) {
+
+        if (hasAllBwd) {
             bwdIdxSchema = takeArrowSchema(bwd_indices_schema);
             bwdIdxArrays = takeArrowArrays(bwd_indices_arrays, bwd_indices_num_arrays);
             bwdIpSchema = takeArrowSchema(bwd_indptr_schema);
             bwdIpArrays = takeArrowArrays(bwd_indptr_arrays, bwd_indptr_num_arrays);
         }
+
         auto result = lbug::ArrowTableSupport::createArrowCsrRelTable(*connPtr, table_name,
             src_table_name, dst_table_name, takeArrowSchema(fwd_indices_schema),
             takeArrowArrays(fwd_indices_arrays, fwd_indices_num_arrays),

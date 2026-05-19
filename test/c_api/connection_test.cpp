@@ -1,5 +1,7 @@
+#include <cstdlib>
 #include <thread>
 
+#include "arrow_test_utils.h"
 #include "c_api_test/c_api_test.h"
 
 using ::testing::Test;
@@ -155,6 +157,48 @@ TEST_F(CApiConnectionTest, QueryTimeout) {
     lbug_connection badConnection;
     ASSERT_EQ(lbug_connection_init(nullptr, &badConnection), LbugError);
     ASSERT_EQ(lbug_connection_set_query_timeout(&badConnection, 1), LbugError);
+}
+
+TEST_F(CApiConnectionTest, CreateArrowCsrRelTableRejectsPartialBwdPointers) {
+    ArrowSchemaWrapper fwdIndicesSchema;
+    createStructSchema(&fwdIndicesSchema, 2);
+    createSchema<uint64_t>(fwdIndicesSchema.children[0], "dst_offset");
+    createSchema<int64_t>(fwdIndicesSchema.children[1], "weight");
+
+    ArrowSchemaWrapper fwdIndptrSchema;
+    createStructSchema(&fwdIndptrSchema, 1);
+    createSchema<uint64_t>(fwdIndptrSchema.children[0], "v");
+
+    ArrowSchemaWrapper bwdIndicesSchema;
+    createStructSchema(&bwdIndicesSchema, 2);
+    createSchema<uint64_t>(bwdIndicesSchema.children[0], "src_offset");
+    createSchema<int64_t>(bwdIndicesSchema.children[1], "weight");
+
+    ArrowSchemaWrapper bwdIndptrSchema;
+    createStructSchema(&bwdIndptrSchema, 1);
+    createSchema<uint64_t>(bwdIndptrSchema.children[0], "v");
+
+    std::vector<ArrowArrayWrapper> fwdIndices;
+    fwdIndices.push_back(
+        createStructArray(1, {[](ArrowArray* a) { createUint64Array(a, {1}); },
+                                 [](ArrowArray* a) { createInt64Array(a, {5}); }}));
+    std::vector<ArrowArrayWrapper> fwdIndptr;
+    fwdIndptr.push_back(
+        createStructArray(3, {[](ArrowArray* a) { createUint64Array(a, {0, 1, 1}); }}));
+
+    lbug_query_result result;
+    auto state = lbug_connection_create_arrow_csr_rel_table(getConnection(), "csr_knows",
+        "csr_person", "csr_person", &fwdIndicesSchema, fwdIndices.data(), fwdIndices.size(),
+        &fwdIndptrSchema, fwdIndptr.data(), fwdIndptr.size(), &bwdIndicesSchema, nullptr, 1,
+        &bwdIndptrSchema, nullptr, 1, &result);
+
+    ASSERT_EQ(state, LbugError);
+    auto* error = lbug_get_last_error();
+    ASSERT_NE(error, nullptr);
+    ASSERT_STREQ(error,
+        "bwd_indices_schema, bwd_indices_arrays, bwd_indptr_schema, and bwd_indptr_arrays must "
+        "all be provided together or all be null");
+    free(error);
 }
 
 #ifndef __SINGLE_THREADED__

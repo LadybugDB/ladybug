@@ -43,17 +43,13 @@ static int64_t findArrowColumnByName(const ArrowSchemaWrapper& schema, const std
     return -1;
 }
 
-static std::string nextId(const std::string& prefix) {
-    static size_t counter = 0;
-    return prefix + std::to_string(counter++);
-}
-
 // ── Node / TRIPLES rel registry ───────────────────────────────────────────────
 
 std::string ArrowTableSupport::registerArrowData(ArrowSchemaWrapper schema,
     std::vector<ArrowArrayWrapper> arrays) {
     std::lock_guard<std::mutex> lock(g_arrowRegistryMutex);
-    std::string id = nextId("arrow_");
+    static size_t counter = 0;
+    std::string id = "arrow_" + std::to_string(counter++);
     g_arrowRegistry[id] = std::make_pair(std::move(schema), std::move(arrays));
     return id;
 }
@@ -79,7 +75,8 @@ void ArrowTableSupport::unregisterArrowData(const std::string& id) {
 
 std::string ArrowTableSupport::registerCsrRelData(storage::ArrowCsrRelData data) {
     std::lock_guard<std::mutex> lock(g_csrRegistryMutex);
-    std::string id = nextId("arrow_csr_");
+    static size_t counter = 0;
+    std::string id = "arrow_csr_" + std::to_string(counter++);
     g_csrRegistry.emplace(id, std::move(data));
     return id;
 }
