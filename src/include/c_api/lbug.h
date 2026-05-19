@@ -443,6 +443,23 @@ LBUG_C_API lbug_state lbug_connection_create_arrow_rel_table(lbug_connection* co
 LBUG_C_API lbug_state lbug_connection_drop_arrow_table(lbug_connection* connection,
     const char* table_name, lbug_query_result* out_query_result);
 /**
+ * @brief Creates an Arrow CSR memory-backed relationship table.
+ *
+ * Stores a CSR-layout edge table driven by bound-offset scans. Ownership of all schemas and
+ * array batches is transferred on call. Pass NULL for bwd_* parameters to omit backward
+ * adjacency (BWD scans will fall back to a full FWD scan). If any bwd_* parameter is non-NULL
+ * all four bwd_* parameters must be non-NULL.
+ */
+LBUG_C_API lbug_state lbug_connection_create_arrow_csr_rel_table(lbug_connection* connection,
+    const char* table_name, const char* src_table_name, const char* dst_table_name,
+    struct ArrowSchema* fwd_indices_schema, struct ArrowArray* fwd_indices_arrays,
+    uint64_t fwd_indices_num_arrays, struct ArrowSchema* fwd_indptr_schema,
+    struct ArrowArray* fwd_indptr_arrays, uint64_t fwd_indptr_num_arrays,
+    struct ArrowSchema* bwd_indices_schema, struct ArrowArray* bwd_indices_arrays,
+    uint64_t bwd_indices_num_arrays, struct ArrowSchema* bwd_indptr_schema,
+    struct ArrowArray* bwd_indptr_arrays, uint64_t bwd_indptr_num_arrays,
+    lbug_query_result* out_query_result);
+/**
  * @brief Interrupts the current query execution in the connection.
  * @param connection The connection instance to interrupt.
  */

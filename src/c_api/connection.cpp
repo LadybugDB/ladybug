@@ -286,9 +286,61 @@ lbug_state lbug_connection_drop_arrow_table(lbug_connection* connection, const c
         auto state = setQueryResult(std::move(result), out_query_result);
         if (state == LbugSuccess) {
             if (!arrowId.empty()) {
+                // One of these is always a no-op depending on table type.
                 lbug::ArrowTableSupport::unregisterArrowData(arrowId);
+                lbug::ArrowTableSupport::unregisterCsrRelData(arrowId);
             }
             forgetArrowTableID(connectionPtr, table_name);
+        }
+        return state;
+    } catch (Exception& e) {
+        setLastCAPIErrorMessage(e.what());
+        return LbugError;
+    }
+}
+
+lbug_state lbug_connection_create_arrow_csr_rel_table(lbug_connection* connection,
+    const char* table_name, const char* src_table_name, const char* dst_table_name,
+    ArrowSchema* fwd_indices_schema, ArrowArray* fwd_indices_arrays,
+    uint64_t fwd_indices_num_arrays, ArrowSchema* fwd_indptr_schema, ArrowArray* fwd_indptr_arrays,
+    uint64_t fwd_indptr_num_arrays, ArrowSchema* bwd_indices_schema, ArrowArray* bwd_indices_arrays,
+    uint64_t bwd_indices_num_arrays, ArrowSchema* bwd_indptr_schema, ArrowArray* bwd_indptr_arrays,
+    uint64_t bwd_indptr_num_arrays, lbug_query_result* out_query_result) {
+    if (connection == nullptr || connection->_connection == nullptr || table_name == nullptr ||
+        src_table_name == nullptr || dst_table_name == nullptr || fwd_indices_schema == nullptr ||
+        fwd_indices_arrays == nullptr || fwd_indptr_schema == nullptr ||
+        fwd_indptr_arrays == nullptr || out_query_result == nullptr) {
+        return LbugError;
+    }
+    // BWD must be all-or-none.
+    bool hasBwdIndices = (bwd_indices_schema != nullptr);
+    bool hasBwdIndptr = (bwd_indptr_schema != nullptr);
+    if (hasBwdIndices != hasBwdIndptr) {
+        setLastCAPIErrorMessage("bwd_indices and bwd_indptr must both be provided or both be null");
+        return LbugError;
+    }
+    try {
+        clearLastCAPIErrorMessage();
+        auto connPtr = static_cast<Connection*>(connection->_connection);
+        std::optional<ArrowSchemaWrapper> bwdIdxSchema;
+        std::optional<std::vector<ArrowArrayWrapper>> bwdIdxArrays;
+        std::optional<ArrowSchemaWrapper> bwdIpSchema;
+        std::optional<std::vector<ArrowArrayWrapper>> bwdIpArrays;
+        if (hasBwdIndices) {
+            bwdIdxSchema = takeArrowSchema(bwd_indices_schema);
+            bwdIdxArrays = takeArrowArrays(bwd_indices_arrays, bwd_indices_num_arrays);
+            bwdIpSchema = takeArrowSchema(bwd_indptr_schema);
+            bwdIpArrays = takeArrowArrays(bwd_indptr_arrays, bwd_indptr_num_arrays);
+        }
+        auto result = lbug::ArrowTableSupport::createArrowCsrRelTable(*connPtr, table_name,
+            src_table_name, dst_table_name, takeArrowSchema(fwd_indices_schema),
+            takeArrowArrays(fwd_indices_arrays, fwd_indices_num_arrays),
+            takeArrowSchema(fwd_indptr_schema),
+            takeArrowArrays(fwd_indptr_arrays, fwd_indptr_num_arrays), std::move(bwdIdxSchema),
+            std::move(bwdIdxArrays), std::move(bwdIpSchema), std::move(bwdIpArrays));
+        auto state = setQueryResult(std::move(result.queryResult), out_query_result);
+        if (state == LbugSuccess) {
+            rememberArrowTableID(connPtr, table_name, std::move(result.arrowId));
         }
         return state;
     } catch (Exception& e) {

@@ -24,8 +24,6 @@
 #include "storage/table/foreign_rel_table.h"
 #include "storage/table/ice_disk_node_table.h"
 #include "storage/table/ice_disk_rel_table.h"
-#include "storage/table/ice_mem_node_table.h"
-#include "storage/table/ice_mem_rel_table.h"
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
 #include "storage/wal/wal_replayer.h"
@@ -110,10 +108,6 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry, main::ClientC
             // Create icebug-disk-backed node table
             tables[entry->getTableID()] =
                 std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager, context);
-        } else if (TableOptionConstants::isIceBugDiskFormat(entry->getStorageFormat())) {
-            // Create icebug-mem-backed node table
-            tables[entry->getTableID()] =
-                std::make_unique<IceMemNodeTable>(this, entry, &memoryManager);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage format option for node table: " +
@@ -168,10 +162,6 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
             // Create icebug-disk-backed rel table
             tables[info.oid] = std::make_unique<IceDiskRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, context);
-        } else if (TableOptionConstants::isIceBugDiskFormat(entry->getStorageFormat())) {
-            // Create icebug-memory-backed rel table
-            tables[info.oid] = std::make_unique<IceMemRelTable>(entry, info.nodePair.srcTableID,
-                info.nodePair.dstTableID, this, &memoryManager);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage format option for rel table: " +
@@ -205,6 +195,62 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
             tables[info.oid] = std::make_unique<ArrowRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, fromNodeTable, toNodeTable,
                 std::move(schemaCopy), std::move(arraysCopy), arrowId);
+        } else if (entry->getStorage().substr(0, 12) == "arrow-csr://") {
+            std::string registryId = entry->getStorage().substr(12);
+            const storage::ArrowCsrRelData* csrData = ArrowTableSupport::getCsrRelData(registryId);
+
+            if (!csrData) {
+                throw common::RuntimeException(
+                    "Failed to retrieve CSR payload for ID: " + registryId);
+            }
+
+            if (!tables.contains(info.nodePair.srcTableID) ||
+                !tables.contains(info.nodePair.dstTableID)) {
+                throw common::RuntimeException(
+                    "Source or destination node table not initialized for Arrow CSR rel table");
+            }
+
+            if (!dynamic_cast<ArrowNodeTable*>(tables.at(info.nodePair.srcTableID).get()) ||
+                !dynamic_cast<ArrowNodeTable*>(tables.at(info.nodePair.dstTableID).get())) {
+                throw common::RuntimeException(
+                    "Arrow CSR rel table requires Arrow-backed source and destination node tables");
+            }
+
+            // Build shallow-copy CSR data (non-owning; registry retains ownership).
+            storage::ArrowCsrRelData csrDataCopy;
+            csrDataCopy.fwd.indicesSchema = createShallowCopy(csrData->fwd.indicesSchema);
+            csrDataCopy.fwd.indptrSchema = createShallowCopy(csrData->fwd.indptrSchema);
+
+            csrDataCopy.fwd.indices.reserve(csrData->fwd.indices.size());
+            for (const auto& arr : csrData->fwd.indices) {
+                csrDataCopy.fwd.indices.push_back(createShallowCopy(arr));
+            }
+
+            csrDataCopy.fwd.indptr.reserve(csrData->fwd.indptr.size());
+            for (const auto& arr : csrData->fwd.indptr) {
+                csrDataCopy.fwd.indptr.push_back(createShallowCopy(arr));
+            }
+
+            if (csrData->bwd.has_value()) {
+                storage::ArrowCsrAdj bwdCopy;
+                bwdCopy.indicesSchema = createShallowCopy(csrData->bwd->indicesSchema);
+                bwdCopy.indptrSchema = createShallowCopy(csrData->bwd->indptrSchema);
+
+                bwdCopy.indices.reserve(csrData->bwd->indices.size());
+                for (const auto& arr : csrData->bwd->indices) {
+                    bwdCopy.indices.push_back(createShallowCopy(arr));
+                }
+
+                bwdCopy.indptr.reserve(csrData->bwd->indptr.size());
+                for (const auto& arr : csrData->bwd->indptr) {
+                    bwdCopy.indptr.push_back(createShallowCopy(arr));
+                }
+                csrDataCopy.bwd = std::move(bwdCopy);
+            }
+
+            tables[info.oid] = std::make_unique<ArrowRelTable>(entry, info.nodePair.srcTableID,
+                info.nodePair.dstTableID, this, &memoryManager, nullptr, nullptr,
+                std::move(csrDataCopy), registryId);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage option for rel table: " + entry->getStorage());
