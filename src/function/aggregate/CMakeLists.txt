@@ -4,6 +4,7 @@ add_library(lbug_function_aggregate
         count_star.cpp
         collect.cpp
         min_max.cpp
+        percentile_disc.cpp
         sum.cpp
         avg.cpp)
 

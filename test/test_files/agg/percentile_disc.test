@@ -1,0 +1,38 @@
+-DATASET CSV empty
+
+--
+
+-CASE PercentileDiscAggregate
+-STATEMENT UNWIND [10.0, 20.0, 30.0, 40.0] AS v
+           RETURN percentileDisc(v, 0.0), percentileDisc(v, 0.5),
+                  percentileDisc(v, 0.75), percentileDisc(v, 1.0)
+---- 1
+10.000000|20.000000|30.000000|40.000000
+
+-STATEMENT CREATE NODE TABLE T(id INT64, g INT64, v INT64, PRIMARY KEY(id));
+---- ok
+
+-STATEMENT CREATE (:T {id: 1, g: 1, v: 10}),
+                  (:T {id: 2, g: 1, v: 20}),
+                  (:T {id: 3, g: 1, v: 30}),
+                  (:T {id: 4, g: 2, v: 5}),
+                  (:T {id: 5, g: 2, v: 15});
+---- ok
+
+-STATEMENT MATCH (n:T)
+           RETURN n.g, percentileDisc(n.v, 0.5)
+           ORDER BY n.g
+---- 2
+1|20
+2|5
+
+-STATEMENT MATCH (n:T)
+           RETURN percentileDisc(DISTINCT n.g, 1.0)
+---- 1
+2
+
+-STATEMENT MATCH (n:T)
+           WHERE n.id > 100
+           RETURN percentileDisc(n.v, 0.5)
+---- 1
+

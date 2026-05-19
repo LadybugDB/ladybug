@@ -2,6 +2,7 @@
 
 #include "function/aggregate/count.h"
 #include "function/aggregate/count_star.h"
+#include "function/aggregate/percentile_disc.h"
 #include "function/arithmetic/vector_arithmetic_functions.h"
 #include "function/array/vector_array_functions.h"
 #include "function/blob/vector_blob_functions.h"
@@ -218,7 +219,7 @@ FunctionCollection* FunctionCollection::getFunctions() {
         AGGREGATE_FUNCTION(CountStarFunction), AGGREGATE_FUNCTION(CountFunction),
         AGGREGATE_FUNCTION(AggregateSumFunction), AGGREGATE_FUNCTION(AggregateAvgFunction),
         AGGREGATE_FUNCTION(AggregateMinFunction), AGGREGATE_FUNCTION(AggregateMaxFunction),
-        AGGREGATE_FUNCTION(CollectFunction),
+        AGGREGATE_FUNCTION(CollectFunction), AGGREGATE_FUNCTION(AggregatePercentileDiscFunction),
 
         // Table functions
         TABLE_FUNCTION(CurrentSettingFunction), TABLE_FUNCTION(CatalogVersionFunction),
