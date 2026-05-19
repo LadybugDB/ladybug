@@ -27,6 +27,9 @@ EXTRA_CMAKE_FLAGS ?=
 CLANGD_DIAGNOSTIC_INSTANCES ?= 4
 PREFIX ?= install
 TEST_JOBS ?= 10
+EXTENSION_E2E_TEST_JOBS ?= 1
+PGEMBED_PYTHON ?= 3.12
+PGEMBED_FIXTURE ?= python3 scripts/run_pgembed_fixture.py --
 EXTENSION_LIST ?= httpfs;duckdb;json;postgres;sqlite;fts;delta;iceberg;azure;unity_catalog;vector;neo4j;algo;llm
 EXTENSION_TEST_EXCLUDE_FILTER ?= ""
 
@@ -255,7 +258,7 @@ extension-test: extension-test-build
 	$(if $(filter Windows_NT,$(OS)),\
 		set "E2E_TEST_FILES_DIRECTORY=extension" &&,\
 		E2E_TEST_FILES_DIRECTORY=extension) \
-    ctest --test-dir build/$(call get-build-path,RelWithDebInfo)/test/runner --output-on-failure -j ${TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
+    ${PGEMBED_FIXTURE} ctest --test-dir build/$(call get-build-path,RelWithDebInfo)/test/runner --output-on-failure -j ${EXTENSION_E2E_TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
     ctest --test-dir build/$(call get-build-path,RelWithDebInfo)/extension --output-on-failure -j ${TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}"
 
 extension-test-static-build:
@@ -270,7 +273,7 @@ extension-static-link-test: extension-test-static-build
 	$(if $(filter Windows_NT,$(OS)),\
 		set "E2E_TEST_FILES_DIRECTORY=extension" &&,\
 		E2E_TEST_FILES_DIRECTORY=extension) \
-    ctest --test-dir build/$(call get-build-path,RelWithDebInfo)/test/runner --output-on-failure -j ${TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
+    ${PGEMBED_FIXTURE} ctest --test-dir build/$(call get-build-path,RelWithDebInfo)/test/runner --output-on-failure -j ${EXTENSION_E2E_TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
     ctest --test-dir build/$(call get-build-path,RelWithDebInfo)/extension --output-on-failure -j ${TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
 	aws s3 rm s3://lbug-dataset-us/${RUN_ID}/ --recursive
 
@@ -286,7 +289,7 @@ extension-lcov: extension-lcov-build
 	$(if $(filter Windows_NT,$(OS)),\
 		set "E2E_TEST_FILES_DIRECTORY=extension" &&,\
 		E2E_TEST_FILES_DIRECTORY=extension) \
-    ctest --test-dir build/$(call get-build-path,Release)/test/runner --output-on-failure -j ${TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
+    ${PGEMBED_FIXTURE} ctest --test-dir build/$(call get-build-path,Release)/test/runner --output-on-failure -j ${EXTENSION_E2E_TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
     ctest --test-dir build/$(call get-build-path,Release)/extension --output-on-failure -j ${TEST_JOBS} --exclude-regex "${EXTENSION_TEST_EXCLUDE_FILTER}" && \
 	aws s3 rm s3://lbug-dataset-us/${RUN_ID}/ --recursive
 
