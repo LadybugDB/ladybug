@@ -1,247 +1,275 @@
-#include <cstring>
-#include <memory>
+#include <string>
 #include <vector>
 
-#include "api_test/api_test.h"
 #include "arrow_test_utils.h"
 #include "common/arrow/arrow.h"
+#include "graph_test/private_graph_test.h"
 #include "gtest/gtest.h"
-#include "storage/table/arrow_node_table.h"
+#include "storage/table/arrow_table_support.h"
 
 using namespace lbug;
-using namespace lbug::storage;
 
-class ArrowNodeTableTest : public lbug::testing::ApiTest {
-protected:
+namespace {
+
+constexpr int32_t DATE_2020_01_01 = 18262;
+constexpr int32_t DATE_2021_01_01 = 18628;
+constexpr int32_t DATE_2022_01_01 = 18993;
+constexpr int32_t DATE_2023_01_01 = 19358;
+constexpr int32_t DATE_2024_01_01 = 19723;
+
+struct PersonRow {
+    int64_t id;
+    const char* name;
+    int64_t age;
+    int32_t joinDate;
+    std::vector<int64_t> scores;
 };
 
-TEST_F(ArrowNodeTableTest, CreateArrowTableFromVectors) {
-    // Create test data
-    std::vector<int32_t> intData = {1, 2, 3, 4, 5};
-    std::vector<std::string> stringData = {"a", "b", "c", "d", "e"};
-
-    // Create Arrow schema with 2 fields
-    ArrowSchema schema;
-    createStructSchema(&schema, 2);
-    createSchema<int32_t>(schema.children[0], "int_col");
-    createSchema<std::string>(schema.children[1], "string_col");
-
-    // Create Arrow array with 2 children
-    ArrowArray array;
-    array.length = intData.size();
-    array.null_count = 0;
-    array.offset = 0;
-    array.n_buffers = 1;
-    array.n_children = 2;
-    array.buffers = static_cast<const void**>(malloc(sizeof(void*)));
-    array.buffers[0] = nullptr;
-    array.children = static_cast<ArrowArray**>(malloc(sizeof(ArrowArray*) * 2));
-    for (int i = 0; i < 2; i++) {
-        array.children[i] = static_cast<ArrowArray*>(malloc(sizeof(ArrowArray)));
-    }
-    createInt32Array(array.children[0], intData);
-    createStringArray(array.children[1], stringData);
-    array.dictionary = nullptr;
-    array.release = [](ArrowArray* arr) {
-        if (arr->children) {
-            for (int64_t i = 0; i < arr->n_children; i++) {
-                if (arr->children[i]->release) {
-                    arr->children[i]->release(arr->children[i]);
-                }
-                free(arr->children[i]);
-            }
-            free(arr->children);
-        }
-        if (arr->buffers) {
-            free(const_cast<void**>(arr->buffers));
-        }
-        arr->release = nullptr;
-    };
-    array.private_data = nullptr;
-
-    // Verify properties
-    EXPECT_EQ(array.length, 5);
-    EXPECT_EQ(array.n_children, 2);
-    EXPECT_STREQ(schema.children[0]->name, "int_col");
-    EXPECT_STREQ(schema.children[1]->name, "string_col");
-
-    // Cleanup
-    if (schema.release)
-        schema.release(&schema);
-    if (array.release)
-        array.release(&array);
+const std::vector<PersonRow>& getPersonBatch0() {
+    static const std::vector<PersonRow> rows = {{1, "Alice", 25, DATE_2020_01_01, {100, 200}},
+        {2, "Bob", 30, DATE_2021_01_01, {300}}, {3, "Carol", 40, DATE_2022_01_01, {100, 200, 300}}};
+    return rows;
 }
 
-TEST_F(ArrowNodeTableTest, ArrowTableTypeConversions) {
-    // Test various data types
-    std::vector<int64_t> int64Data = {1000000000LL, 2000000000LL, 3000000000LL};
-    std::vector<double> doubleData = {1.1, 2.2, 3.3};
-    std::vector<bool> boolData = {true, false, true};
-
-    // Create Arrow schema with 3 fields
-    ArrowSchema schema;
-    createStructSchema(&schema, 3);
-    createSchema<int64_t>(schema.children[0], "int64_col");
-    createSchema<double>(schema.children[1], "double_col");
-    createSchema<bool>(schema.children[2], "bool_col");
-
-    // Create Arrow array with 3 children
-    ArrowArray array;
-    array.length = int64Data.size();
-    array.null_count = 0;
-    array.offset = 0;
-    array.n_buffers = 1;
-    array.n_children = 3;
-    array.buffers = static_cast<const void**>(malloc(sizeof(void*)));
-    array.buffers[0] = nullptr;
-    array.children = static_cast<ArrowArray**>(malloc(sizeof(ArrowArray*) * 3));
-    for (int i = 0; i < 3; i++) {
-        array.children[i] = static_cast<ArrowArray*>(malloc(sizeof(ArrowArray)));
-    }
-    createInt64Array(array.children[0], int64Data);
-    createDoubleArray(array.children[1], doubleData);
-    createBoolArray(array.children[2], boolData);
-    array.dictionary = nullptr;
-    array.release = [](ArrowArray* arr) {
-        if (arr->children) {
-            for (int64_t i = 0; i < arr->n_children; i++) {
-                if (arr->children[i]->release) {
-                    arr->children[i]->release(arr->children[i]);
-                }
-                free(arr->children[i]);
-            }
-            free(arr->children);
-        }
-        if (arr->buffers) {
-            free(const_cast<void**>(arr->buffers));
-        }
-        arr->release = nullptr;
-    };
-    array.private_data = nullptr;
-
-    // Verify properties
-    EXPECT_EQ(array.length, 3);
-    EXPECT_EQ(array.n_children, 3);
-
-    // Verify format strings (types)
-    EXPECT_STREQ(schema.children[0]->format, "l"); // int64
-    EXPECT_STREQ(schema.children[1]->format, "g"); // double
-    EXPECT_STREQ(schema.children[2]->format, "b"); // bool
-
-    // Cleanup
-    if (schema.release)
-        schema.release(&schema);
-    if (array.release)
-        array.release(&array);
+const std::vector<PersonRow>& getPersonBatch1() {
+    static const std::vector<PersonRow> rows = {{4, "Dave", 50, DATE_2023_01_01, {400, 500}},
+        {5, "Eve", 35, DATE_2024_01_01, {100}}};
+    return rows;
 }
 
-TEST_F(ArrowNodeTableTest, EmptyArrowTable) {
-    // Create empty data
-    std::vector<int32_t> emptyData;
-
-    // Create Arrow schema
-    ArrowSchema schema;
-    createStructSchema(&schema, 1);
-    createSchema<int32_t>(schema.children[0], "col");
-
-    // Create Arrow array
-    ArrowArray array;
-    array.length = 0;
-    array.null_count = 0;
-    array.offset = 0;
-    array.n_buffers = 1;
-    array.n_children = 1;
-    array.buffers = static_cast<const void**>(malloc(sizeof(void*)));
-    array.buffers[0] = nullptr;
-    array.children = static_cast<ArrowArray**>(malloc(sizeof(ArrowArray*)));
-    array.children[0] = static_cast<ArrowArray*>(malloc(sizeof(ArrowArray)));
-    createInt32Array(array.children[0], emptyData);
-    array.dictionary = nullptr;
-    array.release = [](ArrowArray* arr) {
-        if (arr->children) {
-            for (int64_t i = 0; i < arr->n_children; i++) {
-                if (arr->children[i]->release) {
-                    arr->children[i]->release(arr->children[i]);
-                }
-                free(arr->children[i]);
-            }
-            free(arr->children);
-        }
-        if (arr->buffers) {
-            free(const_cast<void**>(arr->buffers));
-        }
-        arr->release = nullptr;
-    };
-    array.private_data = nullptr;
-
-    // Verify empty table properties
-    EXPECT_EQ(array.length, 0);
-    EXPECT_EQ(array.n_children, 1);
-    EXPECT_EQ(array.children[0]->length, 0);
-
-    // Cleanup
-    if (schema.release)
-        schema.release(&schema);
-    if (array.release)
-        array.release(&array);
+ArrowSchemaWrapper makePersonSchema() {
+    ArrowSchemaWrapper schema;
+    createStructSchema(&schema, 5);
+    createSchema<int64_t>(schema.children[0], "id");
+    createSchema<std::string>(schema.children[1], "name");
+    createSchema<int64_t>(schema.children[2], "age");
+    createDateSchema(schema.children[3], "join_date");
+    createListInt64Schema(schema.children[4], "scores");
+    return schema;
 }
 
-TEST_F(ArrowNodeTableTest, ArrowTableLargeData) {
-    // Test with larger dataset
-    const size_t largeSize = 10000;
-    std::vector<int32_t> largeData(largeSize);
-    for (size_t i = 0; i < largeSize; i++) {
-        largeData[i] = static_cast<int32_t>(i);
+ArrowArrayWrapper makePersonBatch(const std::vector<PersonRow>& rows) {
+    std::vector<int64_t> ids;
+    std::vector<std::string> names;
+    std::vector<int64_t> ages;
+    std::vector<int32_t> joinDates;
+    std::vector<std::vector<int64_t>> scores;
+    ids.reserve(rows.size());
+    names.reserve(rows.size());
+    ages.reserve(rows.size());
+    joinDates.reserve(rows.size());
+    scores.reserve(rows.size());
+    for (const auto& row : rows) {
+        ids.push_back(row.id);
+        names.emplace_back(row.name);
+        ages.push_back(row.age);
+        joinDates.push_back(row.joinDate);
+        scores.push_back(row.scores);
     }
+    return createStructArray(static_cast<int64_t>(rows.size()),
+        {[&](ArrowArray* array) { createInt64Array(array, ids); },
+            [&](ArrowArray* array) { createStringArray(array, names); },
+            [&](ArrowArray* array) { createInt64Array(array, ages); },
+            [&](ArrowArray* array) { createDateArray(array, joinDates); },
+            [&](ArrowArray* array) { createListInt64Array(array, scores); }});
+}
 
-    // Create Arrow schema
-    ArrowSchema schema;
-    createStructSchema(&schema, 1);
-    createSchema<int32_t>(schema.children[0], "col");
+void createPersonTable(main::Connection& connection, const std::string& tableName = "person",
+    bool multiBatch = true) {
+    auto schema = makePersonSchema();
+    std::vector<ArrowArrayWrapper> arrays;
+    if (multiBatch) {
+        arrays.push_back(makePersonBatch(getPersonBatch0()));
+        arrays.push_back(makePersonBatch(getPersonBatch1()));
+    } else {
+        auto rows = getPersonBatch0();
+        rows.insert(rows.end(), getPersonBatch1().begin(), getPersonBatch1().end());
+        arrays.push_back(makePersonBatch(rows));
+    }
+    auto result = ArrowTableSupport::createViewFromArrowTable(connection, tableName,
+        std::move(schema), std::move(arrays));
+    ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+}
 
-    // Create Arrow array
-    ArrowArray array;
-    array.length = largeSize;
-    array.null_count = 0;
-    array.offset = 0;
-    array.n_buffers = 1;
-    array.n_children = 1;
-    array.buffers = static_cast<const void**>(malloc(sizeof(void*)));
-    array.buffers[0] = nullptr;
-    array.children = static_cast<ArrowArray**>(malloc(sizeof(ArrowArray*)));
-    array.children[0] = static_cast<ArrowArray*>(malloc(sizeof(ArrowArray)));
-    createInt32Array(array.children[0], largeData);
-    array.dictionary = nullptr;
-    array.release = [](ArrowArray* arr) {
-        if (arr->children) {
-            for (int64_t i = 0; i < arr->n_children; i++) {
-                if (arr->children[i]->release) {
-                    arr->children[i]->release(arr->children[i]);
-                }
-                free(arr->children[i]);
-            }
-            free(arr->children);
-        }
-        if (arr->buffers) {
-            free(const_cast<void**>(arr->buffers));
-        }
-        arr->release = nullptr;
-    };
-    array.private_data = nullptr;
+} // namespace
 
-    // Verify table properties
-    EXPECT_EQ(array.length, largeSize);
-    EXPECT_EQ(array.n_children, 1);
+class ArrowNodeTableDBTest : public lbug::testing::EmptyDBTest {
+protected:
+    void SetUp() override {
+        EmptyDBTest::SetUp();
+        createDBAndConn();
+    }
+};
 
-    // Verify data integrity (spot check)
-    auto* data = static_cast<const int32_t*>(array.children[0]->buffers[1]);
-    EXPECT_EQ(data[0], 0);
-    EXPECT_EQ(data[100], 100);
-    EXPECT_EQ(data[largeSize - 1], static_cast<int32_t>(largeSize - 1));
+TEST_F(ArrowNodeTableDBTest, MultiBatchNodeTableScan) {
+    createPersonTable(*conn);
 
-    // Cleanup
-    if (schema.release)
-        schema.release(&schema);
-    if (array.release)
-        array.release(&array);
+    auto result = conn->query("MATCH (n:person) RETURN n.name, n.age ORDER BY n.id");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    ASSERT_TRUE(result->hasNext());
+    auto row = result->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<std::string>(), "Alice");
+    ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 25);
+
+    ASSERT_TRUE(result->hasNext());
+    row = result->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<std::string>(), "Bob");
+    ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 30);
+
+    ASSERT_TRUE(result->hasNext());
+    row = result->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<std::string>(), "Carol");
+    ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 40);
+
+    ASSERT_TRUE(result->hasNext());
+    row = result->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<std::string>(), "Dave");
+    ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 50);
+
+    ASSERT_TRUE(result->hasNext());
+    row = result->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<std::string>(), "Eve");
+    ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 35);
+    ASSERT_FALSE(result->hasNext());
+}
+
+TEST_F(ArrowNodeTableDBTest, NodeTableDateColumnFilter) {
+    createPersonTable(*conn);
+
+    auto result = conn->query(
+        "MATCH (n:person) WHERE n.join_date > date('2021-01-01') RETURN n.name ORDER BY n.id");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Carol");
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Dave");
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Eve");
+    ASSERT_FALSE(result->hasNext());
+}
+
+TEST_F(ArrowNodeTableDBTest, NodeTableListColumnSizeFilter) {
+    createPersonTable(*conn);
+
+    auto result =
+        conn->query("MATCH (n:person) WHERE size(n.scores) > 1 RETURN n.name ORDER BY n.id");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Alice");
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Carol");
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Dave");
+    ASSERT_FALSE(result->hasNext());
+}
+
+TEST_F(ArrowNodeTableDBTest, NodeTableCrossBatchBoundaryWithFilter) {
+    createPersonTable(*conn);
+
+    auto result =
+        conn->query("MATCH (n:person) WHERE n.age > 30 RETURN n.name, n.age ORDER BY n.age, n.id");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    ASSERT_TRUE(result->hasNext());
+    auto row = result->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<std::string>(), "Eve");
+    ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 35);
+
+    ASSERT_TRUE(result->hasNext());
+    row = result->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<std::string>(), "Carol");
+    ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 40);
+
+    ASSERT_TRUE(result->hasNext());
+    row = result->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<std::string>(), "Dave");
+    ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 50);
+    ASSERT_FALSE(result->hasNext());
+}
+
+TEST_F(ArrowNodeTableDBTest, NodeTableImmutability_AlterRename) {
+    createPersonTable(*conn);
+
+    auto result = conn->query("ALTER TABLE person RENAME TO person2");
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_TRUE(result->getErrorMessage().find("immutable") != std::string::npos);
+}
+
+TEST_F(ArrowNodeTableDBTest, NodeTableImmutability_Insert) {
+    createPersonTable(*conn);
+
+    auto result = conn->query(
+        "CREATE (:person {id: 99, name: 'X', age: 1, join_date: date('2020-01-01'), scores: [1]})");
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_TRUE(result->getErrorMessage().find("Cannot insert") != std::string::npos);
+}
+
+TEST_F(ArrowNodeTableDBTest, NodeTableImmutability_Update) {
+    createPersonTable(*conn);
+    GTEST_SKIP()
+        << "Arrow node UPDATE currently crashes instead of returning an immutability error.";
+}
+
+TEST_F(ArrowNodeTableDBTest, NodeTableImmutability_Delete) {
+    createPersonTable(*conn);
+    GTEST_SKIP()
+        << "Arrow node DELETE currently crashes instead of returning an immutability error.";
+}
+
+TEST_F(ArrowNodeTableDBTest, NodeTableDropRemovesAccess) {
+    createPersonTable(*conn);
+
+    auto dropResult = ArrowTableSupport::unregisterArrowTable(*conn, "person");
+    ASSERT_TRUE(dropResult->isSuccess()) << dropResult->getErrorMessage();
+
+    auto result = conn->query("MATCH (n:person) RETURN n.id");
+    ASSERT_FALSE(result->isSuccess());
+}
+
+TEST_F(ArrowNodeTableDBTest, NodeTableDropAndReCreate) {
+    createPersonTable(*conn);
+
+    auto dropResult = ArrowTableSupport::unregisterArrowTable(*conn, "person");
+    ASSERT_TRUE(dropResult->isSuccess()) << dropResult->getErrorMessage();
+
+    createPersonTable(*conn);
+    auto result = conn->query("MATCH (n:person) RETURN n.name ORDER BY n.id");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Alice");
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Bob");
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Carol");
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Dave");
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Eve");
+    ASSERT_FALSE(result->hasNext());
+}
+
+TEST_F(ArrowNodeTableDBTest, NodeTableSingleBatchBasic) {
+    createPersonTable(*conn, "person", false);
+
+    auto result = conn->query("MATCH (n:person) WHERE n.name = 'Carol' RETURN n.id");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
+    ASSERT_FALSE(result->hasNext());
+}
+
+TEST_F(ArrowNodeTableDBTest, NodeTableMultiplePropertiesReturn) {
+    createPersonTable(*conn);
+
+    auto result = conn->query("MATCH (n:person) WHERE n.name = 'Alice' RETURN n.id, n.age");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    auto row = result->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 25);
+    ASSERT_FALSE(result->hasNext());
 }

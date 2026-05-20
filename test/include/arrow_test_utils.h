@@ -375,6 +375,146 @@ inline void createUint64Array(ArrowArray* array, const std::vector<uint64_t>& da
     };
     array->private_data = private_data;
 }
+// Date schema helper (Arrow date32: format "tdD", stores int32 days since 1970-01-01)
+inline void createDateSchema(ArrowSchema* schema, const char* name) {
+    schema->format = "tdD";
+    schema->name = name;
+    schema->metadata = nullptr;
+    schema->flags = ARROW_FLAG_NULLABLE;
+    schema->n_children = 0;
+    schema->children = nullptr;
+    schema->dictionary = nullptr;
+    schema->release = [](ArrowSchema* s) { s->release = nullptr; };
+    schema->private_data = nullptr;
+}
+
+// Date array: Arrow date32 values are stored as int32 (days since 1970-01-01)
+inline void createDateArray(ArrowArray* array, const std::vector<int32_t>& days) {
+    createInt32Array(array, days);
+}
+
+// LIST<INT64> schema helper
+inline void createListInt64Schema(ArrowSchema* schema, const char* name) {
+    schema->format = "+l";
+    schema->name = name;
+    schema->metadata = nullptr;
+    schema->flags = ARROW_FLAG_NULLABLE;
+    schema->n_children = 1;
+    schema->children = static_cast<ArrowSchema**>(malloc(sizeof(ArrowSchema*)));
+    schema->children[0] = static_cast<ArrowSchema*>(malloc(sizeof(ArrowSchema)));
+    schema->children[0]->format = "l";
+    schema->children[0]->name = "item";
+    schema->children[0]->metadata = nullptr;
+    schema->children[0]->flags = ARROW_FLAG_NULLABLE;
+    schema->children[0]->n_children = 0;
+    schema->children[0]->children = nullptr;
+    schema->children[0]->dictionary = nullptr;
+    schema->children[0]->release = [](ArrowSchema* s) { s->release = nullptr; };
+    schema->children[0]->private_data = nullptr;
+    schema->dictionary = nullptr;
+    schema->release = [](ArrowSchema* s) {
+        if (s->children) {
+            for (int64_t i = 0; i < s->n_children; i++) {
+                if (s->children[i]->release) {
+                    s->children[i]->release(s->children[i]);
+                }
+                free(s->children[i]);
+            }
+            free(s->children);
+        }
+        s->release = nullptr;
+    };
+    schema->private_data = nullptr;
+}
+
+// LIST<INT64> array helper
+inline void createListInt64Array(ArrowArray* array,
+    const std::vector<std::vector<int64_t>>& lists) {
+    int32_t total = 0;
+    for (const auto& lst : lists) {
+        total += static_cast<int32_t>(lst.size());
+    }
+
+    auto* offsets = static_cast<int32_t*>(malloc((lists.size() + 1) * sizeof(int32_t)));
+    offsets[0] = 0;
+    for (size_t i = 0; i < lists.size(); ++i) {
+        offsets[i + 1] = offsets[i] + static_cast<int32_t>(lists[i].size());
+    }
+
+    auto* values = static_cast<int64_t*>(malloc(total > 0 ? total * sizeof(int64_t) : 1));
+    int32_t pos = 0;
+    for (const auto& lst : lists) {
+        for (auto value : lst) {
+            values[pos++] = value;
+        }
+    }
+
+    struct ChildPD {
+        int64_t* values;
+    };
+    auto* childPrivateData = new ChildPD{values};
+    auto* child = static_cast<ArrowArray*>(malloc(sizeof(ArrowArray)));
+    child->length = total;
+    child->null_count = 0;
+    child->offset = 0;
+    child->n_buffers = 2;
+    child->n_children = 0;
+    child->buffers = static_cast<const void**>(malloc(sizeof(void*) * 2));
+    child->buffers[0] = nullptr;
+    child->buffers[1] = values;
+    child->children = nullptr;
+    child->dictionary = nullptr;
+    child->release = [](ArrowArray* a) {
+        if (a->private_data) {
+            auto* privateData = static_cast<ChildPD*>(a->private_data);
+            free(privateData->values);
+            delete privateData;
+        }
+        if (a->buffers) {
+            free(const_cast<void**>(a->buffers));
+        }
+        a->release = nullptr;
+    };
+    child->private_data = childPrivateData;
+
+    struct ListPD {
+        int32_t* offsets;
+    };
+    auto* listPrivateData = new ListPD{offsets};
+    array->length = static_cast<int64_t>(lists.size());
+    array->null_count = 0;
+    array->offset = 0;
+    array->n_buffers = 2;
+    array->n_children = 1;
+    array->buffers = static_cast<const void**>(malloc(sizeof(void*) * 2));
+    array->buffers[0] = nullptr;
+    array->buffers[1] = offsets;
+    array->children = static_cast<ArrowArray**>(malloc(sizeof(ArrowArray*)));
+    array->children[0] = child;
+    array->dictionary = nullptr;
+    array->release = [](ArrowArray* a) {
+        if (a->children) {
+            for (int64_t i = 0; i < a->n_children; ++i) {
+                if (a->children[i]->release) {
+                    a->children[i]->release(a->children[i]);
+                }
+                free(a->children[i]);
+            }
+            free(a->children);
+        }
+        if (a->private_data) {
+            auto* privateData = static_cast<ListPD*>(a->private_data);
+            free(privateData->offsets);
+            delete privateData;
+        }
+        if (a->buffers) {
+            free(const_cast<void**>(a->buffers));
+        }
+        a->release = nullptr;
+    };
+    array->private_data = listPrivateData;
+}
+
 inline void createBoolArray(ArrowArray* array, const std::vector<bool>& data) {
     struct ArrayPrivateData {
         void* validity = nullptr;
