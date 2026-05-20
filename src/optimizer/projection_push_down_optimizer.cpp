@@ -1,5 +1,7 @@
 #include "optimizer/projection_push_down_optimizer.h"
 
+#include <algorithm>
+
 #include "binder/expression_visitor.h"
 #include "function/gds/gds_function_collection.h"
 #include "function/gds/rec_joins.h"
@@ -167,6 +169,10 @@ void ProjectionPushDownOptimizer::visitOrderBy(LogicalOperator* op) {
     for (auto& expression : orderBy.getExpressionsToOrderBy()) {
         collectExpressionsInUse(expression);
     }
+    auto child = orderBy.getChild(0);
+    for (auto& expression : child->getSchema()->getExpressionsInScope()) {
+        collectExpressionsInUse(expression);
+    }
     auto expressionsBeforePruning = orderBy.getChild(0)->getSchema()->getExpressionsInScope();
     auto expressionsAfterPruning = pruneExpressions(expressionsBeforePruning);
     if (expressionsBeforePruning.size() == expressionsAfterPruning.size()) {
@@ -260,12 +266,18 @@ void ProjectionPushDownOptimizer::visitCopyFrom(LogicalOperator* op) {
 void ProjectionPushDownOptimizer::visitTableFunctionCall(LogicalOperator* op) {
     auto& tableFunctionCall = op->cast<LogicalTableFunctionCall>();
     std::vector<bool> columnSkips;
+    auto expressionInUseByName = [](const auto& expressionsInUse, const auto& column) {
+        return std::any_of(expressionsInUse.begin(), expressionsInUse.end(),
+            [&](const auto& expr) { return expr->getUniqueName() == column->getUniqueName(); });
+    };
     for (auto& column : tableFunctionCall.getBindData()->columns) {
         // Check both variablesInUse and propertiesInUse since foreign table columns
         // may be referenced as properties in the query (e.g., a.id) but represented
         // as variables in the table function bind data
-        columnSkips.push_back(
-            !variablesInUse.contains(column) && !propertiesInUse.contains(column));
+        const auto inUse = variablesInUse.contains(column) || propertiesInUse.contains(column) ||
+                           expressionInUseByName(variablesInUse, column) ||
+                           expressionInUseByName(propertiesInUse, column);
+        columnSkips.push_back(!inUse);
     }
     tableFunctionCall.setColumnSkips(std::move(columnSkips));
 }

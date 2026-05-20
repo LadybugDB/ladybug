@@ -10,6 +10,7 @@
 #include "common/exception/runtime.h"
 #include "main/database_manager.h"
 #include "planner/operator/extend/logical_extend.h"
+#include "planner/operator/logical_filter.h"
 #include "planner/operator/logical_flatten.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_table_function_call.h"
@@ -132,6 +133,7 @@ struct ForeignJoinPatternInfo {
     // Intermediate operators
     const LogicalHashJoin* outerHashJoin = nullptr;
     const LogicalHashJoin* innerHashJoin = nullptr;
+    const LogicalFilter* relFilter = nullptr;
     // Original output schema
     const Schema* outputSchema = nullptr;
     // Table names extracted from bind data
@@ -221,6 +223,13 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
 
     // Inner hash join probe side should be EXTEND
     auto extendOp = probeOp->getChild(0).get();
+    if (extendOp != nullptr && extendOp->getOperatorType() == LogicalOperatorType::FILTER) {
+        info.relFilter = extendOp->constPtrCast<LogicalFilter>();
+        if (extendOp->getNumChildren() < 1) {
+            return std::nullopt;
+        }
+        extendOp = extendOp->getChild(0).get();
+    }
     if (extendOp == nullptr || extendOp->getOperatorType() != LogicalOperatorType::EXTEND) {
         return std::nullopt;
     }
@@ -516,7 +525,15 @@ std::shared_ptr<LogicalOperator> ForeignJoinPushDownOptimizer::visitHashJoinRepl
     // "a.id" when a canonical pattern-variable expression "_N_a.id" exists.
     auto allColumns = info.outputSchema->getExpressionsInScope();
     expression_vector outputColumns;
+    std::unordered_set<std::string> outputColumnNames;
     std::unordered_set<std::string> canonicalVarProps;
+
+    auto appendOutputColumn = [&](const std::shared_ptr<Expression>& column) {
+        if (!outputColumnNames.insert(column->getUniqueName()).second) {
+            return;
+        }
+        outputColumns.push_back(column);
+    };
 
     auto extractCanonicalVarProp = [](const std::string& uniqueName) -> std::string {
         // "_N_var.prop" -> "var.prop"
@@ -582,14 +599,30 @@ std::shared_ptr<LogicalOperator> ForeignJoinPushDownOptimizer::visitHashJoinRepl
         if (hasLowercaseID(uniqueName)) {
             continue;
         }
-        outputColumns.push_back(col);
+        appendOutputColumn(col);
     }
+
+    // The foreign join rewrite runs before projection pushdown, so the matched
+    // hash join's schema can be narrower than parent FILTER/ORDER BY/PROJECTION
+    // requirements. Keep the available graph properties in the pushed-down scan;
+    // projection pushdown can prune unused columns later.
+    auto appendPatternProperties = [&](const std::shared_ptr<NodeOrRelExpression>& pattern) {
+        for (auto& property : pattern->getPropertyExpressions()) {
+            if (property->getPropertyName().starts_with("_")) {
+                continue;
+            }
+            appendOutputColumn(property);
+        }
+    };
+    appendPatternProperties(info.extend->getBoundNode());
+    appendPatternProperties(info.extend->getRel());
+    appendPatternProperties(info.extend->getNbrNode());
 
     // Fallback: if no property/variable columns were identified, preserve
     // original scope to avoid breaking operator replacement.
     if (outputColumns.empty()) {
         for (auto& col : allColumns) {
-            outputColumns.push_back(col);
+            appendOutputColumn(col);
         }
     }
 
@@ -603,6 +636,10 @@ std::shared_ptr<LogicalOperator> ForeignJoinPushDownOptimizer::visitHashJoinRepl
         return op;
     }
 
+    if (info.relFilter != nullptr) {
+        result = std::make_shared<LogicalFilter>(info.relFilter->getPredicate(), std::move(result));
+        result->computeFlatSchema();
+    }
     return result;
 }
 
