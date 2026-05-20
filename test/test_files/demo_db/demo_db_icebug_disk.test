@@ -7,12 +7,12 @@
 -LOG RenameUserNodeTableFails
 -STATEMENT ALTER TABLE user RENAME TO user2
 ---- error
-Binder exception: Cannot alter table user: icebug-disk tables are immutable.
+Binder exception: Cannot alter table user: external tables are immutable.
 
 -LOG RenameFollowsRelTableFails
 -STATEMENT ALTER TABLE follows RENAME TO follows2
 ---- error
-Binder exception: Cannot alter table follows: icebug-disk tables are immutable.
+Binder exception: Cannot alter table follows: external tables are immutable.
 
 -LOG InsertIntoUserNodeTableFails
 -STATEMENT CREATE (u:user {id: 350, name: 'Alice', age: 35});
