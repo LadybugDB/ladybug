@@ -41,7 +41,7 @@ ArrowNodeTable::~ArrowNodeTable() {
     }
 }
 
-void ArrowNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
+void ArrowNodeTable::initializeScanCoordination(const transaction::Transaction* /*transaction*/) {
     auto arrowScanSharedState =
         static_cast<ArrowNodeTableScanSharedState*>(tableScanSharedState.get());
     auto batchSizes = ArrowUtils::getBatchSizes(arrays);
