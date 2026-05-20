@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <functional>
+#include <unordered_set>
 
 #include "binder/expression/literal_expression.h"
 #include "binder/expression/property_expression.h"
@@ -235,9 +236,32 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableRepl
 std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitTableFunctionCallReplace(
     const std::shared_ptr<LogicalOperator>& op) {
     auto& tableFunctionCall = op->cast<LogicalTableFunctionCall>();
-    auto columnPredicates = getColumnPredicateSets(tableFunctionCall.getBindData()->columns,
-        predicateSet.getAllPredicates());
+    if (!tableFunctionCall.getTableFunc().supportsPushDownFunc()) {
+        return finishPushDown(op);
+    }
+    std::vector<ColumnPredicateSet> columnPredicates;
+    std::unordered_set<const Expression*> pushedPredicates;
+    auto predicates = predicateSet.getAllPredicates();
+    for (auto& column : tableFunctionCall.getBindData()->columns) {
+        auto columnPredicateSet = ColumnPredicateSet();
+        for (auto& predicate : predicates) {
+            auto columnPredicate = ColumnPredicateUtil::tryConvert(*column, *predicate);
+            if (columnPredicate == nullptr) {
+                continue;
+            }
+            columnPredicateSet.addPredicate(std::move(columnPredicate));
+            pushedPredicates.insert(predicate.get());
+        }
+        columnPredicates.push_back(std::move(columnPredicateSet));
+    }
     tableFunctionCall.setColumnPredicates(std::move(columnPredicates));
+    auto remainingPredicates = PredicateSet();
+    for (auto& predicate : predicates) {
+        if (!pushedPredicates.contains(predicate.get())) {
+            remainingPredicates.addPredicate(predicate);
+        }
+    }
+    predicateSet = std::move(remainingPredicates);
     return finishPushDown(op);
 }
 

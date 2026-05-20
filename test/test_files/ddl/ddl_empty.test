@@ -13,6 +13,12 @@ Index idx_default_person_pk has been created.
 -STATEMENT CALL SHOW_INDEXES() RETURN table_name, index_name, property_names;
 ---- 1
 idx_default_person|idx_default_person_pk|[ID]
+-STATEMENT CALL SHOW_INDEXES() WHERE table_name = 'idx_default_person' RETURN table_name, index_name, property_names;
+---- 1
+idx_default_person|idx_default_person_pk|[ID]
+-STATEMENT CALL SHOW_INDEXES() WHERE table_name = 'missing_table' RETURN count(*);
+---- 1
+0
 -STATEMENT CREATE INDEX idx_default_person_pk IF NOT EXISTS FOR (p:idx_default_person) ON (p.ID);
 ---- 1
 Index idx_default_person_pk already exists.
