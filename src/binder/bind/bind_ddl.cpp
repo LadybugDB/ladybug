@@ -597,8 +597,7 @@ std::unique_ptr<BoundStatement> Binder::bindDrop(const Statement& statement) {
     return std::make_unique<BoundDrop>(drop.getDropInfo());
 }
 
-static void validateNotIceDiskTable(main::ClientContext* clientContext,
-    const std::string& tableName) {
+static void validateNotExtTable(main::ClientContext* clientContext, const std::string& tableName) {
     auto catalog = Catalog::Get(*clientContext);
     auto transaction = transaction::Transaction::Get(*clientContext);
 
@@ -608,24 +607,27 @@ static void validateNotIceDiskTable(main::ClientContext* clientContext,
 
     auto tableEntry = catalog->getTableCatalogEntry(transaction, tableName);
     StorageFormat storageFormat = StorageFormat::NONE;
+    std::string storage;
 
     if (tableEntry->getTableType() == common::TableType::NODE) {
         storageFormat = tableEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat();
+        storage = tableEntry->ptrCast<NodeTableCatalogEntry>()->getStorage();
     } else if (tableEntry->getTableType() == common::TableType::REL) {
         storageFormat = tableEntry->ptrCast<RelGroupCatalogEntry>()->getStorageFormat();
+        storage = tableEntry->ptrCast<RelGroupCatalogEntry>()->getStorage();
     }
 
-    if (storageFormat == StorageFormat::ICEBUG_DISK) {
+    if (!storage.empty() || storageFormat == StorageFormat::ICEBUG_DISK) {
         throw BinderException(
-            std::format("Cannot alter table {}: icebug-disk tables are immutable.", tableName));
+            std::format("Cannot alter table {}: external tables are immutable.", tableName));
     }
 }
 
 std::unique_ptr<BoundStatement> Binder::bindAlter(const Statement& statement) {
     auto& alter = statement.constCast<Alter>();
 
-    // we don't support alter operations on icebug-disk tables
-    validateNotIceDiskTable(clientContext, alter.getInfo()->tableName);
+    // we don't support alter operations on external tables
+    validateNotExtTable(clientContext, alter.getInfo()->tableName);
 
     switch (alter.getInfo()->type) {
     case AlterType::RENAME: {
