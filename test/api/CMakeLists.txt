@@ -4,6 +4,10 @@ add_lbug_api_test(api_test
         arrow_test.cpp
         arrow_node_table_test.cpp
         arrow_rel_table_test.cpp
+        arrow_complex_queries_test.cpp
+        arrow_csr_rel_table_test.cpp
+        arrow_error_scenarios_test.cpp
+        arrow_drop_table_test.cpp
         arrow_table_function_test.cpp
         prepare_test.cpp
         result_value_test.cpp
