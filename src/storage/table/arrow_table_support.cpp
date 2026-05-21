@@ -12,14 +12,15 @@ namespace lbug {
 // Global registry for Arrow table data
 // Memory Management:
 // - Registry owns the Arrow data (ArrowSchemaWrapper/ArrowArrayWrapper with release callbacks)
-// - ArrowNodeTable stores shallow copies (no release callbacks) and the arrowId
-// - When a table is dropped (via DROP TABLE or unregisterArrowTable), ArrowNodeTable's
+// - Arrow-backed tables store shallow copies (no release callbacks) and the arrowId
+// - When a table is dropped (via DROP TABLE or unregisterArrowTable), the table's
 //   destructor automatically calls unregisterArrowData to clean up the registry entry
 // - The wrappers' destructors call the release callbacks to free the actual Arrow memory
 static std::mutex g_arrowRegistryMutex;
 static std::unordered_map<std::string,
     std::pair<ArrowSchemaWrapper, std::vector<ArrowArrayWrapper>>>
     g_arrowRegistry;
+static std::unordered_map<std::string, ArrowRelTableData> g_arrowRelRegistry;
 
 std::string join(const std::vector<std::string>& strings, const std::string& delimiter) {
     if (strings.empty())
@@ -55,6 +56,15 @@ std::string ArrowTableSupport::registerArrowData(ArrowSchemaWrapper schema,
     return id;
 }
 
+std::string ArrowTableSupport::registerArrowRelData(ArrowRelTableData data) {
+    std::lock_guard<std::mutex> lock(g_arrowRegistryMutex);
+
+    static size_t nextRelId = 0;
+    std::string id = "arrow_rel_" + std::to_string(nextRelId++);
+    g_arrowRelRegistry[id] = std::move(data);
+    return id;
+}
+
 bool ArrowTableSupport::getArrowData(const std::string& id, ArrowSchemaWrapper*& schema,
     std::vector<ArrowArrayWrapper>*& arrays) {
     std::lock_guard<std::mutex> lock(g_arrowRegistryMutex);
@@ -70,9 +80,21 @@ bool ArrowTableSupport::getArrowData(const std::string& id, ArrowSchemaWrapper*&
     return true;
 }
 
+bool ArrowTableSupport::getArrowRelData(const std::string& id, ArrowRelTableData*& data) {
+    std::lock_guard<std::mutex> lock(g_arrowRegistryMutex);
+
+    auto it = g_arrowRelRegistry.find(id);
+    if (it == g_arrowRelRegistry.end()) {
+        return false;
+    }
+    data = &it->second;
+    return true;
+}
+
 void ArrowTableSupport::unregisterArrowData(const std::string& id) {
     std::lock_guard<std::mutex> lock(g_arrowRegistryMutex);
     g_arrowRegistry.erase(id);
+    g_arrowRelRegistry.erase(id);
 }
 
 ArrowTableCreationResult ArrowTableSupport::createViewFromArrowTable(main::Connection& connection,
@@ -157,8 +179,61 @@ ArrowTableCreationResult ArrowTableSupport::createRelTableFromArrowTable(
     relDefs.insert(relDefs.end(), propertyDefs.begin(), propertyDefs.end());
     std::string tableDef = "(" + join(relDefs, ", ") + ")";
 
-    // Register the Arrow data and get an ID.
-    std::string arrowId = registerArrowData(std::move(schema), std::move(arrays));
+    ArrowRelTableData data;
+    data.layout = ArrowRelTableLayout::FLAT;
+    data.schema = std::move(schema);
+    data.arrays = std::move(arrays);
+    std::string arrowId = registerArrowRelData(std::move(data));
+
+    std::string statement = "CREATE REL TABLE " + tableName + " " + tableDef +
+                            " WITH (storage='arrow://" + arrowId + "')";
+    auto queryResult = connection.query(statement);
+    if (!queryResult->isSuccess()) {
+        unregisterArrowData(arrowId);
+    }
+
+    return {std::move(queryResult), arrowId};
+}
+
+ArrowTableCreationResult ArrowTableSupport::createRelTableFromArrowCSR(main::Connection& connection,
+    const std::string& tableName, const std::string& srcTableName, const std::string& dstTableName,
+    ArrowSchemaWrapper indicesSchema, std::vector<ArrowArrayWrapper> indicesArrays,
+    ArrowSchemaWrapper indptrSchema, std::vector<ArrowArrayWrapper> indptrArrays,
+    const std::string& dstColumnName) {
+    auto dstColIdx = findArrowColumnByName(indicesSchema, dstColumnName);
+    if (dstColIdx < 0) {
+        throw common::RuntimeException(
+            "Arrow CSR relationship indices table must include destination column '" +
+            dstColumnName + "'");
+    }
+    if (indptrSchema.n_children < 1) {
+        throw common::RuntimeException(
+            "Arrow CSR relationship indptr table must contain one offset column");
+    }
+
+    std::vector<std::string> propertyDefs;
+    for (int64_t i = 0; i < indicesSchema.n_children; ++i) {
+        if (i == dstColIdx) {
+            continue;
+        }
+        std::string colName = indicesSchema.children[i]->name;
+        std::string colType =
+            common::ArrowConverter::fromArrowSchema(indicesSchema.children[i]).toString();
+        propertyDefs.push_back(colName + " " + colType);
+    }
+
+    std::vector<std::string> relDefs;
+    relDefs.push_back("FROM " + srcTableName + " TO " + dstTableName);
+    relDefs.insert(relDefs.end(), propertyDefs.begin(), propertyDefs.end());
+    std::string tableDef = "(" + join(relDefs, ", ") + ")";
+
+    ArrowRelTableData data;
+    data.layout = ArrowRelTableLayout::CSR;
+    data.schema = std::move(indicesSchema);
+    data.arrays = std::move(indicesArrays);
+    data.indptrSchema = std::move(indptrSchema);
+    data.indptrArrays = std::move(indptrArrays);
+    std::string arrowId = registerArrowRelData(std::move(data));
 
     std::string statement = "CREATE REL TABLE " + tableName + " " + tableDef +
                             " WITH (storage='arrow://" + arrowId + "')";

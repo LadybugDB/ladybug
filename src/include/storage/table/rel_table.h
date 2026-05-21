@@ -33,6 +33,8 @@ struct RelTableScanState : TableScanState {
     // a single multi-rel scan state can scan native, icebug-disk-backed, and Arrow-backed tables.
     size_t arrowCurrentBatchIdx = 0;
     size_t arrowCurrentBatchOffset = 0;
+    size_t arrowCSRBoundIdx = 0;
+    common::offset_t arrowCSRCurrentRelOffset = common::INVALID_OFFSET;
     std::unordered_map<common::offset_t, common::sel_t> arrowBoundNodeOffsetToSelPos;
     std::unique_ptr<common::ValueVector> arrowSrcKeyVector;
     std::unique_ptr<common::ValueVector> arrowDstKeyVector;

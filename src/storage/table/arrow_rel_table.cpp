@@ -60,11 +60,14 @@ void ArrowRelTableScanState::setToTable(const transaction::Transaction* transact
 
 ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
     table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager,
-    const NodeTable* fromNodeTable, const NodeTable* toNodeTable, ArrowSchemaWrapper schema,
-    std::vector<ArrowArrayWrapper> arrays, std::string arrowId)
+    const NodeTable* fromNodeTable, const NodeTable* toNodeTable, ArrowRelTableLayout layout,
+    ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays,
+    ArrowSchemaWrapper indptrSchema, std::vector<ArrowArrayWrapper> indptrArrays,
+    std::string arrowId)
     : ColumnarRelTableBase{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
-      fromNodeTable{fromNodeTable}, toNodeTable{toNodeTable}, schema{std::move(schema)},
-      arrays{std::move(arrays)}, arrowId{std::move(arrowId)} {
+      fromNodeTable{fromNodeTable}, toNodeTable{toNodeTable}, layout{layout},
+      schema{std::move(schema)}, arrays{std::move(arrays)}, indptrSchema{std::move(indptrSchema)},
+      indptrArrays{std::move(indptrArrays)}, arrowId{std::move(arrowId)} {
     if (!this->schema.format) {
         throw RuntimeException("Arrow schema format cannot be null");
     }
@@ -73,25 +76,50 @@ ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table
             "Arrow relationship table requires source and destination node tables");
     }
 
-    fromColumnIdx = findColumnIdx(this->schema, "from");
-    toColumnIdx = findColumnIdx(this->schema, "to");
-    if (fromColumnIdx < 0 || toColumnIdx < 0) {
-        throw RuntimeException("Arrow relationship table requires 'from' and 'to' columns");
-    }
+    if (this->layout == ArrowRelTableLayout::FLAT) {
+        fromColumnIdx = findColumnIdx(this->schema, "from");
+        toColumnIdx = findColumnIdx(this->schema, "to");
+        if (fromColumnIdx < 0 || toColumnIdx < 0) {
+            throw RuntimeException(
+                "Arrow FLAT relationship table requires 'from' and 'to' columns");
+        }
 
-    auto srcArrowType = ArrowConverter::fromArrowSchema(this->schema.children[fromColumnIdx]);
-    auto dstArrowType = ArrowConverter::fromArrowSchema(this->schema.children[toColumnIdx]);
-    const auto& srcPKType =
-        this->fromNodeTable->getColumn(this->fromNodeTable->getPKColumnID()).getDataType();
-    const auto& dstPKType =
-        this->toNodeTable->getColumn(this->toNodeTable->getPKColumnID()).getDataType();
-    if (srcArrowType.toString() != srcPKType.toString()) {
-        throw RuntimeException("Arrow 'from' column type " + srcArrowType.toString() +
-                               " must match source node PK type " + srcPKType.toString());
-    }
-    if (dstArrowType.toString() != dstPKType.toString()) {
-        throw RuntimeException("Arrow 'to' column type " + dstArrowType.toString() +
-                               " must match destination node PK type " + dstPKType.toString());
+        auto srcArrowType = ArrowConverter::fromArrowSchema(this->schema.children[fromColumnIdx]);
+        auto dstArrowType = ArrowConverter::fromArrowSchema(this->schema.children[toColumnIdx]);
+        const auto& srcPKType =
+            this->fromNodeTable->getColumn(this->fromNodeTable->getPKColumnID()).getDataType();
+        const auto& dstPKType =
+            this->toNodeTable->getColumn(this->toNodeTable->getPKColumnID()).getDataType();
+        if (srcArrowType.toString() != srcPKType.toString()) {
+            throw RuntimeException("Arrow 'from' column type " + srcArrowType.toString() +
+                                   " must match source node PK type " + srcPKType.toString());
+        }
+        if (dstArrowType.toString() != dstPKType.toString()) {
+            throw RuntimeException("Arrow 'to' column type " + dstArrowType.toString() +
+                                   " must match destination node PK type " + dstPKType.toString());
+        }
+    } else {
+        csrNbrColumnIdx = findColumnIdx(this->schema, "to");
+        if (csrNbrColumnIdx < 0) {
+            throw RuntimeException("Arrow CSR relationship table requires a 'to' column");
+        }
+        auto nbrArrowType = ArrowConverter::fromArrowSchema(this->schema.children[csrNbrColumnIdx]);
+        if (nbrArrowType.getLogicalTypeID() != LogicalTypeID::UINT64) {
+            throw RuntimeException("Arrow CSR 'to' column type " + nbrArrowType.toString() +
+                                   " must be UINT64 node offsets");
+        }
+        if (!this->indptrSchema.format || this->indptrArrays.empty()) {
+            throw RuntimeException("Arrow CSR relationship table requires an indptr Arrow table");
+        }
+        if (this->indptrSchema.n_children <= 0 || !this->indptrSchema.children ||
+            !this->indptrSchema.children[0]) {
+            throw RuntimeException("Arrow CSR indptr table requires one offset column");
+        }
+        auto indptrArrowType = ArrowConverter::fromArrowSchema(this->indptrSchema.children[0]);
+        if (indptrArrowType.getLogicalTypeID() != LogicalTypeID::UINT64) {
+            throw RuntimeException("Arrow CSR indptr column type " + indptrArrowType.toString() +
+                                   " must be UINT64 offsets");
+        }
     }
 
     for (const auto& prop : relGroupEntry->getProperties()) {
@@ -113,6 +141,10 @@ ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table
     for (const auto& array : this->arrays) {
         batchStartOffsets.push_back(totalRows);
         totalRows += getArrowBatchLength(array);
+    }
+    for (const auto& array : this->indptrArrays) {
+        indptrBatchStartOffsets.push_back(totalIndptrRows);
+        totalIndptrRows += getArrowBatchLength(array);
     }
 }
 
@@ -151,15 +183,25 @@ void ArrowRelTable::initScanState([[maybe_unused]] transaction::Transaction* tra
 
     relScanState.arrowCurrentBatchIdx = 0;
     relScanState.arrowCurrentBatchOffset = 0;
+    relScanState.arrowCSRBoundIdx = 0;
+    relScanState.arrowCSRCurrentRelOffset = INVALID_OFFSET;
     relScanState.arrowScanCompleted = arrays.empty();
 
-    auto srcPKType = fromNodeTable->getColumn(fromNodeTable->getPKColumnID()).getDataType().copy();
-    auto dstPKType = toNodeTable->getColumn(toNodeTable->getPKColumnID()).getDataType().copy();
     auto singleValueState = DataChunkState::getSingleValueDataChunkState();
-    relScanState.arrowSrcKeyVector =
-        std::make_unique<ValueVector>(std::move(srcPKType), memoryManager, singleValueState);
-    relScanState.arrowDstKeyVector =
-        std::make_unique<ValueVector>(std::move(dstPKType), memoryManager, singleValueState);
+    if (layout == ArrowRelTableLayout::FLAT) {
+        auto srcPKType =
+            fromNodeTable->getColumn(fromNodeTable->getPKColumnID()).getDataType().copy();
+        auto dstPKType = toNodeTable->getColumn(toNodeTable->getPKColumnID()).getDataType().copy();
+        relScanState.arrowSrcKeyVector =
+            std::make_unique<ValueVector>(std::move(srcPKType), memoryManager, singleValueState);
+        relScanState.arrowDstKeyVector =
+            std::make_unique<ValueVector>(std::move(dstPKType), memoryManager, singleValueState);
+    } else {
+        relScanState.arrowSrcKeyVector =
+            std::make_unique<ValueVector>(LogicalType::UINT64(), memoryManager, singleValueState);
+        relScanState.arrowDstKeyVector =
+            std::make_unique<ValueVector>(LogicalType::UINT64(), memoryManager, singleValueState);
+    }
     relScanState.arrowSrcKeyVector->state->setToFlat();
     relScanState.arrowDstKeyVector->state->setToFlat();
 }
@@ -171,6 +213,13 @@ static void readSingleArrowValue(const ArrowSchema* schema, const ArrowArray* ar
 }
 
 bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableScanState& scanState) {
+    if (layout == ArrowRelTableLayout::CSR) {
+        return scanCSR(scanState);
+    }
+    return scanFlat(transaction, scanState);
+}
+
+bool ArrowRelTable::scanFlat(transaction::Transaction* transaction, TableScanState& scanState) {
     auto& relScanState = scanState.cast<RelTableScanState>();
     if (relScanState.arrowScanCompleted || !relScanState.arrowSrcKeyVector ||
         !relScanState.arrowDstKeyVector) {
@@ -301,6 +350,234 @@ bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableSca
     }
     relScanState.arrowScanCompleted = relScanState.arrowCurrentBatchIdx >= arrays.size();
     return true;
+}
+
+bool ArrowRelTable::scanCSR(TableScanState& scanState) {
+    auto& relScanState = scanState.cast<RelTableScanState>();
+    if (relScanState.arrowScanCompleted || !relScanState.arrowSrcKeyVector ||
+        !relScanState.arrowDstKeyVector) {
+        return false;
+    }
+
+    scanState.resetOutVectors();
+    auto outputCount = 0u;
+    constexpr uint64_t maxRowsPerCall = DEFAULT_VECTOR_CAPACITY;
+    auto activeBoundSelPos = INVALID_SEL;
+    auto activeBoundOffset = INVALID_OFFSET;
+    auto hasActiveBound = false;
+    const auto outputToArrowColumnIdx = getOutputToArrowColumnIdx(scanState.columnIDs);
+    const auto isFwd = relScanState.direction != RelDataDirection::BWD;
+
+    if (isFwd) {
+        while (outputCount < maxRowsPerCall &&
+               relScanState.arrowCSRBoundIdx < relScanState.cachedBoundNodeSelVector.getSelSize()) {
+            auto boundNodeIdx =
+                relScanState.cachedBoundNodeSelVector[relScanState.arrowCSRBoundIdx];
+            const auto boundNodeID = relScanState.nodeIDVector->getValue<nodeID_t>(boundNodeIdx);
+            offset_t startOffset = INVALID_OFFSET;
+            offset_t endOffset = INVALID_OFFSET;
+            if (!readIndptr(boundNodeID.offset, startOffset) ||
+                !readIndptr(boundNodeID.offset + 1, endOffset) || startOffset > endOffset) {
+                relScanState.arrowCSRBoundIdx++;
+                relScanState.arrowCSRCurrentRelOffset = INVALID_OFFSET;
+                continue;
+            }
+            if (relScanState.arrowCSRCurrentRelOffset == INVALID_OFFSET) {
+                relScanState.arrowCSRCurrentRelOffset = startOffset;
+            }
+            if (relScanState.arrowCSRCurrentRelOffset >= endOffset) {
+                relScanState.arrowCSRBoundIdx++;
+                relScanState.arrowCSRCurrentRelOffset = INVALID_OFFSET;
+                continue;
+            }
+
+            if (!hasActiveBound) {
+                hasActiveBound = true;
+                activeBoundOffset = boundNodeID.offset;
+                activeBoundSelPos = boundNodeIdx;
+            } else if (boundNodeID.offset != activeBoundOffset) {
+                break;
+            }
+
+            if (!readCSRValue(*relScanState.arrowDstKeyVector,
+                    relScanState.arrowCSRCurrentRelOffset, 0) ||
+                relScanState.arrowDstKeyVector->isNull(0)) {
+                relScanState.arrowCSRCurrentRelOffset++;
+                continue;
+            }
+            auto nbrOffset = relScanState.arrowDstKeyVector->getValue<offset_t>(0);
+            auto relOffset = relScanState.arrowCSRCurrentRelOffset;
+            if (!relScanState.outputVectors.empty()) {
+                relScanState.outputVectors[0]->setValue<internalID_t>(outputCount,
+                    internalID_t{nbrOffset, getToNodeTableID()});
+            }
+            for (uint64_t outCol = 1; outCol < relScanState.outputVectors.size(); ++outCol) {
+                if (!relScanState.outputVectors[outCol]) {
+                    continue;
+                }
+                if (outCol < scanState.columnIDs.size() &&
+                    scanState.columnIDs[outCol] == REL_ID_COLUMN_ID) {
+                    relScanState.outputVectors[outCol]->setValue<internalID_t>(outputCount,
+                        internalID_t{relOffset, getTableID()});
+                    continue;
+                }
+                if (outCol >= outputToArrowColumnIdx.size() || outputToArrowColumnIdx[outCol] < 0) {
+                    continue;
+                }
+                readArrowValueAtOffset(schema, arrays, batchStartOffsets,
+                    outputToArrowColumnIdx[outCol], relOffset, *relScanState.outputVectors[outCol],
+                    outputCount);
+            }
+            outputCount++;
+            relScanState.arrowCSRCurrentRelOffset++;
+        }
+    } else {
+        while (outputCount < maxRowsPerCall && relScanState.arrowCurrentBatchOffset < totalRows) {
+            auto relOffset = relScanState.arrowCurrentBatchOffset;
+            if (!readCSRValue(*relScanState.arrowDstKeyVector, relOffset, 0) ||
+                relScanState.arrowDstKeyVector->isNull(0)) {
+                relScanState.arrowCurrentBatchOffset++;
+                continue;
+            }
+            auto dstOffset = relScanState.arrowDstKeyVector->getValue<offset_t>(0);
+            auto boundIt = relScanState.arrowBoundNodeOffsetToSelPos.find(dstOffset);
+            if (boundIt == relScanState.arrowBoundNodeOffsetToSelPos.end()) {
+                relScanState.arrowCurrentBatchOffset++;
+                continue;
+            }
+            if (!hasActiveBound) {
+                hasActiveBound = true;
+                activeBoundOffset = dstOffset;
+                activeBoundSelPos = boundIt->second;
+            } else if (dstOffset != activeBoundOffset) {
+                break;
+            }
+            auto srcOffset = findCSRSourceOffset(relOffset);
+            if (srcOffset == INVALID_OFFSET) {
+                relScanState.arrowCurrentBatchOffset++;
+                continue;
+            }
+            if (!relScanState.outputVectors.empty()) {
+                relScanState.outputVectors[0]->setValue<internalID_t>(outputCount,
+                    internalID_t{srcOffset, getFromNodeTableID()});
+            }
+            for (uint64_t outCol = 1; outCol < relScanState.outputVectors.size(); ++outCol) {
+                if (!relScanState.outputVectors[outCol]) {
+                    continue;
+                }
+                if (outCol < scanState.columnIDs.size() &&
+                    scanState.columnIDs[outCol] == REL_ID_COLUMN_ID) {
+                    relScanState.outputVectors[outCol]->setValue<internalID_t>(outputCount,
+                        internalID_t{relOffset, getTableID()});
+                    continue;
+                }
+                if (outCol >= outputToArrowColumnIdx.size() || outputToArrowColumnIdx[outCol] < 0) {
+                    continue;
+                }
+                readArrowValueAtOffset(schema, arrays, batchStartOffsets,
+                    outputToArrowColumnIdx[outCol], relOffset, *relScanState.outputVectors[outCol],
+                    outputCount);
+            }
+            outputCount++;
+            relScanState.arrowCurrentBatchOffset++;
+        }
+    }
+
+    if (outputCount == 0) {
+        relScanState.arrowScanCompleted =
+            isFwd ? relScanState.arrowCSRBoundIdx >=
+                        relScanState.cachedBoundNodeSelVector.getSelSize() :
+                    relScanState.arrowCurrentBatchOffset >= totalRows;
+        relScanState.outState->getSelVectorUnsafe().setToFiltered(0);
+        return false;
+    }
+
+    relScanState.setNodeIDVectorToFlat(activeBoundSelPos);
+    auto& selVector = relScanState.outState->getSelVectorUnsafe();
+    selVector.setToFiltered(outputCount);
+    for (uint64_t i = 0; i < outputCount; ++i) {
+        selVector[i] = i;
+    }
+    relScanState.arrowScanCompleted =
+        isFwd ?
+            relScanState.arrowCSRBoundIdx >= relScanState.cachedBoundNodeSelVector.getSelSize() :
+            relScanState.arrowCurrentBatchOffset >= totalRows;
+    return true;
+}
+
+bool ArrowRelTable::readCSRValue(ValueVector& outputVector, offset_t relOffset,
+    uint64_t dstOffset) const {
+    return readArrowValueAtOffset(schema, arrays, batchStartOffsets, csrNbrColumnIdx, relOffset,
+        outputVector, dstOffset);
+}
+
+bool ArrowRelTable::readIndptr(offset_t srcOffset, offset_t& result) const {
+    auto singleValueState = DataChunkState::getSingleValueDataChunkState();
+    ValueVector valueVector{LogicalType::UINT64(), memoryManager, singleValueState};
+    valueVector.state->setToFlat();
+    if (!readArrowValueAtOffset(indptrSchema, indptrArrays, indptrBatchStartOffsets,
+            csrIndptrColumnIdx, srcOffset, valueVector, 0) ||
+        valueVector.isNull(0)) {
+        return false;
+    }
+    result = valueVector.getValue<offset_t>(0);
+    return true;
+}
+
+offset_t ArrowRelTable::findCSRSourceOffset(offset_t relOffset) const {
+    if (totalIndptrRows < 2) {
+        return INVALID_OFFSET;
+    }
+    offset_t low = 0;
+    offset_t high = totalIndptrRows - 1;
+    while (low + 1 < high) {
+        const auto mid = low + (high - low) / 2;
+        offset_t midValue = INVALID_OFFSET;
+        if (!readIndptr(mid, midValue)) {
+            return INVALID_OFFSET;
+        }
+        if (relOffset < midValue) {
+            high = mid;
+        } else {
+            low = mid;
+        }
+    }
+    offset_t start = INVALID_OFFSET;
+    offset_t end = INVALID_OFFSET;
+    if (!readIndptr(low, start) || !readIndptr(low + 1, end) || relOffset < start ||
+        relOffset >= end) {
+        return INVALID_OFFSET;
+    }
+    return low;
+}
+
+bool ArrowRelTable::readArrowValueAtOffset(const ArrowSchemaWrapper& arrowSchema,
+    const std::vector<ArrowArrayWrapper>& arrowArrays, const std::vector<size_t>& startOffsets,
+    int64_t columnIdx, offset_t rowOffset, ValueVector& outputVector, uint64_t dstOffset) const {
+    if (columnIdx < 0 || arrowArrays.empty() || startOffsets.size() != arrowArrays.size()) {
+        return false;
+    }
+    for (size_t batchIdx = 0; batchIdx < arrowArrays.size(); ++batchIdx) {
+        const auto& batch = arrowArrays[batchIdx];
+        auto batchLength = getArrowBatchLength(batch);
+        auto batchStart = startOffsets[batchIdx];
+        if (rowOffset < batchStart || rowOffset >= batchStart + batchLength) {
+            continue;
+        }
+        auto rowInBatch = rowOffset - batchStart;
+        auto numChildren = batch.n_children < 0 ? 0u : static_cast<uint64_t>(batch.n_children);
+        if (static_cast<uint64_t>(columnIdx) >= numChildren || !batch.children ||
+            !arrowSchema.children || !batch.children[columnIdx] ||
+            !arrowSchema.children[columnIdx]) {
+            return false;
+        }
+        auto* childArray = batch.children[columnIdx];
+        auto* childSchema = arrowSchema.children[columnIdx];
+        readSingleArrowValue(childSchema, childArray, outputVector, childArray->offset + rowInBatch,
+            dstOffset);
+        return true;
+    }
+    return false;
 }
 
 std::vector<int64_t> ArrowRelTable::getOutputToArrowColumnIdx(

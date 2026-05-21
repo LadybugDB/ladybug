@@ -54,6 +54,51 @@ static ArrowArrayWrapper createStructArray(int64_t length,
     return array;
 }
 
+static void createUInt64Schema(ArrowSchema* schema, const char* name) {
+    schema->format = "L";
+    schema->name = name;
+    schema->metadata = nullptr;
+    schema->flags = ARROW_FLAG_NULLABLE;
+    schema->n_children = 0;
+    schema->children = nullptr;
+    schema->dictionary = nullptr;
+    schema->release = [](ArrowSchema* s) { s->release = nullptr; };
+    schema->private_data = nullptr;
+}
+
+static void createUInt64Array(ArrowArray* array, const std::vector<uint64_t>& data) {
+    struct ArrayPrivateData {
+        void* data = nullptr;
+    };
+
+    auto* privateData = new ArrayPrivateData();
+    privateData->data = malloc(data.size() * sizeof(uint64_t));
+    memcpy(privateData->data, data.data(), data.size() * sizeof(uint64_t));
+
+    array->length = data.size();
+    array->null_count = 0;
+    array->offset = 0;
+    array->n_buffers = 2;
+    array->n_children = 0;
+    array->buffers = static_cast<const void**>(malloc(sizeof(void*) * 2));
+    array->buffers[0] = nullptr;
+    array->buffers[1] = privateData->data;
+    array->children = nullptr;
+    array->dictionary = nullptr;
+    array->release = [](ArrowArray* a) {
+        if (a->private_data) {
+            auto* pd = static_cast<ArrayPrivateData*>(a->private_data);
+            free(pd->data);
+            delete pd;
+        }
+        if (a->buffers) {
+            free(const_cast<void**>(a->buffers));
+        }
+        a->release = nullptr;
+    };
+    array->private_data = privateData;
+}
+
 static void createArrowPersonTable(main::Connection& connection) {
     std::vector<int64_t> ids = {1, 2, 3};
     std::vector<std::string> names = {"Alice", "Bob", "Carol"};
@@ -70,6 +115,35 @@ static void createArrowPersonTable(main::Connection& connection) {
 
     auto result = ArrowTableSupport::createViewFromArrowTable(connection, "arrow_rel_person",
         std::move(schema), std::move(arrays));
+    ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+}
+
+static void createArrowCSRKnowsTable(main::Connection& connection) {
+    std::vector<uint64_t> to = {1, 2, 2};
+    std::vector<int64_t> weight = {10, 20, 30};
+    std::vector<uint64_t> indptr = {0, 2, 3, 3};
+
+    ArrowSchemaWrapper indicesSchema;
+    createStructSchema(&indicesSchema, 2);
+    createUInt64Schema(indicesSchema.children[0], "to");
+    createSchema<int64_t>(indicesSchema.children[1], "weight");
+
+    std::vector<ArrowArrayWrapper> indicesArrays;
+    indicesArrays.push_back(createStructArray(to.size(),
+        {[&](ArrowArray* array) { createUInt64Array(array, to); },
+            [&](ArrowArray* array) { createInt64Array(array, weight); }}));
+
+    ArrowSchemaWrapper indptrSchema;
+    createStructSchema(&indptrSchema, 1);
+    createUInt64Schema(indptrSchema.children[0], "indptr");
+
+    std::vector<ArrowArrayWrapper> indptrArrays;
+    indptrArrays.push_back(createStructArray(indptr.size(),
+        {[&](ArrowArray* array) { createUInt64Array(array, indptr); }}));
+
+    auto result = ArrowTableSupport::createRelTableFromArrowCSR(connection, "arrow_rel_csr_knows",
+        "arrow_rel_person", "arrow_rel_person", std::move(indicesSchema), std::move(indicesArrays),
+        std::move(indptrSchema), std::move(indptrArrays));
     ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
 }
 
@@ -149,4 +223,24 @@ TEST_F(ArrowRelTableTest, ScanMixedArrowAndNativeRelTables) {
     auto result = conn->query("MATCH ()-[]->() RETURN count(*)");
     ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
     ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 4);
+}
+
+TEST_F(ArrowRelTableTest, ScanArrowCSRRelTable) {
+    createArrowPersonTable(*conn);
+    createArrowCSRKnowsTable(*conn);
+
+    auto countResult = conn->query(
+        "MATCH (:arrow_rel_person)-[:arrow_rel_csr_knows]->(:arrow_rel_person) RETURN count(*)");
+    ASSERT_TRUE(countResult->isSuccess()) << countResult->getErrorMessage();
+    ASSERT_EQ(countResult->getNext()->getValue(0)->getValue<int64_t>(), 3);
+
+    auto sumResult = conn->query("MATCH (:arrow_rel_person)-[e:arrow_rel_csr_knows]->"
+                                 "(:arrow_rel_person) RETURN sum(e.weight)");
+    ASSERT_TRUE(sumResult->isSuccess()) << sumResult->getErrorMessage();
+    ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<common::int128_t>(), 60);
+
+    auto bwdResult = conn->query(
+        "MATCH (:arrow_rel_person)<-[:arrow_rel_csr_knows]-(:arrow_rel_person) RETURN count(*)");
+    ASSERT_TRUE(bwdResult->isSuccess()) << bwdResult->getErrorMessage();
+    ASSERT_EQ(bwdResult->getNext()->getValue(0)->getValue<int64_t>(), 3);
 }

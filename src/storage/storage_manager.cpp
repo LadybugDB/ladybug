@@ -170,9 +170,8 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
     } else if (!entry->getStorage().empty()) {
         if (entry->getStorage().substr(0, 8) == "arrow://") {
             std::string arrowId = entry->getStorage().substr(8);
-            ArrowSchemaWrapper* schema = nullptr;
-            std::vector<ArrowArrayWrapper>* arrays = nullptr;
-            if (!ArrowTableSupport::getArrowData(arrowId, schema, arrays)) {
+            ArrowRelTableData* relData = nullptr;
+            if (!ArrowTableSupport::getArrowRelData(arrowId, relData)) {
                 throw common::RuntimeException("Failed to retrieve Arrow data for ID: " + arrowId);
             }
             if (!tables.contains(info.nodePair.srcTableID) ||
@@ -186,15 +185,22 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
                 throw common::RuntimeException(
                     "Arrow rel table currently supports only regular node tables");
             }
-            ArrowSchemaWrapper schemaCopy = createShallowCopy(*schema);
+            ArrowSchemaWrapper schemaCopy = createShallowCopy(relData->schema);
             std::vector<ArrowArrayWrapper> arraysCopy;
-            arraysCopy.reserve(arrays->size());
-            for (const auto& arr : *arrays) {
+            arraysCopy.reserve(relData->arrays.size());
+            for (const auto& arr : relData->arrays) {
                 arraysCopy.push_back(createShallowCopy(arr));
+            }
+            ArrowSchemaWrapper indptrSchemaCopy = createShallowCopy(relData->indptrSchema);
+            std::vector<ArrowArrayWrapper> indptrArraysCopy;
+            indptrArraysCopy.reserve(relData->indptrArrays.size());
+            for (const auto& arr : relData->indptrArrays) {
+                indptrArraysCopy.push_back(createShallowCopy(arr));
             }
             tables[info.oid] = std::make_unique<ArrowRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, fromNodeTable, toNodeTable,
-                std::move(schemaCopy), std::move(arraysCopy), arrowId);
+                relData->layout, std::move(schemaCopy), std::move(arraysCopy),
+                std::move(indptrSchemaCopy), std::move(indptrArraysCopy), arrowId);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage option for rel table: " + entry->getStorage());
