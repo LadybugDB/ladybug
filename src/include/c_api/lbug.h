@@ -438,6 +438,20 @@ LBUG_C_API lbug_state lbug_connection_create_arrow_rel_table(lbug_connection* co
     struct ArrowSchema* schema, struct ArrowArray* arrays, uint64_t num_arrays,
     lbug_query_result* out_query_result);
 /**
+ * @brief Creates a CSR Arrow memory-backed relationship table from Arrow C Data Interface data.
+ *
+ * The indices Arrow table must contain a destination offset column named "to" and any relationship
+ * property columns. The indptr Arrow table must contain one offset column. Ownership of schemas and
+ * arrays is transferred to lbug on success or failure. The caller must not release them after this
+ * call.
+ */
+LBUG_C_API lbug_state lbug_connection_create_arrow_rel_table_csr(lbug_connection* connection,
+    const char* table_name, const char* src_table_name, const char* dst_table_name,
+    struct ArrowSchema* indices_schema, struct ArrowArray* indices_arrays,
+    uint64_t num_indices_arrays, struct ArrowSchema* indptr_schema,
+    struct ArrowArray* indptr_arrays, uint64_t num_indptr_arrays,
+    lbug_query_result* out_query_result);
+/**
  * @brief Drops an Arrow memory-backed table.
  */
 LBUG_C_API lbug_state lbug_connection_drop_arrow_table(lbug_connection* connection,
