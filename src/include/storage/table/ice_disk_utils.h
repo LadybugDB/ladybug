@@ -51,6 +51,13 @@ public:
             IceDiskUtils::joinPath(dir, "indptr_" + name + suffix)};
     }
 
+    // Get the file path for a flat relationship table. The file contains source and target node
+    // offsets followed by relationship property columns.
+    static std::string constructFlatRelTablePath(const std::string& dir, const std::string& name,
+        const std::string& suffix) {
+        return IceDiskUtils::joinPath(dir, "rels_" + name + suffix);
+    }
+
     // Validates that the parquet file at `path` carries the expected icebug_disk_version metadata.
     // Note: path is already resolved by VFS
     static void checkVersionCompatibility(main::ClientContext* context, const std::string& path) {

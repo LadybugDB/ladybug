@@ -88,6 +88,19 @@ TEST(IceDiskUtils_ConstructCSRPaths, S3URI) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// constructFlatRelTablePath
+// ─────────────────────────────────────────────────────────────
+TEST(IceDiskUtils_ConstructFlatRelTablePath, EmptyDir) {
+    EXPECT_EQ("rels_follows.parquet",
+        IceDiskUtils::constructFlatRelTablePath("", "follows", ".parquet"));
+}
+
+TEST(IceDiskUtils_ConstructFlatRelTablePath, WithDir) {
+    EXPECT_EQ("/some/dir/rels_knows.parquet",
+        IceDiskUtils::constructFlatRelTablePath("/some/dir", "knows", ".parquet"));
+}
+
+// ─────────────────────────────────────────────────────────────
 // checkVersionCompatibility
 // ─────────────────────────────────────────────────────────────
 class IceDiskCheckVersionTest : public EmptyDBTest {

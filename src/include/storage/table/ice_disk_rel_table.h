@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "common/types/internal_id_util.h"
@@ -12,6 +14,8 @@ namespace main {
 class ClientContext;
 } // namespace main
 namespace storage {
+
+enum class IceDiskRelTableLayout : uint8_t { CSR, FLAT };
 
 struct IceDiskRelTableScanState final : RelTableScanState {
     std::unique_ptr<processor::ParquetReaderScanState> parquetScanState;
@@ -68,6 +72,7 @@ protected:
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
 
 private:
+    IceDiskRelTableLayout layout;
     std::string indicesFilePath;
     std::string indptrFilePath;
     mutable std::unique_ptr<processor::ParquetReader> indicesReader;
@@ -80,6 +85,8 @@ private:
     void initializeIndptrReader(transaction::Transaction* transaction) const;
     void loadIndptrData(transaction::Transaction* transaction) const;
     common::offset_t findSourceNodeForRow(common::offset_t globalRowIdx) const;
+    bool scanCSR(transaction::Transaction* transaction, IceDiskRelTableScanState& scanState);
+    bool scanFlat(transaction::Transaction* transaction, IceDiskRelTableScanState& scanState);
 };
 
 } // namespace storage
