@@ -1,6 +1,5 @@
 #include "optimizer/unwind_dedup_optimizer.h"
 
-#include "binder/expression_visitor.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_unwind.h"
 #include "planner/operator/logical_unwind_deduplicate.h"
@@ -42,20 +41,15 @@ static std::shared_ptr<LogicalUnwind> findUnwind(std::shared_ptr<LogicalOperator
     return nullptr;
 }
 
-static binder::expression_vector getDedupKeyExpressions(const LogicalOperator& probeChild,
-    const std::shared_ptr<binder::Expression>& unwindExpr) {
+static binder::expression_vector getDedupKeyExpressions(const LogicalMerge& merge,
+    const LogicalOperator& probeChild) {
     auto schema = probeChild.getSchema();
-    if (schema->isExpressionInScope(*unwindExpr)) {
-        return {unwindExpr};
-    }
     binder::expression_vector result;
-    auto unwindName = unwindExpr->getUniqueName();
-    for (auto& expr : schema->getExpressionsInScope()) {
-        binder::DependentVarNameCollector collector;
-        collector.visit(expr);
-        if (collector.getVarNames().contains(unwindName)) {
-            result.push_back(expr);
+    for (auto& key : merge.getKeys()) {
+        if (!schema->isExpressionInScope(*key)) {
+            return {};
         }
+        result.push_back(key);
     }
     return result;
 }
@@ -96,7 +90,7 @@ std::shared_ptr<LogicalOperator> UnwindDedupOptimizer::visitMergeReplace(
     }
 
     if (unwind != nullptr) {
-        auto keyExpressions = getDedupKeyExpressions(*probeChild, unwind->getOutExpr());
+        auto keyExpressions = getDedupKeyExpressions(*merge, *probeChild);
         if (keyExpressions.empty()) {
             return op;
         }

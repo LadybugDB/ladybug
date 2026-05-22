@@ -676,6 +676,28 @@ alice
 ---- 1
 2
 
+-CASE unwind_merge_with_projection_preserves_match_expansion
+-STATEMENT CREATE NODE TABLE Person2(id STRING PRIMARY KEY, age INT64);
+---- ok
+-STATEMENT CREATE NODE TABLE Department2(id STRING PRIMARY KEY);
+---- ok
+-STATEMENT CREATE REL TABLE Person2_belongsTo_Department2(FROM Person2 TO Department2);
+---- ok
+-STATEMENT CREATE (:Person2 {id:'p1', age:42});
+---- ok
+-STATEMENT CREATE (:Person2 {id:'p2', age:42});
+---- ok
+-STATEMENT CREATE (:Department2 {id:'d1'});
+---- ok
+-STATEMENT UNWIND [{age:42,dept_id:'d1'}] AS row
+        WITH row.age AS age, row.dept_id AS dept_id
+        MATCH (p:Person2 {age: age}), (d:Department2 {id: dept_id})
+        MERGE (p)-[:Person2_belongsTo_Department2]->(d);
+---- ok
+-STATEMENT MATCH (:Person2)-[:Person2_belongsTo_Department2]->(:Department2) RETURN COUNT(*);
+---- 1
+2
+
 -CASE 5817
 -STATEMENT CREATE NODE TABLE N(id SERIAL PRIMARY KEY);
 ---- ok
