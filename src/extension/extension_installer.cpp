@@ -9,9 +9,30 @@
 namespace lbug {
 namespace extension {
 
+namespace {
+
+void applyProxyConfig(httplib::Client& client, const ExtensionRepoInfo& repoInfo) {
+    auto proxyConfig = ExtensionUtils::getProxyConfigForURL(repoInfo.hostURL);
+    if (!proxyConfig) {
+        return;
+    }
+    client.set_proxy(proxyConfig->host, proxyConfig->port);
+    if (!proxyConfig->username.empty()) {
+        client.set_proxy_basic_auth(proxyConfig->username, proxyConfig->password);
+    }
+}
+
+httplib::Client createExtensionDownloadClient(const ExtensionRepoInfo& repoInfo) {
+    httplib::Client client(repoInfo.hostURL.c_str());
+    applyProxyConfig(client, repoInfo);
+    return client;
+}
+
+} // namespace
+
 void ExtensionInstaller::tryDownloadExtensionFile(const ExtensionRepoInfo& repoInfo,
     const std::string& localFilePath) {
-    httplib::Client cli(repoInfo.hostURL.c_str());
+    auto cli = createExtensionDownloadClient(repoInfo);
     httplib::Headers headers = {{"User-Agent", std::format("lbug/v{}", LBUG_EXTENSION_VERSION)}};
     auto res = cli.Get(repoInfo.hostPath.c_str(), headers);
     if (!res || res->status != 200) {
@@ -74,7 +95,7 @@ bool ExtensionInstaller::installExtension() {
 
 void ExtensionInstaller::installDependencies() {
     auto extensionRepoInfo = ExtensionUtils::getExtensionInstallerRepoInfo(info.name, info.repo);
-    httplib::Client cli(extensionRepoInfo.hostURL.c_str());
+    auto cli = createExtensionDownloadClient(extensionRepoInfo);
     httplib::Headers headers = {{"User-Agent", std::format("lbug/v{}", LBUG_EXTENSION_VERSION)}};
     auto res = cli.Get(extensionRepoInfo.hostPath.c_str(), headers);
     if (!res || res->status != 200) {

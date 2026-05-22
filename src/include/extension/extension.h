@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/catalog_entry_type.h"
 #include "common/api.h"
@@ -38,6 +40,13 @@ struct ExtensionRepoInfo {
     std::string hostPath;
     std::string hostURL;
     std::string repoURL;
+};
+
+struct ExtensionProxyConfig {
+    std::string host;
+    int port;
+    std::string username;
+    std::string password;
 };
 
 enum class ExtensionSource : uint8_t { OFFICIAL, USER, STATIC_LINKED };
@@ -86,6 +95,10 @@ struct LBUG_API ExtensionUtils {
 
     static ExtensionRepoInfo getSharedLibRepoInfo(const std::string& fileName,
         const std::string& extensionRepo);
+
+    static std::optional<ExtensionProxyConfig> getProxyConfigForURL(const std::string& url);
+
+    static std::optional<ExtensionProxyConfig> parseProxyConfig(const std::string& proxyURL);
 
     static std::string getExtensionFileName(const std::string& name);
 

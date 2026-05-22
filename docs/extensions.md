@@ -34,6 +34,20 @@ make extension-debug
 make extension-release
 ```
 
+## Installing Through a Proxy
+
+Extension downloads use proxy settings from environment variables. Ladybug-specific variables take
+priority over standard proxy variables:
+
+- `LADYBUG_HTTP_PROXY` for `http://` extension repositories
+- `LADYBUG_HTTPS_PROXY` for `https://` extension repositories
+- `LADYBUG_ALL_PROXY` as a fallback
+- `LADYBUG_NO_PROXY` to bypass the proxy for matching hosts
+
+Standard `http_proxy`, `https_proxy`, `all_proxy`, and `no_proxy` variables are also supported, along
+with their uppercase variants. Proxy values may include basic auth, for example
+`http://user:pass@proxy.example.com:8080`.
+
 ## Testing Extensions
 
 ```bash

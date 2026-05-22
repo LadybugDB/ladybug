@@ -1,12 +1,13 @@
 #include "extension/extension.h"
 
+#include <cstdlib>
+
 #include "common/exception/io.h"
 #include "common/string_utils.h"
 #include "common/system_message.h"
 #include "main/client_context.h"
 #include "main/database.h"
 #include "storage/storage_manager.h"
-
 #ifdef _WIN32
 
 #include "windows.h"
@@ -21,6 +22,104 @@
 
 namespace lbug {
 namespace extension {
+
+namespace {
+
+struct ParsedURL {
+    std::string scheme;
+    std::string host;
+    int port = -1;
+};
+
+std::string getEnv(const char* name) {
+    const auto value = std::getenv(name); // NOLINT(*-mt-unsafe)
+    return value == nullptr ? "" : value;
+}
+
+std::string getProxyEnv(std::initializer_list<const char*> names) {
+    for (auto name : names) {
+        auto value = getEnv(name);
+        if (!value.empty()) {
+            return value;
+        }
+    }
+    return "";
+}
+
+int parsePort(const std::string& port) {
+    try {
+        auto parsedPort = std::stoi(port);
+        return parsedPort > 0 && parsedPort <= 65535 ? parsedPort : -1;
+    } catch (...) {
+        return -1;
+    }
+}
+
+ParsedURL parseURL(std::string url) {
+    ParsedURL result;
+    auto schemeEnd = url.find("://");
+    if (schemeEnd != std::string::npos) {
+        result.scheme = common::StringUtils::getLower(url.substr(0, schemeEnd));
+        url = url.substr(schemeEnd + 3);
+    }
+    auto pathStart = url.find_first_of("/?#");
+    if (pathStart != std::string::npos) {
+        url = url.substr(0, pathStart);
+    }
+    auto atPos = url.rfind('@');
+    if (atPos != std::string::npos) {
+        url = url.substr(atPos + 1);
+    }
+    if (url.starts_with('[')) {
+        auto bracketEnd = url.find(']');
+        if (bracketEnd != std::string::npos) {
+            result.host = url.substr(1, bracketEnd - 1);
+            if (bracketEnd + 1 < url.size() && url[bracketEnd + 1] == ':') {
+                result.port = parsePort(url.substr(bracketEnd + 2));
+            }
+        }
+        return result;
+    }
+    auto portPos = url.rfind(':');
+    if (portPos != std::string::npos && url.find(':') == portPos) {
+        result.host = url.substr(0, portPos);
+        result.port = parsePort(url.substr(portPos + 1));
+    } else {
+        result.host = url;
+    }
+    return result;
+}
+
+bool noProxyMatches(std::string noProxy, const ParsedURL& target) {
+    auto targetHost = common::StringUtils::getLower(target.host);
+    while (!noProxy.empty()) {
+        auto commaPos = noProxy.find(',');
+        auto entry = commaPos == std::string::npos ? noProxy : noProxy.substr(0, commaPos);
+        entry = common::StringUtils::ltrim(common::StringUtils::rtrim(entry));
+        entry = common::StringUtils::getLower(entry);
+        if (entry == "*") {
+            return true;
+        }
+        if (entry.starts_with('.')) {
+            if (targetHost.ends_with(entry)) {
+                return true;
+            }
+        } else {
+            auto entryHost = parseURL(entry).host;
+            entryHost = common::StringUtils::getLower(entryHost);
+            if (targetHost == entryHost || targetHost.ends_with("." + entryHost)) {
+                return true;
+            }
+        }
+        if (commaPos == std::string::npos) {
+            break;
+        }
+        noProxy = noProxy.substr(commaPos + 1);
+    }
+    return false;
+}
+
+} // namespace
 
 std::string getOS() {
     std::string os = "linux";
@@ -102,6 +201,56 @@ ExtensionRepoInfo ExtensionUtils::getSharedLibRepoInfo(const std::string& fileNa
     auto extensionURL = std::format(SHARED_LIB_REPO, extensionRepo, LBUG_EXTENSION_VERSION,
         getPlatform(), fileName);
     return getExtensionRepoInfo(extensionURL);
+}
+
+std::optional<ExtensionProxyConfig> ExtensionUtils::parseProxyConfig(const std::string& proxyURL) {
+    auto parsedURL = parseURL(proxyURL);
+    if (parsedURL.host.empty()) {
+        return std::nullopt;
+    }
+    ExtensionProxyConfig config{parsedURL.host, parsedURL.port == -1 ? 80 : parsedURL.port, "", ""};
+    auto authority = proxyURL;
+    auto schemeEnd = authority.find("://");
+    if (schemeEnd != std::string::npos) {
+        authority = authority.substr(schemeEnd + 3);
+    }
+    auto pathStart = authority.find_first_of("/?#");
+    if (pathStart != std::string::npos) {
+        authority = authority.substr(0, pathStart);
+    }
+    auto atPos = authority.rfind('@');
+    if (atPos != std::string::npos) {
+        auto userInfo = authority.substr(0, atPos);
+        auto passwordPos = userInfo.find(':');
+        if (passwordPos == std::string::npos) {
+            config.username = userInfo;
+        } else {
+            config.username = userInfo.substr(0, passwordPos);
+            config.password = userInfo.substr(passwordPos + 1);
+        }
+    }
+    return config;
+}
+
+std::optional<ExtensionProxyConfig> ExtensionUtils::getProxyConfigForURL(const std::string& url) {
+    auto targetURL = parseURL(url);
+    if (targetURL.host.empty()) {
+        return std::nullopt;
+    }
+    auto noProxy = getProxyEnv({"LADYBUG_NO_PROXY", "no_proxy", "NO_PROXY"});
+    if (!noProxy.empty() && noProxyMatches(noProxy, targetURL)) {
+        return std::nullopt;
+    }
+    std::string proxyURL;
+    if (targetURL.scheme == "https") {
+        proxyURL = getProxyEnv({"LADYBUG_HTTPS_PROXY", "https_proxy", "HTTPS_PROXY"});
+    } else {
+        proxyURL = getProxyEnv({"LADYBUG_HTTP_PROXY", "http_proxy", "HTTP_PROXY"});
+    }
+    if (proxyURL.empty()) {
+        proxyURL = getProxyEnv({"LADYBUG_ALL_PROXY", "all_proxy", "ALL_PROXY"});
+    }
+    return proxyURL.empty() ? std::nullopt : parseProxyConfig(proxyURL);
 }
 
 std::string ExtensionUtils::getExtensionFileName(const std::string& name) {
