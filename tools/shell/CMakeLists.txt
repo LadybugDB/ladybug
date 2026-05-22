@@ -13,8 +13,8 @@ add_executable(lbug_shell
         linenoise.cpp
         shell_runner.cpp)
 
-# Static link: avoid LNK4217 (locally defined symbol imported) when linking lbug.lib
-if(WIN32)
+# Static link: avoid LNK4217 (locally defined symbol imported) when linking lbug.lib.
+if(WIN32 AND NOT MSVC)
     target_compile_definitions(lbug_shell PRIVATE LBUG_STATIC_DEFINE)
 endif()
 
@@ -26,7 +26,11 @@ if (NOT MSVC)
 endif ()
 
 
-target_link_libraries(lbug_shell lbug)
+if(MSVC)
+    target_link_libraries(lbug_shell lbug_shared)
+else()
+    target_link_libraries(lbug_shell lbug)
+endif()
 if (ENABLE_BACKTRACES)
     target_link_libraries(lbug_shell register_backtrace_signal_handler)
 endif ()
