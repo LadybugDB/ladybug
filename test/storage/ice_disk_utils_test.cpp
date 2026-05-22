@@ -133,12 +133,8 @@ TEST_F(IceDiskCheckVersionTest, NotAParquetFile) {
 }
 
 TEST_F(IceDiskCheckVersionTest, MissingVersionKey) {
-    try {
-        IceDiskUtils::checkVersionCompatibility(context, DATASET_DIR + "/nodes_noversion.parquet");
-        FAIL() << "Expected RuntimeException for missing version key";
-    } catch (const RuntimeException& e) {
-        EXPECT_TRUE(std::string(e.what()).find("missing icebug_disk_version") != std::string::npos);
-    }
+    EXPECT_NO_THROW(
+        IceDiskUtils::checkVersionCompatibility(context, DATASET_DIR + "/nodes_noversion.parquet"));
 }
 
 TEST_F(IceDiskCheckVersionTest, WrongVersionValue) {

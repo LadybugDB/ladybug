@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -91,8 +92,11 @@ public:
         }
 
         if (!found) {
-            throw common::RuntimeException(
-                path + ": parquet file is missing icebug_disk_version metadata");
+            std::cerr << "Warning: " << path
+                      << ": parquet file is missing icebug_disk_version metadata; continuing "
+                         "without version compatibility check"
+                      << std::endl;
+            return;
         }
 
         const auto& expected = IceDiskConstants::CURRENT_VERSION;
