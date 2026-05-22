@@ -1,5 +1,8 @@
 #include "optimizer/unwind_dedup_optimizer.h"
 
+#include <unordered_set>
+
+#include "binder/expression/rel_expression.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/logical_unwind.h"
 #include "planner/operator/logical_unwind_deduplicate.h"
@@ -12,16 +15,19 @@ namespace lbug {
 namespace optimizer {
 
 void UnwindDedupOptimizer::rewrite(LogicalPlan* plan) {
-    visitOperator(plan->getLastOperator());
+    visitOperator(plan->getLastOperator(), true /* isRoot */);
 }
 
 std::shared_ptr<LogicalOperator> UnwindDedupOptimizer::visitOperator(
-    const std::shared_ptr<LogicalOperator>& op) {
+    const std::shared_ptr<LogicalOperator>& op, bool isRoot) {
     // bottom-up traversal
     for (auto i = 0u; i < op->getNumChildren(); ++i) {
-        op->setChild(i, visitOperator(op->getChild(i)));
+        op->setChild(i, visitOperator(op->getChild(i), false /* isRoot */));
     }
+    auto canRewriteParentMerge = canRewriteCurrentMerge;
+    canRewriteCurrentMerge = isRoot;
     auto result = visitOperatorReplaceSwitch(op);
+    canRewriteCurrentMerge = canRewriteParentMerge;
     result->computeFlatSchema();
     return result;
 }
@@ -41,15 +47,36 @@ static std::shared_ptr<LogicalUnwind> findUnwind(std::shared_ptr<LogicalOperator
     return nullptr;
 }
 
+static bool appendKeyIfInScope(binder::expression_vector& keys,
+    std::unordered_set<std::string>& names, const LogicalOperator& op,
+    const std::shared_ptr<binder::Expression>& key) {
+    auto schema = op.getSchema();
+    if (!schema->isExpressionInScope(*key)) {
+        return false;
+    }
+    if (names.insert(key->getUniqueName()).second) {
+        keys.push_back(key);
+    }
+    return true;
+}
+
 static binder::expression_vector getDedupKeyExpressions(const LogicalMerge& merge,
-    const LogicalOperator& probeChild) {
-    auto schema = probeChild.getSchema();
+    const LogicalOperator& op) {
     binder::expression_vector result;
+    std::unordered_set<std::string> keyNames;
     for (auto& key : merge.getKeys()) {
-        if (!schema->isExpressionInScope(*key)) {
+        if (!appendKeyIfInScope(result, keyNames, op, key)) {
             return {};
         }
-        result.push_back(key);
+    }
+    for (auto& info : merge.getInsertRelInfos()) {
+        auto rel = info.pattern->constPtrCast<binder::RelExpression>();
+        if (!appendKeyIfInScope(result, keyNames, op, rel->getSrcNode()->getInternalID())) {
+            return {};
+        }
+        if (!appendKeyIfInScope(result, keyNames, op, rel->getDstNode()->getInternalID())) {
+            return {};
+        }
     }
     return result;
 }
@@ -58,6 +85,9 @@ std::shared_ptr<LogicalOperator> UnwindDedupOptimizer::visitMergeReplace(
     std::shared_ptr<LogicalOperator> op) {
     auto merge = op->ptrCast<LogicalMerge>();
     if (merge == nullptr) {
+        return op;
+    }
+    if (!canRewriteCurrentMerge && !merge->getInsertRelInfos().empty()) {
         return op;
     }
 
@@ -90,15 +120,16 @@ std::shared_ptr<LogicalOperator> UnwindDedupOptimizer::visitMergeReplace(
     }
 
     if (unwind != nullptr) {
-        auto keyExpressions = getDedupKeyExpressions(*merge, *probeChild);
+        // Place UNWIND_DEDUP after the join so MERGE keys that depend on matched nodes are in
+        // scope.
+        auto keyExpressions = getDedupKeyExpressions(*merge, *mergeChild);
         if (keyExpressions.empty()) {
             return op;
         }
-        // Wrap the probe child with UNWIND_DEDUP
         auto dedup =
-            std::make_shared<LogicalUnwindDeduplicate>(probeChild, std::move(keyExpressions));
+            std::make_shared<LogicalUnwindDeduplicate>(mergeChild, std::move(keyExpressions));
         dedup->computeFlatSchema();
-        hashJoin->setChild(0, dedup);
+        merge->setChild(0, dedup);
         return op;
     }
 

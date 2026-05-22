@@ -8,11 +8,11 @@ namespace optimizer {
 
 /* When UNWIND is followed by MERGE, duplicate values in the UNWIND list can cause
  * issues because the MERGE's HASH_JOIN doesn't see newly created nodes within the same batch.
- * This optimizer inserts a UNWIND_DEDUP operator to deduplicate UNWIND output before MERGE.
+ * This optimizer inserts a UNWIND_DEDUP operator to deduplicate MERGE input rows.
  *
  * E.g., UNWIND [1, 1, 2] AS x MERGE (a:A {val: x})
  * Before: UNWIND -> HASH_JOIN (for optional match) -> MERGE
- * After:  UNWIND -> UNWIND_DEDUP -> HASH_JOIN -> MERGE
+ * After:  UNWIND -> HASH_JOIN (for optional match) -> UNWIND_DEDUP -> MERGE
  */
 class UnwindDedupOptimizer : public LogicalOperatorVisitor {
 public:
@@ -20,10 +20,12 @@ public:
 
 private:
     std::shared_ptr<planner::LogicalOperator> visitOperator(
-        const std::shared_ptr<planner::LogicalOperator>& op);
+        const std::shared_ptr<planner::LogicalOperator>& op, bool isRoot = false);
 
     std::shared_ptr<planner::LogicalOperator> visitMergeReplace(
         std::shared_ptr<planner::LogicalOperator> op) override;
+
+    bool canRewriteCurrentMerge = false;
 };
 
 } // namespace optimizer
