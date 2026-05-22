@@ -19,11 +19,10 @@ class UnwindDedup final : public PhysicalOperator {
     static constexpr PhysicalOperatorType type_ = PhysicalOperatorType::UNWIND_DEDUP;
 
 public:
-        UnwindDedup(std::vector<DataPos> keyDataPositions, std::unique_ptr<PhysicalOperator> child,
-                uint32_t id,
-        std::unique_ptr<OPPrintInfo> printInfo)
+    UnwindDedup(std::vector<DataPos> keyDataPositions, std::unique_ptr<PhysicalOperator> child,
+        uint32_t id, std::unique_ptr<OPPrintInfo> printInfo)
         : PhysicalOperator{type_, std::move(child), id, std::move(printInfo)},
-                    keyDataPositions{std::move(keyDataPositions)} {}
+          keyDataPositions{std::move(keyDataPositions)} {}
 
     bool getNextTuplesInternal(ExecutionContext* context) override;
 

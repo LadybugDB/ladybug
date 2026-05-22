@@ -20,8 +20,8 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapUnwindDedup(
         keyDataPositions.emplace_back(outSchema->getExpressionPos(*expr));
     }
     auto printInfo = std::make_unique<UnwindDedupPrintInfo>();
-    return std::make_unique<UnwindDedup>(std::move(keyDataPositions),
-        std::move(prevOperator), getOperatorID(), std::move(printInfo));
+    return std::make_unique<UnwindDedup>(std::move(keyDataPositions), std::move(prevOperator),
+        getOperatorID(), std::move(printInfo));
 }
 
 } // namespace processor

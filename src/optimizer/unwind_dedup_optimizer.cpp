@@ -101,8 +101,8 @@ std::shared_ptr<LogicalOperator> UnwindDedupOptimizer::visitMergeReplace(
             return op;
         }
         // Wrap the probe child with UNWIND_DEDUP
-        auto dedup = std::make_shared<LogicalUnwindDeduplicate>(probeChild,
-            std::move(keyExpressions));
+        auto dedup =
+            std::make_shared<LogicalUnwindDeduplicate>(probeChild, std::move(keyExpressions));
         dedup->computeFlatSchema();
         hashJoin->setChild(0, dedup);
         return op;
