@@ -14,10 +14,14 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapUnwindDedup(
     auto& unwindDedup = logicalOperator->constCast<LogicalUnwindDeduplicate>();
     auto outSchema = unwindDedup.getSchema();
     auto prevOperator = mapOperator(logicalOperator->getChild(0).get());
-    auto keyDataPos = DataPos(outSchema->getExpressionPos(*unwindDedup.getKeyExpression()));
+    std::vector<DataPos> keyDataPositions;
+    keyDataPositions.reserve(unwindDedup.getKeyExpressions().size());
+    for (auto& expr : unwindDedup.getKeyExpressions()) {
+        keyDataPositions.emplace_back(outSchema->getExpressionPos(*expr));
+    }
     auto printInfo = std::make_unique<UnwindDedupPrintInfo>();
-    return std::make_unique<UnwindDedup>(keyDataPos, std::move(prevOperator), getOperatorID(),
-        std::move(printInfo));
+    return std::make_unique<UnwindDedup>(std::move(keyDataPositions),
+        std::move(prevOperator), getOperatorID(), std::move(printInfo));
 }
 
 } // namespace processor

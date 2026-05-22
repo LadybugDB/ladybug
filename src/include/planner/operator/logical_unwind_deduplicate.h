@@ -10,22 +10,22 @@ class LogicalUnwindDeduplicate final : public LogicalOperator {
 
 public:
     LogicalUnwindDeduplicate(std::shared_ptr<LogicalOperator> child,
-        std::shared_ptr<binder::Expression> keyExpression)
-        : LogicalOperator{type_, std::move(child)}, keyExpression{std::move(keyExpression)} {}
+        binder::expression_vector keyExpressions)
+        : LogicalOperator{type_, std::move(child)}, keyExpressions{std::move(keyExpressions)} {}
 
     void computeFactorizedSchema() override;
     void computeFlatSchema() override { copyChildSchema(0); }
 
     std::string getExpressionsForPrinting() const override { return {}; }
 
-    std::shared_ptr<binder::Expression> getKeyExpression() const { return keyExpression; }
+    const binder::expression_vector& getKeyExpressions() const { return keyExpressions; }
 
     std::unique_ptr<LogicalOperator> copy() override {
-        return make_unique<LogicalUnwindDeduplicate>(children[0]->copy(), keyExpression);
+        return std::make_unique<LogicalUnwindDeduplicate>(children[0]->copy(), keyExpressions);
     }
 
 private:
-    std::shared_ptr<binder::Expression> keyExpression;
+    binder::expression_vector keyExpressions;
 };
 
 } // namespace planner

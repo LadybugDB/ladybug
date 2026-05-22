@@ -13,7 +13,11 @@ namespace lbug {
 namespace processor {
 
 void UnwindDedup::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* /*context*/) {
-    keyVector = resultSet->getValueVector(keyDataPos).get();
+    keyVectors.clear();
+    keyVectors.reserve(keyDataPositions.size());
+    for (auto& keyDataPos : keyDataPositions) {
+        keyVectors.push_back(resultSet->getValueVector(keyDataPos).get());
+    }
 }
 
 bool UnwindDedup::getNextTuplesInternal(ExecutionContext* context) {
@@ -23,15 +27,28 @@ bool UnwindDedup::getNextTuplesInternal(ExecutionContext* context) {
         }
 
         // Compute hash for the key vector
-        const auto& selVector = keyVector->state->getSelVector();
+        DASSERT(!keyVectors.empty());
+        const auto& selVector = keyVectors[0]->state->getSelVector();
         if (selVector.getSelSize() == 0) {
             continue;
         }
 
         auto hashVector = std::make_unique<ValueVector>(LogicalType::HASH(),
             MemoryManager::Get(*context->clientContext));
-        hashVector->state = keyVector->state;
-        VectorHashFunction::computeHash(*keyVector, selVector, *hashVector, selVector);
+        hashVector->state = keyVectors[0]->state;
+        VectorHashFunction::computeHash(*keyVectors[0], selVector, *hashVector, selVector);
+        if (keyVectors.size() > 1) {
+            auto tmpHashVector = std::make_unique<ValueVector>(LogicalType::HASH(),
+                MemoryManager::Get(*context->clientContext));
+            tmpHashVector->state = keyVectors[0]->state;
+            for (auto i = 1u; i < keyVectors.size(); ++i) {
+                DASSERT(keyVectors[i]->state == keyVectors[0]->state);
+                VectorHashFunction::computeHash(*keyVectors[i], selVector, *tmpHashVector,
+                    selVector);
+                VectorHashFunction::combineHash(*hashVector, selVector, *tmpHashVector, selVector,
+                    *hashVector, selVector);
+            }
+        }
 
         // Filter out duplicate values by modifying the selection vector
         auto hashData = reinterpret_cast<hash_t*>(hashVector->getData());
@@ -50,7 +67,7 @@ bool UnwindDedup::getNextTuplesInternal(ExecutionContext* context) {
 
         if (newSelSize > 0) {
             // Update the selection vector to only include non-duplicate values
-            auto& selVectorUnsafe = keyVector->state->getSelVectorUnsafe();
+            auto& selVectorUnsafe = keyVectors[0]->state->getSelVectorUnsafe();
             selVectorUnsafe.setToFiltered(newSelSize);
             auto buffer = selVectorUnsafe.getMutableBuffer();
             for (auto i = 0u; i < newSelSize; i++) {

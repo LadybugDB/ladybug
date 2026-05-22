@@ -652,6 +652,30 @@ alice
 {_ID: 0:0, _LABEL: Node, id: 0, cities: [Old York,Los Angeles]}
 {_ID: 0:1, _LABEL: Node, id: 1, cities: [Tokyo,Osaka]}
 
+-CASE unwind_merge_with_projection_dedup
+-STATEMENT CREATE NODE TABLE Person(id STRING PRIMARY KEY, name STRING, age INT64, department STRING);
+---- ok
+-STATEMENT CREATE NODE TABLE Department(id STRING PRIMARY KEY, name STRING, headcount INT64);
+---- ok
+-STATEMENT CREATE REL TABLE Person_belongsTo_Department(FROM Person TO Department);
+---- ok
+-STATEMENT CREATE (:Person {id:'p008', name:'a', age:1, department:'x'});
+---- ok
+-STATEMENT CREATE (:Person {id:'p009', name:'b', age:1, department:'x'});
+---- ok
+-STATEMENT CREATE (:Department {id:'d002', name:'d2', headcount:1});
+---- ok
+-STATEMENT CREATE (:Department {id:'d003', name:'d3', headcount:1});
+---- ok
+-STATEMENT UNWIND [{person_id:'p008',dept_id:'d002'},{person_id:'p008',dept_id:'d002'},{person_id:'p009',dept_id:'d003'}] AS row
+        WITH row.person_id AS person_id, row.dept_id AS dept_id
+        MATCH (p:Person {id: person_id}), (d:Department {id: dept_id})
+        MERGE (p)-[:Person_belongsTo_Department]->(d);
+---- ok
+-STATEMENT MATCH (:Person)-[:Person_belongsTo_Department]->(:Department) RETURN COUNT(*);
+---- 1
+2
+
 -CASE 5817
 -STATEMENT CREATE NODE TABLE N(id SERIAL PRIMARY KEY);
 ---- ok
