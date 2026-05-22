@@ -123,8 +123,13 @@ void DBTest::runTest(std::vector<TestStatement>& statements, uint64_t checkpoint
         }
         if (statement.expectedStorageVersion.has_value()) {
             if (!inMemMode) {
-                ASSERT_EQ(readStorageVersionFromHeader(databasePath),
-                    statement.expectedStorageVersion.value());
+                conn.reset();
+                connMap.clear();
+                database.reset();
+                const auto storageVersion = readStorageVersionFromHeader(databasePath);
+                createDB(checkpointWaitTimeout);
+                createConns(connNames);
+                ASSERT_EQ(storageVersion, statement.expectedStorageVersion.value());
             }
             continue;
         }
