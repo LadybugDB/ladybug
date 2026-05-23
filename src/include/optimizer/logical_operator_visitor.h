@@ -147,6 +147,12 @@ protected:
         return op;
     }
 
+    virtual void visitRelDegreeTable(planner::LogicalOperator*) {}
+    virtual std::shared_ptr<planner::LogicalOperator> visitRelDegreeTableReplace(
+        std::shared_ptr<planner::LogicalOperator> op) {
+        return op;
+    }
+
     virtual void visitScanNodeTable(planner::LogicalOperator* /*op*/) {}
     virtual std::shared_ptr<planner::LogicalOperator> visitScanNodeTableReplace(
         std::shared_ptr<planner::LogicalOperator> op) {

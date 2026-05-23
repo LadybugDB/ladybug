@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <vector>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "storage/table/rel_table_data.h"
@@ -203,6 +204,13 @@ public:
     void reclaimStorage(PageAllocator& pageAllocator) const override;
 
     common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) override;
+    virtual common::row_idx_t getNumActiveBoundNodes(const transaction::Transaction* transaction,
+        common::RelDataDirection direction);
+    virtual std::vector<std::pair<common::offset_t, common::row_idx_t>> getDegreeEntries(
+        const transaction::Transaction* transaction, common::RelDataDirection direction);
+    virtual std::vector<std::pair<common::offset_t, common::row_idx_t>> getTopKDegrees(
+        const transaction::Transaction* transaction, common::RelDataDirection direction,
+        common::idx_t k);
 
     RelTableData* getDirectedTableData(common::RelDataDirection direction) const;
 

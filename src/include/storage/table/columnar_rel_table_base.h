@@ -44,6 +44,13 @@ public:
     }
 
     common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) override;
+    common::row_idx_t getNumActiveBoundNodes(const transaction::Transaction* transaction,
+        common::RelDataDirection direction) override;
+    std::vector<std::pair<common::offset_t, common::row_idx_t>> getDegreeEntries(
+        const transaction::Transaction* transaction, common::RelDataDirection direction) override;
+    std::vector<std::pair<common::offset_t, common::row_idx_t>> getTopKDegrees(
+        const transaction::Transaction* transaction, common::RelDataDirection direction,
+        common::idx_t k) override;
 
 protected:
     catalog::RelGroupCatalogEntry* relGroupEntry;
@@ -53,6 +60,13 @@ protected:
     virtual std::string getColumnarFormatName() const = 0;
     virtual common::row_idx_t getTotalRowCount(
         const transaction::Transaction* transaction) const = 0;
+    virtual common::row_idx_t getActiveBoundNodeCount(const transaction::Transaction* transaction,
+        common::RelDataDirection direction) const = 0;
+    virtual std::vector<std::pair<common::offset_t, common::row_idx_t>> getAllDegreeEntries(
+        const transaction::Transaction* transaction, common::RelDataDirection direction) const = 0;
+    virtual std::vector<std::pair<common::offset_t, common::row_idx_t>> getTopKDegreeEntries(
+        const transaction::Transaction* transaction, common::RelDataDirection direction,
+        common::idx_t k) const = 0;
 
     // Helper for finding source node in CSR format
     // Subclasses should cache indptr data and provide it via this interface

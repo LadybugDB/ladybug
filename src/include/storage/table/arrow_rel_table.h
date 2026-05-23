@@ -44,6 +44,14 @@ public:
 protected:
     std::string getColumnarFormatName() const override { return "Arrow"; }
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
+    common::row_idx_t getActiveBoundNodeCount(const transaction::Transaction* transaction,
+        common::RelDataDirection direction) const override;
+    std::vector<std::pair<common::offset_t, common::row_idx_t>> getAllDegreeEntries(
+        const transaction::Transaction* transaction,
+        common::RelDataDirection direction) const override;
+    std::vector<std::pair<common::offset_t, common::row_idx_t>> getTopKDegreeEntries(
+        const transaction::Transaction* transaction, common::RelDataDirection direction,
+        common::idx_t k) const override;
 
 private:
     int64_t fromColumnIdx = -1;

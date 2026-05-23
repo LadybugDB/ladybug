@@ -214,6 +214,7 @@ public:
     bool isEmpty() const override { return !persistentChunkGroup && NodeGroup::isEmpty(); }
 
     ChunkedNodeGroup* getPersistentChunkedGroup() const { return persistentChunkGroup.get(); }
+    const CSRIndex* getCSRIndex() const { return csrIndex.get(); }
     void setPersistentChunkedGroup(std::unique_ptr<ChunkedNodeGroup> chunkedNodeGroup) {
         DASSERT(chunkedNodeGroup->getFormat() == NodeGroupDataFormat::CSR);
         persistentChunkGroup = std::move(chunkedNodeGroup);

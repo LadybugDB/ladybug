@@ -170,6 +170,9 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapOperator(const LogicalOperator*
     case LogicalOperatorType::RECURSIVE_EXTEND: {
         physicalOperator = mapRecursiveExtend(logicalOperator);
     } break;
+    case LogicalOperatorType::REL_DEGREE_TABLE: {
+        physicalOperator = mapRelDegreeTable(logicalOperator);
+    } break;
     case LogicalOperatorType::SCAN_NODE_TABLE: {
         physicalOperator = mapScanNodeTable(logicalOperator);
     } break;

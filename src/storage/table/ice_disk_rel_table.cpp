@@ -1,6 +1,7 @@
 #include "storage/table/ice_disk_rel_table.h"
 
 #include <filesystem>
+#include <queue>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/data_chunk/sel_vector.h"
@@ -488,6 +489,73 @@ row_idx_t IceDiskRelTable::getTotalRowCount(const Transaction* transaction) cons
     }
     auto metadata = indicesReader->getMetadata();
     return metadata ? metadata->num_rows : 0;
+}
+
+row_idx_t IceDiskRelTable::getActiveBoundNodeCount(const Transaction* transaction,
+    RelDataDirection direction) const {
+    if (layout != IceDiskRelTableLayout::CSR || direction == RelDataDirection::BWD) {
+        return 0;
+    }
+    loadIndptrData(const_cast<Transaction*>(transaction));
+    row_idx_t result = 0;
+    for (offset_t i = 0; i + 1 < indptrData.size(); ++i) {
+        result += indptrData[i + 1] > indptrData[i];
+    }
+    return result;
+}
+
+std::vector<std::pair<offset_t, row_idx_t>> IceDiskRelTable::getAllDegreeEntries(
+    const Transaction* transaction, RelDataDirection direction) const {
+    if (layout != IceDiskRelTableLayout::CSR || direction == RelDataDirection::BWD) {
+        return {};
+    }
+    loadIndptrData(const_cast<Transaction*>(transaction));
+    std::vector<std::pair<offset_t, row_idx_t>> result;
+    result.reserve(indptrData.size());
+    for (offset_t i = 0; i + 1 < indptrData.size(); ++i) {
+        if (indptrData[i + 1] <= indptrData[i]) {
+            continue;
+        }
+        result.emplace_back(i, indptrData[i + 1] - indptrData[i]);
+    }
+    return result;
+}
+
+std::vector<std::pair<offset_t, row_idx_t>> IceDiskRelTable::getTopKDegreeEntries(
+    const Transaction* transaction, RelDataDirection direction, idx_t k) const {
+    if (layout != IceDiskRelTableLayout::CSR || direction == RelDataDirection::BWD || k == 0) {
+        return {};
+    }
+    loadIndptrData(const_cast<Transaction*>(transaction));
+    using degree_entry_t = std::pair<offset_t, row_idx_t>;
+    auto better = [](const degree_entry_t& a, const degree_entry_t& b) {
+        return a.second > b.second || (a.second == b.second && a.first < b.first);
+    };
+    auto worseForHeap = [better](const degree_entry_t& a, const degree_entry_t& b) {
+        return better(a, b);
+    };
+    std::priority_queue<degree_entry_t, std::vector<degree_entry_t>, decltype(worseForHeap)> heap{
+        worseForHeap};
+    for (offset_t i = 0; i + 1 < indptrData.size(); ++i) {
+        if (indptrData[i + 1] <= indptrData[i]) {
+            continue;
+        }
+        const auto degree = indptrData[i + 1] - indptrData[i];
+        degree_entry_t entry{i, degree};
+        if (heap.size() < k) {
+            heap.push(entry);
+        } else if (better(entry, heap.top())) {
+            heap.pop();
+            heap.push(entry);
+        }
+    }
+    std::vector<degree_entry_t> result;
+    while (!heap.empty()) {
+        result.push_back(heap.top());
+        heap.pop();
+    }
+    std::sort(result.begin(), result.end(), better);
+    return result;
 }
 
 } // namespace storage

@@ -16,6 +16,21 @@ common::row_idx_t ColumnarRelTableBase::getNumTotalRows(const Transaction* trans
     return getTotalRowCount(transaction);
 }
 
+common::row_idx_t ColumnarRelTableBase::getNumActiveBoundNodes(const Transaction* transaction,
+    RelDataDirection direction) {
+    return getActiveBoundNodeCount(transaction, direction);
+}
+
+std::vector<std::pair<offset_t, row_idx_t>> ColumnarRelTableBase::getDegreeEntries(
+    const Transaction* transaction, RelDataDirection direction) {
+    return getAllDegreeEntries(transaction, direction);
+}
+
+std::vector<std::pair<offset_t, row_idx_t>> ColumnarRelTableBase::getTopKDegrees(
+    const Transaction* transaction, RelDataDirection direction, idx_t k) {
+    return getTopKDegreeEntries(transaction, direction, k);
+}
+
 common::offset_t ColumnarRelTableBase::findSourceNodeForRowInternal(offset_t globalRowIdx,
     const std::vector<offset_t>& indptrData) const {
     if (indptrData.empty()) {

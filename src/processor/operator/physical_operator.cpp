@@ -97,6 +97,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "PROFILE";
     case PhysicalOperatorType::RECURSIVE_EXTEND:
         return "RECURSIVE_EXTEND";
+    case PhysicalOperatorType::REL_DEGREE_TABLE:
+        return "REL_DEGREE_TABLE";
     case PhysicalOperatorType::RESULT_COLLECTOR:
         return "RESULT_COLLECTOR";
     case PhysicalOperatorType::SCAN_NODE_TABLE:

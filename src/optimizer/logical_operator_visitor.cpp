@@ -73,6 +73,9 @@ void LogicalOperatorVisitor::visitOperatorSwitch(LogicalOperator* op) {
     case LogicalOperatorType::RECURSIVE_EXTEND: {
         visitRecursiveExtend(op);
     } break;
+    case LogicalOperatorType::REL_DEGREE_TABLE: {
+        visitRelDegreeTable(op);
+    } break;
     case LogicalOperatorType::SCAN_NODE_TABLE: {
         visitScanNodeTable(op);
     } break;
@@ -164,6 +167,9 @@ std::shared_ptr<LogicalOperator> LogicalOperatorVisitor::visitOperatorReplaceSwi
     }
     case LogicalOperatorType::RECURSIVE_EXTEND: {
         return visitRecursiveExtendReplace(op);
+    }
+    case LogicalOperatorType::REL_DEGREE_TABLE: {
+        return visitRelDegreeTableReplace(op);
     }
     case LogicalOperatorType::SCAN_NODE_TABLE: {
         return visitScanNodeTableReplace(op);

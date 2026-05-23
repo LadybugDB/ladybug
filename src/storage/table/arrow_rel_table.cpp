@@ -1,6 +1,7 @@
 #include "storage/table/arrow_rel_table.h"
 
 #include <cstring>
+#include <queue>
 
 #include "common/arrow/arrow_converter.h"
 #include "common/arrow/arrow_nullmask_tree.h"
@@ -599,6 +600,80 @@ std::vector<int64_t> ArrowRelTable::getOutputToArrowColumnIdx(
 row_idx_t ArrowRelTable::getTotalRowCount(
     [[maybe_unused]] const transaction::Transaction* transaction) const {
     return totalRows;
+}
+
+row_idx_t ArrowRelTable::getActiveBoundNodeCount(
+    [[maybe_unused]] const transaction::Transaction* transaction,
+    RelDataDirection direction) const {
+    if (layout != ArrowRelTableLayout::CSR || direction == RelDataDirection::BWD) {
+        return 0;
+    }
+    row_idx_t result = 0;
+    for (offset_t i = 0; i + 1 < totalIndptrRows; ++i) {
+        offset_t start = INVALID_OFFSET;
+        offset_t end = INVALID_OFFSET;
+        if (readIndptr(i, start) && readIndptr(i + 1, end) && end > start) {
+            result++;
+        }
+    }
+    return result;
+}
+
+std::vector<std::pair<offset_t, row_idx_t>> ArrowRelTable::getAllDegreeEntries(
+    [[maybe_unused]] const transaction::Transaction* transaction,
+    RelDataDirection direction) const {
+    if (layout != ArrowRelTableLayout::CSR || direction == RelDataDirection::BWD) {
+        return {};
+    }
+    std::vector<std::pair<offset_t, row_idx_t>> result;
+    result.reserve(totalIndptrRows);
+    for (offset_t i = 0; i + 1 < totalIndptrRows; ++i) {
+        offset_t start = INVALID_OFFSET;
+        offset_t end = INVALID_OFFSET;
+        if (!readIndptr(i, start) || !readIndptr(i + 1, end) || end <= start) {
+            continue;
+        }
+        result.emplace_back(i, end - start);
+    }
+    return result;
+}
+
+std::vector<std::pair<offset_t, row_idx_t>> ArrowRelTable::getTopKDegreeEntries(
+    [[maybe_unused]] const transaction::Transaction* transaction, RelDataDirection direction,
+    idx_t k) const {
+    if (layout != ArrowRelTableLayout::CSR || direction == RelDataDirection::BWD || k == 0) {
+        return {};
+    }
+    using degree_entry_t = std::pair<offset_t, row_idx_t>;
+    auto better = [](const degree_entry_t& a, const degree_entry_t& b) {
+        return a.second > b.second || (a.second == b.second && a.first < b.first);
+    };
+    auto worseForHeap = [better](const degree_entry_t& a, const degree_entry_t& b) {
+        return better(a, b);
+    };
+    std::priority_queue<degree_entry_t, std::vector<degree_entry_t>, decltype(worseForHeap)> heap{
+        worseForHeap};
+    for (offset_t i = 0; i + 1 < totalIndptrRows; ++i) {
+        offset_t start = INVALID_OFFSET;
+        offset_t end = INVALID_OFFSET;
+        if (!readIndptr(i, start) || !readIndptr(i + 1, end) || end <= start) {
+            continue;
+        }
+        degree_entry_t entry{i, end - start};
+        if (heap.size() < k) {
+            heap.push(entry);
+        } else if (better(entry, heap.top())) {
+            heap.pop();
+            heap.push(entry);
+        }
+    }
+    std::vector<degree_entry_t> result;
+    while (!heap.empty()) {
+        result.push_back(heap.top());
+        heap.pop();
+    }
+    std::sort(result.begin(), result.end(), better);
+    return result;
 }
 
 } // namespace storage

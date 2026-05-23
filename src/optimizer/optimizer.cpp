@@ -73,6 +73,9 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
         auto topKOptimizer = TopKOptimizer();
         topKOptimizer.rewrite(plan);
 
+        // Degree top-k rewrites need the LIMIT to be folded into ORDER_BY first.
+        countRelTableOptimizer.rewrite(plan);
+
         auto factorizationRewriter = FactorizationRewriter();
         factorizationRewriter.rewrite(plan);
 

@@ -1,3 +1,5 @@
+#include <stdexcept>
+
 #include "graph_test/private_graph_test.h"
 #include "planner/operator/logical_plan_util.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
@@ -16,7 +18,15 @@ public:
         return planner::LogicalPlanUtil::encodeJoin(*TestRunner::getLogicalPlan(query, *conn));
     }
     std::unique_ptr<planner::LogicalPlan> getRoot(const std::string& query) {
-        return TestRunner::getLogicalPlan(query, *conn);
+        auto preparedStatement = conn->prepare(query);
+        if (!preparedStatement->isSuccess()) {
+            throw std::runtime_error("Failed to prepare optimizer test query:\n" + query +
+                                     "\nError:\n" + preparedStatement->getErrorMessage());
+        }
+        auto cachedStatement =
+            conn->getClientContext()->getCachedPreparedStatementManager().getCachedStatement(
+                preparedStatement->getName());
+        return std::move(cachedStatement->logicalPlan);
     }
 
     // Helper to check if a specific operator type exists in the plan
@@ -226,8 +236,18 @@ TEST_F(OptimizerTest, SubqueryHint) {
 }
 
 TEST_F(OptimizerTest, CountRelTableOptimizer) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE opt_user(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE opt_follows(FROM opt_user TO opt_user, date DATE);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_user {id: 1});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_user {id: 2});")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_user), (b:opt_user) "
+                            "WHERE a.id = 1 AND b.id = 2 "
+                            "CREATE (a)-[:opt_follows {date: date('2020-01-01')}]->(b);")
+                    ->isSuccess());
+
     // Test that COUNT(*) over a single rel table is optimized to COUNT_REL_TABLE
-    auto q1 = "MATCH (a:person)-[e:knows]->(b:person) RETURN COUNT(*);";
+    auto q1 = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN COUNT(*);";
     auto plan1 = getRoot(q1);
     ASSERT_TRUE(hasOperatorType(plan1->getLastOperator().get(),
         planner::LogicalOperatorType::COUNT_REL_TABLE));
@@ -236,25 +256,144 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     ASSERT_TRUE(result1->isSuccess());
     ASSERT_EQ(result1->getNumTuples(), 1);
     auto tuple1 = result1->getNext();
-    ASSERT_EQ(tuple1->getValue(0)->getValue<int64_t>(), 14);
+    ASSERT_EQ(tuple1->getValue(0)->getValue<int64_t>(), 1);
 
     // Test that COUNT(*) with GROUP BY is NOT optimized (has keys)
-    auto q2 = "MATCH (a:person)-[e:knows]->(b:person) RETURN a.fName, COUNT(*);";
+    auto q2 = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN a.id, COUNT(*);";
     auto plan2 = getRoot(q2);
     ASSERT_FALSE(hasOperatorType(plan2->getLastOperator().get(),
         planner::LogicalOperatorType::COUNT_REL_TABLE));
 
     // Test that COUNT(*) with WHERE clause is NOT optimized (has filter)
-    auto q3 = "MATCH (a:person)-[e:knows]->(b:person) WHERE a.ID > 0 RETURN COUNT(*);";
+    auto q3 = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) WHERE a.id > 0 RETURN COUNT(*);";
     auto plan3 = getRoot(q3);
     ASSERT_FALSE(hasOperatorType(plan3->getLastOperator().get(),
         planner::LogicalOperatorType::COUNT_REL_TABLE));
 
     // Test that COUNT(DISTINCT ...) is NOT optimized
-    auto q4 = "MATCH (a:person)-[e:knows]->(b:person) RETURN COUNT(DISTINCT a);";
+    auto q4 = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN COUNT(DISTINCT a);";
     auto plan4 = getRoot(q4);
     ASSERT_FALSE(hasOperatorType(plan4->getLastOperator().get(),
         planner::LogicalOperatorType::COUNT_REL_TABLE));
+
+    // Test that COUNT(rel) over a full unfiltered rel scan is optimized to COUNT_REL_TABLE
+    auto q5 = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN COUNT(e);";
+    auto plan5 = getRoot(q5);
+    ASSERT_TRUE(hasOperatorType(plan5->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+    auto result5 = conn->query(q5);
+    ASSERT_TRUE(result5->isSuccess());
+    ASSERT_EQ(result5->getNumTuples(), 1);
+    auto tuple5 = result5->getNext();
+    ASSERT_EQ(tuple5->getValue(0)->getValue<int64_t>(), 1);
+
+    // Test that COUNT(node) is NOT optimized by the rel-table fast path
+    auto q6 = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN COUNT(a);";
+    auto plan6 = getRoot(q6);
+    ASSERT_FALSE(hasOperatorType(plan6->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+
+    // Test that COUNT(rel property) is NOT optimized
+    auto q7 = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN COUNT(e.date);";
+    auto plan7 = getRoot(q7);
+    ASSERT_FALSE(hasOperatorType(plan7->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+
+    // Test active-write degree queries over native rel tables.
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE opt_degree_user(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE opt_degree_follows(FROM opt_degree_user TO "
+                            "opt_degree_user);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_degree_user {id: 0});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_degree_user {id: 1});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_degree_user {id: 2});")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_degree_user), (b:opt_degree_user) "
+                            "WHERE a.id = 0 AND b.id = 1 "
+                            "CREATE (a)-[:opt_degree_follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_degree_user), (b:opt_degree_user) "
+                            "WHERE a.id = 0 AND b.id = 2 "
+                            "CREATE (a)-[:opt_degree_follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_degree_user), (b:opt_degree_user) "
+                            "WHERE a.id = 1 AND b.id = 2 "
+                            "CREATE (a)-[:opt_degree_follows]->(b);")
+                    ->isSuccess());
+
+    auto q8 = "MATCH (u:opt_degree_user)-[:opt_degree_follows]->(v) RETURN count(DISTINCT u.id);";
+    auto plan8 = getRoot(q8);
+    ASSERT_TRUE(hasOperatorType(plan8->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto result8 = conn->query(q8);
+    ASSERT_TRUE(result8->isSuccess());
+    ASSERT_EQ(result8->getNext()->getValue(0)->getValue<int64_t>(), 2);
+
+    auto q9 = "MATCH (u:opt_degree_user)-[:opt_degree_follows]->(v) "
+              "RETURN u.id, count(v) AS deg ORDER BY deg DESC LIMIT 2;";
+    auto plan9 = getRoot(q9);
+    ASSERT_TRUE(hasOperatorType(plan9->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto result9 = conn->query(q9);
+    ASSERT_TRUE(result9->isSuccess());
+    auto tuple9a = result9->getNext();
+    ASSERT_EQ(tuple9a->getValue(0)->getValue<int64_t>(), 0);
+    ASSERT_EQ(tuple9a->getValue(1)->getValue<int64_t>(), 2);
+    auto tuple9b = result9->getNext();
+    ASSERT_EQ(tuple9b->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_EQ(tuple9b->getValue(1)->getValue<int64_t>(), 1);
+
+    auto q10 =
+        "MATCH (a:opt_degree_user)<-[e:opt_degree_follows]-(b:opt_degree_user) RETURN COUNT(e);";
+    auto plan10 = getRoot(q10);
+    ASSERT_TRUE(hasOperatorType(plan10->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+    auto result10 = conn->query(q10);
+    ASSERT_TRUE(result10->isSuccess());
+    ASSERT_EQ(result10->getNext()->getValue(0)->getValue<int64_t>(), 3);
+
+    // Test that degree top-k and active bound count merge duplicate bound nodes across rel tables.
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE opt_multi_user(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE opt_multi_target(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE opt_multi(FROM opt_multi_user TO opt_multi_user, "
+                            "FROM opt_multi_user TO opt_multi_target);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_multi_user {id: 0});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_multi_user {id: 1});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_multi_target {id: 0});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_multi_target {id: 1});")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_multi_user), (b:opt_multi_user) "
+                            "WHERE a.id = 0 AND b.id = 1 CREATE (a)-[:opt_multi]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_multi_user), (b:opt_multi_target) "
+                            "WHERE a.id = 0 AND b.id = 0 CREATE (a)-[:opt_multi]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_multi_user), (b:opt_multi_target) "
+                            "WHERE a.id = 1 AND b.id = 1 CREATE (a)-[:opt_multi]->(b);")
+                    ->isSuccess());
+    auto q11 = "MATCH (u:opt_multi_user)-[:opt_multi]->(v) "
+               "RETURN u.id, count(*) AS deg ORDER BY deg DESC LIMIT 2;";
+    auto plan11 = getRoot(q11);
+    ASSERT_TRUE(hasOperatorType(plan11->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto result11 = conn->query(q11);
+    ASSERT_TRUE(result11->isSuccess());
+    auto tuple11a = result11->getNext();
+    ASSERT_EQ(tuple11a->getValue(0)->getValue<int64_t>(), 0);
+    ASSERT_EQ(tuple11a->getValue(1)->getValue<int64_t>(), 2);
+    auto tuple11b = result11->getNext();
+    ASSERT_EQ(tuple11b->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_EQ(tuple11b->getValue(1)->getValue<int64_t>(), 1);
+
+    auto q12 = "MATCH (u:opt_multi_user)-[:opt_multi]->(v) RETURN count(DISTINCT u.id);";
+    auto plan12 = getRoot(q12);
+    ASSERT_TRUE(hasOperatorType(plan12->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto result12 = conn->query(q12);
+    ASSERT_TRUE(result12->isSuccess());
+    ASSERT_EQ(result12->getNext()->getValue(0)->getValue<int64_t>(), 2);
 }
 
 } // namespace testing

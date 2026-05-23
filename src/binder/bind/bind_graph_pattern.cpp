@@ -119,7 +119,7 @@ std::shared_ptr<Expression> Binder::createPath(const std::string& pathName,
 
 static std::vector<std::string> getPropertyNames(const std::vector<TableCatalogEntry*>& entries) {
     std::vector<std::string> result;
-    std::unordered_set<std::string> propertyNamesSet;
+    case_insensitve_set_t propertyNamesSet;
     for (auto& entry : entries) {
         for (auto& property : entry->getProperties()) {
             if (propertyNamesSet.contains(property.getName())) {

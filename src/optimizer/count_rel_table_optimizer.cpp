@@ -1,14 +1,20 @@
 #include "optimizer/count_rel_table_optimizer.h"
 
 #include "binder/expression/aggregate_function_expression.h"
+#include "binder/expression/expression_util.h"
 #include "binder/expression/node_expression.h"
+#include "binder/expression/property_expression.h"
+#include "binder/expression/rel_expression.h"
 #include "catalog/catalog_entry/node_table_id_pair.h"
+#include "function/aggregate/count.h"
 #include "function/aggregate/count_star.h"
 #include "main/client_context.h"
 #include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/logical_aggregate.h"
+#include "planner/operator/logical_order_by.h"
 #include "planner/operator/logical_projection.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
+#include "planner/operator/scan/logical_rel_degree_table.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 
 using namespace lbug::common;
@@ -34,7 +40,7 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitOperator(
     return result;
 }
 
-bool CountRelTableOptimizer::isSimpleCountStar(LogicalOperator* op) const {
+bool CountRelTableOptimizer::isSimpleCount(LogicalOperator* op) const {
     if (op->getOperatorType() != LogicalOperatorType::AGGREGATE) {
         return false;
     }
@@ -51,17 +57,17 @@ bool CountRelTableOptimizer::isSimpleCountStar(LogicalOperator* op) const {
         return false;
     }
 
-    // Must be COUNT_STAR
     auto& aggExpr = aggregates[0];
     if (aggExpr->expressionType != ExpressionType::AGGREGATE_FUNCTION) {
         return false;
     }
     auto& aggFuncExpr = aggExpr->constCast<AggregateFunctionExpression>();
-    if (aggFuncExpr.getFunction().name != function::CountStarFunction::name) {
+    const auto& functionName = aggFuncExpr.getFunction().name;
+    if (functionName != function::CountStarFunction::name &&
+        functionName != function::CountFunction::name) {
         return false;
     }
 
-    // COUNT_STAR should not be DISTINCT (conceptually it doesn't make sense)
     if (aggFuncExpr.isDistinct()) {
         return false;
     }
@@ -69,31 +75,111 @@ bool CountRelTableOptimizer::isSimpleCountStar(LogicalOperator* op) const {
     return true;
 }
 
+bool CountRelTableOptimizer::isCountStar(LogicalOperator* op) const {
+    auto& aggregate = op->constCast<LogicalAggregate>();
+    auto& aggFuncExpr = aggregate.getAggregates()[0]->constCast<AggregateFunctionExpression>();
+    return aggFuncExpr.getFunction().name == function::CountStarFunction::name;
+}
+
+bool CountRelTableOptimizer::isRelIDExpression(const std::shared_ptr<Expression>& expression,
+    const RelExpression& rel) const {
+    if (expression->expressionType != ExpressionType::PROPERTY) {
+        return false;
+    }
+    auto& property = expression->constCast<PropertyExpression>();
+    return property.isInternalID() && *expression == *rel.getInternalID();
+}
+
+bool CountRelTableOptimizer::isCountRelID(LogicalOperator* op, const RelExpression& rel) const {
+    auto& aggregate = op->constCast<LogicalAggregate>();
+    auto& aggFuncExpr = aggregate.getAggregates()[0]->constCast<AggregateFunctionExpression>();
+    if (aggFuncExpr.getFunction().name != function::CountFunction::name) {
+        return false;
+    }
+    if (aggFuncExpr.getNumChildren() != 1) {
+        return false;
+    }
+    return isRelIDExpression(aggFuncExpr.getChild(0), rel);
+}
+
+bool CountRelTableOptimizer::isDistinctCountNodeKey(LogicalOperator* op,
+    const std::shared_ptr<Expression>& nodeKey) const {
+    if (op->getOperatorType() != LogicalOperatorType::AGGREGATE) {
+        return false;
+    }
+    auto& aggregate = op->constCast<LogicalAggregate>();
+    if (aggregate.hasKeys() || aggregate.getAggregates().size() != 1) {
+        return false;
+    }
+    auto& aggFuncExpr = aggregate.getAggregates()[0]->constCast<AggregateFunctionExpression>();
+    if (aggFuncExpr.getFunction().name != function::CountFunction::name ||
+        !aggFuncExpr.isDistinct() || aggFuncExpr.getNumChildren() != 1) {
+        return false;
+    }
+    return *aggFuncExpr.getChild(0) == *nodeKey;
+}
+
+bool CountRelTableOptimizer::isCountNbr(LogicalOperator* op, const NodeExpression& nbr) const {
+    if (op->getOperatorType() != LogicalOperatorType::AGGREGATE) {
+        return false;
+    }
+    auto& aggregate = op->constCast<LogicalAggregate>();
+    if (aggregate.getAggregates().size() != 1) {
+        return false;
+    }
+    auto& aggFuncExpr = aggregate.getAggregates()[0]->constCast<AggregateFunctionExpression>();
+    if (aggFuncExpr.isDistinct()) {
+        return false;
+    }
+    if (aggFuncExpr.getFunction().name == function::CountStarFunction::name &&
+        aggFuncExpr.getNumChildren() == 0) {
+        return true;
+    }
+    if (aggFuncExpr.getFunction().name != function::CountFunction::name ||
+        aggFuncExpr.getNumChildren() != 1) {
+        return false;
+    }
+    return *aggFuncExpr.getChild(0) == *nbr.getInternalID();
+}
+
+static bool relTablesForExtend(const LogicalExtend& extend, std::vector<table_id_t>& relTableIDs,
+    RelGroupCatalogEntry*& relGroupEntry) {
+    auto rel = extend.getRel();
+    if (extend.getDirection() != ExtendDirection::FWD || rel->getNumEntries() != 1) {
+        return false;
+    }
+    DASSERT(rel->getNumEntries() == 1);
+    relGroupEntry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
+    auto boundNodeTableIDs = extend.getBoundNode()->getTableIDsSet();
+    auto nbrNodeTableIDs = extend.getNbrNode()->getTableIDsSet();
+    for (auto& info : relGroupEntry->getRelEntryInfos()) {
+        bool matches = extend.extendFromSourceNode() ?
+                           boundNodeTableIDs.contains(info.nodePair.srcTableID) &&
+                               nbrNodeTableIDs.contains(info.nodePair.dstTableID) :
+                           boundNodeTableIDs.contains(info.nodePair.dstTableID) &&
+                               nbrNodeTableIDs.contains(info.nodePair.srcTableID);
+        if (matches) {
+            relTableIDs.push_back(info.oid);
+        }
+    }
+    return !relTableIDs.empty();
+}
+
 bool CountRelTableOptimizer::canOptimize(LogicalOperator* aggregate) const {
     // Pattern we're looking for:
-    // AGGREGATE (COUNT_STAR, no keys)
-    //   -> PROJECTION (empty expressions or pass-through)
+    // AGGREGATE (COUNT_STAR or COUNT(rel._ID), no keys)
+    //   -> PROJECTION (empty expressions, pass-through, or rel._ID)
     //      -> EXTEND (single rel table, no properties scanned)
     //         -> SCAN_NODE_TABLE (no properties scanned)
     //
     // Note: The projection between aggregate and extend might be empty or
-    // just projecting the count expression.
+    // just projecting the COUNT(rel) input.
 
     auto* current = aggregate->getChild(0).get();
 
-    // Skip any projections (they should be empty or just for count)
+    std::vector<LogicalProjection*> projections;
     while (current->getOperatorType() == LogicalOperatorType::PROJECTION) {
-        auto& proj = current->constCast<LogicalProjection>();
-        // Empty projection is okay, it's just a passthrough
-        if (!proj.getExpressionsToProject().empty()) {
-            // If projection has expressions, they should all be aggregate expressions
-            // (which means they're just passing through the count)
-            for (auto& expr : proj.getExpressionsToProject()) {
-                if (expr->expressionType != ExpressionType::AGGREGATE_FUNCTION) {
-                    return false;
-                }
-            }
-        }
+        projections.push_back(current->ptrCast<LogicalProjection>());
         current = current->getChild(0).get();
     }
 
@@ -116,9 +202,25 @@ bool CountRelTableOptimizer::canOptimize(LogicalOperator* aggregate) const {
         return false;
     }
 
-    // Check if we're scanning any properties (we can only optimize when no properties needed)
-    if (!extend.getProperties().empty()) {
+    if (!isCountStar(aggregate) && !isCountRelID(aggregate, *rel)) {
         return false;
+    }
+
+    // Check if we're scanning any properties. COUNT(rel) needs only rel._ID; other rel properties
+    // would make the relationship variable observable beyond simple cardinality.
+    for (auto& property : extend.getProperties()) {
+        if (!isRelIDExpression(property, *rel)) {
+            return false;
+        }
+    }
+
+    for (auto* projection : projections) {
+        for (auto& expression : projection->getExpressionsToProject()) {
+            if (expression->expressionType != ExpressionType::AGGREGATE_FUNCTION &&
+                !isRelIDExpression(expression, *rel)) {
+                return false;
+            }
+        }
     }
 
     // The child of extend should be SCAN_NODE_TABLE
@@ -138,7 +240,10 @@ bool CountRelTableOptimizer::canOptimize(LogicalOperator* aggregate) const {
 
 std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
     std::shared_ptr<LogicalOperator> op) {
-    if (!isSimpleCountStar(op.get())) {
+    if (auto rewritten = tryRewriteActiveBoundCount(op); rewritten != op) {
+        return rewritten;
+    }
+    if (!isSimpleCount(op.get())) {
         return op;
     }
 
@@ -211,6 +316,115 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
     countRelTable->computeFlatSchema();
 
     return countRelTable;
+}
+
+std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteActiveBoundCount(
+    std::shared_ptr<LogicalOperator> op) {
+    auto* current = op->getChild(0).get();
+    while (current->getOperatorType() == LogicalOperatorType::PROJECTION) {
+        current = current->getChild(0).get();
+    }
+    if (current->getOperatorType() != LogicalOperatorType::EXTEND) {
+        return op;
+    }
+    auto& extend = current->constCast<LogicalExtend>();
+    auto boundNode = extend.getBoundNode();
+    if (boundNode->isMultiLabeled()) {
+        return op;
+    }
+    auto boundKey = boundNode->getPrimaryKey(boundNode->getTableIDs()[0]);
+    if (!boundKey || !isDistinctCountNodeKey(op.get(), boundKey)) {
+        return op;
+    }
+    if (!extend.getProperties().empty()) {
+        return op;
+    }
+    auto* scan = current->getChild(0).get();
+    if (scan->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE) {
+        return op;
+    }
+    auto& scanNode = scan->constCast<LogicalScanNodeTable>();
+    for (auto& property : scanNode.getProperties()) {
+        if (!(*property == *boundKey)) {
+            return op;
+        }
+    }
+    std::vector<table_id_t> relTableIDs;
+    RelGroupCatalogEntry* relGroupEntry = nullptr;
+    if (!relTablesForExtend(extend, relTableIDs, relGroupEntry)) {
+        return op;
+    }
+    auto countExpr = op->constCast<LogicalAggregate>().getAggregates()[0];
+    auto result =
+        std::make_shared<LogicalRelDegreeTable>(relGroupEntry, std::move(relTableIDs), boundNode,
+            extend.getDirection(), RelDegreeTableMode::ACTIVE_BOUND_COUNT, boundKey, countExpr, 1);
+    result->computeFlatSchema();
+    return result;
+}
+
+std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitOrderByReplace(
+    std::shared_ptr<LogicalOperator> op) {
+    return tryRewriteDegreeTopK(op);
+}
+
+std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteDegreeTopK(
+    std::shared_ptr<LogicalOperator> op) {
+    auto& orderBy = op->constCast<LogicalOrderBy>();
+    if (!orderBy.hasLimitNum() || orderBy.hasSkipNum() ||
+        !ExpressionUtil::canEvaluateAsLiteral(*orderBy.getLimitNum()) ||
+        orderBy.getExpressionsToOrderBy().size() != 1 || orderBy.getIsAscOrders().size() != 1 ||
+        orderBy.getIsAscOrders()[0]) {
+        return op;
+    }
+    const auto limit = ExpressionUtil::evaluateAsSkipLimit(*orderBy.getLimitNum());
+    auto* current = op->getChild(0).get();
+    while (current->getOperatorType() == LogicalOperatorType::PROJECTION) {
+        current = current->getChild(0).get();
+    }
+    if (current->getOperatorType() != LogicalOperatorType::AGGREGATE) {
+        return op;
+    }
+    auto& aggregate = current->constCast<LogicalAggregate>();
+    if (aggregate.getKeys().size() != 1 || aggregate.getAggregates().size() != 1 ||
+        aggregate.getDependentKeys().size() != 0 ||
+        !(*orderBy.getExpressionsToOrderBy()[0] == *aggregate.getAggregates()[0])) {
+        return op;
+    }
+    auto nodeKey = aggregate.getKeys()[0];
+    auto* aggregateChild = current->getChild(0).get();
+    while (aggregateChild->getOperatorType() == LogicalOperatorType::PROJECTION) {
+        aggregateChild = aggregateChild->getChild(0).get();
+    }
+    if (aggregateChild->getOperatorType() != LogicalOperatorType::EXTEND) {
+        return op;
+    }
+    auto& extend = aggregateChild->constCast<LogicalExtend>();
+    auto boundNode = extend.getBoundNode();
+    if (boundNode->isMultiLabeled() ||
+        !(*nodeKey == *boundNode->getPrimaryKey(boundNode->getTableIDs()[0])) ||
+        !isCountNbr(current, *extend.getNbrNode()) || !extend.getProperties().empty()) {
+        return op;
+    }
+    auto* scan = aggregateChild->getChild(0).get();
+    if (scan->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE) {
+        return op;
+    }
+    auto& scanNode = scan->constCast<LogicalScanNodeTable>();
+    for (auto& property : scanNode.getProperties()) {
+        if (!(*property == *nodeKey)) {
+            return op;
+        }
+    }
+    std::vector<table_id_t> relTableIDs;
+    RelGroupCatalogEntry* relGroupEntry = nullptr;
+    if (!relTablesForExtend(extend, relTableIDs, relGroupEntry)) {
+        return op;
+    }
+    auto result = std::make_shared<LogicalRelDegreeTable>(relGroupEntry, std::move(relTableIDs),
+        boundNode, extend.getDirection(), RelDegreeTableMode::TOP_K_DEGREES, nodeKey,
+        aggregate.getAggregates()[0], limit);
+    result->computeFlatSchema();
+    return result;
 }
 
 } // namespace optimizer
