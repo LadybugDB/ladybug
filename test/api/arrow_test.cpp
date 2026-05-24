@@ -139,6 +139,7 @@ TEST_F(ArrowTest, queryAsArrowDirectCSRRowIDProjection) {
             tuple->getValue(1)->getValue<int64_t>(), tuple->getValue(2)->getValue<int64_t>());
     }
 
+    conn->setMaxNumThreadForExec(4);
     auto result = conn->queryAsArrow(query, 2);
     auto* arrowResult = dynamic_cast<ArrowQueryResult*>(result.get());
     ASSERT_NE(arrowResult, nullptr);
@@ -161,6 +162,15 @@ TEST_F(ArrowTest, queryAsArrowDirectCSRRowIDProjection) {
         }
     }
     ASSERT_EQ(reconstructed, expected);
+}
+
+TEST_F(ArrowTest, queryAsArrowDirectCSRRowIDProjectionKeepsCSRMetadataWithFourThreads) {
+    auto query = "MATCH (a:person)-[b:knows]->(c:person) RETURN a.rowid, b.rowid, c.rowid";
+    conn->setMaxNumThreadForExec(4);
+    auto result = conn->queryAsArrow(query, 8);
+    auto* arrowResult = dynamic_cast<ArrowQueryResult*>(result.get());
+    ASSERT_NE(arrowResult, nullptr);
+    ASSERT_TRUE(arrowResult->hasCSRMetadata());
 }
 
 TEST_F(ArrowTest, queryAsArrowTracksCSRMetadataWithoutRelIDs) {

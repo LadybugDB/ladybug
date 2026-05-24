@@ -1,6 +1,8 @@
 #include "processor/operator/arrow_result_collector.h"
 
+#include <algorithm>
 #include <array>
+#include <tuple>
 
 #include "common/arrow/arrow_row_batch.h"
 #include "common/exception/runtime.h"
@@ -115,6 +117,66 @@ static void updateDirectCSRMetadata(const CSRTrackingInfo& info, const std::vect
     }
 }
 
+static std::optional<main::ArrowQueryResult::CSRMetadata> mergeCSRMetadata(
+    const main::ArrowQueryResult::CSRMetadata& left,
+    const main::ArrowQueryResult::CSRMetadata& right) {
+    if (left.hasEdgeIDs != right.hasEdgeIDs) {
+        return std::nullopt;
+    }
+    struct CSREntry {
+        int64_t src;
+        int64_t dst;
+        int64_t edge;
+    };
+    std::vector<CSREntry> entries;
+    auto appendEntries = [&](const main::ArrowQueryResult::CSRMetadata& metadata) {
+        if (metadata.hasEdgeIDs && metadata.edgeIDs.size() != metadata.indices.size()) {
+            return false;
+        }
+        if (metadata.indptr.empty()) {
+            return true;
+        }
+        for (auto src = 0u; src + 1 < metadata.indptr.size(); ++src) {
+            const auto begin = metadata.indptr[src];
+            const auto end = metadata.indptr[src + 1];
+            if (begin < 0 || end < begin || static_cast<uint64_t>(end) > metadata.indices.size()) {
+                return false;
+            }
+            for (auto idx = begin; idx < end; ++idx) {
+                const auto idxAsOffset = static_cast<uint64_t>(idx);
+                const auto edge = metadata.hasEdgeIDs ? metadata.edgeIDs[idxAsOffset] : -1;
+                entries.push_back({static_cast<int64_t>(src), metadata.indices[idxAsOffset], edge});
+            }
+        }
+        return true;
+    };
+    if (!appendEntries(left) || !appendEntries(right)) {
+        return std::nullopt;
+    }
+    std::sort(entries.begin(), entries.end(), [](const CSREntry& a, const CSREntry& b) {
+        return std::tie(a.src, a.edge, a.dst) < std::tie(b.src, b.edge, b.dst);
+    });
+    main::ArrowQueryResult::CSRMetadata merged;
+    merged.hasEdgeIDs = left.hasEdgeIDs;
+    merged.indptr.push_back(0);
+    int64_t nextSourceRowID = 0;
+    for (const auto& entry : entries) {
+        if (entry.src < 0 || entry.dst < 0 || (merged.hasEdgeIDs && entry.edge < 0)) {
+            return std::nullopt;
+        }
+        while (nextSourceRowID < entry.src) {
+            merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
+            nextSourceRowID++;
+        }
+        merged.indices.push_back(entry.dst);
+        if (merged.hasEdgeIDs) {
+            merged.edgeIDs.push_back(entry.edge);
+        }
+    }
+    merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
+    return merged;
+}
+
 } // namespace
 
 static void updateCSRMetadata(const CSRTrackingInfo& info, FlatTuple& tuple,
@@ -198,10 +260,7 @@ void ArrowResultCollectorSharedState::merge(const std::vector<ArrowArray>& local
     if (!csrMetadata.has_value() && localCSRMetadata.has_value()) {
         csrMetadata = localCSRMetadata;
     } else if (csrMetadata.has_value() && localCSRMetadata.has_value()) {
-        // Multiple local collectors can merge in nondeterministic order, which makes the source
-        // row grouping required for CSR invalid. Fall back to the non-CSR Arrow result in that
-        // case.
-        csrMetadata.reset();
+        csrMetadata = mergeCSRMetadata(*csrMetadata, *localCSRMetadata);
     }
 }
 
