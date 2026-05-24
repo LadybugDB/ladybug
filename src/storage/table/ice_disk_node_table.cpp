@@ -266,45 +266,9 @@ bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
         iceDiskScanState.dataRead = true;
     }
 
-    // Now distribute one row to this scan state
     if (iceDiskScanState.nextRowToDistribute >= iceDiskScanState.totalRows) {
         iceDiskScanState.scanCompleted = true;
-        return false; // No more rows to distribute
-    }
-
-    size_t rowIndex = iceDiskScanState.nextRowToDistribute++;
-
-    // Copy one row to output vectors
-    // Defensive checks: ensure valid row index and handle empty data gracefully
-    if (rowIndex >= iceDiskScanState.allData.size()) {
-        iceDiskScanState.scanCompleted = true;
         return false;
-    }
-
-    auto numColumns =
-        std::min(scanState.outputVectors.size(), iceDiskScanState.allData[rowIndex].size());
-    for (size_t col = 0; col < numColumns; ++col) {
-        // Defensive check: ensure output vector exists
-        if (col >= scanState.outputVectors.size() || !scanState.outputVectors[col]) {
-            continue;
-        }
-
-        auto& dstVector = *scanState.outputVectors[col];
-
-        // Defensive check: ensure value exists for this column
-        if (col >= iceDiskScanState.allData[rowIndex].size() ||
-            !iceDiskScanState.allData[rowIndex][col]) {
-            dstVector.setNull(0, true);
-            continue;
-        }
-
-        auto& value = *iceDiskScanState.allData[rowIndex][col];
-
-        if (value.isNull()) {
-            dstVector.setNull(0, true);
-        } else {
-            dstVector.copyFromValue(0, value);
-        }
     }
 
     // calc current global row index based on assigned row group and local row index within that
@@ -319,11 +283,47 @@ bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
 
     // Set node ID for this row
     auto tableID = this->getTableID();
-    auto& nodeID = scanState.nodeIDVector->getValue<nodeID_t>(0);
-    nodeID.tableID = tableID;
-    nodeID.offset = startOffset + rowIndex; // Use the actual row index from parquet
+    auto rowsToDistribute = std::min<uint64_t>(DEFAULT_VECTOR_CAPACITY,
+        iceDiskScanState.totalRows - iceDiskScanState.nextRowToDistribute);
+    uint64_t rowsDistributed = 0;
+    for (; rowsDistributed < rowsToDistribute; ++rowsDistributed) {
+        const auto rowIndex = iceDiskScanState.nextRowToDistribute++;
+        if (rowIndex >= iceDiskScanState.allData.size()) {
+            iceDiskScanState.scanCompleted = true;
+            break;
+        }
 
-    scanState.outState->getSelVectorUnsafe().setSelSize(1); // Return exactly one row
+        auto numColumns =
+            std::min(scanState.outputVectors.size(), iceDiskScanState.allData[rowIndex].size());
+        for (size_t col = 0; col < numColumns; ++col) {
+            if (col >= scanState.outputVectors.size() || !scanState.outputVectors[col]) {
+                continue;
+            }
+
+            auto& dstVector = *scanState.outputVectors[col];
+            if (col >= iceDiskScanState.allData[rowIndex].size() ||
+                !iceDiskScanState.allData[rowIndex][col]) {
+                dstVector.setNull(rowsDistributed, true);
+                continue;
+            }
+
+            auto& value = *iceDiskScanState.allData[rowIndex][col];
+            if (value.isNull()) {
+                dstVector.setNull(rowsDistributed, true);
+            } else {
+                dstVector.copyFromValue(rowsDistributed, value);
+            }
+        }
+
+        auto& nodeID = scanState.nodeIDVector->getValue<nodeID_t>(rowsDistributed);
+        nodeID.tableID = tableID;
+        nodeID.offset = startOffset + rowIndex;
+    }
+
+    if (rowsDistributed == 0) {
+        return false;
+    }
+    scanState.outState->getSelVectorUnsafe().setToUnfiltered(rowsDistributed);
     return true;
 }
 

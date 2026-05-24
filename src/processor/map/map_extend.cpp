@@ -1,6 +1,7 @@
 #include "binder/binder.h"
 #include "binder/expression/property_expression.h"
 #include "binder/expression_binder.h"
+#include "catalog/catalog.h"
 #include "common/enums/extend_direction_util.h"
 #include "main/client_context.h"
 #include "planner/operator/extend/logical_extend.h"
@@ -9,6 +10,7 @@
 #include "processor/operator/scan/scan_rel_table.h"
 #include "processor/plan_mapper.h"
 #include "storage/storage_manager.h"
+#include "storage/table/ice_disk_rel_table.h"
 #include "storage/table/node_table.h"
 
 using namespace lbug::binder;
@@ -126,6 +128,39 @@ static bool scanSingleRelTable(const RelExpression& rel, const NodeExpression& b
            extendDirection != ExtendDirection::BOTH;
 }
 
+static ScanNodeTableInfo getNodeTableScanInfo(const LogicalScanNodeTable& scan,
+    storage::NodeTable* table, const catalog::TableCatalogEntry* tableEntry,
+    main::ClientContext* clientContext) {
+    auto tableInfo = ScanNodeTableInfo(table, copyVector(scan.getPropertyPredicates()));
+    auto binder = Binder(clientContext);
+    auto expressionBinder = ExpressionBinder(&binder, clientContext);
+    for (auto& expr : scan.getProperties()) {
+        auto& property = expr->constCast<PropertyExpression>();
+        if (property.hasProperty(tableEntry->getTableID())) {
+            auto propertyName = property.getPropertyName();
+            if (!tableEntry->containsProperty(propertyName) &&
+                tableEntry->containsProperty("data")) {
+                auto columnCaster = ColumnCaster(LogicalType::JSON());
+                columnCaster.setJSONExtract(propertyName);
+                tableInfo.addColumnInfo(tableEntry->getColumnID("data"), std::move(columnCaster));
+                continue;
+            }
+            auto& columnType = tableEntry->getProperty(propertyName).getType();
+            auto columnCaster = ColumnCaster(columnType.copy());
+            if (property.getDataType() != columnType) {
+                auto columnExpr = std::make_shared<PropertyExpression>(property);
+                columnExpr->dataType = columnType.copy();
+                columnCaster.setCastExpr(
+                    expressionBinder.forceCast(columnExpr, property.getDataType()));
+            }
+            tableInfo.addColumnInfo(tableEntry->getColumnID(propertyName), std::move(columnCaster));
+        } else {
+            tableInfo.addColumnInfo(INVALID_COLUMN_ID, ColumnCaster(LogicalType::ANY()));
+        }
+    }
+    return tableInfo;
+}
+
 std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* logicalOperator) {
     auto extend = logicalOperator->constPtrCast<LogicalExtend>();
     auto outFSchema = extend->getSchema();
@@ -162,22 +197,51 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
         if (logicalOperator->getChild(0)->getOperatorType() ==
             LogicalOperatorType::SCAN_NODE_TABLE) {
             auto* scanNode = logicalOperator->getChild(0)->ptrCast<LogicalScanNodeTable>();
-            if (scanNode->getScanType() == LogicalScanNodeTableType::SCAN &&
-                scanNode->getProperties().empty()) {
+            if (scanNode->getScanType() == LogicalScanNodeTableType::SCAN) {
                 std::vector<NodeTable*> sourceNodeTables;
+                std::vector<ScanNodeTableInfo> sourceNodeTableInfos;
+                std::vector<std::shared_ptr<ScanNodeTableSharedState>> sourceNodeSharedStates;
                 auto expectedBoundTableID = relDataDirection == RelDataDirection::FWD ?
                                                 relTable->getFromNodeTableID() :
                                                 relTable->getToNodeTableID();
+                auto catalog = catalog::Catalog::Get(*clientContext);
+                auto transaction = transaction::Transaction::Get(*clientContext);
                 for (auto tableID : scanNode->getTableIDs()) {
                     if (tableID == expectedBoundTableID) {
-                        sourceNodeTables.push_back(
-                            storageManager->getTable(tableID)->ptrCast<NodeTable>());
+                        auto table = storageManager->getTable(tableID)->ptrCast<NodeTable>();
+                        sourceNodeTables.push_back(table);
+                        auto tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
+                        sourceNodeTableInfos.push_back(
+                            getNodeTableScanInfo(*scanNode, table, tableEntry, clientContext));
+                        auto semiMask =
+                            SemiMaskUtil::createMask(table->getNumTotalRows(transaction));
+                        sourceNodeSharedStates.push_back(
+                            std::make_shared<ScanNodeTableSharedState>(std::move(semiMask)));
                     }
                 }
-                // Only apply optimization if scan node is not already mapped (e.g., by a
-                // semi-masker)
+                if (!sourceNodeTables.empty() && !scanNode->getProperties().empty() &&
+                    dynamic_cast<IceDiskRelTable*>(relTable) != nullptr) {
+                    std::vector<DataPos> sourceOutVectorsPos;
+                    for (auto& expression : scanNode->getProperties()) {
+                        sourceOutVectorsPos.emplace_back(getDataPos(*expression, *inFSchema));
+                    }
+                    auto sourceNodeScanInfo =
+                        ScanOpInfo(inNodeIDPos, std::move(sourceOutVectorsPos));
+                    auto progressSharedState = std::make_shared<ScanNodeTableProgressSharedState>();
+                    return std::make_unique<ScanRelTable>(std::move(scanInfo),
+                        std::move(scanRelInfo), std::move(sourceNodeTableInfos),
+                        std::move(sourceNodeSharedStates), std::move(progressSharedState),
+                        std::move(sourceNodeScanInfo), getOperatorID(), printInfo->copy());
+                }
+                // Only apply the existing no-property optimization if scan node is not already
+                // mapped (e.g., by a semi-masker).
                 if (!sourceNodeTables.empty() &&
                     !logicalOpToPhysicalOpMap.contains(logicalOperator->getChild(0).get())) {
+                    if (!scanNode->getProperties().empty()) {
+                        return std::make_unique<ScanRelTable>(std::move(scanInfo),
+                            std::move(scanRelInfo), std::move(prevOperator), getOperatorID(),
+                            printInfo->copy());
+                    }
                     return std::make_unique<ScanRelTable>(std::move(scanInfo),
                         std::move(scanRelInfo), std::move(sourceNodeTables), getOperatorID(),
                         printInfo->copy());

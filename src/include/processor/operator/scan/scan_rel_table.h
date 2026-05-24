@@ -2,6 +2,7 @@
 
 #include "binder/expression/rel_expression.h"
 #include "common/enums/extend_direction.h"
+#include "processor/operator/scan/scan_node_table.h"
 #include "processor/operator/scan/scan_table.h"
 #include "storage/predicate/column_predicate.h"
 #include "storage/table/rel_table.h"
@@ -68,14 +69,26 @@ public:
         std::unique_ptr<PhysicalOperator> child, physical_op_id id,
         std::unique_ptr<OPPrintInfo> printInfo)
         : ScanTable{type_, std::move(info), std::move(child), id, std::move(printInfo)},
-          tableInfo{std::move(tableInfo)} {}
+          tableInfo{std::move(tableInfo)}, sourceNodeScanInfo{DataPos::getInvalidPos(), {}} {}
 
     ScanRelTable(ScanOpInfo info, ScanRelTableInfo tableInfo,
         std::vector<storage::NodeTable*> sourceNodeTables, physical_op_id id,
         std::unique_ptr<OPPrintInfo> printInfo)
         : ScanTable{type_, std::move(info), id, std::move(printInfo)},
           tableInfo{std::move(tableInfo)}, sourceNodeTables{std::move(sourceNodeTables)},
-          sourceMode{true} {}
+          sourceNodeScanInfo{DataPos::getInvalidPos(), {}}, sourceMode{true} {}
+
+    ScanRelTable(ScanOpInfo info, ScanRelTableInfo tableInfo,
+        std::vector<ScanNodeTableInfo> sourceNodeTableInfos,
+        std::vector<std::shared_ptr<ScanNodeTableSharedState>> sourceNodeSharedStates,
+        std::shared_ptr<ScanNodeTableProgressSharedState> sourceNodeProgressSharedState,
+        ScanOpInfo sourceNodeScanInfo, physical_op_id id, std::unique_ptr<OPPrintInfo> printInfo)
+        : ScanTable{type_, std::move(info), id, std::move(printInfo)},
+          tableInfo{std::move(tableInfo)}, sourceNodeTableInfos{std::move(sourceNodeTableInfos)},
+          sourceNodeSharedStates{std::move(sourceNodeSharedStates)},
+          sourceNodeProgressSharedState{std::move(sourceNodeProgressSharedState)},
+          sourceNodeScanInfo{std::move(sourceNodeScanInfo)}, sourceMode{true},
+          sourceNodeScanMode{true} {}
 
     bool isSource() const override { return sourceMode; }
     bool isParallel() const override { return !sourceMode; }
@@ -86,6 +99,12 @@ public:
 
     std::unique_ptr<PhysicalOperator> copy() override {
         if (sourceMode) {
+            if (sourceNodeScanMode) {
+                return std::make_unique<ScanRelTable>(opInfo.copy(), tableInfo.copy(),
+                    copyVector(sourceNodeTableInfos), sourceNodeSharedStates,
+                    sourceNodeProgressSharedState, sourceNodeScanInfo.copy(), id,
+                    printInfo->copy());
+            }
             return std::make_unique<ScanRelTable>(opInfo.copy(), tableInfo.copy(), sourceNodeTables,
                 id, printInfo->copy());
         }
@@ -94,13 +113,21 @@ public:
     }
 
 protected:
+    void initGlobalStateInternal(ExecutionContext* context) override;
     bool fetchNextBoundNodeBatch(transaction::Transaction* transaction);
 
 protected:
     ScanRelTableInfo tableInfo;
     std::unique_ptr<storage::RelTableScanState> scanState;
     std::vector<storage::NodeTable*> sourceNodeTables;
+    std::vector<ScanNodeTableInfo> sourceNodeTableInfos;
+    std::vector<std::shared_ptr<ScanNodeTableSharedState>> sourceNodeSharedStates;
+    std::shared_ptr<ScanNodeTableProgressSharedState> sourceNodeProgressSharedState;
+    ScanOpInfo sourceNodeScanInfo;
+    std::unique_ptr<storage::TableScanState> sourceNodeScanState;
+    std::vector<common::ValueVector*> sourceNodeOutVectors;
     bool sourceMode = false;
+    bool sourceNodeScanMode = false;
     common::idx_t currentSourceTableIdx = 0;
     common::offset_t nextSourceOffset = 0;
     common::row_idx_t currentSourceTableNumRows = 0;
