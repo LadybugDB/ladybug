@@ -12,6 +12,8 @@
 
 -LOG IceDiskRemoteURIMissingParquet
 -STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY) WITH (storage = 'https://example.com/path', format = 'icebug-disk')
+---- ok
+-STATEMENT MATCH (n:t) RETURN *
 ---- error(regex)
 .*[Nn]o such file.*|.*[Cc]annot open.*|.*nodes_t\.parquet.*
 
@@ -19,6 +21,8 @@
 
 -LOG IceDiskS3URIMissingParquet
 -STATEMENT CREATE NODE TABLE t(id INT64 PRIMARY KEY) WITH (storage = 's3://my-bucket/data', format = 'icebug-disk')
+---- ok
+-STATEMENT MATCH (n:t) RETURN *
 ---- error(regex)
 .*[Nn]o such file.*|.*[Cc]annot open.*|.*nodes_t\.parquet.*
 
