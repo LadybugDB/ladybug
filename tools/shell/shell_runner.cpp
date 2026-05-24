@@ -8,6 +8,7 @@
 #include "common/string_utils.h"
 #include "common/task_system/progress_bar.h"
 #include "embedded_shell.h"
+#include "extension/extension_manager.h"
 #include "linenoise.h"
 #include "main/db_config.h"
 #include "printer/printer_factory.h"
@@ -80,6 +81,34 @@ void processRunCommands(EmbeddedShell& shell, const std::shared_ptr<Connection>&
                 shell.printErrorMessage(line, *queryResult);
             }
         }
+    }
+}
+
+bool isHttpfsLoaded(const std::shared_ptr<Connection>& conn) {
+    const auto& loadedExtensions =
+        lbug::extension::ExtensionManager::Get(*conn->getClientContext())->getLoadedExtensions();
+    return std::any_of(loadedExtensions.begin(), loadedExtensions.end(),
+        [](const auto& extension) { return extension.getExtensionName() == "HTTPFS"; });
+}
+
+void installAndLoadHttpfsForRemoteInit(const std::shared_ptr<Connection>& conn,
+    const std::string& initFile) {
+    if (LocalFileSystem::isLocalPath(initFile) || isHttpfsLoaded(conn)) {
+        return;
+    }
+    try {
+        auto result = conn->query("INSTALL httpfs; LOAD EXTENSION httpfs;");
+        while (result != nullptr) {
+            if (!result->isSuccess()) {
+                std::cerr << "Warning: failed to auto-load httpfs for remote init file: "
+                          << result->getErrorMessage() << '\n';
+                return;
+            }
+            result = result->hasNextQueryResult() ? result->moveNextResult() : nullptr;
+        }
+    } catch (Exception& e) {
+        std::cerr << "Warning: failed to auto-load httpfs for remote init file: " << e.what()
+                  << '\n';
     }
 }
 
@@ -224,6 +253,7 @@ int main(int argc, char* argv[]) {
     std::string initFile = ".lbugrc";
     if (init) {
         initFile = args::get(init);
+        installAndLoadHttpfsForRemoteInit(conn, initFile);
         addInitFileDirToSearchPath(conn, initFile);
     }
     try {
