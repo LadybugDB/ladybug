@@ -76,7 +76,11 @@ elseif(NOT WIN32)
         set_target_properties(lbug_shared PROPERTIES OUTPUT_NAME lbug)
 endif()
 
-install(TARGETS lbug lbug_shared)
+if(MSVC)
+        install(TARGETS lbug_shared)
+else()
+        install(TARGETS lbug lbug_shared)
+endif()
 
 if(${BUILD_SINGLE_FILE_HEADER})
         # Create a command to generate lbug.hpp, and then create a target that is
