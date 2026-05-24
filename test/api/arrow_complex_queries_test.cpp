@@ -17,7 +17,6 @@ constexpr int32_t DATE_2020_01_01 = 18262;
 constexpr int32_t DATE_2021_01_01 = 18628;
 constexpr int32_t DATE_2022_01_01 = 18993;
 constexpr int32_t DATE_2023_01_01 = 19358;
-constexpr int32_t DATE_2024_01_01 = 19723;
 
 struct UserRow {
     int64_t id;
