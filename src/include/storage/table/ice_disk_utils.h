@@ -10,6 +10,7 @@
 
 #include "common/constants.h"
 #include "common/exception/runtime.h"
+#include "common/file_system/local_file_system.h"
 #include "common/file_system/virtual_file_system.h"
 #include "processor/operator/persistent/reader/parquet/parquet_reader.h"
 #include "storage/table/ice_disk_constants.h"
@@ -62,6 +63,9 @@ public:
     // Validates that the parquet file at `path` carries the expected icebug_disk_version metadata.
     // Note: path is already resolved by VFS
     static void checkVersionCompatibility(main::ClientContext* context, const std::string& path) {
+        if (!common::LocalFileSystem::isLocalPath(path)) {
+            return;
+        }
         if (!context) {
             throw common::RuntimeException(
                 path + ": failed to read parquet metadata for version check");
