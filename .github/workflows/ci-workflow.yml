@@ -183,7 +183,15 @@ jobs:
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
-        run: make relwithdebinfo
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # RelWithDebInfo embeds debug info in MSVC object files, causing the bundled
+            # static lbug.lib archive to exceed the 4GB COFF limit in this job.
+            make release
+          else
+            make relwithdebinfo
+          fi
 
       - name: Generate datasets
         if: matrix.platform != 'windows'
@@ -207,7 +215,10 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
-            make test
+            # Keep Windows tests on the same Release build to avoid rebuilding the
+            # oversized RelWithDebInfo static archive.
+            make test-build-release
+            ctest --test-dir build/release/test --output-on-failure -j "${TEST_JOBS}"
             exit
           fi
           uv venv
