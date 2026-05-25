@@ -165,7 +165,8 @@ TEST_F(ArrowTest, queryAsArrowDirectCSRRowIDProjection) {
 }
 
 TEST_F(ArrowTest, queryAsArrowDirectCSRRowIDProjectionKeepsCSRMetadataWithFourThreads) {
-    auto query = "MATCH (a:person)-[b:knows]->(c:person) RETURN a.rowid, b.rowid, c.rowid";
+    auto query = "MATCH (a:person)-[b:knows]->(c:person) RETURN a.rowid, b.rowid, c.rowid "
+                 "ORDER BY a.rowid, b.rowid, c.rowid";
     conn->setMaxNumThreadForExec(4);
     auto result = conn->queryAsArrow(query, 8);
     auto* arrowResult = dynamic_cast<ArrowQueryResult*>(result.get());
