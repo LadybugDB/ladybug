@@ -6,11 +6,9 @@ add_library(lbug_shell_printer
         OBJECT
         json_printer.cpp
         printer_factory.cpp
+        ${PROJECT_SOURCE_DIR}/src/common/types/json_type.cpp
 )
-if(NOT MSVC)
-    target_sources(lbug_shell_printer PRIVATE ${PROJECT_SOURCE_DIR}/src/common/types/json_type.cpp)
-endif()
-if(WIN32 AND NOT MSVC)
+if(WIN32)
     target_compile_definitions(lbug_shell_printer PUBLIC LBUG_STATIC_DEFINE)
 endif()
 
