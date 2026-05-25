@@ -172,14 +172,15 @@ jobs:
           ccache --set-config=cache_dir=D:\c
           ccache --set-config=temporary_dir=D:\t
 
-      - name: Cache ccache directory (Windows)
+      - name: Restore ccache directory (Windows)
         if: matrix.platform == 'windows'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: D:\c
-          key: minimal-test-${{ runner.os }}-${{ github.ref }}
+          key: minimal-test-${{ runner.os }}-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            minimal-test-${{ runner.os }}-refs/heads/main
+            minimal-test-${{ runner.os }}-${{ github.ref }}-
+            minimal-test-${{ runner.os }}-refs/heads/main-
             minimal-test-${{ runner.os }}-
 
       - name: Enable long paths (Windows)
@@ -244,6 +245,13 @@ jobs:
           fi
           uv pip install pytest pexpect
           make shell-test test
+
+      - name: Save ccache directory (Windows)
+        if: always() && matrix.platform == 'windows'
+        uses: actions/cache/save@v4
+        with:
+          path: D:\c
+          key: minimal-test-${{ runner.os }}-${{ github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   minimal-linux-extension-test:
     name: minimal linux extension test
