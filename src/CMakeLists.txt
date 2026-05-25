@@ -23,12 +23,6 @@ add_subdirectory(extension)
 add_library(lbug STATIC ${ALL_OBJECT_FILES})
 add_library(lbug_shared SHARED ${ALL_OBJECT_FILES})
 
-if(MSVC)
-    # MSVC COFF archives cannot exceed 4GB. The bundled static lbug.lib can cross that
-    # limit in RelWithDebInfo builds, while Windows CI and tests consume lbug_shared.
-    set_target_properties(lbug PROPERTIES EXCLUDE_FROM_ALL TRUE)
-endif()
-
 set_target_properties(lbug_shared PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR}
