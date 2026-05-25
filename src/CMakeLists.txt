@@ -20,8 +20,10 @@ add_subdirectory(storage)
 add_subdirectory(transaction)
 add_subdirectory(extension)
 
-add_library(lbug STATIC ${ALL_OBJECT_FILES})
 add_library(lbug_shared SHARED ${ALL_OBJECT_FILES})
+if(BUILD_STATIC_LBUG)
+        add_library(lbug STATIC ${ALL_OBJECT_FILES})
+endif()
 
 set_target_properties(lbug_shared PROPERTIES
     VERSION ${PROJECT_VERSION}
@@ -31,33 +33,39 @@ if(WIN32)
     set_target_properties(lbug_shared PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()
 
-target_link_libraries(lbug PUBLIC lbug_link_deps)
 target_link_libraries(lbug_shared PUBLIC lbug_link_deps)
+if(TARGET lbug)
+        target_link_libraries(lbug PUBLIC lbug_link_deps)
+endif()
 
-set(LBUG_STATIC_ARCHIVE_PATHS)
-foreach(LIBRARY IN LISTS LBUG_STATIC_ARCHIVE_LIBRARIES)
-        list(APPEND LBUG_STATIC_ARCHIVE_PATHS "$<TARGET_FILE:${LIBRARY}>")
-endforeach()
-set(LBUG_STATIC_ARCHIVE_PATH_FILE "${CMAKE_CURRENT_BINARY_DIR}/lbug_static_archives_$<CONFIG>.txt")
-file(GENERATE
-        OUTPUT "${LBUG_STATIC_ARCHIVE_PATH_FILE}"
-        CONTENT "$<JOIN:${LBUG_STATIC_ARCHIVE_PATHS},\n>\n")
-add_custom_command(TARGET lbug POST_BUILD
-        COMMAND ${CMAKE_COMMAND}
-                "-DOUTPUT=$<TARGET_FILE:lbug>"
-                "-DMAIN_LIBRARY=$<TARGET_FILE:lbug>"
-                "-DSTATIC_LIBRARIES_FILE=${LBUG_STATIC_ARCHIVE_PATH_FILE}"
-                "-DAR_EXECUTABLE=${CMAKE_AR}"
-                "-DRANLIB_EXECUTABLE=${CMAKE_RANLIB}"
-                -P "${PROJECT_SOURCE_DIR}/cmake/BundleStaticLibrary.cmake"
-        VERBATIM)
+if(TARGET lbug)
+        set(LBUG_STATIC_ARCHIVE_PATHS)
+        foreach(LIBRARY IN LISTS LBUG_STATIC_ARCHIVE_LIBRARIES)
+                list(APPEND LBUG_STATIC_ARCHIVE_PATHS "$<TARGET_FILE:${LIBRARY}>")
+        endforeach()
+        set(LBUG_STATIC_ARCHIVE_PATH_FILE "${CMAKE_CURRENT_BINARY_DIR}/lbug_static_archives_$<CONFIG>.txt")
+        file(GENERATE
+                OUTPUT "${LBUG_STATIC_ARCHIVE_PATH_FILE}"
+                CONTENT "$<JOIN:${LBUG_STATIC_ARCHIVE_PATHS},\n>\n")
+        add_custom_command(TARGET lbug POST_BUILD
+                COMMAND ${CMAKE_COMMAND}
+                        "-DOUTPUT=$<TARGET_FILE:lbug>"
+                        "-DMAIN_LIBRARY=$<TARGET_FILE:lbug>"
+                        "-DSTATIC_LIBRARIES_FILE=${LBUG_STATIC_ARCHIVE_PATH_FILE}"
+                        "-DAR_EXECUTABLE=${CMAKE_AR}"
+                        "-DRANLIB_EXECUTABLE=${CMAKE_RANLIB}"
+                        -P "${PROJECT_SOURCE_DIR}/cmake/BundleStaticLibrary.cmake"
+                VERBATIM)
+endif()
 
 set(LBUG_INCLUDES $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include/c_api ${CMAKE_CURRENT_BINARY_DIR}/../src/include)
-target_include_directories(lbug PUBLIC ${LBUG_INCLUDES})
 target_include_directories(lbug_shared PUBLIC ${LBUG_INCLUDES})
+if(TARGET lbug)
+        target_include_directories(lbug PUBLIC ${LBUG_INCLUDES})
+endif()
 unset(LBUG_INCLUDES)
 
-if(WIN32)
+if(WIN32 AND TARGET lbug)
         # Anything linking against the static library must not use dllimport.
         target_compile_definitions(lbug INTERFACE LBUG_STATIC_DEFINE)
 endif()
@@ -70,7 +78,11 @@ elseif(NOT WIN32)
         set_target_properties(lbug_shared PROPERTIES OUTPUT_NAME lbug)
 endif()
 
-install(TARGETS lbug lbug_shared)
+if(TARGET lbug)
+        install(TARGETS lbug lbug_shared)
+else()
+        install(TARGETS lbug_shared)
+endif()
 
 if(${BUILD_SINGLE_FILE_HEADER})
         # Create a command to generate lbug.hpp, and then create a target that is

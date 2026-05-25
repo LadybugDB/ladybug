@@ -135,7 +135,7 @@ jobs:
       TEST_JOBS: 4
       NUM_THREADS: 4
       WERROR: ${{ matrix.platform == 'windows' && '0' || '1' }}
-      EXTRA_CMAKE_FLAGS: ${{ matrix.platform == 'windows' && '-DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded' || '' }}
+      EXTRA_CMAKE_FLAGS: ${{ matrix.platform == 'windows' && '-DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -DBUILD_STATIC_LBUG=FALSE' || '' }}
     steps:
       - uses: ilammy/msvc-dev-cmd@v1
         if: matrix.platform == 'windows'
@@ -172,6 +172,16 @@ jobs:
           ccache --set-config=cache_dir=D:\c
           ccache --set-config=temporary_dir=D:\t
 
+      - name: Cache ccache directory (Windows)
+        if: matrix.platform == 'windows'
+        uses: actions/cache@v4
+        with:
+          path: D:\c
+          key: minimal-test-${{ runner.os }}-${{ github.ref }}
+          restore-keys: |
+            minimal-test-${{ runner.os }}-refs/heads/main
+            minimal-test-${{ runner.os }}-
+
       - name: Enable long paths (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
@@ -186,11 +196,17 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
-            # RelWithDebInfo embeds debug info in MSVC object files, causing the bundled
-            # static lbug.lib archive to exceed the 4GB COFF limit in this job.
+            ccache -s
+          fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # The bundled static lbug.lib exceeds MSVC's 4GB COFF archive limit in this job.
+            # EXTRA_CMAKE_FLAGS disables that archive for Windows minimal CI only.
             make release
           else
             make relwithdebinfo
+          fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ccache -s
           fi
 
       - name: Generate datasets
@@ -215,8 +231,7 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
-            # Keep Windows tests on the same Release build to avoid rebuilding the
-            # oversized RelWithDebInfo static archive.
+            # Keep Windows tests on the same static-archive-free Release build.
             make test-build-release
             ctest --test-dir build/release/test --output-on-failure -j "${TEST_JOBS}"
             exit
