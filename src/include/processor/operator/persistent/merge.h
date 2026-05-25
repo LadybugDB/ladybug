@@ -12,19 +12,25 @@ struct MergeInfo {
     std::vector<std::unique_ptr<evaluator::ExpressionEvaluator>> keyEvaluators;
     FactorizedTableSchema tableSchema;
     common::executor_info executorInfo;
+    bool storeInsertedPatternIDs;
+    bool suppressDuplicateCreatedOutput;
     DataPos existenceMark;
 
     MergeInfo(std::vector<std::unique_ptr<evaluator::ExpressionEvaluator>> keyEvaluators,
         FactorizedTableSchema tableSchema, common::executor_info executorInfo,
-        DataPos existenceMark)
+        bool storeInsertedPatternIDs, bool suppressDuplicateCreatedOutput, DataPos existenceMark)
         : keyEvaluators{std::move(keyEvaluators)}, tableSchema{std::move(tableSchema)},
-          executorInfo{std::move(executorInfo)}, existenceMark{existenceMark} {}
+          executorInfo{std::move(executorInfo)}, storeInsertedPatternIDs{storeInsertedPatternIDs},
+          suppressDuplicateCreatedOutput{suppressDuplicateCreatedOutput},
+          existenceMark{existenceMark} {}
     EXPLICIT_COPY_DEFAULT_MOVE(MergeInfo);
 
 private:
     MergeInfo(const MergeInfo& other)
         : keyEvaluators{copyVector(other.keyEvaluators)}, tableSchema{other.tableSchema.copy()},
-          executorInfo{other.executorInfo}, existenceMark{other.existenceMark} {}
+          executorInfo{other.executorInfo}, storeInsertedPatternIDs{other.storeInsertedPatternIDs},
+          suppressDuplicateCreatedOutput{other.suppressDuplicateCreatedOutput},
+          existenceMark{other.existenceMark} {}
 };
 
 struct MergePrintInfo final : OPPrintInfo {
@@ -103,7 +109,7 @@ private:
 
     void executeOnNewPattern(PatternCreationInfo& info, ExecutionContext* context);
 
-    void executeNoMatch(ExecutionContext* context);
+    bool executeNoMatch(ExecutionContext* context);
 
 private:
     std::vector<NodeInsertExecutor> nodeInsertExecutors;

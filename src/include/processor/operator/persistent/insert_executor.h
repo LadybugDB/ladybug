@@ -42,6 +42,7 @@ struct NodeTableInsertInfo {
 
     common::ValueVector* pkVector;
     std::vector<common::ValueVector*> columnDataVectors;
+    std::vector<common::column_id_t> columnIDs;
 
     NodeTableInsertInfo(storage::NodeTable* table,
         evaluator::evaluator_vector_t columnDataEvaluators)
@@ -70,6 +71,7 @@ public:
     // For MERGE, we might need to skip the insert for duplicate input. But still, we need to write
     // the output vector for later usage.
     void skipInsert() const;
+    void skipInsert(common::nodeID_t nodeID, main::ClientContext* context) const;
 
 private:
     NodeInsertExecutor(const NodeInsertExecutor& other)

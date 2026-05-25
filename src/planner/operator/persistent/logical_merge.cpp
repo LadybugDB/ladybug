@@ -1,7 +1,10 @@
 #include "planner/operator/persistent/logical_merge.h"
 
+#include <unordered_set>
+
 #include "binder/expression/node_expression.h"
 #include "binder/expression/rel_expression.h"
+#include "binder/expression_visitor.h"
 #include "common/cast.h"
 #include "planner/operator/factorization/flatten_resolver.h"
 
@@ -11,7 +14,57 @@ using namespace lbug::common;
 namespace lbug {
 namespace planner {
 
+static bool hasNonKeyPayload(const Schema& schema, const expression_vector& keys,
+    const std::vector<LogicalInsertInfo>& insertNodeInfos,
+    const std::vector<LogicalInsertInfo>& insertRelInfos, const Expression& existenceMark) {
+    std::unordered_set<std::string> keyNames;
+    keyNames.insert(existenceMark.getUniqueName());
+    for (auto& key : keys) {
+        keyNames.insert(key->getUniqueName());
+        DependentVarNameCollector collector;
+        collector.visit(key);
+        for (auto& name : collector.getVarNames()) {
+            keyNames.insert(name);
+        }
+    }
+    for (auto& info : insertNodeInfos) {
+        keyNames.insert(info.pattern->getUniqueName());
+        for (auto& expression : info.columnExprs) {
+            keyNames.insert(expression->getUniqueName());
+        }
+    }
+    for (auto& info : insertRelInfos) {
+        for (auto& expression : info.columnExprs) {
+            keyNames.insert(expression->getUniqueName());
+        }
+    }
+    for (auto& expression : schema.getExpressionsInScope()) {
+        auto uniqueName = expression->getUniqueName();
+        auto isMergePatternExpression = false;
+        for (auto& info : insertNodeInfos) {
+            isMergePatternExpression |= uniqueName.starts_with(info.pattern->getUniqueName() + ".");
+        }
+        for (auto& info : insertRelInfos) {
+            isMergePatternExpression |= uniqueName.starts_with(info.pattern->getUniqueName() + ".");
+        }
+        if (!keyNames.contains(uniqueName) && !isMergePatternExpression) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void LogicalMerge::computeSuppressDuplicateCreatedOutput() {
+    auto childSchema = children[0]->getSchema();
+    auto storesInsertedPatternIDs = onMatchSetNodeInfos.empty() && onMatchSetRelInfos.empty();
+    suppressDuplicateCreatedOutput =
+        storesInsertedPatternIDs && insertRelInfos.empty() && onCreateSetNodeInfos.empty() &&
+        onCreateSetRelInfos.empty() &&
+        !hasNonKeyPayload(*childSchema, keys, insertNodeInfos, insertRelInfos, *existenceMark);
+}
+
 void LogicalMerge::computeFactorizedSchema() {
+    computeSuppressDuplicateCreatedOutput();
     copyChildSchema(0);
     for (auto& info : insertNodeInfos) {
         // Predicate iri is not matched but needs to be inserted.
@@ -33,6 +86,7 @@ void LogicalMerge::computeFactorizedSchema() {
 }
 
 void LogicalMerge::computeFlatSchema() {
+    computeSuppressDuplicateCreatedOutput();
     copyChildSchema(0);
     for (auto& info : insertNodeInfos) {
         auto node = dynamic_cast_checked<NodeExpression*>(info.pattern.get());
@@ -57,6 +111,7 @@ std::unique_ptr<LogicalOperator> LogicalMerge::copy() {
     merge->onCreateSetRelInfos = copyVector(onCreateSetRelInfos);
     merge->onMatchSetNodeInfos = copyVector(onMatchSetNodeInfos);
     merge->onMatchSetRelInfos = copyVector(onMatchSetRelInfos);
+    merge->suppressDuplicateCreatedOutput = suppressDuplicateCreatedOutput;
     return merge;
 }
 

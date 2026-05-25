@@ -73,8 +73,13 @@ void Merge::executeOnMatch(ExecutionContext* context) {
 
 void Merge::executeOnCreatedPattern(PatternCreationInfo& patternCreationInfo,
     ExecutionContext* context) {
-    for (auto& executor : nodeInsertExecutors) {
-        executor.skipInsert();
+    for (auto i = 0u; i < nodeInsertExecutors.size(); ++i) {
+        auto& executor = nodeInsertExecutors[i];
+        if (info.storeInsertedPatternIDs) {
+            executor.skipInsert(patternCreationInfo.getPatternID(i), context->clientContext);
+        } else {
+            executor.skipInsert();
+        }
     }
     for (auto& executor : relInsertExecutors) {
         executor.skipInsert();
@@ -100,12 +105,13 @@ void Merge::executeOnNewPattern(PatternCreationInfo& patternCreationInfo,
         auto& executor = nodeInsertExecutors[i];
         executor.setNodeIDVectorToNonNull();
         auto nodeID = executor.insert(context->clientContext);
-        patternCreationInfo.updateID(i, info.executorInfo, nodeID);
+        patternCreationInfo.updateID(i, info.executorInfo, info.storeInsertedPatternIDs, nodeID);
     }
     for (auto i = 0u; i < relInsertExecutors.size(); i++) {
         auto& executor = relInsertExecutors[i];
         auto relID = executor.insert(context->clientContext);
-        patternCreationInfo.updateID(i + nodeInsertExecutors.size(), info.executorInfo, relID);
+        patternCreationInfo.updateID(i + nodeInsertExecutors.size(), info.executorInfo,
+            info.storeInsertedPatternIDs, relID);
     }
     for (auto& executor : onCreateNodeSetExecutors) {
         executor->set(context);
@@ -115,28 +121,33 @@ void Merge::executeOnNewPattern(PatternCreationInfo& patternCreationInfo,
     }
 }
 
-void Merge::executeNoMatch(ExecutionContext* context) {
+bool Merge::executeNoMatch(ExecutionContext* context) {
     for (auto& evaluator : info.keyEvaluators) {
         evaluator->evaluate();
     }
     auto patternCreationInfo = localState.getPatternCreationInfo();
     if (patternCreationInfo.hasCreated) {
+        if (info.suppressDuplicateCreatedOutput) {
+            return false;
+        }
         executeOnCreatedPattern(patternCreationInfo, context);
     } else {
         executeOnNewPattern(patternCreationInfo, context);
     }
+    return true;
 }
 
 bool Merge::getNextTuplesInternal(ExecutionContext* context) {
-    if (!children[0]->getNextTuple(context)) {
-        return false;
+    while (children[0]->getNextTuple(context)) {
+        if (localState.patternExists()) {
+            executeOnMatch(context);
+            return true;
+        }
+        if (executeNoMatch(context)) {
+            return true;
+        }
     }
-    if (localState.patternExists()) {
-        executeOnMatch(context);
-    } else {
-        executeNoMatch(context);
-    }
-    return true;
+    return false;
 }
 
 } // namespace processor

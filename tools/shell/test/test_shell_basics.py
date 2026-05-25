@@ -1,4 +1,5 @@
 import os
+import re
 
 import pexpect
 import pytest
@@ -45,6 +46,33 @@ def test_invalid_cast(temp_db) -> None:
     result.check_stdout(
         'Error: Conversion exception: Cast failed. Could not convert "****" to INT8.',
     )
+
+
+def test_unwind_merge_uuid_default_returns_same_id(temp_db) -> None:
+    test = (
+        ShellTest()
+        .add_argument(temp_db)
+        .add_argument("-m")
+        .add_argument("csv")
+        .add_argument("-s")
+        .add_argument("-b")
+        .statement(
+            "CREATE NODE TABLE MergeUuidDefault("
+            "id STRING DEFAULT gen_random_uuid(), stuff INT64, PRIMARY KEY(id));"
+        )
+        .statement(
+            "UNWIND [1, 1] AS i "
+            "MERGE (a:MergeUuidDefault {stuff: i}) "
+            "RETURN a.id;"
+        )
+    )
+    result = test.run()
+    assert result.status_code == 0
+    ids = re.findall(
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+        result.stdout,
+    )
+    assert len(ids) == 1
 
 
 def test_enter_in_between_input(temp_db) -> None:

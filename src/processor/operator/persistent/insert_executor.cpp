@@ -39,6 +39,7 @@ void NodeTableInsertInfo::init(const ResultSet& resultSet, main::ClientContext* 
     for (auto& evaluator : columnDataEvaluators) {
         evaluator->init(resultSet, context);
         columnDataVectors.push_back(evaluator->resultVector.get());
+        columnIDs.push_back(columnIDs.size());
     }
     pkVector = columnDataVectors[table->getPKColumnID()];
 }
@@ -112,6 +113,28 @@ void NodeInsertExecutor::skipInsert() const {
     }
     info.nodeIDVector->setNull(info.nodeIDVector->state->getSelVector()[0], false);
     writeColumnVectors(info.columnVectors, tableInfo.columnDataVectors);
+}
+
+void NodeInsertExecutor::skipInsert(nodeID_t nodeID, main::ClientContext* context) const {
+    info.updateNodeID(nodeID);
+    std::vector<column_id_t> columnIDs;
+    std::vector<ValueVector*> outputVectors;
+    for (auto i = 0u; i < info.columnVectors.size(); ++i) {
+        if (info.columnVectors[i] == nullptr) {
+            continue;
+        }
+        columnIDs.push_back(tableInfo.columnIDs[i]);
+        outputVectors.push_back(info.columnVectors[i]);
+    }
+    if (outputVectors.empty()) {
+        return;
+    }
+    auto transaction = Transaction::Get(*context);
+    storage::NodeTableScanState scanState{info.nodeIDVector, std::move(outputVectors),
+        info.nodeIDVector->state};
+    scanState.setToTable(transaction, tableInfo.table, std::move(columnIDs), {});
+    tableInfo.table->initScanState(transaction, scanState, nodeID.tableID, nodeID.offset);
+    tableInfo.table->lookup(transaction, scanState);
 }
 
 bool NodeInsertExecutor::checkConflict(const Transaction* transaction) const {

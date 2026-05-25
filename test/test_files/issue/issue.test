@@ -765,3 +765,31 @@ h
 -STATEMENT UNWIND [gen_random_uuid(), gen_random_uuid()] AS i RETURN COUNT(DISTINCT i);
 ---- 1
 2
+-STATEMENT CREATE NODE TABLE A_uuid(id STRING DEFAULT gen_random_uuid(), stuff INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND [1, 1] AS i
+           MERGE (a:A_uuid {stuff: i})
+           WITH collect(a.id) AS ids
+           RETURN size(ids), COUNT(DISTINCT ids[1]);
+---- 1
+1|1
+-STATEMENT UNWIND [1, 1] AS i
+           MERGE (a:A_uuid {stuff: i})
+           WITH a
+           RETURN COUNT(*), COUNT(DISTINCT a.id);
+---- 1
+1|1
+-STATEMENT MATCH (a:A_uuid) RETURN COUNT(*), COUNT(DISTINCT a.id);
+---- 1
+1|1
+-STATEMENT CREATE NODE TABLE A_uuid_count(id STRING DEFAULT gen_random_uuid(), stuff INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND [1, 1] AS i
+           MERGE (a:A_uuid_count {stuff: i})
+           WITH a
+           RETURN COUNT(*), COUNT(DISTINCT a.id);
+---- 1
+1|1
+-STATEMENT MATCH (a:A_uuid_count) RETURN COUNT(*), COUNT(DISTINCT a.id);
+---- 1
+1|1

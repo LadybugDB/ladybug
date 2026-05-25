@@ -4,7 +4,12 @@ namespace lbug {
 namespace processor {
 
 void PatternCreationInfo::updateID(common::executor_id_t executorID,
-    common::executor_info executorInfo, common::nodeID_t nodeID) const {
+    common::executor_info executorInfo, bool storeInsertedPatternIDs,
+    common::nodeID_t nodeID) const {
+    if (storeInsertedPatternIDs) {
+        *(common::nodeID_t*)(tuple + executorID * sizeof(common::nodeID_t)) = nodeID;
+        return;
+    }
     if (!executorInfo.contains(executorID)) {
         return;
     }

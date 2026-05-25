@@ -60,9 +60,13 @@ public:
     }
     const binder::expression_vector& getKeys() const { return keys; }
 
+    bool suppressesDuplicateCreatedOutput() const { return suppressDuplicateCreatedOutput; }
+
     std::unique_ptr<LogicalOperator> copy() override;
 
 private:
+    void computeSuppressDuplicateCreatedOutput();
+
     std::shared_ptr<binder::Expression> existenceMark;
     // Create infos
     std::vector<LogicalInsertInfo> insertNodeInfos;
@@ -79,6 +83,7 @@ private:
     // Since we don't re-evaluate the existence of n for each x, we need to create n only for
     // distinct x, i.e. 1 & 3. So there is a notion of key in MERGE.
     binder::expression_vector keys;
+    bool suppressDuplicateCreatedOutput = false;
 };
 
 } // namespace planner

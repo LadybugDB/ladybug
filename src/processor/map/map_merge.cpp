@@ -102,11 +102,17 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapMerge(const LogicalOperator* lo
         keyEvaluators.push_back(expressionMapper.getEvaluator(key));
     }
 
+    auto storeInsertedPatternIDs = logicalMerge.getOnMatchSetNodeInfos().empty() &&
+                                   logicalMerge.getOnMatchSetRelInfos().empty();
+    auto suppressDuplicateCreatedOutput = logicalMerge.suppressesDuplicateCreatedOutput();
+    auto numNodeIDFields = storeInsertedPatternIDs ? logicalMerge.getInsertNodeInfos().size() :
+                                                     logicalMerge.getOnMatchSetNodeInfos().size();
+    auto numRelIDFields = storeInsertedPatternIDs ? logicalMerge.getInsertRelInfos().size() :
+                                                    logicalMerge.getOnMatchSetRelInfos().size();
     MergeInfo mergeInfo{std::move(keyEvaluators),
-        getFactorizedTableSchema(logicalMerge.getKeys(),
-            logicalMerge.getOnMatchSetNodeInfos().size(),
-            logicalMerge.getOnMatchSetRelInfos().size()),
-        std::move(executorInfo), existenceMarkPos};
+        getFactorizedTableSchema(logicalMerge.getKeys(), numNodeIDFields, numRelIDFields),
+        std::move(executorInfo), storeInsertedPatternIDs, suppressDuplicateCreatedOutput,
+        existenceMarkPos};
     return std::make_unique<Merge>(std::move(nodeInsertExecutors), std::move(relInsertExecutors),
         std::move(onCreateNodeSetExecutors), std::move(onCreateRelSetExecutors),
         std::move(onMatchNodeSetExecutors), std::move(onMatchRelSetExecutors), std::move(mergeInfo),
