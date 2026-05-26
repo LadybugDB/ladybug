@@ -36,7 +36,7 @@ void ParquetReader::initializeScan(ParquetReaderScanState& state,
     state.groupOffset = 0;
     state.groupIdxList = std::move(groups_to_read);
     if (!state.fileInfo || state.fileInfo->path != filePath) {
-        state.prefetchMode = false;
+        state.prefetchMode = true;
         state.fileInfo =
             vfs->openFile(filePath, common::FileOpenFlags(FileFlags::READ_ONLY), context);
     }
@@ -69,6 +69,9 @@ bool ParquetReader::scanInternal(ParquetReaderScanState& state, DataChunk& resul
 
         uint64_t toScanCompressedBytes = 0;
         for (auto colIdx = 0u; colIdx < result.getNumValueVectors(); colIdx++) {
+            if (!columnSkips.empty() && columnSkips[colIdx]) {
+                continue;
+            }
             prepareRowGroupBuffer(state, colIdx);
 
             auto fileColIdx = colIdx;
@@ -104,6 +107,9 @@ bool ParquetReader::scanInternal(ParquetReaderScanState& state, DataChunk& resul
             } else {
                 // Prefetch column-wise.
                 for (auto colIdx = 0u; colIdx < result.getNumValueVectors(); colIdx++) {
+                    if (!columnSkips.empty() && columnSkips[colIdx]) {
+                        continue;
+                    }
                     auto fileColIdx = colIdx;
                     auto rootReader =
                         dynamic_cast_checked<StructColumnReader*>(state.rootReader.get());

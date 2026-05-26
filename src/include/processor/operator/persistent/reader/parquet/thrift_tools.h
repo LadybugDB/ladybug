@@ -69,7 +69,7 @@ struct ReadAheadBuffer {
                 auto new_start =
                     std::min<uint64_t>(existing_head->location, new_read_head.location);
                 auto new_length =
-                    std::min<uint64_t>(existing_head->GetEnd(), new_read_head.GetEnd()) - new_start;
+                    std::max<uint64_t>(existing_head->GetEnd(), new_read_head.GetEnd()) - new_start;
                 existing_head->location = new_start;
                 existing_head->size = new_length;
                 return;

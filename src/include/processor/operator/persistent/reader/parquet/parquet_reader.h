@@ -32,9 +32,7 @@ struct ParquetReaderScanState {
     ResizeableBuffer defineBuf;
     ResizeableBuffer repeatBuf;
 
-    // TODO(Ziyi): We currently only support reading from local file system, thus the prefetch
-    // mode is disabled by default. Add this back when we support remote file system.
-    bool prefetchMode = false;
+    bool prefetchMode = true;
     bool currentGroupPrefetched = false;
 };
 
