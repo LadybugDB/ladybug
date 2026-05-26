@@ -458,7 +458,7 @@ public:
     }
 
     void delete_(common::ValueVector* keyVector);
-    void discardPrimaryKey(common::ValueVector* keyVector) override { delete_(keyVector); }
+    void discardPrimaryKey(common::ValueVector* keyVector) override;
 
     void checkpointInMemory() override;
     void checkpoint(main::ClientContext*, storage::PageAllocator& pageAllocator) override;

@@ -603,6 +603,23 @@ void PrimaryKeyIndex::delete_(ValueVector* keyVector) {
         [](auto) { UNREACHABLE_CODE; });
 }
 
+void PrimaryKeyIndex::discardPrimaryKey(ValueVector* keyVector) {
+    DASSERT(indexInfo.keyDataTypes.size() == 1);
+    TypeUtils::visit(
+        indexInfo.keyDataTypes[0],
+        [&]<IndexHashable T>(T) {
+            for (auto i = 0u; i < keyVector->state->getSelVector().getSelSize(); i++) {
+                auto pos = keyVector->state->getSelVector()[i];
+                if (keyVector->isNull(pos)) {
+                    continue;
+                }
+                auto key = keyVector->getValue<T>(pos);
+                discardLocal(key);
+            }
+        },
+        [](auto) { UNREACHABLE_CODE; });
+}
+
 void PrimaryKeyIndex::checkpointInMemory() {
     bool indexChanged = false;
     for (auto i = 0u; i < NUM_HASH_INDEXES; i++) {
