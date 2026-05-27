@@ -40,6 +40,13 @@ jobs:
       - name: Update submodules
         run: git submodule update --init extension
 
+      - name: Setup pixi
+        uses: prefix-dev/setup-pixi@v0.9.4
+        with:
+          pixi-version: v0.68.1
+          cache: false
+          activate-environment: true
+
       - name: Install build dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -202,6 +209,7 @@ jobs:
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          set "EXTRA_CMAKE_FLAGS=-DADBC_INCLUDE_DIR=%CONDA_PREFIX%\Library\include -DADBC_DRIVER_MANAGER_LIBRARY=%CONDA_PREFIX%\Library\lib\adbc_driver_manager.lib"
           make extension-release
         env:
           CMAKE_PREFIX_PATH: C:\local

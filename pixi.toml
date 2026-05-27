@@ -1,7 +1,7 @@
 [workspace]
 channels = ["conda-forge"]
 name = "ladybug-adbc"
-platforms = ["linux-64"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 
 [dependencies]
 libadbc-driver-manager = ">=1.10.0,<2"
