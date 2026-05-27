@@ -275,12 +275,14 @@ private:
 
     uint64_t freeUsedMemory(uint64_t size);
 
-    void releaseFrameForPage(FileHandle& fileHandle [[maybe_unused]],
+    uint64_t releaseFrameForPage(FileHandle& fileHandle [[maybe_unused]],
         common::page_idx_t pageIdx [[maybe_unused]]) {
 #if BM_MALLOC
         // Page is freed instead in PageState::resetToEvicted
+        return fileHandle.getPageSize();
 #else
-        vmRegions[fileHandle.getPageSizeClass()]->releaseFrame(fileHandle.getFrameIdx(pageIdx));
+        return vmRegions[fileHandle.getPageSizeClass()]->releaseFrame(
+            fileHandle.getFrameIdx(pageIdx));
 #endif
     }
 

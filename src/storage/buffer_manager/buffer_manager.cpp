@@ -343,8 +343,15 @@ void BufferManager::removeEvictedCandidates() {
 // and return false, otherwise, we load the page to its corresponding frame and return true.
 bool BufferManager::claimAFrame(FileHandle& fileHandle, page_idx_t pageIdx,
     PageReadPolicy pageReadPolicy) {
-    page_offset_t pageSizeToClaim = fileHandle.getPageSize();
+    uint64_t pageSizeToClaim = fileHandle.getPageSize();
+#if !BM_MALLOC
+    pageSizeToClaim =
+        vmRegions[fileHandle.getPageSizeClass()]->claimFrame(fileHandle.getFrameIdx(pageIdx));
+#endif
     if (!reserve(pageSizeToClaim)) {
+#if !BM_MALLOC
+        vmRegions[fileHandle.getPageSizeClass()]->releaseFrame(fileHandle.getFrameIdx(pageIdx));
+#endif
         return false;
     }
 #if _WIN32 && !BM_MALLOC
@@ -453,8 +460,7 @@ uint64_t BufferManager::tryEvictPage(std::atomic<EvictionCandidate>& _candidate)
     // is dirty. Finally remove the page from the frame and reset the page to EVICTED.
     auto& fileHandle = *fileHandles[candidate.fileIdx];
     fileHandle.flushPageIfDirtyWithoutLock(candidate.pageIdx);
-    auto numBytesFreed = fileHandle.getPageSize();
-    releaseFrameForPage(fileHandle, candidate.pageIdx);
+    auto numBytesFreed = releaseFrameForPage(fileHandle, candidate.pageIdx);
     evictionQueue.clear(_candidate);
     pageState.resetToEvicted();
     return numBytesFreed;
@@ -533,8 +539,8 @@ void BufferManager::removePageFromFrame(FileHandle& fileHandle, page_idx_t pageI
     if (shouldFlush) {
         fileHandle.flushPageIfDirtyWithoutLock(pageIdx);
     }
-    releaseFrameForPage(fileHandle, pageIdx);
-    freeUsedMemory(fileHandle.getPageSize());
+    const auto numBytesFreed = releaseFrameForPage(fileHandle, pageIdx);
+    freeUsedMemory(numBytesFreed);
     pageState->resetToEvicted();
 }
 
