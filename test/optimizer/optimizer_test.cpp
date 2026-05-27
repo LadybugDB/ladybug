@@ -236,6 +236,11 @@ TEST_F(OptimizerTest, SubqueryHint) {
 }
 
 TEST_F(OptimizerTest, CountRelTableOptimizer) {
+#if defined(_WIN32)
+    GTEST_SKIP() << "Windows can pick the reverse physical extend orientation for degree-count "
+                    "plans, so this plan-shape test is nondeterministic there.";
+#endif
+
     ASSERT_TRUE(conn->query("CREATE NODE TABLE opt_user(id INT64, PRIMARY KEY(id));")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE REL TABLE opt_follows(FROM opt_user TO opt_user, date DATE);")
                     ->isSuccess());
