@@ -196,7 +196,8 @@ nodejs:
 nodejs-deps:
 	cd tools/nodejs_api && npm install --include=dev
 
-nodejstest: nodejs
+nodejstest:
+	$(call run-cmake-release, -DBUILD_NODEJS=TRUE -DLBUG_NODEJS_ENABLE_TEST_EXPORTS=ON)
 	cd tools/nodejs_api && npm test
 
 nodejstest-deps: nodejs-deps nodejstest
