@@ -69,6 +69,12 @@ TEST(ExtensionProxyTest, ParseProxyURLWithAuth) {
     EXPECT_EQ(config->password, "pass");
 }
 
+TEST(ExtensionUtilsTest, IdentifiesOfficialExtensions) {
+    EXPECT_TRUE(ExtensionUtils::isOfficialExtension("adbc"));
+    EXPECT_TRUE(ExtensionUtils::isOfficialExtension("ADBC"));
+    EXPECT_FALSE(ExtensionUtils::isOfficialExtension("sqlitescanner"));
+}
+
 TEST(ExtensionProxyTest, ParseProxyURLWithoutSchemeUsesDefaultPort) {
     auto config = ExtensionUtils::parseProxyConfig("proxy.example.com");
     ASSERT_TRUE(config.has_value());
