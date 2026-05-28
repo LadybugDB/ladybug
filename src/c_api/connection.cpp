@@ -276,7 +276,7 @@ lbug_state lbug_connection_create_arrow_rel_table_csr(lbug_connection* connectio
     const char* table_name, const char* src_table_name, const char* dst_table_name,
     ArrowSchema* indices_schema, ArrowArray* indices_arrays, uint64_t num_indices_arrays,
     ArrowSchema* indptr_schema, ArrowArray* indptr_arrays, uint64_t num_indptr_arrays,
-    lbug_query_result* out_query_result) {
+    const char* dst_col_name, lbug_query_result* out_query_result) {
     if (connection == nullptr || connection->_connection == nullptr || table_name == nullptr ||
         src_table_name == nullptr || dst_table_name == nullptr || indices_schema == nullptr ||
         indices_arrays == nullptr || indptr_schema == nullptr || indptr_arrays == nullptr ||
@@ -289,7 +289,8 @@ lbug_state lbug_connection_create_arrow_rel_table_csr(lbug_connection* connectio
             *static_cast<Connection*>(connection->_connection), table_name, src_table_name,
             dst_table_name, takeArrowSchema(indices_schema),
             takeArrowArrays(indices_arrays, num_indices_arrays), takeArrowSchema(indptr_schema),
-            takeArrowArrays(indptr_arrays, num_indptr_arrays));
+            takeArrowArrays(indptr_arrays, num_indptr_arrays),
+            dst_col_name != nullptr ? dst_col_name : "to");
         auto state = setQueryResult(std::move(result.queryResult), out_query_result);
         if (state == LbugSuccess) {
             rememberArrowTableID(static_cast<Connection*>(connection->_connection), table_name,

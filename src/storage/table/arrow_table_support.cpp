@@ -233,6 +233,7 @@ ArrowTableCreationResult ArrowTableSupport::createRelTableFromArrowCSR(main::Con
     data.arrays = std::move(indicesArrays);
     data.indptrSchema = std::move(indptrSchema);
     data.indptrArrays = std::move(indptrArrays);
+    data.dstColumnName = dstColumnName;
     std::string arrowId = registerArrowRelData(std::move(data));
 
     std::string statement = "CREATE REL TABLE " + tableName + " " + tableDef +

@@ -64,7 +64,7 @@ ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table
     const NodeTable* fromNodeTable, const NodeTable* toNodeTable, ArrowRelTableLayout layout,
     ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays,
     ArrowSchemaWrapper indptrSchema, std::vector<ArrowArrayWrapper> indptrArrays,
-    std::string arrowId)
+    std::string arrowId, std::string dstColumnName)
     : ColumnarRelTableBase{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
       fromNodeTable{fromNodeTable}, toNodeTable{toNodeTable}, layout{layout},
       schema{std::move(schema)}, arrays{std::move(arrays)}, indptrSchema{std::move(indptrSchema)},
@@ -100,14 +100,15 @@ ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table
                                    " must match destination node PK type " + dstPKType.toString());
         }
     } else {
-        csrNbrColumnIdx = findColumnIdx(this->schema, "to");
+        csrNbrColumnIdx = findColumnIdx(this->schema, dstColumnName);
         if (csrNbrColumnIdx < 0) {
-            throw RuntimeException("Arrow CSR relationship table requires a 'to' column");
+            throw RuntimeException(
+                "Arrow CSR relationship table requires a '" + dstColumnName + "' column");
         }
         auto nbrArrowType = ArrowConverter::fromArrowSchema(this->schema.children[csrNbrColumnIdx]);
         if (nbrArrowType.getLogicalTypeID() != LogicalTypeID::UINT64) {
-            throw RuntimeException("Arrow CSR 'to' column type " + nbrArrowType.toString() +
-                                   " must be UINT64 node offsets");
+            throw RuntimeException("Arrow CSR '" + dstColumnName + "' column type " +
+                                   nbrArrowType.toString() + " must be UINT64 node offsets");
         }
         if (!this->indptrSchema.format || this->indptrArrays.empty()) {
             throw RuntimeException("Arrow CSR relationship table requires an indptr Arrow table");

@@ -327,6 +327,37 @@ TEST_F(ArrowCsrRelTableTest, CsrOverNativeNodeTableScans) {
     ASSERT_EQ(countResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
 }
 
+TEST_F(ArrowCsrRelTableTest, CustomDstColumnName) {
+    std::vector<ArrowArrayWrapper> fwdIndices, fwdIndptr;
+
+    // Build indices table with column named "dest" instead of "to"
+    std::vector<uint64_t> dst = {1, 2, 2, 3};
+    std::vector<int64_t> w = {10, 20, 30, 40};
+    fwdIndices.push_back(createStructArray(4, {[&](ArrowArray* a) { createUint64Array(a, dst); },
+                                                  [&](ArrowArray* a) { createInt64Array(a, w); }}));
+    fwdIndptr.push_back(makeFwdIndptrArray());
+
+    ArrowSchemaWrapper idxSchema;
+    createStructSchema(&idxSchema, 2);
+    createSchema<uint64_t>(idxSchema.children[0], "dest");
+    createSchema<int64_t>(idxSchema.children[1], "weight");
+
+    auto result = ArrowTableSupport::createRelTableFromArrowCSR(*conn, "csr_knows", "csr_person",
+        "csr_person", std::move(idxSchema), std::move(fwdIndices), makeIndptrSchema(),
+        std::move(fwdIndptr), "dest");
+    ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+
+    auto countResult =
+        conn->query("MATCH (:csr_person)-[:csr_knows]->(:csr_person) RETURN count(*)");
+    ASSERT_TRUE(countResult->isSuccess()) << countResult->getErrorMessage();
+    ASSERT_EQ(countResult->getNext()->getValue(0)->getValue<int64_t>(), 4);
+
+    auto sumResult =
+        conn->query("MATCH (:csr_person)-[e:csr_knows]->(:csr_person) RETURN sum(e.weight)");
+    ASSERT_TRUE(sumResult->isSuccess()) << sumResult->getErrorMessage();
+    ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<common::int128_t>(), 100);
+}
+
 TEST_F(ArrowCsrRelTableTest, MultiBatchCsrIndices) {
     std::vector<ArrowArrayWrapper> fwdIndices;
     fwdIndices.push_back(

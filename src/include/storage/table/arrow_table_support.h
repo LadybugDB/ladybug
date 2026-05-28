@@ -19,6 +19,7 @@ struct ArrowRelTableData {
     std::vector<ArrowArrayWrapper> arrays;
     ArrowSchemaWrapper indptrSchema;
     std::vector<ArrowArrayWrapper> indptrArrays;
+    std::string dstColumnName = "to";
 };
 
 // Result of creating an arrow table view

@@ -33,7 +33,8 @@ public:
         MemoryManager* memoryManager, const NodeTable* fromNodeTable, const NodeTable* toNodeTable,
         ArrowRelTableLayout layout, ArrowSchemaWrapper schema,
         std::vector<ArrowArrayWrapper> arrays, ArrowSchemaWrapper indptrSchema,
-        std::vector<ArrowArrayWrapper> indptrArrays, std::string arrowId);
+        std::vector<ArrowArrayWrapper> indptrArrays, std::string arrowId,
+        std::string dstColumnName = "to");
     ~ArrowRelTable();
 
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,

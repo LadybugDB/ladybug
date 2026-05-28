@@ -200,7 +200,8 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
             tables[info.oid] = std::make_unique<ArrowRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, fromNodeTable, toNodeTable,
                 relData->layout, std::move(schemaCopy), std::move(arraysCopy),
-                std::move(indptrSchemaCopy), std::move(indptrArraysCopy), arrowId);
+                std::move(indptrSchemaCopy), std::move(indptrArraysCopy), arrowId,
+                relData->dstColumnName);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage option for rel table: " + entry->getStorage());
