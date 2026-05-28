@@ -1,0 +1,23 @@
+-DATASET ICEBUG-DISK ice-disk-large-test
+--
+
+-CASE IceDiskLargeNodeScan
+
+-LOG CountBeyondOneVector
+-STATEMENT MATCH (n:nodes) RETURN count(n);
+---- 1
+3000
+
+-LOG SkipPastFirstVector
+-STATEMENT MATCH (n:nodes) RETURN n.id SKIP 2048 LIMIT 10;
+---- 10
+2048
+2049
+2050
+2051
+2052
+2053
+2054
+2055
+2056
+2057

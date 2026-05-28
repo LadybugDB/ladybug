@@ -7,7 +7,6 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "common/types/internal_id_util.h"
-#include "common/types/value/value.h"
 #include "processor/operator/persistent/reader/parquet/parquet_reader.h"
 #include "storage/table/columnar_node_table_base.h"
 
@@ -20,9 +19,6 @@ namespace storage {
 struct IceDiskNodeTableScanState final : ColumnarNodeTableScanState {
     std::unique_ptr<processor::ParquetReader> parquetReader;
     std::unique_ptr<processor::ParquetReaderScanState> parquetScanState;
-    bool dataRead = false;
-    std::vector<std::vector<std::unique_ptr<common::Value>>> allData;
-    size_t nextRowToDistribute = 0;
     uint64_t lastQueryId = 0; // Track the last query ID to detect new queries
 
     IceDiskNodeTableScanState([[maybe_unused]] MemoryManager& mm, common::ValueVector* nodeIDVector,
