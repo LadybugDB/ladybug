@@ -192,11 +192,12 @@ bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
     if (iceDiskScanState.parquetScanState->currentGroup >= 0 &&
         static_cast<uint64_t>(iceDiskScanState.parquetScanState->currentGroup) <
             iceDiskScanState.parquetScanState->groupIdxList.size()) {
-        currentRowGroupIdx = static_cast<common::node_group_idx_t>(iceDiskScanState
-                .parquetScanState->groupIdxList[iceDiskScanState.parquetScanState->currentGroup]);
+        currentRowGroupIdx = static_cast<common::node_group_idx_t>(
+            iceDiskScanState.parquetScanState
+                ->groupIdxList[iceDiskScanState.parquetScanState->currentGroup]);
     }
     for (common::node_group_idx_t rg = 0;
-        rg < currentRowGroupIdx && rg < metadata->row_groups.size(); ++rg) {
+         rg < currentRowGroupIdx && rg < metadata->row_groups.size(); ++rg) {
         startOffset += metadata->row_groups[rg].num_rows;
     }
     startOffset += iceDiskScanState.parquetScanState->groupOffset - selSize;
