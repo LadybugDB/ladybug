@@ -495,8 +495,9 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.skipWasm != 'true' }}
     needs: [build-and-test-wasm]
     runs-on: ubuntu-latest
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_JS_TOKEN }}
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -508,10 +509,13 @@ jobs:
           name: lbug-deploy-wasm
           path: tools/wasm
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Show tarball contents
         run: tar -tvf lbug-wasm.tar.gz
@@ -538,18 +542,15 @@ jobs:
           echo "Package ref: ${PACKAGE_REF}"
 
           if npm view "${PACKAGE_REF}" version >/dev/null 2>&1; then
-            echo "Package version already exists on npm; updating dist-tags only."
+            echo "Package version already exists on npm; trusted publishing only supports publish, so skipping dist-tag update."
           else
-            npm publish lbug-wasm.tar.gz --access public --tag "${NIGHTLY_TAG}"
+            npm publish lbug-wasm.tar.gz --provenance --access public --tag "${NIGHTLY_TAG}"
           fi
-
-          npm dist-tag add "${PACKAGE_REF}" "${NIGHTLY_TAG}"
-          npm dist-tag add "${PACKAGE_REF}" next
         working-directory: tools/wasm
 
       - name: Deploy to npm.js
         if: ${{ github.event.inputs.isDeploy == 'true' && github.event.inputs.isNightly != 'true' }}
-        run: npm publish lbug-wasm.tar.gz --access public --tag latest
+        run: npm publish lbug-wasm.tar.gz --provenance --access public --tag latest
         working-directory: tools/wasm
 
   build-precompiled-bin:
