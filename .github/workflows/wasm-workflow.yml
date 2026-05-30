@@ -101,7 +101,6 @@ jobs:
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
-          EXTRA_CMAKE_FLAGS: -DBUILD_EXTENSIONS=httpfs -DEXTENSION_STATIC_LINK_LIST=httpfs
         run: |
           source /home/runner/emsdk/emsdk_env.sh
           npm run build
