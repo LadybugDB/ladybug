@@ -86,7 +86,10 @@ frame_group_idx_t VMRegion::addNewFrameGroup() {
     std::unique_lock xLck{mtx};
     if (numFrameGroups >= maxNumFrameGroups) {
         // LCOV_EXCL_START
-        throw BufferManagerException("No more frame groups can be added to the allocator.");
+        throw BufferManagerException(
+            std::format("Maximum database size of {} bytes has been reached. "
+                        "Reopen the database with a larger max_db_size to continue.",
+                getMaxRegionSize()));
         // LCOV_EXCL_STOP
     }
     return numFrameGroups++;
