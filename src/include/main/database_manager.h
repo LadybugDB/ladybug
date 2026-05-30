@@ -33,11 +33,9 @@ public:
     void loadGraphsFromCatalog(storage::MemoryManager* memoryManager,
         main::ClientContext* clientContext);
     void setDefaultGraph(const std::string& graphName);
-    void clearDefaultGraph();
     bool hasGraph(const std::string& graphName);
-    catalog::Catalog* getGraphCatalog(const std::string& graphName);
     catalog::Catalog* getDefaultGraphCatalog() const;
-    bool hasDefaultGraph() const { return defaultGraph != "" && defaultGraph != "main"; }
+    bool hasDefaultGraph() const { return defaultGraph != ""; }
     std::string getDefaultGraphName() const { return defaultGraph; }
     std::vector<catalog::Catalog*> getGraphs() const;
     storage::StorageManager* getDefaultGraphStorageManager() const;

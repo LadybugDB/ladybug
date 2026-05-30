@@ -33,3 +33,20 @@ _nodes
 
 -STATEMENT DROP GRAPH mygraph
 ---- ok
+
+-CASE AnyGraphNamedMain
+
+-LOG CreateAnyGraphNamedMain
+-STATEMENT CREATE GRAPH main ANY
+---- error
+Runtime exception: MAIN is a reserved graph name.
+
+-LOG CreateAnyGraphNamedMainUpperCase
+-STATEMENT CREATE GRAPH MAIN ANY
+---- error
+Runtime exception: MAIN is a reserved graph name.
+
+-LOG CreateAnyGraphNamedMainMixedCase
+-STATEMENT CREATE GRAPH Main ANY
+---- error
+Runtime exception: MAIN is a reserved graph name.

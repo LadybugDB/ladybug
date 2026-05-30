@@ -124,6 +124,11 @@ void Drop::dropGraph(const main::ClientContext* context) {
     auto dbManager = main::DatabaseManager::Get(*context);
     auto memoryManager = storage::MemoryManager::Get(*context);
 
+    // Protect the main graph unconditionally — IF EXISTS cannot bypass this.
+    if (StringUtils::getUpper(dropInfo.name) == "MAIN") {
+        throw BinderException("Cannot drop the main graph.");
+    }
+
     if (!dbManager->hasGraph(dropInfo.name)) {
         auto message = std::format("Graph {} does not exist.", dropInfo.name);
         switch (dropInfo.conflictAction) {
@@ -137,11 +142,6 @@ void Drop::dropGraph(const main::ClientContext* context) {
         default:
             UNREACHABLE_CODE;
         }
-    }
-
-    if (dbManager->hasDefaultGraph() && StringUtils::getUpper(dbManager->getDefaultGraphName()) ==
-                                            StringUtils::getUpper(dropInfo.name)) {
-        dbManager->clearDefaultGraph();
     }
 
     dbManager->dropGraph(dropInfo.name, const_cast<main::ClientContext*>(context));

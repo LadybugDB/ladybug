@@ -125,6 +125,51 @@ person|foo1(graph)
 -STATEMENT DROP GRAPH foo1
 ---- ok
 
+-CASE MainGraphProtection
+
+-LOG CreateGraphNamedMain
+-STATEMENT CREATE GRAPH main
+---- error
+Runtime exception: MAIN is a reserved graph name.
+
+-LOG CreateGraphNamedMainUpperCase
+-STATEMENT CREATE GRAPH MAIN
+---- error
+Runtime exception: MAIN is a reserved graph name.
+
+-LOG CreateGraphNamedMainMixedCase
+-STATEMENT CREATE GRAPH Main
+---- error
+Runtime exception: MAIN is a reserved graph name.
+
+-LOG DropGraphMain
+-STATEMENT DROP GRAPH main
+---- error
+Binder exception: Cannot drop the main graph.
+
+-LOG DropGraphMainUpperCase
+-STATEMENT DROP GRAPH MAIN
+---- error
+Binder exception: Cannot drop the main graph.
+
+-LOG DropGraphMainMixedCase
+-STATEMENT DROP GRAPH Main
+---- error
+Binder exception: Cannot drop the main graph.
+
+-LOG DropGraphIfExistsMain
+-STATEMENT DROP GRAPH IF EXISTS main
+---- error
+Binder exception: Cannot drop the main graph.
+
+-LOG UseGraphMain
+-STATEMENT USE GRAPH main
+---- ok
+
+-LOG UseGraphMainUpperCase
+-STATEMENT USE GRAPH MAIN
+---- ok
+
 -CASE ErrorCases
 -LOG DuplicateGraphError
 -STATEMENT CREATE GRAPH graph1_ec
