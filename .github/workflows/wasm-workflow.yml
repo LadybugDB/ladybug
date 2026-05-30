@@ -36,7 +36,7 @@ jobs:
       - name: Install CMake
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake
+          sudo apt-get install -y cmake ninja-build
 
       - name: Update nightly version
         if: ${{ inputs.isNightly == true }}
@@ -50,7 +50,7 @@ jobs:
       
       - name: Install dependencies
         working-directory: tools/wasm
-        run: npm i
+        run: npm ci
 
       - name: Setup Emscripten
         run: |
@@ -74,20 +74,18 @@ jobs:
         if: ${{ inputs.isNightly != true }}
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: wasm-package-${{ runner.os }}-${{ github.ref }}
-          max-size: 2G
+          key: wasm-package-${{ runner.os }}-v2
+          max-size: 5G
           restore-keys: |
-            wasm-package-${{ runner.os }}-refs/heads/main
             wasm-package-${{ runner.os }}-
 
       - name: Setup ccache (test)
         if: ${{ inputs.isNightly == true }}
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: wasm-test-${{ runner.os }}-${{ github.ref }}
-          max-size: 2G
+          key: wasm-test-${{ runner.os }}-v2
+          max-size: 5G
           restore-keys: |
-            wasm-test-${{ runner.os }}-refs/heads/main
             wasm-test-${{ runner.os }}-
 
       - name: Configure ccache for Emscripten
@@ -95,15 +93,19 @@ jobs:
           ccache --set-config=compiler_check=content
           ccache --set-config=hash_dir=false
           ccache --set-config=base_dir=${{ github.workspace }}
+          ccache --zero-stats
 
       - name: Build WebAssembly package
         working-directory: tools/wasm
         env:
+          GEN: Ninja
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          EXTRA_CMAKE_FLAGS: -DBUILD_EXTENSIONS=httpfs -DEXTENSION_STATIC_LINK_LIST=httpfs
         run: |
           source /home/runner/emsdk/emsdk_env.sh
           npm run build
+          ccache -s
 
       - uses: actions/upload-artifact@v4
         with:
@@ -117,6 +119,7 @@ jobs:
       - name: Kernel build
         if: ${{ inputs.isNightly == true }}
         env:
+          GEN: Ninja
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
@@ -141,10 +144,9 @@ jobs:
         if: ${{ inputs.isNightly == true && steps.check-sunday.outputs.is_sunday == 'true' }}
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: wasm-test-single-${{ runner.os }}-${{ github.ref }}
-          max-size: 2G
+          key: wasm-test-single-${{ runner.os }}-v2
+          max-size: 5G
           restore-keys: |
-            wasm-test-single-${{ runner.os }}-refs/heads/main
             wasm-test-single-${{ runner.os }}-
 
       - name: Configure ccache for single-threaded build
@@ -153,10 +155,12 @@ jobs:
           ccache --set-config=compiler_check=content
           ccache --set-config=hash_dir=false
           ccache --set-config=base_dir=${{ github.workspace }}
+          ccache --zero-stats
 
       - name: Kernel build & test (single-threaded)
         if: ${{ inputs.isNightly == true && steps.check-sunday.outputs.is_sunday == 'true' }}
         env:
+          GEN: Ninja
           CMAKE_C_COMPILER_LAUNCHER: ccache
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
           SINGLE_THREADED: true
