@@ -22,3 +22,6 @@
 [submodule "tools/wasm"]
 	path = tools/wasm
 	url = https://github.com/ladybugdb/ladybug-wasm
+[submodule "tools/csharp_api"]
+	path = tools/csharp_api
+	url = https://github.com/LadybugDB/ladybug-dotnet
