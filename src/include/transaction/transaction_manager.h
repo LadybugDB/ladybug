@@ -82,6 +82,7 @@ private:
     common::transaction_t lastTimestamp;
     uint64_t nextWALCommitSequenceToPublish = 1;
     std::condition_variable cvForPublishingCommit;
+    std::condition_variable cvForCommittingWriteTransaction;
     // This mutex serializes begin/commit/rollback calls to protect activeTransactions.
     std::mutex mtxForSerializingPublicFunctionCalls;
     std::mutex mtxForStartingNewTransactions;

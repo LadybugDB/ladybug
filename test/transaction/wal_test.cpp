@@ -1,10 +1,18 @@
+#include <cstring>
 #include <fstream>
+#include <mutex>
+#include <unordered_map>
 
 #include "api_test/api_test.h"
+#include "common/exception/io.h"
 #include "common/exception/runtime.h"
 #include "common/exception/storage.h"
+#include "common/file_system/virtual_file_system.h"
 #include "gmock/gmock.h"
+#include "storage/buffer_manager/memory_manager.h"
 #include "storage/storage_utils.h"
+#include "storage/wal/local_wal.h"
+#include "storage/wal/wal.h"
 #include <format>
 
 using namespace lbug::common;
@@ -22,6 +30,118 @@ protected:
     void testStrayWALFile(const std::function<void()>& setupNewDBFunc);
     void setupChecksumMismatchTest(std::function<void(std::ofstream&)> corruptFunc);
 };
+
+class FailingSyncFileSystem final : public FileSystem {
+public:
+    explicit FailingSyncFileSystem(bool failSync) : failSync{failSync} {}
+
+    bool canHandleFile(const std::string_view path) const override {
+        return path.starts_with("failing-sync://");
+    }
+
+    std::unique_ptr<FileInfo> openFile(const std::string& path, FileOpenFlags flags,
+        lbug::main::ClientContext* /*context*/ = nullptr) override {
+        std::unique_lock lck{mtx};
+        if (flags.flags & FileFlags::CREATE_IF_NOT_EXISTS) {
+            files.try_emplace(path);
+        }
+        return std::make_unique<FileInfo>(path, this);
+    }
+
+    std::vector<std::string> glob(lbug::main::ClientContext* /*context*/,
+        const std::string& path) const override {
+        std::unique_lock lck{mtx};
+        return files.contains(path) ? std::vector<std::string>{path} : std::vector<std::string>{};
+    }
+
+    void renameFile(const std::string& from, const std::string& to) override {
+        std::unique_lock lck{mtx};
+        files[to] = std::move(files[from]);
+        files.erase(from);
+    }
+
+    void removeFileIfExists(const std::string& path,
+        const lbug::main::ClientContext* /*context*/ = nullptr) override {
+        std::unique_lock lck{mtx};
+        files.erase(path);
+    }
+
+    bool fileOrPathExists(const std::string& path,
+        lbug::main::ClientContext* /*context*/ = nullptr) override {
+        std::unique_lock lck{mtx};
+        return files.contains(path);
+    }
+
+    std::string expandPath(lbug::main::ClientContext* /*context*/,
+        const std::string& path) const override {
+        return path;
+    }
+
+    void syncFile(const FileInfo& /*fileInfo*/) const override {
+        if (failSync) {
+            throw IOException{"Injected WAL sync failure."};
+        }
+    }
+
+protected:
+    void readFromFile(FileInfo& fileInfo, void* buffer, uint64_t numBytes,
+        uint64_t position) const override {
+        std::unique_lock lck{mtx};
+        const auto& file = files.at(fileInfo.path);
+        memcpy(buffer, file.data() + position, numBytes);
+    }
+
+    int64_t readFile(FileInfo& /*fileInfo*/, void* /*buf*/, size_t /*numBytes*/) const override {
+        UNREACHABLE_CODE;
+    }
+
+    void writeFile(FileInfo& fileInfo, const uint8_t* buffer, uint64_t numBytes,
+        uint64_t offset) const override {
+        std::unique_lock lck{mtx};
+        auto& file = files[fileInfo.path];
+        if (file.size() < offset + numBytes) {
+            file.resize(offset + numBytes);
+        }
+        memcpy(file.data() + offset, buffer, numBytes);
+    }
+
+    int64_t seek(FileInfo& /*fileInfo*/, uint64_t /*offset*/, int /*whence*/) const override {
+        UNREACHABLE_CODE;
+    }
+
+    void truncate(FileInfo& fileInfo, uint64_t size) const override {
+        std::unique_lock lck{mtx};
+        files[fileInfo.path].resize(size);
+    }
+
+    uint64_t getFileSize(const FileInfo& fileInfo) const override {
+        std::unique_lock lck{mtx};
+        const auto file = files.find(fileInfo.path);
+        return file == files.end() ? 0 : file->second.size();
+    }
+
+private:
+    bool failSync;
+    mutable std::mutex mtx;
+    mutable std::unordered_map<std::string, std::vector<uint8_t>> files;
+};
+
+TEST_F(WalTest, WALSyncFailureReturnsAllocatedCommitSequence) {
+    VirtualFileSystem vfs;
+    vfs.registerFileSystem(std::make_unique<FailingSyncFileSystem>(true /* failSync */));
+
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("dummy");
+    localWAL.logCommit();
+
+    uint64_t walCommitSequence = 0;
+    EXPECT_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence),
+        IOException);
+    EXPECT_EQ(walCommitSequence, 1);
+}
 
 TEST_F(WalTest, NoWALFile) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {

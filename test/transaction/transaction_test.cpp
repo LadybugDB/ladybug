@@ -2,6 +2,7 @@
 
 #include "api_test/api_test.h"
 #include "api_test/private_api_test.h"
+#include "common/exception/runtime.h"
 #include "storage/storage_utils.h"
 #include "storage/wal/wal.h"
 #include <format>
@@ -65,6 +66,11 @@ TEST_F(PrivateApiTest, CommitRollbackRemoveActiveTransaction) {
     ASSERT_TRUE(hasActiveTransaction(*conn));
     conn->query("COMMIT;");
     ASSERT_FALSE(hasActiveTransaction(*conn));
+}
+
+TEST_F(PrivateApiTest, DirectTransactionCommitRequiresCommitTimestamp) {
+    Transaction transaction(TransactionType::WRITE);
+    EXPECT_THROW(transaction.commit(nullptr), lbug::common::RuntimeException);
 }
 
 TEST_F(PrivateApiTest, CloseConnectionWithActiveTransaction) {
@@ -173,6 +179,44 @@ TEST_F(EmptyDBTransactionTest, ConcurrentNodeInsertions) {
     ASSERT_EQ(count, numTotalInsertions);
     res = conn->query("MATCH (a:test) RETURN SUM(a.id) AS SUM_ID;");
     ASSERT_TRUE(res->isSuccess());
+    ASSERT_EQ(res->getNumTuples(), 1);
+    auto sumID = res->getNext()->getValue(0)->getValue<int128_t>();
+    ASSERT_EQ(sumID, (numTotalInsertions * (numTotalInsertions - 1)) / 2);
+}
+
+TEST_F(EmptyDBTransactionTest, ConcurrentNodeInsertionsRecoverFromWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL debug_enable_multi_writes=true;");
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    auto numThreads = 8;
+    auto numInsertsPerThread = 200;
+    conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
+    conn->query("CHECKPOINT;");
+
+    std::vector<std::thread> threads;
+    for (auto i = 0; i < numThreads; ++i) {
+        threads.emplace_back(insertNodes, i * numInsertsPerThread, numInsertsPerThread,
+            std::ref(*database));
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+
+    auto numTotalInsertions = numThreads * numInsertsPerThread;
+    auto res = conn->query("MATCH (a:test) RETURN COUNT(a) AS COUNT;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_EQ(res->getNumTuples(), 1);
+    auto count = res->getNext()->getValue(0)->getValue<int64_t>();
+    ASSERT_EQ(count, numTotalInsertions);
+    res = conn->query("MATCH (a:test) RETURN SUM(a.id) AS SUM_ID;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
     ASSERT_EQ(res->getNumTuples(), 1);
     auto sumID = res->getNext()->getValue(0)->getValue<int128_t>();
     ASSERT_EQ(sumID, (numTotalInsertions * (numTotalInsertions - 1)) / 2);

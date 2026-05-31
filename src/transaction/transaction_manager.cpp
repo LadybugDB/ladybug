@@ -31,10 +31,11 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
            activeWriteTransactionCount.load(std::memory_order_acquire) ==
                committingWriteTransactionCount.load(std::memory_order_acquire)) {
         newTransactionLck.unlock();
-        publicFunctionLck.unlock();
-        std::this_thread::sleep_for(
-            std::chrono::microseconds(THREAD_SLEEP_TIME_WHEN_WAITING_IN_MICROS));
-        publicFunctionLck.lock();
+        cvForCommittingWriteTransaction.wait(publicFunctionLck, [&]() {
+            return !hasActiveWriteTransactionNoLock() ||
+                   activeWriteTransactionCount.load(std::memory_order_acquire) !=
+                       committingWriteTransactionCount.load(std::memory_order_acquire);
+        });
         newTransactionLck.lock();
     }
     switch (type) {
@@ -82,7 +83,7 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
                 committingWriteTransactionCount.fetch_add(1, std::memory_order_release);
                 markedAsCommitting = true;
                 lck.unlock();
-                walCommitSequence = transaction->writeCommitToWAL(&wal);
+                transaction->writeCommitToWAL(&wal, walCommitSequence);
                 lck.lock();
                 if (walCommitSequence != 0) {
                     cvForPublishingCommit.wait(lck,
@@ -100,6 +101,7 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
                 clearTransactionNoLock(transaction->getID());
                 activeWriteTransactionCount.fetch_sub(1, std::memory_order_release);
                 committingWriteTransactionCount.fetch_sub(1, std::memory_order_release);
+                cvForCommittingWriteTransaction.notify_all();
                 markedAsCommitting = false;
             } break;
                 // LCOV_EXCL_START
@@ -118,7 +120,11 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
             cvForPublishingCommit.notify_all();
         }
         if (markedAsCommitting) {
+            std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
+            clearTransactionNoLock(transaction->getID());
+            activeWriteTransactionCount.fetch_sub(1, std::memory_order_release);
             committingWriteTransactionCount.fetch_sub(1, std::memory_order_release);
+            cvForCommittingWriteTransaction.notify_all();
         }
         throw;
     }

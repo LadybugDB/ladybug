@@ -26,17 +26,18 @@ WAL::WAL(const std::string& dbPath, bool readOnly, bool enableChecksums, Virtual
 
 WAL::~WAL() {}
 
-uint64_t WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context) {
+void WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
+    uint64_t& commitSequence) {
     DASSERT(!readOnly);
+    commitSequence = 0;
     if (inMemory || localWAL.getSize() == 0) {
-        return 0; // No need to log empty WAL.
+        return; // No need to log empty WAL.
     }
     std::unique_lock lck{mtx};
     initWriter(context);
     localWAL.inMemWriter->flush(*serializer->getWriter());
-    const auto commitSequence = ++appendedCommitSequence;
+    commitSequence = ++appendedCommitSequence;
     waitForDurabilityNoLock(commitSequence, lck);
-    return commitSequence;
 }
 
 void WAL::logAndFlushCheckpoint(main::ClientContext* context) {
@@ -101,11 +102,11 @@ void WAL::clear() {
 
 void WAL::reset() {
     std::unique_lock lck{mtx};
-    fileInfo.reset();
-    serializer.reset();
     durableCommitSequence = appendedCommitSequence;
     syncInProgress = false;
     groupCommitCV.notify_all();
+    fileInfo.reset();
+    serializer.reset();
     vfs->removeFileIfExists(walPath);
 }
 

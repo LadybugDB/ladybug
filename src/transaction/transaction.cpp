@@ -64,22 +64,29 @@ bool Transaction::shouldForceCheckpoint() const {
 }
 
 void Transaction::commit(storage::WAL* wal) {
-    writeCommitToWAL(wal);
+    if (commitTS == common::INVALID_TRANSACTION) {
+        throw common::RuntimeException{"Cannot commit with an invalid commit timestamp."};
+    }
+    uint64_t walCommitSequence = 0;
+    writeCommitToWAL(wal, walCommitSequence);
     publishCommit();
 }
 
-uint64_t Transaction::writeCommitToWAL(storage::WAL* wal) {
+void Transaction::writeCommitToWAL(storage::WAL* wal, uint64_t& walCommitSequence) {
+    walCommitSequence = 0;
     if (!shouldLogToWAL()) {
-        return 0;
+        return;
     }
     DASSERT(localWAL && wal);
     localWAL->logCommit();
-    const auto walCommitSequence = wal->logCommittedWAL(*localWAL, clientContext);
+    wal->logCommittedWAL(*localWAL, clientContext, walCommitSequence);
     localWAL->clear();
-    return walCommitSequence;
 }
 
 void Transaction::publishCommit() {
+    if (commitTS == common::INVALID_TRANSACTION) {
+        throw common::RuntimeException{"Cannot publish commit with an invalid commit timestamp."};
+    }
     localStorage->commit();
     undoBuffer->commit(commitTS);
     if (hasCatalogChanges) {

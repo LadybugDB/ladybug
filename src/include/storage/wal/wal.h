@@ -19,7 +19,8 @@ public:
         common::VirtualFileSystem* vfs);
     ~WAL();
 
-    uint64_t logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context);
+    void logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
+        uint64_t& commitSequence);
     void logAndFlushCheckpoint(main::ClientContext* context);
 
     bool rotateForCheckpoint(main::ClientContext* context);
