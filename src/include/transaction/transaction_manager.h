@@ -1,5 +1,6 @@
 #pragma once
 
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 
@@ -79,6 +80,8 @@ private:
     std::vector<std::unique_ptr<Transaction>> activeTransactions;
     common::transaction_t lastTransactionID;
     common::transaction_t lastTimestamp;
+    uint64_t nextWALCommitSequenceToPublish = 1;
+    std::condition_variable cvForPublishingCommit;
     // This mutex serializes begin/commit/rollback calls to protect activeTransactions.
     std::mutex mtxForSerializingPublicFunctionCalls;
     std::mutex mtxForStartingNewTransactions;
@@ -88,6 +91,7 @@ private:
     // Atomic counter tracking active write/recovery transactions so the checkpoint drain loop
     // can poll without holding mtxForSerializingPublicFunctionCalls.
     std::atomic<uint32_t> activeWriteTransactionCount{0};
+    std::atomic<uint32_t> committingWriteTransactionCount{0};
     uint64_t checkpointWaitTimeoutInMicros = common::DEFAULT_CHECKPOINT_WAIT_TIMEOUT_IN_MICROS;
 
     init_checkpointer_func_t initCheckpointerFunc;

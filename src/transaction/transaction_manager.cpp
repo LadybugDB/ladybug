@@ -26,6 +26,17 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
     if (type != TransactionType::READ_ONLY) {
         newTransactionLck.lock();
     }
+    while (type != TransactionType::READ_ONLY && !clientContext.getDBConfig()->enableMultiWrites &&
+           hasActiveWriteTransactionNoLock() &&
+           activeWriteTransactionCount.load(std::memory_order_acquire) ==
+               committingWriteTransactionCount.load(std::memory_order_acquire)) {
+        newTransactionLck.unlock();
+        publicFunctionLck.unlock();
+        std::this_thread::sleep_for(
+            std::chrono::microseconds(THREAD_SLEEP_TIME_WHEN_WAITING_IN_MICROS));
+        publicFunctionLck.lock();
+        newTransactionLck.lock();
+    }
     switch (type) {
     case TransactionType::READ_ONLY: {
         auto transaction =
@@ -56,29 +67,60 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
 
 void TransactionManager::commit(main::ClientContext& clientContext, Transaction* transaction) {
     bool shouldCheckpoint = false;
-    {
-        std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
-        clientContext.cleanUp();
-        switch (transaction->getType()) {
-        case TransactionType::READ_ONLY: {
-            clearTransactionNoLock(transaction->getID());
-        } break;
-        case TransactionType::RECOVERY:
-        case TransactionType::WRITE: {
-            lastTimestamp++;
-            transaction->commitTS = lastTimestamp;
-            transaction->commit(&wal);
-            shouldCheckpoint = transaction->shouldForceCheckpoint() ||
-                               Checkpointer::canAutoCheckpoint(clientContext, *transaction);
-            clearTransactionNoLock(transaction->getID());
-            activeWriteTransactionCount.fetch_sub(1, std::memory_order_release);
-        } break;
-            // LCOV_EXCL_START
-        default: {
-            throw TransactionManagerException("Invalid transaction type to commit.");
+    bool markedAsCommitting = false;
+    uint64_t walCommitSequence = 0;
+    try {
+        {
+            std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
+            clientContext.cleanUp();
+            switch (transaction->getType()) {
+            case TransactionType::READ_ONLY: {
+                clearTransactionNoLock(transaction->getID());
+            } break;
+            case TransactionType::RECOVERY:
+            case TransactionType::WRITE: {
+                committingWriteTransactionCount.fetch_add(1, std::memory_order_release);
+                markedAsCommitting = true;
+                lck.unlock();
+                walCommitSequence = transaction->writeCommitToWAL(&wal);
+                lck.lock();
+                if (walCommitSequence != 0) {
+                    cvForPublishingCommit.wait(lck,
+                        [&]() { return walCommitSequence == nextWALCommitSequenceToPublish; });
+                }
+                lastTimestamp++;
+                transaction->commitTS = lastTimestamp;
+                transaction->publishCommit();
+                if (walCommitSequence != 0) {
+                    nextWALCommitSequenceToPublish++;
+                    cvForPublishingCommit.notify_all();
+                }
+                shouldCheckpoint = transaction->shouldForceCheckpoint() ||
+                                   Checkpointer::canAutoCheckpoint(clientContext, *transaction);
+                clearTransactionNoLock(transaction->getID());
+                activeWriteTransactionCount.fetch_sub(1, std::memory_order_release);
+                committingWriteTransactionCount.fetch_sub(1, std::memory_order_release);
+                markedAsCommitting = false;
+            } break;
+                // LCOV_EXCL_START
+            default: {
+                throw TransactionManagerException("Invalid transaction type to commit.");
+            }
+                // LCOV_EXCL_STOP
+            }
         }
-            // LCOV_EXCL_STOP
+    } catch (...) {
+        if (walCommitSequence != 0) {
+            std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
+            cvForPublishingCommit.wait(lck,
+                [&]() { return walCommitSequence == nextWALCommitSequenceToPublish; });
+            nextWALCommitSequenceToPublish++;
+            cvForPublishingCommit.notify_all();
         }
+        if (markedAsCommitting) {
+            committingWriteTransactionCount.fetch_sub(1, std::memory_order_release);
+        }
+        throw;
     }
     // Checkpoint outside the public function lock so active writers can finish
     // (commit/rollback) during the drain phase instead of deadlocking.

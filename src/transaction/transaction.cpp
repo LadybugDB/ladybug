@@ -64,14 +64,24 @@ bool Transaction::shouldForceCheckpoint() const {
 }
 
 void Transaction::commit(storage::WAL* wal) {
+    writeCommitToWAL(wal);
+    publishCommit();
+}
+
+uint64_t Transaction::writeCommitToWAL(storage::WAL* wal) {
+    if (!shouldLogToWAL()) {
+        return 0;
+    }
+    DASSERT(localWAL && wal);
+    localWAL->logCommit();
+    const auto walCommitSequence = wal->logCommittedWAL(*localWAL, clientContext);
+    localWAL->clear();
+    return walCommitSequence;
+}
+
+void Transaction::publishCommit() {
     localStorage->commit();
     undoBuffer->commit(commitTS);
-    if (shouldLogToWAL()) {
-        DASSERT(localWAL && wal);
-        localWAL->logCommit();
-        wal->logCommittedWAL(*localWAL, clientContext);
-        localWAL->clear();
-    }
     if (hasCatalogChanges) {
         Catalog::Get(*clientContext)->incrementVersion();
         hasCatalogChanges = false;

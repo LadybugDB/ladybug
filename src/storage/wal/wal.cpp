@@ -26,15 +26,17 @@ WAL::WAL(const std::string& dbPath, bool readOnly, bool enableChecksums, Virtual
 
 WAL::~WAL() {}
 
-void WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context) {
+uint64_t WAL::logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context) {
     DASSERT(!readOnly);
     if (inMemory || localWAL.getSize() == 0) {
-        return; // No need to log empty WAL.
+        return 0; // No need to log empty WAL.
     }
     std::unique_lock lck{mtx};
     initWriter(context);
     localWAL.inMemWriter->flush(*serializer->getWriter());
-    flushAndSyncNoLock();
+    const auto commitSequence = ++appendedCommitSequence;
+    waitForDurabilityNoLock(commitSequence, lck);
+    return commitSequence;
 }
 
 void WAL::logAndFlushCheckpoint(main::ClientContext* context) {
@@ -55,6 +57,8 @@ bool WAL::rotateForCheckpoint(main::ClientContext* /*context*/) {
     }
     if (serializer) {
         flushAndSyncNoLock();
+        durableCommitSequence = appendedCommitSequence;
+        groupCommitCV.notify_all();
         fileInfo.reset();
         serializer.reset();
     }
@@ -90,13 +94,48 @@ void WAL::clearFrozenWAL() {
 void WAL::clear() {
     std::unique_lock lck{mtx};
     serializer->getWriter()->clear();
+    durableCommitSequence = appendedCommitSequence;
+    syncInProgress = false;
+    groupCommitCV.notify_all();
 }
 
 void WAL::reset() {
     std::unique_lock lck{mtx};
     fileInfo.reset();
     serializer.reset();
+    durableCommitSequence = appendedCommitSequence;
+    syncInProgress = false;
+    groupCommitCV.notify_all();
     vfs->removeFileIfExists(walPath);
+}
+
+void WAL::waitForDurabilityNoLock(uint64_t commitSequence, std::unique_lock<std::mutex>& lck) {
+    while (durableCommitSequence < commitSequence) {
+        if (syncInProgress) {
+            groupCommitCV.wait(lck);
+            continue;
+        }
+        syncInProgress = true;
+        while (durableCommitSequence < appendedCommitSequence) {
+            const auto targetSequence = appendedCommitSequence;
+            serializer->getWriter()->flush();
+            auto* fileToSync = fileInfo.get();
+            lck.unlock();
+            try {
+                fileToSync->syncFile();
+            } catch (...) {
+                lck.lock();
+                syncInProgress = false;
+                groupCommitCV.notify_all();
+                throw;
+            }
+            lck.lock();
+            durableCommitSequence = targetSequence;
+            groupCommitCV.notify_all();
+        }
+        syncInProgress = false;
+        groupCommitCV.notify_all();
+    }
 }
 
 // NOLINTNEXTLINE(readability-make-member-function-const): semantically non-const function.

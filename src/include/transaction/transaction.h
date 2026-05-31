@@ -116,6 +116,8 @@ public:
     bool shouldForceCheckpoint() const;
 
     void commit(storage::WAL* wal);
+    uint64_t writeCommitToWAL(storage::WAL* wal);
+    void publishCommit();
     void rollback(storage::WAL* wal);
 
     storage::LocalStorage* getLocalStorage() const { return localStorage.get(); }
