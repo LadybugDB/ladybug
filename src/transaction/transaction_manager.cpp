@@ -47,6 +47,7 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
     }
     case TransactionType::RECOVERY:
     case TransactionType::WRITE: {
+        wal.throwIfPoisoned();
         if (!clientContext.getDBConfig()->enableMultiWrites && hasActiveWriteTransactionNoLock()) {
             throw TransactionManagerException(
                 "Cannot start a new write transaction in the system. "

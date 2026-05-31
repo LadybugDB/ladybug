@@ -35,6 +35,11 @@ class FailingSyncFileSystem final : public FileSystem {
 public:
     explicit FailingSyncFileSystem(bool failSync) : failSync{failSync} {}
 
+    void setFailSync(bool fail) {
+        std::unique_lock lck{mtx};
+        failSync = fail;
+    }
+
     bool canHandleFile(const std::string_view path) const override {
         return path.starts_with("failing-sync://");
     }
@@ -78,6 +83,7 @@ public:
     }
 
     void syncFile(const FileInfo& /*fileInfo*/) const override {
+        std::unique_lock lck{mtx};
         if (failSync) {
             throw IOException{"Injected WAL sync failure."};
         }
@@ -126,9 +132,11 @@ private:
     mutable std::unordered_map<std::string, std::vector<uint8_t>> files;
 };
 
-TEST_F(WalTest, WALSyncFailureReturnsAllocatedCommitSequence) {
+TEST_F(WalTest, WALSyncFailurePoisonsWALAndReturnsAllocatedCommitSequence) {
     VirtualFileSystem vfs;
-    vfs.registerFileSystem(std::make_unique<FailingSyncFileSystem>(true /* failSync */));
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(true /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
 
     lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
         &vfs);
@@ -139,8 +147,19 @@ TEST_F(WalTest, WALSyncFailureReturnsAllocatedCommitSequence) {
 
     uint64_t walCommitSequence = 0;
     EXPECT_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence),
-        IOException);
+        RuntimeException);
     EXPECT_EQ(walCommitSequence, 1);
+
+    failingFSPtr->setFailSync(false);
+    lbug::storage::LocalWAL secondLocalWAL(
+        *lbug::storage::MemoryManager::Get(*conn->getClientContext()), false /* enableChecksums */);
+    secondLocalWAL.logLoadExtension("dummy2");
+    secondLocalWAL.logCommit();
+
+    walCommitSequence = 0;
+    EXPECT_THROW(wal.logCommittedWAL(secondLocalWAL, conn->getClientContext(), walCommitSequence),
+        RuntimeException);
+    EXPECT_EQ(walCommitSequence, 0);
 }
 
 TEST_F(WalTest, NoWALFile) {
