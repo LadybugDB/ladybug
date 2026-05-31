@@ -122,8 +122,8 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
         }
         if (markedAsCommitting) {
             std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
-            clearTransactionNoLock(transaction->getID());
-            activeWriteTransactionCount.fetch_sub(1, std::memory_order_release);
+            // Keep the transaction active so the caller's rollback path can undo any partial
+            // in-memory publish work. The rollback path clears activeWriteTransactionCount.
             committingWriteTransactionCount.fetch_sub(1, std::memory_order_release);
             cvForCommittingWriteTransaction.notify_all();
         }
