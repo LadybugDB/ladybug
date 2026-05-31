@@ -99,10 +99,10 @@ nodeID_t NodeInsertExecutor::insert(main::ClientContext* context) {
     if (checkConflict(transaction)) {
         return info.getNodeID();
     }
-    auto insertState = std::make_unique<storage::NodeTableInsertState>(*info.nodeIDVector,
-        *tableInfo.pkVector, tableInfo.columnDataVectors);
-    tableInfo.table->initInsertState(context, *insertState);
-    tableInfo.table->insert(transaction, *insertState);
+    storage::NodeTableInsertState insertState{*info.nodeIDVector, *tableInfo.pkVector,
+        tableInfo.columnDataVectors};
+    tableInfo.table->initInsertState(context, insertState);
+    tableInfo.table->insert(transaction, insertState);
     writeColumnVectors(info.columnVectors, tableInfo.columnDataVectors);
     return info.getNodeID();
 }
@@ -197,10 +197,10 @@ internalID_t RelInsertExecutor::insert(main::ClientContext* context) {
     for (auto i = 1u; i < tableInfo.columnDataEvaluators.size(); ++i) {
         tableInfo.columnDataEvaluators[i]->evaluate();
     }
-    auto insertState = std::make_unique<storage::RelTableInsertState>(*info.srcNodeIDVector,
-        *info.dstNodeIDVector, tableInfo.columnDataVectors);
-    tableInfo.table->initInsertState(context, *insertState);
-    tableInfo.table->insert(Transaction::Get(*context), *insertState);
+    storage::RelTableInsertState insertState{*info.srcNodeIDVector, *info.dstNodeIDVector,
+        tableInfo.columnDataVectors};
+    tableInfo.table->initInsertState(context, insertState);
+    tableInfo.table->insert(Transaction::Get(*context), insertState);
     writeColumnVectors(info.columnVectors, tableInfo.columnDataVectors);
     return tableInfo.getRelID();
 }
