@@ -92,6 +92,19 @@ void PreparedStatement::addParameter(const std::string& name, Value* value) {
     parameterMap.insert({name, std::make_shared<Value>(*value)});
 }
 
+void PreparedStatement::setParameter(const std::string& name, Value value) {
+    if (!parameterMap.contains(name)) {
+        throw BinderException(std::format("Parameter {} not found.", name));
+    }
+    auto& oldValue = parameterMap.at(name);
+    if (oldValue->getDataType() != value.getDataType()) {
+        throw BinderException(std::format("Cannot update parameter {} with type {}. Expected {}.",
+            name, value.getDataType().toString(), oldValue->getDataType().toString()));
+    }
+    validateParam(name, &value, oldValue.get());
+    *oldValue = std::move(value);
+}
+
 PreparedStatement::~PreparedStatement() = default;
 
 std::unique_ptr<PreparedStatement> PreparedStatement::getPreparedStatementWithError(

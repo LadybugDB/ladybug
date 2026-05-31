@@ -70,6 +70,7 @@ public:
     std::unordered_set<std::string> getKnownParameters();
     void updateParameter(const std::string& name, common::Value* value);
     void addParameter(const std::string& name, common::Value* value);
+    LBUG_API void setParameter(const std::string& name, common::Value value);
 
     std::string getName() const { return cachedPreparedStatementName; }
 
