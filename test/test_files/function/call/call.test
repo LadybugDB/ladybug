@@ -300,6 +300,10 @@ Binder exception: a.fName has type PROPERTY but LITERAL,PARAMETER,PATTERN was ex
 ---- 1
 SQLITE|Adds support for reading from SQLITE tables
 
+-STATEMENT CALL SHOW_OFFICIAL_EXTENSIONS() yield name, description WITH name, description WHERE name = 'VECTOR' return name, description
+---- 1
+VECTOR|Adds support for vector indexes
+
 -STATEMENT CALL SHOW_OFFICIAL_EXTENSIONS() yield name as extension_name, description as extension_description WITH extension_name, extension_description WHERE extension_name = 'SQLITE' return extension_name, extension_description
 ---- 1
 SQLITE|Adds support for reading from SQLITE tables
