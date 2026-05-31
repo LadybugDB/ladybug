@@ -15,7 +15,7 @@ std::shared_ptr<Expression> ExpressionBinder::bindParameterExpression(
     auto& parsedParameterExpression = parsedExpression.constCast<ParsedParameterExpression>();
     auto parameterName = parsedParameterExpression.getParameterName();
     if (knownParameters.contains(parameterName)) {
-        return make_shared<ParameterExpression>(parameterName, *knownParameters.at(parameterName));
+        return make_shared<ParameterExpression>(parameterName, knownParameters.at(parameterName));
     }
     // LCOV_EXCL_START
     throw BinderException(

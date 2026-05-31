@@ -65,6 +65,8 @@ public:
     const std::unordered_set<std::string>& getUnknownParameters() const {
         return unknownParameters;
     }
+    bool canReuseCachedPlanWith(
+        const std::unordered_map<std::string, std::unique_ptr<common::Value>>& inputParams) const;
     std::unordered_set<std::string> getKnownParameters();
     void updateParameter(const std::string& name, common::Value* value);
     void addParameter(const std::string& name, common::Value* value);

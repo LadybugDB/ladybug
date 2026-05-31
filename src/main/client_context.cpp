@@ -338,6 +338,7 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     if (!preparedStatement->isSuccess()) {
         return QueryResult::getQueryResultWithError(preparedStatement->errMsg);
     }
+    const auto useCachedPlan = preparedStatement->canReuseCachedPlanWith(inputParams);
     try {
         bindParametersNoLock(*preparedStatement, inputParams);
     } catch (std::exception& e) {
@@ -352,6 +353,9 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     }
     // LCOV_EXCL_STOP
     auto cachedStatement = cachedPreparedStatementManager.getCachedStatement(name);
+    if (useCachedPlan) {
+        return executeNoLock(preparedStatement, cachedStatement, queryID);
+    }
     // rebind
     auto [newPreparedStatement, newCachedStatement] =
         prepareNoLock(cachedStatement->parsedStatement, false /*shouldCommitNewTransaction*/,

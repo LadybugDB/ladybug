@@ -46,6 +46,22 @@ StatementType PreparedStatement::getStatementType() const {
     return preparedSummary.statementType;
 }
 
+bool PreparedStatement::canReuseCachedPlanWith(
+    const std::unordered_map<std::string, std::unique_ptr<Value>>& inputParams) const {
+    if (!unknownParameters.empty()) {
+        return false;
+    }
+    for (auto& [key, value] : inputParams) {
+        if (!parameterMap.contains(key)) {
+            return false;
+        }
+        if (parameterMap.at(key)->getDataType() != value->getDataType()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static void validateParam(const std::string& paramName, Value* newVal, Value* oldVal) {
     if (newVal->getDataType().getLogicalTypeID() == LogicalTypeID::POINTER &&
         newVal->getValue<uint8_t*>() != oldVal->getValue<uint8_t*>()) {

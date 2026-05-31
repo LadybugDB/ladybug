@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "common/types/value/value.h"
 #include "expression.h"
 
@@ -12,11 +14,16 @@ class LBUG_API ParameterExpression final : public Expression {
 public:
     explicit ParameterExpression(const std::string& parameterName, common::Value value)
         : Expression{expressionType, value.getDataType().copy(), createUniqueName(parameterName)},
+          parameterName(parameterName), value{std::make_shared<common::Value>(std::move(value))} {}
+
+    explicit ParameterExpression(const std::string& parameterName,
+        std::shared_ptr<common::Value> value)
+        : Expression{expressionType, value->getDataType().copy(), createUniqueName(parameterName)},
           parameterName(parameterName), value{std::move(value)} {}
 
     void cast(const common::LogicalType& type) override;
 
-    common::Value getValue() const { return value; }
+    common::Value getValue() const { return *value; }
 
 private:
     std::string toStringInternal() const override { return "$" + parameterName; }
@@ -24,7 +31,7 @@ private:
 
 private:
     std::string parameterName;
-    common::Value value;
+    std::shared_ptr<common::Value> value;
 };
 
 } // namespace binder
