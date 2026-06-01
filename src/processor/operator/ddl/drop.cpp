@@ -124,6 +124,10 @@ void Drop::dropGraph(const main::ClientContext* context) {
     auto dbManager = main::DatabaseManager::Get(*context);
     auto memoryManager = storage::MemoryManager::Get(*context);
 
+    if (StringUtils::caseInsensitiveEquals(dropInfo.name, "main")) {
+        throw BinderException{"Cannot drop the main graph."};
+    }
+
     if (!dbManager->hasGraph(dropInfo.name)) {
         auto message = std::format("Graph {} does not exist.", dropInfo.name);
         switch (dropInfo.conflictAction) {

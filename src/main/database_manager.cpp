@@ -109,6 +109,10 @@ DatabaseManager* DatabaseManager::Get(const ClientContext& context) {
 
 void DatabaseManager::createGraph(const std::string& graphName,
     storage::MemoryManager* memoryManager, main::ClientContext* clientContext, bool isAnyGraph) {
+    if (StringUtils::caseInsensitiveEquals(graphName, "main")) {
+        throw RuntimeException{"MAIN is a reserved graph name."};
+    }
+
     auto upperCaseName = StringUtils::getUpper(graphName);
 
     // Check if graph already exists in system catalog
@@ -202,6 +206,10 @@ void DatabaseManager::createGraph(const std::string& graphName,
 }
 
 void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContext* clientContext) {
+    if (StringUtils::caseInsensitiveEquals(graphName, "main")) {
+        throw BinderException{"Cannot drop the main graph."};
+    }
+
     auto upperCaseName = StringUtils::getUpper(graphName);
 
     // Check if graph exists in system catalog first
