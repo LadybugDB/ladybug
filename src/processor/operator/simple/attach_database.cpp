@@ -33,20 +33,20 @@ void AttachDatabase::executeInternal(ExecutionContext* context) {
     auto databaseManager = main::DatabaseManager::Get(*client);
     auto memoryManager = storage::MemoryManager::Get(*client);
     if (common::StringUtils::getUpper(attachInfo.dbType) == common::ATTACHED_LBUG_DB_TYPE) {
-        client->addDBDirToFileSearchPath(attachInfo.dbPath);
         auto db = std::make_unique<main::AttachedLbugDatabase>(attachInfo.dbPath,
             attachInfo.dbAlias, common::ATTACHED_LBUG_DB_TYPE, client);
         client->setDefaultDatabase(db.get());
         databaseManager->registerAttachedDatabase(std::move(db));
+        client->addDBDirToFileSearchPath(attachInfo.dbPath);
         appendMessage(attachMessage(), memoryManager);
         return;
     }
     for (auto& storageExtension : client->getDatabase()->getStorageExtensions()) {
         if (storageExtension->canHandleDB(attachInfo.dbType)) {
-            client->addDBDirToFileSearchPath(attachInfo.dbPath);
             auto db = storageExtension->attach(attachInfo.dbAlias, attachInfo.dbPath, client,
                 attachInfo.options);
             databaseManager->registerAttachedDatabase(std::move(db));
+            client->addDBDirToFileSearchPath(attachInfo.dbPath);
             appendMessage(attachMessage(), memoryManager);
             return;
         }

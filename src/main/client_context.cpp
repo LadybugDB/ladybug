@@ -27,6 +27,7 @@
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/spiller.h"
 #include "storage/storage_manager.h"
+#include "storage/storage_utils.h"
 #include "transaction/transaction_context.h"
 #include <format>
 #include <processor/warning_context.h>
@@ -215,11 +216,10 @@ void ClientContext::addDBDirToFileSearchPath(const std::string& dbPath) {
     if (dbPath.find("://") != std::string::npos) {
         return;
     }
-    // Expand ~ using the home directory from config
-    std::string expandedPath = dbPath;
-    if (dbPath.starts_with('~')) {
-        expandedPath = clientConfig.homeDirectory + dbPath.substr(1);
+    if (dbPath.find_first_of("/\\") == std::string::npos) {
+        return;
     }
+    const auto expandedPath = storage::StorageUtils::expandPath(this, dbPath);
     const auto slashPos = expandedPath.find_last_of("/\\");
     if (slashPos == std::string::npos) {
         return;
