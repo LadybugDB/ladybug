@@ -48,9 +48,10 @@ public:
     void addRelTable(catalog::RelGroupCatalogEntry* entry, const catalog::RelTableCatalogInfo& info,
         main::ClientContext* context = nullptr);
 
-    bool checkpoint(main::ClientContext* context, PageAllocator& pageAllocator);
-    bool checkpoint(main::ClientContext* context, const transaction::Transaction& snapshotTxn,
-        PageAllocator& pageAllocator,
+    bool checkpoint(main::ClientContext* context, const catalog::Catalog& catalog,
+        PageAllocator& pageAllocator);
+    bool checkpoint(main::ClientContext* context, const catalog::Catalog& catalog,
+        const transaction::Transaction& snapshotTxn, PageAllocator& pageAllocator,
         const std::unordered_map<common::table_id_t, uint64_t>& epochWatermarks);
 
     // Capture the current changeEpoch for every table. Must be called under the

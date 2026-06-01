@@ -319,6 +319,10 @@ void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManage
         auto storageManager = std::make_unique<storage::StorageManager>(graphPath, false, false,
             *memoryManager, false, clientContext->getDBConfig()->enableDefaultHashIndex, vfs);
         storageManager->initDataFileHandle(vfs, clientContext);
+        if (storageManager->getDataFH()->getNumPages() > 0) {
+            storage::Checkpointer::readCheckpoint(clientContext, catalog.get(),
+                storageManager.get());
+        }
         catalog->setStorageManager(std::move(storageManager));
 
         graphs.push_back(std::move(catalog));

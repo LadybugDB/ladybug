@@ -1,5 +1,7 @@
 #include "storage/checkpointer.h"
 
+#include <vector>
+
 #include "catalog/catalog.h"
 #include "common/file_system/file_system.h"
 #include "common/file_system/virtual_file_system.h"
@@ -8,6 +10,8 @@
 #include "common/serializer/in_mem_file_writer.h"
 #include "extension/extension_manager.h"
 #include "main/client_context.h"
+#include "main/database.h"
+#include "main/database_manager.h"
 #include "main/db_config.h"
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/database_header.h"
@@ -20,12 +24,64 @@
 namespace lbug {
 namespace storage {
 
+namespace {
+
+void writeDatabaseHeaderToStorage(main::ClientContext& clientContext, const DatabaseHeader& header,
+    StorageManager& storageManager) {
+    auto headerWriter =
+        std::make_shared<common::InMemFileWriter>(*MemoryManager::Get(clientContext));
+    common::Serializer headerSerializer(headerWriter);
+    header.serialize(headerSerializer);
+    auto headerPage = headerWriter->getPage(0);
+
+    auto dataFH = storageManager.getDataFH();
+    auto& shadowFile = storageManager.getShadowFile();
+    auto shadowHeader = ShadowUtils::createShadowVersionIfNecessaryAndPinPage(
+        common::StorageConstants::DB_HEADER_PAGE_IDX, true /* skipReadingOriginalPage */, *dataFH,
+        shadowFile);
+    memcpy(shadowHeader.frame, headerPage.data(), common::LBUG_PAGE_SIZE);
+    shadowFile.getShadowingFH().unpinPage(shadowHeader.shadowPage);
+
+    storageManager.setDatabaseHeader(std::make_unique<DatabaseHeader>(header));
+}
+
+void logCheckpointAndApplyShadowPagesForStorage(main::ClientContext& clientContext,
+    StorageManager& storageManager, bool walRotated) {
+    auto& shadowFile = storageManager.getShadowFile();
+    shadowFile.flushAll(clientContext);
+    auto wal = &storageManager.getWAL();
+    if (walRotated) {
+        wal->logAndFlushCheckpointToFrozen(&clientContext);
+    } else {
+        wal->logAndFlushCheckpoint(&clientContext);
+    }
+    shadowFile.applyShadowPages(storageManager, clientContext);
+    auto bufferManager = MemoryManager::Get(clientContext)->getBufferManager();
+    if (!walRotated) {
+        wal->clear();
+    }
+    shadowFile.clear(*bufferManager);
+}
+
+} // namespace
+
 Checkpointer::Checkpointer(main::ClientContext& clientContext)
     : clientContext{clientContext},
       isInMemory{main::DBConfig::isDBPathInMemory(clientContext.getDatabasePath())},
       mainStorageManager{clientContext.getDatabase()->getStorageManager()} {}
 
 Checkpointer::~Checkpointer() = default;
+
+std::vector<Checkpointer::CheckpointTarget> Checkpointer::collectCheckpointTargets() const {
+    std::vector<CheckpointTarget> result;
+    result.push_back({clientContext.getDatabase()->getCatalog(), mainStorageManager});
+    for (auto* graphCatalog : clientContext.getDatabase()->getDatabaseManager()->getGraphs()) {
+        if (auto* graphStorageManager = graphCatalog->getStorageManager()) {
+            result.push_back({graphCatalog, graphStorageManager});
+        }
+    }
+    return result;
+}
 
 PageRange Checkpointer::serializeCatalog(const catalog::Catalog& catalog,
     StorageManager& storageManager) {
@@ -101,7 +157,13 @@ void Checkpointer::writeCheckpoint() {
         return;
     }
 
-    walRotated = mainStorageManager->getWAL().rotateForCheckpoint(&clientContext);
+    checkpointTargets = collectCheckpointTargets();
+
+    for (const auto& target : checkpointTargets) {
+        auto rotated = target.storageManager->getWAL().rotateForCheckpoint(&clientContext);
+        walRotatedByManager[target.storageManager] = rotated;
+        walRotated = walRotated || rotated;
+    }
 
     auto databaseHeader = *mainStorageManager->getOrInitDatabaseHeader(clientContext);
     const auto oldStorageVersion = databaseHeader.storageVersion;
@@ -111,12 +173,24 @@ void Checkpointer::writeCheckpoint() {
     serializeCatalogAndMetadata(databaseHeader, localHasStorageChanges);
     databaseHeader.dataFileNumPages = mainStorageManager->getDataFH()->getNumPages();
     writeDatabaseHeader(databaseHeader);
-    logCheckpointAndApplyShadowPages(walRotated);
+    logCheckpointAndApplyShadowPages(walRotatedByManager.at(mainStorageManager));
+    for (const auto& target : checkpointTargets) {
+        if (target.storageManager == mainStorageManager) {
+            continue;
+        }
+        logCheckpointAndApplyShadowPagesForStorage(clientContext, *target.storageManager,
+            walRotatedByManager.at(target.storageManager));
+    }
 
     // Snapshot versions while the write gate is still held.
-    catalogVersionAtCheckpoint = clientContext.getDatabase()->getCatalog()->getVersion();
-    pageManagerVersionAtCheckpoint =
-        mainStorageManager->getDataFH()->getPageManager()->getVersion();
+    for (const auto& target : checkpointTargets) {
+        catalogVersionAtCheckpointByCatalog[target.catalog] = target.catalog->getVersion();
+        pageManagerVersionAtCheckpointByManager[target.storageManager] =
+            target.storageManager->getDataFH()->getPageManager()->getVersion();
+    }
+    catalogVersionAtCheckpoint =
+        catalogVersionAtCheckpointByCatalog[clientContext.getDatabase()->getCatalog()];
+    pageManagerVersionAtCheckpoint = pageManagerVersionAtCheckpointByManager[mainStorageManager];
 
     postCheckpointCleanup();
 }
@@ -127,8 +201,13 @@ void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp) {
     }
 
     snapshotTS = snapshotTimestamp;
+    checkpointTargets = collectCheckpointTargets();
 
-    walRotated = mainStorageManager->getWAL().rotateForCheckpoint(&clientContext);
+    for (const auto& target : checkpointTargets) {
+        auto rotated = target.storageManager->getWAL().rotateForCheckpoint(&clientContext);
+        walRotatedByManager[target.storageManager] = rotated;
+        walRotated = walRotated || rotated;
+    }
 
     checkpointHeader = *mainStorageManager->getOrInitDatabaseHeader(clientContext);
     const auto oldStorageVersion = checkpointHeader.storageVersion;
@@ -136,10 +215,17 @@ void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp) {
     hasStorageVersionUpgrade = oldStorageVersion != checkpointHeader.storageVersion;
 
     // Capture versions while the write gate is still held.
-    catalogVersionAtCheckpoint = clientContext.getDatabase()->getCatalog()->getVersion();
-    pageManagerVersionAtCheckpoint =
-        mainStorageManager->getDataFH()->getPageManager()->getVersion();
-    tableEpochWatermarks = mainStorageManager->captureChangeEpochs();
+    for (const auto& target : checkpointTargets) {
+        catalogVersionAtCheckpointByCatalog[target.catalog] = target.catalog->getVersion();
+        pageManagerVersionAtCheckpointByManager[target.storageManager] =
+            target.storageManager->getDataFH()->getPageManager()->getVersion();
+        tableEpochWatermarksByManager[target.storageManager] =
+            target.storageManager->captureChangeEpochs();
+    }
+    catalogVersionAtCheckpoint =
+        catalogVersionAtCheckpointByCatalog[clientContext.getDatabase()->getCatalog()];
+    pageManagerVersionAtCheckpoint = pageManagerVersionAtCheckpointByManager[mainStorageManager];
+    tableEpochWatermarks = tableEpochWatermarksByManager[mainStorageManager];
 }
 
 void Checkpointer::checkpointStoragePhase() {
@@ -162,7 +248,14 @@ void Checkpointer::finishCheckpoint() {
     serializeCatalogAndMetadata(checkpointHeader, hasStorageChanges);
     checkpointHeader.dataFileNumPages = mainStorageManager->getDataFH()->getNumPages();
     writeDatabaseHeader(checkpointHeader);
-    logCheckpointAndApplyShadowPages(walRotated);
+    logCheckpointAndApplyShadowPages(walRotatedByManager.at(mainStorageManager));
+    for (const auto& target : checkpointTargets) {
+        if (target.storageManager == mainStorageManager) {
+            continue;
+        }
+        logCheckpointAndApplyShadowPagesForStorage(clientContext, *target.storageManager,
+            walRotatedByManager.at(target.storageManager));
+    }
 }
 
 void Checkpointer::postCheckpointCleanup() {
@@ -176,29 +269,51 @@ void Checkpointer::postCheckpointCleanup() {
     // reset in-memory state.  On the next startup the database loads from the stable
     // on-disk checkpoint and is fully consistent.
     mainStorageManager->finalizeCheckpoint();
+    for (const auto& target : checkpointTargets) {
+        if (target.storageManager == mainStorageManager) {
+            continue;
+        }
+        target.storageManager->finalizeCheckpoint();
+    }
     auto bufferManager = MemoryManager::Get(clientContext)->getBufferManager();
     bufferManager->removeEvictedCandidates();
 
-    clientContext.getDatabase()->getCatalog()->resetVersion(catalogVersionAtCheckpoint);
-    auto* dataFH = mainStorageManager->getDataFH();
-    dataFH->getPageManager()->resetVersion(pageManagerVersionAtCheckpoint);
-    if (walRotated) {
-        mainStorageManager->getWAL().clearFrozenWAL();
-    } else {
-        mainStorageManager->getWAL().reset();
+    for (const auto& target : checkpointTargets) {
+        if (catalogVersionAtCheckpointByCatalog.contains(target.catalog)) {
+            target.catalog->resetVersion(catalogVersionAtCheckpointByCatalog[target.catalog]);
+        }
+        if (pageManagerVersionAtCheckpointByManager.contains(target.storageManager)) {
+            target.storageManager->getDataFH()->getPageManager()->resetVersion(
+                pageManagerVersionAtCheckpointByManager[target.storageManager]);
+        }
+        if (walRotatedByManager.at(target.storageManager)) {
+            target.storageManager->getWAL().clearFrozenWAL();
+        } else {
+            target.storageManager->getWAL().reset();
+        }
+        target.storageManager->getShadowFile().reset();
     }
-    mainStorageManager->getShadowFile().reset();
 }
 
 bool Checkpointer::checkpointStorage() {
-    auto pageAllocator = mainStorageManager->getDataFH()->getPageManager();
-    if (snapshotTS > 0) {
-        const transaction::Transaction snapshotTxn(transaction::TransactionType::CHECKPOINT,
-            transaction::Transaction::DUMMY_TRANSACTION_ID, snapshotTS);
-        return mainStorageManager->checkpoint(&clientContext, snapshotTxn, *pageAllocator,
-            tableEpochWatermarks);
+    bool hasChanges = false;
+    for (const auto& target : checkpointTargets) {
+        auto pageAllocator = target.storageManager->getDataFH()->getPageManager();
+        bool targetHasChanges;
+        if (snapshotTS > 0) {
+            const transaction::Transaction snapshotTxn(transaction::TransactionType::CHECKPOINT,
+                transaction::Transaction::DUMMY_TRANSACTION_ID, snapshotTS);
+            targetHasChanges =
+                target.storageManager->checkpoint(&clientContext, *target.catalog, snapshotTxn,
+                    *pageAllocator, tableEpochWatermarksByManager.at(target.storageManager));
+        } else {
+            targetHasChanges =
+                target.storageManager->checkpoint(&clientContext, *target.catalog, *pageAllocator);
+        }
+        storageChangesByManager[target.storageManager] = targetHasChanges;
+        hasChanges = targetHasChanges || hasChanges;
     }
-    return mainStorageManager->checkpoint(&clientContext, *pageAllocator);
+    return hasChanges;
 }
 
 void Checkpointer::serializeCatalogAndMetadata(DatabaseHeader& databaseHeader,
@@ -223,51 +338,49 @@ void Checkpointer::serializeCatalogAndMetadata(DatabaseHeader& databaseHeader,
             useSnapshot ? serializeMetadataSnapshot(*catalog, *mainStorageManager) :
                           serializeMetadata(*catalog, *mainStorageManager);
     }
+
+    for (const auto& target : checkpointTargets) {
+        if (target.storageManager == mainStorageManager) {
+            continue;
+        }
+        auto graphHeader = *target.storageManager->getOrInitDatabaseHeader(clientContext);
+        auto* graphDataFH = target.storageManager->getDataFH();
+        const auto graphStorageChanges = storageChangesByManager.at(target.storageManager);
+        if (graphHeader.catalogPageRange.startPageIdx == common::INVALID_PAGE_IDX ||
+            target.catalog->changedSinceLastCheckpoint() || hasStorageVersionUpgrade) {
+            graphHeader.updateCatalogPageRange(*graphDataFH->getPageManager(),
+                useSnapshot ? serializeCatalogSnapshot(*target.catalog, *target.storageManager) :
+                              serializeCatalog(*target.catalog, *target.storageManager));
+        }
+        if (graphHeader.metadataPageRange.startPageIdx == common::INVALID_PAGE_IDX ||
+            graphStorageChanges || target.catalog->changedSinceLastCheckpoint() ||
+            graphDataFH->getPageManager()->changedSinceLastCheckpoint()) {
+            graphHeader.freeMetadataPageRange(*graphDataFH->getPageManager());
+            graphHeader.metadataPageRange =
+                useSnapshot ? serializeMetadataSnapshot(*target.catalog, *target.storageManager) :
+                              serializeMetadata(*target.catalog, *target.storageManager);
+        }
+        graphHeader.dataFileNumPages = graphDataFH->getNumPages();
+        writeDatabaseHeaderToStorage(clientContext, graphHeader, *target.storageManager);
+    }
 }
 
 void Checkpointer::writeDatabaseHeader(const DatabaseHeader& header) {
-    auto headerWriter =
-        std::make_shared<common::InMemFileWriter>(*MemoryManager::Get(clientContext));
-    common::Serializer headerSerializer(headerWriter);
-    header.serialize(headerSerializer);
-    auto headerPage = headerWriter->getPage(0);
-
-    auto dataFH = mainStorageManager->getDataFH();
-    auto& shadowFile = mainStorageManager->getShadowFile();
-    auto shadowHeader = ShadowUtils::createShadowVersionIfNecessaryAndPinPage(
-        common::StorageConstants::DB_HEADER_PAGE_IDX, true /* skipReadingOriginalPage */, *dataFH,
-        shadowFile);
-    memcpy(shadowHeader.frame, headerPage.data(), common::LBUG_PAGE_SIZE);
-    shadowFile.getShadowingFH().unpinPage(shadowHeader.shadowPage);
-
-    // Update the in-memory database header with the new version
-    mainStorageManager->setDatabaseHeader(std::make_unique<DatabaseHeader>(header));
+    writeDatabaseHeaderToStorage(clientContext, header, *mainStorageManager);
 }
 
 void Checkpointer::logCheckpointAndApplyShadowPages(bool walRotated_) {
-    auto& shadowFile = mainStorageManager->getShadowFile();
-    shadowFile.flushAll(clientContext);
-    auto wal = WAL::Get(clientContext);
-    if (walRotated_) {
-        wal->logAndFlushCheckpointToFrozen(&clientContext);
-    } else {
-        wal->logAndFlushCheckpoint(&clientContext);
-    }
-    shadowFile.applyShadowPages(*mainStorageManager, clientContext);
-    auto bufferManager = MemoryManager::Get(clientContext)->getBufferManager();
-    if (!walRotated_) {
-        wal->clear();
-    }
-    shadowFile.clear(*bufferManager);
+    logCheckpointAndApplyShadowPagesForStorage(clientContext, *mainStorageManager, walRotated_);
 }
 
 void Checkpointer::rollback() {
     if (isInMemory) {
         return;
     }
-    auto catalog = catalog::Catalog::Get(clientContext);
     // Any pages freed during the checkpoint are no longer freed
-    mainStorageManager->rollbackCheckpoint(*catalog);
+    for (const auto& target : checkpointTargets) {
+        target.storageManager->rollbackCheckpoint(*target.catalog);
+    }
 }
 
 bool Checkpointer::canAutoCheckpoint(const main::ClientContext& clientContext,
@@ -282,7 +395,7 @@ bool Checkpointer::canAutoCheckpoint(const main::ClientContext& clientContext,
         // Recovery transactions are not allowed to trigger auto checkpoint.
         return false;
     }
-    auto wal = WAL::Get(clientContext);
+    auto wal = &clientContext.getDatabase()->getStorageManager()->getWAL();
     const auto expectedSize = transaction.getLocalWAL().getSize() + wal->getFileSize();
     return expectedSize > clientContext.getDBConfig()->checkpointThreshold;
 }
@@ -294,7 +407,7 @@ void Checkpointer::readCheckpoint() {
     storageManager->initDataFileHandle(common::VirtualFileSystem::GetUnsafe(clientContext),
         &clientContext);
     if (!isInMemory && storageManager->getDataFH()->getNumPages() > 0) {
-        readCheckpoint(&clientContext, catalog::Catalog::Get(clientContext), storageManager);
+        readCheckpoint(&clientContext, clientContext.getDatabase()->getCatalog(), storageManager);
     }
     extension::ExtensionManager::Get(clientContext)->autoLoadLinkedExtensions(&clientContext);
 }

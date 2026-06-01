@@ -282,11 +282,11 @@ void StorageManager::reclaimDroppedTables(const Catalog& catalog) {
     }
 }
 
-bool StorageManager::checkpoint(main::ClientContext* context, PageAllocator& pageAllocator) {
+bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& catalog,
+    PageAllocator& pageAllocator) {
     bool hasChanges = false;
-    const auto catalog = Catalog::Get(*context);
-    const auto nodeTableEntries = catalog->getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
-    const auto relGroupEntries = catalog->getRelGroupEntries(&DUMMY_CHECKPOINT_TRANSACTION);
+    const auto nodeTableEntries = catalog.getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
+    const auto relGroupEntries = catalog.getRelGroupEntries(&DUMMY_CHECKPOINT_TRANSACTION);
 
     std::shared_lock lck{mtx};
     for (const auto entry : nodeTableEntries) {
@@ -309,16 +309,16 @@ bool StorageManager::checkpoint(main::ClientContext* context, PageAllocator& pag
         entry->vacuumColumnIDs(1);
     }
     lck.unlock();
-    reclaimDroppedTables(*catalog);
+    reclaimDroppedTables(catalog);
     return hasChanges;
 }
 
-bool StorageManager::checkpoint(main::ClientContext* context, const Transaction& snapshotTxn,
-    PageAllocator& pageAllocator, const std::unordered_map<table_id_t, uint64_t>& epochWatermarks) {
+bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& catalog,
+    const Transaction& snapshotTxn, PageAllocator& pageAllocator,
+    const std::unordered_map<table_id_t, uint64_t>& epochWatermarks) {
     bool hasChanges = false;
-    const auto catalog = Catalog::Get(*context);
-    const auto nodeTableEntries = catalog->getNodeTableEntries(&snapshotTxn);
-    const auto relGroupEntries = catalog->getRelGroupEntries(&snapshotTxn);
+    const auto nodeTableEntries = catalog.getNodeTableEntries(&snapshotTxn);
+    const auto relGroupEntries = catalog.getRelGroupEntries(&snapshotTxn);
 
     std::shared_lock lck{mtx};
     for (const auto entry : nodeTableEntries) {
@@ -348,7 +348,7 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Transaction&
         entry->vacuumColumnIDs(1);
     }
     lck.unlock();
-    reclaimDroppedTables(*catalog);
+    reclaimDroppedTables(catalog);
     return hasChanges;
 }
 

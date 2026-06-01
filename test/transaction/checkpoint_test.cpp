@@ -389,6 +389,37 @@ TEST_F(ReviewFixesTest, CheckpointDrainWaitsForInFlightWrite) {
     ASSERT_EQ(count, N + 1) << "Row committed just before the write gate must survive checkpoint";
 }
 
+TEST_F(ReviewFixesTest, CheckpointUsesMatchingCatalogForMainAndDefaultGraph) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;"));
+    auto createGraph = conn->query("CREATE GRAPH ratatouille ANY;");
+    ASSERT_TRUE(createGraph->isSuccess()) << createGraph->getErrorMessage();
+
+    auto checkpoint = conn->query("CHECKPOINT;");
+    ASSERT_TRUE(checkpoint->isSuccess()) << checkpoint->getErrorMessage();
+    ASSERT_FALSE(std::filesystem::exists(StorageUtils::getCheckpointWALFilePath(databasePath)));
+
+    checkpoint.reset();
+    createGraph.reset();
+    createDBAndConn();
+    auto useGraph = conn->query("USE GRAPH ratatouille;");
+    ASSERT_TRUE(useGraph->isSuccess()) << useGraph->getErrorMessage();
+    auto showTables = conn->query("CALL SHOW_TABLES() RETURN count(*)");
+    ASSERT_TRUE(showTables->isSuccess()) << showTables->getErrorMessage();
+    ASSERT_EQ(showTables->getNext()->getValue(0)->getValue<int64_t>(), 2);
+
+    auto readOnlyConfig = *systemConfig;
+    readOnlyConfig.readOnly = true;
+    auto graphPath = StorageUtils::getGraphPath(databasePath, "ratatouille");
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, readOnlyConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto graphTables = graphConnection->query("CALL SHOW_TABLES() RETURN count(*)");
+    ASSERT_TRUE(graphTables->isSuccess()) << graphTables->getErrorMessage();
+    ASSERT_EQ(graphTables->getNext()->getValue(0)->getValue<int64_t>(), 2);
+}
+
 // Fix #2 – remove const_cast from NodeGroup::checkpointInMemOnly and
 //            NodeGroup::scanAllInsertedAndVersions
 // ─────────────────────────────────────────────────────────────────────────────

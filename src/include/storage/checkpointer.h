@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <vector>
 
 #include "common/types/types.h"
 #include "storage/database_header.h"
@@ -21,6 +22,7 @@ struct FSMLeakChecker;
 }
 namespace main {
 class AttachedLbugDatabase;
+class DatabaseManager;
 } // namespace main
 
 namespace storage {
@@ -28,6 +30,7 @@ class StorageManager;
 
 class Checkpointer {
     friend class main::AttachedLbugDatabase;
+    friend class main::DatabaseManager;
     friend struct testing::FSMLeakChecker;
 
 public:
@@ -59,6 +62,13 @@ protected:
     virtual void logCheckpointAndApplyShadowPages(bool walRotated = false);
 
 private:
+    struct CheckpointTarget {
+        catalog::Catalog* catalog;
+        StorageManager* storageManager;
+    };
+
+    std::vector<CheckpointTarget> collectCheckpointTargets() const;
+
     static void readCheckpoint(main::ClientContext* context, catalog::Catalog* catalog,
         StorageManager* storageManager);
 
@@ -87,6 +97,13 @@ protected:
     uint64_t pageManagerVersionAtCheckpoint = 0;
     // Per-table changeEpoch watermarks captured under the write gate.
     std::unordered_map<common::table_id_t, uint64_t> tableEpochWatermarks;
+    std::unordered_map<StorageManager*, bool> storageChangesByManager;
+    std::unordered_map<StorageManager*, bool> walRotatedByManager;
+    std::vector<CheckpointTarget> checkpointTargets;
+    std::unordered_map<StorageManager*, std::unordered_map<common::table_id_t, uint64_t>>
+        tableEpochWatermarksByManager;
+    std::unordered_map<catalog::Catalog*, uint64_t> catalogVersionAtCheckpointByCatalog;
+    std::unordered_map<StorageManager*, uint64_t> pageManagerVersionAtCheckpointByManager;
 };
 
 } // namespace storage
