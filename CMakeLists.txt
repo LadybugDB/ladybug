@@ -72,6 +72,7 @@ if(WIN32)
   # Required for Windows SDK headers (winnt.h) when using Clang; MSVC branch sets the target arch later.
   if(OS_ARCH STREQUAL "arm64")
     add_compile_definitions(_ARM64_)
+    add_compile_definitions(PCG_LITTLE_ENDIAN=1)
   elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
     add_compile_definitions(_AMD64_)
   else()
