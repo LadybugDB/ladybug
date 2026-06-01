@@ -6,6 +6,7 @@
 #include "common/enums/join_type.h"
 #include "common/enums/rel_direction.h"
 #include "common/enums/table_type.h"
+#include "common/exception/runtime.h"
 #include "common/utils.h"
 #include "planner/join_order/cost_model.h"
 #include "planner/join_order/join_plan_solver.h"
@@ -143,7 +144,16 @@ LogicalPlan Planner::planQueryGraph(const QueryGraph& queryGraph,
         planLevel(context.currentLevel++);
     }
 
-    auto& plans = context.getPlans(context.getFullyMatchedSubqueryGraph());
+    auto fullyMatchedSubqueryGraph = context.getFullyMatchedSubqueryGraph();
+    if (!context.containPlans(fullyMatchedSubqueryGraph)) {
+        if (context.subPlansTable->hasExceededPlanLimit()) {
+            throw RuntimeException(
+                "Query planning exceeded the join enumeration limits. Try simplifying the MATCH "
+                "pattern, splitting it into multiple query parts, or using a join hint.");
+        }
+        throw RuntimeException("Unable to construct a complete plan for the query graph.");
+    }
+    auto& plans = context.getPlans(fullyMatchedSubqueryGraph);
     auto bestIdx = 0;
     for (auto i = 1u; i < plans.size(); ++i) {
         if (plans[i].getCost() < plans[bestIdx].getCost()) {

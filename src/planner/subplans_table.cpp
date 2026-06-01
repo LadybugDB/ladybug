@@ -14,9 +14,9 @@ SubgraphPlans::SubgraphPlans(const SubqueryGraph& subqueryGraph) {
     maxCost = UINT64_MAX;
 }
 
-void SubgraphPlans::addPlan(LogicalPlan plan) {
+bool SubgraphPlans::addPlan(LogicalPlan plan) {
     if (plans.size() > MAX_NUM_PLANS) {
-        return;
+        return false;
     }
     auto planCode = encodePlan(plan);
     if (!encodedPlan2PlanIdx.contains(planCode)) {
@@ -39,6 +39,7 @@ void SubgraphPlans::addPlan(LogicalPlan plan) {
             plans[planIdx] = std::move(plan);
         }
     }
+    return true;
 }
 
 std::bitset<MAX_NUM_QUERY_VARIABLES> SubgraphPlans::encodePlan(const LogicalPlan& plan) {
@@ -59,14 +60,14 @@ std::vector<SubqueryGraph> DPLevel::getSubqueryGraphs() {
     return result;
 }
 
-void DPLevel::addPlan(const SubqueryGraph& subqueryGraph, LogicalPlan plan) {
+bool DPLevel::addPlan(const SubqueryGraph& subqueryGraph, LogicalPlan plan) {
     if (subgraph2Plans.size() > MAX_NUM_SUBGRAPH) {
-        return;
+        return false;
     }
     if (!contains(subqueryGraph)) {
         subgraph2Plans.insert({subqueryGraph, SubgraphPlans(subqueryGraph)});
     }
-    subgraph2Plans.at(subqueryGraph).addPlan(std::move(plan));
+    return subgraph2Plans.at(subqueryGraph).addPlan(std::move(plan));
 }
 
 void SubPlansTable::resize(uint32_t newSize) {
@@ -100,10 +101,11 @@ std::vector<SubqueryGraph> SubPlansTable::getSubqueryGraphs(uint32_t level) {
 
 void SubPlansTable::addPlan(const SubqueryGraph& subqueryGraph, LogicalPlan plan) {
     auto& dpLevel = getDPLevelUnsafe(subqueryGraph);
-    dpLevel.addPlan(subqueryGraph, std::move(plan));
+    exceededPlanLimit = !dpLevel.addPlan(subqueryGraph, std::move(plan)) || exceededPlanLimit;
 }
 
 void SubPlansTable::clear() {
+    exceededPlanLimit = false;
     for (auto& dpLevel : dpLevels) {
         dpLevel.clear();
     }

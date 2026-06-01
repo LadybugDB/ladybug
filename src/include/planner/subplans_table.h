@@ -27,7 +27,7 @@ public:
 
     uint64_t getMaxCost() const { return maxCost; }
 
-    void addPlan(LogicalPlan plan);
+    bool addPlan(LogicalPlan plan);
 
     const std::vector<LogicalPlan>& getPlans() const { return plans; }
 
@@ -37,7 +37,7 @@ private:
     std::bitset<binder::MAX_NUM_QUERY_VARIABLES> encodePlan(const LogicalPlan& plan);
 
 private:
-    constexpr static uint32_t MAX_NUM_PLANS = 10;
+    constexpr static uint32_t MAX_NUM_PLANS = 16;
 
 private:
     uint64_t maxCost = UINT64_MAX;
@@ -61,12 +61,12 @@ public:
 
     std::vector<binder::SubqueryGraph> getSubqueryGraphs();
 
-    void addPlan(const binder::SubqueryGraph& subqueryGraph, LogicalPlan plan);
+    bool addPlan(const binder::SubqueryGraph& subqueryGraph, LogicalPlan plan);
 
     void clear() { subgraph2Plans.clear(); }
 
 private:
-    constexpr static uint32_t MAX_NUM_SUBGRAPH = 50;
+    constexpr static uint32_t MAX_NUM_SUBGRAPH = 128;
 
 private:
     binder::subquery_graph_V_map_t<SubgraphPlans> subgraph2Plans;
@@ -86,6 +86,7 @@ public:
     std::vector<binder::SubqueryGraph> getSubqueryGraphs(uint32_t level);
 
     void addPlan(const binder::SubqueryGraph& subqueryGraph, LogicalPlan plan);
+    bool hasExceededPlanLimit() const { return exceededPlanLimit; }
 
     void clear();
 
@@ -99,6 +100,7 @@ private:
 
 private:
     std::vector<DPLevel> dpLevels;
+    bool exceededPlanLimit = false;
 };
 
 } // namespace planner

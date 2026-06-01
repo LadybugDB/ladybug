@@ -652,6 +652,59 @@ alice
 {_ID: 0:0, _LABEL: Node, id: 0, cities: [Old York,Los Angeles]}
 {_ID: 0:1, _LABEL: Node, id: 1, cities: [Tokyo,Osaka]}
 
+-CASE 556
+-STATEMENT CREATE NODE TABLE Issue556Node(
+    id STRING,
+    kind STRING,
+    reference STRING,
+    name STRING,
+    value STRING,
+    type STRING,
+    PRIMARY KEY (id)
+);
+---- ok
+-STATEMENT CREATE REL TABLE Issue556Child(
+    FROM Issue556Node TO Issue556Node
+);
+---- ok
+-STATEMENT MATCH (MODULE:Issue556Node { kind: 'Module' }),
+    (MODULE:Issue556Node)-[:Issue556Child*1..5]->(FUNCOP:Issue556Node),
+        (FUNCOP:Issue556Node { kind: 'Operation', type: 'llvm.func' }),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(BASE:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(BASE_ALIGNED:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(BASE_OFFSET:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(BASE_STRIDE0:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(BASE_STRIDE1:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(BASE_SIZE0:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(BASE_SIZE1:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(ARG0:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(ARG1:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(ARG2:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(STRIDE0:Issue556Node),
+            (STRIDE0:Issue556Node { kind: 'Operation', type: 'llvm.mlir.constant' }),
+            (STRIDE0:Issue556Node)-[:Issue556Child*1..5]->(STRIDE0_VALUE:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(DESCSTRIDE0:Issue556Node),
+            (DESCSTRIDE0:Issue556Node { kind: 'Operation', type: 'llvm.mul' }),
+            (DESCSTRIDE0:Issue556Node)-[:Issue556Child*1..5]->(ARG0_OP:Issue556Node),
+            (DESCSTRIDE0:Issue556Node)-[:Issue556Child*1..5]->(STRIDE0_OP:Issue556Node),
+            (DESCSTRIDE0:Issue556Node)-[:Issue556Child*1..5]->(DESCSTRIDE0_VALUE:Issue556Node),
+            (DESCSTRIDE0_VALUE:Issue556Node { kind: 'Value' }),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(OFF2:Issue556Node),
+            (OFF2:Issue556Node { kind: 'Operation', type: 'llvm.add' }),
+            (OFF2:Issue556Node)-[:Issue556Child*1..5]->(DESCSTRIDE0_OP:Issue556Node),
+            (OFF2:Issue556Node)-[:Issue556Child*1..5]->(ARG1_OP:Issue556Node),
+            (OFF2:Issue556Node)-[:Issue556Child*1..5]->(OFF2_VALUE:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(DESCPOISON:Issue556Node),
+            (DESCPOISON:Issue556Node { kind: 'Operation', type: 'llvm.mlir.poison' }),
+            (DESCPOISON:Issue556Node)-[:Issue556Child*1..5]->(DESCPOISON_VALUE:Issue556Node),
+        (FUNCOP:Issue556Node)-[:Issue556Child*1..5]->(DESC0:Issue556Node),
+            (DESC0:Issue556Node { kind: 'Operation', type: 'llvm.insertvalue' }),
+            (DESC0:Issue556Node)-[:Issue556Child*1..5]->(BASE_INSERT_OP:Issue556Node),
+            (DESC0:Issue556Node)-[:Issue556Child*1..5]->(POISON_INSERT_OP:Issue556Node)
+RETURN COUNT(*);
+---- 1
+0
+
 -CASE unwind_merge_with_projection_dedup
 -STATEMENT CREATE NODE TABLE Person(id STRING PRIMARY KEY, name STRING, age INT64, department STRING);
 ---- ok
