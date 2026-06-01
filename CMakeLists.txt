@@ -197,11 +197,7 @@ if(MSVC)
     # older versions of the MSVC runtime library
     # See: https://github.com/microsoft/STL/wiki/Changelog#vs-2022-1710
     add_compile_definitions(_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
-    # TODO (bmwinger): Figure out if this can be set automatically by cmake,
-    # or at least better integrated with user-specified options
-    # For now, hardcode _AMD64_
-    # CMAKE_GENERATOR_PLATFORM can be used for visual studio builds, but not for ninja
-    add_compile_definitions(_AMD64_)
+    # Windows target architecture macros are set above from the detected compiler target.
     # Non-english windows system may use other encodings other than utf-8 (e.g. Chinese use GBK).
     add_compile_options("/utf-8")
     # Enables support for custom hardware exception handling
