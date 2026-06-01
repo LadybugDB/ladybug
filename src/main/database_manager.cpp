@@ -111,11 +111,6 @@ void DatabaseManager::createGraph(const std::string& graphName,
     storage::MemoryManager* memoryManager, main::ClientContext* clientContext, bool isAnyGraph) {
     auto upperCaseName = StringUtils::getUpper(graphName);
 
-    // main is the default graph
-    if (upperCaseName == "MAIN") {
-        throw RuntimeException{"MAIN is a reserved graph name."};
-    }
-
     // Check if graph already exists in system catalog
     auto mainCatalog = clientContext->getDatabase()->getCatalog();
     auto transaction = TransactionContext::Get(*clientContext)->getActiveTransaction();
@@ -201,6 +196,9 @@ void DatabaseManager::createGraph(const std::string& graphName,
     }
 
     graphs.push_back(std::move(catalog));
+    if (defaultGraph == "") {
+        defaultGraph = graphName;
+    }
 }
 
 void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContext* clientContext) {
@@ -261,12 +259,10 @@ void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContex
 
 void DatabaseManager::setDefaultGraph(const std::string& graphName) {
     auto upperCaseName = StringUtils::getUpper(graphName);
-
     if (upperCaseName == "MAIN") {
-        defaultGraph = "";
+        defaultGraph = "main";
         return;
     }
-
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
         if (graphNameUpper == upperCaseName) {
@@ -275,6 +271,10 @@ void DatabaseManager::setDefaultGraph(const std::string& graphName) {
         }
     }
     throw BinderException{std::format("No graph named {}.", graphName)};
+}
+
+void DatabaseManager::clearDefaultGraph() {
+    defaultGraph = "main";
 }
 
 void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManager,
@@ -322,6 +322,11 @@ void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManage
         catalog->setStorageManager(std::move(storageManager));
 
         graphs.push_back(std::move(catalog));
+
+        // Set first loaded graph as default if no default set
+        if (defaultGraph == "") {
+            defaultGraph = graphName;
+        }
     }
 }
 
@@ -336,8 +341,19 @@ bool DatabaseManager::hasGraph(const std::string& graphName) {
     return false;
 }
 
+catalog::Catalog* DatabaseManager::getGraphCatalog(const std::string& graphName) {
+    auto upperCaseName = StringUtils::getUpper(graphName);
+    for (auto& graph : graphs) {
+        auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
+        if (graphNameUpper == upperCaseName) {
+            return graph.get();
+        }
+    }
+    throw BinderException{std::format("No graph named {}.", graphName)};
+}
+
 catalog::Catalog* DatabaseManager::getDefaultGraphCatalog() const {
-    if (defaultGraph == "") {
+    if (defaultGraph == "" || defaultGraph == "main") {
         return nullptr;
     }
     auto upperCaseName = StringUtils::getUpper(defaultGraph);
