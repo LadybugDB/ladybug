@@ -67,6 +67,8 @@ case "$OS" in
   MINGW*|MSYS*|CYGWIN*)
     if [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "AMD64" ]; then
       WINDOWS_ARCHIVE_ARCH="x86_64"
+    elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ] || [ "$ARCH" = "ARM64" ]; then
+      WINDOWS_ARCHIVE_ARCH="arm64"
     else
       echo "Unsupported Windows architecture: $ARCH" >&2
       exit 1

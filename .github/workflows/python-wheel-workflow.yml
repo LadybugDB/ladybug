@@ -88,6 +88,12 @@ jobs:
             os: windows
             deployment-target: ''
 
+          # Job 6: Windows ARM64 build
+          - platform: arm64
+            runner: windows-11-arm
+            os: windows
+            deployment-target: ''
+
     env:
       CIBW_PLATFORM: ${{ matrix.os }}
       CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
@@ -228,7 +234,11 @@ jobs:
         shell: cmd
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          if "${{ matrix.platform }}"=="arm64" (
+            call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsarm64.bat"
+          ) else (
+            call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          )
           ccache -s
           pipx run --spec cibuildwheel cibuildwheel %LBUG_PYTHON_CIBW_SOURCE_DIR% --output-dir scripts\pip-package\wheelhouse
           if errorlevel 1 exit /b 1

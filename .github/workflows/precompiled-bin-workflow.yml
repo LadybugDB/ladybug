@@ -43,6 +43,12 @@ jobs:
             arch: arm64
           # Windows x86_64. Produces shared + static + CLI.
           - os: windows-latest
+            arch: x86_64
+            vcvars_bat: vcvars64
+          # Windows ARM64. Produces shared + static + CLI.
+          - os: windows-11-arm
+            arch: arm64
+            vcvars_bat: vcvarsarm64
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
     steps:
@@ -100,11 +106,11 @@ jobs:
         if: runner.os == 'Windows'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: precompiled-bin-${{ runner.os }}-${{ github.ref }}
+          key: precompiled-bin-${{ runner.os }}-${{ matrix.arch }}-${{ github.ref }}
           max-size: 2G
           restore-keys: |
-            precompiled-bin-${{ runner.os }}-refs/heads/main
-            precompiled-bin-${{ runner.os }}-
+            precompiled-bin-${{ runner.os }}-${{ matrix.arch }}-refs/heads/main
+            precompiled-bin-${{ runner.os }}-${{ matrix.arch }}-
 
       # ---- Optional nightly version bump ----
 
@@ -172,7 +178,7 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\${{ matrix.vcvars_bat }}.bat"
           make GEN=Ninja
           make install
 
@@ -260,9 +266,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive -Path lbug.h, lbug.hpp, lbug_shared.dll, lbug_shared.lib -DestinationPath liblbug-windows-x86_64.zip
-          Compress-Archive -Path lbug.h, lbug.hpp, lbug.lib -DestinationPath liblbug-static-windows-x86_64.zip
-          Compress-Archive -Path lbug.exe -DestinationPath lbug_cli-windows-x86_64.zip
+          Compress-Archive -Path lbug.h, lbug.hpp, lbug_shared.dll, lbug_shared.lib -DestinationPath liblbug-windows-${{ matrix.arch }}.zip
+          Compress-Archive -Path lbug.h, lbug.hpp, lbug.lib -DestinationPath liblbug-static-windows-${{ matrix.arch }}.zip
+          Compress-Archive -Path lbug.exe -DestinationPath lbug_cli-windows-${{ matrix.arch }}.zip
 
       # ---- Verify shared-library tarball self-consistency ----
       # Guards against the class of bug where the tarball's on-disk filenames
@@ -346,17 +352,17 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: liblbug-windows-x86_64
-          path: liblbug-windows-x86_64.zip
+          name: liblbug-windows-${{ matrix.arch }}
+          path: liblbug-windows-${{ matrix.arch }}.zip
 
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: liblbug-static-windows-x86_64
-          path: liblbug-static-windows-x86_64.zip
+          name: liblbug-static-windows-${{ matrix.arch }}
+          path: liblbug-static-windows-${{ matrix.arch }}.zip
 
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
-          name: lbug_cli-windows-x86_64
-          path: lbug_cli-windows-x86_64.zip
+          name: lbug_cli-windows-${{ matrix.arch }}
+          path: lbug_cli-windows-${{ matrix.arch }}.zip
