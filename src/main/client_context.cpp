@@ -60,6 +60,7 @@ ClientContext::ClientContext(Database* database) : localDatabase{database} {
     graphEntrySet = std::make_unique<graph::GraphEntrySet>();
     clientConfig.homeDirectory = getUserHomeDir();
     clientConfig.fileSearchPath = "";
+    addDBDirToFileSearchPath(database->databasePath);
     clientConfig.enableSemiMask = ClientConfigDefault::ENABLE_SEMI_MASK;
     clientConfig.enableZoneMap = ClientConfigDefault::ENABLE_ZONE_MAP;
     clientConfig.numThreads = database->dbConfig->maxNumThreads;
@@ -207,6 +208,39 @@ bool ClientContext::isInMemory() const {
         return false;
     }
     return localDatabase->storageManager->isInMemory();
+}
+
+void ClientContext::addDBDirToFileSearchPath(const std::string& dbPath) {
+    // Skip remote paths (e.g. s3://, https://)
+    if (dbPath.find("://") != std::string::npos) {
+        return;
+    }
+    // Expand ~ using the home directory from config
+    std::string expandedPath = dbPath;
+    if (dbPath.starts_with('~')) {
+        expandedPath = clientConfig.homeDirectory + dbPath.substr(1);
+    }
+    const auto slashPos = expandedPath.find_last_of("/\\");
+    if (slashPos == std::string::npos) {
+        return;
+    }
+    std::string dirPath = expandedPath.substr(0, slashPos);
+    if (dirPath.empty()) {
+        dirPath = expandedPath[slashPos] == '\\' ? "\\" : "/";
+    } else {
+        dirPath = std::filesystem::absolute(dirPath).lexically_normal().string();
+    }
+    // Prepend to fileSearchPath if not already present
+    auto& fileSearchPath = clientConfig.fileSearchPath;
+    if (!fileSearchPath.empty()) {
+        const auto searchPaths = StringUtils::split(fileSearchPath, ",");
+        if (std::find(searchPaths.begin(), searchPaths.end(), dirPath) != searchPaths.end()) {
+            return;
+        }
+        fileSearchPath = std::format("{},{}", dirPath, fileSearchPath);
+    } else {
+        fileSearchPath = dirPath;
+    }
 }
 
 std::string ClientContext::getEnvVariable(const std::string& name) {

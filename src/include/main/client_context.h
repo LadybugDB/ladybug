@@ -131,6 +131,8 @@ public:
 
     bool isInMemory() const;
 
+    void addDBDirToFileSearchPath(const std::string& dbPath);
+
     static std::string getEnvVariable(const std::string& name);
     static std::string getUserHomeDir();
 

@@ -1,5 +1,6 @@
 add_lbug_api_test(api_test
         api_test.cpp
+        file_search_path_test.cpp
         system_config_test.cpp
         arrow_test.cpp
         arrow_node_table_test.cpp

@@ -106,6 +106,7 @@ void Database::initMembers(std::string_view dbPath, construct_bm_func_t initBmFu
     const auto dbPathStr = std::string(dbPath);
     auto clientContext = ClientContext(this);
     databasePath = StorageUtils::expandPath(&clientContext, dbPathStr);
+    clientContext.addDBDirToFileSearchPath(databasePath);
 
     if (std::filesystem::is_directory(databasePath)) {
         throw RuntimeException("Database path cannot be a directory: " + databasePath);
