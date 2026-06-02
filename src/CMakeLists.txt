@@ -2,7 +2,11 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # Have to pass this down to every subdirectory, which actually adds the files.
 # This doesn't affect parent directories.
-add_compile_definitions(LBUG_EXPORTS)
+if(BUILD_SHARED_LBUG)
+        add_compile_definitions(LBUG_EXPORTS)
+else()
+        add_compile_definitions(LBUG_STATIC_DEFINE)
+endif()
 add_compile_definitions(ANTLR4CPP_STATIC)
 add_subdirectory(binder)
 add_subdirectory(c_api)
@@ -20,20 +24,26 @@ add_subdirectory(storage)
 add_subdirectory(transaction)
 add_subdirectory(extension)
 
-add_library(lbug_shared SHARED ${ALL_OBJECT_FILES})
+if(BUILD_SHARED_LBUG)
+        add_library(lbug_shared SHARED ${ALL_OBJECT_FILES})
+endif()
 if(BUILD_STATIC_LBUG)
         add_library(lbug STATIC ${ALL_OBJECT_FILES})
 endif()
 
-set_target_properties(lbug_shared PROPERTIES
-    VERSION ${PROJECT_VERSION}
-    SOVERSION ${PROJECT_VERSION_MAJOR}
-)
-if(WIN32)
-    set_target_properties(lbug_shared PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+if(TARGET lbug_shared)
+        set_target_properties(lbug_shared PROPERTIES
+            VERSION ${PROJECT_VERSION}
+            SOVERSION ${PROJECT_VERSION_MAJOR}
+        )
+        if(WIN32)
+            set_target_properties(lbug_shared PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+        endif()
 endif()
 
-target_link_libraries(lbug_shared PUBLIC lbug_link_deps)
+if(TARGET lbug_shared)
+        target_link_libraries(lbug_shared PUBLIC lbug_link_deps)
+endif()
 if(TARGET lbug)
         target_link_libraries(lbug PUBLIC lbug_link_deps)
 endif()
@@ -59,7 +69,9 @@ if(TARGET lbug)
 endif()
 
 set(LBUG_INCLUDES $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include/c_api ${CMAKE_CURRENT_BINARY_DIR}/../src/include)
-target_include_directories(lbug_shared PUBLIC ${LBUG_INCLUDES})
+if(TARGET lbug_shared)
+        target_include_directories(lbug_shared PUBLIC ${LBUG_INCLUDES})
+endif()
 if(TARGET lbug)
         target_include_directories(lbug PUBLIC ${LBUG_INCLUDES})
 endif()
@@ -73,13 +85,17 @@ endif()
 if(EMSCRIPTEN)
         # Emscripten forces SHARED->STATIC, so give it a distinct name to avoid
         # two targets both emitting liblbug.a (Ninja rejects duplicate rules).
-        set_target_properties(lbug_shared PROPERTIES OUTPUT_NAME lbug_shared)
-elseif(NOT WIN32)
+        if(TARGET lbug_shared)
+                set_target_properties(lbug_shared PROPERTIES OUTPUT_NAME lbug_shared)
+        endif()
+elseif(NOT WIN32 AND TARGET lbug_shared)
         set_target_properties(lbug_shared PROPERTIES OUTPUT_NAME lbug)
 endif()
 
-if(TARGET lbug)
+if(TARGET lbug AND TARGET lbug_shared)
         install(TARGETS lbug lbug_shared)
+elseif(TARGET lbug)
+        install(TARGETS lbug)
 else()
         install(TARGETS lbug_shared)
 endif()
@@ -89,13 +105,19 @@ if(${BUILD_SINGLE_FILE_HEADER})
         # always built that depends on it. This allows our generator to detect when
         # exactly to build lbug.hpp, while still building the target by default.
         find_package(Python3 3.9...4 REQUIRED)
+        if(TARGET lbug_shared)
+                set(LBUG_SINGLE_FILE_HEADER_DEP lbug_shared)
+        else()
+                set(LBUG_SINGLE_FILE_HEADER_DEP lbug)
+        endif()
         add_custom_command(
                 OUTPUT lbug.hpp
                 COMMAND
                         ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/collect-single-file-header.py ${CMAKE_CURRENT_BINARY_DIR}/..
                 DEPENDS
-                        ${PROJECT_SOURCE_DIR}/scripts/collect-single-file-header.py lbug_shared)
+                        ${PROJECT_SOURCE_DIR}/scripts/collect-single-file-header.py ${LBUG_SINGLE_FILE_HEADER_DEP})
         add_custom_target(single_file_header ALL DEPENDS lbug.hpp)
+        unset(LBUG_SINGLE_FILE_HEADER_DEP)
 endif()
 
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/c_api/lbug.h TYPE INCLUDE)

@@ -181,6 +181,10 @@ jobs:
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\${{ matrix.vcvars_bat }}.bat"
           make GEN=Ninja
           make install
+          cmake -B build\static-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LBUG=FALSE -DBUILD_SHELL=FALSE -DBUILD_SINGLE_FILE_HEADER=FALSE .
+          cmake --build build\static-release --config Release --target lbug
+          cmake --install build\static-release --prefix install-static
+          copy /Y install-static\lib\lbug.lib install\lib\lbug.lib
 
       # ---- Collect artifacts ----
 
