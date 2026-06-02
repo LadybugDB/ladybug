@@ -23,7 +23,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TARGET_DIR="${LBUG_TARGET_DIR:-$PROJECT_DIR/lib}"
 
 OS="$(uname -s)"
-ARCH="$(uname -m)"
+ARCH="${LBUG_ARCH:-$(uname -m)}"
 
 case "$OS" in
   Darwin)
@@ -65,7 +65,7 @@ case "$OS" in
     fi
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    if [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "AMD64" ]; then
+    if [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "AMD64" ] || [ "$ARCH" = "amd64" ]; then
       WINDOWS_ARCHIVE_ARCH="x86_64"
     elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ] || [ "$ARCH" = "ARM64" ]; then
       WINDOWS_ARCHIVE_ARCH="arm64"

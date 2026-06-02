@@ -153,6 +153,7 @@ jobs:
           LBUG_LINUX_VARIANT: compat
           LBUG_PRECOMPILED_RUN_ID: ${{ inputs.precompiledRunId }}
           LBUG_TARGET_DIR: ${{ env.LBUG_PYTHON_PRECOMPILED_DIR }}
+          LBUG_ARCH: ${{ matrix.platform }}
         run: |
           rm -rf "$LBUG_TARGET_DIR"
           ./scripts/download-liblbug.sh
