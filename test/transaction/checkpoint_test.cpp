@@ -409,10 +409,15 @@ TEST_F(ReviewFixesTest, CheckpointUsesMatchingCatalogForMainAndDefaultGraph) {
     auto showTables = conn->query("CALL SHOW_TABLES() RETURN count(*)");
     ASSERT_TRUE(showTables->isSuccess()) << showTables->getErrorMessage();
     ASSERT_EQ(showTables->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    showTables.reset();
+    useGraph.reset();
 
     auto readOnlyConfig = *systemConfig;
     readOnlyConfig.readOnly = true;
     auto graphPath = StorageUtils::getGraphPath(databasePath, "ratatouille");
+    conn.reset();
+    database.reset();
+
     auto graphDatabase = std::make_unique<main::Database>(graphPath, readOnlyConfig);
     auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
     auto graphTables = graphConnection->query("CALL SHOW_TABLES() RETURN count(*)");
