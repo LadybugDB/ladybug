@@ -85,6 +85,34 @@ Runtime exception: Node(nodeOffset: 0) has more than one neighbour in table Live
 ---- error
 Runtime exception: Node(nodeOffset: 0) has more than one neighbour in table LivesIn in the fwd direction, which violates the rel multiplicity constraint.
 
+-CASE CreateRelGroupPerPairMultiplicity
+-STATEMENT CREATE NODE TABLE User(id STRING, PRIMARY KEY (id));
+---- ok
+-STATEMENT CREATE NODE TABLE Shop(id STRING, PRIMARY KEY (id));
+---- ok
+-STATEMENT CREATE NODE TABLE Event(id STRING, PRIMARY KEY (id));
+---- ok
+-STATEMENT CREATE NODE TABLE City(id STRING, PRIMARY KEY (id));
+---- ok
+-STATEMENT CREATE REL TABLE Located(FROM User TO City MANY_ONE, FROM Shop TO City, FROM Event TO City ONE_ONE, MANY_MANY);
+---- ok
+-STATEMENT CREATE (:User {id: 'u1'}), (:User {id: 'u2'}), (:Shop {id: 's1'}), (:Event {id: 'e1'}), (:Event {id: 'e2'}), (:City {id: 'c1'}), (:City {id: 'c2'});
+---- ok
+-STATEMENT MATCH (u:User), (c:City) WHERE u.id = 'u1' AND c.id = 'c1' CREATE (u)-[:Located]->(c);
+---- ok
+-STATEMENT MATCH (u:User), (c:City) WHERE u.id = 'u2' AND c.id = 'c1' CREATE (u)-[:Located]->(c);
+---- ok
+-STATEMENT MATCH (s:Shop), (c:City) WHERE s.id = 's1' CREATE (s)-[:Located]->(c);
+---- ok
+-STATEMENT MATCH (e:Event), (c:City) WHERE e.id = 'e1' AND c.id = 'c1' CREATE (e)-[:Located]->(c);
+---- ok
+-STATEMENT MATCH (u:User), (c:City) WHERE u.id = 'u1' AND c.id = 'c2' CREATE (u)-[:Located]->(c);
+---- error
+Runtime exception: Node(nodeOffset: 0) has more than one neighbour in table Located in the fwd direction, which violates the rel multiplicity constraint.
+-STATEMENT MATCH (e:Event), (c:City) WHERE e.id = 'e2' AND c.id = 'c1' CREATE (e)-[:Located]->(c);
+---- error
+Runtime exception: Node(nodeOffset: 0) has more than one neighbour in table Located in the bwd direction, which violates the rel multiplicity constraint.
+
 -CASE CreateOneToOneRelTableAfterCreateNodes
 -TEST_FWD_ONLY_REL
 -STATEMENT CREATE NODE TABLE N1(ID SERIAL, PRIMARY KEY (ID));

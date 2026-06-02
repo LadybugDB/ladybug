@@ -95,11 +95,21 @@ struct BoundExtraCreateNodeTableInfo final : BoundExtraCreateTableInfo {
     }
 };
 
+struct BoundRelTableInfo {
+    catalog::NodeTableIDPair nodePair;
+    common::RelMultiplicity srcMultiplicity;
+    common::RelMultiplicity dstMultiplicity;
+
+    BoundRelTableInfo(catalog::NodeTableIDPair nodePair, common::RelMultiplicity srcMultiplicity,
+        common::RelMultiplicity dstMultiplicity)
+        : nodePair{nodePair}, srcMultiplicity{srcMultiplicity}, dstMultiplicity{dstMultiplicity} {}
+};
+
 struct BoundExtraCreateRelTableGroupInfo final : BoundExtraCreateTableInfo {
     common::RelMultiplicity srcMultiplicity;
     common::RelMultiplicity dstMultiplicity;
     common::ExtendDirection storageDirection;
-    std::vector<catalog::NodeTableIDPair> nodePairs;
+    std::vector<BoundRelTableInfo> relTableInfos;
     std::string storage;
     common::StorageFormat storageFormat = common::StorageFormat::NONE;
     std::optional<function::TableFunction> scanFunction;
@@ -108,14 +118,14 @@ struct BoundExtraCreateRelTableGroupInfo final : BoundExtraCreateTableInfo {
 
     explicit BoundExtraCreateRelTableGroupInfo(std::vector<PropertyDefinition> definitions,
         common::RelMultiplicity srcMultiplicity, common::RelMultiplicity dstMultiplicity,
-        common::ExtendDirection storageDirection, std::vector<catalog::NodeTableIDPair> nodePairs,
+        common::ExtendDirection storageDirection, std::vector<BoundRelTableInfo> relTableInfos,
         std::string storage = "", common::StorageFormat storageFormat = common::StorageFormat::NONE,
         std::optional<function::TableFunction> scanFunction = std::nullopt,
         std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData = std::nullopt,
         std::string foreignDatabaseName = "")
         : BoundExtraCreateTableInfo{std::move(definitions)}, srcMultiplicity{srcMultiplicity},
           dstMultiplicity{dstMultiplicity}, storageDirection{storageDirection},
-          nodePairs{std::move(nodePairs)}, storage{std::move(storage)},
+          relTableInfos{std::move(relTableInfos)}, storage{std::move(storage)},
           storageFormat{storageFormat}, scanFunction{std::move(scanFunction)},
           scanBindData{std::move(scanBindData)},
           foreignDatabaseName{std::move(foreignDatabaseName)} {}
@@ -123,7 +133,7 @@ struct BoundExtraCreateRelTableGroupInfo final : BoundExtraCreateTableInfo {
     BoundExtraCreateRelTableGroupInfo(const BoundExtraCreateRelTableGroupInfo& other)
         : BoundExtraCreateTableInfo{copyVector(other.propertyDefinitions)},
           srcMultiplicity{other.srcMultiplicity}, dstMultiplicity{other.dstMultiplicity},
-          storageDirection{other.storageDirection}, nodePairs{other.nodePairs},
+          storageDirection{other.storageDirection}, relTableInfos{other.relTableInfos},
           storage{other.storage}, storageFormat{other.storageFormat},
           scanFunction{other.scanFunction}, scanBindData{other.scanBindData},
           foreignDatabaseName{other.foreignDatabaseName} {}

@@ -362,7 +362,7 @@ iC_CreateNodeTable
 iC_CreateRelTable
     : CREATE SP REL SP TABLE ( SP GROUP )? ( SP iC_IfNotExists )? SP oC_SchemaName
         SP? '(' SP?
-            iC_FromToConnections SP? (
+            iC_CreateFromToConnections SP? (
             ( ',' SP? iC_PropertyDefinitions SP? )?
             ( ',' SP? oC_SymbolicName SP? )? // Constraints
             ')'
@@ -384,6 +384,12 @@ iC_IndexRelationshipPattern
 
 iC_IndexPropertyPattern
     : '(' SP? oC_Variable SP? '.' SP? oC_PropertyKeyName SP? ')' ;
+
+iC_CreateFromToConnections
+    : iC_CreateFromToConnection ( SP? ',' SP? iC_CreateFromToConnection )* ;
+
+iC_CreateFromToConnection
+    : FROM SP oC_SchemaName SP TO SP oC_SchemaName ( SP oC_SymbolicName )? ;
 
 iC_FromToConnections
     : iC_FromToConnection ( SP? ',' SP? iC_FromToConnection )* ;

@@ -28,7 +28,8 @@ static void upgradeLegacyStorageFormat(const std::string& storage,
 
 void RelGroupCatalogEntry::addFromToConnection(table_id_t srcTableID, table_id_t dstTableID,
     oid_t oid) {
-    relTableInfos.emplace_back(NodeTableIDPair{srcTableID, dstTableID}, oid);
+    relTableInfos.emplace_back(NodeTableIDPair{srcTableID, dstTableID}, oid, srcMultiplicity,
+        dstMultiplicity);
 }
 
 void RelGroupCatalogEntry::dropFromToConnection(table_id_t srcTableID, table_id_t dstTableID) {
@@ -48,6 +49,10 @@ void RelTableCatalogInfo::serialize(Serializer& ser) const {
     nodePair.serialize(ser);
     ser.writeDebuggingInfo("oid");
     ser.serializeValue(oid);
+    ser.writeDebuggingInfo("srcMultiplicity");
+    ser.serializeValue(srcMultiplicity);
+    ser.writeDebuggingInfo("dstMultiplicity");
+    ser.serializeValue(dstMultiplicity);
 }
 
 RelTableCatalogInfo RelTableCatalogInfo::deserialize(Deserializer& deser) {
@@ -57,7 +62,15 @@ RelTableCatalogInfo RelTableCatalogInfo::deserialize(Deserializer& deser) {
     auto nodePair = NodeTableIDPair::deserialize(deser);
     deser.validateDebuggingInfo(debuggingInfo, "oid");
     deser.deserializeValue(oid);
-    return RelTableCatalogInfo{nodePair, oid};
+    auto srcMultiplicity = RelMultiplicity::MANY;
+    auto dstMultiplicity = RelMultiplicity::MANY;
+    if (deser.getStorageVersion() >= ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_42) {
+        deser.validateDebuggingInfo(debuggingInfo, "srcMultiplicity");
+        deser.deserializeValue(srcMultiplicity);
+        deser.validateDebuggingInfo(debuggingInfo, "dstMultiplicity");
+        deser.deserializeValue(dstMultiplicity);
+    }
+    return RelTableCatalogInfo{nodePair, oid, srcMultiplicity, dstMultiplicity};
 }
 
 bool RelGroupCatalogEntry::isParent(table_id_t tableID) {
@@ -147,6 +160,13 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     }
     deserializer.validateDebuggingInfo(debuggingInfo, "relTableInfos");
     deserializer.deserializeVector(relTableInfos);
+    if (deserializer.getStorageVersion() <
+        ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_42) {
+        for (auto& relTableInfo : relTableInfos) {
+            relTableInfo.srcMultiplicity = srcMultiplicity;
+            relTableInfo.dstMultiplicity = dstMultiplicity;
+        }
+    }
     if (deserializer.getStorageVersion() >=
         ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_41) {
         deserializer.validateDebuggingInfo(debuggingInfo, "storageFormat");
@@ -181,6 +201,12 @@ static std::string getFromToStr(const NodeTableIDPair& pair, const Catalog* cata
     return std::format("FROM `{}` TO `{}`", srcTableName, dstTableName);
 }
 
+static std::string getMultiplicityStr(RelMultiplicity srcMultiplicity,
+    RelMultiplicity dstMultiplicity) {
+    return RelMultiplicityUtils::toString(srcMultiplicity) + "_" +
+           RelMultiplicityUtils::toString(dstMultiplicity);
+}
+
 std::string RelGroupCatalogEntry::toCypher(const ToCypherInfo& info) const {
     auto relGroupInfo = info.constCast<RelGroupToCypherInfo>();
     auto catalog = Catalog::Get(*relGroupInfo.context);
@@ -189,12 +215,24 @@ std::string RelGroupCatalogEntry::toCypher(const ToCypherInfo& info) const {
     ss << std::format("CREATE REL TABLE `{}` (", getName());
     DASSERT(!relTableInfos.empty());
     ss << getFromToStr(relTableInfos[0].nodePair, catalog, transaction, storage);
+    if (relTableInfos[0].srcMultiplicity != srcMultiplicity ||
+        relTableInfos[0].dstMultiplicity != dstMultiplicity) {
+        ss << " "
+           << getMultiplicityStr(relTableInfos[0].srcMultiplicity,
+                  relTableInfos[0].dstMultiplicity);
+    }
     for (auto i = 1u; i < relTableInfos.size(); ++i) {
         ss << std::format(", {}",
             getFromToStr(relTableInfos[i].nodePair, catalog, transaction, storage));
+        if (relTableInfos[i].srcMultiplicity != srcMultiplicity ||
+            relTableInfos[i].dstMultiplicity != dstMultiplicity) {
+            ss << " "
+               << getMultiplicityStr(relTableInfos[i].srcMultiplicity,
+                      relTableInfos[i].dstMultiplicity);
+        }
     }
-    ss << ", " << propertyCollection.toCypher() << RelMultiplicityUtils::toString(srcMultiplicity)
-       << "_" << RelMultiplicityUtils::toString(dstMultiplicity) << ");";
+    ss << ", " << propertyCollection.toCypher()
+       << getMultiplicityStr(srcMultiplicity, dstMultiplicity) << ");";
     return ss.str();
 }
 
@@ -232,13 +270,14 @@ std::unique_ptr<TableCatalogEntry> RelGroupCatalogEntry::copy() const {
 
 std::unique_ptr<binder::BoundExtraCreateCatalogEntryInfo>
 RelGroupCatalogEntry::getBoundExtraCreateInfo(transaction::Transaction*) const {
-    std::vector<NodeTableIDPair> nodePairs;
+    std::vector<binder::BoundRelTableInfo> boundRelTableInfos;
     for (auto& relTableInfo : relTableInfos) {
-        nodePairs.push_back(relTableInfo.nodePair);
+        boundRelTableInfos.emplace_back(relTableInfo.nodePair, relTableInfo.srcMultiplicity,
+            relTableInfo.dstMultiplicity);
     }
     return std::make_unique<binder::BoundExtraCreateRelTableGroupInfo>(
         copyVector(propertyCollection.getDefinitions()), srcMultiplicity, dstMultiplicity,
-        storageDirection, std::move(nodePairs), storage, storageFormat);
+        storageDirection, std::move(boundRelTableInfos), storage, storageFormat);
 }
 
 } // namespace catalog

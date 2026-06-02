@@ -17,6 +17,8 @@ struct StorageVersionInfo {
     static constexpr storage_version_t STORAGE_VERSION_40 = 40;
     // Storage version 41 adds the table storage FORMAT field to catalog entries (enum encoding).
     static constexpr storage_version_t STORAGE_VERSION_41 = 41;
+    // Storage version 42 adds per-FROM/TO relationship multiplicity to rel table catalog info.
+    static constexpr storage_version_t STORAGE_VERSION_42 = 42;
 
     static std::unordered_map<std::string, storage_version_t> getStorageVersionInfo() {
         return {{"0.12.0", STORAGE_VERSION_40}, {"0.12.2", STORAGE_VERSION_40},
@@ -26,12 +28,13 @@ struct StorageVersionInfo {
             {"0.15.2", STORAGE_VERSION_40}, {"0.15.3", STORAGE_VERSION_40},
             {"0.15.4", STORAGE_VERSION_40}, {"0.16.0", STORAGE_VERSION_40},
             {"0.16.1", STORAGE_VERSION_40}, {"0.17.0", STORAGE_VERSION_41},
-            {"0.17.1", STORAGE_VERSION_41}};
+            {"0.17.1", STORAGE_VERSION_41}, {"0.18.0", STORAGE_VERSION_42}};
     }
 
     static LBUG_API storage_version_t getStorageVersion();
     static bool canReadStorageVersion(storage_version_t storageVersion) {
-        return storageVersion == STORAGE_VERSION_40 || storageVersion == getStorageVersion();
+        return storageVersion == STORAGE_VERSION_40 || storageVersion == STORAGE_VERSION_41 ||
+               storageVersion == getStorageVersion();
     }
 
     static constexpr const char* MAGIC_BYTES = "LBUG";

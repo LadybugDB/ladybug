@@ -165,7 +165,7 @@ RelTable::RelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
         auto nbrTableID = RelDirectionUtils::getNbrTableID(direction, fromTableID, toTableID);
         directedRelData.emplace_back(
             std::make_unique<RelTableData>(storageManager->getDataFH(), memoryManager, shadowFile,
-                *relGroupEntry, *this, direction, nbrTableID, enableCompression));
+                *relGroupEntry, *relEntryInfo, *this, direction, nbrTableID, enableCompression));
     }
 }
 

@@ -224,7 +224,8 @@ void RelBatchInsert::populateCSRHeader(const RelGroupCatalogEntry& relGroupEntry
 void RelBatchInsert::checkRelMultiplicityConstraint(const RelGroupCatalogEntry& relGroupEntry,
     const InMemChunkedCSRHeader& csrHeader, offset_t startNodeOffset,
     const RelBatchInsertInfo& relInfo) {
-    if (!relGroupEntry.isSingleMultiplicity(relInfo.direction)) {
+    if (!relGroupEntry.isSingleMultiplicity(relInfo.fromTableID, relInfo.toTableID,
+            relInfo.direction)) {
         return;
     }
     for (auto i = 0u; i < csrHeader.length->getNumValues(); i++) {

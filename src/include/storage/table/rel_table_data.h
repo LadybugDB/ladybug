@@ -11,7 +11,8 @@
 namespace lbug {
 namespace catalog {
 class RelGroupCatalogEntry;
-}
+struct RelTableCatalogInfo;
+} // namespace catalog
 namespace transaction {
 class Transaction;
 }
@@ -56,7 +57,8 @@ private:
 class RelTableData {
 public:
     RelTableData(FileHandle* dataFH, MemoryManager* mm, ShadowFile* shadowFile,
-        const catalog::RelGroupCatalogEntry& relGroupEntry, Table& table,
+        const catalog::RelGroupCatalogEntry& relGroupEntry,
+        const catalog::RelTableCatalogInfo& relTableInfo, Table& table,
         common::RelDataDirection direction, common::table_id_t nbrTableID, bool enableCompression);
 
     bool update(transaction::Transaction* transaction, common::ValueVector& boundNodeIDVector,

@@ -57,10 +57,10 @@ void InMemoryVersionRecordHandler::rollbackInsert(main::ClientContext* context,
 }
 
 RelTableData::RelTableData(FileHandle* dataFH, MemoryManager* mm, ShadowFile* shadowFile,
-    const RelGroupCatalogEntry& relGroupEntry, Table& table, RelDataDirection direction,
-    table_id_t nbrTableID, bool enableCompression)
+    const RelGroupCatalogEntry& relGroupEntry, const RelTableCatalogInfo& relTableInfo,
+    Table& table, RelDataDirection direction, table_id_t nbrTableID, bool enableCompression)
     : table{table}, mm{mm}, shadowFile{shadowFile}, enableCompression{enableCompression},
-      direction{direction}, multiplicity{relGroupEntry.getMultiplicity(direction)},
+      direction{direction}, multiplicity{relTableInfo.getMultiplicity(direction)},
       persistentVersionRecordHandler(this), inMemoryVersionRecordHandler(this) {
     initCSRHeaderColumns(dataFH);
     initPropertyColumns(relGroupEntry, nbrTableID, dataFH);

@@ -312,8 +312,10 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
     }
     // Bind from to pairs
     node_table_id_pair_set_t nodePairsSet;
-    std::vector<NodeTableIDPair> nodePairs;
-    for (auto& [srcTableName, dstTableName] : extraInfo.srcDstTablePairs) {
+    std::vector<BoundRelTableInfo> relTableInfos;
+    for (auto& connection : extraInfo.connections) {
+        const auto& srcTableName = connection.srcTableName;
+        const auto& dstTableName = connection.dstTableName;
         auto [srcEntry, srcDbName] = bindNodeTableEntry(srcTableName);
         validateNodeTableType(srcEntry);
         auto [dstEntry, dstDbName] = bindNodeTableEntry(dstTableName);
@@ -372,12 +374,16 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
                 std::format("Found duplicate FROM-TO {}-{} pairs.", srcTableName, dstTableName));
         }
         nodePairsSet.insert(pair);
-        nodePairs.emplace_back(pair);
+        const auto& connectionMultiplicity = connection.relMultiplicity.has_value() ?
+                                                 *connection.relMultiplicity :
+                                                 extraInfo.relMultiplicity;
+        relTableInfos.emplace_back(pair, RelMultiplicityUtils::getFwd(connectionMultiplicity),
+            RelMultiplicityUtils::getBwd(connectionMultiplicity));
     }
     auto boundExtraInfo = std::make_unique<BoundExtraCreateRelTableGroupInfo>(
         std::move(propertyDefinitions), srcMultiplicity, dstMultiplicity, storageDirection,
-        std::move(nodePairs), std::move(storage), std::move(storageFormat), std::move(scanFunction),
-        std::move(scanBindData), std::move(foreignDatabaseName));
+        std::move(relTableInfos), std::move(storage), std::move(storageFormat),
+        std::move(scanFunction), std::move(scanBindData), std::move(foreignDatabaseName));
     return BoundCreateTableInfo(CatalogEntryType::REL_GROUP_ENTRY, info->tableName,
         info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());
 }
@@ -488,7 +494,7 @@ std::unique_ptr<BoundStatement> Binder::bindCreateTableAs(const Statement& state
     case TableType::REL: {
         auto& extraInfo = createInfo->extraInfo->constCast<ExtraCreateRelTableGroupInfo>();
         // Currently we don't support multiple from/to pairs for create rel table as
-        if (extraInfo.srcDstTablePairs.size() > 1) {
+        if (extraInfo.connections.size() > 1) {
             throw BinderException(
                 "Multiple FROM/TO pairs are not supported for CREATE REL TABLE AS.");
         }
@@ -497,10 +503,10 @@ std::unique_ptr<BoundStatement> Binder::bindCreateTableAs(const Statement& state
         auto catalog = Catalog::Get(*clientContext);
         auto transaction = transaction::Transaction::Get(*clientContext);
         auto fromTable =
-            catalog->getTableCatalogEntry(transaction, extraInfo.srcDstTablePairs[0].first)
+            catalog->getTableCatalogEntry(transaction, extraInfo.connections[0].srcTableName)
                 ->ptrCast<NodeTableCatalogEntry>();
         auto toTable =
-            catalog->getTableCatalogEntry(transaction, extraInfo.srcDstTablePairs[0].second)
+            catalog->getTableCatalogEntry(transaction, extraInfo.connections[0].dstTableName)
                 ->ptrCast<NodeTableCatalogEntry>();
         auto boundCreateInfo = bindCreateRelTableGroupInfo(createInfo);
         auto boundCopyFromInfo = bindCopyRelFromInfo(createInfo->tableName, propertyDefinitions,

@@ -23,10 +23,19 @@ struct RelGroupToCypherInfo final : ToCypherInfo {
 struct RelTableCatalogInfo {
     NodeTableIDPair nodePair;
     common::oid_t oid = common::INVALID_OID;
+    common::RelMultiplicity srcMultiplicity = common::RelMultiplicity::MANY;
+    common::RelMultiplicity dstMultiplicity = common::RelMultiplicity::MANY;
 
     RelTableCatalogInfo() = default;
-    RelTableCatalogInfo(NodeTableIDPair nodePair, common::oid_t oid)
-        : nodePair{nodePair}, oid{oid} {}
+    RelTableCatalogInfo(NodeTableIDPair nodePair, common::oid_t oid,
+        common::RelMultiplicity srcMultiplicity = common::RelMultiplicity::MANY,
+        common::RelMultiplicity dstMultiplicity = common::RelMultiplicity::MANY)
+        : nodePair{nodePair}, oid{oid}, srcMultiplicity{srcMultiplicity},
+          dstMultiplicity{dstMultiplicity} {}
+
+    common::RelMultiplicity getMultiplicity(common::RelDataDirection direction) const {
+        return direction == common::RelDataDirection::FWD ? dstMultiplicity : srcMultiplicity;
+    }
 
     void serialize(common::Serializer& ser) const;
     static RelTableCatalogInfo deserialize(common::Deserializer& deser);
@@ -60,8 +69,18 @@ public:
     common::RelMultiplicity getMultiplicity(common::RelDataDirection direction) const {
         return direction == common::RelDataDirection::FWD ? dstMultiplicity : srcMultiplicity;
     }
+    common::RelMultiplicity getMultiplicity(common::table_id_t srcTableID,
+        common::table_id_t dstTableID, common::RelDataDirection direction) const {
+        const auto relEntryInfo = getRelEntryInfo(srcTableID, dstTableID);
+        DASSERT(relEntryInfo);
+        return relEntryInfo->getMultiplicity(direction);
+    }
     bool isSingleMultiplicity(common::RelDataDirection direction) const {
         return getMultiplicity(direction) == common::RelMultiplicity::ONE;
+    }
+    bool isSingleMultiplicity(common::table_id_t srcTableID, common::table_id_t dstTableID,
+        common::RelDataDirection direction) const {
+        return getMultiplicity(srcTableID, dstTableID, direction) == common::RelMultiplicity::ONE;
     }
 
     common::ExtendDirection getStorageDirection() const { return storageDirection; }

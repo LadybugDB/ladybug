@@ -103,14 +103,19 @@ std::unique_ptr<Statement> Transformer::transformCreateRelGroup(
     if (ctx.iC_Options()) {
         options = transformOptions(*ctx.iC_Options());
     }
-    std::vector<std::pair<std::string, std::string>> fromToPairs;
-    for (auto& fromTo : ctx.iC_FromToConnections()->iC_FromToConnection()) {
+    std::vector<ParsedRelConnection> connections;
+    for (auto& fromTo : ctx.iC_CreateFromToConnections()->iC_CreateFromToConnection()) {
         auto src = transformSchemaName(*fromTo->oC_SchemaName(0));
         auto dst = transformSchemaName(*fromTo->oC_SchemaName(1));
-        fromToPairs.emplace_back(src, dst);
+        std::optional<std::string> perConnectionMultiplicity;
+        if (fromTo->oC_SymbolicName()) {
+            perConnectionMultiplicity = transformSymbolicName(*fromTo->oC_SymbolicName());
+        }
+        connections.emplace_back(std::move(src), std::move(dst),
+            std::move(perConnectionMultiplicity));
     }
     std::unique_ptr<ExtraCreateTableInfo> extraInfo =
-        std::make_unique<ExtraCreateRelTableGroupInfo>(relMultiplicity, std::move(fromToPairs),
+        std::make_unique<ExtraCreateRelTableGroupInfo>(relMultiplicity, std::move(connections),
             std::move(options));
     auto conflictAction = transformConflictAction(ctx.iC_IfNotExists());
     auto createTableInfo = CreateTableInfo(common::TableType::REL, tableName, conflictAction);

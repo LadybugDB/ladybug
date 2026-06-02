@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -42,15 +43,26 @@ struct ExtraCreateNodeTableInfo final : ExtraCreateTableInfo {
         : pKName{std::move(pKName)}, options{std::move(options)} {}
 };
 
+struct ParsedRelConnection {
+    std::string srcTableName;
+    std::string dstTableName;
+    std::optional<std::string> relMultiplicity;
+
+    ParsedRelConnection(std::string srcTableName, std::string dstTableName,
+        std::optional<std::string> relMultiplicity)
+        : srcTableName{std::move(srcTableName)}, dstTableName{std::move(dstTableName)},
+          relMultiplicity{std::move(relMultiplicity)} {}
+};
+
 struct ExtraCreateRelTableGroupInfo final : ExtraCreateTableInfo {
     std::string relMultiplicity;
-    std::vector<std::pair<std::string, std::string>> srcDstTablePairs;
+    std::vector<ParsedRelConnection> connections;
     options_t options;
 
     ExtraCreateRelTableGroupInfo(std::string relMultiplicity,
-        std::vector<std::pair<std::string, std::string>> srcDstTablePairs, options_t options)
-        : relMultiplicity{std::move(relMultiplicity)},
-          srcDstTablePairs{std::move(srcDstTablePairs)}, options{std::move(options)} {}
+        std::vector<ParsedRelConnection> connections, options_t options)
+        : relMultiplicity{std::move(relMultiplicity)}, connections{std::move(connections)},
+          options{std::move(options)} {}
 };
 
 } // namespace parser

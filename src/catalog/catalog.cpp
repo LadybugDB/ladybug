@@ -199,9 +199,10 @@ CatalogEntry* Catalog::createRelGroupEntry(Transaction* transaction,
     const BoundCreateTableInfo& info) {
     const auto extraInfo = info.extraInfo->ptrCast<BoundExtraCreateRelTableGroupInfo>();
     std::vector<RelTableCatalogInfo> relTableInfos;
-    DASSERT(extraInfo->nodePairs.size() > 0);
-    for (auto& nodePair : extraInfo->nodePairs) {
-        relTableInfos.emplace_back(nodePair, tables->getNextOID());
+    DASSERT(extraInfo->relTableInfos.size() > 0);
+    for (auto& relTableInfo : extraInfo->relTableInfos) {
+        relTableInfos.emplace_back(relTableInfo.nodePair, tables->getNextOID(),
+            relTableInfo.srcMultiplicity, relTableInfo.dstMultiplicity);
     }
     auto relGroupEntry =
         std::make_unique<RelGroupCatalogEntry>(info.tableName, extraInfo->srcMultiplicity,

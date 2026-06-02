@@ -184,13 +184,14 @@ void DatabaseManager::createGraph(const std::string& graphName,
             binder::ColumnDefinition("label", common::LogicalType::STRING()));
         relProperties.emplace_back(binder::ColumnDefinition("data", LogicalType::JSON()));
 
-        std::vector<catalog::NodeTableIDPair> nodePairs;
-        nodePairs.emplace_back(catalog::NodeTableIDPair(nodeTableID, nodeTableID));
+        std::vector<binder::BoundRelTableInfo> relTableInfos;
+        relTableInfos.emplace_back(catalog::NodeTableIDPair(nodeTableID, nodeTableID),
+            common::RelMultiplicity::MANY, common::RelMultiplicity::MANY);
 
         auto relExtraInfo = std::unique_ptr<binder::BoundExtraCreateRelTableGroupInfo>(
             new binder::BoundExtraCreateRelTableGroupInfo(std::move(relProperties),
                 common::RelMultiplicity::MANY, common::RelMultiplicity::MANY,
-                common::ExtendDirection::BOTH, std::move(nodePairs), std::string("")));
+                common::ExtendDirection::BOTH, std::move(relTableInfos), std::string("")));
         auto relTableInfo = binder::BoundCreateTableInfo(catalog::CatalogEntryType::REL_GROUP_ENTRY,
             "_edges", common::ConflictAction::ON_CONFLICT_THROW, std::move(relExtraInfo), false);
         auto* relEntry = catalog->createTableEntry(dummyTransaction, relTableInfo);
