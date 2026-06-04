@@ -150,12 +150,17 @@ std::string getPlatform() {
     return getOS() + "_" + getArch();
 }
 
-static ExtensionRepoInfo getExtensionRepoInfo(std::string& extensionURL) {
-    common::StringUtils::replaceAll(extensionURL, "http://", "");
-    auto hostNamePos = extensionURL.find('/');
-    auto hostName = extensionURL.substr(0, hostNamePos);
-    auto hostURL = "http://" + hostName;
-    auto hostPath = extensionURL.substr(hostNamePos);
+static ExtensionRepoInfo getExtensionRepoInfo(const std::string& extensionURL) {
+    auto parsedURL = parseURL(extensionURL);
+    auto scheme = parsedURL.scheme.empty() ? "http" : parsedURL.scheme;
+    auto hostStart = extensionURL.find("://");
+    hostStart = hostStart == std::string::npos ? 0 : hostStart + 3;
+    auto hostPathStart = extensionURL.find('/', hostStart);
+    auto hostName = hostPathStart == std::string::npos ?
+                        extensionURL.substr(hostStart) :
+                        extensionURL.substr(hostStart, hostPathStart - hostStart);
+    auto hostURL = std::format("{}://{}", scheme, hostName);
+    auto hostPath = hostPathStart == std::string::npos ? "/" : extensionURL.substr(hostPathStart);
     return {hostPath, hostURL, extensionURL};
 }
 

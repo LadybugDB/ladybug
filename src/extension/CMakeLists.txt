@@ -46,14 +46,6 @@ include_directories(
 
 add_library(lbug_generated_extension_loader OBJECT ${GENERATED_CPP_FILE})
 
-# Both the lbug source and httpfs extension includes the httplib which is a header
-# only library. Httpfs requires the openssl function to be enabled in httplib, so
-# we also have to enable httplib there if httpfs is static linked.
-if ("httpfs" IN_LIST STATICALLY_LINKED_EXTENSIONS AND NOT ${BUILD_WASM})
-    add_compile_definitions(CPPHTTPLIB_OPENSSL_SUPPORT)
-    include_directories(${OPENSSL_INCLUDE_DIR})
-endif ()
-
 add_library(lbug_extension
         OBJECT
         catalog_extension.cpp
@@ -63,6 +55,11 @@ add_library(lbug_extension
         extension_manager.cpp
         loaded_extension.cpp
 )
+
+if (NOT BUILD_WASM)
+    target_compile_definitions(lbug_extension PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+    target_include_directories(lbug_extension PRIVATE ${OPENSSL_INCLUDE_DIR})
+endif ()
 
 set(ALL_OBJECT_FILES
         ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_extension>

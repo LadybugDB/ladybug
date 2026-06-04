@@ -75,6 +75,30 @@ TEST(ExtensionUtilsTest, IdentifiesOfficialExtensions) {
     EXPECT_FALSE(ExtensionUtils::isOfficialExtension("sqlitescanner"));
 }
 
+TEST(ExtensionUtilsTest, OfficialExtensionRepoUsesHTTPS) {
+    EXPECT_STREQ(ExtensionUtils::OFFICIAL_EXTENSION_REPO, "https://extension.ladybugdb.com/");
+}
+
+TEST(ExtensionUtilsTest, BuildsHTTPSRepoInfo) {
+    auto repoInfo =
+        ExtensionUtils::getExtensionLibRepoInfo("json", "https://extension.ladybugdb.com/");
+
+    EXPECT_EQ(repoInfo.hostURL, "https://extension.ladybugdb.com");
+    EXPECT_EQ(repoInfo.hostPath, "/v" + std::string{LBUG_EXTENSION_VERSION} + "/" + getPlatform() +
+                                     "/json/libjson.lbug_extension");
+    EXPECT_EQ(repoInfo.repoURL, repoInfo.hostURL + repoInfo.hostPath);
+}
+
+TEST(ExtensionUtilsTest, BuildsHTTPRepoInfo) {
+    auto repoInfo =
+        ExtensionUtils::getExtensionLibRepoInfo("json", "http://extension.ladybugdb.com/");
+
+    EXPECT_EQ(repoInfo.hostURL, "http://extension.ladybugdb.com");
+    EXPECT_EQ(repoInfo.hostPath, "/v" + std::string{LBUG_EXTENSION_VERSION} + "/" + getPlatform() +
+                                     "/json/libjson.lbug_extension");
+    EXPECT_EQ(repoInfo.repoURL, repoInfo.hostURL + repoInfo.hostPath);
+}
+
 TEST(ExtensionProxyTest, ParseProxyURLWithoutSchemeUsesDefaultPort) {
     auto config = ExtensionUtils::parseProxyConfig("proxy.example.com");
     ASSERT_TRUE(config.has_value());
