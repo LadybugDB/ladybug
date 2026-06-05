@@ -325,6 +325,88 @@ void RelTable::detachDelete(Transaction* transaction, RelTableDeleteState* delet
     setHasChanges();
 }
 
+void RelTable::detachDeleteBatch(Transaction* transaction, ValueVector& srcNodeIDVector,
+    ValueVector& dstNodeIDVector, ValueVector& relIDVector, RelDataDirection direction) {
+    if (std::ranges::count(getStorageDirections(), direction) == 0) {
+        return;
+    }
+    const auto& srcSelVector = srcNodeIDVector.state->getSelVector();
+    const auto numNodes = srcSelVector.getSelSize();
+    if (numNodes == 0) {
+        return;
+    }
+
+    std::vector<nodeID_t> srcNodeIDs;
+    srcNodeIDs.reserve(numNodes);
+    for (auto i = 0u; i < numNodes; i++) {
+        const auto pos = srcSelVector[i];
+        if (!srcNodeIDVector.isNull(pos)) {
+            srcNodeIDs.push_back(srcNodeIDVector.getValue<nodeID_t>(pos));
+        }
+    }
+    if (srcNodeIDs.empty()) {
+        return;
+    }
+
+    const auto tableData = getDirectedTableData(direction);
+    const auto reverseTableData =
+        directedRelData.size() == NUM_REL_DIRECTIONS ?
+            getDirectedTableData(RelDirectionUtils::getOppositeDirection(direction)) :
+            nullptr;
+    const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+
+    for (const auto srcNodeID : srcNodeIDs) {
+        const auto srcState = std::make_shared<DataChunkState>();
+        ValueVector tempSrcNodeID(LogicalType::INTERNAL_ID());
+        tempSrcNodeID.setState(srcState);
+        srcState->getSelVectorUnsafe().setSelSize(1);
+        tempSrcNodeID.setValue(0, srcNodeID);
+
+        auto relReadState = std::make_unique<RelTableScanState>(*memoryManager, &tempSrcNodeID,
+            std::vector{&dstNodeIDVector, &relIDVector}, dstNodeIDVector.state,
+            true /*randomLookup*/);
+        relReadState->setToTable(transaction, this, {NBR_ID_COLUMN_ID, REL_ID_COLUMN_ID}, {},
+            direction);
+        initScanState(transaction, *relReadState);
+
+        const auto relState = dstNodeIDVector.state.get();
+        while (scan(transaction, *relReadState)) {
+            const auto numRelsScanned = relState->getSelVector().getSelSize();
+            if (relState->getSelVector().isUnfiltered()) {
+                relState->getSelVectorUnsafe().setRange(0, numRelsScanned);
+            }
+            relState->getSelVectorUnsafe().setToFiltered(1);
+
+            for (auto i = 0u; i < numRelsScanned; i++) {
+                relState->getSelVectorUnsafe()[0] = relIDVector.state->getSelVector()[i];
+
+                const auto relIDPos = relIDVector.state->getSelVector()[0];
+                const auto relOffset = relIDVector.readNodeOffset(relIDPos);
+                if (relOffset >= StorageConstants::MAX_NUM_ROWS_IN_TABLE) {
+                    DASSERT(localTable);
+                    RelTableDeleteState localDeleteState{tempSrcNodeID, dstNodeIDVector,
+                        relIDVector, direction};
+                    localTable->delete_(transaction, localDeleteState);
+                    continue;
+                }
+                [[maybe_unused]] const auto deleted =
+                    tableData->delete_(transaction, tempSrcNodeID, relIDVector);
+                if (reverseTableData) {
+                    [[maybe_unused]] const auto reverseDeleted =
+                        reverseTableData->delete_(transaction, dstNodeIDVector, relIDVector);
+                    DASSERT(deleted == reverseDeleted);
+                }
+            }
+            relState->getSelVectorUnsafe().setToUnfiltered();
+        }
+    }
+    if (transaction->shouldLogToWAL()) {
+        DASSERT(transaction->isWriteTransaction());
+        transaction->getLocalWAL().logRelDetachDelete(tableID, direction, &srcNodeIDVector);
+    }
+    setHasChanges();
+}
+
 std::vector<RelDataDirection> RelTable::getStorageDirections() const {
     std::vector<RelDataDirection> ret;
     for (const auto& relData : directedRelData) {

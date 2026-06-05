@@ -14,17 +14,15 @@ void WALReplayer::replayRelDetachDeletionRecord(const WALRecord& walRecord) cons
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<RelTable>();
     DASSERT(transaction::Transaction::Get(clientContext) &&
             transaction::Transaction::Get(clientContext)->isRecovery());
-    const auto anchorState = deletionRecord.ownedSrcNodeIDVector->state;
-    DASSERT(anchorState->getSelVector().getSelSize() == 1);
     const auto dstNodeIDVector =
         std::make_unique<ValueVector>(LogicalType{LogicalTypeID::INTERNAL_ID});
     const auto relIDVector = std::make_unique<ValueVector>(LogicalType{LogicalTypeID::INTERNAL_ID});
-    dstNodeIDVector->setState(anchorState);
-    relIDVector->setState(anchorState);
-    const auto deleteState = std::make_unique<RelTableDeleteState>(
-        *deletionRecord.ownedSrcNodeIDVector, *dstNodeIDVector, *relIDVector);
-    deleteState->detachDeleteDirection = deletionRecord.direction;
-    table.detachDelete(transaction::Transaction::Get(clientContext), deleteState.get());
+    const auto relState = std::make_shared<DataChunkState>();
+    dstNodeIDVector->setState(relState);
+    relIDVector->setState(relState);
+    table.detachDeleteBatch(transaction::Transaction::Get(clientContext),
+        *deletionRecord.ownedSrcNodeIDVector, *dstNodeIDVector, *relIDVector,
+        deletionRecord.direction);
 }
 
 } // namespace storage

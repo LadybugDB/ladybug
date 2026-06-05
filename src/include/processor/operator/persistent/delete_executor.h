@@ -69,11 +69,25 @@ public:
 
     virtual std::unique_ptr<NodeDeleteExecutor> copy() const = 0;
 
+    virtual void finalize(ExecutionContext* context) = 0;
+
 protected:
+    void appendToBatch(common::internalID_t nodeID);
+    void flushBatch(const std::vector<common::internalID_t>& nodeIDs,
+        common::ValueVector& srcNodeIDVector,
+        const std::unordered_set<storage::RelTable*>& fwdRelTables,
+        const std::unordered_set<storage::RelTable*>& bwdRelTables,
+        transaction::Transaction* transaction);
+
     NodeDeleteInfo info;
     std::unique_ptr<common::ValueVector> dstNodeIDVector;
     std::unique_ptr<common::ValueVector> relIDVector;
     std::unique_ptr<storage::RelTableDeleteState> detachDeleteState;
+    std::vector<common::internalID_t> batchNodeIDs;
+    std::unique_ptr<common::ValueVector> batchSrcNodeIDVector;
+    std::unique_ptr<common::ValueVector> batchDstNodeIDVector;
+    std::unique_ptr<common::ValueVector> batchRelIDVector;
+    static constexpr uint32_t BATCH_SIZE = 1024;
 };
 
 // Handle MATCH (n) (DETACH)? DELETE n
@@ -83,6 +97,8 @@ public:
     EmptyNodeDeleteExecutor(const EmptyNodeDeleteExecutor& other) : NodeDeleteExecutor{other} {}
 
     void delete_(ExecutionContext*) override {}
+
+    void finalize(ExecutionContext*) override {}
 
     std::unique_ptr<NodeDeleteExecutor> copy() const override {
         return std::make_unique<EmptyNodeDeleteExecutor>(*this);
@@ -98,6 +114,7 @@ public:
 
     void init(ResultSet* resultSet, ExecutionContext*) override;
     void delete_(ExecutionContext* context) override;
+    void finalize(ExecutionContext* context) override;
 
     std::unique_ptr<NodeDeleteExecutor> copy() const override {
         return std::make_unique<SingleLabelNodeDeleteExecutor>(*this);
@@ -117,6 +134,7 @@ public:
 
     void init(ResultSet* resultSet, ExecutionContext*) override;
     void delete_(ExecutionContext* context) override;
+    void finalize(ExecutionContext* context) override;
 
     std::unique_ptr<NodeDeleteExecutor> copy() const override {
         return std::make_unique<MultiLabelNodeDeleteExecutor>(*this);

@@ -63,12 +63,51 @@ void NodeDeleteExecutor::init(ResultSet* resultSet, ExecutionContext*) {
         relIDVector->setState(tempSharedState);
         detachDeleteState = std::make_unique<RelTableDeleteState>(*info.nodeIDVector,
             *dstNodeIDVector, *relIDVector);
+        batchSrcNodeIDVector = std::make_unique<ValueVector>(LogicalType::INTERNAL_ID());
+        batchDstNodeIDVector = std::make_unique<ValueVector>(LogicalType::INTERNAL_ID());
+        batchRelIDVector = std::make_unique<ValueVector>(LogicalType::INTERNAL_ID());
+    }
+}
+
+void NodeDeleteExecutor::appendToBatch(internalID_t nodeID) {
+    batchNodeIDs.push_back(nodeID);
+}
+
+void NodeDeleteExecutor::flushBatch(const std::vector<internalID_t>& nodeIDs,
+    ValueVector& srcNodeIDVector, const std::unordered_set<RelTable*>& fwdRelTables,
+    const std::unordered_set<RelTable*>& bwdRelTables, Transaction* transaction) {
+    if (nodeIDs.empty()) {
+        return;
+    }
+    const auto srcState = std::make_shared<DataChunkState>();
+    const auto relState = std::make_shared<DataChunkState>();
+    srcNodeIDVector.setState(srcState);
+    batchDstNodeIDVector->setState(relState);
+    batchRelIDVector->setState(relState);
+    srcState->getSelVectorUnsafe().setSelSize(nodeIDs.size());
+    for (auto i = 0u; i < nodeIDs.size(); i++) {
+        srcNodeIDVector.setValue(i, nodeIDs[i]);
+    }
+    for (auto& relTable : fwdRelTables) {
+        relTable->detachDeleteBatch(transaction, srcNodeIDVector, *batchDstNodeIDVector,
+            *batchRelIDVector, RelDataDirection::FWD);
+    }
+    for (auto& relTable : bwdRelTables) {
+        relTable->detachDeleteBatch(transaction, srcNodeIDVector, *batchDstNodeIDVector,
+            *batchRelIDVector, RelDataDirection::BWD);
     }
 }
 
 void SingleLabelNodeDeleteExecutor::init(ResultSet* resultSet, ExecutionContext* context) {
     NodeDeleteExecutor::init(resultSet, context);
     tableInfo.init(*resultSet);
+}
+
+void SingleLabelNodeDeleteExecutor::finalize(ExecutionContext* context) {
+    auto transaction = Transaction::Get(*context->clientContext);
+    flushBatch(batchNodeIDs, *batchSrcNodeIDVector, tableInfo.fwdRelTables, tableInfo.bwdRelTables,
+        transaction);
+    batchNodeIDs.clear();
 }
 
 void SingleLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
@@ -84,7 +123,16 @@ void SingleLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
         tableInfo.deleteFromRelTable(transaction, info.nodeIDVector);
     } break;
     case DeleteNodeType::DETACH_DELETE: {
-        tableInfo.detachDeleteFromRelTable(transaction, detachDeleteState.get());
+        const auto& selVector = info.nodeIDVector->state->getSelVector();
+        const auto pos = selVector[0];
+        if (!info.nodeIDVector->isNull(pos)) {
+            appendToBatch(info.nodeIDVector->getValue<internalID_t>(pos));
+        }
+        if (batchNodeIDs.size() >= BATCH_SIZE) {
+            flushBatch(batchNodeIDs, *batchSrcNodeIDVector, tableInfo.fwdRelTables,
+                tableInfo.bwdRelTables, transaction);
+            batchNodeIDs.clear();
+        }
     } break;
     default:
         UNREACHABLE_CODE;
@@ -96,6 +144,20 @@ void MultiLabelNodeDeleteExecutor::init(ResultSet* resultSet, ExecutionContext* 
     for (auto& [_, tableInfo] : tableInfos) {
         tableInfo.init(*resultSet);
     }
+}
+
+void MultiLabelNodeDeleteExecutor::finalize(ExecutionContext* context) {
+    auto transaction = Transaction::Get(*context->clientContext);
+    table_id_map_t<std::vector<internalID_t>> tableIDToNodeIDs;
+    for (const auto nodeID : batchNodeIDs) {
+        tableIDToNodeIDs[nodeID.tableID].push_back(nodeID);
+    }
+    for (auto& [tableID, nodeIDs] : tableIDToNodeIDs) {
+        const auto& tableInfo = tableInfos.at(tableID);
+        flushBatch(nodeIDs, *batchSrcNodeIDVector, tableInfo.fwdRelTables, tableInfo.bwdRelTables,
+            transaction);
+    }
+    batchNodeIDs.clear();
 }
 
 void MultiLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
@@ -118,7 +180,10 @@ void MultiLabelNodeDeleteExecutor::delete_(ExecutionContext* context) {
         tableInfo.deleteFromRelTable(transaction, info.nodeIDVector);
     } break;
     case DeleteNodeType::DETACH_DELETE: {
-        tableInfo.detachDeleteFromRelTable(transaction, detachDeleteState.get());
+        appendToBatch(nodeID);
+        if (batchNodeIDs.size() >= BATCH_SIZE) {
+            finalize(context);
+        }
     } break;
     default:
         UNREACHABLE_CODE;
