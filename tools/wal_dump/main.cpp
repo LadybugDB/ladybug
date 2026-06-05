@@ -31,6 +31,27 @@ static WALHeader readWALHeader(Deserializer& deserializer) {
     return header;
 }
 
+static uint64_t getReadOffset(Deserializer& deserializer, bool enableChecksums) {
+    if (enableChecksums) {
+        return deserializer.getReader()->cast<ChecksumReader>()->getReadOffset();
+    }
+    return deserializer.getReader()->cast<BufferedFileReader>()->getReadOffset();
+}
+
+static WALHeader readRawWALHeader(FileInfo& fileInfo) {
+    Deserializer deserializer{std::make_unique<BufferedFileReader>(fileInfo)};
+    return readWALHeader(deserializer);
+}
+
+static Deserializer initDeserializer(FileInfo& fileInfo, lbug::main::ClientContext& clientContext,
+    bool enableChecksums) {
+    if (enableChecksums) {
+        return Deserializer{std::make_unique<ChecksumReader>(fileInfo,
+            *MemoryManager::Get(clientContext), checksumMismatchMessage)};
+    }
+    return Deserializer{std::make_unique<BufferedFileReader>(fileInfo)};
+}
+
 static std::string walRecordTypeToString(WALRecordType type) {
     switch (type) {
     case WALRecordType::BEGIN_TRANSACTION_RECORD:
@@ -259,14 +280,9 @@ int main(int argc, char** argv) {
         auto contextDB = std::make_unique<lbug::main::Database>(":memory:");
         lbug::main::ClientContext clientContext(contextDB.get());
 
-        std::unique_ptr<Reader> reader;
-        if (fileSize >= sizeof(uuid) + sizeof(uint8_t) + sizeof(uint64_t)) {
-            reader = std::make_unique<ChecksumReader>(*fileInfo, *MemoryManager::Get(clientContext),
-                checksumMismatchMessage);
-        } else {
-            reader = std::make_unique<BufferedFileReader>(*fileInfo);
-        }
-        Deserializer deserializer(std::move(reader));
+        auto rawWalHeader = readRawWALHeader(*fileInfo);
+        Deserializer deserializer =
+            initDeserializer(*fileInfo, clientContext, rawWalHeader.enableChecksums);
 
         deserializer.getReader()->onObjectBegin();
         auto walHeader = readWALHeader(deserializer);
@@ -284,12 +300,16 @@ int main(int argc, char** argv) {
         uint64_t lastOffset = 0;
 
         while (!deserializer.finished()) {
-            lastOffset = walHeader.enableChecksums ?
-                             deserializer.getReader()->cast<ChecksumReader>()->getReadOffset() :
-                             deserializer.getReader()->cast<BufferedFileReader>()->getReadOffset();
+            lastOffset = getReadOffset(deserializer, walHeader.enableChecksums);
             auto walRecord = WALRecord::deserialize(deserializer, clientContext);
+            const auto endOffset = getReadOffset(deserializer, walHeader.enableChecksums);
+            const auto framedLength = endOffset - lastOffset;
+            const auto recordLength = framedLength - sizeof(uint64_t) -
+                                      (walHeader.enableChecksums ? sizeof(uint64_t) : 0);
             std::cout << "  Record at offset " << lastOffset << " ("
                       << walRecordTypeToString(walRecord->type) << "):\n";
+            std::cout << "      PayloadLength: " << recordLength << " bytes\n";
+            std::cout << "      FramedLength: " << framedLength << " bytes\n";
             dumpRecord(*walRecord);
             recordCount++;
         }
