@@ -83,11 +83,8 @@ std::unique_ptr<WALRecord> WALRecord::deserialize(Deserializer& deserializer,
     case WALRecordType::LOAD_EXTENSION_RECORD: {
         walRecord = LoadExtensionRecord::deserialize(deserializer);
     } break;
-    case WALRecordType::INVALID_RECORD: {
-        throw RuntimeException("Corrupted wal file. Read out invalid WAL record type.");
-    }
     default: {
-        UNREACHABLE_CODE;
+        throw RuntimeException("Corrupted wal file. Read out invalid WAL record type.");
     }
     }
     walRecord->type = type;

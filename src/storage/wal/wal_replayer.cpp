@@ -117,6 +117,7 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
         if (isLastRecordCheckpoint) {
             ShadowFile::replayShadowPageRecords(clientContext);
             removeFileIfExists(checkpointWalPath);
+            removeFileIfExists(walPath);
             removeFileIfExists(shadowFilePath);
             checkpointer.readCheckpoint();
         } else {

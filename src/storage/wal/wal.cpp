@@ -89,7 +89,7 @@ void WAL::logAndFlushCheckpointToFrozen(main::ClientContext* context) {
 
     CheckpointRecord walRecord;
     frozenSerializer->getWriter()->onObjectBegin();
-    walRecord.serialize(*frozenSerializer);
+    WALRecord::serializeWithLength(*frozenSerializer, walRecord);
     frozenSerializer->getWriter()->onObjectEnd();
     try {
         frozenSerializer->getWriter()->flush();
