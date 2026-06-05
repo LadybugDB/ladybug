@@ -107,6 +107,18 @@ jobs:
           cmp tmphashfile scripts/antlr4/hash.md5
           rm tmphashfile
 
+      - name: Install WAL codegen dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-18
+          pip3 install uv
+
+      - name: Ensure generated WAL record files are up to date
+        run: |
+          export CLANG_FORMAT=clang-format-18
+          python3 scripts/generate_wal_typespec.py
+          git diff --exit-code -- src/include/storage/wal/record src/storage/wal/records
+
   clang-format:
     runs-on: ubuntu-24.04
     container:
@@ -190,6 +202,9 @@ jobs:
           New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
           git config --system core.longpaths true
 
+      - name: Install uv
+        run: pip3 install uv
+
       - name: Build
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
@@ -221,9 +236,6 @@ jobs:
           LBUG_SHELL="$(find build -path '*/src/lbug_shell.exe' -print -quit)"
           test -n "$LBUG_SHELL"
           bash scripts/generate_binary_demo.sh --lbug-shell "$LBUG_SHELL"
-
-      - name: Install uv
-        run: pip3 install uv
 
       - name: Test
         shell: bash
