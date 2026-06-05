@@ -15,7 +15,7 @@ public:
     virtual ~Reader() = default;
 
     virtual bool finished() = 0;
-    virtual uint64_t getReadOffset() const = 0;
+    virtual uint64_t getReadOffset() const { return 0; }
     virtual void skip(uint64_t size) {
         std::array<uint8_t, 4096> buffer{};
         while (size > 0) {
