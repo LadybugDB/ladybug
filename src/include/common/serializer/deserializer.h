@@ -4,6 +4,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -33,6 +34,21 @@ public:
     void read(uint8_t* data, uint64_t size) const { reader->read(data, size); }
 
     Reader* getReader() const { return reader.get(); }
+
+    uint64_t getReadOffset() const { return reader->getReadOffset(); }
+    void beginReadLimit(uint64_t size) { readLimit = getReadOffset() + size; }
+    bool hasRemainingData() const { return !readLimit.has_value() || getReadOffset() < *readLimit; }
+    void skipReadLimit() {
+        if (!readLimit.has_value()) {
+            return;
+        }
+        const auto endOffset = *readLimit;
+        const auto readOffset = getReadOffset();
+        if (readOffset < endOffset) {
+            reader->skip(endOffset - readOffset);
+        }
+        readLimit.reset();
+    }
 
     void validateDebuggingInfo(std::string& value, const std::string& expectedVal);
 
@@ -144,6 +160,7 @@ public:
 private:
     std::unique_ptr<Reader> reader;
     uint64_t storageVersion = std::numeric_limits<uint64_t>::max();
+    std::optional<uint64_t> readLimit;
 };
 
 template<>

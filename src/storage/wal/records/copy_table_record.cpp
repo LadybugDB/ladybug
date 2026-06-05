@@ -18,7 +18,9 @@ void CopyTableRecord::serialize(Serializer& serializer) const {
 
 std::unique_ptr<CopyTableRecord> CopyTableRecord::deserialize(Deserializer& deserializer) {
     table_id_t tableID = common::INVALID_TABLE_ID;
-    deserializer.deserializeValue<table_id_t>(tableID);
+    if (deserializer.hasRemainingData()) {
+        deserializer.deserializeValue<table_id_t>(tableID);
+    }
 
     return std::make_unique<CopyTableRecord>(std::move(tableID));
 }

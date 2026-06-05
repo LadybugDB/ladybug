@@ -33,27 +33,43 @@ std::unique_ptr<RelUpdateRecord> RelUpdateRecord::deserialize(Deserializer& dese
     const main::ClientContext& clientContext) {
     std::string key;
     table_id_t tableID = INVALID_TABLE_ID;
-    deserializer.validateDebuggingInfo(key, "table_id");
-    deserializer.deserializeValue<table_id_t>(tableID);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "table_id");
+        deserializer.deserializeValue<table_id_t>(tableID);
+    }
     column_id_t columnID = INVALID_COLUMN_ID;
-    deserializer.validateDebuggingInfo(key, "column_id");
-    deserializer.deserializeValue<column_id_t>(columnID);
-    deserializer.validateDebuggingInfo(key, "src_node_vector");
-    auto srcNodeIDVectorState = std::make_shared<DataChunkState>();
-    auto srcNodeIDVector = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
-        srcNodeIDVectorState);
-    deserializer.validateDebuggingInfo(key, "dst_node_vector");
-    auto dstNodeIDVectorState = std::make_shared<DataChunkState>();
-    auto dstNodeIDVector = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
-        dstNodeIDVectorState);
-    deserializer.validateDebuggingInfo(key, "rel_id_vector");
-    auto relIDVectorState = std::make_shared<DataChunkState>();
-    auto relIDVector =
-        ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext), relIDVectorState);
-    deserializer.validateDebuggingInfo(key, "property_vector");
-    auto propertyVectorState = std::make_shared<DataChunkState>();
-    auto propertyVector = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
-        propertyVectorState);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "column_id");
+        deserializer.deserializeValue<column_id_t>(columnID);
+    }
+    std::unique_ptr<ValueVector> srcNodeIDVector;
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "src_node_vector");
+        auto srcNodeIDVectorState = std::make_shared<DataChunkState>();
+        srcNodeIDVector = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
+            srcNodeIDVectorState);
+    }
+    std::unique_ptr<ValueVector> dstNodeIDVector;
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "dst_node_vector");
+        auto dstNodeIDVectorState = std::make_shared<DataChunkState>();
+        dstNodeIDVector = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
+            dstNodeIDVectorState);
+    }
+    std::unique_ptr<ValueVector> relIDVector;
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "rel_id_vector");
+        auto relIDVectorState = std::make_shared<DataChunkState>();
+        relIDVector = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
+            relIDVectorState);
+    }
+    std::unique_ptr<ValueVector> propertyVector;
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "property_vector");
+        auto propertyVectorState = std::make_shared<DataChunkState>();
+        propertyVector = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
+            propertyVectorState);
+    }
 
     return std::make_unique<RelUpdateRecord>(std::move(tableID), std::move(columnID),
         std::move(srcNodeIDVector), std::move(dstNodeIDVector), std::move(relIDVector),

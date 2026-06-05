@@ -27,7 +27,14 @@ static void resizeBufferIfNeeded(std::unique_ptr<MemoryBuffer>& entryBuffer,
 }
 
 void ChecksumReader::read(uint8_t* data, uint64_t size) {
-    deserializer.read(data, size);
+    try {
+        deserializer.read(data, size);
+    } catch (const std::exception&) {
+        if (currentEntrySize.has_value()) {
+            throw common::StorageException(std::string{checksumMismatchMessage});
+        }
+        throw;
+    }
     if (currentEntrySize.has_value()) {
         resizeBufferIfNeeded(entryBuffer, *currentEntrySize + size);
         std::memcpy(entryBuffer->getData() + *currentEntrySize, data, size);

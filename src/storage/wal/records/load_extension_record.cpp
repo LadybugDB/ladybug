@@ -20,8 +20,10 @@ void LoadExtensionRecord::serialize(Serializer& serializer) const {
 std::unique_ptr<LoadExtensionRecord> LoadExtensionRecord::deserialize(Deserializer& deserializer) {
     std::string key;
     std::string path{};
-    deserializer.validateDebuggingInfo(key, "path");
-    deserializer.deserializeValue<std::string>(path);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "path");
+        deserializer.deserializeValue<std::string>(path);
+    }
 
     return std::make_unique<LoadExtensionRecord>(std::move(path));
 }

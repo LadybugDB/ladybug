@@ -16,6 +16,7 @@ struct BufferReader final : Reader {
     }
 
     bool finished() override { return readSize >= dataSize; }
+    uint64_t getReadOffset() const override { return readSize; }
 
     uint8_t* data;
     size_t dataSize;

@@ -32,23 +32,31 @@ std::unique_ptr<TableInsertionRecord> TableInsertionRecord::deserialize(Deserial
     const main::ClientContext& clientContext) {
     std::string key;
     table_id_t tableID = INVALID_TABLE_ID;
-    deserializer.validateDebuggingInfo(key, "table_id");
-    deserializer.deserializeValue<table_id_t>(tableID);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "table_id");
+        deserializer.deserializeValue<table_id_t>(tableID);
+    }
     TableType tableType = TableType::UNKNOWN;
-    deserializer.validateDebuggingInfo(key, "table_type");
-    deserializer.deserializeValue<TableType>(tableType);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "table_type");
+        deserializer.deserializeValue<TableType>(tableType);
+    }
     row_idx_t numRows = INVALID_ROW_IDX;
-    deserializer.validateDebuggingInfo(key, "num_rows");
-    deserializer.deserializeValue<row_idx_t>(numRows);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "num_rows");
+        deserializer.deserializeValue<row_idx_t>(numRows);
+    }
     idx_t numVectors = 0;
     std::vector<std::unique_ptr<ValueVector>> vectors;
-    deserializer.validateDebuggingInfo(key, "num_vectors");
-    deserializer.deserializeValue(numVectors);
-    auto vectorsState = DataChunkState::getSingleValueDataChunkState();
-    vectors.reserve(numVectors);
-    for (auto i = 0u; i < numVectors; i++) {
-        vectors.push_back(ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
-            vectorsState));
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "num_vectors");
+        deserializer.deserializeValue(numVectors);
+        auto vectorsState = DataChunkState::getSingleValueDataChunkState();
+        vectors.reserve(numVectors);
+        for (auto i = 0u; i < numVectors; i++) {
+            vectors.push_back(ValueVector::deSerialize(deserializer,
+                MemoryManager::Get(clientContext), vectorsState));
+        }
     }
 
     return std::make_unique<TableInsertionRecord>(std::move(tableID), std::move(tableType),

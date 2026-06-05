@@ -20,9 +20,13 @@ void DropCatalogEntryRecord::serialize(Serializer& serializer) const {
 std::unique_ptr<DropCatalogEntryRecord> DropCatalogEntryRecord::deserialize(
     Deserializer& deserializer) {
     oid_t entryID = common::INVALID_OID;
-    deserializer.deserializeValue<oid_t>(entryID);
+    if (deserializer.hasRemainingData()) {
+        deserializer.deserializeValue<oid_t>(entryID);
+    }
     catalog::CatalogEntryType entryType{};
-    deserializer.deserializeValue<catalog::CatalogEntryType>(entryType);
+    if (deserializer.hasRemainingData()) {
+        deserializer.deserializeValue<catalog::CatalogEntryType>(entryType);
+    }
 
     return std::make_unique<DropCatalogEntryRecord>(std::move(entryID), std::move(entryType));
 }

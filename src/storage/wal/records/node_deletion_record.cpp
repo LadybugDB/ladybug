@@ -27,15 +27,22 @@ std::unique_ptr<NodeDeletionRecord> NodeDeletionRecord::deserialize(Deserializer
     const main::ClientContext& clientContext) {
     std::string key;
     table_id_t tableID = INVALID_TABLE_ID;
-    deserializer.validateDebuggingInfo(key, "table_id");
-    deserializer.deserializeValue<table_id_t>(tableID);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "table_id");
+        deserializer.deserializeValue<table_id_t>(tableID);
+    }
     offset_t nodeOffset = INVALID_OFFSET;
-    deserializer.validateDebuggingInfo(key, "node_offset");
-    deserializer.deserializeValue<offset_t>(nodeOffset);
-    deserializer.validateDebuggingInfo(key, "pk_vector");
-    auto pkVectorState = std::make_shared<DataChunkState>();
-    auto pkVector =
-        ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext), pkVectorState);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "node_offset");
+        deserializer.deserializeValue<offset_t>(nodeOffset);
+    }
+    std::unique_ptr<ValueVector> pkVector;
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "pk_vector");
+        auto pkVectorState = std::make_shared<DataChunkState>();
+        pkVector = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
+            pkVectorState);
+    }
 
     return std::make_unique<NodeDeletionRecord>(std::move(tableID), std::move(nodeOffset),
         std::move(pkVector));

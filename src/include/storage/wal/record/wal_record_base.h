@@ -56,6 +56,7 @@ struct WALRecord {
     DELETE_COPY_DEFAULT_MOVE(WALRecord);
 
     virtual void serialize(common::Serializer& serializer) const;
+    static void serializeWithLength(common::Serializer& serializer, const WALRecord& record);
     static std::unique_ptr<WALRecord> deserialize(common::Deserializer& deserializer,
         const main::ClientContext& clientContext);
 

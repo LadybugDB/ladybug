@@ -116,7 +116,7 @@ void LocalWAL::addNewWALRecord(const WALRecord& walRecord) {
 void LocalWAL::addNewWALRecordNoLock(const WALRecord& walRecord) {
     DASSERT(walRecord.type != WALRecordType::INVALID_RECORD);
     serializer.getWriter()->onObjectBegin();
-    walRecord.serialize(serializer);
+    WALRecord::serializeWithLength(serializer, walRecord);
     serializer.getWriter()->onObjectEnd();
 }
 

@@ -27,15 +27,22 @@ std::unique_ptr<RelDetachDeleteRecord> RelDetachDeleteRecord::deserialize(
     Deserializer& deserializer, const main::ClientContext& clientContext) {
     std::string key;
     table_id_t tableID = INVALID_TABLE_ID;
-    deserializer.validateDebuggingInfo(key, "table_id");
-    deserializer.deserializeValue<table_id_t>(tableID);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "table_id");
+        deserializer.deserializeValue<table_id_t>(tableID);
+    }
     RelDataDirection direction = RelDataDirection::INVALID;
-    deserializer.validateDebuggingInfo(key, "direction");
-    deserializer.deserializeValue<RelDataDirection>(direction);
-    deserializer.validateDebuggingInfo(key, "src_node_vector");
-    auto srcNodeIDVectorState = std::make_shared<DataChunkState>();
-    auto srcNodeIDVector = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
-        srcNodeIDVectorState);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "direction");
+        deserializer.deserializeValue<RelDataDirection>(direction);
+    }
+    std::unique_ptr<ValueVector> srcNodeIDVector;
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "src_node_vector");
+        auto srcNodeIDVectorState = std::make_shared<DataChunkState>();
+        srcNodeIDVector = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
+            srcNodeIDVectorState);
+    }
 
     return std::make_unique<RelDetachDeleteRecord>(std::move(tableID), std::move(direction),
         std::move(srcNodeIDVector));

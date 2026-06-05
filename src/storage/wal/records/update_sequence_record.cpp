@@ -20,9 +20,13 @@ void UpdateSequenceRecord::serialize(Serializer& serializer) const {
 std::unique_ptr<UpdateSequenceRecord> UpdateSequenceRecord::deserialize(
     Deserializer& deserializer) {
     sequence_id_t sequenceID = 0;
-    deserializer.deserializeValue<sequence_id_t>(sequenceID);
+    if (deserializer.hasRemainingData()) {
+        deserializer.deserializeValue<sequence_id_t>(sequenceID);
+    }
     uint64_t kCount = 0;
-    deserializer.deserializeValue<uint64_t>(kCount);
+    if (deserializer.hasRemainingData()) {
+        deserializer.deserializeValue<uint64_t>(kCount);
+    }
 
     return std::make_unique<UpdateSequenceRecord>(std::move(sequenceID), std::move(kCount));
 }

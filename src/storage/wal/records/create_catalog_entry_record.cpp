@@ -27,7 +27,9 @@ std::unique_ptr<CreateCatalogEntryRecord> CreateCatalogEntryRecord::deserialize(
     auto retVal = std::make_unique<CreateCatalogEntryRecord>();
     retVal->ownedCatalogEntry = CatalogEntry::deserialize(deserializer);
     bool isInternal = false;
-    deserializer.deserializeValue(isInternal);
+    if (deserializer.hasRemainingData()) {
+        deserializer.deserializeValue(isInternal);
+    }
     retVal->isInternal = isInternal;
     return retVal;
 }

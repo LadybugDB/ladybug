@@ -8,6 +8,10 @@
 #include "common/exception/runtime.h"
 #include "common/exception/storage.h"
 #include "common/file_system/virtual_file_system.h"
+#include "common/serializer/buffer_reader.h"
+#include "common/serializer/buffer_writer.h"
+#include "common/serializer/deserializer.h"
+#include "common/serializer/serializer.h"
 #include "gmock/gmock.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/storage_utils.h"
@@ -160,6 +164,28 @@ TEST_F(WalTest, WALSyncFailurePoisonsWALAndReturnsAllocatedCommitSequence) {
     EXPECT_THROW(wal.logCommittedWAL(secondLocalWAL, conn->getClientContext(), walCommitSequence),
         RuntimeException);
     EXPECT_EQ(walCommitSequence, 0);
+}
+
+TEST_F(WalTest, WALRecordDeserializeSkipsUnknownTrailingBytes) {
+    auto recordBuffer = std::make_shared<BufferWriter>();
+    Serializer recordSerializer{recordBuffer};
+    lbug::storage::CopyTableRecord record{123};
+    record.serialize(recordSerializer);
+    recordSerializer.write<uint64_t>(456);
+
+    auto walBuffer = std::make_shared<BufferWriter>();
+    Serializer walSerializer{walBuffer};
+    walSerializer.write(recordBuffer->getSize());
+    walSerializer.write(recordBuffer->getBlobData(), recordBuffer->getSize());
+
+    auto walData = walBuffer->getData();
+    Deserializer deserializer{std::make_unique<BufferReader>(walData.data.get(), walData.size)};
+    auto deserialized =
+        lbug::storage::WALRecord::deserialize(deserializer, *conn->getClientContext());
+
+    ASSERT_EQ(deserialized->type, lbug::storage::WALRecordType::COPY_TABLE_RECORD);
+    EXPECT_EQ(deserialized->constCast<lbug::storage::CopyTableRecord>().tableID, 123);
+    EXPECT_TRUE(deserializer.finished());
 }
 
 TEST_F(WalTest, NoWALFile) {

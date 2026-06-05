@@ -23,7 +23,7 @@ public:
     // stored value
     void onObjectEnd() override;
 
-    uint64_t getReadOffset() const;
+    uint64_t getReadOffset() const override;
 
 private:
     common::Deserializer deserializer;

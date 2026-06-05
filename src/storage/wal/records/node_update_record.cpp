@@ -29,18 +29,27 @@ std::unique_ptr<NodeUpdateRecord> NodeUpdateRecord::deserialize(Deserializer& de
     const main::ClientContext& clientContext) {
     std::string key;
     table_id_t tableID = INVALID_TABLE_ID;
-    deserializer.validateDebuggingInfo(key, "table_id");
-    deserializer.deserializeValue<table_id_t>(tableID);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "table_id");
+        deserializer.deserializeValue<table_id_t>(tableID);
+    }
     column_id_t columnID = INVALID_COLUMN_ID;
-    deserializer.validateDebuggingInfo(key, "column_id");
-    deserializer.deserializeValue<column_id_t>(columnID);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "column_id");
+        deserializer.deserializeValue<column_id_t>(columnID);
+    }
     offset_t nodeOffset = INVALID_OFFSET;
-    deserializer.validateDebuggingInfo(key, "node_offset");
-    deserializer.deserializeValue<offset_t>(nodeOffset);
-    deserializer.validateDebuggingInfo(key, "property_vector");
-    auto propertyVectorState = std::make_shared<DataChunkState>();
-    auto propertyVector = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
-        propertyVectorState);
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "node_offset");
+        deserializer.deserializeValue<offset_t>(nodeOffset);
+    }
+    std::unique_ptr<ValueVector> propertyVector;
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "property_vector");
+        auto propertyVectorState = std::make_shared<DataChunkState>();
+        propertyVector = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
+            propertyVectorState);
+    }
 
     return std::make_unique<NodeUpdateRecord>(std::move(tableID), std::move(columnID),
         std::move(nodeOffset), std::move(propertyVector));

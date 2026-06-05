@@ -264,7 +264,7 @@ void WAL::addNewWALRecordNoLock(const WALRecord& walRecord) {
     DASSERT(!inMemory);
     DASSERT(serializer != nullptr);
     serializer->getWriter()->onObjectBegin();
-    walRecord.serialize(*serializer);
+    WALRecord::serializeWithLength(*serializer, walRecord);
     serializer->getWriter()->onObjectEnd();
 }
 

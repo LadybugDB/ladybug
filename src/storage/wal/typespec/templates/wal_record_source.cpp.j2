@@ -182,7 +182,9 @@ std::unique_ptr<CreateCatalogEntryRecord> CreateCatalogEntryRecord::deserialize(
     auto retVal = std::make_unique<CreateCatalogEntryRecord>();
     retVal->ownedCatalogEntry = CatalogEntry::deserialize(deserializer);
     bool isInternal = false;
-    deserializer.deserializeValue(isInternal);
+    if (deserializer.hasRemainingData()) {
+        deserializer.deserializeValue(isInternal);
+    }
     retVal->isInternal = isInternal;
     return retVal;
 }
@@ -222,24 +224,29 @@ std::unique_ptr<{{ dc.name }}> {{ dc.name }}::deserialize(Deserializer&{% if dc.
 {% set wire_name = wire_names.get(name, name) -%}
 {% set default_value = defaults.get(name, default_zero.get(raw_type, "{}")) -%}
 {% if raw_type == "ValueVector" -%}
+    std::unique_ptr<ValueVector> {{ name }};
+    if (deserializer.hasRemainingData()) {
 {% if debug_fields -%}
-    deserializer.validateDebuggingInfo(key, "{{ wire_name }}");
+        deserializer.validateDebuggingInfo(key, "{{ wire_name }}");
 {% endif -%}
-    auto {{ name }}State = std::make_shared<DataChunkState>();
-    auto {{ name }} = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
-        {{ name }}State);
+        auto {{ name }}State = std::make_shared<DataChunkState>();
+        {{ name }} = ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
+            {{ name }}State);
+    }
 {% elif raw_type == "std::vector<ValueVector>" -%}
     idx_t num{{ name[0:1]|upper }}{{ name[1:] }} = 0;
     std::vector<std::unique_ptr<ValueVector>> {{ name }};
+    if (deserializer.hasRemainingData()) {
 {% if debug_fields -%}
-    deserializer.validateDebuggingInfo(key, "{{ wire_name }}");
+        deserializer.validateDebuggingInfo(key, "{{ wire_name }}");
 {% endif -%}
-    deserializer.deserializeValue(num{{ name[0:1]|upper }}{{ name[1:] }});
-    auto {{ name }}State = DataChunkState::getSingleValueDataChunkState();
-    {{ name }}.reserve(num{{ name[0:1]|upper }}{{ name[1:] }});
-    for (auto i = 0u; i < num{{ name[0:1]|upper }}{{ name[1:] }}; i++) {
-        {{ name }}.push_back(ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
-            {{ name }}State));
+        deserializer.deserializeValue(num{{ name[0:1]|upper }}{{ name[1:] }});
+        auto {{ name }}State = DataChunkState::getSingleValueDataChunkState();
+        {{ name }}.reserve(num{{ name[0:1]|upper }}{{ name[1:] }});
+        for (auto i = 0u; i < num{{ name[0:1]|upper }}{{ name[1:] }}; i++) {
+            {{ name }}.push_back(ValueVector::deSerialize(deserializer, MemoryManager::Get(clientContext),
+                {{ name }}State));
+        }
     }
 {% else -%}
 {% if default_value == "{}" -%}
@@ -247,10 +254,12 @@ std::unique_ptr<{{ dc.name }}> {{ dc.name }}::deserialize(Deserializer&{% if dc.
 {% else -%}
     {{ type_map.get(raw_type, raw_type) }} {{ name }} = {{ default_value }};
 {% endif -%}
+    if (deserializer.hasRemainingData()) {
 {% if debug_fields -%}
-    deserializer.validateDebuggingInfo(key, "{{ wire_name }}");
+        deserializer.validateDebuggingInfo(key, "{{ wire_name }}");
 {% endif -%}
-    deserializer.deserializeValue<{{ type_map.get(raw_type, raw_type) }}>({{ name }});
+        deserializer.deserializeValue<{{ type_map.get(raw_type, raw_type) }}>({{ name }});
+    }
 {% endif -%}
 {% endfor %}
     return std::make_unique<{{ dc.name }}>(
