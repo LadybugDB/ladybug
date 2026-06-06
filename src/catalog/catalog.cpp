@@ -523,7 +523,7 @@ std::vector<std::string> Catalog::getMacroNames(const Transaction* transaction) 
 
 void Catalog::dropMacro(Transaction* transaction, std::string& name) {
     if (!containsMacro(transaction, name)) {
-        throw CatalogException{std::format("Marco {} doesn't exist.", name)};
+        throw CatalogException{std::format("Macro {} doesn't exist.", name)};
     }
     auto entry = getFunctionEntry(transaction, name);
     macros->dropEntry(transaction, name, entry->getOID());

@@ -83,7 +83,7 @@ void DatabaseManager::detachDatabase(const std::string& databaseName) {
 }
 
 void DatabaseManager::setDefaultDatabase(const std::string& databaseName) {
-    if (getAttachedDatabase(databaseName) == nullptr) {
+    if (!hasAttachedDatabase(databaseName)) {
         throw RuntimeException{std::format("No database named {}.", databaseName)};
     }
     defaultDatabase = databaseName;

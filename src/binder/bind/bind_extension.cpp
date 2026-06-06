@@ -37,7 +37,7 @@ static void bindLoadExtension(main::ClientContext* context, const ExtensionAuxIn
     if (!localFileSystem.fileOrPathExists(auxInfo.path, nullptr /* clientContext */)) {
         throw common::BinderException(
             std::format("The extension {} is neither an official extension, nor does "
-                        "the extension path: '{}' exists.",
+                        "the extension path: '{}' exist.",
                 auxInfo.path, auxInfo.path));
     }
 }
