@@ -36,7 +36,8 @@ static PlannerTableStats getPlannerStats(main::ClientContext* context,
         return std::move(cachedStats.value());
     }
     return storage::buildPlannerTableStats(storageManager, *catalog::Catalog::Get(*context),
-        transaction::Transaction::Get(*context), tableEntry, physicalTableID);
+        transaction::Transaction::Get(*context), tableEntry, physicalTableID,
+        storage::PlannerStatsMode::SCHEMA_ONLY);
 }
 
 void CardinalityEstimator::init(const QueryGraph& queryGraph) {
@@ -284,7 +285,22 @@ double CardinalityEstimator::getOneHopExtensionRate(const std::vector<table_id_t
         const auto& relStats = stats.relDirectionStats[directionKey].value();
         numRels += relStats.numRows;
     }
-    return static_cast<double>(numRels) / atLeastOne(numBoundNodes);
+    auto rate = static_cast<double>(numRels) / atLeastOne(numBoundNodes);
+    bool sawRelStats = false;
+    bool allBoundKeysUnique = true;
+    for (auto tableID : tableIDs) {
+        if (!tableStats.contains(tableID)) {
+            continue;
+        }
+        const auto& stats = tableStats.at(tableID);
+        const auto directionKey = RelDirectionUtils::relDirectionToKeyIdx(direction);
+        if (!stats.relDirectionStats[directionKey].has_value()) {
+            continue;
+        }
+        sawRelStats = true;
+        allBoundKeysUnique &= stats.relDirectionStats[directionKey]->boundKeysUnique;
+    }
+    return sawRelStats && allBoundKeysUnique ? std::min<double>(rate, 1) : rate;
 }
 
 double CardinalityEstimator::getExtensionRate(const RelExpression& rel,

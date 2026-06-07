@@ -36,6 +36,29 @@ static PlannerRelDirectionStats computeRelDirectionStats(RelTable& relTable,
     return stats;
 }
 
+static const RelTableCatalogInfo& getRelTableInfo(const RelGroupCatalogEntry& relGroupEntry,
+    table_id_t tableID) {
+    for (const auto& relInfo : relGroupEntry.getRelEntryInfos()) {
+        if (relInfo.oid == tableID) {
+            return relInfo;
+        }
+    }
+    UNREACHABLE_CODE;
+}
+
+static PlannerRelDirectionStats computeRelDirectionSchemaStats(RelTable& relTable,
+    const Transaction* transaction, const RelTableCatalogInfo& relInfo,
+    RelDataDirection direction) {
+    auto stats = PlannerRelDirectionStats{};
+    stats.numRows = relTable.getNumTotalRows(transaction);
+    stats.boundKeysUnique = relInfo.getMultiplicity(direction) == RelMultiplicity::ONE;
+    if (stats.boundKeysUnique) {
+        stats.maxDegree = 1;
+        stats.avgDegree = stats.numRows == 0 ? 0 : 1;
+    }
+    return stats;
+}
+
 static void appendIndexStats(PlannerTableStats& plannerStats, const Catalog& catalog,
     const Transaction* transaction, const TableCatalogEntry& tableEntry, table_id_t tableID) {
     for (const auto indexEntry : catalog.getIndexEntries(transaction, tableID)) {
@@ -50,8 +73,8 @@ static void appendIndexStats(PlannerTableStats& plannerStats, const Catalog& cat
 }
 
 PlannerTableStats buildPlannerTableStats(StorageManager& storageManager, const Catalog& catalog,
-    const Transaction* transaction, const TableCatalogEntry& tableEntry,
-    table_id_t physicalTableID) {
+    const Transaction* transaction, const TableCatalogEntry& tableEntry, table_id_t physicalTableID,
+    PlannerStatsMode mode) {
     auto tableID = physicalTableID == INVALID_TABLE_ID ? tableEntry.getTableID() : physicalTableID;
     auto* table = storageManager.getTable(tableID);
     auto plannerStats = PlannerTableStats{};
@@ -65,10 +88,13 @@ PlannerTableStats buildPlannerTableStats(StorageManager& storageManager, const C
     case TableType::REL: {
         auto& relGroupEntry = tableEntry.constCast<RelGroupCatalogEntry>();
         auto* relTable = table->ptrCast<RelTable>();
+        const auto& relInfo = getRelTableInfo(relGroupEntry, tableID);
         for (const auto direction : relGroupEntry.getRelDataDirections()) {
             const auto directionKey = RelDirectionUtils::relDirectionToKeyIdx(direction);
             plannerStats.relDirectionStats[directionKey] =
-                computeRelDirectionStats(*relTable, transaction, direction);
+                mode == PlannerStatsMode::ANALYZE ?
+                    computeRelDirectionStats(*relTable, transaction, direction) :
+                    computeRelDirectionSchemaStats(*relTable, transaction, relInfo, direction);
         }
     } break;
     default: {

@@ -22,6 +22,8 @@ class Transaction;
 namespace storage {
 class StorageManager;
 
+enum class PlannerStatsMode : uint8_t { SCHEMA_ONLY, ANALYZE };
+
 struct PlannerIndexStats {
     std::string indexType;
     std::vector<common::column_id_t> columnIDs;
@@ -62,7 +64,8 @@ struct PlannerTableStats {
 PlannerTableStats buildPlannerTableStats(StorageManager& storageManager,
     const catalog::Catalog& catalog, const transaction::Transaction* transaction,
     const catalog::TableCatalogEntry& tableEntry,
-    common::table_id_t physicalTableID = common::INVALID_TABLE_ID);
+    common::table_id_t physicalTableID = common::INVALID_TABLE_ID,
+    PlannerStatsMode mode = PlannerStatsMode::ANALYZE);
 
 std::vector<common::table_id_t> analyzePlannerStats(StorageManager& storageManager,
     const catalog::Catalog& catalog, const transaction::Transaction* transaction,
