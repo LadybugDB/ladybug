@@ -2,7 +2,10 @@
 
 #include "binder/expression/property_expression.h"
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/index_catalog_entry.h"
+#include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
+#include "common/enums/extend_direction_util.h"
 #include "main/client_context.h"
 #include "planner/join_order/join_order_util.h"
 #include "planner/operator/logical_aggregate.h"
@@ -29,9 +32,11 @@ void CardinalityEstimator::init(const QueryGraph& queryGraph) {
     }
     for (uint64_t i = 0u; i < queryGraph.getNumQueryRels(); ++i) {
         auto rel = queryGraph.getQueryRel(i);
+        init(*rel);
         if (QueryRelTypeUtils::isRecursive(rel->getRelType())) {
             auto recursiveInfo = rel->getRecursiveInfo();
             init(*recursiveInfo->node);
+            init(*recursiveInfo->rel);
         }
     }
 }
@@ -50,12 +55,82 @@ void CardinalityEstimator::init(const NodeExpression& node) {
         auto stats =
             storageManager->getTable(tableID)->cast<storage::NodeTable>().getStats(transaction);
         numNodes += stats.getTableCard();
-        if (!nodeTableStats.contains(tableID)) {
-            nodeTableStats.insert({tableID, std::move(stats)});
+        if (!tableStats.contains(tableID)) {
+            auto plannerStats = PlannerTableStats{};
+            plannerStats.tableID = tableID;
+            plannerStats.tableType = TableType::NODE;
+            plannerStats.storageStats = std::move(stats);
+            auto catalogPtr = catalog::Catalog::Get(*context);
+            for (const auto indexEntry : catalogPtr->getIndexEntries(transaction, tableID)) {
+                auto indexStats = PlannerIndexStats{};
+                indexStats.indexType = indexEntry->getIndexType();
+                indexStats.isPrimary = indexEntry->getIndexName() == InternalKeyword::ID;
+                for (const auto propertyID : indexEntry->getPropertyIDs()) {
+                    indexStats.columnIDs.push_back(entry->getColumnID(propertyID));
+                }
+                plannerStats.indexStats.push_back(std::move(indexStats));
+            }
+            tableStats.insert({tableID, std::move(plannerStats)});
         }
     }
     if (!nodeIDName2dom.contains(key)) {
         nodeIDName2dom.insert({key, numNodes});
+    }
+}
+
+static PlannerRelDirectionStats computeRelDirectionStats(storage::RelTable& relTable,
+    const Transaction* transaction, RelDataDirection direction) {
+    auto degreeEntries = relTable.getDegreeEntries(transaction, direction);
+    cardinality_t totalDegree = 0;
+    cardinality_t maxDegree = 0;
+    for (const auto& [_, degree] : degreeEntries) {
+        totalDegree += degree;
+        maxDegree = std::max<cardinality_t>(maxDegree, degree);
+    }
+    auto stats = PlannerRelDirectionStats{};
+    stats.numRows = relTable.getNumTotalRows(transaction);
+    stats.numActiveBoundNodes = degreeEntries.size();
+    stats.maxDegree = maxDegree;
+    stats.avgDegree =
+        degreeEntries.empty() ? 0 : static_cast<double>(totalDegree) / degreeEntries.size();
+    stats.boundKeysUnique = maxDegree <= 1;
+    return stats;
+}
+
+void CardinalityEstimator::init(const RelExpression& rel) {
+    auto storageManager = storage::StorageManager::Get(*context);
+    auto transaction = transaction::Transaction::Get(*context);
+    auto catalogPtr = catalog::Catalog::Get(*context);
+    for (auto entry : rel.getEntries()) {
+        if (entry->getType() == catalog::CatalogEntryType::FOREIGN_TABLE_ENTRY) {
+            continue;
+        }
+        auto& relGroupEntry = entry->cast<catalog::RelGroupCatalogEntry>();
+        for (const auto& relInfo : relGroupEntry.getRelEntryInfos()) {
+            const auto tableID = relInfo.oid;
+            if (tableStats.contains(tableID)) {
+                continue;
+            }
+            auto* relTable = storageManager->getTable(tableID)->ptrCast<storage::RelTable>();
+            auto plannerStats = PlannerTableStats{};
+            plannerStats.tableID = tableID;
+            plannerStats.tableType = TableType::REL;
+            for (const auto direction : relGroupEntry.getRelDataDirections()) {
+                const auto directionKey = RelDirectionUtils::relDirectionToKeyIdx(direction);
+                plannerStats.relDirectionStats[directionKey] =
+                    computeRelDirectionStats(*relTable, transaction, direction);
+            }
+            for (const auto indexEntry : catalogPtr->getIndexEntries(transaction, tableID)) {
+                auto indexStats = PlannerIndexStats{};
+                indexStats.indexType = indexEntry->getIndexType();
+                indexStats.isPrimary = indexEntry->getIndexName() == InternalKeyword::ID;
+                for (const auto propertyID : indexEntry->getPropertyIDs()) {
+                    indexStats.columnIDs.push_back(entry->getColumnID(propertyID));
+                }
+                plannerStats.indexStats.push_back(std::move(indexStats));
+            }
+            tableStats.insert({tableID, std::move(plannerStats)});
+        }
     }
 }
 
@@ -163,12 +238,13 @@ static bool isSingleLabelledProperty(const Expression& expression) {
 
 static std::optional<cardinality_t> getTableStatsIfPossible(main::ClientContext* context,
     const Expression& predicate,
-    const std::unordered_map<common::table_id_t, storage::TableStats>& nodeTableStats) {
+    const std::unordered_map<common::table_id_t, PlannerTableStats>& tableStats) {
     DASSERT(predicate.getNumChildren() >= 1);
     if (isSingleLabelledProperty(*predicate.getChild(0))) {
         auto& propertyExpr = predicate.getChild(0)->cast<PropertyExpression>();
         auto tableID = propertyExpr.getSingleTableID();
-        if (nodeTableStats.contains(tableID) && propertyExpr.hasProperty(tableID)) {
+        if (tableStats.contains(tableID) && tableStats.at(tableID).storageStats.has_value() &&
+            propertyExpr.hasProperty(tableID)) {
             auto transaction = Transaction::Get(*context);
             auto entry =
                 catalog::Catalog::Get(*context)->getTableCatalogEntry(transaction, tableID);
@@ -177,7 +253,7 @@ static std::optional<cardinality_t> getTableStatsIfPossible(main::ClientContext*
             }
             auto columnID = entry->getColumnID(propertyExpr.getPropertyName());
             if (columnID != INVALID_COLUMN_ID && columnID != ROW_IDX_COLUMN_ID) {
-                auto& stats = nodeTableStats.at(tableID);
+                auto& stats = tableStats.at(tableID).storageStats.value();
                 return atLeastOne(stats.getNumDistinctValues(columnID));
             }
         }
@@ -191,8 +267,7 @@ uint64_t CardinalityEstimator::estimateFilter(const LogicalOperator& childPlan,
         if (isPrimaryKey(*predicate.getChild(0)) || isPrimaryKey(*predicate.getChild(1))) {
             return 1;
         } else {
-            const auto numDistinctValues =
-                getTableStatsIfPossible(context, predicate, nodeTableStats);
+            const auto numDistinctValues = getTableStatsIfPossible(context, predicate, tableStats);
             if (numDistinctValues.has_value()) {
                 return atLeastOne(childPlan.getCardinality() / numDistinctValues.value());
             }
@@ -209,11 +284,11 @@ uint64_t CardinalityEstimator::getNumNodes(const Transaction*,
     const std::vector<table_id_t>& tableIDs) const {
     cardinality_t numNodes = 0u;
     for (auto& tableID : tableIDs) {
-        // Skip foreign tables - they won't be in nodeTableStats
-        if (!nodeTableStats.contains(tableID)) {
+        // Skip foreign tables - they won't be in tableStats.
+        if (!tableStats.contains(tableID) || !tableStats.at(tableID).storageStats.has_value()) {
             continue;
         }
-        numNodes += nodeTableStats.at(tableID).getTableCard();
+        numNodes += tableStats.at(tableID).storageStats.value().getTableCard();
     }
     return atLeastOne(numNodes);
 }
@@ -228,12 +303,50 @@ uint64_t CardinalityEstimator::getNumRels(const Transaction* transaction,
     return atLeastOne(numRels);
 }
 
+double CardinalityEstimator::getOneHopExtensionRate(const std::vector<table_id_t>& tableIDs,
+    const std::vector<table_id_t>& boundTableIDs, RelDataDirection direction) const {
+    cardinality_t numBoundNodes = 0;
+    cardinality_t numRels = 0;
+    for (auto tableID : boundTableIDs) {
+        if (tableStats.contains(tableID) && tableStats.at(tableID).storageStats.has_value()) {
+            numBoundNodes += tableStats.at(tableID).storageStats.value().getTableCard();
+        }
+    }
+    for (auto tableID : tableIDs) {
+        if (!tableStats.contains(tableID)) {
+            continue;
+        }
+        const auto& stats = tableStats.at(tableID);
+        const auto directionKey = RelDirectionUtils::relDirectionToKeyIdx(direction);
+        if (!stats.relDirectionStats[directionKey].has_value()) {
+            continue;
+        }
+        const auto& relStats = stats.relDirectionStats[directionKey].value();
+        numRels += relStats.numRows;
+    }
+    return static_cast<double>(numRels) / atLeastOne(numBoundNodes);
+}
+
 double CardinalityEstimator::getExtensionRate(const RelExpression& rel,
-    const NodeExpression& boundNode, const Transaction* transaction) const {
-    auto numBoundNodes = static_cast<double>(getNumNodes(transaction, boundNode.getTableIDs()));
-    auto numRels = static_cast<double>(getNumRels(transaction, rel.getInnerRelTableIDs()));
-    DASSERT(numBoundNodes > 0);
-    auto oneHopExtensionRate = numRels / atLeastOne(numBoundNodes);
+    const NodeExpression& boundNode, ExtendDirection direction,
+    const Transaction* transaction) const {
+    double oneHopExtensionRate = 0;
+    switch (direction) {
+    case ExtendDirection::FWD:
+    case ExtendDirection::BWD: {
+        oneHopExtensionRate = getOneHopExtensionRate(rel.getInnerRelTableIDs(),
+            boundNode.getTableIDs(), ExtendDirectionUtil::getRelDataDirection(direction));
+    } break;
+    case ExtendDirection::BOTH: {
+        oneHopExtensionRate = getOneHopExtensionRate(rel.getInnerRelTableIDs(),
+                                  boundNode.getTableIDs(), RelDataDirection::FWD) +
+                              getOneHopExtensionRate(rel.getInnerRelTableIDs(),
+                                  boundNode.getTableIDs(), RelDataDirection::BWD);
+    } break;
+    default:
+        UNREACHABLE_CODE;
+    }
+    const auto numRels = static_cast<double>(getNumRels(transaction, rel.getInnerRelTableIDs()));
     switch (rel.getRelType()) {
     case QueryRelType::NON_RECURSIVE: {
         return oneHopExtensionRate;
@@ -243,6 +356,7 @@ double CardinalityEstimator::getExtensionRate(const RelExpression& rel,
     case QueryRelType::VARIABLE_LENGTH_ACYCLIC: {
         auto rate = oneHopExtensionRate *
                     std::max<uint16_t>(rel.getRecursiveInfo()->bindData->upperBound, 1);
+        rate = std::min(rate, numRels);
         return rate * context->getClientConfig()->recursivePatternCardinalityScaleFactor;
     }
     case QueryRelType::SHORTEST:

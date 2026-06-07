@@ -1,6 +1,14 @@
 #pragma once
 
+#include <array>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 #include "binder/query/query_graph.h"
+#include "common/enums/rel_direction.h"
+#include "common/enums/table_type.h"
 #include "planner/operator/logical_plan.h"
 #include "storage/stats/table_stats.h"
 
@@ -17,6 +25,29 @@ namespace planner {
 
 class LogicalAggregate;
 
+struct PlannerIndexStats {
+    std::string indexType;
+    std::vector<common::column_id_t> columnIDs;
+    bool isPrimary = false;
+};
+
+struct PlannerRelDirectionStats {
+    common::cardinality_t numRows = 0;
+    common::cardinality_t numActiveBoundNodes = 0;
+    common::cardinality_t maxDegree = 0;
+    double avgDegree = 0;
+    bool boundKeysUnique = false;
+};
+
+struct PlannerTableStats {
+    common::table_id_t tableID = common::INVALID_TABLE_ID;
+    common::TableType tableType = common::TableType::NODE;
+    std::optional<storage::TableStats> storageStats;
+    std::array<std::optional<PlannerRelDirectionStats>, common::NUM_REL_DIRECTIONS>
+        relDirectionStats;
+    std::vector<PlannerIndexStats> indexStats;
+};
+
 class CardinalityEstimator {
 public:
     explicit CardinalityEstimator(main::ClientContext* context) : context{context} {}
@@ -24,8 +55,24 @@ public:
 
     void init(const binder::QueryGraph& queryGraph);
     LBUG_API void init(const binder::NodeExpression& node);
+    void init(const binder::RelExpression& rel);
 
     void rectifyCardinality(const binder::Expression& nodeID, cardinality_t card);
+
+    const PlannerTableStats* getTableStats(common::table_id_t tableID) const {
+        return tableStats.contains(tableID) ? &tableStats.at(tableID) : nullptr;
+    }
+    const PlannerRelDirectionStats* getRelDirectionStats(common::table_id_t tableID,
+        common::RelDataDirection direction) const {
+        const auto stats = getTableStats(tableID);
+        if (stats == nullptr) {
+            return nullptr;
+        }
+        const auto directionKey = common::RelDirectionUtils::relDirectionToKeyIdx(direction);
+        return stats->relDirectionStats[directionKey].has_value() ?
+                   &stats->relDirectionStats[directionKey].value() :
+                   nullptr;
+    }
 
     cardinality_t estimateScanNode(const LogicalOperator& op) const;
     cardinality_t estimateHashJoin(const std::vector<binder::expression_pair>& joinConditions,
@@ -41,7 +88,8 @@ public:
     cardinality_t estimateAggregate(const LogicalAggregate& op) const;
 
     double getExtensionRate(const binder::RelExpression& rel,
-        const binder::NodeExpression& boundNode, const transaction::Transaction* transaction) const;
+        const binder::NodeExpression& boundNode, common::ExtendDirection direction,
+        const transaction::Transaction* transaction) const;
     cardinality_t multiply(double extensionRate, cardinality_t card) const;
 
 private:
@@ -50,11 +98,13 @@ private:
         const std::vector<common::table_id_t>& tableIDs) const;
     cardinality_t getNumRels(const transaction::Transaction* transaction,
         const std::vector<common::table_id_t>& tableIDs) const;
+    double getOneHopExtensionRate(const std::vector<common::table_id_t>& tableIDs,
+        const std::vector<common::table_id_t>& boundTableIDs,
+        common::RelDataDirection direction) const;
 
 private:
     main::ClientContext* context;
-    // TODO(Guodong): Extend this to cover rel tables.
-    std::unordered_map<common::table_id_t, storage::TableStats> nodeTableStats;
+    std::unordered_map<common::table_id_t, PlannerTableStats> tableStats;
     // The domain of nodeID is defined as the number of unique value of nodeID, i.e. num nodes.
     std::unordered_map<std::string, cardinality_t> nodeIDName2dom;
 };

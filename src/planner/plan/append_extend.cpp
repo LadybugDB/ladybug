@@ -84,7 +84,8 @@ void Planner::appendNonRecursiveExtend(const std::shared_ptr<NodeExpression>& bo
     extend->computeFactorizedSchema();
     // Update cost & cardinality. Note that extend does not change factorized cardinality.
     auto transaction = Transaction::Get(*clientContext);
-    const auto extensionRate = cardinalityEstimator.getExtensionRate(*rel, *boundNode, transaction);
+    const auto extensionRate =
+        cardinalityEstimator.getExtensionRate(*rel, *boundNode, direction, transaction);
     extend->setCardinality(plan.getLastOperator()->getCardinality());
     plan.setCost(CostModel::computeExtendCost(plan));
     auto group = extend->getSchema()->getGroup(nbrNode->getInternalID());
@@ -149,7 +150,8 @@ void Planner::appendRecursiveExtend(const std::shared_ptr<NodeExpression>& bound
     pathPropertyProbe->pathEdgeIDs = recursiveInfo->bindData->pathEdgeIDsExpr;
     pathPropertyProbe->computeFactorizedSchema();
     auto transaction = Transaction::Get(*clientContext);
-    auto extensionRate = cardinalityEstimator.getExtensionRate(*rel, *boundNode, transaction);
+    auto extensionRate =
+        cardinalityEstimator.getExtensionRate(*rel, *boundNode, direction, transaction);
     auto resultCard =
         cardinalityEstimator.multiply(extensionRate, plan.getLastOperator()->getCardinality());
     pathPropertyProbe->setCardinality(resultCard);

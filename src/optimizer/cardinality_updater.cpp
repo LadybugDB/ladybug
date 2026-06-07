@@ -82,7 +82,7 @@ void CardinalityUpdater::visitExtend(planner::LogicalOperator* op) {
     DASSERT(transaction);
     auto& extend = op->cast<planner::LogicalExtend&>();
     const auto extensionRate = cardinalityEstimator.getExtensionRate(*extend.getRel(),
-        *extend.getBoundNode(), transaction);
+        *extend.getBoundNode(), extend.getDirection(), transaction);
     extend.setCardinality(
         cardinalityEstimator.multiply(extensionRate, op->getChild(0)->getCardinality()));
 }
