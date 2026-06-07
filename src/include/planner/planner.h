@@ -79,6 +79,7 @@ public:
     LogicalPlan planCreateMacro(const binder::BoundStatement& statement);
     LogicalPlan planDrop(const binder::BoundStatement& statement);
     LogicalPlan planAlter(const binder::BoundStatement& statement);
+    LogicalPlan planAnalyze(const binder::BoundStatement& statement);
     LogicalPlan planStandaloneCall(const binder::BoundStatement& statement);
     LogicalPlan planStandaloneCallFunction(const binder::BoundStatement& statement);
     LogicalPlan planExplain(const binder::BoundStatement& statement);

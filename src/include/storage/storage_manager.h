@@ -5,6 +5,7 @@
 
 #include "shadow_file.h"
 #include "storage/index/index.h"
+#include "storage/stats/planner_stats.h"
 #include "storage/wal/wal.h"
 
 namespace lbug {
@@ -70,6 +71,10 @@ public:
     bool defaultHashIndexEnabled() const { return enableDefaultHashIndex; }
     void setDefaultHashIndexEnabled(bool enabled) { enableDefaultHashIndex = enabled; }
 
+    std::optional<PlannerTableStats> getCachedPlannerTableStats(common::table_id_t tableID) const;
+    void setCachedPlannerTableStats(PlannerTableStats stats);
+    void clearCachedPlannerTableStats(std::optional<common::table_id_t> tableID = {});
+
     common::VirtualFileSystem* getVFS() const { return vfs_; }
 
     void registerIndexType(IndexType indexType) {
@@ -123,6 +128,8 @@ private:
     bool enableDefaultHashIndex;
     bool inMemory;
     std::vector<IndexType> registeredIndexTypes;
+    mutable std::shared_mutex plannerStatsMtx;
+    std::unordered_map<common::table_id_t, PlannerTableStats> plannerStatsCache;
     std::unordered_map<common::table_id_t, std::string> tableNameCache;
     common::VirtualFileSystem* vfs_; // non-owning, owned by Database
 };

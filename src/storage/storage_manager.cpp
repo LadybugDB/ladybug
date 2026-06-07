@@ -94,6 +94,29 @@ Table* StorageManager::getTable(table_id_t tableID) {
     return tables.at(tableID).get();
 }
 
+std::optional<PlannerTableStats> StorageManager::getCachedPlannerTableStats(
+    table_id_t tableID) const {
+    std::shared_lock lck{plannerStatsMtx};
+    if (!plannerStatsCache.contains(tableID)) {
+        return {};
+    }
+    return plannerStatsCache.at(tableID).copy();
+}
+
+void StorageManager::setCachedPlannerTableStats(PlannerTableStats stats) {
+    std::unique_lock lck{plannerStatsMtx};
+    plannerStatsCache.insert_or_assign(stats.tableID, std::move(stats));
+}
+
+void StorageManager::clearCachedPlannerTableStats(std::optional<table_id_t> tableID) {
+    std::unique_lock lck{plannerStatsMtx};
+    if (tableID.has_value()) {
+        plannerStatsCache.erase(tableID.value());
+    } else {
+        plannerStatsCache.clear();
+    }
+}
+
 void StorageManager::recover(main::ClientContext& clientContext, bool throwOnWalReplayFailure,
     bool enableChecksums) {
     const auto walReplayer = std::make_unique<WALReplayer>(clientContext);
@@ -279,6 +302,7 @@ void StorageManager::reclaimDroppedTables(const Catalog& catalog) {
     }
     for (auto tableID : droppedTables) {
         tables.erase(tableID);
+        clearCachedPlannerTableStats(tableID);
     }
 }
 

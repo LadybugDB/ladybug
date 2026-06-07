@@ -32,6 +32,9 @@ void StatementVisitor::visit(const Statement& statement) {
     case StatementType::ALTER: {
         visitAlter(statement);
     } break;
+    case StatementType::ANALYZE: {
+        visitAnalyze(statement);
+    } break;
     case StatementType::COPY_FROM: {
         visitCopyFrom(statement);
     } break;

@@ -2,7 +2,6 @@
 
 #include "binder/expression/property_expression.h"
 #include "catalog/catalog.h"
-#include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/enums/extend_direction_util.h"
@@ -11,9 +10,9 @@
 #include "planner/operator/logical_aggregate.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
+#include "storage/stats/planner_stats.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
-#include "storage/table/rel_table.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -24,6 +23,20 @@ namespace planner {
 
 static cardinality_t atLeastOne(uint64_t x) {
     return x == 0 ? 1 : x;
+}
+
+static PlannerTableStats getPlannerStats(main::ClientContext* context,
+    storage::StorageManager& storageManager, catalog::TableCatalogEntry& tableEntry,
+    table_id_t physicalTableID = INVALID_TABLE_ID) {
+    const auto tableID =
+        physicalTableID == INVALID_TABLE_ID ? tableEntry.getTableID() : physicalTableID;
+    auto* table = storageManager.getTable(tableID);
+    if (auto cachedStats = storageManager.getCachedPlannerTableStats(tableID);
+        cachedStats.has_value() && cachedStats->tableChangeEpoch == table->getChangeEpoch()) {
+        return std::move(cachedStats.value());
+    }
+    return storage::buildPlannerTableStats(storageManager, *catalog::Catalog::Get(*context),
+        transaction::Transaction::Get(*context), tableEntry, physicalTableID);
 }
 
 void CardinalityEstimator::init(const QueryGraph& queryGraph) {
@@ -45,32 +58,17 @@ void CardinalityEstimator::init(const NodeExpression& node) {
     auto key = node.getInternalID()->getUniqueName();
     cardinality_t numNodes = 0u;
     auto storageManager = storage::StorageManager::Get(*context);
-    auto transaction = transaction::Transaction::Get(*context);
     for (auto entry : node.getEntries()) {
         // Skip foreign tables - they don't have storage in the local database
         if (entry->getType() == catalog::CatalogEntryType::FOREIGN_TABLE_ENTRY) {
             continue;
         }
         auto tableID = entry->getTableID();
-        auto stats =
-            storageManager->getTable(tableID)->cast<storage::NodeTable>().getStats(transaction);
-        numNodes += stats.getTableCard();
+        auto stats = getPlannerStats(context, *storageManager, *entry);
+        DASSERT(stats.storageStats.has_value());
+        numNodes += stats.storageStats->getTableCard();
         if (!tableStats.contains(tableID)) {
-            auto plannerStats = PlannerTableStats{};
-            plannerStats.tableID = tableID;
-            plannerStats.tableType = TableType::NODE;
-            plannerStats.storageStats = std::move(stats);
-            auto catalogPtr = catalog::Catalog::Get(*context);
-            for (const auto indexEntry : catalogPtr->getIndexEntries(transaction, tableID)) {
-                auto indexStats = PlannerIndexStats{};
-                indexStats.indexType = indexEntry->getIndexType();
-                indexStats.isPrimary = indexEntry->getIndexName() == InternalKeyword::ID;
-                for (const auto propertyID : indexEntry->getPropertyIDs()) {
-                    indexStats.columnIDs.push_back(entry->getColumnID(propertyID));
-                }
-                plannerStats.indexStats.push_back(std::move(indexStats));
-            }
-            tableStats.insert({tableID, std::move(plannerStats)});
+            tableStats.insert({tableID, std::move(stats)});
         }
     }
     if (!nodeIDName2dom.contains(key)) {
@@ -78,29 +76,8 @@ void CardinalityEstimator::init(const NodeExpression& node) {
     }
 }
 
-static PlannerRelDirectionStats computeRelDirectionStats(storage::RelTable& relTable,
-    const Transaction* transaction, RelDataDirection direction) {
-    auto degreeEntries = relTable.getDegreeEntries(transaction, direction);
-    cardinality_t totalDegree = 0;
-    cardinality_t maxDegree = 0;
-    for (const auto& [_, degree] : degreeEntries) {
-        totalDegree += degree;
-        maxDegree = std::max<cardinality_t>(maxDegree, degree);
-    }
-    auto stats = PlannerRelDirectionStats{};
-    stats.numRows = relTable.getNumTotalRows(transaction);
-    stats.numActiveBoundNodes = degreeEntries.size();
-    stats.maxDegree = maxDegree;
-    stats.avgDegree =
-        degreeEntries.empty() ? 0 : static_cast<double>(totalDegree) / degreeEntries.size();
-    stats.boundKeysUnique = maxDegree <= 1;
-    return stats;
-}
-
 void CardinalityEstimator::init(const RelExpression& rel) {
     auto storageManager = storage::StorageManager::Get(*context);
-    auto transaction = transaction::Transaction::Get(*context);
-    auto catalogPtr = catalog::Catalog::Get(*context);
     for (auto entry : rel.getEntries()) {
         if (entry->getType() == catalog::CatalogEntryType::FOREIGN_TABLE_ENTRY) {
             continue;
@@ -111,25 +88,8 @@ void CardinalityEstimator::init(const RelExpression& rel) {
             if (tableStats.contains(tableID)) {
                 continue;
             }
-            auto* relTable = storageManager->getTable(tableID)->ptrCast<storage::RelTable>();
-            auto plannerStats = PlannerTableStats{};
-            plannerStats.tableID = tableID;
-            plannerStats.tableType = TableType::REL;
-            for (const auto direction : relGroupEntry.getRelDataDirections()) {
-                const auto directionKey = RelDirectionUtils::relDirectionToKeyIdx(direction);
-                plannerStats.relDirectionStats[directionKey] =
-                    computeRelDirectionStats(*relTable, transaction, direction);
-            }
-            for (const auto indexEntry : catalogPtr->getIndexEntries(transaction, tableID)) {
-                auto indexStats = PlannerIndexStats{};
-                indexStats.indexType = indexEntry->getIndexType();
-                indexStats.isPrimary = indexEntry->getIndexName() == InternalKeyword::ID;
-                for (const auto propertyID : indexEntry->getPropertyIDs()) {
-                    indexStats.columnIDs.push_back(entry->getColumnID(propertyID));
-                }
-                plannerStats.indexStats.push_back(std::move(indexStats));
-            }
-            tableStats.insert({tableID, std::move(plannerStats)});
+            tableStats.insert(
+                {tableID, getPlannerStats(context, *storageManager, *entry, tableID)});
         }
     }
 }

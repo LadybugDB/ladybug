@@ -19,6 +19,7 @@ enum class PhysicalOperatorType : uint8_t {
     AGGREGATE,
     AGGREGATE_FINALIZE,
     AGGREGATE_SCAN,
+    ANALYZE,
     ATTACH_DATABASE,
     BATCH_INSERT,
     COPY_TO,

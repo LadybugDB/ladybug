@@ -155,6 +155,7 @@ public:
     static std::unique_ptr<BoundStatement> bindCreateGraph(const parser::Statement& statement);
     std::unique_ptr<BoundStatement> bindUseGraph(const parser::Statement& statement);
     std::unique_ptr<BoundStatement> bindExtensionClause(const parser::Statement& statement);
+    static std::unique_ptr<BoundStatement> bindAnalyze(const parser::Statement& statement);
 
     /*** bind scan source ***/
     std::unique_ptr<BoundBaseScanSource> bindScanSource(const parser::BaseScanSource* source,

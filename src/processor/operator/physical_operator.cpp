@@ -21,6 +21,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "AGGREGATE_FINALIZE";
     case PhysicalOperatorType::AGGREGATE_SCAN:
         return "AGGREGATE_SCAN";
+    case PhysicalOperatorType::ANALYZE:
+        return "ANALYZE";
     case PhysicalOperatorType::ATTACH_DATABASE:
         return "ATTACH_DATABASE";
     case PhysicalOperatorType::BATCH_INSERT:

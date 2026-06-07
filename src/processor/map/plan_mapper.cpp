@@ -53,6 +53,9 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapOperator(const LogicalOperator*
     case LogicalOperatorType::ALTER: {
         physicalOperator = mapAlter(logicalOperator);
     } break;
+    case LogicalOperatorType::ANALYZE: {
+        physicalOperator = mapAnalyze(logicalOperator);
+    } break;
     case LogicalOperatorType::ATTACH_DATABASE: {
         physicalOperator = mapAttachDatabase(logicalOperator);
     } break;

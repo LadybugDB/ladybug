@@ -1,3 +1,4 @@
+#include "binder/bound_analyze.h"
 #include "binder/bound_attach_database.h"
 #include "binder/bound_create_macro.h"
 #include "binder/bound_detach_database.h"
@@ -27,6 +28,7 @@
 #include "planner/operator/logical_standalone_call.h"
 #include "planner/operator/logical_table_function_call.h"
 #include "planner/operator/logical_transaction.h"
+#include "planner/operator/simple/logical_analyze.h"
 #include "planner/operator/simple/logical_attach_database.h"
 #include "planner/operator/simple/logical_detach_database.h"
 #include "planner/operator/simple/logical_extension.h"
@@ -102,6 +104,12 @@ LogicalPlan Planner::planDrop(const BoundStatement& statement) {
 LogicalPlan Planner::planAlter(const BoundStatement& statement) {
     auto& alter = statement.constCast<BoundAlter>();
     auto op = std::make_shared<LogicalAlter>(alter.getInfo().copy());
+    return getSimplePlan(std::move(op));
+}
+
+LogicalPlan Planner::planAnalyze(const BoundStatement& statement) {
+    auto& analyze = statement.constCast<BoundAnalyze>();
+    auto op = std::make_shared<LogicalAnalyze>(analyze.getTableName());
     return getSimplePlan(std::move(op));
 }
 

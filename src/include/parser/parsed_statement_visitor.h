@@ -46,6 +46,7 @@ private:
     virtual void visitCreateIndex(const Statement& /*statement*/) {}
     virtual void visitCreateType(const Statement& /*statement*/) {}
     virtual void visitAlter(const Statement& /*statement*/) {}
+    virtual void visitAnalyze(const Statement& /*statement*/) {}
     virtual void visitCopyFrom(const Statement& /*statement*/) {}
     virtual void visitCopyTo(const Statement& /*statement*/) {}
     virtual void visitStandaloneCall(const Statement& /*statement*/) {}

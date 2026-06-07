@@ -1,5 +1,6 @@
 add_library(lbug_processor_operator_simple
         OBJECT
+        analyze.cpp
         attach_database.cpp
         detach_database.cpp
         install_extension.cpp

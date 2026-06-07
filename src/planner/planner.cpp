@@ -87,6 +87,9 @@ LogicalPlan Planner::planStatement(const BoundStatement& statement) {
     case StatementType::ALTER: {
         return planAlter(statement);
     }
+    case StatementType::ANALYZE: {
+        return planAnalyze(statement);
+    }
     case StatementType::STANDALONE_CALL: {
         return planStandaloneCall(statement);
     }

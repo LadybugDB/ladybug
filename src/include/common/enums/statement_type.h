@@ -10,6 +10,7 @@ enum class StatementType : uint8_t {
     CREATE_TABLE = 1,
     DROP = 2,
     ALTER = 3,
+    ANALYZE = 4,
     COPY_TO = 19,
     COPY_FROM = 20,
     STANDALONE_CALL = 21,

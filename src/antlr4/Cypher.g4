@@ -7,6 +7,7 @@ oC_Cypher
 
 oC_Statement
     : oC_Query
+        | iC_Analyze
         | iC_CreateUser
         | iC_CreateRole
         | iC_CreateNodeTable
@@ -78,6 +79,9 @@ iC_CreateGraph
 
 iC_UseGraph
     : USE SP GRAPH SP oC_SchemaName;
+
+iC_Analyze
+    : ANALYZE (SP oC_SchemaName)?;
 
 iC_StandaloneCall
     : CALL SP oC_SymbolicName SP? '=' SP? oC_Expression
@@ -754,6 +758,7 @@ iC_NonReservedKeywords
     : COMMENT
         | ADD
         | ALTER
+        | ANALYZE
         | AS
         | ATTACH
         | BEGIN

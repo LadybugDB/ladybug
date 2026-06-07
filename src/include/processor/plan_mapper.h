@@ -82,6 +82,7 @@ public:
         const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapAggregate(const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapAlter(const planner::LogicalOperator* logicalOperator);
+    std::unique_ptr<PhysicalOperator> mapAnalyze(const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapAttachDatabase(
         const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapCopyFrom(const planner::LogicalOperator* logicalOperator);

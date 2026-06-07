@@ -5,6 +5,7 @@
 #include "common/assert.h"
 #include "common/exception/parser.h"
 #include "extension/transformer_extension.h"
+#include "parser/analyze_statement.h"
 #include "parser/explain_statement.h"
 #include "parser/graph_statement.h"
 #include "parser/query/regular_query.h" // IWYU pragma: keep (fixes a forward declaration error)
@@ -37,6 +38,8 @@ std::vector<std::shared_ptr<Statement>> Transformer::transform() {
 std::unique_ptr<Statement> Transformer::transformStatement(CypherParser::OC_StatementContext& ctx) {
     if (ctx.oC_Query()) {
         return transformQuery(*ctx.oC_Query());
+    } else if (ctx.iC_Analyze()) {
+        return transformAnalyze(*ctx.iC_Analyze());
     } else if (ctx.iC_CreateNodeTable()) {
         return transformCreateNodeTable(*ctx.iC_CreateNodeTable());
     } else if (ctx.iC_CreateRelTable()) {
@@ -88,6 +91,14 @@ std::unique_ptr<Statement> Transformer::transformStatement(CypherParser::OC_Stat
     } else {
         UNREACHABLE_CODE;
     }
+}
+
+std::unique_ptr<Statement> Transformer::transformAnalyze(CypherParser::IC_AnalyzeContext& ctx) {
+    std::optional<std::string> tableName;
+    if (ctx.oC_SchemaName()) {
+        tableName = transformSchemaName(*ctx.oC_SchemaName());
+    }
+    return std::make_unique<AnalyzeStatement>(std::move(tableName));
 }
 
 std::unique_ptr<ParsedExpression> Transformer::transformWhere(CypherParser::OC_WhereContext& ctx) {

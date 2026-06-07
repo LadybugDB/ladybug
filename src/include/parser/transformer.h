@@ -46,6 +46,7 @@ public:
         std::unique_ptr<extension::TransformerExtension> transformerExtension);
 
     std::unique_ptr<Statement> transformStatement(CypherParser::OC_StatementContext& ctx);
+    std::unique_ptr<Statement> transformAnalyze(CypherParser::IC_AnalyzeContext& ctx);
 
     std::unique_ptr<ParsedExpression> transformWhere(CypherParser::OC_WhereContext& ctx);
 

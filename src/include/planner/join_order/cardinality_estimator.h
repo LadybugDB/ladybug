@@ -10,7 +10,7 @@
 #include "common/enums/rel_direction.h"
 #include "common/enums/table_type.h"
 #include "planner/operator/logical_plan.h"
-#include "storage/stats/table_stats.h"
+#include "storage/stats/planner_stats.h"
 
 namespace lbug {
 namespace main {
@@ -25,28 +25,9 @@ namespace planner {
 
 class LogicalAggregate;
 
-struct PlannerIndexStats {
-    std::string indexType;
-    std::vector<common::column_id_t> columnIDs;
-    bool isPrimary = false;
-};
-
-struct PlannerRelDirectionStats {
-    common::cardinality_t numRows = 0;
-    common::cardinality_t numActiveBoundNodes = 0;
-    common::cardinality_t maxDegree = 0;
-    double avgDegree = 0;
-    bool boundKeysUnique = false;
-};
-
-struct PlannerTableStats {
-    common::table_id_t tableID = common::INVALID_TABLE_ID;
-    common::TableType tableType = common::TableType::NODE;
-    std::optional<storage::TableStats> storageStats;
-    std::array<std::optional<PlannerRelDirectionStats>, common::NUM_REL_DIRECTIONS>
-        relDirectionStats;
-    std::vector<PlannerIndexStats> indexStats;
-};
+using PlannerIndexStats = storage::PlannerIndexStats;
+using PlannerRelDirectionStats = storage::PlannerRelDirectionStats;
+using PlannerTableStats = storage::PlannerTableStats;
 
 class CardinalityEstimator {
 public:

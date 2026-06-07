@@ -25,6 +25,7 @@ protected:
     virtual void visitDrop(const BoundStatement&) {}
     virtual void visitCreateType(const BoundStatement&) {}
     virtual void visitAlter(const BoundStatement&) {}
+    virtual void visitAnalyze(const BoundStatement&) {}
     virtual void visitCopyFrom(const BoundStatement&);
     virtual void visitCopyTo(const BoundStatement&);
     virtual void visitExportDatabase(const BoundStatement&) {}

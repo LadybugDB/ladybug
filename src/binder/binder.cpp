@@ -51,6 +51,9 @@ std::unique_ptr<BoundStatement> Binder::bind(const Statement& statement) {
     case StatementType::ALTER: {
         boundStatement = bindAlter(statement);
     } break;
+    case StatementType::ANALYZE: {
+        boundStatement = bindAnalyze(statement);
+    } break;
     case StatementType::QUERY: {
         boundStatement = bindQuery(statement);
     } break;
