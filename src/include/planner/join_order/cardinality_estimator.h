@@ -36,7 +36,7 @@ public:
 
     void init(const binder::QueryGraph& queryGraph);
     LBUG_API void init(const binder::NodeExpression& node);
-    void init(const binder::RelExpression& rel);
+    LBUG_API void init(const binder::RelExpression& rel);
 
     void rectifyCardinality(const binder::Expression& nodeID, cardinality_t card);
 
