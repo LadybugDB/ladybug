@@ -352,6 +352,11 @@ set(LBUG_NODEJS_PRECOMPILED_LIB_PATH "" CACHE FILEPATH "Deprecated alias for LBU
 option(ENABLE_BACKTRACES "Enable backtrace printing for fatal signals and termination" FALSE)
 option(PREFER_SYSTEM_DEPS "Only download certain deps if not found on the system" TRUE)
 
+if(BUILD_WASM)
+    set(BUILD_SHARED_LBUG FALSE CACHE BOOL "Build the shared liblbug library." FORCE)
+    set(BUILD_STATIC_LBUG TRUE CACHE BOOL "Build the bundled static liblbug archive." FORCE)
+endif()
+
 if(LBUG_NODEJS_USE_PRECOMPILED_LIB)
     set(LBUG_API_USE_PRECOMPILED_LIB TRUE)
 endif()
