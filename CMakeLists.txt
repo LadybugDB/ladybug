@@ -523,6 +523,15 @@ foreach(ext IN LISTS STATICALLY_LINKED_EXTENSIONS)
     endif()
 endforeach()
 
+# Emscripten does not produce a useful native shared lib here; the wasm package
+# and tests link everything into final JS/wasm artifacts. Keep the legacy
+# lbug_shared target name available for existing consumers, but make it resolve
+# to the static wasm library after real library setup and static extension
+# linking are complete.
+if(EMSCRIPTEN AND TARGET lbug AND NOT TARGET lbug_shared)
+    add_library(lbug_shared ALIAS lbug)
+endif()
+
 if (${BUILD_TESTS} OR ${BUILD_EXTENSION_TESTS})
     add_subdirectory(test)
 elseif (${BUILD_BENCHMARK})
