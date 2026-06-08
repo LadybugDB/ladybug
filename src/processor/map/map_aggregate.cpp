@@ -1,9 +1,20 @@
 #include "binder/expression/aggregate_function_expression.h"
+#include "binder/expression/literal_expression.h"
+#include "binder/expression/scalar_function_expression.h"
 #include "common/copy_constructors.h"
 #include "common/types/types.h"
+#include "function/aggregate/count_star.h"
+#include "function/arithmetic/vector_arithmetic_functions.h"
+#include "function/comparison/vector_comparison_functions.h"
+#include "main/client_context.h"
+#include "planner/operator/factorization/flatten_resolver.h"
 #include "planner/operator/logical_aggregate.h"
+#include "planner/operator/logical_filter.h"
+#include "planner/operator/logical_flatten.h"
+#include "planner/operator/logical_projection.h"
 #include "processor/operator/aggregate/hash_aggregate.h"
 #include "processor/operator/aggregate/hash_aggregate_scan.h"
+#include "processor/operator/aggregate/packed_filtered_count.h"
 #include "processor/operator/aggregate/simple_aggregate.h"
 #include "processor/operator/aggregate/simple_aggregate_scan.h"
 #include "processor/plan_mapper.h"
@@ -105,8 +116,138 @@ static std::vector<move_agg_result_to_vector_func> getMoveAggResultToVectorFuncs
     return moveAggResultToVectorFuncs;
 }
 
+static const LogicalOperator* unwrapFlattens(const LogicalOperator* op) {
+    while (op->getOperatorType() == LogicalOperatorType::FLATTEN) {
+        op = op->getChild(0).get();
+    }
+    return op;
+}
+
+static bool isScalarFunction(const std::shared_ptr<Expression>& expression,
+    const std::string& name) {
+    auto scalarFunction = dynamic_cast<const ScalarFunctionExpression*>(expression.get());
+    if (scalarFunction == nullptr) {
+        return false;
+    }
+    return scalarFunction->getFunction().name == name;
+}
+
+static bool isInt64Literal(const std::shared_ptr<Expression>& expression, int64_t value) {
+    if (expression->expressionType != ExpressionType::LITERAL ||
+        expression->getDataType().getLogicalTypeID() != LogicalTypeID::INT64) {
+        return false;
+    }
+    return expression->constCast<LiteralExpression>().getValue().getValue<int64_t>() == value;
+}
+
+static std::optional<std::pair<std::shared_ptr<Expression>, std::shared_ptr<Expression>>>
+tryGetModuloSumPredicateInputs(const std::shared_ptr<Expression>& predicate) {
+    if (!isScalarFunction(predicate, function::EqualsFunction::name) ||
+        predicate->getNumChildren() != 2) {
+        return std::nullopt;
+    }
+    auto modulo = predicate->getChild(0);
+    auto zero = predicate->getChild(1);
+    if (isInt64Literal(modulo, 0)) {
+        std::swap(modulo, zero);
+    }
+    if (!isInt64Literal(zero, 0) || !isScalarFunction(modulo, function::ModuloFunction::name) ||
+        modulo->getNumChildren() != 2 || !isInt64Literal(modulo->getChild(1), 10)) {
+        return std::nullopt;
+    }
+    auto add = modulo->getChild(0);
+    if (!isScalarFunction(add, function::AddFunction::name) || add->getNumChildren() != 2) {
+        return std::nullopt;
+    }
+    return std::make_pair(add->getChild(0), add->getChild(1));
+}
+
+static std::unique_ptr<PhysicalOperator> tryMapPackedFilteredCount(PlanMapper& mapper,
+    main::ClientContext* clientContext, const LogicalAggregate& agg) {
+    if (!clientContext->getClientConfig()->enablePackedPathExtend || agg.getKeys().size() != 1 ||
+        agg.getAggregates().size() != 1 || agg.getDependentKeys().size() != 0) {
+        return nullptr;
+    }
+    const auto aggregates = agg.getAggregates();
+    const auto& aggregate = aggregates[0];
+    if (aggregate->getNumChildren() != 0) {
+        return nullptr;
+    }
+    auto aggregateExpr = aggregate->constPtrCast<AggregateFunctionExpression>();
+    if (aggregateExpr->getFunction().name != function::CountStarFunction::name) {
+        return nullptr;
+    }
+    const auto* projection = agg.getChild(0).get();
+    if (projection->getOperatorType() != LogicalOperatorType::PROJECTION) {
+        return nullptr;
+    }
+    const auto& logicalProjection = projection->constCast<LogicalProjection>();
+    if (logicalProjection.getExpressionsToProject().size() != 1) {
+        return nullptr;
+    }
+    const auto* filter = projection->getChild(0).get();
+    if (filter->getOperatorType() != LogicalOperatorType::FILTER) {
+        return nullptr;
+    }
+    const auto& logicalFilter = filter->constCast<LogicalFilter>();
+    auto predicateInputs = tryGetModuloSumPredicateInputs(logicalFilter.getPredicate());
+    if (!predicateInputs.has_value()) {
+        return nullptr;
+    }
+    const auto* packedChild = unwrapFlattens(filter->getChild(0).get());
+    auto* packedChildSchema = packedChild->getSchema();
+    auto analyzer = GroupDependencyAnalyzer(true, *packedChildSchema);
+    analyzer.visit(logicalFilter.getPredicate());
+    const auto dependentGroups = analyzer.getDependentGroups();
+    if (dependentGroups.size() != 2) {
+        return nullptr;
+    }
+    for (auto groupPos : dependentGroups) {
+        if (packedChildSchema->getGroup(groupPos)->isFlat()) {
+            return nullptr;
+        }
+    }
+    const auto keys = agg.getKeys();
+    const auto& key = keys[0];
+    if (key->getDataType().getLogicalTypeID() != LogicalTypeID::INT64 ||
+        aggregate->getDataType().getLogicalTypeID() != LogicalTypeID::INT64) {
+        return nullptr;
+    }
+    const auto keyGroupPos = packedChildSchema->getGroupPos(*key);
+    std::vector<data_chunk_pos_t> multiplicityChunks;
+    for (auto groupPos : packedChildSchema->getGroupsPosInScope()) {
+        if (groupPos == keyGroupPos || dependentGroups.contains(groupPos) ||
+            packedChildSchema->getGroup(groupPos)->isFlat()) {
+            continue;
+        }
+        multiplicityChunks.push_back(groupPos);
+    }
+    std::vector<data_chunk_pos_t> dependentGroupsVector{dependentGroups.begin(),
+        dependentGroups.end()};
+    auto sharedState = std::make_shared<PackedFilteredCountSharedState>();
+    auto info = PackedFilteredCountInfo{DataPos{packedChildSchema->getExpressionPos(*key)},
+        DataPos{agg.getSchema()->getExpressionPos(*key)},
+        DataPos{agg.getSchema()->getExpressionPos(*aggregate)},
+        DataPos{packedChildSchema->getExpressionPos(*predicateInputs->first)},
+        DataPos{packedChildSchema->getExpressionPos(*predicateInputs->second)},
+        dependentGroupsVector[0], dependentGroupsVector[1], std::move(multiplicityChunks)};
+    auto sink = std::make_unique<PackedFilteredCount>(sharedState, info,
+        mapper.mapOperator(packedChild), mapper.getOperatorID(),
+        std::make_unique<PackedFilteredCountPrintInfo>(logicalFilter.getPredicate(),
+            agg.getKeys()));
+    sink->setDescriptor(std::make_unique<ResultSetDescriptor>(packedChildSchema));
+    auto scan = std::make_unique<PackedFilteredCountScan>(sharedState, info.groupKeyOutputPos,
+        info.countOutputPos, std::move(sink), mapper.getOperatorID(),
+        std::make_unique<PackedFilteredCountPrintInfo>(logicalFilter.getPredicate(),
+            agg.getKeys()));
+    return scan;
+}
+
 std::unique_ptr<PhysicalOperator> PlanMapper::mapAggregate(const LogicalOperator* logicalOperator) {
     auto& agg = logicalOperator->constCast<LogicalAggregate>();
+    if (auto packedFilteredCount = tryMapPackedFilteredCount(*this, clientContext, agg)) {
+        return packedFilteredCount;
+    }
     auto aggregates = agg.getAggregates();
     auto outSchema = agg.getSchema();
     auto child = agg.getChild(0).get();

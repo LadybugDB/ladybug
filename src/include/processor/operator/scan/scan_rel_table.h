@@ -103,8 +103,8 @@ public:
             if (sourceNodeScanMode) {
                 return std::make_unique<ScanRelTable>(opInfo.copy(), tableInfo.copy(),
                     copyVector(sourceNodeTableInfos), sourceNodeSharedStates,
-                    sourceNodeProgressSharedState, sourceNodeScanInfo.copy(), id,
-                    printInfo->copy(), operatorType);
+                    sourceNodeProgressSharedState, sourceNodeScanInfo.copy(), id, printInfo->copy(),
+                    operatorType);
             }
             return std::make_unique<ScanRelTable>(opInfo.copy(), tableInfo.copy(), sourceNodeTables,
                 id, printInfo->copy(), operatorType);
