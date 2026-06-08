@@ -1,9 +1,14 @@
+#include <functional>
 #include <stdexcept>
 
 #include "graph_test/private_graph_test.h"
+#include "planner/join_order/cost_model.h"
+#include "planner/operator/logical_filter.h"
 #include "planner/operator/logical_plan_util.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
+#include "planner/operator/scan/logical_dummy_scan.h"
 #include "test_runner/test_runner.h"
+#include <format>
 
 namespace lbug {
 namespace testing {
@@ -40,6 +45,41 @@ public:
             }
         }
         return false;
+    }
+};
+
+class StatsOptimizerTest : public EmptyDBTest {
+public:
+    void SetUp() override {
+        EmptyDBTest::SetUp();
+        createDBAndConn();
+    }
+
+    std::unique_ptr<planner::LogicalPlan> getRoot(const std::string& query) {
+        auto preparedStatement = conn->prepare(query);
+        if (!preparedStatement->isSuccess()) {
+            throw std::runtime_error("Failed to prepare optimizer test query:\n" + query +
+                                     "\nError:\n" + preparedStatement->getErrorMessage());
+        }
+        auto cachedStatement =
+            conn->getClientContext()->getCachedPreparedStatementManager().getCachedStatement(
+                preparedStatement->getName());
+        return std::move(cachedStatement->logicalPlan);
+    }
+
+    static planner::LogicalFilter* getDeepestFilter(planner::LogicalOperator* op) {
+        planner::LogicalFilter* result = nullptr;
+        std::function<void(planner::LogicalOperator*)> visit;
+        visit = [&](planner::LogicalOperator* current) {
+            if (current->getOperatorType() == planner::LogicalOperatorType::FILTER) {
+                result = current->ptrCast<planner::LogicalFilter>();
+            }
+            for (auto i = 0u; i < current->getNumChildren(); ++i) {
+                visit(current->getChild(i).get());
+            }
+        };
+        visit(op);
+        return result;
     }
 };
 
@@ -399,6 +439,46 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     auto result12 = conn->query(q12);
     ASSERT_TRUE(result12->isSuccess());
     ASSERT_EQ(result12->getNext()->getValue(0)->getValue<int64_t>(), 2);
+}
+
+TEST_F(StatsOptimizerTest, FilterPushDownOrdersMostSelectivePredicateFirst) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE stats_node(id INT64, common INT64, rare INT64, "
+                            "PRIMARY KEY(id));")
+                    ->isSuccess());
+    for (auto i = 0; i < 20; ++i) {
+        auto result = conn->query(
+            std::format("CREATE (:stats_node {{id: {}, common: {}, rare: {}}});", i, i % 2, i));
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    }
+    ASSERT_TRUE(conn->query("ANALYZE stats_node;")->isSuccess());
+
+    auto plan = getRoot("EXPLAIN LOGICAL MATCH (n:stats_node) "
+                        "WHERE n.common = 1 AND n.rare = 7 "
+                        "RETURN n.id;");
+    auto* deepestFilter = getDeepestFilter(plan->getLastOperator().get());
+    ASSERT_NE(nullptr, deepestFilter);
+    ASSERT_NE(std::string::npos, deepestFilter->getPredicate()->toString().find("rare"));
+}
+
+TEST_F(StatsOptimizerTest, HashJoinCostIncludesEstimatedOutputCardinality) {
+    auto leftOp = std::make_shared<planner::LogicalDummyScan>();
+    leftOp->setCardinality(10);
+    leftOp->computeFlatSchema();
+    auto rightOp = std::make_shared<planner::LogicalDummyScan>();
+    rightOp->setCardinality(10);
+    rightOp->computeFlatSchema();
+
+    auto leftPlan = planner::LogicalPlan();
+    leftPlan.setLastOperator(leftOp);
+    auto rightPlan = planner::LogicalPlan();
+    rightPlan.setLastOperator(rightOp);
+
+    auto joinKeys = binder::expression_vector{};
+    const auto smallIntermediateCost =
+        planner::CostModel::computeHashJoinCost(joinKeys, leftPlan, rightPlan, 5);
+    const auto largeIntermediateCost =
+        planner::CostModel::computeHashJoinCost(joinKeys, leftPlan, rightPlan, 500);
+    ASSERT_LT(smallIntermediateCost, largeIntermediateCost);
 }
 
 } // namespace testing

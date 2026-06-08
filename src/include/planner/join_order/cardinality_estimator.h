@@ -58,6 +58,8 @@ public:
     cardinality_t estimateScanNode(const LogicalOperator& op) const;
     cardinality_t estimateHashJoin(const std::vector<binder::expression_pair>& joinConditions,
         const LogicalOperator& probeOp, const LogicalOperator& buildOp) const;
+    cardinality_t estimateHashJoin(const binder::expression_vector& joinNodeIDs,
+        const LogicalOperator& probeOp, const LogicalOperator& buildOp) const;
     cardinality_t estimateCrossProduct(const LogicalOperator& probeOp,
         const LogicalOperator& buildOp) const;
     cardinality_t estimateIntersect(const binder::expression_vector& joinNodeIDs,

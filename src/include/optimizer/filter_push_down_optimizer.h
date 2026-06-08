@@ -6,6 +6,9 @@ namespace lbug {
 namespace main {
 class ClientContext;
 }
+namespace planner {
+class CardinalityEstimator;
+} // namespace planner
 namespace optimizer {
 
 struct PrimaryKeyRangePredicate {
@@ -44,11 +47,15 @@ private:
 
 class FilterPushDownOptimizer {
 public:
-    explicit FilterPushDownOptimizer(main::ClientContext* context) : context{context} {
+    explicit FilterPushDownOptimizer(main::ClientContext* context,
+        const planner::CardinalityEstimator* cardinalityEstimator)
+        : context{context}, cardinalityEstimator{cardinalityEstimator} {
         predicateSet = PredicateSet();
     }
-    explicit FilterPushDownOptimizer(main::ClientContext* context, PredicateSet predicateSet)
-        : predicateSet{std::move(predicateSet)}, context{context} {}
+    explicit FilterPushDownOptimizer(main::ClientContext* context,
+        const planner::CardinalityEstimator* cardinalityEstimator, PredicateSet predicateSet)
+        : predicateSet{std::move(predicateSet)}, context{context},
+          cardinalityEstimator{cardinalityEstimator} {}
 
     void rewrite(planner::LogicalPlan* plan);
 
@@ -83,6 +90,8 @@ private:
     std::shared_ptr<planner::LogicalOperator> appendFilters(
         const binder::expression_vector& predicates,
         std::shared_ptr<planner::LogicalOperator> child);
+    std::shared_ptr<planner::LogicalOperator> appendFiltersStatsAware(
+        binder::expression_vector predicates, std::shared_ptr<planner::LogicalOperator> child);
 
     std::shared_ptr<planner::LogicalOperator> appendScanNodeTable(
         std::shared_ptr<binder::Expression> nodeID, std::vector<common::table_id_t> nodeTableIDs,
@@ -97,6 +106,7 @@ private:
 private:
     PredicateSet predicateSet;
     main::ClientContext* context;
+    const planner::CardinalityEstimator* cardinalityEstimator;
 };
 
 } // namespace optimizer

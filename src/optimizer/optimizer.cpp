@@ -51,7 +51,7 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
         auto foreignJoinPushDownOptimizer = ForeignJoinPushDownOptimizer(context);
         foreignJoinPushDownOptimizer.rewrite(plan);
 
-        auto filterPushDownOptimizer = FilterPushDownOptimizer(context);
+        auto filterPushDownOptimizer = FilterPushDownOptimizer(context, &cardinalityEstimator);
         filterPushDownOptimizer.rewrite(plan);
 
         auto projectionPushDownOptimizer =

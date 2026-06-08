@@ -20,10 +20,16 @@ uint64_t CostModel::computeHashJoinCost(const std::vector<binder::expression_pai
 
 uint64_t CostModel::computeHashJoinCost(const binder::expression_vector& joinNodeIDs,
     const LogicalPlan& probe, const LogicalPlan& build) {
+    return computeHashJoinCost(joinNodeIDs, probe, build, 0 /* estimatedOutputCardinality */);
+}
+
+uint64_t CostModel::computeHashJoinCost(const binder::expression_vector& joinNodeIDs,
+    const LogicalPlan& probe, const LogicalPlan& build, cardinality_t estimatedOutputCardinality) {
     uint64_t cost = 0ul;
     cost += probe.getCost();
     cost += build.getCost();
     cost += probe.getCardinality();
+    cost += estimatedOutputCardinality;
     cost += PlannerKnobs::BUILD_PENALTY *
             JoinOrderUtil::getJoinKeysFlatCardinality(joinNodeIDs, build.getLastOperatorRef());
     return cost;

@@ -9,6 +9,7 @@
 #include "binder/expression/property_expression.h"
 #include "binder/expression/scalar_function_expression.h"
 #include "main/client_context.h"
+#include "planner/join_order/cardinality_estimator.h"
 #include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/logical_empty_result.h"
 #include "planner/operator/logical_filter.h"
@@ -59,7 +60,7 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitChildren(
     const std::shared_ptr<LogicalOperator>& op) {
     for (auto i = 0u; i < op->getNumChildren(); ++i) {
         // Start new push down for child.
-        auto optimizer = FilterPushDownOptimizer(context);
+        auto optimizer = FilterPushDownOptimizer(context, cardinalityEstimator);
         op->setChild(i, optimizer.visitOperator(op->getChild(i)));
     }
     op->computeFlatSchema();
@@ -101,10 +102,12 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitCrossProductRepla
     }
     DASSERT(op->getNumChildren() == 2);
     // Push probe side
-    auto probeOptimizer = FilterPushDownOptimizer(context, std::move(probePSet));
+    auto probeOptimizer =
+        FilterPushDownOptimizer(context, cardinalityEstimator, std::move(probePSet));
     op->setChild(0, probeOptimizer.visitOperator(op->getChild(0)));
     // Push build side
-    auto buildOptimizer = FilterPushDownOptimizer(context, std::move(buildPSet));
+    auto buildOptimizer =
+        FilterPushDownOptimizer(context, cardinalityEstimator, std::move(buildPSet));
     op->setChild(1, buildOptimizer.visitOperator(op->getChild(1)));
 
     auto probeSchema = op->getChild(0)->getSchema();
@@ -134,13 +137,17 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitCrossProductRepla
     // For non-id based joins, we disable side way information passing.
     hashJoin->getSIPInfoUnsafe().position = SemiMaskPosition::PROHIBIT;
     hashJoin->computeFlatSchema();
+    if (cardinalityEstimator != nullptr) {
+        hashJoin->setCardinality(cardinalityEstimator->estimateHashJoin(joinConditions,
+            *op->getChild(0), *op->getChild(1)));
+    }
     // Apply remaining predicates.
     predicates.insert(predicates.end(), remainingPSet.nonEqualityPredicates.begin(),
         remainingPSet.nonEqualityPredicates.end());
     if (predicates.empty()) {
         return hashJoin;
     }
-    return appendFilters(predicates, hashJoin);
+    return appendFiltersStatsAware(std::move(predicates), hashJoin);
 }
 
 static ColumnPredicateSet getPredicateSet(const Expression& column,
@@ -285,7 +292,7 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::finishPushDown(
         return op;
     }
     auto predicates = predicateSet.getAllPredicates();
-    auto root = appendFilters(predicates, op);
+    auto root = appendFiltersStatsAware(std::move(predicates), op);
     predicateSet.clear();
     return root;
 }
@@ -311,6 +318,30 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::appendFilters(
     auto root = child;
     for (auto& p : predicates) {
         root = appendFilter(p, root);
+    }
+    return root;
+}
+
+std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::appendFiltersStatsAware(
+    expression_vector predicates, std::shared_ptr<LogicalOperator> child) {
+    if (predicates.empty() || cardinalityEstimator == nullptr) {
+        return appendFilters(predicates, std::move(child));
+    }
+    auto root = child;
+    while (!predicates.empty()) {
+        auto bestIdx = 0u;
+        auto bestCardinality = cardinalityEstimator->estimateFilter(*root, *predicates[bestIdx]);
+        for (auto i = 1u; i < predicates.size(); ++i) {
+            const auto cardinality = cardinalityEstimator->estimateFilter(*root, *predicates[i]);
+            if (cardinality < bestCardinality) {
+                bestCardinality = cardinality;
+                bestIdx = i;
+            }
+        }
+        auto predicate = predicates[bestIdx];
+        predicates.erase(predicates.begin() + bestIdx);
+        root = appendFilter(std::move(predicate), root);
+        root->setCardinality(bestCardinality);
     }
     return root;
 }

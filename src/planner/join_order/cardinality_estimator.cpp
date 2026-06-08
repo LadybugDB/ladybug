@@ -153,6 +153,16 @@ uint64_t CardinalityEstimator::estimateHashJoin(
     }
 }
 
+uint64_t CardinalityEstimator::estimateHashJoin(const expression_vector& joinNodeIDs,
+    const LogicalOperator& probeOp, const LogicalOperator& buildOp) const {
+    std::vector<expression_pair> joinConditions;
+    joinConditions.reserve(joinNodeIDs.size());
+    for (auto& joinNodeID : joinNodeIDs) {
+        joinConditions.emplace_back(joinNodeID, joinNodeID);
+    }
+    return estimateHashJoin(joinConditions, probeOp, buildOp);
+}
+
 uint64_t CardinalityEstimator::estimateCrossProduct(const LogicalOperator& probeOp,
     const LogicalOperator& buildOp) const {
     return atLeastOne(probeOp.getCardinality() * buildOp.getCardinality());

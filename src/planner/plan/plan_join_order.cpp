@@ -632,7 +632,10 @@ void Planner::planInnerHashJoin(const SubqueryGraph& subgraph, const SubqueryGra
         getNewlyMatchedExprs(subgraph, otherSubgraph, newSubgraph, context.getWhereExpressions());
     for (auto& leftPlan : context.getPlans(subgraph)) {
         for (auto& rightPlan : context.getPlans(otherSubgraph)) {
-            if (CostModel::computeHashJoinCost(joinNodeIDs, leftPlan, rightPlan) < maxCost) {
+            const auto leftProbeCardinality = cardinalityEstimator.estimateHashJoin(joinNodeIDs,
+                leftPlan.getLastOperatorRef(), rightPlan.getLastOperatorRef());
+            if (CostModel::computeHashJoinCost(joinNodeIDs, leftPlan, rightPlan,
+                    leftProbeCardinality) < maxCost) {
                 auto leftPlanProbeCopy = leftPlan.copy();
                 auto rightPlanBuildCopy = rightPlan.copy();
                 appendHashJoin(joinNodeIDs, JoinType::INNER, leftPlanProbeCopy, rightPlanBuildCopy,
@@ -641,8 +644,10 @@ void Planner::planInnerHashJoin(const SubqueryGraph& subgraph, const SubqueryGra
                 context.addPlan(newSubgraph, std::move(leftPlanProbeCopy));
             }
             // flip build and probe side to get another HashJoin plan
-            if (flipPlan &&
-                CostModel::computeHashJoinCost(joinNodeIDs, rightPlan, leftPlan) < maxCost) {
+            const auto rightProbeCardinality = cardinalityEstimator.estimateHashJoin(joinNodeIDs,
+                rightPlan.getLastOperatorRef(), leftPlan.getLastOperatorRef());
+            if (flipPlan && CostModel::computeHashJoinCost(joinNodeIDs, rightPlan, leftPlan,
+                                rightProbeCardinality) < maxCost) {
                 auto leftPlanBuildCopy = leftPlan.copy();
                 auto rightPlanProbeCopy = rightPlan.copy();
                 appendHashJoin(joinNodeIDs, JoinType::INNER, rightPlanProbeCopy, leftPlanBuildCopy,

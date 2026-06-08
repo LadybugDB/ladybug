@@ -42,9 +42,12 @@ void Planner::appendHashJoin(const std::vector<expression_pair>& joinConditions,
         hashJoin->getSIPInfoUnsafe().position = SemiMaskPosition::PROHIBIT_PROBE_TO_BUILD;
     }
     // Update cost
-    hashJoin->setCardinality(cardinalityEstimator.estimateHashJoin(joinConditions,
-        probePlan.getLastOperatorRef(), buildPlan.getLastOperatorRef()));
-    resultPlan.setCost(CostModel::computeHashJoinCost(joinConditions, probePlan, buildPlan));
+    const auto estimatedOutputCardinality = cardinalityEstimator.estimateHashJoin(joinConditions,
+        probePlan.getLastOperatorRef(), buildPlan.getLastOperatorRef());
+    hashJoin->setCardinality(estimatedOutputCardinality);
+    resultPlan.setCost(
+        CostModel::computeHashJoinCost(LogicalHashJoin::getJoinNodeIDs(joinConditions), probePlan,
+            buildPlan, estimatedOutputCardinality));
     resultPlan.setLastOperator(std::move(hashJoin));
 }
 

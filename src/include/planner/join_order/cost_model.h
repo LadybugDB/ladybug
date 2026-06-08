@@ -12,6 +12,9 @@ public:
         const LogicalPlan& probe, const LogicalPlan& build);
     static uint64_t computeHashJoinCost(const binder::expression_vector& joinNodeIDs,
         const LogicalPlan& probe, const LogicalPlan& build);
+    static uint64_t computeHashJoinCost(const binder::expression_vector& joinNodeIDs,
+        const LogicalPlan& probe, const LogicalPlan& build,
+        cardinality_t estimatedOutputCardinality);
     static uint64_t computeMarkJoinCost(const std::vector<binder::expression_pair>& joinConditions,
         const LogicalPlan& probe, const LogicalPlan& build);
     static uint64_t computeMarkJoinCost(const binder::expression_vector& joinNodeIDs,
