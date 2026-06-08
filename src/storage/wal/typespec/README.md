@@ -6,9 +6,14 @@ WAL record declarations live in `records/*.tsp` and are generated with:
 python3 scripts/generate_wal_typespec.py
 ```
 
-Normal CMake builds also depend on the generated WAL files through the
-`generate_wal_typespec` target, so editing an existing `.tsp`, template, or the generator
-will regenerate the checked-in `.h`/`.cpp` files before the WAL sources compile.
+Normal CMake builds compile the checked-in `.h`/`.cpp` files directly. They do not
+regenerate WAL records, because doing so makes ordinary builds depend on TypeSpec
+codegen tools and source-tree timestamp behavior. To regenerate through CMake, build the
+explicit target:
+
+```bash
+cmake --build build/release --target generate_wal_typespec
+```
 
 For review without touching checked-in C++ files:
 

@@ -5,16 +5,7 @@ file(GLOB WAL_TYPESPEC_RECORD_SPECS CONFIGURE_DEPENDS
 file(GLOB WAL_TYPESPEC_TEMPLATES CONFIGURE_DEPENDS
         ${PROJECT_SOURCE_DIR}/src/storage/wal/typespec/templates/*.j2)
 
-set(WAL_TYPESPEC_GENERATED_FILES)
-foreach(WAL_TYPESPEC_RECORD_SPEC IN LISTS WAL_TYPESPEC_RECORD_SPECS)
-        get_filename_component(WAL_TYPESPEC_RECORD_NAME ${WAL_TYPESPEC_RECORD_SPEC} NAME_WE)
-        list(APPEND WAL_TYPESPEC_GENERATED_FILES
-                ${PROJECT_SOURCE_DIR}/src/include/storage/wal/record/${WAL_TYPESPEC_RECORD_NAME}.h
-                ${PROJECT_SOURCE_DIR}/src/storage/wal/records/${WAL_TYPESPEC_RECORD_NAME}.cpp)
-endforeach()
-
-add_custom_command(
-        OUTPUT ${WAL_TYPESPEC_GENERATED_FILES}
+add_custom_target(generate_wal_typespec
         COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/scripts/generate_wal_typespec.py
         DEPENDS
                 ${PROJECT_SOURCE_DIR}/scripts/generate_wal_typespec.py
@@ -24,9 +15,6 @@ add_custom_command(
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Generating WAL record files from TypeSpec"
         VERBATIM)
-
-add_custom_target(generate_wal_typespec
-        DEPENDS ${WAL_TYPESPEC_GENERATED_FILES})
 
 add_library(lbug_storage_wal
         OBJECT
@@ -63,8 +51,6 @@ add_library(lbug_storage_wal
         records/copy_table_record_replay.cpp
         records/update_sequence_record_replay.cpp
         records/load_extension_record_replay.cpp)
-
-add_dependencies(lbug_storage_wal generate_wal_typespec)
 
 set(ALL_OBJECT_FILES
         ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_storage_wal>
