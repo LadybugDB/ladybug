@@ -1,3 +1,4 @@
+#include "common/data_chunk/data_chunk_state.h"
 #include "graph_test/private_graph_test.h"
 #include "planner/operator/logical_plan_util.h"
 #include "test_runner/test_runner.h"
@@ -181,6 +182,30 @@ TEST_F(CardinalityTest, TestPackedPathExtendOptIn) {
     EXPECT_GE(countOpsWithType(enabledPlan->getLastOperator().get(),
                   planner::LogicalOperatorType::PACKED_EXTEND),
         2);
+}
+
+TEST_F(CardinalityTest, TestPackedChildSliceState) {
+    common::DataChunkState state;
+    EXPECT_FALSE(state.hasPackedChildSlices());
+
+    state.setSingleParentPackedChildSlice(3, 7);
+    ASSERT_TRUE(state.hasPackedChildSlices());
+    const auto& singleParentSlices = state.getPackedChildSlices();
+    ASSERT_EQ(1, singleParentSlices.getNumParents());
+    EXPECT_EQ(3, singleParentSlices.parentPositions[0]);
+    EXPECT_EQ(0, singleParentSlices.offsets[0]);
+    EXPECT_EQ(7, singleParentSlices.offsets[1]);
+    EXPECT_EQ(7, singleParentSlices.getNumValues());
+
+    state.setPackedChildSlices({1, 4}, {0, 2, 5});
+    const auto& multiParentSlices = state.getPackedChildSlices();
+    ASSERT_EQ(2, multiParentSlices.getNumParents());
+    EXPECT_EQ(1, multiParentSlices.parentPositions[0]);
+    EXPECT_EQ(4, multiParentSlices.parentPositions[1]);
+    EXPECT_EQ(5, multiParentSlices.getNumValues());
+
+    state.clearPackedChildSlices();
+    EXPECT_FALSE(state.hasPackedChildSlices());
 }
 
 } // namespace testing

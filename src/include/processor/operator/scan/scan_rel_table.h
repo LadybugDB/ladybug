@@ -116,6 +116,7 @@ public:
 protected:
     void initGlobalStateInternal(ExecutionContext* context) override;
     bool fetchNextBoundNodeBatch(transaction::Transaction* transaction);
+    void updatePackedChildSlices(common::sel_t outputSize) const;
 
 protected:
     ScanRelTableInfo tableInfo;

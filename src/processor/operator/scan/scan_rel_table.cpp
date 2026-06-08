@@ -206,6 +206,16 @@ bool ScanRelTable::fetchNextBoundNodeBatch(transaction::Transaction* transaction
     return false;
 }
 
+void ScanRelTable::updatePackedChildSlices(sel_t outputSize) const {
+    if (operatorType != PhysicalOperatorType::PACKED_EXTEND) {
+        scanState->outState->clearPackedChildSlices();
+        return;
+    }
+    const auto& boundSelVector = scanState->nodeIDVector->state->getSelVector();
+    DASSERT(boundSelVector.getSelSize() == 1);
+    scanState->outState->setSingleParentPackedChildSlice(boundSelVector[0], outputSize);
+}
+
 bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
     const auto transaction = transaction::Transaction::Get(*context->clientContext);
     if (sourceMode) {
@@ -213,6 +223,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
             while (tableInfo.table->scan(transaction, *scanState)) {
                 const auto outputSize = scanState->outState->getSelVector().getSelSize();
                 if (outputSize > 0) {
+                    updatePackedChildSlices(outputSize);
                     tableInfo.castColumns();
                     metrics->numOutputTuple.increase(outputSize);
                     return true;
@@ -227,6 +238,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
         while (tableInfo.table->scan(transaction, *scanState)) {
             const auto outputSize = scanState->outState->getSelVector().getSelSize();
             if (outputSize > 0) {
+                updatePackedChildSlices(outputSize);
                 tableInfo.castColumns();
                 metrics->numOutputTuple.increase(outputSize);
                 return true;

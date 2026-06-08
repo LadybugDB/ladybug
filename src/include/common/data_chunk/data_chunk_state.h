@@ -1,5 +1,8 @@
 #pragma once
 
+#include <optional>
+#include <vector>
+
 #include "common/data_chunk/sel_vector.h"
 
 namespace lbug {
@@ -13,6 +16,20 @@ enum class FStateType : uint8_t {
 
 class LBUG_API DataChunkState {
 public:
+    struct PackedChildSlices {
+        std::vector<sel_t> parentPositions;
+        std::vector<sel_t> offsets;
+
+        void clear() {
+            parentPositions.clear();
+            offsets.clear();
+        }
+
+        bool empty() const { return parentPositions.empty(); }
+        sel_t getNumParents() const { return parentPositions.size(); }
+        sel_t getNumValues() const { return offsets.empty() ? 0 : offsets.back(); }
+    };
+
     DataChunkState();
     explicit DataChunkState(sel_t capacity) : fStateType{FStateType::UNFLAT} {
         selVector = std::make_shared<SelectionVector>(capacity);
@@ -34,10 +51,25 @@ public:
         this->selVector = std::move(selVector_);
     }
 
+    bool hasPackedChildSlices() const { return packedChildSlices.has_value(); }
+    const PackedChildSlices& getPackedChildSlices() const {
+        DASSERT(packedChildSlices.has_value());
+        return *packedChildSlices;
+    }
+    void setPackedChildSlices(std::vector<sel_t> parentPositions, std::vector<sel_t> offsets) {
+        DASSERT(offsets.size() == parentPositions.size() + 1);
+        packedChildSlices = PackedChildSlices{std::move(parentPositions), std::move(offsets)};
+    }
+    void setSingleParentPackedChildSlice(sel_t parentPosition, sel_t numValues) {
+        setPackedChildSlices({parentPosition}, {0, numValues});
+    }
+    void clearPackedChildSlices() { packedChildSlices.reset(); }
+
 private:
     std::shared_ptr<SelectionVector> selVector;
     // TODO: We should get rid of `fStateType` and merge DataChunkState with SelectionVector.
     FStateType fStateType;
+    std::optional<PackedChildSlices> packedChildSlices;
 };
 
 } // namespace common
