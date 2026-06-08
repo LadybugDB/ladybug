@@ -61,13 +61,13 @@ jobs:
         run: |
           dnf install -y 'dnf-command(config-manager)'
           dnf config-manager --set-enabled powertools
-          dnf install -y cmake ninja-build python3 python3-pip git ccache gcc-toolset-13
+          dnf install -y cmake ninja-build python3 python3-pip git ccache gcc-toolset-13 openssl-devel pkg-config
 
       - name: Install build dependencies (Linux perf)
         if: runner.os == 'Linux' && matrix.variant == 'perf'
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y cmake ninja-build python3 python3-pip git ccache curl
+          sudo apt-get install -y cmake ninja-build python3 python3-pip git ccache curl libssl-dev pkg-config
           curl -fsSL https://apt.llvm.org/llvm.sh | sudo bash -s -- 21
 
       - name: Install uv (Linux)
