@@ -62,8 +62,8 @@ public:
     ScanMultiRelTable(ScanOpInfo info, DirectionInfo directionInfo,
         common::table_id_map_t<RelTableCollectionScanner> scanners,
         std::unique_ptr<PhysicalOperator> child, physical_op_id id,
-        std::unique_ptr<OPPrintInfo> printInfo)
-        : ScanTable{type_, std::move(info), std::move(child), id, std::move(printInfo)},
+        std::unique_ptr<OPPrintInfo> printInfo, PhysicalOperatorType operatorType = type_)
+        : ScanTable{operatorType, std::move(info), std::move(child), id, std::move(printInfo)},
           directionInfo{std::move(directionInfo)}, scanState{nullptr}, boundNodeIDVector{nullptr},
           scanners{std::move(scanners)}, currentScanner{nullptr} {}
 
@@ -73,7 +73,7 @@ public:
 
     std::unique_ptr<PhysicalOperator> copy() override {
         return make_unique<ScanMultiRelTable>(opInfo.copy(), directionInfo.copy(),
-            copyUnorderedMap(scanners), children[0]->copy(), id, printInfo->copy());
+            copyUnorderedMap(scanners), children[0]->copy(), id, printInfo->copy(), operatorType);
     }
 
 private:

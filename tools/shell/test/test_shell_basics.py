@@ -111,6 +111,26 @@ def test_packed_path_extend_matches_default_count(temp_db) -> None:
     assert result.stdout.count("\u2502 6     \u2502") == 2
 
 
+def test_packed_path_extend_explain_uses_physical_operator(temp_db) -> None:
+    test = (
+        ShellTest()
+        .add_argument(temp_db)
+        .add_argument("-s")
+        .add_argument("-b")
+        .statement("CREATE NODE TABLE Person(id INT64, PRIMARY KEY(id));")
+        .statement("CREATE REL TABLE FOLLOWS(FROM Person TO Person);")
+        .statement("CALL enable_packed_path_extend=true;")
+        .statement(
+            "EXPLAIN MATCH "
+            "(a:Person)-[:FOLLOWS]->(b:Person)-[:FOLLOWS]->(c:Person) "
+            "RETURN a.id, b.id, c.id;"
+        )
+    )
+    result = test.run()
+    assert result.status_code == 0
+    assert "PACKED_EXTEND" in result.stdout
+
+
 def test_enter_in_between_input(temp_db) -> None:
     test = ShellTest().add_argument(temp_db)
     test.start()

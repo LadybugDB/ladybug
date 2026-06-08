@@ -67,14 +67,14 @@ class ScanRelTable final : public ScanTable {
 public:
     ScanRelTable(ScanOpInfo info, ScanRelTableInfo tableInfo,
         std::unique_ptr<PhysicalOperator> child, physical_op_id id,
-        std::unique_ptr<OPPrintInfo> printInfo)
-        : ScanTable{type_, std::move(info), std::move(child), id, std::move(printInfo)},
+        std::unique_ptr<OPPrintInfo> printInfo, PhysicalOperatorType operatorType = type_)
+        : ScanTable{operatorType, std::move(info), std::move(child), id, std::move(printInfo)},
           tableInfo{std::move(tableInfo)}, sourceNodeScanInfo{DataPos::getInvalidPos(), {}} {}
 
     ScanRelTable(ScanOpInfo info, ScanRelTableInfo tableInfo,
         std::vector<storage::NodeTable*> sourceNodeTables, physical_op_id id,
-        std::unique_ptr<OPPrintInfo> printInfo)
-        : ScanTable{type_, std::move(info), id, std::move(printInfo)},
+        std::unique_ptr<OPPrintInfo> printInfo, PhysicalOperatorType operatorType = type_)
+        : ScanTable{operatorType, std::move(info), id, std::move(printInfo)},
           tableInfo{std::move(tableInfo)}, sourceNodeTables{std::move(sourceNodeTables)},
           sourceNodeScanInfo{DataPos::getInvalidPos(), {}}, sourceMode{true} {}
 
@@ -82,8 +82,9 @@ public:
         std::vector<ScanNodeTableInfo> sourceNodeTableInfos,
         std::vector<std::shared_ptr<ScanNodeTableSharedState>> sourceNodeSharedStates,
         std::shared_ptr<ScanNodeTableProgressSharedState> sourceNodeProgressSharedState,
-        ScanOpInfo sourceNodeScanInfo, physical_op_id id, std::unique_ptr<OPPrintInfo> printInfo)
-        : ScanTable{type_, std::move(info), id, std::move(printInfo)},
+        ScanOpInfo sourceNodeScanInfo, physical_op_id id, std::unique_ptr<OPPrintInfo> printInfo,
+        PhysicalOperatorType operatorType = type_)
+        : ScanTable{operatorType, std::move(info), id, std::move(printInfo)},
           tableInfo{std::move(tableInfo)}, sourceNodeTableInfos{std::move(sourceNodeTableInfos)},
           sourceNodeSharedStates{std::move(sourceNodeSharedStates)},
           sourceNodeProgressSharedState{std::move(sourceNodeProgressSharedState)},
@@ -103,13 +104,13 @@ public:
                 return std::make_unique<ScanRelTable>(opInfo.copy(), tableInfo.copy(),
                     copyVector(sourceNodeTableInfos), sourceNodeSharedStates,
                     sourceNodeProgressSharedState, sourceNodeScanInfo.copy(), id,
-                    printInfo->copy());
+                    printInfo->copy(), operatorType);
             }
             return std::make_unique<ScanRelTable>(opInfo.copy(), tableInfo.copy(), sourceNodeTables,
-                id, printInfo->copy());
+                id, printInfo->copy(), operatorType);
         }
         return std::make_unique<ScanRelTable>(opInfo.copy(), tableInfo.copy(), children[0]->copy(),
-            id, printInfo->copy());
+            id, printInfo->copy(), operatorType);
     }
 
 protected:

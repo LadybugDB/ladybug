@@ -54,6 +54,7 @@ enum class PhysicalOperatorType : uint8_t {
     MERGE,
     MULTIPLICITY_REDUCER,
     PARTITIONER,
+    PACKED_EXTEND,
     PATH_PROPERTY_PROBE,
     PRIMARY_KEY_SCAN_NODE_TABLE,
     PROJECTION,

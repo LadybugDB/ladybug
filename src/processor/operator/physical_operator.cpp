@@ -89,6 +89,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "MULTIPLICITY_REDUCER";
     case PhysicalOperatorType::PARTITIONER:
         return "PARTITIONER";
+    case PhysicalOperatorType::PACKED_EXTEND:
+        return "PACKED_EXTEND";
     case PhysicalOperatorType::PATH_PROPERTY_PROBE:
         return "PATH_PROPERTY_PROBE";
     case PhysicalOperatorType::PRIMARY_KEY_SCAN_NODE_TABLE:
