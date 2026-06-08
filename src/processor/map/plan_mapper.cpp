@@ -116,6 +116,10 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapOperator(const LogicalOperator*
     case LogicalOperatorType::EXTEND: {
         physicalOperator = mapExtend(logicalOperator);
     } break;
+    case LogicalOperatorType::PACKED_EXTEND: {
+        // TODO(Phase 2): replace this with mapPackedExtend when the physical packed operator lands.
+        physicalOperator = mapExtend(logicalOperator);
+    } break;
     case LogicalOperatorType::EXTENSION: {
         physicalOperator = mapExtension(logicalOperator);
     } break;

@@ -231,6 +231,16 @@ common::Value EnableInternalCatalogSetting::getSetting(const ClientContext* cont
     return common::Value::createValue(context->getClientConfig()->enableInternalCatalog);
 }
 
+void EnablePackedPathExtendSetting::setContext(ClientContext* context,
+    const common::Value& parameter) {
+    parameter.validateType(inputType);
+    context->getClientConfigUnsafe()->enablePackedPathExtend = parameter.getValue<bool>();
+}
+
+common::Value EnablePackedPathExtendSetting::getSetting(const ClientContext* context) {
+    return common::Value::createValue(context->getClientConfig()->enablePackedPathExtend);
+}
+
 void SpillToDiskSetting::setContext(ClientContext* context, const common::Value& parameter) {
     parameter.validateType(inputType);
     context->getDBConfigUnsafe()->enableSpillingToDisk = parameter.getValue<bool>();

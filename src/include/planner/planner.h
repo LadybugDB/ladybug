@@ -188,6 +188,9 @@ public:
     bool tryPlanINLJoin(const binder::SubqueryGraph& subgraph,
         const binder::SubqueryGraph& otherSubgraph,
         const std::vector<std::shared_ptr<binder::NodeExpression>>& joinNodes);
+    bool tryPlanPackedINLJoin(const binder::SubqueryGraph& subgraph,
+        const binder::SubqueryGraph& otherSubgraph,
+        const std::vector<std::shared_ptr<binder::NodeExpression>>& joinNodes);
     void planInnerHashJoin(const binder::SubqueryGraph& subgraph,
         const binder::SubqueryGraph& otherSubgraph,
         const std::vector<std::shared_ptr<binder::NodeExpression>>& joinNodes, bool flipPlan);
@@ -238,6 +241,10 @@ public:
 
     // Append extend operators
     void appendNonRecursiveExtend(const std::shared_ptr<binder::NodeExpression>& boundNode,
+        const std::shared_ptr<binder::NodeExpression>& nbrNode,
+        const std::shared_ptr<binder::RelExpression>& rel, common::ExtendDirection direction,
+        bool extendFromSource, const binder::expression_vector& properties, LogicalPlan& plan);
+    void appendPackedExtend(const std::shared_ptr<binder::NodeExpression>& boundNode,
         const std::shared_ptr<binder::NodeExpression>& nbrNode,
         const std::shared_ptr<binder::RelExpression>& rel, common::ExtendDirection direction,
         bool extendFromSource, const binder::expression_vector& properties, LogicalPlan& plan);

@@ -74,6 +74,7 @@ ClientContext::ClientContext(Database* database) : localDatabase{database} {
     clientConfig.recursivePatternCardinalityScaleFactor =
         ClientConfigDefault::RECURSIVE_PATTERN_FACTOR;
     clientConfig.disableMapKeyCheck = ClientConfigDefault::DISABLE_MAP_KEY_CHECK;
+    clientConfig.enablePackedPathExtend = ClientConfigDefault::ENABLE_PACKED_PATH_EXTEND;
     clientConfig.warningLimit = ClientConfigDefault::WARNING_LIMIT;
     progressBar = std::make_unique<ProgressBar>(clientConfig.enableProgressBar);
     warningContext = std::make_unique<WarningContext>(&clientConfig);

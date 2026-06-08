@@ -88,6 +88,8 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
         return "ORDER_BY";
     case LogicalOperatorType::PARTITIONER:
         return "PARTITIONER";
+    case LogicalOperatorType::PACKED_EXTEND:
+        return "PACKED_EXTEND";
     case LogicalOperatorType::PATH_PROPERTY_PROBE:
         return "PATH_PROPERTY_PROBE";
     case LogicalOperatorType::PROJECTION:

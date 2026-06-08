@@ -152,5 +152,12 @@ struct EnableInternalCatalogSetting {
     static common::Value getSetting(const ClientContext* context);
 };
 
+struct EnablePackedPathExtendSetting {
+    static constexpr auto name = "enable_packed_path_extend";
+    static constexpr auto inputType = common::LogicalTypeID::BOOL;
+    static void setContext(ClientContext* context, const common::Value& parameter);
+    static common::Value getSetting(const ClientContext* context);
+};
+
 } // namespace main
 } // namespace lbug

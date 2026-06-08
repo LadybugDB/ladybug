@@ -71,6 +71,9 @@ public:
     FactorizationGroup* getGroup(uint32_t pos) const { return groups[pos].get(); }
 
     f_group_pos createGroup();
+    f_group_pos createChildGroup(f_group_pos parentGroupPos,
+        std::shared_ptr<binder::Expression> parentExpression = nullptr,
+        std::shared_ptr<binder::Expression> childExpression = nullptr);
 
     void insertToScope(const std::shared_ptr<binder::Expression>& expression, uint32_t groupPos);
     void insertToGroupAndScope(const std::shared_ptr<binder::Expression>& expression,
@@ -97,6 +100,15 @@ public:
 
     void flattenGroup(f_group_pos pos) { groups[pos]->setFlat(); }
     void setGroupAsSingleState(f_group_pos pos) { groups[pos]->setSingleState(); }
+    void setGroupParent(f_group_pos groupPos, f_group_pos parentGroupPos,
+        std::shared_ptr<binder::Expression> parentExpression = nullptr,
+        std::shared_ptr<binder::Expression> childExpression = nullptr);
+    f_group_pos getParentGroupPos(f_group_pos groupPos) const;
+    bool isRootGroup(f_group_pos groupPos) const;
+    // Packed sibling attachment currently relies on the convention that candidate parent groups
+    // stay unflat only when the plan was built through LogicalPackedExtend-compatible paths.
+    bool canAttachSibling(f_group_pos parentGroupPos) const;
+    std::vector<f_group_pos> getChildGroups(f_group_pos parentGroupPos) const;
 
     bool isExpressionInScope(const binder::Expression& expression) const;
 
@@ -122,7 +134,15 @@ private:
     size_t getNumGroups(bool isFlat) const;
 
 private:
+    struct FactorizationTreeEntry {
+        f_group_pos parentGroupPos = INVALID_F_GROUP_POS;
+        std::shared_ptr<binder::Expression> parentExpression;
+        std::shared_ptr<binder::Expression> childExpression;
+    };
+
+private:
     std::vector<std::unique_ptr<FactorizationGroup>> groups;
+    std::vector<FactorizationTreeEntry> factorizationTree;
     std::unordered_map<std::string, uint32_t> expressionNameToGroupPos;
     // Our projection doesn't explicitly remove expressions. Instead, we keep track of what
     // expressions are in scope (i.e. being projected).

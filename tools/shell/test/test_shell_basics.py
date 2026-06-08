@@ -75,6 +75,42 @@ def test_unwind_merge_uuid_default_returns_same_id(temp_db) -> None:
     assert len(ids) == 1
 
 
+def test_packed_path_extend_matches_default_count(temp_db) -> None:
+    setup = [
+        "CREATE NODE TABLE Person(id INT64, PRIMARY KEY(id));",
+        "CREATE REL TABLE FOLLOWS(FROM Person TO Person);",
+        "CREATE (:Person {id: 1});",
+        "CREATE (:Person {id: 2});",
+        "CREATE (:Person {id: 3});",
+        "CREATE (:Person {id: 4});",
+        "CREATE (:Person {id: 5});",
+        "CREATE (:Person {id: 6});",
+        "CREATE (:Person {id: 7});",
+        "MATCH (a:Person {id: 1}), (b:Person {id: 2}) CREATE (a)-[:FOLLOWS]->(b);",
+        "MATCH (a:Person {id: 3}), (b:Person {id: 2}) CREATE (a)-[:FOLLOWS]->(b);",
+        "MATCH (b:Person {id: 2}), (c:Person {id: 4}) CREATE (b)-[:FOLLOWS]->(c);",
+        "MATCH (b:Person {id: 2}), (c:Person {id: 5}) CREATE (b)-[:FOLLOWS]->(c);",
+        "MATCH (a:Person {id: 4}), (b:Person {id: 6}) CREATE (a)-[:FOLLOWS]->(b);",
+        "MATCH (b:Person {id: 6}), (c:Person {id: 7}) CREATE (b)-[:FOLLOWS]->(c);",
+    ]
+    count_query = (
+        "MATCH (a:Person)-[:FOLLOWS]->(b:Person)-[:FOLLOWS]->(c:Person) "
+        "RETURN COUNT(*) AS cnt;"
+    )
+    test = ShellTest().add_argument(temp_db).add_argument("-s").add_argument("-b")
+    for statement in setup:
+        test = test.statement(statement)
+    test = (
+        test.statement("CALL enable_packed_path_extend=false;")
+        .statement(count_query)
+        .statement("CALL enable_packed_path_extend=true;")
+        .statement(count_query)
+    )
+    result = test.run()
+    assert result.status_code == 0
+    assert result.stdout.count("\u2502 6     \u2502") == 2
+
+
 def test_enter_in_between_input(temp_db) -> None:
     test = ShellTest().add_argument(temp_db)
     test.start()

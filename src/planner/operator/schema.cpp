@@ -12,7 +12,16 @@ namespace planner {
 f_group_pos Schema::createGroup() {
     auto pos = groups.size();
     groups.push_back(std::make_unique<FactorizationGroup>());
+    factorizationTree.push_back(FactorizationTreeEntry{});
     return pos;
+}
+
+f_group_pos Schema::createChildGroup(f_group_pos parentGroupPos,
+    std::shared_ptr<Expression> parentExpression, std::shared_ptr<Expression> childExpression) {
+    auto childGroupPos = createGroup();
+    setGroupParent(childGroupPos, parentGroupPos, std::move(parentExpression),
+        std::move(childExpression));
+    return childGroupPos;
 }
 
 void Schema::insertToScope(const std::shared_ptr<Expression>& expression, f_group_pos groupPos) {
@@ -50,6 +59,41 @@ void Schema::insertToGroupAndScope(const expression_vector& expressions, f_group
     for (auto& expression : expressions) {
         insertToGroupAndScope(expression, groupPos);
     }
+}
+
+void Schema::setGroupParent(f_group_pos groupPos, f_group_pos parentGroupPos,
+    std::shared_ptr<Expression> parentExpression, std::shared_ptr<Expression> childExpression) {
+    DASSERT(groupPos < factorizationTree.size());
+    DASSERT(parentGroupPos == INVALID_F_GROUP_POS || parentGroupPos < factorizationTree.size());
+    factorizationTree[groupPos].parentGroupPos = parentGroupPos;
+    factorizationTree[groupPos].parentExpression = std::move(parentExpression);
+    factorizationTree[groupPos].childExpression = std::move(childExpression);
+}
+
+f_group_pos Schema::getParentGroupPos(f_group_pos groupPos) const {
+    DASSERT(groupPos < factorizationTree.size());
+    return factorizationTree[groupPos].parentGroupPos;
+}
+
+bool Schema::isRootGroup(f_group_pos groupPos) const {
+    return getParentGroupPos(groupPos) == INVALID_F_GROUP_POS;
+}
+
+bool Schema::canAttachSibling(f_group_pos parentGroupPos) const {
+    if (parentGroupPos >= groups.size()) {
+        return false;
+    }
+    return !groups[parentGroupPos]->isFlat();
+}
+
+std::vector<f_group_pos> Schema::getChildGroups(f_group_pos parentGroupPos) const {
+    std::vector<f_group_pos> result;
+    for (auto groupPos = 0u; groupPos < factorizationTree.size(); ++groupPos) {
+        if (factorizationTree[groupPos].parentGroupPos == parentGroupPos) {
+            result.push_back(groupPos);
+        }
+    }
+    return result;
 }
 
 f_group_pos Schema::getGroupPos(const std::string& expressionName) const {
@@ -108,12 +152,14 @@ std::unique_ptr<Schema> Schema::copy() const {
     for (auto& group : groups) {
         newSchema->groups.push_back(std::make_unique<FactorizationGroup>(*group));
     }
+    newSchema->factorizationTree = factorizationTree;
     newSchema->expressionsInScope = expressionsInScope;
     return newSchema;
 }
 
 void Schema::clear() {
     groups.clear();
+    factorizationTree.clear();
     clearExpressionsInScope();
 }
 

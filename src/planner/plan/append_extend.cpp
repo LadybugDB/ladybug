@@ -5,6 +5,7 @@
 #include "common/enums/join_type.h"
 #include "planner/join_order/cost_model.h"
 #include "planner/operator/extend/logical_extend.h"
+#include "planner/operator/extend/logical_packed_extend.h"
 #include "planner/operator/extend/logical_recursive_extend.h"
 #include "planner/operator/extend/recursive_join_type.h"
 #include "planner/operator/logical_node_label_filter.h"
@@ -83,6 +84,31 @@ void Planner::appendNonRecursiveExtend(const std::shared_ptr<NodeExpression>& bo
         properties_, plan.getLastOperator());
     extend->computeFactorizedSchema();
     // Update cost & cardinality. Note that extend does not change factorized cardinality.
+    auto transaction = Transaction::Get(*clientContext);
+    const auto extensionRate =
+        cardinalityEstimator.getExtensionRate(*rel, *boundNode, direction, transaction);
+    extend->setCardinality(plan.getLastOperator()->getCardinality());
+    plan.setCost(CostModel::computeExtendCost(plan));
+    auto group = extend->getSchema()->getGroup(nbrNode->getInternalID());
+    group->setMultiplier(extensionRate);
+    plan.setLastOperator(std::move(extend));
+    auto nbrNodeTableIDSet = getNbrNodeTableIDSet(*rel, direction);
+    if (nbrNodeTableIDSet.size() > nbrNode->getNumEntries()) {
+        appendNodeLabelFilter(nbrNode->getInternalID(), nbrNode->getTableIDsSet(), plan);
+    }
+}
+
+void Planner::appendPackedExtend(const std::shared_ptr<NodeExpression>& boundNode,
+    const std::shared_ptr<NodeExpression>& nbrNode, const std::shared_ptr<RelExpression>& rel,
+    ExtendDirection direction, bool extendFromSource, const expression_vector& properties,
+    LogicalPlan& plan) {
+    auto boundNodeTableIDSet = getBoundNodeTableIDSet(*rel, direction);
+    if (boundNode->getNumEntries() > boundNodeTableIDSet.size()) {
+        appendNodeLabelFilter(boundNode->getInternalID(), boundNodeTableIDSet, plan);
+    }
+    auto extend = make_shared<LogicalPackedExtend>(boundNode, nbrNode, rel, direction,
+        extendFromSource, properties, plan.getLastOperator());
+    extend->computeFactorizedSchema();
     auto transaction = Transaction::Get(*clientContext);
     const auto extensionRate =
         cardinalityEstimator.getExtensionRate(*rel, *boundNode, direction, transaction);

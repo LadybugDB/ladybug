@@ -8,6 +8,7 @@
 #include "common/enums/table_type.h"
 #include "common/exception/runtime.h"
 #include "common/utils.h"
+#include "main/client_context.h"
 #include "planner/join_order/cost_model.h"
 #include "planner/join_order/join_plan_solver.h"
 #include "planner/join_order/join_tree_constructor.h"
@@ -334,7 +335,16 @@ void Planner::planRelScan(uint32_t relPos, const QueryGraphPlanningInfo& info) {
             auto plan = LogicalPlan();
             const auto extendDirection = getExtendDirection(*rel, *boundNode);
             appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan);
-            appendExtend(boundNode, nbrNode, rel, extendDirection, getProperties(*rel), plan);
+            // Use PackedExtend for eligible single-rel seeds so the bound node group stays unflat.
+            // tryPlanPackedINLJoin depends on this when attaching a second rel as a sibling.
+            if (clientContext->getClientConfig()->enablePackedPathExtend &&
+                rel->getRelType() == QueryRelType::NON_RECURSIVE &&
+                extendDirection != ExtendDirection::BOTH && predicates.empty()) {
+                appendPackedExtend(boundNode, nbrNode, rel, extendDirection,
+                    *boundNode == *rel->getSrcNode(), getProperties(*rel), plan);
+            } else {
+                appendExtend(boundNode, nbrNode, rel, extendDirection, getProperties(*rel), plan);
+            }
             appendFilters(predicates, plan);
             context.addPlan(newSubgraph, std::move(plan));
             return;
@@ -346,7 +356,16 @@ void Planner::planRelScan(uint32_t relPos, const QueryGraphPlanningInfo& info) {
         auto [boundNode, nbrNode] = getBoundAndNbrNodes(*rel, direction);
         const auto extendDirection = getExtendDirection(*rel, *boundNode);
         appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan);
-        appendExtend(boundNode, nbrNode, rel, extendDirection, getProperties(*rel), plan);
+        // Use PackedExtend for eligible single-rel seeds so the bound node group stays unflat.
+        // tryPlanPackedINLJoin depends on this when attaching a second rel as a sibling.
+        if (clientContext->getClientConfig()->enablePackedPathExtend &&
+            rel->getRelType() == QueryRelType::NON_RECURSIVE &&
+            extendDirection != ExtendDirection::BOTH && predicates.empty()) {
+            appendPackedExtend(boundNode, nbrNode, rel, extendDirection,
+                *boundNode == *rel->getSrcNode(), getProperties(*rel), plan);
+        } else {
+            appendExtend(boundNode, nbrNode, rel, extendDirection, getProperties(*rel), plan);
+        }
         appendFilters(predicates, plan);
         context.addPlan(newSubgraph, std::move(plan));
     }
@@ -422,6 +441,7 @@ static LogicalOperator* getSequentialScan(LogicalOperator* op) {
     case LogicalOperatorType::FLATTEN:
     case LogicalOperatorType::FILTER:
     case LogicalOperatorType::EXTEND:
+    case LogicalOperatorType::PACKED_EXTEND:
     case LogicalOperatorType::PROJECTION: { // operators we directly search through
         return getSequentialScan(op->getChild(0).get());
     }
@@ -555,12 +575,77 @@ void Planner::planInnerJoin(uint32_t leftLevel, uint32_t rightLevel) {
                 continue;
             }
             // If index nested loop (INL) join is possible, we prune hash join plans
+            if (tryPlanPackedINLJoin(rightSubgraph, nbrSubgraph, joinNodes)) {
+                continue;
+            }
             if (tryPlanINLJoin(rightSubgraph, nbrSubgraph, joinNodes)) {
                 continue;
             }
             planInnerHashJoin(rightSubgraph, nbrSubgraph, joinNodes, leftLevel != rightLevel);
         }
     }
+}
+
+bool Planner::tryPlanPackedINLJoin(const SubqueryGraph& subgraph,
+    const SubqueryGraph& otherSubgraph,
+    const std::vector<std::shared_ptr<NodeExpression>>& joinNodes) {
+    if (!clientContext->getClientConfig()->enablePackedPathExtend) {
+        return false;
+    }
+    if (joinNodes.size() != 1) {
+        return false;
+    }
+    if (!subgraph.isSingleRel() && !otherSubgraph.isSingleRel()) {
+        return false;
+    }
+    if (subgraph.isSingleRel()) {
+        return tryPlanPackedINLJoin(otherSubgraph, subgraph, joinNodes);
+    }
+    auto relPos = UINT32_MAX;
+    for (auto i = 0u; i < context.queryGraph->getNumQueryRels(); ++i) {
+        if (otherSubgraph.queryRelsSelector[i]) {
+            relPos = i;
+        }
+    }
+    DASSERT(relPos != UINT32_MAX);
+    auto rel = context.queryGraph->getQueryRel(relPos);
+    if (rel->getRelType() != QueryRelType::NON_RECURSIVE) {
+        return false;
+    }
+    const auto& boundNode = joinNodes[0];
+    auto nbrNode =
+        boundNode->getUniqueName() == rel->getSrcNodeName() ? rel->getDstNode() : rel->getSrcNode();
+    const auto nbrNodePos = context.queryGraph->getQueryNodeIdx(nbrNode->getUniqueName());
+    if (subgraph.queryNodesSelector[nbrNodePos]) {
+        return false;
+    }
+    auto extendDirection = getExtendDirection(*rel, *boundNode);
+    if (extendDirection == ExtendDirection::BOTH ||
+        !containsValue(rel->getExtendDirections(), extendDirection)) {
+        return false;
+    }
+    auto newSubgraph = subgraph;
+    newSubgraph.addQueryRel(relPos);
+    auto predicates = getNewlyMatchedExprs(subgraph, newSubgraph, context.getWhereExpressions());
+    if (!predicates.empty()) {
+        return false;
+    }
+    bool hasAppliedINLJoin = false;
+    for (auto& prevPlan : context.getPlans(subgraph)) {
+        if (!isNodeSequentialOnPlan(prevPlan, *boundNode)) {
+            continue;
+        }
+        auto boundGroupPos = prevPlan.getSchema()->getGroupPos(*boundNode->getInternalID());
+        if (!prevPlan.getSchema()->canAttachSibling(boundGroupPos)) {
+            continue;
+        }
+        auto plan = prevPlan.copy();
+        appendPackedExtend(boundNode, nbrNode, rel, extendDirection,
+            *boundNode == *rel->getSrcNode(), getProperties(*rel), plan);
+        context.addPlan(newSubgraph, std::move(plan));
+        hasAppliedINLJoin = true;
+    }
+    return hasAppliedINLJoin;
 }
 
 bool Planner::tryPlanINLJoin(const SubqueryGraph& subgraph, const SubqueryGraph& otherSubgraph,

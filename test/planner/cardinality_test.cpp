@@ -35,6 +35,13 @@ public:
         }
         return getOpWithType(op->getChild(0).get(), type);
     }
+    uint64_t countOpsWithType(planner::LogicalOperator* op, planner::LogicalOperatorType type) {
+        auto result = op->getOperatorType() == type ? 1u : 0u;
+        for (auto i = 0u; i < op->getNumChildren(); ++i) {
+            result += countOpsWithType(op->getChild(i).get(), type);
+        }
+        return result;
+    }
 };
 
 TEST_F(CardinalityTest, TestOperators) {
@@ -149,6 +156,31 @@ TEST_F(CardinalityTest, TestPopulatedAfterOptimizations) {
         }
     };
     checkFunc(plan->getLastOperator().get());
+}
+
+TEST_F(CardinalityTest, TestPackedPathExtendOptIn) {
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE PackedPerson(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE PackedFollows(FROM PackedPerson TO PackedPerson);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:PackedPerson {id: 1});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:PackedPerson {id: 2});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:PackedPerson {id: 3});")->isSuccess());
+    const auto query = "EXPLAIN LOGICAL MATCH "
+                       "(a:PackedPerson)-[:PackedFollows]->(b:PackedPerson)"
+                       "-[:PackedFollows]->(c:PackedPerson) "
+                       "RETURN a.id, b.id, c.id";
+
+    ASSERT_TRUE(conn->query("CALL enable_packed_path_extend=false")->isSuccess());
+    auto disabledPlan = getRoot(query);
+    EXPECT_EQ(0, countOpsWithType(disabledPlan->getLastOperator().get(),
+                     planner::LogicalOperatorType::PACKED_EXTEND));
+
+    ASSERT_TRUE(conn->query("CALL enable_packed_path_extend=true")->isSuccess());
+    auto enabledPlan = getRoot(query);
+    EXPECT_GE(countOpsWithType(enabledPlan->getLastOperator().get(),
+                  planner::LogicalOperatorType::PACKED_EXTEND),
+        2);
 }
 
 } // namespace testing

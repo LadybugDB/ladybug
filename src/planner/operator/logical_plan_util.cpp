@@ -51,6 +51,10 @@ void LogicalPlanUtil::encodeRecursive(LogicalOperator* logicalOperator, std::str
         encodeExtend(logicalOperator, encodeString);
         encodeRecursive(logicalOperator->getChild(0).get(), encodeString);
     } break;
+    case LogicalOperatorType::PACKED_EXTEND: {
+        encodeExtend(logicalOperator, encodeString);
+        encodeRecursive(logicalOperator->getChild(0).get(), encodeString);
+    } break;
     case LogicalOperatorType::SCAN_NODE_TABLE: {
         encodeScanNodeTable(logicalOperator, encodeString);
     } break;

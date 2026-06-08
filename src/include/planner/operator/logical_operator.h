@@ -52,6 +52,7 @@ enum class LogicalOperatorType : uint8_t {
     NOOP,
     ORDER_BY,
     PARTITIONER,
+    PACKED_EXTEND,
     PATH_PROPERTY_PROBE,
     PROJECTION,
     RECURSIVE_EXTEND,

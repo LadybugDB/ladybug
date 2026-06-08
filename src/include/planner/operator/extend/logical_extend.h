@@ -6,7 +6,7 @@
 namespace lbug {
 namespace planner {
 
-class LogicalExtend final : public BaseLogicalExtend {
+class LogicalExtend : public BaseLogicalExtend {
     static constexpr LogicalOperatorType type_ = LogicalOperatorType::EXTEND;
 
 public:
@@ -36,6 +36,19 @@ public:
     bool shouldScanNbrID() const { return scanNbrID; }
 
     std::unique_ptr<LogicalOperator> copy() override;
+
+protected:
+    LogicalExtend(LogicalOperatorType operatorType,
+        std::shared_ptr<binder::NodeExpression> boundNode,
+        std::shared_ptr<binder::NodeExpression> nbrNode, std::shared_ptr<binder::RelExpression> rel,
+        common::ExtendDirection direction, bool extendFromSource,
+        binder::expression_vector properties, std::shared_ptr<LogicalOperator> child,
+        common::cardinality_t cardinality = 0)
+        : BaseLogicalExtend{operatorType, std::move(boundNode), std::move(nbrNode), std::move(rel),
+              direction, extendFromSource, std::move(child)},
+          scanNbrID{true}, properties{std::move(properties)} {
+        this->cardinality = cardinality;
+    }
 
 private:
     bool scanNbrID;
