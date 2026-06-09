@@ -21,6 +21,7 @@ RUN apt-get update \
         git \
         make \
         ninja-build \
+        libssl-dev \
         openjdk-17-jdk \
         pkg-config \
         python3 \
