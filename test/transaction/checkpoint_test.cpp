@@ -649,6 +649,30 @@ TEST_F(ReviewFixesTest, ExplicitCheckpointLeavesPageManagerCleanAfterSecondaryAr
     EXPECT_FALSE(pageManager->changedSinceLastCheckpoint());
 }
 
+TEST_F(ReviewFixesTest, RecoverSecondaryArtIndexCreatedAfterLastCheckpoint) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE art_wal(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:art_wal {id: 1, name: 'alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:art_wal {id: 2, name: 'bob'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE ART INDEX art_wal_name_idx FOR (n:art_wal) ON (n.name);")->isSuccess());
+
+    createDBAndConn();
+
+    auto result = conn->query("MATCH (n:art_wal) WHERE n.name = 'bob' RETURN n.id;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    EXPECT_FALSE(result->hasNext());
+}
+
 // Fix #4 – defer destructive column move until after nodeGroups->checkpoint()
 // ─────────────────────────────────────────────────────────────────────────────
 // NodeTable::checkpoint() used to move columns (vacuuming dropped column IDs)

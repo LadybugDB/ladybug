@@ -245,6 +245,9 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
     case WALRecordType::CREATE_CATALOG_ENTRY_RECORD: {
         replayCreateCatalogEntryRecord(walRecord);
     } break;
+    case WALRecordType::CREATE_INDEX_RECORD: {
+        replayCreateIndexRecord(walRecord);
+    } break;
     case WALRecordType::DROP_CATALOG_ENTRY_RECORD: {
         replayDropCatalogEntryRecord(walRecord);
     } break;

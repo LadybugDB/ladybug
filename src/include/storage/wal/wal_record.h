@@ -6,6 +6,7 @@
 #include "storage/wal/record/commit_record.h"
 #include "storage/wal/record/copy_table_record.h"
 #include "storage/wal/record/create_catalog_entry_record.h"
+#include "storage/wal/record/create_index_record.h"
 #include "storage/wal/record/drop_catalog_entry_record.h"
 #include "storage/wal/record/load_extension_record.h"
 #include "storage/wal/record/node_deletion_record.h"

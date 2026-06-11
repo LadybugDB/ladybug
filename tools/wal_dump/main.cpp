@@ -62,6 +62,8 @@ static std::string walRecordTypeToString(WALRecordType type) {
         return "COPY_TABLE_RECORD";
     case WALRecordType::CREATE_CATALOG_ENTRY_RECORD:
         return "CREATE_CATALOG_ENTRY_RECORD";
+    case WALRecordType::CREATE_INDEX_RECORD:
+        return "CREATE_INDEX_RECORD";
     case WALRecordType::DROP_CATALOG_ENTRY_RECORD:
         return "DROP_CATALOG_ENTRY_RECORD";
     case WALRecordType::ALTER_TABLE_ENTRY_RECORD:
@@ -134,6 +136,16 @@ static void dumpRecord(const WALRecord& record) {
             std::cout << "      Entry Name: " << createRecord.ownedCatalogEntry->getName() << "\n";
         }
         std::cout << "      IsInternal: " << (createRecord.isInternal ? "true" : "false") << "\n";
+        break;
+    }
+    case WALRecordType::CREATE_INDEX_RECORD: {
+        const auto& createIndexRecord = record.constCast<CreateIndexRecord>();
+        std::cout << "      Type: CREATE_INDEX\n";
+        if (createIndexRecord.ownedCatalogEntry) {
+            std::cout << "      Entry Name: " << createIndexRecord.ownedCatalogEntry->getName()
+                      << "\n";
+        }
+        std::cout << "      TreeBytes: " << createIndexRecord.treeBytes.size() << "\n";
         break;
     }
     case WALRecordType::DROP_CATALOG_ENTRY_RECORD: {

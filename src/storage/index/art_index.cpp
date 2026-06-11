@@ -11,6 +11,7 @@
 #include "common/exception/message.h"
 #include "common/exception/runtime.h"
 #include "common/serializer/buffer_reader.h"
+#include "common/serializer/buffer_writer.h"
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
 #include "common/types/value/value.h"
@@ -156,30 +157,6 @@ public:
     void sync() override { fileHandle.flushAllDirtyPagesInFrames(); }
 
     uint64_t getSize() const override { return bytesWritten; }
-
-    void overwrite(uint64_t offset, const uint8_t* data, uint64_t size) {
-        if (offset + size > bytesWritten) {
-            throw RuntimeException("Cannot overwrite past the end of disk-backed ART storage.");
-        }
-        auto remaining = size;
-        while (remaining > 0) {
-            const auto absoluteOffset = pageRange.startPageIdx * LBUG_PAGE_SIZE + offset;
-            const auto pageIdx = absoluteOffset / LBUG_PAGE_SIZE;
-            const auto pageOffset = absoluteOffset % LBUG_PAGE_SIZE;
-            const auto numBytesToCopy = std::min<uint64_t>(remaining, LBUG_PAGE_SIZE - pageOffset);
-            if (hasPinnedPage && currentPage.originalPage == pageIdx) {
-                std::memcpy(currentPage.frame + pageOffset, data + (size - remaining),
-                    numBytesToCopy);
-            } else {
-                auto page = ShadowUtils::createShadowVersionIfNecessaryAndPinPage(pageIdx,
-                    false /*read existing page contents*/, fileHandle, shadowFile);
-                std::memcpy(page.frame + pageOffset, data + (size - remaining), numBytesToCopy);
-                shadowFile.getShadowingFH().unpinPage(page.shadowPage);
-            }
-            offset += numBytesToCopy;
-            remaining -= numBytesToCopy;
-        }
-    }
 
 private:
     void ensurePagePinned() {
@@ -1358,8 +1335,7 @@ uint64_t ArtPrimaryKeyIndex::calculateSerializedTreeSize(const Node& node) const
     return size;
 }
 
-void ArtPrimaryKeyIndex::serializeTree(const Node& node, Serializer& serializer,
-    Writer& writer) const {
+void ArtPrimaryKeyIndex::serializeTree(const Node& node, Serializer& serializer) const {
     writeVarUint(serializer, node.prefix.size());
     if (!node.prefix.empty()) {
         serializer.write(node.prefix.data(), node.prefix.size());
@@ -1380,14 +1356,9 @@ void ArtPrimaryKeyIndex::serializeTree(const Node& node, Serializer& serializer,
     writeVarUint(serializer, node.count);
     auto writeChild = [&](uint8_t byte, const Node& child) {
         serializer.write(&byte, 1);
-        const auto childSizeOffset = writer.getSize();
-        uint64_t childSize = 0;
+        const auto childSize = calculateSerializedTreeSize(child);
         serializer.write<uint64_t>(childSize);
-        const auto childStartOffset = writer.getSize();
-        serializeTree(child, serializer, writer);
-        childSize = writer.getSize() - childStartOffset;
-        writer.cast<ArtPageRangeWriter>().overwrite(childSizeOffset,
-            reinterpret_cast<const uint8_t*>(&childSize), sizeof(childSize));
+        serializeTree(child, serializer);
     };
     switch (node.kind) {
     case Node::Kind::NODE4:
@@ -1416,6 +1387,28 @@ void ArtPrimaryKeyIndex::serializeTree(const Node& node, Serializer& serializer,
     }
 }
 
+std::vector<uint8_t> ArtPrimaryKeyIndex::serializeTreeToBytes() const {
+    std::lock_guard lck{mutex};
+    if (diskBacked) {
+        const auto* fileHandle = diskFileHandle;
+        if (fileHandle == nullptr || diskTreeSize == 0) {
+            return {};
+        }
+        std::vector<uint8_t> bytes(diskTreeSize);
+        ArtPageRangeReader reader(const_cast<FileHandle&>(*fileHandle), diskTreePageRange,
+            diskTreeSize);
+        reader.read(bytes.data(), bytes.size());
+        return bytes;
+    }
+    auto writer = std::make_shared<BufferWriter>(calculateSerializedTreeSize(root));
+    Serializer serializer(writer);
+    serializeTree(root, serializer);
+    const auto size = writer->getSize();
+    std::vector<uint8_t> bytes(size);
+    memcpy(bytes.data(), writer->getBlobData(), size);
+    return bytes;
+}
+
 void ArtPrimaryKeyIndex::checkpoint(main::ClientContext*, PageAllocator& pageAllocator,
     ShadowFile& shadowFile) {
     std::lock_guard lck{mutex};
@@ -1434,7 +1427,7 @@ void ArtPrimaryKeyIndex::checkpoint(main::ClientContext*, PageAllocator& pageAll
     auto writer =
         std::make_shared<ArtPageRangeWriter>(pageRange, *pageAllocator.getDataFH(), shadowFile);
     auto serializer = Serializer(writer);
-    serializeTree(root, serializer, *writer);
+    serializeTree(root, serializer);
     writer->flush();
 
     if (artStorageInfo.treePageRange.startPageIdx != INVALID_PAGE_IDX) {
@@ -1546,6 +1539,25 @@ std::unique_ptr<Index> ArtPrimaryKeyIndex::load(main::ClientContext*,
         ArtPrimaryKeyIndexStorageInfo::deserialize(std::move(storageInfoBufferReader));
     auto index = std::make_unique<ArtPrimaryKeyIndex>(std::move(indexInfo), std::move(storageInfo));
     index->diskFileHandle = storageManager->getDataFH();
+    return index;
+}
+
+std::unique_ptr<ArtPrimaryKeyIndex> ArtPrimaryKeyIndex::loadFromWAL(main::ClientContext*,
+    StorageManager* storageManager, IndexInfo indexInfo, std::span<uint8_t> treeBytes) {
+    validateIndexInfo(indexInfo);
+    auto* dataFH = storageManager->getDataFH();
+    const auto numPages =
+        static_cast<page_idx_t>((treeBytes.size() + LBUG_PAGE_SIZE - 1) / LBUG_PAGE_SIZE);
+    auto pageRange = dataFH->getPageManager()->allocatePageRange(numPages);
+    if (!treeBytes.empty()) {
+        dataFH->writePagesToFile(treeBytes.data(), treeBytes.size(), pageRange.startPageIdx);
+    }
+    auto storageInfo = std::make_unique<ArtPrimaryKeyIndexStorageInfo>(pageRange, treeBytes.size());
+    auto index = std::make_unique<ArtPrimaryKeyIndex>(std::move(indexInfo), std::move(storageInfo));
+    index->diskFileHandle = dataFH;
+    index->diskTreePageRange = pageRange;
+    index->diskTreeSize = treeBytes.size();
+    index->diskBacked = true;
     return index;
 }
 

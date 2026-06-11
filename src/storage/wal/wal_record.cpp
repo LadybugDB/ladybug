@@ -47,6 +47,9 @@ std::unique_ptr<WALRecord> WALRecord::deserialize(Deserializer& deserializer,
     case WALRecordType::CREATE_CATALOG_ENTRY_RECORD: {
         walRecord = CreateCatalogEntryRecord::deserialize(deserializer);
     } break;
+    case WALRecordType::CREATE_INDEX_RECORD: {
+        walRecord = CreateIndexRecord::deserialize(deserializer);
+    } break;
     case WALRecordType::DROP_CATALOG_ENTRY_RECORD: {
         walRecord = DropCatalogEntryRecord::deserialize(deserializer);
     } break;

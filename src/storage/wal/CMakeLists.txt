@@ -28,6 +28,7 @@ add_library(lbug_storage_wal
         records/commit_record.cpp
         records/checkpoint_record.cpp
         records/create_catalog_entry_record.cpp
+        records/create_index_record.cpp
         records/drop_catalog_entry_record.cpp
         records/alter_table_entry_record.cpp
         records/copy_table_record.cpp
@@ -40,6 +41,7 @@ add_library(lbug_storage_wal
         records/rel_update_record.cpp
         records/load_extension_record.cpp
         records/create_catalog_entry_record_replay.cpp
+        records/create_index_record_replay.cpp
         records/drop_catalog_entry_record_replay.cpp
         records/alter_table_entry_record_replay.cpp
         records/table_insertion_record_replay.cpp

@@ -25,6 +25,8 @@ public:
     explicit LocalWAL(MemoryManager& mm, bool enableChecksums);
 
     void logCreateCatalogEntryRecord(catalog::CatalogEntry* catalogEntry, bool isInternal);
+    void logCreateIndexRecord(catalog::CatalogEntry* catalogEntry, IndexInfo indexInfo,
+        std::vector<uint8_t> treeBytes);
     void logDropCatalogEntryRecord(uint64_t tableID, catalog::CatalogEntryType type);
     void logAlterCatalogEntryRecord(const binder::BoundAlterInfo* alterInfo);
     void logUpdateSequenceRecord(common::sequence_id_t sequenceID, uint64_t kCount);

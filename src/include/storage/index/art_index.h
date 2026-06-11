@@ -104,9 +104,12 @@ public:
     void serialize(common::Serializer& ser) const override;
     void reclaimStorage(PageAllocator& pageAllocator) const override;
     std::vector<IndexStorageEntry> getStorageEntries() const override;
+    std::vector<uint8_t> serializeTreeToBytes() const;
 
     static LBUG_API std::unique_ptr<Index> load(main::ClientContext* context,
         StorageManager* storageManager, IndexInfo indexInfo, std::span<uint8_t> storageInfoBuffer);
+    static std::unique_ptr<ArtPrimaryKeyIndex> loadFromWAL(main::ClientContext* context,
+        StorageManager* storageManager, IndexInfo indexInfo, std::span<uint8_t> treeBytes);
 
     static IndexType getIndexType() {
         static const IndexType ART_INDEX_TYPE{"ART", IndexConstraintType::PRIMARY,
@@ -188,8 +191,7 @@ private:
         visible_func isVisible) const;
     void clear();
     uint64_t calculateSerializedTreeSize(const Node& node) const;
-    void serializeTree(const Node& node, common::Serializer& serializer,
-        common::Writer& writer) const;
+    void serializeTree(const Node& node, common::Serializer& serializer) const;
     template<class READER>
     void loadTree(READER& reader, Node& node);
     void collectEntries(const Node& node, std::vector<uint8_t>& key,

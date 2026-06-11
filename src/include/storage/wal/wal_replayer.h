@@ -23,6 +23,7 @@ private:
 
     void replayWALRecord(WALRecord& walRecord) const;
     void replayCreateCatalogEntryRecord(WALRecord& walRecord) const;
+    void replayCreateIndexRecord(WALRecord& walRecord) const;
     void replayDropCatalogEntryRecord(const WALRecord& walRecord) const;
     void replayAlterTableEntryRecord(const WALRecord& walRecord) const;
     void replayTableInsertionRecord(const WALRecord& walRecord) const;

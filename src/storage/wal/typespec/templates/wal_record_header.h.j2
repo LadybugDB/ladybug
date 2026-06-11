@@ -82,6 +82,23 @@ struct CreateCatalogEntryRecord final : WALRecord {
     static std::unique_ptr<CreateCatalogEntryRecord> deserialize(
         common::Deserializer& deserializer);
 };
+{% elif dc.name == "CreateIndexRecord" %}
+struct CreateIndexRecord final : WALRecord {
+    catalog::CatalogEntry* catalogEntry;
+    std::unique_ptr<catalog::CatalogEntry> ownedCatalogEntry;
+    std::unique_ptr<IndexInfo> indexInfo;
+    std::vector<uint8_t> treeBytes;
+
+    CreateIndexRecord() : WALRecord{WALRecordType::{{ record_type }}}, catalogEntry{nullptr} {}
+    CreateIndexRecord(catalog::CatalogEntry* catalogEntry, IndexInfo indexInfo,
+        std::vector<uint8_t> treeBytes)
+        : WALRecord{WALRecordType::{{ record_type }}}, catalogEntry{catalogEntry},
+          indexInfo{std::make_unique<IndexInfo>(std::move(indexInfo))},
+          treeBytes{std::move(treeBytes)} {}
+
+    void serialize(common::Serializer& serializer) const override;
+    static std::unique_ptr<CreateIndexRecord> deserialize(common::Deserializer& deserializer);
+};
 {% else %}
 struct {{ dc.name }} final : WALRecord {
 {% for field in dc.fields -%}

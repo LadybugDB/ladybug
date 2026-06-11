@@ -9,6 +9,7 @@
 #include "storage/index/hash_index.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
+#include "storage/wal/local_wal.h"
 #include <format>
 
 using namespace lbug::catalog;
@@ -94,6 +95,17 @@ void CreateIndex::executeInternal(ExecutionContext* context) {
             std::make_unique<IndexCatalogEntry>(indexType.typeName, info.tableID, info.indexName,
                 std::vector<property_id_t>{info.propertyID},
                 std::make_unique<BuiltinIndexAuxInfo>()));
+        if (transaction->shouldLogToWAL() &&
+            StringUtils::caseInsensitiveEquals(indexType.typeName,
+                storage::ArtPrimaryKeyIndex::getIndexType().typeName)) {
+            auto physicalIndex = table->getIndex(info.indexName);
+            DASSERT(physicalIndex.has_value());
+            auto treeBytes =
+                physicalIndex.value()->cast<storage::ArtPrimaryKeyIndex>().serializeTreeToBytes();
+            auto* indexEntry = catalog->getIndex(transaction, info.tableID, info.indexName);
+            transaction->getLocalWAL().logCreateIndexRecord(indexEntry,
+                physicalIndex.value()->getIndexInfo(), std::move(treeBytes));
+        }
         appendMessage(std::format("Index {} has been created.", info.indexName), memoryManager);
         return;
     }

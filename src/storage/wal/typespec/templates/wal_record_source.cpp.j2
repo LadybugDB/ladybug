@@ -13,6 +13,10 @@
 #include "catalog/catalog_entry/catalog_entry.h"
 #include "common/exception/runtime.h"
 {% endif -%}
+{% if target_name == "CreateIndexRecord" -%}
+#include "catalog/catalog_entry/catalog_entry.h"
+#include "common/exception/runtime.h"
+{% endif -%}
 {% if "ValueVector" in dataclasses|string -%}
 #include "main/client_context.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -24,6 +28,9 @@ using namespace lbug::common;
 using namespace lbug::binder;
 {% endif -%}
 {% if target_name == "CreateCatalogEntryRecord" -%}
+using namespace lbug::catalog;
+{% endif -%}
+{% if target_name == "CreateIndexRecord" -%}
 using namespace lbug::catalog;
 {% endif -%}
 
@@ -186,6 +193,31 @@ std::unique_ptr<CreateCatalogEntryRecord> CreateCatalogEntryRecord::deserialize(
         deserializer.deserializeValue(isInternal);
     }
     retVal->isInternal = isInternal;
+    return retVal;
+}
+{% elif dc.name == "CreateIndexRecord" %}
+// Semi-manual serializer for physical built-in index creation. The catalog entry uses the
+// existing polymorphic catalog serialization; IndexInfo and tree bytes are storage payloads.
+void CreateIndexRecord::serialize(Serializer& serializer) const {
+    WALRecord::serialize(serializer);
+    catalogEntry->serialize(serializer);
+    indexInfo->serialize(serializer);
+    serializer.write<uint64_t>(treeBytes.size());
+    if (!treeBytes.empty()) {
+        serializer.write(treeBytes.data(), treeBytes.size());
+    }
+}
+
+std::unique_ptr<CreateIndexRecord> CreateIndexRecord::deserialize(Deserializer& deserializer) {
+    auto retVal = std::make_unique<CreateIndexRecord>();
+    retVal->ownedCatalogEntry = CatalogEntry::deserialize(deserializer);
+    retVal->indexInfo = std::make_unique<IndexInfo>(IndexInfo::deserialize(deserializer));
+    uint64_t treeSize = 0;
+    deserializer.deserializeValue<uint64_t>(treeSize);
+    retVal->treeBytes.resize(treeSize);
+    if (treeSize > 0) {
+        deserializer.read(retVal->treeBytes.data(), treeSize);
+    }
     return retVal;
 }
 {% else %}
