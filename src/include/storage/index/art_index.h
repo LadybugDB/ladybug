@@ -195,7 +195,8 @@ private:
     void clear();
     uint64_t calculateSerializedTreeSize(const Node& node) const;
     void serializeTree(const Node& node, common::Serializer& serializer) const;
-    void loadTree(ArtPageRangeReader& reader, Node& node);
+    template<class READER>
+    void loadTree(READER& reader, Node& node);
     void loadEntries(const ArtPrimaryKeyIndexStorageInfo& storageInfo);
     void materializeDiskTree();
 

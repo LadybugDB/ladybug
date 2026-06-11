@@ -14,6 +14,7 @@
 #include "storage/page_range.h"
 #include "storage/shadow_file.h"
 #include "storage/shadow_utils.h"
+#include <span>
 
 namespace lbug::storage {
 
@@ -162,6 +163,30 @@ private:
     FileHandle& fileHandle;
     PageRange pageRange;
     uint64_t size;
+    uint64_t offset = 0;
+};
+
+class ArtMemoryReader {
+public:
+    explicit ArtMemoryReader(std::span<const uint8_t> bytes) : bytes{bytes} {}
+
+    void read(uint8_t* data, uint64_t numBytes) {
+        if (offset + numBytes > bytes.size()) {
+            throw common::RuntimeException("Cannot read past the end of in-memory ART storage.");
+        }
+        std::memcpy(data, bytes.data() + offset, numBytes);
+        offset += numBytes;
+    }
+
+    void skip(uint64_t numBytes) {
+        if (offset + numBytes > bytes.size()) {
+            throw common::RuntimeException("Cannot skip past the end of in-memory ART storage.");
+        }
+        offset += numBytes;
+    }
+
+private:
+    std::span<const uint8_t> bytes;
     uint64_t offset = 0;
 };
 

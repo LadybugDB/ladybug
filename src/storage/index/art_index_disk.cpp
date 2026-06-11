@@ -228,7 +228,8 @@ void ArtPrimaryKeyIndex::materializeDiskTree() {
     diskFileHandle = nullptr;
 }
 
-void ArtPrimaryKeyIndex::loadTree(ArtPageRangeReader& reader, Node& node) {
+template<class READER>
+void ArtPrimaryKeyIndex::loadTree(READER& reader, Node& node) {
     resetNodePayload(node);
     const auto prefixSize = readArtVarUint(reader);
     node.prefix.resize(prefixSize);
@@ -271,21 +272,14 @@ std::unique_ptr<Index> ArtPrimaryKeyIndex::load(main::ClientContext*,
 }
 
 std::unique_ptr<ArtPrimaryKeyIndex> ArtPrimaryKeyIndex::loadFromWAL(main::ClientContext*,
-    StorageManager* storageManager, IndexInfo indexInfo, std::span<uint8_t> treeBytes) {
+    StorageManager*, IndexInfo indexInfo, std::span<uint8_t> treeBytes) {
     validateIndexInfo(indexInfo);
-    auto* dataFH = storageManager->getDataFH();
-    const auto numPages =
-        static_cast<page_idx_t>((treeBytes.size() + LBUG_PAGE_SIZE - 1) / LBUG_PAGE_SIZE);
-    auto pageRange = dataFH->getPageManager()->allocatePageRange(numPages);
-    if (!treeBytes.empty()) {
-        dataFH->writePagesToFile(treeBytes.data(), treeBytes.size(), pageRange.startPageIdx);
-    }
-    auto storageInfo = std::make_unique<ArtPrimaryKeyIndexStorageInfo>(pageRange, treeBytes.size());
+    auto storageInfo = std::make_unique<ArtPrimaryKeyIndexStorageInfo>();
     auto index = std::make_unique<ArtPrimaryKeyIndex>(std::move(indexInfo), std::move(storageInfo));
-    index->diskFileHandle = dataFH;
-    index->diskTreePageRange = pageRange;
-    index->diskTreeSize = treeBytes.size();
-    index->diskBacked = true;
+    if (!treeBytes.empty()) {
+        ArtMemoryReader reader{treeBytes};
+        index->loadTree(reader, index->root);
+    }
     return index;
 }
 
