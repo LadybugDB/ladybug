@@ -157,6 +157,30 @@ public:
 
     uint64_t getSize() const override { return bytesWritten; }
 
+    void overwrite(uint64_t offset, const uint8_t* data, uint64_t size) {
+        if (offset + size > bytesWritten) {
+            throw RuntimeException("Cannot overwrite past the end of disk-backed ART storage.");
+        }
+        auto remaining = size;
+        while (remaining > 0) {
+            const auto absoluteOffset = pageRange.startPageIdx * LBUG_PAGE_SIZE + offset;
+            const auto pageIdx = absoluteOffset / LBUG_PAGE_SIZE;
+            const auto pageOffset = absoluteOffset % LBUG_PAGE_SIZE;
+            const auto numBytesToCopy = std::min<uint64_t>(remaining, LBUG_PAGE_SIZE - pageOffset);
+            if (hasPinnedPage && currentPage.originalPage == pageIdx) {
+                std::memcpy(currentPage.frame + pageOffset, data + (size - remaining),
+                    numBytesToCopy);
+            } else {
+                auto page = ShadowUtils::createShadowVersionIfNecessaryAndPinPage(pageIdx,
+                    false /*read existing page contents*/, fileHandle, shadowFile);
+                std::memcpy(page.frame + pageOffset, data + (size - remaining), numBytesToCopy);
+                shadowFile.getShadowingFH().unpinPage(page.shadowPage);
+            }
+            offset += numBytesToCopy;
+            remaining -= numBytesToCopy;
+        }
+    }
+
 private:
     void ensurePagePinned() {
         if (hasPinnedPage) {
@@ -726,7 +750,9 @@ static void skipDiskTree(READER& reader) {
     for (auto i = 0u; i < numChildren; ++i) {
         uint8_t byte = 0;
         reader.read(&byte, 1);
-        skipDiskTree(reader);
+        uint64_t childSize = 0;
+        reader.read(reinterpret_cast<uint8_t*>(&childSize), sizeof(childSize));
+        reader.skip(childSize);
     }
 }
 
@@ -765,11 +791,13 @@ bool ArtPrimaryKeyIndex::lookupPrimaryKey(const transaction::Transaction*, Value
         for (auto i = 0u; i < header.numChildren; ++i) {
             uint8_t byte = 0;
             reader.read(&byte, 1);
+            uint64_t childSize = 0;
+            reader.read(reinterpret_cast<uint8_t*>(&childSize), sizeof(childSize));
             if (byte == edge) {
                 found = true;
                 break;
             }
-            skipDiskTree(reader);
+            reader.skip(childSize);
         }
         if (!found) {
             return false;
@@ -1009,11 +1037,13 @@ bool ArtPrimaryKeyIndex::lookupAll(const transaction::Transaction*, ValueVector*
             for (auto i = 0u; i < header.numChildren; ++i) {
                 uint8_t byte = 0;
                 reader.read(&byte, 1);
+                uint64_t childSize = 0;
+                reader.read(reinterpret_cast<uint8_t*>(&childSize), sizeof(childSize));
                 if (byte == edge) {
                     found = true;
                     break;
                 }
-                skipDiskTree(reader);
+                reader.skip(childSize);
             }
             if (!found) {
                 return false;
@@ -1088,12 +1118,14 @@ static void collectDiskRange(READER& reader, std::vector<uint8_t>& key, const Ar
     for (auto i = 0u; i < header.numChildren; ++i) {
         uint8_t byte = 0;
         reader.read(&byte, 1);
+        uint64_t childSize = 0;
+        reader.read(reinterpret_cast<uint8_t*>(&childSize), sizeof(childSize));
         key.push_back(byte);
         if (satisfiesUpperBound(key, upperBound, true)) {
             collectDiskRange(reader, key, lowerBound, lowerInclusive, upperBound, upperInclusive,
                 maxResults, results, isVisible);
         } else {
-            skipDiskTree(reader);
+            reader.skip(childSize);
         }
         key.pop_back();
         if (results.size() >= maxResults) {
@@ -1295,6 +1327,7 @@ uint64_t ArtPrimaryKeyIndex::calculateSerializedTreeSize(const Node& node) const
     }
     auto addChild = [&](const Node& child) {
         size += sizeof(uint8_t);
+        size += sizeof(uint64_t);
         size += calculateSerializedTreeSize(child);
     };
     switch (node.kind) {
@@ -1325,7 +1358,8 @@ uint64_t ArtPrimaryKeyIndex::calculateSerializedTreeSize(const Node& node) const
     return size;
 }
 
-void ArtPrimaryKeyIndex::serializeTree(const Node& node, Serializer& serializer) const {
+void ArtPrimaryKeyIndex::serializeTree(const Node& node, Serializer& serializer,
+    Writer& writer) const {
     writeVarUint(serializer, node.prefix.size());
     if (!node.prefix.empty()) {
         serializer.write(node.prefix.data(), node.prefix.size());
@@ -1346,7 +1380,14 @@ void ArtPrimaryKeyIndex::serializeTree(const Node& node, Serializer& serializer)
     writeVarUint(serializer, node.count);
     auto writeChild = [&](uint8_t byte, const Node& child) {
         serializer.write(&byte, 1);
-        serializeTree(child, serializer);
+        const auto childSizeOffset = writer.getSize();
+        uint64_t childSize = 0;
+        serializer.write<uint64_t>(childSize);
+        const auto childStartOffset = writer.getSize();
+        serializeTree(child, serializer, writer);
+        childSize = writer.getSize() - childStartOffset;
+        writer.cast<ArtPageRangeWriter>().overwrite(childSizeOffset,
+            reinterpret_cast<const uint8_t*>(&childSize), sizeof(childSize));
     };
     switch (node.kind) {
     case Node::Kind::NODE4:
@@ -1393,7 +1434,7 @@ void ArtPrimaryKeyIndex::checkpoint(main::ClientContext*, PageAllocator& pageAll
     auto writer =
         std::make_shared<ArtPageRangeWriter>(pageRange, *pageAllocator.getDataFH(), shadowFile);
     auto serializer = Serializer(writer);
-    serializeTree(root, serializer);
+    serializeTree(root, serializer, *writer);
     writer->flush();
 
     if (artStorageInfo.treePageRange.startPageIdx != INVALID_PAGE_IDX) {
@@ -1488,6 +1529,8 @@ void ArtPrimaryKeyIndex::loadTree(READER& reader, Node& node) {
     for (auto i = 0u; i < numChildren; ++i) {
         uint8_t byte = 0;
         reader.read(&byte, 1);
+        uint64_t childSize = 0;
+        reader.read(reinterpret_cast<uint8_t*>(&childSize), sizeof(childSize));
         auto* child = allocateNode();
         node.insertChild(*this, byte, child);
         loadTree(reader, *child);

@@ -188,7 +188,8 @@ private:
         visible_func isVisible) const;
     void clear();
     uint64_t calculateSerializedTreeSize(const Node& node) const;
-    void serializeTree(const Node& node, common::Serializer& serializer) const;
+    void serializeTree(const Node& node, common::Serializer& serializer,
+        common::Writer& writer) const;
     template<class READER>
     void loadTree(READER& reader, Node& node);
     void collectEntries(const Node& node, std::vector<uint8_t>& key,
