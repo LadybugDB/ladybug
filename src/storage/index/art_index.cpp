@@ -24,8 +24,6 @@ namespace storage {
 
 namespace {
 
-static constexpr uint32_t ART_TREE_STORAGE_MAGIC = 0x32545241; // "ART2" little-endian.
-
 template<typename T>
 void appendBigEndian(std::vector<uint8_t>& bytes, T value) {
     using U = std::make_unsigned_t<T>;
@@ -112,15 +110,6 @@ uint64_t readVarUint(BufferReader& reader) {
         }
         shift += 7;
     }
-}
-
-bool hasTreeStorageMagic(std::span<uint8_t> storageInfoBuffer) {
-    if (storageInfoBuffer.size() < sizeof(uint32_t)) {
-        return false;
-    }
-    uint32_t magic = 0;
-    std::memcpy(&magic, storageInfoBuffer.data(), sizeof(magic));
-    return magic == ART_TREE_STORAGE_MAGIC;
 }
 
 } // namespace
@@ -1111,8 +1100,7 @@ void ArtPrimaryKeyIndex::serialize(Serializer& serializer) const {
     std::lock_guard lck{mutex};
     const auto treeSize = calculateSerializedTreeSize(root);
     indexInfo.serialize(serializer);
-    serializer.write<uint64_t>(sizeof(uint32_t) + treeSize);
-    serializer.write<uint32_t>(ART_TREE_STORAGE_MAGIC);
+    serializer.write<uint64_t>(treeSize);
     serializeTree(root, serializer);
 }
 
@@ -1123,27 +1111,6 @@ void ArtPrimaryKeyIndex::loadEntries(const ArtPrimaryKeyIndexStorageInfo& storag
             insertInternal(ArtKey{keyBytes}, offset, alwaysVisible);
         } else {
             insertSecondaryInternal(ArtKey{keyBytes}, offset);
-        }
-    }
-}
-
-void ArtPrimaryKeyIndex::loadEntries(BufferReader& reader) {
-    static constexpr auto alwaysVisible = [](offset_t) { return true; };
-    uint64_t numEntries = 0;
-    reader.read(reinterpret_cast<uint8_t*>(&numEntries), sizeof(numEntries));
-    for (auto i = 0u; i < numEntries; ++i) {
-        uint64_t keySize = 0;
-        reader.read(reinterpret_cast<uint8_t*>(&keySize), sizeof(keySize));
-        std::vector<uint8_t> key(keySize);
-        if (keySize > 0) {
-            reader.read(key.data(), keySize);
-        }
-        offset_t offset = INVALID_OFFSET;
-        reader.read(reinterpret_cast<uint8_t*>(&offset), sizeof(offset));
-        if (indexInfo.isPrimary) {
-            insertInternal(ArtKey{std::move(key)}, offset, alwaysVisible);
-        } else {
-            insertSecondaryInternal(ArtKey{std::move(key)}, offset);
         }
     }
 }
@@ -1182,13 +1149,7 @@ std::unique_ptr<Index> ArtPrimaryKeyIndex::load(main::ClientContext*, StorageMan
     auto index = std::make_unique<ArtPrimaryKeyIndex>(std::move(indexInfo),
         std::make_unique<ArtPrimaryKeyIndexStorageInfo>());
     auto storageInfoBufferReader = BufferReader(storageInfoBuffer.data(), storageInfoBuffer.size());
-    if (hasTreeStorageMagic(storageInfoBuffer)) {
-        uint32_t magic = 0;
-        storageInfoBufferReader.read(reinterpret_cast<uint8_t*>(&magic), sizeof(magic));
-        index->loadTree(storageInfoBufferReader, index->root);
-    } else {
-        index->loadEntries(storageInfoBufferReader);
-    }
+    index->loadTree(storageInfoBufferReader, index->root);
     return index;
 }
 

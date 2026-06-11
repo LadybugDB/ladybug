@@ -182,7 +182,6 @@ private:
     void collectEntries(const Node& node, std::vector<uint8_t>& key,
         std::vector<std::pair<std::vector<uint8_t>, common::offset_t>>& entries) const;
     void loadEntries(const ArtPrimaryKeyIndexStorageInfo& storageInfo);
-    void loadEntries(common::BufferReader& reader);
 
 private:
     Node root;
