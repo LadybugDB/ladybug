@@ -47,3 +47,24 @@ True
 -STATEMENT CALL storage_info('meets') WHERE column_name='bwd_location_data' AND compression <> 'UNCOMPRESSED' RETURN COUNT(*);
 ---- 1
 0
+
+-CASE IndexStorageInfo
+-SKIP_IN_MEM
+-STATEMENT CREATE NODE TABLE storage_info_idx_person (ID INT64, name STRING, PRIMARY KEY(ID));
+---- 1
+Table storage_info_idx_person has been created.
+-STATEMENT CREATE (:storage_info_idx_person {ID: 1, name: 'Ada'});
+---- ok
+-STATEMENT CREATE (:storage_info_idx_person {ID: 2, name: 'Grace'});
+---- ok
+-STATEMENT CREATE ART INDEX storage_info_idx_person_name FOR (p:storage_info_idx_person) ON (p.name);
+---- 1
+Index storage_info_idx_person_name has been created.
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT CALL storage_info('storage_info_idx_person') WHERE table_type = 'INDEX' AND column_name = 'storage_info_idx_person_name' AND data_type = 'ART:tree' RETURN count(*), min(num_pages) > 0, min(num_values) > 0;
+---- 1
+1|True|True
+-STATEMENT CALL disk_info() WHERE category = 'index' AND name = 'storage_info_idx_person.storage_info_idx_person_name:tree' RETURN count(*), min(num_pages) > 0, min(size_bytes) > 0;
+---- 1
+1|True|True

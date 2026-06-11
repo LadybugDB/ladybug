@@ -223,6 +223,34 @@ static void appendStorageInfoForNodeGroup(StorageInfoLocalState* localState, Dat
     }
 }
 
+static void appendStorageInfoForIndex(StorageInfoLocalState* localState, DataChunk& outputChunk,
+    const Index& index) {
+    const auto indexInfo = index.getIndexInfo();
+    for (const auto& entry : index.getStorageEntries()) {
+        if (entry.pageRange.startPageIdx == INVALID_PAGE_IDX || entry.pageRange.numPages == 0) {
+            continue;
+        }
+        resetOutputIfNecessary(localState, outputChunk);
+        auto vectorPos = outputChunk.state->getSelVector().getSelSize();
+        outputChunk.getValueVectorMutable(0).setValue(vectorPos, std::string{"INDEX"});
+        outputChunk.getValueVectorMutable(1).setValue<uint64_t>(vectorPos, INVALID_NODE_GROUP_IDX);
+        outputChunk.getValueVectorMutable(2).setValue<uint64_t>(vectorPos, INVALID_NODE_GROUP_IDX);
+        outputChunk.getValueVectorMutable(3).setValue(vectorPos, std::string{"ON_DISK"});
+        outputChunk.getValueVectorMutable(4).setValue(vectorPos, indexInfo.name);
+        outputChunk.getValueVectorMutable(5).setValue(vectorPos,
+            indexInfo.indexType + ":" + entry.component);
+        outputChunk.getValueVectorMutable(6).setValue<uint64_t>(vectorPos,
+            entry.pageRange.startPageIdx);
+        outputChunk.getValueVectorMutable(7).setValue<uint64_t>(vectorPos,
+            entry.pageRange.numPages);
+        outputChunk.getValueVectorMutable(8).setValue<uint64_t>(vectorPos, entry.sizeBytes);
+        outputChunk.getValueVectorMutable(9).setValue(vectorPos, std::string{});
+        outputChunk.getValueVectorMutable(10).setValue(vectorPos, std::string{});
+        outputChunk.getValueVectorMutable(11).setValue(vectorPos, std::string{});
+        outputChunk.state->getSelVectorUnsafe().incrementSelSize();
+    }
+}
+
 static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) {
     auto& dataChunk = output.dataChunk;
     auto localState = dynamic_cast_checked<StorageInfoLocalState*>(input.localState);
@@ -267,6 +295,11 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) 
                 outputData.nodeGroupIdx = i;
                 appendStorageInfoForNodeGroup(localState, dataChunk, outputData,
                     nodeTable.getNodeGroup(i));
+            }
+            for (const auto& indexHolder : nodeTable.getIndexes()) {
+                if (indexHolder.isLoaded()) {
+                    appendStorageInfoForIndex(localState, dataChunk, *indexHolder.getIndex());
+                }
             }
         } break;
         case TableType::REL: {

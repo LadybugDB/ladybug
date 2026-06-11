@@ -1434,6 +1434,15 @@ void ArtPrimaryKeyIndex::reclaimStorage(PageAllocator& pageAllocator) const {
     }
 }
 
+std::vector<IndexStorageEntry> ArtPrimaryKeyIndex::getStorageEntries() const {
+    std::lock_guard lck{mutex};
+    const auto& artStorageInfo = storageInfo->constCast<ArtPrimaryKeyIndexStorageInfo>();
+    if (artStorageInfo.treePageRange.startPageIdx == INVALID_PAGE_IDX) {
+        return {};
+    }
+    return {IndexStorageEntry{"tree", artStorageInfo.treePageRange, artStorageInfo.treeSize}};
+}
+
 void ArtPrimaryKeyIndex::loadEntries(const ArtPrimaryKeyIndexStorageInfo& storageInfo) {
     static constexpr auto alwaysVisible = [](offset_t) { return true; };
     for (const auto& [keyBytes, offset] : storageInfo.entries) {

@@ -119,48 +119,6 @@ struct DiskSizeEntry {
     uint64_t sizeBytes;
 };
 
-// Estimate the number of pages used by a hash index based on the number of entries
-// Hash index structure:
-// - INDEX_HEADER_PAGES pages for HashIndexHeaderOnDisk (2 pages for 256 sub-indexes)
-// - DiskArrayCollection header pages (1+ pages)
-// - For each of 256 sub-indexes: pSlots and oSlots disk arrays
-// - Each slot is SLOT_CAPACITY_BYTES (256 bytes), so 16 slots per page
-// - Number of primary slots = 2^currentLevel + nextSplitSlotId
-// - Overflow slots depend on collisions
-static uint64_t estimateHashIndexPages(const PrimaryKeyIndex* pkIndex) {
-    if (!pkIndex) {
-        return 0;
-    }
-
-    uint64_t totalPages = 0;
-
-    // Index header pages (storing HashIndexHeaderOnDisk for all 256 sub-indexes)
-    totalPages += INDEX_HEADER_PAGES; // 2 pages
-
-    // DiskArrayCollection header pages (at least 1)
-    // Each header page stores headers for up to ~170 disk arrays
-    // With 256 sub-indexes * 2 arrays (pSlots + oSlots) = 512 arrays
-    totalPages += 4; // Approximate: ~3-4 header pages for DiskArrayCollection
-
-    // For each sub-index, estimate primary and overflow slot pages
-    // We can access the headers through the pkIndex to get actual sizes
-    // But since the headers are private, we estimate based on numEntries
-
-    // Get total entries from all sub-indexes
-    // Each entry requires a slot, and slots have capacity of ~3-20 entries depending on key type
-    // With linear hashing, we expect ~70-80% fill rate
-
-    // Rough estimation: For N entries with 8-byte keys:
-    // - Slot capacity is approximately 3 entries per slot (256-byte slot / 80 bytes per entry)
-    // - Number of slots ≈ N / (3 * 0.7) ≈ N / 2
-    // - Pages for slots = slots / 16 (16 slots per page)
-    // - Plus PIP pages for addressing
-
-    // Since we can't easily access internal headers, we return the header overhead
-    // and let the unaccounted calculation handle the rest
-    return totalPages;
-}
-
 static std::vector<DiskSizeEntry> collectDiskSizeInfo(const ClientContext* context) {
     std::vector<DiskSizeEntry> entries;
     auto storageManager = StorageManager::Get(*context);
@@ -203,12 +161,22 @@ static std::vector<DiskSizeEntry> collectDiskSizeInfo(const ClientContext* conte
         entries.push_back(
             {"node_table", tableEntry->getName(), tablePages, tablePages * LBUG_PAGE_SIZE});
 
-        // Count primary key index header pages (rough estimate for overhead)
-        auto* pkIndex = nodeTable.tryGetPKIndex();
-        uint64_t indexPages = estimateHashIndexPages(pkIndex);
-        if (indexPages > 0) {
-            entries.push_back({"pk_index_overhead", tableEntry->getName() + "_pk", indexPages,
-                indexPages * LBUG_PAGE_SIZE});
+        for (const auto& indexHolder : nodeTable.getIndexes()) {
+            if (!indexHolder.isLoaded()) {
+                continue;
+            }
+            const auto* index = indexHolder.getIndex();
+            const auto indexInfo = index->getIndexInfo();
+            for (const auto& storageEntry : index->getStorageEntries()) {
+                if (storageEntry.pageRange.startPageIdx == INVALID_PAGE_IDX ||
+                    storageEntry.pageRange.numPages == 0) {
+                    continue;
+                }
+                entries.push_back({"index",
+                    tableEntry->getName() + "." + indexInfo.name + ":" + storageEntry.component,
+                    storageEntry.pageRange.numPages,
+                    storageEntry.pageRange.numPages * LBUG_PAGE_SIZE});
+            }
         }
     }
 
@@ -256,7 +224,7 @@ static std::vector<DiskSizeEntry> collectDiskSizeInfo(const ClientContext* conte
     }
     for (const auto& entry : entries) {
         if (entry.category == "node_table" || entry.category == "rel_table" ||
-            entry.category == "pk_index_overhead") {
+            entry.category == "index") {
             accountedPages += entry.numPages;
         }
     }
@@ -264,7 +232,7 @@ static std::vector<DiskSizeEntry> collectDiskSizeInfo(const ClientContext* conte
 
     if (totalFilePages > accountedPages) {
         uint64_t unaccountedPages = totalFilePages - accountedPages;
-        entries.push_back({"index_data", "hash_index_slots", unaccountedPages,
+        entries.push_back({"unaccounted", "unaccounted_pages", unaccountedPages,
             unaccountedPages * LBUG_PAGE_SIZE});
     }
 
@@ -308,7 +276,7 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
     return std::make_unique<DiskSizeInfoBindData>(columns, entries.size(), context);
 }
 
-function_set DiskSizeInfoFunction::getFunctionSet() {
+static function_set getDiskSizeInfoFunctionSet(const char* name) {
     function_set functionSet;
     auto function = std::make_unique<TableFunction>(name, std::vector<LogicalTypeID>{});
     function->tableFunc = SimpleTableFunc::getTableFunc(internalTableFunc);
@@ -317,6 +285,14 @@ function_set DiskSizeInfoFunction::getFunctionSet() {
     function->initLocalStateFunc = TableFunction::initEmptyLocalState;
     functionSet.push_back(std::move(function));
     return functionSet;
+}
+
+function_set DiskSizeInfoFunction::getFunctionSet() {
+    return getDiskSizeInfoFunctionSet(name);
+}
+
+function_set DiskInfoFunction::getFunctionSet() {
+    return getDiskSizeInfoFunctionSet(name);
 }
 
 } // namespace function

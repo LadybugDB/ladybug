@@ -7,6 +7,7 @@
 #include "common/types/types.h"
 #include "common/vector/value_vector.h"
 #include "in_mem_hash_index.h"
+#include "storage/page_range.h"
 #include <span>
 
 namespace lbug::storage {
@@ -83,6 +84,12 @@ struct LBUG_API IndexStorageInfo {
     const TARGET& constCast() const {
         return common::dynamic_cast_checked<const TARGET&>(*this);
     }
+};
+
+struct IndexStorageEntry {
+    std::string component;
+    PageRange pageRange;
+    uint64_t sizeBytes;
 };
 
 class LBUG_API Index {
@@ -185,6 +192,7 @@ public:
     virtual void reclaimStorage(PageAllocator&) const {
         // DO NOTHING.
     }
+    virtual std::vector<IndexStorageEntry> getStorageEntries() const { return {}; }
     virtual void finalize(main::ClientContext*) {
         // DO NOTHING.
     }
@@ -243,6 +251,13 @@ public:
             DASSERT(index);
             index->reclaimStorage(pageAllocator);
         }
+    }
+    std::vector<IndexStorageEntry> getStorageEntries() const {
+        if (!loaded) {
+            return {};
+        }
+        DASSERT(index);
+        return index->getStorageEntries();
     }
     // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
     void finalize(main::ClientContext* context) {

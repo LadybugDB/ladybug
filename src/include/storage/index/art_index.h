@@ -103,6 +103,7 @@ public:
     void rollbackCheckpoint() override;
     void serialize(common::Serializer& ser) const override;
     void reclaimStorage(PageAllocator& pageAllocator) const override;
+    std::vector<IndexStorageEntry> getStorageEntries() const override;
 
     static LBUG_API std::unique_ptr<Index> load(main::ClientContext* context,
         StorageManager* storageManager, IndexInfo indexInfo, std::span<uint8_t> storageInfoBuffer);
