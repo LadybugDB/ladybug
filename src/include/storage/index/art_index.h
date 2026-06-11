@@ -19,6 +19,7 @@ struct BufferReader;
 }
 namespace storage {
 
+class ArtPageRangeReader;
 class FileHandle;
 class ShadowFile;
 
@@ -174,6 +175,7 @@ private:
 
     bool insertInternal(const ArtKey& key, common::offset_t offset, visible_func isVisible);
     void insertSecondaryInternal(const ArtKey& key, common::offset_t offset);
+    static void validateIndexInfo(const IndexInfo& indexInfo);
     Node* findOrCreateLeaf(const std::vector<uint8_t>& key);
     bool lookup(const ArtKey& key, common::offset_t& result, visible_func isVisible) const;
     const Node* findLeaf(const ArtKey& key) const;
@@ -193,10 +195,7 @@ private:
     void clear();
     uint64_t calculateSerializedTreeSize(const Node& node) const;
     void serializeTree(const Node& node, common::Serializer& serializer) const;
-    template<class READER>
-    void loadTree(READER& reader, Node& node);
-    void collectEntries(const Node& node, std::vector<uint8_t>& key,
-        std::vector<std::pair<std::vector<uint8_t>, common::offset_t>>& entries) const;
+    void loadTree(ArtPageRangeReader& reader, Node& node);
     void loadEntries(const ArtPrimaryKeyIndexStorageInfo& storageInfo);
     void materializeDiskTree();
 

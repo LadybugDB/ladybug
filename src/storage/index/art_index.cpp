@@ -16,11 +16,7 @@
 #include "common/serializer/serializer.h"
 #include "common/types/value/value.h"
 #include "common/vector/value_vector.h"
-#include "storage/file_handle.h"
-#include "storage/page_allocator.h"
-#include "storage/shadow_file.h"
-#include "storage/shadow_utils.h"
-#include "storage/storage_manager.h"
+#include "storage/index/art_index_disk_utils.h"
 #include <concepts>
 
 using namespace lbug::common;
@@ -84,152 +80,6 @@ bool shouldPrintDestructorStats() {
     const auto* value = std::getenv("LBUG_ART_INDEX_DESTRUCTOR_STATS");
     return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
 }
-
-uint64_t getVarUintSize(uint64_t value) {
-    auto size = 1u;
-    while (value >= 0x80) {
-        value >>= 7;
-        ++size;
-    }
-    return size;
-}
-
-void writeVarUint(Serializer& serializer, uint64_t value) {
-    while (value >= 0x80) {
-        const auto byte = static_cast<uint8_t>(value | 0x80);
-        serializer.write(&byte, 1);
-        value >>= 7;
-    }
-    const auto byte = static_cast<uint8_t>(value);
-    serializer.write(&byte, 1);
-}
-
-template<class READER>
-uint64_t readVarUint(READER& reader) {
-    uint64_t result = 0;
-    auto shift = 0u;
-    while (true) {
-        uint8_t byte = 0;
-        reader.read(&byte, 1);
-        result |= static_cast<uint64_t>(byte & 0x7F) << shift;
-        if ((byte & 0x80) == 0) {
-            return result;
-        }
-        shift += 7;
-    }
-}
-
-class ArtPageRangeWriter final : public Writer {
-public:
-    ArtPageRangeWriter(PageRange pageRange, FileHandle& fileHandle, ShadowFile& shadowFile)
-        : pageRange{pageRange}, fileHandle{fileHandle}, shadowFile{shadowFile} {}
-
-    ~ArtPageRangeWriter() override { flush(); }
-
-    void write(const uint8_t* data, uint64_t size) override {
-        auto remaining = size;
-        while (remaining > 0) {
-            ensurePagePinned();
-            const auto pageOffset = bytesWritten % LBUG_PAGE_SIZE;
-            const auto numBytesToCopy = std::min<uint64_t>(remaining, LBUG_PAGE_SIZE - pageOffset);
-            std::memcpy(currentPage.frame + pageOffset, data + (size - remaining), numBytesToCopy);
-            bytesWritten += numBytesToCopy;
-            remaining -= numBytesToCopy;
-            if (bytesWritten % LBUG_PAGE_SIZE == 0) {
-                unpinCurrentPage();
-            }
-        }
-    }
-
-    void clear() override { UNREACHABLE_CODE; }
-
-    void flush() override {
-        if (!hasPinnedPage) {
-            return;
-        }
-        const auto pageOffset = bytesWritten % LBUG_PAGE_SIZE;
-        if (pageOffset != 0) {
-            std::memset(currentPage.frame + pageOffset, 0, LBUG_PAGE_SIZE - pageOffset);
-        }
-        unpinCurrentPage();
-    }
-
-    void sync() override { fileHandle.flushAllDirtyPagesInFrames(); }
-
-    uint64_t getSize() const override { return bytesWritten; }
-
-private:
-    void ensurePagePinned() {
-        if (hasPinnedPage) {
-            return;
-        }
-        const auto pageOffset = bytesWritten / LBUG_PAGE_SIZE;
-        DASSERT(pageOffset < pageRange.numPages);
-        currentPage = ShadowUtils::createShadowVersionIfNecessaryAndPinPage(pageRange.startPageIdx +
-                                                                                pageOffset,
-            true /*writing all page bytes; no need to read original*/, fileHandle, shadowFile);
-        hasPinnedPage = true;
-    }
-
-    void unpinCurrentPage() {
-        shadowFile.getShadowingFH().unpinPage(currentPage.shadowPage);
-        hasPinnedPage = false;
-    }
-
-private:
-    PageRange pageRange;
-    FileHandle& fileHandle;
-    ShadowFile& shadowFile;
-    uint64_t bytesWritten = 0;
-    ShadowPageAndFrame currentPage{INVALID_PAGE_IDX, INVALID_PAGE_IDX, nullptr};
-    bool hasPinnedPage = false;
-};
-
-class ArtPageRangeReader {
-public:
-    ArtPageRangeReader(FileHandle& fileHandle, PageRange pageRange, uint64_t size)
-        : fileHandle{fileHandle}, pageRange{pageRange}, size{size} {}
-
-    void read(uint8_t* data, uint64_t numBytes) {
-        if (offset + numBytes > size) {
-            throw RuntimeException("Cannot read past the end of disk-backed ART storage.");
-        }
-        auto remaining = numBytes;
-        while (remaining > 0) {
-            const auto absoluteOffset = pageRange.startPageIdx * LBUG_PAGE_SIZE + offset;
-            const auto pageIdx = absoluteOffset / LBUG_PAGE_SIZE;
-            const auto pageOffset = absoluteOffset % LBUG_PAGE_SIZE;
-            const auto numBytesToCopy = std::min<uint64_t>(remaining, LBUG_PAGE_SIZE - pageOffset);
-            auto* frame = fileHandle.pinPage(pageIdx, PageReadPolicy::READ_PAGE);
-            std::memcpy(data + (numBytes - remaining), frame + pageOffset, numBytesToCopy);
-            fileHandle.unpinPage(pageIdx);
-            offset += numBytesToCopy;
-            remaining -= numBytesToCopy;
-        }
-    }
-
-    void skip(uint64_t numBytes) {
-        if (offset + numBytes > size) {
-            throw RuntimeException("Cannot skip past the end of disk-backed ART storage.");
-        }
-        offset += numBytes;
-    }
-
-    uint64_t getOffset() const { return offset; }
-
-    void setOffset(uint64_t offset_) {
-        if (offset_ > size) {
-            throw RuntimeException("Cannot seek past the end of disk-backed ART storage.");
-        }
-        offset = offset_;
-    }
-
-private:
-    FileHandle& fileHandle;
-    PageRange pageRange;
-    uint64_t size;
-    uint64_t offset = 0;
-};
 
 } // namespace
 
@@ -601,7 +451,7 @@ std::unique_ptr<Index::InsertState> ArtPrimaryKeyIndex::initInsertState(main::Cl
     return std::make_unique<InsertState>(std::move(isVisible));
 }
 
-static void validateIndexInfo(const IndexInfo& indexInfo) {
+void ArtPrimaryKeyIndex::validateIndexInfo(const IndexInfo& indexInfo) {
     if (!indexInfo.isBuiltin) {
         throw RuntimeException("ART indexes currently support only built-in indexes.");
     }
@@ -691,47 +541,6 @@ bool ArtPrimaryKeyIndex::lookup(const ArtKey& key, offset_t& result, visible_fun
     return false;
 }
 
-struct DiskNodeHeader {
-    std::vector<uint8_t> prefix;
-    std::vector<offset_t> offsets;
-    uint64_t numChildren = 0;
-};
-
-template<class READER>
-static DiskNodeHeader readDiskNodeHeader(READER& reader) {
-    DiskNodeHeader header;
-    const auto prefixSize = readVarUint(reader);
-    header.prefix.resize(prefixSize);
-    if (prefixSize > 0) {
-        reader.read(header.prefix.data(), prefixSize);
-    }
-    const auto numOffsets = readVarUint(reader);
-    header.offsets.reserve(numOffsets);
-    for (auto i = 0u; i < numOffsets; ++i) {
-        header.offsets.push_back(readVarUint(reader));
-    }
-    header.numChildren = readVarUint(reader);
-    return header;
-}
-
-template<class READER>
-static void skipDiskTree(READER& reader) {
-    const auto prefixSize = readVarUint(reader);
-    reader.skip(prefixSize);
-    const auto numOffsets = readVarUint(reader);
-    for (auto i = 0u; i < numOffsets; ++i) {
-        readVarUint(reader);
-    }
-    const auto numChildren = readVarUint(reader);
-    for (auto i = 0u; i < numChildren; ++i) {
-        uint8_t byte = 0;
-        reader.read(&byte, 1);
-        uint64_t childSize = 0;
-        reader.read(reinterpret_cast<uint8_t*>(&childSize), sizeof(childSize));
-        reader.skip(childSize);
-    }
-}
-
 bool ArtPrimaryKeyIndex::lookupPrimaryKey(const transaction::Transaction*, ValueVector* keyVector,
     uint64_t vectorPos, offset_t& result, visible_func isVisible) {
     std::lock_guard lck{mutex};
@@ -747,7 +556,7 @@ bool ArtPrimaryKeyIndex::lookupPrimaryKey(const transaction::Transaction*, Value
     auto depth = 0u;
     const auto& bytes = key.getBytes();
     while (true) {
-        const auto header = readDiskNodeHeader(reader);
+        const auto header = readArtDiskNodeHeader(reader);
         const auto prefixMatch = matchPrefix(header.prefix, bytes, depth);
         if (prefixMatch != header.prefix.size()) {
             return false;
@@ -994,7 +803,7 @@ bool ArtPrimaryKeyIndex::lookupAll(const transaction::Transaction*, ValueVector*
         auto depth = 0u;
         const auto& bytes = key.getBytes();
         while (true) {
-            const auto header = readDiskNodeHeader(reader);
+            const auto header = readArtDiskNodeHeader(reader);
             const auto prefixMatch = matchPrefix(header.prefix, bytes, depth);
             if (prefixMatch != header.prefix.size()) {
                 return false;
@@ -1072,7 +881,7 @@ template<class READER>
 static void collectDiskRange(READER& reader, std::vector<uint8_t>& key, const ArtKey* lowerBound,
     bool lowerInclusive, const ArtKey* upperBound, bool upperInclusive, idx_t maxResults,
     std::vector<offset_t>& results, visible_func isVisible) {
-    const auto header = readDiskNodeHeader(reader);
+    const auto header = readArtDiskNodeHeader(reader);
     const auto keySizeBeforePrefix = key.size();
     key.insert(key.end(), header.prefix.begin(), header.prefix.end());
     if (results.size() >= maxResults) {
@@ -1236,333 +1045,6 @@ void ArtPrimaryKeyIndex::discardPrimaryKey(ValueVector* keyVector) {
         const auto pos = keyVector->state->getSelVector()[i];
         erase(ArtKey::encode(keyVector, pos));
     }
-}
-
-void ArtPrimaryKeyIndex::collectEntries(const Node& node, std::vector<uint8_t>& key,
-    std::vector<std::pair<std::vector<uint8_t>, offset_t>>& entries) const {
-    const auto keySizeBeforePrefix = key.size();
-    key.insert(key.end(), node.prefix.begin(), node.prefix.end());
-    if (node.offset.has_value()) {
-        entries.emplace_back(key, node.offset.value());
-    }
-    if (node.overflowOffsets) {
-        for (const auto offset : *node.overflowOffsets) {
-            entries.emplace_back(key, offset);
-        }
-    }
-    switch (node.kind) {
-    case Node::Kind::NODE4:
-    case Node::Kind::NODE16:
-        for (auto i = 0u; i < node.count; ++i) {
-            key.push_back(node.small.keys[i]);
-            collectEntries(*node.small.children[i], key, entries);
-            key.pop_back();
-        }
-        break;
-    case Node::Kind::NODE48:
-        for (auto i = 0u; i < node.node48->childIndex.size(); ++i) {
-            const auto pos = node.node48->childIndex[i];
-            if (pos == Node::EMPTY_MARKER) {
-                continue;
-            }
-            key.push_back(static_cast<uint8_t>(i));
-            collectEntries(*node.node48->children[pos], key, entries);
-            key.pop_back();
-        }
-        break;
-    case Node::Kind::NODE256:
-        for (auto i = 0u; i < node.node256->children.size(); ++i) {
-            if (!node.node256->children[i]) {
-                continue;
-            }
-            key.push_back(static_cast<uint8_t>(i));
-            collectEntries(*node.node256->children[i], key, entries);
-            key.pop_back();
-        }
-        break;
-    default:
-        UNREACHABLE_CODE;
-    }
-    key.resize(keySizeBeforePrefix);
-}
-
-uint64_t ArtPrimaryKeyIndex::calculateSerializedTreeSize(const Node& node) const {
-    uint64_t numOffsets = node.offset.has_value() ? 1 : 0;
-    if (node.overflowOffsets) {
-        numOffsets += node.overflowOffsets->size();
-    }
-    auto size = getVarUintSize(node.prefix.size()) + node.prefix.size() +
-                getVarUintSize(numOffsets) + getVarUintSize(node.count);
-    if (node.offset.has_value()) {
-        size += getVarUintSize(node.offset.value());
-    }
-    if (node.overflowOffsets) {
-        for (const auto offset : *node.overflowOffsets) {
-            size += getVarUintSize(offset);
-        }
-    }
-    auto addChild = [&](const Node& child) {
-        size += sizeof(uint8_t);
-        size += sizeof(uint64_t);
-        size += calculateSerializedTreeSize(child);
-    };
-    switch (node.kind) {
-    case Node::Kind::NODE4:
-    case Node::Kind::NODE16:
-        for (auto i = 0u; i < node.count; ++i) {
-            addChild(*node.small.children[i]);
-        }
-        break;
-    case Node::Kind::NODE48:
-        for (auto i = 0u; i < node.node48->childIndex.size(); ++i) {
-            const auto pos = node.node48->childIndex[i];
-            if (pos != Node::EMPTY_MARKER) {
-                addChild(*node.node48->children[pos]);
-            }
-        }
-        break;
-    case Node::Kind::NODE256:
-        for (auto i = 0u; i < node.node256->children.size(); ++i) {
-            if (node.node256->children[i]) {
-                addChild(*node.node256->children[i]);
-            }
-        }
-        break;
-    default:
-        UNREACHABLE_CODE;
-    }
-    return size;
-}
-
-void ArtPrimaryKeyIndex::serializeTree(const Node& node, Serializer& serializer) const {
-    writeVarUint(serializer, node.prefix.size());
-    if (!node.prefix.empty()) {
-        serializer.write(node.prefix.data(), node.prefix.size());
-    }
-    uint64_t numOffsets = node.offset.has_value() ? 1 : 0;
-    if (node.overflowOffsets) {
-        numOffsets += node.overflowOffsets->size();
-    }
-    writeVarUint(serializer, numOffsets);
-    if (node.offset.has_value()) {
-        writeVarUint(serializer, node.offset.value());
-    }
-    if (node.overflowOffsets) {
-        for (const auto offset : *node.overflowOffsets) {
-            writeVarUint(serializer, offset);
-        }
-    }
-    writeVarUint(serializer, node.count);
-    auto writeChild = [&](uint8_t byte, const Node& child) {
-        serializer.write(&byte, 1);
-        const auto childSize = calculateSerializedTreeSize(child);
-        serializer.write<uint64_t>(childSize);
-        serializeTree(child, serializer);
-    };
-    switch (node.kind) {
-    case Node::Kind::NODE4:
-    case Node::Kind::NODE16:
-        for (auto i = 0u; i < node.count; ++i) {
-            writeChild(node.small.keys[i], *node.small.children[i]);
-        }
-        break;
-    case Node::Kind::NODE48:
-        for (auto i = 0u; i < node.node48->childIndex.size(); ++i) {
-            const auto pos = node.node48->childIndex[i];
-            if (pos != Node::EMPTY_MARKER) {
-                writeChild(static_cast<uint8_t>(i), *node.node48->children[pos]);
-            }
-        }
-        break;
-    case Node::Kind::NODE256:
-        for (auto i = 0u; i < node.node256->children.size(); ++i) {
-            if (node.node256->children[i]) {
-                writeChild(static_cast<uint8_t>(i), *node.node256->children[i]);
-            }
-        }
-        break;
-    default:
-        UNREACHABLE_CODE;
-    }
-}
-
-std::vector<uint8_t> ArtPrimaryKeyIndex::serializeTreeToBytes() const {
-    std::lock_guard lck{mutex};
-    if (diskBacked) {
-        const auto* fileHandle = diskFileHandle;
-        if (fileHandle == nullptr || diskTreeSize == 0) {
-            return {};
-        }
-        std::vector<uint8_t> bytes(diskTreeSize);
-        ArtPageRangeReader reader(const_cast<FileHandle&>(*fileHandle), diskTreePageRange,
-            diskTreeSize);
-        reader.read(bytes.data(), bytes.size());
-        return bytes;
-    }
-    auto writer = std::make_shared<BufferWriter>(calculateSerializedTreeSize(root));
-    Serializer serializer(writer);
-    serializeTree(root, serializer);
-    const auto size = writer->getSize();
-    std::vector<uint8_t> bytes(size);
-    memcpy(bytes.data(), writer->getBlobData(), size);
-    return bytes;
-}
-
-uint64_t ArtPrimaryKeyIndex::getSerializedTreeSize() const {
-    std::lock_guard lck{mutex};
-    return diskBacked ? diskTreeSize : calculateSerializedTreeSize(root);
-}
-
-void ArtPrimaryKeyIndex::checkpoint(main::ClientContext*, PageAllocator& pageAllocator,
-    ShadowFile& shadowFile) {
-    std::lock_guard lck{mutex};
-    hasCheckpointRollbackState = false;
-    if (diskBacked) {
-        return;
-    }
-    auto& artStorageInfo = storageInfo->cast<ArtPrimaryKeyIndexStorageInfo>();
-    checkpointRollbackTreePageRange = artStorageInfo.treePageRange;
-    checkpointRollbackTreeSize = artStorageInfo.treeSize;
-    hasCheckpointRollbackState = true;
-
-    const auto treeSize = calculateSerializedTreeSize(root);
-    const auto numPages = static_cast<page_idx_t>((treeSize + LBUG_PAGE_SIZE - 1) / LBUG_PAGE_SIZE);
-    auto pageRange = pageAllocator.allocatePageRange(numPages);
-    auto writer =
-        std::make_shared<ArtPageRangeWriter>(pageRange, *pageAllocator.getDataFH(), shadowFile);
-    auto serializer = Serializer(writer);
-    serializeTree(root, serializer);
-    writer->flush();
-
-    if (artStorageInfo.treePageRange.startPageIdx != INVALID_PAGE_IDX) {
-        pageAllocator.freePageRange(artStorageInfo.treePageRange);
-    }
-    artStorageInfo.treePageRange = pageRange;
-    artStorageInfo.treeSize = treeSize;
-    diskTreePageRange = pageRange;
-    diskTreeSize = treeSize;
-    diskFileHandle = pageAllocator.getDataFH();
-}
-
-void ArtPrimaryKeyIndex::rollbackCheckpoint() {
-    std::lock_guard lck{mutex};
-    if (!hasCheckpointRollbackState) {
-        return;
-    }
-    auto& artStorageInfo = storageInfo->cast<ArtPrimaryKeyIndexStorageInfo>();
-    artStorageInfo.treePageRange = checkpointRollbackTreePageRange;
-    artStorageInfo.treeSize = checkpointRollbackTreeSize;
-    diskTreePageRange = checkpointRollbackTreePageRange;
-    diskTreeSize = checkpointRollbackTreeSize;
-    hasCheckpointRollbackState = false;
-}
-
-void ArtPrimaryKeyIndex::serialize(Serializer& serializer) const {
-    std::lock_guard lck{mutex};
-    indexInfo.serialize(serializer);
-    auto bufferedWriter = storageInfo->serialize();
-    serializer.write<uint64_t>(bufferedWriter->getSize());
-    serializer.write(bufferedWriter->getData().data.get(), bufferedWriter->getSize());
-}
-
-void ArtPrimaryKeyIndex::reclaimStorage(PageAllocator& pageAllocator) const {
-    const auto& artStorageInfo = storageInfo->constCast<ArtPrimaryKeyIndexStorageInfo>();
-    if (artStorageInfo.treePageRange.startPageIdx != INVALID_PAGE_IDX) {
-        pageAllocator.freePageRange(artStorageInfo.treePageRange);
-    }
-}
-
-std::vector<IndexStorageEntry> ArtPrimaryKeyIndex::getStorageEntries() const {
-    std::lock_guard lck{mutex};
-    const auto& artStorageInfo = storageInfo->constCast<ArtPrimaryKeyIndexStorageInfo>();
-    if (artStorageInfo.treePageRange.startPageIdx == INVALID_PAGE_IDX) {
-        return {};
-    }
-    return {IndexStorageEntry{"tree", artStorageInfo.treePageRange, artStorageInfo.treeSize}};
-}
-
-void ArtPrimaryKeyIndex::loadEntries(const ArtPrimaryKeyIndexStorageInfo& storageInfo) {
-    static constexpr auto alwaysVisible = [](offset_t) { return true; };
-    for (const auto& [keyBytes, offset] : storageInfo.entries) {
-        if (indexInfo.isPrimary) {
-            insertInternal(ArtKey{keyBytes}, offset, alwaysVisible);
-        } else {
-            insertSecondaryInternal(ArtKey{keyBytes}, offset);
-        }
-    }
-}
-
-void ArtPrimaryKeyIndex::materializeDiskTree() {
-    if (!diskBacked) {
-        return;
-    }
-    DASSERT(diskFileHandle != nullptr);
-    ArtPageRangeReader reader{*diskFileHandle, diskTreePageRange, diskTreeSize};
-    loadTree(reader, root);
-    diskBacked = false;
-    diskFileHandle = nullptr;
-}
-
-template<class READER>
-void ArtPrimaryKeyIndex::loadTree(READER& reader, Node& node) {
-    resetNodePayload(node);
-    const auto prefixSize = readVarUint(reader);
-    node.prefix.resize(prefixSize);
-    if (prefixSize > 0) {
-        reader.read(node.prefix.data(), prefixSize);
-    }
-    const auto numOffsets = readVarUint(reader);
-    if (numOffsets > 0) {
-        node.offset = readVarUint(reader);
-    }
-    if (numOffsets > 1) {
-        node.overflowOffsets = std::make_unique<std::vector<offset_t>>();
-        node.overflowOffsets->reserve(numOffsets - 1);
-        for (auto i = 1u; i < numOffsets; ++i) {
-            node.overflowOffsets->push_back(readVarUint(reader));
-        }
-    }
-    const auto numChildren = readVarUint(reader);
-    for (auto i = 0u; i < numChildren; ++i) {
-        uint8_t byte = 0;
-        reader.read(&byte, 1);
-        uint64_t childSize = 0;
-        reader.read(reinterpret_cast<uint8_t*>(&childSize), sizeof(childSize));
-        auto* child = allocateNode();
-        node.insertChild(*this, byte, child);
-        loadTree(reader, *child);
-    }
-}
-
-std::unique_ptr<Index> ArtPrimaryKeyIndex::load(main::ClientContext*,
-    StorageManager* storageManager, IndexInfo indexInfo, std::span<uint8_t> storageInfoBuffer) {
-    validateIndexInfo(indexInfo);
-    auto storageInfoBufferReader =
-        std::make_unique<BufferReader>(storageInfoBuffer.data(), storageInfoBuffer.size());
-    auto storageInfo =
-        ArtPrimaryKeyIndexStorageInfo::deserialize(std::move(storageInfoBufferReader));
-    auto index = std::make_unique<ArtPrimaryKeyIndex>(std::move(indexInfo), std::move(storageInfo));
-    index->diskFileHandle = storageManager->getDataFH();
-    return index;
-}
-
-std::unique_ptr<ArtPrimaryKeyIndex> ArtPrimaryKeyIndex::loadFromWAL(main::ClientContext*,
-    StorageManager* storageManager, IndexInfo indexInfo, std::span<uint8_t> treeBytes) {
-    validateIndexInfo(indexInfo);
-    auto* dataFH = storageManager->getDataFH();
-    const auto numPages =
-        static_cast<page_idx_t>((treeBytes.size() + LBUG_PAGE_SIZE - 1) / LBUG_PAGE_SIZE);
-    auto pageRange = dataFH->getPageManager()->allocatePageRange(numPages);
-    if (!treeBytes.empty()) {
-        dataFH->writePagesToFile(treeBytes.data(), treeBytes.size(), pageRange.startPageIdx);
-    }
-    auto storageInfo = std::make_unique<ArtPrimaryKeyIndexStorageInfo>(pageRange, treeBytes.size());
-    auto index = std::make_unique<ArtPrimaryKeyIndex>(std::move(indexInfo), std::move(storageInfo));
-    index->diskFileHandle = dataFH;
-    index->diskTreePageRange = pageRange;
-    index->diskTreeSize = treeBytes.size();
-    index->diskBacked = true;
-    return index;
 }
 
 } // namespace storage
