@@ -125,8 +125,8 @@ void CreateIndex::executeInternal(ExecutionContext* context) {
             transaction->shouldLogToWAL() && isArtIndex && !useCheckpointInsteadOfWAL);
         if (useCheckpointInsteadOfWAL) {
             transaction->setForceCheckpoint();
-            appendMessage("Using checkpoint-instead-of-WAL path for bulk ART index creation; this "
-                          "statement will return after the checkpoint is durable.",
+            appendMessage("Using bulk indexing. This may take a while. If the database shuts down "
+                          "before this finishes, the index will be rebuilt during recovery.",
                 memoryManager);
         } else if (transaction->shouldLogToWAL() && isArtIndex) {
             auto physicalIndex = table->getIndex(info.indexName);
