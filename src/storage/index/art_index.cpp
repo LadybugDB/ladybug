@@ -666,10 +666,9 @@ void ArtPrimaryKeyIndex::insertSecondaryInternal(const ArtKey& key, offset_t off
     if (!node->overflowOffsets) {
         node->overflowOffsets = std::make_unique<std::vector<offset_t>>();
     }
-    if (std::find(node->overflowOffsets->begin(), node->overflowOffsets->end(), offset) ==
-        node->overflowOffsets->end()) {
-        node->overflowOffsets->push_back(offset);
-    }
+    DASSERT(std::find(node->overflowOffsets->begin(), node->overflowOffsets->end(), offset) ==
+            node->overflowOffsets->end());
+    node->overflowOffsets->push_back(offset);
 }
 
 bool ArtPrimaryKeyIndex::lookup(const ArtKey& key, offset_t& result, visible_func isVisible) const {
