@@ -297,8 +297,16 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
         checkpointer->rollback();
         throw CheckpointException{e};
     }
+    bool canResetPageManagerToCurrent = true;
+    if (!writeGate.isLocked()) {
+        try {
+            writeGate = stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave();
+        } catch (std::exception&) {
+            canResetPageManagerToCurrent = false;
+        }
+    }
+    checkpointer->postCheckpointCleanup(canResetPageManagerToCurrent);
     writeGate = {};
-    checkpointer->postCheckpointCleanup();
 }
 
 } // namespace transaction

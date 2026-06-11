@@ -628,6 +628,27 @@ TEST_F(ReviewFixesTest, ReclaimTailMergesWithDeserializedFSMEntries) {
     }
 }
 
+TEST_F(ReviewFixesTest, ExplicitCheckpointLeavesPageManagerCleanAfterSecondaryArtIndex) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE art_clean(id INT64 PRIMARY KEY, name STRING);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:art_clean {id: 1, name: 'alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:art_clean {id: 2, name: 'bob'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE ART INDEX art_clean_name_idx FOR (n:art_clean) ON (n.name);")
+                    ->isSuccess());
+
+    auto checkpoint = conn->query("CHECKPOINT;");
+    ASSERT_TRUE(checkpoint->isSuccess()) << checkpoint->getErrorMessage();
+
+    auto* context = getClientContext(*conn);
+    auto* pageManager = StorageManager::Get(*context)->getDataFH()->getPageManager();
+    EXPECT_FALSE(pageManager->changedSinceLastCheckpoint());
+}
+
 // Fix #4 – defer destructive column move until after nodeGroups->checkpoint()
 // ─────────────────────────────────────────────────────────────────────────────
 // NodeTable::checkpoint() used to move columns (vacuuming dropped column IDs)

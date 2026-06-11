@@ -44,8 +44,9 @@ public:
     // See transaction_manager.cpp for the hash-index timestamp caveat.
     void checkpointStoragePhase();
     void finishCheckpoint();
-    // Cleanup after the core checkpoint that does not require the write gate.
-    void postCheckpointCleanup();
+    // Cleanup after the core checkpoint. If the write gate is held, page-manager changes made by
+    // the checkpoint itself can be marked clean.
+    void postCheckpointCleanup(bool canResetPageManagerToCurrent = true);
     void rollback();
     bool wasWalRotated() const { return walRotated; }
 

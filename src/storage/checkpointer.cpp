@@ -258,7 +258,7 @@ void Checkpointer::finishCheckpoint() {
     }
 }
 
-void Checkpointer::postCheckpointCleanup() {
+void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) {
     if (isInMemory) {
         return;
     }
@@ -282,11 +282,19 @@ void Checkpointer::postCheckpointCleanup() {
         if (catalogVersionAtCheckpointByCatalog.contains(target.catalog)) {
             target.catalog->resetVersion(catalogVersionAtCheckpointByCatalog[target.catalog]);
         }
+        const auto walRotated = walRotatedByManager.at(target.storageManager);
+        const auto hasPostCheckpointWAL =
+            walRotated && target.storageManager->getWAL().getFileSize() > 0;
         if (pageManagerVersionAtCheckpointByManager.contains(target.storageManager)) {
-            target.storageManager->getDataFH()->getPageManager()->resetVersion(
-                pageManagerVersionAtCheckpointByManager[target.storageManager]);
+            auto* pageManager = target.storageManager->getDataFH()->getPageManager();
+            if (hasPostCheckpointWAL || !canResetPageManagerToCurrent) {
+                pageManager->resetVersion(
+                    pageManagerVersionAtCheckpointByManager[target.storageManager]);
+            } else {
+                pageManager->resetVersion();
+            }
         }
-        if (walRotatedByManager.at(target.storageManager)) {
+        if (walRotated) {
             target.storageManager->getWAL().clearFrozenWAL();
         } else {
             target.storageManager->getWAL().reset();
