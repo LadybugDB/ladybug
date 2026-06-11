@@ -11,12 +11,16 @@
 #include "common/types/string_t.h"
 #include "common/types/uint128_t.h"
 #include "storage/index/index.h"
+#include "storage/page_range.h"
 
 namespace lbug {
 namespace common {
 struct BufferReader;
 }
 namespace storage {
+
+class FileHandle;
+class ShadowFile;
 
 class ArtKey {
 public:
@@ -34,11 +38,15 @@ private:
 
 struct ArtPrimaryKeyIndexStorageInfo final : IndexStorageInfo {
     std::vector<std::pair<std::vector<uint8_t>, common::offset_t>> entries;
+    PageRange treePageRange;
+    uint64_t treeSize = 0;
 
     ArtPrimaryKeyIndexStorageInfo() = default;
     explicit ArtPrimaryKeyIndexStorageInfo(
         std::vector<std::pair<std::vector<uint8_t>, common::offset_t>> entries)
         : entries{std::move(entries)} {}
+    ArtPrimaryKeyIndexStorageInfo(PageRange treePageRange, uint64_t treeSize)
+        : treePageRange{treePageRange}, treeSize{treeSize} {}
     DELETE_COPY_DEFAULT_MOVE(ArtPrimaryKeyIndexStorageInfo);
 
     std::shared_ptr<common::BufferWriter> serialize() const override;
@@ -91,8 +99,10 @@ public:
         visible_func isVisible) override;
     void discardPrimaryKey(common::ValueVector* keyVector) override;
 
-    void checkpoint(main::ClientContext*, PageAllocator&) override;
+    void checkpoint(main::ClientContext*, PageAllocator&, ShadowFile&) override;
+    void rollbackCheckpoint() override;
     void serialize(common::Serializer& ser) const override;
+    void reclaimStorage(PageAllocator& pageAllocator) const override;
 
     static LBUG_API std::unique_ptr<Index> load(main::ClientContext* context,
         StorageManager* storageManager, IndexInfo indexInfo, std::span<uint8_t> storageInfoBuffer);
@@ -178,16 +188,25 @@ private:
     void clear();
     uint64_t calculateSerializedTreeSize(const Node& node) const;
     void serializeTree(const Node& node, common::Serializer& serializer) const;
-    void loadTree(common::BufferReader& reader, Node& node);
+    template<class READER>
+    void loadTree(READER& reader, Node& node);
     void collectEntries(const Node& node, std::vector<uint8_t>& key,
         std::vector<std::pair<std::vector<uint8_t>, common::offset_t>>& entries) const;
     void loadEntries(const ArtPrimaryKeyIndexStorageInfo& storageInfo);
+    void materializeDiskTree();
 
 private:
     Node root;
     std::vector<NodeBlock> nodeBlocks;
     uint64_t numAllocatedNodes = 1;
     std::array<uint64_t, 4> numNodesByKind{1, 0, 0, 0};
+    FileHandle* diskFileHandle = nullptr;
+    PageRange diskTreePageRange;
+    uint64_t diskTreeSize = 0;
+    bool diskBacked = false;
+    PageRange checkpointRollbackTreePageRange;
+    uint64_t checkpointRollbackTreeSize = 0;
+    bool hasCheckpointRollbackState = false;
     mutable std::mutex mutex;
 };
 

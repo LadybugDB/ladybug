@@ -461,7 +461,8 @@ public:
     void discardPrimaryKey(common::ValueVector* keyVector) override;
 
     void checkpointInMemory() override;
-    void checkpoint(main::ClientContext*, storage::PageAllocator& pageAllocator) override;
+    void checkpoint(main::ClientContext*, storage::PageAllocator& pageAllocator,
+        ShadowFile&) override;
     OverflowFile* getOverflowFile() const { return overflowFile.get(); }
 
     void rollbackCheckpoint() override;
@@ -470,7 +471,7 @@ public:
         DASSERT(indexInfo.keyDataTypes.size() == 1);
         return indexInfo.keyDataTypes[0];
     }
-    void reclaimStorage(PageAllocator& pageAllocator) const;
+    void reclaimStorage(PageAllocator& pageAllocator) const override;
 
     static LBUG_API std::unique_ptr<Index> load(main::ClientContext* context,
         StorageManager* storageManager, IndexInfo indexInfo, std::span<uint8_t> storageInfoBuffer);

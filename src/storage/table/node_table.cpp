@@ -707,7 +707,7 @@ bool NodeTable::checkpoint(main::ClientContext* context, TableCatalogEntry* tabl
         // TODO: The hash index checkpoint currently operates on live index state rather than
         // a snapshotTxn view. This is a pre-existing limitation; threading snapshotTxn through
         // the full hash-index infrastructure is deferred to a follow-up.
-        index.checkpoint(context, pageAllocator);
+        index.checkpoint(context, pageAllocator, *shadowFile);
     }
     // Checkpoint succeeded. Now vacuum dropped columns and update catalog IDs.
     // Guard under schemaMtx so concurrent readers see a consistent view.
@@ -751,8 +751,8 @@ void NodeTable::rollbackCheckpoint() {
 
 void NodeTable::reclaimStorage(PageAllocator& pageAllocator) const {
     nodeGroups->reclaimStorage(pageAllocator);
-    if (auto* pkIndex = tryGetPKIndex()) {
-        pkIndex->reclaimStorage(pageAllocator);
+    for (const auto& index : indexes) {
+        index.reclaimStorage(pageAllocator);
     }
 }
 

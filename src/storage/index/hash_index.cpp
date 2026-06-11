@@ -681,7 +681,8 @@ static void updateOverflowHeaderPageIfNeeded(IndexStorageInfo* storageInfo,
     }
 }
 
-void PrimaryKeyIndex::checkpoint(main::ClientContext*, storage::PageAllocator& pageAllocator) {
+void PrimaryKeyIndex::checkpoint(main::ClientContext*, storage::PageAllocator& pageAllocator,
+    ShadowFile&) {
     bool indexChanged = false;
     for (auto i = 0u; i < NUM_HASH_INDEXES; i++) {
         if (hashIndices[i]->checkpoint(pageAllocator)) {

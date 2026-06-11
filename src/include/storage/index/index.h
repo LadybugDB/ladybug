@@ -11,7 +11,8 @@
 
 namespace lbug::storage {
 class StorageManager;
-}
+class ShadowFile;
+} // namespace lbug::storage
 namespace lbug {
 namespace transaction {
 class Transaction;
@@ -175,10 +176,13 @@ public:
     virtual void checkpointInMemory() {
         // DO NOTHING.
     };
-    virtual void checkpoint(main::ClientContext*, PageAllocator&) {
+    virtual void checkpoint(main::ClientContext*, PageAllocator&, ShadowFile&) {
         // DO NOTHING.
     }
     virtual void rollbackCheckpoint() {
+        // DO NOTHING.
+    }
+    virtual void reclaimStorage(PageAllocator&) const {
         // DO NOTHING.
     }
     virtual void finalize(main::ClientContext*) {
@@ -220,10 +224,11 @@ public:
     LBUG_API void load(main::ClientContext* context, StorageManager* storageManager);
     bool needCommitInsert() const { return index->needCommitInsert(); }
     // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
-    void checkpoint(main::ClientContext* context, PageAllocator& pageAllocator) {
+    void checkpoint(main::ClientContext* context, PageAllocator& pageAllocator,
+        ShadowFile& shadowFile) {
         if (loaded) {
             DASSERT(index);
-            index->checkpoint(context, pageAllocator);
+            index->checkpoint(context, pageAllocator, shadowFile);
         }
     }
     // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
@@ -231,6 +236,12 @@ public:
         if (loaded) {
             DASSERT(index);
             index->rollbackCheckpoint();
+        }
+    }
+    void reclaimStorage(PageAllocator& pageAllocator) const {
+        if (loaded) {
+            DASSERT(index);
+            index->reclaimStorage(pageAllocator);
         }
     }
     // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
