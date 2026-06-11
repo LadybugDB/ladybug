@@ -51,6 +51,7 @@ ActiveQuery::ActiveQuery() : interrupted{false} {}
 
 void ActiveQuery::reset() {
     interrupted = false;
+    queryID.reset();
     timer = Timer();
 }
 
@@ -571,6 +572,7 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                 if (!queryID) {
                     queryID = localDatabase->getNextQueryID();
                 }
+                setActiveQueryID(queryID.value());
                 const auto executionContext =
                     std::make_unique<ExecutionContext>(profiler.get(), this, *queryID);
                 auto mapper = PlanMapper(executionContext.get());

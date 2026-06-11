@@ -104,7 +104,7 @@ void CreateIndex::executeInternal(ExecutionContext* context) {
             throw BinderException(
                 std::format("Index type {} is not supported by CREATE INDEX.", indexType.typeName));
         }
-        table->buildIndexAndAdd(clientContext, std::move(index));
+        table->buildIndexAndAdd(clientContext, std::move(index), context->queryID);
         storagePKIndexExists = storagePKIndexExists || info.isPrimary;
     }
     if (!storageIndexNameExists) {
@@ -125,9 +125,6 @@ void CreateIndex::executeInternal(ExecutionContext* context) {
             transaction->shouldLogToWAL() && isArtIndex && !useCheckpointInsteadOfWAL);
         if (useCheckpointInsteadOfWAL) {
             transaction->setForceCheckpoint();
-            appendMessage("Using bulk indexing. This may take a while. If the database shuts down "
-                          "before this finishes, the index will be rebuilt during recovery.",
-                memoryManager);
         } else if (transaction->shouldLogToWAL() && isArtIndex) {
             auto physicalIndex = table->getIndex(info.indexName);
             DASSERT(physicalIndex.has_value());

@@ -4,6 +4,7 @@
 
 #include "common/exception/checkpoint.h"
 #include "common/exception/transaction_manager.h"
+#include "common/task_system/progress_bar.h"
 #include "main/attached_database.h"
 #include "main/client_context.h"
 #include "main/database.h"
@@ -16,6 +17,39 @@ using namespace lbug::storage;
 
 namespace lbug {
 namespace transaction {
+namespace {
+
+class QueryProgressScope {
+public:
+    QueryProgressScope(main::ClientContext& clientContext, double initialProgress) {
+        queryID = clientContext.getActiveQueryID();
+        if (!queryID.has_value()) {
+            return;
+        }
+        progressBar = ProgressBar::Get(clientContext);
+        progressBar->addPipeline();
+        progressBar->startProgress(queryID.value());
+        update(initialProgress);
+    }
+
+    ~QueryProgressScope() {
+        if (progressBar != nullptr) {
+            progressBar->endProgress(queryID.value());
+        }
+    }
+
+    void update(double progress) const {
+        if (progressBar != nullptr) {
+            progressBar->updateProgress(queryID.value(), progress);
+        }
+    }
+
+private:
+    ProgressBar* progressBar = nullptr;
+    std::optional<uint64_t> queryID;
+};
+
+} // namespace
 
 Transaction* TransactionManager::beginTransaction(main::ClientContext& clientContext,
     TransactionType type) {
@@ -251,6 +285,7 @@ void TransactionManager::tryCheckpoint(main::ClientContext& clientContext) {
 }
 
 void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
+    QueryProgressScope progress{clientContext, 0.01};
     // We only need to wait for active write transactions to leave the system before
     // checkpointing. Read transactions can continue safely because they use MVCC snapshot
     // isolation and shadow pages are applied with per-page locking.
@@ -273,6 +308,7 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
             snapshotTimestamp = lastTimestamp;
         }
         checkpointer->beginCheckpoint(snapshotTimestamp);
+        progress.update(0.15);
     } catch (std::exception& e) {
         checkpointer->rollback();
         throw CheckpointException{e};
@@ -290,12 +326,14 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     }
     try {
         checkpointer->checkpointStoragePhase();
+        progress.update(0.75);
     } catch (std::exception& e) {
         checkpointer->rollback();
         throw CheckpointException{e};
     }
     try {
         checkpointer->finishCheckpoint();
+        progress.update(0.95);
     } catch (std::exception& e) {
         checkpointer->rollback();
         throw CheckpointException{e};
@@ -309,6 +347,7 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
         }
     }
     checkpointer->postCheckpointCleanup(canResetPageManagerToCurrent);
+    progress.update(1.0);
     writeGate = {};
 }
 

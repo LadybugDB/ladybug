@@ -6,6 +6,7 @@
 #include "common/cast.h"
 #include "common/exception/message.h"
 #include "common/exception/runtime.h"
+#include "common/task_system/progress_bar.h"
 #include "common/type_utils.h"
 #include "common/types/types.h"
 #include "main/client_context.h"
@@ -933,12 +934,17 @@ bool NodeTable::scanPKColumn(const Transaction* transaction, const Value& keyToL
 }
 
 void NodeTable::scanIndexColumns(main::ClientContext* context, IndexScanHelper& scanHelper,
-    const NodeGroupCollection& nodeGroups_) const {
+    const NodeGroupCollection& nodeGroups_, std::optional<uint64_t> queryID) const {
     auto dataChunk = constructDataChunkForColumns(scanHelper.index->getIndexInfo().columnIDs);
     const auto scanState =
         scanHelper.initScanState(transaction::Transaction::Get(*context), dataChunk);
 
     const auto numNodeGroups = nodeGroups_.getNumNodeGroups();
+    auto* progressBar = queryID.has_value() ? common::ProgressBar::Get(*context) : nullptr;
+    if (progressBar != nullptr) {
+        progressBar->addPipeline();
+        progressBar->updateProgress(queryID.value(), numNodeGroups == 0 ? 1.0 : 0.01);
+    }
     for (node_group_idx_t nodeGroupToScan = 0u; nodeGroupToScan < numNodeGroups;
          ++nodeGroupToScan) {
         scanState->nodeGroup = nodeGroups_.getNodeGroupNoLock(nodeGroupToScan);
@@ -959,6 +965,10 @@ void NodeTable::scanIndexColumns(main::ClientContext* context, IndexScanHelper& 
                 }
             }
         }
+        if (progressBar != nullptr) {
+            progressBar->updateProgress(queryID.value(),
+                static_cast<double>(nodeGroupToScan + 1) / numNodeGroups);
+        }
     }
 }
 
@@ -970,13 +980,14 @@ void NodeTable::addIndex(std::unique_ptr<Index> index) {
     setHasChanges();
 }
 
-void NodeTable::buildIndexAndAdd(main::ClientContext* context, std::unique_ptr<Index> index) {
+void NodeTable::buildIndexAndAdd(main::ClientContext* context, std::unique_ptr<Index> index,
+    std::optional<uint64_t> queryID) {
     if (getIndex(index->getName()).has_value()) {
         throw RuntimeException("Index with name " + index->getName() + " already exists.");
     }
     CommittedIndexInserter indexInserter{this, index.get(),
         getVisibleFunc(transaction::Transaction::Get(*context))};
-    scanIndexColumns(context, indexInserter, *nodeGroups);
+    scanIndexColumns(context, indexInserter, *nodeGroups, queryID);
     indexes.push_back(IndexHolder{std::move(index)});
     setHasChanges();
 }

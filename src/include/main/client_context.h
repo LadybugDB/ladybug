@@ -61,6 +61,7 @@ class EmbeddedShell;
 struct ActiveQuery {
     explicit ActiveQuery();
     std::atomic<bool> interrupted;
+    std::optional<uint64_t> queryID;
     common::Timer timer;
 
     void reset();
@@ -97,6 +98,8 @@ public:
     // Timer and timeout
     void interrupt() { activeQuery.interrupted = true; }
     bool interrupted() const { return activeQuery.interrupted; }
+    void setActiveQueryID(uint64_t queryID) { activeQuery.queryID = queryID; }
+    std::optional<uint64_t> getActiveQueryID() const { return activeQuery.queryID; }
     bool hasTimeout() const { return clientConfig.timeoutInMS != 0; }
     void setQueryTimeOut(uint64_t timeoutInMS);
     uint64_t getQueryTimeOut() const;

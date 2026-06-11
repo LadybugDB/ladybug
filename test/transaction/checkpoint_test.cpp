@@ -692,9 +692,6 @@ TEST_F(ReviewFixesTest, BulkArtIndexUsesBlockingCheckpointInsteadOfPhysicalWAL) 
     unsetenv("LBUG_CREATE_INDEX_WAL_THRESHOLD");
     ASSERT_TRUE(createIndex->isSuccess()) << createIndex->getErrorMessage();
     ASSERT_TRUE(createIndex->hasNext());
-    auto message = createIndex->getNext()->getValue(0)->getValue<std::string>();
-    EXPECT_TRUE(message.find("Using bulk indexing.") != std::string::npos);
-    ASSERT_TRUE(createIndex->hasNext());
     EXPECT_EQ(createIndex->getNext()->getValue(0)->getValue<std::string>(),
         "Index art_bulk_name_idx has been created.");
     EXPECT_FALSE(createIndex->hasNext());

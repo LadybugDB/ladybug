@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <shared_mutex>
 
 #include "common/types/types.h"
@@ -167,7 +168,8 @@ public:
         std::vector<common::offset_t>& results) const;
 
     void addIndex(std::unique_ptr<Index> index);
-    void buildIndexAndAdd(main::ClientContext* context, std::unique_ptr<Index> index);
+    void buildIndexAndAdd(main::ClientContext* context, std::unique_ptr<Index> index,
+        std::optional<uint64_t> queryID = std::nullopt);
     void dropIndex(const std::string& name);
 
     common::column_id_t getPKColumnID() const { return pkColumnID; }
@@ -254,7 +256,8 @@ private:
     bool scanPKColumn(const transaction::Transaction* transaction, const common::Value& keyToLookup,
         std::vector<ColumnPredicateSet> columnPredicateSets, common::offset_t& result) const;
     void scanIndexColumns(main::ClientContext* context, IndexScanHelper& scanHelper,
-        const NodeGroupCollection& nodeGroups_) const;
+        const NodeGroupCollection& nodeGroups_,
+        std::optional<uint64_t> queryID = std::nullopt) const;
 
 private:
     // Protects the `columns` vector from concurrent access during checkpoint
