@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 #include <future>
 #include <mutex>
@@ -667,6 +668,40 @@ TEST_F(ReviewFixesTest, RecoverSecondaryArtIndexCreatedAfterLastCheckpoint) {
     createDBAndConn();
 
     auto result = conn->query("MATCH (n:art_wal) WHERE n.name = 'bob' RETURN n.id;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    EXPECT_FALSE(result->hasNext());
+}
+
+TEST_F(ReviewFixesTest, BulkArtIndexUsesBlockingCheckpointInsteadOfPhysicalWAL) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    setenv("LBUG_CREATE_INDEX_WAL_THRESHOLD", "1", 1);
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE art_bulk(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:art_bulk {id: 1, name: 'alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:art_bulk {id: 2, name: 'bob'});")->isSuccess());
+
+    auto createIndex =
+        conn->query("CREATE ART INDEX art_bulk_name_idx FOR (n:art_bulk) ON (n.name);");
+    unsetenv("LBUG_CREATE_INDEX_WAL_THRESHOLD");
+    ASSERT_TRUE(createIndex->isSuccess()) << createIndex->getErrorMessage();
+    ASSERT_TRUE(createIndex->hasNext());
+    auto message = createIndex->getNext()->getValue(0)->getValue<std::string>();
+    EXPECT_TRUE(message.find("checkpoint-instead-of-WAL") != std::string::npos);
+    ASSERT_TRUE(createIndex->hasNext());
+    EXPECT_EQ(createIndex->getNext()->getValue(0)->getValue<std::string>(),
+        "Index art_bulk_name_idx has been created.");
+    EXPECT_FALSE(createIndex->hasNext());
+
+    createDBAndConn();
+
+    auto result = conn->query("MATCH (n:art_bulk) WHERE n.name = 'bob' RETURN n.id;");
     ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
     ASSERT_TRUE(result->hasNext());
     EXPECT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);

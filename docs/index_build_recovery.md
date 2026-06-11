@@ -13,8 +13,23 @@ index storage instead of rescanning the base table.
 
 ## Large index optimization
 
-For very large indexes, writing the full serialized tree into the WAL can duplicate many gigabytes
-of data. The intended optimization is checkpoint-instead-of-WAL:
+For very large ART indexes, writing the full serialized tree into the WAL can duplicate many
+gigabytes of data. `CREATE ART INDEX` switches to a blocking checkpoint-instead-of-WAL path when the
+serialized ART tree is larger than the configured threshold. The statement returns a message saying
+this path is active, commits a small catalog WAL record, and forces a blocking checkpoint before
+returning to the user. If the process crashes before that checkpoint completes, WAL replay sees the
+catalog index entry and rebuilds the physical ART index by scanning the base table.
+
+The default threshold is 256 MiB. Tests can override it with
+`LBUG_CREATE_INDEX_WAL_THRESHOLD=<bytes>`.
+
+The key safety rule is that there must be no window where a valid catalog index entry is committed
+without durable physical index pages or a WAL record/recovery path that can recreate them.
+
+## Future abandoned-build GC
+
+A cheaper crash-recovery path for large index builds would write index pages before commit and keep
+explicit build state:
 
 1. Build the index into private storage while the catalog entry is not visible to queries.
 2. At commit, hold the write gate and persist the index pages through the checkpoint/shadow protocol.
@@ -22,8 +37,8 @@ of data. The intended optimization is checkpoint-instead-of-WAL:
 4. Commit with a small WAL record that points at the durable index storage, or with no index WAL
    payload if the checkpoint record fully covers the transaction.
 
-The key safety rule is that there must be no window where a valid catalog index entry is committed
-without durable physical index pages or a WAL record that can recreate them.
+If a crash happens during the build, recovery should ignore incomplete build metadata and let normal
+space reclamation garbage collect the abandoned index pages later.
 
 ## Future online build
 

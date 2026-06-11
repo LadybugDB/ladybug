@@ -321,10 +321,10 @@ bool Catalog::containsType(const Transaction* transaction, const std::string& ty
     return types->containsEntry(transaction, typeName);
 }
 
-void Catalog::createIndex(Transaction* transaction,
-    std::unique_ptr<CatalogEntry> indexCatalogEntry) {
+void Catalog::createIndex(Transaction* transaction, std::unique_ptr<CatalogEntry> indexCatalogEntry,
+    bool skipLoggingToWAL) {
     DASSERT(indexCatalogEntry->getType() == CatalogEntryType::INDEX_ENTRY);
-    indexes->createEntry(transaction, std::move(indexCatalogEntry));
+    indexes->createEntry(transaction, std::move(indexCatalogEntry), skipLoggingToWAL);
 }
 
 IndexCatalogEntry* Catalog::getIndex(const Transaction* transaction, table_id_t tableID,

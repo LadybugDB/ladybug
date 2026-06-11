@@ -1,5 +1,7 @@
 #include "processor/operator/ddl/create_index.h"
 
+#include <cstdlib>
+
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "common/exception/binder.h"
@@ -17,6 +19,21 @@ using namespace lbug::common;
 
 namespace lbug {
 namespace processor {
+
+static constexpr uint64_t DEFAULT_CREATE_INDEX_WAL_THRESHOLD = 256ull * 1024 * 1024;
+
+static uint64_t getCreateIndexWalThreshold() {
+    const auto* threshold = std::getenv("LBUG_CREATE_INDEX_WAL_THRESHOLD"); // NOLINT(*-mt-unsafe)
+    if (threshold == nullptr || threshold[0] == '\0') {
+        return DEFAULT_CREATE_INDEX_WAL_THRESHOLD;
+    }
+    char* end = nullptr;
+    const auto parsed = std::strtoull(threshold, &end, 10);
+    if (end == threshold || *end != '\0') {
+        return DEFAULT_CREATE_INDEX_WAL_THRESHOLD;
+    }
+    return parsed;
+}
 
 static std::string getExistingIndexName(Catalog* catalog, transaction::Transaction* transaction,
     common::table_id_t tableID, common::property_id_t propertyID) {
@@ -91,13 +108,27 @@ void CreateIndex::executeInternal(ExecutionContext* context) {
         storagePKIndexExists = storagePKIndexExists || info.isPrimary;
     }
     if (!storageIndexNameExists) {
+        const auto isArtIndex = StringUtils::caseInsensitiveEquals(indexType.typeName,
+            storage::ArtPrimaryKeyIndex::getIndexType().typeName);
+        bool useCheckpointInsteadOfWAL = false;
+        if (transaction->shouldLogToWAL() && isArtIndex) {
+            auto physicalIndex = table->getIndex(info.indexName);
+            DASSERT(physicalIndex.has_value());
+            const auto treeSize =
+                physicalIndex.value()->cast<storage::ArtPrimaryKeyIndex>().getSerializedTreeSize();
+            useCheckpointInsteadOfWAL = treeSize > getCreateIndexWalThreshold();
+        }
         catalog->createIndex(transaction,
             std::make_unique<IndexCatalogEntry>(indexType.typeName, info.tableID, info.indexName,
                 std::vector<property_id_t>{info.propertyID},
-                std::make_unique<BuiltinIndexAuxInfo>()));
-        if (transaction->shouldLogToWAL() &&
-            StringUtils::caseInsensitiveEquals(indexType.typeName,
-                storage::ArtPrimaryKeyIndex::getIndexType().typeName)) {
+                std::make_unique<BuiltinIndexAuxInfo>()),
+            transaction->shouldLogToWAL() && isArtIndex && !useCheckpointInsteadOfWAL);
+        if (useCheckpointInsteadOfWAL) {
+            transaction->setForceCheckpoint();
+            appendMessage("Using checkpoint-instead-of-WAL path for bulk ART index creation; this "
+                          "statement will return after the checkpoint is durable.",
+                memoryManager);
+        } else if (transaction->shouldLogToWAL() && isArtIndex) {
             auto physicalIndex = table->getIndex(info.indexName);
             DASSERT(physicalIndex.has_value());
             auto treeBytes =

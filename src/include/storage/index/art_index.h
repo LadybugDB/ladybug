@@ -104,6 +104,7 @@ public:
     void serialize(common::Serializer& ser) const override;
     void reclaimStorage(PageAllocator& pageAllocator) const override;
     std::vector<IndexStorageEntry> getStorageEntries() const override;
+    uint64_t getSerializedTreeSize() const;
     std::vector<uint8_t> serializeTreeToBytes() const;
 
     static LBUG_API std::unique_ptr<Index> load(main::ClientContext* context,

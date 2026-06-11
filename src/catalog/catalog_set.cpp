@@ -62,7 +62,8 @@ CatalogEntry* CatalogSet::getEntryNoLock(const Transaction* transaction,
     return entry;
 }
 
-oid_t CatalogSet::createEntry(Transaction* transaction, std::unique_ptr<CatalogEntry> entry) {
+oid_t CatalogSet::createEntry(Transaction* transaction, std::unique_ptr<CatalogEntry> entry,
+    bool skipLoggingToWAL) {
     CatalogEntry* entryPtr = nullptr;
     oid_t oid = INVALID_OID;
     {
@@ -73,7 +74,7 @@ oid_t CatalogSet::createEntry(Transaction* transaction, std::unique_ptr<CatalogE
     }
     DASSERT(entryPtr);
     if (transaction->shouldAppendToUndoBuffer()) {
-        transaction->pushCreateDropCatalogEntry(*this, *entryPtr, isInternal());
+        transaction->pushCreateDropCatalogEntry(*this, *entryPtr, isInternal(), skipLoggingToWAL);
     }
     return oid;
 }

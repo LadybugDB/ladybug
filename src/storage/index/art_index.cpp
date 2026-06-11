@@ -1409,6 +1409,11 @@ std::vector<uint8_t> ArtPrimaryKeyIndex::serializeTreeToBytes() const {
     return bytes;
 }
 
+uint64_t ArtPrimaryKeyIndex::getSerializedTreeSize() const {
+    std::lock_guard lck{mutex};
+    return diskBacked ? diskTreeSize : calculateSerializedTreeSize(root);
+}
+
 void ArtPrimaryKeyIndex::checkpoint(main::ClientContext*, PageAllocator& pageAllocator,
     ShadowFile& shadowFile) {
     std::lock_guard lck{mutex};

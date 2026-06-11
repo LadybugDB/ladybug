@@ -31,7 +31,7 @@ public:
     bool containsEntry(const transaction::Transaction* transaction, const std::string& name);
     CatalogEntry* getEntry(const transaction::Transaction* transaction, const std::string& name);
     common::oid_t createEntry(transaction::Transaction* transaction,
-        std::unique_ptr<CatalogEntry> entry);
+        std::unique_ptr<CatalogEntry> entry, bool skipLoggingToWAL = false);
     void dropEntry(transaction::Transaction* transaction, const std::string& name,
         common::oid_t oid);
 

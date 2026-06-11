@@ -68,7 +68,8 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
 }
 
 void TransactionManager::commit(main::ClientContext& clientContext, Transaction* transaction) {
-    bool shouldCheckpoint = false;
+    bool shouldForceCheckpoint = false;
+    bool shouldAutoCheckpoint = false;
     bool markedAsCommitting = false;
     uint64_t walCommitSequence = 0;
     try {
@@ -97,8 +98,8 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
                     nextWALCommitSequenceToPublish++;
                     cvForPublishingCommit.notify_all();
                 }
-                shouldCheckpoint = transaction->shouldForceCheckpoint() ||
-                                   Checkpointer::canAutoCheckpoint(clientContext, *transaction);
+                shouldForceCheckpoint = transaction->shouldForceCheckpoint();
+                shouldAutoCheckpoint = Checkpointer::canAutoCheckpoint(clientContext, *transaction);
                 clearTransactionNoLock(transaction->getID());
                 activeWriteTransactionCount.fetch_sub(1, std::memory_order_release);
                 committingWriteTransactionCount.fetch_sub(1, std::memory_order_release);
@@ -131,7 +132,9 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
     }
     // Checkpoint outside the public function lock so active writers can finish
     // (commit/rollback) during the drain phase instead of deadlocking.
-    if (shouldCheckpoint) {
+    if (shouldForceCheckpoint) {
+        checkpoint(clientContext);
+    } else if (shouldAutoCheckpoint) {
         tryCheckpoint(clientContext);
     }
 }
