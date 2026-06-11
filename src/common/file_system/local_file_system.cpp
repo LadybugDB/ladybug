@@ -421,35 +421,59 @@ void LocalFileSystem::readFromFile(FileInfo& fileInfo, void* buffer, uint64_t nu
     uint64_t position) const {
     auto localFileInfo = fileInfo.constPtrCast<LocalFileInfo>();
     DASSERT(localFileInfo->getFileSize() >= position + numBytes);
+    auto outputBuffer = static_cast<uint8_t*>(buffer);
+    uint64_t remainingNumBytesToRead = numBytes;
+    uint64_t bufferOffset = 0;
+    // Keep reads below common OS syscall transfer limits.
+    constexpr uint64_t maxBytesToReadAtOnce = 1ull << 30;
+    while (remainingNumBytesToRead > 0) {
+        const auto numBytesToRead = (std::min)(remainingNumBytesToRead, maxBytesToReadAtOnce);
 #if defined(_WIN32)
-    DWORD numBytesRead;
-    OVERLAPPED overlapped = {};
-    overlapped.Offset = position & 0xffffffff;
-    overlapped.OffsetHigh = position >> 32;
-    if (!ReadFile((HANDLE)localFileInfo->handle, buffer, numBytes, &numBytesRead, &overlapped)) {
-        auto error = GetLastError();
-        throw IOException(
-            std::format("Cannot read from file: {} handle: {} "
-                        "numBytesRead: {} numBytesToRead: {} position: {}. Error {}: {}",
-                fileInfo.path, (intptr_t)localFileInfo->handle, numBytesRead, numBytes, position,
-                error, std::system_category().message(error)));
-    }
-    if (numBytesRead != numBytes && fileInfo.getFileSize() != position + numBytesRead) {
-        throw IOException(std::format("Cannot read from file: {} handle: {} "
-                                      "numBytesRead: {} numBytesToRead: {} position: {}",
-            fileInfo.path, (intptr_t)localFileInfo->handle, numBytesRead, numBytes, position));
-    }
+        DWORD numBytesRead;
+        OVERLAPPED overlapped = {};
+        overlapped.Offset = position & 0xffffffff;
+        overlapped.OffsetHigh = position >> 32;
+        if (!ReadFile((HANDLE)localFileInfo->handle, outputBuffer + bufferOffset, numBytesToRead,
+                &numBytesRead, &overlapped)) {
+            auto error = GetLastError();
+            throw IOException(
+                std::format("Cannot read from file: {} handle: {} "
+                            "numBytesRead: {} numBytesToRead: {} position: {}. Error {}: {}",
+                    fileInfo.path, (intptr_t)localFileInfo->handle, numBytesRead, numBytesToRead,
+                    position, error, std::system_category().message(error)));
+        }
+        if (numBytesRead != numBytesToRead && fileInfo.getFileSize() != position + numBytesRead) {
+            throw IOException(std::format("Cannot read from file: {} handle: {} "
+                                          "numBytesRead: {} numBytesToRead: {} position: {}",
+                fileInfo.path, (intptr_t)localFileInfo->handle, numBytesRead, numBytesToRead,
+                position));
+        }
 #else
-    auto numBytesRead = pread(localFileInfo->fd, buffer, numBytes, position);
-    if (static_cast<uint64_t>(numBytesRead) != numBytes &&
-        localFileInfo->getFileSize() != position + numBytesRead) {
-        // LCOV_EXCL_START
-        throw IOException(std::format("Cannot read from file: {} fileDescriptor: {} "
-                                      "numBytesRead: {} numBytesToRead: {} position: {}",
-            fileInfo.path, localFileInfo->fd, numBytesRead, numBytes, position));
-        // LCOV_EXCL_STOP
-    }
+        auto numBytesRead =
+            pread(localFileInfo->fd, outputBuffer + bufferOffset, numBytesToRead, position);
+        if (numBytesRead < 0) {
+            // LCOV_EXCL_START
+            throw IOException(std::format("Cannot read from file: {} fileDescriptor: {} "
+                                          "numBytesRead: {} numBytesToRead: {} position: {}",
+                fileInfo.path, localFileInfo->fd, numBytesRead, numBytesToRead, position));
+            // LCOV_EXCL_STOP
+        }
+        if (static_cast<uint64_t>(numBytesRead) != numBytesToRead &&
+            localFileInfo->getFileSize() != position + numBytesRead) {
+            // LCOV_EXCL_START
+            throw IOException(std::format("Cannot read from file: {} fileDescriptor: {} "
+                                          "numBytesRead: {} numBytesToRead: {} position: {}",
+                fileInfo.path, localFileInfo->fd, numBytesRead, numBytesToRead, position));
+            // LCOV_EXCL_STOP
+        }
 #endif
+        if (numBytesRead == 0) {
+            break;
+        }
+        remainingNumBytesToRead -= numBytesRead;
+        position += numBytesRead;
+        bufferOffset += numBytesRead;
+    }
 }
 
 int64_t LocalFileSystem::readFile(FileInfo& fileInfo, void* buf, size_t nbyte) const {

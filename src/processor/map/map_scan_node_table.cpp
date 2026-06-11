@@ -111,7 +111,20 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapScanNodeTable(
             alias, indexType);
         return std::make_unique<PrimaryKeyScanNodeTable>(std::move(scanInfo), std::move(tableInfos),
             std::move(evaluator), std::move(upperBoundEvaluator), primaryKeyScanInfo.isRange,
-            primaryKeyScanInfo.lowerInclusive, primaryKeyScanInfo.upperInclusive,
+            false /* isIndexEquality */, primaryKeyScanInfo.lowerInclusive,
+            primaryKeyScanInfo.upperInclusive, "", std::move(sharedState), getOperatorID(),
+            std::move(printInfo));
+    }
+    case LogicalScanNodeTableType::SECONDARY_INDEX_SCAN: {
+        auto& secondaryIndexScanInfo = scan.getExtraInfo()->constCast<SecondaryIndexScanInfo>();
+        auto exprMapper = ExpressionMapper(outSchema);
+        auto evaluator = exprMapper.getEvaluator(secondaryIndexScanInfo.key);
+        auto sharedState = std::make_shared<PrimaryKeyScanSharedState>(tableInfos.size());
+        auto printInfo = std::make_unique<PrimaryKeyScanPrintInfo>(scan.getProperties(),
+            secondaryIndexScanInfo.key->toString(), alias, "ART");
+        return std::make_unique<PrimaryKeyScanNodeTable>(std::move(scanInfo), std::move(tableInfos),
+            std::move(evaluator), nullptr /* upperBoundEvaluator */, true /* isRange */,
+            true /* isIndexEquality */, true, true, secondaryIndexScanInfo.indexName,
             std::move(sharedState), getOperatorID(), std::move(printInfo));
     }
     default:

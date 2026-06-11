@@ -158,6 +158,13 @@ public:
         common::ValueVector* lowerBoundVector, uint64_t lowerBoundPos, bool lowerInclusive,
         common::ValueVector* upperBoundVector, uint64_t upperBoundPos, bool upperInclusive,
         common::idx_t maxResults, std::vector<common::offset_t>& results) const;
+    bool lookupIndexRange(const transaction::Transaction* transaction, const std::string& indexName,
+        common::ValueVector* lowerBoundVector, uint64_t lowerBoundPos, bool lowerInclusive,
+        common::ValueVector* upperBoundVector, uint64_t upperBoundPos, bool upperInclusive,
+        common::idx_t maxResults, std::vector<common::offset_t>& results) const;
+    bool lookupIndex(const transaction::Transaction* transaction, const std::string& indexName,
+        common::ValueVector* keyVector, uint64_t keyPos,
+        std::vector<common::offset_t>& results) const;
 
     void addIndex(std::unique_ptr<Index> index);
     void buildIndexAndAdd(main::ClientContext* context, std::unique_ptr<Index> index);

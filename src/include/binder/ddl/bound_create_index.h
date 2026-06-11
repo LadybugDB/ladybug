@@ -16,6 +16,7 @@ struct BoundCreateIndexInfo {
     common::property_id_t propertyID;
     common::column_id_t columnID;
     common::PhysicalTypeID keyDataType;
+    bool isPrimary;
     common::ConflictAction onConflict;
 
     BoundCreateIndexInfo copy() const { return *this; }

@@ -865,6 +865,29 @@ bool NodeTable::lookupPKRange(const Transaction* transaction, ValueVector* lower
         [&](offset_t offset) { return isVisibleNoLock(transaction, offset); });
 }
 
+bool NodeTable::lookupIndexRange(const Transaction* transaction, const std::string& indexName,
+    ValueVector* lowerBoundVector, uint64_t lowerBoundPos, bool lowerInclusive,
+    ValueVector* upperBoundVector, uint64_t upperBoundPos, bool upperInclusive, idx_t maxResults,
+    std::vector<offset_t>& results) const {
+    auto index = getIndex(indexName);
+    if (!index.has_value()) {
+        return false;
+    }
+    return index.value()->scanPrimaryKeyRange(lowerBoundVector, lowerBoundPos, lowerInclusive,
+        upperBoundVector, upperBoundPos, upperInclusive, maxResults, results,
+        [&](offset_t offset) { return isVisibleNoLock(transaction, offset); });
+}
+
+bool NodeTable::lookupIndex(const Transaction* transaction, const std::string& indexName,
+    ValueVector* keyVector, uint64_t keyPos, std::vector<offset_t>& results) const {
+    auto index = getIndex(indexName);
+    if (!index.has_value()) {
+        return false;
+    }
+    return index.value()->lookupAll(transaction, keyVector, keyPos, results,
+        [&](offset_t offset) { return isVisibleNoLock(transaction, offset); });
+}
+
 bool NodeTable::scanPKColumn(const Transaction* transaction, const Value& keyToLookup,
     std::vector<ColumnPredicateSet> columnPredicateSets, offset_t& result) const {
     auto dataChunk = constructDataChunkForColumns({pkColumnID});

@@ -151,6 +151,11 @@ public:
         visible_func /*isVisible*/) {
         return false;
     }
+    virtual bool lookupAll(const transaction::Transaction* /*transaction*/,
+        common::ValueVector* /*keyVector*/, uint64_t /*vectorPos*/,
+        std::vector<common::offset_t>& /*results*/, visible_func /*isVisible*/) {
+        return false;
+    }
     virtual bool scanPrimaryKeyRange(common::ValueVector* /*lowerBoundVector*/,
         uint64_t /*lowerBoundPos*/, bool /*lowerInclusive*/,
         common::ValueVector* /*upperBoundVector*/, uint64_t /*upperBoundPos*/,
@@ -206,7 +211,7 @@ class IndexHolder {
 public:
     explicit IndexHolder(std::unique_ptr<Index> loadedIndex);
     IndexHolder(IndexInfo indexInfo, std::unique_ptr<uint8_t[]> storageInfoBuffer,
-        uint32_t storageInfoBufferSize);
+        uint64_t storageInfoBufferSize);
 
     std::string getName() const { return indexInfo.name; }
     bool isLoaded() const { return loaded; }

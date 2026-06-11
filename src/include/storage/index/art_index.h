@@ -67,17 +67,23 @@ public:
         const common::ValueVector& nodeIDVector,
         const std::vector<common::ValueVector*>& indexVectors,
         Index::InsertState& insertState) override;
+    std::unique_ptr<UpdateState> initUpdateState(main::ClientContext* context,
+        common::column_id_t columnID, visible_func isVisible) override;
+    void update(transaction::Transaction* transaction, const common::ValueVector& nodeIDVector,
+        common::ValueVector& propertyVector, UpdateState& updateState) override;
 
     std::unique_ptr<DeleteState> initDeleteState(const transaction::Transaction*, MemoryManager*,
         visible_func) override {
         return std::make_unique<DeleteState>();
     }
-    void delete_(transaction::Transaction*, const common::ValueVector&, DeleteState&) override {
-        // Visibility rules filter deleted rows. Physical removal is used only for rollback cleanup.
-    }
+    void delete_(transaction::Transaction*, const common::ValueVector& nodeIDVector,
+        DeleteState&) override;
 
     bool lookupPrimaryKey(const transaction::Transaction* transaction,
         common::ValueVector* keyVector, uint64_t vectorPos, common::offset_t& result,
+        visible_func isVisible) override;
+    bool lookupAll(const transaction::Transaction* transaction, common::ValueVector* keyVector,
+        uint64_t vectorPos, std::vector<common::offset_t>& results,
         visible_func isVisible) override;
     bool scanPrimaryKeyRange(common::ValueVector* lowerBoundVector, uint64_t lowerBoundPos,
         bool lowerInclusive, common::ValueVector* upperBoundVector, uint64_t upperBoundPos,
@@ -86,6 +92,7 @@ public:
     void discardPrimaryKey(common::ValueVector* keyVector) override;
 
     void checkpoint(main::ClientContext*, PageAllocator&) override;
+    void serialize(common::Serializer& ser) const override;
 
     static LBUG_API std::unique_ptr<Index> load(main::ClientContext* context,
         StorageManager* storageManager, IndexInfo indexInfo, std::span<uint8_t> storageInfoBuffer);
@@ -114,19 +121,26 @@ private:
         };
 
         std::optional<common::offset_t> offset;
+        std::unique_ptr<std::vector<common::offset_t>> overflowOffsets;
+        std::vector<uint8_t> prefix;
         Kind kind = Kind::NODE4;
         uint16_t count = 0;
-        union {
-            SmallChildren small;
-            Node48Children node48;
-            Node256Children node256;
-        };
+        SmallChildren small;
+        std::unique_ptr<Node48Children> node48;
+        std::unique_ptr<Node256Children> node256;
 
         Node();
         Node* getChild(uint8_t byte) const;
         Node* getOrInsertChild(ArtPrimaryKeyIndex& index, uint8_t byte);
+        void insertChild(ArtPrimaryKeyIndex& index, uint8_t byte, Node* child);
         void removeChild(uint8_t byte);
-        bool empty() const { return !offset.has_value() && count == 0; }
+        bool hasOffsets() const {
+            return offset.has_value() || (overflowOffsets && !overflowOffsets->empty());
+        }
+        bool empty() const {
+            return !offset.has_value() && (!overflowOffsets || overflowOffsets->empty()) &&
+                   count == 0;
+        }
     };
 
     static constexpr uint64_t NODE_BLOCK_CAPACITY = 16 * 1024;
@@ -144,9 +158,17 @@ private:
     };
 
     bool insertInternal(const ArtKey& key, common::offset_t offset, visible_func isVisible);
+    void insertSecondaryInternal(const ArtKey& key, common::offset_t offset);
+    Node* findOrCreateLeaf(const std::vector<uint8_t>& key);
     bool lookup(const ArtKey& key, common::offset_t& result, visible_func isVisible) const;
+    const Node* findLeaf(const ArtKey& key) const;
+    void appendVisibleOffsets(const Node& node, std::vector<common::offset_t>& results,
+        visible_func isVisible) const;
     bool eraseInternal(Node& node, const std::vector<uint8_t>& key, uint64_t depth);
     void erase(const ArtKey& key);
+    static void eraseOffsetFromLeaf(Node& node, common::offset_t offset);
+    static void resetNodePayload(Node& node);
+    bool eraseOffsetInternal(Node& node, common::offset_t offset);
     Node* allocateNode();
     void recordKindChange(Node& node, Node::Kind newKind);
     void collectRange(const Node& node, std::vector<uint8_t>& key, const ArtKey* lowerBound,
@@ -154,9 +176,13 @@ private:
         common::idx_t maxResults, std::vector<common::offset_t>& results,
         visible_func isVisible) const;
     void clear();
+    uint64_t calculateSerializedTreeSize(const Node& node) const;
+    void serializeTree(const Node& node, common::Serializer& serializer) const;
+    void loadTree(common::BufferReader& reader, Node& node);
     void collectEntries(const Node& node, std::vector<uint8_t>& key,
         std::vector<std::pair<std::vector<uint8_t>, common::offset_t>>& entries) const;
     void loadEntries(const ArtPrimaryKeyIndexStorageInfo& storageInfo);
+    void loadEntries(common::BufferReader& reader);
 
 private:
     Node root;

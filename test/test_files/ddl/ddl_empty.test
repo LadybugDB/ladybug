@@ -156,13 +156,126 @@ Grace
 ---- 1
 Table art_bad_person has been created.
 -STATEMENT CREATE ART INDEX art_bad_person_name FOR (p:art_bad_person) ON (p.name);
----- error
-Binder exception: ART indexes are currently supported only on node primary keys.
+---- 1
+Index art_bad_person_name has been created.
 -STATEMENT CREATE ART INDEX art_bad_person_pk FOR (p:art_bad_person) ON (p.ID) OPTIONS {foo=true};
 ---- error
 Binder exception: CREATE ART INDEX does not support OPTIONS.
 -STATEMENT CALL enable_default_hash_index=true;
 ---- ok
+
+-CASE CreateSecondaryArtIndex
+-STATEMENT CREATE NODE TABLE art_secondary_person (ID INT64, name STRING, rank INT64, PRIMARY KEY(ID));
+---- 1
+Table art_secondary_person has been created.
+-STATEMENT CREATE (:art_secondary_person {ID: 1, name: 'Ada', rank: 2});
+---- ok
+-STATEMENT CREATE (:art_secondary_person {ID: 2, name: 'Ada', rank: 1});
+---- ok
+-STATEMENT CREATE (:art_secondary_person {ID: 3, name: 'Grace', rank: 3});
+---- ok
+-STATEMENT CREATE (:art_secondary_person {ID: 6, name: 'label-aa', rank: 6});
+---- ok
+-STATEMENT CREATE (:art_secondary_person {ID: 7, name: 'label-ab', rank: 7});
+---- ok
+-STATEMENT CREATE (:art_secondary_person {ID: 8, name: 'label-a', rank: 8});
+---- ok
+-STATEMENT CREATE (:art_secondary_person {ID: 9, name: 'label-abc', rank: 9});
+---- ok
+-STATEMENT CREATE ART INDEX art_secondary_person_name FOR (p:art_secondary_person) ON (p.name);
+---- 1
+Index art_secondary_person_name has been created.
+-STATEMENT CALL SHOW_INDEXES() WHERE table_name = 'art_secondary_person' RETURN table_name, index_name, index_type, property_names ORDER BY index_name;
+---- 1
+art_secondary_person|art_secondary_person_name|ART|[name]
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Ada' RETURN p.ID, p.rank ORDER BY p.rank DESC;
+---- 2
+1|2
+2|1
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Missing' RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'label-a' RETURN p.ID;
+---- 1
+8
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'label-aa' RETURN p.ID;
+---- 1
+6
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'label-ab' RETURN p.ID;
+---- 1
+7
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'label-abc' RETURN p.ID;
+---- 1
+9
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name >= 'label-a' AND p.name <= 'label-abc' RETURN p.ID ORDER BY p.name;
+---- 4
+8
+6
+7
+9
+-STATEMENT CREATE (:art_secondary_person {ID: 4, name: 'Ada', rank: 4});
+---- ok
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Ada' RETURN p.ID, p.rank ORDER BY p.ID;
+---- 3
+1|2
+2|1
+4|4
+-STATEMENT CREATE (:art_secondary_person {ID: 5, name: NULL, rank: 5});
+---- ok
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name IS NULL RETURN p.ID;
+---- 1
+5
+-STATEMENT MATCH (p:art_secondary_person {ID: 2}) SET p.name = 'Grace';
+---- ok
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Ada' RETURN p.ID ORDER BY p.ID;
+---- 2
+1
+4
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Grace' RETURN p.ID ORDER BY p.ID;
+---- 2
+2
+3
+-STATEMENT MATCH (p:art_secondary_person {ID: 1}) DELETE p;
+---- ok
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Ada' RETURN p.ID ORDER BY p.ID;
+---- 1
+4
+-STATEMENT MATCH (p:art_secondary_person {ID: 4}) SET p.name = NULL;
+---- ok
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Ada' RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name IS NULL RETURN p.ID ORDER BY p.ID;
+---- 2
+4
+5
+-STATEMENT MATCH (p:art_secondary_person {ID: 5}) SET p.name = 'Grace';
+---- ok
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Grace' RETURN p.ID ORDER BY p.ID;
+---- 3
+2
+3
+5
+-STATEMENT CHECKPOINT;
+---- ok
+-RELOADDB
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Grace' RETURN p.ID ORDER BY p.ID;
+---- 3
+2
+3
+5
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name IS NULL RETURN p.ID ORDER BY p.ID;
+---- 1
+4
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name = 'Ada' RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (p:art_secondary_person) WHERE p.name >= 'label-a' AND p.name <= 'label-abc' RETURN p.ID ORDER BY p.name;
+---- 4
+8
+6
+7
+9
 
 # Check to see if Count() correctly handles full vectors that are all null
 -CASE AddInt64PropertyWithoutDefault

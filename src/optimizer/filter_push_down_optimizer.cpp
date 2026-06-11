@@ -3,11 +3,16 @@
 #include <algorithm>
 #include <array>
 #include <functional>
+#include <optional>
 #include <unordered_set>
 
 #include "binder/expression/literal_expression.h"
 #include "binder/expression/property_expression.h"
 #include "binder/expression/scalar_function_expression.h"
+#include "catalog/catalog.h"
+#include "catalog/catalog_entry/index_catalog_entry.h"
+#include "catalog/catalog_entry/table_catalog_entry.h"
+#include "common/string_utils.h"
 #include "main/client_context.h"
 #include "planner/join_order/cardinality_estimator.h"
 #include "planner/operator/extend/logical_extend.h"
@@ -24,6 +29,7 @@ using namespace lbug::binder;
 using namespace lbug::common;
 using namespace lbug::planner;
 using namespace lbug::storage;
+using namespace lbug::catalog;
 
 namespace lbug {
 namespace optimizer {
@@ -192,6 +198,53 @@ static bool isConstantExpression(const std::shared_ptr<Expression> expression) {
     }
 }
 
+static bool isNodeProperty(const Expression& expression, const Expression& nodeID) {
+    if (expression.expressionType != ExpressionType::PROPERTY) {
+        return false;
+    }
+    auto& property = expression.constCast<PropertyExpression>();
+    return property.getVariableName() == nodeID.constCast<PropertyExpression>().getVariableName();
+}
+
+static std::optional<std::pair<std::shared_ptr<Expression>, std::string>>
+popSecondaryARTEqualityComparison(PredicateSet& predicateSet, const Expression& nodeID,
+    table_id_t tableID, main::ClientContext* context) {
+    auto catalog = Catalog::Get(*context);
+    auto transaction = transaction::Transaction::Get(*context);
+    auto tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
+    auto* table = StorageManager::Get(*context)->getTable(tableID)->ptrCast<NodeTable>();
+    for (auto i = 0u; i < predicateSet.equalityPredicates.size(); ++i) {
+        auto predicate = predicateSet.equalityPredicates[i];
+        auto lhs = predicate->getChild(0);
+        auto rhs = predicate->getChild(1);
+        if (!isNodeProperty(*lhs, nodeID) && isNodeProperty(*rhs, nodeID)) {
+            std::swap(lhs, rhs);
+        }
+        if (!isNodeProperty(*lhs, nodeID) || !isConstantExpression(rhs)) {
+            continue;
+        }
+        auto& property = lhs->constCast<PropertyExpression>();
+        if (property.isPrimaryKey(tableID) || !property.hasProperty(tableID)) {
+            continue;
+        }
+        const auto propertyID = tableEntry->getPropertyID(property.getPropertyName());
+        for (auto* indexEntry : catalog->getIndexEntries(transaction, tableID)) {
+            if (!indexEntry->containsPropertyID(propertyID) ||
+                !StringUtils::caseInsensitiveEquals(indexEntry->getIndexType(),
+                    ArtPrimaryKeyIndex::getIndexType().typeName)) {
+                continue;
+            }
+            auto index = table->getIndex(indexEntry->getIndexName());
+            if (!index.has_value() || index.value()->isPrimary()) {
+                continue;
+            }
+            predicateSet.equalityPredicates.erase(predicateSet.equalityPredicates.begin() + i);
+            return std::make_pair(rhs, indexEntry->getIndexName());
+        }
+    }
+    return std::nullopt;
+}
+
 std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableReplace(
     const std::shared_ptr<LogicalOperator>& op) {
     auto& scan = op->cast<LogicalScanNodeTable>();
@@ -235,6 +288,16 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableRepl
                 scan.setExtraInfo(std::move(extraInfo));
                 scan.computeFlatSchema();
             }
+        }
+    }
+    if (scan.getScanType() == LogicalScanNodeTableType::SCAN && tableIDs.size() == 1) {
+        auto secondaryIndexComparison =
+            popSecondaryARTEqualityComparison(predicateSet, *nodeID, tableIDs[0], context);
+        if (secondaryIndexComparison.has_value()) {
+            scan.setScanType(LogicalScanNodeTableType::SECONDARY_INDEX_SCAN);
+            scan.setExtraInfo(std::make_unique<SecondaryIndexScanInfo>(
+                secondaryIndexComparison->second, secondaryIndexComparison->first));
+            scan.computeFlatSchema();
         }
     }
     return finishPushDown(op);

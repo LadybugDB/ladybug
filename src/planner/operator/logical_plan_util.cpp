@@ -88,7 +88,8 @@ void LogicalPlanUtil::encodeExtend(LogicalOperator* logicalOperator, std::string
 void LogicalPlanUtil::encodeScanNodeTable(LogicalOperator* logicalOperator,
     std::string& encodeString) {
     auto& scan = logicalOperator->constCast<LogicalScanNodeTable>();
-    if (scan.getScanType() == LogicalScanNodeTableType::PRIMARY_KEY_SCAN) {
+    if (scan.getScanType() == LogicalScanNodeTableType::PRIMARY_KEY_SCAN ||
+        scan.getScanType() == LogicalScanNodeTableType::SECONDARY_INDEX_SCAN) {
         encodeString += "IndexScan";
     } else {
         encodeString += "S";

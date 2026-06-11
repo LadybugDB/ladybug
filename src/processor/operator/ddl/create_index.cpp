@@ -56,13 +56,14 @@ void CreateIndex::executeInternal(ExecutionContext* context) {
     auto* table = storageManager->getTable(info.tableID)->ptrCast<storage::NodeTable>();
     const auto storageIndexNameExists = table->getIndex(info.indexName).has_value();
     auto storagePKIndexExists = table->tryGetPrimaryKeyIndex() != nullptr;
-    const auto canCreatePhysicalIndex = !storagePKIndexExists && !storageIndexNameExists;
+    const auto canCreatePhysicalIndex =
+        !storageIndexNameExists && (!info.isPrimary || !storagePKIndexExists);
     auto indexTypeOptional = storageManager->getIndexType(info.indexType);
     if (!indexTypeOptional.has_value()) {
         throw BinderException(std::format("Index type {} does not exist.", info.indexType));
     }
     const auto& indexType = indexTypeOptional.value().get();
-    if (storagePKIndexExists &&
+    if (info.isPrimary && storagePKIndexExists &&
         table->tryGetPrimaryKeyIndex()->getIndexInfo().indexType != indexType.typeName) {
         throw BinderException(std::format(
             "Cannot create {} index because the table already has a {} primary-key index.",
@@ -70,8 +71,7 @@ void CreateIndex::executeInternal(ExecutionContext* context) {
     }
     if (canCreatePhysicalIndex) {
         storage::IndexInfo indexInfo{info.indexName, indexType.typeName, info.tableID,
-            {info.columnID}, {info.keyDataType},
-            indexType.constraintType == storage::IndexConstraintType::PRIMARY,
+            {info.columnID}, {info.keyDataType}, info.isPrimary,
             indexType.definitionType == storage::IndexDefinitionType::BUILTIN};
         std::unique_ptr<storage::Index> index;
         if (StringUtils::caseInsensitiveEquals(indexType.typeName,
@@ -87,9 +87,9 @@ void CreateIndex::executeInternal(ExecutionContext* context) {
                 std::format("Index type {} is not supported by CREATE INDEX.", indexType.typeName));
         }
         table->buildIndexAndAdd(clientContext, std::move(index));
-        storagePKIndexExists = true;
+        storagePKIndexExists = storagePKIndexExists || info.isPrimary;
     }
-    if (storagePKIndexExists) {
+    if (!storageIndexNameExists) {
         catalog->createIndex(transaction,
             std::make_unique<IndexCatalogEntry>(indexType.typeName, info.tableID, info.indexName,
                 std::vector<property_id_t>{info.propertyID},

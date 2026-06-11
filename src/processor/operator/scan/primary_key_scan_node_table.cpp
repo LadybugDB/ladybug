@@ -119,8 +119,16 @@ bool PrimaryKeyScanNodeTable::lookupRange(ExecutionContext* context) {
                 }
             }
             static constexpr auto maxRangeResults = std::numeric_limits<common::idx_t>::max();
-            if (!table.lookupPKRange(transaction, lowerBoundVector, lowerPos, lowerInclusive,
-                    upperBoundVector, upperPos, upperInclusive, maxRangeResults, rangeOffsets)) {
+            const auto found =
+                indexName.empty() ?
+                    table.lookupPKRange(transaction, lowerBoundVector, lowerPos, lowerInclusive,
+                        upperBoundVector, upperPos, upperInclusive, maxRangeResults, rangeOffsets) :
+                isIndexEquality ? table.lookupIndex(transaction, indexName, lowerBoundVector,
+                                      lowerPos, rangeOffsets) :
+                                  table.lookupIndexRange(transaction, indexName, lowerBoundVector,
+                                      lowerPos, lowerInclusive, upperBoundVector, upperPos,
+                                      upperInclusive, maxRangeResults, rangeOffsets);
+            if (!found) {
                 currentRangeTableIdx++;
                 continue;
             }

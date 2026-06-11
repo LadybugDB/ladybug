@@ -115,6 +115,8 @@ uint64_t CardinalityEstimator::estimateScanNode(const LogicalOperator& op) const
                    atLeastOne(getNodeIDDom(scan.getNodeID()->getUniqueName())) :
                    1;
     }
+    case LogicalScanNodeTableType::SECONDARY_INDEX_SCAN:
+        return atLeastOne(getNodeIDDom(scan.getNodeID()->getUniqueName()));
     default:
         return atLeastOne(getNodeIDDom(scan.getNodeID()->getUniqueName()));
     }

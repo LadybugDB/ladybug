@@ -35,6 +35,7 @@
 #include "parser/ddl/drop.h"
 #include "parser/expression/parsed_function_expression.h"
 #include "parser/expression/parsed_literal_expression.h"
+#include "storage/index/art_index.h"
 #include "storage/index/hash_index.h"
 #include "storage/storage_manager.h"
 #include "transaction/transaction.h"
@@ -422,8 +423,11 @@ std::unique_ptr<BoundStatement> Binder::bindCreateIndex(const Statement& stateme
     if (!nodeTableEntry->getStorage().empty()) {
         throw BinderException("CREATE INDEX is only supported on native node tables.");
     }
-    if (!StringUtils::caseInsensitiveEquals(nodeTableEntry->getPrimaryKeyName(),
-            info.propertyName)) {
+    const auto isPrimaryIndex =
+        StringUtils::caseInsensitiveEquals(nodeTableEntry->getPrimaryKeyName(), info.propertyName);
+    const auto isArtIndex = StringUtils::caseInsensitiveEquals(indexType,
+        storage::ArtPrimaryKeyIndex::getIndexType().typeName);
+    if (!isPrimaryIndex && !isArtIndex) {
         throw BinderException(std::format(
             "{} indexes are currently supported only on node primary keys.", indexType));
     }
@@ -434,7 +438,9 @@ std::unique_ptr<BoundStatement> Binder::bindCreateIndex(const Statement& stateme
     auto& property = tableEntry->getProperty(info.propertyName);
     std::vector<PropertyDefinition> propertyDefinitions;
     propertyDefinitions.push_back(property.copy());
-    validatePrimaryKey(property.getName(), propertyDefinitions);
+    if (isPrimaryIndex) {
+        validatePrimaryKey(property.getName(), propertyDefinitions);
+    }
     auto indexName = info.indexName.empty() ? std::string(storage::PrimaryKeyIndex::DEFAULT_NAME) :
                                               info.indexName;
     if (info.onConflict == ConflictAction::ON_CONFLICT_THROW) {
@@ -454,7 +460,7 @@ std::unique_ptr<BoundStatement> Binder::bindCreateIndex(const Statement& stateme
     BoundCreateIndexInfo boundInfo{indexType, std::move(indexName), info.tableName,
         tableEntry->getTableID(), property.getName(), tableEntry->getPropertyID(property.getName()),
         tableEntry->getColumnID(property.getName()), property.getType().getPhysicalType(),
-        info.onConflict};
+        isPrimaryIndex, info.onConflict};
     return std::make_unique<BoundCreateIndex>(std::move(boundInfo));
 }
 

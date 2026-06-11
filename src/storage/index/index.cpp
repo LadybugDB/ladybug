@@ -69,7 +69,7 @@ IndexHolder::IndexHolder(std::unique_ptr<Index> loadedIndex)
       loaded{true}, index{std::move(loadedIndex)} {}
 
 IndexHolder::IndexHolder(IndexInfo indexInfo, std::unique_ptr<uint8_t[]> storageInfoBuffer,
-    uint32_t storageInfoBufferSize)
+    uint64_t storageInfoBufferSize)
     : indexInfo{std::move(indexInfo)}, storageInfoBuffer{std::move(storageInfoBuffer)},
       storageInfoBufferSize{storageInfoBufferSize}, loaded{false}, index{nullptr} {}
 
