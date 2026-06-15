@@ -230,7 +230,7 @@ jobs:
       image: alpine:latest
     env:
       GEN: Ninja
-      EXTRA_CMAKE_FLAGS: -DOPENSSL_ROOT_DIR=/usr -DOPENSSL_INCLUDE_DIR=/usr/include -DOPENSSL_CRYPTO_LIBRARY=/usr/lib/libcrypto.so.3 -DOPENSSL_SSL_LIBRARY=/usr/lib/libssl.so.3
+      EXTRA_CMAKE_FLAGS: -DOPENSSL_ROOT_DIR=/usr/lib/openssl3 -DOPENSSL_INCLUDE_DIR=/usr/include/openssl3 -DOPENSSL_CRYPTO_LIBRARY=/usr/lib/openssl3/libcrypto.so -DOPENSSL_SSL_LIBRARY=/usr/lib/openssl3/libssl.so
       UW_S3_ACCESS_KEY_ID: ${{ secrets.UW_S3_ACCESS_KEY_ID }}
       UW_S3_SECRET_ACCESS_KEY: ${{ secrets.UW_S3_SECRET_ACCESS_KEY }}
       AWS_S3_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY_ID }}

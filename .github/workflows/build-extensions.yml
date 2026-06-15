@@ -153,7 +153,7 @@ jobs:
           source /opt/rh/gcc-toolset-13/enable
           export CC=gcc
           export CXX=g++
-          export EXTRA_CMAKE_FLAGS="-DOPENSSL_ROOT_DIR=/usr -DOPENSSL_INCLUDE_DIR=/usr/include -DOPENSSL_CRYPTO_LIBRARY=/usr/lib64/libcrypto.so.3 -DOPENSSL_SSL_LIBRARY=/usr/lib64/libssl.so.3"
+          export EXTRA_CMAKE_FLAGS="-DOPENSSL_ROOT_DIR=/usr/lib64/openssl3 -DOPENSSL_INCLUDE_DIR=/usr/include/openssl3 -DOPENSSL_CRYPTO_LIBRARY=/usr/lib64/openssl3/libcrypto.so -DOPENSSL_SSL_LIBRARY=/usr/lib64/openssl3/libssl.so"
           make extension-release
 
       - name: Build precompiled extensions (macOS)
