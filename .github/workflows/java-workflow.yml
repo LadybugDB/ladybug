@@ -199,7 +199,7 @@ jobs:
           path: tools/java_api/build/liblbug_java_native*
 
   build-windows-java:
-    runs-on: windows-latest
+    runs-on: windows-2022
     env:
       LBUG_JAVA_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
       LBUG_JAVA_PRECOMPILED_LIB_PATH: ${{ github.workspace }}/precompiled-liblbug/lbug.lib

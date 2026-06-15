@@ -81,7 +81,7 @@ jobs:
             artifact_name: mac-nodejs-module-x64
             node_name: lbugjs-darwin-x64.node
             mac_env: true
-          - os: windows-latest
+          - os: windows-2022
             arch: x64
             platform: win32
             artifact_name: windows-nodejs-module

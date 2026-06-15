@@ -25,7 +25,7 @@ jobs:
             os_name: osx
             arch: x86_64
             cmake_osx_architectures: x86_64
-          - os: windows-latest
+          - os: windows-2022
             os_name: win
             arch: x86_64
     runs-on: ${{ matrix.os }}

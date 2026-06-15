@@ -42,7 +42,7 @@ jobs:
           - os: macos-latest
             arch: arm64
           # Windows x86_64. Produces shared + static + CLI.
-          - os: windows-latest
+          - os: windows-2022
             arch: x86_64
             vcvars_bat: vcvars64
           # Windows ARM64. Produces shared + static + CLI.

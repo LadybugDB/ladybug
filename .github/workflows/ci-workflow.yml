@@ -141,7 +141,7 @@ jobs:
     needs: [ sanity-checks ]
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON((github.event_name == 'schedule' && '{"include":[{"platform":"linux","runner":"ubuntu-latest"},{"platform":"macos","runner":"macos-latest"},{"platform":"windows","runner":"windows-latest"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'macos' && '{"include":[{"platform":"macos","runner":"macos-latest"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'windows' && '{"include":[{"platform":"windows","runner":"windows-latest"}]}') || '{"include":[{"platform":"linux","runner":"ubuntu-latest"}]}') }}
+      matrix: ${{ fromJSON((github.event_name == 'schedule' && '{"include":[{"platform":"linux","runner":"ubuntu-latest"},{"platform":"macos","runner":"macos-latest"},{"platform":"windows","runner":"windows-2022"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'macos' && '{"include":[{"platform":"macos","runner":"macos-latest"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'windows' && '{"include":[{"platform":"windows","runner":"windows-2022"}]}') || '{"include":[{"platform":"linux","runner":"ubuntu-latest"}]}') }}
     env:
       GEN: Ninja
       TEST_JOBS: 4
