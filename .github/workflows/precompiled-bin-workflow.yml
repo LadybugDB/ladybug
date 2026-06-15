@@ -61,7 +61,7 @@ jobs:
         run: |
           dnf install -y 'dnf-command(config-manager)'
           dnf config-manager --set-enabled powertools
-          dnf install -y cmake ninja-build python3 python3-pip git ccache gcc-toolset-13 openssl-devel pkg-config
+          dnf install -y cmake ninja-build python3 python3-pip git ccache gcc-toolset-13 openssl3 openssl3-devel pkg-config
 
       - name: Install build dependencies (Linux perf)
         if: runner.os == 'Linux' && matrix.variant == 'perf'

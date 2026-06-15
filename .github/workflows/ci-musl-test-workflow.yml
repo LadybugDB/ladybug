@@ -245,7 +245,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: apk add --no-cache bash git make cmake ninja build-base linux-headers ccache python3 py3-pip curl wget unzip nodejs npm su-exec openssl-dev
+        run: apk add --no-cache bash git make cmake ninja build-base linux-headers ccache python3 py3-pip curl wget unzip nodejs npm su-exec openssl3 openssl3-dev
 
       - name: Match container user/group to Ubuntu runner
         run: |

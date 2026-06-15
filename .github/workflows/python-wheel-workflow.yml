@@ -106,7 +106,7 @@ jobs:
       # Set the manylinux image based on the detected arch (Linux only)
       CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
       CIBW_MANYLINUX_AARCH64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
-      CIBW_BEFORE_ALL_LINUX: "command -v dnf && dnf install -y ccache openssl-devel pkg-config || apk add --no-cache ccache openssl-dev pkgconfig"
+      CIBW_BEFORE_ALL_LINUX: "command -v dnf && dnf install -y ccache openssl3 openssl3-devel pkg-config || apk add --no-cache ccache openssl3 openssl3-dev pkgconfig"
       # Ensure CMake can locate OpenSSL 3 libraries inside manylinux images
       EXTRA_CMAKE_FLAGS: "-DOPENSSL_CRYPTO_LIBRARY=/usr/lib64/libcrypto.so.3 -DOPENSSL_SSL_LIBRARY=/usr/lib64/libssl.so.3"
       CIBW_ENVIRONMENT_LINUX: ${{ matrix.os == 'linux' && 'LBUG_API_PRECOMPILED_LIB_PATH=/project/precompiled-liblbug/liblbug.a CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache CCACHE_DIR=/project/.ccache' || '' }}
