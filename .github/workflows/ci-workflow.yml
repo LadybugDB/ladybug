@@ -219,6 +219,27 @@ jobs:
             # EXTRA_CMAKE_FLAGS disables that archive for Windows minimal CI only.
             make release
           else
+            # Probe system for libssl.so.3 (various distro layouts) and set EXTRA_CMAKE_FLAGS so CMake finds OpenSSL 3
+            LIBSSL_PATH=""
+            if command -v ldconfig >/dev/null 2>&1; then
+              LIBSSL_PATH=$(ldconfig -p | awk '/libssl.so.3/ {print $4; exit}')
+            fi
+            if [ -z "$LIBSSL_PATH" ]; then
+              # fallback candidate locations
+              for p in /usr/lib/x86_64-linux-gnu/libssl.so.3 /usr/lib/aarch64-linux-gnu/libssl.so.3 /usr/lib/libssl.so.3 /usr/lib64/openssl3/libssl.so.3 /usr/lib/openssl3/libssl.so; do
+                if [ -f "$p" ]; then
+                  LIBSSL_PATH="$p"
+                  break
+                fi
+              done
+            fi
+            if [ -n "$LIBSSL_PATH" ]; then
+              LIBCRYPTO_PATH=$(dirname "$LIBSSL_PATH")/libcrypto.so.3
+              echo "Found OpenSSL libssl at $LIBSSL_PATH, libcrypto at $LIBCRYPTO_PATH"
+              export EXTRA_CMAKE_FLAGS="$EXTRA_CMAKE_FLAGS -DOPENSSL_ROOT_DIR=/usr -DOPENSSL_INCLUDE_DIR=/usr/include -DOPENSSL_CRYPTO_LIBRARY=$LIBCRYPTO_PATH -DOPENSSL_SSL_LIBRARY=$LIBSSL_PATH"
+            else
+              echo "Warning: libssl.so.3 not found by probe; relying on existing EXTRA_CMAKE_FLAGS"
+            fi
             make relwithdebinfo
           fi
           if [ "$RUNNER_OS" = "Windows" ]; then

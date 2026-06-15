@@ -140,7 +140,7 @@ jobs:
           export CXX=g++
           export LDFLAGS="-static-libstdc++"
           # Ensure CMake finds OpenSSL 3 installed by openssl3 packages inside the manylinux container
-          export EXTRA_CMAKE_FLAGS="-DOPENSSL_ROOT_DIR=/usr/lib64/openssl3 -DOPENSSL_INCLUDE_DIR=/usr/include/openssl3 -DOPENSSL_CRYPTO_LIBRARY=/usr/lib64/openssl3/libcrypto.so -DOPENSSL_SSL_LIBRARY=/usr/lib64/openssl3/libssl.so"
+          export EXTRA_CMAKE_FLAGS="-DOPENSSL_ROOT_DIR=/usr/lib64/openssl3 -DOPENSSL_INCLUDE_DIR=/usr/include/openssl3 -DOPENSSL_CRYPTO_LIBRARY=/usr/lib64/openssl3/libcrypto.so -DOPENSSL_SSL_LIBRARY=/usr/lib64/openssl3/libssl.so.3"
           make GEN=Ninja
           make install
 
