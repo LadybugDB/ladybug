@@ -106,7 +106,7 @@ jobs:
       # Set the manylinux image based on the detected arch (Linux only)
       CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
       CIBW_MANYLINUX_AARCH64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
-      CIBW_BEFORE_ALL_LINUX: "command -v dnf && dnf install -y ccache openssl3 openssl3-devel pkg-config || apk add --no-cache ccache openssl3 openssl3-dev pkgconfig"
+      CIBW_BEFORE_ALL_LINUX: "(command -v dnf && dnf install -y ccache openssl3 openssl3-devel pkg-config || apk add --no-cache ccache openssl3 openssl3-dev pkgconfig) && ldconfig"
       # OpenSSL 3 CMake flags are embedded directly in CIBW_ENVIRONMENT_LINUX so they are
       # available in every per-Python build subprocess without relying on ENVIRONMENT_PASS.
       # Use soname links (/usr/lib64/libssl.so.3) instead of devel symlinks
