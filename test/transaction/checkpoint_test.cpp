@@ -11,6 +11,7 @@
 #include "storage/checkpointer.h"
 #include "storage/storage_manager.h"
 #include "storage/wal/wal.h"
+#include "test_env.h"
 #include "transaction/transaction_manager.h"
 #include <format>
 
