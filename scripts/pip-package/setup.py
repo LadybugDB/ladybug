@@ -86,6 +86,11 @@ class CMakeBuild(build_ext):
         full_cmd = ['make', 'python', 'NUM_THREADS=%d' % num_cores]
         precompiled_lib_path = os.environ.get('LBUG_API_PRECOMPILED_LIB_PATH', '').strip()
         extra_cmake_flags = os.environ.get('EXTRA_CMAKE_FLAGS', '').strip()
+        if not extra_cmake_flags:
+            flags_file = '/tmp/lbug_openssl_cmake_flags'
+            if os.path.exists(flags_file):
+                with open(flags_file) as f:
+                    extra_cmake_flags = f.read().strip()
         if precompiled_lib_path:
             self.announce("Using precompiled liblbug from %s." % precompiled_lib_path)
             flags = (
