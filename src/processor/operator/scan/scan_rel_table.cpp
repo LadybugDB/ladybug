@@ -207,45 +207,24 @@ bool ScanRelTable::fetchNextBoundNodeBatch(transaction::Transaction* transaction
 }
 
 void ScanRelTable::updatePackedChildSlices(sel_t outputSize) const {
-    // For non-packed extend we clear any packed child slices. For packed extend we append the
-    // current parent's slice to the outState's packedChildSlices so multiple parents processed
-    // within the same output batch get represented as parentPositions + offsets.
     if (operatorType != PhysicalOperatorType::PACKED_EXTEND) {
         scanState->outState->clearPackedChildSlices();
         return;
     }
-
-    // Determine the parent position corresponding to the current scan result.
-    // Use the cachedBoundNodeSelVector which contains the original parent positions provided by
-    // the input (it may contain multiple parents). currBoundNodeIdx points to the parent whose
-    // CSR list is currently being scanned.
-    const auto& cachedBoundSel = scanState->cachedBoundNodeSelVector;
-    if (cachedBoundSel.getSelSize() == 0) {
-        // Nothing to attach.
-        return;
-    }
-    sel_t parentPos = 0;
-    if (cachedBoundSel.getSelSize() == 1) {
-        parentPos = cachedBoundSel[0];
-    } else {
-        // currBoundNodeIdx tracks which parent within cachedBoundSel is currently scanned.
-        DASSERT(scanState->currBoundNodeIdx < cachedBoundSel.getSelSize());
-        parentPos = cachedBoundSel[scanState->currBoundNodeIdx];
-    }
-
-    // Append to existing packed slices if present, otherwise create a new single-parent slice.
-    // Use the append helper on DataChunkState which maintains offsets invariant.
-    scanState->outState->appendPackedChildSlice(parentPos, outputSize);
+    // The CSR scan sets nodeIDVector to flat, pointing its selVector[0] at the actual parent
+    // whose children are currently materialized in the output vector (see
+    // RelTableScanState::setNodeIDVectorToFlat). We must use that position as the parent
+    // position, NOT currBoundNodeIdx, because currBoundNodeIdx may already have advanced past
+    // this parent by the time we get here (it is incremented when a parent's CSR list is fully
+    // consumed within a single scan() call). The current scan architecture processes one parent
+    // per output batch, so we set a single-parent slice (overwriting any previous one).
+    const auto& boundSelVector = scanState->nodeIDVector->state->getSelVector();
+    DASSERT(boundSelVector.getSelSize() == 1);
+    scanState->outState->setSingleParentPackedChildSlice(boundSelVector[0], outputSize);
 }
 
 bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
     const auto transaction = transaction::Transaction::Get(*context->clientContext);
-    // Clear any previous packed child slices at the start of producing a new output batch for
-    // packed extend. We will accumulate per-parent slices as we scan multiple parents.
-    if (operatorType == PhysicalOperatorType::PACKED_EXTEND && scanState && scanState->outState) {
-        scanState->outState->clearPackedChildSlices();
-    }
-
     if (sourceMode) {
         while (true) {
             while (tableInfo.table->scan(transaction, *scanState)) {

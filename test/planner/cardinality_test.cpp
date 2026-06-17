@@ -211,11 +211,15 @@ TEST_F(CardinalityTest, TestPackedExtendDropsParentsWithoutMatches) {
         "MATCH "
         "(a:PackedPerson)-[:PackedFollows]->(b:PackedPerson)-[:PackedFollows]->(c:PackedPerson) "
         "RETURN DISTINCT a.id ORDER BY a.id");
-    auto tuple = res->getNext();
-    ASSERT_NE(nullptr, tuple);
-    EXPECT_EQ(1, tuple->getValue(0)->getValue<int64_t>());
-    // No more distinct a ids
-    EXPECT_EQ(nullptr, res->getNext());
+    std::vector<int64_t> foundAIds;
+    while (res->hasNext()) {
+        auto tup = res->getNext();
+        ASSERT_NE(nullptr, tup);
+        foundAIds.push_back(tup->getValue(0)->getValue<int64_t>());
+    }
+    // Expect exactly one matching a (id==1); parents with no b/c path must be dropped.
+    ASSERT_EQ(1u, foundAIds.size());
+    EXPECT_EQ(1, foundAIds[0]);
 }
 
 TEST_F(CardinalityTest, TestPackedChildSliceState) {
