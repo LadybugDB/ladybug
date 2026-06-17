@@ -223,6 +223,25 @@ void ScanRelTable::updatePackedChildSlices(sel_t outputSize) const {
     scanState->outState->setSingleParentPackedChildSlice(boundSelVector[0], outputSize);
 }
 
+void ScanRelTable::reservePackedChildSlicesForBatch() const {
+    if (operatorType != PhysicalOperatorType::PACKED_EXTEND) {
+        return;
+    }
+    // cachedBoundNodeSelVector holds the bound-node positions for the current input batch and is
+    // (re)populated by RelTableScanState::initCachedBoundNodeIDSelVector() during initScanState.
+    // Its selSize is the number of parents that may produce children in this batch.
+    //
+    // Only reserve when more than one parent is in flight: the single-parent path uses
+    // setSingleParentPackedChildSlice (overwrite), which replaces the descriptor and would throw
+    // away a reservation. Reserving for numParents > 1 keeps the multi-parent append() path
+    // reallocation-free without adding a wasted allocation to the common single-parent path.
+    const auto numParents = scanState->cachedBoundNodeSelVector.getSelSize();
+    if (numParents <= 1) {
+        return;
+    }
+    scanState->outState->reservePackedChildSlices(numParents);
+}
+
 bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
     const auto transaction = transaction::Transaction::Get(*context->clientContext);
     if (sourceMode) {
@@ -239,6 +258,9 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
             if (!fetchNextBoundNodeBatch(transaction)) {
                 return false;
             }
+            // fetchNextBoundNodeBatch established a new input batch (and repopulated
+            // cachedBoundNodeSelVector via initScanState); reserve for the new parent count.
+            reservePackedChildSlicesForBatch();
         }
     }
     while (true) {
@@ -255,6 +277,9 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
             return false;
         }
         tableInfo.table->initScanState(transaction, *scanState);
+        // A new input batch was just pulled and initScanState repopulated
+        // cachedBoundNodeSelVector; reserve for the new parent count.
+        reservePackedChildSlicesForBatch();
     }
 }
 

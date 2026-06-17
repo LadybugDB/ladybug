@@ -29,6 +29,15 @@ public:
         sel_t getNumParents() const { return parentPositions.size(); }
         sel_t getNumValues() const { return offsets.empty() ? 0 : offsets.back(); }
 
+        // Pre-allocate for an expected number of parents. Call this before a sequence of
+        // append() calls so each append is O(1) amortized with no reallocation.
+        // offsets holds one more entry than parentPositions (prefix-sum invariant), so reserve
+        // numParents+1 for it.
+        void reserve(size_t numParents) {
+            parentPositions.reserve(numParents);
+            offsets.reserve(numParents + 1);
+        }
+
         // Append a parent slice: parent position and number of values for that parent.
         // Maintains the invariant offsets.size() == parentPositions.size() + 1
         void append(sel_t parentPosition, sel_t numValues) {
@@ -85,6 +94,15 @@ public:
             return;
         }
         packedChildSlices->append(parentPosition, numValues);
+    }
+
+    // Pre-allocate the packed child slices for an expected number of parents. Creates the
+    // optional if not present so subsequent appendPackedChildSlice() calls don't reallocate.
+    void reservePackedChildSlices(size_t numParents) {
+        if (!packedChildSlices.has_value()) {
+            packedChildSlices = PackedChildSlices{};
+        }
+        packedChildSlices->reserve(numParents);
     }
 
     void clearPackedChildSlices() { packedChildSlices.reset(); }

@@ -117,6 +117,10 @@ protected:
     void initGlobalStateInternal(ExecutionContext* context) override;
     bool fetchNextBoundNodeBatch(transaction::Transaction* transaction);
     void updatePackedChildSlices(common::sel_t outputSize) const;
+    // Pre-allocate packedChildSlices for the current input batch. The number of parents that will
+    // be processed in this batch is known up front from cachedBoundNodeSelVector, so we reserve
+    // once per batch to keep subsequent appendPackedChildSlice() calls reallocation-free.
+    void reservePackedChildSlicesForBatch() const;
 
 protected:
     ScanRelTableInfo tableInfo;
