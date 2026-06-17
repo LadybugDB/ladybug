@@ -186,7 +186,8 @@ TEST_F(CardinalityTest, TestPackedPathExtendOptIn) {
 
 TEST_F(CardinalityTest, TestPackedExtendDropsParentsWithoutMatches) {
     // Setup small packed graph where only one `a` has a valid two-hop path a->b->c.
-    ASSERT_TRUE(conn->query("CREATE NODE TABLE PackedPerson(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE PackedPerson(id INT64, PRIMARY KEY(id));")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE REL TABLE PackedFollows(FROM PackedPerson TO PackedPerson);")
                     ->isSuccess());
     // Create 5 nodes
@@ -195,16 +196,20 @@ TEST_F(CardinalityTest, TestPackedExtendDropsParentsWithoutMatches) {
     ASSERT_TRUE(conn->query("CREATE (:PackedPerson {id: 3});")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:PackedPerson {id: 4});")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:PackedPerson {id: 5});")->isSuccess());
-    // Create edges forming a chain 1->2->3 only. Nodes 4 and 5 (and possibly 2) won't form full a->b->c
-    ASSERT_TRUE(conn->query("MATCH (a:PackedPerson {id:1}), (b:PackedPerson {id:2}) CREATE (a)-[:PackedFollows]->(b);")
+    // Create edges forming a chain 1->2->3 only. Nodes 4 and 5 (and possibly 2) won't form full
+    // a->b->c
+    ASSERT_TRUE(conn->query("MATCH (a:PackedPerson {id:1}), (b:PackedPerson {id:2}) CREATE "
+                            "(a)-[:PackedFollows]->(b);")
                     ->isSuccess());
-    ASSERT_TRUE(conn->query("MATCH (a:PackedPerson {id:2}), (b:PackedPerson {id:3}) CREATE (a)-[:PackedFollows]->(b);")
+    ASSERT_TRUE(conn->query("MATCH (a:PackedPerson {id:2}), (b:PackedPerson {id:3}) CREATE "
+                            "(a)-[:PackedFollows]->(b);")
                     ->isSuccess());
 
     // Enable packed path extend and run the query. Expect only a.id == 1 to appear in results.
     ASSERT_TRUE(conn->query("CALL enable_packed_path_extend=true")->isSuccess());
     auto res = conn->query(
-        "MATCH (a:PackedPerson)-[:PackedFollows]->(b:PackedPerson)-[:PackedFollows]->(c:PackedPerson) "
+        "MATCH "
+        "(a:PackedPerson)-[:PackedFollows]->(b:PackedPerson)-[:PackedFollows]->(c:PackedPerson) "
         "RETURN DISTINCT a.id ORDER BY a.id");
     auto tuple = res->getNext();
     ASSERT_NE(nullptr, tuple);
@@ -235,6 +240,50 @@ TEST_F(CardinalityTest, TestPackedChildSliceState) {
 
     state.clearPackedChildSlices();
     EXPECT_FALSE(state.hasPackedChildSlices());
+}
+
+TEST_F(CardinalityTest, TestPackedChildSliceAppend) {
+    common::DataChunkState state;
+    EXPECT_FALSE(state.hasPackedChildSlices());
+
+    // Append first parent
+    state.appendPackedChildSlice(2, 3);
+    ASSERT_TRUE(state.hasPackedChildSlices());
+    {
+        const auto& slices = state.getPackedChildSlices();
+        ASSERT_EQ(1, slices.getNumParents());
+        EXPECT_EQ(2, slices.parentPositions[0]);
+        ASSERT_EQ(2, slices.offsets.size());
+        EXPECT_EQ(0, slices.offsets[0]);
+        EXPECT_EQ(3, slices.offsets[1]);
+        EXPECT_EQ(3, slices.getNumValues());
+    }
+
+    // Append second parent
+    state.appendPackedChildSlice(5, 4);
+    {
+        const auto& slices = state.getPackedChildSlices();
+        ASSERT_EQ(2, slices.getNumParents());
+        EXPECT_EQ(2, slices.parentPositions[0]);
+        EXPECT_EQ(5, slices.parentPositions[1]);
+        ASSERT_EQ(3, slices.offsets.size());
+        EXPECT_EQ(0, slices.offsets[0]);
+        EXPECT_EQ(3, slices.offsets[1]);
+        EXPECT_EQ(7, slices.offsets[2]);
+        EXPECT_EQ(7, slices.getNumValues());
+    }
+
+    // Append zero-sized parent should still extend offsets correctly
+    state.appendPackedChildSlice(7, 0);
+    {
+        const auto& slices = state.getPackedChildSlices();
+        ASSERT_EQ(3, slices.getNumParents());
+        EXPECT_EQ(7, slices.parentPositions[2]);
+        ASSERT_EQ(4, slices.offsets.size());
+        EXPECT_EQ(7, slices.offsets[2]);
+        EXPECT_EQ(7, slices.offsets[3]);
+        EXPECT_EQ(7, slices.getNumValues());
+    }
 }
 
 } // namespace testing
