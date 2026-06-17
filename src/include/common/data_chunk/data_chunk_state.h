@@ -28,6 +28,20 @@ public:
         bool empty() const { return parentPositions.empty(); }
         sel_t getNumParents() const { return parentPositions.size(); }
         sel_t getNumValues() const { return offsets.empty() ? 0 : offsets.back(); }
+
+        // Append a parent slice: parent position and number of values for that parent.
+        // Maintains the invariant offsets.size() == parentPositions.size() + 1
+        void append(sel_t parentPosition, sel_t numValues) {
+            if (offsets.empty()) {
+                // initialize offsets with {0, numValues}
+                parentPositions.push_back(parentPosition);
+                offsets.push_back(0);
+                offsets.push_back(numValues);
+                return;
+            }
+            parentPositions.push_back(parentPosition);
+            offsets.push_back(offsets.back() + numValues);
+        }
     };
 
     DataChunkState();
@@ -63,6 +77,16 @@ public:
     void setSingleParentPackedChildSlice(sel_t parentPosition, sel_t numValues) {
         setPackedChildSlices({parentPosition}, {0, numValues});
     }
+
+    // Append a packed child slice for a parent. Creates packedChildSlices if not present.
+    void appendPackedChildSlice(sel_t parentPosition, sel_t numValues) {
+        if (!packedChildSlices.has_value()) {
+            setSingleParentPackedChildSlice(parentPosition, numValues);
+            return;
+        }
+        packedChildSlices->append(parentPosition, numValues);
+    }
+
     void clearPackedChildSlices() { packedChildSlices.reset(); }
 
 private:

@@ -184,6 +184,35 @@ TEST_F(CardinalityTest, TestPackedPathExtendOptIn) {
         2);
 }
 
+TEST_F(CardinalityTest, TestPackedExtendDropsParentsWithoutMatches) {
+    // Setup small packed graph where only one `a` has a valid two-hop path a->b->c.
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE PackedPerson(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE PackedFollows(FROM PackedPerson TO PackedPerson);")
+                    ->isSuccess());
+    // Create 5 nodes
+    ASSERT_TRUE(conn->query("CREATE (:PackedPerson {id: 1});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:PackedPerson {id: 2});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:PackedPerson {id: 3});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:PackedPerson {id: 4});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:PackedPerson {id: 5});")->isSuccess());
+    // Create edges forming a chain 1->2->3 only. Nodes 4 and 5 (and possibly 2) won't form full a->b->c
+    ASSERT_TRUE(conn->query("MATCH (a:PackedPerson {id:1}), (b:PackedPerson {id:2}) CREATE (a)-[:PackedFollows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:PackedPerson {id:2}), (b:PackedPerson {id:3}) CREATE (a)-[:PackedFollows]->(b);")
+                    ->isSuccess());
+
+    // Enable packed path extend and run the query. Expect only a.id == 1 to appear in results.
+    ASSERT_TRUE(conn->query("CALL enable_packed_path_extend=true")->isSuccess());
+    auto res = conn->query(
+        "MATCH (a:PackedPerson)-[:PackedFollows]->(b:PackedPerson)-[:PackedFollows]->(c:PackedPerson) "
+        "RETURN DISTINCT a.id ORDER BY a.id");
+    auto tuple = res->getNext();
+    ASSERT_NE(nullptr, tuple);
+    EXPECT_EQ(1, tuple->getValue(0)->getValue<int64_t>());
+    // No more distinct a ids
+    EXPECT_EQ(nullptr, res->getNext());
+}
+
 TEST_F(CardinalityTest, TestPackedChildSliceState) {
     common::DataChunkState state;
     EXPECT_FALSE(state.hasPackedChildSlices());
