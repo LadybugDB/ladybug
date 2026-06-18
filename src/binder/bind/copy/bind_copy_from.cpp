@@ -23,6 +23,25 @@ static void throwTableNotExist(const std::string& tableName) {
     throw BinderException(std::format("Table {} does not exist.", tableName));
 }
 
+static bool getBoolCopyOption(const options_t& parsingOptions, const char* optionName,
+    bool defaultValue) {
+    const auto it = parsingOptions.find(optionName);
+    if (it == parsingOptions.end()) {
+        return defaultValue;
+    }
+    const auto& value = *it->second;
+    auto strValue = value.toString();
+    StringUtils::toUpper(strValue);
+    if (strValue == "TRUE" || strValue == "1") {
+        return true;
+    }
+    if (strValue == "FALSE" || strValue == "0") {
+        return false;
+    }
+    throw BinderException(
+        std::format("The type of copy parsing option {} must be a boolean.", optionName));
+}
+
 std::unique_ptr<BoundStatement> Binder::bindLegacyCopyRelGroupFrom(const Statement& statement) {
     auto& copyFrom = statement.constCast<CopyFrom>();
     auto catalog = Catalog::Get(*clientContext);
@@ -117,6 +136,17 @@ BoundCopyFromInfo Binder::bindCopyNodeFromInfo(std::string tableName,
     const std::vector<PropertyDefinition>& properties, const BaseScanSource* source,
     const options_t& parsingOptions, const std::vector<std::string>& expectedColumnNames,
     const std::vector<LogicalType>& expectedColumnTypes, bool byColumn) {
+    const auto skipDuplicatePK = getBoolCopyOption(parsingOptions,
+        CopyConstants::SKIP_DUPLICATE_PK_OPTION_NAME, CopyConstants::DEFAULT_SKIP_DUPLICATE_PK);
+    const auto ignoreErrors = getBoolCopyOption(parsingOptions,
+        CopyConstants::IGNORE_ERRORS_OPTION_NAME, CopyConstants::DEFAULT_IGNORE_ERRORS);
+    if (skipDuplicatePK && ignoreErrors) {
+        throw BinderException("SKIP_DUPLICATE_PK cannot be used together with IGNORE_ERRORS.");
+    }
+    if (skipDuplicatePK && source->type != ScanSourceType::FILE) {
+        throw BinderException(
+            "SKIP_DUPLICATE_PK is only supported for COPY FROM files into node tables.");
+    }
     auto boundSource =
         bindScanSource(source, parsingOptions, expectedColumnNames, expectedColumnTypes);
     expression_vector warningDataExprs = boundSource->getWarningColumns();
@@ -140,7 +170,7 @@ BoundCopyFromInfo Binder::bindCopyNodeFromInfo(std::string tableName,
     auto offset =
         createInvisibleVariable(std::string(InternalKeyword::ROW_OFFSET), LogicalType::INT64());
     return BoundCopyFromInfo(tableName, TableType::NODE, std::move(boundSource), std::move(offset),
-        std::move(columns), std::move(evaluateTypes), nullptr /* extraInfo */);
+        std::move(columns), std::move(evaluateTypes), nullptr /* extraInfo */, skipDuplicatePK);
 }
 
 std::unique_ptr<BoundStatement> Binder::bindCopyNodeFrom(const Statement& statement,
@@ -186,6 +216,11 @@ BoundCopyFromInfo Binder::bindCopyRelFromInfo(std::string tableName,
     const options_t& parsingOptions, const std::vector<std::string>& expectedColumnNames,
     const std::vector<LogicalType>& expectedColumnTypes, const NodeTableCatalogEntry* fromTable,
     const NodeTableCatalogEntry* toTable) {
+    if (getBoolCopyOption(parsingOptions, CopyConstants::SKIP_DUPLICATE_PK_OPTION_NAME,
+            CopyConstants::DEFAULT_SKIP_DUPLICATE_PK)) {
+        throw BinderException(
+            "SKIP_DUPLICATE_PK is only supported for COPY FROM files into node tables.");
+    }
     auto boundSource =
         bindScanSource(source, parsingOptions, expectedColumnNames, expectedColumnTypes);
     expression_vector warningDataExprs = boundSource->getWarningColumns();
@@ -225,7 +260,7 @@ BoundCopyFromInfo Binder::bindCopyRelFromInfo(std::string tableName,
     auto extraCopyRelInfo = std::make_unique<ExtraBoundCopyRelInfo>(fromTable->getName(),
         toTable->getName(), internalIDColumnIndices, lookupInfos);
     return BoundCopyFromInfo(tableName, TableType::REL, boundSource->copy(), offset,
-        std::move(columnExprs), std::move(evaluateTypes), std::move(extraCopyRelInfo));
+        std::move(columnExprs), std::move(evaluateTypes), std::move(extraCopyRelInfo), false);
 }
 
 std::unique_ptr<BoundStatement> Binder::bindCopyRelFrom(const Statement& statement,

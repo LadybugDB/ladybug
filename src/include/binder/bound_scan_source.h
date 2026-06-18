@@ -20,6 +20,9 @@ struct BoundBaseScanSource {
     virtual bool getIgnoreErrorsOption() const {
         return common::CopyConstants::DEFAULT_IGNORE_ERRORS;
     };
+    virtual bool getSkipDuplicatePKOption() const {
+        return common::CopyConstants::DEFAULT_SKIP_DUPLICATE_PK;
+    };
     virtual common::column_id_t getNumWarningDataColumns() const { return 0; }
 
     virtual std::unique_ptr<BoundBaseScanSource> copy() const = 0;
@@ -44,6 +47,10 @@ struct BoundTableScanSource final : BoundBaseScanSource {
     expression_vector getColumns() override { return info.bindData->columns; }
     expression_vector getWarningColumns() const override;
     bool getIgnoreErrorsOption() const override;
+    bool getSkipDuplicatePKOption() const override {
+        return info.bindData->constPtrCast<function::ScanFileBindData>()
+            ->getSkipDuplicatePKOption();
+    }
     common::column_id_t getNumWarningDataColumns() const override {
         switch (type) {
         case common::ScanSourceType::FILE:

@@ -15,6 +15,9 @@ CachedPreparedStatement::CachedPreparedStatement() = default;
 CachedPreparedStatement::~CachedPreparedStatement() = default;
 
 std::vector<std::string> CachedPreparedStatement::getColumnNames() const {
+    if (!columnNames.empty()) {
+        return columnNames;
+    }
     std::vector<std::string> names;
     for (auto& column : columns) {
         names.push_back(column->toString());

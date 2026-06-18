@@ -19,10 +19,14 @@ public:
     // last operator in the pipeline must be resultCollector.
     static void appendStringToTable(FactorizedTable* factorizedTable, const std::string& outputMsg,
         storage::MemoryManager* memoryManager);
+    static void appendNodeCopyResultToTable(FactorizedTable* factorizedTable,
+        const std::string& outputMsg, int64_t skippedDuplicatePKCount,
+        const std::vector<std::string>& skippedDuplicatePKs, storage::MemoryManager* memoryManager);
     static std::shared_ptr<FactorizedTable> getFactorizedTableForOutputMsg(
         const std::string& outputMsg, storage::MemoryManager* memoryManager);
     static LBUG_API std::shared_ptr<FactorizedTable> getSingleStringColumnFTable(
         storage::MemoryManager* mm);
+    static std::shared_ptr<FactorizedTable> getNodeCopyResultFTable(storage::MemoryManager* mm);
 };
 
 } // namespace processor

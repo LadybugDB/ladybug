@@ -31,6 +31,7 @@ struct CachedPreparedStatement {
     std::shared_ptr<parser::Statement> parsedStatement;
     std::unique_ptr<planner::LogicalPlan> logicalPlan;
     std::vector<std::shared_ptr<binder::Expression>> columns;
+    std::vector<std::string> columnNames;
 
     CachedPreparedStatement();
     ~CachedPreparedStatement();

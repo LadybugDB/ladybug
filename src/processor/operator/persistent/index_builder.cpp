@@ -90,6 +90,7 @@ void IndexBuilderGlobalQueues::maybeConsumeIndex(size_t index,
                                         erroneousEntry.second,
                                         nodeTable->getTableID(),
                                     },
+                                .kind = NodeCopyErrorKind::DUPLICATE_PK,
                                 .warningData = erroneousEntryWarningData});
                         insertBufferOffset += 1; // skip the erroneous index then continue
                     }
@@ -200,6 +201,7 @@ bool IndexBuilder::checkNonNullConstraint(const ColumnChunkData& chunk,
                     .key = {},
                     .nodeID =
                         nodeID_t{nodeOffset + chunkOffset, sharedState->nodeTable->getTableID()},
+                    .kind = NodeCopyErrorKind::NULL_PK,
                     .warningData = getWarningDataFromChunks(warningData, chunkOffset)});
             });
         return false;

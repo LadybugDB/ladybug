@@ -33,6 +33,9 @@ static void bindBoolParsingOption(CSVReaderConfig& config, const std::string& op
         config.option.allowUnbracedList = optionValue;
     } else if (optionName == CopyConstants::IGNORE_ERRORS_OPTION_NAME) {
         config.option.ignoreErrors = optionValue;
+    } else if (optionName == CopyConstants::SKIP_DUPLICATE_PK_OPTION_NAME) {
+        // COPY-level option. The CSV reader accepts it during parsing, but duplicate-PK handling
+        // is implemented in the node-table insert pipeline rather than in the file reader.
     } else if (optionName == "AUTODETECT" || optionName == "AUTO_DETECT") {
         config.option.autoDetection = optionValue;
     } else {

@@ -110,6 +110,11 @@ void NodeBatchInsertSharedState::initPKIndex(const ExecutionContext* context) {
     auto* pkIndex = nodeTable->tryGetPKIndex();
     if (!pkIndex) {
         if (nodeTable->tryGetPrimaryKeyIndex() != nullptr) {
+            if (skipDuplicatePK) {
+                throw RuntimeException(
+                    "SKIP_DUPLICATE_PK is only supported for node tables with a primary-key "
+                    "hash index.");
+            }
             globalIndexBuilder.reset();
             noIndexPKValidator.reset();
             usePrimaryKeyIndexCommitInsert = true;
@@ -119,6 +124,11 @@ void NodeBatchInsertSharedState::initPKIndex(const ExecutionContext* context) {
             throw RuntimeException(
                 "COPY into a non-empty primary-key node table without a hash index is not "
                 "supported.");
+        }
+        if (skipDuplicatePK) {
+            throw RuntimeException(
+                "SKIP_DUPLICATE_PK is only supported for node tables with a primary-key hash "
+                "index.");
         }
         globalIndexBuilder.reset();
         noIndexPKValidator = createNoIndexPKValidator(pkType);
@@ -197,6 +207,8 @@ void NodeBatchInsert::executeInternal(ExecutionContext* context) {
     const auto clientContext = context->clientContext;
     std::optional<ProducerToken> token;
     auto nodeLocalState = localState->ptrCast<NodeBatchInsertLocalState>();
+    const auto nodeSharedState =
+        dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
     if (nodeLocalState->localIndexBuilder) {
         token = nodeLocalState->localIndexBuilder->getProducerToken();
     }
@@ -222,6 +234,16 @@ void NodeBatchInsert::executeInternal(ExecutionContext* context) {
         nodeLocalState->errorHandler->flushStoredErrors();
     }
     const auto nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
+    if (nodeInfo->skipDuplicatePK) {
+        std::lock_guard lck{nodeSharedState->duplicatePKSkipResult->mtx};
+        nodeSharedState->duplicatePKSkipResult->skippedCount +=
+            nodeLocalState->duplicatePKSkipResult.skippedCount;
+        nodeSharedState->duplicatePKSkipResult->pks.insert(
+            nodeSharedState->duplicatePKSkipResult->pks.end(),
+            std::make_move_iterator(nodeLocalState->duplicatePKSkipResult.pks.begin()),
+            std::make_move_iterator(nodeLocalState->duplicatePKSkipResult.pks.end()));
+        nodeLocalState->duplicatePKSkipResult.pks.clear();
+    }
     sharedState->table->cast<NodeTable>().mergeStats(nodeInfo->insertColumnIDs,
         nodeLocalState->stats);
 }
@@ -266,9 +288,17 @@ NodeBatchInsertErrorHandler NodeBatchInsert::createErrorHandler(ExecutionContext
     const auto nodeSharedState =
         dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
     auto* nodeTable = dynamic_cast_checked<NodeTable*>(sharedState->table);
+    const auto* nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
+    auto* duplicatePKSkipResult = nodeSharedState->duplicatePKSkipResult.get();
+    if (localState != nullptr) {
+        const auto nodeLocalState =
+            dynamic_cast_checked<NodeBatchInsertLocalState*>(localState.get());
+        duplicatePKSkipResult = &nodeLocalState->duplicatePKSkipResult;
+    }
     return NodeBatchInsertErrorHandler{context, nodeSharedState->pkType.getLogicalTypeID(),
         nodeTable, WarningContext::Get(*context->clientContext)->getIgnoreErrorsOption(),
-        sharedState->numErroredRows, &sharedState->erroredRowMutex};
+        sharedState->numErroredRows, &sharedState->erroredRowMutex, nodeInfo->skipDuplicatePK,
+        duplicatePKSkipResult};
 }
 
 static void commitPrimaryKeyIndexInsertions(Transaction* transaction, NodeTable& nodeTable,
@@ -421,11 +451,33 @@ void NodeBatchInsert::finalize(ExecutionContext* context) {
 }
 
 void NodeBatchInsert::finalizeInternal(ExecutionContext* context) {
-    auto outputMsg = std::format("{} tuples have been copied to the {} table.",
-        sharedState->getNumRows() - sharedState->getNumErroredRows(), info->tableName);
     auto clientContext = context->clientContext;
-    FactorizedTableUtils::appendStringToTable(sharedState->fTable.get(), outputMsg,
-        MemoryManager::Get(*clientContext));
+    const auto* nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
+    const auto* nodeSharedState =
+        dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
+    if (nodeInfo->skipDuplicatePK) {
+        std::lock_guard lck{nodeSharedState->duplicatePKSkipResult->mtx};
+        // Duplicate-PK rows are counted in getNumRows() because they are appended before index
+        // validation, but they do not contribute to getNumErroredRows() because they bypass the
+        // generic warning/error path. We subtract skippedCount here to convert the appended-row
+        // count into the final copied-row count. This relies on duplicate-row deletion not
+        // decrementing numRows and on the duplicate skip path not incrementing numErroredRows.
+        DASSERT(
+            sharedState->getNumRows() >= sharedState->getNumErroredRows() +
+                                             nodeSharedState->duplicatePKSkipResult->skippedCount);
+        auto outputMsg = std::format("{} tuples have been copied to the {} table.",
+            sharedState->getNumRows() - sharedState->getNumErroredRows() -
+                nodeSharedState->duplicatePKSkipResult->skippedCount,
+            info->tableName);
+        FactorizedTableUtils::appendNodeCopyResultToTable(sharedState->fTable.get(), outputMsg,
+            nodeSharedState->duplicatePKSkipResult->skippedCount,
+            nodeSharedState->duplicatePKSkipResult->pks, MemoryManager::Get(*clientContext));
+    } else {
+        auto outputMsg = std::format("{} tuples have been copied to the {} table.",
+            sharedState->getNumRows() - sharedState->getNumErroredRows(), info->tableName);
+        FactorizedTableUtils::appendStringToTable(sharedState->fTable.get(), outputMsg,
+            MemoryManager::Get(*clientContext));
+    }
 
     const auto warningCount =
         WarningContext::Get(*clientContext)->getWarningCount(context->queryID);
@@ -434,8 +486,14 @@ void NodeBatchInsert::finalizeInternal(ExecutionContext* context) {
             std::format("{} warnings encountered during copy. Use 'CALL "
                         "show_warnings() RETURN *' to view the actual warnings. Query ID: {}",
                 warningCount, context->queryID);
-        FactorizedTableUtils::appendStringToTable(sharedState->fTable.get(), warningMsg,
-            MemoryManager::Get(*clientContext));
+        if (nodeInfo->skipDuplicatePK) {
+            FactorizedTableUtils::appendNodeCopyResultToTable(sharedState->fTable.get(), warningMsg,
+                0 /* skippedDuplicatePKCount */, {} /* skippedDuplicatePKs */,
+                MemoryManager::Get(*clientContext));
+        } else {
+            FactorizedTableUtils::appendStringToTable(sharedState->fTable.get(), warningMsg,
+                MemoryManager::Get(*clientContext));
+        }
     }
 }
 

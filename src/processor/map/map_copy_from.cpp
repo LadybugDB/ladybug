@@ -48,9 +48,12 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCopyNodeFrom(
     const auto outFSchema = copyFrom.getSchema();
     auto prevOperator = mapOperator(copyFrom.getChild(0).get());
     auto fTable =
-        FactorizedTableUtils::getSingleStringColumnFTable(MemoryManager::Get(*clientContext));
+        copyFromInfo->getSkipDuplicatePKOption() ?
+            FactorizedTableUtils::getNodeCopyResultFTable(MemoryManager::Get(*clientContext)) :
+            FactorizedTableUtils::getSingleStringColumnFTable(MemoryManager::Get(*clientContext));
 
     auto sharedState = std::make_shared<NodeBatchInsertSharedState>(fTable);
+    sharedState->skipDuplicatePK = copyFromInfo->getSkipDuplicatePKOption();
     if (prevOperator->getOperatorType() == PhysicalOperatorType::TABLE_FUNCTION_CALL) {
         const auto call = prevOperator->ptrCast<TableFunctionCall>();
         sharedState->tableFuncSharedState = call->getSharedState().get();
@@ -66,7 +69,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCopyNodeFrom(
     }
     auto info = std::make_unique<NodeBatchInsertInfo>(copyFromInfo->tableName,
         std::move(warningColumnTypes), std::move(columnEvaluators),
-        copyFromInfo->columnEvaluateTypes);
+        copyFromInfo->columnEvaluateTypes, copyFromInfo->getSkipDuplicatePKOption());
     auto printInfo = std::make_unique<NodeBatchInsertPrintInfo>(copyFromInfo->tableName);
     auto batchInsert = std::make_unique<NodeBatchInsert>(std::move(info), std::move(sharedState),
         std::move(prevOperator), getOperatorID(), std::move(printInfo));

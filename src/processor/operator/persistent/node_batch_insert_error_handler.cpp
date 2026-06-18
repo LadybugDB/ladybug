@@ -10,12 +10,14 @@ namespace processor {
 
 NodeBatchInsertErrorHandler::NodeBatchInsertErrorHandler(ExecutionContext* context,
     LogicalTypeID pkType, storage::NodeTable* nodeTable, bool ignoreErrors,
-    std::shared_ptr<row_idx_t> sharedErrorCounter, std::mutex* sharedErrorCounterMtx)
+    std::shared_ptr<row_idx_t> sharedErrorCounter, std::mutex* sharedErrorCounterMtx,
+    bool skipDuplicatePK, DuplicatePKSkipResult* duplicatePKSkipResult)
     : nodeTable(nodeTable), context(context),
       keyVector(std::make_shared<ValueVector>(pkType,
           storage::MemoryManager::Get(*context->clientContext))),
       offsetVector(std::make_shared<ValueVector>(LogicalTypeID::INTERNAL_ID,
           storage::MemoryManager::Get(*context->clientContext))),
+      skipDuplicatePK{skipDuplicatePK}, duplicatePKSkipResult{duplicatePKSkipResult},
       baseErrorHandler(context, ignoreErrors, sharedErrorCounter, sharedErrorCounterMtx) {
     keyVector->state = DataChunkState::getSingleValueDataChunkState();
     offsetVector->state = DataChunkState::getSingleValueDataChunkState();

@@ -2,6 +2,7 @@
 
 #include "binder/bound_scan_source.h"
 #include "binder/expression/expression.h"
+#include "binder/expression/literal_expression.h"
 #include "common/enums/column_evaluate_type.h"
 #include "common/enums/table_type.h"
 #include "index_look_up_info.h"
@@ -31,14 +32,16 @@ struct LBUG_API BoundCopyFromInfo {
     expression_vector columnExprs;
     std::vector<common::ColumnEvaluateType> columnEvaluateTypes;
     std::unique_ptr<ExtraBoundCopyFromInfo> extraInfo;
+    bool skipDuplicatePK;
 
     BoundCopyFromInfo(std::string tableName, common::TableType tableType,
         std::unique_ptr<BoundBaseScanSource> source, std::shared_ptr<Expression> offset,
         expression_vector columnExprs, std::vector<common::ColumnEvaluateType> columnEvaluateTypes,
-        std::unique_ptr<ExtraBoundCopyFromInfo> extraInfo)
+        std::unique_ptr<ExtraBoundCopyFromInfo> extraInfo, bool skipDuplicatePK = false)
         : tableName{std::move(tableName)}, tableType{tableType}, source{std::move(source)},
           offset{std::move(offset)}, columnExprs{std::move(columnExprs)},
-          columnEvaluateTypes{std::move(columnEvaluateTypes)}, extraInfo{std::move(extraInfo)} {}
+          columnEvaluateTypes{std::move(columnEvaluateTypes)}, extraInfo{std::move(extraInfo)},
+          skipDuplicatePK{skipDuplicatePK} {}
 
     EXPLICIT_COPY_DEFAULT_MOVE(BoundCopyFromInfo);
 
@@ -50,11 +53,13 @@ struct LBUG_API BoundCopyFromInfo {
     }
 
     bool getIgnoreErrorsOption() const { return source ? source->getIgnoreErrorsOption() : false; }
+    bool getSkipDuplicatePKOption() const { return skipDuplicatePK; }
 
 private:
     BoundCopyFromInfo(const BoundCopyFromInfo& other)
         : tableName{other.tableName}, tableType{other.tableType}, offset{other.offset},
-          columnExprs{other.columnExprs}, columnEvaluateTypes{other.columnEvaluateTypes} {
+          columnExprs{other.columnExprs}, columnEvaluateTypes{other.columnEvaluateTypes},
+          skipDuplicatePK{other.skipDuplicatePK} {
         source = other.source ? other.source->copy() : nullptr;
         if (other.extraInfo) {
             extraInfo = other.extraInfo->copy();
@@ -88,12 +93,28 @@ class BoundCopyFrom final : public BoundStatement {
 
 public:
     explicit BoundCopyFrom(BoundCopyFromInfo info)
-        : BoundStatement{statementType_, BoundStatementResult::createSingleStringColumnResult()},
+        : BoundStatement{statementType_,
+              info.getSkipDuplicatePKOption() ?
+                  createSkipDuplicatePKResult() :
+                  BoundStatementResult::createSingleStringColumnResult()},
           info{std::move(info)} {}
 
     const BoundCopyFromInfo* getInfo() const { return &info; }
 
 private:
+    static BoundStatementResult createSkipDuplicatePKResult() {
+        auto result = BoundStatementResult::createSingleStringColumnResult();
+        auto skippedCount = std::make_shared<LiteralExpression>(common::Value{int64_t(0)},
+            "skipped_duplicate_pk_count");
+        auto skippedPKs = std::make_shared<LiteralExpression>(
+            common::Value{common::LogicalType::LIST(common::LogicalType::STRING()),
+                std::vector<std::unique_ptr<common::Value>>{}},
+            "skipped_duplicate_pks");
+        result.addColumn("skipped_duplicate_pk_count", skippedCount);
+        result.addColumn("skipped_duplicate_pks", skippedPKs);
+        return result;
+    }
+
     BoundCopyFromInfo info;
 };
 

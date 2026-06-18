@@ -105,12 +105,14 @@ struct CopyConstants {
     static constexpr uint64_t PARALLEL_BLOCK_SIZE = INITIAL_BUFFER_SIZE / 2;
 
     static constexpr const char* IGNORE_ERRORS_OPTION_NAME = "IGNORE_ERRORS";
+    static constexpr const char* SKIP_DUPLICATE_PK_OPTION_NAME = "SKIP_DUPLICATE_PK";
 
     static constexpr const char* FROM_OPTION_NAME = "FROM";
     static constexpr const char* TO_OPTION_NAME = "TO";
 
     static constexpr const char* BOOL_CSV_PARSING_OPTIONS[] = {"HEADER", "PARALLEL",
-        "LIST_UNBRACED", "AUTODETECT", "AUTO_DETECT", CopyConstants::IGNORE_ERRORS_OPTION_NAME};
+        "LIST_UNBRACED", "AUTODETECT", "AUTO_DETECT", CopyConstants::IGNORE_ERRORS_OPTION_NAME,
+        CopyConstants::SKIP_DUPLICATE_PK_OPTION_NAME};
     static constexpr bool DEFAULT_CSV_HAS_HEADER = false;
     static constexpr bool DEFAULT_CSV_PARALLEL = true;
 
@@ -124,6 +126,7 @@ struct CopyConstants {
     static constexpr char DEFAULT_CSV_LIST_BEGIN_CHAR = '[';
     static constexpr char DEFAULT_CSV_LIST_END_CHAR = ']';
     static constexpr bool DEFAULT_IGNORE_ERRORS = false;
+    static constexpr bool DEFAULT_SKIP_DUPLICATE_PK = false;
     static constexpr bool DEFAULT_CSV_AUTO_DETECT = true;
     static constexpr bool DEFAULT_CSV_SET_DIALECT = false;
     static constexpr std::array DEFAULT_CSV_DELIMITER_SEARCH_SPACE = {',', ';', '\t', '|'};

@@ -64,6 +64,11 @@ struct LBUG_API ScanFileBindData : public TableFuncBindData {
             common::CopyConstants::DEFAULT_IGNORE_ERRORS);
     }
 
+    bool getSkipDuplicatePKOption() const {
+        return fileScanInfo.getOption(common::CopyConstants::SKIP_DUPLICATE_PK_OPTION_NAME,
+            common::CopyConstants::DEFAULT_SKIP_DUPLICATE_PK);
+    }
+
     std::unique_ptr<TableFuncBindData> copy() const override {
         return std::make_unique<ScanFileBindData>(*this);
     }

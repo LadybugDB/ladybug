@@ -109,3 +109,89 @@ Found duplicated primary key value 10, which violates the uniqueness constraint 
 -STATEMENT CALL show_warnings() RETURN message, file_path, skipped_line_or_record, line_number
 ---- 1
 Found duplicated primary key value 10, which violates the uniqueness constraint of the primary key column.|${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/duplicate-ids/vOrg.csv|10,Ziyi|4
+
+-CASE DuplicateIntIDsSkipDuplicatePK
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/duplicate-ids/vPerson.csv"(SKIP_DUPLICATE_PK=true)
+---- 1
+3 tuples have been copied to the person table.|1|[10]
+-STATEMENT MATCH (p:person) RETURN p.*
+---- 3
+10|Guodong
+24|Semih
+31|Xiyang
+-STATEMENT CALL show_warnings() RETURN COUNT(*)
+---- 1
+0
+
+-CASE ManyDuplicateIntIDsSkipDuplicatePK
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/duplicate-ids/vPersonManyDuplicates.csv"(SKIP_DUPLICATE_PK=true, PARALLEL=false)
+---- 1
+2 tuples have been copied to the person table.|28|[10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10]
+-STATEMENT MATCH (p:person) RETURN p.*
+---- 2
+10|a
+11|aa
+-STATEMENT CALL show_warnings() RETURN COUNT(*)
+---- 1
+0
+
+-CASE DuplicateStringIDsSkipDuplicatePK
+-STATEMENT COPY org FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/duplicate-ids/vOrg.csv"(SKIP_DUPLICATE_PK=true)
+---- 1
+3 tuples have been copied to the org table.|1|[10]
+-STATEMENT MATCH (o:org) RETURN o.*
+---- 3
+10|Guodong
+24|Semih
+31|Xiyang
+-STATEMENT CALL show_warnings() RETURN COUNT(*)
+---- 1
+0
+
+-CASE DuplicateAgainstExistingRowsSkipDuplicatePK
+-STATEMENT CREATE NODE TABLE seeded(ID INT64, name STRING, PRIMARY KEY(ID))
+---- ok
+-STATEMENT CREATE (p:seeded {ID: 10, name: 'seed'})
+---- ok
+-STATEMENT COPY seeded FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/duplicate-ids/vPerson.csv"(SKIP_DUPLICATE_PK=true)
+---- 1
+2 tuples have been copied to the seeded table.|2|[10,10]
+-STATEMENT MATCH (p:seeded) RETURN p.ID, p.name ORDER BY p.ID, p.name
+---- 3
+10|seed
+24|Semih
+31|Xiyang
+-STATEMENT CALL show_warnings() RETURN COUNT(*)
+---- 1
+0
+
+-CASE MultiFileDuplicateIntIDsSkipDuplicatePK
+-STATEMENT COPY person FROM ["${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/duplicate-ids/vPerson.csv", "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/duplicate-ids/vPersonManyDuplicates.csv"](SKIP_DUPLICATE_PK=true, PARALLEL=false)
+---- 1
+4 tuples have been copied to the person table.|30|[10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10]
+-STATEMENT MATCH (p:person) RETURN p.ID
+---- 4
+10
+24
+31
+11
+-STATEMENT CALL show_warnings() RETURN COUNT(*)
+---- 1
+0
+
+-CASE SkipDuplicatePKCannotCombineIgnoreErrors
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/duplicate-ids/vPerson.csv"(IGNORE_ERRORS=true, SKIP_DUPLICATE_PK=true)
+---- error
+Binder exception: SKIP_DUPLICATE_PK cannot be used together with IGNORE_ERRORS.
+
+-CASE SkipDuplicatePKNotSupportedForRelCopy
+-STATEMENT CREATE REL TABLE likes(FROM person TO person, date DATE, MANY_MANY)
+---- ok
+-STATEMENT COPY likes FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/eLikes.csv"(SKIP_DUPLICATE_PK=true)
+---- error
+Binder exception: SKIP_DUPLICATE_PK is only supported for COPY FROM files into node tables.
+
+-CASE SkipDuplicatePKNotSupportedForSubqueryCopy
+-STATEMENT COPY person FROM (UNWIND [10, 10, 24] AS id RETURN id, 'x' AS fName) (SKIP_DUPLICATE_PK=true)
+---- error
+Binder exception: SKIP_DUPLICATE_PK is only supported for COPY FROM files into node tables.

@@ -525,6 +525,8 @@ ClientContext::PrepareResult ClientContext::prepareNoLock(
                 preparedStatement->unknownParameters = expressionBinder->getUnknownParameters();
                 preparedStatement->parameterMap = expressionBinder->getKnownParameters();
                 cachedStatement->columns = boundStatement->getStatementResult()->getColumns();
+                cachedStatement->columnNames =
+                    boundStatement->getStatementResult()->getColumnNames();
                 auto planner = Planner(this);
                 auto bestPlan = planner.planStatement(*boundStatement);
                 optimizer::Optimizer::optimize(&bestPlan, this, planner.getCardinalityEstimator());

@@ -200,6 +200,25 @@ TEST_F(ApiTest, SingleQueryHasNextQueryResult) {
     ASSERT_FALSE(result->hasNextQueryResult());
 }
 
+TEST_F(ApiTest, CopySkipDuplicatePKPreservesResultColumnNames) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE copy_user(ID STRING, name STRING, PRIMARY KEY(ID));")
+                    ->isSuccess());
+    auto result = conn->query(std::format("COPY copy_user FROM \"{}\" (SKIP_DUPLICATE_PK=true);",
+        TestHelper::appendLbugRootPath("dataset/copy-fault-tests/duplicate-ids/vOrg.csv")));
+    ASSERT_TRUE(result->isSuccess());
+
+    const auto columnNames = result->getColumnNames();
+    ASSERT_EQ(columnNames.size(), 3);
+    EXPECT_EQ(columnNames[0], "result");
+    EXPECT_EQ(columnNames[1], "skipped_duplicate_pk_count");
+    EXPECT_EQ(columnNames[2], "skipped_duplicate_pks");
+
+    ASSERT_TRUE(result->hasNext());
+    auto tuple = result->getNext();
+    EXPECT_EQ(tuple->getValue(1)->getValue<int64_t>(), 1);
+    EXPECT_EQ(tuple->getValue(2)->toString(), "[10]");
+}
+
 TEST_F(ApiTest, Prepare) {
     auto result = conn->prepare("");
     ASSERT_EQ(result->getErrorMessage(), "Connection exception: Query is empty.");
