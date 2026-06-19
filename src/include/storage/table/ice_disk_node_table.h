@@ -75,6 +75,11 @@ public:
     bool isVisibleNoLock(const transaction::Transaction* transaction,
         common::offset_t offset) const override;
 
+    // Virtual dispatch for scan_node_table.cpp extensibility
+    bool requiresExplicitScanInit() const override { return true; }
+    // IceDisk uses nodeGroupIdx-based scanning, not morsel-based.
+    // usesMorselScan() and getNumScanMorsels() are left at NodeTable defaults (false/0).
+
     const std::string& getParquetFilePath() const { return parquetFilePath; }
 
 protected:

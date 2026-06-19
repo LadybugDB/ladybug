@@ -132,9 +132,20 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry, main::ClientC
             tables[entry->getTableID()] =
                 std::make_unique<IceDiskNodeTable>(this, entry, &memoryManager, context);
         } else {
-            throw common::RuntimeException(
-                "Unsupported storage format option for node table: " +
-                std::to_string(static_cast<int>(entry->getStorageFormat())));
+            // Try extension-registered factory (e.g. LANCE)
+            std::unique_lock factoryLck{formatFactoryMtx};
+            auto it = nodeTableFactories.find(entry->getStorageFormat());
+            if (it != nodeTableFactories.end()) {
+                auto factory = it->second;
+                factoryLck.unlock();
+                tables[entry->getTableID()] = factory(this, entry, &memoryManager, context);
+            } else {
+                throw common::RuntimeException(
+                    std::format("Unsupported storage format for node table. "
+                                "The extension providing this format may not be loaded. "
+                                "Format id: {}",
+                        static_cast<int>(entry->getStorageFormat())));
+            }
         }
     } else if (!entry->getStorage().empty()) {
         // Check if storage is Arrow backed
@@ -186,9 +197,21 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
             tables[info.oid] = std::make_unique<IceDiskRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, context);
         } else {
-            throw common::RuntimeException(
-                "Unsupported storage format option for rel table: " +
-                std::to_string(static_cast<int>(entry->getStorageFormat())));
+            // Try extension-registered factory (e.g. LANCE)
+            std::unique_lock factoryLck{formatFactoryMtx};
+            auto it = relTableFactories.find(entry->getStorageFormat());
+            if (it != relTableFactories.end()) {
+                auto factory = it->second;
+                factoryLck.unlock();
+                tables[info.oid] = factory(entry, info.nodePair.srcTableID,
+                    info.nodePair.dstTableID, this, &memoryManager, context);
+            } else {
+                throw common::RuntimeException(
+                    std::format("Unsupported storage format for rel table. "
+                                "The extension providing this format may not be loaded. "
+                                "Format id: {}",
+                        static_cast<int>(entry->getStorageFormat())));
+            }
         }
     } else if (!entry->getStorage().empty()) {
         if (entry->getStorage().substr(0, 8) == "arrow://") {

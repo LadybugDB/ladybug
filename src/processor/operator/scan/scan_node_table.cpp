@@ -7,6 +7,7 @@
 #include "storage/local_storage/local_node_table.h"
 #include "storage/local_storage/local_storage.h"
 #include "storage/table/arrow_node_table.h"
+#include "storage/table/columnar_node_table_base.h"
 #include "storage/table/ice_disk_node_table.h"
 
 using namespace lbug::common;
@@ -17,6 +18,11 @@ namespace processor {
 static std::unique_ptr<TableScanState> createNodeTableScanState(NodeTable* table,
     ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
     MemoryManager* memoryManager) {
+    // Allow extension-defined table types to supply their own scan state via virtual factory.
+    auto extensionState = table->createScanState(nodeIDVector, outVectors, memoryManager);
+    if (extensionState) {
+        return extensionState;
+    }
     if (dynamic_cast<IceDiskNodeTable*>(table) != nullptr) {
         return std::make_unique<IceDiskNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
             nodeIDVector->state);
@@ -69,12 +75,15 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
         } catch (const std::exception& e) {
             this->numCommittedNodeGroups = 1;
         }
-    } else if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(table)) {
-        // For Arrow tables, set numCommittedNodeGroups to number of morsels
-        this->numCommittedNodeGroups =
-            static_cast<common::node_group_idx_t>(arrowTable->getNumScanMorsels(transaction));
     } else {
-        this->numCommittedNodeGroups = table->getNumCommittedNodeGroups();
+        // For morsel-based columnar tables (Arrow, Lance, etc.) getNumScanMorsels() returns
+        // the morsel count; for regular NodeTable it returns 0 → fall back to node groups.
+        auto morselCount = table->getNumScanMorsels(transaction);
+        if (morselCount > 0) {
+            this->numCommittedNodeGroups = static_cast<common::node_group_idx_t>(morselCount);
+        } else {
+            this->numCommittedNodeGroups = table->getNumCommittedNodeGroups();
+        }
     }
     if (transaction->isWriteTransaction()) {
         if (const auto localTable =
@@ -90,18 +99,22 @@ void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
     ScanNodeTableProgressSharedState& progressSharedState) {
     std::unique_lock lck{mtx};
 
-    // ColumnarNodeTables handle morsel assignment internally
+    // Morsel-based columnar tables (Arrow, Lance, …) dispatch through
+    // ColumnarNodeTableBase::getTableScanSharedState() / usesMorselScan().
     // TODO: icebug-disk tables https://github.com/LadybugDB/ladybug/issues/245
-    if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(this->table)) {
-        const auto tableSharedState = arrowTable->getTableScanSharedState();
-        if (tableSharedState->getNextMorsel(static_cast<ColumnarNodeTableScanState*>(&scanState))) {
-            scanState.source = TableScanSource::COMMITTED;
-            progressSharedState.numMorselsScanned++;
-        } else {
-            scanState.source = TableScanSource::NONE;
+    if (this->table->usesMorselScan()) {
+        const auto columnarTable = dynamic_cast<ColumnarNodeTableBase*>(this->table);
+        if (columnarTable) {
+            const auto tableSharedState = columnarTable->getTableScanSharedState();
+            if (tableSharedState->getNextMorsel(
+                    static_cast<ColumnarNodeTableScanState*>(&scanState))) {
+                scanState.source = TableScanSource::COMMITTED;
+                progressSharedState.numMorselsScanned++;
+            } else {
+                scanState.source = TableScanSource::NONE;
+            }
+            return;
         }
-
-        return;
     }
 
     auto& nodeScanState = scanState.cast<NodeTableScanState>();
@@ -149,11 +162,12 @@ void ScanNodeTable::initCurrentTable(ExecutionContext* context) {
         outVectors, MemoryManager::Get(*context->clientContext));
     currentInfo.initScanState(*scanState, outVectors, context->clientContext);
     scanState->semiMask = sharedStates[currentTableIdx]->getSemiMask();
-    // Call table->initScanState for IceDiskNodeTable or ArrowNodeTable
-    if (dynamic_cast<IceDiskNodeTable*>(tableInfos[currentTableIdx].table) ||
-        dynamic_cast<ArrowNodeTable*>(tableInfos[currentTableIdx].table)) {
+    // Use virtual dispatch so extension-defined table types (Lance, etc.) work without
+    // hard-coding their concrete types here.
+    auto* nodeTable = tableInfos[currentTableIdx].table->ptrCast<NodeTable>();
+    if (nodeTable->requiresExplicitScanInit()) {
         auto transaction = transaction::Transaction::Get(*context->clientContext);
-        tableInfos[currentTableIdx].table->initScanState(transaction, *scanState);
+        nodeTable->initScanState(transaction, *scanState);
     }
 }
 

@@ -25,6 +25,8 @@ static constexpr std::array vectorExtensionFunctions = {"QUERY_VECTOR_INDEX", "C
     "DROP_VECTOR_INDEX"};
 static constexpr std::array llmExtensionFunctions = {"CREATE_EMBEDDING"};
 static constexpr std::array neo4jExtensionFunctions = {"NEO4J_MIGRATE"};
+static constexpr std::array lanceExtensionFunctions = {"LANCE_VECTOR_SEARCH", "LANCE_FTS",
+    "LANCE_HYBRID_SEARCH"};
 static constexpr std::array algoExtensionFunctions = {"K_CORE_DECOMPOSITION", "PAGE_RANK",
     "STRONGLY_CONNECTED_COMPONENTS_KOSARAJU", "STRONGLY_CONNECTED_COMPONENTS",
     "WEAKLY_CONNECTED_COMPONENTS"};
@@ -40,6 +42,7 @@ static constexpr EntriesForExtension functionsForExtensionsRaw[] = {
     {"LLM", llmExtensionFunctions, llmExtensionFunctions.size()},
     {"NEO4J", neo4jExtensionFunctions, neo4jExtensionFunctions.size()},
     {"ALGO", algoExtensionFunctions, algoExtensionFunctions.size()},
+    {"LANCE", lanceExtensionFunctions, lanceExtensionFunctions.size()},
 };
 static constexpr std::array functionsForExtensions = std::to_array(functionsForExtensionsRaw);
 

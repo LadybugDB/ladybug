@@ -1,8 +1,11 @@
 #pragma once
 
+#include <functional>
 #include <mutex>
 #include <shared_mutex>
+#include <unordered_map>
 
+#include "common/enums/storage_format.h"
 #include "shadow_file.h"
 #include "storage/index/index.h"
 #include "storage/stats/planner_stats.h"
@@ -32,6 +35,15 @@ class NodeTable;
 class RelTable;
 class DiskArrayCollection;
 struct DatabaseHeader;
+
+/// Factory signature for extension-provided node tables (e.g. LanceNodeTable).
+using NodeTableFactory = std::function<std::unique_ptr<Table>(const StorageManager*,
+    const catalog::NodeTableCatalogEntry*, MemoryManager*, main::ClientContext*)>;
+
+/// Factory signature for extension-provided rel tables (e.g. LanceRelTable).
+using RelTableFactory = std::function<std::unique_ptr<Table>(catalog::RelGroupCatalogEntry*,
+    common::table_id_t, common::table_id_t, const StorageManager*, MemoryManager*,
+    main::ClientContext*)>;
 
 class LBUG_API StorageManager {
 public:
@@ -83,6 +95,16 @@ public:
     std::optional<std::reference_wrapper<const IndexType>> getIndexType(
         const std::string& typeName) const;
 
+    /// Register factories for an extension-defined storage format (e.g. LANCE).
+    /// The extension must call this during its load() function before any
+    /// CREATE TABLE with that format is attempted.
+    void registerStorageFormatHandler(common::StorageFormat format, NodeTableFactory nodeFactory,
+        RelTableFactory relFactory) {
+        std::unique_lock lck{formatFactoryMtx};
+        nodeTableFactories[format] = std::move(nodeFactory);
+        relTableFactories[format] = std::move(relFactory);
+    }
+
     void serialize(const catalog::Catalog& catalog, common::Serializer& ser);
     void serialize(const catalog::Catalog& catalog, const transaction::Transaction& snapshotTxn,
         common::Serializer& ser);
@@ -132,6 +154,11 @@ private:
     std::unordered_map<common::table_id_t, PlannerTableStats> plannerStatsCache;
     std::unordered_map<common::table_id_t, std::string> tableNameCache;
     common::VirtualFileSystem* vfs_; // non-owning, owned by Database
+
+    // Extension-provided storage format factories (protected by formatFactoryMtx)
+    mutable std::mutex formatFactoryMtx;
+    std::unordered_map<common::StorageFormat, NodeTableFactory> nodeTableFactories;
+    std::unordered_map<common::StorageFormat, RelTableFactory> relTableFactories;
 };
 
 } // namespace storage

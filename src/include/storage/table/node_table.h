@@ -129,6 +129,35 @@ public:
     virtual void initializeScanCoordination(
         [[maybe_unused]] const transaction::Transaction* transaction) {}
 
+    // Virtual dispatch methods for scan_node_table.cpp extensibility.
+    // These allow extension-defined table types (e.g. LanceNodeTable) to plug
+    // into the core scan infrastructure without requiring dynamic_casts to
+    // concrete types that live in extension libraries.
+
+    /// Returns true if this table type requires explicit initScanState() calls
+    /// in initCurrentTable() (e.g. Arrow, Lance, IceDisk columnar tables).
+    virtual bool requiresExplicitScanInit() const { return false; }
+
+    /// Returns true if this table drives scanning via ColumnarNodeTableScanSharedState::getNextMorsel()
+    /// rather than via nodeGroupIdx assignment (e.g. Arrow, Lance).
+    virtual bool usesMorselScan() const { return false; }
+
+    /// Returns the number of scan morsels for progress tracking.
+    /// Returns 0 for tables that use the IceDisk row-group path.
+    virtual size_t getNumScanMorsels(
+        [[maybe_unused]] const transaction::Transaction* transaction) const {
+        return 0;
+    }
+
+    /// Creates a format-specific TableScanState. Returns nullptr to fall back to
+    /// the built-in dispatch (ArrowNodeTable / IceDiskNodeTable / default).
+    virtual std::unique_ptr<TableScanState> createScanState(
+        [[maybe_unused]] common::ValueVector* nodeIDVector,
+        [[maybe_unused]] const std::vector<common::ValueVector*>& outVectors,
+        [[maybe_unused]] MemoryManager* memoryManager) const {
+        return nullptr;
+    }
+
     bool scanInternal(transaction::Transaction* transaction, TableScanState& scanState) override;
     template<bool lock = true>
     bool lookup(const transaction::Transaction* transaction, const TableScanState& scanState) const;

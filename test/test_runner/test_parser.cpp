@@ -91,6 +91,9 @@ void TestParser::extractDataset() {
     } else if (datasetType == "ICEBUG-DISK") {
         testGroup->datasetType = TestGroup::DatasetType::ICEBUG_DISK;
         testGroup->dataset = currentToken.params[2];
+    } else if (datasetType == "LANCE") {
+        testGroup->datasetType = TestGroup::DatasetType::LANCE;
+        testGroup->dataset = currentToken.params[2];
     } else {
         throw TestException(
             "Invalid dataset type `" + currentToken.params[1] + "` [" + path + ":" + line + "].");

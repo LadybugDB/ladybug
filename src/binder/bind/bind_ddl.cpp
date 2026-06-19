@@ -365,6 +365,25 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
                 "Cannot mix icebug-disk tables with non-icebug-disk tables in CREATE REL TABLE.");
         }
 
+        bool isSrcLance = srcEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
+                              srcEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
+                                  StorageFormat::LANCE :
+                              false;
+        bool isDstLance = dstEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
+                              dstEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
+                                  StorageFormat::LANCE :
+                              false;
+        bool isRelLance = (storageFormat == StorageFormat::LANCE);
+
+        // Lance rel tables must connect lance node tables, and non-lance rel tables
+        // cannot connect lance node tables.
+        if ((!isRelLance && (isSrcLance || isDstLance)) ||
+            (isRelLance && (!isSrcLance || !isDstLance))) {
+            throw BinderException(
+                "Cannot mix lance tables with non-lance tables in CREATE REL TABLE. "
+                "Lance rel tables must connect lance node tables.");
+        }
+
         // Use the actual shadow table IDs, not FOREIGN_TABLE_ID
         // The shadow tables allow the query planner to distinguish between different node tables
         auto srcTableID = srcEntry->getTableID();

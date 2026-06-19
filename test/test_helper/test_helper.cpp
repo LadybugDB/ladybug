@@ -97,7 +97,8 @@ void TestHelper::executeScript(const std::string& cypherScript, Connection& conn
                 size_t fmtEnd = line.find("\"", fmtStart);
                 if (fmtEnd != std::string::npos) {
                     std::string storageFormat = line.substr(fmtStart, fmtEnd - fmtStart);
-                    if (storageFormat.find("icebug-disk") != std::string::npos) {
+                    if (storageFormat.find("icebug-disk") != std::string::npos ||
+                        storageFormat.find("lance") != std::string::npos) {
                         std::vector<std::string> storagePaths;
                         size_t storageIndex = 0;
                         while (true) {

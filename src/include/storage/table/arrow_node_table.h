@@ -93,13 +93,18 @@ public:
     bool isVisibleNoLock(const transaction::Transaction* transaction,
         common::offset_t offset) const override;
 
+    // Virtual dispatch methods for scan_node_table.cpp extensibility
+    bool requiresExplicitScanInit() const override { return true; }
+    bool usesMorselScan() const override { return true; }
+    size_t getNumScanMorsels(const transaction::Transaction* transaction) const override;
+    // Note: createScanState() left at base default; ArrowNodeTable scan state is
+    // created via the existing dynamic_cast path in createNodeTableScanState().
+
     const ArrowSchemaWrapper& getArrowSchema() const { return schema; }
     const std::vector<ArrowArrayWrapper>& getArrowArrays() const { return arrays; }
 
     common::node_group_idx_t getNumBatches(
         const transaction::Transaction* transaction) const override;
-
-    size_t getNumScanMorsels(const transaction::Transaction* transaction) const;
 
     const catalog::NodeTableCatalogEntry* getCatalogEntry() const { return nodeTableCatalogEntry; }
 

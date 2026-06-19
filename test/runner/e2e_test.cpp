@@ -45,6 +45,16 @@ public:
             lbug::main::Connection* connection =
                 conn ? conn.get() : (connMap.begin()->second).get();
             TestHelper::executeScript(dataset + "/" + TestHelper::SCHEMA_FILE_NAME, *connection);
+        } else if (datasetType == TestGroup::DatasetType::LANCE) {
+            // For LANCE, load the extension first, then run schema.cypher
+            lbug::main::Connection* connection =
+                conn ? conn.get() : (connMap.begin()->second).get();
+            auto loadResult = connection->query("LOAD EXTENSION 'lance'");
+            if (!loadResult->isSuccess()) {
+                throw lbug::common::Exception(
+                    std::format("Failed to load lance extension: {}", loadResult->getErrorMessage()));
+            }
+            TestHelper::executeScript(dataset + "/" + TestHelper::SCHEMA_FILE_NAME, *connection);
         } else if (datasetType != TestGroup::DatasetType::LBUG && dataset != "empty") {
             initGraph();
         } else if (generateBinaryDemo && TestHelper::E2E_OVERRIDE_IMPORT_DIR.empty()) {
