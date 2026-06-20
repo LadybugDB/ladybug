@@ -460,6 +460,24 @@ TEST_F(StatsOptimizerTest, FilterPushDownOrdersMostSelectivePredicateFirst) {
     ASSERT_NE(std::string::npos, deepestFilter->getPredicate()->toString().find("rare"));
 }
 
+TEST_F(StatsOptimizerTest, FilterPushDownOrdersMostSelectivePredicateFirst2) {
+    // This test is similar to the previous one, but uses UNWIND instead of a loop
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE stats_node(id INT64, common INT64, rare INT64, "
+                            "PRIMARY KEY(id));")
+                    ->isSuccess());
+    auto result = conn->query("UNWIND range(0, 19) AS i "
+                              "CREATE (:stats_node {id: i, common: i % 2, rare: i});");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(conn->query("ANALYZE stats_node;")->isSuccess());
+
+    auto plan = getRoot("EXPLAIN LOGICAL MATCH (n:stats_node) "
+                        "WHERE n.common = 1 AND n.rare = 7 "
+                        "RETURN n.id;");
+    auto* deepestFilter = getDeepestFilter(plan->getLastOperator().get());
+    ASSERT_NE(nullptr, deepestFilter);
+    ASSERT_NE(std::string::npos, deepestFilter->getPredicate()->toString().find("rare"));
+}
+
 TEST_F(StatsOptimizerTest, HashJoinCostIncludesEstimatedOutputCardinality) {
     auto leftOp = std::make_shared<planner::LogicalDummyScan>();
     leftOp->setCardinality(10);
