@@ -143,6 +143,9 @@ Conversion exception: Map does not allow duplicate keys.
 -STATEMENT RETURN cast("{12=34}", "MAP(UINT8, UINT16)"), cast("{12=}", "MAP(UINT32, UINT64)"), cast("{=43}", "MAP(INT8, INT16)"), cast("{=}", "MAP(INT32, INT64)"), cast("{12=12}", "MAP(float, double)");
 ---- error
 Conversion exception: Map does not allow null as key.
+-STATEMENT RETURN cast('{k={"val":1}}', 'MAP(STRING, JSON)'), cast(null, 'MAP(STRING, JSON)'), cast('{}', 'MAP(STRING, JSON)')
+---- 1
+{k={"val":1}}||{}
 
 -LOG CastToStruct
 -STATEMENT RETURN cast("{ a : { b : {c:[ 3432423 ,-43423 ,31231 ,NULL ]}  } } ", "STRUCT(a STRUCT(b STRUCT(c INT64[])))"), cast("{ a : { b : {c:[]}  } } ", "STRUCT(a STRUCT(b STRUCT(c INT64[])))"), cast("{ a : { b : {c:}  } } ", "STRUCT(a STRUCT(b STRUCT(c INT64[])))"), cast("{ a : { b : {}  } } ", "STRUCT(a STRUCT(b STRUCT(c INT64[])))"), cast("{ a : {} } ", "STRUCT(a STRUCT(b STRUCT(c INT64[])))"), cast("{} ", "STRUCT(a STRUCT(b STRUCT(c INT64[])))");
