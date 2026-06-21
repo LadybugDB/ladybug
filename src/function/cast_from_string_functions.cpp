@@ -983,6 +983,7 @@ void CastString::copyStringToVector(ValueVector* vector, uint64_t vectorPos,
         CastStringHelper::cast(strVal.data(), strVal.length(), val);
         vector->setValue(vectorPos, val.value);
     } break;
+    case LogicalTypeID::JSON:
     case LogicalTypeID::STRING: {
         if (!utf8proc::Utf8Proc::isValid(strVal.data(), strVal.length())) {
             throw ConversionException{"Invalid UTF8-encoded string."};
