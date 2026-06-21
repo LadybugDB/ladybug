@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -79,7 +80,11 @@ private:
     storage::WAL& wal;
     std::vector<std::unique_ptr<Transaction>> activeTransactions;
     common::transaction_t lastTransactionID;
-    common::transaction_t lastTimestamp;
+    // Atomic so checkpointNoLock() can snapshot it without taking
+    // mtxForSerializingPublicFunctionCalls (which would invert the lock order against
+    // beginTransaction()'s public -> start acquisition order and deadlock concurrent
+    // writers during an auto-checkpoint triggered from commit()).
+    std::atomic<common::transaction_t> lastTimestamp{1};
     uint64_t nextWALCommitSequenceToPublish = 1;
     std::condition_variable cvForPublishingCommit;
     std::condition_variable cvForCommittingWriteTransaction;

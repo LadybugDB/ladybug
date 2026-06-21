@@ -74,8 +74,8 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
     }
     switch (type) {
     case TransactionType::READ_ONLY: {
-        auto transaction =
-            std::make_unique<Transaction>(clientContext, type, ++lastTransactionID, lastTimestamp);
+        auto transaction = std::make_unique<Transaction>(clientContext, type, ++lastTransactionID,
+            lastTimestamp.load(std::memory_order_acquire));
         activeTransactions.push_back(std::move(transaction));
         return activeTransactions.back().get();
     }
@@ -87,8 +87,8 @@ Transaction* TransactionManager::beginTransaction(main::ClientContext& clientCon
                 "Cannot start a new write transaction in the system. "
                 "Only one write transaction at a time is allowed in the system.");
         }
-        auto transaction =
-            std::make_unique<Transaction>(clientContext, type, ++lastTransactionID, lastTimestamp);
+        auto transaction = std::make_unique<Transaction>(clientContext, type, ++lastTransactionID,
+            lastTimestamp.load(std::memory_order_acquire));
         activeWriteTransactionCount.fetch_add(1, std::memory_order_release);
         activeTransactions.push_back(std::move(transaction));
         return activeTransactions.back().get();
@@ -125,8 +125,8 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
                     cvForPublishingCommit.wait(lck,
                         [&]() { return walCommitSequence == nextWALCommitSequenceToPublish; });
                 }
-                lastTimestamp++;
-                transaction->commitTS = lastTimestamp;
+                lastTimestamp.fetch_add(1, std::memory_order_acq_rel);
+                transaction->commitTS = lastTimestamp.load(std::memory_order_acquire);
                 transaction->publishCommit();
                 if (walCommitSequence != 0) {
                     nextWALCommitSequenceToPublish++;
@@ -297,16 +297,12 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     }
     auto checkpointer = initCheckpointerFunc(clientContext);
     try {
-        // Snapshot lastTimestamp under the public-function mutex to avoid a data race:
-        // commit() increments lastTimestamp under that mutex, and checkpointNoLock() runs
-        // without it.  The acquire/release pattern on activeWriteTransactionCount establishes
-        // happens-before ordering for the value itself, but accessing a non-atomic variable
-        // concurrently is still UB under the C++ memory model.
-        transaction_t snapshotTimestamp;
-        {
-            std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
-            snapshotTimestamp = lastTimestamp;
-        }
+        // lastTimestamp is atomic, so we can snapshot it without taking
+        // mtxForSerializingPublicFunctionCalls. Grabbing that mutex here would invert the
+        // lock order against beginTransaction() (which takes public -> start) while the
+        // checkpoint holds the write gate (start), deadlocking concurrent writers during an
+        // auto-checkpoint triggered from commit().
+        transaction_t snapshotTimestamp = lastTimestamp.load(std::memory_order_acquire);
         checkpointer->beginCheckpoint(snapshotTimestamp);
         progress.update(0.15);
     } catch (std::exception& e) {
