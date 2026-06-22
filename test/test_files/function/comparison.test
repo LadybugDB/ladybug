@@ -377,3 +377,24 @@ False
 -STATEMENT MATCH (a:person), (b:person) WHERE a.fName = "Alice" AND b.fName = "Bob" RETURN ID(a) >= ID(b);
 ---- 1
 False
+
+-LOG EqualityInPatternExpressions
+-STATEMENT MATCH p = (n)-[:knows]->(m:person {ID: 2}) WITH nodes(p) AS ns RETURN ns[1] = ns[1];
+---- 3
+True
+True
+True
+
+-LOG InequalityInPatternExpressions
+-STATEMENT MATCH p = (n)-[:knows]->(m:person {ID: 2}) WITH nodes(p) AS ns RETURN ns[1] <> ns[2];
+---- 3
+True
+True
+True
+
+-LOG FalseEqualityInPatternExpressions
+-STATEMENT MATCH p = (n)-[:knows]->(m:person {ID: 2}) WITH nodes(p) AS ns RETURN ns[1] = ns[2];
+---- 3
+False
+False
+False
