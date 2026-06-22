@@ -10,6 +10,7 @@ add_lbug_api_test(api_test
         arrow_error_scenarios_test.cpp
         arrow_drop_table_test.cpp
         arrow_table_function_test.cpp
+        table_storage_format_test.cpp
         prepare_test.cpp
         result_value_test.cpp
         storage_driver_test.cpp

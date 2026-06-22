@@ -17,9 +17,10 @@ class ColumnarRelTableBase : public RelTable {
 public:
     ColumnarRelTableBase(catalog::RelGroupCatalogEntry* relGroupEntry,
         common::table_id_t fromTableID, common::table_id_t toTableID,
-        const StorageManager* storageManager, MemoryManager* memoryManager)
+        const StorageManager* storageManager, MemoryManager* memoryManager,
+        ::lbug::common::TableStorageFormat storageFormat)
         : RelTable{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
-          relGroupEntry{relGroupEntry} {}
+          relGroupEntry{relGroupEntry}, storageFormat{storageFormat} {}
 
     virtual ~ColumnarRelTableBase() = default;
 
@@ -51,6 +52,7 @@ public:
     std::vector<std::pair<common::offset_t, common::row_idx_t>> getTopKDegrees(
         const transaction::Transaction* transaction, common::RelDataDirection direction,
         common::idx_t k) override;
+    lbug::common::TableStorageFormat getStorageFormat() const { return storageFormat; }
 
 protected:
     catalog::RelGroupCatalogEntry* relGroupEntry;
@@ -72,6 +74,9 @@ protected:
     // Subclasses should cache indptr data and provide it via this interface
     virtual common::offset_t findSourceNodeForRowInternal(common::offset_t globalRowIdx,
         const std::vector<common::offset_t>& indptrData) const;
+
+private:
+    lbug::common::TableStorageFormat storageFormat;
 };
 
 } // namespace storage

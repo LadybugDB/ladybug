@@ -65,7 +65,8 @@ ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table
     ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays,
     ArrowSchemaWrapper indptrSchema, std::vector<ArrowArrayWrapper> indptrArrays,
     std::string arrowId, std::string dstColumnName)
-    : ColumnarRelTableBase{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
+    : ColumnarRelTableBase{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager,
+          lbug::common::TableStorageFormat::ARROW},
       fromNodeTable{fromNodeTable}, toNodeTable{toNodeTable}, layout{layout},
       schema{std::move(schema)}, arrays{std::move(arrays)}, indptrSchema{std::move(indptrSchema)},
       indptrArrays{std::move(indptrArrays)}, arrowId{std::move(arrowId)} {

@@ -25,6 +25,8 @@ public:
         MemoryManager* memoryManager, function::TableFunction scanFunction,
         std::shared_ptr<function::TableFuncBindData> scanBindData);
 
+    lbug::common::TableStorageFormat getStorageFormat() const { return storageFormat; }
+
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,
         bool resetCachedBoundNodeSelVec = true) const override;
 
@@ -50,6 +52,7 @@ public:
 private:
     function::TableFunction scanFunction;
     std::shared_ptr<function::TableFuncBindData> scanBindData;
+    lbug::common::TableStorageFormat storageFormat = lbug::common::TableStorageFormat::FOREIGN;
 };
 
 } // namespace storage

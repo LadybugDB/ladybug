@@ -37,10 +37,11 @@ class ColumnarNodeTableBase : public NodeTable {
 public:
     ColumnarNodeTableBase(const StorageManager* storageManager,
         const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
-        std::unique_ptr<ColumnarNodeTableScanSharedState> tableScanSharedState)
+        std::unique_ptr<ColumnarNodeTableScanSharedState> tableScanSharedState,
+        lbug::common::TableStorageFormat storageFormat)
         : NodeTable{storageManager, nodeTableEntry, memoryManager},
           nodeTableCatalogEntry{nodeTableEntry},
-          tableScanSharedState{std::move(tableScanSharedState)} {}
+          tableScanSharedState{std::move(tableScanSharedState)}, storageFormat{storageFormat} {}
 
     virtual ~ColumnarNodeTableBase() = default;
 
@@ -81,6 +82,10 @@ public:
     ColumnarNodeTableScanSharedState* getTableScanSharedState() const {
         return tableScanSharedState.get();
     }
+    lbug::common::TableStorageFormat getStorageFormat() const { return storageFormat; }
+
+private:
+    lbug::common::TableStorageFormat storageFormat;
 };
 
 } // namespace storage

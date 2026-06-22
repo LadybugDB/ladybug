@@ -1,6 +1,7 @@
 add_library(lbug_common_enums
         OBJECT
         accumulate_type.cpp
+        table_storage_format.cpp
         storage_format.cpp
         path_semantic.cpp
         query_rel_type.cpp

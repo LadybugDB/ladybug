@@ -66,7 +66,8 @@ void IceDiskRelTableScanState::reloadCachedBatchData(Transaction* transaction) {
 IceDiskRelTable::IceDiskRelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
     table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager,
     main::ClientContext* context)
-    : ColumnarRelTableBase{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
+    : ColumnarRelTableBase{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager,
+          ::lbug::common::TableStorageFormat::ICEBUG_DISK},
       layout{IceDiskRelTableLayout::CSR} {
     const auto& storage = relGroupEntry->getStorage();
     if (common::StringUtils::getLower(storage).ends_with("parquet")) {
