@@ -471,12 +471,23 @@ void NodeBatchInsert::finalizeInternal(ExecutionContext* context) {
         skippedDuplicatePKCount = nodeSharedState->duplicatePKSkipResult->skippedCount;
         skippedDuplicatePKs = nodeSharedState->duplicatePKSkipResult->pks;
     }
-    auto outputMsg = std::format("{} tuples have been copied to the {} table.",
-        sharedState->getNumRows() - sharedState->getNumErroredRows() - skippedDuplicatePKCount,
-        info->tableName);
+    auto copiedCount =
+        sharedState->getNumRows() - sharedState->getNumErroredRows() - skippedDuplicatePKCount;
+    const auto warningCount =
+        WarningContext::Get(*clientContext)->getWarningCount(context->queryID);
+    std::string outputMsg =
+        std::format("{} tuples have been copied to the {} table.", copiedCount, info->tableName);
+    if (warningCount > 0) {
+        // Fold the warning summary into the single result row so the user still sees how many
+        // warnings were collected during the COPY. Individual warnings remain queryable via
+        // `CALL show_warnings() RETURN *`.
+        outputMsg = std::format(
+            "{} tuples have been copied to the {} table. {} warnings encountered during copy. "
+            "Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: {}",
+            copiedCount, info->tableName, warningCount, context->queryID);
+    }
     // Contract: a node COPY always returns exactly one row with three columns
-    // (result, skipped_duplicate_pk_count, skipped_duplicate_pks). Warnings are no longer surfaced
-    // as a second row here; they remain queryable via `CALL show_warnings() RETURN *`.
+    // (result, skipped_duplicate_pk_count, skipped_duplicate_pks).
     FactorizedTableUtils::appendNodeCopyResultToTable(sharedState->fTable.get(), outputMsg,
         skippedDuplicatePKCount, skippedDuplicatePKs, MemoryManager::Get(*clientContext));
 }

@@ -8,7 +8,7 @@
 ---- ok
 -STATEMENT COPY animal FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/error-on-block-edge.csv" (ignore_errors=true, header=false);
 ---- 1
-191 tuples have been copied to the animal table.|0|[]
+191 tuples have been copied to the animal table. 59 warnings encountered during copy. Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: 7|0|[]
 -STATEMENT CALL show_warnings() RETURN COUNT(*)
 ---- 1
 59
@@ -31,7 +31,7 @@ Quoted newlines are not supported in parallel CSV reader. Please specify PARALLE
 -CASE ParallelSkipInvalidNodeTableRowsCastingErrorCheckNumTuples
 -STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/vPerson.csv" (IGNORE_ERRORS=true, AUTO_DETECT=false)
 ---- 1
-5 tuples have been copied to the person table.|0|[]
+5 tuples have been copied to the person table. 2 warnings encountered during copy. Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: 6|0|[]
 
 -CASE ParallelSkipInvalidNodeTableRowsCastingError
 -STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/vPerson.csv" (IGNORE_ERRORS=true, AUTO_DETECT=false)
@@ -81,7 +81,7 @@ Quoted newlines are not supported in parallel CSV reader. Please specify PARALLE
 ---- ok
 -STATEMENT COPY movie FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/vMovie.csv" (IGNORE_ERRORS=true, HEADER=true, ESCAPE="~", AUTO_DETECT=false)
 ---- 1
-5 tuples have been copied to the movie table.|0|[]
+5 tuples have been copied to the movie table. 5 warnings encountered during copy. Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: 7|0|[]
 -STATEMENT CALL show_warnings() RETURN message, file_path, line_number, skipped_line_or_record
 ---- 2
 Conversion exception: Cast failed. Could not convert "312abc" to INT32.|${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/vMovie.csv|2|0,312abc...
@@ -99,10 +99,10 @@ neither QUOTE nor ESCAPE is proceeded by ESCAPE.|${LBUG_ROOT_DIRECTORY}/dataset/
 ---- ok
 -STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/vPerson.csv" (IGNORE_ERRORS=true, AUTO_DETECT=false)
 ---- 1
-5 tuples have been copied to the person table.|0|[]
+5 tuples have been copied to the person table. 2 warnings encountered during copy. Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: 7|0|[]
 -STATEMENT COPY movie FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/vMovie.csv" (IGNORE_ERRORS=true, ESCAPE="~", HEADER=true, AUTO_DETECT=false)
 ---- 1
-5 tuples have been copied to the movie table.|0|[]
+5 tuples have been copied to the movie table. 5 warnings encountered during copy. Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: 8|0|[]
 -STATEMENT CALL show_warnings() RETURN message, file_path, line_number, skipped_line_or_record
 ---- 2
 Conversion exception: Cast failed. Could not convert "2147483650" to INT32.|${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/vPerson.csv|2|2,2147483650
@@ -268,7 +268,7 @@ Copy exception: Error in file ${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/in
 -CASE SerialSkipInvalidNodeTableRowsCastingErrorCheckNumTuples
 -STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/vPerson.csv" (IGNORE_ERRORS=true, PARALLEL=false, AUTO_DETECT=false)
 ---- 1
-5 tuples have been copied to the person table.|0|[]
+5 tuples have been copied to the person table. 2 warnings encountered during copy. Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: 6|0|[]
 
 -CASE ParallelCopyFromMultipleLargeFilesSkipInvalid
 -STATEMENT CALL threads=2
@@ -354,7 +354,7 @@ unterminated quotes.|${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row
 ---- ok
 -STATEMENT COPY movie FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/vMovie.csv" (IGNORE_ERRORS=true, HEADER=true, ESCAPE="~", PARALLEL=false, AUTO_DETECT=false)
 ---- 1
-5 tuples have been copied to the movie table.|0|[]
+5 tuples have been copied to the movie table. 5 warnings encountered during copy. Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: 7|0|[]
 -STATEMENT CALL show_warnings() RETURN message, file_path, line_number, skipped_line_or_record
 ---- 2
 Conversion exception: Cast failed. Could not convert "312abc" to INT32.|${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/vMovie.csv|2|0,312abc...
@@ -412,7 +412,7 @@ Conversion exception: Cast failed. Could not convert "1111111111111111111111111"
 ---- ok
 -STATEMENT COPY person FROM (MATCH (p:person) RETURN CASE WHEN p.id % 2 = 0 THEN p.id ELSE p.id + 10 END, p.gender) (ignore_errors=true)
 ---- 1
-2 tuples have been copied to the person table.|0|[]
+2 tuples have been copied to the person table. 3 warnings encountered during copy. Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: 7|0|[]
 -STATEMENT MATCH (p:person) RETURN p.id
 ---- 7
 0
@@ -426,7 +426,7 @@ Conversion exception: Cast failed. Could not convert "1111111111111111111111111"
 -CASE ParallelCopyFromCSVWithMultipleBlocksIgnoreErrors
 -STATEMENT COPY Comment FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/Comment.csv" (ignore_errors=true, AUTO_DETECT=false, header=true, delim='|')
 ---- 1
-996 tuples have been copied to the Comment table.|0|[]
+996 tuples have been copied to the Comment table. 3 warnings encountered during copy. Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: 6|0|[]
 -STATEMENT CALL show_warnings() RETURN message, file_path, line_number, skipped_line_or_record
 ---- 3
 Conversion exception: Cast failed. Could not convert "412316860444aa" to INT64.|${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/invalid-row/Comment.csv|26|412316860444aa...

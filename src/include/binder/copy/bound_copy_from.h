@@ -93,7 +93,8 @@ class BoundCopyFrom final : public BoundStatement {
 
 public:
     explicit BoundCopyFrom(BoundCopyFromInfo info)
-        : BoundStatement{statementType_, info.tableType == common::TableType::NODE ?
+        : BoundStatement{statementType_,
+              info.tableType == common::TableType::NODE ?
                   createNodeCopyResult() :
                   BoundStatementResult::createSingleStringColumnResult()},
           info{std::move(info)} {}
