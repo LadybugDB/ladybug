@@ -88,7 +88,8 @@ std::shared_ptr<Expression> LabelFunction::rewriteFunc(const RewriteFunctionBind
         return expressionBinder->createNullLiteralExpression();
     }
     expression_vector children;
-    if (argument->expressionType == ExpressionType::VARIABLE) {
+    // For non-pattern expressions (VARIABLE, FUNCTION, etc.), extract the _LABEL field
+    if (argument->expressionType != ExpressionType::PATTERN) {
         children.push_back(input.arguments[0]);
         children.push_back(expressionBinder->createLiteralExpression(InternalKeyword::LABEL));
         return expressionBinder->bindScalarFunctionExpression(children,

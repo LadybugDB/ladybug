@@ -41,3 +41,9 @@ workAt
 -STATEMENT RETURN labels(null);
 ---- 1
 
+-LOG LabelOnPathNodeExtract
+-STATEMENT MATCH p = (n)-[:knows]->(m:person {ID: 2}) WITH nodes(p) AS ns RETURN label(ns[1]);
+---- 3
+person
+person
+person

@@ -5,6 +5,7 @@
 #include "catalog/catalog.h"
 #include "common/exception/binder.h"
 #include "function/built_in_function_utils.h"
+#include "function/struct/vector_struct_functions.h"
 #include "transaction/transaction.h"
 #include <format>
 
@@ -42,8 +43,19 @@ std::shared_ptr<Expression> ExpressionBinder::bindComparisonExpression(
     DASSERT(children.size() == 2);
     if (isNodeOrRel(*children[0]) && isNodeOrRel(*children[1])) {
         expression_vector newChildren;
-        newChildren.push_back(children[0]->constCast<NodeOrRelExpression>().getInternalID());
-        newChildren.push_back(children[1]->constCast<NodeOrRelExpression>().getInternalID());
+        // For pattern expressions (NODE/REL), use getInternalID() directly
+        // For non-pattern expressions (VARIABLE, FUNCTION, etc.), extract the _ID field
+        for (const auto& child : children) {
+            if (child->expressionType == ExpressionType::PATTERN) {
+                newChildren.push_back(child->constCast<NodeOrRelExpression>().getInternalID());
+            } else {
+                expression_vector extractChildren;
+                extractChildren.push_back(child);
+                extractChildren.push_back(createLiteralExpression(InternalKeyword::ID));
+                newChildren.push_back(
+                    bindScalarFunctionExpression(extractChildren, StructExtractFunctions::name));
+            }
+        }
         return bindComparisonExpression(expressionType, newChildren);
     }
 
