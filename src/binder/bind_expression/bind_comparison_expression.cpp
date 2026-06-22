@@ -27,7 +27,14 @@ std::shared_ptr<Expression> ExpressionBinder::bindComparisonExpression(
     return bindComparisonExpression(parsedExpression.getExpressionType(), children);
 }
 
-static bool isNodeOrRel(const Expression& expression) {
+// A node or rel *pattern* expression (e.g. from a MATCH) has an internal ID property and can
+// be rewritten to an internal-ID comparison. A plain variable holding a NODE/REL value (e.g. a
+// lambda variable bound from `relationships(p)`) is a VariableExpression with a NODE/REL logical
+// type but no internal ID, so it must go through the regular value comparison path.
+static bool isNodeOrRelPattern(const Expression& expression) {
+    if (expression.expressionType != ExpressionType::PATTERN) {
+        return false;
+    }
     switch (expression.getDataType().getLogicalTypeID()) {
     case LogicalTypeID::NODE:
     case LogicalTypeID::REL:
@@ -41,20 +48,11 @@ std::shared_ptr<Expression> ExpressionBinder::bindComparisonExpression(
     ExpressionType expressionType, const expression_vector& children) {
     // Rewrite node or rel comparison
     DASSERT(children.size() == 2);
-    if (isNodeOrRel(*children[0]) && isNodeOrRel(*children[1])) {
+    if (isNodeOrRelPattern(*children[0]) && isNodeOrRelPattern(*children[1])) {
         expression_vector newChildren;
-        // For pattern expressions (NODE/REL), use getInternalID() directly
-        // For non-pattern expressions (VARIABLE, FUNCTION, etc.), extract the _ID field
+        newChildren.reserve(children.size());
         for (const auto& child : children) {
-            if (child->expressionType == ExpressionType::PATTERN) {
-                newChildren.push_back(child->constCast<NodeOrRelExpression>().getInternalID());
-            } else {
-                expression_vector extractChildren;
-                extractChildren.push_back(child);
-                extractChildren.push_back(createLiteralExpression(InternalKeyword::ID));
-                newChildren.push_back(
-                    bindScalarFunctionExpression(extractChildren, StructExtractFunctions::name));
-            }
+            newChildren.push_back(child->constCast<NodeOrRelExpression>().getInternalID());
         }
         return bindComparisonExpression(expressionType, newChildren);
     }
