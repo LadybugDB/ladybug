@@ -49,11 +49,19 @@ public:
     T* getGroup(const common::UniqLock& lock, common::idx_t groupIdx) const {
         DASSERT(lock.isLocked());
         UNUSED(lock);
-        DASSERT(groupIdx < groups.size());
+        // A stale/invalid CSR row can map to an out-of-range group index (e.g.
+        // getQuotientRemainder(INVALID_ROW_IDX)). Returning nullptr instead of
+        // performing an out-of-bounds std::vector access lets callers skip the
+        // stale row rather than dereferencing into undefined behavior (SIGSEGV).
+        if (groupIdx >= groups.size()) {
+            return nullptr;
+        }
         return groups[groupIdx].get();
     }
     T* getGroupNoLock(common::idx_t groupIdx) const {
-        DASSERT(groupIdx < groups.size());
+        if (groupIdx >= groups.size()) {
+            return nullptr;
+        }
         return groups[groupIdx].get();
     }
     void replaceGroup(const common::UniqLock& lock, common::idx_t groupIdx,

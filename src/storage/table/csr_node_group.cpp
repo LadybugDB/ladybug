@@ -292,6 +292,10 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedInMemSequential(const Transaction
         const auto lock = chunkedGroups.lock();
         chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
     }
+    if (chunkedGroup == nullptr) {
+        // Stale/invalid committed-in-memory row: nothing to scan.
+        return NODE_GROUP_SCAN_EMPTY_RESULT;
+    }
     chunkedGroup->scan(transaction, tableState, nodeGroupScanState, startRowInChunk, numRows);
     nodeGroupScanState.nextRowToScan += numRows;
     return NodeGroupScanResult{startRow, numRows};
@@ -318,6 +322,11 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedInMemRandom(const Transaction* tr
             currentChunkIdx = chunkIdx;
             const auto lock = chunkedGroups.lock();
             chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
+        }
+        if (chunkedGroup == nullptr) {
+            // Stale/invalid committed-in-memory row: skip it.
+            nextRow++;
+            continue;
         }
         DASSERT(chunkedGroup);
         numSelected += chunkedGroup->lookup(transaction, tableState, nodeGroupScanState, rowInChunk,
@@ -410,6 +419,10 @@ void CSRNodeGroup::update(const Transaction* transaction, CSRNodeGroupScanSource
             StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
         const auto lock = chunkedGroups.lock();
         const auto chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
+        if (chunkedGroup == nullptr) {
+            // Stale/invalid committed-in-memory row: target row no longer exists.
+            return;
+        }
         return chunkedGroup->update(transaction, rowInChunk, columnID, propertyVector);
     }
     default: {
@@ -432,6 +445,10 @@ bool CSRNodeGroup::delete_(const Transaction* transaction, CSRNodeGroupScanSourc
             StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
         const auto lock = chunkedGroups.lock();
         const auto chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
+        if (chunkedGroup == nullptr) {
+            // Stale/invalid committed-in-memory row: nothing to delete.
+            return false;
+        }
         return chunkedGroup->delete_(transaction, rowInChunk);
     }
     default: {
@@ -854,6 +871,10 @@ std::vector<ChunkCheckpointState> CSRNodeGroup::checkpointColumnInRegion(const U
                 auto [chunkIdx, rowInChunk] = StorageUtils::getQuotientRemainder(row,
                     StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
                 const auto chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
+                if (chunkedGroup == nullptr) {
+                    // Stale/invalid committed-in-memory row: skip the insertion write.
+                    continue;
+                }
                 writeInMemoryCSRInsertion(txn, writeCursor, *chunkedGroup, rowInChunk, columnID,
                     chunkState);
             }
@@ -914,7 +935,7 @@ void CSRNodeGroup::collectInMemRegionChangesAndUpdateHeaderLength(const UniqLock
                 auto [chunkIdx, rowInChunk] = StorageUtils::getQuotientRemainder(row,
                     StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
                 const auto chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
-                if (chunkedGroup->isDeleted(txn, rowInChunk)) {
+                if (chunkedGroup == nullptr || chunkedGroup->isDeleted(txn, rowInChunk)) {
                     csrIndex->indices[nodeOffset].turnToNonSequential();
                     csrIndex->indices[nodeOffset].setInvalid(i);
                     numInMemDeletionsInCSR++;
@@ -1118,7 +1139,8 @@ void CSRNodeGroup::populateCSRLengthInMemOnly(const UniqLock& lock, offset_t num
             auto [chunkIdx, rowInChunk] =
                 StorageUtils::getQuotientRemainder(row, StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
             const auto chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
-            const auto isDeleted = chunkedGroup->isDeleted(txn, rowInChunk);
+            const auto isDeleted =
+                (chunkedGroup == nullptr) || chunkedGroup->isDeleted(txn, rowInChunk);
             if (isDeleted) {
                 csrIndex->indices[offset].turnToNonSequential();
                 csrIndex->indices[offset].setInvalid(i);
