@@ -1,8 +1,12 @@
 #include "common/assert.h"
+#include "common/constants.h"
+#include "common/exception/binder.h"
+#include "common/string_utils.h"
 #include "parser/copy.h"
 #include "parser/expression/parsed_literal_expression.h"
 #include "parser/scan_source.h"
 #include "parser/transformer.h"
+#include <format>
 
 using namespace lbug::common;
 
@@ -95,7 +99,34 @@ options_t Transformer::transformOptions(CypherParser::IC_OptionsContext& ctx) {
         // Check if the literal exists, otherwise set the value to true by default
         if (loadOption->oC_Literal()) {
             // If there is a literal, transform it and use it as the value
-            options.emplace(optionName, transformLiteral(*loadOption->oC_Literal()));
+            std::string valueStr = loadOption->oC_Literal()->getText();
+            StringUtils::toUpper(valueStr);
+            if (loadOption->iC_OptionQualifier()) {
+                auto qualifier =
+                    transformSymbolicName(*loadOption->iC_OptionQualifier()->oC_SymbolicName());
+                auto upperOptionName = optionName;
+                StringUtils::toUpper(upperOptionName);
+                StringUtils::toUpper(qualifier);
+                // Only `IGNORE_ERRORS=true (DUPLICATE_PK_ONLY)` is supported: rewrite it into the
+                // internal SKIP_DUPLICATE_PK option so the existing duplicate-PK skip path kicks
+                // in. Any other option/value/qualifier combination is rejected here.
+                if (upperOptionName != CopyConstants::IGNORE_ERRORS_OPTION_NAME ||
+                    qualifier != CopyConstants::DUPLICATE_PK_ONLY_QUALIFIER_NAME) {
+                    throw common::BinderException(
+                        std::format("Option qualifier ({}) is only supported as "
+                                    "IGNORE_ERRORS=true (DUPLICATE_PK_ONLY).",
+                            qualifier));
+                }
+                if (valueStr != "TRUE" && valueStr != "1") {
+                    throw common::BinderException(
+                        "IGNORE_ERRORS option qualifier "
+                        "(DUPLICATE_PK_ONLY) is only supported with IGNORE_ERRORS=true.");
+                }
+                options.emplace(CopyConstants::SKIP_DUPLICATE_PK_OPTION_NAME,
+                    std::make_unique<ParsedLiteralExpression>(Value(true), "true"));
+            } else {
+                options.emplace(optionName, transformLiteral(*loadOption->oC_Literal()));
+            }
         } else {
             // If no literal is provided, set the default value to true
             options.emplace(optionName,

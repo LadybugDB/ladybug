@@ -112,8 +112,8 @@ void NodeBatchInsertSharedState::initPKIndex(const ExecutionContext* context) {
         if (nodeTable->tryGetPrimaryKeyIndex() != nullptr) {
             if (skipDuplicatePK) {
                 throw RuntimeException(
-                    "SKIP_DUPLICATE_PK is only supported for node tables with a primary-key "
-                    "hash index.");
+                    "IGNORE_ERRORS=true (DUPLICATE_PK_ONLY) is only supported for node tables "
+                    "with a primary-key hash index.");
             }
             globalIndexBuilder.reset();
             noIndexPKValidator.reset();
@@ -127,8 +127,8 @@ void NodeBatchInsertSharedState::initPKIndex(const ExecutionContext* context) {
         }
         if (skipDuplicatePK) {
             throw RuntimeException(
-                "SKIP_DUPLICATE_PK is only supported for node tables with a primary-key hash "
-                "index.");
+                "IGNORE_ERRORS=true (DUPLICATE_PK_ONLY) is only supported for node tables with "
+                "a primary-key hash index.");
         }
         globalIndexBuilder.reset();
         noIndexPKValidator = createNoIndexPKValidator(pkType);
@@ -455,6 +455,9 @@ void NodeBatchInsert::finalizeInternal(ExecutionContext* context) {
     const auto* nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
     const auto* nodeSharedState =
         dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
+
+    int64_t skippedDuplicatePKCount = 0;
+    std::vector<std::string> skippedDuplicatePKs;
     if (nodeInfo->skipDuplicatePK) {
         std::lock_guard lck{nodeSharedState->duplicatePKSkipResult->mtx};
         // Duplicate-PK rows are counted in getNumRows() because they are appended before index
@@ -465,36 +468,17 @@ void NodeBatchInsert::finalizeInternal(ExecutionContext* context) {
         DASSERT(
             sharedState->getNumRows() >= sharedState->getNumErroredRows() +
                                              nodeSharedState->duplicatePKSkipResult->skippedCount);
-        auto outputMsg = std::format("{} tuples have been copied to the {} table.",
-            sharedState->getNumRows() - sharedState->getNumErroredRows() -
-                nodeSharedState->duplicatePKSkipResult->skippedCount,
-            info->tableName);
-        FactorizedTableUtils::appendNodeCopyResultToTable(sharedState->fTable.get(), outputMsg,
-            nodeSharedState->duplicatePKSkipResult->skippedCount,
-            nodeSharedState->duplicatePKSkipResult->pks, MemoryManager::Get(*clientContext));
-    } else {
-        auto outputMsg = std::format("{} tuples have been copied to the {} table.",
-            sharedState->getNumRows() - sharedState->getNumErroredRows(), info->tableName);
-        FactorizedTableUtils::appendStringToTable(sharedState->fTable.get(), outputMsg,
-            MemoryManager::Get(*clientContext));
+        skippedDuplicatePKCount = nodeSharedState->duplicatePKSkipResult->skippedCount;
+        skippedDuplicatePKs = nodeSharedState->duplicatePKSkipResult->pks;
     }
-
-    const auto warningCount =
-        WarningContext::Get(*clientContext)->getWarningCount(context->queryID);
-    if (warningCount > 0) {
-        auto warningMsg =
-            std::format("{} warnings encountered during copy. Use 'CALL "
-                        "show_warnings() RETURN *' to view the actual warnings. Query ID: {}",
-                warningCount, context->queryID);
-        if (nodeInfo->skipDuplicatePK) {
-            FactorizedTableUtils::appendNodeCopyResultToTable(sharedState->fTable.get(), warningMsg,
-                0 /* skippedDuplicatePKCount */, {} /* skippedDuplicatePKs */,
-                MemoryManager::Get(*clientContext));
-        } else {
-            FactorizedTableUtils::appendStringToTable(sharedState->fTable.get(), warningMsg,
-                MemoryManager::Get(*clientContext));
-        }
-    }
+    auto outputMsg = std::format("{} tuples have been copied to the {} table.",
+        sharedState->getNumRows() - sharedState->getNumErroredRows() - skippedDuplicatePKCount,
+        info->tableName);
+    // Contract: a node COPY always returns exactly one row with three columns
+    // (result, skipped_duplicate_pk_count, skipped_duplicate_pks). Warnings are no longer surfaced
+    // as a second row here; they remain queryable via `CALL show_warnings() RETURN *`.
+    FactorizedTableUtils::appendNodeCopyResultToTable(sharedState->fTable.get(), outputMsg,
+        skippedDuplicatePKCount, skippedDuplicatePKs, MemoryManager::Get(*clientContext));
 }
 
 } // namespace processor

@@ -57,7 +57,7 @@
 -LOG CopyWithOptionsErrorTest
 -STATEMENT COPY tableOfTypes FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/parquet/types_50k*.parquet" (HEADER=true);
 ---- error
-Binder exception: Copy from Parquet cannot have options other than IGNORE_ERRORS and SKIP_DUPLICATE_PK.
+Binder exception: Copy from Parquet cannot have options other than IGNORE_ERRORS (which may be qualified as IGNORE_ERRORS=true (DUPLICATE_PK_ONLY)).
 
 -CASE IgnoreErrorsTest
 -STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/parquet/invalid_pk_col.parquet" (IGNORE_ERRORS=true);
@@ -75,6 +75,6 @@ Found duplicated primary key value 2, which violates the uniqueness constraint o
 5
 
 -CASE SkipDuplicatePKStillErrorsOnNullPKTest
--STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/parquet/invalid_pk_col.parquet" (SKIP_DUPLICATE_PK=true);
+-STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-test/node/parquet/invalid_pk_col.parquet" (IGNORE_ERRORS=true (DUPLICATE_PK_ONLY));
 ---- error
 Copy exception: Found NULL, which violates the non-null constraint of the primary key column.

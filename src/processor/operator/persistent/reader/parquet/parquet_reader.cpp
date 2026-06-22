@@ -695,14 +695,18 @@ static std::unique_ptr<TableFuncBindData> bindFunc(main::ClientContext* context,
     const TableFuncBindInput* input) {
     auto scanInput = dynamic_cast_checked<ExtraScanTableFuncBindInput*>(input->extraInput.get());
     const auto& options = scanInput->fileScanInfo.options;
+    // The user-facing COPY options are `IGNORE_ERRORS=true` and `IGNORE_ERRORS=true
+    // (DUPLICATE_PK_ONLY)`; the parser rewrites the latter into the internal SKIP_DUPLICATE_PK
+    // option key, so we accept either of those two keys here.
     if (options.size() > 2 ||
         (options.size() == 1 && !options.contains(CopyConstants::IGNORE_ERRORS_OPTION_NAME) &&
             !options.contains(CopyConstants::SKIP_DUPLICATE_PK_OPTION_NAME)) ||
         (options.size() == 2 &&
             (!options.contains(CopyConstants::IGNORE_ERRORS_OPTION_NAME) ||
                 !options.contains(CopyConstants::SKIP_DUPLICATE_PK_OPTION_NAME)))) {
-        throw BinderException{"Copy from Parquet cannot have options other than IGNORE_ERRORS and "
-                              "SKIP_DUPLICATE_PK."};
+        throw BinderException{
+            "Copy from Parquet cannot have options other than IGNORE_ERRORS (which "
+            "may be qualified as IGNORE_ERRORS=true (DUPLICATE_PK_ONLY))."};
     }
     std::vector<std::string> detectedColumnNames;
     std::vector<LogicalType> detectedColumnTypes;

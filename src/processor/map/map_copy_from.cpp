@@ -47,10 +47,9 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCopyNodeFrom(
     const auto copyFromInfo = copyFrom.getInfo();
     const auto outFSchema = copyFrom.getSchema();
     auto prevOperator = mapOperator(copyFrom.getChild(0).get());
-    auto fTable =
-        copyFromInfo->getSkipDuplicatePKOption() ?
-            FactorizedTableUtils::getNodeCopyResultFTable(MemoryManager::Get(*clientContext)) :
-            FactorizedTableUtils::getSingleStringColumnFTable(MemoryManager::Get(*clientContext));
+    // A node COPY always returns the three-column result schema (result,
+    // skipped_duplicate_pk_count, skipped_duplicate_pks) regardless of the active ignore mode.
+    auto fTable = FactorizedTableUtils::getNodeCopyResultFTable(MemoryManager::Get(*clientContext));
 
     auto sharedState = std::make_shared<NodeBatchInsertSharedState>(fTable);
     sharedState->skipDuplicatePK = copyFromInfo->getSkipDuplicatePKOption();

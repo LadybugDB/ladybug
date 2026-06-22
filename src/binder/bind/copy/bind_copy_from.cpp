@@ -141,11 +141,12 @@ BoundCopyFromInfo Binder::bindCopyNodeFromInfo(std::string tableName,
     const auto ignoreErrors = getBoolCopyOption(parsingOptions,
         CopyConstants::IGNORE_ERRORS_OPTION_NAME, CopyConstants::DEFAULT_IGNORE_ERRORS);
     if (skipDuplicatePK && ignoreErrors) {
-        throw BinderException("SKIP_DUPLICATE_PK cannot be used together with IGNORE_ERRORS.");
+        throw BinderException("IGNORE_ERRORS=true (DUPLICATE_PK_ONLY) cannot be used together with "
+                              "IGNORE_ERRORS=true.");
     }
     if (skipDuplicatePK && source->type != ScanSourceType::FILE) {
-        throw BinderException(
-            "SKIP_DUPLICATE_PK is only supported for COPY FROM files into node tables.");
+        throw BinderException("IGNORE_ERRORS=true (DUPLICATE_PK_ONLY) is only supported for COPY "
+                              "FROM files into node tables.");
     }
     auto boundSource =
         bindScanSource(source, parsingOptions, expectedColumnNames, expectedColumnTypes);
@@ -218,8 +219,8 @@ BoundCopyFromInfo Binder::bindCopyRelFromInfo(std::string tableName,
     const NodeTableCatalogEntry* toTable) {
     if (getBoolCopyOption(parsingOptions, CopyConstants::SKIP_DUPLICATE_PK_OPTION_NAME,
             CopyConstants::DEFAULT_SKIP_DUPLICATE_PK)) {
-        throw BinderException(
-            "SKIP_DUPLICATE_PK is only supported for COPY FROM files into node tables.");
+        throw BinderException("IGNORE_ERRORS=true (DUPLICATE_PK_ONLY) is only supported for COPY "
+                              "FROM files into node tables.");
     }
     auto boundSource =
         bindScanSource(source, parsingOptions, expectedColumnNames, expectedColumnTypes);

@@ -93,16 +93,15 @@ class BoundCopyFrom final : public BoundStatement {
 
 public:
     explicit BoundCopyFrom(BoundCopyFromInfo info)
-        : BoundStatement{statementType_,
-              info.getSkipDuplicatePKOption() ?
-                  createSkipDuplicatePKResult() :
+        : BoundStatement{statementType_, info.tableType == common::TableType::NODE ?
+                  createNodeCopyResult() :
                   BoundStatementResult::createSingleStringColumnResult()},
           info{std::move(info)} {}
 
     const BoundCopyFromInfo* getInfo() const { return &info; }
 
 private:
-    static BoundStatementResult createSkipDuplicatePKResult() {
+    static BoundStatementResult createNodeCopyResult() {
         auto result = BoundStatementResult::createSingleStringColumnResult();
         auto skippedCount = std::make_shared<LiteralExpression>(common::Value{int64_t(0)},
             "skipped_duplicate_pk_count");

@@ -105,7 +105,11 @@ struct CopyConstants {
     static constexpr uint64_t PARALLEL_BLOCK_SIZE = INITIAL_BUFFER_SIZE / 2;
 
     static constexpr const char* IGNORE_ERRORS_OPTION_NAME = "IGNORE_ERRORS";
+    // Internal name of the duplicate-primary-key skip option. The user-facing COPY syntax is
+    // `IGNORE_ERRORS=true (DUPLICATE_PK_ONLY)`, which `Transformer::transformOptions` rewrites into
+    // this option key so the existing duplicate-PK skip path stays intact.
     static constexpr const char* SKIP_DUPLICATE_PK_OPTION_NAME = "SKIP_DUPLICATE_PK";
+    static constexpr const char* DUPLICATE_PK_ONLY_QUALIFIER_NAME = "DUPLICATE_PK_ONLY";
 
     static constexpr const char* FROM_OPTION_NAME = "FROM";
     static constexpr const char* TO_OPTION_NAME = "TO";

@@ -14,7 +14,7 @@
 ---- ok
 -STATEMENT COPY person FROM '${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv' (skip=3);
 ---- 1
-2 tuples have been copied to the person table.
+2 tuples have been copied to the person table.|0|[]
 -STATEMENT MATCH (p:person) return p.*;
 ---- 2
 5|Dan|2|False|True|20|4.800000|1950-07-23|2031-11-30 12:25:30|10 years 5 months 13:00:00.000024|[1,9]|[Wolfeschlegelstein,Daniel]|[[7,4],[8,8],[9]]|[76,88,99,89]|1.300000|a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14

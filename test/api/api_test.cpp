@@ -203,12 +203,16 @@ TEST_F(ApiTest, SingleQueryHasNextQueryResult) {
 TEST_F(ApiTest, CopySkipDuplicatePKPreservesResultColumnNames) {
     ASSERT_TRUE(conn->query("CREATE NODE TABLE copy_user(ID STRING, name STRING, PRIMARY KEY(ID));")
                     ->isSuccess());
-    auto result = conn->query(std::format("COPY copy_user FROM \"{}\" (SKIP_DUPLICATE_PK=true);",
-        TestHelper::appendLbugRootPath("dataset/copy-fault-tests/duplicate-ids/vOrg.csv")));
+    auto result = conn->query(
+        std::format("COPY copy_user FROM \"{}\" (IGNORE_ERRORS=true (DUPLICATE_PK_ONLY));",
+            TestHelper::appendLbugRootPath("dataset/copy-fault-tests/duplicate-ids/vOrg.csv")));
     ASSERT_TRUE(result->isSuccess());
 
+    // Contract: a node COPY always returns exactly one row with three columns
+    // (result, skipped_duplicate_pk_count, skipped_duplicate_pks), regardless of ignore mode.
+    ASSERT_EQ(result->getNumColumns(), 3);
     const auto columnNames = result->getColumnNames();
-    ASSERT_EQ(columnNames.size(), 3);
+    EXPECT_EQ(columnNames.size(), 3);
     EXPECT_EQ(columnNames[0], "result");
     EXPECT_EQ(columnNames[1], "skipped_duplicate_pk_count");
     EXPECT_EQ(columnNames[2], "skipped_duplicate_pks");
@@ -217,6 +221,27 @@ TEST_F(ApiTest, CopySkipDuplicatePKPreservesResultColumnNames) {
     auto tuple = result->getNext();
     EXPECT_EQ(tuple->getValue(1)->getValue<int64_t>(), 1);
     EXPECT_EQ(tuple->getValue(2)->toString(), "[10]");
+    // Exactly one row is returned.
+    EXPECT_FALSE(result->hasNext());
+
+    // The same 1-row / 3-column contract holds even when a second duplicate-PK csv is copied:
+    // duplicate PKs accumulate into the skipped lists/errors instead of erroring out.
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE copy_user2(ID STRING, name STRING, PRIMARY "
+                            "KEY(ID));")
+                    ->isSuccess());
+    auto result2 = conn->query(
+        std::format("COPY copy_user2 FROM \"{}\" (IGNORE_ERRORS=true (DUPLICATE_PK_ONLY));",
+            TestHelper::appendLbugRootPath("dataset/copy-fault-tests/duplicate-ids/vOrg.csv")));
+    ASSERT_TRUE(result2->isSuccess());
+    ASSERT_EQ(result2->getNumColumns(), 3);
+    ASSERT_TRUE(result2->hasNext());
+    auto tuple2 = result2->getNext();
+    EXPECT_EQ(tuple2->getValue(0)->toString(),
+        std::format("{} tuples have been copied to the copy_user2 table.", 3));
+    EXPECT_EQ(tuple2->getValue(1)->getValue<int64_t>(), 1);
+    EXPECT_EQ(tuple2->getValue(2)->toString(), "[10]");
+    // Exactly one row is returned.
+    EXPECT_FALSE(result2->hasNext());
 }
 
 TEST_F(ApiTest, Prepare) {

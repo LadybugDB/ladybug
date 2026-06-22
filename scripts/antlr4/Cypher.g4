@@ -318,7 +318,13 @@ iC_AttachDatabase
     : ATTACH SP StringLiteral (SP AS SP oC_SchemaName)? SP '(' SP? DBTYPE SP oC_SymbolicName (SP? ',' SP? iC_Options)? SP? ')' ;
 
 iC_Option
-    : oC_SymbolicName (SP? '=' SP? | SP*) oC_Literal | oC_SymbolicName;
+    : oC_SymbolicName (SP? '=' SP? | SP*) oC_Literal (SP? iC_OptionQualifier)? | oC_SymbolicName;
+
+// An optional parenthesized qualifier attached to a valued COPY option. Currently only
+// `IGNORE_ERRORS=true (DUPLICATE_PK_ONLY)` is meaningful: it is rewritten at parse time into the
+// internal SKIP_DUPLICATE_PK option (duplicate-primary-key-only ignore mode).
+iC_OptionQualifier
+    : '(' SP? oC_SymbolicName SP? ')' ;
 
 iC_Options
     : iC_Option ( SP? ',' SP? iC_Option )* ;

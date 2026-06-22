@@ -14,9 +14,8 @@ Copy exception: Found NULL, which violates the non-null constraint of the primar
 
 -CASE NullPrimaryKeyInNodeFileIgnoreErrors
 -STATEMENT COPY person FROM "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/null-pk/vPerson.csv"(IGNORE_ERRORS=true)
----- 2
-2 tuples have been copied to the person table.
-1 warnings encountered during copy. Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: 3
+---- 1
+2 tuples have been copied to the person table.|0|[]
 -STATEMENT MATCH (p:person) RETURN p.fName
 ---- 2
 alice
@@ -27,9 +26,8 @@ bob
 
 -CASE NullPrimaryKeyInMultiNodeFilesIgnoreErrors
 -STATEMENT COPY person FROM ["${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/null-pk/vPerson.csv", "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/null-pk/vPerson2.csv"](IGNORE_ERRORS=true)
----- 2
-5 tuples have been copied to the person table.
-2 warnings encountered during copy. Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: 3
+---- 1
+5 tuples have been copied to the person table.|0|[]
 -STATEMENT CALL show_warnings() RETURN query_id, message, file_path, skipped_line_or_record, line_number
 ---- 2
 3|Found NULL, which violates the non-null constraint of the primary key column.|${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/null-pk/vPerson.csv||2
@@ -39,9 +37,8 @@ bob
 -STATEMENT CALL warning_limit=1;
 ---- ok
 -STATEMENT COPY person FROM ["${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/null-pk/vPerson.csv", "${LBUG_ROOT_DIRECTORY}/dataset/copy-fault-tests/null-pk/vPerson2.csv"](IGNORE_ERRORS=true)
----- 2
-5 tuples have been copied to the person table.
-2 warnings encountered during copy. Use 'CALL show_warnings() RETURN *' to view the actual warnings. Query ID: 4
+---- 1
+5 tuples have been copied to the person table.|0|[]
 -STATEMENT CALL show_warnings() RETURN query_id, message
 ---- 1
 4|Found NULL, which violates the non-null constraint of the primary key column.
