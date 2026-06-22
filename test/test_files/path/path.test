@@ -122,3 +122,11 @@ Expected: (LIST) -> INT64
           (ARRAY) -> INT64
           (MAP) -> INT64
           (STRING) -> INT64
+
+-CASE RecursiveRelComparisonBug
+
+-LOG RecursivePathWithAllAndRelComparison
+# Bug: Segfault when using ALL() with relationship comparison in recursive path
+-STATEMENT MATCH (a:person)-[t:knows]->(d:person) WHERE a.ID <> d.ID WITH a, d, t MATCH p = (a)-[:knows*1..3]->(d) WHERE length(p) >= 2 AND ALL (r IN relationships(p) WHERE r <> t) WITH DISTINCT t RETURN count(t);
+---- 1
+12
