@@ -1,7 +1,6 @@
 #pragma once
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
-#include "common/enums/table_storage_format.h"
 #include "common/exception/runtime.h"
 #include "function/table/table_function.h"
 #include "storage/table/rel_table.h"
@@ -25,8 +24,6 @@ public:
         common::table_id_t toTableID, const StorageManager* storageManager,
         MemoryManager* memoryManager, function::TableFunction scanFunction,
         std::shared_ptr<function::TableFuncBindData> scanBindData);
-
-    common::TableStorageFormat getStorageFormat() const { return storageFormat; }
 
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,
         bool resetCachedBoundNodeSelVec = true) const override;
@@ -53,7 +50,6 @@ public:
 private:
     function::TableFunction scanFunction;
     std::shared_ptr<function::TableFuncBindData> scanBindData;
-    common::TableStorageFormat storageFormat = common::TableStorageFormat::FOREIGN;
 };
 
 } // namespace storage

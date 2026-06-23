@@ -6,7 +6,6 @@ add_lbug_test(types_test
         interval_test.cpp
         null_mask_test.cpp
         string_test.cpp
-        table_storage_format_utils_test.cpp
         time_test.cpp
         timestamp_test.cpp
         vfs_test.cpp

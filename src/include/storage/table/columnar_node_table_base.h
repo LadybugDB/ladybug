@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
-#include "common/enums/table_storage_format.h"
 #include "common/exception/runtime.h"
 #include "common/mask.h"
 #include "common/types/internal_id_util.h"
@@ -38,11 +37,10 @@ class ColumnarNodeTableBase : public NodeTable {
 public:
     ColumnarNodeTableBase(const StorageManager* storageManager,
         const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
-        std::unique_ptr<ColumnarNodeTableScanSharedState> tableScanSharedState,
-        common::TableStorageFormat storageFormat)
+        std::unique_ptr<ColumnarNodeTableScanSharedState> tableScanSharedState)
         : NodeTable{storageManager, nodeTableEntry, memoryManager},
           nodeTableCatalogEntry{nodeTableEntry},
-          tableScanSharedState{std::move(tableScanSharedState)}, storageFormat{storageFormat} {}
+          tableScanSharedState{std::move(tableScanSharedState)} {}
 
     virtual ~ColumnarNodeTableBase() = default;
 
@@ -81,15 +79,11 @@ public:
     ColumnarNodeTableScanSharedState* getTableScanSharedState() const {
         return tableScanSharedState.get();
     }
-    common::TableStorageFormat getStorageFormat() const { return storageFormat; }
     virtual std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
         const std::vector<common::ValueVector*>& outVectors,
         MemoryManager* memoryManager) const = 0;
     virtual common::node_group_idx_t getNumScanMorsels(
         const transaction::Transaction* transaction) const = 0;
-
-private:
-    common::TableStorageFormat storageFormat;
 };
 
 } // namespace storage

@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
-#include "common/enums/table_storage_format.h"
 #include "common/exception/runtime.h"
 #include "common/types/internal_id_util.h"
 #include "storage/table/rel_table.h"
@@ -18,10 +17,9 @@ class ColumnarRelTableBase : public RelTable {
 public:
     ColumnarRelTableBase(catalog::RelGroupCatalogEntry* relGroupEntry,
         common::table_id_t fromTableID, common::table_id_t toTableID,
-        const StorageManager* storageManager, MemoryManager* memoryManager,
-        common::TableStorageFormat storageFormat)
+        const StorageManager* storageManager, MemoryManager* memoryManager)
         : RelTable{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
-          relGroupEntry{relGroupEntry}, storageFormat{storageFormat} {}
+          relGroupEntry{relGroupEntry} {}
 
     virtual ~ColumnarRelTableBase() = default;
 
@@ -53,7 +51,6 @@ public:
     std::vector<std::pair<common::offset_t, common::row_idx_t>> getTopKDegrees(
         const transaction::Transaction* transaction, common::RelDataDirection direction,
         common::idx_t k) override;
-    common::TableStorageFormat getStorageFormat() const { return storageFormat; }
     virtual std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
         const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager,
         std::shared_ptr<common::DataChunkState> outChunkState) const = 0;
@@ -78,9 +75,6 @@ protected:
     // Subclasses should cache indptr data and provide it via this interface
     virtual common::offset_t findSourceNodeForRowInternal(common::offset_t globalRowIdx,
         const std::vector<common::offset_t>& indptrData) const;
-
-private:
-    common::TableStorageFormat storageFormat;
 };
 
 } // namespace storage
