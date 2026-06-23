@@ -290,6 +290,12 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedInMemSequential(const Transaction
     const ChunkedNodeGroup* chunkedGroup = nullptr;
     {
         const auto lock = chunkedGroups.lock();
+        // A stale CSR index entry (e.g. an INVALID_ROW_IDX sentinel) can yield an
+        // out-of-range chunk group index. Guard against it instead of dereferencing
+        // a null/out-of-bounds group. See LadybugDB/ladybug#611.
+        if (chunkIdx >= chunkedGroups.getNumGroups(lock)) {
+            return NODE_GROUP_SCAN_EMPTY_RESULT;
+        }
         chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
     }
     chunkedGroup->scan(transaction, tableState, nodeGroupScanState, startRowInChunk, numRows);
@@ -315,8 +321,15 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedInMemRandom(const Transaction* tr
         auto [chunkIdx, rowInChunk] =
             StorageUtils::getQuotientRemainder(rowIdx, StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
         if (chunkIdx != currentChunkIdx) {
-            currentChunkIdx = chunkIdx;
             const auto lock = chunkedGroups.lock();
+            // A stale CSR index entry (e.g. an INVALID_ROW_IDX sentinel) can yield an
+            // out-of-range chunk group index. Skip such rows instead of dereferencing
+            // a null/out-of-bounds group. See LadybugDB/ladybug#611.
+            if (chunkIdx >= chunkedGroups.getNumGroups(lock)) {
+                nextRow++;
+                continue;
+            }
+            currentChunkIdx = chunkIdx;
             chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
         }
         DASSERT(chunkedGroup);
@@ -409,6 +422,11 @@ void CSRNodeGroup::update(const Transaction* transaction, CSRNodeGroupScanSource
         auto [chunkIdx, rowInChunk] = StorageUtils::getQuotientRemainder(rowIdxInGroup,
             StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
         const auto lock = chunkedGroups.lock();
+        // A stale CSR index entry can yield an out-of-range chunk group index; treat
+        // the update as a no-op in that case. See LadybugDB/ladybug#611.
+        if (chunkIdx >= chunkedGroups.getNumGroups(lock)) {
+            return;
+        }
         const auto chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
         return chunkedGroup->update(transaction, rowInChunk, columnID, propertyVector);
     }
@@ -431,6 +449,11 @@ bool CSRNodeGroup::delete_(const Transaction* transaction, CSRNodeGroupScanSourc
         auto [chunkIdx, rowInChunk] = StorageUtils::getQuotientRemainder(rowIdxInGroup,
             StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
         const auto lock = chunkedGroups.lock();
+        // A stale CSR index entry can yield an out-of-range chunk group index; treat
+        // the delete as a no-op in that case. See LadybugDB/ladybug#611.
+        if (chunkIdx >= chunkedGroups.getNumGroups(lock)) {
+            return false;
+        }
         const auto chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
         return chunkedGroup->delete_(transaction, rowInChunk);
     }
@@ -913,6 +936,15 @@ void CSRNodeGroup::collectInMemRegionChangesAndUpdateHeaderLength(const UniqLock
                 const auto row = rows[i];
                 auto [chunkIdx, rowInChunk] = StorageUtils::getQuotientRemainder(row,
                     StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
+                // A stale CSR index entry (e.g. an INVALID_ROW_IDX sentinel from a
+                // prior checkpoint pass) can yield an out-of-range chunk group index.
+                // Treat it as already deleted and skip. See LadybugDB/ladybug#611.
+                if (chunkIdx >= chunkedGroups.getNumGroups(lock)) {
+                    csrIndex->indices[nodeOffset].turnToNonSequential();
+                    csrIndex->indices[nodeOffset].setInvalid(i);
+                    numInMemDeletionsInCSR++;
+                    continue;
+                }
                 const auto chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
                 if (chunkedGroup->isDeleted(txn, rowInChunk)) {
                     csrIndex->indices[nodeOffset].turnToNonSequential();
@@ -1117,6 +1149,15 @@ void CSRNodeGroup::populateCSRLengthInMemOnly(const UniqLock& lock, offset_t num
             const auto row = rows[i];
             auto [chunkIdx, rowInChunk] =
                 StorageUtils::getQuotientRemainder(row, StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
+            // A stale CSR index entry (e.g. an INVALID_ROW_IDX sentinel from a prior
+            // checkpoint pass) can yield an out-of-range chunk group index. Treat it
+            // as already deleted. See LadybugDB/ladybug#611.
+            if (chunkIdx >= chunkedGroups.getNumGroups(lock)) {
+                csrIndex->indices[offset].turnToNonSequential();
+                csrIndex->indices[offset].setInvalid(i);
+                lengthAfterDelete--;
+                continue;
+            }
             const auto chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
             const auto isDeleted = chunkedGroup->isDeleted(txn, rowInChunk);
             if (isDeleted) {
