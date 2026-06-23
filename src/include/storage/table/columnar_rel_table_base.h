@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "common/enums/table_storage_format.h"
 #include "common/exception/runtime.h"
 #include "common/types/internal_id_util.h"
 #include "storage/table/rel_table.h"
@@ -18,7 +19,7 @@ public:
     ColumnarRelTableBase(catalog::RelGroupCatalogEntry* relGroupEntry,
         common::table_id_t fromTableID, common::table_id_t toTableID,
         const StorageManager* storageManager, MemoryManager* memoryManager,
-        ::lbug::common::TableStorageFormat storageFormat)
+        common::TableStorageFormat storageFormat)
         : RelTable{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
           relGroupEntry{relGroupEntry}, storageFormat{storageFormat} {}
 
@@ -52,7 +53,7 @@ public:
     std::vector<std::pair<common::offset_t, common::row_idx_t>> getTopKDegrees(
         const transaction::Transaction* transaction, common::RelDataDirection direction,
         common::idx_t k) override;
-    lbug::common::TableStorageFormat getStorageFormat() const { return storageFormat; }
+    common::TableStorageFormat getStorageFormat() const { return storageFormat; }
     virtual std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
         const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager,
         std::shared_ptr<common::DataChunkState> outChunkState) const = 0;
@@ -79,7 +80,7 @@ protected:
         const std::vector<common::offset_t>& indptrData) const;
 
 private:
-    lbug::common::TableStorageFormat storageFormat;
+    common::TableStorageFormat storageFormat;
 };
 
 } // namespace storage

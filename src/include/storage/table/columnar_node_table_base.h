@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "common/enums/table_storage_format.h"
 #include "common/exception/runtime.h"
 #include "common/mask.h"
 #include "common/types/internal_id_util.h"
@@ -38,7 +39,7 @@ public:
     ColumnarNodeTableBase(const StorageManager* storageManager,
         const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
         std::unique_ptr<ColumnarNodeTableScanSharedState> tableScanSharedState,
-        lbug::common::TableStorageFormat storageFormat)
+        common::TableStorageFormat storageFormat)
         : NodeTable{storageManager, nodeTableEntry, memoryManager},
           nodeTableCatalogEntry{nodeTableEntry},
           tableScanSharedState{std::move(tableScanSharedState)}, storageFormat{storageFormat} {}
@@ -80,7 +81,7 @@ public:
     ColumnarNodeTableScanSharedState* getTableScanSharedState() const {
         return tableScanSharedState.get();
     }
-    lbug::common::TableStorageFormat getStorageFormat() const { return storageFormat; }
+    common::TableStorageFormat getStorageFormat() const { return storageFormat; }
     virtual std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
         const std::vector<common::ValueVector*>& outVectors,
         MemoryManager* memoryManager) const = 0;
@@ -88,7 +89,7 @@ public:
         const transaction::Transaction* transaction) const = 0;
 
 private:
-    lbug::common::TableStorageFormat storageFormat;
+    common::TableStorageFormat storageFormat;
 };
 
 } // namespace storage

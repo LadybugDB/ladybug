@@ -90,8 +90,10 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
     auto* columnarTable = dynamic_cast<storage::ColumnarRelTableBase*>(tableInfo.table);
     auto* foreignTable = dynamic_cast<storage::ForeignRelTable*>(tableInfo.table);
     if (columnarTable) {
-        scanState = columnarTable->createScanState(boundNodeIDVector, outVectors,
+        auto tableScanState = columnarTable->createScanState(boundNodeIDVector, outVectors,
             MemoryManager::Get(*clientContext), nbrNodeIDVector->state);
+        scanState = std::unique_ptr<RelTableScanState>(
+            dynamic_cast<RelTableScanState*>(tableScanState.release()));
     } else if (foreignTable) {
         scanState =
             std::make_unique<storage::ForeignRelTableScanState>(*MemoryManager::Get(*clientContext),

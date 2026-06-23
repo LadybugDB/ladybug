@@ -74,7 +74,7 @@ IceDiskRelTable::IceDiskRelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t
     table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager,
     main::ClientContext* context)
     : ColumnarRelTableBase{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager,
-          ::lbug::common::TableStorageFormat::ICEBUG_DISK},
+          common::TableStorageFormat::ICEBUG_DISK},
       layout{IceDiskRelTableLayout::CSR} {
     const auto& storage = relGroupEntry->getStorage();
     if (common::StringUtils::getLower(storage).ends_with("parquet")) {

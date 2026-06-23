@@ -30,7 +30,7 @@ IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
     main::ClientContext* context)
     : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager,
           std::make_unique<IceDiskNodeTableScanSharedState>(),
-          lbug::common::TableStorageFormat::ICEBUG_DISK} {
+          common::TableStorageFormat::ICEBUG_DISK} {
     const auto& storage = nodeTableEntry->getStorage();
     auto path =
         common::StringUtils::getLower(storage).ends_with("parquet") ?

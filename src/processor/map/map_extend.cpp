@@ -223,10 +223,10 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
                             std::make_shared<ScanNodeTableSharedState>(std::move(semiMask)));
                     }
                 }
-                if (!sourceNodeTables.empty() && !scanNode->getProperties().empty() {
-                    if (const auto* columnarTable =
-                            dynamic_cast<ColumnarRelTableBase*>(relTable) &&
-                            TableStorageFormatUtils::isIceDisk(columnarTable->getStorageFormat())) {
+                if (!sourceNodeTables.empty() && !scanNode->getProperties().empty()) {
+                    if (const auto* columnarTable = dynamic_cast<ColumnarRelTableBase*>(relTable);
+                        columnarTable != nullptr &&
+                        TableStorageFormatUtils::isIceDisk(columnarTable->getStorageFormat())) {
                         std::vector<DataPos> sourceOutVectorsPos;
                         for (auto& expression : scanNode->getProperties()) {
                             sourceOutVectorsPos.emplace_back(getDataPos(*expression, *inFSchema));
@@ -241,7 +241,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
                             std::move(sourceNodeScanInfo), getOperatorID(), printInfo->copy(),
                             physicalOperatorType);
                     }
-            }
+                }
                 // Only apply the existing no-property optimization if scan node is not already
                 // mapped (e.g., by a semi-masker).
                 if (!sourceNodeTables.empty() &&

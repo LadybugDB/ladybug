@@ -29,7 +29,7 @@ ArrowNodeTable::ArrowNodeTable(const StorageManager* storageManager,
     ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays, std::string arrowId)
     : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager,
           std::make_unique<ArrowNodeTableScanSharedState>(scanMorselSize),
-          lbug::common::TableStorageFormat::ARROW},
+          common::TableStorageFormat::ARROW},
       schema{std::move(schema)}, arrays{std::move(arrays)}, totalRows{0},
       arrowId{std::move(arrowId)} {
     // Note: release may be nullptr if schema is managed by registry

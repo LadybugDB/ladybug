@@ -8,9 +8,13 @@
 #include "common/arrow/arrow.h"
 #include "common/enums/table_storage_format.h"
 #include "common/enums/table_type.h"
+#include "graph_test/private_graph_test.h"
 #include "gtest/gtest.h"
+#include "main/client_context.h"
 #include "storage/storage_manager.h"
 #include "storage/table/arrow_table_support.h"
+#include "storage/table/columnar_node_table_base.h"
+#include "storage/table/columnar_rel_table_base.h"
 #include "storage/table/table.h"
 #include "test_helper/test_helper.h"
 #include "transaction/transaction.h"
@@ -20,7 +24,16 @@ using namespace lbug;
 using namespace lbug::common;
 using namespace lbug::testing;
 
-class ColumnarTableStorageFormatTest : public ApiTest {};
+class ColumnarTableStorageFormatTest : public EmptyDBTest {
+protected:
+    void SetUp() override {
+        EmptyDBTest::SetUp();
+        createDBAndConn();
+        context = conn->getClientContext();
+    }
+
+    lbug::main::ClientContext* context = nullptr;
+};
 
 TEST_F(ColumnarTableStorageFormatTest, ReportsRuntimeTableFormats) {
     auto* context = getClientContext(*conn);
@@ -32,12 +45,19 @@ TEST_F(ColumnarTableStorageFormatTest, ReportsRuntimeTableFormats) {
         auto* entry = catalog->getTableCatalogEntry(transaction, tableName);
         ASSERT_NE(entry, nullptr);
         lbug::common::table_id_t tableID = entry->getTableID();
-        if (entry->getTableType() == lbug::common::TableType::REL) {
+
+        if (entry->getTableType() == lbug::common::TableType::NODE) {
+            auto* table =
+                storageManager->getTable(tableID)->ptrCast<lbug::storage::ColumnarNodeTableBase>();
+            ASSERT_NE(table, nullptr);
+            EXPECT_EQ(expected, table->getStorageFormat()) << tableName;
+        } else {
             tableID = entry->ptrCast<catalog::RelGroupCatalogEntry>()->getSingleRelEntryInfo().oid;
+            auto* table =
+                storageManager->getTable(tableID)->ptrCast<lbug::storage::ColumnarRelTableBase>();
+            ASSERT_NE(table, nullptr);
+            EXPECT_EQ(expected, table->getStorageFormat()) << tableName;
         }
-        auto* table = storageManager->getTable(tableID);
-        ASSERT_NE(table, nullptr);
-        EXPECT_EQ(expected, table->getStorageFormat()) << tableName;
     };
 
     const auto iceDiskStorage = TestHelper::appendLbugRootPath("dataset/ice-disk-test/");
@@ -73,7 +93,7 @@ TEST_F(ColumnarTableStorageFormatTest, ReportsRuntimeTableFormats) {
     std::vector<ArrowArrayWrapper> relArrays;
     relArrays.push_back(std::move(relArray));
     auto relCreation = ArrowTableSupport::createRelTableFromArrowTable(*conn, "arrow_format_knows",
-        "person", "person", std::move(relSchema), std::move(relArrays));
+        "arrow_format_person", "arrow_format_person", std::move(relSchema), std::move(relArrays));
     ASSERT_TRUE(relCreation.queryResult->isSuccess()) << relCreation.queryResult->toString();
     expectFormat("arrow_format_knows", TableStorageFormat::ARROW);
 }
