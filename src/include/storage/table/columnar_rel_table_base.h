@@ -53,6 +53,9 @@ public:
         const transaction::Transaction* transaction, common::RelDataDirection direction,
         common::idx_t k) override;
     lbug::common::TableStorageFormat getStorageFormat() const { return storageFormat; }
+    virtual std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
+        const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager,
+        std::shared_ptr<common::DataChunkState> outChunkState) const = 0;
 
 protected:
     catalog::RelGroupCatalogEntry* relGroupEntry;

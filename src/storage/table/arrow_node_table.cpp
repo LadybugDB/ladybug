@@ -51,6 +51,12 @@ ArrowNodeTable::~ArrowNodeTable() {
     }
 }
 
+std::unique_ptr<TableScanState> ArrowNodeTable::createScanState(common::ValueVector* nodeIDVector,
+    const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager) const {
+    return std::make_unique<ArrowNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
+        nodeIDVector->state);
+}
+
 void ArrowNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
     auto arrowScanSharedState =
         static_cast<ArrowNodeTableScanSharedState*>(tableScanSharedState.get());
@@ -136,11 +142,6 @@ bool ArrowNodeTable::scanInternal([[maybe_unused]] transaction::Transaction* tra
     return true;
 }
 
-common::node_group_idx_t ArrowNodeTable::getNumBatches(
-    [[maybe_unused]] const transaction::Transaction* transaction) const {
-    return arrays.size();
-}
-
 common::row_idx_t ArrowNodeTable::getTotalRowCount(
     [[maybe_unused]] const transaction::Transaction* transaction) const {
     return totalRows;
@@ -157,9 +158,9 @@ std::vector<size_t> ArrowNodeTable::getBatchSizes(
     return batchSizes;
 }
 
-size_t ArrowNodeTable::getNumScanMorsels(
+common::node_group_idx_t ArrowNodeTable::getNumScanMorsels(
     [[maybe_unused]] const transaction::Transaction* transaction) const {
-    size_t numMorsels = 0;
+    common::node_group_idx_t numMorsels = 0;
     for (const auto& array : arrays) {
         auto batchLength = getArrowBatchLength(array);
         numMorsels += (batchLength + scanMorselSize - 1) / scanMorselSize;

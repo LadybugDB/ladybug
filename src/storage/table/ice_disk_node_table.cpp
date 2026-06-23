@@ -30,7 +30,7 @@ IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
     main::ClientContext* context)
     : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager,
           std::make_unique<IceDiskNodeTableScanSharedState>(),
-          ::lbug::common::TableStorageFormat::ICEBUG_DISK} {
+          lbug::common::TableStorageFormat::ICEBUG_DISK} {
     const auto& storage = nodeTableEntry->getStorage();
     auto path =
         common::StringUtils::getLower(storage).ends_with("parquet") ?
@@ -41,11 +41,17 @@ IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
     parquetFilePath = resolvedPath;
 }
 
+std::unique_ptr<TableScanState> IceDiskNodeTable::createScanState(common::ValueVector* nodeIDVector,
+    const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager) const {
+    return std::make_unique<IceDiskNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
+        nodeIDVector->state);
+}
+
 void IceDiskNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
     auto iceDiskScanSharedState =
         static_cast<IceDiskNodeTableScanSharedState*>(tableScanSharedState.get());
-    auto numBatches = getNumBatches(transaction);
-    iceDiskScanSharedState->reset(numBatches);
+    auto numMorsels = getNumScanMorsels(transaction);
+    iceDiskScanSharedState->reset(numMorsels);
 }
 
 void IceDiskNodeTable::initScanState(Transaction* transaction, TableScanState& scanState,
@@ -86,7 +92,8 @@ void IceDiskNodeTable::initScanState(Transaction* transaction, TableScanState& s
     initParquetScanForRowGroup(transaction, iceDiskScanState);
 }
 
-common::node_group_idx_t IceDiskNodeTable::getNumBatches(const Transaction* transaction) const {
+common::node_group_idx_t IceDiskNodeTable::getNumScanMorsels(
+    const transaction::Transaction* transaction) const {
     auto context = transaction->getClientContext();
     if (!context) {
         return 1;
@@ -95,7 +102,7 @@ common::node_group_idx_t IceDiskNodeTable::getNumBatches(const Transaction* tran
     std::vector<bool> columnSkips;
     try {
         auto tempReader = std::make_unique<ParquetReader>(parquetFilePath, columnSkips, context);
-        return tempReader->getNumRowGroups();
+        return static_cast<common::node_group_idx_t>(tempReader->getNumRowGroups());
     } catch (const std::exception& e) {
         return 1; // Fallback
     }

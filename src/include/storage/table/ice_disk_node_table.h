@@ -76,12 +76,15 @@ public:
         common::offset_t offset) const override;
 
     const std::string& getParquetFilePath() const { return parquetFilePath; }
+    std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
+        const std::vector<common::ValueVector*>& outVectors,
+        MemoryManager* memoryManager) const override;
+    common::node_group_idx_t getNumScanMorsels(
+        const transaction::Transaction* transaction) const override;
 
 protected:
     // Implement ColumnarNodeTableBase interface
     std::string getColumnarFormatName() const override { return "icebug-disk"; }
-    common::node_group_idx_t getNumBatches(
-        const transaction::Transaction* transaction) const override;
     common::row_idx_t getTotalRowCount(const transaction::Transaction* transaction) const override;
 
 private:

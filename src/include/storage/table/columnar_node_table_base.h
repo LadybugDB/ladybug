@@ -73,8 +73,6 @@ protected:
 
     // Template method pattern: subclasses implement format-specific operations
     virtual std::string getColumnarFormatName() const = 0;
-    virtual common::node_group_idx_t getNumBatches(
-        const transaction::Transaction* transaction) const = 0;
     virtual common::row_idx_t getTotalRowCount(
         const transaction::Transaction* transaction) const = 0;
 
@@ -83,6 +81,11 @@ public:
         return tableScanSharedState.get();
     }
     lbug::common::TableStorageFormat getStorageFormat() const { return storageFormat; }
+    virtual std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
+        const std::vector<common::ValueVector*>& outVectors,
+        MemoryManager* memoryManager) const = 0;
+    virtual common::node_group_idx_t getNumScanMorsels(
+        const transaction::Transaction* transaction) const = 0;
 
 private:
     lbug::common::TableStorageFormat storageFormat;

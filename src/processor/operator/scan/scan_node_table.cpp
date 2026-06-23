@@ -17,14 +17,11 @@ namespace processor {
 static std::unique_ptr<TableScanState> createNodeTableScanState(NodeTable* table,
     ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
     MemoryManager* memoryManager) {
-    if (dynamic_cast<IceDiskNodeTable*>(table) != nullptr) {
-        return std::make_unique<IceDiskNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
-            nodeIDVector->state);
+    if (dynamic_cast<ColumnarNodeTableBase*>(table) != nullptr) {
+        return table->cast<ColumnarNodeTableBase>().createScanState(nodeIDVector, outVectors,
+            memoryManager);
     }
-    if (dynamic_cast<ArrowNodeTable*>(table) != nullptr) {
-        return std::make_unique<ArrowNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
-            nodeIDVector->state);
-    }
+
     return std::make_unique<NodeTableScanState>(nodeIDVector, outVectors, nodeIDVector->state);
 }
 
@@ -56,23 +53,8 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
     // Initialize table-specific scan coordination (e.g., for IceDiskNodeTable)
     table->initializeScanCoordination(transaction);
 
-    if (const auto iceDiskTable = dynamic_cast<IceDiskNodeTable*>(table)) {
-        // For ice-disk tables, set numCommittedNodeGroups to number of row groups
-        std::vector<bool> columnSkips;
-        try {
-            auto context = transaction->getClientContext();
-            auto resolvedPath =
-                common::VirtualFileSystem::resolvePath(context, iceDiskTable->getParquetFilePath());
-            auto tempReader =
-                std::make_unique<processor::ParquetReader>(resolvedPath, columnSkips, context);
-            this->numCommittedNodeGroups = tempReader->getNumRowGroups();
-        } catch (const std::exception& e) {
-            this->numCommittedNodeGroups = 1;
-        }
-    } else if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(table)) {
-        // For Arrow tables, set numCommittedNodeGroups to number of morsels
-        this->numCommittedNodeGroups =
-            static_cast<common::node_group_idx_t>(arrowTable->getNumScanMorsels(transaction));
+    if (const auto columnarNodeTable = dynamic_cast<ColumnarNodeTableBase*>(table)) {
+        this->numCommittedNodeGroups = columnarNodeTable->getNumScanMorsels(transaction);
     } else {
         this->numCommittedNodeGroups = table->getNumCommittedNodeGroups();
     }
@@ -90,10 +72,8 @@ void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
     ScanNodeTableProgressSharedState& progressSharedState) {
     std::unique_lock lck{mtx};
 
-    // ColumnarNodeTables handle morsel assignment internally
-    // TODO: icebug-disk tables https://github.com/LadybugDB/ladybug/issues/245
-    if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(this->table)) {
-        const auto tableSharedState = arrowTable->getTableScanSharedState();
+    if (const auto columnarTable = dynamic_cast<ColumnarNodeTableBase*>(this->table)) {
+        const auto tableSharedState = columnarTable->getTableScanSharedState();
         if (tableSharedState->getNextMorsel(static_cast<ColumnarNodeTableScanState*>(&scanState))) {
             scanState.source = TableScanSource::COMMITTED;
             progressSharedState.numMorselsScanned++;
@@ -149,9 +129,8 @@ void ScanNodeTable::initCurrentTable(ExecutionContext* context) {
         outVectors, MemoryManager::Get(*context->clientContext));
     currentInfo.initScanState(*scanState, outVectors, context->clientContext);
     scanState->semiMask = sharedStates[currentTableIdx]->getSemiMask();
-    // Call table->initScanState for IceDiskNodeTable or ArrowNodeTable
-    if (dynamic_cast<IceDiskNodeTable*>(tableInfos[currentTableIdx].table) ||
-        dynamic_cast<ArrowNodeTable*>(tableInfos[currentTableIdx].table)) {
+    // Call table->initScanState for ColumnarNodeTables
+    if (dynamic_cast<ColumnarNodeTableBase*>(tableInfos[currentTableIdx].table)) {
         auto transaction = transaction::Transaction::Get(*context->clientContext);
         tableInfos[currentTableIdx].table->initScanState(transaction, *scanState);
     }

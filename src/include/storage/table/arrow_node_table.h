@@ -96,12 +96,14 @@ public:
     const ArrowSchemaWrapper& getArrowSchema() const { return schema; }
     const std::vector<ArrowArrayWrapper>& getArrowArrays() const { return arrays; }
 
-    common::node_group_idx_t getNumBatches(
+    common::node_group_idx_t getNumScanMorsels(
         const transaction::Transaction* transaction) const override;
 
-    size_t getNumScanMorsels(const transaction::Transaction* transaction) const;
-
     const catalog::NodeTableCatalogEntry* getCatalogEntry() const { return nodeTableCatalogEntry; }
+
+    std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
+        const std::vector<common::ValueVector*>& outVectors,
+        MemoryManager* memoryManager) const override;
 
 protected:
     std::string getColumnarFormatName() const override { return "Arrow"; }

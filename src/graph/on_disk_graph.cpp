@@ -129,9 +129,11 @@ OnDiskGraphNbrScanState::OnDiskGraphNbrScanState(ClientContext* context,
         }
 
         std::unique_ptr<RelTableScanState> scanState;
-        if (dynamic_cast<IceDiskRelTable*>(table) != nullptr) {
-            scanState = std::make_unique<IceDiskRelTableScanState>(*mm, srcNodeIDVector.get(),
-                outVectors, state);
+        if (const auto* columnarTable =
+                dynamic_cast<ColumnarRelTableBase*>(table) &&
+                TableStorageFormatUtils::isIceDisk(columnarTable->getStorageFormat())) {
+            scanState =
+                columnarTable->createScanState(srcNodeIDVector.get(), outVectors, mm, state);
         } else {
             scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*context),
                 srcNodeIDVector.get(), outVectors, dstNodeIDVector->state, randomLookup);

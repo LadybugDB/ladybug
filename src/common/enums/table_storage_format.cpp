@@ -25,5 +25,13 @@ std::string TableStorageFormatUtils::toString(TableStorageFormat format) {
     }
 }
 
+bool TableStorageFormatUtils::isArrow(TableStorageFormat format) {
+    return format == TableStorageFormat::ARROW;
+}
+
+bool TableStorageFormatUtils::isIceDisk(TableStorageFormat format) {
+    return format == TableStorageFormat::ICEBUG_DISK;
+}
+
 } // namespace common
 } // namespace lbug

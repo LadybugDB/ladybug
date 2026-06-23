@@ -38,6 +38,13 @@ static int64_t findColumnIdx(const ArrowSchemaWrapper& schema, const std::string
     return -1;
 }
 
+std::unique_ptr<TableScanState> ArrowRelTable::createScanState(common::ValueVector* nodeIDVector,
+    const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager,
+    std::shared_ptr<common::DataChunkState> outChunkState) const {
+    return std::make_unique<storage::ArrowRelTableScanState>(*memoryManager, nodeIDVector,
+        outVectors, outChunkState);
+}
+
 void ArrowRelTableScanState::setToTable(const transaction::Transaction* transaction, Table* table_,
     std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
     RelDataDirection direction_) {

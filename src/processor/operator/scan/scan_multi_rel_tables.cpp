@@ -67,86 +67,76 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
     auto nbrNodeIDVector = outVectors[0];
 
     // Check if any table in any scanner is an external rel table with a custom scan state.
-    bool hasArrowTable = false;
-    bool hasIceDiskTable = false;
+    storage::ColumnarRelTableBase* columnarTable = nullptr;
     for (auto& [_, scanner] : scanners) {
         for (auto& relInfo : scanner.relInfos) {
-            if (dynamic_cast<storage::ArrowRelTable*>(relInfo.table) != nullptr) {
-                hasArrowTable = true;
+            if (dynamic_cast<storage::ColumnarRelTableBase*>(relInfo.table) != nullptr) {
+                columnarTable = dynamic_cast<storage::ColumnarRelTableBase*>(relInfo.table);
                 break;
             }
-            if (dynamic_cast<storage::IceDiskRelTable*>(relInfo.table) != nullptr) {
-                hasIceDiskTable = true;
+
+            if (columnarTable != nullptr) {
                 break;
             }
         }
-        if (hasArrowTable || hasIceDiskTable) {
-            break;
-        }
-    }
 
-    // IceDisk scan state extends the common rel scan state and Arrow stores its per-table state
-    // there, so one scan state can now cover IceDisk, Arrow, and native rel tables.
-    if (hasIceDiskTable) {
-        scanState =
-            std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext),
+        // IceDisk scan state extends the common rel scan state and Arrow stores its per-table state
+        // there, so one scan state can now cover IceDisk, Arrow, and native rel tables.
+        if (columnarTable != nullptr) {
+            scanState = columnarTable->createScanState(boundNodeIDVector, outVectors,
+                MemoryManager::Get(*clientContext), nbrNodeIDVector->state);
+        } else {
+            scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);
-    } else if (hasArrowTable) {
-        scanState =
-            std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
-                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
-    } else {
-        scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
-            boundNodeIDVector, outVectors, nbrNodeIDVector->state);
-    }
-    for (auto& [_, scanner] : scanners) {
-        for (auto& relInfo : scanner.relInfos) {
-            if (directionInfo.directionPos.isValid()) {
-                scanner.directionVector =
-                    resultSet->getValueVector(directionInfo.directionPos).get();
-                scanner.directionValues.push_back(directionInfo.needFlip(relInfo.direction));
+        }
+        for (auto& [_, scanner] : scanners) {
+            for (auto& relInfo : scanner.relInfos) {
+                if (directionInfo.directionPos.isValid()) {
+                    scanner.directionVector =
+                        resultSet->getValueVector(directionInfo.directionPos).get();
+                    scanner.directionValues.push_back(directionInfo.needFlip(relInfo.direction));
+                }
             }
         }
-    }
-    currentScanner = nullptr;
-}
-
-bool ScanMultiRelTable::getNextTuplesInternal(ExecutionContext* context) {
-    while (true) {
-        if (currentScanner != nullptr &&
-            currentScanner->scan(context->clientContext, *scanState, outVectors)) {
-            metrics->numOutputTuple.increase(scanState->outState->getSelVector().getSelSize());
-            return true;
-        }
-        if (!children[0]->getNextTuple(context)) {
-            resetState();
-            return false;
-        }
-        const auto currentIdx = boundNodeIDVector->state->getSelVector()[0];
-        if (boundNodeIDVector->isNull(currentIdx)) {
-            currentScanner = nullptr;
-            continue;
-        }
-        auto nodeID = boundNodeIDVector->getValue<nodeID_t>(currentIdx);
-        initCurrentScanner(nodeID);
-    }
-}
-
-void ScanMultiRelTable::resetState() {
-    currentScanner = nullptr;
-    for (auto& [_, scanner] : scanners) {
-        scanner.resetState();
-    }
-}
-
-void ScanMultiRelTable::initCurrentScanner(const nodeID_t& nodeID) {
-    if (scanners.contains(nodeID.tableID)) {
-        currentScanner = &scanners.at(nodeID.tableID);
-        currentScanner->resetState();
-    } else {
         currentScanner = nullptr;
     }
-}
+
+    bool ScanMultiRelTable::getNextTuplesInternal(ExecutionContext * context) {
+        while (true) {
+            if (currentScanner != nullptr &&
+                currentScanner->scan(context->clientContext, *scanState, outVectors)) {
+                metrics->numOutputTuple.increase(scanState->outState->getSelVector().getSelSize());
+                return true;
+            }
+            if (!children[0]->getNextTuple(context)) {
+                resetState();
+                return false;
+            }
+            const auto currentIdx = boundNodeIDVector->state->getSelVector()[0];
+            if (boundNodeIDVector->isNull(currentIdx)) {
+                currentScanner = nullptr;
+                continue;
+            }
+            auto nodeID = boundNodeIDVector->getValue<nodeID_t>(currentIdx);
+            initCurrentScanner(nodeID);
+        }
+    }
+
+    void ScanMultiRelTable::resetState() {
+        currentScanner = nullptr;
+        for (auto& [_, scanner] : scanners) {
+            scanner.resetState();
+        }
+    }
+
+    void ScanMultiRelTable::initCurrentScanner(const nodeID_t& nodeID) {
+        if (scanners.contains(nodeID.tableID)) {
+            currentScanner = &scanners.at(nodeID.tableID);
+            currentScanner->resetState();
+        } else {
+            currentScanner = nullptr;
+        }
+    }
 
 } // namespace processor
 } // namespace lbug

@@ -223,21 +223,25 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
                             std::make_shared<ScanNodeTableSharedState>(std::move(semiMask)));
                     }
                 }
-                if (!sourceNodeTables.empty() && !scanNode->getProperties().empty() &&
-                    dynamic_cast<IceDiskRelTable*>(relTable) != nullptr) {
-                    std::vector<DataPos> sourceOutVectorsPos;
-                    for (auto& expression : scanNode->getProperties()) {
-                        sourceOutVectorsPos.emplace_back(getDataPos(*expression, *inFSchema));
+                if (!sourceNodeTables.empty() && !scanNode->getProperties().empty() {
+                    if (const auto* columnarTable =
+                            dynamic_cast<ColumnarRelTableBase*>(relTable) &&
+                            TableStorageFormatUtils::isIceDisk(columnarTable->getStorageFormat())) {
+                        std::vector<DataPos> sourceOutVectorsPos;
+                        for (auto& expression : scanNode->getProperties()) {
+                            sourceOutVectorsPos.emplace_back(getDataPos(*expression, *inFSchema));
+                        }
+                        auto sourceNodeScanInfo =
+                            ScanOpInfo(inNodeIDPos, std::move(sourceOutVectorsPos));
+                        auto progressSharedState =
+                            std::make_shared<ScanNodeTableProgressSharedState>();
+                        return std::make_unique<ScanRelTable>(std::move(scanInfo),
+                            std::move(scanRelInfo), std::move(sourceNodeTableInfos),
+                            std::move(sourceNodeSharedStates), std::move(progressSharedState),
+                            std::move(sourceNodeScanInfo), getOperatorID(), printInfo->copy(),
+                            physicalOperatorType);
                     }
-                    auto sourceNodeScanInfo =
-                        ScanOpInfo(inNodeIDPos, std::move(sourceOutVectorsPos));
-                    auto progressSharedState = std::make_shared<ScanNodeTableProgressSharedState>();
-                    return std::make_unique<ScanRelTable>(std::move(scanInfo),
-                        std::move(scanRelInfo), std::move(sourceNodeTableInfos),
-                        std::move(sourceNodeSharedStates), std::move(progressSharedState),
-                        std::move(sourceNodeScanInfo), getOperatorID(), printInfo->copy(),
-                        physicalOperatorType);
-                }
+            }
                 // Only apply the existing no-property optimization if scan node is not already
                 // mapped (e.g., by a semi-masker).
                 if (!sourceNodeTables.empty() &&

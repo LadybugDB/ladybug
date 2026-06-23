@@ -22,6 +22,13 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace storage {
 
+std::unique_ptr<TableScanState> IceDiskRelTable::createScanState(common::ValueVector* nodeIDVector,
+    const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager,
+    std::shared_ptr<common::DataChunkState> outChunkState) const {
+    return std::make_unique<storage::IceDiskRelTableScanState>(*memoryManager, nodeIDVector,
+        outVectors, outChunkState);
+}
+
 void IceDiskRelTableScanState::setToTable(const Transaction* transaction, Table* table_,
     std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
     RelDataDirection direction_) {

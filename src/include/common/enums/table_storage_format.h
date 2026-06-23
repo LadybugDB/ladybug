@@ -21,6 +21,8 @@ enum class TableStorageFormat : uint8_t {
 
 struct TableStorageFormatUtils {
     static std::string toString(TableStorageFormat format);
+    static bool isArrow(TableStorageFormat format);
+    static bool isIceDisk(TableStorageFormat format);
 };
 
 } // namespace common

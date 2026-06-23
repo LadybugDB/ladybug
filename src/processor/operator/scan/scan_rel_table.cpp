@@ -23,13 +23,9 @@ namespace processor {
 static std::unique_ptr<TableScanState> createSourceNodeTableScanState(NodeTable* table,
     ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
     MemoryManager* memoryManager) {
-    if (dynamic_cast<IceDiskNodeTable*>(table) != nullptr) {
-        return std::make_unique<IceDiskNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
-            nodeIDVector->state);
-    }
-    if (dynamic_cast<ArrowNodeTable*>(table) != nullptr) {
-        return std::make_unique<ArrowNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
-            nodeIDVector->state);
+    if (dynamic_cast<ColumnarNodeTableBase*>(table) != nullptr) {
+        return table->cast<ColumnarNodeTableBase>().createScanState(nodeIDVector, outVectors,
+            memoryManager);
     }
     return std::make_unique<NodeTableScanState>(nodeIDVector, outVectors, nodeIDVector->state);
 }
@@ -91,17 +87,11 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
     auto boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
     // Check if this is an external rel table and create the corresponding scan state.
-    auto* arrowTable = dynamic_cast<storage::ArrowRelTable*>(tableInfo.table);
-    auto* iceDiskTable = dynamic_cast<storage::IceDiskRelTable*>(tableInfo.table);
+    auto* columnarTable = dynamic_cast<storage::ColumnarRelTableBase*>(tableInfo.table);
     auto* foreignTable = dynamic_cast<storage::ForeignRelTable*>(tableInfo.table);
-    if (arrowTable) {
-        scanState =
-            std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
-                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
-    } else if (iceDiskTable) {
-        scanState =
-            std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext),
-                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+    if (columnarTable) {
+        scanState = columnarTable->createScanState(boundNodeIDVector, outVectors,
+            MemoryManager::Get(*clientContext), nbrNodeIDVector->state);
     } else if (foreignTable) {
         scanState =
             std::make_unique<storage::ForeignRelTableScanState>(*MemoryManager::Get(*clientContext),
@@ -142,8 +132,7 @@ static void initSourceNodeScanState(ScanNodeTableInfo& sourceInfo,
     sourceScanState = createSourceNodeTableScanState(sourceInfo.table->ptrCast<NodeTable>(),
         boundNodeIDVector, sourceNodeOutVectors, MemoryManager::Get(*context));
     sourceInfo.initScanState(*sourceScanState, sourceNodeOutVectors, context);
-    if (dynamic_cast<IceDiskNodeTable*>(sourceInfo.table) ||
-        dynamic_cast<ArrowNodeTable*>(sourceInfo.table)) {
+    if (dynamic_cast<ColumnarNodeTableBase*>(sourceInfo.table)) {
         sourceInfo.table->initScanState(transaction::Transaction::Get(*context), *sourceScanState);
     }
 }
