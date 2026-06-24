@@ -123,6 +123,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         BOOL rc = LockFileEx(handle, dwFlags, 0 /*reserved*/, 1 /*numBytesLow*/, 0 /*numBytesHigh*/,
             &overlapped);
         if (!rc) {
+            CloseHandle(handle);
             auto error = GetLastError();
             throw IOException("Could not set lock on file : " + fullPath +
                               " (Error: " + std::to_string(error) + ")\n" +
@@ -146,6 +147,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         int rc = fcntl(fd, F_SETLK, &fl);
         if (rc == -1) {
             int original_errno = errno;
+            close(fd);
             if (original_errno == EAGAIN || original_errno == EACCES) {
                 struct flock get_fl {};
                 memset(&get_fl, 0, sizeof get_fl);

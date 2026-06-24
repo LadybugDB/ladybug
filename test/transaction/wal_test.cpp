@@ -710,14 +710,27 @@ TEST_F(WalTest, ReadOnlyRecoveryWithShadowFile) {
 
     // Restart in read-only mode
     systemConfig->readOnly = true;
-    createDBAndConn();
-    auto res = conn->query("MATCH (n:test) RETURN n.id ORDER BY n.id;");
-    ASSERT_TRUE(res->isSuccess());
-    // Should handle WAL recovery correctly
-    ASSERT_GE(res->getNumTuples(), 0);
-    // Files should remain unchanged in read-only mode
+    EXPECT_THROW(createDBAndConn(), RuntimeException);
     ASSERT_TRUE(std::filesystem::exists(walFilePath));
     ASSERT_TRUE(std::filesystem::exists(shadowFilePath));
+}
+
+TEST_F(WalTest, ReadOnlyRecoveryWithCheckpointWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL force_checkpoint_on_close=false");
+    conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
+    auto checkpointWalFilePath =
+        lbug::storage::StorageUtils::getCheckpointWALFilePath(databasePath);
+
+    std::ofstream file(checkpointWalFilePath);
+    file.close();
+    ASSERT_TRUE(std::filesystem::exists(checkpointWalFilePath));
+
+    systemConfig->readOnly = true;
+    EXPECT_THROW(createDBAndConn(), RuntimeException);
+    ASSERT_TRUE(std::filesystem::exists(checkpointWalFilePath));
 }
 
 TEST_F(WalTest, ReadOnlyRecoveryEmptyWALFile) {

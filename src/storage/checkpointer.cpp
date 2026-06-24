@@ -1,8 +1,15 @@
 #include "storage/checkpointer.h"
 
+#include <chrono>
+#include <string_view>
+#include <thread>
 #include <vector>
 
 #include "catalog/catalog.h"
+#include "common/constants.h"
+#include "common/exception/io.h"
+#include "common/exception/runtime.h"
+#include "common/file_system/file_info.h"
 #include "common/file_system/file_system.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/serializer/buffered_file.h"
@@ -17,9 +24,11 @@
 #include "storage/database_header.h"
 #include "storage/shadow_utils.h"
 #include "storage/storage_manager.h"
+#include "storage/storage_utils.h"
 #include "storage/storage_version_info.h"
 #include "storage/wal/local_wal.h"
 #include "transaction/transaction.h"
+#include <format>
 
 namespace lbug {
 namespace storage {
@@ -63,6 +72,51 @@ void logCheckpointAndApplyShadowPagesForStorage(main::ClientContext& clientConte
     shadowFile.clear(*bufferManager);
 }
 
+bool isLockContention(const common::IOException& exception) {
+    return std::string(exception.what()).find("Could not set lock") != std::string::npos;
+}
+
+std::unique_ptr<common::FileInfo> acquireCheckpointWriteLock(main::ClientContext& clientContext,
+    const std::string& lockPath) {
+    auto vfs = common::VirtualFileSystem::GetUnsafe(clientContext);
+    while (true) {
+        try {
+            return vfs->openFile(lockPath,
+                common::FileOpenFlags(common::FileFlags::READ_ONLY | common::FileFlags::WRITE |
+                                          common::FileFlags::CREATE_IF_NOT_EXISTS,
+                    common::FileLockType::WRITE_LOCK),
+                &clientContext);
+        } catch (const common::IOException& exception) {
+            if (!isLockContention(exception)) {
+                throw;
+            }
+            std::this_thread::sleep_for(
+                std::chrono::microseconds(common::THREAD_SLEEP_TIME_WHEN_WAITING_IN_MICROS));
+        }
+    }
+}
+
+bool isValidCheckpointPageRange(PageRange range, common::page_idx_t numPages) {
+    if (range.startPageIdx == common::INVALID_PAGE_IDX) {
+        return range.numPages == 0;
+    }
+    if (range.numPages == 0 || range.startPageIdx >= numPages) {
+        return false;
+    }
+    return range.numPages <= numPages - range.startPageIdx;
+}
+
+void validateCheckpointPageRange(PageRange range, common::page_idx_t numPages,
+    std::string_view name) {
+    if (isValidCheckpointPageRange(range, numPages)) {
+        return;
+    }
+    throw common::RuntimeException(std::format(
+        "Cannot read checkpoint: {} page range starts at {} and spans {} pages, outside the "
+        "database file with {} pages. The database may be checkpointing; please retry later.",
+        std::string{name}, range.startPageIdx, range.numPages, numPages));
+}
+
 } // namespace
 
 Checkpointer::Checkpointer(main::ClientContext& clientContext)
@@ -71,6 +125,22 @@ Checkpointer::Checkpointer(main::ClientContext& clientContext)
       mainStorageManager{clientContext.getDatabase()->getStorageManager()} {}
 
 Checkpointer::~Checkpointer() = default;
+
+void Checkpointer::acquireCheckpointLocks() {
+    if (isInMemory || checkpointIntentLockFile || checkpointApplyLockFile) {
+        return;
+    }
+    const auto databasePath = clientContext.getDatabasePath();
+    checkpointIntentLockFile = acquireCheckpointWriteLock(clientContext,
+        StorageUtils::getCheckpointIntentLockFilePath(databasePath));
+    checkpointApplyLockFile = acquireCheckpointWriteLock(clientContext,
+        StorageUtils::getCheckpointApplyLockFilePath(databasePath));
+}
+
+void Checkpointer::releaseCheckpointLocks() {
+    checkpointApplyLockFile.reset();
+    checkpointIntentLockFile.reset();
+}
 
 std::vector<Checkpointer::CheckpointTarget> Checkpointer::collectCheckpointTargets() const {
     std::vector<CheckpointTarget> result;
@@ -157,6 +227,7 @@ void Checkpointer::writeCheckpoint() {
         return;
     }
 
+    acquireCheckpointLocks();
     checkpointTargets = collectCheckpointTargets();
 
     for (const auto& target : checkpointTargets) {
@@ -200,6 +271,7 @@ void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp) {
         return;
     }
 
+    acquireCheckpointLocks();
     snapshotTS = snapshotTimestamp;
     checkpointTargets = collectCheckpointTargets();
 
@@ -301,6 +373,7 @@ void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) {
         }
         target.storageManager->getShadowFile().reset();
     }
+    releaseCheckpointLocks();
 }
 
 bool Checkpointer::checkpointStorage() {
@@ -389,6 +462,7 @@ void Checkpointer::rollback() {
     for (const auto& target : checkpointTargets) {
         target.storageManager->rollbackCheckpoint(*target.catalog);
     }
+    releaseCheckpointLocks();
 }
 
 bool Checkpointer::canAutoCheckpoint(const main::ClientContext& clientContext,
@@ -426,6 +500,15 @@ void Checkpointer::readCheckpoint(main::ClientContext* context, catalog::Catalog
     auto reader = std::make_unique<common::BufferedFileReader>(*fileInfo);
     common::Deserializer deSer(std::move(reader));
     auto currentHeader = std::make_unique<DatabaseHeader>(DatabaseHeader::deserialize(deSer));
+    const auto numPages = storageManager->getDataFH()->getNumPages();
+    validateCheckpointPageRange(currentHeader->catalogPageRange, numPages, "catalog");
+    validateCheckpointPageRange(currentHeader->metadataPageRange, numPages, "metadata");
+    if (currentHeader->dataFileNumPages != 0 && currentHeader->dataFileNumPages > numPages) {
+        throw common::RuntimeException(std::format(
+            "Cannot read checkpoint: header expects {} database pages, but the file has {} pages. "
+            "The database may be checkpointing; please retry later.",
+            currentHeader->dataFileNumPages, numPages));
+    }
     // If the catalog page range is invalid, it means there is no catalog to read; thus, the
     // database is empty.
     if (currentHeader->catalogPageRange.startPageIdx != common::INVALID_PAGE_IDX) {

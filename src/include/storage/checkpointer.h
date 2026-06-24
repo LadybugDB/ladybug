@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -15,6 +16,7 @@ namespace catalog {
 class Catalog;
 }
 namespace common {
+struct FileInfo;
 class VirtualFileSystem;
 } // namespace common
 namespace testing {
@@ -72,6 +74,8 @@ private:
 
     static void readCheckpoint(main::ClientContext* context, catalog::Catalog* catalog,
         StorageManager* storageManager);
+    void acquireCheckpointLocks();
+    void releaseCheckpointLocks();
 
     PageRange serializeCatalog(const catalog::Catalog& catalog, StorageManager& storageManager);
     PageRange serializeCatalogSnapshot(const catalog::Catalog& catalog,
@@ -105,6 +109,8 @@ protected:
         tableEpochWatermarksByManager;
     std::unordered_map<catalog::Catalog*, uint64_t> catalogVersionAtCheckpointByCatalog;
     std::unordered_map<StorageManager*, uint64_t> pageManagerVersionAtCheckpointByManager;
+    std::unique_ptr<common::FileInfo> checkpointIntentLockFile;
+    std::unique_ptr<common::FileInfo> checkpointApplyLockFile;
 };
 
 } // namespace storage
