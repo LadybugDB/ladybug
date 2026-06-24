@@ -70,8 +70,10 @@ void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
     ScanNodeTableProgressSharedState& progressSharedState) {
     std::unique_lock lck{mtx};
 
-    if (const auto columnarTable = dynamic_cast<ColumnarNodeTableBase*>(this->table)) {
-        const auto tableSharedState = columnarTable->getTableScanSharedState();
+    // ColumnarNodeTables handle morsel assignment internally
+    // TODO: icebug-disk tables https://github.com/LadybugDB/ladybug/issues/245
+    if (const auto arrowTable = dynamic_cast<ArrowNodeTable*>(this->table)) {
+        const auto tableSharedState = arrowTable->getTableScanSharedState();
         if (tableSharedState->getNextMorsel(static_cast<ColumnarNodeTableScanState*>(&scanState))) {
             scanState.source = TableScanSource::COMMITTED;
             progressSharedState.numMorselsScanned++;
