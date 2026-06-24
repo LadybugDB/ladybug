@@ -15,8 +15,7 @@ using namespace lbug::storage;
 namespace lbug {
 namespace processor {
 static std::unique_ptr<TableScanState> createNodeTableScanState(NodeTable* table,
-    ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
-    MemoryManager* memoryManager) {
+    ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors) {
     if (dynamic_cast<ColumnarNodeTableBase*>(table) != nullptr) {
         return table->cast<ColumnarNodeTableBase>().createScanState(nodeIDVector, outVectors);
     }
@@ -124,8 +123,8 @@ void ScanNodeTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContex
 
 void ScanNodeTable::initCurrentTable(ExecutionContext* context) {
     auto& currentInfo = tableInfos[currentTableIdx];
-    scanState = createNodeTableScanState(currentInfo.table->ptrCast<NodeTable>(), nodeIDVector,
-        outVectors, MemoryManager::Get(*context->clientContext));
+    scanState =
+        createNodeTableScanState(currentInfo.table->ptrCast<NodeTable>(), nodeIDVector, outVectors);
     currentInfo.initScanState(*scanState, outVectors, context->clientContext);
     scanState->semiMask = sharedStates[currentTableIdx]->getSemiMask();
     // Call table->initScanState for ColumnarNodeTables

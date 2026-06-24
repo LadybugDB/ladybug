@@ -21,8 +21,7 @@ namespace lbug {
 namespace processor {
 
 static std::unique_ptr<TableScanState> createSourceNodeTableScanState(NodeTable* table,
-    ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
-    MemoryManager* memoryManager) {
+    ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors) {
     if (dynamic_cast<ColumnarNodeTableBase*>(table) != nullptr) {
         return table->cast<ColumnarNodeTableBase>().createScanState(nodeIDVector, outVectors);
     }
@@ -131,7 +130,7 @@ static void initSourceNodeScanState(ScanNodeTableInfo& sourceInfo,
     std::unique_ptr<TableScanState>& sourceScanState, ValueVector* boundNodeIDVector,
     const std::vector<ValueVector*>& sourceNodeOutVectors, main::ClientContext* context) {
     sourceScanState = createSourceNodeTableScanState(sourceInfo.table->ptrCast<NodeTable>(),
-        boundNodeIDVector, sourceNodeOutVectors, MemoryManager::Get(*context));
+        boundNodeIDVector, sourceNodeOutVectors);
     sourceInfo.initScanState(*sourceScanState, sourceNodeOutVectors, context);
     if (dynamic_cast<ColumnarNodeTableBase*>(sourceInfo.table)) {
         sourceInfo.table->initScanState(transaction::Transaction::Get(*context), *sourceScanState);
