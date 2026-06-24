@@ -304,6 +304,130 @@ TEST_F(CopyTest, RelCopyWithoutDefaultHashIndexRejectsMissingEndpoint) {
     ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
 }
 
+// The no-hash-index COPY path used to keep all primary keys in an in-memory std::set, which OOMs
+// when the table exceeds RAM. The validator now spills sorted runs to disk once an in-memory
+// budget is exceeded and stream-merges them in finalize(). The following tests force spilling by
+// lowering pk_validator_spill_threshold and drive enough rows to cross several flush boundaries,
+// including cross-chunk duplicates that can only be detected during the final merge.
+
+TEST_F(CopyTest, NodeCopyWithoutDefaultHashIndexSpillsAndSucceeds) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    createDBAndConn();
+    auto result = conn->query("CALL enable_default_hash_index=false");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    // Force a flush after roughly every node-group-sized chunk so that a moderately sized input
+    // produces several spilled runs.
+    result = conn->query("CALL pk_validator_spill_threshold=4096");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE Account(id INT64, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    std::vector<std::string> rows;
+    // 3000 unique, unsorted ids: enough to span many node groups and several spilled runs.
+    rows.reserve(3000);
+    for (int i = 0; i < 3000; ++i) {
+        rows.push_back(std::to_string(2999 - i));
+    }
+    const auto filePath = writeCSV("spill_unique.csv", rows);
+    result = conn->query(std::format("COPY Account FROM '{}'", filePath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query("MATCH (a:Account) RETURN COUNT(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3000);
+}
+
+TEST_F(CopyTest, NodeCopyWithoutDefaultHashIndexSpillsDetectsCrossChunkDuplicate) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    createDBAndConn();
+    auto result = conn->query("CALL enable_default_hash_index=false");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CALL pk_validator_spill_threshold=4096");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE Account(id INT64, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    std::vector<std::string> rows;
+    rows.reserve(3000);
+    for (int i = 0; i < 2999; ++i) {
+        rows.push_back(std::to_string(2998 - i));
+    }
+    // Duplicate of an id that was spilled in an earlier run, so it cannot be caught by the
+    // per-run sort and must surface during the streaming merge in finalize().
+    rows.push_back("0");
+    const auto filePath = writeCSV("spill_dup.csv", rows);
+    result = conn->query(std::format("COPY Account FROM '{}'", filePath));
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_NE(result->getErrorMessage().find("duplicated primary key"), std::string::npos);
+
+    result = conn->query("MATCH (a:Account) RETURN COUNT(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
+TEST_F(CopyTest, NodeCopyWithoutDefaultHashIndexSpillsStringPK) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    createDBAndConn();
+    auto result = conn->query("CALL enable_default_hash_index=false");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CALL pk_validator_spill_threshold=4096");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE Account(name STRING, PRIMARY KEY(name))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    std::vector<std::string> rows;
+    rows.reserve(2000);
+    for (int i = 0; i < 2000; ++i) {
+        rows.push_back(std::format("name_{}", 1999 - i));
+    }
+    const auto filePath = writeCSV("spill_string.csv", rows);
+    result = conn->query(std::format("COPY Account FROM '{}'", filePath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query("MATCH (a:Account) RETURN COUNT(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2000);
+}
+
+TEST_F(CopyTest, NodeCopyWithoutDefaultHashIndexSpillsStringPKDetectsCrossChunkDuplicate) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    createDBAndConn();
+    auto result = conn->query("CALL enable_default_hash_index=false");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CALL pk_validator_spill_threshold=4096");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE Account(name STRING, PRIMARY KEY(name))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    std::vector<std::string> rows;
+    rows.reserve(2000);
+    for (int i = 0; i < 1999; ++i) {
+        rows.push_back(std::format("name_{}", 1998 - i));
+    }
+    // Duplicate of a string PK spilled in an earlier run; only the final merge can catch it.
+    rows.push_back("name_0");
+    const auto filePath = writeCSV("spill_string_dup.csv", rows);
+    result = conn->query(std::format("COPY Account FROM '{}'", filePath));
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_NE(result->getErrorMessage().find("duplicated primary key"), std::string::npos);
+
+    result = conn->query("MATCH (a:Account) RETURN COUNT(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
 TEST_F(CopyTest, NodeCopyBMExceptionRecoverySameConnection) {
     if (inMemMode) {
         GTEST_SKIP();

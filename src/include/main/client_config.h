@@ -24,6 +24,12 @@ struct ClientConfigDefault {
     static constexpr bool ENABLE_PLAN_OPTIMIZER = true;
     static constexpr bool ENABLE_INTERNAL_CATALOG = false;
     static constexpr bool ENABLE_PACKED_PATH_EXTEND = false;
+    // Memory budget (in bytes) for the in-memory primary-key uniqueness buffer used when COPY-ing
+    // into a primary-key node table that has no hash index. Once the buffer exceeds this budget it
+    // is sorted and spilled to disk as a sorted run; cross-run duplicates are detected during a
+    // streaming merge in finalize(). 0 disables spilling (unbounded in-memory buffer, legacy
+    // behaviour) which may OOM on tables larger than RAM.
+    static constexpr uint64_t PK_VALIDATOR_SPILL_THRESHOLD = 8ull * 1024 * 1024 * 1024;
 };
 
 struct ClientConfig {
@@ -60,6 +66,9 @@ struct ClientConfig {
     bool enableInternalCatalog = ClientConfigDefault::ENABLE_INTERNAL_CATALOG;
     // If planning packed sibling path extensions.
     bool enablePackedPathExtend = ClientConfigDefault::ENABLE_PACKED_PATH_EXTEND;
+    // Memory budget (bytes) for the no-hash-index COPY primary-key validator before it spills
+    // sorted runs to disk. See ClientConfigDefault::PK_VALIDATOR_SPILL_THRESHOLD.
+    uint64_t pkValidatorSpillThreshold = ClientConfigDefault::PK_VALIDATOR_SPILL_THRESHOLD;
 };
 
 } // namespace main

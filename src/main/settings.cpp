@@ -267,5 +267,15 @@ common::Value SpillToDiskSetting::getSetting(const ClientContext* context) {
     return common::Value::createValue(context->getDBConfig()->enableSpillingToDisk);
 }
 
+void PKValidatorSpillThresholdSetting::setContext(ClientContext* context,
+    const common::Value& parameter) {
+    parameter.validateType(inputType);
+    context->getClientConfigUnsafe()->pkValidatorSpillThreshold = parameter.getValue<uint64_t>();
+}
+
+common::Value PKValidatorSpillThresholdSetting::getSetting(const ClientContext* context) {
+    return common::Value(context->getClientConfig()->pkValidatorSpillThreshold);
+}
+
 } // namespace main
 } // namespace lbug

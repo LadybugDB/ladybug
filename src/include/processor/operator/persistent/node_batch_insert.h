@@ -24,6 +24,10 @@ struct NoIndexPKValidator {
     virtual ~NoIndexPKValidator() = default;
     virtual void validate(const storage::ColumnChunkData& pkChunk, common::offset_t startOffset,
         common::length_t numValues) = 0;
+    // Called once after all chunks have been validated. Implementations that defer cross-chunk
+    // duplicate detection (e.g. by spilling sorted runs to disk and merging) must report any
+    // duplicate primary key here by throwing.
+    virtual void finalize() {}
 };
 
 struct NodeBatchInsertPrintInfo final : OPPrintInfo {

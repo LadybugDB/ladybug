@@ -138,6 +138,13 @@ struct SpillToDiskSetting {
     static common::Value getSetting(const ClientContext* context);
 };
 
+struct PKValidatorSpillThresholdSetting {
+    static constexpr auto name = "pk_validator_spill_threshold";
+    static constexpr auto inputType = common::LogicalTypeID::UINT64;
+    static void setContext(ClientContext* context, const common::Value& parameter);
+    static common::Value getSetting(const ClientContext* context);
+};
+
 struct EnableOptimizerSetting {
     static constexpr auto name = "enable_plan_optimizer";
     static constexpr auto inputType = common::LogicalTypeID::BOOL;
