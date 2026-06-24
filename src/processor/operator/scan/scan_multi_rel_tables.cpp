@@ -74,10 +74,10 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
                 columnarTable = dynamic_cast<storage::ColumnarRelTableBase*>(relInfo.table);
                 break;
             }
+        }
 
-            if (columnarTable != nullptr) {
-                break;
-            }
+        if (columnarTable != nullptr) {
+            break;
         }
     }
 
