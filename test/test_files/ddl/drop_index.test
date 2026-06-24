@@ -1,0 +1,88 @@
+-DATASET CSV empty
+--
+
+-CASE DropDefaultPKIndex
+-SKIP_FSM_LEAK_CHECK
+-STATEMENT CREATE NODE TABLE di_user(name STRING, age INT64, PRIMARY KEY(name));
+---- 1
+Table di_user has been created.
+-STATEMENT COPY di_user FROM '${LBUG_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv';
+---- ok
+-STATEMENT MATCH (p:di_user) WHERE p.name = 'Adam' RETURN p.age;
+---- 1
+30
+-STATEMENT DROP INDEX di_user._PK;
+---- 1
+Index _PK has been dropped.
+-STATEMENT MATCH (p:di_user) WHERE p.name = 'Adam' RETURN p.age;
+---- 1
+30
+-STATEMENT MATCH (p:di_user) RETURN COUNT(*);
+---- 1
+4
+
+-CASE DropNamedIndex
+-SKIP_FSM_LEAK_CHECK
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CREATE NODE TABLE di_person(ID INT64, name STRING, PRIMARY KEY(ID));
+---- 1
+Table di_person has been created.
+-STATEMENT CREATE (:di_person {ID: 1, name: 'Alice'});
+---- ok
+-STATEMENT CREATE HASH INDEX di_person_pk FOR (p:di_person) ON (p.ID);
+---- 1
+Index di_person_pk has been created.
+-STATEMENT CALL SHOW_INDEXES() WHERE table_name = 'di_person' RETURN index_name;
+---- 1
+di_person_pk
+-STATEMENT DROP INDEX di_person.di_person_pk;
+---- 1
+Index di_person_pk has been dropped.
+-STATEMENT CALL SHOW_INDEXES() WHERE table_name = 'di_person' RETURN count(*);
+---- 1
+0
+-STATEMENT MATCH (p:di_person) WHERE p.ID = 1 RETURN p.name;
+---- 1
+Alice
+-STATEMENT CALL enable_default_hash_index=true;
+---- ok
+
+-CASE DropNonExistentIndexThrows
+-SKIP_FSM_LEAK_CHECK
+-STATEMENT CREATE NODE TABLE di_person2(ID INT64, PRIMARY KEY(ID));
+---- 1
+Table di_person2 has been created.
+-STATEMENT DROP INDEX di_person2.nonexistent_index;
+---- error
+Binder exception: Index nonexistent_index does not exist in table di_person2.
+
+-CASE DropIndexIfExists
+-SKIP_FSM_LEAK_CHECK
+-STATEMENT CREATE NODE TABLE di_person3(ID INT64, PRIMARY KEY(ID));
+---- 1
+Table di_person3 has been created.
+-STATEMENT DROP INDEX IF EXISTS di_person3.nonexistent_index;
+---- 1
+Index nonexistent_index does not exist in table di_person3.
+-STATEMENT DROP INDEX IF EXISTS missingtable.someindex;
+---- 1
+Table missingtable does not exist.
+-STATEMENT DROP INDEX IF EXISTS di_person3._PK;
+---- 1
+Index _PK has been dropped.
+-STATEMENT DROP INDEX IF EXISTS di_person3._PK;
+---- 1
+Index _PK does not exist in table di_person3.
+
+-CASE DropIndexOnNonNodeTableThrows
+-SKIP_FSM_LEAK_CHECK
+-STATEMENT CREATE NODE TABLE di_src(ID INT64, PRIMARY KEY(ID));
+---- 1
+Table di_src has been created.
+-STATEMENT CREATE REL TABLE di_follows(FROM di_src TO di_src);
+---- 1
+Table di_follows has been created.
+-STATEMENT DROP INDEX di_follows._PK;
+---- error
+Binder exception: Table di_follows is not a node table; cannot drop index.

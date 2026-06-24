@@ -66,55 +66,55 @@ public:
     RuleIC_CreateType = 38, RuleIC_SequenceOptions = 39, RuleIC_WithPasswd = 40, 
     RuleIC_CreateUser = 41, RuleIC_CreateRole = 42, RuleIC_IncrementBy = 43, 
     RuleIC_MinValue = 44, RuleIC_MaxValue = 45, RuleIC_StartWith = 46, RuleIC_Cycle = 47, 
-    RuleIC_IfExists = 48, RuleIC_Drop = 49, RuleIC_AlterTable = 50, RuleIC_AlterOptions = 51, 
-    RuleIC_AddProperty = 52, RuleIC_Default = 53, RuleIC_DropProperty = 54, 
-    RuleIC_RenameTable = 55, RuleIC_RenameProperty = 56, RuleIC_AddFromToConnection = 57, 
-    RuleIC_DropFromToConnection = 58, RuleIC_ColumnDefinitions = 59, RuleIC_ColumnDefinition = 60, 
-    RuleIC_PropertyDefinitions = 61, RuleIC_PropertyDefinition = 62, RuleIC_CreateNodeConstraint = 63, 
-    RuleIC_UnionType = 64, RuleIC_StructType = 65, RuleIC_MapType = 66, 
-    RuleIC_DecimalType = 67, RuleIC_DataType = 68, RuleIC_ListIdentifiers = 69, 
-    RuleIC_ListIdentifier = 70, RuleOC_AnyCypherOption = 71, RuleOC_Explain = 72, 
-    RuleOC_Profile = 73, RuleIC_Transaction = 74, RuleIC_Extension = 75, 
-    RuleIC_LoadExtension = 76, RuleIC_InstallExtension = 77, RuleIC_UninstallExtension = 78, 
-    RuleIC_UpdateExtension = 79, RuleOC_Query = 80, RuleOC_RegularQuery = 81, 
-    RuleOC_Union = 82, RuleOC_SingleQuery = 83, RuleOC_SinglePartQuery = 84, 
-    RuleOC_MultiPartQuery = 85, RuleIC_QueryPart = 86, RuleOC_UpdatingClause = 87, 
-    RuleOC_ReadingClause = 88, RuleIC_LoadFrom = 89, RuleOC_YieldItem = 90, 
-    RuleOC_YieldItems = 91, RuleIC_InQueryCall = 92, RuleOC_Match = 93, 
-    RuleIC_Hint = 94, RuleIC_JoinNode = 95, RuleOC_Unwind = 96, RuleOC_Create = 97, 
-    RuleOC_Merge = 98, RuleOC_MergeAction = 99, RuleOC_Set = 100, RuleOC_SetItem = 101, 
-    RuleOC_Delete = 102, RuleOC_With = 103, RuleOC_Return = 104, RuleOC_ProjectionBody = 105, 
-    RuleOC_ProjectionItems = 106, RuleOC_ProjectionItem = 107, RuleOC_Order = 108, 
-    RuleOC_Skip = 109, RuleOC_Limit = 110, RuleOC_SortItem = 111, RuleOC_Where = 112, 
-    RuleOC_Pattern = 113, RuleOC_PatternPart = 114, RuleOC_AnonymousPatternPart = 115, 
-    RuleOC_PatternElement = 116, RuleOC_NodePattern = 117, RuleOC_PatternElementChain = 118, 
-    RuleOC_RelationshipPattern = 119, RuleOC_RelationshipDetail = 120, RuleIC_Properties = 121, 
-    RuleOC_RelationshipTypes = 122, RuleOC_NodeLabels = 123, RuleIC_RecursiveDetail = 124, 
-    RuleIC_RecursiveType = 125, RuleOC_RangeLiteral = 126, RuleIC_RecursiveComprehension = 127, 
-    RuleIC_RecursiveProjectionItems = 128, RuleOC_LowerBound = 129, RuleOC_UpperBound = 130, 
-    RuleOC_LabelName = 131, RuleOC_RelTypeName = 132, RuleOC_Expression = 133, 
-    RuleOC_OrExpression = 134, RuleOC_XorExpression = 135, RuleOC_AndExpression = 136, 
-    RuleOC_NotExpression = 137, RuleOC_ComparisonExpression = 138, RuleIC_ComparisonOperator = 139, 
-    RuleIC_BitwiseOrOperatorExpression = 140, RuleIC_BitwiseAndOperatorExpression = 141, 
-    RuleIC_BitShiftOperatorExpression = 142, RuleIC_BitShiftOperator = 143, 
-    RuleOC_AddOrSubtractExpression = 144, RuleIC_AddOrSubtractOperator = 145, 
-    RuleOC_MultiplyDivideModuloExpression = 146, RuleIC_MultiplyDivideModuloOperator = 147, 
-    RuleOC_PowerOfExpression = 148, RuleOC_StringListNullOperatorExpression = 149, 
-    RuleOC_ListOperatorExpression = 150, RuleOC_StringOperatorExpression = 151, 
-    RuleOC_RegularExpression = 152, RuleOC_NullOperatorExpression = 153, 
-    RuleOC_UnaryAddSubtractOrFactorialExpression = 154, RuleOC_PropertyOrLabelsExpression = 155, 
-    RuleOC_Atom = 156, RuleOC_Quantifier = 157, RuleOC_FilterExpression = 158, 
-    RuleOC_IdInColl = 159, RuleOC_Literal = 160, RuleOC_BooleanLiteral = 161, 
-    RuleOC_ListLiteral = 162, RuleIC_ListEntry = 163, RuleIC_StructLiteral = 164, 
-    RuleIC_StructField = 165, RuleOC_ParenthesizedExpression = 166, RuleOC_FunctionInvocation = 167, 
-    RuleOC_FunctionName = 168, RuleIC_FunctionParameter = 169, RuleIC_LambdaParameter = 170, 
-    RuleIC_LambdaVars = 171, RuleOC_PathPatterns = 172, RuleOC_ExistCountSubquery = 173, 
-    RuleOC_PropertyLookup = 174, RuleOC_CaseExpression = 175, RuleOC_CaseAlternative = 176, 
-    RuleOC_Variable = 177, RuleOC_NumberLiteral = 178, RuleOC_Parameter = 179, 
-    RuleOC_PropertyExpression = 180, RuleOC_PropertyKeyName = 181, RuleOC_IntegerLiteral = 182, 
-    RuleOC_DoubleLiteral = 183, RuleOC_SchemaName = 184, RuleOC_SymbolicName = 185, 
-    RuleIC_NonReservedKeywords = 186, RuleOC_LeftArrowHead = 187, RuleOC_RightArrowHead = 188, 
-    RuleOC_Dash = 189
+    RuleIC_IfExists = 48, RuleIC_Drop = 49, RuleIC_DropIndexName = 50, RuleIC_AlterTable = 51, 
+    RuleIC_AlterOptions = 52, RuleIC_AddProperty = 53, RuleIC_Default = 54, 
+    RuleIC_DropProperty = 55, RuleIC_RenameTable = 56, RuleIC_RenameProperty = 57, 
+    RuleIC_AddFromToConnection = 58, RuleIC_DropFromToConnection = 59, RuleIC_ColumnDefinitions = 60, 
+    RuleIC_ColumnDefinition = 61, RuleIC_PropertyDefinitions = 62, RuleIC_PropertyDefinition = 63, 
+    RuleIC_CreateNodeConstraint = 64, RuleIC_UnionType = 65, RuleIC_StructType = 66, 
+    RuleIC_MapType = 67, RuleIC_DecimalType = 68, RuleIC_DataType = 69, 
+    RuleIC_ListIdentifiers = 70, RuleIC_ListIdentifier = 71, RuleOC_AnyCypherOption = 72, 
+    RuleOC_Explain = 73, RuleOC_Profile = 74, RuleIC_Transaction = 75, RuleIC_Extension = 76, 
+    RuleIC_LoadExtension = 77, RuleIC_InstallExtension = 78, RuleIC_UninstallExtension = 79, 
+    RuleIC_UpdateExtension = 80, RuleOC_Query = 81, RuleOC_RegularQuery = 82, 
+    RuleOC_Union = 83, RuleOC_SingleQuery = 84, RuleOC_SinglePartQuery = 85, 
+    RuleOC_MultiPartQuery = 86, RuleIC_QueryPart = 87, RuleOC_UpdatingClause = 88, 
+    RuleOC_ReadingClause = 89, RuleIC_LoadFrom = 90, RuleOC_YieldItem = 91, 
+    RuleOC_YieldItems = 92, RuleIC_InQueryCall = 93, RuleOC_Match = 94, 
+    RuleIC_Hint = 95, RuleIC_JoinNode = 96, RuleOC_Unwind = 97, RuleOC_Create = 98, 
+    RuleOC_Merge = 99, RuleOC_MergeAction = 100, RuleOC_Set = 101, RuleOC_SetItem = 102, 
+    RuleOC_Delete = 103, RuleOC_With = 104, RuleOC_Return = 105, RuleOC_ProjectionBody = 106, 
+    RuleOC_ProjectionItems = 107, RuleOC_ProjectionItem = 108, RuleOC_Order = 109, 
+    RuleOC_Skip = 110, RuleOC_Limit = 111, RuleOC_SortItem = 112, RuleOC_Where = 113, 
+    RuleOC_Pattern = 114, RuleOC_PatternPart = 115, RuleOC_AnonymousPatternPart = 116, 
+    RuleOC_PatternElement = 117, RuleOC_NodePattern = 118, RuleOC_PatternElementChain = 119, 
+    RuleOC_RelationshipPattern = 120, RuleOC_RelationshipDetail = 121, RuleIC_Properties = 122, 
+    RuleOC_RelationshipTypes = 123, RuleOC_NodeLabels = 124, RuleIC_RecursiveDetail = 125, 
+    RuleIC_RecursiveType = 126, RuleOC_RangeLiteral = 127, RuleIC_RecursiveComprehension = 128, 
+    RuleIC_RecursiveProjectionItems = 129, RuleOC_LowerBound = 130, RuleOC_UpperBound = 131, 
+    RuleOC_LabelName = 132, RuleOC_RelTypeName = 133, RuleOC_Expression = 134, 
+    RuleOC_OrExpression = 135, RuleOC_XorExpression = 136, RuleOC_AndExpression = 137, 
+    RuleOC_NotExpression = 138, RuleOC_ComparisonExpression = 139, RuleIC_ComparisonOperator = 140, 
+    RuleIC_BitwiseOrOperatorExpression = 141, RuleIC_BitwiseAndOperatorExpression = 142, 
+    RuleIC_BitShiftOperatorExpression = 143, RuleIC_BitShiftOperator = 144, 
+    RuleOC_AddOrSubtractExpression = 145, RuleIC_AddOrSubtractOperator = 146, 
+    RuleOC_MultiplyDivideModuloExpression = 147, RuleIC_MultiplyDivideModuloOperator = 148, 
+    RuleOC_PowerOfExpression = 149, RuleOC_StringListNullOperatorExpression = 150, 
+    RuleOC_ListOperatorExpression = 151, RuleOC_StringOperatorExpression = 152, 
+    RuleOC_RegularExpression = 153, RuleOC_NullOperatorExpression = 154, 
+    RuleOC_UnaryAddSubtractOrFactorialExpression = 155, RuleOC_PropertyOrLabelsExpression = 156, 
+    RuleOC_Atom = 157, RuleOC_Quantifier = 158, RuleOC_FilterExpression = 159, 
+    RuleOC_IdInColl = 160, RuleOC_Literal = 161, RuleOC_BooleanLiteral = 162, 
+    RuleOC_ListLiteral = 163, RuleIC_ListEntry = 164, RuleIC_StructLiteral = 165, 
+    RuleIC_StructField = 166, RuleOC_ParenthesizedExpression = 167, RuleOC_FunctionInvocation = 168, 
+    RuleOC_FunctionName = 169, RuleIC_FunctionParameter = 170, RuleIC_LambdaParameter = 171, 
+    RuleIC_LambdaVars = 172, RuleOC_PathPatterns = 173, RuleOC_ExistCountSubquery = 174, 
+    RuleOC_PropertyLookup = 175, RuleOC_CaseExpression = 176, RuleOC_CaseAlternative = 177, 
+    RuleOC_Variable = 178, RuleOC_NumberLiteral = 179, RuleOC_Parameter = 180, 
+    RuleOC_PropertyExpression = 181, RuleOC_PropertyKeyName = 182, RuleOC_IntegerLiteral = 183, 
+    RuleOC_DoubleLiteral = 184, RuleOC_SchemaName = 185, RuleOC_SymbolicName = 186, 
+    RuleIC_NonReservedKeywords = 187, RuleOC_LeftArrowHead = 188, RuleOC_RightArrowHead = 189, 
+    RuleOC_Dash = 190
   };
 
   explicit CypherParser(antlr4::TokenStream *input);
@@ -184,6 +184,7 @@ public:
   class IC_CycleContext;
   class IC_IfExistsContext;
   class IC_DropContext;
+  class IC_DropIndexNameContext;
   class IC_AlterTableContext;
   class IC_AlterOptionsContext;
   class IC_AddPropertyContext;
@@ -1136,11 +1137,27 @@ public:
     antlr4::tree::TerminalNode *MACRO();
     antlr4::tree::TerminalNode *GRAPH();
     IC_IfExistsContext *iC_IfExists();
+    antlr4::tree::TerminalNode *INDEX();
+    IC_DropIndexNameContext *iC_DropIndexName();
 
    
   };
 
   IC_DropContext* iC_Drop();
+
+  class  IC_DropIndexNameContext : public antlr4::ParserRuleContext {
+  public:
+    IC_DropIndexNameContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    std::vector<OC_SchemaNameContext *> oC_SchemaName();
+    OC_SchemaNameContext* oC_SchemaName(size_t i);
+    std::vector<antlr4::tree::TerminalNode *> SP();
+    antlr4::tree::TerminalNode* SP(size_t i);
+
+   
+  };
+
+  IC_DropIndexNameContext* iC_DropIndexName();
 
   class  IC_AlterTableContext : public antlr4::ParserRuleContext {
   public:

@@ -190,7 +190,12 @@ iC_IfExists
     : IF SP EXISTS ;
 
 iC_Drop
-    : DROP SP (TABLE | SEQUENCE | MACRO | GRAPH) SP (iC_IfExists SP)? oC_SchemaName ;
+    : DROP SP (TABLE | SEQUENCE | MACRO | GRAPH) SP (iC_IfExists SP)? oC_SchemaName
+    | DROP SP INDEX SP (iC_IfExists SP)? iC_DropIndexName
+    ;
+
+iC_DropIndexName
+    : oC_SchemaName SP? '.' SP? oC_SchemaName ;
 
 iC_AlterTable
     : ALTER SP TABLE SP oC_SchemaName SP iC_AlterOptions ;

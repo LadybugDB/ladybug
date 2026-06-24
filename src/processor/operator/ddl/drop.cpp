@@ -10,6 +10,8 @@
 #include "main/database_manager.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
 #include "transaction/transaction.h"
 #include <format>
 
@@ -33,6 +35,9 @@ void Drop::executeInternal(ExecutionContext* context) {
     } break;
     case DropType::GRAPH: {
         dropGraph(clientContext);
+    } break;
+    case DropType::INDEX: {
+        dropIndex(clientContext);
     } break;
     default:
         UNREACHABLE_CODE;
@@ -150,6 +155,62 @@ void Drop::dropGraph(const main::ClientContext* context) {
 
     dbManager->dropGraph(dropInfo.name, const_cast<main::ClientContext*>(context));
     appendMessage(std::format("Graph {} has been dropped.", dropInfo.name), memoryManager);
+}
+
+void Drop::dropIndex(const main::ClientContext* context) {
+    auto catalog = Catalog::Get(*context);
+    auto transaction = transaction::Transaction::Get(*context);
+    auto memoryManager = storage::MemoryManager::Get(*context);
+    if (!catalog->containsTable(transaction, dropInfo.name, context->useInternalCatalogEntry())) {
+        auto message = std::format("Table {} does not exist.", dropInfo.name);
+        switch (dropInfo.conflictAction) {
+        case ConflictAction::ON_CONFLICT_DO_NOTHING: {
+            appendMessage(message, memoryManager);
+            return;
+        }
+        case ConflictAction::ON_CONFLICT_THROW: {
+            throw BinderException(message);
+        }
+        default:
+            UNREACHABLE_CODE;
+        }
+    }
+    auto tableEntry = catalog->getTableCatalogEntry(transaction, dropInfo.name);
+    if (tableEntry->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
+        throw BinderException(
+            std::format("Table {} is not a node table; cannot drop index.", dropInfo.name));
+    }
+    auto tableID = tableEntry->getTableID();
+    auto storageManager = storage::StorageManager::Get(*context);
+    auto* nodeTable = storageManager->getTable(tableID)->ptrCast<storage::NodeTable>();
+    // An index may live in the catalog (user-created indexes), in storage only (the default
+    // built-in PK hash index), or in both. Drop whichever are present.
+    const auto inCatalog = catalog->containsIndex(transaction, tableID, dropInfo.indexName);
+    const auto inStorage = nodeTable->getIndex(dropInfo.indexName).has_value();
+    if (!inCatalog && !inStorage) {
+        auto message =
+            std::format("Index {} does not exist in table {}.", dropInfo.indexName, dropInfo.name);
+        switch (dropInfo.conflictAction) {
+        case ConflictAction::ON_CONFLICT_DO_NOTHING: {
+            appendMessage(message, memoryManager);
+            return;
+        }
+        case ConflictAction::ON_CONFLICT_THROW: {
+            throw BinderException(message);
+        }
+        default:
+            UNREACHABLE_CODE;
+        }
+    }
+    if (inCatalog) {
+        // Marks the IndexCatalogEntry deleted; the commit path emits the WAL drop record.
+        catalog->dropIndex(transaction, tableID, dropInfo.indexName);
+    }
+    if (inStorage) {
+        // Removes the in-memory index; its pages are reclaimed on the next checkpoint.
+        nodeTable->dropIndex(dropInfo.indexName);
+    }
+    appendMessage(std::format("Index {} has been dropped.", dropInfo.indexName), memoryManager);
 }
 
 void Drop::handleMacroExistence(const main::ClientContext* context) {

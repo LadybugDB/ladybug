@@ -251,11 +251,18 @@ DropType transformDropType(CypherParser::IC_DropContext& ctx) {
 }
 
 std::unique_ptr<Statement> Transformer::transformDrop(CypherParser::IC_DropContext& ctx) {
-    auto name = transformSchemaName(*ctx.oC_SchemaName());
-    auto dropType = transformDropType(ctx);
     auto conflictAction = ctx.iC_IfExists() ? common::ConflictAction::ON_CONFLICT_DO_NOTHING :
                                               common::ConflictAction::ON_CONFLICT_THROW;
-    return std::make_unique<Drop>(DropInfo{std::move(name), dropType, conflictAction});
+    if (ctx.INDEX()) {
+        auto schemaNames = ctx.iC_DropIndexName()->oC_SchemaName();
+        auto tableName = transformSchemaName(*schemaNames[0]);
+        auto indexName = transformSchemaName(*schemaNames[1]);
+        return std::make_unique<Drop>(
+            DropInfo{std::move(tableName), DropType::INDEX, conflictAction, std::move(indexName)});
+    }
+    auto name = transformSchemaName(*ctx.oC_SchemaName());
+    auto dropType = transformDropType(ctx);
+    return std::make_unique<Drop>(DropInfo{std::move(name), dropType, conflictAction, ""});
 }
 
 std::unique_ptr<Statement> Transformer::transformRenameTable(

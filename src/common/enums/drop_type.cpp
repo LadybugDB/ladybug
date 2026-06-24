@@ -15,6 +15,8 @@ std::string DropTypeUtils::toString(DropType type) {
         return "Macro";
     case DropType::GRAPH:
         return "Graph";
+    case DropType::INDEX:
+        return "Index";
     default:
         UNREACHABLE_CODE;
     }
