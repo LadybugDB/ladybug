@@ -24,8 +24,7 @@ static std::unique_ptr<TableScanState> createSourceNodeTableScanState(NodeTable*
     ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
     MemoryManager* memoryManager) {
     if (dynamic_cast<ColumnarNodeTableBase*>(table) != nullptr) {
-        return table->cast<ColumnarNodeTableBase>().createScanState(nodeIDVector, outVectors,
-            memoryManager);
+        return table->cast<ColumnarNodeTableBase>().createScanState(nodeIDVector, outVectors);
     }
     return std::make_unique<NodeTableScanState>(nodeIDVector, outVectors, nodeIDVector->state);
 }
@@ -90,8 +89,8 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
     auto* columnarTable = dynamic_cast<storage::ColumnarRelTableBase*>(tableInfo.table);
     auto* foreignTable = dynamic_cast<storage::ForeignRelTable*>(tableInfo.table);
     if (columnarTable) {
-        auto tableScanState = columnarTable->createScanState(boundNodeIDVector, outVectors,
-            MemoryManager::Get(*clientContext), nbrNodeIDVector->state);
+        auto tableScanState =
+            columnarTable->createScanState(boundNodeIDVector, outVectors, nbrNodeIDVector->state);
         scanState = std::unique_ptr<RelTableScanState>(
             dynamic_cast<RelTableScanState*>(tableScanState.release()));
     } else if (foreignTable) {

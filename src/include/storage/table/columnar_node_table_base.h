@@ -18,8 +18,8 @@ struct ColumnarNodeTableScanState : NodeTableScanState {
     size_t totalRows = 0;
     bool scanCompleted = false; // Track if this scan state has finished reading
 
-    ColumnarNodeTableScanState([[maybe_unused]] MemoryManager& mm,
-        common::ValueVector* nodeIDVector, std::vector<common::ValueVector*> outputVectors,
+    ColumnarNodeTableScanState(common::ValueVector* nodeIDVector,
+        std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
         : NodeTableScanState{nodeIDVector, std::move(outputVectors), std::move(outChunkState)} {}
 };
@@ -80,8 +80,7 @@ public:
         return tableScanSharedState.get();
     }
     virtual std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
-        const std::vector<common::ValueVector*>& outVectors,
-        MemoryManager* memoryManager) const = 0;
+        const std::vector<common::ValueVector*>& outVectors) const = 0;
     virtual common::node_group_idx_t getNumScanMorsels(
         const transaction::Transaction* transaction) const = 0;
 };

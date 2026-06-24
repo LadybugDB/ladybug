@@ -41,15 +41,15 @@ IceDiskNodeTable::IceDiskNodeTable(const StorageManager* storageManager,
 }
 
 std::unique_ptr<TableScanState> IceDiskNodeTable::createScanState(common::ValueVector* nodeIDVector,
-    const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager) const {
-    return std::make_unique<IceDiskNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
+    const std::vector<common::ValueVector*>& outVectors) const {
+    return std::make_unique<IceDiskNodeTableScanState>(nodeIDVector, outVectors,
         nodeIDVector->state);
 }
 
 void IceDiskNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {
     auto iceDiskScanSharedState =
         static_cast<IceDiskNodeTableScanSharedState*>(tableScanSharedState.get());
-    auto numMorsels = getNumScanMorsels(transaction);
+    auto numMorsels = getNumRowGroups(transaction);
     iceDiskScanSharedState->reset(numMorsels);
 }
 
@@ -91,8 +91,13 @@ void IceDiskNodeTable::initScanState(Transaction* transaction, TableScanState& s
     initParquetScanForRowGroup(transaction, iceDiskScanState);
 }
 
-common::node_group_idx_t IceDiskNodeTable::getNumScanMorsels(
+common::node_group_idx_t IceDiskNodeTable::getNumRowGroups(
     const transaction::Transaction* transaction) const {
+    const auto cached = cachedNumRowGroups.load(std::memory_order_relaxed);
+    if (cached != INVALID_NODE_GROUP_IDX) {
+        return cached;
+    }
+
     auto context = transaction->getClientContext();
     if (!context) {
         return 1;
@@ -101,10 +106,18 @@ common::node_group_idx_t IceDiskNodeTable::getNumScanMorsels(
     std::vector<bool> columnSkips;
     try {
         auto tempReader = std::make_unique<ParquetReader>(parquetFilePath, columnSkips, context);
-        return static_cast<common::node_group_idx_t>(tempReader->getNumRowGroups());
+        const auto numRowGroups =
+            static_cast<common::node_group_idx_t>(tempReader->getNumRowGroups());
+        cachedNumRowGroups.store(numRowGroups, std::memory_order_relaxed);
+        return numRowGroups;
     } catch (const std::exception& e) {
         return 1; // Fallback
     }
+}
+
+common::node_group_idx_t IceDiskNodeTable::getNumScanMorsels(
+    const transaction::Transaction* transaction) const {
+    return getNumRowGroups(transaction);
 }
 
 void IceDiskNodeTable::initParquetScanForRowGroup(Transaction* transaction,

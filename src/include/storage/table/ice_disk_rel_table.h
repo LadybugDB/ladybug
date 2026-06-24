@@ -66,7 +66,7 @@ public:
 
     bool scanInternal(transaction::Transaction* transaction, TableScanState& scanState) override;
     std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
-        const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager,
+        const std::vector<common::ValueVector*>& outVectors,
         std::shared_ptr<common::DataChunkState> outChunkState) const override;
 
 protected:

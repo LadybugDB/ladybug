@@ -51,9 +51,8 @@ ArrowNodeTable::~ArrowNodeTable() {
 }
 
 std::unique_ptr<TableScanState> ArrowNodeTable::createScanState(common::ValueVector* nodeIDVector,
-    const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager) const {
-    return std::make_unique<ArrowNodeTableScanState>(*memoryManager, nodeIDVector, outVectors,
-        nodeIDVector->state);
+    const std::vector<common::ValueVector*>& outVectors) const {
+    return std::make_unique<ArrowNodeTableScanState>(nodeIDVector, outVectors, nodeIDVector->state);
 }
 
 void ArrowNodeTable::initializeScanCoordination(const transaction::Transaction* transaction) {

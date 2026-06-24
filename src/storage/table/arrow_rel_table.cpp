@@ -39,9 +39,9 @@ static int64_t findColumnIdx(const ArrowSchemaWrapper& schema, const std::string
 }
 
 std::unique_ptr<TableScanState> ArrowRelTable::createScanState(common::ValueVector* nodeIDVector,
-    const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager,
+    const std::vector<common::ValueVector*>& outVectors,
     std::shared_ptr<common::DataChunkState> outChunkState) const {
-    return std::make_unique<storage::ArrowRelTableScanState>(*memoryManager, nodeIDVector,
+    return std::make_unique<storage::ArrowRelTableScanState>(*(this->memoryManager), nodeIDVector,
         outVectors, outChunkState);
 }
 

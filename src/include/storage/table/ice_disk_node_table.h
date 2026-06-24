@@ -21,10 +21,10 @@ struct IceDiskNodeTableScanState final : ColumnarNodeTableScanState {
     std::unique_ptr<processor::ParquetReaderScanState> parquetScanState;
     uint64_t lastQueryId = 0; // Track the last query ID to detect new queries
 
-    IceDiskNodeTableScanState([[maybe_unused]] MemoryManager& mm, common::ValueVector* nodeIDVector,
+    IceDiskNodeTableScanState(common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
-        : ColumnarNodeTableScanState{mm, nodeIDVector, std::move(outputVectors),
+        : ColumnarNodeTableScanState{nodeIDVector, std::move(outputVectors),
               std::move(outChunkState)} {
         parquetScanState = std::make_unique<processor::ParquetReaderScanState>();
     }
@@ -77,8 +77,7 @@ public:
 
     const std::string& getParquetFilePath() const { return parquetFilePath; }
     std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
-        const std::vector<common::ValueVector*>& outVectors,
-        MemoryManager* memoryManager) const override;
+        const std::vector<common::ValueVector*>& outVectors) const override;
     common::node_group_idx_t getNumScanMorsels(
         const transaction::Transaction* transaction) const override;
 
@@ -90,10 +89,13 @@ protected:
 private:
     std::string parquetFilePath;
     mutable std::atomic<common::row_idx_t> cachedRowCount{common::INVALID_ROW_IDX};
+    mutable std::atomic<common::node_group_idx_t> cachedNumRowGroups{
+        common::INVALID_NODE_GROUP_IDX};
 
     void initializeParquetReader(transaction::Transaction* transaction) const;
     void initParquetScanForRowGroup(transaction::Transaction* transaction,
         IceDiskNodeTableScanState& iceDiskScanState) const;
+    common::node_group_idx_t getNumRowGroups(const transaction::Transaction* transaction) const;
 };
 
 } // namespace storage

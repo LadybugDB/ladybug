@@ -23,9 +23,9 @@ namespace lbug {
 namespace storage {
 
 std::unique_ptr<TableScanState> IceDiskRelTable::createScanState(common::ValueVector* nodeIDVector,
-    const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager,
+    const std::vector<common::ValueVector*>& outVectors,
     std::shared_ptr<common::DataChunkState> outChunkState) const {
-    return std::make_unique<storage::IceDiskRelTableScanState>(*memoryManager, nodeIDVector,
+    return std::make_unique<storage::IceDiskRelTableScanState>(*(this->memoryManager), nodeIDVector,
         outVectors, outChunkState);
 }
 

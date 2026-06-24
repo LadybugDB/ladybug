@@ -18,8 +18,7 @@ static std::unique_ptr<TableScanState> createNodeTableScanState(NodeTable* table
     ValueVector* nodeIDVector, const std::vector<ValueVector*>& outVectors,
     MemoryManager* memoryManager) {
     if (dynamic_cast<ColumnarNodeTableBase*>(table) != nullptr) {
-        return table->cast<ColumnarNodeTableBase>().createScanState(nodeIDVector, outVectors,
-            memoryManager);
+        return table->cast<ColumnarNodeTableBase>().createScanState(nodeIDVector, outVectors);
     }
 
     return std::make_unique<NodeTableScanState>(nodeIDVector, outVectors, nodeIDVector->state);

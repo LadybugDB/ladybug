@@ -52,7 +52,7 @@ public:
         const transaction::Transaction* transaction, common::RelDataDirection direction,
         common::idx_t k) override;
     virtual std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
-        const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager,
+        const std::vector<common::ValueVector*>& outVectors,
         std::shared_ptr<common::DataChunkState> outChunkState) const = 0;
 
 protected:

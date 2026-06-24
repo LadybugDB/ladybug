@@ -19,10 +19,10 @@ struct ArrowNodeTableScanState final : ColumnarNodeTableScanState {
     size_t currentMorselStartOffset = 0;
     size_t currentMorselEndOffset = 0;
 
-    ArrowNodeTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
+    ArrowNodeTableScanState(common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState)
-        : ColumnarNodeTableScanState{mm, nodeIDVector, std::move(outputVectors),
+        : ColumnarNodeTableScanState{nodeIDVector, std::move(outputVectors),
               std::move(outChunkState)} {}
 };
 
@@ -102,8 +102,7 @@ public:
     const catalog::NodeTableCatalogEntry* getCatalogEntry() const { return nodeTableCatalogEntry; }
 
     std::unique_ptr<TableScanState> createScanState(common::ValueVector* nodeIDVector,
-        const std::vector<common::ValueVector*>& outVectors,
-        MemoryManager* memoryManager) const override;
+        const std::vector<common::ValueVector*>& outVectors) const override;
 
 protected:
     std::string getColumnarFormatName() const override { return "Arrow"; }

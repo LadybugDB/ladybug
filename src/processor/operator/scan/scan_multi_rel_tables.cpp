@@ -84,8 +84,8 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
     // IceDisk scan state extends the common rel scan state and Arrow stores its per-table state
     // there, so one scan state can now cover IceDisk, Arrow, and native rel tables.
     if (columnarTable != nullptr) {
-        auto tableScanState = columnarTable->createScanState(boundNodeIDVector, outVectors,
-            MemoryManager::Get(*clientContext), nbrNodeIDVector->state);
+        auto tableScanState =
+            columnarTable->createScanState(boundNodeIDVector, outVectors, nbrNodeIDVector->state);
         scanState = std::unique_ptr<RelTableScanState>(
             dynamic_cast<RelTableScanState*>(tableScanState.release()));
     } else {
