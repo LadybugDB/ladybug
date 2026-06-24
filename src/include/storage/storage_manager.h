@@ -113,6 +113,8 @@ private:
         main::ClientContext* context = nullptr);
 
     void reclaimDroppedTables(const catalog::Catalog& catalog);
+    // Reclaim on-disk pages of indexes dropped via DROP INDEX since the last checkpoint.
+    void reclaimDroppedIndexes();
 
 private:
     mutable std::shared_mutex mtx;

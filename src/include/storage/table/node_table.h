@@ -171,6 +171,9 @@ public:
     void buildIndexAndAdd(main::ClientContext* context, std::unique_ptr<Index> index,
         std::optional<uint64_t> queryID = std::nullopt);
     void dropIndex(const std::string& name);
+    // Reclaim the on-disk pages of indexes dropped since the last checkpoint. Called by the
+    // storage manager at checkpoint time, mirroring reclaimDroppedTables for dropped tables.
+    void reclaimDroppedIndexes(PageAllocator& pageAllocator);
 
     common::column_id_t getPKColumnID() const { return pkColumnID; }
     Index* tryGetPrimaryKeyIndex() const;
@@ -268,6 +271,9 @@ private:
     std::unique_ptr<NodeGroupCollection> nodeGroups;
     common::column_id_t pkColumnID;
     std::vector<IndexHolder> indexes;
+    // Indexes dropped via DROP INDEX but not yet reclaimed at checkpoint. Their pages are
+    // freed by reclaimDroppedIndexes() during checkpoint (after the dropping tx is durable).
+    std::vector<IndexHolder> droppedIndexes;
     NodeTableVersionRecordHandler versionRecordHandler;
 };
 

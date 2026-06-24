@@ -2,7 +2,6 @@
 --
 
 -CASE DropDefaultPKIndex
--SKIP_FSM_LEAK_CHECK
 -STATEMENT CREATE NODE TABLE di_user(name STRING, age INT64, PRIMARY KEY(name));
 ---- 1
 Table di_user has been created.
@@ -22,7 +21,6 @@ Index _PK has been dropped.
 4
 
 -CASE DropNamedIndex
--SKIP_FSM_LEAK_CHECK
 -STATEMENT CALL enable_default_hash_index=false;
 ---- ok
 -STATEMENT CREATE NODE TABLE di_person(ID INT64, name STRING, PRIMARY KEY(ID));
@@ -49,7 +47,6 @@ Alice
 ---- ok
 
 -CASE DropNonExistentIndexThrows
--SKIP_FSM_LEAK_CHECK
 -STATEMENT CREATE NODE TABLE di_person2(ID INT64, PRIMARY KEY(ID));
 ---- 1
 Table di_person2 has been created.
@@ -58,7 +55,6 @@ Table di_person2 has been created.
 Binder exception: Index nonexistent_index does not exist in table di_person2.
 
 -CASE DropIndexIfExists
--SKIP_FSM_LEAK_CHECK
 -STATEMENT CREATE NODE TABLE di_person3(ID INT64, PRIMARY KEY(ID));
 ---- 1
 Table di_person3 has been created.
@@ -76,7 +72,6 @@ Index _PK has been dropped.
 Index _PK does not exist in table di_person3.
 
 -CASE DropIndexOnNonNodeTableThrows
--SKIP_FSM_LEAK_CHECK
 -STATEMENT CREATE NODE TABLE di_src(ID INT64, PRIMARY KEY(ID));
 ---- 1
 Table di_src has been created.

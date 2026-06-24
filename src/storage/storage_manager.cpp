@@ -268,6 +268,17 @@ ShadowFile& StorageManager::getShadowFile() const {
     return *shadowFile;
 }
 
+void StorageManager::reclaimDroppedIndexes() {
+    std::shared_lock lck{mtx};
+    auto* pageAllocator = dataFH->getPageManager();
+    for (const auto& [tableID, table] : tables) {
+        if (table->getTableType() != TableType::NODE) {
+            continue;
+        }
+        table->cast<NodeTable>().reclaimDroppedIndexes(*pageAllocator);
+    }
+}
+
 void StorageManager::reclaimDroppedTables(const Catalog& catalog) {
     std::unique_lock lck{mtx};
     std::vector<table_id_t> droppedTables;
@@ -333,6 +344,7 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& cat
         entry->vacuumColumnIDs(1);
     }
     lck.unlock();
+    reclaimDroppedIndexes();
     reclaimDroppedTables(catalog);
     return hasChanges;
 }
@@ -372,6 +384,7 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& cat
         entry->vacuumColumnIDs(1);
     }
     lck.unlock();
+    reclaimDroppedIndexes();
     reclaimDroppedTables(catalog);
     return hasChanges;
 }

@@ -750,9 +750,21 @@ void NodeTable::rollbackCheckpoint() {
     }
 }
 
+void NodeTable::reclaimDroppedIndexes(PageAllocator& pageAllocator) {
+    for (const auto& index : droppedIndexes) {
+        index.reclaimStorage(pageAllocator);
+    }
+    droppedIndexes.clear();
+}
+
 void NodeTable::reclaimStorage(PageAllocator& pageAllocator) const {
     nodeGroups->reclaimStorage(pageAllocator);
     for (const auto& index : indexes) {
+        index.reclaimStorage(pageAllocator);
+    }
+    // Also reclaim any indexes that were dropped (but not yet checkpointed) before the table
+    // itself was dropped.
+    for (const auto& index : droppedIndexes) {
         index.reclaimStorage(pageAllocator);
     }
 }
@@ -997,6 +1009,10 @@ void NodeTable::dropIndex(const std::string& name) {
     for (auto it = indexes.begin(); it != indexes.end(); ++it) {
         if (StringUtils::caseInsensitiveEquals(it->getName(), name)) {
             DASSERT(it->isLoaded());
+            // Retain the holder so its page range is known; the pages are reclaimed at the
+            // next checkpoint (reclaimDroppedIndexes), not here, since freeing them within the
+            // dropping transaction would be unsafe on rollback.
+            droppedIndexes.push_back(std::move(*it));
             indexes.erase(it);
             setHasChanges();
             return;
