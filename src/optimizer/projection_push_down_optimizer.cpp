@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "binder/expression/lambda_expression.h"
 #include "binder/expression_visitor.h"
 #include "function/gds/gds_function_collection.h"
 #include "function/gds/rec_joins.h"
@@ -331,6 +332,18 @@ void ProjectionPushDownOptimizer::collectExpressionsInUse(
         nodeOrRelInUse.insert(expression);
         for (auto& child : ExpressionChildrenCollector::collectChildren(*expression)) {
             collectExpressionsInUse(child);
+        }
+        return;
+    }
+    case ExpressionType::LAMBDA: {
+        // A LambdaExpression stores its body (functionExpr) separately from its
+        // expression children, so collectChildren() does not traverse into it.
+        // We need to mark expressions referenced inside the lambda body as in use,
+        // e.g. a path variable `p` referenced inside `any(x IN [...] WHERE p IS NOT NULL)`
+        // depends on the path's recursive-rel segments being materialized.
+        auto& lambdaExpression = expression->constCast<LambdaExpression>();
+        if (lambdaExpression.getFunctionExpr() != nullptr) {
+            collectExpressionsInUse(lambdaExpression.getFunctionExpr());
         }
         return;
     }
