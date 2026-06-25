@@ -1,4 +1,5 @@
 #include "binder/query/bound_regular_query.h"
+#include "planner/operator/logical_projection.h"
 #include "planner/operator/logical_union.h"
 #include "planner/planner.h"
 
@@ -27,11 +28,27 @@ LogicalPlan Planner::createUnionPlan(std::vector<LogicalPlan>& childrenPlans,
     auto plan = LogicalPlan();
     std::vector<std::shared_ptr<LogicalOperator>> children;
     children.reserve(childrenPlans.size());
+    std::vector<binder::expression_vector> childProjections;
+    childProjections.reserve(childrenPlans.size());
     for (auto& childPlan : childrenPlans) {
         children.push_back(childPlan.getLastOperator());
+        // Record each child's non-deduplicated projection list so that
+        // LogicalUnion can look up expressions positionally without indexing
+        // into the schema's deduplicated expressionsInScope.
+        // Only LogicalProjection deduplicates via insertToScopeMayRepeat;
+        // other operator types (e.g. LogicalDelete) keep the full arity in
+        // getExpressionsInScope, so we fall back to that.
+        auto* lastOp = childPlan.getLastOperator().get();
+        if (lastOp->getOperatorType() == LogicalOperatorType::PROJECTION) {
+            auto& projection = lastOp->constCast<LogicalProjection>();
+            childProjections.push_back(projection.getExpressionsToProject());
+        } else {
+            childProjections.push_back(lastOp->getSchema()->getExpressionsInScope());
+        }
     }
     // we compute the schema based on first child
     auto union_ = std::make_shared<LogicalUnion>(expressions, std::move(children));
+    union_->setChildProjections(std::move(childProjections));
     for (auto i = 0u; i < childrenPlans.size(); ++i) {
         appendFlattens(union_->getGroupsPosToFlatten(i), childrenPlans[i]);
         union_->setChild(i, childrenPlans[i].getLastOperator());

@@ -11,7 +11,11 @@ f_group_pos_set LogicalUnion::getGroupsPosToFlatten(uint32_t childIdx) {
     auto childSchema = children[childIdx]->getSchema();
     for (auto i = 0u; i < expressionsToUnion.size(); ++i) {
         if (requireFlatExpression(i)) {
-            auto expression = childSchema->getExpressionsInScope()[i];
+            // Use the non-deduplicated projection list rather than the child schema's
+            // expressionsInScope, which may be shorter when a child projects the same
+            // expression more than once (e.g. RETURN b.age, b.age).
+            DASSERT(childIdx < childProjections.size());
+            auto expression = childProjections[childIdx][i];
             groupsPos.insert(childSchema->getGroupPos(*expression));
         }
     }
@@ -39,13 +43,20 @@ std::unique_ptr<LogicalOperator> LogicalUnion::copy() {
     for (auto i = 0u; i < getNumChildren(); ++i) {
         copiedChildren.push_back(getChild(i)->copy());
     }
-    return make_unique<LogicalUnion>(expressionsToUnion, std::move(copiedChildren));
+    auto result = make_unique<LogicalUnion>(expressionsToUnion, std::move(copiedChildren));
+    result->setChildProjections(childProjections);
+    return result;
 }
 
 bool LogicalUnion::requireFlatExpression(uint32_t expressionIdx) {
-    for (auto& child : children) {
-        auto childSchema = child->getSchema();
-        auto expression = childSchema->getExpressionsInScope()[expressionIdx];
+    for (auto childIdx = 0u; childIdx < children.size(); ++childIdx) {
+        auto childSchema = children[childIdx]->getSchema();
+        // Use the non-deduplicated projection list; indexing by unique name would not
+        // work because different arms may have different expressions at the same
+        // position (only types are validated to match).
+        DASSERT(childIdx < childProjections.size());
+        DASSERT(expressionIdx < childProjections[childIdx].size());
+        auto expression = childProjections[childIdx][expressionIdx];
         if (childSchema->getGroup(expression)->isFlat()) {
             return true;
         }

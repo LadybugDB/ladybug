@@ -846,3 +846,38 @@ h
 -STATEMENT MATCH (a:A_uuid_count) RETURN COUNT(*), COUNT(DISTINCT a.id);
 ---- 1
 1|1
+
+-CASE 619
+-STATEMENT CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY (name));
+---- ok
+-STATEMENT CREATE REL TABLE Knows(FROM Person TO Person);
+---- ok
+-STATEMENT CREATE (p1:Person {name: 'Alice', age: 30});
+---- ok
+-STATEMENT CREATE (p2:Person {name: 'Bob', age: 25});
+---- ok
+-STATEMENT CREATE (p3:Person {name: 'Charlie', age: 35});
+---- ok
+-STATEMENT MATCH (a:Person), (b:Person), (c:Person) WHERE a.name = 'Alice' AND b.name = 'Bob' AND c.name = 'Charlie' CREATE (a)-[:Knows]->(b)-[:Knows]->(c);
+---- ok
+-STATEMENT MATCH p = (a)-[*1..2]-(b)-[*1..2]-(c) WHERE a.name = 'Alice' AND b.name = 'Bob' AND c.name = 'Charlie' RETURN any(x IN [1] WHERE p IS NOT NULL);
+---- 1
+True
+
+-CASE 620
+-STATEMENT CREATE NODE TABLE Person(name STRING, age INT64, PRIMARY KEY (name));
+---- ok
+-STATEMENT CREATE (p1:Person {name: 'Alice', age: 30});
+---- ok
+-STATEMENT CREATE (p2:Person {name: 'Bob', age: 25});
+---- ok
+-STATEMENT CREATE (p3:Person {name: 'Charlie', age: 35});
+---- ok
+-STATEMENT MATCH (a:Person) RETURN 1, 2 UNION ALL MATCH (b:Person) RETURN b.age, b.age;
+---- 6
+30|30
+25|25
+35|35
+1|2
+1|2
+1|2

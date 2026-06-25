@@ -19,8 +19,11 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapUnionAll(const LogicalOperator*
         auto child = logicalOperator->getChild(i);
         auto childSchema = logicalUnionAll.getSchemaBeforeUnion(i);
         auto prevOperator = mapOperator(child.get());
+        // Use the child's non-deduplicated projection list so the factorized table has
+        // the correct number of columns (matching expressionsToUnion.size()), even when
+        // the child projects the same expression more than once (e.g. RETURN b.age, b.age).
         auto resultCollector = createResultCollector(AccumulateType::REGULAR,
-            childSchema->getExpressionsInScope(), childSchema, std::move(prevOperator));
+            logicalUnionAll.getChildProjections()[i], childSchema, std::move(prevOperator));
         tables.push_back(resultCollector->getResultFTable());
         prevOperators.push_back(std::move(resultCollector));
     }
