@@ -1,3 +1,4 @@
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -101,11 +102,12 @@ void lbug_connection_destroy(lbug_connection* connection) {
     if (connection == nullptr) {
         return;
     }
-    if (connection->_connection != nullptr) {
-        auto connectionPtr = static_cast<Connection*>(connection->_connection);
+    std::atomic_ref<void*> atomic_conn(connection->_connection);
+    void* ptr = atomic_conn.exchange(nullptr);
+    if (ptr != nullptr) {
+        auto connectionPtr = static_cast<Connection*>(ptr);
         forgetArrowTableIDs(connectionPtr);
         delete connectionPtr;
-        connection->_connection = nullptr;
     }
 }
 

@@ -1,3 +1,5 @@
+#include <atomic>
+
 #include "c_api/helpers.h"
 #include "c_api/lbug.h"
 #include "common/exception/exception.h"
@@ -31,9 +33,10 @@ void lbug_database_destroy(lbug_database* database) {
     if (database == nullptr) {
         return;
     }
-    if (database->_database != nullptr) {
-        delete static_cast<Database*>(database->_database);
-        database->_database = nullptr;
+    std::atomic_ref<void*> atomic_db(database->_database);
+    void* ptr = atomic_db.exchange(nullptr);
+    if (ptr != nullptr) {
+        delete static_cast<Database*>(ptr);
     }
 }
 
