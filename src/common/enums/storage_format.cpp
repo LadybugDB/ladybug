@@ -13,8 +13,8 @@ StorageFormat StorageFormatUtils::fromString(const std::string& str) {
     if (str == "lance") {
         return StorageFormat::LANCE;
     }
-    throw BinderException(
-        std::format("Unsupported storage format '{}'. Valid options are: icebug-disk, lance.", str));
+    throw BinderException(std::format(
+        "Unsupported storage format '{}'. Valid options are: icebug-disk, lance.", str));
 }
 
 } // namespace common

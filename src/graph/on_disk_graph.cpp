@@ -132,6 +132,8 @@ OnDiskGraphNbrScanState::OnDiskGraphNbrScanState(ClientContext* context,
         if (dynamic_cast<IceDiskRelTable*>(table) != nullptr) {
             scanState = std::make_unique<IceDiskRelTableScanState>(*mm, srcNodeIDVector.get(),
                 outVectors, state);
+        } else if (auto ext = table->createScanState(srcNodeIDVector.get(), outVectors, mm)) {
+            scanState = std::move(ext);
         } else {
             scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*context),
                 srcNodeIDVector.get(), outVectors, dstNodeIDVector->state, randomLookup);

@@ -90,25 +90,31 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
     auto clientContext = context->clientContext;
     auto boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
-    // Check if this is an external rel table and create the corresponding scan state.
-    auto* arrowTable = dynamic_cast<storage::ArrowRelTable*>(tableInfo.table);
-    auto* iceDiskTable = dynamic_cast<storage::IceDiskRelTable*>(tableInfo.table);
-    auto* foreignTable = dynamic_cast<storage::ForeignRelTable*>(tableInfo.table);
-    if (arrowTable) {
-        scanState =
-            std::make_unique<storage::ArrowRelTableScanState>(*MemoryManager::Get(*clientContext),
-                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
-    } else if (iceDiskTable) {
-        scanState =
-            std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext),
-                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
-    } else if (foreignTable) {
-        scanState =
-            std::make_unique<storage::ForeignRelTableScanState>(*MemoryManager::Get(*clientContext),
-                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+    auto* relTable = tableInfo.table->ptrCast<RelTable>();
+    if (auto extensionState = relTable->createScanState(boundNodeIDVector, outVectors,
+            MemoryManager::Get(*clientContext))) {
+        scanState = std::move(extensionState);
     } else {
-        scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
-            boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+        // Check if this is an external rel table and create the corresponding scan state.
+        auto* arrowTable = dynamic_cast<storage::ArrowRelTable*>(tableInfo.table);
+        auto* iceDiskTable = dynamic_cast<storage::IceDiskRelTable*>(tableInfo.table);
+        auto* foreignTable = dynamic_cast<storage::ForeignRelTable*>(tableInfo.table);
+        if (arrowTable) {
+            scanState = std::make_unique<storage::ArrowRelTableScanState>(
+                *MemoryManager::Get(*clientContext), boundNodeIDVector, outVectors,
+                nbrNodeIDVector->state);
+        } else if (iceDiskTable) {
+            scanState = std::make_unique<storage::IceDiskRelTableScanState>(
+                *MemoryManager::Get(*clientContext), boundNodeIDVector, outVectors,
+                nbrNodeIDVector->state);
+        } else if (foreignTable) {
+            scanState = std::make_unique<storage::ForeignRelTableScanState>(
+                *MemoryManager::Get(*clientContext), boundNodeIDVector, outVectors,
+                nbrNodeIDVector->state);
+        } else {
+            scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
+                boundNodeIDVector, outVectors, nbrNodeIDVector->state);
+        }
     }
     tableInfo.initScanState(*scanState, outVectors, clientContext);
     if (sourceNodeScanMode) {

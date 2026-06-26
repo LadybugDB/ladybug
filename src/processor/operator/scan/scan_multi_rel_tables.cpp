@@ -4,6 +4,7 @@
 #include "storage/local_storage/local_storage.h"
 #include "storage/table/arrow_rel_table.h"
 #include "storage/table/ice_disk_rel_table.h"
+#include "storage/table/rel_table.h"
 
 using namespace lbug::common;
 using namespace lbug::storage;
@@ -67,27 +68,32 @@ void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionCo
     auto nbrNodeIDVector = outVectors[0];
 
     // Check if any table in any scanner is an external rel table with a custom scan state.
+    // First, try the extension scan state mechanism (e.g. Lance rel tables).
+    std::unique_ptr<storage::RelTableScanState> extensionScanState;
     bool hasArrowTable = false;
     bool hasIceDiskTable = false;
     for (auto& [_, scanner] : scanners) {
         for (auto& relInfo : scanner.relInfos) {
+            if (!extensionScanState) {
+                if (auto* relTable = dynamic_cast<storage::RelTable*>(relInfo.table)) {
+                    extensionScanState = relTable->createScanState(boundNodeIDVector, outVectors,
+                        MemoryManager::Get(*clientContext));
+                }
+            }
             if (dynamic_cast<storage::ArrowRelTable*>(relInfo.table) != nullptr) {
                 hasArrowTable = true;
-                break;
             }
             if (dynamic_cast<storage::IceDiskRelTable*>(relInfo.table) != nullptr) {
                 hasIceDiskTable = true;
-                break;
             }
-        }
-        if (hasArrowTable || hasIceDiskTable) {
-            break;
         }
     }
 
     // IceDisk scan state extends the common rel scan state and Arrow stores its per-table state
     // there, so one scan state can now cover IceDisk, Arrow, and native rel tables.
-    if (hasIceDiskTable) {
+    if (extensionScanState) {
+        scanState = std::move(extensionScanState);
+    } else if (hasIceDiskTable) {
         scanState =
             std::make_unique<storage::IceDiskRelTableScanState>(*MemoryManager::Get(*clientContext),
                 boundNodeIDVector, outVectors, nbrNodeIDVector->state);

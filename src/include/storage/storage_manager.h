@@ -41,9 +41,9 @@ using NodeTableFactory = std::function<std::unique_ptr<Table>(const StorageManag
     const catalog::NodeTableCatalogEntry*, MemoryManager*, main::ClientContext*)>;
 
 /// Factory signature for extension-provided rel tables (e.g. LanceRelTable).
-using RelTableFactory = std::function<std::unique_ptr<Table>(catalog::RelGroupCatalogEntry*,
-    common::table_id_t, common::table_id_t, const StorageManager*, MemoryManager*,
-    main::ClientContext*)>;
+using RelTableFactory =
+    std::function<std::unique_ptr<Table>(catalog::RelGroupCatalogEntry*, common::table_id_t,
+        common::table_id_t, const StorageManager*, MemoryManager*, main::ClientContext*)>;
 
 class LBUG_API StorageManager {
 public:

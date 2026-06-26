@@ -138,8 +138,9 @@ public:
     /// in initCurrentTable() (e.g. Arrow, Lance, IceDisk columnar tables).
     virtual bool requiresExplicitScanInit() const { return false; }
 
-    /// Returns true if this table drives scanning via ColumnarNodeTableScanSharedState::getNextMorsel()
-    /// rather than via nodeGroupIdx assignment (e.g. Arrow, Lance).
+    /// Returns true if this table drives scanning via
+    /// ColumnarNodeTableScanSharedState::getNextMorsel() rather than via nodeGroupIdx assignment
+    /// (e.g. Arrow, Lance).
     virtual bool usesMorselScan() const { return false; }
 
     /// Returns the number of scan morsels for progress tracking.

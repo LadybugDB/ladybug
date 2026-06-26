@@ -147,6 +147,11 @@ public:
         common::table_id_t toTableID, const StorageManager* storageManager,
         MemoryManager* memoryManager);
 
+    virtual std::unique_ptr<RelTableScanState> createScanState(common::ValueVector* nodeIDVector,
+        const std::vector<common::ValueVector*>& outVectors, MemoryManager* memoryManager) const {
+        return nullptr;
+    }
+
     common::table_id_t getFromNodeTableID() const { return fromNodeTableID; }
     common::table_id_t getToNodeTableID() const { return toNodeTableID; }
 

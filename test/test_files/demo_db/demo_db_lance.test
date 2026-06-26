@@ -1,0 +1,40 @@
+-DATASET LANCE demo-db/lance
+
+--
+
+-CASE DemoDBLanceSmokeTest
+
+-LOG MatchUserNodes
+-STATEMENT MATCH (u:user) RETURN u.name, u.age;
+---- 4
+Adam|30
+Karissa|40
+Zhang|50
+Noura|25
+
+-LOG MatchCityNodes
+-STATEMENT MATCH (c:city) RETURN c.name, c.population;
+---- 3
+Waterloo|150000
+Kitchener|200000
+Guelph|75000
+
+-LOG CountUserNodes
+-STATEMENT MATCH (u:user) RETURN COUNT(*);
+---- 1
+4
+
+-LOG CountCityNodes
+-STATEMENT MATCH (c:city) RETURN COUNT(*);
+---- 1
+3
+
+-LOG CountFollowsRels
+-STATEMENT MATCH ()-[:follows]->() RETURN COUNT(*);
+---- 1
+4
+
+-LOG CountLivesInRels
+-STATEMENT MATCH ()-[:livesin]->() RETURN COUNT(*);
+---- 1
+4
