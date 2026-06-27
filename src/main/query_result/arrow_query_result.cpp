@@ -71,30 +71,114 @@ static ArrowQueryResult::CSRArrowArray makeCSRArrowArray(
     return result;
 }
 
+// K-way merge of per-batch CSR metadata chunks (in batch_index order)
+// into a single flat CSRMetadata. Each chunk's indptr is indexed by
+// GLOBAL source row id: the per-batch CSR tracker fills indptr densely
+// from global row 0 up to that chunk's max source row, with a trailing
+// sentinel equal to indices.size(). For each global source row in
+// ascending order, emit edges from each chunk in batch_index order;
+// within a chunk the per-batch tracker already groups entries by
+// source row in scan order, so emitting in (src, batch_index,
+// scan_order_within_batch) order is correct without any global sort.
+//
+// Runs lazily on first consumer request via combineCSRChunks(), not at
+// result-construction time, so result construction stays zero-work for
+// the NO_ORDER / INSERTION_ORDER path.
+static ArrowQueryResult::CSRMetadata kwayMergeCSRChunks(
+    std::vector<ArrowQueryResult::CSRMetadata> chunks) {
+    if (chunks.empty()) {
+        return ArrowQueryResult::CSRMetadata{};
+    }
+    if (chunks.size() == 1) {
+        return std::move(chunks[0]);
+    }
+    const auto& first = chunks.front();
+    const auto hasEdgeIDs = first.hasEdgeIDs;
+
+    int64_t maxSrcRow = 0;
+    size_t totalIndices = 0;
+    bool sawChunk = false;
+    for (const auto& c : chunks) {
+        if (c.hasEdgeIDs != hasEdgeIDs) {
+            return ArrowQueryResult::CSRMetadata{};
+        }
+        if (c.hasEdgeIDs && c.edgeIDs.size() != c.indices.size()) {
+            return ArrowQueryResult::CSRMetadata{};
+        }
+        if (c.indptr.size() < 2) {
+            continue;
+        }
+        if (c.indptr.back() != static_cast<int64_t>(c.indices.size())) {
+            return ArrowQueryResult::CSRMetadata{};
+        }
+        const auto numSrcRows = static_cast<int64_t>(c.indptr.size() - 1);
+        if (numSrcRows > maxSrcRow) {
+            maxSrcRow = numSrcRows;
+        }
+        totalIndices += c.indices.size();
+        sawChunk = true;
+    }
+    ArrowQueryResult::CSRMetadata merged;
+    merged.hasEdgeIDs = hasEdgeIDs;
+    merged.indptr.push_back(0);
+    if (!sawChunk || maxSrcRow == 0) {
+        return merged;
+    }
+    merged.indices.reserve(totalIndices);
+    if (hasEdgeIDs) {
+        merged.edgeIDs.reserve(totalIndices);
+    }
+    for (int64_t src = 0; src < maxSrcRow; ++src) {
+        for (const auto& c : chunks) {
+            if (static_cast<size_t>(src + 1) >= c.indptr.size()) {
+                continue;
+            }
+            const auto begin = c.indptr[src];
+            const auto end = c.indptr[src + 1];
+            if (begin < 0 || end < begin || static_cast<uint64_t>(end) > c.indices.size()) {
+                return ArrowQueryResult::CSRMetadata{};
+            }
+            for (auto idx = begin; idx < end; ++idx) {
+                const auto u = static_cast<uint64_t>(idx);
+                merged.indices.push_back(c.indices[u]);
+                if (hasEdgeIDs) {
+                    merged.edgeIDs.push_back(c.edgeIDs[u]);
+                }
+            }
+        }
+        merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
+    }
+    return merged;
+}
+
 } // namespace
 
 ArrowQueryResult::ArrowQueryResult(std::vector<ArrowArray> arrays, int64_t chunkSize)
-    : QueryResult{type_}, arrays{std::move(arrays)}, chunkSize_{chunkSize} {
-    for (auto& array : this->arrays) {
+    : QueryResult{type_},
+      arraysStorage{std::make_shared<std::vector<ArrowArray>>(std::move(arrays))},
+      chunkSize_{chunkSize} {
+    for (const auto& array : *arraysStorage) {
         numTuples += array.length;
     }
 }
 
 ArrowQueryResult::ArrowQueryResult(std::vector<ArrowArray> arrays, int64_t chunkSize,
-    CSRMetadata csrMetadata)
-    : QueryResult{type_}, arrays{std::move(arrays)}, chunkSize_{chunkSize},
-      csrMetadata{std::make_shared<CSRMetadata>(std::move(csrMetadata))} {
-    for (auto& array : this->arrays) {
+    std::vector<CSRMetadata> csrChunks)
+    : QueryResult{type_},
+      arraysStorage{std::make_shared<std::vector<ArrowArray>>(std::move(arrays))},
+      chunkSize_{chunkSize}, csrChunks{std::move(csrChunks)} {
+    for (const auto& array : *arraysStorage) {
         numTuples += array.length;
     }
 }
 
 ArrowQueryResult::ArrowQueryResult(std::vector<std::string> columnNames,
     std::vector<LogicalType> columnTypes, FactorizedTable& table, int64_t chunkSize)
-    : QueryResult{type_, std::move(columnNames), std::move(columnTypes)}, chunkSize_{chunkSize} {
+    : QueryResult{type_, std::move(columnNames), std::move(columnTypes)},
+      arraysStorage{std::make_shared<std::vector<ArrowArray>>()}, chunkSize_{chunkSize} {
     auto iterator = FactorizedTableIterator(table);
     while (iterator.hasNext()) {
-        arrays.push_back(getArray(iterator, chunkSize));
+        arraysStorage->push_back(getArray(iterator, chunkSize));
     }
 }
 
@@ -137,7 +221,7 @@ std::string ArrowQueryResult::toString() const {
 }
 
 bool ArrowQueryResult::hasNextArrowChunk() {
-    return cursor < arrays.size();
+    return cursor < arraysStorage->size();
 }
 
 std::unique_ptr<ArrowArray> ArrowQueryResult::getNextArrowChunk(int64_t chunkSize) {
@@ -145,23 +229,38 @@ std::unique_ptr<ArrowArray> ArrowQueryResult::getNextArrowChunk(int64_t chunkSiz
         throw RuntimeException(
             std::format("Chunk size does not match expected value {}.", chunkSize_));
     }
-    return std::make_unique<ArrowArray>(arrays[cursor++]);
+    return std::make_unique<ArrowArray>((*arraysStorage)[cursor++]);
+}
+
+ArrowQueryResult::ArrowChunkedArray ArrowQueryResult::getArrowChunks() const {
+    // Implicit conversion from shared_ptr<vector<ArrowArray>> to
+    // shared_ptr<const vector<ArrowArray>>.
+    return ArrowChunkedArray{arraysStorage};
 }
 
 ArrowQueryResult::CSRArrowArrays ArrowQueryResult::getCSRArrowArrays() const {
     if (!hasCSRMetadata()) {
         throw RuntimeException("Arrow query result does not have CSR metadata.");
     }
+    const CSRMetadata& merged = combineCSRChunks();
     CSRArrowArrays result;
-    result.indptr = makeCSRArrowArray(
-        std::shared_ptr<const std::vector<int64_t>>(csrMetadata, &csrMetadata->indptr));
+    result.indptr =
+        makeCSRArrowArray(std::shared_ptr<const std::vector<int64_t>>(combinedCSR, &merged.indptr));
     result.indices = makeCSRArrowArray(
-        std::shared_ptr<const std::vector<int64_t>>(csrMetadata, &csrMetadata->indices));
-    if (csrMetadata->hasEdgeIDs) {
+        std::shared_ptr<const std::vector<int64_t>>(combinedCSR, &merged.indices));
+    if (merged.hasEdgeIDs) {
         result.edgeIDs = makeCSRArrowArray(
-            std::shared_ptr<const std::vector<int64_t>>(csrMetadata, &csrMetadata->edgeIDs));
+            std::shared_ptr<const std::vector<int64_t>>(combinedCSR, &merged.edgeIDs));
     }
     return result;
+}
+
+const ArrowQueryResult::CSRMetadata& ArrowQueryResult::combineCSRChunks() const {
+    if (combinedCSR) {
+        return *combinedCSR;
+    }
+    combinedCSR = std::make_shared<const CSRMetadata>(kwayMergeCSRChunks(csrChunks));
+    return *combinedCSR;
 }
 
 } // namespace main

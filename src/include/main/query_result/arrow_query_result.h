@@ -59,8 +59,48 @@ public:
         std::optional<CSRArrowArray> edgeIDs;
     };
 
+    // View of the merged Arrow arrays as a chunked sequence, similar to
+    // Arrow C++ lib's arrow::ChunkedArray. We expose per-batch ArrowArrays
+    // in batch_index order instead of concatenating them via arrow::Concat
+    // (which we don't link); python users can construct pyarrow.ChunkedArray
+    // from these chunks and call combine_chunks() to materialize on the
+    // consumer side. Chunk order is the natural global row order for the
+    // query.
+    //
+    // Non-owning view: ArrowQueryResult retains ownership of the underlying
+    // chunk buffers. The caller is responsible for calling release on each
+    // chunk's ArrowArray when done, to free the buffers (matches the
+    // existing hasNextArrowChunk / getNextArrowChunk contract).
+    struct ArrowChunkedArray {
+        std::shared_ptr<const std::vector<ArrowArray>> chunks;
+
+        ArrowChunkedArray() = default;
+        explicit ArrowChunkedArray(std::shared_ptr<const std::vector<ArrowArray>> chunks)
+            : chunks{std::move(chunks)} {}
+
+        int64_t numChunks() const { return chunks ? static_cast<int64_t>(chunks->size()) : 0; }
+
+        int64_t length() const {
+            if (!chunks) {
+                return 0;
+            }
+            int64_t total = 0;
+            for (const auto& c : *chunks) {
+                total += c.length;
+            }
+            return total;
+        }
+
+        const ArrowArray* data() const {
+            return chunks && !chunks->empty() ? chunks->data() : nullptr;
+        }
+
+        bool empty() const { return !chunks || chunks->empty(); }
+    };
+
     ArrowQueryResult(std::vector<ArrowArray> arrays, int64_t chunkSize);
-    ArrowQueryResult(std::vector<ArrowArray> arrays, int64_t chunkSize, CSRMetadata csrMetadata);
+    ArrowQueryResult(std::vector<ArrowArray> arrays, int64_t chunkSize,
+        std::vector<CSRMetadata> csrChunks);
     ArrowQueryResult(std::vector<std::string> columnNames,
         std::vector<common::LogicalType> columnTypes, processor::FactorizedTable& table,
         int64_t chunkSize);
@@ -79,19 +119,45 @@ public:
 
     std::unique_ptr<ArrowArray> getNextArrowChunk(int64_t chunkSize) override;
 
-    bool hasCSRMetadata() const { return csrMetadata != nullptr; }
-    const CSRMetadata& getCSRMetadata() const { return *csrMetadata; }
+    // Get all ArrowArrays as a chunked view (ArrowChunkedArray, similar
+    // to Arrow C++ lib's arrow::ChunkedArray). Coexists with the
+    // hasNextArrowChunk / getNextArrowChunk iteration API; both refer to
+    // the same underlying chunks.
+    ArrowChunkedArray getArrowChunks() const;
+
+    // CSR metadata is stored as a chunked view: per-batch chunks in
+    // batch_index order (the same order the physical collector produces).
+    // The actual k-way merge across batches runs lazily on the first call
+    // to combineCSRChunks() / getCSRMetadata() / getCSRArrowArrays(); the
+    // merged result is cached. NO_ORDER / INSERTION_ORDER queries take
+    // zero work at result-construction time.
+    bool hasCSRMetadata() const { return !csrChunks.empty(); }
+    const CSRMetadata& getCSRMetadata() const { return combineCSRChunks(); }
     CSRArrowArrays getCSRArrowArrays() const;
+
+    // Per-batch CSR chunks (in batch_index order). No merge is performed
+    // until combineCSRChunks() is called; this is the ChunkedArray-style
+    // view exposed for callers that want to combine on the consumer side
+    // (e.g. python users constructing pyarrow.ChunkedArray).
+    const std::vector<CSRMetadata>& getCSRChunks() const { return csrChunks; }
+
+    // K-way merge the per-batch CSR chunks in batch_index order into a
+    // single CSRMetadata. Result is cached; subsequent calls are O(1).
+    const CSRMetadata& combineCSRChunks() const;
 
 private:
     ArrowArray getArray(processor::FactorizedTableIterator& iterator, int64_t chunkSize);
 
 private:
-    std::vector<ArrowArray> arrays;
+    // Shared with ArrowChunkedArray views so the chunked view and the
+    // hasNextArrowChunk / getNextArrowChunk iteration API can coexist
+    // without invalidating each other.
+    std::shared_ptr<std::vector<ArrowArray>> arraysStorage;
     int64_t chunkSize_;
     uint64_t numTuples = 0;
     uint64_t cursor = 0;
-    std::shared_ptr<const CSRMetadata> csrMetadata;
+    std::vector<CSRMetadata> csrChunks;
+    mutable std::shared_ptr<const CSRMetadata> combinedCSR;
 };
 
 } // namespace main

@@ -4,6 +4,7 @@
 #include "main/database.h"
 #include "planner/operator/logical_plan.h"
 #include "processor/operator/profile.h"
+#include "processor/physical_plan_util.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 
@@ -27,8 +28,18 @@ std::unique_ptr<PhysicalPlan> PlanMapper::getPhysicalPlan(const LogicalPlan* log
     auto root = mapOperator(logicalPlan->getLastOperator().get());
     if (!root->isSink()) {
         if (resultType == main::QueryResultType::ARROW) {
+            // Walk the physical plan to decide the order-preservation
+            // strategy for the Arrow collector. Replaces the previous
+            // logical-plan walker (LogicalPlanUtil::hasOrderByOnDataPath)
+            // which hand-maintained a list of operator types that "reset"
+            // ordering. The walker here asks each physical operator for
+            // its declared OrderPreservationType metadata, so adding a new
+            // reordering operator that forgets to declare its semantics
+            // safely under-classifies it as NO_ORDER (the default) — the
+            // cheap batch-index collector path.
+            const auto orderPreservation = PhysicalPlanUtil::getOrderPreservation(*root);
             root = createArrowResultCollector(arrowConfig, expressions, logicalPlan->getSchema(),
-                std::move(root));
+                std::move(root), orderPreservation);
         } else {
             root = createResultCollector(AccumulateType::REGULAR, expressions,
                 logicalPlan->getSchema(), std::move(root));

@@ -5,6 +5,7 @@ add_subdirectory(result)
 add_library(lbug_processor
         OBJECT
         warning_context.cpp
+        physical_plan_util.cpp
         processor.cpp
         processor_task.cpp)
 

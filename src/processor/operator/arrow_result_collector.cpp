@@ -1,7 +1,6 @@
 #include "processor/operator/arrow_result_collector.h"
 
 #include <algorithm>
-#include <array>
 #include <tuple>
 
 #include "common/arrow/arrow_row_batch.h"
@@ -14,63 +13,6 @@ namespace lbug {
 namespace processor {
 
 namespace {
-
-struct DirectArrowChunkHolder {
-    std::vector<std::vector<int64_t>> columns;
-    std::array<const void*, 1> rootBuffers = {{nullptr}};
-    std::vector<std::array<const void*, 2>> childBuffers;
-    std::vector<ArrowArray> children;
-    std::vector<ArrowArray*> childPtrs;
-};
-
-static void releaseDirectArrowChunk(ArrowArray* array) {
-    if (!array || !array->release) {
-        return;
-    }
-    array->release = nullptr;
-    auto holder = static_cast<DirectArrowChunkHolder*>(array->private_data);
-    delete holder;
-    array->private_data = nullptr;
-}
-
-static ArrowArray makeDirectInt64ArrowChunk(std::vector<std::vector<int64_t>> columns) {
-    auto holder = std::make_unique<DirectArrowChunkHolder>();
-    holder->columns = std::move(columns);
-    const auto numColumns = holder->columns.size();
-    const auto length = numColumns == 0 ? 0 : holder->columns[0].size();
-    holder->childBuffers.resize(numColumns);
-    holder->children.resize(numColumns);
-    holder->childPtrs.resize(numColumns);
-    for (auto i = 0u; i < numColumns; ++i) {
-        holder->childBuffers[i][0] = nullptr;
-        holder->childBuffers[i][1] = holder->columns[i].data();
-        auto& child = holder->children[i];
-        child.length = static_cast<int64_t>(holder->columns[i].size());
-        child.null_count = 0;
-        child.offset = 0;
-        child.n_buffers = 2;
-        child.n_children = 0;
-        child.buffers = holder->childBuffers[i].data();
-        child.children = nullptr;
-        child.dictionary = nullptr;
-        child.release = nullptr;
-        child.private_data = nullptr;
-        holder->childPtrs[i] = &child;
-    }
-
-    ArrowArray result{};
-    result.length = static_cast<int64_t>(length);
-    result.null_count = 0;
-    result.offset = 0;
-    result.n_buffers = 1;
-    result.n_children = static_cast<int64_t>(numColumns);
-    result.buffers = holder->rootBuffers.data();
-    result.children = holder->childPtrs.data();
-    result.dictionary = nullptr;
-    result.private_data = holder.release();
-    result.release = releaseDirectArrowChunk;
-    return result;
-}
 
 static void updateDirectCSRMetadata(const CSRTrackingInfo& info, const std::vector<int64_t>& values,
     ArrowResultCollectorLocalState& localState) {
@@ -117,9 +59,15 @@ static void updateDirectCSRMetadata(const CSRTrackingInfo& info, const std::vect
     }
 }
 
+// Deterministic pairwise merge of two CSR metadata chunks into one. Used
+// only in FIXED_ORDER mode (ORDER BY / TopK on the data path), where per-
+// batch chunks are collapsed to a single sorted chunk to preserve global
+// order. The cheap NO_ORDER / INSERTION_ORDER path does not call this — it
+// moves per-batch chunks into arraysByBatchIndex and the final k-way
+// merge across batches runs lazily in ArrowQueryResult::combineCSRChunks()
+// on first consumer request.
 static std::optional<main::ArrowQueryResult::CSRMetadata> mergeCSRMetadata(
-    const main::ArrowQueryResult::CSRMetadata& left,
-    const main::ArrowQueryResult::CSRMetadata& right) {
+    main::ArrowQueryResult::CSRMetadata left, main::ArrowQueryResult::CSRMetadata right) {
     if (left.hasEdgeIDs != right.hasEdgeIDs) {
         return std::nullopt;
     }
@@ -176,6 +124,11 @@ static std::optional<main::ArrowQueryResult::CSRMetadata> mergeCSRMetadata(
     merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
     return merged;
 }
+
+// (The k-way CSR chunk merge that used to live here now lives next to
+// ArrowQueryResult::combineCSRChunks() in arrow_query_result.cpp, so
+// result construction stays zero-work. Per-batch chunks are passed
+// straight through and merged lazily on first consumer request.)
 
 } // namespace
 
@@ -251,16 +204,46 @@ void ArrowResultCollectorLocalState::resetCursor() {
     }
 }
 
-void ArrowResultCollectorSharedState::merge(const std::vector<ArrowArray>& localArrays,
-    const std::optional<main::ArrowQueryResult::CSRMetadata>& localCSRMetadata) {
+void ArrowResultCollectorSharedState::merge(std::vector<ArrowArray> localArrays,
+    batch_index_t batchIndex, std::optional<main::ArrowQueryResult::CSRMetadata> localCSRMetadata) {
     std::unique_lock lck{mutex};
-    for (auto i = 0u; i < localArrays.size(); ++i) {
-        arrays.push_back(localArrays[i]);
+    if (requireDeterministicOrder) {
+        // FIXED_ORDER (ORDER BY / TopK): collapse to a single running chunk
+        // under key 0 via the existing pairwise mergeCSRMetadata. This
+        // preserves global sort order across threads.
+        if (!localArrays.empty()) {
+            auto& slot = arraysByBatchIndex[0];
+            slot.insert(slot.end(), std::make_move_iterator(localArrays.begin()),
+                std::make_move_iterator(localArrays.end()));
+        }
+        if (localCSRMetadata.has_value()) {
+            auto it = csrMetadataByBatchIndex.find(0);
+            if (it == csrMetadataByBatchIndex.end()) {
+                csrMetadataByBatchIndex.emplace(0, std::move(*localCSRMetadata));
+            } else {
+                auto merged = mergeCSRMetadata(std::move(it->second), std::move(*localCSRMetadata));
+                if (merged.has_value()) {
+                    it->second = std::move(*merged);
+                } else {
+                    csrMetadataByBatchIndex.erase(it);
+                }
+            }
+        }
+        return;
     }
-    if (!csrMetadata.has_value() && localCSRMetadata.has_value()) {
-        csrMetadata = localCSRMetadata;
-    } else if (csrMetadata.has_value() && localCSRMetadata.has_value()) {
-        csrMetadata = mergeCSRMetadata(*csrMetadata, *localCSRMetadata);
+    // NO_ORDER / INSERTION_ORDER: cheap batch-index parallel path.
+    // Per-batch chunks are moved into the global map (O(log N) per call,
+    // no pairwise merge, no sort). The final k-way merge across batches
+    // runs lazily in ArrowQueryResult::combineCSRChunks() on first
+    // consumer request, so result construction itself does no merging
+    // work for the cheap path.
+    if (!localArrays.empty()) {
+        auto& slot = arraysByBatchIndex[batchIndex];
+        slot.insert(slot.end(), std::make_move_iterator(localArrays.begin()),
+            std::make_move_iterator(localArrays.end()));
+    }
+    if (localCSRMetadata.has_value()) {
+        csrMetadataByBatchIndex[batchIndex] = std::move(*localCSRMetadata);
     }
 }
 
@@ -286,7 +269,8 @@ void ArrowResultCollector::executeInternal(ExecutionContext* context) {
         localState.csrMetadata->indptr.push_back(
             static_cast<int64_t>(localState.csrMetadata->indices.size()));
     }
-    sharedState->merge(localState.arrays, localState.csrMetadata);
+    sharedState->merge(std::move(localState.arrays), localState.batchIndex,
+        std::move(localState.csrMetadata));
 }
 
 bool ArrowResultCollector::fillRowBatch(ArrowRowBatch& rowBatch) {
@@ -302,6 +286,11 @@ bool ArrowResultCollector::fillRowBatch(ArrowRowBatch& rowBatch) {
 }
 
 void ArrowResultCollector::initLocalStateInternal(ResultSet* resultSet, ExecutionContext*) {
+    // Assign a unique batch_index for this local collector. The atomic
+    // fetch_add inside BatchIndexAssigner is the only synchronization needed
+    // to give each thread a distinct batch_index.
+    localState.batchIndex = sharedState->batchIndexAssigner.next();
+
     std::unordered_map<idx_t, idx_t> idxMap; // Map result set chunk idx to local state idx
     // Populate chunks
     for (auto& pos : info.payloadPositions) {
@@ -322,14 +311,26 @@ void ArrowResultCollector::initLocalStateInternal(ResultSet* resultSet, Executio
 }
 
 std::unique_ptr<main::QueryResult> ArrowResultCollector::getQueryResult() const {
-    if (sharedState->csrMetadata.has_value()) {
-        return std::make_unique<main::ArrowQueryResult>(std::move(sharedState->arrays),
-            info.chunkSize, std::move(*sharedState->csrMetadata));
+    // Walk the per-batch map in batch_index order and concatenate. The map
+    // is std::map<batch_index_t, ...>, so iteration is naturally ordered.
+    std::vector<ArrowArray> arrays;
+    for (auto& [batchIdx, batchArrays] : sharedState->arraysByBatchIndex) {
+        for (auto& arr : batchArrays) {
+            arrays.push_back(std::move(arr));
+        }
     }
-    return std::make_unique<main::ArrowQueryResult>(std::move(sharedState->arrays), info.chunkSize);
+    std::vector<main::ArrowQueryResult::CSRMetadata> csrChunks;
+    csrChunks.reserve(sharedState->csrMetadataByBatchIndex.size());
+    for (auto& [batchIdx, csr] : sharedState->csrMetadataByBatchIndex) {
+        csrChunks.push_back(std::move(csr));
+    }
+    return std::make_unique<main::ArrowQueryResult>(std::move(arrays), info.chunkSize,
+        std::move(csrChunks));
 }
 
 void DirectArrowResultCollector::initLocalStateInternal(ResultSet* resultSet, ExecutionContext*) {
+    localState.batchIndex = sharedState->batchIndexAssigner.next();
+
     std::unordered_map<idx_t, idx_t> idxMap;
     for (auto& pos : info.payloadPositions) {
         auto idx = pos.dataChunkPos;
@@ -352,15 +353,23 @@ void DirectArrowResultCollector::initLocalStateInternal(ResultSet* resultSet, Ex
 }
 
 void DirectArrowResultCollector::executeInternal(ExecutionContext* context) {
-    std::vector<std::vector<int64_t>> columns(info.payloadPositions.size());
+    // The Direct collector only sees INT64 rowid projections on a
+    // CSR-shaped query. The (src, edge, dst) tuples are already being
+    // captured into localState.csrMetadata by updateDirectCSRMetadata, so
+    // duplicating them into per-column vectors and re-wrapping them as
+    // ArrowArrays is pure waste: every rowid that lands in the ArrowArrays
+    // also lands in csrMetadata->indices / edgeIDs. For a 1B-edge query
+    // with 3 INT64 columns at chunkSize=1M that double materialization
+    // is ~24GB of ArrowArrays on top of the ~24GB of CSR chunks, and is
+    // the dominant resident-set cost of the .csr() flow (the consumer
+    // never touches the ArrowArrays — they're already in CSR).
+    //
+    // Skip the columns/flushChunk path entirely. localState.arrays stays
+    // empty; sharedState->merge sees no ArrowArrays to store, so
+    // arraysByBatchIndex for this batch_index is empty and the
+    // ArrowQueryResult's ArrowChunkedArray is empty for this collector.
+    // The CSR side is unaffected: it gets built and combined as before.
     std::vector<int64_t> rowValues(info.payloadPositions.size());
-    auto flushChunk = [&]() {
-        if (columns.empty() || columns[0].empty()) {
-            return;
-        }
-        localState.arrays.push_back(makeDirectInt64ArrowChunk(std::move(columns)));
-        columns = std::vector<std::vector<int64_t>>(info.payloadPositions.size());
-    };
 
     while (children[0]->getNextTuple(context)) {
         localState.resetCursor();
@@ -373,31 +382,34 @@ void DirectArrowResultCollector::executeInternal(ExecutionContext* context) {
                         "Direct Arrow CSR collector cannot export null rowid values.");
                 }
                 rowValues[i] = vector->getValue<int64_t>(pos);
-                columns[i].push_back(rowValues[i]);
             }
             updateDirectCSRMetadata(info.csrTrackingInfo, rowValues, localState);
-            if (columns[0].size() == static_cast<uint64_t>(info.chunkSize)) {
-                flushChunk();
-            }
             if (!localState.advance()) {
                 break;
             }
         }
     }
-    flushChunk();
     if (localState.csrMetadata.has_value()) {
         localState.csrMetadata->indptr.push_back(
             static_cast<int64_t>(localState.csrMetadata->indices.size()));
     }
-    sharedState->merge(localState.arrays, localState.csrMetadata);
+    sharedState->merge({}, localState.batchIndex, std::move(localState.csrMetadata));
 }
 
 std::unique_ptr<main::QueryResult> DirectArrowResultCollector::getQueryResult() const {
-    if (sharedState->csrMetadata.has_value()) {
-        return std::make_unique<main::ArrowQueryResult>(std::move(sharedState->arrays),
-            info.chunkSize, std::move(*sharedState->csrMetadata));
+    std::vector<ArrowArray> arrays;
+    for (auto& [batchIdx, batchArrays] : sharedState->arraysByBatchIndex) {
+        for (auto& arr : batchArrays) {
+            arrays.push_back(std::move(arr));
+        }
     }
-    return std::make_unique<main::ArrowQueryResult>(std::move(sharedState->arrays), info.chunkSize);
+    std::vector<main::ArrowQueryResult::CSRMetadata> csrChunks;
+    csrChunks.reserve(sharedState->csrMetadataByBatchIndex.size());
+    for (auto& [batchIdx, csr] : sharedState->csrMetadataByBatchIndex) {
+        csrChunks.push_back(std::move(csr));
+    }
+    return std::make_unique<main::ArrowQueryResult>(std::move(arrays), info.chunkSize,
+        std::move(csrChunks));
 }
 
 } // namespace processor

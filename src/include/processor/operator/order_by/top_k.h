@@ -182,6 +182,12 @@ public:
 
     void executeInternal(ExecutionContext* context) override;
 
+    // TopK produces a fixed, partially-sorted output. Drives the
+    // deterministic pairwise-merge path in ArrowResultCollector.
+    OrderPreservationType operatorOrder() const override {
+        return OrderPreservationType::FIXED_ORDER;
+    }
+
     void finalize(ExecutionContext* /*context*/) override { sharedState->finalize(); }
 
     std::unique_ptr<PhysicalOperator> copy() override {

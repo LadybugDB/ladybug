@@ -14,6 +14,28 @@ struct ExecutionContext;
 
 using physical_op_id = uint32_t;
 
+// Order-preservation type for a physical operator, used by
+// PhysicalPlanUtil::getOrderPreservation to walk the plan and decide which
+// Arrow result-collector strategy to use.
+//
+// Ladybug does not expose a `preserve_insertion_order` setting to the user,
+// and we assume the default that no operator makes an insertion-order
+// guarantee unless it explicitly opts in by overriding operatorOrder() /
+// sourceOrder() to return INSERTION_ORDER. The FIXED_ORDER overrides on
+// OrderBy / TopK drive the expensive deterministic-merge collector path.
+enum class OrderPreservationType : uint8_t {
+    // The operator makes no guarantees on output order. Default for all
+    // operators; safe to assume unless explicitly overridden. Routes to the
+    // batch-index parallel collector.
+    NO_ORDER,
+    // The operator maintains the order of its child(ren). Reserved for
+    // future opt-in; not used by any operator in this change.
+    INSERTION_ORDER,
+    // The operator outputs rows in a fixed order that must be preserved
+    // (ORDER BY, TopK). Routes to the deterministic pairwise-merge path.
+    FIXED_ORDER,
+};
+
 enum class PhysicalOperatorType : uint8_t {
     ALTER,
     AGGREGATE,
@@ -125,6 +147,13 @@ public:
     virtual bool isSource() const { return false; }
     virtual bool isSink() const { return false; }
     virtual bool isParallel() const { return true; }
+
+    // Order-preservation metadata, used by PhysicalPlanUtil::getOrderPreservation
+    // to walk the plan and decide which Arrow result-collector strategy to use.
+    // Default is NO_ORDER (Ladybug makes no insertion-order guarantee).
+    // See OrderPreservationType above for the meaning of each value.
+    virtual OrderPreservationType operatorOrder() const { return OrderPreservationType::NO_ORDER; }
+    virtual OrderPreservationType sourceOrder() const { return OrderPreservationType::NO_ORDER; }
 
     void addChild(std::unique_ptr<PhysicalOperator> op) { children.push_back(std::move(op)); }
     PhysicalOperator* getChild(common::idx_t idx) const { return children[idx].get(); }

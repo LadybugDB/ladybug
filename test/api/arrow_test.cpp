@@ -18,8 +18,10 @@ TEST(ArrowQueryResultTest, exportsCSRMetadataAsZeroCopyArrowArrays) {
     metadata.indices = {4, 5, 6};
     metadata.edgeIDs = {10, 11, 12};
     metadata.hasEdgeIDs = true;
+    std::vector<ArrowQueryResult::CSRMetadata> csrChunks;
+    csrChunks.push_back(std::move(metadata));
 
-    ArrowQueryResult result{{}, 8, std::move(metadata)};
+    ArrowQueryResult result{{}, 8, std::move(csrChunks)};
     const auto& storedMetadata = result.getCSRMetadata();
     auto csrArrays = result.getCSRArrowArrays();
 
@@ -145,13 +147,12 @@ TEST_F(ArrowTest, queryAsArrowDirectCSRRowIDProjection) {
     ASSERT_NE(arrowResult, nullptr);
     ASSERT_TRUE(arrowResult->hasCSRMetadata());
 
-    ASSERT_TRUE(arrowResult->hasNextArrowChunk());
-    auto arrowArray = arrowResult->getNextArrowChunk(2);
-    ASSERT_EQ(arrowArray->n_children, 3);
-    ASSERT_EQ(arrowArray->length, 2);
-    ASSERT_EQ(arrowArray->children[0]->n_buffers, 2);
-    ASSERT_EQ(arrowArray->children[0]->buffers[0], nullptr);
-    arrowArray->release(arrowArray.get());
+    // Direct collector no longer materializes the per-column ArrowArrays
+    // for INT64 rowid projections — the rowids are already in the CSR,
+    // and the .csr() consumer never touches the ArrowArrays. Saving the
+    // ~24GB of double materialization is the whole point of this path.
+    ASSERT_FALSE(arrowResult->hasNextArrowChunk());
+    ASSERT_TRUE(arrowResult->getArrowChunks().empty());
 
     const auto& metadata = arrowResult->getCSRMetadata();
     std::vector<std::tuple<int64_t, int64_t, int64_t>> reconstructed;
