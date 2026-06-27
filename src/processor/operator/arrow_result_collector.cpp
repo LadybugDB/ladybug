@@ -118,8 +118,7 @@ static void updateDirectCSRMetadata(const CSRTrackingInfo& info, const std::vect
 }
 
 static std::optional<main::ArrowQueryResult::CSRMetadata> mergeCSRMetadata(
-    const main::ArrowQueryResult::CSRMetadata& left,
-    const main::ArrowQueryResult::CSRMetadata& right) {
+    main::ArrowQueryResult::CSRMetadata left, main::ArrowQueryResult::CSRMetadata right) {
     if (left.hasEdgeIDs != right.hasEdgeIDs) {
         return std::nullopt;
     }
@@ -174,6 +173,65 @@ static std::optional<main::ArrowQueryResult::CSRMetadata> mergeCSRMetadata(
         }
     }
     merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
+    return merged;
+}
+
+// Flatten a chunked list of per-thread CSR metadata into a single flat
+// CSRMetadata. This is the one place we pay for materializing the merged
+// CSR (a single O(n) copy of indptr/indices/edgeIDs) — the scan-time merge
+// in ArrowResultCollectorSharedState::merge is zero-copy (push_back moves).
+// Takes the chunk vector by value so the single-chunk fast path is also
+// zero-copy: we just move the sole chunk out.
+static main::ArrowQueryResult::CSRMetadata flattenCSRMetadata(
+    std::vector<main::ArrowQueryResult::CSRMetadata> chunks) {
+    if (chunks.empty()) {
+        return main::ArrowQueryResult::CSRMetadata{};
+    }
+    if (chunks.size() == 1) {
+        return std::move(chunks[0]);
+    }
+    const auto& first = chunks.front();
+    main::ArrowQueryResult::CSRMetadata merged;
+    merged.hasEdgeIDs = first.hasEdgeIDs;
+    size_t totalIndptr = 0, totalIndices = 0, totalEdgeIDs = 0;
+    for (const auto& c : chunks) {
+        if (c.hasEdgeIDs != merged.hasEdgeIDs) {
+            // Mismatched shapes across threads; fall back to empty metadata
+            // (caller treats empty as "no CSR metadata").
+            return main::ArrowQueryResult::CSRMetadata{};
+        }
+        if (c.hasEdgeIDs && c.edgeIDs.size() != c.indices.size()) {
+            return main::ArrowQueryResult::CSRMetadata{};
+        }
+        totalIndptr += c.indptr.size();
+        totalIndices += c.indices.size();
+        totalEdgeIDs += c.edgeIDs.size();
+    }
+    merged.indptr.reserve(totalIndptr);
+    merged.indices.reserve(totalIndices);
+    if (merged.hasEdgeIDs) {
+        merged.edgeIDs.reserve(totalEdgeIDs);
+    }
+    int64_t offset = 0;
+    for (auto& c : chunks) {
+        merged.indptr.insert(merged.indptr.end(), c.indptr.begin(), c.indptr.end());
+        if (offset > 0) {
+            // Re-base this chunk's indptr values by the running offset.
+            // Each chunk's indptr is 0-based within the chunk (its first
+            // entry is 0); after concatenation it must point into the
+            // merged indices array, so add the offset to every entry of
+            // this chunk (including the first).
+            const auto base = merged.indptr.size() - c.indptr.size();
+            for (auto i = base; i < merged.indptr.size(); ++i) {
+                merged.indptr[i] += offset;
+            }
+        }
+        merged.indices.insert(merged.indices.end(), c.indices.begin(), c.indices.end());
+        if (merged.hasEdgeIDs) {
+            merged.edgeIDs.insert(merged.edgeIDs.end(), c.edgeIDs.begin(), c.edgeIDs.end());
+        }
+        offset += static_cast<int64_t>(c.indices.size());
+    }
     return merged;
 }
 
@@ -252,15 +310,41 @@ void ArrowResultCollectorLocalState::resetCursor() {
 }
 
 void ArrowResultCollectorSharedState::merge(const std::vector<ArrowArray>& localArrays,
-    const std::optional<main::ArrowQueryResult::CSRMetadata>& localCSRMetadata) {
+    std::optional<main::ArrowQueryResult::CSRMetadata> localCSRMetadata) {
     std::unique_lock lck{mutex};
     for (auto i = 0u; i < localArrays.size(); ++i) {
         arrays.push_back(localArrays[i]);
     }
-    if (!csrMetadata.has_value() && localCSRMetadata.has_value()) {
-        csrMetadata = localCSRMetadata;
-    } else if (csrMetadata.has_value() && localCSRMetadata.has_value()) {
-        csrMetadata = mergeCSRMetadata(*csrMetadata, *localCSRMetadata);
+    if (!localCSRMetadata.has_value()) {
+        return;
+    }
+    if (csrMetadata.empty()) {
+        // First thread contributing CSR metadata: move it in (zero-copy).
+        csrMetadata.push_back(std::move(*localCSRMetadata));
+        return;
+    }
+    if (requireDeterministicOrder) {
+        // Deterministic merge: collapse to a single chunk holding the
+        // globally-sorted result. mergeCSRMetadata takes by value, so both
+        // the accumulated chunk and the new thread's metadata are moved in
+        // (no extra copies beyond the entries/sort inside mergeCSRMetadata).
+        auto merged = mergeCSRMetadata(std::move(csrMetadata[0]), std::move(*localCSRMetadata));
+        csrMetadata.clear();
+        if (merged.has_value()) {
+            csrMetadata.push_back(std::move(*merged));
+        }
+        // On nullopt (e.g. hasEdgeIDs mismatch) we drop CSR metadata.
+    } else {
+        // No ORDER BY: row order is undefined. Append this thread's metadata
+        // as a new chunk (zero-copy move of the vectors). The per-thread
+        // source-row groupings are preserved, and the chunks are flattened
+        // in finish order at result-construction time.
+        if (csrMetadata.front().hasEdgeIDs != localCSRMetadata->hasEdgeIDs) {
+            // Mismatched shapes across threads; drop CSR metadata entirely.
+            csrMetadata.clear();
+            return;
+        }
+        csrMetadata.push_back(std::move(*localCSRMetadata));
     }
 }
 
@@ -286,7 +370,7 @@ void ArrowResultCollector::executeInternal(ExecutionContext* context) {
         localState.csrMetadata->indptr.push_back(
             static_cast<int64_t>(localState.csrMetadata->indices.size()));
     }
-    sharedState->merge(localState.arrays, localState.csrMetadata);
+    sharedState->merge(localState.arrays, std::move(localState.csrMetadata));
 }
 
 bool ArrowResultCollector::fillRowBatch(ArrowRowBatch& rowBatch) {
@@ -322,9 +406,13 @@ void ArrowResultCollector::initLocalStateInternal(ResultSet* resultSet, Executio
 }
 
 std::unique_ptr<main::QueryResult> ArrowResultCollector::getQueryResult() const {
-    if (sharedState->csrMetadata.has_value()) {
+    if (!sharedState->csrMetadata.empty()) {
+        // Flatten the per-thread chunks into a single CSRMetadata. This is
+        // the one O(n) copy of the merge pipeline, paid here at result-
+        // construction time rather than during the 100M-row scan.
+        auto flatCSR = flattenCSRMetadata(std::move(sharedState->csrMetadata));
         return std::make_unique<main::ArrowQueryResult>(std::move(sharedState->arrays),
-            info.chunkSize, std::move(*sharedState->csrMetadata));
+            info.chunkSize, std::move(flatCSR));
     }
     return std::make_unique<main::ArrowQueryResult>(std::move(sharedState->arrays), info.chunkSize);
 }
@@ -389,13 +477,14 @@ void DirectArrowResultCollector::executeInternal(ExecutionContext* context) {
         localState.csrMetadata->indptr.push_back(
             static_cast<int64_t>(localState.csrMetadata->indices.size()));
     }
-    sharedState->merge(localState.arrays, localState.csrMetadata);
+    sharedState->merge(localState.arrays, std::move(localState.csrMetadata));
 }
 
 std::unique_ptr<main::QueryResult> DirectArrowResultCollector::getQueryResult() const {
-    if (sharedState->csrMetadata.has_value()) {
+    if (!sharedState->csrMetadata.empty()) {
+        auto flatCSR = flattenCSRMetadata(std::move(sharedState->csrMetadata));
         return std::make_unique<main::ArrowQueryResult>(std::move(sharedState->arrays),
-            info.chunkSize, std::move(*sharedState->csrMetadata));
+            info.chunkSize, std::move(flatCSR));
     }
     return std::make_unique<main::ArrowQueryResult>(std::move(sharedState->arrays), info.chunkSize);
 }

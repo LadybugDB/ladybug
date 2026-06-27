@@ -14,10 +14,26 @@ namespace processor {
 class ArrowResultCollectorSharedState {
 public:
     std::vector<ArrowArray> arrays;
-    std::optional<main::ArrowQueryResult::CSRMetadata> csrMetadata;
+    // Per-thread CSR metadata chunks, accumulated in thread-finish order.
+    // Stored as a chunked list (rather than a single merged metadata) so the
+    // merge is zero-copy: we just move each thread's vectors in via push_back.
+    // Flattening into a single CSRMetadata is deferred to result-construction
+    // time (ArrowResultCollector::getQueryResult), where it is paid once.
+    // - When requireDeterministicOrder is true, this is collapsed to a single
+    //   chunk holding the globally-sorted result of the deterministic merge.
+    // - When false, this holds one chunk per thread in finish order, and the
+    //   per-thread source-row groupings are preserved.
+    // Empty means no CSR metadata.
+    std::vector<main::ArrowQueryResult::CSRMetadata> csrMetadata;
+    // When false, the query has no ORDER BY and the CSR metadata from multiple
+    // local collectors can be merged in any order. The cheap path skips the
+    // expensive sort+copy and instead stores per-thread chunks (zero-copy).
+    bool requireDeterministicOrder = true;
 
+    // localCSRMetadata is taken by value so the caller can move its
+    // per-thread metadata in; this is the key to a zero-copy merge.
     void merge(const std::vector<ArrowArray>& localArrays,
-        const std::optional<main::ArrowQueryResult::CSRMetadata>& localCSRMetadata);
+        std::optional<main::ArrowQueryResult::CSRMetadata> localCSRMetadata);
 
 private:
     std::mutex mutex;
@@ -59,17 +75,21 @@ struct ArrowResultCollectorInfo {
     std::vector<DataPos> payloadPositions;
     std::vector<common::LogicalType> columnTypes;
     CSRTrackingInfo csrTrackingInfo;
+    bool requireDeterministicOrder = true;
 
     ArrowResultCollectorInfo(int64_t chunkSize, std::vector<DataPos> payloadPositions,
-        std::vector<common::LogicalType> columnTypes, CSRTrackingInfo csrTrackingInfo = {})
+        std::vector<common::LogicalType> columnTypes, CSRTrackingInfo csrTrackingInfo = {},
+        bool requireDeterministicOrder = true)
         : chunkSize{chunkSize}, payloadPositions{std::move(payloadPositions)},
-          columnTypes{std::move(columnTypes)}, csrTrackingInfo{csrTrackingInfo} {}
+          columnTypes{std::move(columnTypes)}, csrTrackingInfo{csrTrackingInfo},
+          requireDeterministicOrder{requireDeterministicOrder} {}
     EXPLICIT_COPY_DEFAULT_MOVE(ArrowResultCollectorInfo);
 
 private:
     ArrowResultCollectorInfo(const ArrowResultCollectorInfo& other)
         : chunkSize{other.chunkSize}, payloadPositions{other.payloadPositions},
-          columnTypes{copyVector(other.columnTypes)}, csrTrackingInfo{other.csrTrackingInfo} {}
+          columnTypes{copyVector(other.columnTypes)}, csrTrackingInfo{other.csrTrackingInfo},
+          requireDeterministicOrder{other.requireDeterministicOrder} {}
 };
 
 class ArrowResultCollector final : public Sink {

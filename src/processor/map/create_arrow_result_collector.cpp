@@ -47,7 +47,8 @@ static CSRTrackingInfo getCSRTrackingInfo(const binder::expression_vector& expre
 
 std::unique_ptr<PhysicalOperator> PlanMapper::createArrowResultCollector(
     ArrowResultConfig arrowConfig, const binder::expression_vector& expressions,
-    planner::Schema* schema, std::unique_ptr<PhysicalOperator> prevOperator) {
+    planner::Schema* schema, std::unique_ptr<PhysicalOperator> prevOperator,
+    bool requireDeterministicOrder) {
     std::vector<DataPos> columnDataPos;
     std::vector<LogicalType> columnTypes;
     for (auto& expr : expressions) {
@@ -55,9 +56,10 @@ std::unique_ptr<PhysicalOperator> PlanMapper::createArrowResultCollector(
         columnTypes.push_back(expr->getDataType().copy());
     }
     auto sharedState = std::make_shared<ArrowResultCollectorSharedState>();
+    sharedState->requireDeterministicOrder = requireDeterministicOrder;
     auto csrTrackingInfo = getCSRTrackingInfo(expressions);
     auto opInfo = ArrowResultCollectorInfo(arrowConfig.chunkSize, columnDataPos,
-        std::move(columnTypes), csrTrackingInfo);
+        std::move(columnTypes), csrTrackingInfo, requireDeterministicOrder);
     auto printInfo = OPPrintInfo::EmptyInfo();
     if (csrTrackingInfo.enabled() &&
         (expressions.size() == 2 || (expressions.size() == 3 && csrTrackingInfo.hasRelRowID()))) {

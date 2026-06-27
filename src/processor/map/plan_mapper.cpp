@@ -3,6 +3,7 @@
 #include "main/client_context.h"
 #include "main/database.h"
 #include "planner/operator/logical_plan.h"
+#include "planner/operator/logical_plan_util.h"
 #include "processor/operator/profile.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
@@ -27,8 +28,10 @@ std::unique_ptr<PhysicalPlan> PlanMapper::getPhysicalPlan(const LogicalPlan* log
     auto root = mapOperator(logicalPlan->getLastOperator().get());
     if (!root->isSink()) {
         if (resultType == main::QueryResultType::ARROW) {
+            const auto requireDeterministicOrder =
+                LogicalPlanUtil::hasOrderByOnDataPath(*logicalPlan->getLastOperator());
             root = createArrowResultCollector(arrowConfig, expressions, logicalPlan->getSchema(),
-                std::move(root));
+                std::move(root), requireDeterministicOrder);
         } else {
             root = createResultCollector(AccumulateType::REGULAR, expressions,
                 logicalPlan->getSchema(), std::move(root));

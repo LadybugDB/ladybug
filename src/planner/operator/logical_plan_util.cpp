@@ -106,5 +106,24 @@ void LogicalPlanUtil::encodeFilter(LogicalOperator*, std::string& encodedString)
     encodedString += "Filter()";
 }
 
+bool LogicalPlanUtil::hasOrderByOnDataPath(const LogicalOperator& op) {
+    if (op.getOperatorType() == LogicalOperatorType::ORDER_BY) {
+        return true;
+    }
+    switch (op.getOperatorType()) {
+    case LogicalOperatorType::UNION_ALL:
+    case LogicalOperatorType::INTERSECT:
+    case LogicalOperatorType::CROSS_PRODUCT:
+    case LogicalOperatorType::RECURSIVE_EXTEND:
+        return false;
+    default:
+        break;
+    }
+    if (op.getNumChildren() == 0) {
+        return false;
+    }
+    return hasOrderByOnDataPath(*op.getChild(0));
+}
+
 } // namespace planner
 } // namespace lbug
