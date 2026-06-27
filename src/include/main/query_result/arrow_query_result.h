@@ -18,6 +18,10 @@ public:
         std::vector<int64_t> indices;
         std::vector<int64_t> edgeIDs;
         bool hasEdgeIDs = false;
+        // Total number of source (node) rows in the table. Used to pad
+        // trailing empty rows in indptr; set at plan-mapping time from the
+        // node table cardinality.
+        int64_t numSourceRows = 0;
     };
 
     struct CSRArrowArray {

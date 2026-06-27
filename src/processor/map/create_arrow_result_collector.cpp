@@ -4,6 +4,9 @@
 #include "processor/operator/arrow_result_collector.h"
 #include "processor/physical_plan_util.h"
 #include "processor/plan_mapper.h"
+#include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
+#include "transaction/transaction.h"
 
 using namespace lbug::common;
 
@@ -60,6 +63,19 @@ std::unique_ptr<PhysicalOperator> PlanMapper::createArrowResultCollector(
     sharedState->requireDeterministicOrder =
         (orderPreservation == OrderPreservationType::FIXED_ORDER);
     auto csrTrackingInfo = getCSRTrackingInfo(expressions);
+    if (csrTrackingInfo.enabled()) {
+        // Look up the source node table's total row count so we can pad
+        // trailing empty rows in the CSR indptr (nodes with zero outgoing
+        // edges must still have an indptr slot).
+        const auto& srcExpr = *expressions[csrTrackingInfo.srcRowIDColIdx];
+        const auto& scalarFunc = srcExpr.constCast<binder::ScalarFunctionExpression>();
+        const auto& propExpr = scalarFunc.getChild(0)->constCast<binder::PropertyExpression>();
+        auto tableID = propExpr.getSingleTableID();
+        auto trx = transaction::Transaction::Get(*clientContext);
+        auto table = storage::StorageManager::Get(*clientContext)->getTable(tableID);
+        auto nodeTable = table->ptrCast<storage::NodeTable>();
+        csrTrackingInfo.numSourceRows = static_cast<int64_t>(nodeTable->getNumTotalRows(trx));
+    }
     auto opInfo = ArrowResultCollectorInfo(arrowConfig.chunkSize, columnDataPos,
         std::move(columnTypes), csrTrackingInfo, orderPreservation);
     auto printInfo = OPPrintInfo::EmptyInfo();

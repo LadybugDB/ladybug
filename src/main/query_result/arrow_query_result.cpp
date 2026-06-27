@@ -97,6 +97,7 @@ static ArrowQueryResult::CSRMetadata kwayMergeCSRChunks(
 
     int64_t maxSrcRow = 0;
     size_t totalIndices = 0;
+    int64_t numSourceRows = 0;
     bool sawChunk = false;
     for (const auto& c : chunks) {
         if (c.hasEdgeIDs != hasEdgeIDs) {
@@ -104,6 +105,9 @@ static ArrowQueryResult::CSRMetadata kwayMergeCSRChunks(
         }
         if (c.hasEdgeIDs && c.edgeIDs.size() != c.indices.size()) {
             return ArrowQueryResult::CSRMetadata{};
+        }
+        if (c.numSourceRows > numSourceRows) {
+            numSourceRows = c.numSourceRows;
         }
         if (c.indptr.size() < 2) {
             continue;
@@ -120,8 +124,13 @@ static ArrowQueryResult::CSRMetadata kwayMergeCSRChunks(
     }
     ArrowQueryResult::CSRMetadata merged;
     merged.hasEdgeIDs = hasEdgeIDs;
+    merged.numSourceRows = numSourceRows;
     merged.indptr.push_back(0);
     if (!sawChunk || maxSrcRow == 0) {
+        // Pad to numSourceRows + 1 entries even when there are no edges.
+        for (int64_t i = 0; i < numSourceRows; ++i) {
+            merged.indptr.push_back(0);
+        }
         return merged;
     }
     merged.indices.reserve(totalIndices);
@@ -146,6 +155,15 @@ static ArrowQueryResult::CSRMetadata kwayMergeCSRChunks(
                 }
             }
         }
+        merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
+    }
+    // Fill trailing empty source rows (nodes after the last source row
+    // with edges in any chunk). maxSrcRow is the highest numSrcRows
+    // (indptr.size() - 1) across all chunks; if it is less than
+    // numSourceRows, the trailing node rows have zero edges and need
+    // empty entries in the merged indptr so the CSR is indexable up
+    // to numSourceRows - 1.
+    for (int64_t src = maxSrcRow; src < numSourceRows; ++src) {
         merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
     }
     return merged;

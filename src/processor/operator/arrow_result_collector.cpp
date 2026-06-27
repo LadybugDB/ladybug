@@ -25,6 +25,7 @@ static void updateDirectCSRMetadata(const CSRTrackingInfo& info, const std::vect
         main::ArrowQueryResult::CSRMetadata metadata;
         metadata.indptr.push_back(0);
         metadata.hasEdgeIDs = info.hasRelRowID();
+        metadata.numSourceRows = info.numSourceRows;
         localState.csrMetadata = std::move(metadata);
     }
     auto& metadata = *localState.csrMetadata;
@@ -106,6 +107,7 @@ static std::optional<main::ArrowQueryResult::CSRMetadata> mergeCSRMetadata(
     });
     main::ArrowQueryResult::CSRMetadata merged;
     merged.hasEdgeIDs = left.hasEdgeIDs;
+    merged.numSourceRows = left.numSourceRows;
     merged.indptr.push_back(0);
     int64_t nextSourceRowID = 0;
     for (const auto& entry : entries) {
@@ -122,6 +124,15 @@ static std::optional<main::ArrowQueryResult::CSRMetadata> mergeCSRMetadata(
         }
     }
     merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
+    // Fill trailing empty source rows (nodes after the last source row with
+    // edges). nextSourceRowID is the last distinct src value; the sentinel
+    // push above already covers row nextSourceRowID - 1, so we need
+    // numSourceRows - nextSourceRowID - 1 more pushes.
+    if (merged.numSourceRows > 0) {
+        for (int64_t src = nextSourceRowID; src + 1 < merged.numSourceRows; ++src) {
+            merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
+        }
+    }
     return merged;
 }
 
@@ -143,6 +154,7 @@ static void updateCSRMetadata(const CSRTrackingInfo& info, FlatTuple& tuple,
         main::ArrowQueryResult::CSRMetadata metadata;
         metadata.indptr.push_back(0);
         metadata.hasEdgeIDs = info.hasRelRowID();
+        metadata.numSourceRows = info.numSourceRows;
         localState.csrMetadata = std::move(metadata);
     }
     auto& metadata = *localState.csrMetadata;
@@ -266,8 +278,15 @@ void ArrowResultCollector::executeInternal(ExecutionContext* context) {
         localState.arrays.push_back(rowBatch->toArray(info.columnTypes));
     }
     if (localState.csrMetadata.has_value()) {
-        localState.csrMetadata->indptr.push_back(
-            static_cast<int64_t>(localState.csrMetadata->indices.size()));
+        auto& metadata = *localState.csrMetadata;
+        metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
+        // Fill trailing empty source rows (nodes after the last source row
+        // with edges). Without this padding, consumers see an indptr shorter
+        // than numSourceRows + 1 and silently skip trailing node rows.
+        while (localState.nextSourceRowID + 1 < metadata.numSourceRows) {
+            localState.nextSourceRowID++;
+            metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
+        }
     }
     sharedState->merge(std::move(localState.arrays), localState.batchIndex,
         std::move(localState.csrMetadata));
@@ -390,8 +409,15 @@ void DirectArrowResultCollector::executeInternal(ExecutionContext* context) {
         }
     }
     if (localState.csrMetadata.has_value()) {
-        localState.csrMetadata->indptr.push_back(
-            static_cast<int64_t>(localState.csrMetadata->indices.size()));
+        auto& metadata = *localState.csrMetadata;
+        metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
+        // Fill trailing empty source rows (nodes after the last source row
+        // with edges). Without this padding, consumers see an indptr shorter
+        // than numSourceRows + 1 and silently skip trailing node rows.
+        while (localState.nextSourceRowID + 1 < metadata.numSourceRows) {
+            localState.nextSourceRowID++;
+            metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
+        }
     }
     sharedState->merge({}, localState.batchIndex, std::move(localState.csrMetadata));
 }

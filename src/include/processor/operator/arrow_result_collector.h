@@ -66,6 +66,11 @@ struct CSRTrackingInfo {
     common::idx_t srcRowIDColIdx = common::INVALID_IDX;
     common::idx_t dstRowIDColIdx = common::INVALID_IDX;
     common::idx_t relRowIDColIdx = common::INVALID_IDX;
+    // Total number of source (node) rows. Set at plan-mapping time from
+    // the node table cardinality. Used to fill trailing empty rows in the
+    // per-chunk CSR indptr so that indptr always has numSourceRows + 1
+    // entries (one per node row plus trailing sentinel).
+    int64_t numSourceRows = 0;
 
     bool enabled() const {
         return srcRowIDColIdx != common::INVALID_IDX && dstRowIDColIdx != common::INVALID_IDX;
