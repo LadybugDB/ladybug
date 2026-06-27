@@ -365,23 +365,23 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
                 "Cannot mix icebug-disk tables with non-icebug-disk tables in CREATE REL TABLE.");
         }
 
-        bool isSrcLance = srcEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
-                              srcEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
-                                  StorageFormat::LANCE :
-                              false;
-        bool isDstLance = dstEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
-                              dstEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
-                                  StorageFormat::LANCE :
-                              false;
-        bool isRelLance = (storageFormat == StorageFormat::LANCE);
+        bool isSrcExternal = srcEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
+                                 srcEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
+                                     StorageFormat::EXTERNAL :
+                                 false;
+        bool isDstExternal = dstEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ?
+                                 dstEntry->ptrCast<NodeTableCatalogEntry>()->getStorageFormat() ==
+                                     StorageFormat::EXTERNAL :
+                                 false;
+        bool isRelExternal = (storageFormat == StorageFormat::EXTERNAL);
 
-        // Lance rel tables must connect lance node tables, and non-lance rel tables
-        // cannot connect lance node tables.
-        if ((!isRelLance && (isSrcLance || isDstLance)) ||
-            (isRelLance && (!isSrcLance || !isDstLance))) {
+        // External rel tables must connect external node tables, and non-external rel tables
+        // cannot connect external node tables.
+        if ((!isRelExternal && (isSrcExternal || isDstExternal)) ||
+            (isRelExternal && (!isSrcExternal || !isDstExternal))) {
             throw BinderException(
-                "Cannot mix lance tables with non-lance tables in CREATE REL TABLE. "
-                "Lance rel tables must connect lance node tables.");
+                "Cannot mix external tables with non-external tables in CREATE REL TABLE. "
+                "External rel tables must connect external node tables.");
         }
 
         // Use the actual shadow table IDs, not FOREIGN_TABLE_ID

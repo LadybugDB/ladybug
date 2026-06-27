@@ -10,11 +10,11 @@ StorageFormat StorageFormatUtils::fromString(const std::string& str) {
     if (str == "icebug-disk") {
         return StorageFormat::ICEBUG_DISK;
     }
-    if (str == "lance") {
-        return StorageFormat::LANCE;
+    if (str == "external") {
+        return StorageFormat::EXTERNAL;
     }
     throw BinderException(std::format(
-        "Unsupported storage format '{}'. Valid options are: icebug-disk, lance.", str));
+        "Unsupported storage format '{}'. Valid options are: icebug-disk, external.", str));
 }
 
 } // namespace common
