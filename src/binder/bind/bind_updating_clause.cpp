@@ -265,7 +265,8 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
             if (literalExpr && !literalExpr->isNull()) {
                 auto val = literalExpr->getValue();
                 // Create a temporary ValueVector of size 1 and reuse json_extension::jsonify
-                ValueVector tempVec(val.getDataType().copy());
+                auto mm = storage::MemoryManager::Get(*clientContext);
+                ValueVector tempVec(val.getDataType().copy(), mm);
                 tempVec.state = DataChunkState::getSingleValueDataChunkState();
                 tempVec.copyFromValue(0, val);
                 jsonVal = json_extension::jsonify(mutWrapper, tempVec, 0);
@@ -415,7 +416,8 @@ void Binder::bindInsertRel(std::shared_ptr<RelExpression> rel,
             if (literalExpr && !literalExpr->isNull()) {
                 auto val = literalExpr->getValue();
                 // Create a temporary ValueVector of size 1 and reuse json_extension::jsonify
-                ValueVector tempVec(val.getDataType().copy());
+                auto mm = storage::MemoryManager::Get(*clientContext);
+                ValueVector tempVec(val.getDataType().copy(), mm);
                 tempVec.state = DataChunkState::getSingleValueDataChunkState();
                 tempVec.copyFromValue(0, val);
                 jsonVal = json_extension::jsonify(mutWrapper, tempVec, 0);
