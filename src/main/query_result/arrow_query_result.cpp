@@ -150,7 +150,10 @@ static ArrowQueryResult::CSRMetadata kwayMergeCSRChunks(
             }
             sumCounts += cnt;
         }
-        if (static_cast<size_t>(sumCounts) != c.indices.size()) {
+        // Sparse-run form: sum(counts) must equal indices.size(). Legacy
+        // dense form (empty srcRows, pre-set indptr): skip this check,
+        // there are no per-source counts to sum.
+        if (!c.srcRows.empty() && static_cast<size_t>(sumCounts) != c.indices.size()) {
             return ArrowQueryResult::CSRMetadata{};
         }
         if (c.numSourceRows > numSourceRows) {
@@ -167,9 +170,17 @@ static ArrowQueryResult::CSRMetadata kwayMergeCSRChunks(
         auto& c = chunks[0];
         merged.indices = std::move(c.indices);
         merged.edgeIDs = std::move(c.edgeIDs);
-        merged.indptr = buildDenseIndptr(numSourceRows, c.srcRows, c.counts);
-        if (merged.indptr.empty()) {
-            return ArrowQueryResult::CSRMetadata{};
+        // Sparse-run form (production path): rebuild the dense indptr from
+        // (srcRows, counts). Legacy dense form (test fixtures / older
+        // callers that set indptr directly with empty srcRows): keep the
+        // provided indptr as-is.
+        if (!c.srcRows.empty()) {
+            merged.indptr = buildDenseIndptr(numSourceRows, c.srcRows, c.counts);
+            if (merged.indptr.empty()) {
+                return ArrowQueryResult::CSRMetadata{};
+            }
+        } else {
+            merged.indptr = std::move(c.indptr);
         }
         return merged;
     }
@@ -219,6 +230,18 @@ static ArrowQueryResult::CSRMetadata kwayMergeCSRChunks(
         const size_t next = top.cursor + 1;
         if (next < c.srcRows.size()) {
             heap.push({c.srcRows[next], top.chunk, next});
+        } else {
+            // This chunk's source rows are all consumed and its edges have
+            // been copied into the merged arrays. Free its vectors now so the
+            // merge doesn't hold the full per-batch set + the merged copy at
+            // once. Chunks whose max source row is low are freed early; those
+            // spanning near numSourceRows are freed late. This is safe: a
+            // chunk with an exhausted cursor is never pushed again, and the
+            // heap loop only touches c when popping a live cursor entry.
+            std::vector<int64_t>().swap(c.indices);
+            std::vector<int64_t>().swap(c.edgeIDs);
+            std::vector<int64_t>().swap(c.srcRows);
+            std::vector<int64_t>().swap(c.counts);
         }
     }
     for (size_t i = 0; i + 1 < merged.indptr.size(); ++i) {
@@ -335,7 +358,13 @@ const ArrowQueryResult::CSRMetadata& ArrowQueryResult::combineCSRChunks() const 
     if (combinedCSR) {
         return *combinedCSR;
     }
-    combinedCSR = std::make_shared<const CSRMetadata>(kwayMergeCSRChunks(csrChunks));
+    // std::move the per-batch chunks into the merge so that (a) we don't
+    // copy ~6GB of per-batch indices/edgeIDs into the function argument,
+    // and (b) kwayMergeCSRChunks can free each chunk's vectors as soon as
+    // its source rows are consumed, keeping the transient peak (per-batch
+    // + merged) low instead of holding both for the whole merge. csrChunks
+    // is left empty; hasCSRMetadata() stays true via combinedCSR.
+    combinedCSR = std::make_shared<const CSRMetadata>(kwayMergeCSRChunks(std::move(csrChunks)));
     return *combinedCSR;
 }
 

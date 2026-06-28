@@ -150,15 +150,20 @@ public:
     // The actual k-way merge across batches runs lazily on the first call
     // to combineCSRChunks() / getCSRMetadata() / getCSRArrowArrays(); the
     // merged result is cached. NO_ORDER / INSERTION_ORDER queries take
-    // zero work at result-construction time.
-    bool hasCSRMetadata() const { return !csrChunks.empty(); }
+    // zero work at result-construction time. combineCSRChunks() std::moves
+    // and consumes the per-batch chunks (freeing them incrementally as they
+    // are copied into the merged arrays), so csrChunks is empty afterwards;
+    // hasCSRMetadata() remains true via the cached merged result.
+    bool hasCSRMetadata() const { return !csrChunks.empty() || combinedCSR != nullptr; }
     const CSRMetadata& getCSRMetadata() const { return combineCSRChunks(); }
     CSRArrowArrays getCSRArrowArrays() const;
 
-    // Per-batch CSR chunks (in batch_index order). No merge is performed
-    // until combineCSRChunks() is called; this is the ChunkedArray-style
-    // view exposed for callers that want to combine on the consumer side
-    // (e.g. python users constructing pyarrow.ChunkedArray).
+    // Per-batch CSR chunks (in batch_index order), before merging. No merge
+    // is performed until combineCSRChunks() is called; this is the
+    // ChunkedArray-style view for callers that want to combine on the
+    // consumer side. NOTE: combineCSRChunks() consumes (moves) these chunks
+    // to free their memory as the merged arrays are built, so this returns
+    // an empty vector after the first merge call.
     const std::vector<CSRMetadata>& getCSRChunks() const { return csrChunks; }
 
     // K-way merge the per-batch CSR chunks in batch_index order into a
@@ -176,7 +181,10 @@ private:
     int64_t chunkSize_;
     uint64_t numTuples = 0;
     uint64_t cursor = 0;
-    std::vector<CSRMetadata> csrChunks;
+    // Mutable because combineCSRChunks() (a const accessor, called from the
+    // const getCSRMetadata()/getCSRArrowArrays()) std::moves these chunks
+    // into the merge to free their memory as the merged arrays are built.
+    mutable std::vector<CSRMetadata> csrChunks;
     mutable std::shared_ptr<const CSRMetadata> combinedCSR;
 };
 

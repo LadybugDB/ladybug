@@ -32,12 +32,26 @@ TEST(ArrowQueryResultTest, exportsCSRMetadataAsZeroCopyArrowArrays) {
     ASSERT_EQ(csrArrays.indptr.array.length, static_cast<int64_t>(storedMetadata.indptr.size()));
     ASSERT_EQ(csrArrays.indices.array.length, static_cast<int64_t>(storedMetadata.indices.size()));
     ASSERT_EQ(csrArrays.edgeIDs->array.length, static_cast<int64_t>(storedMetadata.edgeIDs.size()));
+    // No validity bitmap (the array is non-nullable).
     ASSERT_EQ(csrArrays.indptr.array.buffers[0], nullptr);
     ASSERT_EQ(csrArrays.indices.array.buffers[0], nullptr);
     ASSERT_EQ(csrArrays.edgeIDs->array.buffers[0], nullptr);
-    ASSERT_EQ(csrArrays.indptr.array.buffers[1], storedMetadata.indptr.data());
-    ASSERT_EQ(csrArrays.indices.array.buffers[1], storedMetadata.indices.data());
-    ASSERT_EQ(csrArrays.edgeIDs->array.buffers[1], storedMetadata.edgeIDs.data());
+    // Value-equivalence: the exported Arrow data buffers hold the merged
+    // CSR values. We check the contents rather than the backing pointer,
+    // so the test does not break if the merge path changes whether it moves
+    // or copies the per-batch vectors.
+    const auto* indptrData = static_cast<const int64_t*>(csrArrays.indptr.array.buffers[1]);
+    const auto* indicesData = static_cast<const int64_t*>(csrArrays.indices.array.buffers[1]);
+    const auto* edgeIDsData = static_cast<const int64_t*>(csrArrays.edgeIDs->array.buffers[1]);
+    ASSERT_NE(indptrData, nullptr);
+    ASSERT_NE(indicesData, nullptr);
+    ASSERT_NE(edgeIDsData, nullptr);
+    ASSERT_EQ(std::vector<int64_t>(indptrData, indptrData + storedMetadata.indptr.size()),
+        (std::vector<int64_t>{0, 2, 3}));
+    ASSERT_EQ(std::vector<int64_t>(indicesData, indicesData + storedMetadata.indices.size()),
+        (std::vector<int64_t>{4, 5, 6}));
+    ASSERT_EQ(std::vector<int64_t>(edgeIDsData, edgeIDsData + storedMetadata.edgeIDs.size()),
+        (std::vector<int64_t>{10, 11, 12}));
 }
 
 TEST_F(ArrowTest, resultToArrow) {
