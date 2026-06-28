@@ -14,9 +14,25 @@ class ArrowQueryResult : public QueryResult {
 
 public:
     struct CSRMetadata {
+        // Dense global indptr. Populated ONLY on the merged result produced
+        // by combineCSRChunks()/kwayMergeCSRChunks(); per-batch chunks leave
+        // this empty and use the sparse (srcRows, counts) representation
+        // below instead, so a batch only pays for the distinct source rows
+        // it actually touched (not numSourceRows+1 entries).
         std::vector<int64_t> indptr;
         std::vector<int64_t> indices;
         std::vector<int64_t> edgeIDs;
+        // Sparse per-batch CSR representation: srcRows[i] is a global source
+        // row id touched by this batch (strictly increasing, since the rel
+        // scan emits edges in non-decreasing source order per thread and
+        // morsel acquisition is monotonic), and counts[i] is the number of
+        // edges for that source row. The edges for srcRows[i] live at
+        // indices[offset..offset+counts[i]-1] where offset = sum(counts[0..i-1]).
+        // Per-batch srcRows sets are disjoint (a source node is scanned in
+        // exactly one morsel -> one thread), so the merge is a union of
+        // sorted disjoint runs, not a general k-way merge.
+        std::vector<int64_t> srcRows;
+        std::vector<int64_t> counts;
         bool hasEdgeIDs = false;
         // Total number of source (node) rows in the table. Used to pad
         // trailing empty rows in indptr; set at plan-mapping time from the

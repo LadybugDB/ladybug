@@ -23,7 +23,6 @@ static void updateDirectCSRMetadata(const CSRTrackingInfo& info, const std::vect
     const auto dstRowID = values[info.dstRowIDColIdx];
     if (!localState.csrMetadata.has_value()) {
         main::ArrowQueryResult::CSRMetadata metadata;
-        metadata.indptr.push_back(0);
         metadata.hasEdgeIDs = info.hasRelRowID();
         metadata.numSourceRows = info.numSourceRows;
         localState.csrMetadata = std::move(metadata);
@@ -34,39 +33,43 @@ static void updateDirectCSRMetadata(const CSRTrackingInfo& info, const std::vect
         localState.csrMetadata.reset();
         return;
     }
+    // Sparse per-batch CSR build. The rel scan emits edges in non-decreasing
+    // source order per thread, so we record one (srcRow, count) run per
+    // distinct source row instead of a dense global indptr (which would
+    // cost numSourceRows+1 entries per batch). The trailing run is flushed
+    // in executeInternal(); the global dense indptr is reconstructed once
+    // by kwayMergeCSRChunks() on first consumer request.
     if (localState.currentSourceRowID == -1) {
-        while (localState.nextSourceRowID < srcRowID) {
-            metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
-            localState.nextSourceRowID++;
-        }
         localState.currentSourceRowID = srcRowID;
+        localState.currentRowCount = 0;
     } else if (srcRowID != localState.currentSourceRowID) {
         if (srcRowID < localState.currentSourceRowID) {
             localState.csrMetadataValid = false;
             localState.csrMetadata.reset();
             return;
         }
-        metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
-        localState.nextSourceRowID = localState.currentSourceRowID + 1;
-        while (localState.nextSourceRowID < srcRowID) {
-            metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
-            localState.nextSourceRowID++;
-        }
+        metadata.srcRows.push_back(localState.currentSourceRowID);
+        metadata.counts.push_back(localState.currentRowCount);
         localState.currentSourceRowID = srcRowID;
+        localState.currentRowCount = 0;
     }
     metadata.indices.push_back(dstRowID);
     if (info.hasRelRowID()) {
         metadata.edgeIDs.push_back(values[info.relRowIDColIdx]);
     }
+    localState.currentRowCount++;
 }
 
-// Deterministic pairwise merge of two CSR metadata chunks into one. Used
-// only in FIXED_ORDER mode (ORDER BY / TopK on the data path), where per-
-// batch chunks are collapsed to a single sorted chunk to preserve global
-// order. The cheap NO_ORDER / INSERTION_ORDER path does not call this — it
-// moves per-batch chunks into arraysByBatchIndex and the final k-way
-// merge across batches runs lazily in ArrowQueryResult::combineCSRChunks()
-// on first consumer request.
+// Deterministic pairwise merge of two sparse CSR metadata chunks into one.
+// Used only in FIXED_ORDER mode (ORDER BY / TopK on the data path), where
+// per-batch chunks are collapsed to a single sorted chunk under key 0 to
+// preserve global order. Materializes (src, dst, edge) entries and sorts by
+// (src, edge, dst), then rebuilds the sparse (srcRows, counts) runs. The
+// cheap NO_ORDER / INSERTION_ORDER path does not call this — it moves
+// per-batch chunks into arraysByBatchIndex and the final k-way merge across
+// batches runs lazily in ArrowQueryResult::combineCSRChunks() on first
+// consumer request. FIXED_ORDER is inherently more expensive (it must sort);
+// the common NO_ORDER rel-scan path takes the sparse run build instead.
 static std::optional<main::ArrowQueryResult::CSRMetadata> mergeCSRMetadata(
     main::ArrowQueryResult::CSRMetadata left, main::ArrowQueryResult::CSRMetadata right) {
     if (left.hasEdgeIDs != right.hasEdgeIDs) {
@@ -82,20 +85,23 @@ static std::optional<main::ArrowQueryResult::CSRMetadata> mergeCSRMetadata(
         if (metadata.hasEdgeIDs && metadata.edgeIDs.size() != metadata.indices.size()) {
             return false;
         }
-        if (metadata.indptr.empty()) {
-            return true;
+        if (metadata.srcRows.size() != metadata.counts.size()) {
+            return false;
         }
-        for (auto src = 0u; src + 1 < metadata.indptr.size(); ++src) {
-            const auto begin = metadata.indptr[src];
-            const auto end = metadata.indptr[src + 1];
-            if (begin < 0 || end < begin || static_cast<uint64_t>(end) > metadata.indices.size()) {
+        int64_t offset = 0;
+        for (auto i = 0u; i < metadata.srcRows.size(); ++i) {
+            const auto src = metadata.srcRows[i];
+            const auto count = metadata.counts[i];
+            if (src < 0 || count < 0 ||
+                static_cast<uint64_t>(offset + count) > metadata.indices.size()) {
                 return false;
             }
-            for (auto idx = begin; idx < end; ++idx) {
-                const auto idxAsOffset = static_cast<uint64_t>(idx);
+            for (auto j = 0; j < count; ++j) {
+                const auto idxAsOffset = static_cast<uint64_t>(offset + j);
                 const auto edge = metadata.hasEdgeIDs ? metadata.edgeIDs[idxAsOffset] : -1;
-                entries.push_back({static_cast<int64_t>(src), metadata.indices[idxAsOffset], edge});
+                entries.push_back({src, metadata.indices[idxAsOffset], edge});
             }
+            offset += count;
         }
         return true;
     };
@@ -107,31 +113,30 @@ static std::optional<main::ArrowQueryResult::CSRMetadata> mergeCSRMetadata(
     });
     main::ArrowQueryResult::CSRMetadata merged;
     merged.hasEdgeIDs = left.hasEdgeIDs;
-    merged.numSourceRows = left.numSourceRows;
-    merged.indptr.push_back(0);
-    int64_t nextSourceRowID = 0;
+    merged.numSourceRows = std::max(left.numSourceRows, right.numSourceRows);
+    int64_t curSrc = -1;
+    int64_t curCount = 0;
     for (const auto& entry : entries) {
         if (entry.src < 0 || entry.dst < 0 || (merged.hasEdgeIDs && entry.edge < 0)) {
             return std::nullopt;
         }
-        while (nextSourceRowID < entry.src) {
-            merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
-            nextSourceRowID++;
+        if (entry.src != curSrc) {
+            if (curSrc >= 0 && curCount > 0) {
+                merged.srcRows.push_back(curSrc);
+                merged.counts.push_back(curCount);
+            }
+            curSrc = entry.src;
+            curCount = 0;
         }
         merged.indices.push_back(entry.dst);
         if (merged.hasEdgeIDs) {
             merged.edgeIDs.push_back(entry.edge);
         }
+        curCount++;
     }
-    merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
-    // Fill trailing empty source rows (nodes after the last source row with
-    // edges). nextSourceRowID is the last distinct src value; the sentinel
-    // push above already covers row nextSourceRowID - 1, so we need
-    // numSourceRows - nextSourceRowID - 1 more pushes.
-    if (merged.numSourceRows > 0) {
-        for (int64_t src = nextSourceRowID; src + 1 < merged.numSourceRows; ++src) {
-            merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
-        }
+    if (curSrc >= 0 && curCount > 0) {
+        merged.srcRows.push_back(curSrc);
+        merged.counts.push_back(curCount);
     }
     return merged;
 }
@@ -152,7 +157,6 @@ static void updateCSRMetadata(const CSRTrackingInfo& info, FlatTuple& tuple,
     const auto dstRowID = tuple.getValue(info.dstRowIDColIdx)->getValue<int64_t>();
     if (!localState.csrMetadata.has_value()) {
         main::ArrowQueryResult::CSRMetadata metadata;
-        metadata.indptr.push_back(0);
         metadata.hasEdgeIDs = info.hasRelRowID();
         metadata.numSourceRows = info.numSourceRows;
         localState.csrMetadata = std::move(metadata);
@@ -163,30 +167,26 @@ static void updateCSRMetadata(const CSRTrackingInfo& info, FlatTuple& tuple,
         localState.csrMetadata.reset();
         return;
     }
+    // See updateDirectCSRMetadata for the sparse run rationale.
     if (localState.currentSourceRowID == -1) {
-        while (localState.nextSourceRowID < srcRowID) {
-            metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
-            localState.nextSourceRowID++;
-        }
         localState.currentSourceRowID = srcRowID;
+        localState.currentRowCount = 0;
     } else if (srcRowID != localState.currentSourceRowID) {
         if (srcRowID < localState.currentSourceRowID) {
             localState.csrMetadataValid = false;
             localState.csrMetadata.reset();
             return;
         }
-        metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
-        localState.nextSourceRowID = localState.currentSourceRowID + 1;
-        while (localState.nextSourceRowID < srcRowID) {
-            metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
-            localState.nextSourceRowID++;
-        }
+        metadata.srcRows.push_back(localState.currentSourceRowID);
+        metadata.counts.push_back(localState.currentRowCount);
         localState.currentSourceRowID = srcRowID;
+        localState.currentRowCount = 0;
     }
     metadata.indices.push_back(dstRowID);
     if (info.hasRelRowID()) {
         metadata.edgeIDs.push_back(tuple.getValue(info.relRowIDColIdx)->getValue<int64_t>());
     }
+    localState.currentRowCount++;
 }
 
 bool ArrowResultCollectorLocalState::advance() {
@@ -277,16 +277,13 @@ void ArrowResultCollector::executeInternal(ExecutionContext* context) {
     if (rowBatch->size() > 0) {
         localState.arrays.push_back(rowBatch->toArray(info.columnTypes));
     }
-    if (localState.csrMetadata.has_value()) {
+    // Flush the trailing source row's run into the sparse (srcRows, counts)
+    // representation. The global dense indptr (with trailing empty-row
+    // padding) is reconstructed once by kwayMergeCSRChunks() at merge time.
+    if (localState.csrMetadata.has_value() && localState.currentSourceRowID != -1) {
         auto& metadata = *localState.csrMetadata;
-        metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
-        // Fill trailing empty source rows (nodes after the last source row
-        // with edges). Without this padding, consumers see an indptr shorter
-        // than numSourceRows + 1 and silently skip trailing node rows.
-        while (localState.nextSourceRowID + 1 < metadata.numSourceRows) {
-            localState.nextSourceRowID++;
-            metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
-        }
+        metadata.srcRows.push_back(localState.currentSourceRowID);
+        metadata.counts.push_back(localState.currentRowCount);
     }
     sharedState->merge(std::move(localState.arrays), localState.batchIndex,
         std::move(localState.csrMetadata));
@@ -408,16 +405,13 @@ void DirectArrowResultCollector::executeInternal(ExecutionContext* context) {
             }
         }
     }
-    if (localState.csrMetadata.has_value()) {
+    // Flush the trailing source row's run into the sparse (srcRows, counts)
+    // representation. The global dense indptr (with trailing empty-row
+    // padding) is reconstructed once by kwayMergeCSRChunks() at merge time.
+    if (localState.csrMetadata.has_value() && localState.currentSourceRowID != -1) {
         auto& metadata = *localState.csrMetadata;
-        metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
-        // Fill trailing empty source rows (nodes after the last source row
-        // with edges). Without this padding, consumers see an indptr shorter
-        // than numSourceRows + 1 and silently skip trailing node rows.
-        while (localState.nextSourceRowID + 1 < metadata.numSourceRows) {
-            localState.nextSourceRowID++;
-            metadata.indptr.push_back(static_cast<int64_t>(metadata.indices.size()));
-        }
+        metadata.srcRows.push_back(localState.currentSourceRowID);
+        metadata.counts.push_back(localState.currentRowCount);
     }
     sharedState->merge({}, localState.batchIndex, std::move(localState.csrMetadata));
 }

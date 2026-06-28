@@ -89,8 +89,11 @@ struct ArrowResultCollectorLocalState {
     std::vector<common::sel_t> chunkCursors;
     std::unique_ptr<FlatTuple> tuple;
     std::optional<main::ArrowQueryResult::CSRMetadata> csrMetadata;
-    int64_t nextSourceRowID = 0;
+    // Current source row being accumulated and how many edges have been
+    // seen for it. Used by the sparse per-batch CSR builder to emit a
+    // (srcRow, count) run when the source row changes.
     int64_t currentSourceRowID = -1;
+    int64_t currentRowCount = 0;
     bool csrMetadataValid = true;
 
     // Advance cursor.

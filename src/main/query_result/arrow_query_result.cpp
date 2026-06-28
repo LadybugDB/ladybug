@@ -1,6 +1,7 @@
 #include "main/query_result/arrow_query_result.h"
 
 #include <array>
+#include <queue>
 
 #include "common/arrow/arrow_row_batch.h"
 #include "common/exception/not_implemented.h"
@@ -71,15 +72,53 @@ static ArrowQueryResult::CSRArrowArray makeCSRArrowArray(
     return result;
 }
 
-// K-way merge of per-batch CSR metadata chunks (in batch_index order)
-// into a single flat CSRMetadata. Each chunk's indptr is indexed by
-// GLOBAL source row id: the per-batch CSR tracker fills indptr densely
-// from global row 0 up to that chunk's max source row, with a trailing
-// sentinel equal to indices.size(). For each global source row in
-// ascending order, emit edges from each chunk in batch_index order;
-// within a chunk the per-batch tracker already groups entries by
-// source row in scan order, so emitting in (src, batch_index,
-// scan_order_within_batch) order is correct without any global sort.
+// Build a dense global indptr of size numSourceRows+1 from sparse
+// (srcRows, counts) runs. indptr[src+1] is set to counts[i] for the
+// touched src = srcRows[i], then prefix-summed so indptr[src] gives the
+// offset of src's edges in the (source-sorted) indices vector. Source
+// rows absent from srcRows keep their slot at 0, i.e. no edges. Returns
+// an empty vector on validation failure (bad src/count, or the
+// disjointness invariant is violated — a source row appearing more than
+// once would silently corrupt the merged CSR).
+static std::vector<int64_t> buildDenseIndptr(int64_t numSourceRows,
+    const std::vector<int64_t>& srcRows, const std::vector<int64_t>& counts) {
+    std::vector<int64_t> indptr(static_cast<size_t>(numSourceRows) + 1, 0);
+    for (auto i = 0u; i < srcRows.size(); ++i) {
+        const auto src = srcRows[i];
+        const auto count = counts[i];
+        if (src < 0 || src >= numSourceRows || count < 0) {
+            return {};
+        }
+        if (indptr[static_cast<size_t>(src) + 1] != 0) {
+            return {};
+        }
+        indptr[static_cast<size_t>(src) + 1] = count;
+    }
+    for (size_t i = 0; i + 1 < indptr.size(); ++i) {
+        indptr[i + 1] += indptr[i];
+    }
+    return indptr;
+}
+
+// K-way merge of per-batch sparse CSR metadata chunks (in batch_index
+// order) into a single flat CSRMetadata with a dense global indptr.
+// Per-batch chunks carry (srcRows, counts) sparse runs — NOT a dense
+// global indptr — so a batch only pays for the distinct source rows it
+// touched (the old dense representation cost numSourceRows+1 entries per
+// batch, i.e. ~B x 800MB for a 100M-node table, which was the 45GB
+// blow-up). The rel scan emits edges in non-decreasing source order per
+// thread (CSR storage + monotonic morsel acquisition), and each source
+// node is scanned in exactly one morsel -> one thread, so per-batch
+// srcRows sets are disjoint and sorted: this is a union of sorted
+// disjoint runs, not a general k-way merge.
+//
+// Single-chunk fast path: the chunk's indices are already laid out in
+// source-row order, so we move indices/edgeIDs through without copying
+// and synthesize the dense indptr from (srcRows, counts).
+//
+// Multi-chunk path: k-way merge by source row via a min-heap, copying
+// edges into merged.indices in global source order, then prefix-sum the
+// per-source-row counts into the dense indptr.
 //
 // Runs lazily on first consumer request via combineCSRChunks(), not at
 // result-construction time, so result construction stays zero-work for
@@ -89,16 +128,11 @@ static ArrowQueryResult::CSRMetadata kwayMergeCSRChunks(
     if (chunks.empty()) {
         return ArrowQueryResult::CSRMetadata{};
     }
-    if (chunks.size() == 1) {
-        return std::move(chunks[0]);
-    }
     const auto& first = chunks.front();
     const auto hasEdgeIDs = first.hasEdgeIDs;
 
-    int64_t maxSrcRow = 0;
-    size_t totalIndices = 0;
     int64_t numSourceRows = 0;
-    bool sawChunk = false;
+    size_t totalIndices = 0;
     for (const auto& c : chunks) {
         if (c.hasEdgeIDs != hasEdgeIDs) {
             return ArrowQueryResult::CSRMetadata{};
@@ -106,65 +140,89 @@ static ArrowQueryResult::CSRMetadata kwayMergeCSRChunks(
         if (c.hasEdgeIDs && c.edgeIDs.size() != c.indices.size()) {
             return ArrowQueryResult::CSRMetadata{};
         }
+        if (c.srcRows.size() != c.counts.size()) {
+            return ArrowQueryResult::CSRMetadata{};
+        }
+        int64_t sumCounts = 0;
+        for (auto cnt : c.counts) {
+            if (cnt < 0) {
+                return ArrowQueryResult::CSRMetadata{};
+            }
+            sumCounts += cnt;
+        }
+        if (static_cast<size_t>(sumCounts) != c.indices.size()) {
+            return ArrowQueryResult::CSRMetadata{};
+        }
         if (c.numSourceRows > numSourceRows) {
             numSourceRows = c.numSourceRows;
         }
-        if (c.indptr.size() < 2) {
-            continue;
-        }
-        if (c.indptr.back() != static_cast<int64_t>(c.indices.size())) {
-            return ArrowQueryResult::CSRMetadata{};
-        }
-        const auto numSrcRows = static_cast<int64_t>(c.indptr.size() - 1);
-        if (numSrcRows > maxSrcRow) {
-            maxSrcRow = numSrcRows;
-        }
         totalIndices += c.indices.size();
-        sawChunk = true;
     }
+
     ArrowQueryResult::CSRMetadata merged;
     merged.hasEdgeIDs = hasEdgeIDs;
     merged.numSourceRows = numSourceRows;
-    merged.indptr.push_back(0);
-    if (!sawChunk || maxSrcRow == 0) {
-        // Pad to numSourceRows + 1 entries even when there are no edges.
-        for (int64_t i = 0; i < numSourceRows; ++i) {
-            merged.indptr.push_back(0);
+
+    if (chunks.size() == 1) {
+        auto& c = chunks[0];
+        merged.indices = std::move(c.indices);
+        merged.edgeIDs = std::move(c.edgeIDs);
+        merged.indptr = buildDenseIndptr(numSourceRows, c.srcRows, c.counts);
+        if (merged.indptr.empty()) {
+            return ArrowQueryResult::CSRMetadata{};
         }
         return merged;
     }
+
     merged.indices.reserve(totalIndices);
     if (hasEdgeIDs) {
         merged.edgeIDs.reserve(totalIndices);
     }
-    for (int64_t src = 0; src < maxSrcRow; ++src) {
-        for (const auto& c : chunks) {
-            if (static_cast<size_t>(src + 1) >= c.indptr.size()) {
-                continue;
-            }
-            const auto begin = c.indptr[src];
-            const auto end = c.indptr[src + 1];
-            if (begin < 0 || end < begin || static_cast<uint64_t>(end) > c.indices.size()) {
-                return ArrowQueryResult::CSRMetadata{};
-            }
-            for (auto idx = begin; idx < end; ++idx) {
-                const auto u = static_cast<uint64_t>(idx);
-                merged.indices.push_back(c.indices[u]);
-                if (hasEdgeIDs) {
-                    merged.edgeIDs.push_back(c.edgeIDs[u]);
-                }
+    merged.indptr.assign(static_cast<size_t>(numSourceRows) + 1, 0);
+
+    struct HeapItem {
+        int64_t src;
+        size_t chunk;
+        size_t cursor;
+    };
+    auto cmp = [](const HeapItem& a, const HeapItem& b) { return a.src > b.src; };
+    std::priority_queue<HeapItem, std::vector<HeapItem>, decltype(cmp)> heap(cmp);
+    std::vector<int64_t> chunkLocalOff(chunks.size(), 0);
+    for (size_t ci = 0; ci < chunks.size(); ++ci) {
+        if (!chunks[ci].srcRows.empty()) {
+            heap.push({chunks[ci].srcRows[0], ci, 0});
+        }
+    }
+    while (!heap.empty()) {
+        const auto top = heap.top();
+        heap.pop();
+        const auto src = top.src;
+        auto& c = chunks[top.chunk];
+        const auto count = c.counts[top.cursor];
+        const int64_t localOff = chunkLocalOff[top.chunk];
+        if (src < 0 || src >= numSourceRows || count < 0 ||
+            static_cast<uint64_t>(localOff + count) > c.indices.size()) {
+            return ArrowQueryResult::CSRMetadata{};
+        }
+        if (merged.indptr[static_cast<size_t>(src) + 1] != 0) {
+            return ArrowQueryResult::CSRMetadata{};
+        }
+        for (int64_t j = 0; j < count; ++j) {
+            const auto u = static_cast<uint64_t>(localOff + j);
+            merged.indices.push_back(c.indices[u]);
+            if (hasEdgeIDs) {
+                merged.edgeIDs.push_back(c.edgeIDs[u]);
             }
         }
-        merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
+        chunkLocalOff[top.chunk] += count;
+        merged.indptr[static_cast<size_t>(src) + 1] = count;
+        const size_t next = top.cursor + 1;
+        if (next < c.srcRows.size()) {
+            heap.push({c.srcRows[next], top.chunk, next});
+        }
     }
-    // Fill trailing empty source rows (nodes after the last source row
-    // with edges in any chunk). maxSrcRow is the highest numSrcRows
-    // (indptr.size() - 1) across all chunks; if it is less than
-    // numSourceRows, the trailing node rows have zero edges and need
-    // empty entries in the merged indptr so the CSR is indexable up
-    // to numSourceRows - 1.
-    for (int64_t src = maxSrcRow; src < numSourceRows; ++src) {
-        merged.indptr.push_back(static_cast<int64_t>(merged.indices.size()));
+    for (size_t i = 0; i + 1 < merged.indptr.size(); ++i) {
+        merged.indptr[i + 1] += merged.indptr[i];
     }
     return merged;
 }
