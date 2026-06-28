@@ -72,7 +72,7 @@ jobs:
 
           # Job 3: macOS arm64 build
           - platform: arm64
-            runner: macos-latest
+            runner: macos-15
             os: macos
             deployment-target: '15.0'
 
