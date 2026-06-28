@@ -11,7 +11,8 @@ make release
 # Debug build (with debug symbols)
 make debug
 
-# RelWithDebInfo (recommended for testing with stack traces)
+# RelWithDebInfo
+# (Not recommended due to size. Use only for testing with stack traces)
 make relwithdebinfo
 
 # Full build with all components
