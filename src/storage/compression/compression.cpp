@@ -542,6 +542,17 @@ template<IntegerBitpackingType T>
 BitpackInfo<T> IntegerBitpacking<T>::getPackingInfo(const CompressionMetadata& metadata) {
     auto max = metadata.max.get<T>();
     auto min = metadata.min.get<T>();
+    constexpr auto fullBitWidth = static_cast<uint8_t>(sizeof(T) * 8);
+    if constexpr (std::same_as<T, int128_t>) {
+        // INT128_MIN cannot be negated so frame-of-reference math around this value
+        // can throw while computing abs(), min/max deltas, or value - offset.
+        // Force a raw full-width layout here. The metadata layer will turn
+        // full-width integer bitpacking into UNCOMPRESSED storage instead of
+        // doing unsafe signed arithmetic.
+        if (min.high == std::numeric_limits<int64_t>::min() && min.low == 0) {
+            return BitpackInfo<T>{fullBitWidth, false, T{}};
+        }
+    }
     bool hasNegative = false;
     T offset = 0;
     uint8_t bitWidth = 0;
@@ -571,6 +582,14 @@ BitpackInfo<T> IntegerBitpacking<T>::getPackingInfo(const CompressionMetadata& m
         bitWidth =
             static_cast<uint8_t>(numeric_utils::bitWidth((U)std::max(abs<T>(min), abs<T>(max))));
         hasNegative = false;
+    }
+    if constexpr (std::same_as<T, int128_t>) {
+        // Full-width int128_t bitpacking is not useful and can interact badly with
+        // signed INT128 edge values. Normalize it to raw full-width/no-offset metadata
+        // so ColumnChunkMetadata falls back to UNCOMPRESSED for correctness.
+        if (bitWidth >= fullBitWidth) {
+            return BitpackInfo<T>{fullBitWidth, false, T{}};
+        }
     }
     return BitpackInfo<T>{bitWidth, hasNegative, offset};
 }
@@ -727,6 +746,13 @@ void IntegerBitpacking<T>::packPartialChunk(const U* srcBuffer, uint8_t* dstBuff
 template<IntegerBitpackingType T>
 void IntegerBitpacking<T>::copyValuesToTempChunkWithOffset(const U* srcBuffer, U* tmpBuffer,
     BitpackInfo<T> info, size_t numValuesToCopy) const {
+    if (info.offset == 0) {
+        // With no frame-of-reference offset there is nothing to subtract. Copy the raw
+        // unsigned representation so values such as INT128_MIN do not go through signed
+        // arithmetic unnecessarily.
+        std::copy_n(srcBuffer, numValuesToCopy, tmpBuffer);
+        return;
+    }
     for (auto j = 0u; j < numValuesToCopy; j++) {
         tmpBuffer[j] = static_cast<U>((T)(srcBuffer[j]) - info.offset);
     }

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <limits>
 
 #include "common/exception/not_implemented.h"
 #include "common/exception/storage.h"
@@ -10,6 +11,7 @@
 #include "gtest/gtest.h"
 #include "storage/compression/compression.h"
 #include "storage/storage_utils.h"
+#include "storage/table/column_chunk_metadata.h"
 
 using namespace lbug::common;
 using namespace lbug::storage;
@@ -367,6 +369,26 @@ TEST(CompressionTests, IntegerPackingTest128NegativeSimple) {
 
     auto alg = IntegerBitpacking<lbug::common::int128_t>();
     test_compression(alg, src, false);
+}
+
+TEST(CompressionTests, IntegerPackingTest128MinEdgeCase) {
+    // INT128_MIN cannot be negated. UUID nil is stored internally as flipped
+    // INT128_MIN, so a non-constant UUID chunk used to crash when compression tried
+    // to compute frame-of-reference deltas. Such ranges must fall back to raw storage.
+    lbug::common::int128_t minValue{};
+    minValue.high = std::numeric_limits<int64_t>::min();
+    minValue.low = 0;
+    auto maxValue = minValue + lbug::common::int128_t{1};
+
+    auto alg = std::make_shared<IntegerBitpacking<lbug::common::int128_t>>();
+    const auto dataType = lbug::common::LogicalType::INT128();
+    auto getMetadata = GetCompressionMetadata(alg, dataType);
+    const auto metadata =
+        getMetadata(std::span<const uint8_t>{}, 2, StorageValue(minValue), StorageValue(maxValue));
+
+    // This is the important behavior: avoid INT128 bitpacking when the range starts at
+    // INT128_MIN, because bitpacking's offset math would need unsafe signed subtraction.
+    EXPECT_EQ(metadata.compMeta.compression, CompressionType::UNCOMPRESSED);
 }
 
 TEST(CompressionTests, IntegerPackingTest128CompressFullChunkLargeWidth) {
