@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "common/constants.h"
 #include "common/file_system/local_file_system.h"
 #include "common/file_system/virtual_file_system.h"
 #include "graph_test/base_graph_test.h"
@@ -13,6 +14,10 @@
 #include "test_runner/test_parser.h"
 #include "transaction/transaction_manager.h"
 #include <format>
+
+using ::testing::TestParamInfo;
+using ::testing::Values;
+using ::testing::WithParamInterface;
 
 namespace lbug {
 namespace testing {
@@ -133,6 +138,98 @@ public:
     std::atomic<uint64_t> failureFrequency;
     FlakyBufferManager* currentBM;
 };
+
+struct StructuralCSVReaderTestCase {
+    std::string name;
+    std::vector<std::string> rows;
+    std::string query;
+    std::vector<std::vector<std::string>> expectedRows;
+};
+
+class StructuralCSVReaderTest : public CopyTest,
+                                public WithParamInterface<StructuralCSVReaderTestCase> {};
+
+static std::string bindStructuralCSVPath(std::string query, const std::string& filePath) {
+    const auto markerPos = query.find("{}");
+    DASSERT(markerPos != std::string::npos);
+    query.replace(markerPos, 2, filePath);
+    return query;
+}
+
+static StructuralCSVReaderTestCase makeLargeStructuralCSVTestCase() {
+    static constexpr auto numRows = common::DEFAULT_VECTOR_CAPACITY + 17;
+    const auto fieldBody =
+        std::string(common::CopyConstants::INITIAL_BUFFER_SIZE + 128, 'x') + "\n" + "tail";
+    std::vector<std::string> rows;
+    rows.reserve(numRows);
+    for (auto i = 0u; i < numRows; ++i) {
+        rows.push_back(std::to_string(i) + ",\"" + fieldBody + "\"");
+    }
+    return StructuralCSVReaderTestCase{
+        "LargeContinuationAndBufferRefill",
+        std::move(rows),
+        R"(LOAD FROM "{}" (MULTILINE_PARALLEL=true, AUTO_DETECT=false) RETURN COUNT(*), MAX(SIZE(column1)))",
+        {{std::to_string(numRows), std::to_string(fieldBody.size())}},
+    };
+}
+
+TEST_P(StructuralCSVReaderTest, MultilineParallelStructuralParser) {
+    createDBAndConn();
+    const auto& testCase = GetParam();
+    const auto filePath = writeCSV("structural.csv", testCase.rows);
+    auto result = conn->query(bindStructuralCSVPath(testCase.query, filePath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    for (const auto& expectedRow : testCase.expectedRows) {
+        ASSERT_TRUE(result->hasNext()) << testCase.name;
+        auto tuple = result->getNext();
+        ASSERT_EQ(expectedRow.size(), tuple->len()) << testCase.name;
+        for (auto i = 0u; i < expectedRow.size(); ++i) {
+            EXPECT_EQ(expectedRow[i], tuple->getValue(i)->toString()) << testCase.name;
+        }
+    }
+    EXPECT_FALSE(result->hasNext()) << testCase.name;
+}
+
+INSTANTIATE_TEST_SUITE_P(CSV, StructuralCSVReaderTest,
+    Values(
+        StructuralCSVReaderTestCase{
+            "QuotedNewline",
+            {R"("abc
+def")"},
+            R"(LOAD FROM "{}" (MULTILINE_PARALLEL=true, AUTO_DETECT=false) RETURN COUNT(*), SIZE(column0))",
+            {{"1", "7"}},
+        },
+        StructuralCSVReaderTestCase{
+            "QuotedCRLF",
+            {"1,\"abc\r\ndef\""},
+            R"(LOAD FROM "{}" (MULTILINE_PARALLEL=true, AUTO_DETECT=false) RETURN COUNT(*), SIZE(column1))",
+            {{"1", "8"}},
+        },
+        StructuralCSVReaderTestCase{
+            "CustomDelimiterScalarPlannedRange",
+            {"1;\"abc\ndef\""},
+            R"(LOAD FROM "{}" (MULTILINE_PARALLEL=true, AUTO_DETECT=false, DELIM=';') RETURN COUNT(*), SIZE(column1))",
+            {{"1", "7"}},
+        },
+        StructuralCSVReaderTestCase{
+            "EscapedQuotes",
+            {R"(1,"a ""quoted"" value",tail)"},
+            R"(LOAD FROM "{}" (MULTILINE_PARALLEL=true, AUTO_DETECT=false) RETURN column0, SIZE(column1), column2)",
+            {{"1", "16", "tail"}},
+        },
+        StructuralCSVReaderTestCase{
+            "MultiColumnQuotedDelimiters",
+            {R"(1,"first
+line","middle,with,delimiters","last
+line")",
+                R"(2,"alpha","middle
+line","omega
+tail")"},
+            R"(LOAD FROM "{}" (MULTILINE_PARALLEL=true, AUTO_DETECT=false) RETURN column0, SIZE(column1), SIZE(column2), SIZE(column3) ORDER BY column0)",
+            {{"1", "10", "22", "9"}, {"2", "5", "11", "10"}},
+        },
+        makeLargeStructuralCSVTestCase()),
+    [](const TestParamInfo<StructuralCSVReaderTest::ParamType>& info) { return info.param.name; });
 
 void CopyTest::BMExceptionRecoveryTest(BMExceptionRecoveryTestConfig cfg) {
     if (inMemMode) {

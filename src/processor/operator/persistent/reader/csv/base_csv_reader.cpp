@@ -12,6 +12,13 @@
 #include "utf8proc_wrapper.h"
 #include <format>
 
+#if defined(__x86_64__) || defined(_M_X64)
+#include <immintrin.h>
+#endif
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#include <arm_neon.h>
+#endif
+
 using namespace lbug::common;
 
 namespace lbug {
@@ -518,11 +525,299 @@ BaseCSVReader::parse_result_t BaseCSVReader::parseCSV(Driver& driver) {
                 return {curRowIdx, numErrors};
             }
             column++;
-        } else if (column > 0) {
-            // File ends right after a delimiter with an empty trailing field.
-            // Without this, a row like "a,b," (no trailing newline) loses its last
-            // empty field and undercounts columns, causing "expected N, got N-1".
-            if (!addValue(driver, curRowIdx, column, std::string_view{}, escapePositions)) {
+        }
+        if (column > 0) {
+            curRowIdx += driver.addRow(curRowIdx, column,
+                getOptionalWarningData<Driver>(columnInfo, option, getWarningSourceData()));
+        }
+        return {curRowIdx, numErrors};
+    ignore_error:
+        // we skip the current row then restart the state machine to continue parsing
+        skipCurrentLine();
+        if (driver.done(curRowIdx)) {
+            return {curRowIdx, numErrors};
+        }
+        continue;
+    }
+    UNREACHABLE_CODE;
+}
+
+bool BaseCSVReader::supportsStructuralParser() const {
+    return option.delimiter == CopyConstants::DEFAULT_CSV_DELIMITER &&
+           option.quoteChar == CopyConstants::DEFAULT_CSV_QUOTE_CHAR &&
+           option.escapeChar == CopyConstants::DEFAULT_CSV_ESCAPE_CHAR && !option.ignoreErrors;
+}
+
+static uint64_t findNextCSVStructuralByteScalar(const char* buffer, uint64_t position,
+    uint64_t bufferSize, const CSVOption& option, bool inQuotedField) {
+    for (; position < bufferSize; ++position) {
+        const auto c = buffer[position];
+        if (inQuotedField) {
+            if (c == option.quoteChar || c == option.escapeChar || c == '\r' || c == '\n') {
+                return position;
+            }
+        } else if (c == option.delimiter || c == '\r' || c == '\n') {
+            return position;
+        }
+    }
+    return bufferSize;
+}
+
+#if defined(__x86_64__) || defined(_M_X64)
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((target("avx2")))
+#endif
+static uint64_t
+findNextCSVStructuralByteAVX2(const char* buffer, uint64_t position, uint64_t bufferSize,
+    const CSVOption& option, bool inQuotedField) {
+    const auto quote = _mm256_set1_epi8(option.quoteChar);
+    const auto escape = _mm256_set1_epi8(option.escapeChar);
+    const auto delimiter = _mm256_set1_epi8(option.delimiter);
+    const auto carriageReturn = _mm256_set1_epi8('\r');
+    const auto newline = _mm256_set1_epi8('\n');
+
+    for (; position + 32 <= bufferSize; position += 32) {
+        const auto bytes = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(buffer + position));
+        auto mask = _mm256_movemask_epi8(_mm256_or_si256(_mm256_cmpeq_epi8(bytes, carriageReturn),
+            _mm256_cmpeq_epi8(bytes, newline)));
+        if (inQuotedField) {
+            mask |= _mm256_movemask_epi8(
+                _mm256_or_si256(_mm256_cmpeq_epi8(bytes, quote), _mm256_cmpeq_epi8(bytes, escape)));
+        } else {
+            mask |= _mm256_movemask_epi8(_mm256_cmpeq_epi8(bytes, delimiter));
+        }
+        if (mask != 0) {
+            return position + static_cast<uint64_t>(__builtin_ctz(static_cast<unsigned>(mask)));
+        }
+    }
+    return findNextCSVStructuralByteScalar(buffer, position, bufferSize, option, inQuotedField);
+}
+
+static bool hasAVX2() {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_cpu_supports("avx2");
+#else
+    return false;
+#endif
+}
+#endif
+
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+static uint64_t findFirstNeonMatch(uint64_t position, const uint8_t* matches) {
+    for (auto i = 0u; i < 16; ++i) {
+        if (matches[i] != 0) {
+            return position + i;
+        }
+    }
+    return position + 16;
+}
+
+static uint64_t findNextCSVStructuralByteNEON(const char* buffer, uint64_t position,
+    uint64_t bufferSize, const CSVOption& option, bool inQuotedField) {
+    const auto quote = vdupq_n_u8(option.quoteChar);
+    const auto escape = vdupq_n_u8(option.escapeChar);
+    const auto delimiter = vdupq_n_u8(option.delimiter);
+    const auto carriageReturn = vdupq_n_u8('\r');
+    const auto newline = vdupq_n_u8('\n');
+
+    alignas(16) uint8_t matches[16];
+    for (; position + 16 <= bufferSize; position += 16) {
+        const auto bytes = vld1q_u8(reinterpret_cast<const uint8_t*>(buffer + position));
+        auto mask = vorrq_u8(vceqq_u8(bytes, carriageReturn), vceqq_u8(bytes, newline));
+        if (inQuotedField) {
+            mask = vorrq_u8(mask, vorrq_u8(vceqq_u8(bytes, quote), vceqq_u8(bytes, escape)));
+        } else {
+            mask = vorrq_u8(mask, vceqq_u8(bytes, delimiter));
+        }
+        if (vmaxvq_u8(mask) != 0) {
+            vst1q_u8(matches, mask);
+            return findFirstNeonMatch(position, matches);
+        }
+    }
+    return findNextCSVStructuralByteScalar(buffer, position, bufferSize, option, inQuotedField);
+}
+#endif
+
+static uint64_t findNextCSVStructuralByte(const char* buffer, uint64_t position,
+    uint64_t bufferSize, const CSVOption& option, bool inQuotedField) {
+#if defined(__x86_64__) || defined(_M_X64)
+    static const bool avx2 = hasAVX2();
+    if (avx2) {
+        return findNextCSVStructuralByteAVX2(buffer, position, bufferSize, option, inQuotedField);
+    }
+#endif
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+    return findNextCSVStructuralByteNEON(buffer, position, bufferSize, option, inQuotedField);
+#else
+    return findNextCSVStructuralByteScalar(buffer, position, bufferSize, option, inQuotedField);
+#endif
+}
+
+template<typename Driver>
+BaseCSVReader::parse_result_t BaseCSVReader::parseCSVStructural(Driver& driver) {
+    DASSERT(nullptr != errorHandler);
+    DASSERT(supportsStructuralParser());
+
+    curRowIdx = 0;
+    numErrors = 0;
+
+    while (true) {
+        column_id_t column = 0;
+        auto start = position.load();
+        bool hasQuotes = false;
+        std::vector<uint64_t> escapePositions;
+        lineContext.setNewLine(getFileOffset());
+
+        if (!maybeReadBuffer(&start)) {
+            return {curRowIdx, numErrors};
+        }
+
+        goto value_start;
+    value_start:
+        if (buffer[position] == option.quoteChar) {
+            start = position + 1;
+            hasQuotes = true;
+            ++position;
+            goto in_quotes;
+        }
+        start = position;
+        hasQuotes = false;
+        goto normal;
+    normal:
+        do {
+            position = findNextCSVStructuralByte(buffer.get(), position, bufferSize, option, false);
+            if (position >= bufferSize) {
+                continue;
+            }
+            if (buffer[position] == option.delimiter) {
+                goto add_value;
+            }
+            if (isNewLine(buffer[position])) {
+                goto add_row;
+            }
+        } while (readBuffer(&start));
+        goto final_state;
+    add_value:
+        DASSERT(buffer[position] == option.delimiter ||
+                buffer[position] == CopyConstants::DEFAULT_CSV_LIST_END_CHAR);
+        if (!addValue(driver, curRowIdx, column,
+                std::string_view(buffer.get() + start, position - start - hasQuotes),
+                escapePositions)) {
+            goto ignore_error;
+        }
+        column++;
+        ++position;
+        start = position;
+        if (!maybeReadBuffer(&start)) {
+            goto final_state;
+        }
+        goto value_start;
+    add_row: {
+        DASSERT(isNewLine(buffer[position]));
+        lineContext.setEndOfLine(getFileOffset());
+        bool isCarriageReturn = buffer[position] == '\r';
+        if (!addValue(driver, curRowIdx, column,
+                std::string_view(buffer.get() + start, position - start - hasQuotes),
+                escapePositions)) {
+            goto ignore_error;
+        }
+        column++;
+
+        curRowIdx += driver.addRow(curRowIdx, column,
+            getOptionalWarningData<Driver>(columnInfo, option, getWarningSourceData()));
+
+        column = 0;
+        position++;
+        start = position;
+        lineContext.setNewLine(getFileOffset());
+        if (!maybeReadBuffer(&start)) {
+            goto final_state;
+        }
+        if (isCarriageReturn) {
+            goto carriage_return;
+        }
+        if (driver.done(curRowIdx)) {
+            return {curRowIdx, numErrors};
+        }
+        goto value_start;
+    }
+    in_quotes:
+        do {
+            position = findNextCSVStructuralByte(buffer.get(), position, bufferSize, option, true);
+            if (position >= bufferSize) {
+                continue;
+            }
+            if (buffer[position] == option.quoteChar) {
+                goto unquote;
+            }
+            if (buffer[position] == option.escapeChar) {
+                escapePositions.push_back(position - start);
+                goto handle_escape;
+            }
+            if (isNewLine(buffer[position])) {
+                if (!handleQuotedNewline()) {
+                    goto ignore_error;
+                }
+                ++position;
+                goto in_quotes;
+            }
+        } while (readBuffer(&start));
+        lineContext.setEndOfLine(getFileOffset());
+        handleCopyException("unterminated quotes.");
+        goto ignore_error;
+    unquote:
+        DASSERT(hasQuotes && buffer[position] == option.quoteChar);
+        position++;
+        if (!maybeReadBuffer(&start)) {
+            goto final_state;
+        }
+        if (buffer[position] == option.quoteChar) {
+            escapePositions.push_back(position - start);
+            ++position;
+            goto in_quotes;
+        }
+        if (buffer[position] == option.delimiter ||
+            buffer[position] == CopyConstants::DEFAULT_CSV_LIST_END_CHAR) {
+            goto add_value;
+        }
+        if (isNewLine(buffer[position])) {
+            goto add_row;
+        }
+        handleCopyException("quote should be followed by "
+                            "end of file, end of value, end of "
+                            "row or another quote.");
+        goto ignore_error;
+    handle_escape:
+        position++;
+        if (!maybeReadBuffer(&start)) {
+            lineContext.setEndOfLine(getFileOffset());
+            handleCopyException("escape at end of file.");
+            goto ignore_error;
+        }
+        if (buffer[position] != option.quoteChar && buffer[position] != option.escapeChar) {
+            ++position;
+            handleCopyException("neither QUOTE nor ESCAPE is proceeded by ESCAPE.");
+            goto ignore_error;
+        }
+        ++position;
+        goto in_quotes;
+    carriage_return:
+        if (buffer[position] == '\n') {
+            start = ++position;
+            if (!maybeReadBuffer(&start)) {
+                goto final_state;
+            }
+        }
+        if (driver.done(curRowIdx)) {
+            return {curRowIdx, numErrors};
+        }
+        goto value_start;
+    final_state:
+        lineContext.setEndOfLine(getFileOffset());
+        if (position > start) {
+            if (!addValue(driver, curRowIdx, column,
+                    std::string_view(buffer.get() + start, position - start - hasQuotes),
+                    escapePositions)) {
                 return {curRowIdx, numErrors};
             }
             column++;
@@ -533,7 +828,6 @@ BaseCSVReader::parse_result_t BaseCSVReader::parseCSV(Driver& driver) {
         }
         return {curRowIdx, numErrors};
     ignore_error:
-        // we skip the current row then restart the state machine to continue parsing
         skipCurrentLine();
         if (driver.done(curRowIdx)) {
             return {curRowIdx, numErrors};
@@ -577,6 +871,8 @@ common::idx_t BaseCSVReader::getFileIdxFunc(const CopyFromFileError& error) {
 }
 
 template BaseCSVReader::parse_result_t BaseCSVReader::parseCSV<ParallelParsingDriver>(
+    ParallelParsingDriver&);
+template BaseCSVReader::parse_result_t BaseCSVReader::parseCSVStructural<ParallelParsingDriver>(
     ParallelParsingDriver&);
 template BaseCSVReader::parse_result_t BaseCSVReader::parseCSV<SerialParsingDriver>(
     SerialParsingDriver&);
