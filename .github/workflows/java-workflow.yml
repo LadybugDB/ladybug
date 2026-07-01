@@ -41,12 +41,12 @@ jobs:
     env:
       LBUG_LINUX_VARIANT: compat
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory '*'
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
           java-version: '21'
@@ -90,7 +90,7 @@ jobs:
           export EXTRA_CMAKE_FLAGS="-DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_API_USE_PRECOMPILED_LIB=TRUE -DLBUG_API_PRECOMPILED_LIB_PATH=${LBUG_JAVA_PRECOMPILED_LIB_PATH}"
           make GEN=Ninja java
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: java-lib-linux-x86_64
           path: tools/java_api/build/liblbug_java_native*
@@ -108,12 +108,12 @@ jobs:
     env:
       LBUG_LINUX_VARIANT: compat
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory '*'
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
           java-version: '21'
@@ -157,7 +157,7 @@ jobs:
           export EXTRA_CMAKE_FLAGS="-DBUILD_LBUG=FALSE -DBUILD_SHELL=FALSE -DLBUG_API_USE_PRECOMPILED_LIB=TRUE -DLBUG_API_PRECOMPILED_LIB_PATH=${LBUG_JAVA_PRECOMPILED_LIB_PATH}"
           make GEN=Ninja java
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: java-lib-linux-aarch64
           path: tools/java_api/build/liblbug_java_native*
@@ -168,9 +168,9 @@ jobs:
       LBUG_JAVA_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
       LBUG_JAVA_PRECOMPILED_LIB_PATH: ${{ github.workspace }}/precompiled-liblbug/liblbug.a
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
           java-version: '21'
@@ -208,7 +208,7 @@ jobs:
         run: |
           arch -arm64 make GEN=Ninja java
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: java-lib-osx-arm64
           path: tools/java_api/build/liblbug_java_native*
@@ -219,9 +219,9 @@ jobs:
       LBUG_JAVA_PRECOMPILED_DIR: ${{ github.workspace }}/precompiled-liblbug
       LBUG_JAVA_PRECOMPILED_LIB_PATH: ${{ github.workspace }}/precompiled-liblbug/lbug.lib
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
           java-version: '21'
@@ -265,7 +265,7 @@ jobs:
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           make GEN=Ninja java
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: java-lib-win-x86_64
           path: tools/java_api/build/liblbug_java_native*

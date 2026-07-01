@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'schedule' || github.event.inputs.isNightly == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install uv
         run: python3 -m pip install uv
@@ -77,7 +77,7 @@ jobs:
         working-directory: scripts
       
       - name: Upload version
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: version
           path: scripts/version.txt
@@ -107,37 +107,37 @@ jobs:
     needs: build-wheels
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: macos-wheels-arm64
           path: dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: macos-wheels-x86_64
           path: dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: manylinux_2_28-wheels-x86_64
           path: dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: manylinux_2_28-wheels-aarch64
           path: dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: windows-wheels-amd64
           path: dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: windows-wheels-arm64
           path: dist
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-sdist
           path: dist
@@ -151,7 +151,7 @@ jobs:
         working-directory: dist
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lbug-deploy-wheels
           path: dist/*
@@ -182,7 +182,7 @@ jobs:
       LBUG_SOURCE_DIR: ${{ github.workspace }}
       LBUG_RUST_BUILD_FROM_SOURCE: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/rust_api
@@ -216,7 +216,7 @@ jobs:
         working-directory: tools/rust_api
 
       - name: Upload crate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lbug-deploy-crate
           path: tools/rust_api/target/package/*.crate
@@ -243,9 +243,9 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
           java-version: '21'
@@ -264,22 +264,22 @@ jobs:
           python3 update-nightly-build-version.py
         working-directory: scripts
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: java-lib-osx-arm64
           path: tools/java_api/src/main/resources
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: java-lib-linux-aarch64
           path: tools/java_api/src/main/resources
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: java-lib-linux-x86_64
           path: tools/java_api/src/main/resources
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: java-lib-win-x86_64
           path: tools/java_api/src/main/resources
@@ -291,7 +291,7 @@ jobs:
 
       - name: Upload Java test diagnostics
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: java-test-diagnostics
           path: |
@@ -300,7 +300,7 @@ jobs:
             tools/java_api/build/hs_err_pid*.log
 
       - name: Upload Java JAR
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lbug-java-multiplatform-jar
           path: tools/java_api/build/libs/lbug*.jar
@@ -315,7 +315,7 @@ jobs:
             mv lbug-java-bundle.zip $ORIGINAL_PWD
       
       - name: Upload Maven Central bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lbug-java-multiplatform-bundle
           path: tools/java_api/lbug-java-bundle.zip
@@ -370,7 +370,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/nodejs_api
@@ -389,32 +389,32 @@ jobs:
       - name: Create prebuilt folder
         run: mkdir -p tools/nodejs_api/prebuilt
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: mac-nodejs-module-arm64
           path: tools/nodejs_api/prebuilt
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: mac-nodejs-module-x64
           path: tools/nodejs_api/prebuilt
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: linux-nodejs-module-x86_64
           path: tools/nodejs_api/prebuilt
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: linux-nodejs-module-aarch64
           path: tools/nodejs_api/prebuilt
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: windows-nodejs-module
           path: tools/nodejs_api/prebuilt
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
@@ -436,13 +436,13 @@ jobs:
         working-directory: tools/nodejs_api
 
       - name: Upload main tarball
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lbug-deploy-nodejs
           path: tools/nodejs_api/lbug-source.tar.gz
 
       - name: Upload per-platform tarballs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lbug-deploy-nodejs-platform-packages
           path: tools/nodejs_api/lbug-*.tar.gz
@@ -509,17 +509,17 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/wasm
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: lbug-deploy-wasm
           path: tools/wasm
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
@@ -576,7 +576,7 @@ jobs:
     outputs:
       image: ${{ steps.image.outputs.image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Select builder image tag
         id: image
