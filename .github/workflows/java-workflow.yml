@@ -46,6 +46,11 @@ jobs:
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory '*'
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Set precompiled lib path
         run: |
           echo "LBUG_JAVA_PRECOMPILED_DIR=${GITHUB_WORKSPACE}/precompiled-liblbug" >> "$GITHUB_ENV"
@@ -108,6 +113,11 @@ jobs:
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory '*'
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Set precompiled lib path
         run: |
           echo "LBUG_JAVA_PRECOMPILED_DIR=${GITHUB_WORKSPACE}/precompiled-liblbug" >> "$GITHUB_ENV"
@@ -160,6 +170,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Update submodules
         run: git submodule update --init --recursive tools/java_api
 
@@ -191,7 +206,7 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: 13.3
           ARCHFLAGS: "-arch arm64"
         run: |
-          arch -arm64 env JAVA_HOME=$(/usr/libexec/java_home) make GEN=Ninja java
+          arch -arm64 make GEN=Ninja java
 
       - uses: actions/upload-artifact@v4
         with:
@@ -205,6 +220,11 @@ jobs:
       LBUG_JAVA_PRECOMPILED_LIB_PATH: ${{ github.workspace }}/precompiled-liblbug/lbug.lib
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
 
       - name: Update submodules
         run: git submodule update --init --recursive tools/java_api
