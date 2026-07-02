@@ -1,6 +1,8 @@
 #include "extension/extension.h"
 
+#include <array>
 #include <cstdlib>
+#include <filesystem>
 
 #include "common/exception/io.h"
 #include "common/string_utils.h"
@@ -256,6 +258,51 @@ std::optional<ExtensionProxyConfig> ExtensionUtils::getProxyConfigForURL(const s
         proxyURL = getProxyEnv({"LADYBUG_ALL_PROXY", "all_proxy", "ALL_PROXY"});
     }
     return proxyURL.empty() ? std::nullopt : parseProxyConfig(proxyURL);
+}
+
+std::optional<ExtensionCaCertPath> ExtensionUtils::getCaCertPath() {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+
+    // 1. Respect SSL_CERT_FILE environment variable (OpenSSL standard).
+    if (const char* env = std::getenv("SSL_CERT_FILE")) { // NOLINT(*-mt-unsafe)
+        if (fs::exists(env, ec) && !fs::is_empty(env, ec)) {
+            return ExtensionCaCertPath{env, ""};
+        }
+    }
+    // 2. Respect SSL_CERT_DIR environment variable (OpenSSL standard).
+    if (const char* env = std::getenv("SSL_CERT_DIR")) { // NOLINT(*-mt-unsafe)
+        if (fs::is_directory(env, ec)) {
+            return ExtensionCaCertPath{"", env};
+        }
+    }
+    // 3. Probe well-known CA bundle file locations by distro.
+    constexpr std::array<const char*, 6> wellKnownFiles = {
+        "/etc/ssl/certs/ca-certificates.crt", // Debian / Ubuntu
+        "/etc/pki/tls/certs/ca-bundle.crt",   // RHEL / Fedora / CentOS
+        "/etc/ssl/ca-bundle.pem",             // openSUSE
+        "/etc/ssl/certs/ca-bundle.crt",       // Alpine / Arch (alt)
+        "/etc/pki/tls/cert.pem",              // RHEL / Fedora (alternate)
+        "/etc/ssl/cert.pem",                  // macOS (Homebrew openssl), some BSDs
+    };
+    for (const auto* path : wellKnownFiles) {
+        if (fs::exists(path, ec) && !fs::is_empty(path, ec)) {
+            return ExtensionCaCertPath{path, ""};
+        }
+    }
+    // 4. Probe well-known CApath directories (Debian hashed-symlink layout).
+    constexpr std::array<const char*, 2> wellKnownDirs = {
+        "/etc/ssl/certs",     // Debian / Ubuntu (hashed symlinks)
+        "/etc/pki/tls/certs", // RHEL (fallback, mixed)
+    };
+    for (const auto* path : wellKnownDirs) {
+        if (fs::is_directory(path, ec)) {
+            return ExtensionCaCertPath{"", path};
+        }
+    }
+    // No CA bundle found - let OpenSSL fall back to its compile-time defaults
+    // (SSL_CTX_set_default_verify_paths on Linux; Windows cert store on Windows).
+    return std::nullopt;
 }
 
 std::string ExtensionUtils::getExtensionFileName(const std::string& name) {

@@ -22,8 +22,19 @@ void applyProxyConfig(httplib::Client& client, const ExtensionRepoInfo& repoInfo
     }
 }
 
+void configureSSLCerts(httplib::Client& client, const ExtensionRepoInfo& repoInfo) {
+    // Only relevant for https - plain http/file clients have no SSL context.
+    if (repoInfo.hostURL.rfind("https://", 0) != 0) {
+        return;
+    }
+    if (auto caCertPath = ExtensionUtils::getCaCertPath()) {
+        client.set_ca_cert_path(caCertPath->caCertFilePath, caCertPath->caCertDirPath);
+    }
+}
+
 httplib::Client createExtensionDownloadClient(const ExtensionRepoInfo& repoInfo) {
     httplib::Client client(repoInfo.hostURL.c_str());
+    configureSSLCerts(client, repoInfo);
     applyProxyConfig(client, repoInfo);
     return client;
 }

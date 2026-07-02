@@ -49,6 +49,11 @@ struct ExtensionProxyConfig {
     std::string password;
 };
 
+struct ExtensionCaCertPath {
+    std::string caCertFilePath;
+    std::string caCertDirPath;
+};
+
 enum class ExtensionSource : uint8_t { OFFICIAL, USER, STATIC_LINKED };
 
 struct ExtensionSourceUtils {
@@ -99,6 +104,8 @@ struct LBUG_API ExtensionUtils {
     static std::optional<ExtensionProxyConfig> getProxyConfigForURL(const std::string& url);
 
     static std::optional<ExtensionProxyConfig> parseProxyConfig(const std::string& proxyURL);
+
+    static std::optional<ExtensionCaCertPath> getCaCertPath();
 
     static std::string getExtensionFileName(const std::string& name);
 
