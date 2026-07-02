@@ -508,7 +508,7 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
             // STRING VIEW
             return scanArrowArrayBLOBView(array, outputVector, mask, srcOffset, dstOffset, count);
         default:
-            UNREACHABLE_CODE;
+            throw RuntimeException("Unsupported arrow view type: " + std::string(arrowType));
         }
     case 'd': {
         switch (outputVector.dataType.getPhysicalType()) {
@@ -525,7 +525,9 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
             return scanArrowArrayFixedSizePrimitive<int128_t>(array, outputVector, mask, srcOffset,
                 dstOffset, count);
         default:
-            UNREACHABLE_CODE;
+            throw RuntimeException(
+                "Invalid Output Type: " +
+                PhysicalTypeUtils::toString(outputVector.dataType.getPhysicalType()));
         }
     }
     case 'w':
@@ -547,7 +549,8 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
             }
         case 't':
             // TODO pure time type
-            UNREACHABLE_CODE;
+            throw RuntimeException(
+                "Pure time type is not yet supported: " + std::string(arrowType));
         case 's':
             // TIMESTAMP
             return scanArrowArrayFixedSizePrimitive<int64_t>(array, outputVector, mask, srcOffset,
@@ -569,7 +572,7 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
                 return scanArrowArrayDurationScaledDown(array, outputVector, mask, 1000, srcOffset,
                     dstOffset, count);
             default:
-                UNREACHABLE_CODE;
+                throw RuntimeException("Unsupported duration sub-type: " + std::string(arrowType));
             }
         case 'i':
             // INTERVAL
@@ -584,10 +587,10 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
                 return scanArrowArrayMonthDayNanoInterval(array, outputVector, mask, srcOffset,
                     dstOffset, count);
             default:
-                UNREACHABLE_CODE;
+                throw RuntimeException("Unsupported interval sub-type: " + std::string(arrowType));
             }
         default:
-            UNREACHABLE_CODE;
+            throw RuntimeException("Unsupported temporal sub-type: " + std::string(arrowType));
         }
     case '+':
         switch (arrowType[1]) {
@@ -641,13 +644,13 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
                     dstOffset, count);
                 // LONG LIST VIEW
             default:
-                UNREACHABLE_CODE;
+                throw RuntimeException("Unsupported list view sub-type: " + std::string(arrowType));
             }
         default:
-            UNREACHABLE_CODE;
+            throw RuntimeException("Unsupported nested type sub-format: " + std::string(arrowType));
         }
     default:
-        UNREACHABLE_CODE;
+        throw RuntimeException("Unsupported arrow array type: " + std::string(arrowType));
     }
 }
 

@@ -628,7 +628,7 @@ struct LBUG_API UnionType {
     static union_field_idx_t getFieldIdx(const LogicalType& type, const std::string& key);
 };
 
-struct PhysicalTypeUtils {
+struct LBUG_API PhysicalTypeUtils {
     static std::string toString(PhysicalTypeID physicalType);
     static uint32_t getFixedTypeSize(PhysicalTypeID physicalType);
 };
