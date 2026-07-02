@@ -3,6 +3,7 @@ add_lbug_test(types_test
         uint128_test.cpp
         date_test.cpp
         extension_proxy_test.cpp
+        extension_ca_cert_test.cpp
         interval_test.cpp
         null_mask_test.cpp
         string_test.cpp
