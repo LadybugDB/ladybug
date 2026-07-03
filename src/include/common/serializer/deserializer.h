@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <map>
@@ -28,10 +29,25 @@ public:
     template<typename T>
         requires std::is_trivially_destructible_v<T> || std::is_same_v<std::string, T>
     void deserializeValue(T& value) {
-        reader->read(reinterpret_cast<uint8_t*>(&value), sizeof(T));
+        this->read(reinterpret_cast<uint8_t*>(&value), sizeof(T));
     }
 
-    void read(uint8_t* data, uint64_t size) const { reader->read(data, size); }
+    void read(uint8_t* data, uint64_t size) const {
+        if (readLimit.has_value()) {
+            const auto remaining = *readLimit - getReadOffset();
+            if (size > remaining) {
+                // Don't read past the declared record boundary.
+                // Read what's available and zero-fill the rest so that fields added
+                // in a newer format default to zero when reading older WAL records.
+                if (remaining > 0) {
+                    reader->read(data, remaining);
+                }
+                std::memset(data + remaining, 0, size - remaining);
+                return;
+            }
+        }
+        reader->read(data, size);
+    }
 
     Reader* getReader() const { return reader.get(); }
 

@@ -188,6 +188,41 @@ TEST_F(WalTest, WALRecordDeserializeSkipsUnknownTrailingBytes) {
     EXPECT_TRUE(deserializer.finished());
 }
 
+// Simulates the scenario where the declared record length is smaller than the actual serialized
+// record. This happens when an older writer (e.g. v42) wrote a WAL record with fewer fields than
+// the current reader (e.g. v43) expects. The deserializer must gracefully handle the size mismatch
+// by truncating reads at the declared record boundary and zero-filling any remaining bytes in the
+// new field. This allows silent forward-compatible migration without corrupting the next record.
+TEST_F(WalTest, WALRecordDeserializeHandlesSizeMismatch) {
+    auto recordBuffer = std::make_shared<BufferWriter>();
+    Serializer recordSerializer{recordBuffer};
+    lbug::storage::CopyTableRecord record{123};
+    record.serialize(recordSerializer);
+    recordSerializer.write<uint64_t>(456);
+
+    // Declare a record length one byte shorter than the actual serialized size, simulating
+    // an older version that wrote a smaller struct.
+    const auto realRecordSize = recordBuffer->getSize();
+    ASSERT_GT(realRecordSize, 1u);
+    const auto truncatedLength = realRecordSize - 1;
+
+    auto walBuffer = std::make_shared<BufferWriter>();
+    Serializer walSerializer{walBuffer};
+    walSerializer.write(truncatedLength);
+    walSerializer.write(recordBuffer->getBlobData(), realRecordSize);
+
+    auto walData = walBuffer->getData();
+    Deserializer deserializer{std::make_unique<BufferReader>(walData.data.get(), walData.size)};
+    // Should NOT throw: the deserializer truncates reads at the declared record boundary
+    // and zero-fills the rest, so the next record in the stream starts at the correct offset.
+    auto deserialized =
+        lbug::storage::WALRecord::deserialize(deserializer, *conn->getClientContext());
+    ASSERT_EQ(deserialized->type, lbug::storage::WALRecordType::COPY_TABLE_RECORD);
+    EXPECT_EQ(deserialized->constCast<lbug::storage::CopyTableRecord>().tableID, 123);
+    // The stream should be positioned at the declared record boundary, not past it.
+    EXPECT_FALSE(deserializer.finished());
+}
+
 TEST_F(WalTest, NoWALFile) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
