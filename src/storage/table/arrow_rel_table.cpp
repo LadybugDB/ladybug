@@ -674,6 +674,21 @@ std::vector<std::pair<offset_t, row_idx_t>> ArrowRelTable::getAllDegreeEntries(
     return result;
 }
 
+row_idx_t ArrowRelTable::getDegreeForOffsetInternal(
+    [[maybe_unused]] const transaction::Transaction* transaction, RelDataDirection direction,
+    offset_t nodeOffset) const {
+    if (layout != ArrowRelTableLayout::CSR || direction == RelDataDirection::BWD ||
+        nodeOffset + 1 >= totalIndptrRows) {
+        return 0;
+    }
+    offset_t start = INVALID_OFFSET;
+    offset_t end = INVALID_OFFSET;
+    if (!readIndptr(nodeOffset, start) || !readIndptr(nodeOffset + 1, end) || end <= start) {
+        return 0;
+    }
+    return end - start;
+}
+
 std::vector<std::pair<offset_t, row_idx_t>> ArrowRelTable::getTopKDegreeEntries(
     [[maybe_unused]] const transaction::Transaction* transaction, RelDataDirection direction,
     idx_t k) const {

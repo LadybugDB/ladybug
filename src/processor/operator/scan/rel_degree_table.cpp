@@ -70,12 +70,7 @@ bool RelDegreeTable::getNextTuplesInternal(ExecutionContext* context) {
     if (mode == planner::RelDegreeTableMode::OFFSET_COUNT) {
         row_idx_t count = 0;
         for (auto* relTable : relTables) {
-            for (auto& [offset, degree] : relTable->getDegreeEntries(transaction, direction)) {
-                if (offset == nodeOffset) {
-                    count += degree;
-                    break;
-                }
-            }
+            count += relTable->getDegreeForOffset(transaction, direction, nodeOffset);
         }
         degreeVector->state->getSelVectorUnsafe().setToUnfiltered(1);
         degreeVector->setValue<int64_t>(0, static_cast<int64_t>(count));

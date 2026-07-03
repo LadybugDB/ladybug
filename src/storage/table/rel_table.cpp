@@ -732,6 +732,38 @@ row_idx_t RelTable::getNumActiveBoundNodes(const Transaction* transaction,
     return getDegreeEntries(transaction, direction).size();
 }
 
+row_idx_t RelTable::getDegreeForOffset(const Transaction* transaction, RelDataDirection direction,
+    offset_t nodeOffset) {
+    const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(nodeOffset);
+    const auto offsetInGroup = nodeOffset - StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
+    auto* relTableData = getDirectedTableData(direction);
+    if (nodeGroupIdx >= relTableData->getNumNodeGroups()) {
+        return 0;
+    }
+    auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx);
+    if (!nodeGroup) {
+        return 0;
+    }
+    auto& csrNodeGroup = nodeGroup->cast<CSRNodeGroup>();
+    row_idx_t count = 0;
+    if (auto* persistentGroup = csrNodeGroup.getPersistentChunkedGroup()) {
+        count +=
+            persistentGroup->cast<ChunkedCSRNodeGroup>().getCSRHeader().getCSRLength(offsetInGroup);
+    }
+    if (const auto* csrIndex = csrNodeGroup.getCSRIndex()) {
+        count += csrIndex->getNumRows(offsetInGroup);
+    }
+    if (transaction->isWriteTransaction()) {
+        if (auto* localTable = transaction->getLocalStorage()->getLocalTable(tableID)) {
+            auto& localCSRIndex = localTable->cast<LocalRelTable>().getCSRIndex(direction);
+            if (auto it = localCSRIndex.find(nodeOffset); it != localCSRIndex.end()) {
+                count += it->second.size();
+            }
+        }
+    }
+    return count;
+}
+
 void RelTable::serialize(Serializer& ser) const {
     ser.writeDebuggingInfo("next_rel_offset");
     ser.write<offset_t>(nextRelOffset);
