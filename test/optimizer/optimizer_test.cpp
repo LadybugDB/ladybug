@@ -366,6 +366,54 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
                             "CREATE (a)-[:opt_degree_follows]->(b);")
                     ->isSuccess());
 
+    auto qSortedOffset =
+        "MATCH (a:opt_degree_user)-[:opt_degree_follows]->(b) WHERE a.id = 0 RETURN count(*);";
+    auto planSortedOffsetBeforeAlter = getRoot(qSortedOffset);
+    ASSERT_FALSE(hasOperatorType(planSortedOffsetBeforeAlter->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    ASSERT_TRUE(conn->query("ALTER TABLE opt_degree_user SET SORTED BY (id ASC);")->isSuccess());
+    auto planSortedOffset = getRoot(qSortedOffset);
+    ASSERT_TRUE(hasOperatorType(planSortedOffset->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto resultSortedOffset = conn->query(qSortedOffset);
+    ASSERT_TRUE(resultSortedOffset->isSuccess());
+    ASSERT_EQ(resultSortedOffset->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    auto resultSortedOffsetMissing = conn->query(
+        "MATCH (a:opt_degree_user)-[:opt_degree_follows]->(b) WHERE a.id = 99 RETURN count(*);");
+    ASSERT_TRUE(resultSortedOffsetMissing->isSuccess());
+    ASSERT_EQ(resultSortedOffsetMissing->getNext()->getValue(0)->getValue<int64_t>(), 0);
+
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE opt_sorted_user(id INT64, kind INT64, "
+                            "PRIMARY KEY(id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE opt_sorted_follows(FROM opt_sorted_user TO "
+                            "opt_sorted_user);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_sorted_user {id: 0, kind: 7});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_sorted_user {id: 1, kind: 6});")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_sorted_user), (b:opt_sorted_user) "
+                            "WHERE a.id = 0 AND b.id = 1 "
+                            "CREATE (a)-[:opt_sorted_follows]->(b);")
+                    ->isSuccess());
+    auto qCompositeSortedOffset =
+        "MATCH (a:opt_sorted_user)-[:opt_sorted_follows]->(b) WHERE a.id = 0 RETURN count(*);";
+    ASSERT_TRUE(
+        conn->query("ALTER TABLE opt_sorted_user SET SORTED BY (kind DESC, id ASC);")->isSuccess());
+    auto planCompositeNonLeadingPK = getRoot(qCompositeSortedOffset);
+    ASSERT_FALSE(hasOperatorType(planCompositeNonLeadingPK->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto resultCompositeNonLeadingPK = conn->query(qCompositeSortedOffset);
+    ASSERT_TRUE(resultCompositeNonLeadingPK->isSuccess());
+    ASSERT_EQ(resultCompositeNonLeadingPK->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(
+        conn->query("ALTER TABLE opt_sorted_user SET SORTED BY (id ASC, kind DESC);")->isSuccess());
+    auto planCompositeLeadingPK = getRoot(qCompositeSortedOffset);
+    ASSERT_TRUE(hasOperatorType(planCompositeLeadingPK->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto resultCompositeLeadingPK = conn->query(qCompositeSortedOffset);
+    ASSERT_TRUE(resultCompositeLeadingPK->isSuccess());
+    ASSERT_EQ(resultCompositeLeadingPK->getNext()->getValue(0)->getValue<int64_t>(), 1);
+
     auto q8 = "MATCH (u:opt_degree_user)-[:opt_degree_follows]->(v) RETURN count(DISTINCT u.id);";
     auto plan8 = getRoot(q8);
     ASSERT_TRUE(hasOperatorType(plan8->getLastOperator().get(),
