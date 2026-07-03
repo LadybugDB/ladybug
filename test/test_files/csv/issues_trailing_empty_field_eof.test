@@ -1,0 +1,19 @@
+-DATASET CSV empty
+
+--
+
+# Regression test for the fix in ffce93a49c306806a546b3cd368bc50849c87688
+# "fix(csv): handle trailing empty field at EOF without newline"
+#
+# When a CSV file ends with a row like "a,b," (no trailing newline, last field
+# empty), the parser used to drop the empty field, causing "expected N values
+# per row, but got N-1". The fix adds an else-if branch in final_state to emit
+# the empty value when column > 0.
+-CASE TrailingEmptyFieldAtEOF
+-STATEMENT CREATE NODE TABLE t(A STRING, B STRING, C STRING, PRIMARY KEY(A));
+---- ok
+-STATEMENT COPY t FROM "${LBUG_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/trailing-empty-field-eof.csv";
+---- ok
+-STATEMENT MATCH (t:t) RETURN t.*;
+---- 1
+a|b|
