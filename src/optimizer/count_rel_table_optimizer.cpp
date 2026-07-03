@@ -2,15 +2,18 @@
 
 #include "binder/expression/aggregate_function_expression.h"
 #include "binder/expression/expression_util.h"
+#include "binder/expression/literal_expression.h"
 #include "binder/expression/node_expression.h"
 #include "binder/expression/property_expression.h"
 #include "binder/expression/rel_expression.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_id_pair.h"
 #include "function/aggregate/count.h"
 #include "function/aggregate/count_star.h"
 #include "main/client_context.h"
 #include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/logical_aggregate.h"
+#include "planner/operator/logical_filter.h"
 #include "planner/operator/logical_order_by.h"
 #include "planner/operator/logical_projection.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
@@ -243,6 +246,9 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
     if (auto rewritten = tryRewriteActiveBoundCount(op); rewritten != op) {
         return rewritten;
     }
+    if (auto rewritten = tryRewriteSortedOffsetCount(op); rewritten != op) {
+        return rewritten;
+    }
     if (!isSimpleCount(op.get())) {
         return op;
     }
@@ -316,6 +322,168 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
     countRelTable->computeFlatSchema();
 
     return countRelTable;
+}
+
+static LogicalOperator* skipProjections(LogicalOperator* op) {
+    while (op->getOperatorType() == LogicalOperatorType::PROJECTION) {
+        op = op->getChild(0).get();
+    }
+    return op;
+}
+
+static bool isPropertyForNodePrimaryKey(const Expression& expression, const NodeExpression& node) {
+    if (expression.expressionType != ExpressionType::PROPERTY || node.getNumEntries() != 1) {
+        return false;
+    }
+    auto& property = expression.constCast<PropertyExpression>();
+    return property.getVariableName() == node.getUniqueName() &&
+           property.isPrimaryKey(node.getTableIDs()[0]);
+}
+
+static bool literalToOffset(const Expression& expression, offset_t& offset) {
+    if (expression.expressionType != ExpressionType::LITERAL) {
+        return false;
+    }
+    auto value = expression.constCast<LiteralExpression>().getValue();
+    if (value.isNull()) {
+        return false;
+    }
+    switch (value.getDataType().getPhysicalType()) {
+    case PhysicalTypeID::INT8: {
+        auto signedValue = value.getValue<int8_t>();
+        if (signedValue < 0) {
+            return false;
+        }
+        offset = static_cast<offset_t>(signedValue);
+        return true;
+    }
+    case PhysicalTypeID::INT16: {
+        auto signedValue = value.getValue<int16_t>();
+        if (signedValue < 0) {
+            return false;
+        }
+        offset = static_cast<offset_t>(signedValue);
+        return true;
+    }
+    case PhysicalTypeID::INT32: {
+        auto signedValue = value.getValue<int32_t>();
+        if (signedValue < 0) {
+            return false;
+        }
+        offset = static_cast<offset_t>(signedValue);
+        return true;
+    }
+    case PhysicalTypeID::INT64: {
+        auto signedValue = value.getValue<int64_t>();
+        if (signedValue < 0) {
+            return false;
+        }
+        offset = static_cast<offset_t>(signedValue);
+        return true;
+    }
+    case PhysicalTypeID::UINT8: {
+        offset = static_cast<offset_t>(value.getValue<uint8_t>());
+        return true;
+    }
+    case PhysicalTypeID::UINT16: {
+        offset = static_cast<offset_t>(value.getValue<uint16_t>());
+        return true;
+    }
+    case PhysicalTypeID::UINT32: {
+        offset = static_cast<offset_t>(value.getValue<uint32_t>());
+        return true;
+    }
+    case PhysicalTypeID::UINT64: {
+        offset = static_cast<offset_t>(value.getValue<uint64_t>());
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+static bool getPrimaryKeyOffsetPredicate(const Expression& predicate, const NodeExpression& node,
+    offset_t& offset) {
+    if (predicate.expressionType != ExpressionType::EQUALS || predicate.getNumChildren() != 2) {
+        return false;
+    }
+    auto lhs = predicate.getChild(0);
+    auto rhs = predicate.getChild(1);
+    if (isPropertyForNodePrimaryKey(*lhs, node)) {
+        return literalToOffset(*rhs, offset);
+    }
+    if (isPropertyForNodePrimaryKey(*rhs, node)) {
+        return literalToOffset(*lhs, offset);
+    }
+    return false;
+}
+
+std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteSortedOffsetCount(
+    std::shared_ptr<LogicalOperator> op) {
+    if (!isSimpleCount(op.get())) {
+        return op;
+    }
+    auto* current = skipProjections(op->getChild(0).get());
+    const LogicalFilter* filter = nullptr;
+    if (current->getOperatorType() == LogicalOperatorType::FILTER) {
+        filter = current->ptrCast<LogicalFilter>();
+        current = skipProjections(current->getChild(0).get());
+    }
+    if (current->getOperatorType() != LogicalOperatorType::EXTEND) {
+        return op;
+    }
+    auto& extend = current->constCast<LogicalExtend>();
+    auto boundNode = extend.getBoundNode();
+    if (boundNode->getNumEntries() != 1 || extend.getDirection() == ExtendDirection::BOTH ||
+        !extend.getProperties().empty()) {
+        return op;
+    }
+    auto tableID = boundNode->getTableIDs()[0];
+    auto* nodeEntry = boundNode->getEntry(0)->ptrCast<NodeTableCatalogEntry>();
+    if (!nodeEntry->isLeadingSortPrimaryKeyAsc()) {
+        return op;
+    }
+    auto nodeKey = boundNode->getPrimaryKey(tableID);
+    if (!nodeKey) {
+        return op;
+    }
+    auto* scan = current->getChild(0).get();
+    if (scan->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE) {
+        return op;
+    }
+    auto& scanNode = scan->constCast<LogicalScanNodeTable>();
+    offset_t offset = INVALID_OFFSET;
+    if (filter) {
+        if (!getPrimaryKeyOffsetPredicate(*filter->getPredicate(), *boundNode, offset)) {
+            return op;
+        }
+    } else {
+        if (scanNode.getScanType() != LogicalScanNodeTableType::PRIMARY_KEY_SCAN ||
+            scanNode.getExtraInfo() == nullptr) {
+            return op;
+        }
+        auto& primaryKeyScanInfo = scanNode.getExtraInfo()->constCast<PrimaryKeyScanInfo>();
+        if (primaryKeyScanInfo.isRange || !primaryKeyScanInfo.key ||
+            !literalToOffset(*primaryKeyScanInfo.key, offset)) {
+            return op;
+        }
+    }
+    for (auto& property : scanNode.getProperties()) {
+        if (!(*property == *nodeKey)) {
+            return op;
+        }
+    }
+    std::vector<table_id_t> relTableIDs;
+    RelGroupCatalogEntry* relGroupEntry = nullptr;
+    if (!relTablesForExtend(extend, relTableIDs, relGroupEntry)) {
+        return op;
+    }
+    auto countExpr = op->constCast<LogicalAggregate>().getAggregates()[0];
+    auto result =
+        std::make_shared<LogicalRelDegreeTable>(relGroupEntry, std::move(relTableIDs), boundNode,
+            extend.getDirection(), RelDegreeTableMode::OFFSET_COUNT, nodeKey, countExpr, 1, offset);
+    result->computeFlatSchema();
+    return result;
 }
 
 std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteActiveBoundCount(

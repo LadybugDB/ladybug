@@ -28,10 +28,11 @@ class RelDegreeTable final : public PhysicalOperator {
 public:
     RelDegreeTable(std::vector<storage::RelTable*> relTables, common::RelDataDirection direction,
         planner::RelDegreeTableMode mode, DataPos nodeKeyOutputPos, DataPos degreeOutputPos,
-        common::idx_t limit, physical_op_id id, std::unique_ptr<OPPrintInfo> printInfo)
+        common::idx_t limit, common::offset_t nodeOffset, physical_op_id id,
+        std::unique_ptr<OPPrintInfo> printInfo)
         : PhysicalOperator{type_, id, std::move(printInfo)}, relTables{std::move(relTables)},
           direction{direction}, mode{mode}, nodeKeyOutputPos{nodeKeyOutputPos},
-          degreeOutputPos{degreeOutputPos}, limit{limit} {}
+          degreeOutputPos{degreeOutputPos}, limit{limit}, nodeOffset{nodeOffset} {}
 
     bool isSource() const override { return true; }
     bool isParallel() const override { return false; }
@@ -41,7 +42,7 @@ public:
 
     std::unique_ptr<PhysicalOperator> copy() override {
         return std::make_unique<RelDegreeTable>(relTables, direction, mode, nodeKeyOutputPos,
-            degreeOutputPos, limit, id, printInfo->copy());
+            degreeOutputPos, limit, nodeOffset, id, printInfo->copy());
     }
 
 private:
@@ -54,6 +55,7 @@ private:
     DataPos nodeKeyOutputPos;
     DataPos degreeOutputPos;
     common::idx_t limit;
+    common::offset_t nodeOffset;
     common::ValueVector* nodeKeyVector = nullptr;
     common::ValueVector* degreeVector = nullptr;
     bool hasExecuted = false;

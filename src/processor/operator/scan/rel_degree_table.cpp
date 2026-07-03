@@ -67,6 +67,21 @@ bool RelDegreeTable::getNextTuplesInternal(ExecutionContext* context) {
         hasExecuted = true;
         return true;
     }
+    if (mode == planner::RelDegreeTableMode::OFFSET_COUNT) {
+        row_idx_t count = 0;
+        for (auto* relTable : relTables) {
+            for (auto& [offset, degree] : relTable->getDegreeEntries(transaction, direction)) {
+                if (offset == nodeOffset) {
+                    count += degree;
+                    break;
+                }
+            }
+        }
+        degreeVector->state->getSelVectorUnsafe().setToUnfiltered(1);
+        degreeVector->setValue<int64_t>(0, static_cast<int64_t>(count));
+        hasExecuted = true;
+        return true;
+    }
 
     std::unordered_map<offset_t, row_idx_t> degrees;
     for (auto* relTable : relTables) {

@@ -9,7 +9,7 @@
 namespace lbug {
 namespace planner {
 
-enum class RelDegreeTableMode : uint8_t { ACTIVE_BOUND_COUNT, TOP_K_DEGREES };
+enum class RelDegreeTableMode : uint8_t { ACTIVE_BOUND_COUNT, TOP_K_DEGREES, OFFSET_COUNT };
 
 struct LogicalRelDegreeTablePrintInfo final : OPPrintInfo {
     std::string relTableName;
@@ -21,7 +21,8 @@ struct LogicalRelDegreeTablePrintInfo final : OPPrintInfo {
     std::string toString() const override {
         return "Table: " + relTableName + ", Mode: " +
                (mode == RelDegreeTableMode::ACTIVE_BOUND_COUNT ? "ACTIVE_BOUND_COUNT" :
-                                                                 "TOP_K_DEGREES");
+                   mode == RelDegreeTableMode::TOP_K_DEGREES   ? "TOP_K_DEGREES" :
+                                                                 "OFFSET_COUNT");
     }
 
     std::unique_ptr<OPPrintInfo> copy() const override {
@@ -37,20 +38,22 @@ public:
         std::vector<common::table_id_t> relTableIDs,
         std::shared_ptr<binder::NodeExpression> boundNode, common::ExtendDirection direction,
         RelDegreeTableMode mode, std::shared_ptr<binder::Expression> nodeKeyExpr,
-        std::shared_ptr<binder::Expression> degreeExpr, common::idx_t limit)
+        std::shared_ptr<binder::Expression> degreeExpr, common::idx_t limit,
+        common::offset_t nodeOffset = common::INVALID_OFFSET)
         : LogicalOperator{type_}, relGroupEntry{relGroupEntry}, relTableIDs{std::move(relTableIDs)},
           boundNode{std::move(boundNode)}, direction{direction}, mode{mode},
-          nodeKeyExpr{std::move(nodeKeyExpr)}, degreeExpr{std::move(degreeExpr)}, limit{limit} {
-        cardinality = mode == RelDegreeTableMode::ACTIVE_BOUND_COUNT ? 1 : limit;
+          nodeKeyExpr{std::move(nodeKeyExpr)}, degreeExpr{std::move(degreeExpr)}, limit{limit},
+          nodeOffset{nodeOffset} {
+        cardinality = mode == RelDegreeTableMode::TOP_K_DEGREES ? limit : 1;
     }
 
     void computeFactorizedSchema() override;
     void computeFlatSchema() override;
 
     std::string getExpressionsForPrinting() const override {
-        return mode == RelDegreeTableMode::ACTIVE_BOUND_COUNT ?
-                   degreeExpr->toString() :
-                   nodeKeyExpr->toString() + ", " + degreeExpr->toString();
+        return mode == RelDegreeTableMode::TOP_K_DEGREES ?
+                   nodeKeyExpr->toString() + ", " + degreeExpr->toString() :
+                   degreeExpr->toString();
     }
 
     catalog::RelGroupCatalogEntry* getRelGroupEntry() const { return relGroupEntry; }
@@ -61,6 +64,7 @@ public:
     std::shared_ptr<binder::Expression> getNodeKeyExpr() const { return nodeKeyExpr; }
     std::shared_ptr<binder::Expression> getDegreeExpr() const { return degreeExpr; }
     common::idx_t getLimit() const { return limit; }
+    common::offset_t getNodeOffset() const { return nodeOffset; }
 
     std::unique_ptr<OPPrintInfo> getPrintInfo() const override {
         return std::make_unique<LogicalRelDegreeTablePrintInfo>(relGroupEntry->getName(), mode);
@@ -68,7 +72,7 @@ public:
 
     std::unique_ptr<LogicalOperator> copy() override {
         return std::make_unique<LogicalRelDegreeTable>(relGroupEntry, relTableIDs, boundNode,
-            direction, mode, nodeKeyExpr, degreeExpr, limit);
+            direction, mode, nodeKeyExpr, degreeExpr, limit, nodeOffset);
     }
 
 private:
@@ -80,6 +84,7 @@ private:
     std::shared_ptr<binder::Expression> nodeKeyExpr;
     std::shared_ptr<binder::Expression> degreeExpr;
     common::idx_t limit;
+    common::offset_t nodeOffset;
 };
 
 } // namespace planner
