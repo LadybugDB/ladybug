@@ -518,6 +518,14 @@ BaseCSVReader::parse_result_t BaseCSVReader::parseCSV(Driver& driver) {
                 return {curRowIdx, numErrors};
             }
             column++;
+        } else if (column > 0) {
+            // File ends right after a delimiter with an empty trailing field.
+            // Without this, a row like "a,b," (no trailing newline) loses its last
+            // empty field and undercounts columns, causing "expected N, got N-1".
+            if (!addValue(driver, curRowIdx, column, std::string_view{}, escapePositions)) {
+                return {curRowIdx, numErrors};
+            }
+            column++;
         }
         if (column > 0) {
             curRowIdx += driver.addRow(curRowIdx, column,
