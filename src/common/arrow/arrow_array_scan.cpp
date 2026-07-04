@@ -478,10 +478,20 @@ static void scanArrowArrayRunEndEncoded(const ArrowSchema* schema, const ArrowAr
 void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray* array,
     ValueVector& outputVector, ArrowNullMaskTree* mask, uint64_t srcOffset, uint64_t dstOffset,
     uint64_t count) {
+    return fromArrowArray(schema, array, outputVector, mask, srcOffset, dstOffset, count, nullptr);
+}
+
+void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray* array,
+    ValueVector& outputVector, ArrowNullMaskTree* mask, uint64_t srcOffset, uint64_t dstOffset,
+    uint64_t count, const std::optional<ArrowLogicalTypeInfo>* logicalTypeInfo) {
     const auto arrowType = schema->format;
-    if (auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(schema);
-        logicalTypeInfo.has_value() &&
-        logicalTypeInfo->type == ArrowLogicalTypeInfo::Type::DECIMAL) {
+    std::optional<ArrowLogicalTypeInfo> parsedLogicalTypeInfo;
+    if (logicalTypeInfo == nullptr) {
+        parsedLogicalTypeInfo = tryGetArrowLogicalTypeInfo(schema);
+        logicalTypeInfo = &parsedLogicalTypeInfo;
+    }
+    if (logicalTypeInfo->has_value() &&
+        (*logicalTypeInfo)->type == ArrowLogicalTypeInfo::Type::DECIMAL) {
         switch (arrowType[0]) {
         case 'c':
             return scanArrowArrayIntegerBackedDecimal<int8_t>(array, outputVector, mask, srcOffset,

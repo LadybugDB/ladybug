@@ -7,6 +7,7 @@
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/arrow/arrow.h"
+#include "common/arrow/arrow_schema_metadata.h"
 #include "storage/table/arrow_table_support.h"
 #include "storage/table/columnar_rel_table_base.h"
 #include "storage/table/node_table.h"
@@ -69,6 +70,7 @@ private:
     common::offset_t findCSRSourceOffset(common::offset_t relOffset) const;
     bool readArrowValueAtOffset(const ArrowSchemaWrapper& arrowSchema,
         const std::vector<ArrowArrayWrapper>& arrowArrays, const std::vector<size_t>& startOffsets,
+        const std::vector<std::optional<common::ArrowLogicalTypeInfo>>& logicalTypeInfos,
         int64_t columnIdx, common::offset_t rowOffset, common::ValueVector& outputVector,
         uint64_t dstOffset) const;
 
@@ -77,9 +79,11 @@ private:
     ArrowRelTableLayout layout;
     ArrowSchemaWrapper schema;
     std::vector<ArrowArrayWrapper> arrays;
+    std::vector<std::optional<common::ArrowLogicalTypeInfo>> columnLogicalTypeInfos;
     std::vector<size_t> batchStartOffsets;
     ArrowSchemaWrapper indptrSchema;
     std::vector<ArrowArrayWrapper> indptrArrays;
+    std::vector<std::optional<common::ArrowLogicalTypeInfo>> indptrColumnLogicalTypeInfos;
     std::vector<size_t> indptrBatchStartOffsets;
     std::unordered_map<common::column_id_t, int64_t> propertyColumnToArrowColumnIdx;
     size_t totalRows = 0;

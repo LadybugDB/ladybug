@@ -38,6 +38,21 @@ static int64_t findColumnIdx(const ArrowSchemaWrapper& schema, const std::string
     return -1;
 }
 
+static std::vector<std::optional<ArrowLogicalTypeInfo>> resolveColumnLogicalTypeInfos(
+    const ArrowSchemaWrapper& schema) {
+    std::vector<std::optional<ArrowLogicalTypeInfo>> result;
+    if (schema.n_children <= 0 || schema.children == nullptr) {
+        return result;
+    }
+    result.reserve(static_cast<size_t>(schema.n_children));
+    for (int64_t i = 0; i < schema.n_children; ++i) {
+        result.push_back(schema.children[i] == nullptr ?
+                             std::nullopt :
+                             tryGetArrowLogicalTypeInfo(schema.children[i]));
+    }
+    return result;
+}
+
 void ArrowRelTableScanState::setToTable(const transaction::Transaction* transaction, Table* table_,
     std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
     RelDataDirection direction_) {
@@ -72,6 +87,8 @@ ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table
     if (!this->schema.format) {
         throw RuntimeException("Arrow schema format cannot be null");
     }
+    columnLogicalTypeInfos = resolveColumnLogicalTypeInfos(this->schema);
+    indptrColumnLogicalTypeInfos = resolveColumnLogicalTypeInfos(this->indptrSchema);
     if (!this->fromNodeTable || !this->toNodeTable) {
         throw RuntimeException(
             "Arrow relationship table requires source and destination node tables");
@@ -209,9 +226,11 @@ void ArrowRelTable::initScanState([[maybe_unused]] transaction::Transaction* tra
 }
 
 static void readSingleArrowValue(const ArrowSchema* schema, const ArrowArray* array,
-    ValueVector& outputVector, uint64_t srcOffset, uint64_t dstOffset) {
+    ValueVector& outputVector, uint64_t srcOffset, uint64_t dstOffset,
+    const std::optional<ArrowLogicalTypeInfo>* logicalTypeInfo = nullptr) {
     ArrowNullMaskTree nullMask(schema, array, array->offset, array->length);
-    ArrowConverter::fromArrowArray(schema, array, outputVector, &nullMask, srcOffset, dstOffset, 1);
+    ArrowConverter::fromArrowArray(schema, array, outputVector, &nullMask, srcOffset, dstOffset, 1,
+        logicalTypeInfo);
 }
 
 bool ArrowRelTable::scanInternal(transaction::Transaction* transaction, TableScanState& scanState) {
@@ -262,14 +281,22 @@ bool ArrowRelTable::scanFlat(transaction::Transaction* transaction, TableScanSta
         auto* dstChildSchema = schema.children[toColumnIdx];
         auto srcOffsetToRead = srcChildArray->offset + srcOffsetInBatch;
         auto dstOffsetToRead = dstChildArray->offset + srcOffsetInBatch;
+        const auto* srcLogicalTypeInfo =
+            static_cast<size_t>(fromColumnIdx) < columnLogicalTypeInfos.size() ?
+                &columnLogicalTypeInfos[fromColumnIdx] :
+                nullptr;
+        const auto* dstLogicalTypeInfo =
+            static_cast<size_t>(toColumnIdx) < columnLogicalTypeInfos.size() ?
+                &columnLogicalTypeInfos[toColumnIdx] :
+                nullptr;
         readSingleArrowValue(srcChildSchema, srcChildArray, *relScanState.arrowSrcKeyVector,
-            srcOffsetToRead, 0);
+            srcOffsetToRead, 0, srcLogicalTypeInfo);
         if (relScanState.arrowSrcKeyVector->isNull(0)) {
             relScanState.arrowCurrentBatchOffset++;
             continue;
         }
         readSingleArrowValue(dstChildSchema, dstChildArray, *relScanState.arrowDstKeyVector,
-            dstOffsetToRead, 0);
+            dstOffsetToRead, 0, dstLogicalTypeInfo);
         if (relScanState.arrowDstKeyVector->isNull(0)) {
             relScanState.arrowCurrentBatchOffset++;
             continue;
@@ -331,8 +358,12 @@ bool ArrowRelTable::scanFlat(transaction::Transaction* transaction, TableScanSta
             }
             auto* childArray = batch.children[arrowColIdx];
             auto* childSchema = schema.children[arrowColIdx];
+            const auto* logicalTypeInfo =
+                static_cast<size_t>(arrowColIdx) < columnLogicalTypeInfos.size() ?
+                    &columnLogicalTypeInfos[arrowColIdx] :
+                    nullptr;
             readSingleArrowValue(childSchema, childArray, *relScanState.outputVectors[outCol],
-                childArray->offset + srcOffsetInBatch, outputCount);
+                childArray->offset + srcOffsetInBatch, outputCount, logicalTypeInfo);
         }
         outputCount++;
         relScanState.arrowCurrentBatchOffset++;
@@ -426,7 +457,7 @@ bool ArrowRelTable::scanCSR(TableScanState& scanState) {
                 if (outCol >= outputToArrowColumnIdx.size() || outputToArrowColumnIdx[outCol] < 0) {
                     continue;
                 }
-                readArrowValueAtOffset(schema, arrays, batchStartOffsets,
+                readArrowValueAtOffset(schema, arrays, batchStartOffsets, columnLogicalTypeInfos,
                     outputToArrowColumnIdx[outCol], relOffset, *relScanState.outputVectors[outCol],
                     outputCount);
             }
@@ -476,7 +507,7 @@ bool ArrowRelTable::scanCSR(TableScanState& scanState) {
                 if (outCol >= outputToArrowColumnIdx.size() || outputToArrowColumnIdx[outCol] < 0) {
                     continue;
                 }
-                readArrowValueAtOffset(schema, arrays, batchStartOffsets,
+                readArrowValueAtOffset(schema, arrays, batchStartOffsets, columnLogicalTypeInfos,
                     outputToArrowColumnIdx[outCol], relOffset, *relScanState.outputVectors[outCol],
                     outputCount);
             }
@@ -509,8 +540,8 @@ bool ArrowRelTable::scanCSR(TableScanState& scanState) {
 
 bool ArrowRelTable::readCSRValue(ValueVector& outputVector, offset_t relOffset,
     uint64_t dstOffset) const {
-    return readArrowValueAtOffset(schema, arrays, batchStartOffsets, csrNbrColumnIdx, relOffset,
-        outputVector, dstOffset);
+    return readArrowValueAtOffset(schema, arrays, batchStartOffsets, columnLogicalTypeInfos,
+        csrNbrColumnIdx, relOffset, outputVector, dstOffset);
 }
 
 bool ArrowRelTable::readIndptr(offset_t srcOffset, offset_t& result) const {
@@ -518,7 +549,7 @@ bool ArrowRelTable::readIndptr(offset_t srcOffset, offset_t& result) const {
     ValueVector valueVector{LogicalType::UINT64(), memoryManager, singleValueState};
     valueVector.state->setToFlat();
     if (!readArrowValueAtOffset(indptrSchema, indptrArrays, indptrBatchStartOffsets,
-            csrIndptrColumnIdx, srcOffset, valueVector, 0) ||
+            indptrColumnLogicalTypeInfos, csrIndptrColumnIdx, srcOffset, valueVector, 0) ||
         valueVector.isNull(0)) {
         return false;
     }
@@ -555,7 +586,8 @@ offset_t ArrowRelTable::findCSRSourceOffset(offset_t relOffset) const {
 
 bool ArrowRelTable::readArrowValueAtOffset(const ArrowSchemaWrapper& arrowSchema,
     const std::vector<ArrowArrayWrapper>& arrowArrays, const std::vector<size_t>& startOffsets,
-    int64_t columnIdx, offset_t rowOffset, ValueVector& outputVector, uint64_t dstOffset) const {
+    const std::vector<std::optional<ArrowLogicalTypeInfo>>& logicalTypeInfos, int64_t columnIdx,
+    offset_t rowOffset, ValueVector& outputVector, uint64_t dstOffset) const {
     if (columnIdx < 0 || arrowArrays.empty() || startOffsets.size() != arrowArrays.size()) {
         return false;
     }
@@ -575,8 +607,11 @@ bool ArrowRelTable::readArrowValueAtOffset(const ArrowSchemaWrapper& arrowSchema
         }
         auto* childArray = batch.children[columnIdx];
         auto* childSchema = arrowSchema.children[columnIdx];
+        const auto* logicalTypeInfo = static_cast<size_t>(columnIdx) < logicalTypeInfos.size() ?
+                                          &logicalTypeInfos[columnIdx] :
+                                          nullptr;
         readSingleArrowValue(childSchema, childArray, outputVector, childArray->offset + rowInBatch,
-            dstOffset);
+            dstOffset, logicalTypeInfo);
         return true;
     }
     return false;

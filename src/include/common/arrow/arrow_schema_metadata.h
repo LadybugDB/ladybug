@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 
+#include "common/api.h"
 #include "common/arrow/arrow.h"
 
 namespace lbug {
@@ -28,7 +29,7 @@ struct ArrowLogicalTypeInfo {
     ArrowDecimalTypeInfo decimal;
 };
 
-std::optional<ArrowLogicalTypeInfo> tryGetArrowLogicalTypeInfo(const ArrowSchema* schema);
+LBUG_API std::optional<ArrowLogicalTypeInfo> tryGetArrowLogicalTypeInfo(const ArrowSchema* schema);
 
 } // namespace common
 } // namespace lbug
