@@ -224,6 +224,27 @@ else()
     add_compile_options(-Wno-unknown-pragmas)
 endif()
 
+# --- TEST PR ONLY: force SIMD compile flags so CI exercises the SIMD path ---
+# Do NOT merge. This unconditionally enables arch SIMD flags to prove the
+# structural CSV parser path compiles and runs green across the matrix.
+string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _simd_arch)
+if(_simd_arch MATCHES "^(x86_64|amd64|x64|i[3-6]86)$")
+    if(MSVC)
+        add_compile_options(/arch:AVX2)
+    else()
+        add_compile_options(-mavx2)
+    endif()
+    message(STATUS "TEST PR: x86 SIMD flags enabled")
+elseif(_simd_arch MATCHES "^(arm64|aarch64)$")
+    message(STATUS "TEST PR: arm64 baseline NEON (no extra flags)")
+elseif(_simd_arch MATCHES "^arm")
+    if(NOT MSVC)
+        add_compile_options(-mfpu=neon)
+    endif()
+    message(STATUS "TEST PR: arm32 NEON enabled")
+endif()
+# --- end TEST PR block ---
+
 if(${BUILD_WASM})
     if(NOT __SINGLE_THREADED__)
         add_compile_options(-pthread)
