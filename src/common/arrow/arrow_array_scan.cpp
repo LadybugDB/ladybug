@@ -1,9 +1,11 @@
 #include "common/arrow/arrow_converter.h"
+#include "common/arrow/arrow_schema_metadata.h"
 #include "common/exception/runtime.h"
 #include "common/types/int128_t.h"
 #include "common/types/interval_t.h"
 #include "common/types/types.h"
 #include "common/vector/value_vector.h"
+#include "function/cast/functions/cast_decimal.h"
 #include "function/cast/functions/numeric_limits.h"
 
 namespace lbug {
@@ -56,6 +58,74 @@ static void scanArrowArrayFixedSizePrimitiveAndCastTo(const ArrowArray* array,
             outputVector.setValue<DST>(i + dstOffset, (DST)curValue);
         }
     });
+}
+
+template<typename SRC>
+static void scanArrowArrayIntegerBackedDecimal(const ArrowArray* array, ValueVector& outputVector,
+    ArrowNullMaskTree* mask, uint64_t srcOffset, uint64_t dstOffset, uint64_t count) {
+    switch (outputVector.dataType.getPhysicalType()) {
+    case PhysicalTypeID::INT16:
+        return scanArrowArrayFixedSizePrimitiveAndCastTo<SRC, int16_t>(array, outputVector, mask,
+            srcOffset, dstOffset, count);
+    case PhysicalTypeID::INT32:
+        return scanArrowArrayFixedSizePrimitiveAndCastTo<SRC, int32_t>(array, outputVector, mask,
+            srcOffset, dstOffset, count);
+    case PhysicalTypeID::INT64:
+        return scanArrowArrayFixedSizePrimitiveAndCastTo<SRC, int64_t>(array, outputVector, mask,
+            srcOffset, dstOffset, count);
+    case PhysicalTypeID::INT128:
+        return scanArrowArrayFixedSizePrimitiveAndCastTo<SRC, int128_t>(array, outputVector, mask,
+            srcOffset, dstOffset, count);
+    default:
+        throw RuntimeException(
+            "Invalid decimal output type: " +
+            PhysicalTypeUtils::toString(outputVector.dataType.getPhysicalType()));
+    }
+}
+
+template<typename SRC, typename DST>
+static void castArrowArrayDecimalValue(SRC input, ValueVector& outputVector, uint64_t pos) {
+    DST output{};
+    function::CastToDecimal::operation(input, output, outputVector, outputVector);
+    outputVector.setValue<DST>(pos, output);
+}
+
+template<typename SRC, typename DST>
+static void scanArrowArrayDecimalWithCastTo(const ArrowArray* array, ValueVector& outputVector,
+    ArrowNullMaskTree* mask, uint64_t srcOffset, uint64_t dstOffset, uint64_t count) {
+    auto arrayBuffer = (const SRC*)array->buffers[1];
+
+    mask->copyToValueVector(&outputVector, dstOffset, count);
+
+    rowIter(outputVector, count, [&](auto i) {
+        if (!mask->isNull(i)) {
+            castArrowArrayDecimalValue<SRC, DST>(arrayBuffer[i + srcOffset], outputVector,
+                i + dstOffset);
+        }
+    });
+}
+
+template<typename SRC>
+static void scanArrowArrayDecimalWithCast(const ArrowArray* array, ValueVector& outputVector,
+    ArrowNullMaskTree* mask, uint64_t srcOffset, uint64_t dstOffset, uint64_t count) {
+    switch (outputVector.dataType.getPhysicalType()) {
+    case PhysicalTypeID::INT16:
+        return scanArrowArrayDecimalWithCastTo<SRC, int16_t>(array, outputVector, mask, srcOffset,
+            dstOffset, count);
+    case PhysicalTypeID::INT32:
+        return scanArrowArrayDecimalWithCastTo<SRC, int32_t>(array, outputVector, mask, srcOffset,
+            dstOffset, count);
+    case PhysicalTypeID::INT64:
+        return scanArrowArrayDecimalWithCastTo<SRC, int64_t>(array, outputVector, mask, srcOffset,
+            dstOffset, count);
+    case PhysicalTypeID::INT128:
+        return scanArrowArrayDecimalWithCastTo<SRC, int128_t>(array, outputVector, mask, srcOffset,
+            dstOffset, count);
+    default:
+        throw RuntimeException(
+            "Invalid decimal output type: " +
+            PhysicalTypeUtils::toString(outputVector.dataType.getPhysicalType()));
+    }
 }
 
 template<>
@@ -409,6 +479,44 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
     ValueVector& outputVector, ArrowNullMaskTree* mask, uint64_t srcOffset, uint64_t dstOffset,
     uint64_t count) {
     const auto arrowType = schema->format;
+    if (auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(schema);
+        logicalTypeInfo.has_value() &&
+        logicalTypeInfo->type == ArrowLogicalTypeInfo::Type::DECIMAL) {
+        switch (arrowType[0]) {
+        case 'c':
+            return scanArrowArrayIntegerBackedDecimal<int8_t>(array, outputVector, mask, srcOffset,
+                dstOffset, count);
+        case 'C':
+            return scanArrowArrayIntegerBackedDecimal<uint8_t>(array, outputVector, mask, srcOffset,
+                dstOffset, count);
+        case 's':
+            return scanArrowArrayIntegerBackedDecimal<int16_t>(array, outputVector, mask, srcOffset,
+                dstOffset, count);
+        case 'S':
+            return scanArrowArrayIntegerBackedDecimal<uint16_t>(array, outputVector, mask,
+                srcOffset, dstOffset, count);
+        case 'i':
+            return scanArrowArrayIntegerBackedDecimal<int32_t>(array, outputVector, mask, srcOffset,
+                dstOffset, count);
+        case 'I':
+            return scanArrowArrayIntegerBackedDecimal<uint32_t>(array, outputVector, mask,
+                srcOffset, dstOffset, count);
+        case 'l':
+            return scanArrowArrayIntegerBackedDecimal<int64_t>(array, outputVector, mask, srcOffset,
+                dstOffset, count);
+        case 'L':
+            return scanArrowArrayIntegerBackedDecimal<uint64_t>(array, outputVector, mask,
+                srcOffset, dstOffset, count);
+        case 'f':
+            return scanArrowArrayDecimalWithCast<float>(array, outputVector, mask, srcOffset,
+                dstOffset, count);
+        case 'g':
+            return scanArrowArrayDecimalWithCast<double>(array, outputVector, mask, srcOffset,
+                dstOffset, count);
+        default:
+            break;
+        }
+    }
     if (array->dictionary != nullptr) {
         switch (arrowType[0]) {
         case 'c':

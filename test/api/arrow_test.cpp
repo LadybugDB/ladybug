@@ -1,10 +1,59 @@
+#include <cstring>
+#include <string>
+#include <vector>
+
 #include "api_test/api_test.h"
+#include "arrow_test_utils.h"
+#include "common/arrow/arrow_converter.h"
+#include "common/arrow/arrow_schema_metadata.h"
 #include "common/exception/runtime.h"
+#include "common/types/types.h"
+#include "common/vector/value_vector.h"
 #include "main/query_result/arrow_query_result.h"
 
 using namespace lbug::common;
 using namespace lbug::main;
 using namespace lbug::testing;
+
+namespace {
+
+std::vector<char> serializeArrowMetadata(
+    const std::vector<std::pair<std::string, std::string>>& entries) {
+    auto size = sizeof(int32_t);
+    for (const auto& [key, value] : entries) {
+        size += sizeof(int32_t) + key.size() + sizeof(int32_t) + value.size();
+    }
+    std::vector<char> bytes(size);
+    auto* ptr = bytes.data();
+    const auto numEntries = static_cast<int32_t>(entries.size());
+    memcpy(ptr, &numEntries, sizeof(int32_t));
+    ptr += sizeof(int32_t);
+    for (const auto& [key, value] : entries) {
+        const auto keySize = static_cast<int32_t>(key.size());
+        memcpy(ptr, &keySize, sizeof(int32_t));
+        ptr += sizeof(int32_t);
+        memcpy(ptr, key.data(), key.size());
+        ptr += key.size();
+        const auto valueSize = static_cast<int32_t>(value.size());
+        memcpy(ptr, &valueSize, sizeof(int32_t));
+        ptr += sizeof(int32_t);
+        memcpy(ptr, value.data(), value.size());
+        ptr += value.size();
+    }
+    return bytes;
+}
+
+void appendInt32(std::vector<char>& bytes, int32_t value) {
+    const auto* ptr = reinterpret_cast<const char*>(&value);
+    bytes.insert(bytes.end(), ptr, ptr + sizeof(int32_t));
+}
+
+void appendString(std::vector<char>& bytes, const std::string& value) {
+    appendInt32(bytes, static_cast<int32_t>(value.size()));
+    bytes.insert(bytes.end(), value.begin(), value.end());
+}
+
+} // namespace
 
 class ArrowTest : public ApiTest {};
 
@@ -52,6 +101,331 @@ TEST(ArrowQueryResultTest, exportsCSRMetadataAsZeroCopyArrowArrays) {
         (std::vector<int64_t>{4, 5, 6}));
     ASSERT_EQ(std::vector<int64_t>(edgeIDsData, edgeIDsData + storedMetadata.edgeIDs.size()),
         (std::vector<int64_t>{10, 11, 12}));
+}
+
+TEST(ArrowConverterTest, bindsIntegerBackedSnowflakeDecimalMetadataAsDecimal) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata =
+        serializeArrowMetadata({{"logicalType", "FIXED"}, {"precision", "7"}, {"scale", "2"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+    const auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::DECIMAL);
+    ASSERT_EQ(DecimalType::getPrecision(type), 7u);
+    ASSERT_EQ(DecimalType::getScale(type), 2u);
+    ASSERT_TRUE(logicalTypeInfo.has_value());
+    ASSERT_EQ(logicalTypeInfo->source, ArrowLogicalTypeInfo::Source::SNOWFLAKE);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, bindsSnowflakeRawDataTypeMetadataAsDecimal) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata = serializeArrowMetadata({{"DATA_TYPE", "NUMBER(12, 4)"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+    const auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::DECIMAL);
+    ASSERT_EQ(DecimalType::getPrecision(type), 12u);
+    ASSERT_EQ(DecimalType::getScale(type), 4u);
+    ASSERT_TRUE(logicalTypeInfo.has_value());
+    ASSERT_EQ(logicalTypeInfo->source, ArrowLogicalTypeInfo::Source::SNOWFLAKE);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, bindsSnowflakeRawNumberMetadataWithoutExplicitScaleAsDecimal) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata = serializeArrowMetadata({{"DATA_TYPE", "NUMBER(18)"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+    const auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::DECIMAL);
+    ASSERT_EQ(DecimalType::getPrecision(type), 18u);
+    ASSERT_EQ(DecimalType::getScale(type), 0u);
+    ASSERT_TRUE(logicalTypeInfo.has_value());
+    ASSERT_EQ(logicalTypeInfo->source, ArrowLogicalTypeInfo::Source::SNOWFLAKE);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, bindsSnowflakeRawNumericMetadataWithWhitespaceAsDecimal) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata = serializeArrowMetadata({{"DATA_TYPE", " numeric ( 10 , 3 ) "}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::DECIMAL);
+    ASSERT_EQ(DecimalType::getPrecision(type), 10u);
+    ASSERT_EQ(DecimalType::getScale(type), 3u);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, bindsGenericIntegerBackedDecimalMetadataAsDecimal) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata =
+        serializeArrowMetadata({{"logicalType", "DECIMAL"}, {"precision", "9"}, {"scale", "3"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+    const auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::DECIMAL);
+    ASSERT_EQ(DecimalType::getPrecision(type), 9u);
+    ASSERT_EQ(DecimalType::getScale(type), 3u);
+    ASSERT_TRUE(logicalTypeInfo.has_value());
+    ASSERT_EQ(logicalTypeInfo->source, ArrowLogicalTypeInfo::Source::GENERIC_METADATA);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, malformedIntegerBackedDecimalMetadataFallsBackToPhysicalType) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata =
+        serializeArrowMetadata({{"logicalType", "FIXED"}, {"precision", "bad"}, {"scale", "2"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::INT64);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, negativeSnowflakeDecimalMetadataFallsBackToPhysicalType) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata =
+        serializeArrowMetadata({{"logicalType", "FIXED"}, {"precision", "-1"}, {"scale", "2"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::INT64);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, overflowSnowflakeDecimalMetadataFallsBackToPhysicalType) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata = serializeArrowMetadata(
+        {{"logicalType", "FIXED"}, {"precision", "4294967296"}, {"scale", "2"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::INT64);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, invalidSnowflakeDecimalScaleFallsBackToPhysicalType) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata =
+        serializeArrowMetadata({{"logicalType", "FIXED"}, {"precision", "4"}, {"scale", "5"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::INT64);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, negativeMetadataEntryCountFallsBackToPhysicalType) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    std::vector<char> metadata;
+    appendInt32(metadata, -1);
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::INT64);
+    ASSERT_FALSE(tryGetArrowLogicalTypeInfo(&schema).has_value());
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, negativeMetadataKeyLengthFallsBackToPhysicalType) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    std::vector<char> metadata;
+    appendInt32(metadata, 1);
+    appendInt32(metadata, -1);
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::INT64);
+    ASSERT_FALSE(tryGetArrowLogicalTypeInfo(&schema).has_value());
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, negativeMetadataValueLengthFallsBackToPhysicalType) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    std::vector<char> metadata;
+    appendInt32(metadata, 1);
+    appendString(metadata, "logicalType");
+    appendInt32(metadata, -1);
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::INT64);
+    ASSERT_FALSE(tryGetArrowLogicalTypeInfo(&schema).has_value());
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, invalidGenericDecimalScaleFallsBackToPhysicalType) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata =
+        serializeArrowMetadata({{"logicalType", "DECIMAL"}, {"precision", "6"}, {"scale", "7"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::INT64);
+    ASSERT_FALSE(tryGetArrowLogicalTypeInfo(&schema).has_value());
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, genericDecimalMetadataDoesNotBindFloatBackedStorage) {
+    ArrowSchema schema{};
+    createSchema<double>(&schema, "amount");
+    auto metadata =
+        serializeArrowMetadata({{"logicalType", "DECIMAL"}, {"precision", "9"}, {"scale", "2"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::DOUBLE);
+    ASSERT_FALSE(tryGetArrowLogicalTypeInfo(&schema).has_value());
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, malformedSnowflakeRawDataTypeFallsBackToSnowflakeLogicalTypeMetadata) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata = serializeArrowMetadata({{"DATA_TYPE", "NUMBER(bad,2)"},
+        {"logicalType", "FIXED"}, {"precision", "7"}, {"scale", "2"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+    const auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::DECIMAL);
+    ASSERT_EQ(DecimalType::getPrecision(type), 7u);
+    ASSERT_EQ(DecimalType::getScale(type), 2u);
+    ASSERT_TRUE(logicalTypeInfo.has_value());
+    ASSERT_EQ(logicalTypeInfo->source, ArrowLogicalTypeInfo::Source::SNOWFLAKE);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, malformedSnowflakeRawDataTypeFallsBackToGenericLogicalTypeMetadata) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata = serializeArrowMetadata({{"DATA_TYPE", "NUMBER(bad,2)"},
+        {"logicalType", "DECIMAL"}, {"precision", "7"}, {"scale", "2"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+    const auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::DECIMAL);
+    ASSERT_EQ(DecimalType::getPrecision(type), 7u);
+    ASSERT_EQ(DecimalType::getScale(type), 2u);
+    ASSERT_TRUE(logicalTypeInfo.has_value());
+    ASSERT_EQ(logicalTypeInfo->source, ArrowLogicalTypeInfo::Source::GENERIC_METADATA);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest,
+    snowflakeRawDataTypeMetadataTakesPrecedenceOverGenericLogicalTypeMetadata) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata = serializeArrowMetadata({{"DATA_TYPE", "NUMBER(12,4)"},
+        {"logicalType", "DECIMAL"}, {"precision", "9"}, {"scale", "3"}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+    const auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::DECIMAL);
+    ASSERT_EQ(DecimalType::getPrecision(type), 12u);
+    ASSERT_EQ(DecimalType::getScale(type), 4u);
+    ASSERT_TRUE(logicalTypeInfo.has_value());
+    ASSERT_EQ(logicalTypeInfo->source, ArrowLogicalTypeInfo::Source::SNOWFLAKE);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, scansFloatBackedSnowflakeDecimalMetadataIntoDecimalStorage) {
+    ArrowSchema schema{};
+    createSchema<double>(&schema, "amount");
+    auto metadata =
+        serializeArrowMetadata({{"logicalType", "FIXED"}, {"precision", "9"}, {"scale", "2"}});
+    schema.metadata = metadata.data();
+
+    ArrowArray array{};
+    createDoubleArray(&array, {1.25, -2.50, 100.01});
+    ValueVector outputVector{LogicalType::DECIMAL(9, 2)};
+
+    ArrowConverter::fromArrowArray(&schema, &array, outputVector);
+
+    ASSERT_EQ(outputVector.getValue<int32_t>(0), 125);
+    ASSERT_EQ(outputVector.getValue<int32_t>(1), -250);
+    ASSERT_EQ(outputVector.getValue<int32_t>(2), 10001);
+    array.release(&array);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, scansFloat32BackedSnowflakeDecimalMetadataIntoDecimalStorage) {
+    ArrowSchema schema{};
+    createSchema<float>(&schema, "amount");
+    auto metadata =
+        serializeArrowMetadata({{"logicalType", "FIXED"}, {"precision", "8"}, {"scale", "1"}});
+    schema.metadata = metadata.data();
+
+    ArrowArray array{};
+    createFloatArray(&array, {1.5F, -2.0F, 12.3F});
+    ValueVector outputVector{LogicalType::DECIMAL(8, 1)};
+
+    ArrowConverter::fromArrowArray(&schema, &array, outputVector);
+
+    ASSERT_EQ(outputVector.getValue<int32_t>(0), 15);
+    ASSERT_EQ(outputVector.getValue<int32_t>(1), -20);
+    ASSERT_EQ(outputVector.getValue<int32_t>(2), 123);
+    array.release(&array);
+    schema.release(&schema);
+}
+
+TEST(ArrowConverterTest, scansIntegerBackedSnowflakeDecimalMetadataIntoDecimalStorage) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "amount");
+    auto metadata =
+        serializeArrowMetadata({{"logicalType", "FIXED"}, {"precision", "7"}, {"scale", "2"}});
+    schema.metadata = metadata.data();
+
+    ArrowArray array{};
+    createInt64Array(&array, {120, 200, 50, 10000});
+    ValueVector outputVector{LogicalType::DECIMAL(7, 2)};
+
+    ArrowConverter::fromArrowArray(&schema, &array, outputVector);
+
+    ASSERT_EQ(outputVector.getValue<int32_t>(0), 120);
+    ASSERT_EQ(outputVector.getValue<int32_t>(1), 200);
+    ASSERT_EQ(outputVector.getValue<int32_t>(2), 50);
+    ASSERT_EQ(outputVector.getValue<int32_t>(3), 10000);
+    array.release(&array);
+    schema.release(&schema);
 }
 
 TEST_F(ArrowTest, resultToArrow) {

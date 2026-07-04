@@ -51,6 +51,19 @@ inline void createSchema<double>(ArrowSchema* schema, const char* name) {
 }
 
 template<>
+inline void createSchema<float>(ArrowSchema* schema, const char* name) {
+    schema->format = "f"; // float
+    schema->name = name;
+    schema->metadata = nullptr;
+    schema->flags = ARROW_FLAG_NULLABLE;
+    schema->n_children = 0;
+    schema->children = nullptr;
+    schema->dictionary = nullptr;
+    schema->release = [](ArrowSchema* s) { s->release = nullptr; };
+    schema->private_data = nullptr;
+}
+
+template<>
 inline void createSchema<bool>(ArrowSchema* schema, const char* name) {
     schema->format = "b"; // boolean
     schema->name = name;
@@ -279,6 +292,54 @@ inline void createDoubleArray(ArrowArray* array, const std::vector<double>& data
     private_data->validity = nullptr; // No nulls
     private_data->data = malloc(data.size() * sizeof(double));
     memcpy(private_data->data, data.data(), data.size() * sizeof(double));
+
+    array->length = data.size();
+    array->null_count = 0;
+    array->offset = 0;
+    array->n_buffers = 2; // validity and data
+    array->n_children = 0;
+    array->buffers = static_cast<const void**>(malloc(sizeof(void*) * 2));
+    array->buffers[0] = nullptr; // validity buffer (no nulls)
+    array->buffers[1] = private_data->data;
+    array->children = nullptr;
+    array->dictionary = nullptr;
+    array->release = [](ArrowArray* a) {
+        if (a->private_data) {
+            auto* pd = static_cast<ArrayPrivateData*>(a->private_data);
+            free(pd->validity);
+            free(pd->data);
+            free(pd->offsets);
+            delete pd;
+        }
+        if (a->buffers) {
+            free(const_cast<void**>(a->buffers));
+        }
+        if (a->children) {
+            for (int64_t i = 0; i < a->n_children; i++) {
+                if (a->children[i]->release) {
+                    a->children[i]->release(a->children[i]);
+                }
+                free(a->children[i]);
+            }
+            free(a->children);
+        }
+        a->release = nullptr;
+    };
+    array->private_data = private_data;
+}
+
+// Helper to create a float array from vector
+inline void createFloatArray(ArrowArray* array, const std::vector<float>& data) {
+    struct ArrayPrivateData {
+        void* validity = nullptr;
+        void* data = nullptr;
+        int32_t* offsets = nullptr;
+    };
+
+    auto* private_data = new ArrayPrivateData();
+    private_data->validity = nullptr; // No nulls
+    private_data->data = malloc(data.size() * sizeof(float));
+    memcpy(private_data->data, data.data(), data.size() * sizeof(float));
 
     array->length = data.size();
     array->null_count = 0;
