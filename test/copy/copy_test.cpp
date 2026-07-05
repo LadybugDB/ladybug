@@ -128,7 +128,7 @@ public:
         std::replace(filePath.begin(), filePath.end(), '\\', '/');
 #endif
         std::filesystem::create_directories(tempDir);
-        std::ofstream file(filePath);
+        std::ofstream file(filePath, std::ios::binary);
         for (const auto& row : rows) {
             file << row << "\n";
         }
