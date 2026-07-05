@@ -595,7 +595,13 @@ findNextCSVStructuralByteAVX2(const char* buffer, uint64_t position, uint64_t bu
             mask |= _mm256_movemask_epi8(_mm256_cmpeq_epi8(bytes, delimiter));
         }
         if (mask != 0) {
+#if defined(__GNUC__) || defined(__clang__)
             return position + static_cast<uint64_t>(__builtin_ctz(static_cast<unsigned>(mask)));
+#elif defined(_MSC_VER)
+            unsigned long index;
+            _BitScanForward(&index, static_cast<unsigned long>(mask));
+            return position + static_cast<uint64_t>(index);
+#endif
         }
     }
     return findNextCSVStructuralByteScalar(buffer, position, bufferSize, option, inQuotedField);
