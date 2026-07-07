@@ -65,6 +65,14 @@ VMRegion::VMRegion(PageSizeClass pageSizeClass, uint64_t maxRegionSize) : numFra
         throw BufferManagerException(
             "Mmap for size " + std::to_string(getMaxRegionSize()) + " failed.");
     }
+#ifdef MADV_DONTDUMP
+    // Tell the kernel not to include this virtual reservation in core dumps.
+    // Without this, the kernel walks the entire (potentially multi-TB) sparse
+    // reservation during crash dump generation, turning every SIGSEGV into an
+    // unkillable process stuck at 100% CPU in the dump path for minutes.
+    // MADV_DONTDUMP is available on Linux >= 3.4; macOS has no equivalent.
+    madvise(region, getMaxRegionSize(), MADV_DONTDUMP);
+#endif
 #endif
 }
 
