@@ -1,7 +1,6 @@
 #include "optimizer/limit_push_down_optimizer.h"
 
 #include "binder/expression/expression_util.h"
-#include "common/exception/runtime.h"
 #include "planner/operator/extend/logical_recursive_extend.h"
 #include "planner/operator/logical_distinct.h"
 #include "planner/operator/logical_hash_join.h"
@@ -19,7 +18,8 @@ void LimitPushDownOptimizer::rewrite(LogicalPlan* plan) {
     visitOperator(plan->getLastOperator().get());
 }
 
-void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op) {
+void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op,
+    bool canPushLimitToHashJoin) {
     switch (op->getOperatorType()) {
     case LogicalOperatorType::LIMIT: {
         auto& limit = op->constCast<LogicalLimit>();
@@ -35,9 +35,14 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op) {
     case LogicalOperatorType::MULTIPLICITY_REDUCER:
     case LogicalOperatorType::EXPLAIN:
     case LogicalOperatorType::ACCUMULATE:
-    case LogicalOperatorType::FILTER:
     case LogicalOperatorType::PROJECTION: {
-        visitOperator(op->getChild(0).get());
+        visitOperator(op->getChild(0).get(), canPushLimitToHashJoin);
+        return;
+    }
+    case LogicalOperatorType::FILTER: {
+        // A filter between LIMIT and HASH_JOIN can reject rows after the join. A static
+        // pre-join cap could then leave the parent LIMIT with too few surviving rows.
+        visitOperator(op->getChild(0).get(), false);
         return;
     }
     case LogicalOperatorType::TABLE_FUNCTION_CALL: {
@@ -60,25 +65,24 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op) {
         return;
     }
     case LogicalOperatorType::HASH_JOIN: {
-        if (limitNumber == INVALID_LIMIT && skipNumber == 0) {
+        if (limitNumber == INVALID_LIMIT || !canPushLimitToHashJoin) {
             return;
         }
-        if (op->getChild(0)->getOperatorType() == LogicalOperatorType::HASH_JOIN) {
-            op->ptrCast<LogicalHashJoin>()->getSIPInfoUnsafe().position = SemiMaskPosition::NONE;
-            // OP is the hash join reading destination node property. Continue push limit down.
-            op = op->getChild(0).get();
+        auto& hashJoin = op->cast<LogicalHashJoin>();
+        // The recursive-extend join created by Planner::appendRecursiveExtend is a 1:1 INNER
+        // join that reads the bound node properties back after path expansion. Only that direct
+        // shape is safe: nested joins, filtering joins, and multiplicative joins must remain
+        // barriers because their first N probe rows may produce fewer than N final rows.
+        if (hashJoin.getJoinType() != JoinType::INNER || hashJoin.requireFlatProbeKeys()) {
+            return;
         }
-        if (op->getChild(0)->getOperatorType() == LogicalOperatorType::PATH_PROPERTY_PROBE) {
-            // LCOV_EXCL_START
-            if (op->getChild(0)->getChild(0)->getOperatorType() !=
-                LogicalOperatorType::RECURSIVE_EXTEND) {
-                throw RuntimeException("Trying to push limit to a non RECURSIVE_EXTEND operator. "
-                                       "This should never happen.");
-            }
-            // LCOV_EXCL_STOP
-            auto& extend = op->getChild(0)->getChild(0)->cast<LogicalRecursiveExtend>();
-            extend.setLimitNum(skipNumber + limitNumber);
+        if (op->getChild(0)->getOperatorType() != LogicalOperatorType::PATH_PROPERTY_PROBE ||
+            op->getChild(0)->getChild(0)->getOperatorType() !=
+                LogicalOperatorType::RECURSIVE_EXTEND || skipNumber > INVALID_LIMIT - limitNumber) {
+            return;
         }
+        auto& extend = op->getChild(0)->getChild(0)->cast<LogicalRecursiveExtend>();
+        extend.setLimitNum(skipNumber + limitNumber);
         return;
     }
     case LogicalOperatorType::UNION_ALL: {

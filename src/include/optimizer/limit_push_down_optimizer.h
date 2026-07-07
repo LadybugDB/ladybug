@@ -12,7 +12,7 @@ public:
     void rewrite(planner::LogicalPlan* plan);
 
 private:
-    void visitOperator(planner::LogicalOperator* op);
+    void visitOperator(planner::LogicalOperator* op, bool canPushLimitToHashJoin = true);
 
 private:
     common::offset_t skipNumber;
