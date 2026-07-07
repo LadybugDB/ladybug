@@ -93,6 +93,11 @@ void Transaction::publishCommit() {
         Catalog::Get(*clientContext)->incrementVersion();
         hasCatalogChanges = false;
     }
+    for (auto& callback : commitCallbacks) {
+        callback(*this);
+    }
+    commitCallbacks.clear();
+    rollbackCallbacks.clear();
 }
 
 void Transaction::rollback(storage::WAL*) {
@@ -102,6 +107,19 @@ void Transaction::rollback(storage::WAL*) {
     undoBuffer->rollback(clientContext);
     localStorage->rollback();
     hasCatalogChanges = false;
+    for (auto& callback : rollbackCallbacks) {
+        callback(*this);
+    }
+    commitCallbacks.clear();
+    rollbackCallbacks.clear();
+}
+
+void Transaction::pushCommitCallback(std::function<void(Transaction&)> callback) {
+    commitCallbacks.push_back(std::move(callback));
+}
+
+void Transaction::pushRollbackCallback(std::function<void(Transaction&)> callback) {
+    rollbackCallbacks.push_back(std::move(callback));
 }
 
 bool Transaction::isUnCommitted(common::table_id_t tableID, common::offset_t nodeOffset) const {

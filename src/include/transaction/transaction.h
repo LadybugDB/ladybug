@@ -1,7 +1,9 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <mutex>
+#include <vector>
 
 #include "common/types/types.h"
 
@@ -119,6 +121,8 @@ public:
     void writeCommitToWAL(storage::WAL* wal, uint64_t& walCommitSequence);
     void publishCommit();
     void rollback(storage::WAL* wal);
+    void pushCommitCallback(std::function<void(Transaction&)> callback);
+    void pushRollbackCallback(std::function<void(Transaction&)> callback);
 
     storage::LocalStorage* getLocalStorage() const { return localStorage.get(); }
     LocalCacheManager& getLocalCacheManager() { return localCacheManager; }
@@ -163,6 +167,8 @@ private:
     std::unique_ptr<storage::UndoBuffer> undoBuffer;
     std::unique_ptr<storage::LocalWAL> localWAL;
     LocalCacheManager localCacheManager;
+    std::vector<std::function<void(Transaction&)>> commitCallbacks;
+    std::vector<std::function<void(Transaction&)>> rollbackCallbacks;
     bool forceCheckpoint;
     std::atomic<bool> hasCatalogChanges;
 };
