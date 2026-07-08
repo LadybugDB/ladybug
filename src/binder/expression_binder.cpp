@@ -1,7 +1,9 @@
 #include "binder/expression_binder.h"
 
 #include "binder/binder.h"
+#include "binder/expression/case_expression.h"
 #include "binder/expression/expression_util.h"
+#include "binder/expression/literal_expression.h"
 #include "binder/expression/parameter_expression.h"
 #include "binder/expression_visitor.h"
 #include "common/exception/binder.h"
@@ -18,6 +20,15 @@ using namespace lbug::parser;
 
 namespace lbug {
 namespace binder {
+
+static bool isBoolLiteral(const Expression& expression, bool value) {
+    if (expression.expressionType != ExpressionType::LITERAL ||
+        expression.dataType != LogicalType::BOOL()) {
+        return false;
+    }
+    auto literalValue = expression.constCast<LiteralExpression>().getValue();
+    return !literalValue.isNull() && literalValue.getValue<bool>() == value;
+}
 
 std::shared_ptr<Expression> ExpressionBinder::bindExpression(
     const ParsedExpression& parsedExpression) {
@@ -77,10 +88,114 @@ std::shared_ptr<Expression> ExpressionBinder::bindExpression(
         throw NotImplementedException(
             "bindExpression(" + ExpressionTypeUtil::toString(expressionType) + ").");
     }
+    expression = simplifyExpression(expression);
     if (ConstantExpressionVisitor::needFold(*expression)) {
         return foldExpression(expression);
     }
     return expression;
+}
+
+std::shared_ptr<Expression> ExpressionBinder::simplifyExpression(
+    const std::shared_ptr<Expression>& expression) {
+    switch (expression->expressionType) {
+    case ExpressionType::AND:
+    case ExpressionType::OR:
+    case ExpressionType::NOT:
+        return simplifyBooleanExpression(expression);
+    case ExpressionType::CASE_ELSE:
+        return simplifyCaseExpression(expression);
+    default:
+        return expression;
+    }
+}
+
+std::shared_ptr<Expression> ExpressionBinder::simplifyBooleanExpression(
+    const std::shared_ptr<Expression>& expression) {
+    auto expressionType = expression->expressionType;
+    if (expressionType == ExpressionType::NOT) {
+        auto child = simplifyExpression(expression->getChild(0));
+        if (isBoolLiteral(*child, true)) {
+            return createLiteralExpression(Value(false));
+        }
+        if (isBoolLiteral(*child, false)) {
+            return createLiteralExpression(Value(true));
+        }
+        if (child->expressionType == ExpressionType::NOT) {
+            return child->getChild(0);
+        }
+        if (child != expression->getChild(0)) {
+            return bindBooleanExpression(expressionType, expression_vector{child});
+        }
+        return expression;
+    }
+    DASSERT(expressionType == ExpressionType::AND || expressionType == ExpressionType::OR);
+    auto left = simplifyExpression(expression->getChild(0));
+    auto right = simplifyExpression(expression->getChild(1));
+    if (expressionType == ExpressionType::AND) {
+        if (isBoolLiteral(*left, false)) {
+            return left;
+        }
+        if (isBoolLiteral(*right, false)) {
+            return right;
+        }
+        if (isBoolLiteral(*left, true)) {
+            return right;
+        }
+        if (isBoolLiteral(*right, true)) {
+            return left;
+        }
+    } else {
+        if (isBoolLiteral(*left, true)) {
+            return left;
+        }
+        if (isBoolLiteral(*right, true)) {
+            return right;
+        }
+        if (isBoolLiteral(*left, false)) {
+            return right;
+        }
+        if (isBoolLiteral(*right, false)) {
+            return left;
+        }
+    }
+    if (left != expression->getChild(0) || right != expression->getChild(1)) {
+        return bindBooleanExpression(expressionType, expression_vector{left, right});
+    }
+    return expression;
+}
+
+std::shared_ptr<Expression> ExpressionBinder::simplifyCaseExpression(
+    const std::shared_ptr<Expression>& expression) {
+    auto& caseExpression = expression->constCast<CaseExpression>();
+    auto elseExpression = simplifyExpression(caseExpression.getElseExpression());
+    auto simplifiedCaseExpression = std::make_shared<CaseExpression>(expression->dataType.copy(),
+        elseExpression, expression->getUniqueName());
+    bool changed = elseExpression != caseExpression.getElseExpression();
+    for (auto i = 0u; i < caseExpression.getNumCaseAlternatives(); ++i) {
+        auto alternative = caseExpression.getCaseAlternative(i);
+        auto whenExpression = simplifyExpression(alternative->whenExpression);
+        auto thenExpression = simplifyExpression(alternative->thenExpression);
+        if (ExpressionUtil::isNullLiteral(*whenExpression) ||
+            isBoolLiteral(*whenExpression, false)) {
+            changed = true;
+            continue;
+        }
+        if (isBoolLiteral(*whenExpression, true)) {
+            changed = true;
+            if (simplifiedCaseExpression->getNumCaseAlternatives() == 0) {
+                return thenExpression;
+            }
+            simplifiedCaseExpression->addCaseAlternative(whenExpression, thenExpression);
+            break;
+        }
+        changed = changed || whenExpression != alternative->whenExpression ||
+                  thenExpression != alternative->thenExpression;
+        simplifiedCaseExpression->addCaseAlternative(whenExpression, thenExpression);
+    }
+    if (simplifiedCaseExpression->getNumCaseAlternatives() == 0) {
+        return elseExpression;
+    }
+    return changed ? simplifiedCaseExpression : expression;
 }
 
 std::shared_ptr<Expression> ExpressionBinder::foldExpression(
