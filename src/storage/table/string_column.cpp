@@ -166,32 +166,46 @@ void StringColumn::scanSegment(const SegmentState& state, ColumnChunkData* resul
         }
         dictionary.scan(state, stringResultChunk->getDictionaryChunk());
     } else {
-        // Any strings which are duplicated only need to be scanned once, so we track duplicate
-        // indices
-        std::unordered_map<string_index_t, uint64_t> indexMap;
-        std::vector<std::pair<string_index_t, uint64_t>> offsetsToScan;
+        // Partial chunk scans first collect old dictionary indexes per result row. The dictionary
+        // materialization step may scan those old indexes in a different order for locality, so row
+        // index values are written only after the actual old-to-new dictionary mapping is known.
+        std::unordered_map<string_index_t, string_index_t> oldToNewIndex;
+        std::vector<string_index_t> oldIndexesByRow;
+        std::vector<string_index_t> indexesToScan;
+        oldIndexesByRow.resize(numValuesToScan);
         for (auto i = 0u; i < numValuesToScan; i++) {
-            if (!resultChunk->isNull(startOffsetInResult + i)) {
-                auto index = indexChunk->getValue<string_index_t>(startOffsetInResult + i);
-                auto element = indexMap.find(index);
-                if (element == indexMap.end()) {
-                    indexMap.insert(std::make_pair(index, initialDictSize + offsetsToScan.size()));
-                    indexChunk->setValue<string_index_t>(initialDictSize + offsetsToScan.size(),
-                        startOffsetInResult + i);
-                    offsetsToScan.emplace_back(index, initialDictSize + offsetsToScan.size());
-                } else {
-                    indexChunk->setValue<string_index_t>(element->second, startOffsetInResult + i);
-                }
+            auto resultPos = startOffsetInResult + i;
+            if (resultChunk->isNull(resultPos)) {
+                continue;
+            }
+            auto index = indexChunk->getValue<string_index_t>(resultPos);
+            oldIndexesByRow[i] = index;
+            if (oldToNewIndex.find(index) == oldToNewIndex.end()) {
+                oldToNewIndex.insert(std::make_pair(index, 0));
+                indexesToScan.push_back(index);
             }
         }
 
-        if (offsetsToScan.size() == 0) {
+        if (indexesToScan.empty()) {
             // All scanned values are null
             return;
         }
-        dictionary.scan(getChildState(state, ChildStateIndex::OFFSET),
-            getChildState(state, ChildStateIndex::DATA), offsetsToScan, stringResultChunk,
+        auto materializedIndexes = dictionary.materializeToStringChunkDictionary(
+            getChildState(state, ChildStateIndex::OFFSET),
+            getChildState(state, ChildStateIndex::DATA), indexesToScan, *stringResultChunk,
             getChildState(state, ChildStateIndex::INDEX).metadata);
+        for (const auto& [oldIndex, newIndex] : materializedIndexes) {
+            oldToNewIndex[oldIndex] = newIndex;
+        }
+        for (auto i = 0u; i < numValuesToScan; i++) {
+            auto resultPos = startOffsetInResult + i;
+            if (resultChunk->isNull(resultPos)) {
+                continue;
+            }
+            auto element = oldToNewIndex.find(oldIndexesByRow[i]);
+            DASSERT(element != oldToNewIndex.end());
+            indexChunk->setValue<string_index_t>(element->second, resultPos);
+        }
     }
     DASSERT(resultChunk->getNumValues() == startOffsetInResult + numValuesToScan &&
             stringResultChunk->getIndexColumnChunk()->getNumValues() ==
