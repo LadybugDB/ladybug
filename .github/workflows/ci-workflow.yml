@@ -256,7 +256,9 @@ jobs:
 
       - name: Generate datasets
         if: matrix.platform != 'windows'
-        run: bash scripts/generate_binary_demo.sh --lbug-shell-mode relwithdebinfo
+        run: |
+          bash scripts/generate_binary_demo.sh --lbug-shell-mode relwithdebinfo
+          uv run --with pyarrow python3 scripts/generate-dictionary-bug-fixture.py
 
       - name: Generate datasets (Windows)
         if: matrix.platform == 'windows'
@@ -265,6 +267,7 @@ jobs:
           LBUG_SHELL="$(find build -path '*/src/lbug_shell.exe' -print -quit)"
           test -n "$LBUG_SHELL"
           bash scripts/generate_binary_demo.sh --lbug-shell "$LBUG_SHELL"
+          uv run --with pyarrow python3 scripts/generate-dictionary-bug-fixture.py
 
       - name: Test
         shell: bash

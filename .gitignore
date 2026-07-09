@@ -90,3 +90,6 @@ scripts/generate-cpp-docs/c/docs
 dataset/binary-demo
 dataset/databases/tinysnb
 dataset/ldbc-1/csv
+
+# Generated dictionary-bug e2e parquet fixtures
+test/test_files/dictionary_bug/orb383_relationship_projection_obfuscated_fixture/*.parquet
