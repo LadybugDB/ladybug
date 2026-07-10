@@ -28,7 +28,9 @@ void configureSSLCerts(httplib::Client& client, const ExtensionRepoInfo& repoInf
         return;
     }
     if (auto caCertPath = ExtensionUtils::getCaCertPath()) {
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
         client.set_ca_cert_path(caCertPath->caCertFilePath, caCertPath->caCertDirPath);
+#endif
     }
 }
 
