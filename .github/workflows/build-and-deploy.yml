@@ -419,6 +419,9 @@ jobs:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Upgrade npm
+        run: npm install -g npm@11
+
       - name: Package Node.js API (main + per-platform sub-packages)
         run: node package
         working-directory: tools/nodejs_api
@@ -520,6 +523,9 @@ jobs:
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm
+        run: npm install -g npm@11
 
       - name: Show tarball contents
         run: tar -tvf lbug-wasm.tar.gz
