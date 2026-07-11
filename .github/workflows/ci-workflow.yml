@@ -267,7 +267,7 @@ jobs:
           LBUG_SHELL="$(find build -path '*/src/lbug_shell.exe' -print -quit)"
           test -n "$LBUG_SHELL"
           bash scripts/generate_binary_demo.sh --lbug-shell "$LBUG_SHELL"
-          uv run --with pyarrow python3 scripts/generate-dictionary-bug-fixture.py
+          uv run --with pyarrow python scripts/generate-dictionary-bug-fixture.py
 
       - name: Test
         shell: bash
