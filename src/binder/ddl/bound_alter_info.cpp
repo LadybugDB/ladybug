@@ -35,6 +35,19 @@ std::string BoundAlterInfo::toString() const {
         result += "Comment on Table " + tableName;
         break;
     }
+    case common::AlterType::SET_SORTED_BY: {
+        auto sortedByInfo =
+            common::dynamic_cast_checked<BoundExtraSetSortedByInfo*>(extraInfo.get());
+        result += "Set Table " + tableName + " Sorted By ";
+        for (auto i = 0u; i < sortedByInfo->properties.size(); ++i) {
+            if (i > 0) {
+                result += ", ";
+            }
+            auto& property = sortedByInfo->properties[i];
+            result += property.propertyName + (property.ascending ? " ASC" : " DESC");
+        }
+        break;
+    }
     default:
         break;
     }

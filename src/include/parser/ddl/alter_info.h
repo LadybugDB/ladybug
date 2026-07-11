@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "common/copy_constructors.h"
 #include "common/enums/alter_type.h"
@@ -9,6 +10,11 @@
 
 namespace lbug {
 namespace parser {
+
+struct ParsedSortedByProperty {
+    std::string propertyName;
+    bool ascending;
+};
 
 struct ExtraAlterInfo {
     virtual ~ExtraAlterInfo() = default;
@@ -81,6 +87,13 @@ struct ExtraCommentInfo : public ExtraAlterInfo {
     std::string comment;
 
     explicit ExtraCommentInfo(std::string comment) : comment{std::move(comment)} {}
+};
+
+struct ExtraSetSortedByInfo : public ExtraAlterInfo {
+    std::vector<ParsedSortedByProperty> properties;
+
+    explicit ExtraSetSortedByInfo(std::vector<ParsedSortedByProperty> properties)
+        : properties{std::move(properties)} {}
 };
 
 } // namespace parser

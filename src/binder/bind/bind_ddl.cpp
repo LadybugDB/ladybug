@@ -655,6 +655,9 @@ std::unique_ptr<BoundStatement> Binder::bindAlter(const Statement& statement) {
     case AlterType::COMMENT: {
         return bindCommentOn(statement);
     }
+    case AlterType::SET_SORTED_BY: {
+        return bindSetSortedBy(statement);
+    }
     case AlterType::ADD_FROM_TO_CONNECTION:
     case AlterType::DROP_FROM_TO_CONNECTION: {
         return bindAlterFromToConnection(statement);
@@ -735,6 +738,27 @@ std::unique_ptr<BoundStatement> Binder::bindCommentOn(const Statement& statement
     auto boundExtraInfo = std::make_unique<BoundExtraCommentInfo>(comment);
     auto boundInfo =
         BoundAlterInfo(AlterType::COMMENT, tableName, std::move(boundExtraInfo), info->onConflict);
+    return std::make_unique<BoundAlter>(std::move(boundInfo));
+}
+
+std::unique_ptr<BoundStatement> Binder::bindSetSortedBy(const Statement& statement) const {
+    auto& alter = statement.constCast<Alter>();
+    auto info = alter.getInfo();
+    auto extraInfo = info->extraInfo->constPtrCast<ExtraSetSortedByInfo>();
+    auto tableName = info->tableName;
+    auto catalog = Catalog::Get(*clientContext);
+    auto transaction = transaction::Transaction::Get(*clientContext);
+    auto tableEntry = catalog->getTableCatalogEntry(transaction, tableName);
+    validateNodeTableType(tableEntry);
+    std::vector<BoundSortedByProperty> properties;
+    properties.reserve(extraInfo->properties.size());
+    for (auto& property : extraInfo->properties) {
+        validateColumnExistence(tableEntry, property.propertyName);
+        properties.push_back(BoundSortedByProperty{property.propertyName, property.ascending});
+    }
+    auto boundExtraInfo = std::make_unique<BoundExtraSetSortedByInfo>(std::move(properties));
+    auto boundInfo = BoundAlterInfo(AlterType::SET_SORTED_BY, tableName, std::move(boundExtraInfo),
+        info->onConflict);
     return std::make_unique<BoundAlter>(std::move(boundInfo));
 }
 

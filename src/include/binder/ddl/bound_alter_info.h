@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "binder/ddl/property_definition.h"
 #include "binder/expression/expression.h"
 #include "common/enums/alter_type.h"
@@ -7,6 +9,11 @@
 
 namespace lbug {
 namespace binder {
+
+struct BoundSortedByProperty {
+    std::string propertyName;
+    bool ascending;
+};
 
 struct BoundExtraAlterInfo {
     virtual ~BoundExtraAlterInfo() = default;
@@ -118,6 +125,19 @@ struct BoundExtraAlterFromToConnection final : BoundExtraAlterInfo {
         : fromTableID{fromTableID}, toTableID{toTableID} {}
     std::unique_ptr<BoundExtraAlterInfo> copy() const override {
         return std::make_unique<BoundExtraAlterFromToConnection>(*this);
+    }
+};
+
+struct BoundExtraSetSortedByInfo final : BoundExtraAlterInfo {
+    std::vector<BoundSortedByProperty> properties;
+
+    explicit BoundExtraSetSortedByInfo(std::vector<BoundSortedByProperty> properties)
+        : properties{std::move(properties)} {}
+    BoundExtraSetSortedByInfo(const BoundExtraSetSortedByInfo& other)
+        : properties{other.properties} {}
+
+    std::unique_ptr<BoundExtraAlterInfo> copy() const override {
+        return std::make_unique<BoundExtraSetSortedByInfo>(*this);
     }
 };
 

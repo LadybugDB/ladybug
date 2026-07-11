@@ -35,18 +35,19 @@ public:
     ON = 119, ONLY = 120, OPTIONS = 121, OPTIONAL = 122, OR = 123, ORDER = 124, 
     PRIMARY = 125, PROFILE = 126, PROJECT = 127, READ = 128, REL = 129, 
     RENAME = 130, RETURN = 131, ROLLBACK = 132, ROLLBACK_SKIP_CHECKPOINT = 133, 
-    SEQUENCE = 134, SET = 135, SHORTEST = 136, START = 137, STARTS = 138, 
-    STRUCT = 139, TABLE = 140, THEN = 141, TO = 142, TRAIL = 143, TRANSACTION = 144, 
-    TRUE = 145, TYPE = 146, UNION = 147, UNWIND = 148, UNINSTALL = 149, 
-    UPDATE = 150, USE = 151, WHEN = 152, WHERE = 153, WITH = 154, WRITE = 155, 
-    WSHORTEST = 156, XOR = 157, SINGLE = 158, YIELD = 159, USER = 160, PASSWORD = 161, 
-    ROLE = 162, MAP = 163, DECIMAL = 164, STAR = 165, L_SKIP = 166, INVALID_NOT_EQUAL = 167, 
-    COLON = 168, DOTDOT = 169, MINUS = 170, FACTORIAL = 171, StringLiteral = 172, 
-    EscapedChar = 173, DecimalInteger = 174, HexLetter = 175, HexDigit = 176, 
-    Digit = 177, NonZeroDigit = 178, NonZeroOctDigit = 179, ZeroDigit = 180, 
-    ExponentDecimalReal = 181, RegularDecimalReal = 182, UnescapedSymbolicName = 183, 
-    IdentifierStart = 184, IdentifierPart = 185, EscapedSymbolicName = 186, 
-    SP = 187, WHITESPACE = 188, CypherComment = 189, Unknown = 190
+    SEQUENCE = 134, SET = 135, SORTED = 136, SHORTEST = 137, START = 138, 
+    STARTS = 139, STRUCT = 140, TABLE = 141, THEN = 142, TO = 143, TRAIL = 144, 
+    TRANSACTION = 145, TRUE = 146, TYPE = 147, UNION = 148, UNWIND = 149, 
+    UNINSTALL = 150, UPDATE = 151, USE = 152, WHEN = 153, WHERE = 154, WITH = 155, 
+    WRITE = 156, WSHORTEST = 157, XOR = 158, SINGLE = 159, YIELD = 160, 
+    USER = 161, PASSWORD = 162, ROLE = 163, MAP = 164, DECIMAL = 165, STAR = 166, 
+    L_SKIP = 167, INVALID_NOT_EQUAL = 168, COLON = 169, DOTDOT = 170, MINUS = 171, 
+    FACTORIAL = 172, StringLiteral = 173, EscapedChar = 174, DecimalInteger = 175, 
+    HexLetter = 176, HexDigit = 177, Digit = 178, NonZeroDigit = 179, NonZeroOctDigit = 180, 
+    ZeroDigit = 181, ExponentDecimalReal = 182, RegularDecimalReal = 183, 
+    UnescapedSymbolicName = 184, IdentifierStart = 185, IdentifierPart = 186, 
+    EscapedSymbolicName = 187, SP = 188, WHITESPACE = 189, CypherComment = 190, 
+    Unknown = 191
   };
 
   explicit CypherLexer(antlr4::CharStream *input);

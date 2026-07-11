@@ -196,6 +196,8 @@ SEQUENCE : ( 'S' | 's' ) ( 'E' | 'e' ) ( 'Q' | 'q' ) ( 'U' | 'u' ) ( 'E' | 'e' )
 
 SET : ( 'S' | 's' ) ( 'E' | 'e' ) ( 'T' | 't' ) ;
 
+SORTED : ( 'S' | 's' ) ( 'O' | 'o' ) ( 'R' | 'r' ) ( 'T' | 't' ) ( 'E' | 'e' ) ( 'D' | 'd' ) ;
+
 SHORTEST : ( 'S' | 's' ) ( 'H' | 'h' ) ( 'O' | 'o' ) ( 'R' | 'r' ) ( 'T' | 't' ) ( 'E' | 'e' ) ( 'S' | 's' ) ( 'T' | 't' ) ;
 
 START : ( 'S' | 's' ) ( 'T' | 't' ) ( 'A' | 'a' ) ( 'R' | 'r' ) ( 'T' | 't' ) ;
@@ -461,7 +463,8 @@ iC_AlterOptions
         | iC_RenameTable
         | iC_RenameProperty
         | iC_AddFromToConnection
-        | iC_DropFromToConnection;
+        | iC_DropFromToConnection
+        | iC_SetSortedBy;
 
 iC_AddProperty
     : ADD SP (iC_IfNotExists SP)? oC_PropertyKeyName SP iC_DataType ( SP iC_Default )? ;
@@ -483,6 +486,12 @@ iC_AddFromToConnection
 
 iC_DropFromToConnection
     : DROP SP (iC_IfExists SP)? iC_FromToConnection ;
+
+iC_SetSortedBy
+    : SET SP SORTED SP BY SP? '(' SP? iC_SortedByItem ( SP? ',' SP? iC_SortedByItem )* SP? ')' ;
+
+iC_SortedByItem
+    : oC_PropertyKeyName SP ( ASC | DESC ) ;
 
 iC_ColumnDefinitions: iC_ColumnDefinition ( SP? ',' SP? iC_ColumnDefinition )* ;
 
