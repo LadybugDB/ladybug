@@ -40,4 +40,7 @@ for rpath in \
 done
 
 # install_name_tool invalidates the existing signature.
+# Ad-hoc signing ("-") is sufficient for development and CI. If this binary is
+# distributed to end-users (e.g., via npm), a proper Developer ID certificate
+# should be used instead for notarization compatibility.
 codesign --force --sign - "$binary"

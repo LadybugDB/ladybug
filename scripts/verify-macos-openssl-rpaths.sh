@@ -7,6 +7,11 @@ if [ "$#" -ne 1 ]; then
 fi
 
 binary="$1"
+if [ ! -f "$binary" ]; then
+    echo "Mach-O binary not found: $binary" >&2
+    exit 1
+fi
+
 dependencies="$(otool -L "$binary")"
 
 for library in libssl.3.dylib libcrypto.3.dylib; do
@@ -16,6 +21,8 @@ for library in libssl.3.dylib libcrypto.3.dylib; do
     fi
 done
 
+# The leading '/' is matched by the '^[[:space:]]+/' portion of the regex, so the
+# alternatives within the group omit it: 'opt/homebrew', 'usr/local', 'opt/local'.
 if grep -Eq '^[[:space:]]+/(opt/homebrew|usr/local|opt/local)/.*lib(ssl|crypto)\.3\.dylib' \
     <<<"$dependencies"; then
     echo "package-manager-specific OpenSSL dependency remains in $binary" >&2
