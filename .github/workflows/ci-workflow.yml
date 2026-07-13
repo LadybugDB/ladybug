@@ -101,6 +101,9 @@ jobs:
       - name: Check extension files for std::assert
         run: ./scripts/check-no-std-assert.sh extension
 
+      - name: Test precompiled artifact download routing
+        run: ./scripts/test-download-liblbug.sh
+
       - name: Ensure generated grammar files are up to date
         run: |
           python3 scripts/antlr4/hash.py src/antlr4/keywords.txt src/antlr4/Cypher.g4 > tmphashfile
