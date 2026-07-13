@@ -313,6 +313,14 @@ jobs:
         working-directory: tools/nodejs_api
         run: npm test
 
+      - name: Make macOS OpenSSL lookup package-manager independent
+        if: ${{ matrix.platform == 'darwin' }}
+        working-directory: tools/nodejs_api
+        run: |
+          ../../scripts/relocate-macos-openssl.sh build/lbugjs.node
+          ../../scripts/verify-macos-openssl-rpaths.sh build/lbugjs.node
+          node -e "require('./build/lbugjs.node')"
+
       - name: Move Node.js native module (Linux)
         if: ${{ matrix.platform == 'linux' }}
         working-directory: tools/nodejs_api
