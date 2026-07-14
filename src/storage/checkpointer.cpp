@@ -140,6 +140,12 @@ void Checkpointer::acquireCheckpointLocks() {
 void Checkpointer::releaseCheckpointLocks() {
     checkpointApplyLockFile.reset();
     checkpointIntentLockFile.reset();
+    auto vfs = common::VirtualFileSystem::GetUnsafe(clientContext);
+    const auto databasePath = clientContext.getDatabasePath();
+    vfs->removeFileIfExists(StorageUtils::getCheckpointIntentLockFilePath(databasePath),
+        &clientContext);
+    vfs->removeFileIfExists(StorageUtils::getCheckpointApplyLockFilePath(databasePath),
+        &clientContext);
 }
 
 std::vector<Checkpointer::CheckpointTarget> Checkpointer::collectCheckpointTargets() const {
