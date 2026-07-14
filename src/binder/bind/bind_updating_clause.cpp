@@ -359,11 +359,13 @@ void Binder::bindInsertRel(std::shared_ptr<RelExpression> rel,
     auto useInternal = clientContext->useInternalCatalogEntry();
     auto dbManager = main::DatabaseManager::Get(*clientContext);
     auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
-    bool isAnyGraph =
-        defaultGraphCatalog != nullptr &&
-        entry->getTableID() ==
-            defaultGraphCatalog->getTableCatalogEntry(transaction, "_edges", useInternal)
-                ->getTableID();
+    bool isAnyGraph = false;
+    if (defaultGraphCatalog != nullptr &&
+        defaultGraphCatalog->containsTable(transaction, "_edges", useInternal)) {
+        isAnyGraph = entry->getTableID() ==
+                     defaultGraphCatalog->getTableCatalogEntry(transaction, "_edges", useInternal)
+                         ->getTableID();
+    }
 
     if (isAnyGraph) {
         // For ANY graphs, the _edges table has columns: _id (INTERNAL_ID), label (STRING), data
