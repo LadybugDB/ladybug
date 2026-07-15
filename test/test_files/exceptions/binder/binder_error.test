@@ -209,6 +209,14 @@ Expected: (STRING) -> DATE
 ---- error
 Conversion exception: Error occurred during parsing date. Given: "2012". Expected format: (YYYY-MM-DD)
 
+-LOG FoldImplicitDateCastInComparison
+-STATEMENT MATCH (a:person) WHERE a.birthdate = '2012' RETURN COUNT(*);
+---- error
+Conversion exception: Error occurred during parsing date. Given: "2012". Expected format: (YYYY-MM-DD)
+-STATEMENT EXPLAIN MATCH (a:person) WHERE a.birthdate = '2012' RETURN COUNT(*);
+---- error
+Conversion exception: Error occurred during parsing date. Given: "2012". Expected format: (YYYY-MM-DD)
+
 -LOG OrderByVariableNotInScope
 -STATEMENT MATCH (a:person)-[e1:knows]->(b:person) RETURN SUM(a.age) ORDER BY a.ID;
 ---- error

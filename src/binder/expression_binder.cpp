@@ -253,7 +253,12 @@ std::shared_ptr<Expression> ExpressionBinder::forceCast(
     auto functionName = "CAST";
     auto children =
         expression_vector{expression, createLiteralExpression(Value(targetType.toString()))};
-    return bindScalarFunctionExpression(children, functionName);
+    auto castExpression = bindScalarFunctionExpression(children, functionName);
+    if (expression->expressionType == ExpressionType::LITERAL &&
+        expression->dataType == LogicalType::STRING() && LogicalTypeUtils::isDate(targetType)) {
+        return foldExpression(castExpression);
+    }
+    return castExpression;
 }
 
 std::string ExpressionBinder::getUniqueName(const std::string& name) const {
