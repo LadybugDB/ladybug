@@ -48,14 +48,11 @@ StorageManager::StorageManager(const std::string& databasePath, bool readOnly, b
     shadowFile =
         std::make_unique<ShadowFile>(*memoryManager.getBufferManager(), vfs, this->databasePath);
     inMemory = main::DBConfig::isDBPathInMemory(databasePath);
-    if (!readOnly && !inMemory) {
-        vfs->openFile(StorageUtils::getCheckpointIntentLockFilePath(databasePath),
-            FileOpenFlags(
-                FileFlags::READ_ONLY | FileFlags::WRITE | FileFlags::CREATE_IF_NOT_EXISTS));
-        vfs->openFile(StorageUtils::getCheckpointApplyLockFilePath(databasePath),
-            FileOpenFlags(
-                FileFlags::READ_ONLY | FileFlags::WRITE | FileFlags::CREATE_IF_NOT_EXISTS));
-    }
+    // Checkpoint intent/apply lock files (*.checkpoint.intent.lock and
+    // *.checkpoint.apply.lock) are NOT created here.  All access, including subgraph
+    // access, goes through the main database path returned by
+    // clientContext.getDatabasePath().  The Checkpointer creates these files on demand
+    // (with CREATE_IF_NOT_EXISTS) when a checkpoint starts via acquireCheckpointLocks().
     registerIndexType(PrimaryKeyIndex::getIndexType());
     registerIndexType(ArtPrimaryKeyIndex::getIndexType());
 }
