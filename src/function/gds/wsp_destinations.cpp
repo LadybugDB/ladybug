@@ -183,13 +183,18 @@ private:
 template<typename T>
 class WSPDestinationsEdgeCompute : public EdgeCompute {
 public:
-    explicit WSPDestinationsEdgeCompute(CostsPair* costsPair) : costsPair{costsPair} {}
+    explicit WSPDestinationsEdgeCompute(CostsPair* costsPair, NodeOffsetMaskMap* pathNodeMask)
+        : costsPair{costsPair}, pathNodeMask{pathNodeMask} {}
 
     std::vector<nodeID_t> edgeCompute(nodeID_t boundNodeID, graph::NbrScanState::Chunk& chunk,
         bool) override {
         std::vector<nodeID_t> result;
         chunk.forEach([&](auto neighbors, auto propertyVectors, auto i) {
             auto nbrNodeID = neighbors[i];
+            // Skip nodes that fail the node predicate (if one is set).
+            if (pathNodeMask != nullptr && !pathNodeMask->valid(nbrNodeID)) {
+                return;
+            }
             auto weight = propertyVectors[0]->template getValue<T>(i);
             WeightUtils::checkWeight(WeightedSPDestinationsFunction::name, weight);
             if (costsPair->update(boundNodeID.offset, nbrNodeID.offset,
@@ -201,11 +206,12 @@ public:
     }
 
     std::unique_ptr<EdgeCompute> copy() override {
-        return std::make_unique<WSPDestinationsEdgeCompute<T>>(costsPair);
+        return std::make_unique<WSPDestinationsEdgeCompute<T>>(costsPair, pathNodeMask);
     }
 
 private:
     CostsPair* costsPair;
+    NodeOffsetMaskMap* pathNodeMask;
 };
 
 class WSPDestinationsAuxiliaryState : public GDSAuxiliaryState {
@@ -313,7 +319,8 @@ private:
         std::unique_ptr<GDSComputeState> gdsState;
         WeightUtils::visit(WeightedSPDestinationsFunction::name,
             bindData.weightPropertyExpr->getDataType(), [&]<typename T>(T) {
-                auto edgeCompute = std::make_unique<WSPDestinationsEdgeCompute<T>>(costPairPtr);
+                auto edgeCompute = std::make_unique<WSPDestinationsEdgeCompute<T>>(costPairPtr,
+                    sharedState->getPathNodeMaskMap());
                 gdsState = std::make_unique<GDSComputeState>(std::move(frontierPair),
                     std::move(edgeCompute), std::move(auxiliaryState));
             });
