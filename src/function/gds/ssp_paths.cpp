@@ -15,8 +15,10 @@ namespace function {
 
 class SSPPathsEdgeCompute : public SPEdgeCompute {
 public:
-    SSPPathsEdgeCompute(SPFrontierPair* frontierPair, BFSGraphManager* bfsGraphManager)
-        : SPEdgeCompute{frontierPair}, bfsGraphManager{bfsGraphManager} {
+    SSPPathsEdgeCompute(SPFrontierPair* frontierPair, BFSGraphManager* bfsGraphManager,
+        NodeOffsetMaskMap* pathNodeMask)
+        : SPEdgeCompute{frontierPair}, bfsGraphManager{bfsGraphManager},
+          pathNodeMask{pathNodeMask} {
         block = bfsGraphManager->getCurrentGraph()->addNewBlock();
     }
 
@@ -25,6 +27,10 @@ public:
         std::vector<nodeID_t> activeNodes;
         resultChunk.forEach([&](auto neighbors, auto propertyVectors, auto i) {
             auto nbrNodeID = neighbors[i];
+            // Skip nodes that fail the node predicate (if one is set).
+            if (pathNodeMask != nullptr && !pathNodeMask->valid(nbrNodeID)) {
+                return;
+            }
             auto iter = frontierPair->getNextFrontierValue(nbrNodeID.offset);
             if (iter == FRONTIER_UNVISITED) {
                 if (!block->hasSpace()) {
@@ -40,12 +46,13 @@ public:
     }
 
     std::unique_ptr<EdgeCompute> copy() override {
-        return std::make_unique<SSPPathsEdgeCompute>(frontierPair, bfsGraphManager);
+        return std::make_unique<SSPPathsEdgeCompute>(frontierPair, bfsGraphManager, pathNodeMask);
     }
 
 private:
     BFSGraphManager* bfsGraphManager;
     ObjectBlock<ParentList>* block = nullptr;
+    NodeOffsetMaskMap* pathNodeMask;
 };
 
 // Single shortest path algorithm. Paths are tracked.
@@ -81,8 +88,8 @@ private:
         auto bfsGraph =
             std::make_unique<BFSGraphManager>(sharedState->graph->getMaxOffsetMap(transaction),
                 storage::MemoryManager::Get(*clientContext));
-        auto edgeCompute =
-            std::make_unique<SSPPathsEdgeCompute>(frontierPair.get(), bfsGraph.get());
+        auto edgeCompute = std::make_unique<SSPPathsEdgeCompute>(frontierPair.get(), bfsGraph.get(),
+            sharedState->getPathNodeMaskMap());
         auto auxiliaryState = std::make_unique<PathAuxiliaryState>(std::move(bfsGraph));
         return std::make_unique<GDSComputeState>(std::move(frontierPair), std::move(edgeCompute),
             std::move(auxiliaryState));

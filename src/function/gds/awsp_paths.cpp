@@ -18,8 +18,8 @@ namespace function {
 template<typename T>
 class AWSPPathsEdgeCompute : public EdgeCompute {
 public:
-    explicit AWSPPathsEdgeCompute(BFSGraphManager* bfsGraphManager)
-        : bfsGraphManager{bfsGraphManager} {
+    explicit AWSPPathsEdgeCompute(BFSGraphManager* bfsGraphManager, NodeOffsetMaskMap* pathNodeMask)
+        : bfsGraphManager{bfsGraphManager}, pathNodeMask{pathNodeMask} {
         block = bfsGraphManager->getCurrentGraph()->addNewBlock();
     }
 
@@ -28,6 +28,10 @@ public:
         std::vector<nodeID_t> result;
         chunk.forEach([&](auto neighbors, auto propertyVectors, auto i) {
             auto nbrNodeID = neighbors[i];
+            // Skip nodes that fail the node predicate (if one is set).
+            if (pathNodeMask != nullptr && !pathNodeMask->valid(nbrNodeID)) {
+                return;
+            }
             auto edgeID = propertyVectors[0]->template getValue<relID_t>(i);
             auto weight = propertyVectors[1]->template getValue<T>(i);
             WeightUtils::checkWeight(AllWeightedSPPathsFunction::name, weight);
@@ -43,12 +47,13 @@ public:
     }
 
     std::unique_ptr<EdgeCompute> copy() override {
-        return std::make_unique<AWSPPathsEdgeCompute<T>>(bfsGraphManager);
+        return std::make_unique<AWSPPathsEdgeCompute<T>>(bfsGraphManager, pathNodeMask);
     }
 
 private:
     BFSGraphManager* bfsGraphManager;
     ObjectBlock<ParentList>* block = nullptr;
+    NodeOffsetMaskMap* pathNodeMask;
 };
 
 class AWSPPathsOutputWriter : public PathsOutputWriter {
@@ -156,7 +161,8 @@ private:
         std::unique_ptr<GDSComputeState> gdsState;
         WeightUtils::visit(AllWeightedSPPathsFunction::name,
             bindData.weightPropertyExpr->getDataType(), [&]<typename T>(T) {
-                auto edgeCompute = std::make_unique<AWSPPathsEdgeCompute<T>>(bfsGraph.get());
+                auto edgeCompute = std::make_unique<AWSPPathsEdgeCompute<T>>(bfsGraph.get(),
+                    sharedState->getPathNodeMaskMap());
                 auto auxiliaryState = std::make_unique<WSPPathsAuxiliaryState>(std::move(bfsGraph));
                 gdsState = std::make_unique<GDSComputeState>(std::move(frontierPair),
                     std::move(edgeCompute), std::move(auxiliaryState));

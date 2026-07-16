@@ -242,14 +242,20 @@ private:
 
 class ASPDestinationsEdgeCompute : public SPEdgeCompute {
 public:
-    ASPDestinationsEdgeCompute(SPFrontierPair* frontierPair, MultiplicitiesPair* multiplicitiesPair)
-        : SPEdgeCompute{frontierPair}, multiplicitiesPair{multiplicitiesPair} {};
+    ASPDestinationsEdgeCompute(SPFrontierPair* frontierPair, MultiplicitiesPair* multiplicitiesPair,
+        NodeOffsetMaskMap* pathNodeMask)
+        : SPEdgeCompute{frontierPair}, multiplicitiesPair{multiplicitiesPair},
+          pathNodeMask{pathNodeMask} {};
 
     std::vector<nodeID_t> edgeCompute(nodeID_t boundNodeID, NbrScanState::Chunk& resultChunk,
         bool) override {
         std::vector<nodeID_t> activeNodes;
         resultChunk.forEach([&](auto neighbors, auto, auto i) {
             auto nbrNodeID = neighbors[i];
+            // Skip nodes that fail the node predicate (if one is set).
+            if (pathNodeMask != nullptr && !pathNodeMask->valid(nbrNodeID)) {
+                return;
+            }
             auto nbrVal = frontierPair->getNextFrontierValue(nbrNodeID.offset);
             // We should update the nbrID's multiplicity in 2 cases: 1) if nbrID is being visited
             // for the first time, i.e., when its value in the pathLengths frontier is
@@ -272,11 +278,13 @@ public:
     }
 
     std::unique_ptr<EdgeCompute> copy() override {
-        return std::make_unique<ASPDestinationsEdgeCompute>(frontierPair, multiplicitiesPair);
+        return std::make_unique<ASPDestinationsEdgeCompute>(frontierPair, multiplicitiesPair,
+            pathNodeMask);
     }
 
 private:
     MultiplicitiesPair* multiplicitiesPair;
+    NodeOffsetMaskMap* pathNodeMask;
 };
 
 // All shortest path algorithm. Only destinations are tracked (reachability query).
@@ -306,7 +314,7 @@ private:
         auto frontier = DenseFrontier::getUnvisitedFrontier(context, graph);
         auto frontierPair = std::make_unique<SPFrontierPair>(std::move(frontier));
         auto edgeCompute = std::make_unique<ASPDestinationsEdgeCompute>(frontierPair.get(),
-            multiplicitiesPair.get());
+            multiplicitiesPair.get(), sharedState->getPathNodeMaskMap());
         auto auxiliaryState =
             std::make_unique<ASPDestinationsAuxiliaryState>(std::move(multiplicitiesPair));
         return std::make_unique<GDSComputeState>(std::move(frontierPair), std::move(edgeCompute),
