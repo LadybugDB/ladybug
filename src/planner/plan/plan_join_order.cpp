@@ -52,9 +52,39 @@ LogicalPlan Planner::planQueryGraphCollection(const QueryGraphCollection& queryG
         // product.
         queryGraphIdxToPlanExpressionsScan = getConnectedQueryGraphIdx(queryGraphCollection, info);
     }
+    // First pass: determine which disconnected graphs contain only correlated nodes.
+    // These patterns reference already-bound variables without adding new constraints
+    // (e.g. `(n3)` in OPTIONAL MATCH where n3 is from the outer plan). Skipping them
+    // avoids a full node-table scan that would artificially multiply cardinality (#697).
+    std::vector<bool> skipGraph(queryGraphCollection.getNumQueryGraphs(), false);
+    bool anyNonSkipped = false;
+    for (auto i = 0u; i < queryGraphCollection.getNumQueryGraphs(); ++i) {
+        auto queryGraph = queryGraphCollection.getQueryGraph(i);
+        if (queryGraph->getNumQueryRels() == 0 && info.subqueryType != SubqueryPlanningType::NONE) {
+            bool allNodesCorrelated = true;
+            for (auto& node : queryGraph->getQueryNodes()) {
+                if (!info.containsCorrExpr(*node->getInternalID())) {
+                    allNodesCorrelated = false;
+                    break;
+                }
+            }
+            skipGraph[i] = allNodesCorrelated;
+        }
+        if (!skipGraph[i]) {
+            anyNonSkipped = true;
+        }
+    }
+    // If every graph would be skipped, preserve the first one to keep the plan valid.
+    if (!anyNonSkipped && queryGraphCollection.getNumQueryGraphs() > 0) {
+        skipGraph[0] = false;
+    }
+
     std::unordered_set<uint32_t> evaluatedPredicatesIndices;
     std::vector<LogicalPlan> planPerQueryGraph;
     for (auto i = 0u; i < queryGraphCollection.getNumQueryGraphs(); ++i) {
+        if (skipGraph[i]) {
+            continue;
+        }
         auto queryGraph = queryGraphCollection.getQueryGraph(i);
         // Extract predicates for current query graph
         std::unordered_set<uint32_t> predicateToEvaluateIndices;
