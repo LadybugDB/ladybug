@@ -1,0 +1,51 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue696LabelConstraintReordering
+# Reproduction for github issue #696:
+# Reordering comma-separated MATCH patterns can ignore a label constraint
+# on a previously bound variable
+#
+# Bug: MATCH (n1), (n0:L3)<-[:T5]-(n1:L2) returns 1 instead of 0 because
+# the later :L2 constraint on n1 is ignored when n1 was already bound by
+# the earlier unlabelled (n1) pattern.
+
+-STATEMENT CREATE NODE TABLE L1(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE L2(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE L3(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE T5(FROM L1 TO L3);
+---- ok
+
+-STATEMENT CREATE (:L1 {id: 1});
+---- ok
+-STATEMENT CREATE (:L3 {id: 2});
+---- ok
+-STATEMENT MATCH (a:L1), (b:L3) WHERE a.id = 1 AND b.id = 2 CREATE (a)-[:T5]->(b);
+---- ok
+
+# L2 remains empty. Both queries should return 0 because n1 is constrained
+# to L2, which is empty.
+
+# Query A: explicit label first, then wildcard (was already correct)
+-STATEMENT MATCH (n0:L3)<-[:T5]-(n1:L2), (n1) RETURN count(*) AS c;
+---- 1
+0
+
+# Query B: wildcard first, then explicit label (was returning 1, github issue #696)
+-STATEMENT MATCH (n1), (n0:L3)<-[:T5]-(n1:L2) RETURN count(*) AS c;
+---- 1
+0
+
+# Verify data is correct when using only L1 (the actual table with data)
+-STATEMENT MATCH (n0:L3)<-[:T5]-(n1:L1) RETURN count(*) AS c;
+---- 1
+1
+
+# Verify T5 relationship exists as expected
+-STATEMENT MATCH (n0:L3)<-[:T5]-(n1:L1) RETURN n1.id, n0.id;
+---- 1
+1|2
