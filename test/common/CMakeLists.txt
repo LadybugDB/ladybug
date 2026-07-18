@@ -10,4 +10,5 @@ add_lbug_test(types_test
         time_test.cpp
         timestamp_test.cpp
         vfs_test.cpp
+        boolean_filter_test.cpp
 )
