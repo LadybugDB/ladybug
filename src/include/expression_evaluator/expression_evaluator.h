@@ -84,7 +84,12 @@ protected:
 
     bool updateSelectedPos(common::SelectionVector& selVector) const {
         auto& resultSelVector = resultVector->state->getSelVector();
-        if (resultSelVector.getSelSize() > 1) {
+        // The boolean-only path below is valid only for genuinely flat result states. It must
+        // not be taken for an unflat chunk whose current selection happens to have size 1: the
+        // caller may activate the selection buffer via setToFiltered afterwards, so skipping
+        // the buffer write would expose stale positions left over from a previous batch
+        // (issue #692: a rel-property IN filter duplicated one row and dropped another).
+        if (!resultVector->state->isFlat()) {
             auto numSelectedValues = 0u;
             for (auto i = 0u; i < resultSelVector.getSelSize(); ++i) {
                 auto pos = resultSelVector[i];
