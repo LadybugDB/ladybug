@@ -577,7 +577,16 @@ std::shared_ptr<NodeExpression> Binder::bindQueryNode(const NodePattern& nodePat
             // We bind to a single node with both labels
             if (!nodePattern.getTableNames().empty()) {
                 auto otherNodeEntries = bindNodeTableEntries(nodePattern.getTableNames());
-                queryNode->addEntries(otherNodeEntries.first);
+                // If the existing node was created from a wildcard pattern (no explicit
+                // labels), replace its entries with the explicit label constraint instead
+                // of adding. This ensures that reordering comma-separated patterns does
+                // not cause explicit label constraints to be ignored (github issue #696).
+                // E.g. MATCH (n1), (n1:L2) should restrict n1 to L2, not keep all tables.
+                if (queryNode->getOriginalLabels().empty()) {
+                    queryNode->setEntries(otherNodeEntries.first);
+                } else {
+                    queryNode->addEntries(otherNodeEntries.first);
+                }
             }
         }
     } else {
