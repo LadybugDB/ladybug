@@ -3,6 +3,7 @@
 #include "main/client_context.h"
 #include "optimizer/acc_hash_join_optimizer.h"
 #include "optimizer/agg_key_dependency_optimizer.h"
+#include "optimizer/bool_folding_optimizer.h"
 #include "optimizer/cardinality_updater.h"
 #include "optimizer/correlated_subquery_unnest_solver.h"
 #include "optimizer/count_rel_table_optimizer.h"
@@ -50,6 +51,11 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
         // the full pattern before it gets modified.
         auto foreignJoinPushDownOptimizer = ForeignJoinPushDownOptimizer(context);
         foreignJoinPushDownOptimizer.rewrite(plan);
+
+        // Boolean folding should run before filter push-down so that
+        // contradictory or always-true predicates are simplified first.
+        auto boolFoldingOptimizer = BoolFoldingOptimizer();
+        boolFoldingOptimizer.rewrite(plan);
 
         auto filterPushDownOptimizer = FilterPushDownOptimizer(context, &cardinalityEstimator);
         filterPushDownOptimizer.rewrite(plan);
