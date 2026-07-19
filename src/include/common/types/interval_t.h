@@ -30,6 +30,8 @@ enum class DatePartSpecifier : uint8_t {
     MINUTE,
     HOUR,
     WEEK,
+    // Day of the week (0 = Sunday, 6 = Saturday), matching PG/DuckDB "dow".
+    DOW,
 };
 
 struct LBUG_API interval_t {
