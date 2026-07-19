@@ -412,6 +412,9 @@ void Interval::tryGetDatePartSpecifier(std::string specifier, DatePartSpecifier&
                specifier == "weekofyear") {
         // ISO week number
         result = DatePartSpecifier::WEEK;
+    } else if (specifier == "dow" || specifier == "dayofweek") {
+        // day of the week (0-6, Sunday = 0)
+        result = DatePartSpecifier::DOW;
     } else if (specifier == "quarter" || specifier == "quarters") {
         // quarter of the year (1-4)
         result = DatePartSpecifier::QUARTER;
