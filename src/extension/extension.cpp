@@ -398,9 +398,9 @@ ExtensionLibLoader::ExtensionLibLoader(const std::string& extensionName, const s
     if (libHdl == nullptr) {
         // Read before dlErrMessage(), which is also driven by GetLastError().
         const auto hint = dlMissingDependencyHint(path);
-        throw common::IOException(
-            std::format("Failed to load library: {} which is needed by extension: {}.\nError: {}.{}",
-                path, extensionName, common::dlErrMessage(), hint));
+        throw common::IOException(std::format(
+            "Failed to load library: {} which is needed by extension: {}.\nError: {}.{}", path,
+            extensionName, common::dlErrMessage(), hint));
     }
 }
 
