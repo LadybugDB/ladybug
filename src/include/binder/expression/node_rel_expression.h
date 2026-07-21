@@ -10,6 +10,9 @@ namespace lbug {
 namespace catalog {
 class TableCatalogEntry;
 }
+namespace main {
+class ClientContext;
+}
 namespace binder {
 
 class LBUG_API NodeOrRelExpression : public Expression {
@@ -109,6 +112,9 @@ protected:
     // Original labels from the node/rel pattern (for ANY graphs)
     std::vector<std::string> originalLabels;
 };
+
+// True when the node/rel is backed by an ANY graph's internal `_nodes`/`_edges` table.
+bool isAnyGraphNodeOrRel(const NodeOrRelExpression& nodeOrRel, main::ClientContext* context);
 
 } // namespace binder
 } // namespace lbug
