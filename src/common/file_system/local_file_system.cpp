@@ -255,11 +255,6 @@ void LocalFileSystem::copyFile(const std::string& from, const std::string& to) {
 
 void LocalFileSystem::createDir(const std::string& dir) const {
     try {
-        if (std::filesystem::exists(dir)) {
-            // LCOV_EXCL_START
-            throw IOException(std::format("Directory {} already exists.", dir));
-            // LCOV_EXCL_STOP
-        }
         auto directoryToCreate = dir;
         if (directoryToCreate.ends_with('/')
 #if defined(_WIN32)
@@ -272,13 +267,7 @@ void LocalFileSystem::createDir(const std::string& dir) const {
             directoryToCreate = directoryToCreate.substr(0, directoryToCreate.size() - 1);
         }
         std::error_code errCode;
-        if (!std::filesystem::create_directories(directoryToCreate, errCode)) {
-            // LCOV_EXCL_START
-            throw IOException(
-                std::format("Directory {} cannot be created. Check if it exists and remove it.",
-                    directoryToCreate));
-            // LCOV_EXCL_STOP
-        }
+        std::filesystem::create_directories(directoryToCreate, errCode);
         if (errCode) {
             // LCOV_EXCL_START
             throw IOException(std::format("Failed to create directory: {}, error message: {}.", dir,

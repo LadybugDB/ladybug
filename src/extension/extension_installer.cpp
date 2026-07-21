@@ -1,5 +1,8 @@
 #include "extension/extension_installer.h"
 
+#include <atomic>
+#include <thread>
+
 #include "common/exception/io.h"
 #include "common/file_system/virtual_file_system.h"
 #include "httplib.h"
@@ -62,13 +65,36 @@ void ExtensionInstaller::tryDownloadExtensionFile(const ExtensionRepoInfo& repoI
         }
     }
 
+    // Download to a temp file, then atomically rename into place so that concurrent
+    // readers (e.g. dlopen) never see a truncated or partially-written file.
     auto vfs = common::VirtualFileSystem::GetUnsafe(context);
-    auto fileInfo = vfs->openFile(localFilePath,
+    static std::atomic<uint64_t> tempCounter{0};
+    std::hash<std::thread::id> threadHasher;
+    auto tempPath = localFilePath + ".tmp." +
+                    std::to_string(threadHasher(std::this_thread::get_id())) + "." +
+                    std::to_string(tempCounter.fetch_add(1, std::memory_order_relaxed));
+
+    auto fileInfo = vfs->openFile(tempPath,
         common::FileOpenFlags(common::FileFlags::WRITE | common::FileFlags::READ_ONLY |
                               common::FileFlags::CREATE_AND_TRUNCATE_IF_EXISTS));
-    fileInfo->writeFile(reinterpret_cast<const uint8_t*>(res->body.c_str()), res->body.size(),
-        0 /* offset */);
-    fileInfo->syncFile();
+    try {
+        fileInfo->writeFile(reinterpret_cast<const uint8_t*>(res->body.c_str()), res->body.size(),
+            0 /* offset */);
+        fileInfo->syncFile();
+    } catch (...) {
+        // Clean up the temp file on write failure before rethrowing.
+        fileInfo.reset();
+        vfs->removeFileIfExists(tempPath);
+        throw;
+    }
+    fileInfo.reset(); // Ensure the file handle is closed before rename.
+    try {
+        vfs->renameFile(tempPath, localFilePath);
+    } catch (...) {
+        // Clean up the temp file on rename failure (e.g. cross-filesystem edge case).
+        vfs->removeFileIfExists(tempPath);
+        throw;
+    }
 }
 
 bool ExtensionInstaller::install() {
@@ -99,6 +125,12 @@ bool ExtensionInstaller::installExtension() {
     auto localDirForSharedLib = extension::ExtensionUtils::getLocalPathForSharedLib(&context);
     if (!vfs->fileOrPathExists(localDirForSharedLib)) {
         vfs->createDir(localDirForSharedLib);
+    }
+    // Re-check after creating dirs: another process may have installed it while we
+    // were working.  Without this, both processes would download and rename, wasting
+    // bandwidth (though atomic rename prevents data races in dlopen).
+    if (vfs->fileOrPathExists(localLibFilePath) && !info.forceInstall) {
+        return false;
     }
     auto libFileRepoInfo = extension::ExtensionUtils::getExtensionLibRepoInfo(info.name, info.repo);
 
