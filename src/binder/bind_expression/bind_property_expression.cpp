@@ -34,8 +34,7 @@ static bool isStructPattern(const Expression& expression) {
            logicalTypeID == LogicalTypeID::STRUCT;
 }
 
-static bool isAnyGraphNodeOrRel(const NodeOrRelExpression& nodeOrRel,
-    main::ClientContext* context) {
+bool isAnyGraphNodeOrRel(const NodeOrRelExpression& nodeOrRel, main::ClientContext* context) {
     auto transaction = transaction::Transaction::Get(*context);
     auto useInternal = context->useInternalCatalogEntry();
     auto dbManager = main::DatabaseManager::Get(*context);
