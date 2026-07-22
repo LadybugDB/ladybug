@@ -1,5 +1,7 @@
 #include "storage/wal/wal_replayer.h"
 
+#include <string>
+
 #include "common/exception/io.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/file_info.h"
@@ -330,12 +332,23 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
         replayLoadExtensionRecord(walRecord);
     } break;
     case WALRecordType::CHECKPOINT_RECORD: {
-        // This record should not be replayed. It is only used to indicate that the previous records
-        // had been replayed and shadow files are created.
-        UNREACHABLE_CODE;
+        // This record should not be replayed during individual record replay.
+        // CHECKPOINT records are handled by the frozen/active WAL recovery path
+        // that replays shadow pages as a batch. If we reach here, the WAL file has
+        // been corrupted (or checksums are disabled and a torn write happened to
+        // produce type byte 254). Throw a descriptive error instead of asserting
+        // so that the database can still be opened with throwOnWalReplayFailure=false.
+        throw common::RuntimeException(std::format(
+            "WAL replay encountered a CHECKPOINT record outside the expected recovery "
+            "path. This is caused by a corrupted WAL tail. "
+            "Set throwOnWalReplayFailure=false to discard the tail and open the database."));
     }
     default:
-        UNREACHABLE_CODE;
+        throw common::RuntimeException(std::format(
+            "WAL replay encountered an unknown record type ({}). "
+            "The WAL file is corrupted. "
+            "Set throwOnWalReplayFailure=false to discard the tail and open the database.",
+            static_cast<int>(walRecord.type)));
     }
 }
 
