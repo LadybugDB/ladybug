@@ -25,8 +25,8 @@
 -LOG QueryAllNodes
 -STATEMENT MATCH (a) RETURN a.*
 ---- 2
-0|[User]|{"age":30,"name":"Alice"}
-1|[City]|{"population":8000000,"name":"New York"}
+{"age":30,"name":"Alice"}
+{"population":8000000,"name":"New York"}
 
 -LOG QueryDynamicProperties
 -STATEMENT MATCH (u:User)-[:LivesIn]->(c:City) RETURN u.name, c.name
@@ -46,7 +46,7 @@ Alice|30
 -LOG QueryDynamicNodePropertyInWhereFilter
 -STATEMENT MATCH (u:User) WHERE u.age = 30 RETURN u.*
 ---- 1
-0|[User]|{"age":30,"name":"Alice"}
+{"age":30,"name":"Alice"}
 
 -LOG QueryDynamicStringNodePropertyInWhereFilter
 -STATEMENT MATCH (u:User) WHERE u.name = 'Alice' RETURN u.name, u.age
@@ -98,7 +98,7 @@ Alice|30
 -LOG MatchConjunctiveLabelsReturnNodeStar
 -STATEMENT MATCH (n:Person:Employee) RETURN n.*
 ---- 1
-0|[Person,Employee]|{"name":"Alice"}
+{"name":"Alice"}
 
 -LOG Cleanup
 -STATEMENT USE GRAPH main
@@ -177,12 +177,12 @@ WorksAt
 -LOG WholeNodeLabelIsRealLabelSet
 -STATEMENT MATCH (n:Person:Employee) RETURN n
 ---- 1
-{_ID: 0:0, _LABEL: [Person,Employee], id: 0, label: [Person,Employee], data: {"name":"Alice"}}
+{_ID: 0:0, _LABEL: [Person,Employee], data: {"name":"Alice"}}
 
 -LOG WholeRelLabelIsRealType
 -STATEMENT MATCH ()-[e:WorksAt]->() RETURN e
 ---- 1
-(0:0)-{_LABEL: WorksAt, _id: 1:0, label: WorksAt, data: {"since":2020}}->(0:1)
+(0:0)-{_LABEL: WorksAt, _id: 1:0, data: {"since":2020}}->(0:1)
 
 -LOG Cleanup
 -STATEMENT USE GRAPH main
