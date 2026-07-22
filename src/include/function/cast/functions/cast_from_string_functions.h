@@ -119,7 +119,7 @@ inline void CastString::operation(const string_t& input, date_t& result,
 template<>
 inline void CastString::operation(const string_t& input, timestamp_t& result,
     ValueVector* /*resultVector*/, uint64_t /*rowToAdd*/, const CSVOption* /*option*/) {
-    result = Timestamp::fromCString((const char*)input.getData(), input.len);
+    result = Timestamp::fromCStringLocal((const char*)input.getData(), input.len);
 }
 
 template<>
