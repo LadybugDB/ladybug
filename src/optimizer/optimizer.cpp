@@ -14,7 +14,9 @@
 #include "optimizer/order_by_push_down_optimizer.h"
 #include "optimizer/projection_push_down_optimizer.h"
 #include "optimizer/remove_factorization_rewriter.h"
+#include "optimizer/remove_unnecessary_distinct_optimizer.h"
 #include "optimizer/remove_unnecessary_join_optimizer.h"
+#include "optimizer/remove_unnecessary_order_by_optimizer.h"
 #include "optimizer/schema_populator.h"
 #include "optimizer/top_k_optimizer.h"
 #include "optimizer/unwind_dedup_optimizer.h"
@@ -89,6 +91,16 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
         // after FactorizationRewriter.
         auto aggKeyDependencyOptimizer = AggKeyDependencyOptimizer();
         aggKeyDependencyOptimizer.rewrite(plan);
+
+        // RemoveUnnecessaryDistinctOptimizer should run after AggKeyDependencyOptimizer
+        // so that dependent-key resolution has already happened.
+        auto removeUnnecessaryDistinctOptimizer = RemoveUnnecessaryDistinctOptimizer();
+        removeUnnecessaryDistinctOptimizer.rewrite(plan);
+
+        // RemoveUnnecessaryOrderByOptimizer removes ORDER BY nodes that do not
+        // affect the result (e.g., before a GROUP BY-less aggregate like COUNT(*)).
+        auto removeUnnecessaryOrderByOptimizer = RemoveUnnecessaryOrderByOptimizer();
+        removeUnnecessaryOrderByOptimizer.rewrite(plan);
 
         // for EXPLAIN LOGICAL we need to update the cardinalities for the optimized plan
         // we don't need to do this otherwise as we don't use the cardinalities after planning
