@@ -152,6 +152,9 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapOperator(const LogicalOperator*
     case LogicalOperatorType::INDEX_LOOK_UP: {
         physicalOperator = mapIndexLookup(logicalOperator);
     } break;
+    case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP: {
+        physicalOperator = mapQueryPrimaryKeyLookup(logicalOperator);
+    } break;
     case LogicalOperatorType::INTERSECT: {
         physicalOperator = mapIntersect(logicalOperator);
     } break;

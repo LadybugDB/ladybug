@@ -70,6 +70,8 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
         return "IMPORT_DATABASE";
     case LogicalOperatorType::INDEX_LOOK_UP:
         return "INDEX_LOOK_UP";
+    case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP:
+        return "QUERY_PRIMARY_KEY_LOOKUP";
     case LogicalOperatorType::INTERSECT:
         return "INTERSECT";
     case LogicalOperatorType::INSERT:

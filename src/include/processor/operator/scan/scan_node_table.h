@@ -5,7 +5,15 @@
 #include "storage/table/node_table.h"
 
 namespace lbug {
+namespace storage {
+class MemoryManager;
+} // namespace storage
+
 namespace processor {
+
+std::unique_ptr<storage::TableScanState> createNodeTableScanState(storage::NodeTable* table,
+    common::ValueVector* nodeIDVector, const std::vector<common::ValueVector*>& outVectors,
+    storage::MemoryManager* memoryManager);
 
 struct ScanNodeTableProgressSharedState {
     std::atomic<common::node_group_idx_t> numMorselsScanned;

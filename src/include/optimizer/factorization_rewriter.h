@@ -21,6 +21,7 @@ private:
     void visitOrderBy(planner::LogicalOperator* op) override;
     void visitLimit(planner::LogicalOperator* op) override;
     void visitDistinct(planner::LogicalOperator* op) override;
+    void visitQueryPrimaryKeyLookup(planner::LogicalOperator* op) override;
     void visitUnwind(planner::LogicalOperator* op) override;
     void visitUnion(planner::LogicalOperator* op) override;
     void visitFilter(planner::LogicalOperator* op) override;
