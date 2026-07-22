@@ -71,6 +71,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "IMPORT_DATABASE";
     case PhysicalOperatorType::INDEX_LOOKUP:
         return "INDEX_LOOKUP";
+    case PhysicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP:
+        return "QUERY_PRIMARY_KEY_LOOKUP";
     case PhysicalOperatorType::INSERT:
         return "INSERT";
     case PhysicalOperatorType::INTERSECT_BUILD:

@@ -19,6 +19,7 @@
 #include "planner/operator/persistent/logical_insert.h"
 #include "planner/operator/persistent/logical_merge.h"
 #include "planner/operator/persistent/logical_set.h"
+#include "planner/operator/scan/logical_query_primary_key_lookup.h"
 
 using namespace lbug::common;
 using namespace lbug::binder;
@@ -112,6 +113,13 @@ void FactorizationRewriter::visitDistinct(planner::LogicalOperator* op) {
     auto& distinct = op->cast<LogicalDistinct>();
     auto groupsPosToFlatten = distinct.getGroupsPosToFlatten();
     distinct.setChild(0, appendFlattens(distinct.getChild(0), groupsPosToFlatten));
+}
+
+void FactorizationRewriter::visitQueryPrimaryKeyLookup(planner::LogicalOperator* op) {
+    auto& lookup = op->cast<LogicalQueryPrimaryKeyLookup>();
+    auto groupsPosToFlatten =
+        FlattenAll::getGroupsPosToFlatten(lookup.getKey(), *op->getChild(0)->getSchema());
+    lookup.setChild(0, appendFlattens(lookup.getChild(0), groupsPosToFlatten));
 }
 
 void FactorizationRewriter::visitUnwind(planner::LogicalOperator* op) {

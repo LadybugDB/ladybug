@@ -26,6 +26,7 @@ add_library(lbug_processor_operator
         physical_operator.cpp
         projection.cpp
         profile.cpp
+        query_primary_key_lookup.cpp
         recursive_extend.cpp
         result_collector.cpp
         semi_masker.cpp

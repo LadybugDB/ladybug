@@ -141,6 +141,12 @@ protected:
         return op;
     }
 
+    virtual void visitQueryPrimaryKeyLookup(planner::LogicalOperator* /*op*/) {}
+    virtual std::shared_ptr<planner::LogicalOperator> visitQueryPrimaryKeyLookupReplace(
+        std::shared_ptr<planner::LogicalOperator> op) {
+        return op;
+    }
+
     virtual void visitRecursiveExtend(planner::LogicalOperator*) {}
     virtual std::shared_ptr<planner::LogicalOperator> visitRecursiveExtendReplace(
         std::shared_ptr<planner::LogicalOperator> op) {
