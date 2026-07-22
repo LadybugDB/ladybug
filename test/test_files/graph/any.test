@@ -162,3 +162,30 @@ WorksAt
 ---- ok
 -STATEMENT DROP GRAPH g
 ---- ok
+
+-CASE AnyGraphWholeObjectLabel
+-SKIP_FSM_LEAK_CHECK
+
+-LOG CreateAnyGraph
+-STATEMENT CREATE GRAPH g ANY
+---- ok
+-STATEMENT USE GRAPH g
+---- ok
+-STATEMENT CREATE (:Person:Employee {name: 'Alice'})-[:WorksAt {since: 2020}]->(:Org {name: 'Acme'})
+---- ok
+
+-LOG WholeNodeLabelIsRealLabelSet
+-STATEMENT MATCH (n:Person:Employee) RETURN n
+---- 1
+{_ID: 0:0, _LABEL: [Person,Employee], id: 0, label: [Person,Employee], data: {"name":"Alice"}}
+
+-LOG WholeRelLabelIsRealType
+-STATEMENT MATCH ()-[e:WorksAt]->() RETURN e
+---- 1
+(0:0)-{_LABEL: WorksAt, _id: 1:0, label: WorksAt, data: {"since":2020}}->(0:1)
+
+-LOG Cleanup
+-STATEMENT USE GRAPH main
+---- ok
+-STATEMENT DROP GRAPH g
+---- ok

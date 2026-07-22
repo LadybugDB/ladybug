@@ -311,8 +311,15 @@ std::shared_ptr<RelExpression> Binder::createNonRecursiveQueryRel(const std::str
         queryRel->setDirectionExpr(expressionBinder.createVariableExpression(LogicalType::BOOL(),
             queryRel->getUniqueName() + InternalKeyword::DIRECTION));
     }
-    auto input = function::RewriteFunctionBindInput(clientContext, &expressionBinder, {queryRel});
-    queryRel->setLabelExpression(function::LabelFunction::rewriteFunc(input));
+    // In an ANY graph a rel's type is stored in the scalar `label` STRING column, so surface
+    // that as _LABEL instead of the internal `_edges` table name (type stays STRING).
+    if (isAnyGraphNodeOrRel(*queryRel, clientContext) && queryRel->hasPropertyExpression("label")) {
+        queryRel->setLabelExpression(queryRel->getPropertyExpression("label"));
+    } else {
+        auto input =
+            function::RewriteFunctionBindInput(clientContext, &expressionBinder, {queryRel});
+        queryRel->setLabelExpression(function::LabelFunction::rewriteFunc(input));
+    }
     // Store original labels for ANY graphs
     if (!originalLabels.empty()) {
         queryRel->setOriginalLabels(originalLabels);
@@ -647,8 +654,24 @@ std::shared_ptr<NodeExpression> Binder::createQueryNode(const std::string& parse
     // Bind internal expressions
     queryNode->setInternalID(
         construct(LogicalType::INTERNAL_ID(), InternalKeyword::ID, *queryNode));
-    auto input = function::RewriteFunctionBindInput(clientContext, &expressionBinder, {queryNode});
-    queryNode->setLabelExpression(function::LabelFunction::rewriteFunc(input));
+    // In an ANY graph a node carries a *set* of labels, stored in the `label` STRING[] column.
+    // Surface that column as _LABEL (typed STRING[]) rather than the internal `_nodes` table
+    // name. Structured graphs keep the single-label STRING form via the rewrite.
+    if (isAnyGraphNodeOrRel(*queryNode, clientContext) &&
+        queryNode->hasPropertyExpression("label")) {
+        std::vector<StructField> fields;
+        fields.emplace_back(InternalKeyword::ID, LogicalType::INTERNAL_ID());
+        fields.emplace_back(InternalKeyword::LABEL, LogicalType::LIST(LogicalType::STRING()));
+        for (auto& property : propertyExpressions) {
+            fields.emplace_back(property->getPropertyName(), property->getDataType().copy());
+        }
+        queryNode->setDataType(LogicalType::NODE(std::move(fields)));
+        queryNode->setLabelExpression(queryNode->getPropertyExpression("label"));
+    } else {
+        auto input =
+            function::RewriteFunctionBindInput(clientContext, &expressionBinder, {queryNode});
+        queryNode->setLabelExpression(function::LabelFunction::rewriteFunc(input));
+    }
     return queryNode;
 }
 
