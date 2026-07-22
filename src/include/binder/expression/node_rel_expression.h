@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <unordered_set>
 
 #include "common/case_insensitive_map.h"
 #include "expression.h"
@@ -50,6 +51,24 @@ public:
     }
     std::vector<std::shared_ptr<PropertyExpression>> getPropertyExpressions() const {
         return propertyExprs;
+    }
+    // Property expressions surfaced in whole-object (`RETURN n`) and `.*` output. Equal to
+    // getPropertyExpressions() unless some are hidden (e.g. an ANY graph's internal `id`/`label`
+    // columns), which stay bound for writes and explicit access but are excluded from projection.
+    std::vector<std::shared_ptr<PropertyExpression>> getProjectedPropertyExpressions() const {
+        if (hiddenPropertyNames.empty()) {
+            return propertyExprs;
+        }
+        std::vector<std::shared_ptr<PropertyExpression>> result;
+        for (auto& property : propertyExprs) {
+            if (!hiddenPropertyNames.contains(property->getPropertyName())) {
+                result.push_back(property);
+            }
+        }
+        return result;
+    }
+    void setHiddenPropertyNames(std::unordered_set<std::string> names) {
+        hiddenPropertyNames = std::move(names);
     }
     std::shared_ptr<PropertyExpression> getPropertyExpression(
         const std::string& propertyName) const {
@@ -111,6 +130,8 @@ protected:
     std::unordered_map<catalog::TableCatalogEntry*, std::string> dbNames;
     // Original labels from the node/rel pattern (for ANY graphs)
     std::vector<std::string> originalLabels;
+    // Property names hidden from whole-object / `.*` projection (e.g. ANY internal `id`/`label`).
+    std::unordered_set<std::string> hiddenPropertyNames;
 };
 
 // True when the node/rel is backed by an ANY graph's internal `_nodes`/`_edges` table.

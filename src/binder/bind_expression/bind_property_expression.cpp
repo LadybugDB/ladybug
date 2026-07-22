@@ -73,7 +73,9 @@ expression_vector ExpressionBinder::bindPropertyStarExpression(
 expression_vector ExpressionBinder::bindNodeOrRelPropertyStarExpression(const Expression& child) {
     expression_vector result;
     auto& nodeOrRel = child.constCast<NodeOrRelExpression>();
-    for (auto& property : nodeOrRel.getPropertyExpressions()) {
+    // Projected properties exclude columns hidden from output (e.g. an ANY graph's internal
+    // `id`/`label`), matching whole-object `RETURN n` behaviour.
+    for (auto& property : nodeOrRel.getProjectedPropertyExpressions()) {
         if (Binder::reservedInPropertyLookup(property->getPropertyName())) {
             continue;
         }
