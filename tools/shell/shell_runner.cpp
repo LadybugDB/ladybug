@@ -192,9 +192,10 @@ int main(int argc, char* argv[]) {
     if (readOnlyMode) {
         systemConfig.readOnly = true;
     }
-    if (ignoreWalErrors) {
-        systemConfig.throwOnWalReplayFailure = false;
-    }
+    // The library default is now false (lenient), but the shell CLI semantics are:
+    // without --ignore_wal_replay_errors → strict mode (throw on corrupt WAL tail)
+    // with --ignore_wal_replay_errors    → lenient mode (discard tail and open)
+    systemConfig.throwOnWalReplayFailure = !ignoreWalErrors;
 
     const std::string historyFile = "history.txt";
     auto pathToHistory = args::get(historyPathFlag);
