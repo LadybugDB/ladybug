@@ -52,9 +52,10 @@ public:
     std::vector<std::shared_ptr<PropertyExpression>> getPropertyExpressions() const {
         return propertyExprs;
     }
-    // Property expressions surfaced in whole-object (`RETURN n`) and `.*` output. Equal to
+    // Property expressions surfaced in whole-object (`RETURN n`) output. Equal to
     // getPropertyExpressions() unless some are hidden (e.g. an ANY graph's internal `id`/`label`
-    // columns), which stay bound for writes and explicit access but are excluded from projection.
+    // columns, which the whole-object struct already exposes as _ID/_LABEL). Hidden properties
+    // stay bound for writes, explicit access, and `.*`; only the whole-object struct omits them.
     std::vector<std::shared_ptr<PropertyExpression>> getProjectedPropertyExpressions() const {
         if (hiddenPropertyNames.empty()) {
             return propertyExprs;
@@ -130,7 +131,7 @@ protected:
     std::unordered_map<catalog::TableCatalogEntry*, std::string> dbNames;
     // Original labels from the node/rel pattern (for ANY graphs)
     std::vector<std::string> originalLabels;
-    // Property names hidden from whole-object / `.*` projection (e.g. ANY internal `id`/`label`).
+    // Property names hidden from the whole-object struct (e.g. ANY internal `id`/`label`).
     std::unordered_set<std::string> hiddenPropertyNames;
 };
 

@@ -262,8 +262,8 @@ static std::vector<StructField> getBaseRelStructFields() {
 }
 
 // Full node/rel struct type: the base fields followed by the properties surfaced in whole-object
-// (`RETURN n`) and `.*` output. Properties hidden from projection are excluded here so the struct
-// fields stay aligned with the child expressions built in ExpressionMapper.
+// (`RETURN n`) output. Properties hidden from the struct are excluded here so the struct fields
+// stay aligned with the child expressions built in ExpressionMapper.
 static std::vector<StructField> getNodeStructFields(const NodeExpression& node,
     LogicalType labelType) {
     std::vector<StructField> fields;
