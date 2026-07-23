@@ -261,6 +261,28 @@ static std::vector<StructField> getBaseRelStructFields() {
     return fields;
 }
 
+// Full node/rel struct type: the base fields followed by the properties surfaced in whole-object
+// (`RETURN n`) and `.*` output. Properties hidden from projection are excluded here so the struct
+// fields stay aligned with the child expressions built in ExpressionMapper.
+static std::vector<StructField> getNodeStructFields(const NodeExpression& node,
+    LogicalType labelType) {
+    std::vector<StructField> fields;
+    fields.emplace_back(InternalKeyword::ID, LogicalType::INTERNAL_ID());
+    fields.emplace_back(InternalKeyword::LABEL, std::move(labelType));
+    for (auto& property : node.getProjectedPropertyExpressions()) {
+        fields.emplace_back(property->getPropertyName(), property->getDataType().copy());
+    }
+    return fields;
+}
+
+static std::vector<StructField> getRelStructFields(const RelExpression& rel) {
+    auto fields = getBaseRelStructFields();
+    for (auto& property : rel.getProjectedPropertyExpressions()) {
+        fields.emplace_back(property->getPropertyName(), property->getDataType().copy());
+    }
+    return fields;
+}
+
 static std::shared_ptr<PropertyExpression> construct(LogicalType type,
     const std::string& propertyName, const Expression& child) {
     DASSERT(child.expressionType == ExpressionType::PATTERN);
@@ -284,7 +306,6 @@ std::shared_ptr<RelExpression> Binder::createNonRecursiveQueryRel(const std::str
     auto uniqueName = getUniqueExpressionName(parsedName);
     // Bind properties. As with createQueryNode, defer the struct type until we know whether this
     // is an ANY graph, so start from the base fields and set the full struct type afterwards.
-    auto structFields = getBaseRelStructFields();
     std::vector<std::shared_ptr<PropertyExpression>> propertyExpressions;
     if (!entries.empty()) {
         for (auto& propertyName : getPropertyNames(entries)) {
@@ -306,27 +327,23 @@ std::shared_ptr<RelExpression> Binder::createNonRecursiveQueryRel(const std::str
             queryRel->addPropertyExpression(property);
         }
     }
-    // In an ANY graph, rels are backed by the internal `_edges` table whose `label` column is
-    // surfaced as _LABEL (see DatabaseManager::createGraph). Hide the redundant `label` column
-    // from whole-object (`RETURN e`) and `.*` output, keeping `_id` and the `data` property bag.
-    const bool isAny = !entries.empty() && isAnyGraphNodeOrRel(*queryRel, clientContext);
-    if (isAny) {
-        queryRel->setHiddenPropertyNames({"label"});
-    }
-    for (auto& property : queryRel->getProjectedPropertyExpressions()) {
-        structFields.emplace_back(property->getPropertyName(), property->getDataType().copy());
-    }
-    queryRel->setDataType(LogicalType::REL(std::move(structFields)));
     // Bind internal expressions.
     if (directionType == RelDirectionType::BOTH) {
         queryRel->setDirectionExpr(expressionBinder.createVariableExpression(LogicalType::BOOL(),
             queryRel->getUniqueName() + InternalKeyword::DIRECTION));
     }
-    // In an ANY graph a rel's type is stored in the scalar `label` STRING column (kept above),
-    // so surface it as _LABEL instead of the internal `_edges` table name (type stays STRING).
-    if (isAny && queryRel->hasPropertyExpression("label")) {
+    if (!entries.empty() && isAnyGraphNodeOrRel(*queryRel, clientContext) &&
+        queryRel->hasPropertyExpression("label")) {
+        // ANY graph. Rels are backed by the internal `_edges` table, whose `label` column is
+        // surfaced as _LABEL (see DatabaseManager::createGraph), so hide the redundant column from
+        // projection. A rel has a single type, so _LABEL stays scalar STRING. `_id` and `data`
+        // (the JSON property bag) stay.
+        queryRel->setHiddenPropertyNames({"label"});
+        queryRel->setDataType(LogicalType::REL(getRelStructFields(*queryRel)));
         queryRel->setLabelExpression(queryRel->getPropertyExpression("label"));
     } else {
+        // Structured graph. Every column is user-facing, and _LABEL is resolved by the rewrite.
+        queryRel->setDataType(LogicalType::REL(getRelStructFields(*queryRel)));
         auto input =
             function::RewriteFunctionBindInput(clientContext, &expressionBinder, {queryRel});
         queryRel->setLabelExpression(function::LabelFunction::rewriteFunc(input));
@@ -667,26 +684,21 @@ std::shared_ptr<NodeExpression> Binder::createQueryNode(const std::string& parse
     // Bind internal expressions
     queryNode->setInternalID(
         construct(LogicalType::INTERNAL_ID(), InternalKeyword::ID, *queryNode));
-    // In an ANY graph, nodes are backed by the internal `_nodes` table whose `id`/`label`/`data`
-    // columns are implementation detail (see DatabaseManager::createGraph): `id` duplicates _ID,
-    // `label` is surfaced as _LABEL (a label *set*, so STRING[]), and `data` is the JSON property
-    // bag. Hide `id`/`label` from whole-object (`RETURN n`) and `.*` output, keeping the real
-    // user-facing column(s). Structured graphs keep every column and the scalar-STRING _LABEL.
-    const bool isAny = isAnyGraphNodeOrRel(*queryNode, clientContext);
-    if (isAny) {
+    if (isAnyGraphNodeOrRel(*queryNode, clientContext) &&
+        queryNode->hasPropertyExpression("label")) {
+        // ANY graph. Nodes are backed by the internal `_nodes` table whose `id`/`label`/`data`
+        // columns are implementation detail (see DatabaseManager::createGraph): `id` duplicates
+        // _ID and `label` is surfaced as _LABEL, so hide both from projection. A node carries a
+        // *set* of labels, hence STRING[]. `data` (the JSON property bag) stays.
         queryNode->setHiddenPropertyNames({"id", "label"});
-    }
-    std::vector<StructField> structFields;
-    structFields.emplace_back(InternalKeyword::ID, LogicalType::INTERNAL_ID());
-    structFields.emplace_back(InternalKeyword::LABEL,
-        isAny ? LogicalType::LIST(LogicalType::STRING()) : LogicalType::STRING());
-    for (auto& property : queryNode->getProjectedPropertyExpressions()) {
-        structFields.emplace_back(property->getPropertyName(), property->getDataType().copy());
-    }
-    queryNode->setDataType(LogicalType::NODE(std::move(structFields)));
-    if (isAny && queryNode->hasPropertyExpression("label")) {
+        queryNode->setDataType(LogicalType::NODE(
+            getNodeStructFields(*queryNode, LogicalType::LIST(LogicalType::STRING()))));
         queryNode->setLabelExpression(queryNode->getPropertyExpression("label"));
     } else {
+        // Structured graph. Every column is user-facing, and _LABEL is the single table name
+        // resolved by the rewrite (scalar STRING).
+        queryNode->setDataType(
+            LogicalType::NODE(getNodeStructFields(*queryNode, LogicalType::STRING())));
         auto input =
             function::RewriteFunctionBindInput(clientContext, &expressionBinder, {queryNode});
         queryNode->setLabelExpression(function::LabelFunction::rewriteFunc(input));
