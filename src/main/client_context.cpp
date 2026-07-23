@@ -572,6 +572,9 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
             [&]() -> void {
                 const auto profiler = std::make_unique<Profiler>();
                 profiler->enabled = cachedStatement->logicalPlan->isProfile();
+                if (profiler->enabled) {
+                    profiler->startQueryTimer();
+                }
                 if (!queryID) {
                     queryID = localDatabase->getNextQueryID();
                 }

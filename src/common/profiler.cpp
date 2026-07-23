@@ -3,6 +3,17 @@
 namespace lbug {
 namespace common {
 
+void Profiler::startQueryTimer() {
+    std::lock_guard<std::mutex> lck(mtx);
+    queryTimer.start();
+    queryTimerStarted = true;
+}
+
+double Profiler::getQueryElapsedTimeMS() const {
+    std::lock_guard<std::mutex> lck(mtx);
+    return queryTimerStarted ? queryTimer.getElapsedTimeMS() : 0.0;
+}
+
 TimeMetric* Profiler::registerTimeMetric(const std::string& key) {
     auto timeMetric = std::make_unique<TimeMetric>(enabled);
     auto metricPtr = timeMetric.get();

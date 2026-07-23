@@ -152,6 +152,21 @@ TEST_F(ApiTest, Profile) {
     ASSERT_TRUE(result->isSuccess());
 }
 
+TEST_F(ApiTest, ProfileReportsWallClockTime) {
+    auto result = conn->query("PROFILE MATCH (a:person) RETURN a.ID");
+    ASSERT_TRUE(result->isSuccess());
+    auto profile = result->toString();
+    // WallClockTime (real wall clock) appears only on the PROFILE operator.
+    EXPECT_NE(profile.find("WallClockTime:"), std::string::npos);
+    // TotalTime (accumulated CPU across threads) appears on every operator.
+    auto totalCount = 0u;
+    for (auto pos = profile.find("TotalTime:"); pos != std::string::npos;
+         pos = profile.find("TotalTime:", pos + 1)) {
+        totalCount++;
+    }
+    EXPECT_GT(totalCount, 1);
+}
+
 TEST_F(ApiTest, TimeOut) {
     conn->setQueryTimeOut(1000 /* timeoutInMS */);
     auto result = conn->query(
