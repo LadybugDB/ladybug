@@ -38,6 +38,12 @@ public:
         return count;
     }
 
+    double getElapsedTimeMS() const {
+        auto now = std::chrono::high_resolution_clock::now();
+        auto duration = now - startTime;
+        return std::chrono::duration_cast<std::chrono::microseconds>(duration).count() / 1000.0;
+    }
+
 private:
     std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
     std::chrono::time_point<std::chrono::high_resolution_clock> stopTime;
