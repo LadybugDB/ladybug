@@ -25,7 +25,8 @@ std::unique_ptr<BoundReadingClause> Binder::bindInQueryCall(const ReadingClause&
     auto transaction = transaction::Transaction::Get(*clientContext);
     auto entry = Catalog::Get(*clientContext)->getFunctionEntry(transaction, functionName);
     switch (entry->getType()) {
-    case CatalogEntryType::TABLE_FUNCTION_ENTRY: {
+    case CatalogEntryType::TABLE_FUNCTION_ENTRY:
+    case CatalogEntryType::STANDALONE_TABLE_FUNCTION_ENTRY: {
         auto boundTableFunction =
             bindTableFunc(functionName, *functionExpr, call.getYieldVariables());
         boundReadingClause =
