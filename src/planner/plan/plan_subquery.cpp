@@ -88,7 +88,7 @@ bool Planner::tryPlanQueryPrimaryKeyLookup(const QueryGraphCollection& queryGrap
     const auto dependentExprs = getDependentExprs(key, *plan.getSchema());
     DASSERT(!dependentExprs.empty());
     const auto outputGroupPos = plan.getSchema()->getGroupPos(*dependentExprs[0]);
-    for (auto& dependentExpr : dependentExprs) {
+    for ([[maybe_unused]] auto& dependentExpr : dependentExprs) {
         DASSERT(plan.getSchema()->getGroupPos(*dependentExpr) == outputGroupPos);
     }
     auto lookup = std::make_shared<LogicalQueryPrimaryKeyLookup>(tableID, node->getInternalID(),
