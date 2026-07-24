@@ -35,14 +35,26 @@ void QueryPrimaryKeyLookup::initLocalStateInternal(ResultSet* resultSet,
 }
 
 bool QueryPrimaryKeyLookup::getNextTuplesInternal(ExecutionContext* context) {
-    while (children[0]->getNextTuple(context)) {
+    auto transaction = transaction::Transaction::Get(*context->clientContext);
+    sel_t outputSize = 0;
+    do {
+        // The node-id vector shares its DataChunkState with the child (the key expression lives
+        // in the same group). Restoring the saved selection vector hands control back to the
+        // child so it can advance, and saving afterwards swaps in a private selection vector we
+        // are free to rewrite. Without this restore/save dance, filtering the selection vector
+        // here would clobber the child's state (e.g. Flatten's currentSelVector) and leave it
+        // reporting an empty selection on the next call.
+        restoreSelVector(*nodeIDVector->state);
+        if (!children[0]->getNextTuple(context)) {
+            return false;
+        }
+        saveSelVector(*nodeIDVector->state);
         keyEvaluator->evaluate();
         auto* keyVector = keyEvaluator->resultVector.get();
-        auto& inputSelVector = keyVector->state->getSelVector();
+        const auto& inputSelVector = keyVector->state->getSelVector();
         auto& outputSelVector = nodeIDVector->state->getSelVectorUnsafe();
         outputSelVector.setToFiltered();
-        sel_t outputSize = 0;
-        auto transaction = transaction::Transaction::Get(*context->clientContext);
+        outputSize = 0;
         for (sel_t i = 0; i < inputSelVector.getSelSize(); ++i) {
             const auto pos = inputSelVector[i];
             if (keyVector->isNull(pos)) {
@@ -56,16 +68,12 @@ bool QueryPrimaryKeyLookup::getNextTuplesInternal(ExecutionContext* context) {
             outputSelVector[outputSize++] = pos;
         }
         outputSelVector.setSelSize(outputSize);
-        if (outputSize == 0) {
-            continue;
-        }
-        table->lookupMultiple(transaction, *scanState);
-        tableInfo.castColumns();
-        scanState->outState->setToUnflat();
-        metrics->numOutputTuple.increase(outputSize);
-        return true;
-    }
-    return false;
+    } while (outputSize == 0);
+    table->lookupMultiple(transaction, *scanState);
+    tableInfo.castColumns();
+    scanState->outState->setToUnflat();
+    metrics->numOutputTuple.increase(outputSize);
+    return true;
 }
 
 } // namespace processor

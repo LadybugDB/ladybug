@@ -1,6 +1,7 @@
 #pragma once
 
 #include "expression_evaluator/expression_evaluator.h"
+#include "processor/operator/filtering_operator.h"
 #include "processor/operator/physical_operator.h"
 #include "processor/operator/scan/scan_node_table.h"
 
@@ -31,7 +32,7 @@ private:
           properties{other.properties} {}
 };
 
-class QueryPrimaryKeyLookup final : public PhysicalOperator {
+class QueryPrimaryKeyLookup final : public PhysicalOperator, SelVectorOverWriter {
     static constexpr PhysicalOperatorType type_ = PhysicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP;
 
 public:

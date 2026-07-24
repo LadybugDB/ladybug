@@ -217,6 +217,29 @@ TEST_F(ApiTest, UnwindQueryPrimaryKeyLookupFallsBackWithoutIndex) {
     ASSERT_EQ(TestHelper::convertResultToString(*result), std::vector<std::string>{"1"});
 }
 
+// Regression: when the first row(s) of an UNWIND-driven MATCH miss the primary-key index, the
+// row-driven lookup operator must not clobber the upstream selection vector (it had filtered the
+// shared state to size 0, starving every subsequent tuple). What remains must be exactly the rows
+// whose keys actually exist, in the same order as the UNWIND.
+TEST_F(ApiTest, UnwindQueryPrimaryKeyLookupLeadingMissThenHits) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE LookupLeadingMiss(id INT64, v INT64, "
+                            "PRIMARY KEY(id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:LookupLeadingMiss {id: 2, v: 20});"
+                            "CREATE (:LookupLeadingMiss {id: 3, v: 30});")
+                    ->isSuccess());
+
+    auto explain = conn->query("EXPLAIN UNWIND [0, 2, 3] AS x "
+                               "MATCH (t:LookupLeadingMiss {id: x}) RETURN t.v");
+    ASSERT_TRUE(explain->isSuccess());
+    EXPECT_NE(explain->toString().find("QUERY_PRIMARY_KEY_LOOKUP"), std::string::npos);
+
+    auto result = conn->query("UNWIND [0, 2, 3] AS x"
+                              " MATCH (t:LookupLeadingMiss {id: x}) RETURN t.v");
+    ASSERT_TRUE(result->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*result), (std::vector<std::string>{"20", "30"}));
+}
+
 TEST_F(ApiTest, Profile) {
     auto result =
         conn->query("EXPLAIN MATCH (a:person) WHERE EXISTS { MATCH (a)-[:knows]->(b:person) WHERE "
