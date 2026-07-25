@@ -52,7 +52,7 @@ jobs:
         run: |
           dnf install -y 'dnf-command(config-manager)'
           dnf config-manager --set-enabled powertools
-          dnf install -y cmake ninja-build python3 python3-pip git wget unzip gcc-toolset-13 openssl3 openssl3-devel pkg-config
+          dnf install -y cmake ninja-build python3 python3-pip git wget unzip gcc-toolset-13 openssl3 openssl3-devel pkg-config libpq libpq-devel
 
       - name: Install DuckDB (Linux)
         if: runner.os == 'Linux'
@@ -156,6 +156,21 @@ jobs:
           export EXTRA_CMAKE_FLAGS="-DOPENSSL_ROOT_DIR=/usr/lib64/openssl3 -DOPENSSL_INCLUDE_DIR=/usr/include/openssl3 -DOPENSSL_CRYPTO_LIBRARY=/usr/lib64/openssl3/libcrypto.so -DOPENSSL_SSL_LIBRARY=/usr/lib64/openssl3/libssl.so"
           make extension-release
 
+      - name: Install PostgreSQL client (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install libpq
+          # libpq is keg-only — add pg_config to PATH so CMake's
+          # find_package(PostgreSQL) can locate headers and libraries.
+          # On Apple Silicon brew installs under /opt/homebrew, on Intel
+          # under /usr/local.
+          for d in /opt/homebrew/opt/libpq /usr/local/opt/libpq; do
+            if [ -x "$d/bin/pg_config" ]; then
+              echo "$d/bin" >> "$GITHUB_PATH"
+              break
+            fi
+          done
+
       - name: Build precompiled extensions (macOS)
         if: runner.os == 'macOS'
         run: make extension-release
@@ -202,6 +217,13 @@ jobs:
         if: runner.os == 'Windows'
         run: ccache -s
         shell: bash
+
+      - name: Install PostgreSQL client (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install postgresql --version=16 --params='/NoServer /NoTools' -y
+          echo "CMAKE_PREFIX_PATH=C:\Program Files\PostgreSQL\16;C:\local" >> $env:GITHUB_ENV
 
       - name: Build precompiled extensions (Windows)
         if: runner.os == 'Windows'
