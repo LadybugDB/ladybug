@@ -138,15 +138,14 @@ def main() -> int:
     import psycopg
 
     repo_root = Path(__file__).resolve().parent.parent
-    sql_paths = [
-        repo_root / "extension" / "postgres" / "test" / "test_files" / "create_test_db.sql",
-        repo_root / "extension" / "pg_client" / "test" / "test_files" / "create_pg_client_test_db.sql",
-    ]
+    postgres_sql = repo_root / "extension" / "postgres" / "test" / "test_files" / "create_test_db.sql"
+    pg_client_sql = repo_root / "extension" / "pg_client" / "test" / "test_files" / "create_pg_client_test_db.sql"
 
     with tempfile.TemporaryDirectory(prefix="lbug_pgembed_") as tmpdir:
         with pgembed.get_server(tmpdir) as pg:
             admin_uri = pg.get_uri("postgres")
-            scan_uri = pg.get_uri("pgscan")
+            pgscan_uri = pg.get_uri("pgscan")
+            pgclient_uri = pg.get_uri("pgscan_pg_client")
 
             with psycopg.connect(admin_uri, autocommit=True) as conn:
                 conn.execute(
@@ -160,21 +159,23 @@ def main() -> int:
                     $$;
                     """
                 )
-                exists = conn.execute(
-                    "SELECT 1 FROM pg_database WHERE datname = 'pgscan'"
-                ).fetchone()
-                if exists is None:
-                    conn.execute("CREATE DATABASE pgscan OWNER ci")
+                for dbname in ("pgscan", "pgscan_pg_client"):
+                    exists = conn.execute(
+                        "SELECT 1 FROM pg_database WHERE datname = %s", (dbname,)
+                    ).fetchone()
+                    if exists is None:
+                        conn.execute(f"CREATE DATABASE \"{dbname}\" OWNER ci")
 
-            with psycopg.connect(scan_uri) as conn:
-                for sql_path in sql_paths:
-                    if sql_path.exists():
-                        import_sql_dump(conn, sql_path)
+            if postgres_sql.exists():
+                with psycopg.connect(pgscan_uri) as conn:
+                    import_sql_dump(conn, postgres_sql)
+            if pg_client_sql.exists():
+                with psycopg.connect(pgclient_uri) as conn:
+                    import_sql_dump(conn, pg_client_sql)
 
             env = os.environ.copy()
-            conn_string = uri_to_libpq_connection_string(scan_uri, "pgscan", "ci")
-            env["POSTGRES_CONNECTION_STRING"] = conn_string
-            env["PG_CLIENT_CONNECTION_STRING"] = conn_string
+            env["POSTGRES_CONNECTION_STRING"] = uri_to_libpq_connection_string(pgscan_uri, "pgscan", "ci")
+            env["PG_CLIENT_CONNECTION_STRING"] = uri_to_libpq_connection_string(pgclient_uri, "pgscan_pg_client", "ci")
             return subprocess.run(args.command, env=env).returncode
 
 
