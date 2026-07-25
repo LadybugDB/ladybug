@@ -160,16 +160,11 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install libpq
-          # libpq is keg-only — add pg_config to PATH so CMake's
-          # find_package(PostgreSQL) can locate headers and libraries.
-          # On Apple Silicon brew installs under /opt/homebrew, on Intel
-          # under /usr/local.
-          for d in /opt/homebrew/opt/libpq /usr/local/opt/libpq; do
-            if [ -x "$d/bin/pg_config" ]; then
-              echo "$d/bin" >> "$GITHUB_PATH"
-              break
-            fi
-          done
+          # libpq is keg-only — tell CMake where to find it via
+          # CMAKE_PREFIX_PATH and put pg_config on PATH as a fallback.
+          prefix="$(brew --prefix libpq)"
+          echo "CMAKE_PREFIX_PATH=${prefix}:${CMAKE_PREFIX_PATH:-}" >> "$GITHUB_ENV"
+          echo "${prefix}/bin" >> "$GITHUB_PATH"
 
       - name: Build precompiled extensions (macOS)
         if: runner.os == 'macOS'
