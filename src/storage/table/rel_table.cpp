@@ -161,11 +161,15 @@ RelTable::RelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
     auto relEntryInfo = relGroupEntry->getRelEntryInfo(fromNodeTableID, toNodeTableID);
     tableID = relEntryInfo->oid;
     relGroupID = relGroupEntry->getTableID();
-    for (auto direction : relGroupEntry->getRelDataDirections()) {
-        auto nbrTableID = RelDirectionUtils::getNbrTableID(direction, fromTableID, toTableID);
-        directedRelData.emplace_back(
-            std::make_unique<RelTableData>(storageManager->getDataFH(), memoryManager, shadowFile,
-                *relGroupEntry, *relEntryInfo, *this, direction, nbrTableID, enableCompression));
+    // Foreign-backed rel tables (e.g. pg_client fkrel_ tables) are scan-driven and don't
+    // own on-disk CSR columns, so skip RelTableData construction for them.
+    if (!relGroupEntry->getScanFunction().has_value()) {
+        for (auto direction : relGroupEntry->getRelDataDirections()) {
+            auto nbrTableID = RelDirectionUtils::getNbrTableID(direction, fromTableID, toTableID);
+            directedRelData.emplace_back(std::make_unique<RelTableData>(storageManager->getDataFH(),
+                memoryManager, shadowFile, *relGroupEntry, *relEntryInfo, *this, direction,
+                nbrTableID, enableCompression));
+        }
     }
 }
 
