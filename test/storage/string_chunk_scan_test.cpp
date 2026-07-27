@@ -374,5 +374,39 @@ TEST_F(StringChunkScanTest, ValueVectorPartialScansRemainCorrectWhenDictionaryOf
     EXPECT_EQ(scanned, expectedRange(values, 1, 3));
 }
 
+TEST_F(StringChunkScanTest, FilteredValueVectorScanUsesResultCoordinatesAcrossSegments) {
+    auto* memoryManager = getMemoryManager(*database);
+    auto* storageManager = getStorageManager(*database);
+    PageManager pageManager{storageManager->getDataFH()};
+    StringColumn column{"scan_value", LogicalType::STRING(), storageManager->getDataFH(),
+        memoryManager, &storageManager->getShadowFile(), true /*enableCompression*/};
+
+    const std::vector<MaybeString> firstValues = {value("ROW_ZERO"), value("ROW_ONE")};
+    const std::vector<MaybeString> secondValues = {value("ROW_TWO"), value("ROW_THREE")};
+    auto firstPersisted =
+        buildPersistedStringChunk(*memoryManager, pageManager, column, firstValues);
+    auto secondPersisted =
+        buildPersistedStringChunk(*memoryManager, pageManager, column, secondValues);
+    ChunkState scanState;
+    scanState.column = &column;
+    scanState.segmentStates.push_back(std::move(firstPersisted.state.segmentStates[0]));
+    scanState.segmentStates.push_back(std::move(secondPersisted.state.segmentStates[0]));
+
+    auto outputState = std::make_shared<DataChunkState>();
+    ValueVector outputVector{LogicalType::STRING(), memoryManager, outputState};
+    StringVector::addString(&outputVector, 2, "SENTINEL_TWO");
+    StringVector::addString(&outputVector, 3, "SENTINEL_THREE");
+    auto& selection = outputVector.state->getSelVectorUnsafe();
+    auto selectedPositions = selection.getMutableBuffer();
+    selectedPositions[0] = 2;
+    selectedPositions[1] = 3;
+    selection.setToFiltered(2);
+
+    column.scan(scanState, 0 /*startRow*/, 4 /*numRows*/, &outputVector, 0 /*offsetInVector*/);
+
+    EXPECT_EQ(outputVector.getValue<string_t>(2).getAsString(), "ROW_TWO");
+    EXPECT_EQ(outputVector.getValue<string_t>(3).getAsString(), "ROW_THREE");
+}
+
 } // namespace testing
 } // namespace lbug
