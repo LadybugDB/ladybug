@@ -31,9 +31,16 @@ void ForeignRelTable::initScanState([[maybe_unused]] transaction::Transaction* t
     TableScanState& scanState, [[maybe_unused]] bool resetCachedBoundNodeSelVec) const {
     // For foreign tables, we don't need node group initialization
     // RelTable::initScanState(transaction, scanState, resetCachedBoundNodeSelVec);
+    if (!scanBindData || scanFunction.tableFunc == nullptr ||
+        scanFunction.initSharedStateFunc == nullptr || scanFunction.initLocalStateFunc == nullptr) {
+        return;
+    }
     auto& foreignRelScanState = static_cast<ForeignRelTableScanState&>(scanState);
     function::TableFuncInitSharedStateInput sharedInput{scanBindData.get(), nullptr /* context */};
     foreignRelScanState.sharedState = scanFunction.initSharedStateFunc(sharedInput);
+    if (!foreignRelScanState.sharedState) {
+        return;
+    }
     function::TableFuncInitLocalStateInput localInput{*foreignRelScanState.sharedState,
         *scanBindData, nullptr /* clientContext */};
     foreignRelScanState.localState = scanFunction.initLocalStateFunc(localInput);
@@ -42,6 +49,9 @@ void ForeignRelTable::initScanState([[maybe_unused]] transaction::Transaction* t
 bool ForeignRelTable::scanInternal([[maybe_unused]] transaction::Transaction* transaction,
     TableScanState& scanState) {
     auto& foreignRelScanState = static_cast<ForeignRelTableScanState&>(scanState);
+    if (!scanBindData || scanFunction.tableFunc == nullptr) {
+        return false;
+    }
     function::TableFuncInput input{scanBindData.get(), foreignRelScanState.localState.get(),
         foreignRelScanState.sharedState.get(), nullptr /* clientContext */};
     common::DataChunk dc;
