@@ -294,12 +294,15 @@ void Planner::planNodeScan(uint32_t nodePos) {
     newSubgraph.addQueryNode(nodePos);
     auto plan = LogicalPlan();
     auto properties = getProperties(*node);
-    if (node->getEntries().size() == 1 &&
-        node->getEntries()[0]->getType() == catalog::CatalogEntryType::FOREIGN_TABLE_ENTRY) {
+    if (node->getEntries().size() == 1) {
+        // getBoundScanInfo is the polymorphic authority: it returns non-null iff the
+        // entry (or its referenced foreign entry) provides a scan function, covering
+        // both FOREIGN_TABLE_ENTRY and shadow NODE_TABLE_ENTRY cases.  Regular native
+        // entries return nullptr here, falling through to appendScanNodeTable.
         auto boundScanInfo =
             node->getEntries()[0]->getBoundScanInfo(clientContext, node->getUniqueName());
         if (boundScanInfo != nullptr) {
-            // Use table function call for foreign tables
+            // Use table function call for entries that supply a scan function
             appendTableFunctionCall(*boundScanInfo, plan);
         } else {
             appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan);
