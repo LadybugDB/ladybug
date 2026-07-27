@@ -7,6 +7,9 @@
 #include "c_api/lbug.h"
 #include "common/exception/exception.h"
 #include "main/lbug.h"
+#include "planner/operator/logical_operator.h"
+#include "planner/operator/logical_plan.h"
+#include "planner/operator/logical_table_function_call.h"
 #include "storage/table/arrow_table_support.h"
 
 namespace lbug {
@@ -17,6 +20,7 @@ class Value;
 
 using namespace lbug::common;
 using namespace lbug::main;
+using namespace lbug::planner;
 
 static std::mutex arrowTableIDMutex;
 static std::unordered_map<Connection*, std::unordered_map<std::string, std::string>> arrowTableIDs;
@@ -344,4 +348,83 @@ lbug_state lbug_connection_set_query_timeout(lbug_connection* connection, uint64
         return LbugError;
     }
     return LbugSuccess;
+}
+
+// Helper: walk the logical operator tree to find the first TABLE_FUNCTION_CALL
+// whose table function supports push-down, and return its description (SQL).
+// Returns empty string if no such operator is found.
+static std::string findPushedSqlFromPlan(LogicalOperator* op) {
+    if (op == nullptr) {
+        return "";
+    }
+    if (op->getOperatorType() == LogicalOperatorType::TABLE_FUNCTION_CALL) {
+        auto& tableFuncCall = op->constCast<LogicalTableFunctionCall>();
+        if (tableFuncCall.getTableFunc().supportsPushDownFunc()) {
+            auto desc = tableFuncCall.getBindData()->getDescription();
+            if (!desc.empty()) {
+                return desc;
+            }
+        }
+    }
+    // Depth-first search: check children
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        auto child = op->getChild(i).get();
+        if (child != nullptr) {
+            auto result = findPushedSqlFromPlan(child);
+            if (!result.empty()) {
+                return result;
+            }
+        }
+    }
+    return "";
+}
+
+lbug_state lbug_connection_get_pushed_sql(lbug_connection* connection, const char* cypher_query,
+    char** out_sql) {
+    if (connection == nullptr || connection->_connection == nullptr || cypher_query == nullptr ||
+        out_sql == nullptr) {
+        return LbugError;
+    }
+    // Initialize the out parameter up-front so every error path leaves it as NULL
+    // rather than whatever the caller passed in.
+    *out_sql = nullptr;
+    try {
+        clearLastCAPIErrorMessage();
+
+        auto* connPtr = static_cast<Connection*>(connection->_connection);
+
+        // Prepare the query (this runs the planner and optimizer)
+        auto prepared = connPtr->prepare(cypher_query);
+        if (prepared == nullptr || !prepared->isSuccess()) {
+            std::string err = prepared ? prepared->getErrorMessage() : "prepare returned null";
+            setLastCAPIErrorMessage(err);
+            return LbugError;
+        }
+
+        // Get the cached prepared statement to access the logical plan
+        auto name = prepared->getName();
+        auto& manager = connPtr->getClientContext()->getCachedPreparedStatementManager();
+        auto* cached = manager.getCachedStatement(name);
+        if (cached == nullptr || cached->logicalPlan == nullptr) {
+            setLastCAPIErrorMessage("No logical plan found in cached statement");
+            return LbugError;
+        }
+
+        // Walk the logical plan to find the pushed-down SQL
+        auto root = cached->logicalPlan->getLastOperator().get();
+        auto sql = findPushedSqlFromPlan(root);
+        if (sql.empty()) {
+            *out_sql = nullptr;
+            // Not an error if no pushdown SQL is found - caller can handle NULL
+            return LbugSuccess;
+        }
+
+        *out_sql = convertToOwnedCString(sql);
+        return LbugSuccess;
+
+    } catch (Exception& e) {
+        setLastCAPIErrorMessage(e.what());
+        *out_sql = nullptr;
+        return LbugError;
+    }
 }
