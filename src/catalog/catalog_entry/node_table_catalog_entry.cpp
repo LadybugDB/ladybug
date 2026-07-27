@@ -106,10 +106,13 @@ std::unique_ptr<binder::BoundTableScanInfo> NodeTableCatalogEntry::getBoundScanI
         // Foreign table - call the extension's bind data function
         auto bindData = createBindDataFunc(context);
         return std::make_unique<binder::BoundTableScanInfo>(*scanFunction, std::move(bindData));
-    } else {
-        // Local table - for now, return nullptr as ForeignNodeTable handles the binding
-        return nullptr;
     }
+    // Check referenced entry (shadow tables: NodeTableCatalogEntry that wraps a foreign entry)
+    if (referencedEntry != nullptr) {
+        return referencedEntry->getBoundScanInfo(context, nodeUniqueName);
+    }
+    // Local table - no scan function available
+    return nullptr;
 }
 
 std::unique_ptr<TableCatalogEntry> NodeTableCatalogEntry::copy() const {
