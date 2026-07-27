@@ -132,7 +132,7 @@ void StringColumn::scanSegment(const SegmentState& state, offset_t startOffsetIn
     if (!resultVector->state || resultVector->state->getSelVector().isUnfiltered()) {
         scanUnfiltered(state, startOffsetInChunk, numValuesToScan, resultVector, offsetInResult);
     } else {
-        scanFiltered(state, startOffsetInChunk, resultVector, offsetInResult);
+        scanFiltered(state, startOffsetInChunk, numValuesToScan, resultVector, offsetInResult);
     }
 }
 
@@ -249,17 +249,17 @@ void StringColumn::scanUnfiltered(const SegmentState& state, offset_t startOffse
 }
 
 void StringColumn::scanFiltered(const SegmentState& state, offset_t startOffsetInChunk,
-    ValueVector* resultVector, offset_t offsetInResult) const {
+    row_idx_t numValuesToScan, ValueVector* resultVector, offset_t offsetInResult) const {
     std::vector<std::pair<string_index_t, uint64_t>> offsetsToScan;
     for (sel_t i = 0; i < resultVector->state->getSelVector().getSelSize(); i++) {
         const auto pos = resultVector->state->getSelVector()[i];
-        if (pos >= offsetInResult && startOffsetInChunk + pos < state.metadata.numValues &&
+        if (pos >= offsetInResult && pos < offsetInResult + numValuesToScan &&
             !resultVector->isNull(pos)) {
             // TODO(bmwinger): optimize index scans by grouping them when adjacent
-            const auto offsetInGroup = startOffsetInChunk + pos - offsetInResult;
+            const auto offsetInSegment = startOffsetInChunk + pos - offsetInResult;
             string_index_t index = 0;
-            indexColumn->scanSegment(getChildState(state, ChildStateIndex::INDEX), offsetInGroup, 1,
-                reinterpret_cast<uint8_t*>(&index));
+            indexColumn->scanSegment(getChildState(state, ChildStateIndex::INDEX), offsetInSegment,
+                1, reinterpret_cast<uint8_t*>(&index));
             offsetsToScan.emplace_back(index, pos);
         }
     }
