@@ -9,6 +9,11 @@
 namespace lbug {
 namespace planner {
 
+// WIN32 defines DELETE as a macro (0x00010000L) in winnt.h, which would break
+// compilation of the enum below. Push/pop to keep the fix local.
+#pragma push_macro("DELETE")
+#undef DELETE
+
 // This ENUM is sorted by alphabetical order.
 enum class LogicalOperatorType : uint8_t {
     ACCUMULATE,
@@ -73,6 +78,8 @@ enum class LogicalOperatorType : uint8_t {
     // Executes child once per unique value and replicates outputs for duplicates
     UNWIND_DEDUPLICATE,
 };
+
+#pragma pop_macro("DELETE")
 
 class LogicalOperator;
 using logical_op_vector_t = std::vector<std::shared_ptr<LogicalOperator>>;
