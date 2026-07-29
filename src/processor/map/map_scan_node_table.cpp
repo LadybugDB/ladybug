@@ -3,6 +3,8 @@
 #include "binder/expression_binder.h"
 #include "catalog/catalog.h"
 #include "common/mask.h"
+#include "main/attached_database.h"
+#include "main/database_manager.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "processor/expression_mapper.h"
 #include "processor/operator/scan/primary_key_scan_node_table.h"
@@ -19,8 +21,6 @@ namespace processor {
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapScanNodeTable(
     const LogicalOperator* logicalOperator) {
-    auto storageManager = storage::StorageManager::Get(*clientContext);
-    auto catalog = catalog::Catalog::Get(*clientContext);
     auto transaction = transaction::Transaction::Get(*clientContext);
     auto& scan = logicalOperator->constCast<LogicalScanNodeTable>();
     const auto outSchema = scan.getSchema();
@@ -36,9 +36,59 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapScanNodeTable(
     auto binder = Binder(clientContext);
     auto expressionBinder = ExpressionBinder(&binder, clientContext);
     for (const auto& tableID : tableIDs) {
-        auto tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
+        // Look up database name from the scan's tableDBMap (set during planning
+        // when the node expression carries dbNames for attached databases).
+        auto& dbMap = scan.getTableDBMap();
+        auto it = dbMap.find(tableID);
+        auto dbName = it != dbMap.end() ? it->second : std::string{};
+        auto [cat, sm] =
+            main::DatabaseManager::resolveTableStorage(*clientContext, tableID, dbName);
+        auto tableEntry = cat->getTableCatalogEntry(transaction, tableID);
+        // Fallback: if the resolved entry doesn't have any of the scanned
+        // properties, try attached databases (IDs overlap between databases).
+        if (dbName.empty() && !scan.getProperties().empty()) {
+            bool hasAnyProperty = false;
+            for (auto& expr : scan.getProperties()) {
+                auto& prop = expr->constCast<PropertyExpression>();
+                if (prop.hasProperty(tableEntry->getTableID()) &&
+                    tableEntry->containsProperty(prop.getPropertyName())) {
+                    hasAnyProperty = true;
+                    break;
+                }
+            }
+            if (!hasAnyProperty) {
+                // Try attached databases
+                auto* dbManager = main::DatabaseManager::Get(*clientContext);
+                for (auto* attachedDB : dbManager->getAttachedDatabases()) {
+                    if (attachedDB->getDBType() == common::ATTACHED_LBUG_DB_TYPE) {
+                        auto* attachedLbug = static_cast<main::AttachedLbugDatabase*>(attachedDB);
+                        if (attachedLbug->getStorageManager()->containsTable(tableID)) {
+                            auto* attachedCat = attachedDB->getCatalog();
+                            auto* attachedEntry =
+                                attachedCat->getTableCatalogEntry(transaction, tableID);
+                            // Verify this database has the expected properties
+                            bool found = false;
+                            for (auto& expr : scan.getProperties()) {
+                                auto& prop = expr->constCast<PropertyExpression>();
+                                if (prop.hasProperty(attachedEntry->getTableID()) &&
+                                    attachedEntry->containsProperty(prop.getPropertyName())) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (found) {
+                                cat = attachedCat;
+                                sm = attachedLbug->getStorageManager();
+                                tableEntry = attachedEntry;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         tableNames.push_back(tableEntry->getName());
-        auto table = storageManager->getTable(tableID)->ptrCast<storage::NodeTable>();
+        auto table = sm->getTable(tableID)->ptrCast<storage::NodeTable>();
         auto tableInfo = ScanNodeTableInfo(table, copyVector(scan.getPropertyPredicates()));
         for (auto& expr : scan.getProperties()) {
             auto& property = expr->constCast<PropertyExpression>();
@@ -70,7 +120,12 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapScanNodeTable(
     }
     std::vector<std::shared_ptr<ScanNodeTableSharedState>> sharedStates;
     for (auto& tableID : tableIDs) {
-        auto table = storageManager->getTable(tableID)->ptrCast<storage::NodeTable>();
+        auto& dbMap = scan.getTableDBMap();
+        auto it = dbMap.find(tableID);
+        auto dbName = it != dbMap.end() ? it->second : std::string{};
+        auto [cat, sm] =
+            main::DatabaseManager::resolveTableStorage(*clientContext, tableID, dbName);
+        auto table = sm->getTable(tableID)->ptrCast<storage::NodeTable>();
         auto semiMask = SemiMaskUtil::createMask(table->getNumTotalRows(transaction));
         sharedStates.push_back(std::make_shared<ScanNodeTableSharedState>(std::move(semiMask)));
     }

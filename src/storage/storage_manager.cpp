@@ -100,6 +100,11 @@ Table* StorageManager::getTable(table_id_t tableID) {
     return tables.at(tableID).get();
 }
 
+bool StorageManager::containsTable(table_id_t tableID) const {
+    std::shared_lock lck{mtx};
+    return tables.contains(tableID);
+}
+
 std::optional<PlannerTableStats> StorageManager::getCachedPlannerTableStats(
     table_id_t tableID) const {
     std::shared_lock lck{plannerStatsMtx};

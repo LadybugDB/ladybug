@@ -11,7 +11,7 @@ LogicalPlan Planner::getNodePropertyScanPlan(const NodeExpression& node) {
     if (properties.empty()) {
         return scanPlan;
     }
-    appendScanNodeTable(node.getInternalID(), node.getTableIDs(), properties, scanPlan);
+    appendScanNodeTable(node.getInternalID(), node.getTableIDs(), properties, scanPlan, &node);
     return scanPlan;
 }
 

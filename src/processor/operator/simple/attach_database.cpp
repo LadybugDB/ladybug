@@ -35,7 +35,6 @@ void AttachDatabase::executeInternal(ExecutionContext* context) {
     if (common::StringUtils::getUpper(attachInfo.dbType) == common::ATTACHED_LBUG_DB_TYPE) {
         auto db = std::make_unique<main::AttachedLbugDatabase>(attachInfo.dbPath,
             attachInfo.dbAlias, common::ATTACHED_LBUG_DB_TYPE, client);
-        client->setDefaultDatabase(db.get());
         databaseManager->registerAttachedDatabase(std::move(db));
         client->addDBDirToFileSearchPath(attachInfo.dbPath);
         appendMessage(attachMessage(), memoryManager);
