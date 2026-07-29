@@ -827,14 +827,17 @@ std::vector<TableCatalogEntry*> Binder::bindRelGroupEntries(
         for (auto entry : catalog->getRelGroupEntries(transaction, useInternal)) {
             entrySet.insert(entry);
         }
-        for (auto attachedDB : dbManager->getAttachedDatabases()) {
-            auto attachedCatalog = attachedDB->getCatalog();
-            for (auto entry : attachedCatalog->getRelGroupEntries(transaction, useInternal)) {
-                entrySet.insert(entry);
-            }
-        }
+        // Stop-gap: skip attached rel groups; physical routing for rel patterns
+        // over attached databases is not yet implemented. Unlabeled ()-[r]->()
+        // would otherwise crash or silently read the wrong table on ID overlap.
+        // TODO: implement full dbName plumbing for rel patterns (BUG 6).
     } else {
         for (auto& name : tableNames) {
+            // Check for qualified rel name (db.table) — not yet supported.
+            if (name.find('.') != std::string::npos) {
+                throw BinderException(
+                    "Qualified relationship patterns (e.g. -[r:db.rel]->) are not supported yet.");
+            }
             if (catalog->containsTable(transaction, name)) {
                 auto entry = catalog->getTableCatalogEntry(transaction, name, useInternal);
                 if (entry->getType() != CatalogEntryType::REL_GROUP_ENTRY) {

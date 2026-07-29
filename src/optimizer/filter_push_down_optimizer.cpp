@@ -13,7 +13,9 @@
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/string_utils.h"
+#include "main/attached_database.h"
 #include "main/client_context.h"
+#include "main/database_manager.h"
 #include "planner/join_order/cardinality_estimator.h"
 #include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/logical_empty_result.h"
@@ -208,11 +210,11 @@ static bool isNodeProperty(const Expression& expression, const Expression& nodeI
 
 static std::optional<std::pair<std::shared_ptr<Expression>, std::string>>
 popSecondaryARTEqualityComparison(PredicateSet& predicateSet, const Expression& nodeID,
-    table_id_t tableID, main::ClientContext* context) {
-    auto catalog = Catalog::Get(*context);
+    table_id_t tableID, main::ClientContext* context, const std::string& dbName = {}) {
+    auto [cat, sm] = main::DatabaseManager::resolveTableStorage(*context, tableID, dbName);
     auto transaction = transaction::Transaction::Get(*context);
-    auto tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
-    auto* table = StorageManager::Get(*context)->getTable(tableID)->ptrCast<NodeTable>();
+    auto tableEntry = cat->getTableCatalogEntry(transaction, tableID);
+    auto* table = sm->getTable(tableID)->ptrCast<NodeTable>();
     for (auto i = 0u; i < predicateSet.equalityPredicates.size(); ++i) {
         auto predicate = predicateSet.equalityPredicates[i];
         auto lhs = predicate->getChild(0);
@@ -228,7 +230,7 @@ popSecondaryARTEqualityComparison(PredicateSet& predicateSet, const Expression& 
             continue;
         }
         const auto propertyID = tableEntry->getPropertyID(property.getPropertyName());
-        for (auto* indexEntry : catalog->getIndexEntries(transaction, tableID)) {
+        for (auto* indexEntry : cat->getIndexEntries(transaction, tableID)) {
             if (!indexEntry->containsPropertyID(propertyID) ||
                 !StringUtils::caseInsensitiveEquals(indexEntry->getIndexType(),
                     ArtPrimaryKeyIndex::getIndexType().typeName)) {
@@ -257,12 +259,18 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableRepl
     // Apply index scan
     auto tableIDs = scan.getTableIDs();
     std::shared_ptr<Expression> primaryKeyEqualityComparison = nullptr;
+    auto& dbMap = scan.getTableDBMap();
+    auto getResolvedTable = [&](table_id_t id) -> storage::NodeTable* {
+        auto dbIt = dbMap.find(id);
+        auto dbName = dbIt != dbMap.end() ? dbIt->second : std::string{};
+        auto [cat, sm] = main::DatabaseManager::resolveTableStorage(*context, id, dbName);
+        return sm->getTable(id)->ptrCast<storage::NodeTable>();
+    };
     if (tableIDs.size() == 1) {
         primaryKeyEqualityComparison = predicateSet.popNodePKEqualityComparison(*nodeID);
     }
     if (primaryKeyEqualityComparison != nullptr) { // Try rewrite index scan
-        auto* table =
-            StorageManager::Get(*context)->getTable(tableIDs[0])->ptrCast<storage::NodeTable>();
+        auto* table = getResolvedTable(tableIDs[0]);
         auto rhs = primaryKeyEqualityComparison->getChild(1);
         if (table->tryGetPrimaryKeyIndex() != nullptr && isConstantExpression(rhs)) {
             auto extraInfo = std::make_unique<PrimaryKeyScanInfo>(rhs);
@@ -274,8 +282,7 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableRepl
             predicateSet.addPredicate(primaryKeyEqualityComparison);
         }
     } else if (tableIDs.size() == 1) {
-        auto* table =
-            StorageManager::Get(*context)->getTable(tableIDs[0])->ptrCast<storage::NodeTable>();
+        auto* table = getResolvedTable(tableIDs[0]);
         auto* pkIndex = table->tryGetPrimaryKeyIndex();
         if (pkIndex != nullptr && pkIndex->getIndexInfo().indexType ==
                                       storage::ArtPrimaryKeyIndex::getIndexType().typeName) {
@@ -291,8 +298,10 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableRepl
         }
     }
     if (scan.getScanType() == LogicalScanNodeTableType::SCAN && tableIDs.size() == 1) {
+        auto dbIt = dbMap.find(tableIDs[0]);
+        auto dbName = dbIt != dbMap.end() ? dbIt->second : std::string{};
         auto secondaryIndexComparison =
-            popSecondaryARTEqualityComparison(predicateSet, *nodeID, tableIDs[0], context);
+            popSecondaryARTEqualityComparison(predicateSet, *nodeID, tableIDs[0], context, dbName);
         if (secondaryIndexComparison.has_value()) {
             scan.setScanType(LogicalScanNodeTableType::SECONDARY_INDEX_SCAN);
             scan.setExtraInfo(std::make_unique<SecondaryIndexScanInfo>(
@@ -358,19 +367,6 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::finishPushDown(
     auto root = appendFiltersStatsAware(std::move(predicates), op);
     predicateSet.clear();
     return root;
-}
-
-std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::appendScanNodeTable(
-    std::shared_ptr<binder::Expression> nodeID, std::vector<common::table_id_t> nodeTableIDs,
-    binder::expression_vector properties, std::shared_ptr<planner::LogicalOperator> child) {
-    if (properties.empty()) {
-        return child;
-    }
-    auto printInfo = std::make_unique<OPPrintInfo>();
-    auto scanNodeTable = std::make_shared<LogicalScanNodeTable>(std::move(nodeID),
-        std::move(nodeTableIDs), std::move(properties));
-    scanNodeTable->computeFlatSchema();
-    return scanNodeTable;
 }
 
 std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::appendFilters(
