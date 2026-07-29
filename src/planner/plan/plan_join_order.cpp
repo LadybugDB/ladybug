@@ -305,10 +305,12 @@ void Planner::planNodeScan(uint32_t nodePos) {
             // Use table function call for entries that supply a scan function
             appendTableFunctionCall(*boundScanInfo, plan);
         } else {
-            appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan);
+            appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan,
+                node.get());
         }
     } else {
-        appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan);
+        appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan,
+            node.get());
     }
     auto predicates = getNewlyMatchedExprs(context.getEmptySubqueryGraph(), newSubgraph,
         context.getWhereExpressions());
@@ -321,7 +323,7 @@ void Planner::planNodeIDScan(uint32_t nodePos) {
     auto newSubgraph = context.getEmptySubqueryGraph();
     newSubgraph.addQueryNode(nodePos);
     auto plan = LogicalPlan();
-    appendScanNodeTable(node->getInternalID(), node->getTableIDs(), {}, plan);
+    appendScanNodeTable(node->getInternalID(), node->getTableIDs(), {}, plan, node.get());
     context.addPlan(newSubgraph, std::move(plan));
 }
 
@@ -367,7 +369,8 @@ void Planner::planRelScan(uint32_t relPos, const QueryGraphPlanningInfo& info) {
             auto nbrNode = srcCorrelated ? dstNode : srcNode;
             auto plan = LogicalPlan();
             const auto extendDirection = getExtendDirection(*rel, *boundNode);
-            appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan);
+            appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan,
+                boundNode.get());
             // Use PackedExtend for eligible single-rel seeds so the bound node group stays unflat.
             // tryPlanPackedINLJoin depends on this when attaching a second rel as a sibling.
             if (clientContext->getClientConfig()->enablePackedPathExtend &&
@@ -388,7 +391,8 @@ void Planner::planRelScan(uint32_t relPos, const QueryGraphPlanningInfo& info) {
         auto plan = LogicalPlan();
         auto [boundNode, nbrNode] = getBoundAndNbrNodes(*rel, direction);
         const auto extendDirection = getExtendDirection(*rel, *boundNode);
-        appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan);
+        appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan,
+            boundNode.get());
         // Use PackedExtend for eligible single-rel seeds so the bound node group stays unflat.
         // tryPlanPackedINLJoin depends on this when attaching a second rel as a sibling.
         if (clientContext->getClientConfig()->enablePackedPathExtend &&
