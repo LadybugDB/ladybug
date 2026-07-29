@@ -397,5 +397,35 @@ std::vector<catalog::Catalog*> DatabaseManager::getGraphs() const {
     return result;
 }
 
+std::pair<catalog::Catalog*, storage::StorageManager*> DatabaseManager::resolveTableStorage(
+    const ClientContext& context, common::table_id_t tableID, const std::string& dbName) {
+    if (!dbName.empty()) {
+        auto* attachedDB = DatabaseManager::Get(context)->getAttachedDatabase(dbName);
+        if (attachedDB->getDBType() == common::ATTACHED_LBUG_DB_TYPE) {
+            auto* attachedLbug = static_cast<main::AttachedLbugDatabase*>(attachedDB);
+            if (attachedLbug->getStorageManager()->containsTable(tableID)) {
+                return {attachedDB->getCatalog(), attachedLbug->getStorageManager()};
+            }
+        }
+        throw common::RuntimeException(
+            std::format("Table with ID {} not found in database {}.", tableID, dbName));
+    }
+    auto* mainSM = storage::StorageManager::Get(context);
+    if (mainSM->containsTable(tableID)) {
+        return {catalog::Catalog::Get(context), mainSM};
+    }
+    auto* dbManager = DatabaseManager::Get(context);
+    for (auto* attachedDB : dbManager->getAttachedDatabases()) {
+        if (attachedDB->getDBType() == common::ATTACHED_LBUG_DB_TYPE) {
+            auto* attachedLbug = static_cast<main::AttachedLbugDatabase*>(attachedDB);
+            if (attachedLbug->getStorageManager()->containsTable(tableID)) {
+                return {attachedDB->getCatalog(), attachedLbug->getStorageManager()};
+            }
+        }
+    }
+    throw common::RuntimeException(
+        std::format("Table with ID {} not found in any attached database.", tableID));
+}
+
 } // namespace main
 } // namespace lbug

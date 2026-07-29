@@ -16,10 +16,6 @@ std::string DetatchDatabasePrintInfo::toString() const {
 void DetachDatabase::executeInternal(ExecutionContext* context) {
     auto clientContext = context->clientContext;
     auto dbManager = main::DatabaseManager::Get(*clientContext);
-    if (dbManager->hasAttachedDatabase(dbName) &&
-        dbManager->getAttachedDatabase(dbName)->getDBType() == common::ATTACHED_LBUG_DB_TYPE) {
-        clientContext->setDefaultDatabase(nullptr /* defaultDatabase */);
-    }
     dbManager->detachDatabase(dbName);
     appendMessage("Detached database successfully.", storage::MemoryManager::Get(*clientContext));
 }

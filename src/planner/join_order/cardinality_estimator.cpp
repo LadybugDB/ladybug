@@ -6,6 +6,7 @@
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/enums/extend_direction_util.h"
 #include "main/client_context.h"
+#include "main/database_manager.h"
 #include "planner/join_order/join_order_util.h"
 #include "planner/operator/logical_aggregate.h"
 #include "planner/operator/logical_hash_join.h"
@@ -26,8 +27,8 @@ static cardinality_t atLeastOne(uint64_t x) {
 }
 
 static PlannerTableStats getPlannerStats(main::ClientContext* context,
-    storage::StorageManager& storageManager, catalog::TableCatalogEntry& tableEntry,
-    table_id_t physicalTableID = INVALID_TABLE_ID) {
+    storage::StorageManager& storageManager, catalog::Catalog& catalog,
+    catalog::TableCatalogEntry& tableEntry, table_id_t physicalTableID = INVALID_TABLE_ID) {
     const auto tableID =
         physicalTableID == INVALID_TABLE_ID ? tableEntry.getTableID() : physicalTableID;
     auto* table = storageManager.getTable(tableID);
@@ -35,7 +36,7 @@ static PlannerTableStats getPlannerStats(main::ClientContext* context,
         cachedStats.has_value() && cachedStats->tableChangeEpoch == table->getChangeEpoch()) {
         return std::move(cachedStats.value());
     }
-    return storage::buildPlannerTableStats(storageManager, *catalog::Catalog::Get(*context),
+    return storage::buildPlannerTableStats(storageManager, catalog,
         transaction::Transaction::Get(*context), tableEntry, physicalTableID,
         storage::PlannerStatsMode::SCHEMA_ONLY);
 }
@@ -58,14 +59,25 @@ void CardinalityEstimator::init(const QueryGraph& queryGraph) {
 void CardinalityEstimator::init(const NodeExpression& node) {
     auto key = node.getInternalID()->getUniqueName();
     cardinality_t numNodes = 0u;
-    auto storageManager = storage::StorageManager::Get(*context);
     for (auto entry : node.getEntries()) {
         // Skip foreign tables - they don't have storage in the local database
         if (entry->getType() == catalog::CatalogEntryType::FOREIGN_TABLE_ENTRY) {
             continue;
         }
         auto tableID = entry->getTableID();
-        auto stats = getPlannerStats(context, *storageManager, *entry);
+        auto dbName = node.getDbName(entry);
+        storage::StorageManager* storageManager;
+        catalog::Catalog* cat;
+        if (!dbName.empty()) {
+            auto* attachedDB = main::DatabaseManager::Get(*context)->getAttachedDatabase(dbName);
+            auto* attachedLbugDB = static_cast<main::AttachedLbugDatabase*>(attachedDB);
+            storageManager = attachedLbugDB->getStorageManager();
+            cat = attachedDB->getCatalog();
+        } else {
+            storageManager = storage::StorageManager::Get(*context);
+            cat = catalog::Catalog::Get(*context);
+        }
+        auto stats = getPlannerStats(context, *storageManager, *cat, *entry);
         DASSERT(stats.storageStats.has_value());
         numNodes += stats.storageStats->getTableCard();
         if (!tableStats.contains(tableID)) {
@@ -78,10 +90,21 @@ void CardinalityEstimator::init(const NodeExpression& node) {
 }
 
 void CardinalityEstimator::init(const RelExpression& rel) {
-    auto storageManager = storage::StorageManager::Get(*context);
     for (auto entry : rel.getEntries()) {
         if (entry->getType() == catalog::CatalogEntryType::FOREIGN_TABLE_ENTRY) {
             continue;
+        }
+        auto dbName = rel.getDbName(entry);
+        storage::StorageManager* storageManager;
+        catalog::Catalog* cat;
+        if (!dbName.empty()) {
+            auto* attachedDB = main::DatabaseManager::Get(*context)->getAttachedDatabase(dbName);
+            auto* attachedLbugDB = static_cast<main::AttachedLbugDatabase*>(attachedDB);
+            storageManager = attachedLbugDB->getStorageManager();
+            cat = attachedDB->getCatalog();
+        } else {
+            storageManager = storage::StorageManager::Get(*context);
+            cat = catalog::Catalog::Get(*context);
         }
         auto& relGroupEntry = entry->cast<catalog::RelGroupCatalogEntry>();
         for (const auto& relInfo : relGroupEntry.getRelEntryInfos()) {
@@ -90,7 +113,7 @@ void CardinalityEstimator::init(const RelExpression& rel) {
                 continue;
             }
             tableStats.insert(
-                {tableID, getPlannerStats(context, *storageManager, *entry, tableID)});
+                {tableID, getPlannerStats(context, *storageManager, *cat, *entry, tableID)});
         }
     }
 }
@@ -219,8 +242,8 @@ static std::optional<cardinality_t> getTableStatsIfPossible(main::ClientContext*
         if (tableStats.contains(tableID) && tableStats.at(tableID).storageStats.has_value() &&
             propertyExpr.hasProperty(tableID)) {
             auto transaction = Transaction::Get(*context);
-            auto entry =
-                catalog::Catalog::Get(*context)->getTableCatalogEntry(transaction, tableID);
+            auto [cat, sm] = main::DatabaseManager::resolveTableStorage(*context, tableID);
+            auto entry = cat->getTableCatalogEntry(transaction, tableID);
             if (!entry->containsProperty(propertyExpr.getPropertyName())) {
                 return {};
             }
@@ -266,12 +289,17 @@ uint64_t CardinalityEstimator::getNumNodes(const Transaction*,
     return atLeastOne(numNodes);
 }
 
+static storage::Table* getTableFromAnyStorageManager(main::ClientContext* context,
+    common::table_id_t tableID) {
+    auto [cat, sm] = main::DatabaseManager::resolveTableStorage(*context, tableID);
+    return sm->getTable(tableID);
+}
+
 uint64_t CardinalityEstimator::getNumRels(const Transaction* transaction,
     const std::vector<table_id_t>& tableIDs) const {
     cardinality_t numRels = 0u;
     for (auto tableID : tableIDs) {
-        numRels +=
-            storage::StorageManager::Get(*context)->getTable(tableID)->getNumTotalRows(transaction);
+        numRels += getTableFromAnyStorageManager(context, tableID)->getNumTotalRows(transaction);
     }
     return atLeastOne(numRels);
 }
