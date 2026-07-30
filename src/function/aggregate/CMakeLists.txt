@@ -5,6 +5,7 @@ add_library(lbug_function_aggregate
         collect.cpp
         min_max.cpp
         percentile_disc.cpp
+        percentile_cont.cpp
         sum.cpp
         avg.cpp)
 

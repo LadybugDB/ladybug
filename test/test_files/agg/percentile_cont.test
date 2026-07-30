@@ -1,0 +1,64 @@
+-DATASET CSV empty
+
+--
+
+-CASE PercentileContAggregate
+-STATEMENT UNWIND [10.0, 20.0, 30.0, 40.0] AS v
+           RETURN percentileCont(v, 0.0), percentileCont(v, 0.5),
+                  percentileCont(v, 0.75), percentileCont(v, 1.0)
+---- 1
+10.000000|25.000000|32.500000|40.000000
+
+-STATEMENT UNWIND [1, 2, 3, 4, 5] AS v
+           RETURN percentileCont(v, 0.5)
+---- 1
+3.000000
+
+-STATEMENT UNWIND [1, 2, 3, 4] AS v
+           RETURN percentileCont(v, 0.5)
+---- 1
+2.500000
+
+-STATEMENT CREATE NODE TABLE T(id INT64, g INT64, v INT64, PRIMARY KEY(id));
+---- ok
+
+-STATEMENT CREATE (:T {id: 1, g: 1, v: 10}),
+                  (:T {id: 2, g: 1, v: 20}),
+                  (:T {id: 3, g: 1, v: 30}),
+                  (:T {id: 4, g: 2, v: 5}),
+                  (:T {id: 5, g: 2, v: 15});
+---- ok
+
+-STATEMENT MATCH (n:T)
+           RETURN n.g, percentileCont(n.v, 0.5)
+           ORDER BY n.g
+---- 2
+1|20.000000
+2|10.000000
+
+-STATEMENT MATCH (n:T)
+           RETURN percentileCont(DISTINCT n.g, 1.0)
+---- 1
+2.000000
+
+-STATEMENT MATCH (n:T)
+           WHERE n.id > 100
+           RETURN percentileCont(n.v, 0.5)
+---- 1
+
+-STATEMENT UNWIND [1.5, 2.5, 3.5] AS v
+           RETURN percentileCont(v, 0.5)
+---- 1
+2.500000
+
+-STATEMENT UNWIND [100, 200] AS v
+           RETURN percentileCont(v, 0.25)
+---- 1
+125.000000
+
+-STATEMENT UNWIND [1, 2, 3, 4, 5, 6] AS v
+           RETURN percentileCont(v, 0.0), percentileCont(v, 0.25),
+                  percentileCont(v, 0.5), percentileCont(v, 0.75),
+                  percentileCont(v, 1.0)
+---- 1
+1.000000|2.250000|3.500000|4.750000|6.000000
