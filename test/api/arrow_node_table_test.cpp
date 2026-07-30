@@ -7,6 +7,7 @@
 #include "common/arrow/arrow.h"
 #include "gtest/gtest.h"
 #include "storage/table/arrow_node_table.h"
+#include "storage/table/arrow_table_support.h"
 
 using namespace lbug;
 using namespace lbug::storage;
@@ -244,4 +245,69 @@ TEST_F(ArrowNodeTableTest, ArrowTableLargeData) {
         schema.release(&schema);
     if (array.release)
         array.release(&array);
+}
+
+TEST_F(ArrowNodeTableTest, CreateArrowTableReservedFieldNames) {
+    // Use reserved word "index" as a field name
+    std::vector<int32_t> indexData = {10, 20};
+    std::vector<std::string> valueData = {"foo", "bar"};
+
+    ArrowSchemaWrapper schema;
+    createStructSchema(&schema, 2);
+    createSchema<int32_t>(schema.children[0], "index");
+    createSchema<std::string>(schema.children[1], "value");
+
+    std::vector<ArrowArrayWrapper> arrays;
+    arrays.push_back(createStructArray(indexData.size(),
+        {[&](ArrowArray* a) { createInt32Array(a, indexData); },
+            [&](ArrowArray* a) { createStringArray(a, valueData); }}));
+
+    auto result = ArrowTableSupport::createViewFromArrowTable(*conn, "t1", std::move(schema),
+        std::move(arrays));
+    ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+
+    // Query back to confirm data was ingested
+    auto queryResult = conn->query("MATCH (n:t1) RETURN n.`index`, n.value ORDER BY n.`index`");
+    ASSERT_TRUE(queryResult->isSuccess()) << queryResult->getErrorMessage();
+    ASSERT_TRUE(queryResult->hasNext());
+    auto row = queryResult->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<int32_t>(), 10);
+    ASSERT_EQ(row->getValue(1)->getValue<std::string>(), "foo");
+    ASSERT_TRUE(queryResult->hasNext());
+    row = queryResult->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<int32_t>(), 20);
+    ASSERT_EQ(row->getValue(1)->getValue<std::string>(), "bar");
+}
+
+TEST_F(ArrowNodeTableTest, CreateArrowTableIrregularFieldNames) {
+    // Use field names with a space and a leading digit
+    std::vector<int32_t> col1Data = {1, 2};
+    std::vector<std::string> col2Data = {"x", "y"};
+
+    ArrowSchemaWrapper schema;
+    createStructSchema(&schema, 2);
+    createSchema<int32_t>(schema.children[0], "my column");
+    createSchema<std::string>(schema.children[1], "2nd");
+
+    std::vector<ArrowArrayWrapper> arrays;
+    arrays.push_back(createStructArray(col1Data.size(),
+        {[&](ArrowArray* a) { createInt32Array(a, col1Data); },
+            [&](ArrowArray* a) { createStringArray(a, col2Data); }}));
+
+    auto result = ArrowTableSupport::createViewFromArrowTable(*conn, "t2", std::move(schema),
+        std::move(arrays));
+    ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+
+    // Query back to confirm data was ingested
+    auto queryResult =
+        conn->query("MATCH (n:t2) RETURN n.`my column`, n.`2nd` ORDER BY n.`my column`");
+    ASSERT_TRUE(queryResult->isSuccess()) << queryResult->getErrorMessage();
+    ASSERT_TRUE(queryResult->hasNext());
+    auto row = queryResult->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<int32_t>(), 1);
+    ASSERT_EQ(row->getValue(1)->getValue<std::string>(), "x");
+    ASSERT_TRUE(queryResult->hasNext());
+    row = queryResult->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<int32_t>(), 2);
+    ASSERT_EQ(row->getValue(1)->getValue<std::string>(), "y");
 }
