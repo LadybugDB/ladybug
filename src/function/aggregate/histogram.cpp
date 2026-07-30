@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <format>
 #include <sstream>
 #include <vector>
 
@@ -13,6 +12,7 @@
 #include "common/vector/value_vector.h"
 #include "function/aggregate/comparison_funcs.h"
 #include "function/aggregate/conversion_funcs.h"
+#include <format>
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -80,7 +80,6 @@ struct HistogramState : public AggregateStateWithNull {
 
     // Computed bins (populated in finalize, consumed by writeToVector)
     std::vector<HistogramBin> computedBins;
-    bool finalized = false;
 };
 
 void HistogramState::writeToVector(common::ValueVector* outputVector, uint64_t pos) {
@@ -88,16 +87,16 @@ void HistogramState::writeToVector(common::ValueVector* outputVector, uint64_t p
     auto numEntries = static_cast<uint64_t>(bins.size());
 
     // Allocate a list entry for the MAP (which is a LIST of STRUCT)
-    auto listEntry = common::ListVector::addList(outputVector, numEntries);
-    outputVector->setValue<common::list_entry_t>(pos, listEntry);
+    auto listEntry = ListVector::addList(outputVector, numEntries);
+    outputVector->setValue<list_entry_t>(pos, listEntry);
 
     if (numEntries == 0) {
         return;
     }
 
     // Get the key (STRING) and value (INT64) vectors from the MAP's struct child
-    auto keyVector = common::MapVector::getKeyVector(outputVector);
-    auto valVector = common::MapVector::getValueVector(outputVector);
+    auto keyVector = MapVector::getKeyVector(outputVector);
+    auto valVector = MapVector::getValueVector(outputVector);
 
     for (uint64_t i = 0; i < numEntries; ++i) {
         auto& bin = bins[i];
@@ -109,7 +108,7 @@ void HistogramState::writeToVector(common::ValueVector* outputVector, uint64_t p
         snprintf(buf, sizeof(buf), "%.*f-%.*f", precMin, bin.minVal, precMax, bin.maxVal);
 
         auto posInList = listEntry.offset + i;
-        common::StringVector::addString(keyVector, posInList, std::string_view(buf));
+        StringVector::addString(keyVector, posInList, std::string_view(buf));
         valVector->setValue<int64_t>(posInList, static_cast<int64_t>(bin.count));
     }
 }
@@ -191,6 +190,11 @@ static void combine(uint8_t* state_, uint8_t* otherState_,
 
 // ---------------------------------------------------------------------------
 // Build equal-depth (adaptive) bins from sorted values
+//
+// For each of the (up to) k bins, take roughly N/k values, then extend the
+// bin's end to include all duplicates of the boundary value so that identical
+// values never span two bin boundaries. The last bin absorbs any remaining
+// values.
 // ---------------------------------------------------------------------------
 static void buildAdaptiveBins(const std::vector<double>& values, int32_t numBins,
     std::vector<HistogramBin>& bins) {
@@ -206,54 +210,36 @@ static void buildAdaptiveBins(const std::vector<double>& values, int32_t numBins
         return;
     }
 
-    std::vector<double> boundaries(k + 1);
-    boundaries[0] = values.front();
-    for (int32_t i = 1; i < k; ++i) {
-        uint64_t idx = static_cast<uint64_t>(static_cast<double>(i) * static_cast<double>(n) /
-                                              static_cast<double>(k));
-        if (idx >= n) {
-            idx = n - 1;
-        }
-        boundaries[i] = values[idx];
-    }
-    boundaries[k] = values.back();
-
     uint64_t valIdx = 0;
     for (int32_t i = 0; i < k && valIdx < n; ++i) {
-        double binMin = boundaries[i];
-        double binMax = boundaries[i + 1];
-
-        if (i > 0 && binMin == boundaries[i - 1]) {
-            continue;
-        }
-
-        uint64_t binCount = 0;
-        bool lastIter = (i + 1 >= k) ? true : false;
-        while (valIdx < n) {
-            if (values[valIdx] < binMax || (lastIter && values[valIdx] == binMax)) {
-                ++binCount;
-                ++valIdx;
-            } else if (!lastIter && values[valIdx] == binMax && valIdx + 1 < n &&
-                       values[valIdx + 1] == binMax) {
-                ++binCount;
-                ++valIdx;
-            } else {
-                break;
-            }
-        }
-
-        if (binCount > 0) {
-            bins.push_back({binMin, valIdx > 0 ? values[valIdx - 1] : binMax, binCount});
-        }
-    }
-
-    if (valIdx < n) {
-        if (!bins.empty()) {
-            bins.back().count += (n - valIdx);
-            bins.back().maxVal = values.back();
+        // Target count for this bin: distribute remaining values evenly.
+        // ceil((n - valIdx) / (k - i)) so the final bin ends exactly at n.
+        uint64_t remaining = n - valIdx;
+        uint64_t targetCount;
+        if (i + 1 == k) {
+            targetCount = remaining;
         } else {
-            bins.push_back({values.front(), values.back(), n});
+            targetCount =
+                (remaining + static_cast<uint64_t>(k - i - 1)) / static_cast<uint64_t>(k - i);
         }
+        if (targetCount < 1) {
+            targetCount = 1;
+        }
+
+        uint64_t endIdx = valIdx + targetCount - 1;
+        if (endIdx >= n) {
+            endIdx = n - 1;
+        }
+
+        // Extend the bin to include all duplicates of the boundary value so
+        // identical values never span two bin boundaries.
+        while (endIdx + 1 < n && values[endIdx] == values[endIdx + 1]) {
+            ++endIdx;
+        }
+
+        uint64_t binCount = endIdx - valIdx + 1;
+        bins.push_back({values[valIdx], values[endIdx], binCount});
+        valIdx = endIdx + 1;
     }
 }
 
@@ -303,15 +289,6 @@ static void buildFixedSizeBins(const std::vector<double>& values, double binWidt
             bins.push_back({binMin, values[valIdx - 1], binCount});
         }
     }
-
-    if (valIdx < values.size()) {
-        if (!bins.empty()) {
-            bins.back().count += (values.size() - valIdx);
-            bins.back().maxVal = values.back();
-        } else {
-            bins.push_back({minVal, values.back(), values.size()});
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -321,7 +298,6 @@ static void finalize(uint8_t* state_, LogicalTypeID typeID) {
     auto* state = reinterpret_cast<HistogramState*>(state_);
     if (state->isNull || state->count == 0) {
         state->computedBins.clear();
-        state->finalized = true;
         return;
     }
 
@@ -341,7 +317,6 @@ static void finalize(uint8_t* state_, LogicalTypeID typeID) {
     } else {
         buildAdaptiveBins(values, state->numBins, state->computedBins);
     }
-    state->finalized = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -371,8 +346,7 @@ static double parseBinWidth(const ScalarBindFuncInput& input, uint32_t argIdx) {
     }
     auto val = literalExpr->getValue().getValue<double>();
     if (val < 0) {
-        throw BinderException(
-            std::format("{} bin_width must be non-negative.", HISTOGRAM_NAME));
+        throw BinderException(std::format("{} bin_width must be non-negative.", HISTOGRAM_NAME));
     }
     return val;
 }
@@ -389,7 +363,7 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
         binWidth = parseBinWidth(input, 2);
     }
 
-    auto* aggFunc = reinterpret_cast<AggregateFunction*>(input.definition);
+    auto* aggFunc = input.definition->ptrCast<AggregateFunction>();
     aggFunc->initializeFunc = [numBins, binWidth]() {
         return std::make_unique<HistogramState>(numBins, binWidth);
     };
@@ -398,8 +372,7 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
     aggFunc->initialNullAggregateState = aggFunc->createInitialNullAggregateState();
 
     // Return type: MAP(STRING, INT64)
-    auto resultType =
-        LogicalType::MAP(LogicalType::STRING(), LogicalType::INT64());
+    auto resultType = LogicalType::MAP(LogicalType::STRING(), LogicalType::INT64());
     return FunctionBindData::getSimpleBindData(input.arguments, resultType);
 }
 
@@ -411,17 +384,18 @@ function_set AggregateHistogramFunction::getFunctionSet() {
     for (auto typeID : LogicalTypeUtils::getNumericalLogicalTypeIDs()) {
         for (auto isDistinct : std::vector<bool>{true, false}) {
             // 1. HISTOGRAM(value)
-            result.push_back(std::make_unique<AggregateFunction>(name,
-                std::vector<LogicalTypeID>{typeID}, LogicalTypeID::MAP, initialize, updateAll,
+            result.push_back(std::make_unique<AggregateFunction>(
+                name, std::vector<LogicalTypeID>{typeID}, LogicalTypeID::MAP, initialize, updateAll,
                 updatePos, combine, [](auto) {}, isDistinct, bindFunc));
 
             // 2. HISTOGRAM(value, num_bins)
-            result.push_back(std::make_unique<AggregateFunction>(name,
-                std::vector<LogicalTypeID>{typeID, LogicalTypeID::INT64}, LogicalTypeID::MAP,
+            result.push_back(std::make_unique<AggregateFunction>(
+                name, std::vector<LogicalTypeID>{typeID, LogicalTypeID::INT64}, LogicalTypeID::MAP,
                 initialize, updateAll, updatePos, combine, [](auto) {}, isDistinct, bindFunc));
 
             // 3. HISTOGRAM(value, num_bins, bin_width)
-            result.push_back(std::make_unique<AggregateFunction>(name,
+            result.push_back(std::make_unique<AggregateFunction>(
+                name,
                 std::vector<LogicalTypeID>{typeID, LogicalTypeID::INT64, LogicalTypeID::DOUBLE},
                 LogicalTypeID::MAP, initialize, updateAll, updatePos, combine, [](auto) {},
                 isDistinct, bindFunc));
