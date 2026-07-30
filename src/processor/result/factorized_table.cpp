@@ -334,8 +334,20 @@ void FactorizedTable::setNonOverflowColNull(uint8_t* nullBuffer, ft_col_idx_t co
 
 void FactorizedTable::clear() {
     numTuples = 0;
-    flatTupleBlockCollection = std::make_unique<DataBlockCollection>(
-        tableSchema.getNumBytesPerTuple(), numFlatTuplesPerBlock);
+    // Reuse the first DataBlock (zeroed) and drop the rest. This skips the
+    // 256KB malloc on the next append while preserving the dense-packing
+    // invariant that getBlockIdxAndTupleIdxInBlock(tupleIdx) =
+    // tupleIdx / numFlatTuplesPerBlock relies on: the "next" block to write
+    // to must live at index 0. Once it fills, allocateFlatTupleBlocks
+    // appends new blocks at the tail, so block 1, 2, ... keep the formula
+    // correct.
+    if (!flatTupleBlockCollection->isEmpty()) {
+        auto& firstBlock = flatTupleBlockCollection->getBlocks().front();
+        firstBlock->resetToZero();
+        firstBlock->freeSize = firstBlock->getSizedData().size();
+        firstBlock->numTuples = 0;
+        flatTupleBlockCollection->keepFirstBlock();
+    }
     unFlatTupleBlockCollection = std::make_unique<DataBlockCollection>();
     inMemOverflowBuffer->resetBuffer();
 }

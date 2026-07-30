@@ -58,8 +58,9 @@ void ResultCollector::executeInternal(ExecutionContext* context) {
 }
 
 void ResultCollector::prepareForReuse(storage::MemoryManager* memoryManager) {
-    sharedState = std::make_shared<ResultCollectorSharedState>(
-        std::make_shared<FactorizedTable>(memoryManager, info.tableSchema.copy()));
+    // Clear the existing result table instead of freeing + re-allocating.
+    // This keeps the DataBlocks alive so the next execution reuses them.
+    sharedState->getTable()->clear();
     PhysicalOperator::prepareForReuse(memoryManager);
 }
 
