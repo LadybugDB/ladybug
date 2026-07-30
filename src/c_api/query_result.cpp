@@ -123,6 +123,7 @@ lbug_state lbug_query_result_get_arrow_schema(lbug_query_result* query_result,
         *out_schema = *static_cast<QueryResult*>(query_result->_query_result)->getArrowSchema();
         return LbugSuccess;
     } catch (Exception& e) {
+        setLastCAPIErrorMessage(e.what());
         return LbugError;
     }
 }
@@ -134,6 +135,7 @@ lbug_state lbug_query_result_get_next_arrow_chunk(lbug_query_result* query_resul
             *static_cast<QueryResult*>(query_result->_query_result)->getNextArrowChunk(chunk_size);
         return LbugSuccess;
     } catch (Exception& e) {
+        setLastCAPIErrorMessage(e.what());
         return LbugError;
     }
 }

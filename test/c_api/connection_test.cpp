@@ -230,3 +230,41 @@ TEST_F(CApiConnectionTest, GetPushedSqlSyntaxError) {
     ASSERT_NE(std::string(err).find("exception"), std::string::npos) << err;
     lbug_destroy_string(err);
 }
+
+TEST_F(CApiConnectionTest, GetLastErrorQueryFailure) {
+    // A query that returns a failed QueryResult should set the last error message
+    lbug_query_result result;
+    lbug_state state;
+    auto connection = getConnection();
+
+    state = lbug_connection_query(connection, "MATCH (a:NoSuchTable) RETURN a", &result);
+    ASSERT_EQ(state, LbugError);
+
+    // Error message should be retrievable
+    char* err = lbug_get_last_error();
+    ASSERT_NE(err, nullptr);
+    ASSERT_NE(std::string(err).find("exception"), std::string::npos) << err;
+    lbug_destroy_string(err);
+}
+
+TEST_F(CApiConnectionTest, GetLastErrorExecuteFailure) {
+    // A prepared statement that fails on execution should set the last error message
+    lbug_query_result result;
+    lbug_prepared_statement prepared;
+    lbug_state state;
+    auto connection = getConnection();
+
+    state = lbug_connection_prepare(connection, "MATCH (a:NoSuchTable) RETURN a", &prepared);
+    ASSERT_EQ(state, LbugSuccess) << "Prepare should succeed (syntax is valid)";
+
+    state = lbug_connection_execute(connection, &prepared, &result);
+    ASSERT_EQ(state, LbugError);
+
+    // Error message should be retrievable
+    char* err = lbug_get_last_error();
+    ASSERT_NE(err, nullptr);
+    ASSERT_NE(std::string(err).find("exception"), std::string::npos) << err;
+    lbug_destroy_string(err);
+
+    lbug_prepared_statement_destroy(&prepared);
+}
