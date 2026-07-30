@@ -7,6 +7,8 @@
 #include "binder/expression/literal_expression.h"
 #include "common/exception/binder.h"
 #include "common/type_utils.h"
+#include "function/aggregate/comparison_funcs.h"
+#include "function/aggregate/conversion_funcs.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -36,71 +38,6 @@ struct PercentileContState : public AggregateStateWithNull {
 
 static uint8_t* getElementValue(PercentileContElement* element) {
     return reinterpret_cast<uint8_t*>(element) + sizeof(PercentileContElement);
-}
-
-static bool valueLess(const uint8_t* left, const uint8_t* right, LogicalTypeID typeID) {
-    switch (typeID) {
-    case LogicalTypeID::INT8:
-        return *reinterpret_cast<const int8_t*>(left) < *reinterpret_cast<const int8_t*>(right);
-    case LogicalTypeID::INT16:
-        return *reinterpret_cast<const int16_t*>(left) < *reinterpret_cast<const int16_t*>(right);
-    case LogicalTypeID::INT32:
-        return *reinterpret_cast<const int32_t*>(left) < *reinterpret_cast<const int32_t*>(right);
-    case LogicalTypeID::INT64:
-    case LogicalTypeID::SERIAL:
-        return *reinterpret_cast<const int64_t*>(left) < *reinterpret_cast<const int64_t*>(right);
-    case LogicalTypeID::UINT8:
-        return *reinterpret_cast<const uint8_t*>(left) < *reinterpret_cast<const uint8_t*>(right);
-    case LogicalTypeID::UINT16:
-        return *reinterpret_cast<const uint16_t*>(left) < *reinterpret_cast<const uint16_t*>(right);
-    case LogicalTypeID::UINT32:
-        return *reinterpret_cast<const uint32_t*>(left) < *reinterpret_cast<const uint32_t*>(right);
-    case LogicalTypeID::UINT64:
-        return *reinterpret_cast<const uint64_t*>(left) < *reinterpret_cast<const uint64_t*>(right);
-    case LogicalTypeID::FLOAT:
-        return *reinterpret_cast<const float*>(left) < *reinterpret_cast<const float*>(right);
-    case LogicalTypeID::DOUBLE:
-        return *reinterpret_cast<const double*>(left) < *reinterpret_cast<const double*>(right);
-    case LogicalTypeID::INT128:
-        return *reinterpret_cast<const int128_t*>(left) < *reinterpret_cast<const int128_t*>(right);
-    case LogicalTypeID::UINT128:
-        return *reinterpret_cast<const uint128_t*>(left) <
-               *reinterpret_cast<const uint128_t*>(right);
-    default:
-        UNREACHABLE_CODE;
-    }
-}
-
-static double getValueAsDouble(const uint8_t* data, LogicalTypeID typeID) {
-    switch (typeID) {
-    case LogicalTypeID::INT8:
-        return static_cast<double>(*reinterpret_cast<const int8_t*>(data));
-    case LogicalTypeID::INT16:
-        return static_cast<double>(*reinterpret_cast<const int16_t*>(data));
-    case LogicalTypeID::INT32:
-        return static_cast<double>(*reinterpret_cast<const int32_t*>(data));
-    case LogicalTypeID::INT64:
-    case LogicalTypeID::SERIAL:
-        return static_cast<double>(*reinterpret_cast<const int64_t*>(data));
-    case LogicalTypeID::UINT8:
-        return static_cast<double>(*reinterpret_cast<const uint8_t*>(data));
-    case LogicalTypeID::UINT16:
-        return static_cast<double>(*reinterpret_cast<const uint16_t*>(data));
-    case LogicalTypeID::UINT32:
-        return static_cast<double>(*reinterpret_cast<const uint32_t*>(data));
-    case LogicalTypeID::UINT64:
-        return static_cast<double>(*reinterpret_cast<const uint64_t*>(data));
-    case LogicalTypeID::FLOAT:
-        return static_cast<double>(*reinterpret_cast<const float*>(data));
-    case LogicalTypeID::DOUBLE:
-        return *reinterpret_cast<const double*>(data);
-    case LogicalTypeID::INT128:
-        return static_cast<double>(*reinterpret_cast<const int128_t*>(data));
-    case LogicalTypeID::UINT128:
-        return static_cast<double>(*reinterpret_cast<const uint128_t*>(data));
-    default:
-        UNREACHABLE_CODE;
-    }
 }
 
 static std::unique_ptr<AggregateState> initialize() {
@@ -177,8 +114,8 @@ static void finalize(uint8_t* state_, LogicalTypeID typeID) {
     uint64_t lowIdx = static_cast<uint64_t>(std::floor(idx));
     uint64_t highIdx = static_cast<uint64_t>(std::ceil(idx));
     auto fraction = idx - static_cast<double>(lowIdx);
-    double lowVal = getValueAsDouble(values[lowIdx], typeID);
-    double highVal = getValueAsDouble(values[highIdx], typeID);
+    double lowVal = valueToDouble(values[lowIdx], typeID);
+    double highVal = valueToDouble(values[highIdx], typeID);
     state->result = lowVal + fraction * (highVal - lowVal);
 }
 
