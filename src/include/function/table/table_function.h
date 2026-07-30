@@ -46,6 +46,7 @@ struct LBUG_API TableFuncSharedState {
     explicit TableFuncSharedState(common::row_idx_t numRows) : numRows{numRows} {}
     virtual ~TableFuncSharedState() = default;
     virtual uint64_t getNumRows() const { return numRows; }
+    virtual void resetState() {}
 
     common::table_id_map_t<common::SemiMask*> getSemiMasks() const { return semiMasks.getMasks(); }
 

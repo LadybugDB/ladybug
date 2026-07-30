@@ -64,6 +64,13 @@ public:
 
     void finalizeInternal(ExecutionContext* context) override;
 
+    void prepareForReuse(storage::MemoryManager* memoryManager) override {
+        if (sharedState) {
+            sharedState->resetState();
+        }
+        PhysicalOperator::prepareForReuse(memoryManager);
+    }
+
     double getProgress(ExecutionContext* context) const override;
 
     std::unique_ptr<PhysicalOperator> copy() override {

@@ -77,6 +77,8 @@ public:
 
     void finalizeInternal(ExecutionContext* context) override;
 
+    void prepareForReuse(storage::MemoryManager* memoryManager) override;
+
     std::shared_ptr<FactorizedTable> getResultFTable() const override {
         return sharedState->getTable();
     }

@@ -57,6 +57,12 @@ void ResultCollector::executeInternal(ExecutionContext* context) {
     }
 }
 
+void ResultCollector::prepareForReuse(storage::MemoryManager* memoryManager) {
+    sharedState = std::make_shared<ResultCollectorSharedState>(
+        std::make_shared<FactorizedTable>(memoryManager, info.tableSchema.copy()));
+    PhysicalOperator::prepareForReuse(memoryManager);
+}
+
 void ResultCollector::finalizeInternal(ExecutionContext* context) {
     switch (info.accumulateType) {
     case AccumulateType::OPTIONAL_: {

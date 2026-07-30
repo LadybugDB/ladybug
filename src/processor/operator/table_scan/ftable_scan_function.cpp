@@ -18,6 +18,8 @@ struct FTableScanSharedState final : public SimpleTableFuncSharedState {
         : SimpleTableFuncSharedState{table->getNumTuples()}, table{std::move(table)},
           morselSize{morselSize}, nextTupleIdx{0} {}
 
+    void resetState() override { nextTupleIdx = 0; }
+
     TableFuncMorsel getMorsel() override {
         std::unique_lock lck{mtx};
         auto numTuplesToScan = std::min(morselSize, table->getNumTuples() - nextTupleIdx);

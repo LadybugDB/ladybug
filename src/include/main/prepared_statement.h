@@ -10,6 +10,13 @@
 #include "query_summary.h"
 
 namespace lbug {
+namespace processor {
+class PhysicalPlan;
+struct ResultSetDescriptor;
+} // namespace processor
+} // namespace lbug
+
+namespace lbug {
 namespace common {
 class LogicalType;
 }
@@ -32,6 +39,14 @@ struct CachedPreparedStatement {
     std::unique_ptr<planner::LogicalPlan> logicalPlan;
     std::vector<std::shared_ptr<binder::Expression>> columns;
     std::vector<std::string> columnNames;
+
+    // Cached physical plan for fast re-execution. When canReuseCachedPlanWith returns true,
+    // this operator-tree template is cloned and its sink state is refreshed for each call,
+    // avoiding the PlanMapper::mapOperator recursion entirely.
+    std::unique_ptr<processor::PhysicalPlan> physicalPlanCache;
+    // Cached result-set descriptor. copy() does not propagate the descriptor from an
+    // operator tree, so we store it here separately and re-attach it on the cloned sink.
+    std::unique_ptr<processor::ResultSetDescriptor> resultSetDescriptor;
 
     CachedPreparedStatement();
     ~CachedPreparedStatement();

@@ -224,7 +224,8 @@ private:
 
     std::unique_ptr<QueryResult> executeNoLock(PreparedStatement* preparedStatement,
         CachedPreparedStatement* cachedPreparedStatement,
-        std::optional<uint64_t> queryID = std::nullopt, QueryConfig config = {});
+        std::optional<uint64_t> queryID = std::nullopt, QueryConfig config = {},
+        bool cachePhysicalPlan = false);
     std::unique_ptr<QueryResult> queryNoLock(std::string_view query,
         std::optional<uint64_t> queryID = std::nullopt, QueryConfig config = {});
 
