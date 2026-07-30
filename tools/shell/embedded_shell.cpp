@@ -10,8 +10,8 @@
 #endif
 #include <algorithm>
 #include <array>
-#include <csignal>
 #include <cmath>
+#include <csignal>
 #include <iomanip>
 #include <regex>
 #include <sstream>
@@ -25,6 +25,8 @@
 #include "catalog/catalog_entry/scalar_macro_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "common/exception/parser.h"
+#include "common/types/value/nested.h"
+#include "common/types/value/value.h"
 #include "extension/extension_manager.h"
 #include "keywords.h"
 #include "parser/parser.h"
@@ -32,8 +34,6 @@
 #include "printer/printer_factory.h"
 #include "transaction/transaction.h"
 #include "transaction/transaction_context.h"
-#include "common/types/value/nested.h"
-#include "common/types/value/value.h"
 #include "utf8proc.h"
 #include "utf8proc_wrapper.h"
 
@@ -1144,7 +1144,7 @@ void EmbeddedShell::printExecutionResult(QueryResult& queryResult) const {
 // Render a MAP(STRING, INT64) value as a compact single-line visual.
 // Falls back to default toString() for other types.
 // ---------------------------------------------------------------------------
-static std::string renderMapCell(const common::Value& val, uint32_t /*colWidth*/) {
+static std::string renderMapCell(const common::Value& val) {
     if (val.isNull() || val.getDataType().getLogicalTypeID() != common::LogicalTypeID::MAP) {
         return val.toString();
     }
@@ -1172,7 +1172,8 @@ static std::string renderMapCell(const common::Value& val, uint32_t /*colWidth*/
         auto* cntVal = common::NestedVal::getChildVal(entry, 1);
         labels[i] = keyVal->toString();
         counts[i] = cntVal->getValue<int64_t>();
-        if (counts[i] > maxCount) maxCount = counts[i];
+        if (counts[i] > maxCount)
+            maxCount = counts[i];
     }
 
     // Unicode blocks U+2581..U+2588 as raw UTF-8
@@ -1182,15 +1183,16 @@ static std::string renderMapCell(const common::Value& val, uint32_t /*colWidth*/
     // Build sparkline
     std::string spark;
     for (uint32_t i = 0; i < numBins; ++i) {
-        int level = static_cast<int>(std::round(static_cast<double>(counts[i]) * 7.0 /
-                                                 static_cast<double>(maxCount)));
+        int level = static_cast<int>(
+            std::round(static_cast<double>(counts[i]) * 7.0 / static_cast<double>(maxCount)));
         spark.append(BLOCKS + level * 3, 3);
     }
 
     // Build compact summary:  [1.00-1.00:2, 2.00-2.00:2, 5.00-10.00:7]
     std::string summary = "  [";
     for (uint32_t i = 0; i < numBins; ++i) {
-        if (i > 0) summary += ", ";
+        if (i > 0)
+            summary += ", ";
         summary += labels[i] + ":" + std::to_string(counts[i]);
     }
     summary += "]";
@@ -1227,8 +1229,11 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
             auto colType = queryResult.getColumnDataTypes()[i].getLogicalTypeID();
             std::string tupleString;
             if (colType == common::LogicalTypeID::MAP) {
-                tupleString = renderMapCell(*tuple->getValue(i),
-                    std::max(colsWidth[i], (uint32_t)60));
+                tupleString = renderMapCell(*tuple->getValue(i));
+                // MAP cells tend to be wider than other types; ensure a usable
+                // minimum width so subsequent rows of the same column get
+                // reasonable space.
+                colsWidth[i] = std::max(colsWidth[i], (uint32_t)60);
             } else {
                 tupleString = tuple->getValue(i)->toString();
             }
@@ -1241,15 +1246,13 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
             }
             // An extra 2 spaces are added for an extra space on either
             // side of the std::string.
-            colsWidth[i] = std::max(colsWidth[i], fieldLen + 4);
+            colsWidth[i] = std::max(colsWidth[i], fieldLen + 2);
         }
         rowCount++;
     }
 
     // calculate the maximum width of the table
     uint32_t sumGoal = BaseTablePrinter::MIN_TRUNCATED_WIDTH;
-    uint32_t maxWidth = BaseTablePrinter::MIN_TRUNCATED_WIDTH;
-    ;
     if (colsWidth.size() == 1) {
         uint32_t minDisplayWidth =
             BaseTablePrinter::MIN_TRUNCATED_WIDTH + BaseTablePrinter::SMALL_TABLE_SEPERATOR_LENGTH;
@@ -1280,12 +1283,10 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
     for (auto i = 0u; i < colsWidth.size(); i++) {
         if (maxValueIndex.empty() || colsWidth[i] == colsWidth[maxValueIndex[0]]) {
             maxValueIndex.push_back(i);
-            maxWidth = colsWidth[maxValueIndex[0]];
         } else if (colsWidth[i] > colsWidth[maxValueIndex[0]]) {
             secondHighestValue = colsWidth[maxValueIndex[0]];
             maxValueIndex.clear();
             maxValueIndex.push_back(i);
-            maxWidth = colsWidth[maxValueIndex[0]];
         } else if (colsWidth[i] > secondHighestValue) {
             secondHighestValue = colsWidth[i];
         }
@@ -1313,7 +1314,6 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
         for (auto i = 0u; i < maxValueIndex.size(); i++) {
             colsWidth[maxValueIndex[i]] = newValue;
         }
-        maxWidth = newValue - 2;
         sum -= (oldValue - newValue) * maxValueIndex.size();
         if (newValue == BaseTablePrinter::MIN_TRUNCATED_WIDTH + 2) {
             break;
@@ -1583,7 +1583,7 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
             } else {
                 auto colType = queryResult.getColumnDataTypes()[i].getLogicalTypeID();
                 if (colType == common::LogicalTypeID::MAP) {
-                    cellStr = renderMapCell(*tuple->getValue(i), colsWidth[i]);
+                    cellStr = renderMapCell(*tuple->getValue(i));
                 } else {
                     cellStr = tuple->getValue(i)->toString();
                 }
