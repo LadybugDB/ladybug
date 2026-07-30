@@ -71,6 +71,17 @@ public:
     DataBlock* getBlock(ft_block_idx_t blockIdx) { return blocks[blockIdx].get(); }
     DataBlock* getLastBlock() { return blocks.back().get(); }
 
+    // Truncates the collection to at most one block, dropping the rest so that
+    // getBlockIdxAndTupleIdxInBlock(tupleIdx) = tupleIdx / numTuplesPerBlock
+    // keeps mapping tuple 0 to block 0 across a clear/reuse cycle. The caller
+    // is responsible for zeroing the surviving block (if any) before calling
+    // this.
+    void keepFirstBlock() {
+        if (blocks.size() > 1) {
+            blocks.resize(1);
+        }
+    }
+
     void merge(DataBlockCollection& other);
     void preventDestruction() const {
         for (auto& block : blocks) {
