@@ -588,8 +588,10 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                     result = localDatabase->queryProcessor->execute(physicalPlan.get(),
                         executionContext.get());
                 } else {
-                    if (preparedStatement->getStatementType() == StatementType::COPY_FROM) {
-                        // Note: We always force checkpoint for COPY_FROM statement.
+                    if (preparedStatement->getStatementType() == StatementType::COPY_FROM &&
+                        getDBConfig()->autoCheckpoint) {
+                        // Note: We force checkpoint for COPY_FROM statement unless the user has
+                        // disabled automatic checkpointing.
                         Transaction::Get(*this)->setForceCheckpoint();
                     }
                     result = localDatabase->queryProcessor->execute(physicalPlan.get(),
