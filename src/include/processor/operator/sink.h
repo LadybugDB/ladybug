@@ -27,6 +27,7 @@ public:
         DASSERT(resultSetDescriptor == nullptr);
         resultSetDescriptor = std::move(descriptor);
     }
+    ResultSetDescriptor* getDescriptor() const { return resultSetDescriptor.get(); }
     std::unique_ptr<ResultSet> getResultSet(storage::MemoryManager* memoryManager);
 
     void execute(ResultSet* resultSet, ExecutionContext* context) {

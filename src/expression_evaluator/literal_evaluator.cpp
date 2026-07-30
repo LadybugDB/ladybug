@@ -1,5 +1,6 @@
 #include "expression_evaluator/literal_evaluator.h"
 
+#include "binder/expression/parameter_expression.h"
 #include "common/types/value/value.h"
 
 using namespace lbug::common;
@@ -32,10 +33,16 @@ void LiteralExpressionEvaluator::resolveResultVector(const processor::ResultSet&
     flatState = DataChunkState::getSingleValueDataChunkState();
     unFlatState = std::make_shared<DataChunkState>();
     resultVector->setState(flatState);
-    if (value.isNull()) {
+    // If the expression is a bound parameter, read the fresh value from the expression
+    // rather than the frozen copy captured at plan-build time. This enables the cached
+    // physical-plan path to pick up changed parameter values between executions.
+    const auto& srcValue = expression->expressionType == common::ExpressionType::PARAMETER ?
+                               expression->constCast<binder::ParameterExpression>().getValue() :
+                               value;
+    if (srcValue.isNull()) {
         resultVector->setNull(0 /* pos */, true);
     } else {
-        resultVector->copyFromValue(resultVector->state->getSelVector()[0], value);
+        resultVector->copyFromValue(resultVector->state->getSelVector()[0], srcValue);
     }
 }
 

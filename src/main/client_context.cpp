@@ -390,14 +390,14 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     // LCOV_EXCL_STOP
     auto cachedStatement = cachedPreparedStatementManager.getCachedStatement(name);
     if (useCachedPlan) {
-        return executeNoLock(preparedStatement, cachedStatement, queryID);
+        return executeNoLock(preparedStatement, cachedStatement, queryID, {}, true);
     }
     // rebind
     auto [newPreparedStatement, newCachedStatement] =
         prepareNoLock(cachedStatement->parsedStatement, false /*shouldCommitNewTransaction*/,
             preparedStatement->parameterMap);
     useInternalCatalogEntry_ = false;
-    return executeNoLock(newPreparedStatement.get(), newCachedStatement.get(), queryID);
+    return executeNoLock(newPreparedStatement.get(), newCachedStatement.get(), queryID, {}, true);
 }
 
 std::unique_ptr<QueryResult> ClientContext::query(std::string_view query,
@@ -421,7 +421,7 @@ std::unique_ptr<QueryResult> ClientContext::queryNoLock(std::string_view query,
         auto [preparedStatement, cachedStatement] =
             prepareNoLock(statement, false /*shouldCommitNewTransaction*/);
         auto currentQueryResult =
-            executeNoLock(preparedStatement.get(), cachedStatement.get(), queryID, config);
+            executeNoLock(preparedStatement.get(), cachedStatement.get(), queryID, config, false);
         if (!currentQueryResult->isSuccess()) {
             if (!lastResult) {
                 queryResult = std::move(currentQueryResult);
@@ -554,7 +554,7 @@ ClientContext::PrepareResult ClientContext::prepareNoLock(
 
 std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* preparedStatement,
     CachedPreparedStatement* cachedStatement, std::optional<uint64_t> queryID,
-    QueryConfig queryConfig) {
+    QueryConfig queryConfig, bool cachePhysicalPlan) {
     if (!preparedStatement->isSuccess()) {
         return QueryResult::getQueryResultWithError(preparedStatement->errMsg);
     }
@@ -581,9 +581,34 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                 setActiveQueryID(queryID.value());
                 const auto executionContext =
                     std::make_unique<ExecutionContext>(profiler.get(), this, *queryID);
-                auto mapper = PlanMapper(executionContext.get());
-                const auto physicalPlan = mapper.getPhysicalPlan(cachedStatement->logicalPlan.get(),
-                    cachedStatement->columns, queryConfig.resultType, queryConfig.arrowConfig);
+                std::unique_ptr<PhysicalPlan> physicalPlan;
+                if (cachePhysicalPlan && cachedStatement->physicalPlanCache) {
+                    // Fast path: clone cached operator tree and refresh sink state.
+                    // Avoids the PlanMapper::mapOperator recursion entirely.
+                    physicalPlan = std::make_unique<PhysicalPlan>(
+                        cachedStatement->physicalPlanCache->lastOperator->copy());
+                    physicalPlan->lastOperator->prepareForReuse(storage::MemoryManager::Get(*this));
+                    // Re-attach the ResultSetDescriptor (not propagated by copy()).
+                    if (cachedStatement->resultSetDescriptor) {
+                        auto* sink = physicalPlan->lastOperator->ptrCast<Sink>();
+                        sink->setDescriptor(cachedStatement->resultSetDescriptor->copy());
+                    }
+                } else {
+                    auto mapper = PlanMapper(executionContext.get());
+                    physicalPlan = mapper.getPhysicalPlan(cachedStatement->logicalPlan.get(),
+                        cachedStatement->columns, queryConfig.resultType, queryConfig.arrowConfig);
+                    if (cachePhysicalPlan) {
+                        // Cache the operator tree template for future reuse.
+                        cachedStatement->physicalPlanCache =
+                            std::make_unique<PhysicalPlan>(physicalPlan->lastOperator->copy());
+                        // Also save the ResultSetDescriptor separately (copy() doesn't
+                        // propagate it, and the cloned sink needs it for getResultSet).
+                        auto* sink = physicalPlan->lastOperator->ptrCast<Sink>();
+                        if (sink->getDescriptor()) {
+                            cachedStatement->resultSetDescriptor = sink->getDescriptor()->copy();
+                        }
+                    }
+                }
                 if (isTransactionStatement) {
                     result = localDatabase->queryProcessor->execute(physicalPlan.get(),
                         executionContext.get());

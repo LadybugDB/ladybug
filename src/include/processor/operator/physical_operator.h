@@ -8,6 +8,9 @@ class Profiler;
 class NumericMetric;
 class TimeMetric;
 } // namespace lbug::common
+namespace lbug::storage {
+class MemoryManager;
+} // namespace lbug::storage
 namespace lbug {
 namespace processor {
 struct ExecutionContext;
@@ -170,6 +173,15 @@ public:
     bool getNextTuple(ExecutionContext* context);
 
     virtual void finalize(ExecutionContext* context);
+
+    // Prepare the operator tree for reuse across executions. Replaces mutable shared state
+    // (e.g., accumulating result tables) with fresh instances so the tree can be executed
+    // again without leaking data between iterations.
+    virtual void prepareForReuse(storage::MemoryManager* memoryManager) {
+        for (auto& child : children) {
+            child->prepareForReuse(memoryManager);
+        }
+    }
 
     std::unordered_map<std::string, std::string> getProfilerKeyValAttributes(
         common::Profiler& profiler) const;

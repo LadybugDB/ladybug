@@ -4,6 +4,7 @@
 #include "common/exception/binder.h"
 #include "common/types/value/value.h"
 #include "planner/operator/logical_plan.h" // IWYU pragma: keep
+#include "processor/physical_plan.h"       // IWYU pragma: keep
 #include <format>
 
 using namespace lbug::common;
