@@ -4,6 +4,7 @@
 #include "main/client_context.h"
 #include "main/settings.h"
 #include "processor/execution_context.h"
+#include "processor/result/result_set.h"
 #include "storage/buffer_manager/memory_manager.h"
 
 using namespace lbug::common;
@@ -26,21 +27,38 @@ void ProcessorTask::run() {
     }
     auto taskRoot = sink->copy();
     lck.unlock();
-    // Pick the ResultSet to hand to the cloned sink. We prefer the cached
-    // one from the ExecutionContext (set up by the cached physical-plan
-    // path) to skip per-execution DataChunk/ValueVector allocation, but
-    // only when this task is single-threaded: a shared ResultSet would
-    // race between worker threads writing to the same ValueVectors
-    // concurrently. The old code created a fresh ResultSet per call, so
-    // each thread had its own. We restore that behaviour for multi-
-    // threaded tasks; the single-threaded path (the hot one for trivial
-    // queries) keeps the allocation savings.
+    // Reuse the DataChunk / ValueVector / value-buffer allocations across
+    // executions of the same prepared statement. The old code allocated a
+    // fresh ResultSet per ProcessorTask::run() call; for a loop like
+    //     for i in range(n): conn.execute("RETURN $i", {"i": i})
+    // that's a 16KB+ calloc on every iteration.
+    //
+    // We instead keep a thread-local shared_ptr<ResultSet> whose descriptor
+    // matches this sink's, so each thread of a multi-threaded task gets
+    // its own allocation-free slot. The thread owns the ResultSet outright
+    // (no aliasing), so the lifetime is straightforward: dropped when the
+    // thread exits, or when a different prepared statement runs on this
+    // thread and the descriptor pointer no longer matches.
     ResultSet* resultSetPtr = nullptr;
     std::unique_ptr<ResultSet> ownedResultSet;
-    if (maxNumThreads == 1) {
-        resultSetPtr = executionContext->sharedResultSet;
-    }
-    if (resultSetPtr == nullptr) {
+    if (auto* desc = sink->getDescriptor()) {
+        thread_local processor::ResultSetDescriptor* cachedDesc = nullptr;
+        thread_local std::shared_ptr<processor::ResultSet> cachedResultSet;
+        if (cachedDesc == desc && cachedResultSet) {
+            // Same prepared statement on this thread: reuse the allocation.
+            cachedResultSet->resetForReuse();
+            resultSetPtr = cachedResultSet.get();
+        } else {
+            // First time on this thread, or a different prepared statement:
+            // allocate fresh. Owning shared_ptr; lifetime ends with the
+            // thread (or when the descriptor changes).
+            cachedResultSet = std::make_shared<processor::ResultSet>(desc,
+                storage::MemoryManager::Get(*executionContext->clientContext));
+            cachedDesc = desc;
+            resultSetPtr = cachedResultSet.get();
+        }
+    } else {
+        // No descriptor (e.g. OrderByMerge): fall back to per-call allocation.
         ownedResultSet =
             sink->getResultSet(storage::MemoryManager::Get(*executionContext->clientContext));
         resultSetPtr = ownedResultSet.get();
