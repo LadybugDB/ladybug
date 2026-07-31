@@ -36,5 +36,28 @@ uint64_t ResultSet::getNumTuplesWithoutMultiplicity(
     return numTuples;
 }
 
+void ResultSet::resetForReuse() {
+    // multiplicity is overwritten by Projection / MultiplicityReducer each
+    // execution, but if neither runs (e.g. trivial ``RETURN $i``) the cached
+    // value from the previous run would leak into the next. Reset to 1 so
+    // downstream operators that multiply it start from a clean slate.
+    multiplicity = 1;
+    for (auto& dataChunk : dataChunks) {
+        if (dataChunk == nullptr) {
+            continue;
+        }
+        for (auto& valueVector : dataChunk->valueVectors) {
+            // setAllNonNull() clears any null bits the previous run may have
+            // set (operators that only call setValue<T>() don't touch the null
+            // mask, so the stale bit would otherwise persist across runs).
+            // resetAuxiliaryBuffer() drops the in-memory overflow buffer for
+            // strings / lists / arrays / structs so variable-length state from
+            // a prior run doesn't survive.
+            valueVector->setAllNonNull();
+            valueVector->resetAuxiliaryBuffer();
+        }
+    }
+}
+
 } // namespace processor
 } // namespace lbug
