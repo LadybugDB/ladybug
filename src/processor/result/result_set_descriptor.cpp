@@ -5,7 +5,8 @@
 namespace lbug {
 namespace processor {
 
-ResultSetDescriptor::ResultSetDescriptor(planner::Schema* schema) {
+ResultSetDescriptor::ResultSetDescriptor(planner::Schema* schema)
+    : id{nextID.fetch_add(1, std::memory_order_relaxed)} {
     for (auto i = 0u; i < schema->getNumGroups(); ++i) {
         auto group = schema->getGroup(i);
         auto dataChunkDescriptor = std::make_unique<DataChunkDescriptor>(group->isSingleState());

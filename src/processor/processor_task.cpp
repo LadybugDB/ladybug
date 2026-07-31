@@ -42,9 +42,9 @@ void ProcessorTask::run() {
     ResultSet* resultSetPtr = nullptr;
     std::unique_ptr<ResultSet> ownedResultSet;
     if (auto* desc = sink->getDescriptor()) {
-        thread_local processor::ResultSetDescriptor* cachedDesc = nullptr;
+        thread_local uint64_t cachedDescID = UINT64_MAX;
         thread_local std::shared_ptr<processor::ResultSet> cachedResultSet;
-        if (cachedDesc == desc && cachedResultSet) {
+        if (cachedDescID == desc->id && cachedResultSet) {
             // Same prepared statement on this thread: reuse the allocation.
             cachedResultSet->resetForReuse();
             resultSetPtr = cachedResultSet.get();
@@ -54,7 +54,7 @@ void ProcessorTask::run() {
             // thread (or when the descriptor changes).
             cachedResultSet = std::make_shared<processor::ResultSet>(desc,
                 storage::MemoryManager::Get(*executionContext->clientContext));
-            cachedDesc = desc;
+            cachedDescID = desc->id;
             resultSetPtr = cachedResultSet.get();
         }
     } else {
