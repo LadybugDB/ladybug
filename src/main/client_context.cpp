@@ -579,7 +579,7 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                     queryID = localDatabase->getNextQueryID();
                 }
                 setActiveQueryID(queryID.value());
-                const auto executionContext =
+                auto executionContext =
                     std::make_unique<ExecutionContext>(profiler.get(), this, *queryID);
                 std::unique_ptr<PhysicalPlan> physicalPlan;
                 if (cachePhysicalPlan && cachedStatement->physicalPlanCache) {
@@ -606,8 +606,32 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                         auto* sink = physicalPlan->lastOperator->ptrCast<Sink>();
                         if (sink->getDescriptor()) {
                             cachedStatement->resultSetDescriptor = sink->getDescriptor()->copy();
+                            // Build the cached ResultSet once (first execution
+                            // only) and borrow it into the ExecutionContext so
+                            // ProcessorTask::run reuses the DataChunks /
+                            // ValueVectors / value buffers instead of
+                            // allocating fresh ones every call. The ResultSet
+                            // is owned by CachedPreparedStatement and outlives
+                            // the cloned PhysicalPlan.
+                            cachedStatement->resultSetCache = std::make_shared<ResultSet>(
+                                sink->getDescriptor(), storage::MemoryManager::Get(*this));
                         }
                     }
+                }
+                // Expose the cached ResultSet (if any) to the processor via the
+                // ExecutionContext. ProcessorTask::run will prefer this over
+                // allocating a new ResultSet. Doing it here -- instead of
+                // stashing the pointer on the sink -- avoids a data race with
+                // the multi-threaded ProcessorTask that calls Sink::getResultSet
+                // concurrently.
+                if (cachePhysicalPlan && cachedStatement->resultSetCache) {
+                    executionContext->sharedResultSet = cachedStatement->resultSetCache.get();
+                    // Clear per-execution state (null mask, aux buffers,
+                    // multiplicity) so operators start from a clean slate.
+                    // Operators overwrite values themselves; this covers the
+                    // bits they don't reset (e.g. setValue<T> doesn't clear
+                    // the null bit).
+                    cachedStatement->resultSetCache->resetForReuse();
                 }
                 if (isTransactionStatement) {
                     result = localDatabase->queryProcessor->execute(physicalPlan.get(),

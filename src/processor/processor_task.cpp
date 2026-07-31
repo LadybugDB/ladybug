@@ -26,9 +26,26 @@ void ProcessorTask::run() {
     }
     auto taskRoot = sink->copy();
     lck.unlock();
-    auto resultSet =
-        sink->getResultSet(storage::MemoryManager::Get(*executionContext->clientContext));
-    taskRoot->ptrCast<Sink>()->execute(resultSet.get(), executionContext);
+    // Pick the ResultSet to hand to the cloned sink. We prefer the cached
+    // one from the ExecutionContext (set up by the cached physical-plan
+    // path) to skip per-execution DataChunk/ValueVector allocation, but
+    // only when this task is single-threaded: a shared ResultSet would
+    // race between worker threads writing to the same ValueVectors
+    // concurrently. The old code created a fresh ResultSet per call, so
+    // each thread had its own. We restore that behaviour for multi-
+    // threaded tasks; the single-threaded path (the hot one for trivial
+    // queries) keeps the allocation savings.
+    ResultSet* resultSetPtr = nullptr;
+    std::unique_ptr<ResultSet> ownedResultSet;
+    if (maxNumThreads == 1) {
+        resultSetPtr = executionContext->sharedResultSet;
+    }
+    if (resultSetPtr == nullptr) {
+        ownedResultSet =
+            sink->getResultSet(storage::MemoryManager::Get(*executionContext->clientContext));
+        resultSetPtr = ownedResultSet.get();
+    }
+    taskRoot->ptrCast<Sink>()->execute(resultSetPtr, executionContext);
 }
 
 void ProcessorTask::finalize() {

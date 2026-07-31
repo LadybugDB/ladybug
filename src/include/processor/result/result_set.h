@@ -15,6 +15,13 @@ public:
     explicit ResultSet(common::idx_t numDataChunks) : multiplicity{1}, dataChunks(numDataChunks) {}
     ResultSet(ResultSetDescriptor* resultSetDescriptor, storage::MemoryManager* memoryManager);
 
+    // Reset per-execution mutable state so the ResultSet can be reused across
+    // multiple executions of the same prepared statement without re-allocating
+    // DataChunks / ValueVectors / value buffers. Operators overwrite the values
+    // and null bits on every execution; this just clears stale state for the
+    // pieces the operators don't explicitly reset.
+    void resetForReuse();
+
     void insert(common::idx_t pos, std::shared_ptr<common::DataChunk> dataChunk) {
         DASSERT(dataChunks.size() > pos);
         dataChunks[pos] = std::move(dataChunk);

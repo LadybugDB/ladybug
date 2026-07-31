@@ -12,6 +12,7 @@
 namespace lbug {
 namespace processor {
 class PhysicalPlan;
+class ResultSet;
 struct ResultSetDescriptor;
 } // namespace processor
 } // namespace lbug
@@ -47,6 +48,13 @@ struct CachedPreparedStatement {
     // Cached result-set descriptor. copy() does not propagate the descriptor from an
     // operator tree, so we store it here separately and re-attach it on the cloned sink.
     std::unique_ptr<processor::ResultSetDescriptor> resultSetDescriptor;
+    // Cached ResultSet (DataChunks + ValueVectors + value buffers) reused
+    // across executions of this prepared statement. Without this, every
+    // execution allocates a fresh ResultSet via Sink::getResultSet(), paying
+    // a calloc() per ValueVector's value buffer and a fresh nullMask. The
+    // ResultSet outlives any single PhysicalPlan clone, so we hold it here
+    // and attach it to the cloned sink before each execution.
+    std::shared_ptr<processor::ResultSet> resultSetCache;
 
     CachedPreparedStatement();
     ~CachedPreparedStatement();
