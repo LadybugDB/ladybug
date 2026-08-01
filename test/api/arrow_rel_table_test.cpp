@@ -443,6 +443,107 @@ TEST_F(ArrowRelTableTest, ScanArrowRelTableOverNativeNodeTable) {
     ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<common::int128_t>(), 60);
 }
 
+// Regression test for https://github.com/LadybugDB/ladybug/issues/757:
+// Arrow `createArrowRelTable` must accept a `FixedSizeBinary(16)` endpoint column
+// carrying the `arrow.uuid` extension when the node table's primary key is UUID,
+// since the physical 16-byte layout matches the UUID storage.
+TEST_F(ArrowRelTableTest, ScanArrowRelTableOverNativeUuidNodeTable) {
+    auto setupResult =
+        conn->query("CREATE NODE TABLE nu(id UUID, name STRING, PRIMARY KEY(id));"
+                    "CREATE (:nu {id: UUID('11111111-1111-1111-1111-111111111111'), name: 'a'});"
+                    "CREATE (:nu {id: UUID('22222222-2222-2222-2222-222222222222'), name: 'b'});"
+                    "CREATE (:nu {id: UUID('33333333-3333-3333-3333-333333333333'), name: 'c'});");
+    ASSERT_TRUE(setupResult->isSuccess()) << setupResult->getErrorMessage();
+
+    auto u1 = common::UUID::fromString("11111111-1111-1111-1111-111111111111");
+    auto u2 = common::UUID::fromString("22222222-2222-2222-2222-222222222222");
+    auto u3 = common::UUID::fromString("33333333-3333-3333-3333-333333333333");
+
+    ArrowSchemaWrapper schema;
+    createStructSchema(&schema, 3);
+    createUuidSchema(schema.children[0], "from");
+    createUuidSchema(schema.children[1], "to");
+    createSchema<int64_t>(schema.children[2], "weight");
+
+    std::vector<ArrowArrayWrapper> arrays;
+    arrays.push_back(
+        createStructArray(3, {[&](ArrowArray* a) { createUuidArray(a, {u1, u1, u2}); },
+                                 [&](ArrowArray* a) { createUuidArray(a, {u2, u3, u3}); },
+                                 [&](ArrowArray* a) { createInt64Array(a, {10, 20, 30}); }}));
+
+    auto result = ArrowTableSupport::createRelTableFromArrowTable(*conn, "nu_knows", "nu", "nu",
+        std::move(schema), std::move(arrays));
+    ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+
+    auto countResult = conn->query("MATCH (:nu)-[:nu_knows]->(:nu) RETURN count(*)");
+    ASSERT_TRUE(countResult->isSuccess()) << countResult->getErrorMessage();
+    ASSERT_EQ(countResult->getNext()->getValue(0)->getValue<int64_t>(), 3);
+
+    auto sumResult = conn->query("MATCH (:nu)-[e:nu_knows]->(:nu) RETURN sum(e.weight)");
+    ASSERT_TRUE(sumResult->isSuccess()) << sumResult->getErrorMessage();
+    ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<common::int128_t>(), 60);
+
+    auto namesResult = conn->query(
+        "MATCH (a:nu)-[e:nu_knows]->(b:nu) RETURN a.name, b.name, e.weight ORDER BY e.weight");
+    ASSERT_TRUE(namesResult->isSuccess()) << namesResult->getErrorMessage();
+    const std::vector<std::tuple<std::string, std::string, int64_t>> expected = {{"a", "b", 10},
+        {"a", "c", 20}, {"b", "c", 30}};
+    for (const auto& [src, dst, weight] : expected) {
+        ASSERT_TRUE(namesResult->hasNext());
+        auto row = namesResult->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<std::string>(), src);
+        ASSERT_EQ(row->getValue(1)->getValue<std::string>(), dst);
+        ASSERT_EQ(row->getValue(2)->getValue<int64_t>(), weight);
+    }
+    ASSERT_FALSE(namesResult->hasNext());
+}
+
+// Verify that the Arrow endpoint check still rejects a `FixedSizeBinary(16)`
+// column WITHOUT the `arrow.uuid` extension when the PK is UUID. The accepted
+// forms are an exact logical-type match and `FixedSizeBinary(16) + arrow.uuid`.
+TEST_F(ArrowRelTableTest, RejectFixedSizeBinaryWithoutUuidExtensionForUuidPK) {
+    auto setupResult =
+        conn->query("CREATE NODE TABLE nu(id UUID, name STRING, PRIMARY KEY(id));"
+                    "CREATE (:nu {id: UUID('11111111-1111-1111-1111-111111111111'), name: 'a'});");
+    ASSERT_TRUE(setupResult->isSuccess()) << setupResult->getErrorMessage();
+
+    auto u1 = common::UUID::fromString("11111111-1111-1111-1111-111111111111");
+
+    ArrowSchemaWrapper schema;
+    createStructSchema(&schema, 2);
+    // FixedSizeBinary(16) WITHOUT the arrow.uuid extension. A bare `w:16` is
+    // a BLOB in lbug's view, so it must not be accepted for a UUID PK.
+    schema.children[0]->format = "w:16";
+    schema.children[0]->name = "from";
+    schema.children[0]->metadata = nullptr;
+    schema.children[0]->flags = ARROW_FLAG_NULLABLE;
+    schema.children[0]->n_children = 0;
+    schema.children[0]->children = nullptr;
+    schema.children[0]->dictionary = nullptr;
+    schema.children[0]->release = [](ArrowSchema* s) { s->release = nullptr; };
+    schema.children[0]->private_data = nullptr;
+    schema.children[1]->format = "w:16";
+    schema.children[1]->name = "to";
+    schema.children[1]->metadata = nullptr;
+    schema.children[1]->flags = ARROW_FLAG_NULLABLE;
+    schema.children[1]->n_children = 0;
+    schema.children[1]->children = nullptr;
+    schema.children[1]->dictionary = nullptr;
+    schema.children[1]->release = [](ArrowSchema* s) { s->release = nullptr; };
+    schema.children[1]->private_data = nullptr;
+
+    std::vector<ArrowArrayWrapper> arrays;
+    arrays.push_back(createStructArray(1, {[&](ArrowArray* a) { createUuidArray(a, {u1}); },
+                                              [&](ArrowArray* a) { createUuidArray(a, {u1}); }}));
+
+    auto result = ArrowTableSupport::createRelTableFromArrowTable(*conn, "nu_knows", "nu", "nu",
+        std::move(schema), std::move(arrays));
+    ASSERT_FALSE(result.queryResult->isSuccess());
+    ASSERT_NE(result.queryResult->getErrorMessage().find("not compatible with source node PK type"),
+        std::string::npos)
+        << result.queryResult->getErrorMessage();
+}
+
 TEST_F(ArrowRelTableTest, ScanMixedArrowAndNativeRelTables) {
     createArrowPersonTable(*conn);
     createArrowKnowsTable(*conn);

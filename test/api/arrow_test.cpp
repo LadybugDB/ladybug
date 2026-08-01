@@ -696,3 +696,55 @@ TEST_F(ArrowTest, queryAsArrowDoesNotTrackCSRMetadataForNonCSRShape) {
     ASSERT_NE(arrowResult, nullptr);
     ASSERT_FALSE(arrowResult->hasCSRMetadata());
 }
+
+// Verify that an Arrow FixedSizeBinary(16) column with the `arrow.uuid`
+// extension metadata is recognized as a UUID. This is the encoding the
+// Arrow UUID spec mandates and is the only encoding that maps cleanly
+// onto a UUID primary key on a relationship table.
+TEST(ArrowConverterTest, bindsArrowUuidExtensionMetadataAsUuid) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "id");
+    schema.format = "w:16";
+    auto metadata = serializeArrowMetadata(
+        {{"ARROW:extension:name", "arrow.uuid"}, {"ARROW:extension:metadata", ""}});
+    schema.metadata = metadata.data();
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+    const auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(&schema);
+
+    ASSERT_EQ(type.getLogicalTypeID(), LogicalTypeID::UUID);
+    ASSERT_TRUE(logicalTypeInfo.has_value());
+    ASSERT_EQ(logicalTypeInfo->type, ArrowLogicalTypeInfo::Type::UUID);
+    schema.release(&schema);
+}
+
+// A bare FixedSizeBinary(16) WITHOUT the `arrow.uuid` extension is just a
+// BLOB. The UUID parser must not mistake it for a UUID.
+TEST(ArrowConverterTest, fixedSizeBinaryWithoutUuidExtensionIsNotUuid) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "id");
+    schema.format = "w:16";
+    schema.metadata = nullptr;
+
+    const auto type = ArrowConverter::fromArrowSchema(&schema);
+    const auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(&schema);
+
+    ASSERT_NE(type.getLogicalTypeID(), LogicalTypeID::UUID);
+    ASSERT_FALSE(logicalTypeInfo.has_value());
+    schema.release(&schema);
+}
+
+// A FixedSizeBinary of a width other than 16 with the `arrow.uuid` extension
+// is malformed: a UUID is exactly 16 bytes, so this must not bind to UUID.
+TEST(ArrowConverterTest, rejectsNon16ByteArrowUuidExtensionAsUuid) {
+    ArrowSchema schema{};
+    createSchema<int64_t>(&schema, "id");
+    schema.format = "w:8";
+    auto metadata = serializeArrowMetadata(
+        {{"ARROW:extension:name", "arrow.uuid"}, {"ARROW:extension:metadata", ""}});
+    schema.metadata = metadata.data();
+
+    const auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(&schema);
+    ASSERT_FALSE(logicalTypeInfo.has_value());
+    schema.release(&schema);
+}

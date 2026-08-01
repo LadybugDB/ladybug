@@ -53,6 +53,38 @@ static std::vector<std::optional<ArrowLogicalTypeInfo>> resolveColumnLogicalType
     return result;
 }
 
+// Returns true when the Arrow endpoint column's wire type is acceptable for the
+// node table's primary key type. The historical rule is "exact match" via
+// toString(); a UUID primary key breaks that because no Arrow wire type round-trips
+// to a UUID logical type. The `arrow.uuid` extension on FixedSizeBinary(16) is
+// the canonical Arrow encoding of a UUID, so we accept that as well, with the
+// 16 bytes assumed to be in the big-endian (network) byte order that the
+// extension spec mandates. See https://arrow.apache.org/docs/format/CDataInterface.html.
+static bool isArrowEndpointCompatibleWithPK(const ArrowSchema* endpointSchema,
+    const LogicalType& pkType) {
+    if (endpointSchema == nullptr) {
+        return false;
+    }
+    auto arrowType = ArrowConverter::fromArrowSchema(endpointSchema);
+    if (arrowType.toString() == pkType.toString()) {
+        return true;
+    }
+    if (pkType.getLogicalTypeID() == LogicalTypeID::UUID) {
+        if (endpointSchema->format == nullptr) {
+            return false;
+        }
+        if (std::string(endpointSchema->format) != "w:16") {
+            return false;
+        }
+        if (auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(endpointSchema);
+            logicalTypeInfo.has_value() &&
+            logicalTypeInfo->type == ArrowLogicalTypeInfo::Type::UUID) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void ArrowRelTableScanState::setToTable(const transaction::Transaction* transaction, Table* table_,
     std::vector<column_id_t> columnIDs_, std::vector<ColumnPredicateSet> columnPredicateSets_,
     RelDataDirection direction_) {
@@ -102,19 +134,27 @@ ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table
                 "Arrow FLAT relationship table requires 'from' and 'to' columns");
         }
 
-        auto srcArrowType = ArrowConverter::fromArrowSchema(this->schema.children[fromColumnIdx]);
-        auto dstArrowType = ArrowConverter::fromArrowSchema(this->schema.children[toColumnIdx]);
+        auto* srcEndpointSchema = this->schema.children[fromColumnIdx];
+        auto* dstEndpointSchema = this->schema.children[toColumnIdx];
         const auto& srcPKType =
             this->fromNodeTable->getColumn(this->fromNodeTable->getPKColumnID()).getDataType();
         const auto& dstPKType =
             this->toNodeTable->getColumn(this->toNodeTable->getPKColumnID()).getDataType();
-        if (srcArrowType.toString() != srcPKType.toString()) {
-            throw RuntimeException("Arrow 'from' column type " + srcArrowType.toString() +
-                                   " must match source node PK type " + srcPKType.toString());
+        if (!isArrowEndpointCompatibleWithPK(srcEndpointSchema, srcPKType)) {
+            throw RuntimeException(
+                "Arrow 'from' column type " +
+                std::string(srcEndpointSchema->format ? srcEndpointSchema->format : "?") +
+                " is not compatible with source node PK type " + srcPKType.toString() +
+                "; supported: matching logical type, or "
+                "FixedSizeBinary(16) with the 'arrow.uuid' extension for UUID");
         }
-        if (dstArrowType.toString() != dstPKType.toString()) {
-            throw RuntimeException("Arrow 'to' column type " + dstArrowType.toString() +
-                                   " must match destination node PK type " + dstPKType.toString());
+        if (!isArrowEndpointCompatibleWithPK(dstEndpointSchema, dstPKType)) {
+            throw RuntimeException(
+                "Arrow 'to' column type " +
+                std::string(dstEndpointSchema->format ? dstEndpointSchema->format : "?") +
+                " is not compatible with destination node PK type " + dstPKType.toString() +
+                "; supported: matching logical type, or "
+                "FixedSizeBinary(16) with the 'arrow.uuid' extension for UUID");
         }
     } else {
         csrNbrColumnIdx = findColumnIdx(this->schema, dstColumnName);

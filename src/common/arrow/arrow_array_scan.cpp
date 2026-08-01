@@ -280,6 +280,36 @@ static void scanArrowArrayFixedBLOB(const ArrowArray* array, ValueVector& output
     });
 }
 
+// Reads a FixedSizeBinary(16) Arrow column carrying the `arrow.uuid` extension
+// (https://arrow.apache.org/docs/format/CDataInterface.html) into a UUID-typed
+// value vector. The 16 bytes are in big-endian (network) byte order on the wire;
+// lbug stores the UUID internally as an int128 with the most-significant bit
+// flipped (so lexicographic order of strings matches the natural numeric order),
+// so the buffer is byte-reversed to land in the int128 layout, then the MSB is
+// re-flipped.
+static void scanArrowArrayUuid(const ArrowArray* array, ValueVector& outputVector,
+    ArrowNullMaskTree* mask, uint64_t srcOffset, uint64_t dstOffset, uint64_t count) {
+    constexpr uint64_t uuidSize = sizeof(int128_t);
+    auto arrayBuffer = ((const uint8_t*)array->buffers[1]) + srcOffset * uuidSize;
+
+    mask->copyToValueVector(&outputVector, dstOffset, count);
+
+    rowIter(outputVector, count, [&](auto i) {
+        if (mask->isNull(i)) {
+            return;
+        }
+        int128_t value{};
+        auto valueBytes = reinterpret_cast<uint8_t*>(&value);
+        const auto* src = arrayBuffer + i * uuidSize;
+        for (uint64_t j = 0; j < uuidSize; ++j) {
+            valueBytes[j] = src[uuidSize - 1 - j];
+        }
+        // Re-flip the MSB to undo the internal flip applied when writing.
+        value.high ^= (int64_t(1) << 63);
+        outputVector.setValue<int128_t>(i + dstOffset, value);
+    });
+}
+
 template<typename offsetsT>
 static void scanArrowArrayList(const ArrowSchema* schema, const ArrowArray* array,
     ValueVector& outputVector, ArrowNullMaskTree* mask, uint64_t srcOffset, uint64_t dstOffset,
@@ -649,7 +679,11 @@ void ArrowConverter::fromArrowArray(const ArrowSchema* schema, const ArrowArray*
         }
     }
     case 'w':
-        // FIXED BLOB
+        // FIXED BLOB / UUID
+        if (logicalTypeInfo->has_value() &&
+            (*logicalTypeInfo)->type == ArrowLogicalTypeInfo::Type::UUID) {
+            return scanArrowArrayUuid(array, outputVector, mask, srcOffset, dstOffset, count);
+        }
         return scanArrowArrayFixedBLOB(array, outputVector, mask, std::stoi(arrowType + 2),
             srcOffset, dstOffset, count);
     case 't':

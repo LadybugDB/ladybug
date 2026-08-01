@@ -22,6 +22,7 @@ struct ArrowLogicalTypeInfo {
 
     enum class Type : uint8_t {
         DECIMAL,
+        UUID,
     };
 
     Source source;
