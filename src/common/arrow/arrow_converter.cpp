@@ -265,6 +265,11 @@ void ArrowConverter::setArrowFormat(ArrowSchemaHolder& rootHolder, ArrowSchema& 
         child.children[0]->name = "entries";
         setArrowFormat(rootHolder, **child.children, ListType::getChildType(dataType),
             fallbackExtensionTypes);
+        // The Arrow columnar spec requires both the entries struct of a map and its
+        // key child to be non-nullable. See
+        // https://arrow.apache.org/docs/format/Columnar.html#map-layout
+        child.children[0]->flags &=
+            ~ARROW_FLAG_NULLABLE; // Map's entries struct must be non-nullable
         child.children[0]->children[0]->flags &=
             ~ARROW_FLAG_NULLABLE; // Map's keys must be non-nullable
     } break;
