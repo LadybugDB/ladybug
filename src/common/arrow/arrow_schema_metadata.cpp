@@ -18,6 +18,10 @@ std::optional<ArrowLogicalTypeInfo> tryGetArrowLogicalTypeInfo(const ArrowSchema
         snowflakeTypeInfo.has_value()) {
         return snowflakeTypeInfo;
     }
+    if (auto uuidTypeInfo = tryParseUuidExtensionMetadata(schema, metadata);
+        uuidTypeInfo.has_value()) {
+        return uuidTypeInfo;
+    }
     return tryParseGenericIntegerBackedDecimalMetadata(schema, metadata);
 }
 

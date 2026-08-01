@@ -29,6 +29,8 @@ std::optional<ArrowLogicalTypeInfo> tryParseSnowflakeLogicalTypeInfo(const Arrow
     const ArrowMetadataMap& metadata);
 std::optional<ArrowLogicalTypeInfo> tryParseGenericIntegerBackedDecimalMetadata(
     const ArrowSchema* schema, const ArrowMetadataMap& metadata);
+std::optional<ArrowLogicalTypeInfo> tryParseUuidExtensionMetadata(const ArrowSchema* schema,
+    const ArrowMetadataMap& metadata);
 
 } // namespace common
 } // namespace lbug

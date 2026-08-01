@@ -2,10 +2,13 @@
 
 #include <cstring>
 #include <functional>
+#include <map>
 #include <memory>
 #include <vector>
 
 #include "common/arrow/arrow.h"
+#include "common/types/int128_t.h"
+#include "common/types/uuid.h"
 
 // Template helpers to create Arrow schemas for different types
 template<typename T>
@@ -667,4 +670,99 @@ inline ArrowArrayWrapper createStructArray(int64_t length,
     };
     array.private_data = nullptr;
     return array;
+}
+
+// Serialize Arrow schema metadata into the binary format expected by
+// readArrowMetadata in src/common/arrow/arrow_schema_metadata_utils.cpp.
+// The keys are written in their original case; readArrowMetadata lowercases
+// keys when parsing, so the callers can use either case.
+inline char* serializeArrowSchemaMetadata(const std::map<std::string, std::string>& entries) {
+    size_t size = sizeof(int32_t);
+    for (const auto& [k, v] : entries) {
+        size += 2 * sizeof(int32_t) + k.size() + v.size();
+    }
+    auto* bytes = new char[size];
+    char* ptr = bytes;
+    auto numEntries = static_cast<int32_t>(entries.size());
+    memcpy(ptr, &numEntries, sizeof(int32_t));
+    ptr += sizeof(int32_t);
+    for (const auto& [k, v] : entries) {
+        auto ksz = static_cast<int32_t>(k.size());
+        auto vsz = static_cast<int32_t>(v.size());
+        memcpy(ptr, &ksz, sizeof(int32_t));
+        ptr += sizeof(int32_t);
+        memcpy(ptr, k.data(), k.size());
+        ptr += k.size();
+        memcpy(ptr, &vsz, sizeof(int32_t));
+        ptr += sizeof(int32_t);
+        memcpy(ptr, v.data(), v.size());
+        ptr += v.size();
+    }
+    return bytes;
+}
+
+// Schema helper for Arrow UUID extension type (FixedSizeBinary(16) with the
+// `arrow.uuid` extension metadata). See
+// https://arrow.apache.org/docs/format/CDataInterface.html and the issue
+// referenced in this test for the exact layout.
+inline void createUuidSchema(ArrowSchema* schema, const char* name) {
+    static auto* sharedMetadata = serializeArrowSchemaMetadata(
+        {{"ARROW:extension:name", "arrow.uuid"}, {"ARROW:extension:metadata", ""}});
+    schema->format = "w:16"; // FixedSizeBinary(16)
+    schema->name = name;
+    schema->metadata = sharedMetadata;
+    schema->flags = ARROW_FLAG_NULLABLE;
+    schema->n_children = 0;
+    schema->children = nullptr;
+    schema->dictionary = nullptr;
+    schema->release = [](ArrowSchema* s) { s->release = nullptr; };
+    schema->private_data = nullptr;
+}
+
+// Array helper for UUID columns. The 16-byte values are stored in big-endian
+// (network) byte order on the wire, matching the Arrow UUID extension type.
+inline void createUuidArray(ArrowArray* array, const std::vector<lbug::common::int128_t>& uuids) {
+    constexpr uint64_t uuidSize = sizeof(lbug::common::int128_t);
+    struct ArrayPrivateData {
+        void* validity = nullptr;
+        void* data = nullptr;
+    };
+    auto* private_data = new ArrayPrivateData();
+    private_data->validity = nullptr;
+    private_data->data = malloc(uuids.size() * uuidSize);
+    auto* dst = static_cast<uint8_t*>(private_data->data);
+    for (size_t i = 0; i < uuids.size(); ++i) {
+        // Mirror templateCopyNonNullValue<LogicalTypeID::UUID> in
+        // src/common/arrow/arrow_row_batch.cpp: the stored byte order is the
+        // byte-reversed (big-endian) form of the in-memory int128_t.
+        lbug::common::int128_t val = uuids[i];
+        val.high ^= (int64_t(1) << 63);
+        auto srcBytes = reinterpret_cast<uint8_t*>(&val);
+        for (uint64_t j = 0; j < uuidSize; ++j) {
+            dst[i * uuidSize + j] = srcBytes[uuidSize - 1 - j];
+        }
+    }
+    array->length = static_cast<int64_t>(uuids.size());
+    array->null_count = 0;
+    array->offset = 0;
+    array->n_buffers = 2; // validity and data
+    array->n_children = 0;
+    array->buffers = static_cast<const void**>(malloc(sizeof(void*) * 2));
+    array->buffers[0] = nullptr; // validity buffer (no nulls)
+    array->buffers[1] = private_data->data;
+    array->children = nullptr;
+    array->dictionary = nullptr;
+    array->release = [](ArrowArray* a) {
+        if (a->private_data) {
+            auto* pd = static_cast<ArrayPrivateData*>(a->private_data);
+            free(pd->validity);
+            free(pd->data);
+            delete pd;
+        }
+        if (a->buffers) {
+            free(const_cast<void**>(a->buffers));
+        }
+        a->release = nullptr;
+    };
+    array->private_data = private_data;
 }

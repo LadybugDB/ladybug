@@ -141,5 +141,23 @@ bool isValidDecimalParameters(uint32_t precision, uint32_t scale) {
     return precision > 0 && precision <= DECIMAL_PRECISION_LIMIT && scale <= precision;
 }
 
+std::optional<ArrowLogicalTypeInfo> tryParseUuidExtensionMetadata(const ArrowSchema* schema,
+    const ArrowMetadataMap& metadata) {
+    // Arrow's UUID extension uses FixedSizeBinary(16) ("w:16") with an "ARROW:extension:name"
+    // of "arrow.uuid". See https://arrow.apache.org/docs/format/CDataInterface.html.
+    if (schema == nullptr || schema->format == nullptr) {
+        return std::nullopt;
+    }
+    if (schema->format[0] != 'w' || std::string(schema->format) != "w:16") {
+        return std::nullopt;
+    }
+    const auto extensionName = getMetadataValue(metadata, "arrow:extension:name");
+    if (!extensionName.has_value() || *extensionName != "arrow.uuid") {
+        return std::nullopt;
+    }
+    return ArrowLogicalTypeInfo{ArrowLogicalTypeInfo::Source::GENERIC_METADATA,
+        ArrowLogicalTypeInfo::Type::UUID, ArrowDecimalTypeInfo{0, 0}};
+}
+
 } // namespace common
 } // namespace lbug

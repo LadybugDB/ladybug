@@ -22,6 +22,8 @@ LogicalType ArrowConverter::fromArrowSchema(const ArrowSchema* schema) {
         case ArrowLogicalTypeInfo::Type::DECIMAL:
             return LogicalType::DECIMAL(logicalTypeInfo->decimal.precision,
                 logicalTypeInfo->decimal.scale);
+        case ArrowLogicalTypeInfo::Type::UUID:
+            return LogicalType::UUID();
         }
     }
     switch (arrowType[0]) {
