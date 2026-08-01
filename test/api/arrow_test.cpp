@@ -501,6 +501,45 @@ TEST_F(ArrowTest, getArrowSchema) {
     schema->release(schema.get());
 }
 
+// The Arrow columnar map layout requires the entries struct of a map and the
+// key child of that struct to be non-nullable. Consumers (e.g. arrow-java's
+// MapVector) reject the schema when these flags are wrong, which makes every
+// query that returns a MAP column unreadable through the Arrow API.
+// See https://arrow.apache.org/docs/format/Columnar.html#map-layout
+TEST_F(ArrowTest, mapColumnArrowSchemaHasNonNullableEntriesAndKey) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE MapT(id STRING, m MAP(STRING, STRING), "
+                            "PRIMARY KEY(id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:MapT {id: 'r1', m: map(['k'], ['v'])});")->isSuccess());
+
+    auto result = conn->query("MATCH (n:MapT) RETURN n.m;");
+    ASSERT_TRUE(result->isSuccess());
+    auto schema = result->getArrowSchema();
+    ASSERT_NE(schema, nullptr);
+    ASSERT_EQ(schema->n_children, 1);
+
+    auto* mapColumn = schema->children[0];
+    ASSERT_STREQ(mapColumn->format, "+m");
+    // The map column itself may be null.
+    ASSERT_TRUE(mapColumn->flags & ARROW_FLAG_NULLABLE);
+    ASSERT_EQ(mapColumn->n_children, 1);
+
+    auto* entries = mapColumn->children[0];
+    ASSERT_STREQ(entries->name, "entries");
+    // Per the Arrow map layout, the entries struct must be non-nullable.
+    ASSERT_FALSE(entries->flags & ARROW_FLAG_NULLABLE);
+    ASSERT_EQ(entries->n_children, 2);
+
+    auto* key = entries->children[0];
+    auto* value = entries->children[1];
+    // Map keys are always non-nullable.
+    ASSERT_FALSE(key->flags & ARROW_FLAG_NULLABLE);
+    // Map values follow the value type's nullability.
+    ASSERT_TRUE(value->flags & ARROW_FLAG_NULLABLE);
+
+    schema->release(schema.get());
+}
+
 TEST_F(ArrowTest, queryAsArrowDirectCSRRowIDProjection) {
     ASSERT_TRUE(
         conn->query("CREATE NODE TABLE DirectPerson(id INT64, PRIMARY KEY(id));")->isSuccess());
