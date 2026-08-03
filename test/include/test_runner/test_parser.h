@@ -149,7 +149,14 @@ private:
 
     bool nextLine() {
         previousFilePosition = fileStream.tellg();
-        return static_cast<bool>(getline(fileStream, line));
+        bool result = static_cast<bool>(getline(fileStream, line));
+        // Strip trailing '\r' (CRLF line endings). When the file is opened in
+        // binary mode, getline keeps '\r'; this keeps both LF and CRLF test
+        // files parseable identically on all platforms.
+        if (result && !line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        return result;
     }
 
     void checkMinimumParams(uint64_t minimumParams) const {
