@@ -572,6 +572,9 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
             [&]() -> void {
                 const auto profiler = std::make_unique<Profiler>();
                 profiler->enabled = cachedStatement->logicalPlan->isProfile();
+                if (profiler->enabled) {
+                    profiler->startQueryTimer();
+                }
                 if (!queryID) {
                     queryID = localDatabase->getNextQueryID();
                 }
@@ -585,8 +588,10 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                     result = localDatabase->queryProcessor->execute(physicalPlan.get(),
                         executionContext.get());
                 } else {
-                    if (preparedStatement->getStatementType() == StatementType::COPY_FROM) {
-                        // Note: We always force checkpoint for COPY_FROM statement.
+                    if (preparedStatement->getStatementType() == StatementType::COPY_FROM &&
+                        getDBConfig()->autoCheckpoint) {
+                        // Note: We force checkpoint for COPY_FROM statement unless the user has
+                        // disabled automatic checkpointing.
                         Transaction::Get(*this)->setForceCheckpoint();
                     }
                     result = localDatabase->queryProcessor->execute(physicalPlan.get(),

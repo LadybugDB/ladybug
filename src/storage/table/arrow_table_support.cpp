@@ -42,6 +42,13 @@ static int64_t findArrowColumnByName(const ArrowSchemaWrapper& schema, const std
     return -1;
 }
 
+// Identifiers generated into DDL must be quoted: Arrow field names and caller-supplied table
+// names are arbitrary strings, and many ordinary ones (`index`, `order`, `group`, names with a
+// space or a leading digit) are not valid unquoted Cypher identifiers.
+std::string quoteIdent(const std::string& name) {
+    return "`" + name + "`";
+}
+
 std::string ArrowTableSupport::registerArrowData(ArrowSchemaWrapper schema,
     std::vector<ArrowArrayWrapper> arrays) {
     std::lock_guard<std::mutex> lock(g_arrowRegistryMutex);
@@ -109,12 +116,12 @@ ArrowTableCreationResult ArrowTableSupport::createViewFromArrowTable(main::Conne
         std::string colName = schema.children[i]->name;
         std::string colType =
             common::ArrowConverter::fromArrowSchema(schema.children[i]).toString();
-        columnDefs.push_back(colName + " " + colType);
+        columnDefs.push_back(quoteIdent(colName) + " " + colType);
     }
 
     // Add PRIMARY KEY clause using first column
     std::string primaryKey = numColumns > 0 ? schema.children[0]->name : "id";
-    columnDefs.push_back("PRIMARY KEY (" + primaryKey + ")");
+    columnDefs.push_back("PRIMARY KEY (" + quoteIdent(primaryKey) + ")");
 
     // Create table definition
     std::string tableDef = "(" + join(columnDefs, ", ") + ")";
@@ -124,7 +131,7 @@ ArrowTableCreationResult ArrowTableSupport::createViewFromArrowTable(main::Conne
 
     // Build CREATE NODE TABLE statement with arrow storage
 
-    std::string statement = "CREATE NODE TABLE " + viewName + " " + tableDef +
+    std::string statement = "CREATE NODE TABLE " + quoteIdent(viewName) + " " + tableDef +
                             " WITH (storage='arrow://" + arrowId + "')";
 
     // Create table with Arrow storage
@@ -171,11 +178,11 @@ ArrowTableCreationResult ArrowTableSupport::createRelTableFromArrowTable(
         std::string colName = schema.children[i]->name;
         std::string colType =
             common::ArrowConverter::fromArrowSchema(schema.children[i]).toString();
-        propertyDefs.push_back(colName + " " + colType);
+        propertyDefs.push_back(quoteIdent(colName) + " " + colType);
     }
 
     std::vector<std::string> relDefs;
-    relDefs.push_back("FROM " + srcTableName + " TO " + dstTableName);
+    relDefs.push_back("FROM " + quoteIdent(srcTableName) + " TO " + quoteIdent(dstTableName));
     relDefs.insert(relDefs.end(), propertyDefs.begin(), propertyDefs.end());
     std::string tableDef = "(" + join(relDefs, ", ") + ")";
 
@@ -185,7 +192,7 @@ ArrowTableCreationResult ArrowTableSupport::createRelTableFromArrowTable(
     data.arrays = std::move(arrays);
     std::string arrowId = registerArrowRelData(std::move(data));
 
-    std::string statement = "CREATE REL TABLE " + tableName + " " + tableDef +
+    std::string statement = "CREATE REL TABLE " + quoteIdent(tableName) + " " + tableDef +
                             " WITH (storage='arrow://" + arrowId + "')";
     auto queryResult = connection.query(statement);
     if (!queryResult->isSuccess()) {
@@ -219,11 +226,11 @@ ArrowTableCreationResult ArrowTableSupport::createRelTableFromArrowCSR(main::Con
         std::string colName = indicesSchema.children[i]->name;
         std::string colType =
             common::ArrowConverter::fromArrowSchema(indicesSchema.children[i]).toString();
-        propertyDefs.push_back(colName + " " + colType);
+        propertyDefs.push_back(quoteIdent(colName) + " " + colType);
     }
 
     std::vector<std::string> relDefs;
-    relDefs.push_back("FROM " + srcTableName + " TO " + dstTableName);
+    relDefs.push_back("FROM " + quoteIdent(srcTableName) + " TO " + quoteIdent(dstTableName));
     relDefs.insert(relDefs.end(), propertyDefs.begin(), propertyDefs.end());
     std::string tableDef = "(" + join(relDefs, ", ") + ")";
 
@@ -236,7 +243,7 @@ ArrowTableCreationResult ArrowTableSupport::createRelTableFromArrowCSR(main::Con
     data.dstColumnName = dstColumnName;
     std::string arrowId = registerArrowRelData(std::move(data));
 
-    std::string statement = "CREATE REL TABLE " + tableName + " " + tableDef +
+    std::string statement = "CREATE REL TABLE " + quoteIdent(tableName) + " " + tableDef +
                             " WITH (storage='arrow://" + arrowId + "')";
     auto queryResult = connection.query(statement);
     if (!queryResult->isSuccess()) {
@@ -250,7 +257,7 @@ std::unique_ptr<main::QueryResult> ArrowTableSupport::unregisterArrowTable(
     main::Connection& connection, const std::string& tableName) {
 
     // Drop the table - this will trigger ArrowNodeTable destructor which unregisters the data
-    std::string dropStatement = "DROP TABLE " + tableName;
+    std::string dropStatement = "DROP TABLE " + quoteIdent(tableName);
     return connection.query(dropStatement);
 }
 

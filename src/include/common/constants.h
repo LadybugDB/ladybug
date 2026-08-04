@@ -115,10 +115,11 @@ struct CopyConstants {
     static constexpr const char* TO_OPTION_NAME = "TO";
 
     static constexpr const char* BOOL_CSV_PARSING_OPTIONS[] = {"HEADER", "PARALLEL",
-        "LIST_UNBRACED", "AUTODETECT", "AUTO_DETECT", CopyConstants::IGNORE_ERRORS_OPTION_NAME,
-        CopyConstants::SKIP_DUPLICATE_PK_OPTION_NAME};
+        "MULTILINE_PARALLEL", "LIST_UNBRACED", "AUTODETECT", "AUTO_DETECT",
+        CopyConstants::IGNORE_ERRORS_OPTION_NAME, CopyConstants::SKIP_DUPLICATE_PK_OPTION_NAME};
     static constexpr bool DEFAULT_CSV_HAS_HEADER = false;
     static constexpr bool DEFAULT_CSV_PARALLEL = true;
+    static constexpr bool DEFAULT_CSV_MULTILINE_PARALLEL = false;
 
     // Default configuration for csv file parsing
     static constexpr const char* STRING_CSV_PARSING_OPTIONS[] = {"ESCAPE", "DELIM", "DELIMITER",

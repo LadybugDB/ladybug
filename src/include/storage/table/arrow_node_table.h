@@ -6,6 +6,7 @@
 
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/arrow/arrow.h"
+#include "common/arrow/arrow_schema_metadata.h"
 #include "common/cast.h"
 #include "common/exception/runtime.h"
 #include "function/table/table_function.h"
@@ -122,6 +123,7 @@ private:
 private:
     ArrowSchemaWrapper schema;
     std::vector<ArrowArrayWrapper> arrays;
+    std::vector<std::optional<common::ArrowLogicalTypeInfo>> columnLogicalTypeInfos;
     std::vector<size_t> batchStartOffsets;
     size_t totalRows;
     std::string arrowId;                           // ID in registry for cleanup

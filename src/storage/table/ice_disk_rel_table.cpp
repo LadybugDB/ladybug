@@ -521,6 +521,21 @@ std::vector<std::pair<offset_t, row_idx_t>> IceDiskRelTable::getAllDegreeEntries
     return result;
 }
 
+row_idx_t IceDiskRelTable::getDegreeForOffsetInternal(const Transaction* transaction,
+    RelDataDirection direction, offset_t nodeOffset) const {
+    if (layout != IceDiskRelTableLayout::CSR || direction == RelDataDirection::BWD) {
+        return 0;
+    }
+    loadIndptrData(const_cast<Transaction*>(transaction));
+    if (nodeOffset + 1 >= indptrData.size()) {
+        return 0;
+    }
+    if (indptrData[nodeOffset + 1] <= indptrData[nodeOffset]) {
+        return 0;
+    }
+    return indptrData[nodeOffset + 1] - indptrData[nodeOffset];
+}
+
 std::vector<std::pair<offset_t, row_idx_t>> IceDiskRelTable::getTopKDegreeEntries(
     const Transaction* transaction, RelDataDirection direction, idx_t k) const {
     if (layout != IceDiskRelTableLayout::CSR || direction == RelDataDirection::BWD || k == 0) {

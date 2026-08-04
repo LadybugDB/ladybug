@@ -1057,8 +1057,32 @@ std::vector<std::unique_ptr<ColumnChunkData>> ColumnChunkData::split(bool target
     // the size above MAX_SEGMENT_SIZE, since this will still sometimes produce segments larger than
     // MAX_SEGMENT_SIZE
     auto maxSegmentSize = std::max(getMinimumSizeOnDisk(), common::StorageConfig::MAX_SEGMENT_SIZE);
-    auto targetSize =
-        targetMaxSize ? maxSegmentSize : std::min(getSizeOnDisk() / 2, maxSegmentSize);
+
+    // Compute compression metadata once. This runs expensive analysis (e.g., ALP's
+    // find_top_k_combinations for float types) exactly once for the whole chunk, instead of O(N)
+    // times in the inner loop below.
+    auto meta = getMetadataToFlush();
+    auto dataPages = meta.getNumDataPages(dataType.getPhysicalType());
+    uint64_t nullSize = 0;
+    if (nullData) {
+        nullSize = nullData->getSizeOnDisk();
+    }
+    auto totalSize = dataPages * common::LBUG_PAGE_SIZE + nullSize;
+
+    auto targetSize = targetMaxSize ? maxSegmentSize : std::min(totalSize / 2, maxSegmentSize);
+
+    // For fixed-size types, compute a count-based bound directly from the compression metadata.
+    // Using pages * valuesPerPage is accurate because it respects page boundaries and avoids the
+    // integer-division bias of a simple avg-bytes-per-value approach.
+    uint64_t maxValuesPerSegment = UINT64_MAX;
+    if (numBytesPerValue > 0 && numValues > 0 && dataPages > 0) {
+        const auto valuesPerPage = common::ceilDiv(numValues, static_cast<uint64_t>(dataPages));
+        const auto maxPages = targetSize / common::LBUG_PAGE_SIZE;
+        if (maxPages > 0) {
+            maxValuesPerSegment = maxPages * valuesPerPage;
+        }
+    }
+
     std::vector<std::unique_ptr<ColumnChunkData>> newSegments;
     uint64_t pos = 0;
     const uint64_t chunkSize = 64;
@@ -1068,7 +1092,17 @@ std::vector<std::unique_ptr<ColumnChunkData>> ColumnChunkData::split(bool target
             ColumnChunkFactory::createColumnChunkData(getMemoryManager(), getDataType().copy(),
                 isCompressionEnabled(), initialCapacity, ResidencyState::IN_MEMORY, hasNullData());
 
-        while (pos < numValues && newSegment->getSizeOnDiskInMemoryStats() <= targetSize) {
+        // Fast inner loop: use the count-based bound for fixed-size types (avoiding O(N) metadata
+        // recomputation), or fall back to the metadata-based check for variable-size types
+        // (strings/lists), which don't trigger expensive ALP analysis.
+        while (pos < numValues) {
+            if (maxValuesPerSegment != UINT64_MAX) {
+                if (newSegment->getNumValues() >= maxValuesPerSegment) {
+                    break;
+                }
+            } else if (newSegment->getSizeOnDiskInMemoryStats() > targetSize) {
+                break;
+            }
             if (newSegment->getNumValues() == newSegment->getCapacity()) {
                 newSegment->resize(newSegment->getCapacity() * 2);
             }
@@ -1076,9 +1110,24 @@ std::vector<std::unique_ptr<ColumnChunkData>> ColumnChunkData::split(bool target
             newSegment->append(this, pos, numValuesToAppendInChunk);
             pos += numValuesToAppendInChunk;
         }
-        if (pos < numValues && newSegment->getNumValues() > chunkSize) {
-            // Size exceeded target size, so we should drop the last batch added (unless they are
-            // the only values)
+
+        // Verify the segment fits within targetSize. The count-based bound is an approximation;
+        // segment-specific overhead (e.g., null pages, per-segment bitpacking width) can make
+        // the actual size differ. Backtrack until the segment fits.
+        if (maxValuesPerSegment != UINT64_MAX && pos < numValues &&
+            newSegment->getNumValues() > chunkSize &&
+            newSegment->getSizeOnDiskInMemoryStats() > targetSize) {
+            // Remove full batches until the segment fits within targetSize.
+            while (pos < numValues && newSegment->getNumValues() > chunkSize &&
+                   newSegment->getSizeOnDiskInMemoryStats() > targetSize) {
+                pos -= chunkSize;
+                newSegment->truncate(newSegment->getNumValues() - chunkSize);
+            }
+            // If the segment still exceeds targetSize after removing all but one batch,
+            // keep it as-is (it's the minimum viable segment).
+        } else if (maxValuesPerSegment == UINT64_MAX && pos < numValues &&
+                   newSegment->getNumValues() > chunkSize) {
+            // Original backtracking logic for variable-size types.
             pos -= chunkSize;
             newSegment->truncate(newSegment->getNumValues() - chunkSize);
         }

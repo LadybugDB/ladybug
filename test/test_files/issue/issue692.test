@@ -1,0 +1,122 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue692RelTableGroupInPredicate
+# Reproduction for github issue #692:
+# REL TABLE GROUP property IN predicate duplicates rows and omits another endpoint table
+# Note: may only reproduce with on-disk (checkpointed) data
+
+-STATEMENT CREATE NODE TABLE File(id STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE Function(id STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE CodeRelation(FROM File TO Function, FROM Function TO Function, type STRING, confidence DOUBLE);
+---- ok
+
+-STATEMENT CREATE (f1:File {id: 'FileA'}), (f2:File {id: 'FileB'}), (fn1:Function {id: 'Function1'}), (fn2:Function {id: 'Function2'});
+---- ok
+
+# File -> Function CALLS
+-STATEMENT MATCH (f:File {id: 'FileA'}), (fn:Function {id: 'Function1'}) CREATE (f)-[:CodeRelation {type: 'CALLS', confidence: 0.85}]->(fn);
+---- ok
+
+# File -> Function DEFINES
+-STATEMENT MATCH (f:File {id: 'FileB'}), (fn:Function {id: 'Function1'}) CREATE (f)-[:CodeRelation {type: 'DEFINES', confidence: 1.0}]->(fn);
+---- ok
+
+# Function -> Function CALLS
+-STATEMENT MATCH (fn1:Function {id: 'Function2'}), (fn2:Function {id: 'Function1'}) CREATE (fn1)-[:CodeRelation {type: 'CALLS', confidence: 0.85}]->(fn2);
+---- ok
+
+# Force checkpoint to ensure data is on disk (may be required to reproduce)
+-STATEMENT CHECKPOINT;
+---- ok
+
+# No predicate test
+-STATEMENT MATCH (s)-[r:CodeRelation]->(t) WHERE t.id = 'Function1' RETURN s.id AS src, t.id AS dst, r.type AS type, r.confidence AS conf ORDER BY src, type;
+---- 3
+FileA|Function1|CALLS|0.850000
+FileB|Function1|DEFINES|1.000000
+Function2|Function1|CALLS|0.850000
+
+# Equality predicate test
+-STATEMENT MATCH (s)-[r:CodeRelation]->(t) WHERE t.id = 'Function1' AND r.type = 'CALLS' RETURN s.id AS src, t.id AS dst, r.type AS type, r.confidence AS conf ORDER BY src;
+---- 2
+FileA|Function1|CALLS|0.850000
+Function2|Function1|CALLS|0.850000
+
+# Single-element IN predicate test (the bug)
+-STATEMENT MATCH (s)-[r:CodeRelation]->(t) WHERE t.id = 'Function1' AND r.type IN ['CALLS'] RETURN s.id AS src, t.id AS dst, r.type AS type, r.confidence AS conf ORDER BY src;
+---- 2
+FileA|Function1|CALLS|0.850000
+Function2|Function1|CALLS|0.850000
+
+# Multi-element IN predicate test
+-STATEMENT MATCH (s)-[r:CodeRelation]->(t) WHERE t.id = 'Function1' AND r.type IN ['CALLS', 'DEFINES'] RETURN s.id AS src, t.id AS dst, r.type AS type, r.confidence AS conf ORDER BY src, type;
+---- 3
+FileA|Function1|CALLS|0.850000
+FileB|Function1|DEFINES|1.000000
+Function2|Function1|CALLS|0.850000
+
+# Explicit source label + single IN test
+-STATEMENT MATCH (s:File)-[r:CodeRelation]->(t) WHERE t.id = 'Function1' AND r.type IN ['CALLS'] RETURN s.id AS src, t.id AS dst, r.type AS type, r.confidence AS conf;
+---- 1
+FileA|Function1|CALLS|0.850000
+
+-STATEMENT MATCH (s:Function)-[r:CodeRelation]->(t) WHERE t.id = 'Function1' AND r.type IN ['CALLS'] RETURN s.id AS src, t.id AS dst, r.type AS type, r.confidence AS conf;
+---- 1
+Function2|Function1|CALLS|0.850000
+
+-CASE Issue692InPredicateStaleSelectionAfterCopy
+# Deterministic reproduction for github issue #692 via the bulk COPY path.
+# Shape that triggers the stale-selection bug in the no-selectFunc filter
+# fallback (updateSelectedPos): the File->Function pair holds two edges
+# between the SAME node pair (DEFINES before CALLS, so the matching row is
+# not at position 0), followed by a single-row Function->Function batch.
+# Before the fix, the IN filter returned the f0 row twice and dropped F10.
+
+-STATEMENT CREATE NODE TABLE Function(id STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE File(id STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE CodeRelation(FROM File TO Function, FROM Function TO Function, type STRING);
+---- ok
+-STATEMENT COPY Function FROM "${LBUG_ROOT_DIRECTORY}/test/test_files/issue/issue692_fixture/function.csv" (header=false);
+---- ok
+-STATEMENT COPY File FROM "${LBUG_ROOT_DIRECTORY}/test/test_files/issue/issue692_fixture/file.csv" (header=false);
+---- ok
+-STATEMENT COPY CodeRelation FROM "${LBUG_ROOT_DIRECTORY}/test/test_files/issue/issue692_fixture/file_fn.csv" (from='File', to='Function', header=false);
+---- ok
+-STATEMENT COPY CodeRelation FROM "${LBUG_ROOT_DIRECTORY}/test/test_files/issue/issue692_fixture/fn_fn.csv" (from='Function', to='Function', header=false);
+---- ok
+
+# Ground truth: three incoming edges on F11
+-STATEMENT MATCH (c)-[r:CodeRelation]->(t {id: 'F11'}) RETURN c.id AS src, r.type AS type ORDER BY src, type;
+---- 3
+F10|CALLS
+f0|CALLS
+f0|DEFINES
+
+# Equality predicate (was already correct)
+-STATEMENT MATCH (c)-[r:CodeRelation]->(t {id: 'F11'}) WHERE r.type = 'CALLS' RETURN c.id AS src, r.type AS type ORDER BY src;
+---- 2
+F10|CALLS
+f0|CALLS
+
+# Single-element IN predicate (the bug: returned f0 twice, dropped F10)
+-STATEMENT MATCH (c)-[r:CodeRelation]->(t {id: 'F11'}) WHERE r.type IN ['CALLS'] RETURN c.id AS src, r.type AS type ORDER BY src;
+---- 2
+F10|CALLS
+f0|CALLS
+
+# list_contains spelled directly (same code path)
+-STATEMENT MATCH (c)-[r:CodeRelation]->(t {id: 'F11'}) WHERE list_contains(['CALLS'], r.type) RETURN c.id AS src, r.type AS type ORDER BY src;
+---- 2
+F10|CALLS
+f0|CALLS
+
+# Complement stays correct
+-STATEMENT MATCH (c)-[r:CodeRelation]->(t {id: 'F11'}) WHERE NOT (r.type IN ['CALLS']) RETURN c.id AS src, r.type AS type;
+---- 1
+f0|DEFINES

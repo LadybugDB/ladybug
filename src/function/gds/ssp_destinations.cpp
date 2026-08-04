@@ -60,15 +60,17 @@ private:
 
 class SSPDestinationsEdgeCompute : public SPEdgeCompute {
 public:
-    explicit SSPDestinationsEdgeCompute(SPFrontierPair* frontierPair)
-        : SPEdgeCompute{frontierPair} {};
+    explicit SSPDestinationsEdgeCompute(SPFrontierPair* frontierPair,
+        NodeOffsetMaskMap* pathNodeMask)
+        : SPEdgeCompute{frontierPair}, pathNodeMask{pathNodeMask} {};
 
     std::vector<nodeID_t> edgeCompute(nodeID_t, NbrScanState::Chunk& resultChunk, bool) override {
         std::vector<nodeID_t> activeNodes;
         resultChunk.forEach([&](auto neighbors, auto, auto i) {
             auto nbrNode = neighbors[i];
             auto iter = frontierPair->getNextFrontierValue(nbrNode.offset);
-            if (iter == FRONTIER_UNVISITED) {
+            if (iter == FRONTIER_UNVISITED &&
+                (pathNodeMask == nullptr || pathNodeMask->valid(nbrNode))) {
                 activeNodes.push_back(nbrNode);
             }
         });
@@ -76,8 +78,11 @@ public:
     }
 
     std::unique_ptr<EdgeCompute> copy() override {
-        return std::make_unique<SSPDestinationsEdgeCompute>(frontierPair);
+        return std::make_unique<SSPDestinationsEdgeCompute>(frontierPair, pathNodeMask);
     }
+
+private:
+    NodeOffsetMaskMap* pathNodeMask;
 };
 
 // Single shortest path algorithm. Only destinations are tracked (reachability query).
@@ -104,7 +109,8 @@ private:
         auto graph = sharedState->graph.get();
         auto denseFrontier = DenseFrontier::getUninitializedFrontier(context, graph);
         auto frontierPair = std::make_unique<SPFrontierPair>(std::move(denseFrontier));
-        auto edgeCompute = std::make_unique<SSPDestinationsEdgeCompute>(frontierPair.get());
+        auto edgeCompute = std::make_unique<SSPDestinationsEdgeCompute>(frontierPair.get(),
+            sharedState->getPathNodeMaskMap());
         auto auxiliaryState = std::make_unique<EmptyGDSAuxiliaryState>();
         return std::make_unique<GDSComputeState>(std::move(frontierPair), std::move(edgeCompute),
             std::move(auxiliaryState));

@@ -219,6 +219,7 @@ public:
     std::unique_ptr<Statement> transformAddProperty(CypherParser::IC_AlterTableContext& ctx);
     std::unique_ptr<Statement> transformDropProperty(CypherParser::IC_AlterTableContext& ctx);
     std::unique_ptr<Statement> transformRenameProperty(CypherParser::IC_AlterTableContext& ctx);
+    std::unique_ptr<Statement> transformSetSortedBy(CypherParser::IC_AlterTableContext& ctx);
     std::unique_ptr<Statement> transformCommentOn(CypherParser::IC_CommentOnContext& ctx);
     std::string transformUnionType(CypherParser::IC_UnionTypeContext& ctx);
     std::string transformStructType(CypherParser::IC_StructTypeContext& ctx);

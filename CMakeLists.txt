@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(Lbug VERSION 0.18.0 LANGUAGES CXX C)
+project(Lbug VERSION 0.19.0 LANGUAGES CXX C)
 
 option(SINGLE_THREADED "Single-threaded mode" FALSE)
 if(SINGLE_THREADED)
@@ -499,7 +499,7 @@ unset(LBUG_LINK_LIBRARIES)
 
 add_definitions(-DLBUG_ROOT_DIRECTORY="${PROJECT_SOURCE_DIR}")
 add_definitions(-DLBUG_CMAKE_VERSION="${CMAKE_PROJECT_VERSION}")
-add_definitions(-DLBUG_EXTENSION_VERSION="0.18.0")
+add_definitions(-DLBUG_EXTENSION_VERSION="0.19.0")
 
 if(BUILD_LBUG OR LBUG_API_USE_PRECOMPILED_LIB)
 include_directories(

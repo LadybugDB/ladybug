@@ -159,6 +159,7 @@ void TestRunner::testStatement(TestStatement& statement, Connection& conn,
     replaceEnv(statement.query, "GCS_SECRET_ACCESS_KEY");
     replaceEnv(statement.query, "OLLAMA_URL");
     replaceEnv(statement.query, "POSTGRES_CONNECTION_STRING");
+    replaceEnv(statement.query, "PG_CLIENT_CONNECTION_STRING");
     replaceEnv(statement.query, "RUN_ID");
     const auto actualResult = conn.query(statement.query);
     QueryResult* currentQueryResult = actualResult.get();

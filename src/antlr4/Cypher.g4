@@ -206,7 +206,8 @@ iC_AlterOptions
         | iC_RenameTable
         | iC_RenameProperty
         | iC_AddFromToConnection
-        | iC_DropFromToConnection;
+        | iC_DropFromToConnection
+        | iC_SetSortedBy;
 
 iC_AddProperty
     : ADD SP (iC_IfNotExists SP)? oC_PropertyKeyName SP iC_DataType ( SP iC_Default )? ;
@@ -228,6 +229,12 @@ iC_AddFromToConnection
 
 iC_DropFromToConnection
     : DROP SP (iC_IfExists SP)? iC_FromToConnection ;
+
+iC_SetSortedBy
+    : SET SP SORTED SP BY SP? '(' SP? iC_SortedByItem ( SP? ',' SP? iC_SortedByItem )* SP? ')' ;
+
+iC_SortedByItem
+    : oC_PropertyKeyName SP ( ASC | DESC ) ;
 
 iC_ColumnDefinitions: iC_ColumnDefinition ( SP? ',' SP? iC_ColumnDefinition )* ;
 

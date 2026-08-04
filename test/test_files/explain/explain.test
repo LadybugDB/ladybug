@@ -42,6 +42,10 @@
 -STATEMENT EXPLAIN LOGICAL MATCH (p:person) WHERE p.gender='F' RETURN p;
 ---- ok
 
+-LOG ExplainImplicitDateCast
+-STATEMENT EXPLAIN MATCH (p:person) WHERE p.birthdate = '1980-10-26' RETURN p;
+---- ok
+
 -LOG ExplainLogicalCall
 -STATEMENT EXPLAIN LOGICAL CALL threads=5
 ---- ok

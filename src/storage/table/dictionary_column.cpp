@@ -13,7 +13,6 @@
 #include "storage/table/string_chunk_data.h"
 #include "storage/table/string_column.h"
 #include <bit>
-#include <concepts>
 
 using namespace lbug::common;
 using namespace lbug::transaction;
@@ -68,16 +67,15 @@ void DictionaryColumn::scan(const SegmentState& state, DictionaryChunk& dictChun
     }
 }
 
-template<typename Result>
 void DictionaryColumn::scan(const SegmentState& offsetState, const SegmentState& dataState,
-    std::vector<std::pair<string_index_t, uint64_t>>& offsetsToScan, Result* result,
+    std::vector<std::pair<string_index_t, uint64_t>>& offsetsToScan, ValueVector* result,
     const ColumnChunkMetadata& indexMeta) const {
     string_index_t firstOffsetToScan = 0, lastOffsetToScan = 0;
     auto comp = [](auto pair1, auto pair2) { return pair1.first < pair2.first; };
     auto duplicationFactor = (double)offsetState.metadata.numValues / indexMeta.numValues;
     if (duplicationFactor <= 0.5) {
         // If at least 50% of strings are duplicated, sort the offsets so we can re-use scanned
-        // strings
+        // strings.
         std::sort(offsetsToScan.begin(), offsetsToScan.end(), comp);
         firstOffsetToScan = offsetsToScan.front().first;
         lastOffsetToScan = offsetsToScan.back().first;
@@ -100,13 +98,6 @@ void DictionaryColumn::scan(const SegmentState& offsetState, const SegmentState&
     scanOffsets(offsetState, offsets.data(), firstOffsetToScan, numOffsetsToScan,
         dataState.metadata.numValues);
 
-    if constexpr (std::same_as<Result, ColumnChunkData>) {
-        auto& offsetChunk = *result->getDictionaryChunk()->getOffsetChunk();
-        if (offsetChunk.getNumValues() + offsetsToScan.size() > offsetChunk.getCapacity()) {
-            offsetChunk.resize(std::bit_ceil(offsetChunk.getNumValues() + offsetsToScan.size()));
-        }
-    }
-
     for (auto pos = 0u; pos < offsetsToScan.size(); pos++) {
         auto startOffset = offsets[offsetsToScan[pos].first - firstOffsetToScan];
         auto endOffset = offsets[offsetsToScan[pos].first - firstOffsetToScan + 1];
@@ -114,36 +105,56 @@ void DictionaryColumn::scan(const SegmentState& offsetState, const SegmentState&
         DASSERT(endOffset >= startOffset);
         scanValue(dataState, startOffset, lengthToScan, result, offsetsToScan[pos].second);
         // For each string which has the same index in the dictionary as the one we scanned,
-        // copy the scanned string to its position in the result vector
-        if constexpr (std::same_as<Result, ValueVector>) {
-            auto& scannedString = result->template getValue<string_t>(offsetsToScan[pos].second);
-            while (pos + 1 < offsetsToScan.size() &&
-                   offsetsToScan[pos + 1].first == offsetsToScan[pos].first) {
-                pos++;
-                result->template setValue<string_t>(offsetsToScan[pos].second, scannedString);
-            }
-        } else {
-            // When scanning to chunks de-duplication should be done prior to this function such
-            // that you can have multiple positions in the string index chunk pointing to one string
-            // in this dictionary chunk.
-            // The offset chunk cannot have multiple offsets pointing to the same data, even if
-            // consecutive, since that would break the mechanism for calculating the size of a
-            // string.
-            DASSERT(pos == offsetsToScan.size() - 1 ||
-                    offsetsToScan[pos].first != offsetsToScan[pos + 1].first);
+        // copy the scanned string to its position in the result vector.
+        auto& scannedString = result->getValue<string_t>(offsetsToScan[pos].second);
+        while (pos + 1 < offsetsToScan.size() &&
+               offsetsToScan[pos + 1].first == offsetsToScan[pos].first) {
+            pos++;
+            result->setValue<string_t>(offsetsToScan[pos].second, scannedString);
         }
     }
 }
 
-template void DictionaryColumn::scan<common::ValueVector>(const SegmentState& offsetState,
-    const SegmentState& dataState,
-    std::vector<std::pair<DictionaryChunk::string_index_t, uint64_t>>& offsetsToScan,
-    common::ValueVector* result, const ColumnChunkMetadata& indexMeta) const;
+std::vector<std::pair<string_index_t, string_index_t>>
+DictionaryColumn::materializeToStringChunkDictionary(const SegmentState& offsetState,
+    const SegmentState& dataState, std::vector<string_index_t>& indexesToScan,
+    StringChunkData& result, const ColumnChunkMetadata& indexMeta) const {
+    if (indexesToScan.empty()) {
+        return {};
+    }
 
-template void DictionaryColumn::scan<StringChunkData>(const SegmentState& offsetState,
-    const SegmentState& dataState,
-    std::vector<std::pair<DictionaryChunk::string_index_t, uint64_t>>& offsetsToScan,
-    StringChunkData* result, const ColumnChunkMetadata& indexMeta) const;
+    string_index_t firstOffsetToScan = 0, lastOffsetToScan = 0;
+    auto comp = [](auto index1, auto index2) { return index1 < index2; };
+    auto duplicationFactor = (double)offsetState.metadata.numValues / indexMeta.numValues;
+    if (duplicationFactor <= 0.5) {
+        std::sort(indexesToScan.begin(), indexesToScan.end(), comp);
+        firstOffsetToScan = indexesToScan.front();
+        lastOffsetToScan = indexesToScan.back();
+    } else {
+        const auto& [min, max] =
+            std::minmax_element(indexesToScan.begin(), indexesToScan.end(), comp);
+        firstOffsetToScan = *min;
+        lastOffsetToScan = *max;
+    }
+
+    auto numOffsetsToScan = lastOffsetToScan - firstOffsetToScan + 1;
+    std::vector<string_offset_t> offsets(numOffsetsToScan + 1);
+    scanOffsets(offsetState, offsets.data(), firstOffsetToScan, numOffsetsToScan,
+        dataState.metadata.numValues);
+
+    std::vector<std::pair<string_index_t, string_index_t>> mapping;
+    mapping.reserve(indexesToScan.size());
+    for (const auto indexToScan : indexesToScan) {
+        auto startOffset = offsets[indexToScan - firstOffsetToScan];
+        auto endOffset = offsets[indexToScan - firstOffsetToScan + 1];
+        auto lengthToScan = endOffset - startOffset;
+        DASSERT(endOffset >= startOffset);
+        auto newIndex =
+            appendScannedValueToDictionary(dataState, startOffset, lengthToScan, result);
+        mapping.emplace_back(indexToScan, newIndex);
+    }
+    return mapping;
+}
 
 string_index_t DictionaryColumn::append(const DictionaryChunk& dictChunk, SegmentState& state,
     std::string_view val) const {
@@ -179,26 +190,24 @@ void DictionaryColumn::scanValue(const SegmentState& dataState, uint64_t startOf
     }
 }
 
-void DictionaryColumn::scanValue(const SegmentState& dataState, uint64_t startOffset,
-    uint64_t length, StringChunkData* result, uint64_t offsetInResult) const {
-    auto& stringDataChunk = *result->getDictionaryChunk().getStringDataChunk();
-    auto& offsetChunk = *result->getDictionaryChunk().getOffsetChunk();
-    auto& indexChunk = *result->getIndexColumnChunk();
+string_index_t DictionaryColumn::appendScannedValueToDictionary(const SegmentState& dataState,
+    uint64_t startOffset, uint64_t length, StringChunkData& result) const {
+    auto& stringDataChunk = *result.getDictionaryChunk().getStringDataChunk();
+    auto& offsetChunk = *result.getDictionaryChunk().getOffsetChunk();
     if (stringDataChunk.getCapacity() < stringDataChunk.getNumValues() + length) {
         stringDataChunk.resize(std::bit_ceil(stringDataChunk.getNumValues() + length));
     }
     if (offsetChunk.getNumValues() == offsetChunk.getCapacity()) {
         offsetChunk.resize(std::bit_ceil(offsetChunk.getNumValues() + 1));
     }
-    if (offsetInResult >= indexChunk.getCapacity()) {
-        indexChunk.resize(std::bit_ceil(offsetInResult + 1));
+    const auto newIndex = static_cast<string_index_t>(offsetChunk.getNumValues());
+    if (length > 0) {
+        dataColumn->scanSegment(dataState, startOffset, length,
+            stringDataChunk.getData<uint8_t>() + stringDataChunk.getNumValues());
     }
-    dataColumn->scanSegment(dataState, startOffset, length,
-        stringDataChunk.getData<uint8_t>() + stringDataChunk.getNumValues());
-    indexChunk.setValue<string_index_t>(offsetChunk.getNumValues(), offsetInResult);
-    offsetChunk.setValue<string_offset_t>(stringDataChunk.getNumValues(),
-        offsetChunk.getNumValues());
+    offsetChunk.setValue<string_offset_t>(stringDataChunk.getNumValues(), newIndex);
     stringDataChunk.setNumValues(stringDataChunk.getNumValues() + length);
+    return newIndex;
 }
 
 bool DictionaryColumn::canCommitInPlace(const SegmentState& state, uint64_t numNewStrings,

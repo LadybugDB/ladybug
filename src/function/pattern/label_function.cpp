@@ -7,6 +7,7 @@
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "function/binary_function_executor.h"
 #include "function/list/functions/list_extract_function.h"
+#include "function/list/vector_list_functions.h"
 #include "function/rewrite_function.h"
 #include "function/scalar_function.h"
 #include "function/schema/vector_node_rel_functions.h"
@@ -102,6 +103,22 @@ std::shared_ptr<Expression> LabelFunction::rewriteFunc(const RewriteFunctionBind
             if (node.isEmpty()) {
                 return expressionBinder->createLiteralExpression("");
             }
+            // ANY graph: the node's single catalog entry is the internal `_nodes` table, whose
+            // name is not the user's label. Read the per-row `label` STRING[] column instead
+            // (the same column `n.*` exposes). functionName is empty on the precompute path,
+            // which preserves legacy behavior; only query-level label()/labels() get here.
+            if (!input.functionName.empty() && isAnyGraphNodeOrRel(node, input.context) &&
+                node.hasPropertyExpression("label")) {
+                auto labelProp = node.getPropertyExpression("label");
+                if (input.functionName == LabelsFunction::name) {
+                    return labelProp->copy(); // labels(n) -> STRING[]
+                }
+                // label(n) -> labels(n)[0] (list_extract is 1-based)
+                return expressionBinder->bindScalarFunctionExpression(
+                    expression_vector{labelProp,
+                        expressionBinder->createLiteralExpression(Value((int64_t)1))},
+                    ListExtractFunction::name);
+            }
             if (!node.isMultiLabeled()) {
                 auto label = node.getEntry(0)->getName();
                 return expressionBinder->createLiteralExpression(label);
@@ -115,6 +132,18 @@ std::shared_ptr<Expression> LabelFunction::rewriteFunc(const RewriteFunctionBind
         if (!disableLiteralRewrite) {
             if (rel.isEmpty()) {
                 return expressionBinder->createLiteralExpression("");
+            }
+            // ANY graph: the rel is backed by the internal `_edges` table, whose `label` is a
+            // scalar STRING (a rel has one type). label(e) returns it directly; labels(e) wraps
+            // it into a 1-element list for parity with node labels().
+            if (!input.functionName.empty() && isAnyGraphNodeOrRel(rel, input.context) &&
+                rel.hasPropertyExpression("label")) {
+                auto labelProp = rel.getPropertyExpression("label");
+                if (input.functionName == LabelsFunction::name) {
+                    return expressionBinder->bindScalarFunctionExpression(
+                        expression_vector{labelProp}, ListCreationFunction::name);
+                }
+                return labelProp->copy(); // label(e) -> scalar STRING
             }
             if (!rel.isMultiLabeled()) {
                 auto label = rel.getEntry(0)->getName();

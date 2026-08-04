@@ -233,10 +233,6 @@ inline bool tryIntegerCast(const char* input, uint64_t& len, IntegerCastData<T>&
         return integerCastLoop<T, true>(input, len, result);
     }
 
-    // not allow leading 0
-    if (len > 1 && *input == '0') {
-        return false;
-    }
     return integerCastLoop<T, false>(input, len, result);
 }
 

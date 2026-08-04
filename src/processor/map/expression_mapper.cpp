@@ -167,7 +167,9 @@ std::unique_ptr<ExpressionEvaluator> ExpressionMapper::getNodeEvaluator(
     expression_vector children;
     children.push_back(node->getInternalID());
     children.push_back(node->getLabelExpression());
-    for (auto& property : node->getPropertyExpressions()) {
+    // Projected (not full) properties: internal columns hidden from output must stay out of the
+    // whole-object struct's children to keep them aligned with its (also-filtered) field list.
+    for (auto& property : node->getProjectedPropertyExpressions()) {
         children.push_back(property);
     }
     auto childrenEvaluators = getEvaluators(children);
@@ -182,7 +184,7 @@ std::unique_ptr<ExpressionEvaluator> ExpressionMapper::getRelEvaluator(
     children.push_back(rel->getSrcNode()->getInternalID());
     children.push_back(rel->getDstNode()->getInternalID());
     children.push_back(rel->getLabelExpression());
-    for (auto& property : rel->getPropertyExpressions()) {
+    for (auto& property : rel->getProjectedPropertyExpressions()) {
         children.push_back(property);
     }
     auto childrenEvaluators = getEvaluators(children);

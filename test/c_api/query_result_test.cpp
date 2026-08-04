@@ -274,3 +274,26 @@ TEST_F(CApiQueryResultTest, MultipleQuery) {
 
     lbug_query_result_destroy(&result);
 }
+
+TEST_F(CApiQueryResultTest, GetLastErrorArrowSchemaFailure) {
+    // A query result with a JSON column should fail to produce an Arrow schema
+    lbug_query_result result;
+    lbug_state state;
+    auto connection = getConnection();
+
+    state = lbug_connection_query(connection, "RETURN CAST('{}' AS JSON)", &result);
+    ASSERT_EQ(state, LbugSuccess);
+    ASSERT_TRUE(lbug_query_result_is_success(&result));
+
+    ArrowSchema schema;
+    state = lbug_query_result_get_arrow_schema(&result, &schema);
+    ASSERT_EQ(state, LbugError);
+
+    // Error message should be retrievable
+    char* err = lbug_get_last_error();
+    ASSERT_NE(err, nullptr);
+    ASSERT_NE(std::string(err).find("exception"), std::string::npos) << err;
+    lbug_destroy_string(err);
+
+    lbug_query_result_destroy(&result);
+}

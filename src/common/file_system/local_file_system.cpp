@@ -123,6 +123,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         BOOL rc = LockFileEx(handle, dwFlags, 0 /*reserved*/, 1 /*numBytesLow*/, 0 /*numBytesHigh*/,
             &overlapped);
         if (!rc) {
+            CloseHandle(handle);
             auto error = GetLastError();
             throw IOException("Could not set lock on file : " + fullPath +
                               " (Error: " + std::to_string(error) + ")\n" +
@@ -146,6 +147,7 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         int rc = fcntl(fd, F_SETLK, &fl);
         if (rc == -1) {
             int original_errno = errno;
+            close(fd);
             if (original_errno == EAGAIN || original_errno == EACCES) {
                 struct flock get_fl {};
                 memset(&get_fl, 0, sizeof get_fl);
@@ -253,11 +255,6 @@ void LocalFileSystem::copyFile(const std::string& from, const std::string& to) {
 
 void LocalFileSystem::createDir(const std::string& dir) const {
     try {
-        if (std::filesystem::exists(dir)) {
-            // LCOV_EXCL_START
-            throw IOException(std::format("Directory {} already exists.", dir));
-            // LCOV_EXCL_STOP
-        }
         auto directoryToCreate = dir;
         if (directoryToCreate.ends_with('/')
 #if defined(_WIN32)
@@ -270,13 +267,7 @@ void LocalFileSystem::createDir(const std::string& dir) const {
             directoryToCreate = directoryToCreate.substr(0, directoryToCreate.size() - 1);
         }
         std::error_code errCode;
-        if (!std::filesystem::create_directories(directoryToCreate, errCode)) {
-            // LCOV_EXCL_START
-            throw IOException(
-                std::format("Directory {} cannot be created. Check if it exists and remove it.",
-                    directoryToCreate));
-            // LCOV_EXCL_STOP
-        }
+        std::filesystem::create_directories(directoryToCreate, errCode);
         if (errCode) {
             // LCOV_EXCL_START
             throw IOException(std::format("Failed to create directory: {}, error message: {}.", dir,

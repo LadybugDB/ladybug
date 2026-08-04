@@ -10,6 +10,7 @@
 #endif
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <csignal>
 #include <iomanip>
 #include <regex>
@@ -24,6 +25,8 @@
 #include "catalog/catalog_entry/scalar_macro_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "common/exception/parser.h"
+#include "common/types/value/nested.h"
+#include "common/types/value/value.h"
 #include "extension/extension_manager.h"
 #include "keywords.h"
 #include "parser/parser.h"
@@ -1137,6 +1140,66 @@ void EmbeddedShell::printExecutionResult(QueryResult& queryResult) const {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Render a MAP(STRING, INT64) value as a compact single-line visual.
+// Falls back to default toString() for other types.
+// ---------------------------------------------------------------------------
+static std::string renderMapCell(const common::Value& val) {
+    if (val.isNull() || val.getDataType().getLogicalTypeID() != common::LogicalTypeID::MAP) {
+        return val.toString();
+    }
+
+    const auto& mapType = val.getDataType();
+    const auto& keyType = common::MapType::getKeyType(mapType);
+    const auto& valType = common::MapType::getValueType(mapType);
+    if (keyType.getLogicalTypeID() != common::LogicalTypeID::STRING ||
+        valType.getLogicalTypeID() != common::LogicalTypeID::INT64) {
+        return val.toString();
+    }
+
+    auto numBins = common::NestedVal::getChildrenSize(&val);
+    if (numBins == 0) {
+        return "(empty)";
+    }
+
+    // Collect counts and find max
+    std::vector<int64_t> counts(numBins);
+    std::vector<std::string> labels(numBins);
+    int64_t maxCount = 1;
+    for (uint32_t i = 0; i < numBins; ++i) {
+        auto* entry = common::NestedVal::getChildVal(&val, i);
+        auto* keyVal = common::NestedVal::getChildVal(entry, 0);
+        auto* cntVal = common::NestedVal::getChildVal(entry, 1);
+        labels[i] = keyVal->toString();
+        counts[i] = cntVal->getValue<int64_t>();
+        if (counts[i] > maxCount)
+            maxCount = counts[i];
+    }
+
+    // Unicode blocks U+2581..U+2588 as raw UTF-8
+    static const char* BLOCKS = "\xe2\x96\x81\xe2\x96\x82\xe2\x96\x83\xe2\x96\x84"
+                                "\xe2\x96\x85\xe2\x96\x86\xe2\x96\x87\xe2\x96\x88";
+
+    // Build sparkline
+    std::string spark;
+    for (uint32_t i = 0; i < numBins; ++i) {
+        int level = static_cast<int>(
+            std::round(static_cast<double>(counts[i]) * 7.0 / static_cast<double>(maxCount)));
+        spark.append(BLOCKS + level * 3, 3);
+    }
+
+    // Build compact summary:  [1.00-1.00:2, 2.00-2.00:2, 5.00-10.00:7]
+    std::string summary = "  [";
+    for (uint32_t i = 0; i < numBins; ++i) {
+        if (i > 0)
+            summary += ", ";
+        summary += labels[i] + ":" + std::to_string(counts[i]);
+    }
+    summary += "]";
+
+    return spark + summary;
+}
+
 void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) const {
     auto& baseTablePrinter = printer->constCast<BaseTablePrinter>();
     auto querySummary = queryResult.getQuerySummary();
@@ -1162,7 +1225,18 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
             if (tuple->getValue(i)->isNull()) {
                 continue;
             }
-            std::string tupleString = tuple->getValue(i)->toString();
+            // Use renderMapCell for MAP columns to get visual rendering width
+            auto colType = queryResult.getColumnDataTypes()[i].getLogicalTypeID();
+            std::string tupleString;
+            if (colType == common::LogicalTypeID::MAP) {
+                tupleString = renderMapCell(*tuple->getValue(i));
+                // MAP cells tend to be wider than other types; ensure a usable
+                // minimum width so subsequent rows of the same column get
+                // reasonable space.
+                colsWidth[i] = std::max(colsWidth[i], (uint32_t)60);
+            } else {
+                tupleString = tuple->getValue(i)->toString();
+            }
             uint32_t fieldLen = 0;
             uint32_t chrIter = 0;
             while (chrIter < tupleString.length()) {
@@ -1179,8 +1253,6 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
 
     // calculate the maximum width of the table
     uint32_t sumGoal = BaseTablePrinter::MIN_TRUNCATED_WIDTH;
-    uint32_t maxWidth = BaseTablePrinter::MIN_TRUNCATED_WIDTH;
-    ;
     if (colsWidth.size() == 1) {
         uint32_t minDisplayWidth =
             BaseTablePrinter::MIN_TRUNCATED_WIDTH + BaseTablePrinter::SMALL_TABLE_SEPERATOR_LENGTH;
@@ -1211,12 +1283,10 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
     for (auto i = 0u; i < colsWidth.size(); i++) {
         if (maxValueIndex.empty() || colsWidth[i] == colsWidth[maxValueIndex[0]]) {
             maxValueIndex.push_back(i);
-            maxWidth = colsWidth[maxValueIndex[0]];
         } else if (colsWidth[i] > colsWidth[maxValueIndex[0]]) {
             secondHighestValue = colsWidth[maxValueIndex[0]];
             maxValueIndex.clear();
             maxValueIndex.push_back(i);
-            maxWidth = colsWidth[maxValueIndex[0]];
         } else if (colsWidth[i] > secondHighestValue) {
             secondHighestValue = colsWidth[i];
         }
@@ -1244,7 +1314,6 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
         for (auto i = 0u; i < maxValueIndex.size(); i++) {
             colsWidth[maxValueIndex[i]] = newValue;
         }
-        maxWidth = newValue - 2;
         sum -= (oldValue - newValue) * maxValueIndex.size();
         if (newValue == BaseTablePrinter::MIN_TRUNCATED_WIDTH + 2) {
             break;
@@ -1505,21 +1574,47 @@ void EmbeddedShell::printTruncatedExecutionResult(QueryResult& queryResult) cons
             continue;
         }
         auto tuple = queryResult.getNext();
-        auto result = tuple->toString(colsWidth, baseTablePrinter.TupleDelimiter, maxWidth);
-        std::string printString;
-        uint64_t startPos = 0;
-        std::vector<std::string> colResults;
+        // Build formatted column strings, using renderMapCell for MAP columns
+        std::vector<std::string> colResults(colsWidth.size());
         for (auto i = 0u; i < colsWidth.size(); i++) {
-            uint32_t chrIter = startPos;
-            uint32_t fieldLen = 0;
-            while (fieldLen < colsWidth[i]) {
-                fieldLen += Utf8Proc::renderWidth(result.c_str(), chrIter);
-                chrIter = utf8proc_next_grapheme(result.c_str(), result.length(), chrIter);
+            std::string cellStr;
+            if (tuple->getValue(i)->isNull()) {
+                cellStr = std::string(colsWidth[i], ' ');
+            } else {
+                auto colType = queryResult.getColumnDataTypes()[i].getLogicalTypeID();
+                if (colType == common::LogicalTypeID::MAP) {
+                    cellStr = renderMapCell(*tuple->getValue(i));
+                } else {
+                    cellStr = tuple->getValue(i)->toString();
+                }
+                // Truncate/pad to column width
+                uint32_t fieldLen = 0;
+                uint32_t chrIter = 0;
+                uint32_t cutoff = 0;
+                uint32_t cutoffLen = 0;
+                while (chrIter < cellStr.length()) {
+                    auto w = Utf8Proc::renderWidth(cellStr.c_str(), chrIter);
+                    if (fieldLen + w > colsWidth[i] - 2 && cutoff == 0) {
+                        cutoff = chrIter;
+                        cutoffLen = fieldLen;
+                    }
+                    fieldLen += w;
+                    chrIter = utf8proc_next_grapheme(cellStr.c_str(), cellStr.length(), chrIter);
+                }
+                if (fieldLen > colsWidth[i] - 2) {
+                    cellStr = cellStr.substr(0, cutoff) + "...";
+                    fieldLen = cutoffLen + 3;
+                }
+                cellStr = " " + std::move(cellStr) + " ";
+                fieldLen += 2;
+                if (fieldLen < colsWidth[i]) {
+                    cellStr += std::string(colsWidth[i] - fieldLen, ' ');
+                }
             }
-            colResults.push_back(result.substr(startPos, chrIter - startPos));
-            // new start position is after the | seperating results
-            startPos = chrIter + 1;
+            colResults[i] = cellStr;
         }
+
+        std::string printString;
         printString += baseTablePrinter.Vertical;
         for (auto i = 0u; i < k; i++) {
             printString += colResults[i];

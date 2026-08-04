@@ -44,6 +44,13 @@ public:
 
     LBUG_API void invalidateCache();
 
+    // Given a table ID, find the database that contains it and return its
+    // catalog and storage manager. Returns (main catalog, main storage manager)
+    // if the table is in the main database. If dbName is non-empty, use that
+    // database directly.
+    static std::pair<catalog::Catalog*, storage::StorageManager*> resolveTableStorage(
+        const ClientContext& context, common::table_id_t tableID, const std::string& dbName = {});
+
     LBUG_API static DatabaseManager* Get(const ClientContext& context);
 
 private:

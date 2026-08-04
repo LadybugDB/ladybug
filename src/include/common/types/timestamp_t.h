@@ -66,6 +66,10 @@ class Timestamp {
 public:
     LBUG_API static timestamp_t fromCString(const char* str, uint64_t len);
 
+    // Like fromCString but ignores any parsed UTC offset, preserving the
+    // wall-clock time. Used by TIMESTAMP (without TZ) CAST operations.
+    LBUG_API static timestamp_t fromCStringLocal(const char* str, uint64_t len);
+
     // Convert a timestamp object to a std::string in the format "YYYY-MM-DD hh:mm:ss".
     LBUG_API static std::string toString(timestamp_t timestamp);
 

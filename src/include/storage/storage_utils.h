@@ -77,6 +77,12 @@ public:
     static std::string getShadowFilePath(const std::string& path) {
         return std::format("{}.{}", path, common::StorageConstants::SHADOWING_SUFFIX);
     }
+    static std::string getCheckpointIntentLockFilePath(const std::string& path) {
+        return std::format("{}.checkpoint.intent.lock", path);
+    }
+    static std::string getCheckpointApplyLockFilePath(const std::string& path) {
+        return std::format("{}.checkpoint.apply.lock", path);
+    }
     static std::string getTmpFilePath(const std::string& path) {
         return std::format("{}.{}", path, common::StorageConstants::TEMP_FILE_SUFFIX);
     }

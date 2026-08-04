@@ -237,7 +237,9 @@ public:
     void appendExpressionsScan(const binder::expression_vector& expressions, LogicalPlan& plan);
     void appendScanNodeTable(std::shared_ptr<binder::Expression> nodeID,
         std::vector<common::table_id_t> tableIDs, const binder::expression_vector& properties,
-        LogicalPlan& plan);
+        LogicalPlan& plan, const binder::NodeOrRelExpression* nodeOrRel = nullptr);
+    bool tryPlanQueryPrimaryKeyLookup(const binder::QueryGraphCollection& queryGraphCollection,
+        const binder::expression_vector& predicates, LogicalPlan& plan);
 
     // Append extend operators
     void appendNonRecursiveExtend(const std::shared_ptr<binder::NodeExpression>& boundNode,

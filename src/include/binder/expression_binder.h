@@ -144,6 +144,13 @@ public:
     const ExpressionBinderConfig& getConfig() { return config; }
 
 private:
+    std::shared_ptr<Expression> simplifyExpression(const std::shared_ptr<Expression>& expression);
+    std::shared_ptr<Expression> simplifyBooleanExpression(
+        const std::shared_ptr<Expression>& expression);
+    std::shared_ptr<Expression> simplifyCaseExpression(
+        const std::shared_ptr<Expression>& expression);
+
+private:
     Binder* binder;
     main::ClientContext* context;
     std::unordered_set<std::string> unknownParameters;

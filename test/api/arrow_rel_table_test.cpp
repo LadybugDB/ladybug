@@ -579,6 +579,42 @@ TEST_F(ArrowRelTableTest, LargeBatchArrowRelTable) {
     ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<common::int128_t>(), 2098176);
 }
 
+TEST_F(ArrowRelTableTest, CreateArrowRelTableReservedTableName) {
+    // Use a reserved word as the relationship table name
+    createArrowPersonTable(*conn);
+
+    std::vector<int64_t> from = {1, 1, 2};
+    std::vector<int64_t> to = {2, 3, 3};
+    std::vector<int64_t> weight = {10, 20, 30};
+
+    ArrowSchemaWrapper schema;
+    createStructSchema(&schema, 3);
+    createSchema<int64_t>(schema.children[0], "from");
+    createSchema<int64_t>(schema.children[1], "to");
+    createSchema<int64_t>(schema.children[2], "weight");
+
+    std::vector<ArrowArrayWrapper> arrays;
+    arrays.push_back(
+        createStructArray(from.size(), {[&](ArrowArray* a) { createInt64Array(a, from); },
+                                           [&](ArrowArray* a) { createInt64Array(a, to); },
+                                           [&](ArrowArray* a) { createInt64Array(a, weight); }}));
+
+    // "index" is a reserved word
+    auto result = ArrowTableSupport::createRelTableFromArrowTable(*conn, "index",
+        "arrow_rel_person", "arrow_rel_person", std::move(schema), std::move(arrays));
+    ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+
+    auto countResult =
+        conn->query("MATCH (:arrow_rel_person)-[`index`]->(:arrow_rel_person) RETURN count(*)");
+    ASSERT_TRUE(countResult->isSuccess()) << countResult->getErrorMessage();
+    ASSERT_EQ(countResult->getNext()->getValue(0)->getValue<int64_t>(), 3);
+
+    auto sumResult = conn->query(
+        "MATCH (:arrow_rel_person)-[e:`index`]->(:arrow_rel_person) RETURN sum(e.weight)");
+    ASSERT_TRUE(sumResult->isSuccess()) << sumResult->getErrorMessage();
+    ASSERT_EQ(sumResult->getNext()->getValue(0)->getValue<common::int128_t>(), 60);
+}
+
 class ArrowRelTableComplexTypesTest : public lbug::testing::EmptyDBTest {
 protected:
     void SetUp() override {

@@ -38,8 +38,8 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapRelDegreeTable(
     auto printInfo = std::make_unique<RelDegreeTablePrintInfo>(
         logical.getRelGroupEntry()->getName(), logical.getMode());
     return std::make_unique<RelDegreeTable>(std::move(relTables), relDirection, logical.getMode(),
-        nodeKeyOutputPos, degreeOutputPos, logical.getLimit(), getOperatorID(),
-        std::move(printInfo));
+        nodeKeyOutputPos, degreeOutputPos, logical.getLimit(), logical.getNodeOffset(),
+        getOperatorID(), std::move(printInfo));
 }
 
 } // namespace processor

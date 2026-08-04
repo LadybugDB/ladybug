@@ -18,6 +18,7 @@ union AlterExtraInfo {
     renameProperty: RenamePropertyAlterPayload,
     comment: CommentAlterPayload,
     rename: RenameTableAlterPayload,
+    setSortedBy: SetSortedByAlterPayload,
     addFromToConnection: AddFromToConnectionAlterPayload,
     dropFromToConnection: DropFromToConnectionAlterPayload,
 }
@@ -41,6 +42,15 @@ model CommentAlterPayload {
 
 model RenameTableAlterPayload {
     newName: string;
+}
+
+model BoundSortedByProperty {
+    propertyName: string;
+    ascending: bool;
+}
+
+model SetSortedByAlterPayload {
+    properties: BoundSortedByProperty[];
 }
 
 model AddFromToConnectionAlterPayload {

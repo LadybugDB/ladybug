@@ -41,6 +41,7 @@ public:
     ~StorageManager();
 
     Table* getTable(common::table_id_t tableID);
+    bool containsTable(common::table_id_t tableID) const;
 
     static void recover(main::ClientContext& clientContext, bool throwOnWalReplayFailure,
         bool enableChecksums);

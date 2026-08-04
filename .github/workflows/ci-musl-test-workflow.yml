@@ -205,11 +205,13 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc 'make relwithdebinfo'
 
-      - name: Generate datasets
-        run: su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc 'bash scripts/generate_binary_demo.sh --lbug-shell-mode relwithdebinfo'
-
       - name: Install uv
         run: pip3 install uv
+
+      - name: Generate datasets
+        run: |
+          su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc 'bash scripts/generate_binary_demo.sh --lbug-shell-mode relwithdebinfo'
+          su-exec "$RUN_AS_USER:$RUN_AS_GROUP" env HOME="$RUN_AS_HOME" sh -lc 'uv run --with pyarrow python3 scripts/generate-dictionary-bug-fixture.py'
 
       - name: Test
         env:

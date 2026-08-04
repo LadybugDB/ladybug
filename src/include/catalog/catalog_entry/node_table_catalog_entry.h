@@ -4,6 +4,9 @@
 #include <optional>
 
 #include "common/enums/storage_format.h"
+#include "common/serializer/deserializer.h"
+#include "common/serializer/serializer.h"
+#include "common/string_utils.h"
 #include "function/table/table_function.h"
 #include "table_catalog_entry.h"
 
@@ -13,6 +16,14 @@ class Transaction;
 } // namespace transaction
 
 namespace catalog {
+
+struct SortedByProperty {
+    std::string propertyName;
+    bool ascending;
+
+    void serialize(common::Serializer& serializer) const;
+    static SortedByProperty deserialize(common::Deserializer& deserializer);
+};
 
 // Callback to create bind data for foreign tables
 // This allows extensions to provide bind data creation without core needing to know extension types
@@ -59,6 +70,17 @@ public:
     }
     const std::string& getStorage() const { return storage; }
     common::StorageFormat getStorageFormat() const { return storageFormat; }
+    const std::vector<SortedByProperty>& getSortedByProperties() const {
+        return sortedByProperties;
+    }
+    bool isLeadingSortPrimaryKeyAsc() const {
+        return !sortedByProperties.empty() && sortedByProperties[0].ascending &&
+               common::StringUtils::caseInsensitiveEquals(sortedByProperties[0].propertyName,
+                   primaryKeyName);
+    }
+    void setSortedByProperties(std::vector<SortedByProperty> properties) {
+        sortedByProperties = std::move(properties);
+    }
     std::optional<function::TableFunction> getScanFunction() const override;
     const CreateBindDataFunc& getCreateBindDataFunc() const { return createBindDataFunc; }
     const std::string& getForeignDatabaseName() const { return foreignDatabaseName; }
@@ -84,6 +106,7 @@ private:
 
 private:
     std::string primaryKeyName;
+    std::vector<SortedByProperty> sortedByProperties;
     std::string storage;
     common::StorageFormat storageFormat = common::StorageFormat::NONE;
     std::optional<function::TableFunction> scanFunction;

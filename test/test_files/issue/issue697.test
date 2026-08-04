@@ -1,0 +1,40 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue697OptionalMatchBoundNode
+# Reproduction for github issue #697:
+# Repeating a bound node in a comma-separated OPTIONAL MATCH doubles the
+# result cardinality.
+#
+# Bug: Adding (n3) to OPTIONAL MATCH when n3 is already bound from the
+# outer MATCH changes count(*) from 2 to 4 because n3 gets re-scanned.
+
+-STATEMENT CREATE NODE TABLE L1(id INT64, k11 INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE X(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE T1(FROM X TO L1);
+---- ok
+
+-STATEMENT CREATE (:L1 {id: 1, k11: 1});
+---- ok
+-STATEMENT CREATE (:X {id: 2});
+---- ok
+-STATEMENT MATCH (a:X), (b:L1) CREATE (a)-[:T1]->(b);
+---- ok
+
+# Query A: OPTIONAL MATCH without the redundant (n3) - should return 2
+-STATEMENT MATCH (n0:L1), (n3) OPTIONAL MATCH (n6)-[:T1]->(n0) WHERE n0.k11 = 1 RETURN count(*) AS c;
+---- 1
+2
+
+# Query B: OPTIONAL MATCH with redundant (n3) - was returning 4, github issue #697
+-STATEMENT MATCH (n0:L1), (n3) OPTIONAL MATCH (n6)-[:T1]->(n0), (n3) WHERE n0.k11 = 1 RETURN count(*) AS c;
+---- 1
+2
+
+# Verify the base MATCH produces 2 rows
+-STATEMENT MATCH (n0:L1), (n3) RETURN count(*) AS c;
+---- 1
+2

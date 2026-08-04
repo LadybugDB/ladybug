@@ -58,6 +58,8 @@ private:
     bool canOptimize(planner::LogicalOperator* aggregate) const;
     std::shared_ptr<planner::LogicalOperator> tryRewriteActiveBoundCount(
         std::shared_ptr<planner::LogicalOperator> op);
+    std::shared_ptr<planner::LogicalOperator> tryRewriteSortedOffsetCount(
+        std::shared_ptr<planner::LogicalOperator> op);
     std::shared_ptr<planner::LogicalOperator> tryRewriteDegreeTopK(
         std::shared_ptr<planner::LogicalOperator> op);
 

@@ -13,15 +13,16 @@ inline static bool isTrue(ValueVector& vector, uint64_t pos) {
 
 bool ReferenceExpressionEvaluator::selectInternal(SelectionVector& selVector) {
     uint64_t numSelectedValues = 0;
-    auto selectedBuffer = resultVector->state->getSelVectorUnsafe().getMutableBuffer();
-    if (resultVector->state->getSelVector().isUnfiltered()) {
-        for (auto i = 0u; i < resultVector->state->getSelVector().getSelSize(); i++) {
+    auto selectedBuffer = selVector.getMutableBuffer();
+    auto& resultSelVector = resultVector->state->getSelVector();
+    if (resultSelVector.isUnfiltered()) {
+        for (auto i = 0u; i < resultSelVector.getSelSize(); i++) {
             selectedBuffer[numSelectedValues] = i;
             numSelectedValues += isTrue(*resultVector, i);
         }
     } else {
-        for (auto i = 0u; i < resultVector->state->getSelVector().getSelSize(); i++) {
-            auto pos = resultVector->state->getSelVector()[i];
+        for (auto i = 0u; i < resultSelVector.getSelSize(); i++) {
+            auto pos = resultSelVector[i];
             selectedBuffer[numSelectedValues] = pos;
             numSelectedValues += isTrue(*resultVector, pos);
         }

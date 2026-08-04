@@ -366,6 +366,54 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
                             "CREATE (a)-[:opt_degree_follows]->(b);")
                     ->isSuccess());
 
+    auto qSortedOffset =
+        "MATCH (a:opt_degree_user)-[:opt_degree_follows]->(b) WHERE a.id = 0 RETURN count(*);";
+    auto planSortedOffsetBeforeAlter = getRoot(qSortedOffset);
+    ASSERT_FALSE(hasOperatorType(planSortedOffsetBeforeAlter->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    ASSERT_TRUE(conn->query("ALTER TABLE opt_degree_user SET SORTED BY (id ASC);")->isSuccess());
+    auto planSortedOffset = getRoot(qSortedOffset);
+    ASSERT_TRUE(hasOperatorType(planSortedOffset->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto resultSortedOffset = conn->query(qSortedOffset);
+    ASSERT_TRUE(resultSortedOffset->isSuccess());
+    ASSERT_EQ(resultSortedOffset->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    auto resultSortedOffsetMissing = conn->query(
+        "MATCH (a:opt_degree_user)-[:opt_degree_follows]->(b) WHERE a.id = 99 RETURN count(*);");
+    ASSERT_TRUE(resultSortedOffsetMissing->isSuccess());
+    ASSERT_EQ(resultSortedOffsetMissing->getNext()->getValue(0)->getValue<int64_t>(), 0);
+
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE opt_sorted_user(id INT64, kind INT64, "
+                            "PRIMARY KEY(id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE opt_sorted_follows(FROM opt_sorted_user TO "
+                            "opt_sorted_user);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_sorted_user {id: 0, kind: 7});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_sorted_user {id: 1, kind: 6});")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_sorted_user), (b:opt_sorted_user) "
+                            "WHERE a.id = 0 AND b.id = 1 "
+                            "CREATE (a)-[:opt_sorted_follows]->(b);")
+                    ->isSuccess());
+    auto qCompositeSortedOffset =
+        "MATCH (a:opt_sorted_user)-[:opt_sorted_follows]->(b) WHERE a.id = 0 RETURN count(*);";
+    ASSERT_TRUE(
+        conn->query("ALTER TABLE opt_sorted_user SET SORTED BY (kind DESC, id ASC);")->isSuccess());
+    auto planCompositeNonLeadingPK = getRoot(qCompositeSortedOffset);
+    ASSERT_FALSE(hasOperatorType(planCompositeNonLeadingPK->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto resultCompositeNonLeadingPK = conn->query(qCompositeSortedOffset);
+    ASSERT_TRUE(resultCompositeNonLeadingPK->isSuccess());
+    ASSERT_EQ(resultCompositeNonLeadingPK->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(
+        conn->query("ALTER TABLE opt_sorted_user SET SORTED BY (id ASC, kind DESC);")->isSuccess());
+    auto planCompositeLeadingPK = getRoot(qCompositeSortedOffset);
+    ASSERT_TRUE(hasOperatorType(planCompositeLeadingPK->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto resultCompositeLeadingPK = conn->query(qCompositeSortedOffset);
+    ASSERT_TRUE(resultCompositeLeadingPK->isSuccess());
+    ASSERT_EQ(resultCompositeLeadingPK->getNext()->getValue(0)->getValue<int64_t>(), 1);
+
     auto q8 = "MATCH (u:opt_degree_user)-[:opt_degree_follows]->(v) RETURN count(DISTINCT u.id);";
     auto plan8 = getRoot(q8);
     ASSERT_TRUE(hasOperatorType(plan8->getLastOperator().get(),
@@ -497,6 +545,61 @@ TEST_F(StatsOptimizerTest, HashJoinCostIncludesEstimatedOutputCardinality) {
     const auto largeIntermediateCost =
         planner::CostModel::computeHashJoinCost(joinKeys, leftPlan, rightPlan, 500);
     ASSERT_LT(smallIntermediateCost, largeIntermediateCost);
+}
+
+TEST_F(OptimizerTest, RemoveUnnecessaryOrderByBeforeCountStar) {
+    // Issue #720: ORDER BY before LIMIT and COUNT(*) should be removed since
+    // COUNT(*) doesn't depend on ordering.
+    //
+    // Query: MATCH (n:person) WITH n ORDER BY n.ID LIMIT 5 RETURN count(*)
+    // Expected plan: AGGREGATE -> PROJECTION -> LIMIT -> ... (no ORDER BY)
+
+    auto q1 = "MATCH (n:person) WITH n ORDER BY n.ID LIMIT 5 RETURN count(*)";
+    auto plan1 = getRoot(q1);
+    // After optimization, there should be no ORDER_BY operator
+    ASSERT_FALSE(
+        hasOperatorType(plan1->getLastOperator().get(), planner::LogicalOperatorType::ORDER_BY))
+        << "ORDER BY should be removed before COUNT(*) aggregate";
+
+    // Note: Cypher requires ORDER BY in WITH to be followed by SKIP/LIMIT,
+    // so we can only test the common case with LIMIT here.
+
+    // Sanity check: ORDER BY before COUNT(*) with GROUP BY should be kept
+    // (the order influences which rows are grouped; the optimizer should not
+    // remove it since the issue specifically targets aggregates without keys)
+    auto q3 = "MATCH (n:person) WITH n ORDER BY n.ID LIMIT 5 RETURN n.isStudent, count(*)";
+    auto plan3 = getRoot(q3);
+    // With GROUP BY keys, ORDER BY might still be needed for LIMIT semantics
+    // We don't assert on this — just verify we don't crash.
+    ASSERT_TRUE(plan3 != nullptr);
+}
+
+TEST_F(OptimizerTest, RemoveUnnecessaryDistinctOnPrimaryKey) {
+    // Issue #721: DISTINCT on a primary-key column should be removed since
+    // the primary key is already unique.
+    //
+    // Expected plan: no DISTINCT operator
+
+    // Test: DISTINCT on primary key (no alias — key stays PropertyExpression)
+    auto q1 = "MATCH (n:person) RETURN DISTINCT n.ID";
+    auto plan1 = getRoot(q1);
+    ASSERT_FALSE(
+        hasOperatorType(plan1->getLastOperator().get(), planner::LogicalOperatorType::DISTINCT))
+        << "DISTINCT on primary key should be removed";
+
+    // Sanity check: DISTINCT on a non-primary-key column should be kept
+    auto q2 = "MATCH (n:person) RETURN DISTINCT n.age";
+    auto plan2 = getRoot(q2);
+    ASSERT_TRUE(
+        hasOperatorType(plan2->getLastOperator().get(), planner::LogicalOperatorType::DISTINCT))
+        << "DISTINCT on non-primary-key column should be kept";
+
+    // Sanity check: DISTINCT on a mix of PK and non-PK — the DISTINCT
+    // is still redundant since the PK alone guarantees uniqueness, but
+    // our optimizer only removes it when ALL (non-payload) keys are PKs.
+    auto q3 = "MATCH (n:person) RETURN DISTINCT n.ID, n.age";
+    auto plan3 = getRoot(q3);
+    ASSERT_TRUE(plan3 != nullptr);
 }
 
 } // namespace testing

@@ -201,9 +201,13 @@ void DatabaseManager::createGraph(const std::string& graphName,
     }
 
     graphs.push_back(std::move(catalog));
-    if (defaultGraph == "") {
-        defaultGraph = graphName;
-    }
+    // NOTE: Do NOT set defaultGraph here. Setting defaultGraph before the transaction
+    // commits causes Catalog::Get() in Transaction::publishCommit() to return the graph's
+    // catalog instead of the main catalog, so the main catalog's version is never
+    // incremented. Without the version bump, the CHECKPOINT path skips serializing the
+    // main catalog (because changedSinceLastCheckpoint() is false), and the graph catalog
+    // entry in the main catalog's `graphs` set is lost on reopen.
+    // Users must explicitly USE GRAPH to work in the graph.
 }
 
 void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContext* clientContext) {
@@ -336,10 +340,8 @@ void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManage
 
         graphs.push_back(std::move(catalog));
 
-        // Set first loaded graph as default if no default set
-        if (defaultGraph == "") {
-            defaultGraph = graphName;
-        }
+        // NOTE: Do NOT set defaultGraph here (see createGraph for rationale).
+        // Users must explicitly USE GRAPH to work in the graph.
     }
 }
 
@@ -393,6 +395,36 @@ std::vector<catalog::Catalog*> DatabaseManager::getGraphs() const {
         result.push_back(graph.get());
     }
     return result;
+}
+
+std::pair<catalog::Catalog*, storage::StorageManager*> DatabaseManager::resolveTableStorage(
+    const ClientContext& context, common::table_id_t tableID, const std::string& dbName) {
+    if (!dbName.empty()) {
+        auto* attachedDB = DatabaseManager::Get(context)->getAttachedDatabase(dbName);
+        if (attachedDB->getDBType() == common::ATTACHED_LBUG_DB_TYPE) {
+            auto* attachedLbug = static_cast<main::AttachedLbugDatabase*>(attachedDB);
+            if (attachedLbug->getStorageManager()->containsTable(tableID)) {
+                return {attachedDB->getCatalog(), attachedLbug->getStorageManager()};
+            }
+        }
+        throw common::RuntimeException(
+            std::format("Table with ID {} not found in database {}.", tableID, dbName));
+    }
+    auto* mainSM = storage::StorageManager::Get(context);
+    if (mainSM->containsTable(tableID)) {
+        return {catalog::Catalog::Get(context), mainSM};
+    }
+    auto* dbManager = DatabaseManager::Get(context);
+    for (auto* attachedDB : dbManager->getAttachedDatabases()) {
+        if (attachedDB->getDBType() == common::ATTACHED_LBUG_DB_TYPE) {
+            auto* attachedLbug = static_cast<main::AttachedLbugDatabase*>(attachedDB);
+            if (attachedLbug->getStorageManager()->containsTable(tableID)) {
+                return {attachedDB->getCatalog(), attachedLbug->getStorageManager()};
+            }
+        }
+    }
+    throw common::RuntimeException(
+        std::format("Table with ID {} not found in any attached database.", tableID));
 }
 
 } // namespace main

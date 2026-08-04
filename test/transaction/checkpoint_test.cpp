@@ -853,5 +853,103 @@ TEST_F(ReviewFixesTest, RecoverFromFailedCheckpointAfterAddColumn) {
     ASSERT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), 42);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Regression test for: subgraph catalog writes lost after checkpoint + reopen
+// when the main database has pre-existing tables.
+//
+// Bug: DatabaseManager::createGraph() set defaultGraph to the newly created
+// graph before the transaction committed, causing Catalog::Get() in
+// Transaction::publishCommit() to return the graph's catalog instead of the
+// main catalog.  The main catalog's version was never incremented, so
+// CHECKPOINT skipped serializing it (changedSinceLastCheckpoint() was false)
+// and the graph entry in the main catalog's `graphs` set was lost on reopen.
+//
+// This only manifested when the database already had tables (a valid
+// catalogPageRange from a previous checkpoint), because with a bare database
+// the first-time-serialization path (INVALID_PAGE_IDX) rescued the data.
+// ─────────────────────────────────────────────────────────────────────────────
+TEST_F(ReviewFixesTest, SubgraphCatalogPersistsAfterCheckpointWithPreExistingTables) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+
+    // ---- Phase 1: create pre-existing tables (like Hyper-Extract does) ----
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE IF NOT EXISTS Template ("
+                            "name STRING, domain STRING, type STRING, tags STRING, "
+                            "description STRING, language STRING, output STRING, "
+                            "guideline STRING, identifiers STRING, opts STRING, display STRING, "
+                            "PRIMARY KEY (name));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE IF NOT EXISTS KnowledgeAbstract ("
+                            "id STRING, template_name STRING, lang STRING, type STRING, "
+                            "created_at STRING, updated_at STRING, metadata STRING, "
+                            "PRIMARY KEY (id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE IF NOT EXISTS Entity ("
+                            "id STRING, ka_id STRING, entity_type STRING, data STRING, "
+                            "PRIMARY KEY (id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE IF NOT EXISTS Relates ("
+                            "FROM Entity TO Entity, ka_id STRING, "
+                            "relation_type STRING, data STRING"
+                            ");")
+                    ->isSuccess());
+
+    // First checkpoint: persist the schema so the data file has a valid
+    // catalogPageRange.  Without this the bug would be masked (the first
+    // checkpoint after graph creation would serialize unconditionally).
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_FALSE(std::filesystem::exists(StorageUtils::getCheckpointWALFilePath(databasePath)));
+
+    // ---- Phase 2: create a subgraph and checkpoint ----
+    ASSERT_TRUE(conn->query("CREATE GRAPH regression_test;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_FALSE(std::filesystem::exists(StorageUtils::getCheckpointWALFilePath(databasePath)));
+
+    // ---- Phase 3: reopen the database ----
+    auto graphName = conn->query("CALL show_graphs() RETURN name ORDER BY name;");
+    ASSERT_TRUE(graphName->isSuccess()) << graphName->getErrorMessage();
+    ASSERT_TRUE(graphName->hasNext());
+    // The subgraph must be visible in the current process already.
+    std::vector<std::string> graphsBeforeReopen;
+    while (graphName->hasNext()) {
+        graphsBeforeReopen.push_back(graphName->getNext()->getValue(0)->getValue<std::string>());
+    }
+    ASSERT_EQ(graphsBeforeReopen.size(), 1);
+    ASSERT_EQ(graphsBeforeReopen[0], "regression_test");
+    graphName.reset();
+
+    // Reopen the database in a fresh connection (simulates a new process).
+    createDBAndConn();
+
+    // ---- Phase 4: verify the subgraph survived ----
+    auto result = conn->query("CALL show_graphs() RETURN name ORDER BY name;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    std::vector<std::string> graphs;
+    while (result->hasNext()) {
+        graphs.push_back(result->getNext()->getValue(0)->getValue<std::string>());
+    }
+
+    // The list should include the subgraph created above.
+    bool found = false;
+    for (const auto& g : graphs) {
+        if (g == "regression_test") {
+            found = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found) << "Subgraph 'regression_test' was lost after checkpoint + reopen. "
+                       << "Visible graphs count: " << graphs.size();
+
+    // Also verify we can USE GRAPH and see at least the main database tables
+    // (proving the main catalog itself was correctly restored).
+    ASSERT_TRUE(conn->query("USE GRAPH regression_test;")->isSuccess());
+    auto tables = conn->query("CALL show_tables() RETURN name ORDER BY name;");
+    ASSERT_TRUE(tables->isSuccess()) << tables->getErrorMessage();
+    // Clean up
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+}
+
 } // namespace testing
 } // namespace lbug

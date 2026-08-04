@@ -37,6 +37,15 @@ std::unique_ptr<TableCatalogEntry> TableCatalogEntry::alter(transaction_t timest
         auto& commentInfo = *alterInfo.extraInfo->constPtrCast<BoundExtraCommentInfo>();
         newEntry->setComment(commentInfo.comment);
     } break;
+    case AlterType::SET_SORTED_BY: {
+        auto& sortedByInfo = *alterInfo.extraInfo->constPtrCast<BoundExtraSetSortedByInfo>();
+        std::vector<SortedByProperty> properties;
+        properties.reserve(sortedByInfo.properties.size());
+        for (auto& property : sortedByInfo.properties) {
+            properties.push_back(SortedByProperty{property.propertyName, property.ascending});
+        }
+        newEntry->ptrCast<NodeTableCatalogEntry>()->setSortedByProperties(std::move(properties));
+    } break;
     case AlterType::ADD_FROM_TO_CONNECTION: {
         auto& connectionInfo =
             *alterInfo.extraInfo->constPtrCast<BoundExtraAlterFromToConnection>();

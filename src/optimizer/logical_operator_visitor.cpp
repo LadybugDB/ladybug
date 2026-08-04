@@ -70,6 +70,9 @@ void LogicalOperatorVisitor::visitOperatorSwitch(LogicalOperator* op) {
     case LogicalOperatorType::PROJECTION: {
         visitProjection(op);
     } break;
+    case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP: {
+        visitQueryPrimaryKeyLookup(op);
+    } break;
     case LogicalOperatorType::RECURSIVE_EXTEND: {
         visitRecursiveExtend(op);
     } break;
@@ -164,6 +167,9 @@ std::shared_ptr<LogicalOperator> LogicalOperatorVisitor::visitOperatorReplaceSwi
     }
     case LogicalOperatorType::PROJECTION: {
         return visitProjectionReplace(op);
+    }
+    case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP: {
+        return visitQueryPrimaryKeyLookupReplace(op);
     }
     case LogicalOperatorType::RECURSIVE_EXTEND: {
         return visitRecursiveExtendReplace(op);

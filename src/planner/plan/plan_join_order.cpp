@@ -52,9 +52,39 @@ LogicalPlan Planner::planQueryGraphCollection(const QueryGraphCollection& queryG
         // product.
         queryGraphIdxToPlanExpressionsScan = getConnectedQueryGraphIdx(queryGraphCollection, info);
     }
+    // First pass: determine which disconnected graphs contain only correlated nodes.
+    // These patterns reference already-bound variables without adding new constraints
+    // (e.g. `(n3)` in OPTIONAL MATCH where n3 is from the outer plan). Skipping them
+    // avoids a full node-table scan that would artificially multiply cardinality (#697).
+    std::vector<bool> skipGraph(queryGraphCollection.getNumQueryGraphs(), false);
+    bool anyNonSkipped = false;
+    for (auto i = 0u; i < queryGraphCollection.getNumQueryGraphs(); ++i) {
+        auto queryGraph = queryGraphCollection.getQueryGraph(i);
+        if (queryGraph->getNumQueryRels() == 0 && info.subqueryType != SubqueryPlanningType::NONE) {
+            bool allNodesCorrelated = true;
+            for (auto& node : queryGraph->getQueryNodes()) {
+                if (!info.containsCorrExpr(*node->getInternalID())) {
+                    allNodesCorrelated = false;
+                    break;
+                }
+            }
+            skipGraph[i] = allNodesCorrelated;
+        }
+        if (!skipGraph[i]) {
+            anyNonSkipped = true;
+        }
+    }
+    // If every graph would be skipped, preserve the first one to keep the plan valid.
+    if (!anyNonSkipped && queryGraphCollection.getNumQueryGraphs() > 0) {
+        skipGraph[0] = false;
+    }
+
     std::unordered_set<uint32_t> evaluatedPredicatesIndices;
     std::vector<LogicalPlan> planPerQueryGraph;
     for (auto i = 0u; i < queryGraphCollection.getNumQueryGraphs(); ++i) {
+        if (skipGraph[i]) {
+            continue;
+        }
         auto queryGraph = queryGraphCollection.getQueryGraph(i);
         // Extract predicates for current query graph
         std::unordered_set<uint32_t> predicateToEvaluateIndices;
@@ -264,18 +294,23 @@ void Planner::planNodeScan(uint32_t nodePos) {
     newSubgraph.addQueryNode(nodePos);
     auto plan = LogicalPlan();
     auto properties = getProperties(*node);
-    if (node->getEntries().size() == 1 &&
-        node->getEntries()[0]->getType() == catalog::CatalogEntryType::FOREIGN_TABLE_ENTRY) {
+    if (node->getEntries().size() == 1) {
+        // getBoundScanInfo is the polymorphic authority: it returns non-null iff the
+        // entry (or its referenced foreign entry) provides a scan function, covering
+        // both FOREIGN_TABLE_ENTRY and shadow NODE_TABLE_ENTRY cases.  Regular native
+        // entries return nullptr here, falling through to appendScanNodeTable.
         auto boundScanInfo =
             node->getEntries()[0]->getBoundScanInfo(clientContext, node->getUniqueName());
         if (boundScanInfo != nullptr) {
-            // Use table function call for foreign tables
+            // Use table function call for entries that supply a scan function
             appendTableFunctionCall(*boundScanInfo, plan);
         } else {
-            appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan);
+            appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan,
+                node.get());
         }
     } else {
-        appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan);
+        appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan,
+            node.get());
     }
     auto predicates = getNewlyMatchedExprs(context.getEmptySubqueryGraph(), newSubgraph,
         context.getWhereExpressions());
@@ -288,7 +323,7 @@ void Planner::planNodeIDScan(uint32_t nodePos) {
     auto newSubgraph = context.getEmptySubqueryGraph();
     newSubgraph.addQueryNode(nodePos);
     auto plan = LogicalPlan();
-    appendScanNodeTable(node->getInternalID(), node->getTableIDs(), {}, plan);
+    appendScanNodeTable(node->getInternalID(), node->getTableIDs(), {}, plan, node.get());
     context.addPlan(newSubgraph, std::move(plan));
 }
 
@@ -334,7 +369,8 @@ void Planner::planRelScan(uint32_t relPos, const QueryGraphPlanningInfo& info) {
             auto nbrNode = srcCorrelated ? dstNode : srcNode;
             auto plan = LogicalPlan();
             const auto extendDirection = getExtendDirection(*rel, *boundNode);
-            appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan);
+            appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan,
+                boundNode.get());
             // Use PackedExtend for eligible single-rel seeds so the bound node group stays unflat.
             // tryPlanPackedINLJoin depends on this when attaching a second rel as a sibling.
             if (clientContext->getClientConfig()->enablePackedPathExtend &&
@@ -355,7 +391,8 @@ void Planner::planRelScan(uint32_t relPos, const QueryGraphPlanningInfo& info) {
         auto plan = LogicalPlan();
         auto [boundNode, nbrNode] = getBoundAndNbrNodes(*rel, direction);
         const auto extendDirection = getExtendDirection(*rel, *boundNode);
-        appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan);
+        appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan,
+            boundNode.get());
         // Use PackedExtend for eligible single-rel seeds so the bound node group stays unflat.
         // tryPlanPackedINLJoin depends on this when attaching a second rel as a sibling.
         if (clientContext->getClientConfig()->enablePackedPathExtend &&

@@ -65,6 +65,8 @@ struct LBUG_API SystemConfig {
      * @param throwOnWalReplayFailure If true, any WAL replaying failure when loading the database
      * will throw an error. Otherwise, Lbug will silently ignore the failure and replay up to where
      * the error occured.
+     * Default is false: on a torn tail (e.g. after a crash), the database opens with all data
+     * up to the last checkpoint, discarding only the unreplayable tail.
      * @param enableChecksums If true, the database will use checksums to detect corruption in the
      * WAL file.
      * @param enableMultiWrites If true, multiple concurrent write transactions are allowed.
@@ -75,7 +77,7 @@ struct LBUG_API SystemConfig {
     explicit SystemConfig(uint64_t bufferPoolSize = -1u, uint64_t maxNumThreads = 0,
         bool enableCompression = true, bool readOnly = false, uint64_t maxDBSize = -1u,
         bool autoCheckpoint = true, uint64_t checkpointThreshold = 16777216 /* 16MB */,
-        bool forceCheckpointOnClose = true, bool throwOnWalReplayFailure = true,
+        bool forceCheckpointOnClose = true, bool throwOnWalReplayFailure = false,
         bool enableChecksums = true, bool enableMultiWrites = false,
         bool enableDefaultHashIndex = true
 #if defined(__APPLE__)

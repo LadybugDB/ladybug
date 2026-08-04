@@ -12,10 +12,16 @@ struct RewriteFunctionBindInput {
     main::ClientContext* context;
     binder::ExpressionBinder* expressionBinder;
     binder::expression_vector arguments;
+    // The as-invoked, normalized (upper-case) function name, e.g. "LABEL" vs "LABELS".
+    // Empty when a rewrite is precomputed directly (bypassing the binder); callers use the
+    // empty form to request the legacy/full-list behavior.
+    std::string functionName;
 
     RewriteFunctionBindInput(main::ClientContext* context,
-        binder::ExpressionBinder* expressionBinder, binder::expression_vector arguments)
-        : context{context}, expressionBinder{expressionBinder}, arguments{std::move(arguments)} {}
+        binder::ExpressionBinder* expressionBinder, binder::expression_vector arguments,
+        std::string functionName = "")
+        : context{context}, expressionBinder{expressionBinder}, arguments{std::move(arguments)},
+          functionName{std::move(functionName)} {}
 };
 
 // Rewrite function to a different expression, e.g. id(n) -> n._id.
