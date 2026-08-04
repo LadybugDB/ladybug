@@ -18,11 +18,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 set(CMAKE_FIND_PACKAGE_RESOLVE_SYMLINKS TRUE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-# On Linux, symbols in executables are not accessible by loaded shared libraries (e.g. via dlopen(3)). However, we need to export public symbols in executables so that extensions can access public symbols. This enables that behaviour.
 set(CMAKE_ENABLE_EXPORTS TRUE)
 
-# When building tests, we need all symbols visible so tests can link to the shared library
-# instead of static linking (which bloats binary sizes significantly)
 option(BUILD_TESTS "Build C++ tests." FALSE)
 option(BUILD_EXTENSION_TESTS "Build C++ extension tests." FALSE)
 if(BUILD_TESTS OR BUILD_EXTENSION_TESTS)
@@ -46,7 +43,6 @@ if(ENABLE_WERROR)
     endif()
 endif()
 
-# Detect OS and architecture, copied from DuckDB
 set(OS_NAME "unknown")
 set(OS_ARCH "amd64")
 
@@ -67,9 +63,7 @@ if(APPLE)
 endif()
 if(WIN32)
   set(OS_NAME "windows")
-  # Prevent Windows min/max macros from breaking std::min/std::max (needed for Clang-on-Windows too)
   add_compile_definitions(NOMINMAX)
-  # Required for Windows SDK headers (winnt.h) when using Clang; MSVC branch sets the target arch later.
   if(OS_ARCH STREQUAL "arm64")
     add_compile_definitions(_ARM64_)
     add_compile_definitions(PCG_LITTLE_ENDIAN=1)
@@ -80,7 +74,7 @@ if(WIN32)
   endif()
 endif()
 if(UNIX AND NOT APPLE)
-  set(OS_NAME "linux") # sorry BSD
+  set(OS_NAME "linux")
 endif()
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -118,18 +112,10 @@ else ()
     endif ()
 endif ()
 
-set(INSTALL_LIB_DIR
-        lib
-        CACHE PATH "Installation directory for libraries")
-set(INSTALL_BIN_DIR
-        bin
-        CACHE PATH "Installation directory for executables")
-set(INSTALL_INCLUDE_DIR
-        include
-        CACHE PATH "Installation directory for header files")
-set(INSTALL_CMAKE_DIR
-        ${DEF_INSTALL_CMAKE_DIR}
-        CACHE PATH "Installation directory for CMake files")
+set(INSTALL_LIB_DIR lib CACHE PATH "Installation directory for libraries")
+set(INSTALL_BIN_DIR bin CACHE PATH "Installation directory for executables")
+set(INSTALL_INCLUDE_DIR include CACHE PATH "Installation directory for header files")
+set(INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH "Installation directory for CMake files")
 
 option(ENABLE_ADDRESS_SANITIZER "Enable address sanitizer." FALSE)
 option(ENABLE_THREAD_SANITIZER "Enable thread sanitizer." FALSE)
@@ -153,14 +139,11 @@ if(NOT LBUG_VECTOR_CAPACITY_LOG2)
     set(LBUG_VECTOR_CAPACITY_LOG2 11)
 endif()
 message(STATUS "LBUG_VECTOR_CAPACITY_LOG2: ${LBUG_VECTOR_CAPACITY_LOG2}")
-
-# 64 * 2048 nodes per group
 option(LBUG_NODE_GROUP_SIZE_LOG2 "Log2 of the vector capacity." 17)
 if(NOT LBUG_NODE_GROUP_SIZE_LOG2)
     set(LBUG_NODE_GROUP_SIZE_LOG2 17)
 endif()
 message(STATUS "LBUG_NODE_GROUP_SIZE_LOG2: ${LBUG_NODE_GROUP_SIZE_LOG2}")
-
 option(LBUG_MAX_SEGMENT_SIZE_LOG2 "Log2 of the maximum segment size in bytes." 18)
 if(NOT LBUG_MAX_SEGMENT_SIZE_LOG2)
     set(LBUG_MAX_SEGMENT_SIZE_LOG2 18)
@@ -173,54 +156,39 @@ include(CheckCXXSymbolExists)
 check_cxx_symbol_exists(F_FULLFSYNC "fcntl.h" HAS_FULLFSYNC)
 check_cxx_symbol_exists(fdatasync "unistd.h" HAS_FDATASYNC)
 if(HAS_FULLFSYNC)
-    message(STATUS "✓ F_FULLFSYNC will be used on this platform")
+    message(STATUS "F_FULLFSYNC will be used on this platform")
     add_compile_definitions(HAS_FULLFSYNC)
 else()
-    message(STATUS "✗ F_FULLFSYNC not available")
+    message(STATUS "F_FULLFSYNC not available")
 endif()
 
 if(HAS_FDATASYNC)
-    message(STATUS "✓ fdatasync will be used on this platform")
+    message(STATUS "fdatasync will be used on this platform")
     add_compile_definitions(HAS_FDATASYNC)
 else()
-    message(STATUS "✗ fdatasync not available, using fsync fallback")
+    message(STATUS "fdatasync not available, using fsync fallback")
 endif()
 
 if(MSVC)
-    # Required for M_PI on Windows
     add_compile_definitions(_USE_MATH_DEFINES)
     add_compile_definitions(NOMINMAX)
     add_compile_definitions(SERD_STATIC)
-    # This is a workaround for regex oom issue on windows in gtest.
     add_compile_definitions(_REGEX_MAX_STACK_COUNT=0)
     add_compile_definitions(_REGEX_MAX_COMPLEXITY_COUNT=0)
-    # Disable constexpr mutex constructor to avoid compatibility issues with
-    # older versions of the MSVC runtime library
-    # See: https://github.com/microsoft/STL/wiki/Changelog#vs-2022-1710
     add_compile_definitions(_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
-    # Windows target architecture macros are set above from the detected compiler target.
-    # Non-english windows system may use other encodings other than utf-8 (e.g. Chinese use GBK).
     add_compile_options("/utf-8")
-    # Enables support for custom hardware exception handling
     add_compile_options("/EHa")
-    # Reduces the size of the static library by roughly 1/2
     add_compile_options("/Zc:inline")
-    # Disable type conversion warnings
     add_compile_options(/wd4244 /wd4267)
-    # Remove the default to avoid warnings
     STRING(REPLACE "/EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
     STRING(REPLACE "/EHs" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    # Store all libraries and binaries in the same directory so that lbug_shared.dll is found at runtime
     set(LIBRARY_OUTPUT_PATH "${CMAKE_BINARY_DIR}/src")
     set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}/src")
-    # This is a workaround for regex stackoverflow issue on windows in gtest.
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:8388608")
-
     string(REGEX REPLACE "/W[3|4]" "/w" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
     add_compile_options($<$<CONFIG:Release>:/W0>)
 else()
     add_compile_options(-Wall -Wextra)
-    # Disable warnings for unknown pragmas, which is used by several third-party libraries
     add_compile_options(-Wno-unknown-pragmas)
 endif()
 
@@ -236,11 +204,7 @@ if(${BUILD_WASM})
     add_link_options(-sASSERTIONS=1)
     add_link_options(-lembind)
     add_link_options(-sWASM_BIGINT)
-
     if(BUILD_TESTS OR BUILD_EXTENSION_TESTS)
-        # Tests need full host filesystem access via legacy NODERAWFS.
-        # WASMFS's NODERAWFS backend does not support recursive_directory_iterator
-        # which is required for test discovery and test file scanning.
         add_link_options(-sINITIAL_MEMORY=3892MB)
         add_link_options(-sNODERAWFS=1)
     elseif(WASM_NODEFS)
@@ -259,11 +223,6 @@ if(${BUILD_WASM})
         add_link_options(-sEXPORT_NAME=lbug)
         add_link_options(-sMAXIMUM_MEMORY=4GB)
         if(NOT __SINGLE_THREADED__)
-            # OPFS requires pthreads — the Emscripten OPFS JS backend
-            # (-lopfs.js) internally uses _emscripten_proxy_finish which is
-            # only defined when pthreads are enabled.  Linking -lopfs.js
-            # without -pthread causes wasmfsOPFSProxyFinish to compile as a
-            # no-op, leading to UNREACHABLE at opfs_backend.cpp:292.
             add_link_options(-lopfs.js)
             add_link_options(-sEXPORTED_RUNTIME_METHODS=FS,wasmMemory,allocateUTF8)
             add_link_options("-sEXPORTED_FUNCTIONS=_free,_wasmfs_create_opfs_backend,_wasmfs_create_directory")
@@ -295,7 +254,7 @@ if(ANDROID_ABI)
 endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    add_compile_options(-Wno-restrict) # no restrict until https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105651 is fixed
+    add_compile_options(-Wno-restrict)
 endif()
 
 if(${ENABLE_THREAD_SANITIZER} AND (NOT __SINGLE_THREADED__))
@@ -408,18 +367,10 @@ function(add_lbug_test TEST_NAME)
     endif()
     target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_SOURCE_DIR}/test/include)
     include(GoogleTest)
-
     if (TEST_NAME STREQUAL "e2e_test")
-        gtest_discover_tests(${TEST_NAME}
-            DISCOVERY_TIMEOUT 600
-            DISCOVERY_MODE PRE_TEST
-            TEST_PREFIX e2e_test_
-        )
+        gtest_discover_tests(${TEST_NAME} DISCOVERY_TIMEOUT 600 DISCOVERY_MODE PRE_TEST TEST_PREFIX e2e_test_)
     else()
-        gtest_discover_tests(${TEST_NAME}
-            DISCOVERY_TIMEOUT 600
-            DISCOVERY_MODE PRE_TEST
-        )
+        gtest_discover_tests(${TEST_NAME} DISCOVERY_TIMEOUT 600 DISCOVERY_MODE PRE_TEST)
     endif()
 endfunction()
 
@@ -435,7 +386,6 @@ function(add_lbug_api_test TEST_NAME)
     gtest_discover_tests(${TEST_NAME})
 endfunction()
 
-# Windows doesn't support dynamic lookup, so we have to link extensions against lbug.
 if (MSVC AND (NOT "${BUILD_EXTENSIONS}" STREQUAL "") AND NOT LBUG_API_USE_PRECOMPILED_LIB)
     set(BUILD_LBUG TRUE)
 endif ()
@@ -485,13 +435,20 @@ if (ENABLE_BACKTRACES)
     list(APPEND LBUG_LINK_LIBRARIES cpptrace::cpptrace)
 endif()
 if (NOT BUILD_WASM)
-    find_package(OpenSSL 3 REQUIRED)
-    # Prefer modern imported targets when available (OpenSSL 3 provides OpenSSL::SSL/OpenSSL::Crypto)
-    if (TARGET OpenSSL::SSL AND TARGET OpenSSL::Crypto)
-        list(APPEND LBUG_LINK_LIBRARIES OpenSSL::SSL OpenSSL::Crypto)
+    # OpenSSL 3 is optional: extension download over HTTPS requires it, but the
+    # core database compiles and runs without it.  Using QUIET + guard instead of
+    # REQUIRED allows Windows builds (where OpenSSL 3 is typically not installed)
+    # and minimal CI environments to succeed without external dependencies.
+    find_package(OpenSSL 3 QUIET)
+    if (OpenSSL_FOUND)
+        message(STATUS "OpenSSL 3 found — enabling HTTPS for extension downloads")
+        if (TARGET OpenSSL::SSL AND TARGET OpenSSL::Crypto)
+            list(APPEND LBUG_LINK_LIBRARIES OpenSSL::SSL OpenSSL::Crypto)
+        else()
+            list(APPEND LBUG_LINK_LIBRARIES ${OPENSSL_LIBRARIES})
+        endif()
     else()
-        # Fallback to legacy variables for older CMake/OpenSSL packaging
-        list(APPEND LBUG_LINK_LIBRARIES ${OPENSSL_LIBRARIES})
+        message(STATUS "OpenSSL 3 not found — building without HTTPS extension download support")
     endif()
 endif()
 target_link_libraries(lbug_link_deps INTERFACE ${LBUG_LINK_LIBRARIES})
@@ -516,7 +473,6 @@ if(BUILD_LBUG)
 
 add_subdirectory(src)
 
-# Link extensions which require static linking.
 foreach(ext IN LISTS STATICALLY_LINKED_EXTENSIONS)
     if (${BUILD_EXTENSION_TESTS})
         add_compile_definitions(__STATIC_LINK_EXTENSION_TEST__)
@@ -529,11 +485,6 @@ foreach(ext IN LISTS STATICALLY_LINKED_EXTENSIONS)
     endif()
 endforeach()
 
-# Emscripten does not produce a useful native shared lib here; the wasm package
-# and tests link everything into final JS/wasm artifacts. Keep the legacy
-# lbug_shared target name available for existing consumers, but make it resolve
-# to the static wasm library after real library setup and static extension
-# linking are complete.
 if(EMSCRIPTEN AND TARGET lbug AND NOT TARGET lbug_shared)
     add_library(lbug_shared ALIAS lbug)
 endif()
