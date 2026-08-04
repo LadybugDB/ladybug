@@ -173,6 +173,23 @@ void Catalog::dropTableEntry(Transaction* transaction, table_id_t tableID) {
 
 void Catalog::dropTableEntry(Transaction* transaction, const TableCatalogEntry* entry) {
     dropSerialSequence(transaction, entry);
+    if (auto* nodeEntry = dynamic_cast<const NodeTableCatalogEntry*>(entry);
+        nodeEntry != nullptr && nodeEntry->isPartitioned()) {
+        // Dropping a partitioned parent drops all of its partition subgraph node tables.
+        // Children may already have been dropped individually by the caller; skip those.
+        for (auto childID : nodeEntry->getChildTableIDs()) {
+            if (!containsTable(transaction, childID)) {
+                continue;
+            }
+            auto* child = getTableCatalogEntry(transaction, childID);
+            dropSerialSequence(transaction, child);
+            if (tables->containsEntry(transaction, child->getName())) {
+                tables->dropEntry(transaction, child->getName(), child->getOID());
+            } else {
+                internalTables->dropEntry(transaction, child->getName(), child->getOID());
+            }
+        }
+    }
     if (tables->containsEntry(transaction, entry->getName())) {
         tables->dropEntry(transaction, entry->getName(), entry->getOID());
     } else {
@@ -571,7 +588,34 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
     createSerialSequence(transaction, entry.get(), info.isInternal);
     auto catalogSet = info.isInternal ? internalTables.get() : tables.get();
     catalogSet->createEntry(transaction, std::move(entry));
-    return catalogSet->getEntry(transaction, info.tableName);
+    auto* parentEntry = catalogSet->getEntry(transaction, info.tableName);
+
+    // PostgreSQL-style partitioning: the logical parent owns the schema but no physical storage.
+    // Each partition is a separate node-table subgraph. Partitions are kept in the same public
+    // catalog set as the parent so they get normal (small) table IDs: several execution-storage
+    // structures index state by table ID, and internal entries carry OIDs near 2^63 which would
+    // otherwise blow those up.
+    if (extraInfo->partitionInfo.has_value()) {
+        auto* parent = parentEntry->ptrCast<NodeTableCatalogEntry>();
+        const auto& partitionInfo = *extraInfo->partitionInfo;
+        auto partitionColumnID = parent->getPropertyID(partitionInfo.columnName);
+        parent->setPartitionInfo(partitionInfo.method, partitionInfo.columnName, partitionColumnID,
+            partitionInfo.numPartitions);
+        for (auto i = 0u; i < partitionInfo.numPartitions; i++) {
+            auto childName = std::format("{}_p{}", info.tableName, i);
+            auto child = std::make_unique<NodeTableCatalogEntry>(childName,
+                extraInfo->primaryKeyName, extraInfo->storage, extraInfo->storageFormat);
+            for (auto& definition : extraInfo->propertyDefinitions) {
+                child->addProperty(definition.copy());
+            }
+            child->setHasParent(info.hasParent);
+            child->setParentInfo(parent->getTableID(), i);
+            createSerialSequence(transaction, child.get(), info.isInternal);
+            auto childOID = catalogSet->createEntry(transaction, std::move(child));
+            parent->addChildTableID(childOID);
+        }
+    }
+    return parentEntry;
 }
 
 void Catalog::createSerialSequence(Transaction* transaction, const TableCatalogEntry* entry,

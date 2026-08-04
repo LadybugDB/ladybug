@@ -114,6 +114,8 @@ GRAPH : ( 'G' | 'g' ) ( 'R' | 'r' ) ( 'A' | 'a' ) ( 'P' | 'p' ) ( 'H' | 'h' ) ;
 
 GROUP : ( 'G' | 'g' ) ( 'R' | 'r' ) ( 'O' | 'o' ) ( 'U' | 'u' ) ( 'P' | 'p' ) ;
 
+HASH : ( 'H' | 'h' ) ( 'A' | 'a' ) ( 'S' | 's' ) ( 'H' | 'h' ) ;
+
 HEADERS : ( 'H' | 'h' ) ( 'E' | 'e' ) ( 'A' | 'a' ) ( 'D' | 'd' ) ( 'E' | 'e' ) ( 'R' | 'r' ) ( 'S' | 's' ) ;
 
 HINT : ( 'H' | 'h' ) ( 'I' | 'i' ) ( 'N' | 'n' ) ( 'T' | 't' ) ;
@@ -182,6 +184,8 @@ PROFILE : ( 'P' | 'p' ) ( 'R' | 'r' ) ( 'O' | 'o' ) ( 'F' | 'f' ) ( 'I' | 'i' ) 
 
 PROJECT : ( 'P' | 'p' ) ( 'R' | 'r' ) ( 'O' | 'o' ) ( 'J' | 'j' ) ( 'E' | 'e' ) ( 'C' | 'c' ) ( 'T' | 't' ) ;
 
+RANGE : ( 'R' | 'r' ) ( 'A' | 'a' ) ( 'N' | 'n' ) ( 'G' | 'g' ) ( 'E' | 'e' ) ;
+
 READ : ( 'R' | 'r' ) ( 'E' | 'e' ) ( 'A' | 'a' ) ( 'D' | 'd' ) ;
 
 REL : ( 'R' | 'r' ) ( 'E' | 'e' ) ( 'L' | 'l' ) ;
@@ -249,6 +253,10 @@ SINGLE : ( 'S' | 's' ) ( 'I' | 'i' ) ( 'N' | 'n' ) ( 'G' | 'g' ) ( 'L' | 'l' ) (
 YIELD : ( 'Y' | 'y' ) ( 'I' | 'i' ) ( 'E' | 'e' ) ( 'L' | 'l' ) ( 'D' | 'd' ) ;
 
 USER : ( 'U' | 'u' ) ( 'S' | 's' ) ( 'E' | 'e' ) ( 'R' | 'r' ) ;
+
+PARTITION : ( 'P' | 'p' ) ( 'A' | 'a' ) ( 'R' | 'r' ) ( 'T' | 't' ) ( 'I' | 'i' ) ( 'T' | 't' ) ( 'I' | 'i' ) ( 'O' | 'o' ) ( 'N' | 'n' ) ;
+
+PARTITIONS : ( 'P' | 'p' ) ( 'A' | 'a' ) ( 'R' | 'r' ) ( 'T' | 't' ) ( 'I' | 'i' ) ( 'T' | 't' ) ( 'I' | 'i' ) ( 'O' | 'o' ) ( 'N' | 'n' ) ( 'S' | 's' ) ;
 
 PASSWORD : ( 'P' | 'p' ) ( 'A' | 'a' ) ( 'S' | 's' ) ( 'S' | 's' ) ( 'W' | 'w' ) ( 'O' | 'o' ) ( 'R' | 'r' ) ( 'D' | 'd' ) ;
 
@@ -373,7 +381,18 @@ iC_IfNotExists
     : IF SP NOT SP EXISTS ;
 
 iC_CreateNodeTable
-    : CREATE SP NODE SP TABLE SP (iC_IfNotExists SP)? oC_SchemaName ( SP? '(' SP? iC_PropertyDefinitions SP? ( ',' SP? iC_CreateNodeConstraint )? SP? ')' | SP AS SP oC_Query ) ( SP WITH SP? '(' SP? iC_Options SP? ')')? ;
+    : CREATE SP NODE SP TABLE SP (iC_IfNotExists SP)? oC_SchemaName ( SP? '(' SP? iC_PropertyDefinitions SP? ( ',' SP? iC_CreateNodeConstraint )? SP? ')' | SP AS SP oC_Query ) ( SP WITH SP? '(' SP? iC_Options SP? ')')? ( SP iC_PartitionBy )? ;
+
+// PostgreSQL-style partitioning. A node table can be declared as a partitioned parent,
+// where each partition is backed by its own subgraph (a hidden node table).
+iC_PartitionBy
+    : PARTITION SP BY SP ( iC_PartitionRange | iC_PartitionHash ) ;
+
+iC_PartitionHash
+    : HASH SP? '(' SP? oC_PropertyKeyName SP? ')' SP PARTITIONS SP oC_IntegerLiteral ;
+
+iC_PartitionRange
+    : RANGE SP? '(' SP? oC_PropertyKeyName SP? ')' SP PARTITIONS SP oC_IntegerLiteral ;
 
 iC_CreateRelTable
     : CREATE SP REL SP TABLE ( SP GROUP )? ( SP iC_IfNotExists )? SP oC_SchemaName
@@ -1058,6 +1077,7 @@ iC_NonReservedKeywords
         | EXTENSION
         | FORCE
         | GRAPH
+        | HASH
         | IF
         | IS
         | IMPORT
@@ -1074,6 +1094,7 @@ iC_NonReservedKeywords
         | PROJECT
         | READ
         | REL
+        | RANGE
         | RENAME
         | RETURN
         | ROLLBACK
@@ -1094,6 +1115,8 @@ iC_NonReservedKeywords
         | TO
         | YIELD
         | USER
+        | PARTITION
+        | PARTITIONS
         | PASSWORD
         | MAP
         ;

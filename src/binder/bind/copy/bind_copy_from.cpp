@@ -177,6 +177,13 @@ BoundCopyFromInfo Binder::bindCopyNodeFromInfo(std::string tableName,
 std::unique_ptr<BoundStatement> Binder::bindCopyNodeFrom(const Statement& statement,
     NodeTableCatalogEntry& nodeTableEntry) {
     auto& copyStatement = statement.constCast<CopyFrom>();
+    if (nodeTableEntry.isPartitioned()) {
+        throw BinderException(std::format(
+            "Cannot COPY into partitioned table {}. Partitioned tables do not own physical "
+            "storage; copy each row-bundle into its partition subgraphs instead (e.g. {}_p0, "
+            "{}_p1, ...).",
+            nodeTableEntry.getName(), nodeTableEntry.getName(), nodeTableEntry.getName()));
+    }
     // Check extension secondary index loaded
     auto catalog = Catalog::Get(*clientContext);
     auto transaction = transaction::Transaction::Get(*clientContext);

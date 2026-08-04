@@ -73,6 +73,35 @@ ConflictAction Transformer::transformConflictAction(CypherParser::IC_IfNotExists
     return ConflictAction::ON_CONFLICT_THROW;
 }
 
+static uint64_t getPartitionCount(CypherParser::OC_IntegerLiteralContext& ctx) {
+    return std::stoull(ctx.DecimalInteger()->getText());
+}
+
+std::optional<ParsedPartitionInfo> Transformer::transformPartitionInfo(
+    CypherParser::IC_PartitionByContext* ctx) {
+    if (ctx == nullptr) {
+        return std::nullopt;
+    }
+    ParsedPartitionMethod method;
+    std::string columnName;
+    uint64_t numPartitions;
+    if (ctx->iC_PartitionHash() != nullptr) {
+        method = ParsedPartitionMethod::HASH;
+        auto& hashCtx = *ctx->iC_PartitionHash();
+        columnName = transformPropertyKeyName(*hashCtx.oC_PropertyKeyName());
+        numPartitions = getPartitionCount(*hashCtx.oC_IntegerLiteral());
+        return ParsedPartitionInfo(method, std::move(columnName), numPartitions);
+    }
+    if (ctx->iC_PartitionRange() != nullptr) {
+        method = ParsedPartitionMethod::RANGE;
+        auto& rangeCtx = *ctx->iC_PartitionRange();
+        columnName = transformPropertyKeyName(*rangeCtx.oC_PropertyKeyName());
+        numPartitions = getPartitionCount(*rangeCtx.oC_IntegerLiteral());
+        return ParsedPartitionInfo(method, std::move(columnName), numPartitions);
+    }
+    throw ParserException("Invalid partition clause.");
+}
+
 std::unique_ptr<Statement> Transformer::transformCreateNodeTable(
     CypherParser::IC_CreateNodeTableContext& ctx) {
     auto tableName = transformSchemaName(*ctx.oC_SchemaName());
@@ -89,8 +118,9 @@ std::unique_ptr<Statement> Transformer::transformCreateNodeTable(
         if (ctx.iC_Options()) {
             options = transformOptions(*ctx.iC_Options());
         }
-        createTableInfo.extraInfo =
-            std::make_unique<ExtraCreateNodeTableInfo>(getPKName(ctx), std::move(options));
+        auto partitionInfo = transformPartitionInfo(ctx.iC_PartitionBy());
+        createTableInfo.extraInfo = std::make_unique<ExtraCreateNodeTableInfo>(getPKName(ctx),
+            std::move(options), std::move(partitionInfo));
         return std::make_unique<CreateTable>(std::move(createTableInfo));
     }
 }

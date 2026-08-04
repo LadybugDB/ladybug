@@ -1,0 +1,93 @@
+-DATASET CSV empty
+--
+
+-CASE PartitionedCreateHash
+-STATEMENT CREATE NODE TABLE Orders (id INT64 PRIMARY KEY, region STRING, amount INT64) PARTITION BY HASH (region) PARTITIONS 4;
+---- 1
+Table Orders has been created.
+# The parent owns no storage; its records live in the partition subgraphs Orders_p0..p3.
+-STATEMENT CALL show_tables() RETURN name ORDER BY name;
+---- 5
+Orders
+Orders_p0
+Orders_p1
+Orders_p2
+Orders_p3
+-STATEMENT CREATE (:Orders_p0 {id: 1, region: 'east', amount: 10});
+---- ok
+-STATEMENT CREATE (:Orders_p0 {id: 2, region: 'east', amount: 20});
+---- ok
+-STATEMENT CREATE (:Orders_p1 {id: 3, region: 'west', amount: 30});
+---- ok
+-STATEMENT CREATE (:Orders_p3 {id: 4, region: 'north', amount: 40});
+---- ok
+# Querying the parent unions over every partition subgraph.
+-STATEMENT MATCH (o:Orders) RETURN o.id, o.region, o.amount ORDER BY o.id;
+---- 4
+1|east|10
+2|east|20
+3|west|30
+4|north|40
+-STATEMENT MATCH (o:Orders) RETURN count(*) AS total;
+---- 1
+4
+# A specific partition can be queried directly too.
+-STATEMENT MATCH (o:Orders_p0) RETURN o.id ORDER BY o.id;
+---- 2
+1
+2
+
+-CASE PartitionedCreateRange
+-STATEMENT CREATE NODE TABLE Events (id INT64 PRIMARY KEY, ts TIMESTAMP, value DOUBLE) PARTITION BY RANGE (ts) PARTITIONS 5;
+---- 1
+Table Events has been created.
+-STATEMENT CREATE (:Events_p2 {id: 1, ts: timestamp('2024-03-01 10:00:00'), value: 1.5});
+---- ok
+-STATEMENT CREATE (:Events_p4 {id: 2, ts: timestamp('2024-07-15 08:30:00'), value: 2.5});
+---- ok
+-STATEMENT MATCH (e:Events) RETURN e.id ORDER BY e.id;
+---- 2
+1
+2
+-STATEMENT MATCH (e:Events) WHERE e.value > 2 RETURN e.id;
+---- 1
+2
+
+-CASE PartitionedWriteToParentRejected
+-STATEMENT CREATE NODE TABLE T (id INT64 PRIMARY KEY, k STRING) PARTITION BY HASH (k) PARTITIONS 3;
+---- 1
+Table T has been created.
+-STATEMENT CREATE (:T {id: 1, k: 'a'});
+---- error
+Binder exception: Cannot write to partitioned table T. Writes to a partitioned parent are not yet routed; write to its partition subgraphs instead (e.g. T_p0).
+-STATEMENT COPY T FROM '${LBUG_ROOT_DIRECTORY}/test/test_files/ddl/partitioned.csv';
+---- error
+Binder exception: Cannot COPY into partitioned table T. Partitioned tables do not own physical storage; copy each row-bundle into its partition subgraphs instead (e.g. T_p0, T_p1, ...).
+
+-CASE PartitionedValidation
+-STATEMENT CREATE NODE TABLE Bad1 (id INT64 PRIMARY KEY, data STRING[]) PARTITION BY HASH (data) PARTITIONS 2;
+---- error
+Binder exception: Partition column data has type STRING[] which is not eligible for partitioning. Partition columns must be an integral, temporal or textual type.
+-STATEMENT CREATE NODE TABLE Bad2 (id INT64 PRIMARY KEY, k STRING, PARTITION_MISSING INT64) PARTITION BY HASH (nope) PARTITIONS 2;
+---- error
+Binder exception: Partition column nope does not exist. A partition column must be an existing column of the table.
+-STATEMENT CREATE NODE TABLE Bad3 (id INT64 PRIMARY KEY, k STRING) PARTITION BY HASH (k) PARTITIONS 0;
+---- error
+Binder exception: Number of partitions must be greater than 0.
+
+-CASE PartitionedDropCascades
+-STATEMENT CREATE NODE TABLE P (id INT64 PRIMARY KEY, k STRING) PARTITION BY RANGE (id) PARTITIONS 2;
+---- 1
+Table P has been created.
+-STATEMENT CREATE (:P_p0 {id: 1, k: 'a'});
+---- ok
+-STATEMENT CREATE (:P_p1 {id: 2, k: 'b'});
+---- ok
+-STATEMENT MATCH (n:P) RETURN count(*);
+---- 1
+2
+-STATEMENT DROP TABLE P;
+---- ok
+-STATEMENT CALL show_tables() RETURN count(*);
+---- 1
+0
