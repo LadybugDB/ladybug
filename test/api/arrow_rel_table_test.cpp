@@ -498,6 +498,57 @@ TEST_F(ArrowRelTableTest, ScanArrowRelTableOverNativeUuidNodeTable) {
     ASSERT_FALSE(namesResult->hasNext());
 }
 
+// Regression test for the byte-order conversion in scanArrowArrayUuid.
+// The symmetric UUIDs in ScanArrowRelTableOverNativeUuidNodeTable
+// (11111111-..., 22222222-..., 33333333-...) have all 16 bytes identical,
+// so the 16-byte reversal in the read path is a no-op on them: the test
+// would pass even if the byte order were wrong. This test uses asymmetric
+// UUIDs (every byte differs) to actually exercise the byte-swap.
+TEST_F(ArrowRelTableTest, ScanArrowRelTableWithAsymmetricUuidEndpoints) {
+    auto setupResult =
+        conn->query("CREATE NODE TABLE nu(id UUID, name STRING, PRIMARY KEY(id));"
+                    "CREATE (:nu {id: UUID('01234567-89ab-cdef-0123-456789abcdef'), name: 'a'});"
+                    "CREATE (:nu {id: UUID('fedcba98-7654-3210-fedc-ba9876543210'), name: 'b'});");
+    ASSERT_TRUE(setupResult->isSuccess()) << setupResult->getErrorMessage();
+
+    auto ua = common::UUID::fromString("01234567-89ab-cdef-0123-456789abcdef");
+    auto ub = common::UUID::fromString("fedcba98-7654-3210-fedc-ba9876543210");
+
+    ArrowSchemaWrapper schema;
+    createStructSchema(&schema, 2);
+    createUuidSchema(schema.children[0], "from");
+    createUuidSchema(schema.children[1], "to");
+
+    std::vector<ArrowArrayWrapper> arrays;
+    arrays.push_back(createStructArray(1, {[&](ArrowArray* a) { createUuidArray(a, {ua}); },
+                                              [&](ArrowArray* a) { createUuidArray(a, {ub}); }}));
+
+    auto result = ArrowTableSupport::createRelTableFromArrowTable(*conn, "nu_knows", "nu", "nu",
+        std::move(schema), std::move(arrays));
+    ASSERT_TRUE(result.queryResult->isSuccess()) << result.queryResult->getErrorMessage();
+
+    // The edge must land on the right two nodes. If scanArrowArrayUuid
+    // reverses the bytes incorrectly, the UUID lookup misses and the
+    // edge either fails to insert or hits the wrong node.
+    auto namesResult = conn->query("MATCH (a:nu)-[:nu_knows]->(b:nu) RETURN a.name, b.name");
+    ASSERT_TRUE(namesResult->isSuccess()) << namesResult->getErrorMessage();
+    ASSERT_TRUE(namesResult->hasNext());
+    auto row = namesResult->getNext();
+    ASSERT_EQ(row->getValue(0)->getValue<std::string>(), "a");
+    ASSERT_EQ(row->getValue(1)->getValue<std::string>(), "b");
+    ASSERT_FALSE(namesResult->hasNext());
+
+    // The UUIDs must round-trip exactly. If the byte order were off, the
+    // read-back would return a different int128.
+    auto idResult = conn->query("MATCH (a:nu {name: 'a'}), (b:nu {name: 'b'}) RETURN a.id, b.id");
+    ASSERT_TRUE(idResult->isSuccess()) << idResult->getErrorMessage();
+    ASSERT_TRUE(idResult->hasNext());
+    auto idRow = idResult->getNext();
+    ASSERT_EQ(idRow->getValue(0)->getValue<common::int128_t>(), ua);
+    ASSERT_EQ(idRow->getValue(1)->getValue<common::int128_t>(), ub);
+    ASSERT_FALSE(idResult->hasNext());
+}
+
 // Verify that the Arrow endpoint check still rejects a `FixedSizeBinary(16)`
 // column WITHOUT the `arrow.uuid` extension when the PK is UUID. The accepted
 // forms are an exact logical-type match and `FixedSizeBinary(16) + arrow.uuid`.
