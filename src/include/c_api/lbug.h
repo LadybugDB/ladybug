@@ -472,6 +472,21 @@ LBUG_C_API void lbug_connection_interrupt(lbug_connection* connection);
 LBUG_C_API lbug_state lbug_connection_set_query_timeout(lbug_connection* connection,
     uint64_t timeout_in_ms);
 
+/**
+ * @brief Returns the pushed-down SQL extracted from the logical plan of the given query.
+ * Prepares the query, optimizes it, and walks the logical plan to find any
+ * TABLE_FUNCTION_CALL operator whose table function supports push-down. Returns
+ * the SQL string from that operator's bind-data description.
+ *
+ * The caller is responsible for freeing the returned string with `lbug_destroy_string`.
+ * @param connection The connection instance to execute the query preparation.
+ * @param cypher_query The Cypher query to prepare and analyze.
+ * @param[out] out_sql The output parameter that will hold the pushed-down SQL string.
+ * @return The state indicating the success or failure of the operation.
+ */
+LBUG_C_API lbug_state lbug_connection_get_pushed_sql(lbug_connection* connection,
+    const char* cypher_query, char** out_sql);
+
 // PreparedStatement
 /**
  * @brief Destroys the prepared statement instance and frees the allocated memory.

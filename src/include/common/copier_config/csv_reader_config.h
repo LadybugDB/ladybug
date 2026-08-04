@@ -97,15 +97,19 @@ struct CSVOption {
 struct CSVReaderConfig {
     CSVOption option;
     bool parallel;
+    bool multilineParallel;
 
-    CSVReaderConfig() : option{}, parallel{CopyConstants::DEFAULT_CSV_PARALLEL} {}
+    CSVReaderConfig()
+        : option{}, parallel{CopyConstants::DEFAULT_CSV_PARALLEL},
+          multilineParallel{CopyConstants::DEFAULT_CSV_MULTILINE_PARALLEL} {}
     EXPLICIT_COPY_DEFAULT_MOVE(CSVReaderConfig);
 
     static CSVReaderConfig construct(const case_insensitive_map_t<Value>& options);
 
 private:
     CSVReaderConfig(const CSVReaderConfig& other)
-        : option{other.option.copy()}, parallel{other.parallel} {}
+        : option{other.option.copy()}, parallel{other.parallel},
+          multilineParallel{other.multilineParallel} {}
 };
 
 } // namespace common

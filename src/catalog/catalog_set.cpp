@@ -195,6 +195,7 @@ void CatalogSet::alterTableEntry(Transaction* transaction,
     case AlterType::ADD_PROPERTY:
     case AlterType::DROP_PROPERTY:
     case AlterType::RENAME_PROPERTY:
+    case AlterType::SET_SORTED_BY:
     case AlterType::ADD_FROM_TO_CONNECTION:
     case AlterType::DROP_FROM_TO_CONNECTION: {
         emplaceNoLock(std::move(newEntry));

@@ -16,6 +16,25 @@ struct ForeignRelTableScanState final : RelTableScanState {
     ForeignRelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,
         std::shared_ptr<common::DataChunkState> outChunkState);
+
+    // Foreign rel tables are scan-driven and own no on-disk CSR columns, so skip
+    // the RelTableScanState CSR-column resolution (which would dereference an
+    // empty directedRelData and throw).
+    void setToTable(const transaction::Transaction* transaction, Table* table_,
+        std::vector<common::column_id_t> columnIDs_,
+        std::vector<ColumnPredicateSet> columnPredicateSets_,
+        common::RelDataDirection direction_) override {
+        TableScanState::setToTable(transaction, table_, std::move(columnIDs_),
+            std::move(columnPredicateSets_));
+        columns.resize(columnIDs.size());
+        direction = direction_;
+        for (size_t i = 0; i < columnIDs.size(); ++i) {
+            columns[i] = nullptr;
+        }
+        csrOffsetColumn = nullptr;
+        csrLengthColumn = nullptr;
+        nodeGroupIdx = common::INVALID_NODE_GROUP_IDX;
+    }
 };
 
 class ForeignRelTable final : public RelTable {

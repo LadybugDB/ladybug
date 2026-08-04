@@ -82,6 +82,9 @@ static std::string getNodeForeignDatabaseName(const NodeExpression* node,
         return "";
     }
     auto dbManager = main::DatabaseManager::Get(*context);
+    if (!dbManager) {
+        return "";
+    }
     auto attachedDB = dbManager->getAttachedDatabase(dbName);
     if (!attachedDB) {
         return "";
@@ -106,6 +109,10 @@ static std::string getRelForeignDatabaseName(const RelExpression* rel,
     // First try the stored foreignDatabaseName
     auto storedName = relEntry->getForeignDatabaseName();
     if (!storedName.empty()) {
+        auto dbManager = main::DatabaseManager::Get(*context);
+        if (!dbManager) {
+            return storedName;
+        }
         return storedName;
     }
     // For foreign rel tables, extract from storage
@@ -116,6 +123,9 @@ static std::string getRelForeignDatabaseName(const RelExpression* rel,
     }
     auto dbName = storage.substr(0, dotPos);
     auto dbManager = main::DatabaseManager::Get(*context);
+    if (!dbManager) {
+        return "";
+    }
     auto attachedDB = dbManager->getAttachedDatabase(dbName);
     if (!attachedDB) {
         return "";
@@ -260,6 +270,9 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
     }
 
     // Extract just the database name (without type suffix like "(DUCKDB)")
+    if (srcDbName.empty()) {
+        return std::nullopt;
+    }
     auto parenPos = srcDbName.find('(');
     if (parenPos != std::string::npos) {
         info.dbName = srcDbName.substr(0, parenPos);
@@ -323,7 +336,13 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
 // Helper to get column names from a foreign table
 static std::vector<std::string> getForeignTableColumnNames(const std::string& dbName,
     const std::string& tableName, main::ClientContext* context) {
+    if (dbName.empty() || tableName.empty() || !context) {
+        return {};
+    }
     auto dbManager = main::DatabaseManager::Get(*context);
+    if (!dbManager) {
+        return {};
+    }
     auto attachedDB = dbManager->getAttachedDatabase(dbName);
     if (!attachedDB) {
         return {};
@@ -353,11 +372,16 @@ static std::string sanitizeSQLAlias(std::string alias) {
 // Keep result column names SQL-safe while using display names that preserve the user's labels.
 static JoinQueryInfo buildJoinQuery(const ForeignJoinPatternInfo& info,
     const expression_vector& outputColumns, main::ClientContext* context) {
+    if (!info.extend || !context) {
+        return {};
+    }
     auto extend = info.extend;
     auto srcNode = extend->getBoundNode();
     auto dstNode = extend->getNbrNode();
     auto rel = extend->getRel();
-
+    if (!srcNode || !dstNode || !rel) {
+        return {};
+    }
     // Get raw variable names (user-facing, like 'a', 'b', 'c')
     std::string srcAlias = srcNode->getVariableName();
     std::string dstAlias = dstNode->getVariableName();
@@ -513,6 +537,9 @@ static std::shared_ptr<LogicalOperator> createJoinTableFunctionCall(
 
 std::shared_ptr<LogicalOperator> ForeignJoinPushDownOptimizer::visitHashJoinReplace(
     std::shared_ptr<LogicalOperator> op) {
+    if (!op) {
+        return op;
+    }
     auto patternInfo = matchPattern(op.get(), this->context);
     if (!patternInfo.has_value()) {
         return op;
@@ -629,6 +656,11 @@ std::shared_ptr<LogicalOperator> ForeignJoinPushDownOptimizer::visitHashJoinRepl
     auto joinQueryInfo = buildJoinQuery(info, outputColumns, this->context);
 
     // Create the optimized table function call
+    if (joinQueryInfo.query.empty()) {
+        // buildJoinQuery bailed out (missing context, null nodes, etc.) — don't
+        // attempt to push down a malformed query, just keep the original op.
+        return op;
+    }
     auto result = createJoinTableFunctionCall(info, joinQueryInfo.query, joinQueryInfo.columnNames,
         joinQueryInfo.displayNames, outputColumns);
     if (!result) {

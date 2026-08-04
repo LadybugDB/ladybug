@@ -168,42 +168,42 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
     columnTypes.push_back(LogicalType::STRING());
     columnNames.emplace_back("default expression");
     columnTypes.push_back(LogicalType::STRING());
-    auto name = common::StringUtils::split(input->getLiteralVal<std::string>(0), ".");
+    auto tableName = input->getLiteralVal<std::string>(0);
 
     std::vector<PropertyInfo> infos;
     CatalogEntryType type = CatalogEntryType::DUMMY_ENTRY;
     auto transaction = transaction::Transaction::Get(*context);
-    if (name.size() == 1) {
-        auto tableName = name[0];
-        auto catalog = Catalog::Get(*context);
-        if (catalog->containsTable(transaction, tableName)) {
-            auto entry = catalog->getTableCatalogEntry(transaction, tableName);
-            switch (entry->getType()) {
-            case CatalogEntryType::NODE_TABLE_ENTRY: {
-                columnNames.emplace_back("primary key");
-                columnTypes.push_back(LogicalType::BOOL());
-                infos = getNodePropertyInfos(entry->ptrCast<NodeTableCatalogEntry>());
-                type = CatalogEntryType::NODE_TABLE_ENTRY;
-            } break;
-            case CatalogEntryType::REL_GROUP_ENTRY: {
-                columnNames.emplace_back("storage_direction");
-                columnTypes.push_back(LogicalType::STRING());
-                infos = getRelPropertyInfos(entry->ptrCast<RelGroupCatalogEntry>());
-                type = CatalogEntryType::REL_GROUP_ENTRY;
-            } break;
-            default:
-                UNREACHABLE_CODE;
-            }
+    auto catalog = Catalog::Get(*context);
+    if (catalog->containsTable(transaction, tableName)) {
+        auto entry = catalog->getTableCatalogEntry(transaction, tableName);
+        switch (entry->getType()) {
+        case CatalogEntryType::NODE_TABLE_ENTRY: {
+            columnNames.emplace_back("primary key");
+            columnTypes.push_back(LogicalType::BOOL());
+            infos = getNodePropertyInfos(entry->ptrCast<NodeTableCatalogEntry>());
+            type = CatalogEntryType::NODE_TABLE_ENTRY;
+        } break;
+        case CatalogEntryType::REL_GROUP_ENTRY: {
+            columnNames.emplace_back("storage_direction");
+            columnTypes.push_back(LogicalType::STRING());
+            infos = getRelPropertyInfos(entry->ptrCast<RelGroupCatalogEntry>());
+            type = CatalogEntryType::REL_GROUP_ENTRY;
+        } break;
+        default:
+            UNREACHABLE_CODE;
+        }
+    } else {
+        auto splitName = common::StringUtils::split(tableName, ".");
+        if (splitName.size() >= 2) {
+            auto dbName = splitName[0];
+            auto tblName = splitName[1];
+            auto db = main::DatabaseManager::Get(*context)->getAttachedDatabase(dbName);
+            auto entry = db->getCatalog()->getTableCatalogEntry(transaction, tblName);
+            infos = getForeignPropertyInfos(entry);
+            type = CatalogEntryType::FOREIGN_TABLE_ENTRY;
         } else {
             throw CatalogException(std::format("{} does not exist in catalog.", tableName));
         }
-    } else {
-        auto dbName = name[0];
-        auto tableName = name[1];
-        auto db = main::DatabaseManager::Get(*context)->getAttachedDatabase(dbName);
-        auto entry = db->getCatalog()->getTableCatalogEntry(transaction, tableName);
-        infos = getForeignPropertyInfos(entry);
-        type = CatalogEntryType::FOREIGN_TABLE_ENTRY;
     }
     columnNames = TableFunction::extractYieldVariables(columnNames, input->yieldVariables);
     auto columns = input->binder->createVariables(columnNames, columnTypes);

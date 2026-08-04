@@ -112,6 +112,7 @@ public:
     std::unique_ptr<BoundStatement> bindDropProperty(const parser::Statement& statement) const;
     std::unique_ptr<BoundStatement> bindRenameProperty(const parser::Statement& statement) const;
     std::unique_ptr<BoundStatement> bindCommentOn(const parser::Statement& statement) const;
+    std::unique_ptr<BoundStatement> bindSetSortedBy(const parser::Statement& statement) const;
     std::unique_ptr<BoundStatement> bindAlterFromToConnection(
         const parser::Statement& statement) const;
 

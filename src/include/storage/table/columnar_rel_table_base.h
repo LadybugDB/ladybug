@@ -48,6 +48,8 @@ public:
         common::RelDataDirection direction) override;
     std::vector<std::pair<common::offset_t, common::row_idx_t>> getDegreeEntries(
         const transaction::Transaction* transaction, common::RelDataDirection direction) override;
+    common::row_idx_t getDegreeForOffset(const transaction::Transaction* transaction,
+        common::RelDataDirection direction, common::offset_t nodeOffset) override;
     std::vector<std::pair<common::offset_t, common::row_idx_t>> getTopKDegrees(
         const transaction::Transaction* transaction, common::RelDataDirection direction,
         common::idx_t k) override;
@@ -64,6 +66,9 @@ protected:
         common::RelDataDirection direction) const = 0;
     virtual std::vector<std::pair<common::offset_t, common::row_idx_t>> getAllDegreeEntries(
         const transaction::Transaction* transaction, common::RelDataDirection direction) const = 0;
+    virtual common::row_idx_t getDegreeForOffsetInternal(
+        const transaction::Transaction* transaction, common::RelDataDirection direction,
+        common::offset_t nodeOffset) const = 0;
     virtual std::vector<std::pair<common::offset_t, common::row_idx_t>> getTopKDegreeEntries(
         const transaction::Transaction* transaction, common::RelDataDirection direction,
         common::idx_t k) const = 0;

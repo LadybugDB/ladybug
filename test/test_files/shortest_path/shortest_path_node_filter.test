@@ -1,0 +1,73 @@
+-DATASET CSV empty
+
+--
+
+-CASE ShortestPathNodeFilter
+
+-LOG Issue680_SHORTEST_blocked
+# Regression test for issue #680: recursive-rel node filter silently ignored in SHORTEST mode.
+# Three persons in a chain. Person 2 has date=50 which fails the filter n.date >= 100,
+# so nothing should be reachable from person 1 in either SHORTEST or plain mode.
+-STATEMENT CREATE NODE TABLE Person(id INT64 PRIMARY KEY, date INT64);
+---- ok
+-STATEMENT CREATE REL TABLE Knows(FROM Person TO Person);
+---- ok
+-STATEMENT CREATE (:Person {id: 1, date: 100});
+---- ok
+-STATEMENT CREATE (:Person {id: 2, date: 50});
+---- ok
+-STATEMENT CREATE (:Person {id: 3, date: 200});
+---- ok
+-STATEMENT MATCH (a:Person {id: 1}), (b:Person {id: 2}) CREATE (a)-[:Knows]->(b);
+---- ok
+-STATEMENT MATCH (a:Person {id: 2}), (b:Person {id: 3}) CREATE (a)-[:Knows]->(b);
+---- ok
+-STATEMENT MATCH (p:Person {id: 1})-[e:Knows* SHORTEST 1..3 (r, n | WHERE n.date >= 100)]-(x:Person) WHERE x.id <> 1 AND x.date >= 100 RETURN x.id ORDER BY x.id;
+---- 0
+-STATEMENT MATCH (p:Person {id: 1})-[e:Knows*1..3 (r, n | WHERE n.date >= 100)]-(x:Person) WHERE x.id <> 1 AND x.date >= 100 RETURN x.id ORDER BY x.id;
+---- 0
+
+-LOG Issue680_SHORTEST_not_blocked
+# Sanity check: same structure but all nodes pass the filter -> results should be returned.
+-STATEMENT CREATE NODE TABLE Person2(id INT64 PRIMARY KEY, date INT64);
+---- ok
+-STATEMENT CREATE REL TABLE Knows2(FROM Person2 TO Person2);
+---- ok
+-STATEMENT CREATE (:Person2 {id: 1, date: 100});
+---- ok
+-STATEMENT CREATE (:Person2 {id: 2, date: 150});
+---- ok
+-STATEMENT CREATE (:Person2 {id: 3, date: 200});
+---- ok
+-STATEMENT MATCH (a:Person2 {id: 1}), (b:Person2 {id: 2}) CREATE (a)-[:Knows2]->(b);
+---- ok
+-STATEMENT MATCH (a:Person2 {id: 2}), (b:Person2 {id: 3}) CREATE (a)-[:Knows2]->(b);
+---- ok
+-STATEMENT MATCH (p:Person2 {id: 1})-[e:Knows2* SHORTEST 1..3 (r, n | WHERE n.date >= 100)]-(x:Person2) WHERE x.id <> 1 AND x.date >= 100 RETURN x.id ORDER BY x.id;
+---- 2
+2
+3
+
+-LOG Issue680_ALL_SHORTEST_blocked
+# Same as Issue680_SHORTEST_blocked but with ALL SHORTEST instead of SHORTEST
+-STATEMENT MATCH (p:Person {id: 1})-[e:Knows* ALL SHORTEST 1..3 (r, n | WHERE n.date >= 100)]-(x:Person) WHERE x.id <> 1 AND x.date >= 100 RETURN x.id ORDER BY x.id;
+---- 0
+
+-LOG Issue680_ALL_SHORTEST_not_blocked
+# Same as Issue680_SHORTEST_not_blocked but with ALL SHORTEST
+-STATEMENT MATCH (p:Person2 {id: 1})-[e:Knows2* ALL SHORTEST 1..3 (r, n | WHERE n.date >= 100)]-(x:Person2) WHERE x.id <> 1 AND x.date >= 100 RETURN x.id ORDER BY x.id;
+---- 2
+2
+3
+
+-LOG Issue680_directed_shortest_filtered
+# Directed shortest path with node filter blocking traversal through node 2
+-STATEMENT MATCH (p:Person {id: 1})-[e:Knows* SHORTEST 1..3 (r, n | WHERE n.date >= 100)]->(x:Person) WHERE x.id <> 1 AND x.date >= 100 RETURN x.id ORDER BY x.id;
+---- 0
+
+-LOG Issue680_directed_shortest_unfiltered
+# Directed shortest path without node filter — no predicate should still reach node 3
+-STATEMENT MATCH (p:Person {id: 1})-[e:Knows* SHORTEST 1..3]->(x:Person) WHERE x.id <> 1 RETURN x.id ORDER BY x.id;
+---- 2
+2
+3

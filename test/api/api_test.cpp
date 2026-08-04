@@ -145,11 +145,121 @@ TEST_F(ApiTest, ExplainPrimaryKeyIndexChoice) {
     EXPECT_NE(artPlan.find("Index: ART"), std::string::npos);
 }
 
+TEST_F(ApiTest, UnwindQueryPrimaryKeyLookup) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE LookupEvent(id INT64, name STRING, PRIMARY KEY(id));"
+                            "CREATE NODE TABLE LookupAuth(id INT64, PRIMARY KEY(id));"
+                            "CREATE REL TABLE LookupRel(FROM LookupEvent TO LookupAuth);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:LookupEvent {id: 1, name: 'one'});"
+                            "CREATE (:LookupEvent {id: 2, name: 'two'});"
+                            "CREATE (:LookupAuth {id: 10});"
+                            "CREATE (:LookupAuth {id: 20});")
+                    ->isSuccess());
+
+    auto explain = conn->query("EXPLAIN UNWIND [{event_id: 1, auth_id: 10}, "
+                               "{event_id: 2, auth_id: 20}] AS row "
+                               "MATCH (e:LookupEvent {id: row.event_id}) "
+                               "MATCH (a:LookupAuth {id: row.auth_id}) "
+                               "MERGE (e)-[:LookupRel]->(a)");
+    ASSERT_TRUE(explain->isSuccess());
+    const auto plan = explain->toString();
+    EXPECT_NE(plan.find("QUERY_PRIMARY_KEY_LOOKUP"), std::string::npos);
+    EXPECT_NE(plan.find("Table: LookupEvent"), std::string::npos);
+    EXPECT_NE(plan.find("Table: LookupAuth"), std::string::npos);
+    EXPECT_NE(plan.find("Key: STRUCT_EXTRACT(row)"), std::string::npos);
+
+    auto merge = conn->query("UNWIND [{event_id: 1, auth_id: 10}, {event_id: 2, auth_id: 20}, "
+                             "{event_id: 999, auth_id: 10}, {event_id: 1, auth_id: 999}] AS row "
+                             "MATCH (e:LookupEvent {id: row.event_id}) "
+                             "MATCH (a:LookupAuth {id: row.auth_id}) "
+                             "MERGE (e)-[:LookupRel]->(a)");
+    ASSERT_TRUE(merge->isSuccess());
+    auto count = conn->query("MATCH (:LookupEvent)-[:LookupRel]->(:LookupAuth) RETURN COUNT(*)");
+    ASSERT_TRUE(count->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*count), std::vector<std::string>{"2"});
+
+    auto residual = conn->query("UNWIND [{id: 1, name: 'one'}, {id: 2, name: 'wrong'}] AS row "
+                                "MATCH (e:LookupEvent {id: row.id}) "
+                                "WHERE e.name = row.name RETURN e.id ORDER BY e.id");
+    ASSERT_TRUE(residual->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*residual), std::vector<std::string>{"1"});
+
+    auto batchMerge = conn->query("UNWIND RANGE(1, 1000) AS id "
+                                  "CREATE (:LookupEvent {id: id + 100, name: 'batch'});"
+                                  "UNWIND RANGE(1, 1000) AS id "
+                                  "CREATE (:LookupAuth {id: id + 100});"
+                                  "UNWIND RANGE(1, 1000) AS id "
+                                  "MATCH (e:LookupEvent {id: id + 100}) "
+                                  "MATCH (a:LookupAuth {id: id + 100}) "
+                                  "MERGE (e)-[:LookupRel]->(a);");
+    ASSERT_TRUE(batchMerge->isSuccess());
+    auto batchCount =
+        conn->query("MATCH (:LookupEvent)-[:LookupRel]->(:LookupAuth) RETURN COUNT(*)");
+    ASSERT_TRUE(batchCount->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*batchCount), std::vector<std::string>{"1002"});
+}
+
+TEST_F(ApiTest, UnwindQueryPrimaryKeyLookupFallsBackWithoutIndex) {
+    ASSERT_TRUE(conn->query("CALL enable_default_hash_index=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE LookupNoIndex(id INT64, PRIMARY KEY(id));"
+                            "CREATE (:LookupNoIndex {id: 1});")
+                    ->isSuccess());
+    auto explain = conn->query("EXPLAIN UNWIND [1] AS id "
+                               "MATCH (n:LookupNoIndex {id: id}) RETURN n.id");
+    ASSERT_TRUE(explain->isSuccess());
+    const auto plan = explain->toString();
+    EXPECT_EQ(plan.find("QUERY_PRIMARY_KEY_LOOKUP"), std::string::npos);
+    EXPECT_NE(plan.find("SCAN_NODE_TABLE"), std::string::npos);
+
+    auto result = conn->query("UNWIND [1, 999] AS id "
+                              "MATCH (n:LookupNoIndex {id: id}) RETURN n.id");
+    ASSERT_TRUE(result->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*result), std::vector<std::string>{"1"});
+}
+
+// Regression: when the first row(s) of an UNWIND-driven MATCH miss the primary-key index, the
+// row-driven lookup operator must not clobber the upstream selection vector (it had filtered the
+// shared state to size 0, starving every subsequent tuple). What remains must be exactly the rows
+// whose keys actually exist, in the same order as the UNWIND.
+TEST_F(ApiTest, UnwindQueryPrimaryKeyLookupLeadingMissThenHits) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE LookupLeadingMiss(id INT64, v INT64, "
+                            "PRIMARY KEY(id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:LookupLeadingMiss {id: 2, v: 20});"
+                            "CREATE (:LookupLeadingMiss {id: 3, v: 30});")
+                    ->isSuccess());
+
+    auto explain = conn->query("EXPLAIN UNWIND [0, 2, 3] AS x "
+                               "MATCH (t:LookupLeadingMiss {id: x}) RETURN t.v");
+    ASSERT_TRUE(explain->isSuccess());
+    EXPECT_NE(explain->toString().find("QUERY_PRIMARY_KEY_LOOKUP"), std::string::npos);
+
+    auto result = conn->query("UNWIND [0, 2, 3] AS x"
+                              " MATCH (t:LookupLeadingMiss {id: x}) RETURN t.v");
+    ASSERT_TRUE(result->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*result), (std::vector<std::string>{"20", "30"}));
+}
+
 TEST_F(ApiTest, Profile) {
     auto result =
         conn->query("EXPLAIN MATCH (a:person) WHERE EXISTS { MATCH (a)-[:knows]->(b:person) WHERE "
                     "b.fName='Farooq' } RETURN a.ID, min(a.age)");
     ASSERT_TRUE(result->isSuccess());
+}
+
+TEST_F(ApiTest, ProfileReportsWallClockTime) {
+    auto result = conn->query("PROFILE MATCH (a:person) RETURN a.ID");
+    ASSERT_TRUE(result->isSuccess());
+    auto profile = result->toString();
+    // WallClockTime (real wall clock) appears only on the PROFILE operator.
+    EXPECT_NE(profile.find("WallClockTime:"), std::string::npos);
+    // TotalTime (accumulated CPU across threads) appears on every operator.
+    auto totalCount = 0u;
+    for (auto pos = profile.find("TotalTime:"); pos != std::string::npos;
+         pos = profile.find("TotalTime:", pos + 1)) {
+        totalCount++;
+    }
+    EXPECT_GT(totalCount, 1);
 }
 
 TEST_F(ApiTest, TimeOut) {

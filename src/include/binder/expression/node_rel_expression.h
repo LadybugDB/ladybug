@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <unordered_set>
 
 #include "common/case_insensitive_map.h"
 #include "expression.h"
@@ -9,6 +10,9 @@
 namespace lbug {
 namespace catalog {
 class TableCatalogEntry;
+}
+namespace main {
+class ClientContext;
 }
 namespace binder {
 
@@ -47,6 +51,25 @@ public:
     }
     std::vector<std::shared_ptr<PropertyExpression>> getPropertyExpressions() const {
         return propertyExprs;
+    }
+    // Property expressions surfaced in whole-object (`RETURN n`) output. Equal to
+    // getPropertyExpressions() unless some are hidden (e.g. an ANY graph's internal `id`/`label`
+    // columns, which the whole-object struct already exposes as _ID/_LABEL). Hidden properties
+    // stay bound for writes, explicit access, and `.*`; only the whole-object struct omits them.
+    std::vector<std::shared_ptr<PropertyExpression>> getProjectedPropertyExpressions() const {
+        if (hiddenPropertyNames.empty()) {
+            return propertyExprs;
+        }
+        std::vector<std::shared_ptr<PropertyExpression>> result;
+        for (auto& property : propertyExprs) {
+            if (!hiddenPropertyNames.contains(property->getPropertyName())) {
+                result.push_back(property);
+            }
+        }
+        return result;
+    }
+    void setHiddenPropertyNames(std::unordered_set<std::string> names) {
+        hiddenPropertyNames = std::move(names);
     }
     std::shared_ptr<PropertyExpression> getPropertyExpression(
         const std::string& propertyName) const {
@@ -108,7 +131,12 @@ protected:
     std::unordered_map<catalog::TableCatalogEntry*, std::string> dbNames;
     // Original labels from the node/rel pattern (for ANY graphs)
     std::vector<std::string> originalLabels;
+    // Property names hidden from the whole-object struct (e.g. ANY internal `id`/`label`).
+    std::unordered_set<std::string> hiddenPropertyNames;
 };
+
+// True when the node/rel is backed by an ANY graph's internal `_nodes`/`_edges` table.
+bool isAnyGraphNodeOrRel(const NodeOrRelExpression& nodeOrRel, main::ClientContext* context);
 
 } // namespace binder
 } // namespace lbug

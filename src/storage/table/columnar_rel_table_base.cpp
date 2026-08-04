@@ -26,6 +26,11 @@ std::vector<std::pair<offset_t, row_idx_t>> ColumnarRelTableBase::getDegreeEntri
     return getAllDegreeEntries(transaction, direction);
 }
 
+row_idx_t ColumnarRelTableBase::getDegreeForOffset(const Transaction* transaction,
+    RelDataDirection direction, offset_t nodeOffset) {
+    return getDegreeForOffsetInternal(transaction, direction, nodeOffset);
+}
+
 std::vector<std::pair<offset_t, row_idx_t>> ColumnarRelTableBase::getTopKDegrees(
     const Transaction* transaction, RelDataDirection direction, idx_t k) {
     return getTopKDegreeEntries(transaction, direction, k);

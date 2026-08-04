@@ -1,6 +1,7 @@
 add_library(lbug_processor_operator_csv_reader
         OBJECT
         base_csv_reader.cpp
+        csv_boundary_scanner.cpp
         driver.cpp
         parallel_csv_reader.cpp
         serial_csv_reader.cpp

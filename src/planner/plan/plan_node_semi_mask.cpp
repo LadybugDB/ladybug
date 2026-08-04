@@ -36,7 +36,7 @@ LogicalPlan Planner::getNodeSemiMaskPlan(SemiMaskTargetType targetType, const No
         auto& propExpr = expr->constCast<PropertyExpression>();
         propertyExprCollection.addProperties(propExpr.getVariableName(), expr);
     }
-    appendScanNodeTable(node.getInternalID(), node.getTableIDs(), getProperties(node), plan);
+    appendScanNodeTable(node.getInternalID(), node.getTableIDs(), getProperties(node), plan, &node);
     appendFilter(nodePredicate, plan);
     exitPropertyExprCollection(std::move(prevCollection));
     appendNodeSemiMask(targetType, node, plan);

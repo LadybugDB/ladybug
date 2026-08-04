@@ -32,6 +32,9 @@ std::unique_ptr<Statement> Transformer::transformAlterTable(
     if (ctx.iC_AlterOptions()->iC_DropFromToConnection()) {
         return transformDropFromToConnection(ctx);
     }
+    if (ctx.iC_AlterOptions()->iC_SetSortedBy()) {
+        return transformSetSortedBy(ctx);
+    }
     return transformRenameProperty(ctx);
 }
 
@@ -355,6 +358,21 @@ std::unique_ptr<Statement> Transformer::transformRenameProperty(
         *ctx.iC_AlterOptions()->iC_RenameProperty()->oC_PropertyKeyName()[1]);
     auto extraInfo = std::make_unique<ExtraRenamePropertyInfo>(propertyName, newName);
     auto info = AlterInfo(AlterType::RENAME_PROPERTY, tableName, std::move(extraInfo));
+    return std::make_unique<Alter>(std::move(info));
+}
+
+std::unique_ptr<Statement> Transformer::transformSetSortedBy(
+    CypherParser::IC_AlterTableContext& ctx) {
+    auto tableName = transformSchemaName(*ctx.oC_SchemaName());
+    auto sortedByCtx = ctx.iC_AlterOptions()->iC_SetSortedBy();
+    std::vector<ParsedSortedByProperty> properties;
+    for (auto* item : sortedByCtx->iC_SortedByItem()) {
+        auto propertyName = transformPropertyKeyName(*item->oC_PropertyKeyName());
+        properties.push_back(
+            ParsedSortedByProperty{std::move(propertyName), item->ASC() != nullptr});
+    }
+    auto extraInfo = std::make_unique<ExtraSetSortedByInfo>(std::move(properties));
+    auto info = AlterInfo(AlterType::SET_SORTED_BY, tableName, std::move(extraInfo));
     return std::make_unique<Alter>(std::move(info));
 }
 

@@ -110,6 +110,10 @@ protected:
 
     template<typename Driver>
     parse_result_t parseCSV(Driver&);
+    template<typename Driver>
+    parse_result_t parseCSVStructural(Driver&);
+
+    bool supportsStructuralParser() const;
 
     inline bool isNewLine(char c) { return c == '\n' || c == '\r'; }
 

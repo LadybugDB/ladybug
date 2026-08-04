@@ -436,6 +436,22 @@ int32_t Date::getDatePart(DatePartSpecifier specifier, date_t date) {
         return year > 0 ? ((year - 1) / 1000) + 1 : (year / 1000) - 1;
     case DatePartSpecifier::QUARTER:
         return (month - 1) / Interval::MONTHS_PER_QUARTER + 1;
+    case DatePartSpecifier::DOW:
+        // 1970-01-01 (days == 0) is a Thursday, i.e. dow 4. The inner % may be
+        // negative for dates before the epoch, hence the outer adjustment.
+        return ((date.days + 4) % Interval::DAYS_PER_WEEK + Interval::DAYS_PER_WEEK) %
+               Interval::DAYS_PER_WEEK;
+    case DatePartSpecifier::WEEK: {
+        // ISO-8601 week number (1-53): a week (Mon-Sun) belongs to the ISO year
+        // that its Thursday falls in.
+        const int32_t dow = getDatePart(DatePartSpecifier::DOW, date);
+        const int32_t isoWeekday = dow == 0 ? Interval::DAYS_PER_WEEK : dow;
+        const date_t thursday = date + (4 - isoWeekday);
+        int32_t thursdayYear = 0, thursdayMonth = 0, thursdayDay = 0;
+        Date::convert(thursday, thursdayYear, thursdayMonth, thursdayDay);
+        const int64_t dayOfYear = thursday - Date::fromDate(thursdayYear, 1, 1 /* day */);
+        return static_cast<int32_t>(dayOfYear / Interval::DAYS_PER_WEEK + 1);
+    }
     default:
         return 0;
     }
@@ -450,7 +466,15 @@ date_t Date::trunc(DatePartSpecifier specifier, date_t date) {
         return Date::fromDate(Date::getDatePart(DatePartSpecifier::YEAR, date),
             Date::getDatePart(DatePartSpecifier::MONTH, date), 1 /* day */);
     case DatePartSpecifier::DAY:
+    case DatePartSpecifier::DOW:
+        // DuckDB treats "dow" as day-level precision for truncation.
         return date;
+    case DatePartSpecifier::WEEK: {
+        // Truncate to the Monday of the current ISO week.
+        const int32_t dow = Date::getDatePart(DatePartSpecifier::DOW, date);
+        const int32_t isoWeekday = dow == 0 ? Interval::DAYS_PER_WEEK : dow;
+        return date - (isoWeekday - 1);
+    }
     case DatePartSpecifier::DECADE:
         return Date::fromDate((Date::getDatePart(DatePartSpecifier::YEAR, date) / 10) * 10,
             1 /* month */, 1 /* day */);

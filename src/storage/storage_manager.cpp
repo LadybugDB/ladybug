@@ -18,6 +18,7 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/checkpointer.h"
 #include "storage/index/art_index.h"
+#include "storage/storage_utils.h"
 #include "storage/table/arrow_node_table.h"
 #include "storage/table/arrow_rel_table.h"
 #include "storage/table/arrow_table_support.h"
@@ -47,6 +48,11 @@ StorageManager::StorageManager(const std::string& databasePath, bool readOnly, b
     shadowFile =
         std::make_unique<ShadowFile>(*memoryManager.getBufferManager(), vfs, this->databasePath);
     inMemory = main::DBConfig::isDBPathInMemory(databasePath);
+    // Checkpoint intent/apply lock files (*.checkpoint.intent.lock and
+    // *.checkpoint.apply.lock) are NOT created here.  All access, including subgraph
+    // access, goes through the main database path returned by
+    // clientContext.getDatabasePath().  The Checkpointer creates these files on demand
+    // (with CREATE_IF_NOT_EXISTS) when a checkpoint starts via acquireCheckpointLocks().
     registerIndexType(PrimaryKeyIndex::getIndexType());
     registerIndexType(ArtPrimaryKeyIndex::getIndexType());
 }
@@ -92,6 +98,11 @@ Table* StorageManager::getTable(table_id_t tableID) {
     std::shared_lock lck{mtx};
     DASSERT(tables.contains(tableID));
     return tables.at(tableID).get();
+}
+
+bool StorageManager::containsTable(table_id_t tableID) const {
+    std::shared_lock lck{mtx};
+    return tables.contains(tableID);
 }
 
 std::optional<PlannerTableStats> StorageManager::getCachedPlannerTableStats(

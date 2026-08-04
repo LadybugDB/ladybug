@@ -2,6 +2,7 @@ add_library(lbug_optimizer
         OBJECT
         acc_hash_join_optimizer.cpp
         agg_key_dependency_optimizer.cpp
+        bool_folding_optimizer.cpp
         cardinality_updater.cpp
         correlated_subquery_unnest_solver.cpp
         count_rel_table_optimizer.cpp
@@ -18,6 +19,8 @@ add_library(lbug_optimizer
         top_k_optimizer.cpp
         limit_push_down_optimizer.cpp
         order_by_push_down_optimizer.cpp
+        remove_unnecessary_distinct_optimizer.cpp
+        remove_unnecessary_order_by_optimizer.cpp
         unwind_dedup_optimizer.cpp)
 
 set(ALL_OBJECT_FILES

@@ -111,6 +111,21 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
             boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     }
     tableInfo.initScanState(*scanState, outVectors, clientContext);
+    // The native RelTable::initScanState reads from the bound-node
+    // nodeIDVector to pick a node group, so it must run after a child tuple
+    // is in flight (the existing call sites in fetchNextBoundNodeBatch and
+    // after pulling a child tuple handle that). External rel table backends
+    // (ForeignRelTable, ArrowRelTable, IceDiskRelTable, ...) only use
+    // initScanState to set up scan-function / shared / local state and
+    // source/nodeGroupIdx — they don't need a bound node — but the first
+    // scan() in this operator fires before any of those re-init call sites,
+    // so we'd dereference uninitialized state and crash. Detect "external"
+    // by checking the dynamic type isn't the native RelTable — this scales
+    // to any future external backend without enumerating each one here.
+    if (typeid(*tableInfo.table) != typeid(RelTable)) {
+        auto transaction = transaction::Transaction::Get(*clientContext);
+        tableInfo.table->initScanState(transaction, *scanState);
+    }
     if (sourceNodeScanMode) {
         sourceNodeOutVectors.clear();
         for (auto& pos : sourceNodeScanInfo.outVectorsPos) {

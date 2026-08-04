@@ -14,6 +14,18 @@ using namespace lbug::common;
 namespace lbug {
 namespace catalog {
 
+void SortedByProperty::serialize(common::Serializer& serializer) const {
+    serializer.write(propertyName);
+    serializer.write(ascending);
+}
+
+SortedByProperty SortedByProperty::deserialize(common::Deserializer& deserializer) {
+    SortedByProperty result;
+    deserializer.deserializeValue(result.propertyName);
+    deserializer.deserializeValue(result.ascending);
+    return result;
+}
+
 static void upgradeLegacyStorageFormat(const std::string& storage,
     common::StorageFormat& storageFormat) {
     const auto lowerStorage = common::StringUtils::getLower(storage);
@@ -28,12 +40,20 @@ void NodeTableCatalogEntry::renameProperty(const std::string& propertyName,
     if (common::StringUtils::caseInsensitiveEquals(propertyName, primaryKeyName)) {
         primaryKeyName = newName;
     }
+    for (auto& sortedByProperty : sortedByProperties) {
+        if (common::StringUtils::caseInsensitiveEquals(propertyName,
+                sortedByProperty.propertyName)) {
+            sortedByProperty.propertyName = newName;
+        }
+    }
 }
 
 void NodeTableCatalogEntry::serialize(common::Serializer& serializer) const {
     TableCatalogEntry::serialize(serializer);
     serializer.writeDebuggingInfo("primaryKeyName");
     serializer.write(primaryKeyName);
+    serializer.writeDebuggingInfo("sortedByProperties");
+    serializer.serializeVector(sortedByProperties);
     serializer.writeDebuggingInfo("storage");
     serializer.write(storage);
     serializer.writeDebuggingInfo("storageFormat");
@@ -44,10 +64,16 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
     common::Deserializer& deserializer) {
     std::string debuggingInfo;
     std::string primaryKeyName;
+    std::vector<SortedByProperty> sortedByProperties;
     std::string storage;
     auto storageFormat = StorageFormat::NONE;
     deserializer.validateDebuggingInfo(debuggingInfo, "primaryKeyName");
     deserializer.deserializeValue(primaryKeyName);
+    if (deserializer.getStorageVersion() >=
+        ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_43) {
+        deserializer.validateDebuggingInfo(debuggingInfo, "sortedByProperties");
+        deserializer.deserializeVector(sortedByProperties);
+    }
     deserializer.validateDebuggingInfo(debuggingInfo, "storage");
     deserializer.deserializeValue(storage);
     if (deserializer.getStorageVersion() >=
@@ -59,6 +85,7 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
     }
     auto nodeTableEntry = std::make_unique<NodeTableCatalogEntry>();
     nodeTableEntry->primaryKeyName = primaryKeyName;
+    nodeTableEntry->sortedByProperties = std::move(sortedByProperties);
     nodeTableEntry->storage = storage;
     nodeTableEntry->storageFormat = storageFormat;
     return nodeTableEntry;
@@ -79,15 +106,19 @@ std::unique_ptr<binder::BoundTableScanInfo> NodeTableCatalogEntry::getBoundScanI
         // Foreign table - call the extension's bind data function
         auto bindData = createBindDataFunc(context);
         return std::make_unique<binder::BoundTableScanInfo>(*scanFunction, std::move(bindData));
-    } else {
-        // Local table - for now, return nullptr as ForeignNodeTable handles the binding
-        return nullptr;
     }
+    // Check referenced entry (shadow tables: NodeTableCatalogEntry that wraps a foreign entry)
+    if (referencedEntry != nullptr) {
+        return referencedEntry->getBoundScanInfo(context, nodeUniqueName);
+    }
+    // Local table - no scan function available
+    return nullptr;
 }
 
 std::unique_ptr<TableCatalogEntry> NodeTableCatalogEntry::copy() const {
     auto other = std::make_unique<NodeTableCatalogEntry>();
     other->primaryKeyName = primaryKeyName;
+    other->sortedByProperties = sortedByProperties;
     other->storage = storage;
     other->storageFormat = storageFormat;
     other->scanFunction = scanFunction;

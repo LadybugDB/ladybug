@@ -412,6 +412,9 @@ void Interval::tryGetDatePartSpecifier(std::string specifier, DatePartSpecifier&
                specifier == "weekofyear") {
         // ISO week number
         result = DatePartSpecifier::WEEK;
+    } else if (specifier == "dow" || specifier == "dayofweek") {
+        // day of the week (0-6, Sunday = 0)
+        result = DatePartSpecifier::DOW;
     } else if (specifier == "quarter" || specifier == "quarters") {
         // quarter of the year (1-4)
         result = DatePartSpecifier::QUARTER;
@@ -454,7 +457,10 @@ int32_t Interval::getIntervalPart(DatePartSpecifier specifier, interval_t interv
 }
 
 int64_t Interval::getMicro(const interval_t& val) {
-    return val.micros + val.months * MICROS_PER_MONTH + val.days * MICROS_PER_DAY;
+    int64_t years = val.months / MONTHS_PER_YEAR;
+    int64_t months = val.months % MONTHS_PER_YEAR;
+    return val.micros + years * DAYS_PER_YEAR * MICROS_PER_DAY +
+           months * DAYS_PER_MONTH * MICROS_PER_DAY + val.days * MICROS_PER_DAY;
 }
 
 int64_t Interval::getNanoseconds(const interval_t& val) {

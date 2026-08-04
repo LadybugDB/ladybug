@@ -42,6 +42,14 @@ static void serializeAlterExtraInfo(Serializer& serializer, const BoundAlterInfo
         auto renameTableInfo = extraInfo->constPtrCast<BoundExtraRenameTableInfo>();
         serializer.write(renameTableInfo->newName);
     } break;
+    case AlterType::SET_SORTED_BY: {
+        auto sortedByInfo = extraInfo->constPtrCast<BoundExtraSetSortedByInfo>();
+        serializer.write(static_cast<uint64_t>(sortedByInfo->properties.size()));
+        for (auto& property : sortedByInfo->properties) {
+            serializer.write(property.propertyName);
+            serializer.write(property.ascending);
+        }
+    } break;
     case AlterType::ADD_FROM_TO_CONNECTION:
     case AlterType::DROP_FROM_TO_CONNECTION: {
         auto connectionInfo = extraInfo->constPtrCast<BoundExtraAlterFromToConnection>();
@@ -87,6 +95,19 @@ static decltype(auto) deserializeAlterRecord(Deserializer& deserializer) {
         std::string newName;
         deserializer.deserializeValue(newName);
         extraInfo = std::make_unique<BoundExtraRenameTableInfo>(std::move(newName));
+    } break;
+    case AlterType::SET_SORTED_BY: {
+        uint64_t numProperties = 0;
+        deserializer.deserializeValue(numProperties);
+        std::vector<BoundSortedByProperty> properties;
+        properties.reserve(numProperties);
+        for (auto i = 0u; i < numProperties; ++i) {
+            BoundSortedByProperty property;
+            deserializer.deserializeValue(property.propertyName);
+            deserializer.deserializeValue(property.ascending);
+            properties.push_back(std::move(property));
+        }
+        extraInfo = std::make_unique<BoundExtraSetSortedByInfo>(std::move(properties));
     } break;
     case AlterType::ADD_FROM_TO_CONNECTION:
     case AlterType::DROP_FROM_TO_CONNECTION: {

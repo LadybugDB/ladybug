@@ -1,5 +1,9 @@
 #include "storage/wal/wal_replayer.h"
 
+#include <string>
+
+#include "common/exception/io.h"
+#include "common/exception/runtime.h"
 #include "common/file_system/file_info.h"
 #include "common/file_system/file_system.h"
 #include "common/file_system/virtual_file_system.h"
@@ -11,6 +15,7 @@
 #include "storage/file_db_id_utils.h"
 #include "storage/local_storage/local_rel_table.h"
 #include "storage/storage_manager.h"
+#include "storage/storage_utils.h"
 #include "storage/wal/checksum_reader.h"
 #include "storage/wal/wal_record.h"
 #include "transaction/transaction_context.h"
@@ -25,6 +30,8 @@ namespace storage {
 
 static constexpr std::string_view checksumMismatchMessage =
     "Checksum verification failed, the WAL file is corrupted.";
+static constexpr std::string_view readOnlyCheckpointInProgressMessage =
+    "Cannot open database in read-only mode while checkpoint is in progress. Please retry later.";
 
 WALReplayer::WALReplayer(main::ClientContext& clientContext) : clientContext{clientContext} {
     walPath = StorageUtils::getWALFilePath(clientContext.getDatabasePath());
@@ -74,11 +81,52 @@ static uint64_t getReadOffset(Deserializer& deSer, bool enableChecksums) {
     }
 }
 
+static std::unique_ptr<FileInfo> tryAcquireReadOnlyCheckpointLock(
+    main::ClientContext& clientContext, const std::string& lockPath) {
+    auto vfs = VirtualFileSystem::GetUnsafe(clientContext);
+    if (!vfs->fileOrPathExists(lockPath, &clientContext)) {
+        return nullptr;
+    }
+    try {
+        return vfs->openFile(lockPath, FileOpenFlags(FileFlags::READ_ONLY, FileLockType::READ_LOCK),
+            &clientContext);
+    } catch (const IOException&) {
+        throw RuntimeException(std::string(readOnlyCheckpointInProgressMessage));
+    }
+}
+
+static std::unique_ptr<FileInfo> acquireReadOnlyCheckpointApplyLock(
+    main::ClientContext& clientContext) {
+    if (!StorageManager::Get(clientContext)->isReadOnly()) {
+        return nullptr;
+    }
+    const auto databasePath = clientContext.getDatabasePath();
+    auto intentLock = tryAcquireReadOnlyCheckpointLock(clientContext,
+        StorageUtils::getCheckpointIntentLockFilePath(databasePath));
+    auto applyLock = tryAcquireReadOnlyCheckpointLock(clientContext,
+        StorageUtils::getCheckpointApplyLockFilePath(databasePath));
+    return applyLock;
+}
+
+static void throwIfReadOnlyCheckpointState(main::ClientContext& clientContext, bool hasFrozenWAL,
+    const std::string& shadowFilePath) {
+    if (!StorageManager::Get(clientContext)->isReadOnly()) {
+        return;
+    }
+    auto vfs = VirtualFileSystem::GetUnsafe(clientContext);
+    if (hasFrozenWAL || vfs->fileOrPathExists(shadowFilePath, &clientContext)) {
+        throw RuntimeException(std::string(readOnlyCheckpointInProgressMessage));
+    }
+}
+
 void WALReplayer::replay(bool throwOnWalReplayFailure, bool enableChecksums) const {
     auto vfs = VirtualFileSystem::GetUnsafe(clientContext);
+    [[maybe_unused]] auto readOnlyCheckpointApplyLock =
+        acquireReadOnlyCheckpointApplyLock(clientContext);
     Checkpointer checkpointer(clientContext);
     bool hasFrozenWAL = vfs->fileOrPathExists(checkpointWalPath, &clientContext);
     bool hasActiveWAL = vfs->fileOrPathExists(walPath, &clientContext);
+    throwIfReadOnlyCheckpointState(clientContext, hasFrozenWAL, shadowFilePath);
 
     if (!hasFrozenWAL && !hasActiveWAL) {
         removeFileIfExists(shadowFilePath);
@@ -115,6 +163,7 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
         auto [offsetDeserialized, isLastRecordCheckpoint] =
             dryReplay(*fileInfo, throwOnWalReplayFailure, enableChecksums);
         if (isLastRecordCheckpoint) {
+            throwIfReadOnlyCheckpointState(clientContext, true /* hasFrozenWAL */, shadowFilePath);
             ShadowFile::replayShadowPageRecords(clientContext);
             removeFileIfExists(checkpointWalPath);
             removeFileIfExists(walPath);
@@ -161,6 +210,7 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
         auto [offsetDeserialized, isLastRecordCheckpoint] =
             dryReplay(*fileInfo, throwOnWalReplayFailure, enableChecksums);
         if (isLastRecordCheckpoint) {
+            throwIfReadOnlyCheckpointState(clientContext, true /* hasFrozenWAL */, shadowFilePath);
             ShadowFile::replayShadowPageRecords(clientContext);
             removeWALAndShadowFiles();
             checkpointer.readCheckpoint();
@@ -282,12 +332,23 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
         replayLoadExtensionRecord(walRecord);
     } break;
     case WALRecordType::CHECKPOINT_RECORD: {
-        // This record should not be replayed. It is only used to indicate that the previous records
-        // had been replayed and shadow files are created.
-        UNREACHABLE_CODE;
+        // This record should not be replayed during individual record replay.
+        // CHECKPOINT records are handled by the frozen/active WAL recovery path
+        // that replays shadow pages as a batch. If we reach here, the WAL file has
+        // been corrupted (or checksums are disabled and a torn write happened to
+        // produce type byte 254). Throw a descriptive error instead of asserting
+        // so that the database can still be opened with throwOnWalReplayFailure=false.
+        throw common::RuntimeException(std::format(
+            "WAL replay encountered a CHECKPOINT record outside the expected recovery "
+            "path. This is caused by a corrupted WAL tail. "
+            "Set throwOnWalReplayFailure=false to discard the tail and open the database."));
     }
     default:
-        UNREACHABLE_CODE;
+        throw common::RuntimeException(std::format(
+            "WAL replay encountered an unknown record type ({}). "
+            "The WAL file is corrupted. "
+            "Set throwOnWalReplayFailure=false to discard the tail and open the database.",
+            static_cast<int>(walRecord.type)));
     }
 }
 

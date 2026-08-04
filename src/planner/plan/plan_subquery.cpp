@@ -1,8 +1,14 @@
+#include <algorithm>
+
 #include "binder/expression/expression_util.h"
+#include "binder/expression/property_expression.h"
 #include "binder/expression/subquery_expression.h"
 #include "binder/expression_visitor.h"
 #include "planner/operator/factorization/flatten_resolver.h"
+#include "planner/operator/scan/logical_query_primary_key_lookup.h"
 #include "planner/planner.h"
+#include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -14,6 +20,84 @@ static expression_vector getDependentExprs(std::shared_ptr<Expression> expr, con
     auto analyzer = GroupDependencyAnalyzer(true /* collectDependentExpr */, schema);
     analyzer.visit(expr);
     return analyzer.getDependentExprs();
+}
+
+static bool isNodePrimaryKey(const Expression& expression, const NodeExpression& node,
+    table_id_t tableID) {
+    if (expression.expressionType != ExpressionType::PROPERTY) {
+        return false;
+    }
+    auto& property = expression.constCast<PropertyExpression>();
+    return property.getVariableName() == node.getInternalID()->getVariableName() &&
+           property.isPrimaryKey(tableID);
+}
+
+bool Planner::tryPlanQueryPrimaryKeyLookup(const QueryGraphCollection& queryGraphCollection,
+    const expression_vector& predicates, LogicalPlan& plan) {
+    if (queryGraphCollection.getNumQueryGraphs() != 1) {
+        return false;
+    }
+    auto queryGraph = queryGraphCollection.getQueryGraph(0);
+    if (queryGraph->getNumQueryNodes() != 1 || queryGraph->getNumQueryRels() != 0) {
+        return false;
+    }
+    auto node = queryGraph->getQueryNode(0);
+    auto tableIDs = node->getTableIDs();
+    if (tableIDs.size() != 1 || plan.getSchema()->isExpressionInScope(*node->getInternalID())) {
+        return false;
+    }
+    auto tableID = tableIDs[0];
+    auto table = storage::StorageManager::Get(*clientContext)
+                     ->getTable(tableID)
+                     ->ptrCast<storage::NodeTable>();
+    if (table->tryGetPrimaryKeyIndex() == nullptr) {
+        return false;
+    }
+
+    std::shared_ptr<Expression> key;
+    expression_vector residualPredicates;
+    for (auto& predicate : predicates) {
+        if (predicate->expressionType != ExpressionType::EQUALS) {
+            residualPredicates.push_back(predicate);
+            continue;
+        }
+        auto lhs = predicate->getChild(0);
+        auto rhs = predicate->getChild(1);
+        if (isNodePrimaryKey(*rhs, *node, tableID)) {
+            std::swap(lhs, rhs);
+        }
+        if (key == nullptr && isNodePrimaryKey(*lhs, *node, tableID) &&
+            plan.getSchema()->evaluable(*rhs) &&
+            !getDependentExprs(rhs, *plan.getSchema()).empty()) {
+            key = rhs;
+        } else {
+            residualPredicates.push_back(predicate);
+        }
+    }
+    if (key == nullptr) {
+        return false;
+    }
+
+    appendFlattens(plan.getSchema()->getGroupsPosInScope(), plan);
+    auto properties = getProperties(*node);
+    properties.erase(std::remove_if(properties.begin(), properties.end(),
+                         [](const std::shared_ptr<Expression>& expression) {
+                             return expression->constCast<PropertyExpression>().isInternalID();
+                         }),
+        properties.end());
+    const auto dependentExprs = getDependentExprs(key, *plan.getSchema());
+    DASSERT(!dependentExprs.empty());
+    const auto outputGroupPos = plan.getSchema()->getGroupPos(*dependentExprs[0]);
+    for ([[maybe_unused]] auto& dependentExpr : dependentExprs) {
+        DASSERT(plan.getSchema()->getGroupPos(*dependentExpr) == outputGroupPos);
+    }
+    auto lookup = std::make_shared<LogicalQueryPrimaryKeyLookup>(tableID, node->getInternalID(),
+        properties, key, outputGroupPos, plan.getLastOperator());
+    lookup->computeFactorizedSchema();
+    lookup->setCardinality(plan.getCardinality());
+    plan.setLastOperator(std::move(lookup));
+    appendFilters(residualPredicates, plan);
+    return true;
 }
 
 expression_vector Planner::getCorrelatedExprs(const QueryGraphCollection& collection,
@@ -173,6 +257,11 @@ void Planner::planOptionalMatch(const QueryGraphCollection& queryGraphCollection
 void Planner::planRegularMatch(const QueryGraphCollection& queryGraphCollection,
     const expression_vector& predicates, LogicalPlan& leftPlan,
     std::shared_ptr<BoundJoinHintNode> hint) {
+    // Correlated subqueries and OPTIONAL MATCH use dedicated join planning paths. Extending this
+    // lookup to them requires a rewrite that preserves their Mark/Left Join semantics.
+    if (tryPlanQueryPrimaryKeyLookup(queryGraphCollection, predicates, leftPlan)) {
+        return;
+    }
     expression_vector predicatesToPushDown, predicatesToPullUp;
     // E.g. MATCH (a) WITH COUNT(*) AS s MATCH (b) WHERE b.age > s
     // "b.age > s" should be pulled up after both MATCH clauses are joined.

@@ -6,6 +6,7 @@
 #include "common/enums/alter_type.h"
 #include "common/exception/binder.h"
 #include "common/exception/runtime.h"
+#include "common/string_utils.h"
 #include "processor/execution_context.h"
 #include "storage/storage_manager.h"
 #include "storage/table/table.h"
@@ -158,6 +159,22 @@ static bool checkRenameTableConflicts(const BoundAlterInfo& info, main::ClientCo
     return false;
 }
 
+static bool checkSetSortedByConflicts(const TableCatalogEntry& tableEntry,
+    const BoundAlterInfo& info) {
+    if (tableEntry.getTableType() != TableType::NODE) {
+        throw BinderException(std::format("Cannot set sorted-by metadata on non-node table {}.",
+            tableEntry.getName()));
+    }
+    auto& extraInfo = info.extraInfo->constCast<BoundExtraSetSortedByInfo>();
+    if (extraInfo.properties.empty()) {
+        throw BinderException("SORTED BY requires at least one property.");
+    }
+    for (auto& property : extraInfo.properties) {
+        validatePropertyExist(ConflictAction::ON_CONFLICT_THROW, tableEntry, property.propertyName);
+    }
+    return false;
+}
+
 static std::string fromToInTableMessage(const std::string& relGroupName,
     const std::string& fromTableName, const std::string& toTableName) {
     return std::format("{}->{} already exists in {} table.", fromTableName, toTableName,
@@ -287,6 +304,13 @@ void Alter::alterTable(main::ClientContext* clientContext, const TableCatalogEnt
     } break;
     case AlterType::COMMENT: {
         appendMessage(std::format("Comment added to table {}.", tableName), memoryManager);
+    } break;
+    case AlterType::SET_SORTED_BY: {
+        checkSetSortedByConflicts(entry, info);
+        auto& extraInfo = info.extraInfo->constCast<BoundExtraSetSortedByInfo>();
+        appendMessage(std::format("Table {} sorted-by metadata updated with {} column(s).",
+                          tableName, extraInfo.properties.size()),
+            memoryManager);
     } break;
     default:
         UNREACHABLE_CODE;

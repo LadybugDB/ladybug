@@ -261,6 +261,28 @@ static std::vector<StructField> getBaseRelStructFields() {
     return fields;
 }
 
+// Full node/rel struct type: the base fields followed by the properties surfaced in whole-object
+// (`RETURN n`) output. Properties hidden from the struct are excluded here so the struct fields
+// stay aligned with the child expressions built in ExpressionMapper.
+static std::vector<StructField> getNodeStructFields(const NodeExpression& node,
+    LogicalType labelType) {
+    std::vector<StructField> fields;
+    fields.emplace_back(InternalKeyword::ID, LogicalType::INTERNAL_ID());
+    fields.emplace_back(InternalKeyword::LABEL, std::move(labelType));
+    for (auto& property : node.getProjectedPropertyExpressions()) {
+        fields.emplace_back(property->getPropertyName(), property->getDataType().copy());
+    }
+    return fields;
+}
+
+static std::vector<StructField> getRelStructFields(const RelExpression& rel) {
+    auto fields = getBaseRelStructFields();
+    for (auto& property : rel.getProjectedPropertyExpressions()) {
+        fields.emplace_back(property->getPropertyName(), property->getDataType().copy());
+    }
+    return fields;
+}
+
 static std::shared_ptr<PropertyExpression> construct(LogicalType type,
     const std::string& propertyName, const Expression& child) {
     DASSERT(child.expressionType == ExpressionType::PATTERN);
@@ -282,22 +304,21 @@ std::shared_ptr<RelExpression> Binder::createNonRecursiveQueryRel(const std::str
     std::shared_ptr<NodeExpression> dstNode, RelDirectionType directionType,
     const std::vector<std::string>& originalLabels) {
     auto uniqueName = getUniqueExpressionName(parsedName);
-    // Bind properties
-    auto structFields = getBaseRelStructFields();
+    // Bind properties. As with createQueryNode, defer the struct type until we know whether this
+    // is an ANY graph, so start from the base fields and set the full struct type afterwards.
     std::vector<std::shared_ptr<PropertyExpression>> propertyExpressions;
-    if (entries.empty()) {
-        structFields.emplace_back(InternalKeyword::ID, LogicalType::INTERNAL_ID());
-    } else {
+    if (!entries.empty()) {
         for (auto& propertyName : getPropertyNames(entries)) {
-            auto property = createPropertyExpression(propertyName, uniqueName, parsedName, entries);
-            structFields.emplace_back(property->getPropertyName(), property->getDataType().copy());
-            propertyExpressions.push_back(std::move(property));
+            propertyExpressions.push_back(
+                createPropertyExpression(propertyName, uniqueName, parsedName, entries));
         }
     }
-    auto queryRel = std::make_shared<RelExpression>(LogicalType::REL(std::move(structFields)),
+    auto queryRel = std::make_shared<RelExpression>(LogicalType::REL(getBaseRelStructFields()),
         uniqueName, parsedName, entries, std::move(srcNode), std::move(dstNode), directionType,
         QueryRelType::NON_RECURSIVE);
     queryRel->setAlias(parsedName);
+    // Keep every property bound (the insert path looks columns up by name); internal columns are
+    // hidden from projection below, not dropped here.
     if (entries.empty()) {
         queryRel->addPropertyExpression(
             construct(LogicalType::INTERNAL_ID(), InternalKeyword::ID, *queryRel));
@@ -311,8 +332,22 @@ std::shared_ptr<RelExpression> Binder::createNonRecursiveQueryRel(const std::str
         queryRel->setDirectionExpr(expressionBinder.createVariableExpression(LogicalType::BOOL(),
             queryRel->getUniqueName() + InternalKeyword::DIRECTION));
     }
-    auto input = function::RewriteFunctionBindInput(clientContext, &expressionBinder, {queryRel});
-    queryRel->setLabelExpression(function::LabelFunction::rewriteFunc(input));
+    if (!entries.empty() && isAnyGraphNodeOrRel(*queryRel, clientContext) &&
+        queryRel->hasPropertyExpression("label")) {
+        // ANY graph. Rels are backed by the internal `_edges` table, whose `label` column is
+        // surfaced as _LABEL (see DatabaseManager::createGraph), so hide the redundant column from
+        // projection. A rel has a single type, so _LABEL stays scalar STRING. `_id` and `data`
+        // (the JSON property bag) stay.
+        queryRel->setHiddenPropertyNames({"label"});
+        queryRel->setDataType(LogicalType::REL(getRelStructFields(*queryRel)));
+        queryRel->setLabelExpression(queryRel->getPropertyExpression("label"));
+    } else {
+        // Structured graph. Every column is user-facing, and _LABEL is resolved by the rewrite.
+        queryRel->setDataType(LogicalType::REL(getRelStructFields(*queryRel)));
+        auto input =
+            function::RewriteFunctionBindInput(clientContext, &expressionBinder, {queryRel});
+        queryRel->setLabelExpression(function::LabelFunction::rewriteFunc(input));
+    }
     // Store original labels for ANY graphs
     if (!originalLabels.empty()) {
         queryRel->setOriginalLabels(originalLabels);
@@ -577,7 +612,16 @@ std::shared_ptr<NodeExpression> Binder::bindQueryNode(const NodePattern& nodePat
             // We bind to a single node with both labels
             if (!nodePattern.getTableNames().empty()) {
                 auto otherNodeEntries = bindNodeTableEntries(nodePattern.getTableNames());
-                queryNode->addEntries(otherNodeEntries.first);
+                // If the existing node was created from a wildcard pattern (no explicit
+                // labels), replace its entries with the explicit label constraint instead
+                // of adding. This ensures that reordering comma-separated patterns does
+                // not cause explicit label constraints to be ignored (github issue #696).
+                // E.g. MATCH (n1), (n1:L2) should restrict n1 to L2, not keep all tables.
+                if (queryNode->getOriginalLabels().empty()) {
+                    queryNode->setEntries(otherNodeEntries.first);
+                } else {
+                    queryNode->addEntries(otherNodeEntries.first);
+                }
             }
         }
     } else {
@@ -614,17 +658,19 @@ std::shared_ptr<NodeExpression> Binder::createQueryNode(const std::string& parse
     const std::unordered_map<TableCatalogEntry*, std::string>& dbNames,
     const std::vector<std::string>& originalLabels) {
     auto uniqueName = getUniqueExpressionName(parsedName);
-    // Bind properties.
-    auto structFields = getBaseNodeStructFields();
+    // Bind properties. The struct type is finalized below, once we know whether this is an ANY
+    // graph (whose internal columns are hidden from projection), so start the node from just the
+    // base fields and set the full struct type afterwards.
     std::vector<std::shared_ptr<PropertyExpression>> propertyExpressions;
     for (auto& propertyName : getPropertyNames(entries)) {
-        auto property = createPropertyExpression(propertyName, uniqueName, parsedName, entries);
-        structFields.emplace_back(property->getPropertyName(), property->getDataType().copy());
-        propertyExpressions.push_back(std::move(property));
+        propertyExpressions.push_back(
+            createPropertyExpression(propertyName, uniqueName, parsedName, entries));
     }
-    auto queryNode = std::make_shared<NodeExpression>(LogicalType::NODE(std::move(structFields)),
+    auto queryNode = std::make_shared<NodeExpression>(LogicalType::NODE(getBaseNodeStructFields()),
         uniqueName, parsedName, entries);
     queryNode->setAlias(parsedName);
+    // Keep every property bound: the insert path and explicit `n.prop` access rely on the full
+    // set. Internal columns are hidden from projection (below), not dropped here.
     for (auto& property : propertyExpressions) {
         queryNode->addPropertyExpression(property);
     }
@@ -638,8 +684,25 @@ std::shared_ptr<NodeExpression> Binder::createQueryNode(const std::string& parse
     // Bind internal expressions
     queryNode->setInternalID(
         construct(LogicalType::INTERNAL_ID(), InternalKeyword::ID, *queryNode));
-    auto input = function::RewriteFunctionBindInput(clientContext, &expressionBinder, {queryNode});
-    queryNode->setLabelExpression(function::LabelFunction::rewriteFunc(input));
+    if (isAnyGraphNodeOrRel(*queryNode, clientContext) &&
+        queryNode->hasPropertyExpression("label")) {
+        // ANY graph. Nodes are backed by the internal `_nodes` table whose `id`/`label`/`data`
+        // columns are implementation detail (see DatabaseManager::createGraph): `id` duplicates
+        // _ID and `label` is surfaced as _LABEL, so hide both from projection. A node carries a
+        // *set* of labels, hence STRING[]. `data` (the JSON property bag) stays.
+        queryNode->setHiddenPropertyNames({"id", "label"});
+        queryNode->setDataType(LogicalType::NODE(
+            getNodeStructFields(*queryNode, LogicalType::LIST(LogicalType::STRING()))));
+        queryNode->setLabelExpression(queryNode->getPropertyExpression("label"));
+    } else {
+        // Structured graph. Every column is user-facing, and _LABEL is the single table name
+        // resolved by the rewrite (scalar STRING).
+        queryNode->setDataType(
+            LogicalType::NODE(getNodeStructFields(*queryNode, LogicalType::STRING())));
+        auto input =
+            function::RewriteFunctionBindInput(clientContext, &expressionBinder, {queryNode});
+        queryNode->setLabelExpression(function::LabelFunction::rewriteFunc(input));
+    }
     return queryNode;
 }
 
@@ -764,14 +827,17 @@ std::vector<TableCatalogEntry*> Binder::bindRelGroupEntries(
         for (auto entry : catalog->getRelGroupEntries(transaction, useInternal)) {
             entrySet.insert(entry);
         }
-        for (auto attachedDB : dbManager->getAttachedDatabases()) {
-            auto attachedCatalog = attachedDB->getCatalog();
-            for (auto entry : attachedCatalog->getRelGroupEntries(transaction, useInternal)) {
-                entrySet.insert(entry);
-            }
-        }
+        // Stop-gap: skip attached rel groups; physical routing for rel patterns
+        // over attached databases is not yet implemented. Unlabeled ()-[r]->()
+        // would otherwise crash or silently read the wrong table on ID overlap.
+        // TODO: implement full dbName plumbing for rel patterns (BUG 6).
     } else {
         for (auto& name : tableNames) {
+            // Check for qualified rel name (db.table) — not yet supported.
+            if (name.find('.') != std::string::npos) {
+                throw BinderException(
+                    "Qualified relationship patterns (e.g. -[r:db.rel]->) are not supported yet.");
+            }
             if (catalog->containsTable(transaction, name)) {
                 auto entry = catalog->getTableCatalogEntry(transaction, name, useInternal);
                 if (entry->getType() != CatalogEntryType::REL_GROUP_ENTRY) {

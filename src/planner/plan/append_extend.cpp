@@ -194,14 +194,15 @@ void Planner::appendRecursiveExtend(const std::shared_ptr<NodeExpression>& bound
 
 void Planner::createPathNodePropertyScanPlan(const std::shared_ptr<NodeExpression>& node,
     const expression_vector& properties, LogicalPlan& plan) {
-    appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan);
+    appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan, node.get());
 }
 
 void Planner::createPathRelPropertyScanPlan(const std::shared_ptr<NodeExpression>& boundNode,
     const std::shared_ptr<NodeExpression>& nbrNode, const std::shared_ptr<RelExpression>& rel,
     ExtendDirection direction, bool extendFromSource, const expression_vector& properties,
     LogicalPlan& plan) {
-    appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan);
+    appendScanNodeTable(boundNode->getInternalID(), boundNode->getTableIDs(), {}, plan,
+        boundNode.get());
     appendNonRecursiveExtend(boundNode, nbrNode, rel, direction, extendFromSource, properties,
         plan);
     appendProjection(properties, plan);

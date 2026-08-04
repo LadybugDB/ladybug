@@ -3,8 +3,10 @@
 #include <string>
 #include <vector>
 
+#include "common/api.h"
 #include "common/arrow/arrow.h"
 #include "common/arrow/arrow_nullmask_tree.h"
+#include "common/arrow/arrow_schema_metadata.h"
 
 struct ArrowSchema;
 
@@ -20,7 +22,7 @@ struct ArrowSchemaHolder {
     std::vector<std::unique_ptr<char[]>> ownedMetadatas;
 };
 
-class ArrowConverter {
+class LBUG_API ArrowConverter {
 public:
     static std::unique_ptr<ArrowSchema> toArrowSchema(const std::vector<LogicalType>& dataTypes,
         const std::vector<std::string>& columnNames, bool fallbackExtensionTypes);
@@ -29,6 +31,9 @@ public:
     static void fromArrowArray(const ArrowSchema* schema, const ArrowArray* array,
         ValueVector& outputVector, ArrowNullMaskTree* mask, uint64_t srcOffset, uint64_t dstOffset,
         uint64_t count);
+    static void fromArrowArray(const ArrowSchema* schema, const ArrowArray* array,
+        ValueVector& outputVector, ArrowNullMaskTree* mask, uint64_t srcOffset, uint64_t dstOffset,
+        uint64_t count, const std::optional<ArrowLogicalTypeInfo>* logicalTypeInfo);
     static void fromArrowArray(const ArrowSchema* schema, const ArrowArray* array,
         ValueVector& outputVector);
 

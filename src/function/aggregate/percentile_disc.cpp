@@ -7,6 +7,7 @@
 #include "binder/expression/literal_expression.h"
 #include "common/exception/binder.h"
 #include "common/type_utils.h"
+#include "function/aggregate/comparison_funcs.h"
 
 using namespace lbug::binder;
 using namespace lbug::common;
@@ -37,39 +38,6 @@ struct PercentileDiscState : public AggregateStateWithNull {
 
 static uint8_t* getElementValue(PercentileDiscElement* element) {
     return reinterpret_cast<uint8_t*>(element) + sizeof(PercentileDiscElement);
-}
-
-static bool valueLess(const uint8_t* left, const uint8_t* right, LogicalTypeID typeID) {
-    switch (typeID) {
-    case LogicalTypeID::INT8:
-        return *reinterpret_cast<const int8_t*>(left) < *reinterpret_cast<const int8_t*>(right);
-    case LogicalTypeID::INT16:
-        return *reinterpret_cast<const int16_t*>(left) < *reinterpret_cast<const int16_t*>(right);
-    case LogicalTypeID::INT32:
-        return *reinterpret_cast<const int32_t*>(left) < *reinterpret_cast<const int32_t*>(right);
-    case LogicalTypeID::INT64:
-    case LogicalTypeID::SERIAL:
-        return *reinterpret_cast<const int64_t*>(left) < *reinterpret_cast<const int64_t*>(right);
-    case LogicalTypeID::UINT8:
-        return *reinterpret_cast<const uint8_t*>(left) < *reinterpret_cast<const uint8_t*>(right);
-    case LogicalTypeID::UINT16:
-        return *reinterpret_cast<const uint16_t*>(left) < *reinterpret_cast<const uint16_t*>(right);
-    case LogicalTypeID::UINT32:
-        return *reinterpret_cast<const uint32_t*>(left) < *reinterpret_cast<const uint32_t*>(right);
-    case LogicalTypeID::UINT64:
-        return *reinterpret_cast<const uint64_t*>(left) < *reinterpret_cast<const uint64_t*>(right);
-    case LogicalTypeID::FLOAT:
-        return *reinterpret_cast<const float*>(left) < *reinterpret_cast<const float*>(right);
-    case LogicalTypeID::DOUBLE:
-        return *reinterpret_cast<const double*>(left) < *reinterpret_cast<const double*>(right);
-    case LogicalTypeID::INT128:
-        return *reinterpret_cast<const int128_t*>(left) < *reinterpret_cast<const int128_t*>(right);
-    case LogicalTypeID::UINT128:
-        return *reinterpret_cast<const uint128_t*>(left) <
-               *reinterpret_cast<const uint128_t*>(right);
-    default:
-        UNREACHABLE_CODE;
-    }
 }
 
 static std::unique_ptr<AggregateState> initialize() {

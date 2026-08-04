@@ -1,0 +1,14 @@
+-DATASET CSV empty
+-BUFFER_POOL_SIZE 1024000000
+
+--
+
+-CASE issue9
+-STATEMENT CREATE NODE TABLE `a.b`(id STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CALL show_tables() RETURN name, type;
+---- 1
+a.b|NODE
+-STATEMENT CALL table_info('a.b') RETURN *;
+---- 1
+0|id|STRING|NULL|True

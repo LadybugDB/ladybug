@@ -44,7 +44,8 @@ protected:
         common::offset_t numValuesToRead, common::ValueVector* resultVector,
         common::sel_t startPosInVector = 0) const;
     void scanFiltered(const SegmentState& state, common::offset_t startOffsetInChunk,
-        common::ValueVector* resultVector, common::sel_t startPosInVector) const;
+        common::row_idx_t numValuesToScan, common::ValueVector* resultVector,
+        common::sel_t startPosInVector) const;
 
     void lookupInternal(const SegmentState& state, common::offset_t nodeOffset,
         common::ValueVector* resultVector, uint32_t posInVector) const override;

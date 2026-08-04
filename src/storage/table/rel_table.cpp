@@ -161,11 +161,15 @@ RelTable::RelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
     auto relEntryInfo = relGroupEntry->getRelEntryInfo(fromNodeTableID, toNodeTableID);
     tableID = relEntryInfo->oid;
     relGroupID = relGroupEntry->getTableID();
-    for (auto direction : relGroupEntry->getRelDataDirections()) {
-        auto nbrTableID = RelDirectionUtils::getNbrTableID(direction, fromTableID, toTableID);
-        directedRelData.emplace_back(
-            std::make_unique<RelTableData>(storageManager->getDataFH(), memoryManager, shadowFile,
-                *relGroupEntry, *relEntryInfo, *this, direction, nbrTableID, enableCompression));
+    // Foreign-backed rel tables (e.g. pg_client fkrel_ tables) are scan-driven and don't
+    // own on-disk CSR columns, so skip RelTableData construction for them.
+    if (!relGroupEntry->getScanFunction().has_value()) {
+        for (auto direction : relGroupEntry->getRelDataDirections()) {
+            auto nbrTableID = RelDirectionUtils::getNbrTableID(direction, fromTableID, toTableID);
+            directedRelData.emplace_back(std::make_unique<RelTableData>(storageManager->getDataFH(),
+                memoryManager, shadowFile, *relGroupEntry, *relEntryInfo, *this, direction,
+                nbrTableID, enableCompression));
+        }
     }
 }
 
@@ -730,6 +734,38 @@ std::vector<std::pair<offset_t, row_idx_t>> RelTable::getTopKDegrees(const Trans
 row_idx_t RelTable::getNumActiveBoundNodes(const Transaction* transaction,
     RelDataDirection direction) {
     return getDegreeEntries(transaction, direction).size();
+}
+
+row_idx_t RelTable::getDegreeForOffset(const Transaction* transaction, RelDataDirection direction,
+    offset_t nodeOffset) {
+    const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(nodeOffset);
+    const auto offsetInGroup = nodeOffset - StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
+    auto* relTableData = getDirectedTableData(direction);
+    if (nodeGroupIdx >= relTableData->getNumNodeGroups()) {
+        return 0;
+    }
+    auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx);
+    if (!nodeGroup) {
+        return 0;
+    }
+    auto& csrNodeGroup = nodeGroup->cast<CSRNodeGroup>();
+    row_idx_t count = 0;
+    if (auto* persistentGroup = csrNodeGroup.getPersistentChunkedGroup()) {
+        count +=
+            persistentGroup->cast<ChunkedCSRNodeGroup>().getCSRHeader().getCSRLength(offsetInGroup);
+    }
+    if (const auto* csrIndex = csrNodeGroup.getCSRIndex()) {
+        count += csrIndex->getNumRows(offsetInGroup);
+    }
+    if (transaction->isWriteTransaction()) {
+        if (auto* localTable = transaction->getLocalStorage()->getLocalTable(tableID)) {
+            auto& localCSRIndex = localTable->cast<LocalRelTable>().getCSRIndex(direction);
+            if (auto it = localCSRIndex.find(nodeOffset); it != localCSRIndex.end()) {
+                count += it->second.size();
+            }
+        }
+    }
+    return count;
 }
 
 void RelTable::serialize(Serializer& ser) const {

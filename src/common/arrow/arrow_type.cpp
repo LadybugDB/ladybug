@@ -1,4 +1,5 @@
 #include "common/arrow/arrow_converter.h"
+#include "common/arrow/arrow_schema_metadata.h"
 #include "common/exception/not_implemented.h"
 #include "common/string_utils.h"
 
@@ -15,6 +16,13 @@ LogicalType ArrowConverter::fromArrowSchema(const ArrowSchema* schema) {
     // logical type of the dict
     if (schema->dictionary != nullptr) {
         return fromArrowSchema(schema->dictionary);
+    }
+    if (auto logicalTypeInfo = tryGetArrowLogicalTypeInfo(schema); logicalTypeInfo.has_value()) {
+        switch (logicalTypeInfo->type) {
+        case ArrowLogicalTypeInfo::Type::DECIMAL:
+            return LogicalType::DECIMAL(logicalTypeInfo->decimal.precision,
+                logicalTypeInfo->decimal.scale);
+        }
     }
     switch (arrowType[0]) {
     case 'n':

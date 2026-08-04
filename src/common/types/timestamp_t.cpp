@@ -169,6 +169,43 @@ timestamp_t Timestamp::fromCString(const char* str, uint64_t len) {
     return result;
 }
 
+timestamp_t Timestamp::fromCStringLocal(const char* str, uint64_t len) {
+    uint64_t pos = 0;
+    date_t date;
+    dtime_t time;
+    if (!Date::tryConvertDate(str, len, pos, date, true /*allowTrailing*/)) {
+        throw ConversionException(getTimestampConversionExceptionMsg(str, len));
+    }
+    if (pos < len && (str[pos] == ' ' || str[pos] == 'T')) {
+        pos++;
+    }
+    if (pos < len) {
+        uint64_t time_pos = 0;
+        if (!Time::tryConvertTime(str + pos, len - pos, time_pos, time)) {
+            throw ConversionException(getTimestampConversionExceptionMsg(str, len));
+        }
+        pos += time_pos;
+    }
+    // Validate trailing chars: allow 'Z', optional UTC offset, whitespace.
+    // Reject anything else for consistency with tryConvertTimestamp.
+    if (pos < len) {
+        if (str[pos] == 'Z') {
+            pos++;
+        }
+        int hour_offset = 0, minute_offset = 0;
+        if (Timestamp::tryParseUTCOffset(str, pos, len, hour_offset, minute_offset)) {
+            // UTC offset present, deliberately ignored to keep wall-clock time.
+        }
+        while (pos < len && isspace(str[pos])) {
+            pos++;
+        }
+        if (pos < len) {
+            throw ConversionException(getTimestampConversionExceptionMsg(str, len));
+        }
+    }
+    return fromDateTime(date, time);
+}
+
 bool Timestamp::tryParseUTCOffset(const char* str, uint64_t& pos, uint64_t len, int& hour_offset,
     int& minute_offset) {
     minute_offset = 0;

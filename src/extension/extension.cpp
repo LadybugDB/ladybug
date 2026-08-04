@@ -369,13 +369,38 @@ void ExtensionUtils::registerIndexType(main::Database& database, storage::IndexT
     database.getStorageManager()->registerIndexType(std::move(type));
 }
 
+#ifdef _WIN32
+// Windows reports a dependency it cannot find as ERROR_MOD_NOT_FOUND against the library we asked
+// for, so the message names the extension while the file actually missing is something the
+// extension links against. Say so, rather than leaving users to guess which module is meant.
+static std::string dlMissingDependencyHint(const std::string& path) {
+    // Capture the code before touching the filesystem, which would overwrite it -- the caller still
+    // needs GetLastError() intact for dlErrMessage().
+    const auto errorCode = GetLastError();
+    const auto extensionExists = std::filesystem::exists(path);
+    SetLastError(errorCode);
+    if (errorCode != ERROR_MOD_NOT_FOUND || !extensionExists) {
+        return "";
+    }
+    return "\nThe extension itself was found, so a library it depends on is the one that could not "
+           "be located. Extensions link against OpenSSL 3 (libssl-3-x64.dll and "
+           "libcrypto-3-x64.dll), which is not distributed with them.";
+}
+#else
+static std::string dlMissingDependencyHint(const std::string&) {
+    return "";
+}
+#endif
+
 ExtensionLibLoader::ExtensionLibLoader(const std::string& extensionName, const std::string& path)
     : extensionName{extensionName} {
     libHdl = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
     if (libHdl == nullptr) {
-        throw common::IOException(
-            std::format("Failed to load library: {} which is needed by extension: {}.\nError: {}.",
-                path, extensionName, common::dlErrMessage()));
+        // Read before dlErrMessage(), which is also driven by GetLastError().
+        const auto hint = dlMissingDependencyHint(path);
+        throw common::IOException(std::format(
+            "Failed to load library: {} which is needed by extension: {}.\nError: {}.{}", path,
+            extensionName, common::dlErrMessage(), hint));
     }
 }
 

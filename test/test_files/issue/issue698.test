@@ -1,0 +1,64 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue698NullContradiction
+# Reproduction for github issue #698:
+# NULL contradiction (n.v IS NULL AND n.v IS NOT NULL) scans the node table
+# instead of producing an empty result.
+#
+# Bug: The optimizer does not simplify "x IS NULL AND x IS NOT NULL" to false,
+# causing a full node-table scan instead of returning empty immediately.
+
+-STATEMENT CREATE NODE TABLE N(id INT64, v INT64, PRIMARY KEY(id));
+---- ok
+
+-STATEMENT CREATE (:N {id: 1, v: 1});
+---- ok
+-STATEMENT CREATE (:N {id: 2, v: 2});
+---- ok
+
+# Query A: NULL contradiction - should return 0 without scanning the node table
+-STATEMENT MATCH (n:N) WHERE n.v IS NULL AND n.v IS NOT NULL RETURN count(*) AS c;
+---- 1
+0
+
+# Query B: Same as false literal - should also return 0
+-STATEMENT MATCH (n:N) WHERE false RETURN count(*) AS c;
+---- 1
+0
+
+# Verify data exists
+-STATEMENT MATCH (n:N) RETURN count(*) AS c;
+---- 1
+2
+
+# Single IS NULL alone is still handled as a proper filter (not a contradiction)
+-STATEMENT MATCH (n:N) WHERE n.v IS NULL RETURN count(*) AS c;
+---- 1
+0
+
+# Single IS NOT NULL alone is still handled as a proper filter (not a contradiction)
+-STATEMENT MATCH (n:N) WHERE n.v IS NOT NULL RETURN count(*) AS c;
+---- 1
+2
+
+# Triple AND: two contradictory IS NULL + IS NOT NULL plus a real condition should be false
+-STATEMENT MATCH (n:N) WHERE n.v IS NULL AND n.v IS NOT NULL AND n.v > 0 RETURN count(*) AS c;
+---- 1
+0
+
+# Nested AND with contradiction in sub-expression
+-STATEMENT MATCH (n:N) WHERE (n.v IS NULL AND n.v IS NOT NULL) OR n.id = 1 RETURN count(*) AS c;
+---- 1
+1
+
+# OR tautology: IS_NULL(x) OR IS_NOT_NULL(x) is always true -> all rows returned
+-STATEMENT MATCH (n:N) WHERE n.v IS NULL OR n.v IS NOT NULL RETURN count(*) AS c;
+---- 1
+2
+
+# OR tautology via NOT: (n.v IS NULL) OR NOT(n.v IS NULL) is always true
+-STATEMENT MATCH (n:N) WHERE n.v IS NULL OR NOT(n.v IS NULL) RETURN count(*) AS c;
+---- 1
+2

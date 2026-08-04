@@ -93,9 +93,6 @@ private:
     std::shared_ptr<planner::LogicalOperator> appendFiltersStatsAware(
         binder::expression_vector predicates, std::shared_ptr<planner::LogicalOperator> child);
 
-    std::shared_ptr<planner::LogicalOperator> appendScanNodeTable(
-        std::shared_ptr<binder::Expression> nodeID, std::vector<common::table_id_t> nodeTableIDs,
-        binder::expression_vector properties, std::shared_ptr<planner::LogicalOperator> child);
     std::shared_ptr<planner::LogicalOperator> appendFilter(
         std::shared_ptr<binder::Expression> predicate,
         std::shared_ptr<planner::LogicalOperator> child);

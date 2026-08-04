@@ -255,6 +255,61 @@ Dan
 0
 0
 
+-LOG StructuredDateExtractDayOfWeekFuncTest
+-STATEMENT MATCH (p:person) RETURN date_part("dow", p.birthdate)
+---- 8
+1
+1
+6
+0
+0
+0
+0
+2
+-STATEMENT MATCH (p:person) RETURN date_part("dayofweek", p.birthdate)
+---- 8
+1
+1
+6
+0
+0
+0
+0
+2
+-STATEMENT RETURN date_part("dow", date('1970-01-01')), date_part("dow", date('1969-12-28')), date_part("dow", date('2023-10-11'))
+---- 1
+4|0|3
+
+-LOG StructuredDateExtractWeekFuncTest
+-STATEMENT MATCH (p:person) RETURN date_part("week", p.birthdate)
+---- 8
+1
+1
+25
+29
+43
+43
+43
+48
+-STATEMENT RETURN date_part("week", date('2019-12-30')), date_part("week", date('2021-01-01')), date_part("week", date('1970-01-01'))
+---- 1
+1|53|1
+
+-LOG StructuredDateTruncWeekFuncTest
+-STATEMENT MATCH (p:person) RETURN date_trunc("week", p.birthdate)
+---- 8
+1900-01-01
+1900-01-01
+1940-06-17
+1950-07-17
+1980-10-20
+1980-10-20
+1980-10-20
+1990-11-26
+-STATEMENT RETURN date_trunc("week", date('2026-07-19')), date_trunc("week", date('1970-01-01')), date_trunc("dow", date('1933-12-12'))
+---- 1
+2026-07-13|1969-12-29|1933-12-12
+
 -LOG StructuredDateTruncYearFuncTest
 -STATEMENT MATCH (p:person) RETURN date_trunc("year", p.birthdate)
 ---- 8

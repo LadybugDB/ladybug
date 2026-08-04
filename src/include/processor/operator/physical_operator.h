@@ -67,6 +67,7 @@ enum class PhysicalOperatorType : uint8_t {
     HASH_JOIN_PROBE,
     IMPORT_DATABASE,
     INDEX_LOOKUP,
+    QUERY_PRIMARY_KEY_LOOKUP,
     INSERT,
     INTERSECT_BUILD,
     INTERSECT,

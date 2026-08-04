@@ -1,0 +1,80 @@
+-DATASET PARQUET empty
+-SKIP_IN_MEM
+
+--
+
+-CASE AnonymousParquetDeleteReload
+-STATEMENT CREATE NODE TABLE `A` (`id` INT64, `key` STRING, PRIMARY KEY(`id`));
+---- ok
+
+-STATEMENT CREATE NODE TABLE `B` (`id` INT64, `key` STRING, PRIMARY KEY(`id`));
+---- ok
+
+-STATEMENT CREATE REL TABLE `A_TO_B` (FROM `A` TO `B`, `type` STRING, MANY_MANY);
+---- ok
+
+-STATEMENT COPY `A` (`id`, `key`) FROM "${LBUG_ROOT_DIRECTORY}/test/test_files/dictionary_bug/orb383_relationship_projection_obfuscated_fixture/A.parquet";
+---- ok
+
+-STATEMENT COPY `B` (`id`, `key`) FROM "${LBUG_ROOT_DIRECTORY}/test/test_files/dictionary_bug/orb383_relationship_projection_obfuscated_fixture/B.parquet";
+---- ok
+
+-STATEMENT COPY `A_TO_B` (`type`) FROM "${LBUG_ROOT_DIRECTORY}/test/test_files/dictionary_bug/orb383_relationship_projection_obfuscated_fixture/A_TO_B.parquet";
+---- ok
+
+-STATEMENT MATCH ()-[r:A_TO_B]->() RETURN count(r);
+---- 1
+953
+
+-STATEMENT MATCH (a:A)-[r:A_TO_B]->(b:B)
+           WHERE offset(ID(r)) = 952
+           RETURN a.key, r.type, b.key;
+---- 1
+node_10049|REL_A|node_10050
+
+-STATEMENT MATCH (a:A {key: 'node_3379'})-[r:A_TO_B]->(b:B {key: 'node_3382'})
+           RETURN offset(ID(r)), r.type;
+---- 1
+0|REL_A
+
+-STATEMENT MATCH (b:B {key: 'node_3382'})<-[r:A_TO_B]-(a:A {key: 'node_3379'})
+           RETURN offset(ID(r)), r.type;
+---- 1
+0|REL_A
+
+-STATEMENT MATCH ()-[r:A_TO_B]->()
+           WHERE offset(ID(r)) = 952
+           DELETE r;
+---- ok
+
+-STATEMENT MATCH ()-[r:A_TO_B]->()
+           WHERE offset(ID(r)) = 952
+           RETURN count(r);
+---- 1
+0
+
+-STATEMENT MATCH (a:A {key: 'node_3379'})-[r:A_TO_B]->(b:B {key: 'node_3382'})
+           RETURN offset(ID(r)), r.type;
+---- 1
+0|REL_A
+
+-STATEMENT MATCH (b:B {key: 'node_3382'})<-[r:A_TO_B]-(a:A {key: 'node_3379'})
+           RETURN offset(ID(r)), r.type;
+---- 1
+0|REL_A
+
+-RELOADDB
+
+-STATEMENT MATCH ()-[r:A_TO_B]->() RETURN count(r);
+---- 1
+952
+
+-STATEMENT MATCH (a:A {key: 'node_3379'})-[r:A_TO_B]->(b:B {key: 'node_3382'})
+           RETURN offset(ID(r)), r.type;
+---- 1
+0|REL_A
+
+-STATEMENT MATCH (b:B {key: 'node_3382'})<-[r:A_TO_B]-(a:A {key: 'node_3379'})
+           RETURN offset(ID(r)), r.type;
+---- 1
+0|REL_A

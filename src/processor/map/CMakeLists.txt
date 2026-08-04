@@ -38,6 +38,7 @@ add_library(lbug_processor_mapper
         map_order_by.cpp
         map_path_property_probe.cpp
         map_projection.cpp
+        map_query_primary_key_lookup.cpp
         map_recursive_extend.cpp
         map_rel_degree_table.cpp
         map_scan_node_table.cpp

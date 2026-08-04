@@ -125,3 +125,67 @@ Binder exception: Create node a with multiple node labels is not supported.
 ---- ok
 -STATEMENT DROP TABLE Person
 ---- ok
+
+-CASE AnyGraphLabelsFunctions
+-SKIP_FSM_LEAK_CHECK
+
+-LOG CreateAnyGraph
+-STATEMENT CREATE GRAPH g ANY
+---- ok
+-STATEMENT USE GRAPH g
+---- ok
+-STATEMENT CREATE (:Person:Employee {name: 'Alice'})-[:WorksAt {since: 2020}]->(:Org {name: 'Acme'})
+---- ok
+
+-LOG NodeLabelsReturnsFullList
+-STATEMENT MATCH (n:Person:Employee) RETURN labels(n)
+---- 1
+[Person,Employee]
+
+-LOG NodeLabelSingularReturnsFirst
+-STATEMENT MATCH (n:Person:Employee) RETURN label(n)
+---- 1
+Person
+
+-LOG RelLabelsReturnsList
+-STATEMENT MATCH (:Person)-[e:WorksAt]->(:Org) RETURN labels(e)
+---- 1
+[WorksAt]
+
+-LOG RelLabelSingularReturnsScalar
+-STATEMENT MATCH (:Person)-[e:WorksAt]->(:Org) RETURN label(e)
+---- 1
+WorksAt
+
+-LOG Cleanup
+-STATEMENT USE GRAPH main
+---- ok
+-STATEMENT DROP GRAPH g
+---- ok
+
+-CASE AnyGraphWholeObjectLabel
+-SKIP_FSM_LEAK_CHECK
+
+-LOG CreateAnyGraph
+-STATEMENT CREATE GRAPH g ANY
+---- ok
+-STATEMENT USE GRAPH g
+---- ok
+-STATEMENT CREATE (:Person:Employee {name: 'Alice'})-[:WorksAt {since: 2020}]->(:Org {name: 'Acme'})
+---- ok
+
+-LOG WholeNodeLabelIsRealLabelSet
+-STATEMENT MATCH (n:Person:Employee) RETURN n
+---- 1
+{_ID: 0:0, _LABEL: [Person,Employee], data: {"name":"Alice"}}
+
+-LOG WholeRelLabelIsRealType
+-STATEMENT MATCH ()-[e:WorksAt]->() RETURN e
+---- 1
+(0:0)-{_LABEL: WorksAt, _id: 1:0, data: {"since":2020}}->(0:1)
+
+-LOG Cleanup
+-STATEMENT USE GRAPH main
+---- ok
+-STATEMENT DROP GRAPH g
+---- ok

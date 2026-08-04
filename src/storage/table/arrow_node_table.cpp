@@ -24,6 +24,21 @@ static uint64_t getArrowBatchLength(const ArrowArrayWrapper& array) {
     return 0;
 }
 
+static std::vector<std::optional<common::ArrowLogicalTypeInfo>> resolveColumnLogicalTypeInfos(
+    const ArrowSchemaWrapper& schema) {
+    std::vector<std::optional<common::ArrowLogicalTypeInfo>> result;
+    if (schema.n_children <= 0 || schema.children == nullptr) {
+        return result;
+    }
+    result.reserve(static_cast<size_t>(schema.n_children));
+    for (int64_t i = 0; i < schema.n_children; ++i) {
+        result.push_back(schema.children[i] == nullptr ?
+                             std::nullopt :
+                             common::tryGetArrowLogicalTypeInfo(schema.children[i]));
+    }
+    return result;
+}
+
 ArrowNodeTable::ArrowNodeTable(const StorageManager* storageManager,
     const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
     ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays, std::string arrowId)
@@ -35,6 +50,7 @@ ArrowNodeTable::ArrowNodeTable(const StorageManager* storageManager,
     if (!this->schema.format) {
         throw common::RuntimeException("Arrow schema format cannot be null");
     }
+    columnLogicalTypeInfos = resolveColumnLogicalTypeInfos(this->schema);
     batchStartOffsets.reserve(this->arrays.size());
     for (const auto& array : this->arrays) {
         batchStartOffsets.push_back(totalRows);
@@ -203,10 +219,14 @@ void ArrowNodeTable::copyArrowMorselToOutputVectors(const ArrowArrayWrapper& bat
         auto& outputVector = *outputVectors[outCol];
         auto* childArray = batch.children[arrowColIdx];
         auto* childSchema = schema.children[arrowColIdx];
+        const auto* logicalTypeInfo =
+            static_cast<size_t>(arrowColIdx) < columnLogicalTypeInfos.size() ?
+                &columnLogicalTypeInfos[arrowColIdx] :
+                nullptr;
         common::ArrowNullMaskTree nullMask(childSchema, childArray, childArray->offset,
             childArray->length);
         common::ArrowConverter::fromArrowArray(childSchema, childArray, outputVector, &nullMask,
-            childArray->offset + currentMorselStartOffset, 0, numRowsToCopy);
+            childArray->offset + currentMorselStartOffset, 0, numRowsToCopy, logicalTypeInfo);
     }
 }
 
@@ -245,11 +265,15 @@ bool ArrowNodeTable::lookupPK([[maybe_unused]] const transaction::Transaction* t
         }
         auto* pkChildArray = batch.children[pkArrowColumnIdx];
         auto* pkChildSchema = schema.children[pkArrowColumnIdx];
+        const auto* logicalTypeInfo =
+            static_cast<size_t>(pkArrowColumnIdx) < columnLogicalTypeInfos.size() ?
+                &columnLogicalTypeInfos[pkArrowColumnIdx] :
+                nullptr;
         common::ArrowNullMaskTree nullMask(pkChildSchema, pkChildArray, pkChildArray->offset,
             pkChildArray->length);
         for (uint64_t rowIdx = 0; rowIdx < batchLength; ++rowIdx) {
             common::ArrowConverter::fromArrowArray(pkChildSchema, pkChildArray, *arrowPKVector,
-                &nullMask, pkChildArray->offset + rowIdx, 0, 1);
+                &nullMask, pkChildArray->offset + rowIdx, 0, 1, logicalTypeInfo);
             if (arrowPKVector->isNull(0)) {
                 continue;
             }

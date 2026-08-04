@@ -102,6 +102,12 @@ public:
 
     std::shared_ptr<binder::Expression> getNodeID() const { return nodeID; }
     std::vector<common::table_id_t> getTableIDs() const { return nodeTableIDs; }
+    const std::unordered_map<common::table_id_t, std::string>& getTableDBMap() const {
+        return tableDBMap;
+    }
+    void setTableDBMap(std::unordered_map<common::table_id_t, std::string> map) {
+        tableDBMap = std::move(map);
+    }
 
     binder::expression_vector getProperties() const { return properties; }
     void addProperty(std::shared_ptr<binder::Expression> expr) {
@@ -128,6 +134,7 @@ private:
     LogicalScanNodeTableType scanType;
     std::shared_ptr<binder::Expression> nodeID;
     std::vector<common::table_id_t> nodeTableIDs;
+    std::unordered_map<common::table_id_t, std::string> tableDBMap;
     binder::expression_vector properties;
     std::vector<storage::ColumnPredicateSet> propertyPredicates;
     std::unique_ptr<ExtraScanNodeTableInfo> extraInfo;
