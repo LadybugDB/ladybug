@@ -775,6 +775,30 @@ static std::vector<TableCatalogEntry*> sortEntries(const table_catalog_entry_set
     return entries;
 }
 
+// A partitioned parent node table owns no physical storage; its records live across its
+// partition subgraphs. When a node label resolves to a partitioned parent we expand it into the
+// child partition tables so the (existing) multi-table node scan unions over every partition.
+static table_catalog_entry_set_t expandPartitionedNodeTables(catalog::Catalog* catalog,
+    const transaction::Transaction* transaction, const table_catalog_entry_set_t& entrySet) {
+    table_catalog_entry_set_t expanded;
+    for (auto entry : entrySet) {
+        if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
+            expanded.insert(entry);
+            continue;
+        }
+        auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
+        if (!nodeEntry->isPartitioned()) {
+            expanded.insert(entry);
+            continue;
+        }
+        for (auto childID : nodeEntry->getChildTableIDs()) {
+            auto* child = catalog->getTableCatalogEntry(transaction, childID);
+            expanded.insert(child);
+        }
+    }
+    return expanded;
+}
+
 std::pair<std::vector<TableCatalogEntry*>, std::unordered_map<TableCatalogEntry*, std::string>>
 Binder::bindNodeTableEntries(const std::vector<std::string>& tableNames) const {
     auto transaction = transaction::Transaction::Get(*clientContext);
@@ -826,6 +850,8 @@ Binder::bindNodeTableEntries(const std::vector<std::string>& tableNames) const {
             }
         }
     }
+    // Expand partitioned parents into their partition subgraphs for scanning.
+    entrySet = expandPartitionedNodeTables(catalog, transaction, entrySet);
     return {sortEntries(entrySet), std::move(dbNames)};
 }
 

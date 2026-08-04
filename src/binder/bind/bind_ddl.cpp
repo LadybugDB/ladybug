@@ -213,6 +213,24 @@ static StorageFormat getStorageFormat(const case_insensitive_map_t<Value>& optio
     return StorageFormat::NONE;
 }
 
+static void validatePartitionColumn(const std::vector<PropertyDefinition>& propertyDefinitions,
+    const std::string& columnName) {
+    auto propertyIt = std::find_if(propertyDefinitions.begin(), propertyDefinitions.end(),
+        [&](const PropertyDefinition& def) { return def.getName() == columnName; });
+    if (propertyIt == propertyDefinitions.end()) {
+        throw BinderException(std::format(
+            "Partition column {} does not exist. A partition column must be an existing column "
+            "of the table.",
+            columnName));
+    }
+    if (!LogicalTypeUtils::isPartitionable(propertyIt->getType())) {
+        throw BinderException(std::format(
+            "Partition column {} has type {} which is not eligible for partitioning. Partition "
+            "columns must be an integral, temporal or textual type.",
+            columnName, propertyIt->getType().toString()));
+    }
+}
+
 BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info) {
     auto propertyDefinitions = bindPropertyDefinitions(info->propertyDefinitions, info->tableName);
     auto& extraInfo = info->extraInfo->constCast<ExtraCreateNodeTableInfo>();
@@ -220,8 +238,20 @@ BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info
     auto boundOptions = bindParsingOptions(extraInfo.options);
     auto storage = getStorage(boundOptions);
     auto storageFormat = getStorageFormat(boundOptions);
+    std::optional<BoundPartitionInfo> partitionInfo;
+    if (extraInfo.partitionInfo.has_value()) {
+        const auto& parsed = *extraInfo.partitionInfo;
+        auto method = parsed.method == ParsedPartitionMethod::HASH ? BoundPartitionMethod::HASH :
+                                                                     BoundPartitionMethod::RANGE;
+        if (parsed.numPartitions == 0) {
+            throw BinderException("Number of partitions must be greater than 0.");
+        }
+        validatePartitionColumn(propertyDefinitions, parsed.columnName);
+        partitionInfo = BoundPartitionInfo(method, parsed.columnName, parsed.numPartitions);
+    }
     auto boundExtraInfo = std::make_unique<BoundExtraCreateNodeTableInfo>(extraInfo.pKName,
-        std::move(propertyDefinitions), std::move(storage), std::move(storageFormat));
+        std::move(propertyDefinitions), std::move(storage), std::move(storageFormat),
+        std::move(partitionInfo));
     return BoundCreateTableInfo(CatalogEntryType::NODE_TABLE_ENTRY, info->tableName,
         info->onConflict, std::move(boundExtraInfo), clientContext->useInternalCatalogEntry());
 }

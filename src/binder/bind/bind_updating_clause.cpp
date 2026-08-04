@@ -186,6 +186,36 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
             "Create node " + node->toString() + " with empty node labels is not supported.");
     }
     if (node->isMultiLabeled()) {
+        // A partitioned parent is resolved into its partition subgraphs for scanning. Writing to
+        // it is not yet routed, so reject it with an actionable message.
+        std::optional<common::table_id_t> parentTableID;
+        auto onlyPartitionsOfSingleParent = true;
+        for (auto i = 0u; i < node->getNumEntries(); i++) {
+            auto* e = node->getEntry(i);
+            if (e->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
+                onlyPartitionsOfSingleParent = false;
+                break;
+            }
+            auto parentID = e->ptrCast<NodeTableCatalogEntry>()->getParentTableID();
+            if (parentID == common::INVALID_TABLE_ID) {
+                onlyPartitionsOfSingleParent = false;
+                break;
+            }
+            if (!parentTableID.has_value()) {
+                parentTableID = parentID;
+            } else if (*parentTableID != parentID) {
+                onlyPartitionsOfSingleParent = false;
+                break;
+            }
+        }
+        if (onlyPartitionsOfSingleParent) {
+            auto* parent =
+                Catalog::Get(*clientContext)->getTableCatalogEntry(transaction, *parentTableID);
+            throw BinderException(std::format(
+                "Cannot write to partitioned table {}. Writes to a partitioned parent are not yet "
+                "routed; write to its partition subgraphs instead (e.g. {}_p0).",
+                parent->getName(), parent->getName()));
+        }
         throw BinderException(
             "Create node " + node->toString() + " with multiple node labels is not supported.");
     }

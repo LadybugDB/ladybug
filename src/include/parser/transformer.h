@@ -8,6 +8,7 @@
 
 #include "common/enums/conflict_action.h"
 #include "extension/transformer_extension.h"
+#include "parser/ddl/create_table_info.h"
 #include "parser/ddl/parsed_property_definition.h"
 #include "statement.h"
 
@@ -206,6 +207,8 @@ public:
     std::unique_ptr<Statement> transformAlterTable(CypherParser::IC_AlterTableContext& ctx);
     std::unique_ptr<Statement> transformCreateNodeTable(
         CypherParser::IC_CreateNodeTableContext& ctx);
+    std::optional<ParsedPartitionInfo> transformPartitionInfo(
+        CypherParser::IC_PartitionByContext* ctx);
     std::unique_ptr<Statement> transformCreateRelGroup(CypherParser::IC_CreateRelTableContext& ctx);
     std::unique_ptr<Statement> transformCreateIndex(CypherParser::IC_CreateIndexContext& ctx);
     std::unique_ptr<Statement> transformCreateSequence(CypherParser::IC_CreateSequenceContext& ctx);

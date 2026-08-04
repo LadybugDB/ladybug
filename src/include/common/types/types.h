@@ -63,6 +63,8 @@ using sequence_id_t = uint64_t;
 using oid_t = uint64_t;
 constexpr oid_t INVALID_OID = UINT64_MAX;
 
+constexpr property_id_t INVALID_PROPERTY_ID = UINT32_MAX;
+
 using transaction_t = uint64_t;
 constexpr transaction_t INVALID_TRANSACTION = UINT64_MAX;
 using executor_id_t = uint64_t;
@@ -651,6 +653,8 @@ struct LBUG_API LogicalTypeUtils {
     static bool isFloatingPoint(const LogicalTypeID& dataType);
     static bool isNested(const LogicalType& dataType);
     static bool isNested(LogicalTypeID logicalTypeID);
+    static bool isPartitionable(const LogicalType& dataType);
+    static bool isPartitionable(const LogicalTypeID& dataType);
     static std::vector<LogicalTypeID> getAllValidComparableLogicalTypes();
     static std::vector<LogicalTypeID> getNumericalLogicalTypeIDs();
     static std::vector<LogicalTypeID> getIntegerTypeIDs();

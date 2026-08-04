@@ -74,21 +74,35 @@ struct LBUG_API BoundExtraCreateTableInfo : BoundExtraCreateCatalogEntryInfo {
     }
 };
 
+// PostgreSQL-style partitioning method applied to a node table.
+enum class BoundPartitionMethod : uint8_t { HASH = 0, RANGE = 1 };
+
+struct BoundPartitionInfo {
+    BoundPartitionMethod method;
+    std::string columnName;
+    uint64_t numPartitions;
+
+    BoundPartitionInfo(BoundPartitionMethod method, std::string columnName, uint64_t numPartitions)
+        : method{method}, columnName{std::move(columnName)}, numPartitions{numPartitions} {}
+};
+
 struct BoundExtraCreateNodeTableInfo final : BoundExtraCreateTableInfo {
     std::string primaryKeyName;
     std::string storage;
     common::StorageFormat storageFormat = common::StorageFormat::NONE;
+    std::optional<BoundPartitionInfo> partitionInfo;
 
     BoundExtraCreateNodeTableInfo(std::string primaryKeyName,
         std::vector<PropertyDefinition> definitions, std::string storage = "",
-        common::StorageFormat storageFormat = common::StorageFormat::NONE)
+        common::StorageFormat storageFormat = common::StorageFormat::NONE,
+        std::optional<BoundPartitionInfo> partitionInfo = std::nullopt)
         : BoundExtraCreateTableInfo{std::move(definitions)},
           primaryKeyName{std::move(primaryKeyName)}, storage{std::move(storage)},
-          storageFormat{storageFormat} {}
+          storageFormat{storageFormat}, partitionInfo{std::move(partitionInfo)} {}
     BoundExtraCreateNodeTableInfo(const BoundExtraCreateNodeTableInfo& other)
         : BoundExtraCreateTableInfo{copyVector(other.propertyDefinitions)},
           primaryKeyName{other.primaryKeyName}, storage{other.storage},
-          storageFormat{other.storageFormat} {}
+          storageFormat{other.storageFormat}, partitionInfo{other.partitionInfo} {}
 
     std::unique_ptr<BoundExtraCreateCatalogEntryInfo> copy() const override {
         return std::make_unique<BoundExtraCreateNodeTableInfo>(*this);

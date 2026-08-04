@@ -131,6 +131,11 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
     auto* storageManager = storage::StorageManager::Get(*context);
     for (auto* tableEntry :
         catalog->getNodeTableEntries(transaction, context->useInternalCatalogEntry())) {
+        // A partitioned parent holds no physical storage (and no built-in PK index); only its
+        // partition subgraphs do. Skip it so index enumeration doesn't deref a missing table.
+        if (tableEntry->isPartitioned()) {
+            continue;
+        }
         const auto tableID = tableEntry->getTableID();
         const auto hasCatalogPKIndex =
             catalog->containsIndex(transaction, tableID, tableEntry->getPrimaryKeyID());

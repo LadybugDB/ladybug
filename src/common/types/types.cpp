@@ -1236,6 +1236,16 @@ bool LogicalTypeUtils::isNested(lbug::common::LogicalTypeID logicalTypeID) {
     }
 }
 
+bool LogicalTypeUtils::isPartitionable(const LogicalType& dataType) {
+    return isPartitionable(dataType.typeID);
+}
+
+bool LogicalTypeUtils::isPartitionable(const LogicalTypeID& dataType) {
+    return isIntegral(dataType) || isDate(dataType) || isTimestamp(dataType) ||
+           dataType == LogicalTypeID::STRING || dataType == LogicalTypeID::UUID ||
+           dataType == LogicalTypeID::BLOB;
+}
+
 std::vector<LogicalTypeID> LogicalTypeUtils::getAllValidComparableLogicalTypes() {
     return std::vector<LogicalTypeID>{LogicalTypeID::BOOL, LogicalTypeID::INT64,
         LogicalTypeID::INT32, LogicalTypeID::INT16, LogicalTypeID::INT8, LogicalTypeID::UINT64,

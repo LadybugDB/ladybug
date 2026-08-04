@@ -90,17 +90,20 @@ void FSMLeakChecker::checkForLeakedPages(main::Connection* conn) {
         tableNames.emplace_back(next->getValue(0)->toString(), next->getValue(1)->toString());
     }
 
-    // Drop rel tables first
+    // Drop rel tables first. Use IF EXISTS because dropping a partitioned parent already cascades
+    // to (and removes) its partition subgraphs, which may still appear in the collected listing.
     for (const auto& [name, type] : tableNames) {
         if (type == common::TableTypeUtils::toString(common::TableType::REL)) {
-            ASSERT_TRUE(conn->query("drop table " + common::StringUtils::quoteIdentifier(name))
+            ASSERT_TRUE(conn->query(std::format("drop table if exists {}",
+                                        common::StringUtils::quoteIdentifier(name)))
                             ->isSuccess());
         }
     }
     // Then non-rel
     for (const auto& [name, type] : tableNames) {
         if (type != common::TableTypeUtils::toString(common::TableType::REL)) {
-            ASSERT_TRUE(conn->query("drop table " + common::StringUtils::quoteIdentifier(name))
+            ASSERT_TRUE(conn->query(std::format("drop table if exists {}",
+                                        common::StringUtils::quoteIdentifier(name)))
                             ->isSuccess());
         }
     }

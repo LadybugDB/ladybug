@@ -58,7 +58,7 @@ public:
         : TableCatalogEntry{entryType_, std::move(name)}, primaryKeyName{std::move(primaryKeyName)},
           foreignDatabaseName{std::move(foreignDatabaseName)} {}
 
-    bool isParent(common::table_id_t /*tableID*/) override { return false; }
+    bool isParent(common::table_id_t /*tableID*/) override { return isPartitioned(); }
     common::TableType getTableType() const override { return common::TableType::NODE; }
 
     std::string getPrimaryKeyName() const { return primaryKeyName; }
@@ -98,6 +98,29 @@ public:
     TableCatalogEntry* getReferencedEntry() const { return referencedEntry; }
     void setForeignDatabaseName(std::string s) { foreignDatabaseName = std::move(s); }
 
+    // ---- PostgreSQL-style partitioning ----
+    // A partitioned node table is a logical parent that does not own physical storage; each
+    // partition is a separate node-table subgraph that does. This mirrors how we plan to expose
+    // local (in-process) or remote (columnar protocol such as ADBC) partitions uniformly.
+    bool isPartitioned() const { return partitionMethod.has_value(); }
+    bool isPartitionChild() const { return parentTableID != common::INVALID_TABLE_ID; }
+    void setPartitionInfo(binder::BoundPartitionMethod method, std::string columnName,
+        common::property_id_t columnID, uint64_t numPartitions);
+    void addChildTableID(common::table_id_t tableID) { childTableIDs.push_back(tableID); }
+    void setParentInfo(common::table_id_t parentTableID_, uint64_t partitionIndex_) {
+        parentTableID = parentTableID_;
+        partitionIndex = partitionIndex_;
+    }
+    std::optional<binder::BoundPartitionMethod> getPartitionMethod() const {
+        return partitionMethod;
+    }
+    const std::string& getPartitionColumnName() const { return partitionColumnName; }
+    common::property_id_t getPartitionColumnID() const { return partitionColumnID; }
+    uint64_t getNumPartitions() const { return numPartitions; }
+    const std::vector<common::table_id_t>& getChildTableIDs() const { return childTableIDs; }
+    common::table_id_t getParentTableID() const { return parentTableID; }
+    uint64_t getPartitionIndex() const { return partitionIndex; }
+
     std::unique_ptr<binder::BoundTableScanInfo> getBoundScanInfo(main::ClientContext* context,
         const std::string& nodeUniqueName = "") override;
 
@@ -124,6 +147,16 @@ private:
     CreateBindDataFunc createBindDataFunc; // Callback to create bind data
     std::string foreignDatabaseName;
     TableCatalogEntry* referencedEntry = nullptr;
+
+    // Partitioning state. `partitionMethod` is set only on the logical parent. `parentTableID` /
+    // `partitionIndex` are set only on child partition subgraphs.
+    std::optional<binder::BoundPartitionMethod> partitionMethod;
+    std::string partitionColumnName;
+    common::property_id_t partitionColumnID = common::INVALID_PROPERTY_ID;
+    uint64_t numPartitions = 0;
+    std::vector<common::table_id_t> childTableIDs;
+    common::table_id_t parentTableID = common::INVALID_TABLE_ID;
+    uint64_t partitionIndex = 0;
 };
 
 } // namespace catalog

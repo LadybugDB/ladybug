@@ -22,6 +22,19 @@ struct ExtraCreateTableInfo {
     }
 };
 
+// PostgreSQL-style partitioning method applied to a node table.
+enum class ParsedPartitionMethod : uint8_t { HASH = 0, RANGE = 1 };
+
+struct ParsedPartitionInfo {
+    ParsedPartitionMethod method;
+    std::string columnName;
+    uint64_t numPartitions;
+
+    ParsedPartitionInfo(ParsedPartitionMethod method, std::string columnName,
+        uint64_t numPartitions)
+        : method{method}, columnName{std::move(columnName)}, numPartitions{numPartitions} {}
+};
+
 struct CreateTableInfo {
     common::TableType type;
     std::string tableName;
@@ -38,9 +51,12 @@ struct CreateTableInfo {
 struct ExtraCreateNodeTableInfo final : ExtraCreateTableInfo {
     std::string pKName;
     options_t options;
+    std::optional<ParsedPartitionInfo> partitionInfo;
 
-    explicit ExtraCreateNodeTableInfo(std::string pKName, options_t options = {})
-        : pKName{std::move(pKName)}, options{std::move(options)} {}
+    explicit ExtraCreateNodeTableInfo(std::string pKName, options_t options = {},
+        std::optional<ParsedPartitionInfo> partitionInfo = std::nullopt)
+        : pKName{std::move(pKName)}, options{std::move(options)},
+          partitionInfo{std::move(partitionInfo)} {}
 };
 
 struct ParsedRelConnection {

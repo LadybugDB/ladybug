@@ -258,7 +258,19 @@ void StorageManager::createTable(TableCatalogEntry* entry, main::ClientContext* 
     std::unique_lock lck{mtx};
     switch (entry->getType()) {
     case CatalogEntryType::NODE_TABLE_ENTRY: {
-        createNodeTable(entry->ptrCast<NodeTableCatalogEntry>(), context);
+        auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
+        if (nodeEntry->isPartitioned()) {
+            // A partitioned parent is a logical table: it has no physical storage of its own.
+            // Create storage for each partition subgraph instead.
+            auto* catalog = Catalog::Get(*context);
+            for (auto childTableID : nodeEntry->getChildTableIDs()) {
+                auto* child = catalog->getTableCatalogEntry(transaction::Transaction::Get(*context),
+                    childTableID);
+                createNodeTable(child->ptrCast<NodeTableCatalogEntry>(), context);
+            }
+        } else {
+            createNodeTable(nodeEntry, context);
+        }
     } break;
     case CatalogEntryType::REL_GROUP_ENTRY: {
         createRelTableGroup(entry->ptrCast<RelGroupCatalogEntry>(), context);
@@ -331,8 +343,10 @@ void StorageManager::reclaimDroppedTables(const Catalog& catalog) {
 bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& catalog,
     PageAllocator& pageAllocator) {
     bool hasChanges = false;
-    const auto nodeTableEntries = catalog.getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
+    auto nodeTableEntries = catalog.getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     const auto relGroupEntries = catalog.getRelGroupEntries(&DUMMY_CHECKPOINT_TRANSACTION);
+    // Partitioned parents hold no physical storage; only their partition subgraphs do.
+    std::erase_if(nodeTableEntries, [](const auto* e) { return e->isPartitioned(); });
 
     std::shared_lock lck{mtx};
     for (const auto entry : nodeTableEntries) {
@@ -364,8 +378,10 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& cat
     const Transaction& snapshotTxn, PageAllocator& pageAllocator,
     const std::unordered_map<table_id_t, uint64_t>& epochWatermarks) {
     bool hasChanges = false;
-    const auto nodeTableEntries = catalog.getNodeTableEntries(&snapshotTxn);
+    auto nodeTableEntries = catalog.getNodeTableEntries(&snapshotTxn);
     const auto relGroupEntries = catalog.getRelGroupEntries(&snapshotTxn);
+    // Partitioned parents hold no physical storage; only their partition subgraphs do.
+    std::erase_if(nodeTableEntries, [](const auto* e) { return e->isPartitioned(); });
 
     std::shared_lock lck{mtx};
     for (const auto entry : nodeTableEntries) {
@@ -417,6 +433,11 @@ void StorageManager::rollbackCheckpoint(const Catalog& catalog) {
     std::unique_lock lck{mtx};
     const auto nodeTableEntries = catalog.getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     for (const auto tableEntry : nodeTableEntries) {
+        // Partitioned parents hold no physical storage; only their partition subgraphs do.
+        if (tableEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY &&
+            tableEntry->ptrCast<NodeTableCatalogEntry>()->isPartitioned()) {
+            continue;
+        }
         DASSERT(tables.contains(tableEntry->getTableID()));
         tables.at(tableEntry->getTableID())->rollbackCheckpoint();
     }
@@ -441,6 +462,8 @@ void StorageManager::serialize(const Catalog& catalog, Serializer& ser) {
         [](const auto& a, const auto& b) { return a->getTableID() < b->getTableID(); });
     std::sort(relGroupEntries.begin(), relGroupEntries.end(),
         [](const auto& a, const auto& b) { return a->getTableID() < b->getTableID(); });
+    // Partitioned parents own no physical storage; their partitions are serialized individually.
+    std::erase_if(nodeTableEntries, [](const auto* e) { return e->isPartitioned(); });
     ser.writeDebuggingInfo("num_node_tables");
     ser.write<uint64_t>(nodeTableEntries.size());
     for (const auto tableEntry : nodeTableEntries) {
@@ -473,6 +496,8 @@ void StorageManager::serialize(const Catalog& catalog, const Transaction& snapsh
         [](const auto& a, const auto& b) { return a->getTableID() < b->getTableID(); });
     std::sort(relGroupEntries.begin(), relGroupEntries.end(),
         [](const auto& a, const auto& b) { return a->getTableID() < b->getTableID(); });
+    // Partitioned parents own no physical storage; their partitions are serialized individually.
+    std::erase_if(nodeTableEntries, [](const auto* e) { return e->isPartitioned(); });
 
     std::shared_lock lck{mtx};
     ser.writeDebuggingInfo("num_node_tables");

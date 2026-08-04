@@ -34,6 +34,14 @@ static void upgradeLegacyStorageFormat(const std::string& storage,
     }
 }
 
+void NodeTableCatalogEntry::setPartitionInfo(binder::BoundPartitionMethod method,
+    std::string columnName, common::property_id_t columnID, uint64_t numPartitions) {
+    partitionMethod = method;
+    partitionColumnName = std::move(columnName);
+    partitionColumnID = columnID;
+    this->numPartitions = numPartitions;
+}
+
 void NodeTableCatalogEntry::renameProperty(const std::string& propertyName,
     const std::string& newName) {
     TableCatalogEntry::renameProperty(propertyName, newName);
@@ -61,6 +69,21 @@ void NodeTableCatalogEntry::serialize(common::Serializer& serializer) const {
     serializer.write(storage);
     serializer.writeDebuggingInfo("storageFormat");
     serializer.serializeValue(storageFormat);
+    serializer.writeDebuggingInfo("partitioning");
+    serializer.write(partitionMethod.has_value());
+    if (partitionMethod.has_value()) {
+        serializer.write(static_cast<uint8_t>(*partitionMethod));
+        serializer.write(partitionColumnName);
+        serializer.write(partitionColumnID);
+        serializer.write(numPartitions);
+        serializer.serializeVector(childTableIDs);
+    }
+    serializer.writeDebuggingInfo("partitionChild");
+    serializer.write(isPartitionChild());
+    if (isPartitionChild()) {
+        serializer.write(parentTableID);
+        serializer.write(partitionIndex);
+    }
 }
 
 std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
@@ -102,13 +125,49 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
     nodeTableEntry->csrChangeEpoch = csrChangeEpoch;
     nodeTableEntry->storage = storage;
     nodeTableEntry->storageFormat = storageFormat;
+    if (deserializer.getStorageVersion() >=
+        ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_46) {
+        deserializer.validateDebuggingInfo(debuggingInfo, "partitioning");
+        bool isPartitioned = false;
+        deserializer.deserializeValue(isPartitioned);
+        if (isPartitioned) {
+            uint8_t method = 0;
+            std::string columnName;
+            auto columnID = common::property_id_t{};
+            uint64_t numPartitions = 0;
+            std::vector<common::table_id_t> childTableIDs;
+            deserializer.deserializeValue(method);
+            deserializer.deserializeValue(columnName);
+            deserializer.deserializeValue(columnID);
+            deserializer.deserializeValue(numPartitions);
+            deserializer.deserializeVector(childTableIDs);
+            nodeTableEntry->partitionMethod = static_cast<binder::BoundPartitionMethod>(method);
+            nodeTableEntry->partitionColumnName = std::move(columnName);
+            nodeTableEntry->partitionColumnID = columnID;
+            nodeTableEntry->numPartitions = numPartitions;
+            nodeTableEntry->childTableIDs = std::move(childTableIDs);
+        }
+        deserializer.validateDebuggingInfo(debuggingInfo, "partitionChild");
+        bool isPartitionChild = false;
+        deserializer.deserializeValue(isPartitionChild);
+        if (isPartitionChild) {
+            deserializer.deserializeValue(nodeTableEntry->parentTableID);
+            deserializer.deserializeValue(nodeTableEntry->partitionIndex);
+        }
+    }
     return nodeTableEntry;
 }
 
 std::string NodeTableCatalogEntry::toCypher(const ToCypherInfo& /*info*/) const {
-    return std::format("CREATE NODE TABLE {} ({} PRIMARY KEY({}));",
+    auto base = std::format("CREATE NODE TABLE {} ({} PRIMARY KEY({}))",
         common::StringUtils::quoteIdentifier(getName()), propertyCollection.toCypher(),
         common::StringUtils::quoteIdentifier(primaryKeyName));
+    if (isPartitioned()) {
+        auto method = *partitionMethod == binder::BoundPartitionMethod::HASH ? "HASH" : "RANGE";
+        base += std::format(" PARTITION BY {}({}) PARTITIONS {}", method,
+            common::StringUtils::quoteIdentifier(partitionColumnName), numPartitions);
+    }
+    return base + ";";
 }
 
 std::optional<function::TableFunction> NodeTableCatalogEntry::getScanFunction() const {
@@ -141,14 +200,26 @@ std::unique_ptr<TableCatalogEntry> NodeTableCatalogEntry::copy() const {
     other->scanFunction = scanFunction;
     other->createBindDataFunc = createBindDataFunc;
     other->foreignDatabaseName = foreignDatabaseName;
+    other->partitionMethod = partitionMethod;
+    other->partitionColumnName = partitionColumnName;
+    other->partitionColumnID = partitionColumnID;
+    other->numPartitions = numPartitions;
+    other->childTableIDs = childTableIDs;
+    other->parentTableID = parentTableID;
+    other->partitionIndex = partitionIndex;
     other->copyFrom(*this);
     return other;
 }
 
 std::unique_ptr<BoundExtraCreateCatalogEntryInfo> NodeTableCatalogEntry::getBoundExtraCreateInfo(
     transaction::Transaction*) const {
+    std::optional<binder::BoundPartitionInfo> partitionInfo;
+    if (isPartitioned()) {
+        partitionInfo =
+            binder::BoundPartitionInfo(*partitionMethod, partitionColumnName, numPartitions);
+    }
     return std::make_unique<BoundExtraCreateNodeTableInfo>(primaryKeyName,
-        copyVector(getProperties()), storage, storageFormat);
+        copyVector(getProperties()), storage, storageFormat, std::move(partitionInfo));
 }
 
 } // namespace catalog
