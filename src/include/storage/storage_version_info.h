@@ -31,7 +31,8 @@ struct StorageVersionInfo {
             {"0.15.4", STORAGE_VERSION_40}, {"0.16.0", STORAGE_VERSION_40},
             {"0.16.1", STORAGE_VERSION_40}, {"0.17.0", STORAGE_VERSION_41},
             {"0.17.1", STORAGE_VERSION_41}, {"0.18.0", STORAGE_VERSION_42},
-            {"0.18.1", STORAGE_VERSION_42}, {"0.19.0", STORAGE_VERSION_43}};
+            {"0.18.1", STORAGE_VERSION_42}, {"0.19.0", STORAGE_VERSION_43},
+            {"0.19.1", STORAGE_VERSION_43}};
     }
 
     static LBUG_API storage_version_t getStorageVersion();
