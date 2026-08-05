@@ -1,5 +1,11 @@
 # Build Tips
 
+## Minimum Toolchain Requirements
+
+- **C++20**: the codebase requires C++20 (e.g. `std::atomic_ref` in `src/c_api`). Pass `-DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_STANDARD_REQUIRED=ON` when configuring with CMake.
+- **macOS: Xcode 16+ / macOS 15+ (libc++ 17+)**: `std::atomic_ref` was only implemented in libc++ 17 (LLVM 17). Xcode 15.4 ships libc++ 16, so builds fail with `error: no member named 'atomic_ref' in namespace 'std'`. On GitHub Actions, use `macos-15` (or newer) runners.
+- **Windows / Linux**: any C++20-compliant compiler works (MSVC, GCC, Clang).
+
 ## General Build Options
 
 - Use release builds for fast runtimes
