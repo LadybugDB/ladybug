@@ -64,6 +64,8 @@ COUNT : ( 'C' | 'c' ) ( 'O' | 'o' ) ( 'U' | 'u' ) ( 'N' | 'n' ) ( 'T' | 't' ) ;
 
 CREATE : ( 'C' | 'c' ) ( 'R' | 'r' ) ( 'E' | 'e' ) ( 'A' | 'a' ) ( 'T' | 't' ) ( 'E' | 'e' ) ;
 
+CSR : ( 'C' | 'c' ) ( 'S' | 's' ) ( 'R' | 'r' ) ;
+
 CYCLE : ( 'C' | 'c' ) ( 'Y' | 'y' ) ( 'C' | 'c' ) ( 'L' | 'l' ) ( 'E' | 'e' ) ;
 
 DATABASE : ( 'D' | 'd' ) ( 'A' | 'a' ) ( 'T' | 't' ) ( 'A' | 'a' ) ( 'B' | 'b' ) ( 'A' | 'a' ) ( 'S' | 's' ) ( 'E' | 'e' ) ;
@@ -488,7 +490,7 @@ iC_DropFromToConnection
     : DROP SP (iC_IfExists SP)? iC_FromToConnection ;
 
 iC_SetSortedBy
-    : SET SP SORTED SP BY SP? '(' SP? iC_SortedByItem ( SP? ',' SP? iC_SortedByItem )* SP? ')' ;
+    : SET SP SORTED SP BY SP? '(' SP? iC_SortedByItem ( SP? ',' SP? iC_SortedByItem )* SP? ')' SP? ( CSR )? ;
 
 iC_SortedByItem
     : oC_PropertyKeyName SP ( ASC | DESC ) ;

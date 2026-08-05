@@ -49,6 +49,8 @@ static void serializeAlterExtraInfo(Serializer& serializer, const BoundAlterInfo
             serializer.write(property.propertyName);
             serializer.write(property.ascending);
         }
+        serializer.write(sortedByInfo->csr);
+        serializer.write(sortedByInfo->csrChangeEpoch);
     } break;
     case AlterType::ADD_FROM_TO_CONNECTION:
     case AlterType::DROP_FROM_TO_CONNECTION: {
@@ -107,7 +109,13 @@ static decltype(auto) deserializeAlterRecord(Deserializer& deserializer) {
             deserializer.deserializeValue(property.ascending);
             properties.push_back(std::move(property));
         }
-        extraInfo = std::make_unique<BoundExtraSetSortedByInfo>(std::move(properties));
+        bool csr = false;
+        uint64_t csrChangeEpoch = 0;
+        deserializer.deserializeValue(csr);
+        deserializer.deserializeValue(csrChangeEpoch);
+        auto sortedByInfo = std::make_unique<BoundExtraSetSortedByInfo>(std::move(properties), csr);
+        sortedByInfo->csrChangeEpoch = csrChangeEpoch;
+        extraInfo = std::move(sortedByInfo);
     } break;
     case AlterType::ADD_FROM_TO_CONNECTION:
     case AlterType::DROP_FROM_TO_CONNECTION: {

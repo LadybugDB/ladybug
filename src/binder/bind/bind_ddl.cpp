@@ -756,7 +756,8 @@ std::unique_ptr<BoundStatement> Binder::bindSetSortedBy(const Statement& stateme
         validateColumnExistence(tableEntry, property.propertyName);
         properties.push_back(BoundSortedByProperty{property.propertyName, property.ascending});
     }
-    auto boundExtraInfo = std::make_unique<BoundExtraSetSortedByInfo>(std::move(properties));
+    auto boundExtraInfo =
+        std::make_unique<BoundExtraSetSortedByInfo>(std::move(properties), extraInfo->csr);
     auto boundInfo = BoundAlterInfo(AlterType::SET_SORTED_BY, tableName, std::move(boundExtraInfo),
         info->onConflict);
     return std::make_unique<BoundAlter>(std::move(boundInfo));

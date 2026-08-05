@@ -130,11 +130,16 @@ struct BoundExtraAlterFromToConnection final : BoundExtraAlterInfo {
 
 struct BoundExtraSetSortedByInfo final : BoundExtraAlterInfo {
     std::vector<BoundSortedByProperty> properties;
+    bool csr = false;
+    // changeEpoch of the node table when CSR was declared. The optimizer uses this to
+    // disregard the CSR invariant if the table has been mutated since declaration.
+    uint64_t csrChangeEpoch = 0;
 
-    explicit BoundExtraSetSortedByInfo(std::vector<BoundSortedByProperty> properties)
-        : properties{std::move(properties)} {}
+    explicit BoundExtraSetSortedByInfo(std::vector<BoundSortedByProperty> properties,
+        bool csr = false)
+        : properties{std::move(properties)}, csr{csr} {}
     BoundExtraSetSortedByInfo(const BoundExtraSetSortedByInfo& other)
-        : properties{other.properties} {}
+        : properties{other.properties}, csr{other.csr}, csrChangeEpoch{other.csrChangeEpoch} {}
 
     std::unique_ptr<BoundExtraAlterInfo> copy() const override {
         return std::make_unique<BoundExtraSetSortedByInfo>(*this);

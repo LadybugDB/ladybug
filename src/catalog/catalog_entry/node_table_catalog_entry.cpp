@@ -54,6 +54,9 @@ void NodeTableCatalogEntry::serialize(common::Serializer& serializer) const {
     serializer.write(primaryKeyName);
     serializer.writeDebuggingInfo("sortedByProperties");
     serializer.serializeVector(sortedByProperties);
+    serializer.writeDebuggingInfo("csrMetadata");
+    serializer.write(csr);
+    serializer.write(csrChangeEpoch);
     serializer.writeDebuggingInfo("storage");
     serializer.write(storage);
     serializer.writeDebuggingInfo("storageFormat");
@@ -65,6 +68,9 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
     std::string debuggingInfo;
     std::string primaryKeyName;
     std::vector<SortedByProperty> sortedByProperties;
+    auto csr = false;
+    // Must match the uint64_t member and the ALTER record wire type
+    uint64_t csrChangeEpoch = 0;
     std::string storage;
     auto storageFormat = StorageFormat::NONE;
     deserializer.validateDebuggingInfo(debuggingInfo, "primaryKeyName");
@@ -73,6 +79,12 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
         ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_43) {
         deserializer.validateDebuggingInfo(debuggingInfo, "sortedByProperties");
         deserializer.deserializeVector(sortedByProperties);
+    }
+    if (deserializer.getStorageVersion() >=
+        ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_44) {
+        deserializer.validateDebuggingInfo(debuggingInfo, "csrMetadata");
+        deserializer.deserializeValue(csr);
+        deserializer.deserializeValue(csrChangeEpoch);
     }
     deserializer.validateDebuggingInfo(debuggingInfo, "storage");
     deserializer.deserializeValue(storage);
@@ -86,6 +98,8 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
     auto nodeTableEntry = std::make_unique<NodeTableCatalogEntry>();
     nodeTableEntry->primaryKeyName = primaryKeyName;
     nodeTableEntry->sortedByProperties = std::move(sortedByProperties);
+    nodeTableEntry->csr = csr;
+    nodeTableEntry->csrChangeEpoch = csrChangeEpoch;
     nodeTableEntry->storage = storage;
     nodeTableEntry->storageFormat = storageFormat;
     return nodeTableEntry;
@@ -119,6 +133,8 @@ std::unique_ptr<TableCatalogEntry> NodeTableCatalogEntry::copy() const {
     auto other = std::make_unique<NodeTableCatalogEntry>();
     other->primaryKeyName = primaryKeyName;
     other->sortedByProperties = sortedByProperties;
+    other->csr = csr;
+    other->csrChangeEpoch = csrChangeEpoch;
     other->storage = storage;
     other->storageFormat = storageFormat;
     other->scanFunction = scanFunction;

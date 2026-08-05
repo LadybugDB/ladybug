@@ -51,6 +51,8 @@ model BoundSortedByProperty {
 
 model SetSortedByAlterPayload {
     properties: BoundSortedByProperty[];
+    csr: bool;
+    csrChangeEpoch: uint64_t;
 }
 
 model AddFromToConnectionAlterPayload {

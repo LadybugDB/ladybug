@@ -46,6 +46,9 @@ std::string BoundAlterInfo::toString() const {
             auto& property = sortedByInfo->properties[i];
             result += property.propertyName + (property.ascending ? " ASC" : " DESC");
         }
+        if (sortedByInfo->csr) {
+            result += " CSR";
+        }
         break;
     }
     default:

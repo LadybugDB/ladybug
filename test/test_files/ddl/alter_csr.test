@@ -1,0 +1,45 @@
+-DATASET CSV empty
+--
+
+-CASE AlterSetSortedByCsrBasics
+-STATEMENT CREATE NODE TABLE csr_person(id INT64, name STRING, PRIMARY KEY(id));
+---- 1
+Table csr_person has been created.
+-STATEMENT CREATE NODE TABLE csr_extra(id INT64, PRIMARY KEY(id));
+---- 1
+Table csr_extra has been created.
+-STATEMENT CREATE REL TABLE csr_knows(FROM csr_person TO csr_person);
+---- 1
+Table csr_knows has been created.
+-STATEMENT ALTER TABLE csr_person SET SORTED BY (id ASC);
+---- 1
+Table csr_person sorted-by metadata updated with 1 column(s).
+-STATEMENT ALTER TABLE csr_person SET SORTED BY (id ASC) CSR;
+---- 1
+Table csr_person sorted-by metadata updated with 1 column(s).
+-STATEMENT ALTER TABLE csr_person SET SORTED BY (id DESC) CSR;
+---- error
+Binder exception: CSR requires exactly one SORTED BY property in ascending order.
+-STATEMENT ALTER TABLE csr_person SET SORTED BY (id ASC, name ASC) CSR;
+---- error
+Binder exception: CSR requires exactly one SORTED BY property in ascending order.
+-STATEMENT ALTER TABLE csr_person SET SORTED BY (name ASC) CSR;
+---- error
+Binder exception: CSR requires the SORTED BY property to be the primary key.
+-STATEMENT ALTER TABLE csr_knows SET SORTED BY (id ASC) CSR;
+---- error
+Binder exception: csr_knows is not of type NODE.
+-STATEMENT CREATE (:csr_person {id: 0, name: 'Alice'});
+---- ok
+-STATEMENT CREATE (:csr_person {id: 1, name: 'Bob'});
+---- ok
+-STATEMENT MATCH (a:csr_person), (b:csr_person) WHERE a.id = 0 AND b.id = 1 CREATE (a)-[:csr_knows]->(b);
+---- ok
+-STATEMENT MATCH (a:csr_person)-[:csr_knows]->(b) WHERE a.id = 0 RETURN count(*);
+---- 1
+1
+-STATEMENT CREATE (:csr_person {id: 9, name: 'Eve'});
+---- ok
+-STATEMENT MATCH (a:csr_person)-[:csr_knows]->(b) WHERE a.id = 0 RETURN count(*);
+---- 1
+1
