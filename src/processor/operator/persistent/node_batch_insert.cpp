@@ -519,9 +519,6 @@ void NodeBatchInsert::initLocalStateInternal(ResultSet* resultSet, ExecutionCont
         evaluator->init(*resultSet, context->clientContext);
         nodeLocalState->columnVectors[i] = evaluator->resultVector.get();
     }
-    nodeLocalState->chunkedGroup =
-        std::make_unique<InMemChunkedNodeGroup>(*MemoryManager::Get(*context->clientContext),
-            nodeInfo->columnTypes, info->compressionEnabled, StorageConfig::NODE_GROUP_SIZE, 0);
     DASSERT(resultSet->dataChunks[0]);
     nodeLocalState->columnState = resultSet->dataChunks[0]->state;
 }
@@ -544,7 +541,7 @@ void NodeBatchInsert::executeInternal(ExecutionContext* context) {
         copyToNodeGroup(transaction, MemoryManager::Get(*clientContext)),
             nodeLocalState->columnState->setSelVector(originalSelVector);
     }
-    if (nodeLocalState->chunkedGroup->getNumRows() > 0) {
+    if (nodeLocalState->chunkedGroup && nodeLocalState->chunkedGroup->getNumRows() > 0) {
         appendIncompleteNodeGroup(transaction, std::move(nodeLocalState->chunkedGroup),
             nodeLocalState->localIndexBuilder, MemoryManager::Get(*context->clientContext));
     }
@@ -593,6 +590,15 @@ void NodeBatchInsert::copyToNodeGroup(transaction::Transaction* transaction,
     const auto nodeLocalState = dynamic_cast_checked<NodeBatchInsertLocalState*>(localState.get());
     const auto numTuplesToAppend = nodeLocalState->columnState->getSelVector().getSelSize();
     while (numAppendedTuples < numTuplesToAppend) {
+        if (!nodeLocalState->chunkedGroup) {
+            // Allocate on the first append rather than in initLocalStateInternal so that a worker
+            // that receives no rows allocates nothing. Eager allocation reserves NODE_GROUP_SIZE
+            // rows of every column for every worker before the scan produces a row, which sets
+            // the COPY memory floor to columns x workers regardless of the input size.
+            const auto nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
+            nodeLocalState->chunkedGroup = std::make_unique<InMemChunkedNodeGroup>(*mm,
+                nodeInfo->columnTypes, info->compressionEnabled, StorageConfig::NODE_GROUP_SIZE, 0);
+        }
         const auto numAppendedTuplesInNodeGroup =
             nodeLocalState->chunkedGroup->append(nodeLocalState->columnVectors, numAppendedTuples,
                 numTuplesToAppend - numAppendedTuples);

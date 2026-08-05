@@ -889,5 +889,56 @@ TEST_F(CopyTest, OutOfMemoryRecoveryDropTable) {
         ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2420766);
     }
 }
+
+TEST_F(CopyTest, CopySmallInputIntoWideTableUnderSmallBufferPool) {
+    if (inMemMode ||
+        common::StorageConfig::NODE_GROUP_SIZE_LOG2 != TestParser::STANDARD_NODE_GROUP_SIZE_LOG_2) {
+        GTEST_SKIP();
+    }
+    // A worker allocates its column buffers only once it receives rows, so the buffer pool a
+    // COPY needs scales with the input size rather than with columns x workers. With the
+    // standard node group size an eager allocation would cost about 1 MiB per INT64 column per
+    // worker, which the pool below cannot hold for 64 columns at 16 workers.
+    static constexpr auto numColumns = 64;
+    systemConfig->maxNumThreads = 16;
+    resetDB(192 * 1024 * 1024 + TestHelper::HASH_INDEX_MEM);
+    std::string header = "id";
+    std::string createQuery = "CREATE NODE TABLE wide(id INT64";
+    for (auto i = 1; i <= numColumns; i++) {
+        header += std::format(",c{}", i);
+        createQuery += std::format(", c{} INT64", i);
+    }
+    createQuery += ", PRIMARY KEY(id))";
+    auto result = conn->query(createQuery);
+    ASSERT_TRUE(result->isSuccess()) << result->toString();
+    // A zero-row input reaches no worker, so it must not allocate any worker column buffers.
+    auto emptyCsvPath = writeCSV("wide_empty.csv", {header});
+    result = conn->query(std::format("COPY wide FROM '{}' (HEADER=true)", emptyCsvPath));
+    ASSERT_TRUE(result->isSuccess()) << result->toString();
+    result = conn->query("MATCH (w:wide) RETURN COUNT(w.id)");
+    ASSERT_TRUE(result->isSuccess()) << result->toString();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
+    // A small input only allocates in the workers that receive rows.
+    std::vector<std::string> rows = {header};
+    for (auto r = 0; r < 100; r++) {
+        auto row = std::to_string(r);
+        for (auto i = 1; i <= numColumns; i++) {
+            row += std::format(",{}", r + i);
+        }
+        rows.push_back(row);
+    }
+    auto smallCsvPath = writeCSV("wide_small.csv", rows);
+    result = conn->query(std::format("COPY wide FROM '{}' (HEADER=true)", smallCsvPath));
+    ASSERT_TRUE(result->isSuccess()) << result->toString();
+    result = conn->query("MATCH (w:wide) RETURN COUNT(w.id)");
+    ASSERT_TRUE(result->isSuccess()) << result->toString();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 100);
+    result = conn->query("MATCH (w:wide) WHERE w.id = 42 RETURN w.c17");
+    ASSERT_TRUE(result->isSuccess()) << result->toString();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 59);
+}
 } // namespace testing
 } // namespace lbug
