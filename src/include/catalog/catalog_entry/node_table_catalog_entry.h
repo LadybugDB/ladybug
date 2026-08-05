@@ -78,6 +78,15 @@ public:
                common::StringUtils::caseInsensitiveEquals(sortedByProperties[0].propertyName,
                    primaryKeyName);
     }
+    // CSR is an explicit declaration that the primary key is a csr_index interchangeable
+    // with the rel table's table_offset (i.e. primary_key == rowid). It is only honored
+    // while the node table has not been mutated since the CSR declaration.
+    bool isCsr() const { return csr; }
+    uint64_t getCsrChangeEpoch() const { return csrChangeEpoch; }
+    void setCsr(bool enable, uint64_t changeEpoch) {
+        csr = enable;
+        csrChangeEpoch = enable ? changeEpoch : 0;
+    }
     void setSortedByProperties(std::vector<SortedByProperty> properties) {
         sortedByProperties = std::move(properties);
     }
@@ -107,6 +116,8 @@ private:
 private:
     std::string primaryKeyName;
     std::vector<SortedByProperty> sortedByProperties;
+    bool csr = false;
+    uint64_t csrChangeEpoch = 0;
     std::string storage;
     common::StorageFormat storageFormat = common::StorageFormat::NONE;
     std::optional<function::TableFunction> scanFunction;

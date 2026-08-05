@@ -172,6 +172,20 @@ static bool checkSetSortedByConflicts(const TableCatalogEntry& tableEntry,
     for (auto& property : extraInfo.properties) {
         validatePropertyExist(ConflictAction::ON_CONFLICT_THROW, tableEntry, property.propertyName);
     }
+    if (extraInfo.csr) {
+        // CSR asserts primary_key == rowid, so the sorted-by clause must declare the primary
+        // key in ascending order and nothing else.
+        const auto& nodeEntry = tableEntry.constCast<NodeTableCatalogEntry>();
+        const auto& primaryKeyName = nodeEntry.getPrimaryKeyName();
+        if (extraInfo.properties.size() != 1 || !extraInfo.properties[0].ascending) {
+            throw BinderException(
+                "CSR requires exactly one SORTED BY property in ascending order.");
+        }
+        if (!common::StringUtils::caseInsensitiveEquals(extraInfo.properties[0].propertyName,
+                primaryKeyName)) {
+            throw BinderException("CSR requires the SORTED BY property to be the primary key.");
+        }
+    }
     return false;
 }
 
@@ -307,7 +321,14 @@ void Alter::alterTable(main::ClientContext* clientContext, const TableCatalogEnt
     } break;
     case AlterType::SET_SORTED_BY: {
         checkSetSortedByConflicts(entry, info);
-        auto& extraInfo = info.extraInfo->constCast<BoundExtraSetSortedByInfo>();
+        auto& extraInfo = info.extraInfo->cast<BoundExtraSetSortedByInfo>();
+        // Record the node table's changeEpoch at declaration time so the optimizer can
+        // disregard the CSR invariant once the table is mutated.
+        if (extraInfo.csr) {
+            auto* table =
+                storage::StorageManager::Get(*clientContext)->getTable(entry.getTableID());
+            extraInfo.csrChangeEpoch = table ? table->getChangeEpoch() : 0;
+        }
         appendMessage(std::format("Table {} sorted-by metadata updated with {} column(s).",
                           tableName, extraInfo.properties.size()),
             memoryManager);

@@ -45,6 +45,8 @@ std::unique_ptr<TableCatalogEntry> TableCatalogEntry::alter(transaction_t timest
             properties.push_back(SortedByProperty{property.propertyName, property.ascending});
         }
         newEntry->ptrCast<NodeTableCatalogEntry>()->setSortedByProperties(std::move(properties));
+        newEntry->ptrCast<NodeTableCatalogEntry>()->setCsr(sortedByInfo.csr,
+            sortedByInfo.csrChangeEpoch);
     } break;
     case AlterType::ADD_FROM_TO_CONNECTION: {
         auto& connectionInfo =

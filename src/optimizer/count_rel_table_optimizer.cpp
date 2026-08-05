@@ -19,6 +19,8 @@
 #include "planner/operator/scan/logical_count_rel_table.h"
 #include "planner/operator/scan/logical_rel_degree_table.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
+#include "storage/storage_manager.h"
+#include "storage/table/table.h"
 
 using namespace lbug::common;
 using namespace lbug::planner;
@@ -440,7 +442,16 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteSortedOffsetC
     }
     auto tableID = boundNode->getTableIDs()[0];
     auto* nodeEntry = boundNode->getEntry(0)->ptrCast<NodeTableCatalogEntry>();
-    if (!nodeEntry->isLeadingSortPrimaryKeyAsc()) {
+    // The CSR declaration asserts primary_key == rowid (csr_index interchangeable with the rel
+    // table's table_offset). This is only an explicit user declaration, not a derivable fact from
+    // the sort order, so it must be gated on the CSR flag.
+    if (!nodeEntry->isCsr()) {
+        return op;
+    }
+    // Any mutation of the node table invalidates the CSR invariant, so disregard the
+    // optimization if the table has been mutated since the CSR declaration.
+    auto* table = storage::StorageManager::Get(*_context)->getTable(tableID);
+    if (!table || table->getChangeEpoch() != nodeEntry->getCsrChangeEpoch()) {
         return op;
     }
     auto nodeKey = boundNode->getPrimaryKey(tableID);

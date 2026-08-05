@@ -371,7 +371,8 @@ std::unique_ptr<Statement> Transformer::transformSetSortedBy(
         properties.push_back(
             ParsedSortedByProperty{std::move(propertyName), item->ASC() != nullptr});
     }
-    auto extraInfo = std::make_unique<ExtraSetSortedByInfo>(std::move(properties));
+    auto csr = sortedByCtx->CSR() != nullptr;
+    auto extraInfo = std::make_unique<ExtraSetSortedByInfo>(std::move(properties), csr);
     auto info = AlterInfo(AlterType::SET_SORTED_BY, tableName, std::move(extraInfo));
     return std::make_unique<Alter>(std::move(info));
 }

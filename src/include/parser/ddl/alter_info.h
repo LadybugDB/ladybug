@@ -91,9 +91,10 @@ struct ExtraCommentInfo : public ExtraAlterInfo {
 
 struct ExtraSetSortedByInfo : public ExtraAlterInfo {
     std::vector<ParsedSortedByProperty> properties;
+    bool csr = false;
 
-    explicit ExtraSetSortedByInfo(std::vector<ParsedSortedByProperty> properties)
-        : properties{std::move(properties)} {}
+    explicit ExtraSetSortedByInfo(std::vector<ParsedSortedByProperty> properties, bool csr = false)
+        : properties{std::move(properties)}, csr{csr} {}
 };
 
 } // namespace parser

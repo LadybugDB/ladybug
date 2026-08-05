@@ -371,7 +371,15 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     auto planSortedOffsetBeforeAlter = getRoot(qSortedOffset);
     ASSERT_FALSE(hasOperatorType(planSortedOffsetBeforeAlter->getLastOperator().get(),
         planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    // A plain SORTED BY declaration (ascending primary key) without the CSR keyword relies only on
+    // the old (incorrect) heuristic and must NOT trigger the offset-count rewrite.
     ASSERT_TRUE(conn->query("ALTER TABLE opt_degree_user SET SORTED BY (id ASC);")->isSuccess());
+    auto planSortedOffsetNoCsr = getRoot(qSortedOffset);
+    ASSERT_FALSE(hasOperatorType(planSortedOffsetNoCsr->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    // Declaring CSR asserts primary_key == rowid, which is what gates the optimization.
+    ASSERT_TRUE(
+        conn->query("ALTER TABLE opt_degree_user SET SORTED BY (id ASC) CSR;")->isSuccess());
     auto planSortedOffset = getRoot(qSortedOffset);
     ASSERT_TRUE(hasOperatorType(planSortedOffset->getLastOperator().get(),
         planner::LogicalOperatorType::REL_DEGREE_TABLE));
@@ -397,6 +405,9 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
                     ->isSuccess());
     auto qCompositeSortedOffset =
         "MATCH (a:opt_sorted_user)-[:opt_sorted_follows]->(b) WHERE a.id = 0 RETURN count(*);";
+    // Composite (non-CSR) sorted-by does not gate the offset-count rewrite, even when the leading
+    // column is the primary key in ascending order: without the explicit CSR declaration the old
+    // heuristic is not applied.
     ASSERT_TRUE(
         conn->query("ALTER TABLE opt_sorted_user SET SORTED BY (kind DESC, id ASC);")->isSuccess());
     auto planCompositeNonLeadingPK = getRoot(qCompositeSortedOffset);
@@ -408,11 +419,14 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     ASSERT_TRUE(
         conn->query("ALTER TABLE opt_sorted_user SET SORTED BY (id ASC, kind DESC);")->isSuccess());
     auto planCompositeLeadingPK = getRoot(qCompositeSortedOffset);
-    ASSERT_TRUE(hasOperatorType(planCompositeLeadingPK->getLastOperator().get(),
+    ASSERT_FALSE(hasOperatorType(planCompositeLeadingPK->getLastOperator().get(),
         planner::LogicalOperatorType::REL_DEGREE_TABLE));
     auto resultCompositeLeadingPK = conn->query(qCompositeSortedOffset);
     ASSERT_TRUE(resultCompositeLeadingPK->isSuccess());
     ASSERT_EQ(resultCompositeLeadingPK->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    // CSR is incompatible with composite sort keys: it requires a single ascending primary key.
+    ASSERT_FALSE(conn->query("ALTER TABLE opt_sorted_user SET SORTED BY (id ASC, kind DESC) CSR;")
+                     ->isSuccess());
 
     auto q8 = "MATCH (u:opt_degree_user)-[:opt_degree_follows]->(v) RETURN count(DISTINCT u.id);";
     auto plan8 = getRoot(q8);
@@ -487,6 +501,16 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     auto result12 = conn->query(q12);
     ASSERT_TRUE(result12->isSuccess());
     ASSERT_EQ(result12->getNext()->getValue(0)->getValue<int64_t>(), 2);
+
+    // Mutating the node table invalidates the CSR invariant and the optimization is disregarded,
+    // but the query still returns correct results through the non-optimized path.
+    ASSERT_TRUE(conn->query("CREATE (:opt_degree_user {id: 3});")->isSuccess());
+    auto planSortedOffsetAfterMutation = getRoot(qSortedOffset);
+    ASSERT_FALSE(hasOperatorType(planSortedOffsetAfterMutation->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto resultSortedOffsetAfterMutation = conn->query(qSortedOffset);
+    ASSERT_TRUE(resultSortedOffsetAfterMutation->isSuccess());
+    ASSERT_EQ(resultSortedOffsetAfterMutation->getNext()->getValue(0)->getValue<int64_t>(), 2);
 }
 
 TEST_F(StatsOptimizerTest, FilterPushDownOrdersMostSelectivePredicateFirst) {
