@@ -50,8 +50,8 @@ private:
     void replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalReplayFailure,
         bool enableChecksums) const;
 
-    void removeWALAndShadowFiles() const;
-    void removeFileIfExists(const std::string& path) const;
+    void removeWALAndShadowFiles(const std::string& walFilePath) const;
+    bool removeFileIfExists(const std::string& path) const;
 
     std::unique_ptr<common::FileInfo> openWALFile() const;
     void syncWALFile(const common::FileInfo& fileInfo) const;

@@ -165,11 +165,19 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
         throw;
     }
     // Checkpoint outside the public function lock so active writers can finish
-    // (commit/rollback) during the drain phase instead of deadlocking.
-    if (shouldForceCheckpoint) {
-        checkpoint(clientContext);
-    } else if (shouldAutoCheckpoint) {
-        tryCheckpoint(clientContext);
+    // (commit/rollback) during the drain phase instead of deadlocking. The transaction has
+    // already been removed from activeTransactions at this point, so any later failure is a
+    // checkpoint failure, not a transaction failure that can be rolled back.
+    try {
+        if (shouldForceCheckpoint) {
+            checkpoint(clientContext);
+        } else if (shouldAutoCheckpoint) {
+            tryCheckpoint(clientContext);
+        }
+    } catch (const CheckpointException&) {
+        throw;
+    } catch (const std::exception& e) {
+        throw CheckpointException{e};
     }
 }
 
@@ -179,6 +187,16 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
 void TransactionManager::rollback(main::ClientContext& clientContext, Transaction* transaction) {
     std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
     clientContext.cleanUp();
+    // A post-commit checkpoint failure may be observed after the manager has released the
+    // transaction but before its context has cleared the non-owning pointer. Do not dereference
+    // a transaction that is no longer manager-owned.
+    const auto isActiveTransaction =
+        std::ranges::any_of(activeTransactions, [transaction](const auto& activeTransaction) {
+            return activeTransaction.get() == transaction;
+        });
+    if (!isActiveTransaction) {
+        return;
+    }
     switch (transaction->getType()) {
     case TransactionType::READ_ONLY: {
         clearTransactionNoLock(transaction->getID());
