@@ -1,5 +1,6 @@
 #include "transaction/transaction_context.h"
 
+#include "common/exception/checkpoint.h"
 #include "common/exception/transaction_manager.h"
 #include "main/client_context.h"
 #include "main/database.h"
@@ -56,7 +57,15 @@ void TransactionContext::commit() {
     if (!hasActiveTransaction()) {
         return;
     }
-    clientContext.getDatabase()->getTransactionManager()->commit(clientContext, activeTransaction);
+    try {
+        clientContext.getDatabase()->getTransactionManager()->commit(clientContext,
+            activeTransaction);
+    } catch (const CheckpointException&) {
+        // TransactionManager has already released the transaction before running the
+        // post-commit checkpoint. It cannot be rolled back after this error.
+        clearTransaction();
+        throw;
+    }
     clearTransaction();
 }
 

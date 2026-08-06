@@ -129,21 +129,33 @@ uint8_t* BufferManager::pin(FileHandle& fileHandle, page_idx_t pageIdx,
         switch (PageState::getState(currStateAndVersion)) {
         case PageState::EVICTED: {
             if (pageState->tryLock(currStateAndVersion)) {
-                if (!claimAFrame(fileHandle, pageIdx, pageReadPolicy)) {
-                    pageState->resetToEvicted();
-                    throw BufferManagerException("Unable to allocate memory! The buffer pool is "
-                                                 "full and no memory could be freed!");
-                }
-                if (!evictionQueue.insert(fileHandle.getFileIndex(), pageIdx)) {
-                    throw BufferManagerException(
-                        "Eviction queue is full! This should be impossible.");
-                }
+                try {
+                    if (!claimAFrame(fileHandle, pageIdx, pageReadPolicy)) {
+                        pageState->resetToEvicted();
+                        throw BufferManagerException(
+                            "Unable to allocate memory! The buffer pool is full and no memory "
+                            "could be freed!");
+                    }
+                    if (!evictionQueue.insert(fileHandle.getFileIndex(), pageIdx)) {
+                        const auto releasedBytes = releaseFrameForPage(fileHandle, pageIdx);
+                        freeUsedMemory(releasedBytes);
+                        pageState->resetToEvicted();
+                        throw BufferManagerException(
+                            "Eviction queue is full! The page could not be tracked safely.");
+                    }
 #if BM_MALLOC
-                DASSERT(pageState->getPage());
-                return pageState->getPage();
+                    DASSERT(pageState->getPage());
+                    return pageState->getPage();
 #else
-                return getFrame(fileHandle, pageIdx);
+                    return getFrame(fileHandle, pageIdx);
 #endif
+                } catch (...) {
+                    // A failed page read must not strand the page in LOCKED state.
+                    if (PageState::getState(pageState->getStateAndVersion()) == PageState::LOCKED) {
+                        pageState->resetToEvicted();
+                    }
+                    throw;
+                }
             }
         } break;
         case PageState::UNLOCKED:
@@ -354,18 +366,28 @@ bool BufferManager::claimAFrame(FileHandle& fileHandle, page_idx_t pageIdx,
 #endif
         return false;
     }
+    try {
 #if _WIN32 && !BM_MALLOC
-    // Committing in this context means reserving physical memory/page file space for a segment of
-    // virtual memory. On Linux/Unix this is automatic when you write to the memory address.
-    auto result =
-        VirtualAlloc(getFrame(fileHandle, pageIdx), pageSizeToClaim, MEM_COMMIT, PAGE_READWRITE);
-    if (result == NULL) {
-        throw BufferManagerException(
-            std::format("VirtualAlloc MEM_COMMIT failed with error code {}: {}.", GetLastError(),
-                std::system_category().message(GetLastError())));
-    }
+        // Committing in this context means reserving physical memory/page file space for a segment
+        // of virtual memory. On Linux/Unix this is automatic when we write to the memory address.
+        auto result = VirtualAlloc(getFrame(fileHandle, pageIdx), pageSizeToClaim, MEM_COMMIT,
+            PAGE_READWRITE);
+        if (result == NULL) {
+            throw BufferManagerException(
+                std::format("VirtualAlloc MEM_COMMIT failed with error code {}: {}.",
+                    GetLastError(), std::system_category().message(GetLastError())));
+        }
 #endif
-    cachePageIntoFrame(fileHandle, pageIdx, pageReadPolicy);
+        cachePageIntoFrame(fileHandle, pageIdx, pageReadPolicy);
+    } catch (...) {
+        // Loading a page can perform NFS I/O. Undo the frame reservation if that read fails so the
+        // caller can safely reset the page state without leaking a frame or leaving it locked.
+#if !BM_MALLOC
+        vmRegions[fileHandle.getPageSizeClass()]->releaseFrame(fileHandle.getFrameIdx(pageIdx));
+#endif
+        freeUsedMemory(pageSizeToClaim);
+        throw;
+    }
     return true;
 }
 
@@ -459,11 +481,18 @@ uint64_t BufferManager::tryEvictPage(std::atomic<EvictionCandidate>& _candidate)
     // Next, flush out the frame into the file page if the frame
     // is dirty. Finally remove the page from the frame and reset the page to EVICTED.
     auto& fileHandle = *fileHandles[candidate.fileIdx];
-    fileHandle.flushPageIfDirtyWithoutLock(candidate.pageIdx);
-    auto numBytesFreed = releaseFrameForPage(fileHandle, candidate.pageIdx);
-    evictionQueue.clear(_candidate);
-    pageState.resetToEvicted();
-    return numBytesFreed;
+    try {
+        fileHandle.flushPageIfDirtyWithoutLock(candidate.pageIdx);
+        auto numBytesFreed = releaseFrameForPage(fileHandle, candidate.pageIdx);
+        evictionQueue.clear(_candidate);
+        pageState.resetToEvicted();
+        return numBytesFreed;
+    } catch (...) {
+        // A failed NFS flush must not strand the page in LOCKED state. Keep the frame resident so
+        // the dirty page can be retried after storage recovers.
+        pageState.unlock();
+        throw;
+    }
 }
 
 void BufferManager::cachePageIntoFrame(FileHandle& fileHandle, page_idx_t pageIdx,
@@ -536,12 +565,18 @@ void BufferManager::removePageFromFrame(FileHandle& fileHandle, page_idx_t pageI
         return;
     }
     pageState->spinLock(pageState->getStateAndVersion());
-    if (shouldFlush) {
-        fileHandle.flushPageIfDirtyWithoutLock(pageIdx);
+    try {
+        if (shouldFlush) {
+            fileHandle.flushPageIfDirtyWithoutLock(pageIdx);
+        }
+        const auto numBytesFreed = releaseFrameForPage(fileHandle, pageIdx);
+        freeUsedMemory(numBytesFreed);
+        pageState->resetToEvicted();
+    } catch (...) {
+        // Preserve the page and release the lock when a flush fails.
+        pageState->unlock();
+        throw;
     }
-    const auto numBytesFreed = releaseFrameForPage(fileHandle, pageIdx);
-    freeUsedMemory(numBytesFreed);
-    pageState->resetToEvicted();
 }
 
 uint64_t BufferManager::freeUsedMemory(uint64_t size) {

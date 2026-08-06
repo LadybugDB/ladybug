@@ -1,13 +1,16 @@
 #include "storage/wal/wal_replayer.h"
 
+#include <filesystem>
 #include <string>
 
 #include "common/exception/io.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/file_info.h"
 #include "common/file_system/file_system.h"
+#include "common/file_system/local_file_system.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/serializer/buffered_file.h"
+#include "common/system_message.h"
 #include "common/type_utils.h"
 #include "common/types/types.h"
 #include "main/client_context.h"
@@ -20,6 +23,10 @@
 #include "storage/wal/wal_record.h"
 #include "transaction/transaction_context.h"
 #include <format>
+#ifndef _WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 using namespace lbug::common;
 using namespace lbug::storage;
@@ -32,6 +39,33 @@ static constexpr std::string_view checksumMismatchMessage =
     "Checksum verification failed, the WAL file is corrupted.";
 static constexpr std::string_view readOnlyCheckpointInProgressMessage =
     "Cannot open database in read-only mode while checkpoint is in progress. Please retry later.";
+
+static void syncParentDirectoryForLocalPath(const std::string& path) {
+#ifdef _WIN32
+    (void)path;
+#else
+    if (!LocalFileSystem::isLocalPath(path)) {
+        return;
+    }
+    auto parentPath = std::filesystem::path(path).parent_path();
+    if (parentPath.empty()) {
+        parentPath = ".";
+    }
+    const int dirFd = open(parentPath.c_str(), O_RDONLY | O_DIRECTORY);
+    if (dirFd < 0) {
+        throw IOException(std::format("Failed to open parent directory {} for sync: {}",
+            parentPath.string(), posixErrMessage()));
+    }
+    if (fsync(dirFd) != 0) {
+        const auto errorMessage = posixErrMessage();
+        close(dirFd);
+        throw IOException(
+            std::format("Failed to sync parent directory {} after removing WAL file {}: {}",
+                parentPath.string(), path, errorMessage));
+    }
+    close(dirFd);
+#endif
+}
 
 WALReplayer::WALReplayer(main::ClientContext& clientContext) : clientContext{clientContext} {
     walPath = StorageUtils::getWALFilePath(clientContext.getDatabasePath());
@@ -137,7 +171,6 @@ void WALReplayer::replay(bool throwOnWalReplayFailure, bool enableChecksums) con
     if (hasFrozenWAL) {
         replayFrozenWAL(checkpointer, throwOnWalReplayFailure, enableChecksums);
     } else {
-        removeFileIfExists(shadowFilePath);
         checkpointer.readCheckpoint();
     }
 
@@ -152,7 +185,10 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
     auto fileInfo =
         vfs->openFile(checkpointWalPath, FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE));
     if (fileInfo->getFileSize() == 0) {
-        removeFileIfExists(checkpointWalPath);
+        fileInfo.reset();
+        if (removeFileIfExists(checkpointWalPath)) {
+            syncParentDirectoryForLocalPath(checkpointWalPath);
+        }
         removeFileIfExists(shadowFilePath);
         checkpointer.readCheckpoint();
         return;
@@ -165,9 +201,8 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
         if (isLastRecordCheckpoint) {
             throwIfReadOnlyCheckpointState(clientContext, true /* hasFrozenWAL */, shadowFilePath);
             ShadowFile::replayShadowPageRecords(clientContext);
-            removeFileIfExists(checkpointWalPath);
-            removeFileIfExists(walPath);
-            removeFileIfExists(shadowFilePath);
+            fileInfo.reset();
+            removeWALAndShadowFiles(checkpointWalPath);
             checkpointer.readCheckpoint();
         } else {
             removeFileIfExists(shadowFilePath);
@@ -186,7 +221,10 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
                 auto walRecord = WALRecord::deserialize(deserializer, clientContext);
                 replayWALRecord(*walRecord);
             }
-            removeFileIfExists(checkpointWalPath);
+            fileInfo.reset();
+            if (removeFileIfExists(checkpointWalPath)) {
+                syncParentDirectoryForLocalPath(checkpointWalPath);
+            }
         }
     } catch (const std::exception&) {
         auto transactionContext = TransactionContext::Get(clientContext);
@@ -201,7 +239,11 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
     bool enableChecksums) const {
     auto fileInfo = openWALFile();
     if (fileInfo->getFileSize() == 0) {
-        removeFileIfExists(walPath);
+        fileInfo.reset();
+        if (removeFileIfExists(walPath)) {
+            syncParentDirectoryForLocalPath(walPath);
+        }
+        removeFileIfExists(shadowFilePath);
         return;
     }
     syncWALFile(*fileInfo);
@@ -212,9 +254,11 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
         if (isLastRecordCheckpoint) {
             throwIfReadOnlyCheckpointState(clientContext, true /* hasFrozenWAL */, shadowFilePath);
             ShadowFile::replayShadowPageRecords(clientContext);
-            removeWALAndShadowFiles();
+            fileInfo.reset();
+            removeWALAndShadowFiles(walPath);
             checkpointer.readCheckpoint();
         } else {
+            removeFileIfExists(shadowFilePath);
             Deserializer deserializer = initDeserializer(*fileInfo, clientContext, enableChecksums);
             if (offsetDeserialized > 0) {
                 deserializer.getReader()->onObjectBegin();
@@ -352,19 +396,23 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
     }
 }
 
-void WALReplayer::removeWALAndShadowFiles() const {
+void WALReplayer::removeWALAndShadowFiles(const std::string& walFilePath) const {
+    if (removeFileIfExists(walFilePath)) {
+        syncParentDirectoryForLocalPath(walFilePath);
+    }
     removeFileIfExists(shadowFilePath);
-    removeFileIfExists(walPath);
 }
 
-void WALReplayer::removeFileIfExists(const std::string& path) const {
+bool WALReplayer::removeFileIfExists(const std::string& path) const {
     if (StorageManager::Get(clientContext)->isReadOnly()) {
-        return;
+        return false;
     }
     auto vfs = VirtualFileSystem::GetUnsafe(clientContext);
     if (vfs->fileOrPathExists(path, &clientContext)) {
         vfs->removeFileIfExists(path);
+        return true;
     }
+    return false;
 }
 
 std::unique_ptr<FileInfo> WALReplayer::openWALFile() const {
