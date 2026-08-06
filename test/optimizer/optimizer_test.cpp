@@ -1,5 +1,6 @@
 #include <functional>
 #include <stdexcept>
+#include <vector>
 
 #include "graph_test/private_graph_test.h"
 #include "planner/join_order/cost_model.h"
@@ -624,6 +625,93 @@ TEST_F(OptimizerTest, RemoveUnnecessaryDistinctOnPrimaryKey) {
     auto q3 = "MATCH (n:person) RETURN DISTINCT n.ID, n.age";
     auto plan3 = getRoot(q3);
     ASSERT_TRUE(plan3 != nullptr);
+}
+
+TEST_F(OptimizerTest, CountReachableDistinctNodes) {
+#if defined(_WIN32)
+    GTEST_SKIP() << "Windows may pick a different recursive-extend plan shape for reachable-count "
+                    "queries, so this plan-shape test is nondeterministic there.";
+#endif
+    // Build a small graph where count(distinct b) over a variable-length path is fully determined:
+    //
+    //   0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 6
+    //    \             ^--- (cycle 4 -> 1)
+    //     \-> 4
+    //
+    // From node 0, count(distinct b) for [lo..up] ranges is verified below against the reference
+    // (non-optimized) semantics.
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE rc_user(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE rc_follows(FROM rc_user TO rc_user);")->isSuccess());
+    for (auto i = 0; i <= 6; ++i) {
+        std::string q = std::format("CREATE (:rc_user {{id: {}}});", i);
+        ASSERT_TRUE(conn->query(q)->isSuccess()) << q;
+    }
+    struct Edge {
+        int64_t src;
+        int64_t dst;
+    };
+    const std::vector<Edge> edges = {{0, 1}, {1, 2}, {2, 3}, {3, 4}, {0, 4}, {4, 5}, {5, 6},
+        {4, 1}};
+    for (const auto& [src, dst] : edges) {
+        std::string q = std::format("MATCH (a:rc_user {{id: {}}}), (b:rc_user {{id: {}}}) "
+                                    "CREATE (a)-[:rc_follows]->(b);",
+            src, dst);
+        ASSERT_TRUE(conn->query(q)->isSuccess()) << q;
+    }
+    // Declare the CSR invariant (primary_key == rowid) after all data is loaded so it is not
+    // invalidated by subsequent node mutation.
+    ASSERT_TRUE(conn->query("ALTER TABLE rc_user SET SORTED BY (id ASC) CSR;")->isSuccess());
+
+    auto q1 =
+        "MATCH (a:rc_user {id: 0})-[e:rc_follows*1..5]->(b:rc_user) RETURN count(distinct b);";
+    auto plan1 = getRoot(q1);
+    ASSERT_TRUE(hasOperatorType(plan1->getLastOperator().get(),
+        planner::LogicalOperatorType::REACHABLE_COUNT))
+        << "CSR-sorted source + count(distinct nbr) over a variable-length path should be "
+           "rewritten "
+           "to REACHABLE_COUNT";
+    auto result1 = conn->query(q1);
+    ASSERT_TRUE(result1->isSuccess());
+    ASSERT_EQ(result1->getNext()->getValue(0)->getValue<int64_t>(), 6);
+
+    auto checkRange = [&](const std::string& range, int64_t expected) {
+        std::string q = std::format("MATCH (a:rc_user {{id: 0}})-[e:rc_follows*{}]->(b:rc_user) "
+                                    "RETURN count(distinct b);",
+            range);
+        auto result = conn->query(q);
+        ASSERT_TRUE(result->isSuccess()) << q;
+        ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), expected) << q;
+    };
+    checkRange("1..5", 6);
+    checkRange("2..4", 6);
+    checkRange("3..4", 4);
+    checkRange("4..4", 2);
+    checkRange("3..3", 3);
+    checkRange("0..2", 5);
+    checkRange("1..1", 2);
+
+    // Without the CSR declaration the rewrite must not fire, and the query must still be correct.
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE nc_user(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE nc_follows(FROM nc_user TO nc_user);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:nc_user {id: 0});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:nc_user {id: 1});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:nc_user {id: 2});")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:nc_user {id: 0}), (b:nc_user {id: 1}) "
+                            "CREATE (a)-[:nc_follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:nc_user {id: 1}), (b:nc_user {id: 2}) "
+                            "CREATE (a)-[:nc_follows]->(b);")
+                    ->isSuccess());
+
+    auto qNoCsr = "MATCH (a:nc_user {id: 0})-[e:nc_follows*1..2]->(b:nc_user) "
+                  "RETURN count(distinct b);";
+    auto planNoCsr = getRoot(qNoCsr);
+    ASSERT_FALSE(hasOperatorType(planNoCsr->getLastOperator().get(),
+        planner::LogicalOperatorType::REACHABLE_COUNT))
+        << "Without CSR the reachable-count rewrite must not fire";
+    auto resultNoCsr = conn->query(qNoCsr);
+    ASSERT_TRUE(resultNoCsr->isSuccess());
+    ASSERT_EQ(resultNoCsr->getNext()->getValue(0)->getValue<int64_t>(), 2);
 }
 
 } // namespace testing
