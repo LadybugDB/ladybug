@@ -13,10 +13,11 @@ foreach (EXT_NAME IN LISTS STATICALLY_LINKED_EXTENSIONS)
         set(EXT_NAME_CAMELCASE "${EXT_NAME_CAMELCASE}${FIRST_LETTER}${REMAINDER}")
     endforeach ()
 
-    set(LOAD_LINKED_EXTENSION "${LOAD_LINKED_EXTENSION}\{
+    set(LOAD_LINKED_EXTENSION "${LOAD_LINKED_EXTENSION}\
+{
         ${EXT_NAME_LOWER}_extension::${EXT_NAME_CAMELCASE}Extension extension{};
         extension.load(context);
-        loadedExtensions.push_back(LoadedExtension(${EXT_NAME_LOWER}_extension::${EXT_NAME_CAMELCASE}Extension::EXTENSION_NAME, " ",
+        loadedExtensions.push_back(LoadedExtension(${EXT_NAME_LOWER}_extension::${EXT_NAME_CAMELCASE}Extension::EXTENSION_NAME, \" \",
             ExtensionSource::STATIC_LINKED));
     }\n")
     include_directories(${PROJECT_SOURCE_DIR}/extension/${EXT_NAME}/src/include/main)
