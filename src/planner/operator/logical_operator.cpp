@@ -98,6 +98,8 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
         return "PROJECTION";
     case LogicalOperatorType::RECURSIVE_EXTEND:
         return "RECURSIVE_EXTEND";
+    case LogicalOperatorType::REACHABLE_COUNT:
+        return "REACHABLE_COUNT";
     case LogicalOperatorType::REL_DEGREE_TABLE:
         return "REL_DEGREE_TABLE";
     case LogicalOperatorType::SCAN_NODE_TABLE:

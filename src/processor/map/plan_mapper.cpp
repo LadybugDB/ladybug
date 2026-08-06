@@ -194,6 +194,9 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapOperator(const LogicalOperator*
     case LogicalOperatorType::REL_DEGREE_TABLE: {
         physicalOperator = mapRelDegreeTable(logicalOperator);
     } break;
+    case LogicalOperatorType::REACHABLE_COUNT: {
+        physicalOperator = mapReachableCount(logicalOperator);
+    } break;
     case LogicalOperatorType::SCAN_NODE_TABLE: {
         physicalOperator = mapScanNodeTable(logicalOperator);
     } break;

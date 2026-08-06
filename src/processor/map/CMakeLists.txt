@@ -41,6 +41,7 @@ add_library(lbug_processor_mapper
         map_query_primary_key_lookup.cpp
         map_recursive_extend.cpp
         map_rel_degree_table.cpp
+        map_reachable_count.cpp
         map_scan_node_table.cpp
         map_semi_masker.cpp
         map_set.cpp
