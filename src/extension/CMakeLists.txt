@@ -3,6 +3,7 @@ set(LOAD_LINKED_EXTENSION "")
 
 foreach (EXT_NAME IN LISTS STATICALLY_LINKED_EXTENSIONS)
     string(TOLOWER "${EXT_NAME}" EXT_NAME_LOWER)
+    # Convert to camel case
     string(REPLACE "_" ";" EXT_NAME_SPLIT ${EXT_NAME})
     set(EXT_NAME_CAMELCASE "")
     foreach (EXT_NAME_PART IN LISTS EXT_NAME_SPLIT)
@@ -12,11 +13,10 @@ foreach (EXT_NAME IN LISTS STATICALLY_LINKED_EXTENSIONS)
         set(EXT_NAME_CAMELCASE "${EXT_NAME_CAMELCASE}${FIRST_LETTER}${REMAINDER}")
     endforeach ()
 
-    set(LOAD_LINKED_EXTENSION "${LOAD_LINKED_EXTENSION}\
-{
+    set(LOAD_LINKED_EXTENSION "${LOAD_LINKED_EXTENSION}\{
         ${EXT_NAME_LOWER}_extension::${EXT_NAME_CAMELCASE}Extension extension{};
         extension.load(context);
-        loadedExtensions.push_back(LoadedExtension(${EXT_NAME_LOWER}_extension::${EXT_NAME_CAMELCASE}Extension::EXTENSION_NAME, \" \",
+        loadedExtensions.push_back(LoadedExtension(${EXT_NAME_LOWER}_extension::${EXT_NAME_CAMELCASE}Extension::EXTENSION_NAME, " ",
             ExtensionSource::STATIC_LINKED));
     }\n")
     include_directories(${PROJECT_SOURCE_DIR}/extension/${EXT_NAME}/src/include/main)
