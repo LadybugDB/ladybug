@@ -60,7 +60,7 @@ static void syncParentDirectoryForLocalPath(const std::string& path) {
         const auto errorMessage = posixErrMessage();
         close(dirFd);
         throw IOException(
-            std::format("Failed to sync parent directory {} after removing WAL file {}: {}",
+            std::format("Failed to sync parent directory {} after removing file {}: {}",
                 parentPath.string(), path, errorMessage));
     }
     close(dirFd);
@@ -163,7 +163,7 @@ void WALReplayer::replay(bool throwOnWalReplayFailure, bool enableChecksums) con
     throwIfReadOnlyCheckpointState(clientContext, hasFrozenWAL, shadowFilePath);
 
     if (!hasFrozenWAL && !hasActiveWAL) {
-        removeFileIfExists(shadowFilePath);
+        removeFileAndSyncParentDirectory(shadowFilePath);
         checkpointer.readCheckpoint();
         return;
     }
@@ -186,10 +186,7 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
         vfs->openFile(checkpointWalPath, FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE));
     if (fileInfo->getFileSize() == 0) {
         fileInfo.reset();
-        if (removeFileIfExists(checkpointWalPath)) {
-            syncParentDirectoryForLocalPath(checkpointWalPath);
-        }
-        removeFileIfExists(shadowFilePath);
+        removeWALAndShadowFiles(checkpointWalPath);
         checkpointer.readCheckpoint();
         return;
     }
@@ -205,7 +202,7 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
             removeWALAndShadowFiles(checkpointWalPath);
             checkpointer.readCheckpoint();
         } else {
-            removeFileIfExists(shadowFilePath);
+            removeFileAndSyncParentDirectory(shadowFilePath);
             checkpointer.readCheckpoint();
             Deserializer deserializer = initDeserializer(*fileInfo, clientContext, enableChecksums);
             if (offsetDeserialized > 0) {
@@ -222,9 +219,7 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
                 replayWALRecord(*walRecord);
             }
             fileInfo.reset();
-            if (removeFileIfExists(checkpointWalPath)) {
-                syncParentDirectoryForLocalPath(checkpointWalPath);
-            }
+            removeFileAndSyncParentDirectory(checkpointWalPath);
         }
     } catch (const std::exception&) {
         auto transactionContext = TransactionContext::Get(clientContext);
@@ -240,10 +235,7 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
     auto fileInfo = openWALFile();
     if (fileInfo->getFileSize() == 0) {
         fileInfo.reset();
-        if (removeFileIfExists(walPath)) {
-            syncParentDirectoryForLocalPath(walPath);
-        }
-        removeFileIfExists(shadowFilePath);
+        removeWALAndShadowFiles(walPath);
         return;
     }
     syncWALFile(*fileInfo);
@@ -258,7 +250,7 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
             removeWALAndShadowFiles(walPath);
             checkpointer.readCheckpoint();
         } else {
-            removeFileIfExists(shadowFilePath);
+            removeFileAndSyncParentDirectory(shadowFilePath);
             Deserializer deserializer = initDeserializer(*fileInfo, clientContext, enableChecksums);
             if (offsetDeserialized > 0) {
                 deserializer.getReader()->onObjectBegin();
@@ -397,10 +389,17 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
 }
 
 void WALReplayer::removeWALAndShadowFiles(const std::string& walFilePath) const {
-    if (removeFileIfExists(walFilePath)) {
-        syncParentDirectoryForLocalPath(walFilePath);
+    const bool walRemoved = removeFileIfExists(walFilePath);
+    const bool shadowRemoved = removeFileIfExists(shadowFilePath);
+    if (walRemoved || shadowRemoved) {
+        syncParentDirectoryForLocalPath(walRemoved ? walFilePath : shadowFilePath);
     }
-    removeFileIfExists(shadowFilePath);
+}
+
+void WALReplayer::removeFileAndSyncParentDirectory(const std::string& path) const {
+    if (removeFileIfExists(path)) {
+        syncParentDirectoryForLocalPath(path);
+    }
 }
 
 bool WALReplayer::removeFileIfExists(const std::string& path) const {

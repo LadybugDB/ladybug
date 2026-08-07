@@ -30,7 +30,7 @@ Connection::~Connection() {
     // We do this here (before destroying ClientContext) while Database and Connection are still
     // valid; ~ClientContext then skips rollback to avoid double-rollback or use-after-free.
     if (Transaction* tx = Transaction::Get(*clientContext)) {
-        database->getTransactionManager()->rollback(*clientContext, tx);
+        database->getTransactionManager()->rollback(*clientContext, tx->getID());
     }
     clientContext->preventTransactionRollbackOnDestruction = true;
 }

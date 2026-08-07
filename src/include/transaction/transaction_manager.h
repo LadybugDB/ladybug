@@ -44,7 +44,7 @@ public:
     Transaction* beginTransaction(main::ClientContext& clientContext, TransactionType type);
 
     void commit(main::ClientContext& clientContext, Transaction* transaction);
-    void rollback(main::ClientContext& clientContext, Transaction* transaction);
+    void rollback(main::ClientContext& clientContext, common::transaction_t transactionID);
 
     void checkpoint(main::ClientContext& clientContext);
 
