@@ -74,7 +74,7 @@ void TransactionContext::rollback() {
         return;
     }
     clientContext.getDatabase()->getTransactionManager()->rollback(clientContext,
-        activeTransaction);
+        activeTransaction->getID());
     clearTransaction();
 }
 

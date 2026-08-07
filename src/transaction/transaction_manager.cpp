@@ -1,5 +1,6 @@
 #include "transaction/transaction_manager.h"
 
+#include <algorithm>
 #include <thread>
 
 #include "common/exception/checkpoint.h"
@@ -11,6 +12,7 @@
 #include "main/db_config.h"
 #include "storage/checkpointer.h"
 #include "storage/wal/local_wal.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::storage;
@@ -174,29 +176,25 @@ void TransactionManager::commit(main::ClientContext& clientContext, Transaction*
         } else if (shouldAutoCheckpoint) {
             tryCheckpoint(clientContext);
         }
-    } catch (const CheckpointException&) {
-        throw;
     } catch (const std::exception& e) {
-        throw CheckpointException{e};
+        throw CheckpointException{std::format(
+            "Transaction committed successfully, but the post-commit checkpoint failed. "
+            "The committed data is durable and will be recovered on restart: {}",
+            e.what())};
     }
 }
 
-// Note: We take in additional `transaction` here is due to that `transactionContext` might be
-// destructed when a transaction throws an exception, while we need to roll back the active
-// transaction still.
-void TransactionManager::rollback(main::ClientContext& clientContext, Transaction* transaction) {
+void TransactionManager::rollback(main::ClientContext& clientContext, transaction_t transactionID) {
     std::unique_lock lck{mtxForSerializingPublicFunctionCalls};
     clientContext.cleanUp();
-    // A post-commit checkpoint failure may be observed after the manager has released the
-    // transaction but before its context has cleared the non-owning pointer. Do not dereference
-    // a transaction that is no longer manager-owned.
-    const auto isActiveTransaction =
-        std::ranges::any_of(activeTransactions, [transaction](const auto& activeTransaction) {
-            return activeTransaction.get() == transaction;
+    const auto transactionIt =
+        std::ranges::find_if(activeTransactions, [transactionID](const auto& activeTransaction) {
+            return activeTransaction->getID() == transactionID;
         });
-    if (!isActiveTransaction) {
+    if (transactionIt == activeTransactions.end()) {
         return;
     }
+    auto* transaction = transactionIt->get();
     switch (transaction->getType()) {
     case TransactionType::READ_ONLY: {
         clearTransactionNoLock(transaction->getID());

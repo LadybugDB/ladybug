@@ -84,8 +84,8 @@ ClientContext::~ClientContext() {
     if (preventTransactionRollbackOnDestruction) {
         return;
     }
-    if (Transaction::Get(*this)) {
-        getDatabase()->transactionManager->rollback(*this, Transaction::Get(*this));
+    if (auto* transaction = Transaction::Get(*this)) {
+        getDatabase()->transactionManager->rollback(*this, transaction->getID());
     }
 }
 
