@@ -72,6 +72,3 @@ jobs:
         with:
           name: lsqb-benchmark-log
           path: lsqb.log
-
-      - name: Report result to server
-        run:  python3 benchmark/lsqb/results_reporter.py
