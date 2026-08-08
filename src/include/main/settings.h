@@ -124,6 +124,13 @@ struct ForceCheckpointClosingDBSetting {
     static common::Value getSetting(const ClientContext* context);
 };
 
+struct AllowStorageVersionUpgradeSetting {
+    static constexpr auto name = "allow_storage_version_upgrade";
+    static constexpr auto inputType = common::LogicalTypeID::BOOL;
+    static void setContext(ClientContext* context, const common::Value& parameter);
+    static common::Value getSetting(const ClientContext* context);
+};
+
 struct EnableDefaultHashIndexSetting {
     static constexpr auto name = "enable_default_hash_index";
     static constexpr auto inputType = common::LogicalTypeID::BOOL;

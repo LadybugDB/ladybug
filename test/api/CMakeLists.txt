@@ -15,4 +15,5 @@ add_lbug_api_test(api_test
         result_value_test.cpp
         storage_driver_test.cpp
         udf_test.cpp
-        read_only_test.cpp)
+        read_only_test.cpp
+        storage_version_ceremony_test.cpp)

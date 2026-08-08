@@ -73,13 +73,17 @@ struct LBUG_API SystemConfig {
      * Default to false.
      * @param enableDefaultHashIndex If true, node tables create the default primary-key hash
      * index.
+     * @param allowStorageVersionUpgrade If true (default), checkpointing a database file written
+     * by an older Lbug release silently upgrades the file to the current storage version, after
+     * which older Lbug binaries can no longer open it. If false, such a checkpoint throws
+     * instead of upgrading, and the file stays readable by the release that wrote it.
      */
     explicit SystemConfig(uint64_t bufferPoolSize = -1u, uint64_t maxNumThreads = 0,
         bool enableCompression = true, bool readOnly = false, uint64_t maxDBSize = -1u,
         bool autoCheckpoint = true, uint64_t checkpointThreshold = 16777216 /* 16MB */,
         bool forceCheckpointOnClose = true, bool throwOnWalReplayFailure = false,
         bool enableChecksums = true, bool enableMultiWrites = false,
-        bool enableDefaultHashIndex = true
+        bool enableDefaultHashIndex = true, bool allowStorageVersionUpgrade = true
 #if defined(__APPLE__)
         ,
         uint32_t threadQos = QOS_CLASS_DEFAULT
@@ -98,6 +102,7 @@ struct LBUG_API SystemConfig {
     bool enableChecksums;
     bool enableMultiWrites;
     bool enableDefaultHashIndex;
+    bool allowStorageVersionUpgrade;
 #if defined(__APPLE__)
     uint32_t threadQos;
 #endif

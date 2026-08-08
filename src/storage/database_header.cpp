@@ -21,7 +21,6 @@ static storage_version_t validateStorageVersion(common::Deserializer& deSer) {
     deSer.deserializeValue(savedStorageVersion);
     const auto storageVersion = StorageVersionInfo::getStorageVersion();
     if (!StorageVersionInfo::canReadStorageVersion(savedStorageVersion)) {
-        // TODO(Guodong): Add a test case for this.
         throw common::RuntimeException(
             std::format("Trying to read a database file with a different version. "
                         "Database file version: {}, Current build storage version: {}",
@@ -85,8 +84,7 @@ void DatabaseHeader::serialize(common::Serializer& ser) const {
     ser.serializeValue(dataFileNumPages);
 }
 
-DatabaseHeader DatabaseHeader::deserialize(common::Deserializer& deSer) {
-    validateMagicBytes(deSer);
+static DatabaseHeader deserializeHeaderBody(common::Deserializer& deSer) {
     const auto savedStorageVersion = validateStorageVersion(deSer);
     PageRange catalogPageRange{}, metaPageRange{};
     common::uuid databaseID{};
@@ -110,6 +108,11 @@ DatabaseHeader DatabaseHeader::deserialize(common::Deserializer& deSer) {
     return {catalogPageRange, metaPageRange, dataFileNumPages, databaseID, savedStorageVersion};
 }
 
+DatabaseHeader DatabaseHeader::deserialize(common::Deserializer& deSer) {
+    validateMagicBytes(deSer);
+    return deserializeHeaderBody(deSer);
+}
+
 DatabaseHeader DatabaseHeader::createInitialHeader(common::RandomEngine* randomEngine) {
     // We generate a random UUID to act as the database ID
     return DatabaseHeader{{}, {}, 0, common::UUID::generateRandomUUID(randomEngine),
@@ -124,11 +127,15 @@ std::optional<DatabaseHeader> DatabaseHeader::readDatabaseHeader(common::FileInf
     auto reader = std::make_unique<common::BufferedFileReader>(dataFileInfo);
     common::Deserializer deSer(std::move(reader));
     try {
-        return DatabaseHeader::deserialize(deSer);
+        validateMagicBytes(deSer);
     } catch (const common::RuntimeException&) {
         // It is possible we optimistically write to the database file before the first checkpoint
         // In this case the magic bytes check will fail and we assume there is no existing header
         return std::nullopt;
     }
+    // Past the magic bytes the file is a Lbug database file: any further failure (e.g. an
+    // unreadable storage version) is a real error and must propagate rather than be treated as
+    // "no existing header".
+    return deserializeHeaderBody(deSer);
 }
 } // namespace lbug::storage

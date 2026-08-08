@@ -39,6 +39,8 @@ struct StorageVersionInfo {
     }
 
     static LBUG_API storage_version_t getStorageVersion();
+    static LBUG_API storage_version_t getStorageVersionForVersionString(
+        const std::string& rawVersion);
     static bool canReadStorageVersion(storage_version_t storageVersion) {
         return storageVersion == STORAGE_VERSION_40 || storageVersion == STORAGE_VERSION_41 ||
                storageVersion == STORAGE_VERSION_42 || storageVersion == STORAGE_VERSION_43 ||

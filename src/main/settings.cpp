@@ -200,6 +200,16 @@ common::Value ForceCheckpointClosingDBSetting::getSetting(const ClientContext* c
     return common::Value(context->getDBConfig()->forceCheckpointOnClose);
 }
 
+void AllowStorageVersionUpgradeSetting::setContext(ClientContext* context,
+    const common::Value& parameter) {
+    parameter.validateType(inputType);
+    context->getDBConfigUnsafe()->allowStorageVersionUpgrade = parameter.getValue<bool>();
+}
+
+common::Value AllowStorageVersionUpgradeSetting::getSetting(const ClientContext* context) {
+    return common::Value(context->getDBConfig()->allowStorageVersionUpgrade);
+}
+
 void EnableDefaultHashIndexSetting::setContext(ClientContext* context,
     const common::Value& parameter) {
     parameter.validateType(inputType);

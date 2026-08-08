@@ -1,6 +1,7 @@
 #include "storage/checkpointer.h"
 
 #include <chrono>
+#include <iostream>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -228,6 +229,25 @@ PageRange Checkpointer::serializeMetadata(const catalog::Catalog& catalog,
     return allocatedPages;
 }
 
+static void applyStorageVersionUpgradeCeremony(const main::ClientContext& clientContext,
+    storage_version_t oldStorageVersion, storage_version_t newStorageVersion) {
+    if (oldStorageVersion == newStorageVersion) {
+        return;
+    }
+    if (!clientContext.getDBConfig()->allowStorageVersionUpgrade) {
+        throw common::RuntimeException(std::format(
+            "Checkpoint would upgrade the database storage version from {} to {}, after which "
+            "older Lbug binaries can no longer open this database file, and "
+            "allow_storage_version_upgrade is false. Run CALL "
+            "allow_storage_version_upgrade=true; to allow the upgrade.",
+            oldStorageVersion, newStorageVersion));
+    }
+    std::cerr << "Warning: upgrading database storage version from " << oldStorageVersion << " to "
+              << newStorageVersion
+              << ". Older Lbug binaries will no longer be able to open this database file."
+              << std::endl;
+}
+
 void Checkpointer::writeCheckpoint() {
     if (isInMemory) {
         return;
@@ -236,16 +256,21 @@ void Checkpointer::writeCheckpoint() {
     acquireCheckpointLocks();
     checkpointTargets = collectCheckpointTargets();
 
+    auto databaseHeader = *mainStorageManager->getOrInitDatabaseHeader(clientContext);
+    const auto oldStorageVersion = databaseHeader.storageVersion;
+    databaseHeader.storageVersion = StorageVersionInfo::getStorageVersion();
+    hasStorageVersionUpgrade = oldStorageVersion != databaseHeader.storageVersion;
+    // Refuse (or warn about) a storage-version upgrade before any WAL rotation: an exception
+    // thrown after rotation would leave a frozen WAL that replays over a later checkpoint.
+    applyStorageVersionUpgradeCeremony(clientContext, oldStorageVersion,
+        databaseHeader.storageVersion);
+
     for (const auto& target : checkpointTargets) {
         auto rotated = target.storageManager->getWAL().rotateForCheckpoint(&clientContext);
         walRotatedByManager[target.storageManager] = rotated;
         walRotated = walRotated || rotated;
     }
 
-    auto databaseHeader = *mainStorageManager->getOrInitDatabaseHeader(clientContext);
-    const auto oldStorageVersion = databaseHeader.storageVersion;
-    databaseHeader.storageVersion = StorageVersionInfo::getStorageVersion();
-    hasStorageVersionUpgrade = oldStorageVersion != databaseHeader.storageVersion;
     bool localHasStorageChanges = checkpointStorage();
     serializeCatalogAndMetadata(databaseHeader, localHasStorageChanges);
     databaseHeader.dataFileNumPages = mainStorageManager->getDataFH()->getNumPages();
@@ -281,16 +306,20 @@ void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp) {
     snapshotTS = snapshotTimestamp;
     checkpointTargets = collectCheckpointTargets();
 
+    checkpointHeader = *mainStorageManager->getOrInitDatabaseHeader(clientContext);
+    const auto oldStorageVersion = checkpointHeader.storageVersion;
+    checkpointHeader.storageVersion = StorageVersionInfo::getStorageVersion();
+    hasStorageVersionUpgrade = oldStorageVersion != checkpointHeader.storageVersion;
+    // Refuse (or warn about) a storage-version upgrade before any WAL rotation: an exception
+    // thrown after rotation would leave a frozen WAL that replays over a later checkpoint.
+    applyStorageVersionUpgradeCeremony(clientContext, oldStorageVersion,
+        checkpointHeader.storageVersion);
+
     for (const auto& target : checkpointTargets) {
         auto rotated = target.storageManager->getWAL().rotateForCheckpoint(&clientContext);
         walRotatedByManager[target.storageManager] = rotated;
         walRotated = walRotated || rotated;
     }
-
-    checkpointHeader = *mainStorageManager->getOrInitDatabaseHeader(clientContext);
-    const auto oldStorageVersion = checkpointHeader.storageVersion;
-    checkpointHeader.storageVersion = StorageVersionInfo::getStorageVersion();
-    hasStorageVersionUpgrade = oldStorageVersion != checkpointHeader.storageVersion;
 
     // Capture versions while the write gate is still held.
     for (const auto& target : checkpointTargets) {

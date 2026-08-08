@@ -1,5 +1,8 @@
 #include "storage/storage_version_info.h"
 
+#include "common/exception/runtime.h"
+#include <format>
+
 namespace lbug {
 namespace storage {
 
@@ -19,24 +22,25 @@ static bool usesStorageVersion40(const std::string& version) {
            version.starts_with("0.16.");
 }
 
-storage_version_t StorageVersionInfo::getStorageVersion() {
+storage_version_t StorageVersionInfo::getStorageVersionForVersionString(
+    const std::string& rawVersion) {
     auto storageVersionInfo = getStorageVersionInfo();
-    auto version = normalizeVersionForStorageLookup(LBUG_CMAKE_VERSION);
+    auto version = normalizeVersionForStorageLookup(rawVersion);
     if (usesStorageVersion40(version)) {
         return STORAGE_VERSION_40;
     }
     if (!storageVersionInfo.contains(version)) {
-        // If the current LBUG_CMAKE_VERSION is not in the map,
-        // then we must run the newest version of lbug
-        // LCOV_EXCL_START
-        storage_version_t maxVersion = 0;
-        for (auto& [_, versionNumber] : storageVersionInfo) {
-            maxVersion = std::max(maxVersion, versionNumber);
-        }
-        return maxVersion;
-        // LCOV_EXCL_STOP
+        throw common::RuntimeException(
+            std::format("Lbug version '{}' has no storage version mapping. This is a build "
+                        "configuration error: add the release to "
+                        "StorageVersionInfo::getStorageVersionInfo().",
+                rawVersion));
     }
     return storageVersionInfo.at(version);
+}
+
+storage_version_t StorageVersionInfo::getStorageVersion() {
+    return getStorageVersionForVersionString(LBUG_CMAKE_VERSION);
 }
 
 } // namespace storage

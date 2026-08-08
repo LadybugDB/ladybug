@@ -25,3 +25,24 @@
 -STATEMENT MATCH (u:users) RETURN u.id, u.name;
 ---- 1
 1|Alice
+
+-CASE StorageVersionUpgradeOptOut
+-STATEMENT CALL storage_version() RETURN *;
+---- 1
+44
+-SET_STORAGE_VERSION 41
+-STATEMENT CALL allow_storage_version_upgrade=false;
+---- ok
+-STATEMENT CALL current_setting('allow_storage_version_upgrade') RETURN *;
+---- 1
+False
+-STATEMENT CREATE NODE TABLE optout_users(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CHECKPOINT;
+---- error
+Runtime exception: Checkpoint would upgrade the database storage version from 41 to 44, after which older Lbug binaries can no longer open this database file, and allow_storage_version_upgrade is false. Run CALL allow_storage_version_upgrade=true; to allow the upgrade.
+-STATEMENT CALL allow_storage_version_upgrade=true;
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-CHECK_STORAGE_VERSION 44
