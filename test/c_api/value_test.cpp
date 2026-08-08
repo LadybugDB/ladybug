@@ -2354,3 +2354,15 @@ TEST_F(CApiValueTest, GetIntervalFromDifftime) {
     ASSERT_EQ(interval.days, 13);
     ASSERT_EQ(interval.micros, 34960479000);
 }
+
+TEST(CApiValueTestEmptyDB, NullHandleReturnsErrorNotCrash) {
+    // The C API exception floor: null or empty handles come back as errors, never as
+    // dereferences of nullptr crossing the C boundary.
+    int64_t int_out = 42;
+    ASSERT_EQ(lbug_value_get_int64(nullptr, &int_out), LbugError);
+    uint64_t size_out = 42;
+    ASSERT_EQ(lbug_value_get_list_size(nullptr, &size_out), LbugError);
+    ASSERT_EQ(lbug_value_clone(nullptr), nullptr);
+    ASSERT_EQ(lbug_value_to_string(nullptr), nullptr);
+    ASSERT_EQ(lbug_value_create_null_with_data_type(nullptr), nullptr);
+}
