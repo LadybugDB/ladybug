@@ -51,17 +51,11 @@ jobs:
       - name: Install uv
         run: pip install uv
 
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: benchmark-${{ runner.os }}
-
-      - name: Build
+      - name: Install ladybug wheel from PyPI
         run: |
           uv venv
           source .venv/bin/activate
-          make python
-          uv pip install --prerelease=allow -e tools/python_api/[dev]
+          uv pip install --prerelease=allow ladybug psutil
 
       - name: Benchmark
         run: uv run benchmark/lsqb/benchmark_runner.py
