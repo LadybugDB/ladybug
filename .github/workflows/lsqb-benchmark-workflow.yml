@@ -29,6 +29,7 @@ jobs:
     name: benchmark
     env:
       GEN: Ninja
+      SERIALIZED_DIR: /tmp/lsqb-serialized
     runs-on: ubuntu-latest
     steps:
       - name: Set env for scheduled run
