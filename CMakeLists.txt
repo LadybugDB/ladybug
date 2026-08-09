@@ -18,6 +18,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 set(CMAKE_FIND_PACKAGE_RESOLVE_SYMLINKS TRUE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# When building inside a pixi/conda env (CI uses setup-pixi with
+# activate-environment: true, setting $CONDA_PREFIX), stage the env as a CMake
+# search prefix. find_package(Arrow) already happens to resolve libarrow's
+# ArrowConfig.cmake under <env>/lib/cmake, but module-based probes such as
+# FindOpenMP (find_library/find_path for llvm-openmp's libomp) never see that
+# prefix and fail. Prepending the env here makes every find_* consult it, so
+# new deps just need a pixi.toml entry - no per-lib HINTS (cf. extension/adbc).
+if(DEFINED ENV{CONDA_PREFIX} AND EXISTS "$ENV{CONDA_PREFIX}")
+    list(PREPEND CMAKE_PREFIX_PATH "$ENV{CONDA_PREFIX}")
+    list(PREPEND CMAKE_MODULE_PATH "$ENV{CONDA_PREFIX}/lib/cmake")
+    if(WIN32 AND EXISTS "$ENV{CONDA_PREFIX}/Library")
+        list(PREPEND CMAKE_PREFIX_PATH "$ENV{CONDA_PREFIX}/Library")
+    endif()
+    message(STATUS "Using pixi/conda env for dependencies: $ENV{CONDA_PREFIX}")
+endif()
 # On Linux, symbols in executables are not accessible by loaded shared libraries (e.g. via dlopen(3)). However, we need to export public symbols in executables so that extensions can access public symbols. This enables that behaviour.
 set(CMAKE_ENABLE_EXPORTS TRUE)
 
