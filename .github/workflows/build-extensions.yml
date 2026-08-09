@@ -173,6 +173,21 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: 13.3
           CMAKE_OSX_ARCHITECTURES: ${{ matrix.cmake_osx_architectures }}
 
+      - name: Relocate libpq dependency for distribution (macOS)
+        if: runner.os == 'macOS'
+        # pg_client links against the keg-only standalone `libpq` Homebrew
+        # formula at /opt/homebrew/opt/libpq/lib/libpq.5.dylib, which is not
+        # present on machines that install libpq via `postgresql@18` instead.
+        # Relocate the dependency to @rpath with the common Homebrew locations
+        # as fallbacks so the released binary loads in either layout, and
+        # verify the result. See LadybugDB/extensions#48.
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' ext; do
+            extension/scripts/relocate-macos-libpq.sh "$ext"
+            extension/scripts/verify-macos-libpq-rpaths.sh "$ext"
+          done < <(find extension/pg_client/build -maxdepth 1 -name '*.lbug_extension' -print0)
+
       - name: Enable long paths (Windows)
         if: runner.os == 'Windows'
         run: |
