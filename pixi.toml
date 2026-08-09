@@ -6,3 +6,4 @@ platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
 [dependencies]
 libadbc-driver-manager = ">=1.11.0,<2"
 libarrow = ">=25.0.0"
+llvm-openmp = ">=22.1.8,<23"
