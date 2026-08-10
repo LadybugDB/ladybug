@@ -159,6 +159,7 @@ option(ENABLE_UBSAN "Enable undefined behavior sanitizer." FALSE)
 option(ENABLE_RUNTIME_CHECKS "Enable runtime coherency checks (e.g. asserts)" FALSE)
 option(ENABLE_LTO "Enable Link-Time Optimization" FALSE)
 option(ENABLE_MALLOC_BUFFER_MANAGER "Enable Buffer manager using malloc. Default option for webassembly" OFF)
+option(LBUG_ENABLE_SIMD "Enable runtime-dispatched query-processor SIMD kernels." ON)
 
 option(LBUG_DEFAULT_REL_STORAGE_DIRECTION "Only store fwd direction in rel tables by default." BOTH)
 if(NOT LBUG_DEFAULT_REL_STORAGE_DIRECTION)

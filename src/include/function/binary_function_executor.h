@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/vector/value_vector.h"
+#include "function/comparison/simd_filter.h"
 
 namespace lbug {
 namespace function {
@@ -313,15 +314,43 @@ struct BinaryFunctionExecutor {
             return selectBothFlat<LEFT_TYPE, RIGHT_TYPE, FUNC, BinaryComparisonSelectWrapper>(left,
                 right, dataPtr);
         } else if (left.state->isFlat() && !right.state->isFlat()) {
+            if (simd::trySelectConstant(right, left,
+                    reverseComparisonOperation(FUNC::comparisonOperation), selVector)) {
+                return selVector.getSelSize() > 0;
+            }
             return selectFlatUnFlat<LEFT_TYPE, RIGHT_TYPE, FUNC, BinaryComparisonSelectWrapper>(
                 left, right, selVector, dataPtr);
         } else if (!left.state->isFlat() && right.state->isFlat()) {
+            if (simd::trySelectConstant(left, right, FUNC::comparisonOperation, selVector)) {
+                return selVector.getSelSize() > 0;
+            }
             return selectUnFlatFlat<LEFT_TYPE, RIGHT_TYPE, FUNC, BinaryComparisonSelectWrapper>(
                 left, right, selVector, dataPtr);
         } else {
+            if (simd::trySelectVector(left, right, FUNC::comparisonOperation, selVector)) {
+                return selVector.getSelSize() > 0;
+            }
             return selectBothUnFlat<LEFT_TYPE, RIGHT_TYPE, FUNC, BinaryComparisonSelectWrapper>(
                 left, right, selVector, dataPtr);
         }
+    }
+
+private:
+    static constexpr ComparisonOperation reverseComparisonOperation(ComparisonOperation operation) {
+        switch (operation) {
+        case ComparisonOperation::LESS_THAN:
+            return ComparisonOperation::GREATER_THAN;
+        case ComparisonOperation::LESS_THAN_EQUAL:
+            return ComparisonOperation::GREATER_THAN_EQUAL;
+        case ComparisonOperation::GREATER_THAN:
+            return ComparisonOperation::LESS_THAN;
+        case ComparisonOperation::GREATER_THAN_EQUAL:
+            return ComparisonOperation::LESS_THAN_EQUAL;
+        case ComparisonOperation::EQUAL:
+        case ComparisonOperation::NOT_EQUAL:
+            return operation;
+        }
+        return operation;
     }
 };
 

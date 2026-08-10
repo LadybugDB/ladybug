@@ -1,11 +1,14 @@
 #pragma once
 
 #include "common/vector/value_vector.h"
+#include "function/comparison/comparison_operation.h"
 
 namespace lbug {
 namespace function {
 
 struct Equals {
+    static constexpr auto comparisonOperation = ComparisonOperation::EQUAL;
+
     template<class A, class B>
     static inline void operation(const A& left, const B& right, uint8_t& result,
         common::ValueVector* /*leftVector*/, common::ValueVector* /*rightVector*/) {
@@ -21,6 +24,8 @@ struct Equals {
 };
 
 struct NotEquals {
+    static constexpr auto comparisonOperation = ComparisonOperation::NOT_EQUAL;
+
     template<class A, class B>
     static inline void operation(const A& left, const B& right, uint8_t& result,
         common::ValueVector* leftVector, common::ValueVector* rightVector) {
@@ -37,6 +42,8 @@ struct NotEquals {
 };
 
 struct GreaterThan {
+    static constexpr auto comparisonOperation = ComparisonOperation::GREATER_THAN;
+
     template<class A, class B>
     static inline void operation(const A& left, const B& right, uint8_t& result,
         common::ValueVector* /*leftVector*/, common::ValueVector* /*rightVector*/) {
@@ -52,6 +59,8 @@ struct GreaterThan {
 };
 
 struct GreaterThanEquals {
+    static constexpr auto comparisonOperation = ComparisonOperation::GREATER_THAN_EQUAL;
+
     template<class A, class B>
     static inline void operation(const A& left, const B& right, uint8_t& result,
         common::ValueVector* leftVector, common::ValueVector* rightVector) {
@@ -71,6 +80,8 @@ struct GreaterThanEquals {
 };
 
 struct LessThan {
+    static constexpr auto comparisonOperation = ComparisonOperation::LESS_THAN;
+
     template<class A, class B>
     static inline void operation(const A& left, const B& right, uint8_t& result,
         common::ValueVector* leftVector, common::ValueVector* rightVector) {
@@ -87,6 +98,8 @@ struct LessThan {
 };
 
 struct LessThanEquals {
+    static constexpr auto comparisonOperation = ComparisonOperation::LESS_THAN_EQUAL;
+
     template<class A, class B>
     static inline void operation(const A& left, const B& right, uint8_t& result,
         common::ValueVector* leftVector, common::ValueVector* rightVector) {

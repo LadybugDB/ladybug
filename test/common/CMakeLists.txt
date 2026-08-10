@@ -11,4 +11,5 @@ add_lbug_test(types_test
         timestamp_test.cpp
         vfs_test.cpp
         boolean_filter_test.cpp
+        simd_filter_test.cpp
 )
