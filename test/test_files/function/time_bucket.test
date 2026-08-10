@@ -1,0 +1,74 @@
+-DATASET CSV empty
+
+--
+
+-CASE TimeBucket
+-STATEMENT UNWIND [timestamp('2026-08-01 00:00:00'), timestamp('2026-08-01 10:23:45'),
+                    timestamp('2026-08-01 23:59:59'), timestamp('2026-08-02 00:00:00'), NULL] AS ts
+           RETURN time_bucket(interval('1 day'), ts),
+                  time_bucket(interval('1 day'), ts) + interval('1 day')
+---- 5
+2026-08-01 00:00:00|2026-08-02 00:00:00
+2026-08-01 00:00:00|2026-08-02 00:00:00
+2026-08-01 00:00:00|2026-08-02 00:00:00
+2026-08-02 00:00:00|2026-08-03 00:00:00
+|
+
+-STATEMENT UNWIND [date('2024-02-29'), date('2024-06-30')] AS d
+           RETURN time_bucket(interval('5 months'), d)
+---- 2
+2023-10-01
+2024-03-01
+
+-STATEMENT UNWIND [date('2025-08-20')] AS d
+           RETURN time_bucket(interval('2 years'), d),
+                  time_bucket(interval('3 weeks'), d)
+---- 1
+2024-01-01|2025-08-07
+
+-STATEMENT CREATE NODE TABLE CampusUser(id INT64, PRIMARY KEY(id));
+---- ok
+
+-STATEMENT CREATE NODE TABLE EventNetworkOnline(id INT64, PRIMARY KEY(id));
+---- ok
+
+-STATEMENT CREATE REL TABLE CampusUserHasOnlineSession(
+             FROM CampusUser TO EventNetworkOnline, login_time TIMESTAMP, user_ipv4 STRING);
+---- ok
+
+-STATEMENT CREATE (:CampusUser {id: 1}), (:CampusUser {id: 2}),
+                  (:EventNetworkOnline {id: 101}), (:EventNetworkOnline {id: 102}),
+                  (:EventNetworkOnline {id: 103});
+---- ok
+
+-STATEMENT MATCH (s:CampusUser), (e:EventNetworkOnline) WHERE s.id = 1 AND e.id = 101
+           CREATE (s)-[:CampusUserHasOnlineSession {
+             login_time: timestamp('2026-08-01 10:23:45'), user_ipv4: '10.0.0.1'
+           }]->(e);
+---- ok
+
+-STATEMENT MATCH (s:CampusUser), (e:EventNetworkOnline) WHERE s.id = 1 AND e.id = 102
+           CREATE (s)-[:CampusUserHasOnlineSession {
+             login_time: timestamp('2026-08-02 00:00:00'), user_ipv4: '10.0.0.2'
+           }]->(e);
+---- ok
+
+-STATEMENT MATCH (s:CampusUser), (e:EventNetworkOnline) WHERE s.id = 2 AND e.id = 103
+           CREATE (s)-[:CampusUserHasOnlineSession {user_ipv4: '10.0.0.3'}]->(e);
+---- ok
+
+-STATEMENT MATCH (s:CampusUser)-[r:CampusUserHasOnlineSession]->(e:EventNetworkOnline)
+           WITH s.id AS entity_id, e.id AS event_id,
+                time_bucket(interval('1 day'), r.login_time) AS window_start
+           RETURN entity_id, event_id, window_start,
+                  window_start + interval('1 day') AS window_end
+           ORDER BY entity_id, event_id;
+---- 3
+1|101|2026-08-01 00:00:00|2026-08-02 00:00:00
+1|102|2026-08-02 00:00:00|2026-08-03 00:00:00
+2|103||
+
+-STATEMENT UNWIND [timestamp('2026-08-01')] AS ts
+           RETURN time_bucket(interval('0 seconds'), ts)
+---- error
+Binder exception: time_bucket interval must be positive.

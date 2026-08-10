@@ -1,5 +1,6 @@
 add_library(lbug_timestamp_function
         OBJECT
+        time_bucket.cpp
         to_epoch_ms.cpp)
 
 set(ALL_OBJECT_FILES

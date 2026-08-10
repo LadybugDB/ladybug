@@ -24,6 +24,7 @@
 #include "function/struct/vector_struct_functions.h"
 #include "function/table/simple_table_function.h"
 #include "function/table/standalone_call_function.h"
+#include "function/timestamp/time_bucket.h"
 #include "function/timestamp/vector_timestamp_functions.h"
 #include "function/union/vector_union_functions.h"
 #include "function/utility/vector_utility_functions.h"
@@ -164,7 +165,7 @@ FunctionCollection* FunctionCollection::getFunctions() {
         // Timestamp functions
         SCALAR_FUNCTION(CenturyFunction), SCALAR_FUNCTION(EpochMsFunction),
         SCALAR_FUNCTION(ToTimestampFunction), SCALAR_FUNCTION(CurrentTimestampFunction),
-        SCALAR_FUNCTION(ToEpochMsFunction),
+        SCALAR_FUNCTION(ToEpochMsFunction), SCALAR_FUNCTION(TimeBucketFunction),
 
         // Interval functions
         SCALAR_FUNCTION(ToYearsFunction), SCALAR_FUNCTION(ToMonthsFunction),
