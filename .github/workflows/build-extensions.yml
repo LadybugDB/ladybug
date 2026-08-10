@@ -31,7 +31,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Mark workspace safe for git (Linux container)
         if: runner.os == 'Linux'
@@ -214,9 +214,9 @@ jobs:
           ccache --set-config=temporary_dir=D:\t
         shell: bash
 
-      - name: Cache ccache directory (Windows)
+      - name: Restore ccache directory (Windows)
         if: runner.os == 'Windows'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: D:\c
           key: ${{ runner.os }}-ccache-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
@@ -246,6 +246,15 @@ jobs:
         env:
           CMAKE_PREFIX_PATH: C:\local
 
+      - name: Save ccache directory (Windows)
+        # Always save the ccache, even if the build failed, so the cache is
+        # preserved between runs.
+        if: ${{ always() && runner.os == 'Windows' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: D:\c
+          key: ${{ runner.os }}-ccache-${{ hashFiles('**/CMakeLists.txt', '**/*.cpp', '**/*.h') }}
+
       - name: Show ccache stats (after) (Windows)
         if: runner.os == 'Windows'
         run: ccache -s
@@ -255,7 +264,7 @@ jobs:
         run: python3 scripts/collect-extensions.py
 
       - name: Upload built artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lbug-extensions-${{ matrix.os_name }}-${{ matrix.arch }}
           path: extension-artifacts
