@@ -26,12 +26,19 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # prefix and fail. Prepending the env here makes every find_* consult it, so
 # new deps just need a pixi.toml entry - no per-lib HINTS (cf. extension/adbc).
 if(DEFINED ENV{CONDA_PREFIX} AND EXISTS "$ENV{CONDA_PREFIX}")
-    list(PREPEND CMAKE_PREFIX_PATH "$ENV{CONDA_PREFIX}")
-    list(PREPEND CMAKE_MODULE_PATH "$ENV{CONDA_PREFIX}/lib/cmake")
+    # Normalize backslashes to forward slashes so the path survives being
+    # round-tripped through CMake's set(... "...") parser. try_compile's scratch
+    # file embeds CMAKE_*_PATH entries in a set() call, and CMake 3.31 rejects
+    # unrecognized escape sequences like "\a", "\b", etc. that appear in Windows
+    # pixi paths (e.g. D:\a\...\.pixi\envs\default). On non-Windows this is a no-op.
+    file(TO_CMAKE_PATH "$ENV{CONDA_PREFIX}" _lbug_conda_prefix)
+    list(PREPEND CMAKE_PREFIX_PATH "${_lbug_conda_prefix}")
+    list(PREPEND CMAKE_MODULE_PATH "${_lbug_conda_prefix}/lib/cmake")
     if(WIN32 AND EXISTS "$ENV{CONDA_PREFIX}/Library")
-        list(PREPEND CMAKE_PREFIX_PATH "$ENV{CONDA_PREFIX}/Library")
+        file(TO_CMAKE_PATH "$ENV{CONDA_PREFIX}/Library" _lbug_conda_lib)
+        list(PREPEND CMAKE_PREFIX_PATH "${_lbug_conda_lib}")
     endif()
-    message(STATUS "Using pixi/conda env for dependencies: $ENV{CONDA_PREFIX}")
+    message(STATUS "Using pixi/conda env for dependencies: ${_lbug_conda_prefix}")
 endif()
 # On Linux, symbols in executables are not accessible by loaded shared libraries (e.g. via dlopen(3)). However, we need to export public symbols in executables so that extensions can access public symbols. This enables that behaviour.
 set(CMAKE_ENABLE_EXPORTS TRUE)
