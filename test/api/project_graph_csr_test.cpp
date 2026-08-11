@@ -15,19 +15,16 @@ public:
         ASSERT_TRUE(conn->query("CREATE NODE TABLE CsrNode(id INT64 PRIMARY KEY)")->isSuccess());
         ASSERT_TRUE(conn->query("CREATE REL TABLE CsrEdge(FROM CsrNode TO CsrNode)")->isSuccess());
         ASSERT_TRUE(conn->query("CREATE (:CsrNode {id:0}), (:CsrNode {id:1}), (:CsrNode {id:2})")
-                ->isSuccess());
-        ASSERT_TRUE(
-            conn->query("MATCH (a:CsrNode {id:0}), (b:CsrNode {id:1}) "
-                        "CREATE (a)-[:CsrEdge]->(b)")
-                ->isSuccess());
-        ASSERT_TRUE(
-            conn->query("MATCH (a:CsrNode {id:0}), (b:CsrNode {id:2}) "
-                        "CREATE (a)-[:CsrEdge]->(b)")
-                ->isSuccess());
-        ASSERT_TRUE(
-            conn->query("MATCH (a:CsrNode {id:1}), (b:CsrNode {id:2}) "
-                        "CREATE (a)-[:CsrEdge]->(b)")
-                ->isSuccess());
+                        ->isSuccess());
+        ASSERT_TRUE(conn->query("MATCH (a:CsrNode {id:0}), (b:CsrNode {id:1}) "
+                                "CREATE (a)-[:CsrEdge]->(b)")
+                        ->isSuccess());
+        ASSERT_TRUE(conn->query("MATCH (a:CsrNode {id:0}), (b:CsrNode {id:2}) "
+                                "CREATE (a)-[:CsrEdge]->(b)")
+                        ->isSuccess());
+        ASSERT_TRUE(conn->query("MATCH (a:CsrNode {id:1}), (b:CsrNode {id:2}) "
+                                "CREATE (a)-[:CsrEdge]->(b)")
+                        ->isSuccess());
     }
 
     const ParsedNativeGraphEntry& getNativeEntry(const std::string& name) {
@@ -72,7 +69,7 @@ TEST_F(ProjectGraphCsrTest, skipsMaterializationWithPredicate) {
 TEST_F(ProjectGraphCsrTest, skipsMaterializationWithMultipleNodeTables) {
     ASSERT_TRUE(conn->query("CREATE NODE TABLE CsrNode2(id INT64 PRIMARY KEY)")->isSuccess());
     ASSERT_TRUE(conn->query("CALL PROJECT_GRAPH('CsrGMulti', ['CsrNode', 'CsrNode2'], ['CsrEdge'])")
-            ->isSuccess());
+                    ->isSuccess());
     const auto& entry = getNativeEntry("CsrGMulti");
     ASSERT_TRUE(entry.relCsrResults.empty());
 }
