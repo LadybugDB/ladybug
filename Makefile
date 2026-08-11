@@ -30,7 +30,7 @@ TEST_JOBS ?= 10
 EXTENSION_E2E_TEST_JOBS ?= 1
 PGEMBED_PYTHON ?= 3.12
 PGEMBED_FIXTURE ?= python3 scripts/run_pgembed_fixture.py --
-EXTENSION_LIST ?= adbc;httpfs;duckdb;json;postgres;pg_client;sqlite;fts;delta;iceberg;azure;unity_catalog;vector;neo4j;algo;llm
+EXTENSION_LIST ?= adbc;httpfs;duckdb;json;postgres;pg_client;sqlite;fts;delta;iceberg;azure;unity_catalog;vector;neo4j;algo;llm;gql
 EXTENSION_TEST_EXCLUDE_FILTER ?= ""
 
 ifeq ($(OS),Windows_NT)
