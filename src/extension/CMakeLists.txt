@@ -56,7 +56,9 @@ add_library(lbug_extension
         loaded_extension.cpp
 )
 
-if (NOT BUILD_WASM)
+# Only enable HTTPS for extension downloads when OpenSSL is available.
+# Without OpenSSL, extension downloads fall back to HTTP or fail with a clear error.
+if (NOT BUILD_WASM AND OpenSSL_FOUND)
     target_compile_definitions(lbug_extension PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
     target_include_directories(lbug_extension PRIVATE ${OPENSSL_INCLUDE_DIR})
 endif ()
