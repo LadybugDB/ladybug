@@ -1,12 +1,16 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "common/cast.h"
 
 namespace lbug {
+namespace main {
+class QueryResult;
+} // namespace main
 namespace graph {
 
 enum class GraphEntryType : uint8_t {
@@ -41,11 +45,18 @@ struct ParsedNativeGraphTableInfo {
 struct LBUG_API ParsedNativeGraphEntry : ParsedGraphEntry {
     std::vector<ParsedNativeGraphTableInfo> nodeInfos;
     std::vector<ParsedNativeGraphTableInfo> relInfos;
+    // Arrow CSR per relInfos[i] (same order), materialized at PROJECT_GRAPH time by running the
+    // projection scan through the arrow CSR collector; entries are ArrowQueryResults whose
+    // CSRMetadata GDS consumers wrap zero-copy. Null (or empty) when materialization was skipped
+    // (multi-node-table graph, per-table predicate, manual transaction) — consumers must fall
+    // back to scanning storage. Lifetime: the session's GraphEntrySet; freed on DROP.
+    std::vector<std::shared_ptr<main::QueryResult>> relCsrResults;
 
     ParsedNativeGraphEntry(std::vector<ParsedNativeGraphTableInfo> nodeInfos,
         std::vector<ParsedNativeGraphTableInfo> relInfos)
         : ParsedGraphEntry{GraphEntryType::NATIVE}, nodeInfos{std::move(nodeInfos)},
           relInfos{std::move(relInfos)} {}
+    ~ParsedNativeGraphEntry() override;
 };
 
 struct LBUG_API ParsedCypherGraphEntry : ParsedGraphEntry {

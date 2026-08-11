@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "common/exception/binder.h"
 #include "common/types/value/nested.h"
 #include "function/gds/gds.h"
@@ -5,8 +7,12 @@
 #include "function/table/bind_input.h"
 #include "function/table/standalone_call_function.h"
 #include "graph/graph_entry_set.h"
+#include "main/connection.h"
+#include "main/database.h"
+#include "main/query_result/arrow_query_result.h"
 #include "parser/parser.h"
 #include "processor/execution_context.h"
+#include "transaction/transaction_context.h"
 #include <format>
 
 using namespace lbug::binder;
@@ -33,13 +39,54 @@ struct ProjectGraphNativeBindData final : TableFuncBindData {
     }
 };
 
+// Materialize each projected rel table as arrow CSR by running the projection scan through the
+// arrow CSR collector (queryAsArrow tracks CSR for the MATCH..RETURN rowid shape with no row
+// materialization). The result is pinned on the entry for GDS consumers to wrap zero-copy.
+// Fallback-first: any condition the CSR can't faithfully represent yet (multiple node tables,
+// per-table predicates) or where an internal read connection would not see the caller's data
+// (manual transaction: uncommitted writes are invisible to the inner connection) skips
+// materialization; consumers fall back to scanning storage.
+static void materializeRelCsr(ParsedNativeGraphEntry& entry, main::ClientContext* context) {
+    if (entry.nodeInfos.size() != 1) {
+        return;
+    }
+    const auto anyPredicate = [](const ParsedNativeGraphTableInfo& info) {
+        return !info.predicate.empty();
+    };
+    if (std::any_of(entry.nodeInfos.begin(), entry.nodeInfos.end(), anyPredicate) ||
+        std::any_of(entry.relInfos.begin(), entry.relInfos.end(), anyPredicate)) {
+        return;
+    }
+    if (!transaction::TransactionContext::Get(*context)->isAutoTransaction()) {
+        return;
+    }
+    static constexpr int64_t ARROW_CHUNK_SIZE = 1 << 16;
+    const auto& nodeTable = entry.nodeInfos[0].tableName;
+    main::Connection conn{context->getDatabase()};
+    entry.relCsrResults.reserve(entry.relInfos.size());
+    for (const auto& relInfo : entry.relInfos) {
+        auto query = std::format("MATCH (a:`{}`)-[r:`{}`]->(b:`{}`) RETURN a.rowid, b.rowid",
+            nodeTable, relInfo.tableName, nodeTable);
+        auto result = conn.queryAsArrow(query, ARROW_CHUNK_SIZE);
+        auto* arrowResult = dynamic_cast<main::ArrowQueryResult*>(result.get());
+        if (arrowResult != nullptr && arrowResult->isSuccess() && arrowResult->hasCSRMetadata()) {
+            entry.relCsrResults.push_back(std::shared_ptr<main::QueryResult>{std::move(result)});
+        } else {
+            // Shape not tracked (or scan failed): this rel stays unmaterialized.
+            entry.relCsrResults.push_back(nullptr);
+        }
+    }
+}
+
 static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput&) {
     const auto bindData = dynamic_cast_checked<ProjectGraphNativeBindData*>(input.bindData);
-    auto graphEntrySet = GraphEntrySet::Get(*input.context->clientContext);
+    auto clientContext = input.context->clientContext;
+    auto graphEntrySet = GraphEntrySet::Get(*clientContext);
     graphEntrySet->validateGraphNotExist(bindData->graphName);
     auto entry = std::make_unique<ParsedNativeGraphEntry>(bindData->nodeInfos, bindData->relInfos);
     // bind graph entry to check if input is valid or not. Ignore bind result.
-    GDSFunction::bindGraphEntry(*input.context->clientContext, *entry);
+    GDSFunction::bindGraphEntry(*clientContext, *entry);
+    materializeRelCsr(*entry, clientContext);
     graphEntrySet->addGraph(bindData->graphName, std::move(entry));
     return 0;
 }

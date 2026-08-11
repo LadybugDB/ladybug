@@ -12,6 +12,7 @@ add_lbug_api_test(api_test
         drop_index_test.cpp
         arrow_table_function_test.cpp
         prepare_test.cpp
+        project_graph_csr_test.cpp
         result_value_test.cpp
         storage_driver_test.cpp
         udf_test.cpp
