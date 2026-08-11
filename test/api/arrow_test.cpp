@@ -103,6 +103,59 @@ TEST(ArrowQueryResultTest, exportsCSRMetadataAsZeroCopyArrowArrays) {
         (std::vector<int64_t>{10, 11, 12}));
 }
 
+// Builds an ArrowQueryResult from a raw CSR (indptr, indices) and returns its
+// symmetrized CSRArrowArrays, with sortedByDest controlling the fast/slow path.
+static ArrowQueryResult::CSRArrowArrays symmetrizeCSR(std::vector<int64_t> indptr,
+    std::vector<int64_t> indices, bool sortedByDest) {
+    ArrowQueryResult::CSRMetadata metadata;
+    metadata.indptr = std::move(indptr);
+    metadata.indices = std::move(indices);
+    metadata.sortedByDest = sortedByDest;
+    std::vector<ArrowQueryResult::CSRMetadata> csrChunks;
+    csrChunks.push_back(std::move(metadata));
+    ArrowQueryResult result{{}, 8, std::move(csrChunks)};
+    auto csrArrays = result.getCSRArrowArrays();
+    EXPECT_EQ(csrArrays.sortedByDest, sortedByDest);
+    return csrArrays.symmetrize();
+}
+
+static std::vector<int64_t> csrArrowValues(const ArrowQueryResult::CSRArrowArray& arr) {
+    const auto* data = static_cast<const int64_t*>(arr.array.buffers[1]);
+    return {data, data + arr.array.length};
+}
+
+// A = {(0,1),(0,2),(1,0)} over 3 nodes. Symmetrized (A + Aᵀ, reciprocal
+// pairs coalesced):
+//   row 0: A={1,2} Aᵀ={1}  -> {1,2}
+//   row 1: A={0}   Aᵀ={0}  -> {0}      (reciprocal pair (0,1)/(1,0) coalesces)
+//   row 2: A={}    Aᵀ={0}  -> {0}
+TEST(ArrowQueryResultTest, symmetrizeCoalescesReciprocalPairsSlowPath) {
+    auto out = symmetrizeCSR({0, 2, 3, 3}, {2, 1, 0}, false /*sortedByDest*/);
+    // Row 0's neighbors {2,1} are NOT sorted in A, so the slow path must sort
+    // them before the two-pointer merge — verifying the sort is exercised.
+    EXPECT_EQ(csrArrowValues(out.indptr), (std::vector<int64_t>{0, 2, 3, 4}));
+    EXPECT_EQ(csrArrowValues(out.indices), (std::vector<int64_t>{1, 2, 0, 0}));
+    // Symmetrize drops edgeIDs (sparse-addition semantics).
+    EXPECT_FALSE(out.edgeIDs.has_value());
+}
+
+// Same graph but with A's neighbors already sorted within each row, and the
+// sortedByDest flag set — exercises the fast path (no per-row sort).
+TEST(ArrowQueryResultTest, symmetrizeFastPathMatchesSlowPath) {
+    const auto slow = symmetrizeCSR({0, 2, 3, 3}, {2, 1, 0}, false);
+    const auto fast = symmetrizeCSR({0, 2, 3, 3}, {1, 2, 0}, true /*sortedByDest*/);
+    EXPECT_EQ(csrArrowValues(fast.indptr), csrArrowValues(slow.indptr));
+    EXPECT_EQ(csrArrowValues(fast.indices), csrArrowValues(slow.indices));
+}
+
+// Self-loop (0,0): appears once in A and once in Aᵀ (same edge), so the
+// merge coalesces the two equal heads into a single entry.
+TEST(ArrowQueryResultTest, symmetrizeCoalescesSelfLoop) {
+    auto out = symmetrizeCSR({0, 1, 1}, {0}, true /*sortedByDest*/);
+    EXPECT_EQ(csrArrowValues(out.indptr), (std::vector<int64_t>{0, 1, 1}));
+    EXPECT_EQ(csrArrowValues(out.indices), (std::vector<int64_t>{0}));
+}
+
 TEST(ArrowConverterTest, bindsIntegerBackedSnowflakeDecimalMetadataAsDecimal) {
     ArrowSchema schema{};
     createSchema<int64_t>(&schema, "amount");

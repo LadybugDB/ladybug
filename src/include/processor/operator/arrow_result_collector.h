@@ -71,6 +71,14 @@ struct CSRTrackingInfo {
     // per-chunk CSR indptr so that indptr always has numSourceRows + 1
     // entries (one per node row plus trailing sentinel).
     int64_t numSourceRows = 0;
+    // True when the scanned rel table has been declared CSR-sorted-by-dest
+    // (ALTER TABLE ... SET SORTED BY (FROM ASC, TO ASC) CSR) AND the
+    // table has not been mutated since that declaration (csrChangeEpoch
+    // matches the storage table's current changeEpoch). Set at plan-mapping
+    // time; propagated into CSRMetadata so symmetrize() can take the fast
+    // (no per-row sort) path. False on any mismatch — the safe per-row sort
+    // path is always the default.
+    bool sortedByDest = false;
 
     bool enabled() const {
         return srcRowIDColIdx != common::INVALID_IDX && dstRowIDColIdx != common::INVALID_IDX;

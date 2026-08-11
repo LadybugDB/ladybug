@@ -28,7 +28,16 @@ Binder exception: CSR requires exactly one SORTED BY property in ascending order
 Binder exception: CSR requires the SORTED BY property to be the primary key.
 -STATEMENT ALTER TABLE csr_knows SET SORTED BY (id ASC) CSR;
 ---- error
-Binder exception: csr_knows is not of type NODE.
+Binder exception: CSR on rel table csr_knows requires SORTED BY (FROM ASC, TO ASC).
+-STATEMENT ALTER TABLE csr_knows SET SORTED BY (FROM ASC, TO ASC);
+---- error
+Binder exception: SORTED BY on rel table csr_knows requires the CSR clause.
+-STATEMENT ALTER TABLE csr_knows SET SORTED BY (FROM ASC, TO DESC) CSR;
+---- error
+Binder exception: CSR on rel table csr_knows requires SORTED BY (FROM ASC, TO ASC).
+-STATEMENT ALTER TABLE csr_knows SET SORTED BY (FROM ASC, TO ASC) CSR;
+---- 1
+Table csr_knows sorted-by metadata updated with 2 column(s).
 -STATEMENT CREATE (:csr_person {id: 0, name: 'Alice'});
 ---- ok
 -STATEMENT CREATE (:csr_person {id: 1, name: 'Bob'});

@@ -132,6 +132,10 @@ void RelGroupCatalogEntry::serialize(Serializer& serializer) const {
     serializer.serializeVector(relTableInfos);
     serializer.writeDebuggingInfo("storageFormat");
     serializer.serializeValue(storageFormat);
+    serializer.writeDebuggingInfo("csrSortedByDest");
+    serializer.serializeValue(csrSortedByDest);
+    serializer.writeDebuggingInfo("csrChangeEpoch");
+    serializer.serializeValue(csrChangeEpoch);
 }
 
 std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
@@ -174,6 +178,15 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     } else {
         upgradeLegacyStorageFormat(storage, storageFormat);
     }
+    bool csrSortedByDest = false;
+    uint64_t csrChangeEpoch = 0;
+    if (deserializer.getStorageVersion() >=
+        ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_45) {
+        deserializer.validateDebuggingInfo(debuggingInfo, "csrSortedByDest");
+        deserializer.deserializeValue(csrSortedByDest);
+        deserializer.validateDebuggingInfo(debuggingInfo, "csrChangeEpoch");
+        deserializer.deserializeValue(csrChangeEpoch);
+    }
     auto relGroupEntry = std::make_unique<RelGroupCatalogEntry>();
     relGroupEntry->srcMultiplicity = srcMultiplicity;
     relGroupEntry->dstMultiplicity = dstMultiplicity;
@@ -182,6 +195,8 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     relGroupEntry->storageFormat = storageFormat;
     relGroupEntry->scanFunction = scanFunction;
     relGroupEntry->relTableInfos = relTableInfos;
+    relGroupEntry->csrSortedByDest = csrSortedByDest;
+    relGroupEntry->csrChangeEpoch = csrChangeEpoch;
     return relGroupEntry;
 }
 
@@ -264,6 +279,8 @@ std::unique_ptr<TableCatalogEntry> RelGroupCatalogEntry::copy() const {
     other->scanBindData = std::nullopt; // TODO: implement copy for bindData if needed
     other->foreignDatabaseName = foreignDatabaseName;
     other->relTableInfos = relTableInfos;
+    other->csrSortedByDest = csrSortedByDest;
+    other->csrChangeEpoch = csrChangeEpoch;
     other->copyFrom(*this);
     return other;
 }

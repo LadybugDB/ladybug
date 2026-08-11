@@ -39,14 +39,23 @@ std::unique_ptr<TableCatalogEntry> TableCatalogEntry::alter(transaction_t timest
     } break;
     case AlterType::SET_SORTED_BY: {
         auto& sortedByInfo = *alterInfo.extraInfo->constPtrCast<BoundExtraSetSortedByInfo>();
-        std::vector<SortedByProperty> properties;
-        properties.reserve(sortedByInfo.properties.size());
-        for (auto& property : sortedByInfo.properties) {
-            properties.push_back(SortedByProperty{property.propertyName, property.ascending});
+        if (newEntry->getTableType() == common::TableType::NODE) {
+            std::vector<SortedByProperty> properties;
+            properties.reserve(sortedByInfo.properties.size());
+            for (auto& property : sortedByInfo.properties) {
+                properties.push_back(SortedByProperty{property.propertyName, property.ascending});
+            }
+            newEntry->ptrCast<NodeTableCatalogEntry>()->setSortedByProperties(
+                std::move(properties));
+            newEntry->ptrCast<NodeTableCatalogEntry>()->setCsr(sortedByInfo.csr,
+                sortedByInfo.csrChangeEpoch);
+        } else if (newEntry->getTableType() == common::TableType::REL) {
+            // For rel tables the sorted-by clause is structural (FROM ASC,
+            // TO ASC) — there are no per-property sorted-by columns to
+            // store, only the CSR-sorted-by-dest flag + changeEpoch watermark.
+            newEntry->ptrCast<RelGroupCatalogEntry>()->setCsrSortedByDest(sortedByInfo.csr,
+                sortedByInfo.csrChangeEpoch);
         }
-        newEntry->ptrCast<NodeTableCatalogEntry>()->setSortedByProperties(std::move(properties));
-        newEntry->ptrCast<NodeTableCatalogEntry>()->setCsr(sortedByInfo.csr,
-            sortedByInfo.csrChangeEpoch);
     } break;
     case AlterType::ADD_FROM_TO_CONNECTION: {
         auto& connectionInfo =

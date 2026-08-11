@@ -34,6 +34,12 @@ public:
         std::vector<int64_t> srcRows;
         std::vector<int64_t> counts;
         bool hasEdgeIDs = false;
+        // True when the rel table was declared CSR-sorted-by-dest at
+        // plan-mapping time and the table's changeEpoch still matches the
+        // declaration watermark. Propagated from CSRTrackingInfo by the
+        // collector; consumed by CSRArrowArrays::symmetrize() to skip the
+        // per-row sort. False by default → safe per-row sort path.
+        bool sortedByDest = false;
         // Total number of source (node) rows in the table. Used to pad
         // trailing empty rows in indptr; set at plan-mapping time from the
         // node table cardinality.
@@ -77,6 +83,27 @@ public:
         CSRArrowArray indptr;
         CSRArrowArray indices;
         std::optional<CSRArrowArray> edgeIDs;
+        // Mirrors CSRMetadata::sortedByDest — true when the underlying rel
+        // table was declared CSR-sorted-by-dest and not mutated since. Set
+        // by getCSRArrowArrays(); consumed by symmetrize() to skip the
+        // per-row sort.
+        bool sortedByDest = false;
+
+        // Compute A + A.T, the symmetric (undirected) view of the directed
+        // CSR: nonzero at (u, v) iff (u, v) ∈ A or (v, u) ∈ A. Reciprocal
+        // pairs coalesce into a single structural entry (sparse addition
+        // semantics — same as scipy sparse matrices). The returned arrays
+        // do NOT carry edgeIDs: symmetry makes the edge identity ambiguous
+        // when both (u, v) and (v, u) existed, and per-edge values are
+        // dropped by A + A.T in scipy too. Chains on top of
+        // getCSRArrowArrays(): `result.getCSRArrowArrays().symmetrize()`.
+        //
+        // Fast path: when sortedByDest is set (the rel table was declared
+        // ALTER TABLE ... SET SORTED BY (FROM ASC, TO ASC) CSR and
+        // not mutated since), A's neighbors are already non-decreasing
+        // within each row, so the O(m log max-degree) per-row sort is
+        // skipped and the merge runs directly against the raw indices.
+        CSRArrowArrays symmetrize() const;
     };
 
     // View of the merged Arrow arrays as a chunked sequence, similar to

@@ -1,5 +1,6 @@
 #include "main/query_result/arrow_query_result.h"
 
+#include <algorithm>
 #include <array>
 #include <queue>
 
@@ -130,6 +131,9 @@ static ArrowQueryResult::CSRMetadata kwayMergeCSRChunks(
     }
     const auto& first = chunks.front();
     const auto hasEdgeIDs = first.hasEdgeIDs;
+    // All chunks come from the same rel scan, so they share sortedByDest.
+    // Propagate it through the merge so symmetrize() can take the fast path.
+    const auto sortedByDest = first.sortedByDest;
 
     int64_t numSourceRows = 0;
     size_t totalIndices = 0;
@@ -165,6 +169,7 @@ static ArrowQueryResult::CSRMetadata kwayMergeCSRChunks(
     ArrowQueryResult::CSRMetadata merged;
     merged.hasEdgeIDs = hasEdgeIDs;
     merged.numSourceRows = numSourceRows;
+    merged.sortedByDest = sortedByDest;
 
     if (chunks.size() == 1) {
         auto& c = chunks[0];
@@ -351,6 +356,7 @@ ArrowQueryResult::CSRArrowArrays ArrowQueryResult::getCSRArrowArrays() const {
         result.edgeIDs = makeCSRArrowArray(
             std::shared_ptr<const std::vector<int64_t>>(combinedCSR, &merged.edgeIDs));
     }
+    result.sortedByDest = merged.sortedByDest;
     return result;
 }
 
@@ -366,6 +372,122 @@ const ArrowQueryResult::CSRMetadata& ArrowQueryResult::combineCSRChunks() const 
     // is left empty; hasCSRMetadata() stays true via combinedCSR.
     combinedCSR = std::make_shared<const CSRMetadata>(kwayMergeCSRChunks(std::move(csrChunks)));
     return *combinedCSR;
+}
+
+ArrowQueryResult::CSRArrowArrays ArrowQueryResult::CSRArrowArrays::symmetrize() const {
+    const auto n = static_cast<int64_t>(indptr.array.length - 1);
+    const auto m = static_cast<int64_t>(indices.array.length);
+    const auto* indptrData = static_cast<const int64_t*>(indptr.array.buffers[1]);
+    const auto* indicesData = static_cast<const int64_t*>(indices.array.buffers[1]);
+
+    // Step 1: build Aᵀ (CSR) in O(n + m) via counting + scatter. For
+    // each (i, j) ∈ A, increment atIndptr[j + 1] (in-degree of j),
+    // prefix-sum into atIndptr, then scatter i into Aᵀ's row j at the
+    // cursor. Because the scatter iterates source rows i in increasing
+    // order, Aᵀ's neighbors for each row end up sorted in increasing
+    // source-row order, which is what lets the per-row merge below be
+    // a two-pointer walk instead of a per-row sort.
+    std::vector<int64_t> atIndptr(static_cast<size_t>(n) + 1);
+    for (int64_t k = 0; k < m; ++k) {
+        ++atIndptr[indicesData[k] + 1];
+    }
+    for (int64_t j = 1; j <= n; ++j) {
+        atIndptr[j] += atIndptr[j - 1];
+    }
+    std::vector<int64_t> cursor = atIndptr;
+    std::vector<int64_t> atTIndices(static_cast<size_t>(m));
+    for (int64_t i = 0; i < n; ++i) {
+        const auto begin = indptrData[i];
+        const auto end = indptrData[i + 1];
+        for (auto k = begin; k < end; ++k) {
+            atTIndices[cursor[indicesData[k]]++] = i;
+        }
+    }
+
+    // Step 2: provide a sorted view of A's neighbors per row for the
+    // two-pointer merge. When sortedByDest is set (the rel table was
+    // declared ALTER TABLE ... SET SORTED BY (FROM ASC, TO ASC) CSR and
+    // not mutated since), A's neighbors are already
+    // non-decreasing within each row, so we read the raw indices
+    // directly — no copy, no per-row sort, O(m) total. Otherwise the
+    // CSR metadata's neighbors are populated in rel-scan order (see
+    // updateDirectCSRMetadata / updateCSRMetadata), not necessarily
+    // non-decreasing within a row, so we copy into a writable buffer
+    // and sort each row in place. Total work for the slow path is
+    // Σ dᵢ log dᵢ ≤ m log max(dᵢ).
+    std::vector<int64_t> aIndicesStorage;
+    const int64_t* aIndices = nullptr;
+    if (sortedByDest) {
+        // Fast path: read directly from the backing buffer. Safe because
+        // symmetrize() never mutates A's indices — the two-pointer merge
+        // only advances read cursors.
+        aIndices = indicesData;
+    } else {
+        aIndicesStorage.resize(static_cast<size_t>(m));
+        for (int64_t i = 0; i < n; ++i) {
+            const auto begin = indptrData[i];
+            const auto end = indptrData[i + 1];
+            std::copy(indicesData + begin, indicesData + end, aIndicesStorage.begin() + begin);
+            std::sort(aIndicesStorage.begin() + begin, aIndicesStorage.begin() + end);
+        }
+        aIndices = aIndicesStorage.data();
+    }
+
+    // Step 3: per-row two-pointer merge of A's neighbors (sorted) and
+    // Aᵀ's neighbors (sorted by construction). Equal heads collapse
+    // reciprocal pairs (u, v)/(v, u) and self-loops emitted twice into
+    // a single entry, mirroring scipy's sparse-addition coalescing.
+    // Output stays sorted within each row, so the result is itself a
+    // canonical CSR.
+    std::vector<int64_t> outIndptr(static_cast<size_t>(n) + 1);
+    std::vector<int64_t> outIndices;
+    // Upper bound 2m: each input edge contributes at most one (u, v)
+    // and one (v, u) pair; coalesced to one when both existed. The
+    // actual final size is at most 2m (and typically ≪ m for sparse
+    // graphs), so reserve the upper bound and resize down at the end.
+    outIndices.reserve(static_cast<size_t>(2 * m));
+    outIndptr[0] = 0;
+    for (int64_t i = 0; i < n; ++i) {
+        auto aIt = aIndices + indptrData[i];
+        const auto aEnd = aIndices + indptrData[i + 1];
+        auto tIt = atTIndices.begin() + atIndptr[i];
+        const auto tEnd = atTIndices.begin() + atIndptr[i + 1];
+        int64_t last = -1;
+        int64_t count = 0;
+        while (aIt != aEnd || tIt != tEnd) {
+            int64_t v;
+            if (aIt == aEnd) {
+                v = *tIt++;
+            } else if (tIt == tEnd) {
+                v = *aIt++;
+            } else if (*aIt < *tIt) {
+                v = *aIt++;
+            } else if (*tIt < *aIt) {
+                v = *tIt++;
+            } else {
+                // Equal heads: coalesce reciprocal pair or self-loop.
+                v = *aIt++;
+                ++tIt;
+            }
+            if (v != last) {
+                outIndices.push_back(v);
+                last = v;
+                ++count;
+            }
+        }
+        outIndptr[static_cast<size_t>(i) + 1] = outIndptr[i] + count;
+    }
+    outIndices.resize(outIndptr[n]);
+
+    CSRArrowArrays result;
+    result.indptr =
+        makeCSRArrowArray(std::make_shared<const std::vector<int64_t>>(std::move(outIndptr)));
+    result.indices =
+        makeCSRArrowArray(std::make_shared<const std::vector<int64_t>>(std::move(outIndices)));
+    // edgeIDs intentionally left unset: A + Aᵀ drops per-edge values in
+    // scipy's sparse-addition semantics, and a reciprocal pair makes
+    // edge identity ambiguous anyway.
+    return result;
 }
 
 } // namespace main

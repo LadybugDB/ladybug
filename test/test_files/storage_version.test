@@ -5,8 +5,8 @@
 -CASE StorageVersionFunctionAndUpgrade
 -STATEMENT CALL storage_version() RETURN *;
 ---- 1
-44
--CHECK_STORAGE_VERSION 44
+45
+-CHECK_STORAGE_VERSION 45
 -SET_STORAGE_VERSION 40
 -STATEMENT CALL storage_version() RETURN *;
 ---- 1
@@ -17,11 +17,11 @@
 ---- ok
 -STATEMENT CHECKPOINT;
 ---- ok
--CHECK_STORAGE_VERSION 44
+-CHECK_STORAGE_VERSION 45
 -RELOADDB
 -STATEMENT CALL storage_version() RETURN *;
 ---- 1
-44
+45
 -STATEMENT MATCH (u:users) RETURN u.id, u.name;
 ---- 1
 1|Alice
