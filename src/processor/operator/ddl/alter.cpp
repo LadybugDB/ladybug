@@ -161,13 +161,19 @@ static bool checkRenameTableConflicts(const BoundAlterInfo& info, main::ClientCo
 
 static bool checkSetSortedByConflicts(const TableCatalogEntry& tableEntry,
     const BoundAlterInfo& info) {
-    if (tableEntry.getTableType() != TableType::NODE) {
-        throw BinderException(std::format("Cannot set sorted-by metadata on non-node table {}.",
-            tableEntry.getName()));
-    }
     auto& extraInfo = info.extraInfo->constCast<BoundExtraSetSortedByInfo>();
     if (extraInfo.properties.empty()) {
         throw BinderException("SORTED BY requires at least one property.");
+    }
+    if (tableEntry.getTableType() == TableType::REL) {
+        // Rel-table CSR sorted-by is validated structurally in the binder
+        // (FROM ASC, TO ASC). Nothing further to check here; the
+        // non-node path does not have per-property columns to validate.
+        return false;
+    }
+    if (tableEntry.getTableType() != TableType::NODE) {
+        throw BinderException(
+            std::format("Cannot set sorted-by metadata on table {}.", tableEntry.getName()));
     }
     for (auto& property : extraInfo.properties) {
         validatePropertyExist(ConflictAction::ON_CONFLICT_THROW, tableEntry, property.propertyName);
@@ -322,12 +328,23 @@ void Alter::alterTable(main::ClientContext* clientContext, const TableCatalogEnt
     case AlterType::SET_SORTED_BY: {
         checkSetSortedByConflicts(entry, info);
         auto& extraInfo = info.extraInfo->cast<BoundExtraSetSortedByInfo>();
-        // Record the node table's changeEpoch at declaration time so the optimizer can
-        // disregard the CSR invariant once the table is mutated.
+        // Record the table's changeEpoch at declaration time so the optimizer
+        // / symmetrize() can disregard the sorted-by invariant once the table
+        // is mutated. For rel tables, every underlying rel table in the group
+        // shares the same changeEpoch watermark; we capture from the first.
         if (extraInfo.csr) {
-            auto* table =
-                storage::StorageManager::Get(*clientContext)->getTable(entry.getTableID());
-            extraInfo.csrChangeEpoch = table ? table->getChangeEpoch() : 0;
+            if (entry.getTableType() == TableType::REL) {
+                auto& relGroupEntry = entry.constCast<RelGroupCatalogEntry>();
+                if (!relGroupEntry.getRelEntryInfos().empty()) {
+                    const auto relOid = relGroupEntry.getRelEntryInfos()[0].oid;
+                    auto* table = storage::StorageManager::Get(*clientContext)->getTable(relOid);
+                    extraInfo.csrChangeEpoch = table ? table->getChangeEpoch() : 0;
+                }
+            } else {
+                auto* table =
+                    storage::StorageManager::Get(*clientContext)->getTable(entry.getTableID());
+                extraInfo.csrChangeEpoch = table ? table->getChangeEpoch() : 0;
+            }
         }
         appendMessage(std::format("Table {} sorted-by metadata updated with {} column(s).",
                           tableName, extraInfo.properties.size()),

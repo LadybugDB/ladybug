@@ -25,6 +25,7 @@ static void updateDirectCSRMetadata(const CSRTrackingInfo& info, const std::vect
         main::ArrowQueryResult::CSRMetadata metadata;
         metadata.hasEdgeIDs = info.hasRelRowID();
         metadata.numSourceRows = info.numSourceRows;
+        metadata.sortedByDest = info.sortedByDest;
         localState.csrMetadata = std::move(metadata);
     }
     auto& metadata = *localState.csrMetadata;
@@ -159,6 +160,7 @@ static void updateCSRMetadata(const CSRTrackingInfo& info, FlatTuple& tuple,
         main::ArrowQueryResult::CSRMetadata metadata;
         metadata.hasEdgeIDs = info.hasRelRowID();
         metadata.numSourceRows = info.numSourceRows;
+        metadata.sortedByDest = info.sortedByDest;
         localState.csrMetadata = std::move(metadata);
     }
     auto& metadata = *localState.csrMetadata;

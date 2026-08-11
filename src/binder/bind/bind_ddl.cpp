@@ -749,12 +749,38 @@ std::unique_ptr<BoundStatement> Binder::bindSetSortedBy(const Statement& stateme
     auto catalog = Catalog::Get(*clientContext);
     auto transaction = transaction::Transaction::Get(*clientContext);
     auto tableEntry = catalog->getTableCatalogEntry(transaction, tableName);
-    validateNodeTableType(tableEntry);
     std::vector<BoundSortedByProperty> properties;
     properties.reserve(extraInfo->properties.size());
-    for (auto& property : extraInfo->properties) {
-        validateColumnExistence(tableEntry, property.propertyName);
-        properties.push_back(BoundSortedByProperty{property.propertyName, property.ascending});
+    if (tableEntry->getTableType() == common::TableType::REL) {
+        // Rel-table sorted-by is structural: the CSR adjacency lists must be
+        // sorted by (FROM ASC, TO ASC), where FROM and TO are the source and
+        // destination endpoints of the relation. They are reserved structural
+        // names — they are NOT rel properties, so they bypass
+        // validateColumnExistence. Only the CSR form is meaningful for rel
+        // tables (the non-CSR sorted-by is a node-table feature).
+        if (!extraInfo->csr) {
+            throw BinderException(
+                std::format("SORTED BY on rel table {} requires the CSR clause.", tableName));
+        }
+        if (extraInfo->properties.size() != 2 ||
+            !common::StringUtils::caseInsensitiveEquals(extraInfo->properties[0].propertyName,
+                "FROM") ||
+            !extraInfo->properties[0].ascending ||
+            !common::StringUtils::caseInsensitiveEquals(extraInfo->properties[1].propertyName,
+                "TO") ||
+            !extraInfo->properties[1].ascending) {
+            throw BinderException(std::format(
+                "CSR on rel table {} requires SORTED BY (FROM ASC, TO ASC).", tableName));
+        }
+        for (auto& property : extraInfo->properties) {
+            properties.push_back(BoundSortedByProperty{property.propertyName, property.ascending});
+        }
+    } else {
+        validateNodeTableType(tableEntry);
+        for (auto& property : extraInfo->properties) {
+            validateColumnExistence(tableEntry, property.propertyName);
+            properties.push_back(BoundSortedByProperty{property.propertyName, property.ascending});
+        }
     }
     auto boundExtraInfo =
         std::make_unique<BoundExtraSetSortedByInfo>(std::move(properties), extraInfo->csr);

@@ -86,6 +86,26 @@ public:
     common::ExtendDirection getStorageDirection() const { return storageDirection; }
     const std::string& getStorage() const { return storage; }
     common::StorageFormat getStorageFormat() const { return storageFormat; }
+
+    // CSR sorted-by-dest is an explicit user declaration that the rel
+    // table's CSR adjacency lists are physically stored with neighbors
+    // (dest node row IDs) in non-decreasing order within each bound
+    // (source) row. This lets ArrowQueryResult::CSRArrowArrays::symmetrize()
+    // skip the O(m log max-degree) per-row sort and run a two-pointer
+    // merge directly against the raw indices. It is a user assertion: the
+    // storage engine does not (yet) establish the invariant during
+    // checkpoint, so it is the caller's responsibility to only declare it
+    // on data that is actually sorted (e.g. loaded from a pre-sorted
+    // source). The csrChangeEpoch watermark records the rel table's
+    // changeEpoch at declaration time; symmetrize() disregards the flag
+    // when the table has been mutated since declaration, falling back to
+    // the safe per-row sort path.
+    bool isCsrSortedByDest() const { return csrSortedByDest; }
+    uint64_t getCsrChangeEpoch() const { return csrChangeEpoch; }
+    void setCsrSortedByDest(bool enable, uint64_t changeEpoch) {
+        csrSortedByDest = enable;
+        csrChangeEpoch = enable ? changeEpoch : 0;
+    }
     std::optional<function::TableFunction> getScanFunction() const override { return scanFunction; }
     const std::optional<std::shared_ptr<function::TableFuncBindData>>& getScanBindData() const {
         return scanBindData;
@@ -140,6 +160,8 @@ private:
     std::optional<function::TableFunction> scanFunction;
     std::optional<std::shared_ptr<function::TableFuncBindData>> scanBindData;
     std::string foreignDatabaseName; // Database name for foreign-backed rel tables
+    bool csrSortedByDest = false;
+    uint64_t csrChangeEpoch = 0;
 };
 
 } // namespace catalog
