@@ -940,5 +940,57 @@ TEST_F(CopyTest, CopySmallInputIntoWideTableUnderSmallBufferPool) {
     ASSERT_TRUE(result->hasNext());
     ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 59);
 }
+
+TEST_F(CopyTest, CopyBuildsPrimaryKeyBuffersOnFirstInsert) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    // A COPY worker builds its primary-key buffers at its first insert, so a worker that
+    // receives no rows never builds them and its flush has nothing to hand to the global
+    // queues. Those buffers are C++ heap rather than buffer pool, so the saving is not a
+    // floor the way CopySmallInputIntoWideTableUnderSmallBufferPool's is. What has to hold is
+    // that an empty input leaves a usable builder behind, that both arms of the key-type
+    // variant allocate once a row does arrive, and that a duplicate key is still reported.
+    systemConfig->maxNumThreads = 16;
+    createDBAndConn();
+    auto result = conn->query("CREATE NODE TABLE Account(id INT64, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE Person(name STRING, PRIMARY KEY(name))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE Repeat(name STRING, PRIMARY KEY(name))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    // No worker inserts anything, on either arm of the variant.
+    const auto emptyIntPath = writeCSV("empty_int.csv", {"id"});
+    result = conn->query(std::format("COPY Account FROM '{}' (HEADER=true)", emptyIntPath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    const auto emptyStringPath = writeCSV("empty_string.csv", {"name"});
+    result = conn->query(std::format("COPY Person FROM '{}' (HEADER=true)", emptyStringPath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    // The same tables then take rows, so the buffers are built by a COPY that follows one
+    // which built none, and the index they feed has to be complete.
+    const auto accountPath = writeCSV("accounts.csv", {"1", "2", "3"});
+    result = conn->query(std::format("COPY Account FROM '{}'", accountPath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    const auto personPath = writeCSV("people.csv", {"ann", "bo", "cy"});
+    result = conn->query(std::format("COPY Person FROM '{}'", personPath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query("MATCH (a:Account) WHERE a.id = 2 RETURN COUNT(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    result = conn->query("MATCH (p:Person) WHERE p.name = 'bo' RETURN COUNT(*)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+
+    // The error path runs through the same lazily built buffers.
+    const auto duplicatePath = writeCSV("duplicate_string.csv", {"dd", "dd"});
+    result = conn->query(std::format("COPY Repeat FROM '{}'", duplicatePath));
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_NE(result->getErrorMessage().find("duplicated primary key"), std::string::npos);
+}
 } // namespace testing
 } // namespace lbug
