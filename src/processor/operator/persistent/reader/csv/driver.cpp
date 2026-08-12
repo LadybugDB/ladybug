@@ -19,8 +19,8 @@ bool ParsingDriver::done(uint64_t rowNum) {
     return rowNum >= DEFAULT_VECTOR_CAPACITY || doneEarly();
 }
 
-bool ParsingDriver::addValue(uint64_t rowNum, common::column_id_t columnIdx,
-    std::string_view value) {
+bool ParsingDriver::addValue(uint64_t rowNum, common::column_id_t columnIdx, std::string_view value,
+    bool valueWasQuoted) {
     uint64_t length = value.length();
     if (length == 0 && columnIdx == 0) {
         rowEmpty = true;
@@ -43,7 +43,7 @@ bool ParsingDriver::addValue(uint64_t rowNum, common::column_id_t columnIdx,
     }
     try {
         function::CastString::copyStringToVector(&chunk.getValueVectorMutable(columnIdx), rowNum,
-            value, &reader->option);
+            value, &reader->option, valueWasQuoted);
     } catch (ConversionException& e) {
         reader->handleCopyException(e.what());
         return false;
@@ -122,7 +122,7 @@ SniffCSVDialectDriver::SniffCSVDialectDriver(SerialCSVReader* reader)
 }
 
 bool SniffCSVDialectDriver::addValue(uint64_t /*rowNum*/, common::column_id_t columnIdx,
-    std::string_view value) {
+    std::string_view value, bool /*valueWasQuoted*/) {
     uint64_t length = value.length();
     if (length == 0 && columnIdx == 0) {
         rowEmpty = true;
@@ -202,7 +202,7 @@ bool SniffCSVNameAndTypeDriver::done(uint64_t rowNum) {
 }
 
 bool SniffCSVNameAndTypeDriver::addValue(uint64_t rowNum, common::column_id_t columnIdx,
-    std::string_view value) {
+    std::string_view value, bool /*valueWasQuoted*/) {
     uint64_t length = value.length();
     if (length == 0 && columnIdx == 0) {
         rowEmpty = true;
@@ -268,7 +268,7 @@ SniffCSVHeaderDriver::SniffCSVHeaderDriver(SerialCSVReader* reader,
 }
 
 bool SniffCSVHeaderDriver::addValue(uint64_t /*rowNum*/, common::column_id_t columnIdx,
-    std::string_view value) {
+    std::string_view value, bool /*valueWasQuoted*/) {
     uint64_t length = value.length();
     if (length == 0 && columnIdx == 0) {
         rowEmpty = true;

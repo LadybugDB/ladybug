@@ -13,8 +13,11 @@ namespace lbug {
 namespace function {
 
 struct LBUG_API CastString {
+    // `valueWasQuoted` says the CSV field carried its own quotes, which distinguishes an empty
+    // string written as "" from a NULL written as an empty field. A quoted field is therefore
+    // exempt from the null-string test.
     static void copyStringToVector(ValueVector* vector, uint64_t vectorPos, std::string_view strVal,
-        const CSVOption* option);
+        const CSVOption* option, bool valueWasQuoted = false);
 
     template<typename T>
     static inline bool tryCast(const string_t& input, T& result) {
