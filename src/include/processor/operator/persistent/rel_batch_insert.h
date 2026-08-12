@@ -148,6 +148,10 @@ public:
     }
 
 private:
+    // The chunked CSR group, its header and the all-null gap-filling chunk, built at the
+    // worker's first partition rather than in initLocalStateInternal.
+    void initLocalStateForFirstPartition(ExecutionContext* context);
+
     void appendNodeGroup(const catalog::RelGroupCatalogEntry& relGroupEntry,
         storage::MemoryManager& mm, transaction::Transaction* transaction,
         storage::CSRNodeGroup& nodeGroup, const RelBatchInsertInfo& relInfo,

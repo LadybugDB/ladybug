@@ -992,5 +992,51 @@ TEST_F(CopyTest, CopyBuildsPrimaryKeyBuffersOnFirstInsert) {
     ASSERT_FALSE(result->isSuccess());
     ASSERT_NE(result->getErrorMessage().find("duplicated primary key"), std::string::npos);
 }
+
+TEST_F(CopyTest, RelCopyBuildsWorkerStateOnFirstPartition) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    // A rel COPY worker builds its chunked CSR group, whose header is sized NODE_GROUP_SIZE,
+    // at its first partition. An input with no edges hands out no partitions at all, so no
+    // worker builds one and nothing downstream may assume the group exists.
+    systemConfig->maxNumThreads = 16;
+    createDBAndConn();
+    auto result = conn->query("CREATE NODE TABLE Account(id INT64, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE REL TABLE Knows(FROM Account TO Account, since INT64)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE REL TABLE Follows(FROM Account TO Account, since INT64)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    const auto accountPath = writeCSV("rel_accounts.csv", {"1", "2", "3"});
+    result = conn->query(std::format("COPY Account FROM '{}'", accountPath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    // No partition reaches any of the sixteen workers.
+    const auto emptyEdgePath = writeCSV("rel_empty.csv", {"from,to,since"});
+    result = conn->query(std::format("COPY Knows FROM '{}' (HEADER=true)", emptyEdgePath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("MATCH (:Account)-[k:Knows]->(:Account) RETURN COUNT(k)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
+
+    // One partition reaches one worker, in each direction, and the other fifteen build nothing.
+    const auto edgePath = writeCSV("rel_edges.csv", {"from,to,since", "1,2,2020", "2,3,2021"});
+    result = conn->query(std::format("COPY Follows FROM '{}' (HEADER=true)", edgePath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("MATCH (:Account)-[f:Follows]->(:Account) RETURN COUNT(f)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    result = conn->query("MATCH (a:Account)-[f:Follows]->(b:Account) WHERE a.id = 1 RETURN "
+                         "b.id, f.since");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    auto tuple = result->getNext();
+    ASSERT_EQ(tuple->getValue(0)->getValue<int64_t>(), 2);
+    ASSERT_EQ(tuple->getValue(1)->getValue<int64_t>(), 2020);
+}
 } // namespace testing
 } // namespace lbug

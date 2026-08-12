@@ -30,8 +30,14 @@ std::string RelBatchInsertPrintInfo::toString() const {
     return result;
 }
 
-void RelBatchInsert::initLocalStateInternal(ResultSet*, ExecutionContext* context) {
+void RelBatchInsert::initLocalStateInternal(ResultSet*, ExecutionContext*) {
+    // Everything a worker needs to write a partition is built at its first partition instead,
+    // in initLocalStateForFirstPartition. A rel COPY starts a worker per thread and hands out
+    // partitions to whichever ones ask, so on a small input most workers build none of it.
     localState = std::make_unique<RelBatchInsertLocalState>();
+}
+
+void RelBatchInsert::initLocalStateForFirstPartition(ExecutionContext* context) {
     const auto relInfo = info->ptrCast<RelBatchInsertInfo>();
     localState->chunkedGroup =
         std::make_unique<InMemChunkedCSRNodeGroup>(*MemoryManager::Get(*context->clientContext),
@@ -108,6 +114,9 @@ void RelBatchInsert::executeInternal(ExecutionContext* context) {
         if (relLocalState->nodeGroupIdx == INVALID_PARTITION_IDX) {
             // No more partitions left in the partitioning buffer.
             break;
+        }
+        if (!localState->chunkedGroup) {
+            initLocalStateForFirstPartition(context);
         }
         ++progressSharedState->partitionsDone;
         // TODO(Guodong): We need to handle the concurrency between COPY and other insertions
