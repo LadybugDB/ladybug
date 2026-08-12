@@ -101,6 +101,10 @@ struct TestStatement {
 struct TestGroup {
     std::string group;
     std::string dataset;
+    // Optional dataset to build an on-disk `.lbdb` file that test cases can ATTACH.
+    // Built at setup time from `dataset/<attachDataset>/schema.cypher` + `copy.cypher`
+    // and placed under `${DATABASE_PATH}/attach_target.lbdb` (the test temp dir).
+    std::string attachDataset;
     std::unordered_map<std::string, std::vector<TestStatement>> testCases;
     std::unordered_map<std::string, std::vector<TestStatement>> testCasesStatementBlocks;
     std::optional<uint64_t> bufferPoolSize;
@@ -124,6 +128,7 @@ struct TestGroup {
 
     bool isValid() const { return !group.empty() && !dataset.empty(); }
     bool hasStatements() const { return !testCases.empty(); }
+    bool hasAttachDataset() const { return !attachDataset.empty(); }
 };
 
 } // namespace testing

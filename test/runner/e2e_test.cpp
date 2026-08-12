@@ -20,10 +20,11 @@ public:
     explicit EndToEndTest(TestGroup::DatasetType datasetType, std::string dataset,
         std::optional<uint64_t> bufferPoolSize, uint64_t checkpointWaitTimeout,
         const std::set<std::string>& connNames, std::vector<TestStatement> testStatements,
-        std::string testPath)
+        std::string testPath, std::string attachDataset)
         : datasetType{datasetType}, dataset{std::move(dataset)}, bufferPoolSize{bufferPoolSize},
           checkpointWaitTimeout{checkpointWaitTimeout}, testStatements{std::move(testStatements)},
-          connNames{connNames}, testPath{std::move(testPath)} {}
+          connNames{connNames}, testPath{std::move(testPath)},
+          attachDataset{std::move(attachDataset)} {}
 
     void SetUp() override {
         setUpDataset();
@@ -53,6 +54,40 @@ public:
             initGraph(TestHelper::appendLbugRootPath(
                 TestHelper::E2E_OVERRIDE_IMPORT_DIR + "/demo-db/parquet/"));
         }
+        if (!attachDataset.empty()) {
+            buildAttachDatabase();
+        }
+    }
+
+    // Build an on-disk `.lbdb` file from `dataset/<attachDataset>/schema.cypher` +
+    // `copy.cypher` and place it at `${DATABASE_PATH}/attach_target.lbdb` so that test
+    // statements can ATTACH it without relying on a pre-existing binary file.
+    void buildAttachDatabase() {
+        const auto attachDatasetPath = TestHelper::appendLbugRootPath("dataset/" + attachDataset);
+        const auto schemaPath = attachDatasetPath + "/" + TestHelper::SCHEMA_FILE_NAME;
+        const auto copyPath = attachDatasetPath + "/" + TestHelper::COPY_FILE_NAME;
+        if (!std::filesystem::exists(schemaPath)) {
+            throw TestException("ATTACH_DATASET schema not found: " + schemaPath);
+        }
+        // Build into a sub-directory of the test temp dir so TearDown's
+        // removeParentDirectoryOfDBPath() cleans everything up.
+        const auto buildDir =
+            TestHelper::getTempDir("attach_target_build_" + getTestGroupAndName());
+        const auto buildDbPath = buildDir + "/" + TESTING_DB_FILE_NAME;
+        {
+            auto buildDb = std::make_unique<lbug::main::Database>(buildDbPath, *systemConfig);
+            auto buildConn = std::make_unique<lbug::main::Connection>(buildDb.get());
+            TestHelper::executeScript(schemaPath, *buildConn);
+            if (std::filesystem::exists(copyPath)) {
+                TestHelper::executeScript(copyPath, *buildConn);
+            }
+            auto ckptResult = buildConn->query("CHECKPOINT;");
+            ASSERT_TRUE(ckptResult->isSuccess()) << ckptResult->toString();
+        }
+        const auto attachDbPath =
+            std::filesystem::path(databasePath).parent_path().string() + "/attach_target.lbdb";
+        std::filesystem::copy(buildDbPath, attachDbPath,
+            std::filesystem::copy_options::overwrite_existing);
     }
 
     void setUpDataset() {
@@ -107,6 +142,7 @@ private:
     std::vector<TestStatement> testStatements;
     std::set<std::string> connNames;
     std::string testPath;
+    std::string attachDataset;
 
     std::string generateTempDatasetPath() const {
         std::string datasetName = dataset;
@@ -318,6 +354,7 @@ void parseAndRegisterTestGroup(const std::string& path, bool generateTestList = 
         auto testCases = std::move(testGroup->testCases);
         auto bufferPoolSize = testGroup->bufferPoolSize;
         auto checkpointWaitTimeout = testGroup->checkpointWaitTimeout;
+        auto attachDataset = testGroup->attachDataset;
         for (auto& [testCaseName, testStatements] : testCases) {
             // Check for invalid characters in the case name (see ISSUE 4510)
             if (testCaseName.find('-') != std::string::npos) {
@@ -334,14 +371,16 @@ void parseAndRegisterTestGroup(const std::string& path, bool generateTestList = 
             testing::RegisterTest(testGroup->group.c_str(), testCaseName.c_str(), nullptr, nullptr,
                 __FILE__, __LINE__,
                 [path, datasetType, dataset, bufferPoolSize, checkpointWaitTimeout, connNames,
-                    testStatements = std::move(testStatements), testCaseName]() mutable -> DBTest* {
+                    testStatements = std::move(testStatements), testCaseName,
+                    attachDataset]() mutable -> DBTest* {
                     std::vector<TestStatement> testStatementsCopy;
                     for (const auto& testStatement : testStatements) {
                         testStatementsCopy.emplace_back(TestStatement(testStatement));
                         testStatementsCopy.back().testCaseName = testCaseName;
                     }
                     return new EndToEndTest(datasetType, dataset, bufferPoolSize,
-                        checkpointWaitTimeout, connNames, std::move(testStatementsCopy), path);
+                        checkpointWaitTimeout, connNames, std::move(testStatementsCopy), path,
+                        attachDataset);
                 });
         }
     } else {
