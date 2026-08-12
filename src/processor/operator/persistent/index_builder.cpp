@@ -104,16 +104,21 @@ void IndexBuilderGlobalQueues::maybeConsumeIndex(size_t index,
 
 IndexBuilderLocalBuffers::IndexBuilderLocalBuffers(IndexBuilderGlobalQueues& globalQueues)
     : globalQueues(&globalQueues) {
+    // Select the buffer type without allocating it: the buffers are built at the first
+    // insert, so a worker which receives no rows leaves them unbuilt.
     TypeUtils::visit(
-        globalQueues.pkTypeID(),
-        [&](string_t) { buffers = std::make_unique<Buffers<std::string>>(); },
-        [&]<HashablePrimitive T>(T) { buffers = std::make_unique<Buffers<T>>(); },
+        globalQueues.pkTypeID(), [&](string_t) { buffers = UniqueBuffers<std::string>{}; },
+        [&]<HashablePrimitive T>(T) { buffers = UniqueBuffers<T>{}; },
         [](auto) { UNREACHABLE_CODE; });
 }
 
 void IndexBuilderLocalBuffers::flush(NodeBatchInsertErrorHandler& errorHandler) {
     std::visit(
         [&](auto&& buffers) {
+            if (!buffers) {
+                // No insert reached this worker, so the queues receive no buffer.
+                return;
+            }
             for (auto i = 0u; i < buffers->size(); i++) {
                 globalQueues->insert(i, std::move((*buffers)[i]), errorHandler);
             }

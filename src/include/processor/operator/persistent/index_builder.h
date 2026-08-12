@@ -89,7 +89,7 @@ public:
     void insert(std::string key, common::offset_t value, OptionalWarningSourceData&& warningData,
         NodeBatchInsertErrorHandler& errorHandler) {
         auto indexPos = storage::HashIndexUtils::getHashIndexPosition(std::string_view(key));
-        auto& stringBuffer = (*std::get<UniqueBuffers<std::string>>(buffers))[indexPos];
+        auto& stringBuffer = getBuffers<std::string>()[indexPos];
 
         if (stringBuffer.full()) {
             // StaticVector's move constructor leaves the original vector valid and empty
@@ -105,7 +105,7 @@ public:
     void insert(T key, common::offset_t value, OptionalWarningSourceData&& warningData,
         NodeBatchInsertErrorHandler& errorHandler) {
         auto indexPos = storage::HashIndexUtils::getHashIndexPosition(key);
-        auto& buffer = (*std::get<UniqueBuffers<T>>(buffers))[indexPos];
+        auto& buffer = getBuffers<T>()[indexPos];
 
         if (buffer.full()) {
             globalQueues->insert(indexPos, std::move(buffer), errorHandler);
@@ -126,6 +126,20 @@ private:
     using Buffers = std::array<IndexBufferWithWarningData<T>, storage::NUM_HASH_INDEXES>;
     template<typename T>
     using UniqueBuffers = std::unique_ptr<Buffers<T>>;
+
+    // Allocate on the first insert rather than in the constructor, so that a worker which
+    // receives no rows leaves the array unbuilt. Every COPY worker constructs an
+    // IndexBuilder, and one set of buffers is NUM_HASH_INDEXES times INDEX_BUFFER_SIZE
+    // entries, about 4 MiB, zeroed at construction whatever the input holds.
+    template<typename T>
+    Buffers<T>& getBuffers() {
+        auto& owned = std::get<UniqueBuffers<T>>(buffers);
+        if (!owned) {
+            owned = std::make_unique<Buffers<T>>();
+        }
+        return *owned;
+    }
+
     std::variant<UniqueBuffers<std::string>, UniqueBuffers<int64_t>, UniqueBuffers<int32_t>,
         UniqueBuffers<int16_t>, UniqueBuffers<int8_t>, UniqueBuffers<uint64_t>,
         UniqueBuffers<uint32_t>, UniqueBuffers<uint16_t>, UniqueBuffers<uint8_t>,
