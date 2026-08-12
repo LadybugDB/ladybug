@@ -1,3 +1,5 @@
+#include "main/attached_database.h"
+#include "main/database_manager.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
 #include "processor/operator/scan/count_rel_table.h"
 #include "processor/plan_mapper.h"
@@ -15,7 +17,14 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCountRelTable(
     auto& logicalCountRelTable = logicalOperator->constCast<LogicalCountRelTable>();
     auto outSchema = logicalCountRelTable.getSchema();
 
-    auto storageManager = StorageManager::Get(*clientContext);
+    // Resolve the storage manager that owns the rel tables: main by default, or the
+    // attached database recorded on the count operator for attached rels.
+    auto dbName = logicalCountRelTable.getDbName();
+    auto storageManager = dbName.empty() ? StorageManager::Get(*clientContext) : [&]() {
+        auto* attachedDB = main::DatabaseManager::Get(*clientContext)->getAttachedDatabase(dbName);
+        auto* attachedLbug = static_cast<main::AttachedLbugDatabase*>(attachedDB);
+        return attachedLbug->getStorageManager();
+    }();
 
     // Get the node tables for scanning bound nodes
     std::vector<NodeTable*> nodeTables;

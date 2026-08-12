@@ -282,6 +282,7 @@ public:
         RelDirectionType directionType, const std::vector<std::string>& originalLabels);
     std::shared_ptr<RelExpression> createRecursiveQueryRel(const parser::RelPattern& relPattern,
         const std::vector<catalog::TableCatalogEntry*>& entries,
+        const std::unordered_map<catalog::TableCatalogEntry*, std::string>& dbNames,
         std::shared_ptr<NodeExpression> srcNode, std::shared_ptr<NodeExpression> dstNode,
         RelDirectionType directionType);
     expression_vector bindRecursivePatternNodeProjectionList(
@@ -302,8 +303,10 @@ public:
     std::pair<std::vector<catalog::TableCatalogEntry*>,
         std::unordered_map<catalog::TableCatalogEntry*, std::string>>
     bindNodeTableEntries(const std::vector<std::string>& tableNames) const;
-    std::vector<catalog::TableCatalogEntry*> bindRelGroupEntries(
-        const std::vector<std::string>& tableNames) const;
+    std::pair<std::vector<catalog::TableCatalogEntry*>,
+        std::unordered_map<catalog::TableCatalogEntry*, std::string>>
+    bindRelGroupEntries(const std::vector<std::string>& tableNames,
+        const std::string& contextDbName = "") const;
     std::pair<catalog::TableCatalogEntry*, std::string> bindNodeTableEntry(
         const std::string& name) const;
     std::vector<PropertyDefinition> bindRelPropertyDefinitions(const parser::CreateTableInfo& info);
