@@ -51,6 +51,12 @@ struct LBUG_API ParsedNativeGraphEntry : ParsedGraphEntry {
     // (multi-node-table graph, per-table predicate, manual transaction) — consumers must fall
     // back to scanning storage. Lifetime: the session's GraphEntrySet; freed on DROP.
     std::vector<std::shared_ptr<main::QueryResult>> relCsrResults;
+    // Each rel table's storage changeEpoch, captured immediately BEFORE the materializing scan
+    // (parallel to relCsrResults; meaningless where the result is null). Consumers compare it to
+    // the table's current epoch and treat any mismatch as staleness, falling back to scanning
+    // live storage. Capturing before the scan makes a concurrent mutation during materialization
+    // read as stale — conservative in the safe direction.
+    std::vector<uint64_t> relCsrEpochs;
 
     ParsedNativeGraphEntry(std::vector<ParsedNativeGraphTableInfo> nodeInfos,
         std::vector<ParsedNativeGraphTableInfo> relInfos)
