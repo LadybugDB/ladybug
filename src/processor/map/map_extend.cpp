@@ -2,8 +2,11 @@
 #include "binder/expression/property_expression.h"
 #include "binder/expression_binder.h"
 #include "catalog/catalog.h"
+#include "common/constants.h"
 #include "common/enums/extend_direction_util.h"
+#include "main/attached_database.h"
 #include "main/client_context.h"
+#include "main/database_manager.h"
 #include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "processor/operator/scan/scan_multi_rel_tables.h"
@@ -21,6 +24,24 @@ using namespace lbug::catalog;
 
 namespace lbug {
 namespace processor {
+
+// Resolve the storage manager that owns a rel table belonging to dbName. Empty dbName
+// means the main database; otherwise look up the attached lbug database's storage
+// manager. Extension-backed attached databases cannot be scanned through a local
+// StorageManager, so those raise a clear error.
+static storage::StorageManager* getRelStorageManager(main::ClientContext* clientContext,
+    const std::string& dbName) {
+    if (dbName.empty()) {
+        return storage::StorageManager::Get(*clientContext);
+    }
+    auto* attachedDB = main::DatabaseManager::Get(*clientContext)->getAttachedDatabase(dbName);
+    if (attachedDB->getDBType() != common::ATTACHED_LBUG_DB_TYPE) {
+        throw common::RuntimeException(std::format(
+            "Relationship pattern over attached database {} is not supported.", dbName));
+    }
+    auto* attachedLbug = static_cast<main::AttachedLbugDatabase*>(attachedDB);
+    return attachedLbug->getStorageManager();
+}
 
 static ScanRelTableInfo getRelTableScanInfo(const TableCatalogEntry& tableEntry,
     RelDataDirection direction, RelTable* relTable, bool shouldScanNbrID,
@@ -81,9 +102,10 @@ static bool isRelTableQualifies(ExtendDirection direction, table_id_t srcTableID
 static std::vector<ScanRelTableInfo> populateRelTableCollectionScanner(table_id_t boundNodeTableID,
     const table_id_set_t& nbrTableISet, const RelGroupCatalogEntry& entry,
     ExtendDirection extendDirection, bool shouldScanNbrID, const expression_vector& properties,
-    const std::vector<ColumnPredicateSet>& columnPredicates, main::ClientContext* clientContext) {
+    const std::vector<ColumnPredicateSet>& columnPredicates, const std::string& dbName,
+    main::ClientContext* clientContext) {
     std::vector<ScanRelTableInfo> scanInfos;
-    const auto storageManager = StorageManager::Get(*clientContext);
+    const auto storageManager = getRelStorageManager(clientContext, dbName);
     for (auto& info : entry.getRelEntryInfos()) {
         auto srcTableID = info.nodePair.srcTableID;
         auto dstTableID = info.nodePair.dstTableID;
@@ -183,7 +205,6 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
     }
     auto scanInfo = ScanOpInfo(inNodeIDPos, outVectorsPos);
     std::vector<std::string> tableNames;
-    auto storageManager = StorageManager::Get(*clientContext);
     for (auto entry : rel->getEntries()) {
         tableNames.push_back(entry->getName());
     }
@@ -194,7 +215,10 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
         auto entry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
         auto relDataDirection = ExtendDirectionUtil::getRelDataDirection(extendDirection);
         auto entryInfo = entry->getSingleRelEntryInfo();
-        auto relTable = storageManager->getTable(entryInfo.oid)->ptrCast<RelTable>();
+        // Resolve the storage manager that owns this rel table: main by default, or
+        // the attached database recorded on the rel entry for attached rels.
+        auto relStorageManager = getRelStorageManager(clientContext, rel->getDbName(entry));
+        auto relTable = relStorageManager->getTable(entryInfo.oid)->ptrCast<RelTable>();
         auto scanRelInfo =
             getRelTableScanInfo(*entry, relDataDirection, relTable, extend->shouldScanNbrID(),
                 extend->getProperties(), extend->getPropertyPredicates(), clientContext);
@@ -208,13 +232,19 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
                 auto expectedBoundTableID = relDataDirection == RelDataDirection::FWD ?
                                                 relTable->getFromNodeTableID() :
                                                 relTable->getToNodeTableID();
-                auto catalog = catalog::Catalog::Get(*clientContext);
                 auto transaction = transaction::Transaction::Get(*clientContext);
+                auto& nodeDBMap = scanNode->getTableDBMap();
                 for (auto tableID : scanNode->getTableIDs()) {
                     if (tableID == expectedBoundTableID) {
-                        auto table = storageManager->getTable(tableID)->ptrCast<NodeTable>();
+                        // Route each source node table to its owning storage manager/catalog
+                        // (main or the attached database recorded on the scan).
+                        auto dbName =
+                            nodeDBMap.contains(tableID) ? nodeDBMap.at(tableID) : std::string{};
+                        auto [cat, sm] = main::DatabaseManager::resolveTableStorage(*clientContext,
+                            tableID, dbName);
+                        auto table = sm->getTable(tableID)->ptrCast<NodeTable>();
                         sourceNodeTables.push_back(table);
-                        auto tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
+                        auto tableEntry = cat->getTableCatalogEntry(transaction, tableID);
                         sourceNodeTableInfos.push_back(
                             getNodeTableScanInfo(*scanNode, table, tableEntry, clientContext));
                         auto semiMask =
@@ -266,10 +296,10 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
     for (auto boundNodeTableID : boundNode->getTableIDs()) {
         for (auto entry : rel->getEntries()) {
             auto& relGroupEntry = entry->constCast<RelGroupCatalogEntry>();
-            auto scanInfos =
-                populateRelTableCollectionScanner(boundNodeTableID, nbrNode->getTableIDsSet(),
-                    relGroupEntry, extendDirection, extend->shouldScanNbrID(),
-                    extend->getProperties(), extend->getPropertyPredicates(), clientContext);
+            auto scanInfos = populateRelTableCollectionScanner(boundNodeTableID,
+                nbrNode->getTableIDsSet(), relGroupEntry, extendDirection,
+                extend->shouldScanNbrID(), extend->getProperties(), extend->getPropertyPredicates(),
+                rel->getDbName(entry), clientContext);
             if (scanInfos.empty()) {
                 continue;
             }

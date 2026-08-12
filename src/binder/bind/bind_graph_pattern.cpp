@@ -194,7 +194,32 @@ std::shared_ptr<RelExpression> Binder::bindQueryRel(const RelPattern& relPattern
         throw BinderException("Bind relationship " + parsedName +
                               " to relationship with same name is not supported.");
     }
-    auto entries = bindRelGroupEntries(relPattern.getTableNames());
+    // Infer the catalog context from the endpoint nodes: if every endpoint table belongs
+    // to the same single attached database, unqualified rel labels (and anonymous rel
+    // patterns) resolve in that database's catalog. Mixed or main-only endpoints yield no
+    // context, so rel labels fall back to the default catalog (main unless USE db/GRAPH).
+    std::string contextDbName;
+    bool sawAttached = false;
+    bool sawMain = false;
+    for (auto* node : {leftNode.get(), rightNode.get()}) {
+        for (auto* entry : node->getEntries()) {
+            auto dbName = node->getDbName(entry);
+            if (dbName.empty()) {
+                sawMain = true;
+            } else {
+                sawAttached = true;
+                if (contextDbName.empty()) {
+                    contextDbName = dbName;
+                } else if (contextDbName != dbName) {
+                    contextDbName.clear();
+                }
+            }
+        }
+    }
+    if (sawMain || !sawAttached || contextDbName.empty()) {
+        contextDbName.clear();
+    }
+    auto [entries, dbNames] = bindRelGroupEntries(relPattern.getTableNames(), contextDbName);
     // bind src & dst node
     RelDirectionType directionType = RelDirectionType::UNKNOWN;
     std::shared_ptr<NodeExpression> srcNode;
@@ -223,7 +248,8 @@ std::shared_ptr<RelExpression> Binder::bindQueryRel(const RelPattern& relPattern
     // bind variable length
     std::shared_ptr<RelExpression> queryRel;
     if (QueryRelTypeUtils::isRecursive(relPattern.getRelType())) {
-        queryRel = createRecursiveQueryRel(relPattern, entries, srcNode, dstNode, directionType);
+        queryRel =
+            createRecursiveQueryRel(relPattern, entries, dbNames, srcNode, dstNode, directionType);
     } else {
         queryRel = createNonRecursiveQueryRel(relPattern.getVariableName(), entries, srcNode,
             dstNode, directionType, relPattern.getTableNames());
@@ -238,6 +264,11 @@ std::shared_ptr<RelExpression> Binder::bindQueryRel(const RelPattern& relPattern
     queryRel->setLeftNode(leftNode);
     queryRel->setRightNode(rightNode);
     queryRel->setAlias(parsedName);
+    // Carry the database context for each rel entry so planning/physical routing
+    // (cardinality estimation, extend scan) can resolve the right storage manager.
+    for (auto& [entry, dbName] : dbNames) {
+        queryRel->setDbName(entry, dbName);
+    }
     if (!parsedName.empty()) {
         addToScope(parsedName, queryRel);
     }
@@ -388,18 +419,36 @@ static void checkWeightedShortestPathSupportedType(const LogicalType& type) {
 }
 
 std::shared_ptr<RelExpression> Binder::createRecursiveQueryRel(const parser::RelPattern& relPattern,
-    const std::vector<TableCatalogEntry*>& entries, std::shared_ptr<NodeExpression> srcNode,
-    std::shared_ptr<NodeExpression> dstNode, RelDirectionType directionType) {
-    auto catalog = Catalog::Get(*clientContext);
+    const std::vector<TableCatalogEntry*>& entries,
+    const std::unordered_map<TableCatalogEntry*, std::string>& dbNames,
+    std::shared_ptr<NodeExpression> srcNode, std::shared_ptr<NodeExpression> dstNode,
+    RelDirectionType directionType) {
     auto transaction = transaction::Transaction::Get(*clientContext);
     table_catalog_entry_set_t nodeEntrySet;
+    std::unordered_map<TableCatalogEntry*, std::string> nodeDbNames;
     for (auto entry : entries) {
         auto& relGroupEntry = entry->constCast<RelGroupCatalogEntry>();
+        // Resolve the catalog that owns this rel entry so its endpoint node tables are
+        // looked up in the right database (IDs are 0-based per database).
+        auto dbNameIt = dbNames.find(entry);
+        auto dbName = dbNameIt != dbNames.end() ? dbNameIt->second : "";
+        auto catalog = dbName.empty() ? Catalog::Get(*clientContext) :
+                                        main::DatabaseManager::Get(*clientContext)
+                                            ->getAttachedDatabase(dbName)
+                                            ->getCatalog();
         for (auto id : relGroupEntry.getSrcNodeTableIDSet()) {
-            nodeEntrySet.insert(catalog->getTableCatalogEntry(transaction, id));
+            auto nodeEntry = catalog->getTableCatalogEntry(transaction, id);
+            nodeEntrySet.insert(nodeEntry);
+            if (!dbName.empty()) {
+                nodeDbNames[nodeEntry] = dbName;
+            }
         }
         for (auto id : relGroupEntry.getDstNodeTableIDSet()) {
-            nodeEntrySet.insert(catalog->getTableCatalogEntry(transaction, id));
+            auto nodeEntry = catalog->getTableCatalogEntry(transaction, id);
+            nodeEntrySet.insert(nodeEntry);
+            if (!dbName.empty()) {
+                nodeDbNames[nodeEntry] = dbName;
+            }
         }
     }
     auto nodeEntries = std::vector<TableCatalogEntry*>{nodeEntrySet.begin(), nodeEntrySet.end()};
@@ -407,13 +456,13 @@ std::shared_ptr<RelExpression> Binder::createRecursiveQueryRel(const parser::Rel
     auto prevScope = saveScope();
     scope.clear();
     // Bind intermediate node.
-    auto node = createQueryNode(recursivePatternInfo->nodeName, nodeEntries, {}, {});
+    auto node = createQueryNode(recursivePatternInfo->nodeName, nodeEntries, nodeDbNames, {});
     addToScope(node->toString(), node);
     auto nodeFields = getBaseNodeStructFields();
     auto nodeProjectionList = bindRecursivePatternNodeProjectionList(*recursivePatternInfo, *node);
     bindProjectionListAsStructField(nodeProjectionList, nodeFields);
     node->setDataType(LogicalType::NODE(std::move(nodeFields)));
-    auto nodeCopy = createQueryNode(recursivePatternInfo->nodeName, nodeEntries, {}, {});
+    auto nodeCopy = createQueryNode(recursivePatternInfo->nodeName, nodeEntries, nodeDbNames, {});
     // Bind intermediate rel
     auto rel = createNonRecursiveQueryRel(recursivePatternInfo->relName, entries,
         nullptr /* srcNode */, nullptr /* dstNode */, directionType, {});
@@ -721,15 +770,30 @@ static std::vector<TableCatalogEntry*> sortEntries(const table_catalog_entry_set
 std::pair<std::vector<TableCatalogEntry*>, std::unordered_map<TableCatalogEntry*, std::string>>
 Binder::bindNodeTableEntries(const std::vector<std::string>& tableNames) const {
     auto transaction = transaction::Transaction::Get(*clientContext);
-    auto catalog = Catalog::Get(*clientContext);
     auto useInternal = clientContext->useInternalCatalogEntry();
+    // Select the base catalog for unqualified/anonymous patterns: active graph, then
+    // default database (USE db), then main.
+    auto dbManager = main::DatabaseManager::Get(*clientContext);
+    catalog::Catalog* catalog = nullptr;
+    std::string activeDbName;
+    if (auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
+        defaultGraphCatalog != nullptr) {
+        catalog = defaultGraphCatalog;
+    } else if (dbManager->hasDefaultDatabase()) {
+        activeDbName = dbManager->getDefaultDatabase();
+        catalog = dbManager->getAttachedDatabase(activeDbName)->getCatalog();
+    } else {
+        catalog = Catalog::Get(*clientContext);
+    }
     table_catalog_entry_set_t entrySet;
     std::unordered_map<TableCatalogEntry*, std::string> dbNames;
-    if (tableNames.empty()) { // Rewrite as all node tables in database.
+    if (tableNames.empty()) { // Rewrite as all node tables in the active catalog.
         for (auto entry : catalog->getNodeTableEntries(transaction, useInternal)) {
             entrySet.insert(entry);
+            if (!activeDbName.empty()) {
+                dbNames[entry] = activeDbName;
+            }
         }
-        auto dbManager = main::DatabaseManager::Get(*clientContext);
         for (auto attachedDB : dbManager->getAttachedDatabases()) {
             auto attachedCatalog = attachedDB->getCatalog();
             for (auto entry : attachedCatalog->getTableEntries(transaction, useInternal)) {
@@ -782,20 +846,25 @@ std::pair<TableCatalogEntry*, std::string> Binder::bindNodeTableEntry(
         }
         return {attachedCatalog->getTableCatalogEntry(transaction, tableName, useInternal), dbName};
     } else {
-        // Check if there's a default graph set and use its catalog
+        // Check if there's a default graph set and use its catalog; otherwise fall
+        // back to the default database (USE db), then main.
         auto dbManager = main::DatabaseManager::Get(*clientContext);
         catalog::Catalog* catalog = nullptr;
-        auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
-        if (defaultGraphCatalog != nullptr) {
+        std::string resolvedDbName;
+        if (auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
+            defaultGraphCatalog != nullptr) {
             catalog = defaultGraphCatalog;
+        } else if (dbManager->hasDefaultDatabase()) {
+            resolvedDbName = dbManager->getDefaultDatabase();
+            catalog = dbManager->getAttachedDatabase(resolvedDbName)->getCatalog();
         } else {
             catalog = Catalog::Get(*clientContext);
         }
-        // Unqualified name: only search main catalog
+        // Unqualified name: only search the active catalog
         // Foreign tables require qualified names (db.table) to avoid ambiguity
         bool hasTable = catalog->containsTable(transaction, name, useInternal);
         if (hasTable) {
-            return {catalog->getTableCatalogEntry(transaction, name, useInternal), ""};
+            return {catalog->getTableCatalogEntry(transaction, name, useInternal), resolvedDbName};
         }
         // Check if this is an ANY graph (has _nodes table)
         // In ANY graphs, labels are stored dynamically in the _nodes table
@@ -807,57 +876,87 @@ std::pair<TableCatalogEntry*, std::string> Binder::bindNodeTableEntry(
     }
 }
 
-std::vector<TableCatalogEntry*> Binder::bindRelGroupEntries(
-    const std::vector<std::string>& tableNames) const {
+std::pair<std::vector<TableCatalogEntry*>, std::unordered_map<TableCatalogEntry*, std::string>>
+Binder::bindRelGroupEntries(const std::vector<std::string>& tableNames,
+    const std::string& contextDbName) const {
     auto transaction = transaction::Transaction::Get(*clientContext);
     auto useInternal = clientContext->useInternalCatalogEntry();
 
-    // Check if there's a default graph set and use its catalog
+    // Resolve the catalog for unqualified names / the anonymous case. An explicit
+    // context (all endpoint nodes from the same attached database) wins; otherwise
+    // fall back to the active graph, then the default database (USE db), then main.
     auto dbManager = main::DatabaseManager::Get(*clientContext);
     catalog::Catalog* catalog = nullptr;
-    auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
-    if (defaultGraphCatalog != nullptr) {
+    std::string activeDbName;
+    if (!contextDbName.empty()) {
+        activeDbName = contextDbName;
+    } else if (auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
+               defaultGraphCatalog != nullptr) {
         catalog = defaultGraphCatalog;
+    } else if (dbManager->hasDefaultDatabase()) {
+        activeDbName = dbManager->getDefaultDatabase();
     } else {
         catalog = Catalog::Get(*clientContext);
     }
+    if (!activeDbName.empty()) {
+        catalog = dbManager->getAttachedDatabase(activeDbName)->getCatalog();
+    }
 
     table_catalog_entry_set_t entrySet;
-    if (tableNames.empty()) { // Rewrite as all rel groups in database.
+    std::unordered_map<TableCatalogEntry*, std::string> dbNames;
+    if (tableNames.empty()) { // Rewrite as all rel groups in the active catalog.
         for (auto entry : catalog->getRelGroupEntries(transaction, useInternal)) {
             entrySet.insert(entry);
+            if (!activeDbName.empty()) {
+                dbNames[entry] = activeDbName;
+            }
         }
-        // Stop-gap: skip attached rel groups; physical routing for rel patterns
-        // over attached databases is not yet implemented. Unlabeled ()-[r]->()
-        // would otherwise crash or silently read the wrong table on ID overlap.
-        // TODO: implement full dbName plumbing for rel patterns (BUG 6).
     } else {
         for (auto& name : tableNames) {
-            // Check for qualified rel name (db.table) — not yet supported.
-            if (name.find('.') != std::string::npos) {
-                throw BinderException(
-                    "Qualified relationship patterns (e.g. -[r:db.rel]->) are not supported yet.");
+            std::string dbName;
+            std::string tableName = name;
+            auto dotPos = name.find('.');
+            if (dotPos != std::string::npos) {
+                dbName = name.substr(0, dotPos);
+                tableName = name.substr(dotPos + 1);
             }
-            if (catalog->containsTable(transaction, name)) {
-                auto entry = catalog->getTableCatalogEntry(transaction, name, useInternal);
+            // Qualified name (db.rel) resolves in that attached database's catalog;
+            // unqualified names resolve in the active catalog selected above.
+            catalog::Catalog* targetCatalog = catalog;
+            std::string resolvedDbName = activeDbName;
+            if (!dbName.empty()) {
+                auto* attachedDB = dbManager->getAttachedDatabase(dbName);
+                targetCatalog = attachedDB->getCatalog();
+                resolvedDbName = dbName;
+            }
+            if (targetCatalog->containsTable(transaction, tableName, useInternal)) {
+                auto entry =
+                    targetCatalog->getTableCatalogEntry(transaction, tableName, useInternal);
                 if (entry->getType() != CatalogEntryType::REL_GROUP_ENTRY) {
                     throw BinderException(std::format(
                         "Cannot bind {} as a relationship pattern label.", entry->getName()));
                 }
                 entrySet.insert(entry);
+                if (!resolvedDbName.empty()) {
+                    dbNames[entry] = resolvedDbName;
+                }
             } else {
                 // Check if this is an ANY graph (has _edges table)
                 // In ANY graphs, labels are stored dynamically in the _edges table
-                if (catalog->containsTable(transaction, "_edges", useInternal)) {
-                    auto entry = catalog->getTableCatalogEntry(transaction, "_edges", useInternal);
+                if (targetCatalog->containsTable(transaction, "_edges", useInternal)) {
+                    auto entry =
+                        targetCatalog->getTableCatalogEntry(transaction, "_edges", useInternal);
                     entrySet.insert(entry);
+                    if (!resolvedDbName.empty()) {
+                        dbNames[entry] = resolvedDbName;
+                    }
                 } else {
                     throw BinderException(std::format("Table {} does not exist.", name));
                 }
             }
         }
     }
-    return sortEntries(entrySet);
+    return {sortEntries(entrySet), std::move(dbNames)};
 }
 
 } // namespace binder

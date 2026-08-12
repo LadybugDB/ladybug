@@ -41,10 +41,10 @@ public:
         std::vector<common::table_id_t> relTableIDs,
         std::vector<common::table_id_t> boundNodeTableIDs,
         std::shared_ptr<binder::NodeExpression> boundNode, common::ExtendDirection direction,
-        std::shared_ptr<binder::Expression> countExpr)
+        std::shared_ptr<binder::Expression> countExpr, std::string dbName = {})
         : LogicalOperator{type_}, relGroupEntry{relGroupEntry}, relTableIDs{std::move(relTableIDs)},
           boundNodeTableIDs{std::move(boundNodeTableIDs)}, boundNode{std::move(boundNode)},
-          direction{direction}, countExpr{std::move(countExpr)} {
+          direction{direction}, countExpr{std::move(countExpr)}, dbName{std::move(dbName)} {
         cardinality = 1; // Always returns exactly one row
     }
 
@@ -61,6 +61,7 @@ public:
     std::shared_ptr<binder::NodeExpression> getBoundNode() const { return boundNode; }
     common::ExtendDirection getDirection() const { return direction; }
     std::shared_ptr<binder::Expression> getCountExpr() const { return countExpr; }
+    const std::string& getDbName() const { return dbName; }
 
     std::unique_ptr<OPPrintInfo> getPrintInfo() const override {
         return std::make_unique<LogicalCountRelTablePrintInfo>(relGroupEntry->getName(), countExpr);
@@ -68,7 +69,7 @@ public:
 
     std::unique_ptr<LogicalOperator> copy() override {
         return std::make_unique<LogicalCountRelTable>(relGroupEntry, relTableIDs, boundNodeTableIDs,
-            boundNode, direction, countExpr);
+            boundNode, direction, countExpr, dbName);
     }
 
 private:
@@ -78,6 +79,7 @@ private:
     std::shared_ptr<binder::NodeExpression> boundNode;
     common::ExtendDirection direction;
     std::shared_ptr<binder::Expression> countExpr;
+    std::string dbName;
 };
 
 } // namespace planner

@@ -3,6 +3,7 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/binder.h"
+#include "main/database_manager.h"
 #include "transaction/transaction.h"
 #include <format>
 
@@ -74,7 +75,7 @@ struct Candidates {
 };
 
 void QueryGraphLabelAnalyzer::pruneNode(const QueryGraph& graph, NodeExpression& node) const {
-    auto catalog = Catalog::Get(clientContext);
+    auto tx = transaction::Transaction::Get(clientContext);
     for (auto i = 0u; i < graph.getNumQueryRels(); ++i) {
         auto queryRel = graph.getQueryRel(i);
         if (queryRel->isRecursive()) {
@@ -83,11 +84,23 @@ void QueryGraphLabelAnalyzer::pruneNode(const QueryGraph& graph, NodeExpression&
         Candidates candidates;
         auto isSrcConnect = *queryRel->getSrcNode() == node;
         auto isDstConnect = *queryRel->getDstNode() == node;
-        auto tx = transaction::Transaction::Get(clientContext);
+        // Rel endpoint tables may live in an attached database; resolve the catalog
+        // that owns the rel entry so ID lookups hit the right catalog (IDs are
+        // 0-based per database and overlap across databases).
+        auto resolveCatalog = [&](catalog::TableCatalogEntry* relEntry) -> Catalog* {
+            auto dbName = queryRel->getDbName(relEntry);
+            if (dbName.empty()) {
+                return Catalog::Get(clientContext);
+            }
+            return main::DatabaseManager::Get(clientContext)
+                ->getAttachedDatabase(dbName)
+                ->getCatalog();
+        };
         if (queryRel->getDirectionType() == RelDirectionType::BOTH) {
             if (isSrcConnect || isDstConnect) {
                 for (auto entry : queryRel->getEntries()) {
                     auto& relEntry = entry->constCast<RelGroupCatalogEntry>();
+                    auto catalog = resolveCatalog(entry);
                     candidates.insert(relEntry.getSrcNodeTableIDSet(), catalog, tx);
                     candidates.insert(relEntry.getDstNodeTableIDSet(), catalog, tx);
                 }
@@ -96,11 +109,13 @@ void QueryGraphLabelAnalyzer::pruneNode(const QueryGraph& graph, NodeExpression&
             if (isSrcConnect) {
                 for (auto entry : queryRel->getEntries()) {
                     auto& relEntry = entry->constCast<RelGroupCatalogEntry>();
+                    auto catalog = resolveCatalog(entry);
                     candidates.insert(relEntry.getSrcNodeTableIDSet(), catalog, tx);
                 }
             } else if (isDstConnect) {
                 for (auto entry : queryRel->getEntries()) {
                     auto& relEntry = entry->constCast<RelGroupCatalogEntry>();
+                    auto catalog = resolveCatalog(entry);
                     candidates.insert(relEntry.getDstNodeTableIDSet(), catalog, tx);
                 }
             }

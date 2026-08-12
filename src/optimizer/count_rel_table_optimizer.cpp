@@ -327,9 +327,9 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
         boundNodeTableIDs.end());
 
     // Create the new COUNT_REL_TABLE operator with all necessary information for scanning
-    auto countRelTable =
-        std::make_shared<LogicalCountRelTable>(relGroupEntry, std::move(relTableIDs),
-            std::move(boundNodeTableIDsVec), boundNode, extend.getDirection(), countExpr);
+    auto countRelTable = std::make_shared<LogicalCountRelTable>(relGroupEntry,
+        std::move(relTableIDs), std::move(boundNodeTableIDsVec), boundNode, extend.getDirection(),
+        countExpr, rel->getDbName(relGroupEntry));
     countRelTable->computeFlatSchema();
 
     return countRelTable;
