@@ -13,6 +13,7 @@ namespace testing {
 enum class TokenType {
     // header only
     DATASET,
+    ATTACH_DATASET,
     BUFFER_POOL_SIZE,
 
     // Skip or enable tests
@@ -72,7 +73,8 @@ enum class TokenType {
 };
 
 const std::unordered_map<std::string, TokenType> TOKEN_MAP = {{"-DATASET", TokenType::DATASET},
-    {"-CASE", TokenType::CASE}, {"-CHECK_ORDER", TokenType::CHECK_ORDER}, {"-LOG", TokenType::LOG},
+    {"-ATTACH_DATASET", TokenType::ATTACH_DATASET}, {"-CASE", TokenType::CASE},
+    {"-CHECK_ORDER", TokenType::CHECK_ORDER}, {"-LOG", TokenType::LOG},
     {"-DEFINE_STATEMENT_BLOCK", TokenType::DEFINE_STATEMENT_BLOCK}, {"-SKIP", TokenType::SKIP},
     {"-SKIP_MUSL", TokenType::SKIP_MUSL}, {"-SKIP_LINE", TokenType::SET},
     {"-SKIP_WASM", TokenType::SKIP_WASM},

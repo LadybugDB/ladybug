@@ -177,6 +177,12 @@ void TestParser::parseHeader() {
             checkMinimumParams(2);
             extractDataset();
         } break;
+        case TokenType::ATTACH_DATASET: {
+            // -ATTACH_DATASET <name>: build an on-disk `.lbdb` file at
+            // `${DATABASE_PATH}/attach_target.lbdb` from `dataset/<name>/`.
+            checkMinimumParams(1);
+            testGroup->attachDataset = currentToken.params[1];
+        } break;
         case TokenType::BUFFER_POOL_SIZE: {
             checkMinimumParams(1);
             testGroup->bufferPoolSize = stoll(currentToken.params[1]);
