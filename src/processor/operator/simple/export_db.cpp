@@ -60,7 +60,7 @@ static std::string getTablePropertyDefinitions(const TableCatalogEntry* entry) {
         if (property.getType() == LogicalType::INTERNAL_ID()) {
             continue;
         }
-        columns += "`" + property.getName() + "`";
+        columns += common::StringUtils::quoteIdentifier(property.getName());
         columns += propertyIdx == properties.size() ? "" : ",";
     }
     return columns;
@@ -79,10 +79,11 @@ static void writeCopyNodeStatement(stringstream& ss, const TableCatalogEntry* en
     }
     auto copyOptionsCypher = CSVOption::toCypher(csvConfig.option.toOptionsMap(useParallelReader));
     if (columns.empty()) {
-        ss << std::format("COPY `{}` FROM \"{}\" {};\n", entry->getName(), fileName,
-            copyOptionsCypher);
+        ss << std::format("COPY {} FROM \"{}\" {};\n",
+            common::StringUtils::quoteIdentifier(entry->getName()), fileName, copyOptionsCypher);
     } else {
-        ss << std::format("COPY `{}` ({}) FROM \"{}\" {};\n", entry->getName(), columns, fileName,
+        ss << std::format("COPY {} ({}) FROM \"{}\" {};\n",
+            common::StringUtils::quoteIdentifier(entry->getName()), columns, fileName,
             copyOptionsCypher);
     }
 }
@@ -111,11 +112,12 @@ static void writeCopyRelStatement(stringstream& ss, const ClientContext* context
         copyOptionsMap["to"] = std::format("'{}'", toTableName);
         auto copyOptions = CSVOption::toCypher(copyOptionsMap);
         if (columns.empty()) {
-            ss << std::format("COPY `{}` FROM \"{}\" {};\n", entry->getName(), fileName,
-                copyOptions);
+            ss << std::format("COPY {} FROM \"{}\" {};\n",
+                common::StringUtils::quoteIdentifier(entry->getName()), fileName, copyOptions);
         } else {
-            ss << std::format("COPY `{}` ({}) FROM \"{}\" {};\n", entry->getName(), columns,
-                fileName, copyOptions);
+            ss << std::format("COPY {} ({}) FROM \"{}\" {};\n",
+                common::StringUtils::quoteIdentifier(entry->getName()), columns, fileName,
+                copyOptions);
         }
     }
 }

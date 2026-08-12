@@ -4,6 +4,7 @@
 #include "common/exception/catalog.h"
 #include "common/exception/overflow.h"
 #include "common/serializer/deserializer.h"
+#include "common/string_utils.h"
 #include "common/vector/value_vector.h"
 #include "function/arithmetic/add.h"
 #include "transaction/transaction.h"
@@ -156,11 +157,12 @@ std::unique_ptr<SequenceCatalogEntry> SequenceCatalogEntry::deserialize(
 }
 
 std::string SequenceCatalogEntry::toCypher(const ToCypherInfo& /* info */) const {
-    return std::format("DROP SEQUENCE IF EXISTS `{}`;\n"
-                       "CREATE SEQUENCE IF NOT EXISTS `{}` START {} INCREMENT {} MINVALUE {} "
+    const auto quotedName = common::StringUtils::quoteIdentifier(getName());
+    return std::format("DROP SEQUENCE IF EXISTS {};\n"
+                       "CREATE SEQUENCE IF NOT EXISTS {} START {} INCREMENT {} MINVALUE {} "
                        "MAXVALUE {} {} CYCLE;\n"
                        "RETURN nextval('{}');",
-        getName(), getName(), sequenceData.currVal, sequenceData.increment, sequenceData.minValue,
+        quotedName, quotedName, sequenceData.currVal, sequenceData.increment, sequenceData.minValue,
         sequenceData.maxValue, sequenceData.cycle ? "" : "NO", getName());
 }
 

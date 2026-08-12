@@ -3,6 +3,7 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/binder.h"
+#include "common/string_utils.h"
 #include "common/types/value/nested.h"
 #include "function/gds/gds.h"
 #include "function/table/bind_data.h"
@@ -83,8 +84,10 @@ static void materializeRelCsr(ParsedNativeGraphEntry& entry, main::ClientContext
                 epoch = relTable->getChangeEpoch();
             }
         }
-        auto query = std::format("MATCH (a:`{}`)-[r:`{}`]->(b:`{}`) RETURN a.rowid, b.rowid",
-            nodeTable, relInfo.tableName, nodeTable);
+        const auto quotedNodeTable = common::StringUtils::quoteIdentifier(nodeTable);
+        auto query =
+            std::format("MATCH (a:{})-[r:{}]->(b:{}) RETURN a.rowid, b.rowid", quotedNodeTable,
+                common::StringUtils::quoteIdentifier(relInfo.tableName), quotedNodeTable);
         auto result = conn.queryAsArrow(query, ARROW_CHUNK_SIZE);
         auto* arrowResult = dynamic_cast<main::ArrowQueryResult*>(result.get());
         if (arrowResult != nullptr && arrowResult->isSuccess() && arrowResult->hasCSRMetadata()) {

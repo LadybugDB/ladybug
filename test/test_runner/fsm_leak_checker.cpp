@@ -7,6 +7,7 @@
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
+#include "common/string_utils.h"
 #include "gtest/gtest.h"
 #include "main/connection.h"
 #include "processor/result/flat_tuple.h"
@@ -92,13 +93,15 @@ void FSMLeakChecker::checkForLeakedPages(main::Connection* conn) {
     // Drop rel tables first
     for (const auto& [name, type] : tableNames) {
         if (type == common::TableTypeUtils::toString(common::TableType::REL)) {
-            ASSERT_TRUE(conn->query(std::format("drop table `{}`", name))->isSuccess());
+            ASSERT_TRUE(conn->query("drop table " + common::StringUtils::quoteIdentifier(name))
+                            ->isSuccess());
         }
     }
     // Then non-rel
     for (const auto& [name, type] : tableNames) {
         if (type != common::TableTypeUtils::toString(common::TableType::REL)) {
-            ASSERT_TRUE(conn->query(std::format("drop table `{}`", name))->isSuccess());
+            ASSERT_TRUE(conn->query("drop table " + common::StringUtils::quoteIdentifier(name))
+                            ->isSuccess());
         }
     }
 

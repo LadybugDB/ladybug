@@ -5,6 +5,7 @@
 
 #include "common/arrow/arrow_converter.h"
 #include "common/exception/runtime.h"
+#include "common/string_utils.h"
 #include "main/database.h"
 
 namespace lbug {
@@ -46,7 +47,7 @@ static int64_t findArrowColumnByName(const ArrowSchemaWrapper& schema, const std
 // names are arbitrary strings, and many ordinary ones (`index`, `order`, `group`, names with a
 // space or a leading digit) are not valid unquoted Cypher identifiers.
 std::string quoteIdent(const std::string& name) {
-    return "`" + name + "`";
+    return common::StringUtils::quoteIdentifier(name);
 }
 
 std::string ArrowTableSupport::registerArrowData(ArrowSchemaWrapper schema,

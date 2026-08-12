@@ -211,10 +211,21 @@ std::string Transformer::transformVariable(CypherParser::OC_VariableContext& ctx
 }
 std::string Transformer::transformSymbolicName(CypherParser::OC_SymbolicNameContext& ctx) {
     if (ctx.EscapedSymbolicName()) {
-        std::string escapedSymbolName = ctx.EscapedSymbolicName()->getText();
-        // escapedSymbolName symbol will be of form "`Some.Value`". Therefore, we need to sanitize
-        // it such that we don't store the symbol with escape character.
-        return escapedSymbolName.substr(1, escapedSymbolName.size() - 2);
+        // The token spans one or more backtick-quoted groups, so `a``b` arrives here as the
+        // single text "`a``b`". Strip the outer pair, then collapse each doubled backtick into
+        // the one the name asked for, which is the escape the grammar's repetition encodes.
+        const std::string escapedSymbolName = ctx.EscapedSymbolicName()->getText();
+        const auto inner =
+            std::string_view(escapedSymbolName).substr(1, escapedSymbolName.size() - 2);
+        std::string name;
+        name.reserve(inner.size());
+        for (auto i = 0u; i < inner.size(); i++) {
+            name += inner[i];
+            if (inner[i] == '`' && i + 1 < inner.size() && inner[i + 1] == '`') {
+                i++;
+            }
+        }
+        return name;
     } else {
         DASSERT(ctx.HexLetter() || ctx.UnescapedSymbolicName() || ctx.iC_NonReservedKeywords());
         return ctx.getText();

@@ -30,6 +30,23 @@ public:
     static void toLower(std::string& input);
     static void toUpper(std::string& input);
 
+    // Wrap a name for use as an escaped identifier in generated Cypher. A backtick inside the
+    // name is doubled, which is the form the lexer reads as one identifier and the transformer
+    // collapses back to a single backtick.
+    static std::string quoteIdentifier(std::string_view name) {
+        std::string quoted;
+        quoted.reserve(name.size() + 2);
+        quoted += '`';
+        for (const char c : name) {
+            quoted += c;
+            if (c == '`') {
+                quoted += c;
+            }
+        }
+        quoted += '`';
+        return quoted;
+    }
+
     static bool isSpace(char c) {
         return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
     }

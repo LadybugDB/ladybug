@@ -4,6 +4,7 @@
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "common/serializer/buffer_writer.h"
+#include "common/string_utils.h"
 #include "transaction/transaction.h"
 #include <format>
 
@@ -31,8 +32,10 @@ std::string BuiltinIndexAuxInfo::toCypher(const IndexCatalogEntry& indexEntry,
         return "";
     }
     auto propertyName = tableEntry->getProperty(propertyIDs[0]).getName();
-    return std::format("CREATE {} INDEX `{}` FOR (n:`{}`) ON (n.`{}`);", indexEntry.getIndexType(),
-        indexEntry.getIndexName(), tableEntry->getName(), propertyName);
+    return std::format("CREATE {} INDEX {} FOR (n:{}) ON (n.{});", indexEntry.getIndexType(),
+        common::StringUtils::quoteIdentifier(indexEntry.getIndexName()),
+        common::StringUtils::quoteIdentifier(tableEntry->getName()),
+        common::StringUtils::quoteIdentifier(propertyName));
 }
 
 bool IndexCatalogEntry::containsPropertyID(common::property_id_t propertyID) const {

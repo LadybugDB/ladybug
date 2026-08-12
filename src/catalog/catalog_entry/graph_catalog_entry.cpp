@@ -1,6 +1,7 @@
 #include "catalog/catalog_entry/graph_catalog_entry.h"
 
 #include "common/serializer/deserializer.h"
+#include "common/string_utils.h"
 #include <format>
 
 using namespace lbug::common;
@@ -25,9 +26,10 @@ std::unique_ptr<GraphCatalogEntry> GraphCatalogEntry::deserialize(Deserializer& 
 }
 
 std::string GraphCatalogEntry::toCypher(const ToCypherInfo& /* info */) const {
-    return std::format("DROP GRAPH IF EXISTS `{}`;\n"
-                       "CREATE GRAPH `{}` {};\n",
-        getName(), getName(), isAnyGraph ? "ANY" : "");
+    const auto name = common::StringUtils::quoteIdentifier(getName());
+    return std::format("DROP GRAPH IF EXISTS {};\n"
+                       "CREATE GRAPH {} {};\n",
+        name, name, isAnyGraph ? "ANY" : "");
 }
 
 } // namespace catalog
