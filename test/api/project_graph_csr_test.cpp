@@ -58,6 +58,22 @@ TEST_F(ProjectGraphCsrTest, materializedCsrSurvivesConsumingQueries) {
     ASSERT_EQ(arrowResult->getCSRMetadata().indices.size(), 3u);
 }
 
+TEST_F(ProjectGraphCsrTest, recordsRelChangeEpochs) {
+    ASSERT_TRUE(conn->query("CALL PROJECT_GRAPH('CsrG', ['CsrNode'], ['CsrEdge'])")->isSuccess());
+    const auto& entry = getNativeEntry("CsrG");
+    ASSERT_EQ(entry.relCsrEpochs.size(), 1u);
+    const auto epochAtProjection = entry.relCsrEpochs[0];
+    // Mutating the rel table bumps its change epoch; a fresh projection must record a later one,
+    // which is what lets consumers detect that an old entry's pinned CSR is stale.
+    ASSERT_TRUE(conn->query("MATCH (a:CsrNode {id:2}), (b:CsrNode {id:0}) "
+                            "CREATE (a)-[:CsrEdge]->(b)")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CALL PROJECT_GRAPH('CsrG2', ['CsrNode'], ['CsrEdge'])")->isSuccess());
+    const auto& entry2 = getNativeEntry("CsrG2");
+    ASSERT_EQ(entry2.relCsrEpochs.size(), 1u);
+    ASSERT_GT(entry2.relCsrEpochs[0], epochAtProjection);
+}
+
 TEST_F(ProjectGraphCsrTest, skipsMaterializationWithPredicate) {
     ASSERT_TRUE(
         conn->query("CALL PROJECT_GRAPH('CsrGPred', ['CsrNode'], {CsrEdge: 'r.rowid >= 0'})")

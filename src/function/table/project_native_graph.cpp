@@ -1,5 +1,7 @@
 #include <algorithm>
 
+#include "catalog/catalog.h"
+#include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/binder.h"
 #include "common/types/value/nested.h"
 #include "function/gds/gds.h"
@@ -12,6 +14,8 @@
 #include "main/query_result/arrow_query_result.h"
 #include "parser/parser.h"
 #include "processor/execution_context.h"
+#include "storage/storage_manager.h"
+#include "storage/table/table.h"
 #include "transaction/transaction_context.h"
 #include <format>
 
@@ -64,16 +68,32 @@ static void materializeRelCsr(ParsedNativeGraphEntry& entry, main::ClientContext
     const auto& nodeTable = entry.nodeInfos[0].tableName;
     main::Connection conn{context->getDatabase()};
     entry.relCsrResults.reserve(entry.relInfos.size());
+    entry.relCsrEpochs.reserve(entry.relInfos.size());
     for (const auto& relInfo : entry.relInfos) {
+        // Capture the rel table's change epoch BEFORE the scan: a mutation racing the
+        // materialization bumps the epoch, so consumers see a mismatch and fall back.
+        uint64_t epoch = 0;
+        const auto* relEntry = catalog::Catalog::Get(*context)->getTableCatalogEntry(
+            transaction::Transaction::Get(*context), relInfo.tableName);
+        const auto& relGroup = relEntry->constCast<catalog::RelGroupCatalogEntry>();
+        if (!relGroup.getRelEntryInfos().empty()) {
+            const auto* relTable = storage::StorageManager::Get(*context)->getTable(
+                relGroup.getRelEntryInfos()[0].oid);
+            if (relTable != nullptr) {
+                epoch = relTable->getChangeEpoch();
+            }
+        }
         auto query = std::format("MATCH (a:`{}`)-[r:`{}`]->(b:`{}`) RETURN a.rowid, b.rowid",
             nodeTable, relInfo.tableName, nodeTable);
         auto result = conn.queryAsArrow(query, ARROW_CHUNK_SIZE);
         auto* arrowResult = dynamic_cast<main::ArrowQueryResult*>(result.get());
         if (arrowResult != nullptr && arrowResult->isSuccess() && arrowResult->hasCSRMetadata()) {
             entry.relCsrResults.push_back(std::shared_ptr<main::QueryResult>{std::move(result)});
+            entry.relCsrEpochs.push_back(epoch);
         } else {
             // Shape not tracked (or scan failed): this rel stays unmaterialized.
             entry.relCsrResults.push_back(nullptr);
+            entry.relCsrEpochs.push_back(0);
         }
     }
 }
