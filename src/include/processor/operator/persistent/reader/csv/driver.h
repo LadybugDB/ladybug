@@ -44,7 +44,8 @@ public:
     virtual ~ParsingDriver() = default;
 
     bool done(uint64_t rowNum);
-    virtual bool addValue(uint64_t rowNum, common::column_id_t columnIdx, std::string_view value);
+    virtual bool addValue(uint64_t rowNum, common::column_id_t columnIdx, std::string_view value,
+        bool valueWasQuoted = false);
     virtual bool addRow(uint64_t rowNum, common::column_id_t columnCount,
         std::optional<WarningDataWithColumnInfo> warningData);
 
@@ -96,7 +97,8 @@ public:
     explicit SniffCSVDialectDriver(SerialCSVReader* reader);
 
     bool done(uint64_t rowNum) const;
-    bool addValue(uint64_t rowNum, common::column_id_t columnIdx, std::string_view value) override;
+    bool addValue(uint64_t rowNum, common::column_id_t columnIdx, std::string_view value,
+        bool valueWasQuoted = false) override;
     bool addRow(uint64_t rowNum, common::column_id_t columnCount,
         std::optional<WarningDataWithColumnInfo> warningData) override;
     void reset();
@@ -126,7 +128,8 @@ public:
         const function::ExtraScanTableFuncBindInput* bindInput);
 
     bool done(uint64_t rowNum);
-    bool addValue(uint64_t rowNum, common::column_id_t columnIdx, std::string_view value) override;
+    bool addValue(uint64_t rowNum, common::column_id_t columnIdx, std::string_view value,
+        bool valueWasQuoted = false) override;
 
 public:
     std::vector<std::string> firstRow;
@@ -145,7 +148,8 @@ public:
         return (0 < rowNum);
     };
 
-    bool addValue(uint64_t rowNum, common::column_id_t columnIdx, std::string_view value) override;
+    bool addValue(uint64_t rowNum, common::column_id_t columnIdx, std::string_view value,
+        bool valueWasQuoted = false) override;
 
 public:
     std::vector<std::pair<std::string, common::LogicalType>> columns;
