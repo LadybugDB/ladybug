@@ -6,6 +6,7 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/binder.h"
+#include "common/string_utils.h"
 #include "function/table/bind_input.h"
 #include "graph/graph_entry_set.h"
 #include "graph/on_disk_graph.h"
@@ -83,12 +84,14 @@ static NativeGraphEntryTableInfo bindNodeEntry(ClientContext& context, const std
         throw BinderException(std::format("{} is not a NODE table.", tableName));
     }
     if (!predicate.empty()) {
-        auto cypher = std::format("MATCH (n:`{}`) RETURN n, {}", nodeEntry->getName(), predicate);
+        auto cypher = std::format("MATCH (n:{}) RETURN n, {}",
+            common::StringUtils::quoteIdentifier(nodeEntry->getName()), predicate);
         auto columns = getResultColumns(cypher, &context);
         DASSERT(columns.size() == 2);
         return {nodeEntry, columns[0], columns[1]};
     } else {
-        auto cypher = std::format("MATCH (n:`{}`) RETURN n", nodeEntry->getName());
+        auto cypher = std::format("MATCH (n:{}) RETURN n",
+            common::StringUtils::quoteIdentifier(nodeEntry->getName()));
         auto columns = getResultColumns(cypher, &context);
         DASSERT(columns.size() == 1);
         return {nodeEntry, columns[0], nullptr /* empty predicate */};
@@ -105,13 +108,14 @@ static NativeGraphEntryTableInfo bindRelEntry(ClientContext& context, const std:
             std::format("{} has catalog entry type. REL entry was expected.", tableName));
     }
     if (!predicate.empty()) {
-        auto cypher =
-            std::format("MATCH ()-[r:`{}`]->() RETURN r, {}", relEntry->getName(), predicate);
+        auto cypher = std::format("MATCH ()-[r:{}]->() RETURN r, {}",
+            common::StringUtils::quoteIdentifier(relEntry->getName()), predicate);
         auto columns = getResultColumns(cypher, &context);
         DASSERT(columns.size() == 2);
         return {relEntry, columns[0], columns[1]};
     } else {
-        auto cypher = std::format("MATCH ()-[r:`{}`]->() RETURN r", relEntry->getName());
+        auto cypher = std::format("MATCH ()-[r:{}]->() RETURN r",
+            common::StringUtils::quoteIdentifier(relEntry->getName()));
         auto columns = getResultColumns(cypher, &context);
         DASSERT(columns.size() == 1);
         return {relEntry, columns[0], nullptr /* empty predicate */};

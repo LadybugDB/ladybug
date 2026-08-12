@@ -102,8 +102,7 @@ std::string PropertyDefinitionCollection::toCypher() const {
         if (typeStr.find("MAP") != std::string::npos) {
             StringUtils::replaceAll(typeStr, "  ", ",");
         }
-        ss << "`" << def.getName() << "`"
-           << " " << typeStr << ",";
+        ss << common::StringUtils::quoteIdentifier(def.getName()) << " " << typeStr << ",";
     }
     return ss.str();
 }

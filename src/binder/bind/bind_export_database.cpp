@@ -58,14 +58,17 @@ void bindExportTableData(ExportedTableData& tableData, const std::string& query,
 }
 
 static std::string getExportNodeTableDataQuery(const TableCatalogEntry& entry) {
-    return std::format("match (a:`{}`) return a.*", entry.getName());
+    return std::format("match (a:{}) return a.*", StringUtils::quoteIdentifier(entry.getName()));
 }
 
 static std::string getExportRelTableDataQuery(const TableCatalogEntry& relGroupEntry,
     const NodeTableCatalogEntry& srcEntry, const NodeTableCatalogEntry& dstEntry) {
-    return std::format("match (a:`{}`)-[r:`{}`]->(b:`{}`) return a.{},b.{},r.*;",
-        srcEntry.getName(), relGroupEntry.getName(), dstEntry.getName(),
-        srcEntry.getPrimaryKeyName(), dstEntry.getPrimaryKeyName());
+    return std::format("match (a:{})-[r:{}]->(b:{}) return a.{},b.{},r.*;",
+        StringUtils::quoteIdentifier(srcEntry.getName()),
+        StringUtils::quoteIdentifier(relGroupEntry.getName()),
+        StringUtils::quoteIdentifier(dstEntry.getName()),
+        StringUtils::quoteIdentifier(srcEntry.getPrimaryKeyName()),
+        StringUtils::quoteIdentifier(dstEntry.getPrimaryKeyName()));
 }
 
 static std::vector<ExportedTableData> getExportInfo(const Catalog& catalog,

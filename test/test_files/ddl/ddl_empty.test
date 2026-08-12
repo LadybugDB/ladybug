@@ -424,3 +424,42 @@ Adam|2020|Karissa
 Adam|2020|Zhang
 Karissa|2021|Zhang
 Zhang|2022|Noura
+
+-CASE EscapedIdentifierCollapsesDoubledBacktick
+-STATEMENT CREATE NODE TABLE `a``b` (id INT64, `c``d` INT64, PRIMARY KEY(id));
+---- 1
+Table a`b has been created.
+-STATEMENT CALL SHOW_TABLES() RETURN name;
+---- 1
+a`b
+-STATEMENT CREATE (:`a``b` {id: 1, `c``d`: 2});
+---- ok
+-STATEMENT MATCH (n:`a``b`) RETURN n.`c``d`;
+---- 1
+2
+-STATEMENT CALL TABLE_INFO('a`b') RETURN name;
+---- 2
+c`d
+id
+
+-CASE EscapedIdentifierSurvivesExportImport
+-SKIP_WASM
+-STATEMENT CREATE NODE TABLE `x``y` (id INT64, `p``q` INT64, PRIMARY KEY(id));
+---- 1
+Table x`y has been created.
+-STATEMENT CREATE (:`x``y` {id: 1, `p``q`: 2});
+---- ok
+-STATEMENT EXPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_backtick/db";
+---- 1
+Exported database successfully.
+-IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_backtick/db"
+-STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_backtick/db";
+---- 1
+Imported database successfully.
+-STATEMENT CALL SHOW_TABLES() RETURN name;
+---- 1
+x`y
+-STATEMENT MATCH (n:`x``y`) RETURN n.`p``q`;
+---- 1
+2
+

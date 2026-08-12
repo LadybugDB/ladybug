@@ -213,7 +213,8 @@ static std::string getFromToStr(const NodeTableIDPair& pair, const Catalog* cata
         srcTableName = catalog->getTableCatalogEntry(transaction, pair.srcTableID)->getName();
         dstTableName = catalog->getTableCatalogEntry(transaction, pair.dstTableID)->getName();
     }
-    return std::format("FROM `{}` TO `{}`", srcTableName, dstTableName);
+    return std::format("FROM {} TO {}", common::StringUtils::quoteIdentifier(srcTableName),
+        common::StringUtils::quoteIdentifier(dstTableName));
 }
 
 static std::string getMultiplicityStr(RelMultiplicity srcMultiplicity,
@@ -227,7 +228,7 @@ std::string RelGroupCatalogEntry::toCypher(const ToCypherInfo& info) const {
     auto catalog = Catalog::Get(*relGroupInfo.context);
     auto transaction = transaction::Transaction::Get(*relGroupInfo.context);
     std::stringstream ss;
-    ss << std::format("CREATE REL TABLE `{}` (", getName());
+    ss << std::format("CREATE REL TABLE {} (", common::StringUtils::quoteIdentifier(getName()));
     DASSERT(!relTableInfos.empty());
     ss << getFromToStr(relTableInfos[0].nodePair, catalog, transaction, storage);
     if (relTableInfos[0].srcMultiplicity != srcMultiplicity ||
