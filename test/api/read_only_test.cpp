@@ -29,10 +29,9 @@ TEST_F(ReadOnlyTest, ProjectGraphOnReadOnlyDatabase) {
     ASSERT_TRUE(conn->query("CREATE NODE TABLE RoNode(id INT64 PRIMARY KEY)")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE REL TABLE RoEdge(FROM RoNode TO RoNode)")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE (:RoNode {id:0}), (:RoNode {id:1})")->isSuccess());
-    ASSERT_TRUE(
-        conn->query("MATCH (a:RoNode {id:0}), (b:RoNode {id:1}) "
-                    "CREATE (a)-[:RoEdge]->(b)")
-            ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:RoNode {id:0}), (b:RoNode {id:1}) "
+                            "CREATE (a)-[:RoEdge]->(b)")
+                    ->isSuccess());
     systemConfig->readOnly = true;
     createDBAndConn();
     // The graph-projection trio only mutates the session-local GraphEntrySet — it must work on
