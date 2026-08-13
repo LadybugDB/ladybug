@@ -22,7 +22,7 @@ private:
     void visitAlter(const Statement& /*statement*/) override { readOnly = false; }
     void visitCopyFrom(const Statement& /*statement*/) override { readOnly = false; }
     void visitStandaloneCall(const Statement& /*statement*/) override { readOnly = true; }
-    void visitStandaloneCallFunction(const Statement& /*statement*/) override { readOnly = false; }
+    void visitStandaloneCallFunction(const Statement& statement) override;
     void visitCreateMacro(const Statement& /*statement*/) override { readOnly = false; }
     void visitCreateGraph(const Statement& /*statement*/) override { readOnly = false; }
     void visitExtension(const Statement& /*statement*/) override;
