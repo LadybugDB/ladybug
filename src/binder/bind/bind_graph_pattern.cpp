@@ -6,6 +6,7 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "common/constants.h"
 #include "common/enums/rel_direction.h"
 #include "common/exception/binder.h"
 #include "common/types/types.h"
@@ -25,6 +26,14 @@ using namespace lbug::catalog;
 
 namespace lbug {
 namespace binder {
+
+// Returns true only for attached native LBUG databases. Foreign attached databases
+// (sqlite/duckdb/postgres/...) must not participate in default-database or rel-context
+// resolution: rel tables referencing foreign node tables live in the main catalog and
+// unqualified names must keep resolving there.
+static bool isLbugDatabase(main::DatabaseManager* dbManager, const std::string& dbName) {
+    return dbManager->getAttachedDatabase(dbName)->getDBType() == ATTACHED_LBUG_DB_TYPE;
+}
 
 // A graph pattern contains node/rel and a set of key-value pairs associated with the variable. We
 // bind node/rel as query graph and key-value pairs as a separate collection. This collection is
@@ -195,28 +204,27 @@ std::shared_ptr<RelExpression> Binder::bindQueryRel(const RelPattern& relPattern
                               " to relationship with same name is not supported.");
     }
     // Infer the catalog context from the endpoint nodes: if every endpoint table belongs
-    // to the same single attached database, unqualified rel labels (and anonymous rel
-    // patterns) resolve in that database's catalog. Mixed or main-only endpoints yield no
-    // context, so rel labels fall back to the default catalog (main unless USE db/GRAPH).
+    // to the same single attached LBUG database, unqualified rel labels (and anonymous rel
+    // patterns) resolve in that database's catalog. Main and foreign endpoint tables
+    // (sqlite/duckdb/postgres) invalidate the context: rel tables referencing foreign node
+    // tables (e.g. a main-catalog rel table over attached foreign nodes) must still resolve
+    // in the default catalog.
+    auto dbManager = main::DatabaseManager::Get(*clientContext);
     std::string contextDbName;
-    bool sawAttached = false;
-    bool sawMain = false;
+    bool invalidContext = false;
     for (auto* node : {leftNode.get(), rightNode.get()}) {
         for (auto* entry : node->getEntries()) {
             auto dbName = node->getDbName(entry);
-            if (dbName.empty()) {
-                sawMain = true;
-            } else {
-                sawAttached = true;
-                if (contextDbName.empty()) {
-                    contextDbName = dbName;
-                } else if (contextDbName != dbName) {
-                    contextDbName.clear();
-                }
+            if (dbName.empty() || !isLbugDatabase(dbManager, dbName)) {
+                invalidContext = true;
+            } else if (contextDbName.empty()) {
+                contextDbName = dbName;
+            } else if (contextDbName != dbName) {
+                invalidContext = true;
             }
         }
     }
-    if (sawMain || !sawAttached || contextDbName.empty()) {
+    if (invalidContext || contextDbName.empty()) {
         contextDbName.clear();
     }
     auto [entries, dbNames] = bindRelGroupEntries(relPattern.getTableNames(), contextDbName);
@@ -779,7 +787,8 @@ Binder::bindNodeTableEntries(const std::vector<std::string>& tableNames) const {
     if (auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
         defaultGraphCatalog != nullptr) {
         catalog = defaultGraphCatalog;
-    } else if (dbManager->hasDefaultDatabase()) {
+    } else if (dbManager->hasDefaultDatabase() &&
+               isLbugDatabase(dbManager, dbManager->getDefaultDatabase())) {
         activeDbName = dbManager->getDefaultDatabase();
         catalog = dbManager->getAttachedDatabase(activeDbName)->getCatalog();
     } else {
@@ -854,7 +863,8 @@ std::pair<TableCatalogEntry*, std::string> Binder::bindNodeTableEntry(
         if (auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
             defaultGraphCatalog != nullptr) {
             catalog = defaultGraphCatalog;
-        } else if (dbManager->hasDefaultDatabase()) {
+        } else if (dbManager->hasDefaultDatabase() &&
+                   isLbugDatabase(dbManager, dbManager->getDefaultDatabase())) {
             resolvedDbName = dbManager->getDefaultDatabase();
             catalog = dbManager->getAttachedDatabase(resolvedDbName)->getCatalog();
         } else {
@@ -893,7 +903,8 @@ Binder::bindRelGroupEntries(const std::vector<std::string>& tableNames,
     } else if (auto defaultGraphCatalog = dbManager->getDefaultGraphCatalog();
                defaultGraphCatalog != nullptr) {
         catalog = defaultGraphCatalog;
-    } else if (dbManager->hasDefaultDatabase()) {
+    } else if (dbManager->hasDefaultDatabase() &&
+               isLbugDatabase(dbManager, dbManager->getDefaultDatabase())) {
         activeDbName = dbManager->getDefaultDatabase();
     } else {
         catalog = Catalog::Get(*clientContext);
