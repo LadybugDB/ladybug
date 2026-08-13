@@ -237,11 +237,28 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
                 for (auto tableID : scanNode->getTableIDs()) {
                     if (tableID == expectedBoundTableID) {
                         // Route each source node table to its owning storage manager/catalog
-                        // (main or the attached database recorded on the scan).
+                        // (main or the attached database recorded on the scan). Only native
+                        // LBUG attached databases participate in this routing; foreign node
+                        // tables (sqlite/duckdb/postgres) are registered in the main storage
+                        // manager/catalog and keep the pre-attach path.
                         auto dbName =
                             nodeDBMap.contains(tableID) ? nodeDBMap.at(tableID) : std::string{};
-                        auto [cat, sm] = main::DatabaseManager::resolveTableStorage(*clientContext,
-                            tableID, dbName);
+                        catalog::Catalog* cat = nullptr;
+                        storage::StorageManager* sm = nullptr;
+                        if (!dbName.empty()) {
+                            auto* attachedDB = main::DatabaseManager::Get(*clientContext)
+                                                   ->getAttachedDatabase(dbName);
+                            if (attachedDB->getDBType() == common::ATTACHED_LBUG_DB_TYPE) {
+                                auto [cat2, sm2] = main::DatabaseManager::resolveTableStorage(
+                                    *clientContext, tableID, dbName);
+                                cat = cat2;
+                                sm = sm2;
+                            }
+                        }
+                        if (cat == nullptr) {
+                            cat = catalog::Catalog::Get(*clientContext);
+                            sm = storage::StorageManager::Get(*clientContext);
+                        }
                         auto table = sm->getTable(tableID)->ptrCast<NodeTable>();
                         sourceNodeTables.push_back(table);
                         auto tableEntry = cat->getTableCatalogEntry(transaction, tableID);
