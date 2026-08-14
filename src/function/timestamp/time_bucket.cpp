@@ -9,6 +9,7 @@
 #include "common/exception/binder.h"
 #include "common/exception/overflow.h"
 #include "common/types/date_t.h"
+#include "common/types/int128_t.h"
 #include "common/types/interval_t.h"
 #include "common/types/timestamp_t.h"
 
@@ -36,17 +37,17 @@ struct TimeBucketBindData final : FunctionBindData {
     interval_t interval;
 };
 
-static __int128 floorDiv(__int128 value, __int128 divisor) {
+static int128_t floorDiv(int128_t value, int128_t divisor) {
     auto quotient = value / divisor;
     if (value % divisor < 0) {
-        --quotient;
+        quotient = quotient - 1;
     }
     return quotient;
 }
 
 static int64_t fixedDurationMicros(const interval_t& interval) {
-    const auto duration = static_cast<__int128>(interval.days) * Interval::MICROS_PER_DAY +
-                          static_cast<__int128>(interval.micros);
+    const auto duration =
+        int128_t{interval.days} * Interval::MICROS_PER_DAY + int128_t{interval.micros};
     if (duration <= 0 || duration > std::numeric_limits<int64_t>::max()) {
         throw BinderException("time_bucket interval must be positive and representable.");
     }
@@ -54,9 +55,9 @@ static int64_t fixedDurationMicros(const interval_t& interval) {
 }
 
 static interval_t multiplyInterval(const interval_t& interval, int64_t multiplier) {
-    const auto months = static_cast<__int128>(interval.months) * multiplier;
-    const auto days = static_cast<__int128>(interval.days) * multiplier;
-    const auto micros = static_cast<__int128>(interval.micros) * multiplier;
+    const auto months = int128_t{interval.months} * multiplier;
+    const auto days = int128_t{interval.days} * multiplier;
+    const auto micros = int128_t{interval.micros} * multiplier;
     if (months < std::numeric_limits<int32_t>::min() ||
         months > std::numeric_limits<int32_t>::max() ||
         days < std::numeric_limits<int32_t>::min() || days > std::numeric_limits<int32_t>::max() ||
@@ -128,7 +129,7 @@ template<typename T>
 static T bucketTimestampValue(T value, const interval_t& interval) {
     if (interval.months == 0) {
         const auto widthMicros = fixedDurationMicros(interval);
-        __int128 bucketValue = 0;
+        int128_t bucketValue{0};
         if constexpr (std::is_same_v<T, timestamp_sec_t>) {
             const auto width = widthMicros / Interval::MICROS_PER_SEC;
             bucketValue = floorDiv(value.value, width) * width;
@@ -136,7 +137,7 @@ static T bucketTimestampValue(T value, const interval_t& interval) {
             const auto width = widthMicros / Interval::MICROS_PER_MSEC;
             bucketValue = floorDiv(value.value, width) * width;
         } else if constexpr (std::is_same_v<T, timestamp_ns_t>) {
-            const auto width = static_cast<__int128>(widthMicros) * Interval::NANOS_PER_MICRO;
+            const auto width = int128_t{widthMicros} * Interval::NANOS_PER_MICRO;
             bucketValue = floorDiv(value.value, width) * width;
         } else {
             bucketValue = floorDiv(value.value, widthMicros) * widthMicros;
@@ -165,7 +166,7 @@ static T bucketTimestampValue(T value, const interval_t& interval) {
     } else if constexpr (std::is_same_v<T, timestamp_ms_t>) {
         return timestamp_ms_t{Timestamp::getEpochMilliSeconds(result)};
     } else if constexpr (std::is_same_v<T, timestamp_ns_t>) {
-        const auto resultNanos = static_cast<__int128>(result.value) * Interval::NANOS_PER_MICRO;
+        const auto resultNanos = int128_t{result.value} * Interval::NANOS_PER_MICRO;
         if (resultNanos < std::numeric_limits<int64_t>::min() ||
             resultNanos > std::numeric_limits<int64_t>::max()) {
             throw OverflowException("time_bucket result is out of TIMESTAMP_NS range.");
