@@ -9,7 +9,7 @@
 namespace lbug {
 namespace main {
 
-class ArrowQueryResult : public QueryResult {
+class LBUG_API ArrowQueryResult : public QueryResult {
     static constexpr QueryResultType type_ = QueryResultType::ARROW;
 
 public:
