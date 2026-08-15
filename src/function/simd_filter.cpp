@@ -110,13 +110,11 @@ common::sel_t selectVectorScalarTyped(const void* leftPtr, const void* rightPtr,
     const auto right = static_cast<const T*>(rightPtr);
     common::sel_t selected = 0;
     for (common::sel_t i = 0; i < count; ++i) {
-        if ((leftNullMask && common::NullMask::isNull(leftNullMask, i)) ||
-            (rightNullMask && common::NullMask::isNull(rightNullMask, i))) {
-            continue;
-        }
-        if (compare<T, OPERATION>(left[i], right[i])) {
-            output[selected++] = i;
-        }
+        const auto isValid = (!leftNullMask || !common::NullMask::isNull(leftNullMask, i)) &&
+                             (!rightNullMask || !common::NullMask::isNull(rightNullMask, i));
+        const auto matches = isValid && compare<T, OPERATION>(left[i], right[i]);
+        output[selected] = i;
+        selected += matches;
     }
     return selected;
 }
