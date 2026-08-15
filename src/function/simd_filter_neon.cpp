@@ -1,4 +1,3 @@
-#include <array>
 #include <cstdint>
 #include <type_traits>
 
@@ -22,11 +21,6 @@ namespace function {
 namespace simd {
 
 namespace {
-
-template<typename T>
-using MaskLane = std::conditional_t<sizeof(T) == 1, uint8_t,
-    std::conditional_t<sizeof(T) == 2, uint16_t,
-        std::conditional_t<sizeof(T) == 4, uint32_t, uint64_t>>>;
 
 template<typename T>
 auto loadVector(const T* data) {
@@ -154,19 +148,6 @@ auto notMask(MASK mask) {
     }
 }
 
-template<typename T, typename MASK>
-void storeMask(MaskLane<T>* data, MASK mask) {
-    if constexpr (sizeof(T) == 1) {
-        vst1q_u8(data, mask);
-    } else if constexpr (sizeof(T) == 2) {
-        vst1q_u16(data, mask);
-    } else if constexpr (sizeof(T) == 4) {
-        vst1q_u32(data, mask);
-    } else {
-        vst1q_u64(data, mask);
-    }
-}
-
 template<typename T, ComparisonOperation OPERATION, typename VECTOR>
 auto compareVector(VECTOR left, VECTOR right) {
     const auto equal = equalVector<T>(left, right);
@@ -215,8 +196,21 @@ uint32_t applyNullMask(uint32_t laneMask, const uint64_t* nullMask, common::sel_
     return laneMask & ~static_cast<uint32_t>(nullLanes);
 }
 
+template<common::sel_t LANE_COUNT>
 common::sel_t compactLaneMask(uint32_t laneMask, common::sel_t base, common::sel_t* output,
     common::sel_t selected) {
+    constexpr auto FULL_MASK = UINT32_MAX >> (32 - LANE_COUNT);
+    if (laneMask == 0) {
+        return selected;
+    }
+    if (laneMask == FULL_MASK) {
+        auto positions = vaddq_u64(vdupq_n_u64(base), vsetq_lane_u64(1, vdupq_n_u64(0), 1));
+        for (common::sel_t lane = 0; lane < LANE_COUNT; lane += 2) {
+            vst1q_u64(output + selected + lane, positions);
+            positions = vaddq_u64(positions, vdupq_n_u64(2));
+        }
+        return selected + LANE_COUNT;
+    }
     while (laneMask) {
         const auto lane = static_cast<common::sel_t>(std::countr_zero(laneMask));
         output[selected++] = base + lane;
@@ -227,30 +221,51 @@ common::sel_t compactLaneMask(uint32_t laneMask, common::sel_t base, common::sel
 
 template<typename T, typename MASK>
 uint32_t toLaneMask(MASK mask) {
-    constexpr common::sel_t LANE_COUNT = 16 / sizeof(T);
-    alignas(16) std::array<MaskLane<T>, LANE_COUNT> lanes;
-    storeMask<T>(lanes.data(), mask);
-    uint32_t laneMask = 0;
-    for (common::sel_t lane = 0; lane < LANE_COUNT; ++lane) {
-        laneMask |= static_cast<uint32_t>(lanes[lane] != 0) << lane;
+    if constexpr (sizeof(T) == 1) {
+        const auto bits = vshrq_n_u8(mask, 7);
+        const uint8x8_t weights = {1, 2, 4, 8, 16, 32, 64, 128};
+        const auto low = vaddv_u8(vmul_u8(vget_low_u8(bits), weights));
+        const auto high = vaddv_u8(vmul_u8(vget_high_u8(bits), weights));
+        return static_cast<uint32_t>(low) | (static_cast<uint32_t>(high) << 8);
+    } else if constexpr (sizeof(T) == 2) {
+        const uint16x8_t weights = {1, 2, 4, 8, 16, 32, 64, 128};
+        return vaddvq_u16(vmulq_u16(vshrq_n_u16(mask, 15), weights));
+    } else if constexpr (sizeof(T) == 4) {
+        const uint32x4_t weights = {1, 2, 4, 8};
+        return vaddvq_u32(vmulq_u32(vshrq_n_u32(mask, 31), weights));
+    } else {
+        const auto bits = vshrq_n_u64(mask, 63);
+        return static_cast<uint32_t>(vgetq_lane_u64(bits, 0) | (vgetq_lane_u64(bits, 1) << 1));
     }
-    return laneMask;
 }
 
 template<typename T, ComparisonOperation OPERATION>
 common::sel_t selectConstantTyped(const void* dataPtr, common::sel_t count, const void* constantPtr,
     const uint64_t* nullMask, common::sel_t* output) {
     constexpr common::sel_t LANE_COUNT = 16 / sizeof(T);
+    constexpr common::sel_t GROUP_LANE_COUNT = 32;
+    constexpr common::sel_t VECTORS_PER_GROUP = GROUP_LANE_COUNT / LANE_COUNT;
     const auto data = static_cast<const T*>(dataPtr);
     const auto constant = *static_cast<const T*>(constantPtr);
     const auto constantVector = broadcastVector(constant);
     common::sel_t selected = 0;
     common::sel_t base = 0;
+    for (; base + GROUP_LANE_COUNT <= count; base += GROUP_LANE_COUNT) {
+        uint32_t groupMask = 0;
+        for (common::sel_t vector = 0; vector < VECTORS_PER_GROUP; ++vector) {
+            const auto vectorBase = base + vector * LANE_COUNT;
+            auto laneMask = toLaneMask<T>(
+                compareVector<T, OPERATION>(loadVector(data + vectorBase), constantVector));
+            laneMask = applyNullMask<LANE_COUNT>(laneMask, nullMask, vectorBase);
+            groupMask |= laneMask << (vector * LANE_COUNT);
+        }
+        selected = compactLaneMask<GROUP_LANE_COUNT>(groupMask, base, output, selected);
+    }
     for (; base + LANE_COUNT <= count; base += LANE_COUNT) {
         auto laneMask =
             toLaneMask<T>(compareVector<T, OPERATION>(loadVector(data + base), constantVector));
         laneMask = applyNullMask<LANE_COUNT>(laneMask, nullMask, base);
-        selected = compactLaneMask(laneMask, base, output, selected);
+        selected = compactLaneMask<LANE_COUNT>(laneMask, base, output, selected);
     }
     for (; base < count; ++base) {
         if ((!nullMask || !common::NullMask::isNull(nullMask, base)) &&
@@ -291,16 +306,30 @@ template<typename T, ComparisonOperation OPERATION>
 common::sel_t selectVectorTyped(const void* leftPtr, const void* rightPtr, common::sel_t count,
     const uint64_t* leftNullMask, const uint64_t* rightNullMask, common::sel_t* output) {
     constexpr common::sel_t LANE_COUNT = 16 / sizeof(T);
+    constexpr common::sel_t GROUP_LANE_COUNT = 32;
+    constexpr common::sel_t VECTORS_PER_GROUP = GROUP_LANE_COUNT / LANE_COUNT;
     const auto left = static_cast<const T*>(leftPtr);
     const auto right = static_cast<const T*>(rightPtr);
     common::sel_t selected = 0;
     common::sel_t base = 0;
+    for (; base + GROUP_LANE_COUNT <= count; base += GROUP_LANE_COUNT) {
+        uint32_t groupMask = 0;
+        for (common::sel_t vector = 0; vector < VECTORS_PER_GROUP; ++vector) {
+            const auto vectorBase = base + vector * LANE_COUNT;
+            auto laneMask = toLaneMask<T>(compareVector<T, OPERATION>(loadVector(left + vectorBase),
+                loadVector(right + vectorBase)));
+            laneMask = applyNullMask<LANE_COUNT>(laneMask, leftNullMask, vectorBase);
+            laneMask = applyNullMask<LANE_COUNT>(laneMask, rightNullMask, vectorBase);
+            groupMask |= laneMask << (vector * LANE_COUNT);
+        }
+        selected = compactLaneMask<GROUP_LANE_COUNT>(groupMask, base, output, selected);
+    }
     for (; base + LANE_COUNT <= count; base += LANE_COUNT) {
         auto laneMask = toLaneMask<T>(
             compareVector<T, OPERATION>(loadVector(left + base), loadVector(right + base)));
         laneMask = applyNullMask<LANE_COUNT>(laneMask, leftNullMask, base);
         laneMask = applyNullMask<LANE_COUNT>(laneMask, rightNullMask, base);
-        selected = compactLaneMask(laneMask, base, output, selected);
+        selected = compactLaneMask<LANE_COUNT>(laneMask, base, output, selected);
     }
     for (; base < count; ++base) {
         if ((!leftNullMask || !common::NullMask::isNull(leftNullMask, base)) &&
@@ -384,7 +413,7 @@ common::sel_t selectVectorNEON(const void* left, const void* right, common::sel_
         return selectVectorTyped<int32_t>(left, right, count, leftNullMask, rightNullMask, output,
             operation);
     case common::PhysicalTypeID::INT64:
-        return selectVectorTyped<int64_t>(left, right, count, leftNullMask, rightNullMask, output,
+        return selectVectorScalar(left, right, count, leftNullMask, rightNullMask, output, type,
             operation);
     case common::PhysicalTypeID::UINT8:
         return selectVectorTyped<uint8_t>(left, right, count, leftNullMask, rightNullMask, output,
@@ -396,13 +425,13 @@ common::sel_t selectVectorNEON(const void* left, const void* right, common::sel_
         return selectVectorTyped<uint32_t>(left, right, count, leftNullMask, rightNullMask, output,
             operation);
     case common::PhysicalTypeID::UINT64:
-        return selectVectorTyped<uint64_t>(left, right, count, leftNullMask, rightNullMask, output,
+        return selectVectorScalar(left, right, count, leftNullMask, rightNullMask, output, type,
             operation);
     case common::PhysicalTypeID::FLOAT:
         return selectVectorTyped<float>(left, right, count, leftNullMask, rightNullMask, output,
             operation);
     case common::PhysicalTypeID::DOUBLE:
-        return selectVectorTyped<double>(left, right, count, leftNullMask, rightNullMask, output,
+        return selectVectorScalar(left, right, count, leftNullMask, rightNullMask, output, type,
             operation);
     default:
         return 0;
