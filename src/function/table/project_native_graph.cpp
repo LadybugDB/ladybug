@@ -95,8 +95,11 @@ static void materializeRelCsr(ParsedNativeGraphEntry& entry, main::ClientContext
             entry.relCsrEpochs.push_back(epoch);
         } else {
             // Shape not tracked (or scan failed): this rel stays unmaterialized.
+            // Record the captured epoch anyway — it is the table's change epoch at projection
+            // time, even without a materialized CSR. Consumers check relCsrResults[i] for null
+            // to decide whether to use the pinned CSR or fall back to scanning storage.
             entry.relCsrResults.push_back(nullptr);
-            entry.relCsrEpochs.push_back(0);
+            entry.relCsrEpochs.push_back(epoch);
         }
     }
 }
