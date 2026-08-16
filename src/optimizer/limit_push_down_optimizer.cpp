@@ -78,7 +78,8 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op,
         }
         if (op->getChild(0)->getOperatorType() != LogicalOperatorType::PATH_PROPERTY_PROBE ||
             op->getChild(0)->getChild(0)->getOperatorType() !=
-                LogicalOperatorType::RECURSIVE_EXTEND || skipNumber > INVALID_LIMIT - limitNumber) {
+                LogicalOperatorType::RECURSIVE_EXTEND ||
+            skipNumber > INVALID_LIMIT - limitNumber) {
             return;
         }
         auto& extend = op->getChild(0)->getChild(0)->cast<LogicalRecursiveExtend>();
