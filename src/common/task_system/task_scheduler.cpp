@@ -41,8 +41,13 @@ TaskScheduler::~TaskScheduler() {
 
 void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
     processor::ExecutionContext* context, bool launchNewWorkerThread) {
+    scheduleTaskAndWaitOrError(task, context->clientContext, launchNewWorkerThread);
+}
+
+void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
+    main::ClientContext* clientContext, bool launchNewWorkerThread) {
     for (auto& dependency : task->children) {
-        scheduleTaskAndWaitOrError(dependency, context);
+        scheduleTaskAndWaitOrError(dependency, clientContext);
         if (dependency->terminate()) {
             return;
         }
@@ -71,16 +76,16 @@ void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task
             taskLck.unlock();
             break;
         }
-        if (context->clientContext->hasTimeout()) {
-            timeout = context->clientContext->getTimeoutRemainingInMS();
+        if (clientContext->hasTimeout()) {
+            timeout = clientContext->getTimeoutRemainingInMS();
             if (timeout == 0) {
-                context->clientContext->interrupt();
+                clientContext->interrupt();
             } else {
                 timedWait = true;
             }
         } else if (task->hasExceptionNoLock()) {
             // Interrupt tasks that errored, so other threads can stop working on them early.
-            context->clientContext->interrupt();
+            clientContext->interrupt();
         }
         if (timedWait) {
             task->cv.wait_for(taskLck, std::chrono::milliseconds(timeout));
@@ -152,9 +157,14 @@ TaskScheduler::~TaskScheduler() {
 }
 
 void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
-    processor::ExecutionContext* context, bool) {
+    processor::ExecutionContext* context, bool launchNewWorkerThread) {
+    scheduleTaskAndWaitOrError(task, context->clientContext, launchNewWorkerThread);
+}
+
+void TaskScheduler::scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
+    main::ClientContext* clientContext, bool) {
     for (auto& dependency : task->children) {
-        scheduleTaskAndWaitOrError(dependency, context);
+        scheduleTaskAndWaitOrError(dependency, clientContext);
         if (dependency->terminate()) {
             return;
         }

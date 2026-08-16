@@ -56,6 +56,8 @@ public:
     // thread will be working on the given task.
     void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
         processor::ExecutionContext* context, bool launchNewWorkerThread = false);
+    void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
+        main::ClientContext* clientContext, bool launchNewWorkerThread = false);
 
     static TaskScheduler* Get(const main::ClientContext& context);
 
@@ -90,6 +92,8 @@ public:
 
     void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
         processor::ExecutionContext* context, bool launchNewWorkerThread = false);
+    void scheduleTaskAndWaitOrError(const std::shared_ptr<Task>& task,
+        main::ClientContext* clientContext, bool launchNewWorkerThread = false);
 
     static TaskScheduler* Get(const main::ClientContext& context);
 
