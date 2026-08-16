@@ -1,3 +1,5 @@
+#include <cerrno>
+#include <cstring>
 #include <fstream>
 #include <string>
 #include <string_view>
@@ -36,7 +38,7 @@ public:
             !std::getenv("USE_EXISTING_BINARY_DATASET") && dataset.ends_with("binary-demo");
         if (datasetType == TestGroup::DatasetType::LBUG && dataset != "empty" &&
             !generateBinaryDemo) {
-            std::filesystem::copy(dataset + "/" + TESTING_DB_FILE_NAME, databasePath);
+            copyFileManual(dataset + "/" + TESTING_DB_FILE_NAME, databasePath);
         }
         createDB(checkpointWaitTimeout);
         createConns(connNames);
@@ -86,8 +88,7 @@ public:
         }
         const auto attachDbPath =
             std::filesystem::path(databasePath).parent_path().string() + "/attach_target.lbdb";
-        std::filesystem::copy(buildDbPath, attachDbPath,
-            std::filesystem::copy_options::overwrite_existing);
+        copyFileManual(buildDbPath, attachDbPath);
     }
 
     void setUpDataset() {
@@ -148,6 +149,28 @@ private:
         std::string datasetName = dataset;
         std::ranges::replace(datasetName, '/', '_');
         return TestHelper::getTempDir(datasetName + "_parquet_" + getTestGroupAndName());
+    }
+
+    // Manual file copy using ifstream/ofstream instead of std::filesystem::copy (which uses
+    // copy_file internally and fails on WASM with "Permission denied" errors).
+    static void copyFileManual(const std::string& from, const std::string& to) {
+        std::ifstream src(from, std::ios::binary);
+        if (!src) {
+            throw TestException(std::format("Error opening source file for copy: {}. Error: {}",
+                from, std::strerror(errno)));
+        }
+        std::ofstream dst(to, std::ios::binary | std::ios::trunc);
+        if (!dst) {
+            throw TestException(
+                std::format("Error opening destination file for copy: {}. Error: {}", to,
+                    std::strerror(errno)));
+        }
+        dst << src.rdbuf();
+        if (!dst) {
+            throw TestException(
+                std::format("Error writing to destination file during copy: {}. Error: {}", to,
+                    std::strerror(errno)));
+        }
     }
 
     // Used when `REWRITE_TESTS` mode is enabled.
