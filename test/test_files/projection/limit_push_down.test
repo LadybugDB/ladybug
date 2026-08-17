@@ -1,0 +1,26 @@
+-DATASET CSV tinysnb
+--
+
+-CASE FilterMustBlockDistinctLimitPushDown
+-LOG Rows filtered after DISTINCT must not count toward the outer LIMIT
+-STATEMENT UNWIND [0, 1, 100, 101] AS age WITH DISTINCT age WHERE age >= 100 RETURN age LIMIT 2;
+---- 2
+100
+101
+
+-CASE DistinctWithSkipAndLimitReturnsRows
+-LOG DISTINCT with finite SKIP and LIMIT returns the requested rows
+-STATEMENT MATCH (a:person) WITH DISTINCT a.age AS age SKIP 2 LIMIT 2 RETURN CASE WHEN age >= 0 THEN 1 ELSE 0 END AS marker;
+---- 2
+1
+1
+
+-CASE SkipOnlyMustNotCapDistinct
+-LOG SKIP without LIMIT has no finite row demand and must not cap DISTINCT
+-STATEMENT MATCH (a:person) WITH DISTINCT a.age AS age SKIP 2 RETURN CASE WHEN age >= 0 THEN 1 ELSE 0 END AS marker;
+---- 5
+1
+1
+1
+1
+1
