@@ -223,15 +223,20 @@ template<typename T, typename MASK>
 uint32_t toLaneMask(MASK mask) {
     if constexpr (sizeof(T) == 1) {
         const auto bits = vshrq_n_u8(mask, 7);
-        const uint8x8_t weights = {1, 2, 4, 8, 16, 32, 64, 128};
+        // MSVC ARM64 maps NEON vector types to __n64/__n128, which cannot take brace
+        // initializers (C2078), so build the {1, 2, 4, 8, 16, 32, 64, 128} lane weights
+        // from a bit pattern instead.
+        const auto weights = vcreate_u8(0x8040201008040201ULL);
         const auto low = vaddv_u8(vmul_u8(vget_low_u8(bits), weights));
         const auto high = vaddv_u8(vmul_u8(vget_high_u8(bits), weights));
         return static_cast<uint32_t>(low) | (static_cast<uint32_t>(high) << 8);
     } else if constexpr (sizeof(T) == 2) {
-        const uint16x8_t weights = {1, 2, 4, 8, 16, 32, 64, 128};
+        const auto weights =
+            vcombine_u16(vcreate_u16(0x0008000400020001ULL), vcreate_u16(0x0080004000200010ULL));
         return vaddvq_u16(vmulq_u16(vshrq_n_u16(mask, 15), weights));
     } else if constexpr (sizeof(T) == 4) {
-        const uint32x4_t weights = {1, 2, 4, 8};
+        const auto weights =
+            vcombine_u32(vcreate_u32(0x0000000200000001ULL), vcreate_u32(0x0000000800000004ULL));
         return vaddvq_u32(vmulq_u32(vshrq_n_u32(mask, 31), weights));
     } else {
         const auto bits = vshrq_n_u64(mask, 63);
