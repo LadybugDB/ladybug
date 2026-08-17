@@ -42,6 +42,12 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op,
     case LogicalOperatorType::FILTER: {
         // A filter between LIMIT and HASH_JOIN can reject rows after the join. A static
         // pre-join cap could then leave the parent LIMIT with too few surviving rows.
+        if (treatFilterAsBarrier) {
+            // A filter can discard rows, so a static cap pushed beneath it could leave the parent
+            // LIMIT with too few surviving rows. Stop the descent: nothing below the filter is
+            // capped.
+            return;
+        }
         visitOperator(op->getChild(0).get(), false);
         return;
     }
@@ -88,7 +94,7 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op,
     }
     case LogicalOperatorType::UNION_ALL: {
         for (auto i = 0u; i < op->getNumChildren(); ++i) {
-            auto optimizer = LimitPushDownOptimizer();
+            auto optimizer = LimitPushDownOptimizer(treatFilterAsBarrier);
             optimizer.visitOperator(op->getChild(i).get());
         }
         return;
