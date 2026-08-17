@@ -18,8 +18,7 @@ void LimitPushDownOptimizer::rewrite(LogicalPlan* plan) {
     visitOperator(plan->getLastOperator().get());
 }
 
-void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op,
-    bool canPushLimitToHashJoin) {
+void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op) {
     switch (op->getOperatorType()) {
     case LogicalOperatorType::LIMIT: {
         auto& limit = op->constCast<LogicalLimit>();
@@ -36,19 +35,12 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op,
     case LogicalOperatorType::EXPLAIN:
     case LogicalOperatorType::ACCUMULATE:
     case LogicalOperatorType::PROJECTION: {
-        visitOperator(op->getChild(0).get(), canPushLimitToHashJoin);
+        visitOperator(op->getChild(0).get());
         return;
     }
     case LogicalOperatorType::FILTER: {
-        // A filter between LIMIT and HASH_JOIN can reject rows after the join. A static
-        // pre-join cap could then leave the parent LIMIT with too few surviving rows.
-        if (treatFilterAsBarrier) {
-            // A filter can discard rows, so a static cap pushed beneath it could leave the parent
-            // LIMIT with too few surviving rows. Stop the descent: nothing below the filter is
-            // capped.
-            return;
-        }
-        visitOperator(op->getChild(0).get(), false);
+        // A filter can discard rows, so a static cap pushed below it could leave the parent LIMIT
+        // with too few surviving rows.
         return;
     }
     case LogicalOperatorType::TABLE_FUNCTION_CALL: {
@@ -71,7 +63,7 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op,
         return;
     }
     case LogicalOperatorType::HASH_JOIN: {
-        if (limitNumber == INVALID_LIMIT || !canPushLimitToHashJoin) {
+        if (limitNumber == INVALID_LIMIT) {
             return;
         }
         auto& hashJoin = op->cast<LogicalHashJoin>();
@@ -94,7 +86,7 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op,
     }
     case LogicalOperatorType::UNION_ALL: {
         for (auto i = 0u; i < op->getNumChildren(); ++i) {
-            auto optimizer = LimitPushDownOptimizer(treatFilterAsBarrier);
+            auto optimizer = LimitPushDownOptimizer();
             optimizer.visitOperator(op->getChild(i).get());
         }
         return;
