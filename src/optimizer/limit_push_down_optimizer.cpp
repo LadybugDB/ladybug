@@ -54,7 +54,7 @@ void LimitPushDownOptimizer::visitOperator(planner::LogicalOperator* op) {
         return;
     }
     case LogicalOperatorType::DISTINCT: {
-        if (limitNumber == INVALID_LIMIT && skipNumber == 0) {
+        if (limitNumber == INVALID_LIMIT || skipNumber >= INVALID_LIMIT - limitNumber) {
             return;
         }
         auto& distinctOp = op->cast<LogicalDistinct>();
