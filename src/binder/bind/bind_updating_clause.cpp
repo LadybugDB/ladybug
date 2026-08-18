@@ -186,10 +186,13 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
             "Create node " + node->toString() + " with empty node labels is not supported.");
     }
     if (node->isMultiLabeled()) {
-        // A partitioned parent is resolved into its partition subgraphs for scanning. Writing to
-        // it is not yet routed, so reject it with an actionable message.
+        // A partitioned parent is resolved into its partition subgraphs for scanning. A write to
+        // the parent therefore arrives here as a multi-labeled node whose entries are exactly the
+        // partition subgraphs of one parent; keep it multi-labeled and route the row into the
+        // correct partition at runtime (see NodeInsertExecutor). Any other multi-label write is
+        // rejected.
         std::optional<common::table_id_t> parentTableID;
-        auto onlyPartitionsOfSingleParent = true;
+        bool onlyPartitionsOfSingleParent = true;
         for (auto i = 0u; i < node->getNumEntries(); i++) {
             auto* e = node->getEntry(i);
             if (e->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
@@ -208,18 +211,12 @@ void Binder::bindInsertNode(std::shared_ptr<NodeExpression> node,
                 break;
             }
         }
-        if (onlyPartitionsOfSingleParent) {
-            auto* parent =
-                Catalog::Get(*clientContext)->getTableCatalogEntry(transaction, *parentTableID);
-            throw BinderException(std::format(
-                "Cannot write to partitioned table {}. Writes to a partitioned parent are not yet "
-                "routed; write to its partition subgraphs instead (e.g. {}_p0).",
-                parent->getName(), parent->getName()));
+        if (!onlyPartitionsOfSingleParent) {
+            throw BinderException(
+                "Create node " + node->toString() + " with multiple node labels is not supported.");
         }
-        throw BinderException(
-            "Create node " + node->toString() + " with multiple node labels is not supported.");
     }
-    DASSERT(node->getNumEntries() == 1);
+    DASSERT(node->getNumEntries() >= 1);
     auto entry = node->getEntry(0);
     DASSERT(entry->getTableType() == TableType::NODE);
     bool isAnyGraph = false;

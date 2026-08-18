@@ -8,8 +8,9 @@ current limitations, and the roadmap (including remote partitions accessed over 
 protocol such as ADBC).
 
 > Status: **v1 (foundational).** DDL, catalog, storage, persistence, drop-cascade and query
-> (read over all partitions) are implemented. Write-routing (COPY / CREATE into the parent) and
-> predicate-based partition pruning are designed below but not yet wired in.
+> (read over all partitions) are implemented. Write-routing (COPY / CREATE / MERGE into the
+> parent) is implemented for HASH partitioning; RANGE reuses the same deterministic hash routing
+> until declarative range bounds land. Predicate-based partition pruning is still future work.
 
 ## Why subgraph-per-partition
 
@@ -142,9 +143,12 @@ Because each partition is a real node table, you can also address a specific par
 
 ## Current limitations / v1 boundaries
 
-* **Write-routing is not implemented.** `COPY INTO <parent>`, `CREATE (n:<parent>)` and
-  `MERGE`/`SET` against a partitioned parent currently raise a clear, actionable
-  `BinderException` telling you to target the partition subgraphs. Reads on the parent work.
+* **Write-routing.** `COPY INTO <parent>`, `CREATE (n:<parent>)` and `MERGE` against a
+  partitioned parent are routed into the partition matching each row's partition-key value. HASH
+  partitions use the same value hashing as the built-in `HASH()` function; RANGE partitions
+  currently reuse that hash (there are no declarative bounds yet), which keeps writes
+  deterministic and findable because parent reads union over all partitions. Primary-key
+  uniqueness is enforced per partition, not across the parent.
 * **No partition pruning on predicates.** A `WHERE` on the partition key is not yet used to skip
   partitions; all partitions are scanned and unioned.
 * **No `ALTER` propagation.** Altering the parent schema does not alter its partitions.
@@ -156,20 +160,21 @@ Because each partition is a real node table, you can also address a specific par
 
 ### 1. Write routing (COPY / CREATE / MERGE)
 
-The canonical path is `COPY INTO Orders FROM file`. Plan:
+The canonical path is `COPY INTO Orders FROM file`. Implemented:
 
-* Thread partition metadata into `BoundCopyFromInfo`/`NodeBatchInsertInfo` (partition method,
-  partition-key column id, and the child `NodeTable` list).
-* In `NodeBatchInsert`, evaluate each row's partition-key value, determine its partition index
-  (`hash(value) % n` for HASH; compare against range bounds for RANGE — use a shared
-  `valueToDouble`-style comparator already used by the histogram/percentile aggregates), and route
-  the row into the correct child `NodeTable`'s node group.
-* Primary-key duplicate detection becomes per-partition (each child has its own PK index), which
-  the current single-table batch-insert already composes that way.
+* `BoundCopyFromInfo`/`NodeBatchInsertInfo` carry the partition method, partition-key column id,
+  and the child table list (`common::NodePartitionWriteInfo`).
+* `NodeBatchInsert` evaluates each row's partition-key value, computes `hash(value) % n` (for both
+  HASH and, for now, RANGE), and routes consecutive same-partition runs into the correct child
+  `NodeTable`'s node group. Each child is an ordinary `NodeTable`, so its own WAL/MVCC machinery
+  (`appendToLastNodeGroup` + commit/undo records) applies the routed write.
+* Primary-key duplicate detection is per partition (each child has its own PK index), matching how
+  a direct `COPY` into a partition subgraph behaves.
+* Single-row `CREATE`/`MERGE` routes at runtime in `NodeInsertExecutor`: the partition key is
+  evaluated, the matching child table is selected, and the row is inserted there.
 
-For single-row `CREATE`/`MERGE` with a *literal* partition key, the partition can be resolved at
-bind time from the property literal; the general (expression/parameter) case routes at runtime in
-the insert operator.
+Remaining for RANGE: replace the hash stand-in with real bound comparison once declarative range
+bounds (`PARTITION p0 VALUES < (...) ...`) are implemented.
 
 ### 2. Partition pruning
 

@@ -135,7 +135,8 @@ static std::pair<ColumnEvaluateType, std::shared_ptr<Expression>> matchColumnExp
 BoundCopyFromInfo Binder::bindCopyNodeFromInfo(std::string tableName,
     const std::vector<PropertyDefinition>& properties, const BaseScanSource* source,
     const options_t& parsingOptions, const std::vector<std::string>& expectedColumnNames,
-    const std::vector<LogicalType>& expectedColumnTypes, bool byColumn) {
+    const std::vector<LogicalType>& expectedColumnTypes, bool byColumn,
+    std::optional<NodePartitionWriteInfo> partitionInfo) {
     const auto skipDuplicatePK = getBoolCopyOption(parsingOptions,
         CopyConstants::SKIP_DUPLICATE_PK_OPTION_NAME, CopyConstants::DEFAULT_SKIP_DUPLICATE_PK);
     const auto ignoreErrors = getBoolCopyOption(parsingOptions,
@@ -171,18 +172,22 @@ BoundCopyFromInfo Binder::bindCopyNodeFromInfo(std::string tableName,
     auto offset =
         createInvisibleVariable(std::string(InternalKeyword::ROW_OFFSET), LogicalType::INT64());
     return BoundCopyFromInfo(tableName, TableType::NODE, std::move(boundSource), std::move(offset),
-        std::move(columns), std::move(evaluateTypes), nullptr /* extraInfo */, skipDuplicatePK);
+        std::move(columns), std::move(evaluateTypes), nullptr /* extraInfo */, skipDuplicatePK,
+        std::move(partitionInfo));
 }
 
 std::unique_ptr<BoundStatement> Binder::bindCopyNodeFrom(const Statement& statement,
     NodeTableCatalogEntry& nodeTableEntry) {
     auto& copyStatement = statement.constCast<CopyFrom>();
+    // A partitioned parent owns no physical storage. Rows are routed into the partition
+    // subgraphs at runtime by NodeBatchInsert; bind the parent schema (identical to each
+    // partition's schema) and carry the routing metadata to the physical plan.
+    std::optional<NodePartitionWriteInfo> partitionWriteInfo;
     if (nodeTableEntry.isPartitioned()) {
-        throw BinderException(std::format(
-            "Cannot COPY into partitioned table {}. Partitioned tables do not own physical "
-            "storage; copy each row-bundle into its partition subgraphs instead (e.g. {}_p0, "
-            "{}_p1, ...).",
-            nodeTableEntry.getName(), nodeTableEntry.getName(), nodeTableEntry.getName()));
+        partitionWriteInfo = NodePartitionWriteInfo{
+            static_cast<PartitionMethod>(*nodeTableEntry.getPartitionMethod()),
+            nodeTableEntry.getPartitionColumnID(), nodeTableEntry.getNumPartitions(),
+            nodeTableEntry.getChildTableIDs()};
     }
     // Check extension secondary index loaded
     auto catalog = Catalog::Get(*clientContext);
@@ -202,7 +207,7 @@ std::unique_ptr<BoundStatement> Binder::bindCopyNodeFrom(const Statement& statem
     auto boundCopyFromInfo =
         bindCopyNodeFromInfo(nodeTableEntry.getName(), nodeTableEntry.getProperties(),
             copyStatement.getSource(), copyStatement.getParsingOptions(), expectedColumnNames,
-            expectedColumnTypes, copyStatement.byColumn());
+            expectedColumnTypes, copyStatement.byColumn(), std::move(partitionWriteInfo));
     return std::make_unique<BoundCopyFrom>(std::move(boundCopyFromInfo));
 }
 

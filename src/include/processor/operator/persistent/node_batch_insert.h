@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/enums/column_evaluate_type.h"
+#include "common/partition_routing.h"
 #include "common/types/types.h"
 #include "expression_evaluator/expression_evaluator.h"
 #include "processor/operator/persistent/batch_insert.h"
@@ -12,6 +13,7 @@ namespace lbug {
 namespace storage {
 class ColumnChunkData;
 class MemoryManager;
+class NodeTable;
 } // namespace storage
 namespace transaction {
 class Transaction;
@@ -50,64 +52,87 @@ struct NodeBatchInsertInfo final : BatchInsertInfo {
     evaluator::evaluator_vector_t columnEvaluators;
     std::vector<common::ColumnEvaluateType> evaluateTypes;
     bool skipDuplicatePK;
+    // Set when copying into a partitioned parent. Each row is routed into the partition subgraph
+    // whose index matches the row's partition-key value.
+    std::optional<common::NodePartitionWriteInfo> partitionInfo;
 
     NodeBatchInsertInfo(std::string tableName, std::vector<common::LogicalType> warningColumnTypes,
         std::vector<std::unique_ptr<evaluator::ExpressionEvaluator>> columnEvaluators,
-        std::vector<common::ColumnEvaluateType> evaluateTypes, bool skipDuplicatePK)
+        std::vector<common::ColumnEvaluateType> evaluateTypes, bool skipDuplicatePK,
+        std::optional<common::NodePartitionWriteInfo> partitionInfo = std::nullopt)
         : BatchInsertInfo{std::move(tableName), std::move(warningColumnTypes)},
           columnEvaluators{std::move(columnEvaluators)}, evaluateTypes{std::move(evaluateTypes)},
-          skipDuplicatePK{skipDuplicatePK} {}
+          skipDuplicatePK{skipDuplicatePK}, partitionInfo{std::move(partitionInfo)} {}
 
     NodeBatchInsertInfo(const NodeBatchInsertInfo& other)
         : BatchInsertInfo{other}, columnEvaluators{copyVector(other.columnEvaluators)},
-          evaluateTypes{other.evaluateTypes}, skipDuplicatePK{other.skipDuplicatePK} {}
+          evaluateTypes{other.evaluateTypes}, skipDuplicatePK{other.skipDuplicatePK},
+          partitionInfo{other.partitionInfo} {}
 
     std::unique_ptr<BatchInsertInfo> copy() const override {
         return std::make_unique<NodeBatchInsertInfo>(*this);
     }
 };
 
-struct NodeBatchInsertSharedState final : BatchInsertSharedState {
-    // Primary key info
-    common::column_id_t pkColumnID;
-    common::LogicalType pkType;
+// Per-partition write target. A non-partitioned COPY has exactly one target; a partitioned COPY
+// has one target per partition subgraph. Each target carries its own index/PK state and its own
+// shared (cross-worker) leftover node group.
+struct NodeBatchInsertTarget {
+    storage::NodeTable* table = nullptr;
     std::optional<IndexBuilder> globalIndexBuilder;
     std::unique_ptr<NoIndexPKValidator> noIndexPKValidator;
-    bool usePrimaryKeyIndexCommitInsert;
+    bool usePrimaryKeyIndexCommitInsert = false;
+    std::unique_ptr<storage::InMemChunkedNodeGroup> sharedNodeGroup;
+};
+
+struct NodeBatchInsertSharedState final : BatchInsertSharedState {
+    // Primary key info (identical across partition subgraphs of the same parent).
+    common::column_id_t pkColumnID;
+    common::LogicalType pkType;
     bool skipDuplicatePK;
 
     function::TableFuncSharedState* tableFuncSharedState;
 
     std::vector<common::column_id_t> mainDataColumns;
 
-    // The sharedNodeGroup is to accumulate left data within local node groups in NodeBatchInsert
-    // ops.
-    std::unique_ptr<storage::InMemChunkedNodeGroup> sharedNodeGroup;
+    // One write target per partition subgraph (or exactly one for a non-partitioned table).
+    std::vector<NodeBatchInsertTarget> targets;
+    // Index of the partition-key column among the evaluated column vectors; INVALID when the
+    // write is not into a partitioned parent.
+    common::column_id_t partitionKeyColumnIdx = common::INVALID_COLUMN_ID;
+
     std::shared_ptr<DuplicatePKSkipResult> duplicatePKSkipResult;
 
     explicit NodeBatchInsertSharedState(std::shared_ptr<FactorizedTable> fTable)
-        : BatchInsertSharedState{std::move(fTable)}, pkColumnID{0},
-          globalIndexBuilder(std::nullopt), noIndexPKValidator{nullptr},
-          usePrimaryKeyIndexCommitInsert{false}, skipDuplicatePK{false},
-          tableFuncSharedState{nullptr}, sharedNodeGroup{nullptr},
+        : BatchInsertSharedState{std::move(fTable)}, pkColumnID{0}, skipDuplicatePK{false},
+          tableFuncSharedState{nullptr},
           duplicatePKSkipResult{std::make_shared<DuplicatePKSkipResult>()} {}
 
-    void initPKIndex(const ExecutionContext* context);
+    void initTargetPKIndex(const ExecutionContext* context, NodeBatchInsertTarget& target);
+};
+
+struct NodeBatchInsertLocalTarget {
+    std::unique_ptr<storage::InMemChunkedNodeGroup> chunkedGroup;
+    std::optional<IndexBuilder> localIndexBuilder;
+    std::optional<NodeBatchInsertErrorHandler> errorHandler;
 };
 
 struct NodeBatchInsertLocalState final : BatchInsertLocalState {
-    std::optional<NodeBatchInsertErrorHandler> errorHandler;
-
-    std::optional<IndexBuilder> localIndexBuilder;
+    std::vector<NodeBatchInsertLocalTarget> targets;
     DuplicatePKSkipResult duplicatePKSkipResult;
 
     std::shared_ptr<common::DataChunkState> columnState;
     std::vector<common::ValueVector*> columnVectors;
 
-    storage::TableStats stats;
+    // Scratch buffer reused to hold the partition index of every row in the current chunk.
+    std::vector<uint64_t> partitionIdxes;
 
-    explicit NodeBatchInsertLocalState(std::span<common::LogicalType> outputDataTypes)
-        : stats{outputDataTypes} {}
+    // Per-operator table stats for the non-partitioned (single target) path only. Partitioned
+    // COPYs skip per-partition stats collection for now (stats are advisory, not required for
+    // correctness).
+    std::optional<storage::TableStats> stats;
+
+    NodeBatchInsertLocalState() = default;
 };
 
 class NodeBatchInsert final : public BatchInsert {
@@ -135,15 +160,15 @@ public:
     }
 
     // The node group will be reset so that the only values remaining are the ones which were
-    // not written
-    void writeAndResetNodeGroup(transaction::Transaction* transaction,
+    // not written.
+    void writeAndResetNodeGroup(transaction::Transaction* transaction, common::idx_t targetIdx,
         std::unique_ptr<storage::InMemChunkedNodeGroup>& nodeGroup,
         std::optional<IndexBuilder>& indexBuilder, storage::MemoryManager* mm,
         storage::PageAllocator& pageAllocator) const;
 
 private:
     void evaluateExpressions(uint64_t numTuples) const;
-    void appendIncompleteNodeGroup(transaction::Transaction* transaction,
+    void appendIncompleteNodeGroup(transaction::Transaction* transaction, common::idx_t targetIdx,
         std::unique_ptr<storage::InMemChunkedNodeGroup> localNodeGroup,
         std::optional<IndexBuilder>& indexBuilder, storage::MemoryManager* mm) const;
     void clearToIndex(storage::MemoryManager* mm,
@@ -152,9 +177,10 @@ private:
 
     void copyToNodeGroup(transaction::Transaction* transaction, storage::MemoryManager* mm) const;
 
-    NodeBatchInsertErrorHandler createErrorHandler(ExecutionContext* context) const;
+    NodeBatchInsertErrorHandler createErrorHandler(ExecutionContext* context,
+        storage::NodeTable* nodeTable, DuplicatePKSkipResult* duplicatePKSkipResult) const;
 
-    void writeAndResetNodeGroup(transaction::Transaction* transaction,
+    void writeAndResetNodeGroup(transaction::Transaction* transaction, common::idx_t targetIdx,
         std::unique_ptr<storage::InMemChunkedNodeGroup>& nodeGroup,
         std::optional<IndexBuilder>& indexBuilder, storage::MemoryManager* mm,
         NodeBatchInsertErrorHandler& errorHandler, storage::PageAllocator& pageAllocator) const;

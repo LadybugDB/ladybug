@@ -1,5 +1,6 @@
 #include "catalog/catalog.h"
 
+#include "binder/ddl/bound_alter_info.h"
 #include "binder/ddl/bound_create_sequence_info.h"
 #include "binder/ddl/bound_create_table_info.h"
 #include "catalog/catalog_entry/function_catalog_entry.h"
@@ -188,6 +189,7 @@ void Catalog::dropTableEntry(Transaction* transaction, const TableCatalogEntry* 
             } else {
                 internalTables->dropEntry(transaction, child->getName(), child->getOID());
             }
+            dropNodeTableSubgraph(transaction, child->getName());
         }
     }
     if (tables->containsEntry(transaction, entry->getName())) {
@@ -195,6 +197,7 @@ void Catalog::dropTableEntry(Transaction* transaction, const TableCatalogEntry* 
     } else {
         internalTables->dropEntry(transaction, entry->getName(), entry->getOID());
     }
+    dropNodeTableSubgraph(transaction, entry->getName());
 }
 void Catalog::dropMacroEntry(Transaction* transaction, const lbug::common::oid_t macroID) {
     dropMacroEntry(transaction, getScalarMacroCatalogEntry(transaction, macroID));
@@ -205,7 +208,17 @@ void Catalog::dropMacroEntry(Transaction* transaction, const ScalarMacroCatalogE
 }
 
 void Catalog::alterTableEntry(Transaction* transaction, const BoundAlterInfo& info) {
+    // Capture whether the renamed entry is a node table before the rename clears its name.
+    const auto isNodeTable = tables->containsEntry(transaction, info.tableName) &&
+                             tables->getEntry(transaction, info.tableName)->getType() ==
+                                 CatalogEntryType::NODE_TABLE_ENTRY;
     tables->alterTableEntry(transaction, info);
+    if (isNodeTable && info.alterType == AlterType::RENAME) {
+        // Keep the subgraph name in sync with the table name.
+        const auto& renameInfo = info.extraInfo->constPtrCast<BoundExtraRenameTableInfo>();
+        dropNodeTableSubgraph(transaction, info.tableName);
+        createNodeTableSubgraph(transaction, renameInfo->newName);
+    }
 }
 
 void Catalog::addTableEntry(std::unique_ptr<TableCatalogEntry> entry) {
@@ -576,6 +589,21 @@ CatalogEntry* Catalog::createTableEntry(Transaction* transaction,
     }
 }
 
+void Catalog::createNodeTableSubgraph(Transaction* transaction, const std::string& tableName) {
+    // Skipped in WAL: the table's own create record implies the subgraph, and replay recreates it
+    // through createNodeTableEntry. The undo buffer still tracks it, so a rolled-back CREATE NODE
+    // TABLE also removes the subgraph.
+    graphs->createEntry(transaction, std::make_unique<GraphCatalogEntry>(tableName, false),
+        true /* skipLoggingToWAL */);
+}
+
+void Catalog::dropNodeTableSubgraph(Transaction* transaction, const std::string& tableName) {
+    if (graphs->containsEntry(transaction, tableName)) {
+        graphs->dropEntry(transaction, tableName,
+            graphs->getEntry(transaction, tableName)->getOID());
+    }
+}
+
 CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
     const BoundCreateTableInfo& info) {
     const auto extraInfo = info.extraInfo->constPtrCast<BoundExtraCreateNodeTableInfo>();
@@ -589,6 +617,8 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
     auto catalogSet = info.isInternal ? internalTables.get() : tables.get();
     catalogSet->createEntry(transaction, std::move(entry));
     auto* parentEntry = catalogSet->getEntry(transaction, info.tableName);
+    // A node table is itself a subgraph; register it so SHOW_GRAPHS lists it.
+    createNodeTableSubgraph(transaction, info.tableName);
 
     // PostgreSQL-style partitioning: the logical parent owns the schema but no physical storage.
     // Each partition is a separate node-table subgraph. Partitions are kept in the same public
@@ -612,6 +642,8 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
             child->setParentInfo(parent->getTableID(), i);
             createSerialSequence(transaction, child.get(), info.isInternal);
             auto childOID = catalogSet->createEntry(transaction, std::move(child));
+            // Each partition subgraph is a node table and therefore its own subgraph.
+            createNodeTableSubgraph(transaction, childName);
             parent->addChildTableID(childOID);
         }
     }

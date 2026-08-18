@@ -1,5 +1,6 @@
 #include "processor/operator/persistent/insert_executor.h"
 
+#include "processor/partition_routing.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -91,18 +92,42 @@ void NodeInsertExecutor::setNodeIDVectorToNonNull() const {
     info.nodeIDVector->setNull(info.nodeIDVector->state->getSelVector()[0], false);
 }
 
+storage::NodeTable* NodeInsertExecutor::resolveTargetTable() const {
+    if (tableInfo.partitionTables.empty()) {
+        return tableInfo.table;
+    }
+    auto* keyVector = tableInfo.columnDataVectors[tableInfo.partitionKeyColumnID];
+    DASSERT(keyVector->state->getSelVector().getSelSize() == 1);
+    std::vector<uint64_t> partitionIndexes;
+    computePartitionIndexes(*keyVector, tableInfo.partitionTables.size(), partitionIndexes);
+    return tableInfo.partitionTables[partitionIndexes[0]];
+}
+
+storage::NodeTable* NodeInsertExecutor::resolveTableForNodeID(common::nodeID_t nodeID) const {
+    if (tableInfo.partitionTables.empty()) {
+        return tableInfo.table;
+    }
+    for (auto* table : tableInfo.partitionTables) {
+        if (table->getTableID() == nodeID.tableID) {
+            return table;
+        }
+    }
+    return tableInfo.table;
+}
+
 nodeID_t NodeInsertExecutor::insert(main::ClientContext* context) {
     for (auto& evaluator : tableInfo.columnDataEvaluators) {
         evaluator->evaluate();
     }
     auto transaction = Transaction::Get(*context);
-    if (checkConflict(transaction)) {
+    auto* targetTable = resolveTargetTable();
+    if (checkConflict(transaction, targetTable)) {
         return info.getNodeID();
     }
     storage::NodeTableInsertState insertState{*info.nodeIDVector, *tableInfo.pkVector,
         tableInfo.columnDataVectors};
-    tableInfo.table->initInsertState(context, insertState);
-    tableInfo.table->insert(transaction, insertState);
+    targetTable->initInsertState(context, insertState);
+    targetTable->insert(transaction, insertState);
     writeColumnVectors(info.columnVectors, tableInfo.columnDataVectors);
     return info.getNodeID();
 }
@@ -130,20 +155,21 @@ void NodeInsertExecutor::skipInsert(nodeID_t nodeID, main::ClientContext* contex
         return;
     }
     auto transaction = Transaction::Get(*context);
+    auto* table = resolveTableForNodeID(nodeID);
     storage::NodeTableScanState scanState{info.nodeIDVector, std::move(outputVectors),
         info.nodeIDVector->state};
-    scanState.setToTable(transaction, tableInfo.table, std::move(columnIDs), {});
-    tableInfo.table->initScanState(transaction, scanState, nodeID.tableID, nodeID.offset);
-    tableInfo.table->lookup(transaction, scanState);
+    scanState.setToTable(transaction, table, std::move(columnIDs), {});
+    table->initScanState(transaction, scanState, nodeID.tableID, nodeID.offset);
+    table->lookup(transaction, scanState);
 }
 
-bool NodeInsertExecutor::checkConflict(const Transaction* transaction) const {
+bool NodeInsertExecutor::checkConflict(const Transaction* transaction,
+    storage::NodeTable* table) const {
     if (info.conflictAction == ConflictAction::ON_CONFLICT_DO_NOTHING) {
-        auto offset =
-            tableInfo.table->validateUniquenessConstraint(transaction, tableInfo.columnDataVectors);
+        auto offset = table->validateUniquenessConstraint(transaction, tableInfo.columnDataVectors);
         if (offset != INVALID_OFFSET) {
             // Conflict. Skip insertion.
-            info.updateNodeID({offset, tableInfo.table->getTableID()});
+            info.updateNodeID({offset, table->getTableID()});
             return true;
         }
     }

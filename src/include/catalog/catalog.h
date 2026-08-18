@@ -266,6 +266,14 @@ private:
         bool isInternal);
     void dropSerialSequence(transaction::Transaction* transaction, const TableCatalogEntry* entry);
 
+    // Every node table (including partition subgraphs) is backed by a GraphCatalogEntry so that
+    // SHOW_GRAPHS lists it. The subgraph is implied by the table's own WAL create/drop record and
+    // is therefore created with WAL logging skipped; CHECKPOINT serializes it with the `graphs`
+    // catalog set, and WAL replay recreates it through createNodeTableEntry.
+    void createNodeTableSubgraph(transaction::Transaction* transaction,
+        const std::string& tableName);
+    void dropNodeTableSubgraph(transaction::Transaction* transaction, const std::string& tableName);
+
     template<TableCatalogEntryType T>
     std::vector<T*> getTableEntries(const transaction::Transaction* transaction, bool useInternal,
         CatalogEntryType entryType) const;
