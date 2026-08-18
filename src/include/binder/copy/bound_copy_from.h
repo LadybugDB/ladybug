@@ -1,10 +1,13 @@
 #pragma once
 
+#include <optional>
+
 #include "binder/bound_scan_source.h"
 #include "binder/expression/expression.h"
 #include "binder/expression/literal_expression.h"
 #include "common/enums/column_evaluate_type.h"
 #include "common/enums/table_type.h"
+#include "common/partition_routing.h"
 #include "index_look_up_info.h"
 
 namespace lbug {
@@ -33,15 +36,19 @@ struct LBUG_API BoundCopyFromInfo {
     std::vector<common::ColumnEvaluateType> columnEvaluateTypes;
     std::unique_ptr<ExtraBoundCopyFromInfo> extraInfo;
     bool skipDuplicatePK;
+    // Set when copying into a partitioned parent: the write is routed into the partition
+    // subgraphs at runtime.
+    std::optional<common::NodePartitionWriteInfo> partitionInfo;
 
     BoundCopyFromInfo(std::string tableName, common::TableType tableType,
         std::unique_ptr<BoundBaseScanSource> source, std::shared_ptr<Expression> offset,
         expression_vector columnExprs, std::vector<common::ColumnEvaluateType> columnEvaluateTypes,
-        std::unique_ptr<ExtraBoundCopyFromInfo> extraInfo, bool skipDuplicatePK = false)
+        std::unique_ptr<ExtraBoundCopyFromInfo> extraInfo, bool skipDuplicatePK = false,
+        std::optional<common::NodePartitionWriteInfo> partitionInfo = std::nullopt)
         : tableName{std::move(tableName)}, tableType{tableType}, source{std::move(source)},
           offset{std::move(offset)}, columnExprs{std::move(columnExprs)},
           columnEvaluateTypes{std::move(columnEvaluateTypes)}, extraInfo{std::move(extraInfo)},
-          skipDuplicatePK{skipDuplicatePK} {}
+          skipDuplicatePK{skipDuplicatePK}, partitionInfo{std::move(partitionInfo)} {}
 
     EXPLICIT_COPY_DEFAULT_MOVE(BoundCopyFromInfo);
 
@@ -59,7 +66,7 @@ private:
     BoundCopyFromInfo(const BoundCopyFromInfo& other)
         : tableName{other.tableName}, tableType{other.tableType}, offset{other.offset},
           columnExprs{other.columnExprs}, columnEvaluateTypes{other.columnEvaluateTypes},
-          skipDuplicatePK{other.skipDuplicatePK} {
+          skipDuplicatePK{other.skipDuplicatePK}, partitionInfo{other.partitionInfo} {
         source = other.source ? other.source->copy() : nullptr;
         if (other.extraInfo) {
             extraInfo = other.extraInfo->copy();

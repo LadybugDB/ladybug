@@ -44,6 +44,13 @@ struct NodeTableInsertInfo {
     std::vector<common::ValueVector*> columnDataVectors;
     std::vector<common::column_id_t> columnIDs;
 
+    // When writing into a partitioned parent, `table` is the first partition subgraph (used to
+    // derive the PK vector position) and `partitionTables` holds every partition subgraph in
+    // partition order. `partitionKeyColumnID` indexes the partition-key column among
+    // columnDataVectors. Empty `partitionTables` means a plain single-table write.
+    std::vector<storage::NodeTable*> partitionTables;
+    common::column_id_t partitionKeyColumnID = common::INVALID_COLUMN_ID;
+
     NodeTableInsertInfo(storage::NodeTable* table,
         evaluator::evaluator_vector_t columnDataEvaluators)
         : table{table}, columnDataEvaluators{std::move(columnDataEvaluators)}, pkVector{nullptr} {}
@@ -54,7 +61,8 @@ struct NodeTableInsertInfo {
 private:
     NodeTableInsertInfo(const NodeTableInsertInfo& other)
         : table{other.table}, columnDataEvaluators{copyVector(other.columnDataEvaluators)},
-          pkVector{nullptr} {}
+          pkVector{nullptr}, partitionTables{other.partitionTables},
+          partitionKeyColumnID{other.partitionKeyColumnID} {}
 };
 
 class NodeInsertExecutor {
@@ -77,7 +85,11 @@ private:
     NodeInsertExecutor(const NodeInsertExecutor& other)
         : info{other.info.copy()}, tableInfo{other.tableInfo.copy()} {}
 
-    bool checkConflict(const transaction::Transaction* transaction) const;
+    bool checkConflict(const transaction::Transaction* transaction,
+        storage::NodeTable* table) const;
+    // Resolves the partition subgraph for the current (already evaluated) partition-key value.
+    storage::NodeTable* resolveTargetTable() const;
+    storage::NodeTable* resolveTableForNodeID(common::nodeID_t nodeID) const;
 
 private:
     NodeInsertInfo info;

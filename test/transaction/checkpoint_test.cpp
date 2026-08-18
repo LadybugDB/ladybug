@@ -911,13 +911,17 @@ TEST_F(ReviewFixesTest, SubgraphCatalogPersistsAfterCheckpointWithPreExistingTab
     auto graphName = conn->query("CALL show_graphs() RETURN name ORDER BY name;");
     ASSERT_TRUE(graphName->isSuccess()) << graphName->getErrorMessage();
     ASSERT_TRUE(graphName->hasNext());
-    // The subgraph must be visible in the current process already.
+    // The subgraph must be visible in the current process already. Every node table is also
+    // backed by a subgraph, so the list carries the three node tables plus the created graph.
     std::vector<std::string> graphsBeforeReopen;
     while (graphName->hasNext()) {
         graphsBeforeReopen.push_back(graphName->getNext()->getValue(0)->getValue<std::string>());
     }
-    ASSERT_EQ(graphsBeforeReopen.size(), 1);
-    ASSERT_EQ(graphsBeforeReopen[0], "regression_test");
+    ASSERT_EQ(graphsBeforeReopen.size(), 4);
+    ASSERT_EQ(graphsBeforeReopen[0], "Entity");
+    ASSERT_EQ(graphsBeforeReopen[1], "KnowledgeAbstract");
+    ASSERT_EQ(graphsBeforeReopen[2], "Template");
+    ASSERT_EQ(graphsBeforeReopen[3], "regression_test");
     graphName.reset();
 
     // Reopen the database in a fresh connection (simulates a new process).

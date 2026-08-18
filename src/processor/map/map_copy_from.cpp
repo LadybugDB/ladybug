@@ -68,7 +68,8 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCopyNodeFrom(
     }
     auto info = std::make_unique<NodeBatchInsertInfo>(copyFromInfo->tableName,
         std::move(warningColumnTypes), std::move(columnEvaluators),
-        copyFromInfo->columnEvaluateTypes, copyFromInfo->getSkipDuplicatePKOption());
+        copyFromInfo->columnEvaluateTypes, copyFromInfo->getSkipDuplicatePKOption(),
+        copyFromInfo->partitionInfo);
     auto printInfo = std::make_unique<NodeBatchInsertPrintInfo>(copyFromInfo->tableName);
     auto batchInsert = std::make_unique<NodeBatchInsert>(std::move(info), std::move(sharedState),
         std::move(prevOperator), getOperatorID(), std::move(printInfo));

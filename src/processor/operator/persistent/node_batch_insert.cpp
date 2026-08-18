@@ -23,6 +23,7 @@
 #include "main/db_config.h"
 #include "processor/execution_context.h"
 #include "processor/operator/persistent/index_builder.h"
+#include "processor/partition_routing.h"
 #include "processor/result/factorized_table_util.h"
 #include "processor/warning_context.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -428,8 +429,9 @@ std::string NodeBatchInsertPrintInfo::toString() const {
     return result;
 }
 
-void NodeBatchInsertSharedState::initPKIndex(const ExecutionContext* context) {
-    auto* nodeTable = dynamic_cast_checked<NodeTable*>(table);
+void NodeBatchInsertSharedState::initTargetPKIndex(const ExecutionContext* context,
+    NodeBatchInsertTarget& target) {
+    auto* nodeTable = target.table;
     auto* pkIndex = nodeTable->tryGetPKIndex();
     if (!pkIndex) {
         if (nodeTable->tryGetPrimaryKeyIndex() != nullptr) {
@@ -438,9 +440,9 @@ void NodeBatchInsertSharedState::initPKIndex(const ExecutionContext* context) {
                     "IGNORE_ERRORS=true (DUPLICATE_PK_ONLY) is only supported for node tables "
                     "with a primary-key hash index.");
             }
-            globalIndexBuilder.reset();
-            noIndexPKValidator.reset();
-            usePrimaryKeyIndexCommitInsert = true;
+            target.globalIndexBuilder.reset();
+            target.noIndexPKValidator.reset();
+            target.usePrimaryKeyIndexCommitInsert = true;
             return;
         }
         if (nodeTable->getNumTotalRows(Transaction::Get(*context->clientContext)) != 0) {
@@ -453,17 +455,17 @@ void NodeBatchInsertSharedState::initPKIndex(const ExecutionContext* context) {
                 "IGNORE_ERRORS=true (DUPLICATE_PK_ONLY) is only supported for node tables with "
                 "a primary-key hash index.");
         }
-        globalIndexBuilder.reset();
-        noIndexPKValidator = createNoIndexPKValidator(pkType, context->clientContext);
-        usePrimaryKeyIndexCommitInsert = false;
-        if (!noIndexPKValidator) {
+        target.globalIndexBuilder.reset();
+        target.noIndexPKValidator = createNoIndexPKValidator(pkType, context->clientContext);
+        target.usePrimaryKeyIndexCommitInsert = false;
+        if (!target.noIndexPKValidator) {
             throw RuntimeException(ExceptionMessage::invalidPKType(pkType.toString()));
         }
         return;
     }
-    noIndexPKValidator.reset();
-    usePrimaryKeyIndexCommitInsert = false;
-    globalIndexBuilder = IndexBuilder(std::make_shared<IndexBuilderSharedState>(
+    target.noIndexPKValidator.reset();
+    target.usePrimaryKeyIndexCommitInsert = false;
+    target.globalIndexBuilder = IndexBuilder(std::make_shared<IndexBuilderSharedState>(
         Transaction::Get(*context->clientContext), nodeTable));
 }
 
@@ -473,7 +475,6 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
     auto transaction = Transaction::Get(*clientContext);
     auto nodeTableEntry = catalog->getTableCatalogEntry(transaction, info->tableName)
                               ->ptrCast<NodeTableCatalogEntry>();
-    auto nodeTable = StorageManager::Get(*clientContext)->getTable(nodeTableEntry->getTableID());
     const auto& pkDefinition = nodeTableEntry->getPrimaryKeyDefinition();
     auto pkColumnID = nodeTableEntry->getColumnID(pkDefinition.getName());
     // Init info
@@ -490,10 +491,37 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
     }
     // Init shared state
     auto nodeSharedState = sharedState->ptrCast<NodeBatchInsertSharedState>();
-    nodeSharedState->table = nodeTable;
     nodeSharedState->pkColumnID = pkColumnID;
     nodeSharedState->pkType = pkDefinition.getType().copy();
-    nodeSharedState->initPKIndex(context);
+    nodeSharedState->skipDuplicatePK = info->ptrCast<NodeBatchInsertInfo>()->skipDuplicatePK;
+
+    auto* storageManager = StorageManager::Get(*clientContext);
+    const auto nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
+    if (nodeInfo->partitionInfo.has_value()) {
+        const auto& partitionInfo = *nodeInfo->partitionInfo;
+        nodeSharedState->targets.reserve(partitionInfo.numPartitions);
+        for (auto tableID : partitionInfo.partitionTableIDs) {
+            NodeBatchInsertTarget target;
+            target.table = storageManager->getTable(tableID)->ptrCast<NodeTable>();
+            nodeSharedState->targets.push_back(std::move(target));
+        }
+        // The partition-key column id is the catalog property id. Property columns are evaluated
+        // in schema order, so its index among the column evaluators equals its position in
+        // insertColumnIDs (warning columns are appended after property columns).
+        const auto keyColumnID = partitionInfo.partitionKeyColumnID;
+        const auto it =
+            std::find(info->insertColumnIDs.begin(), info->insertColumnIDs.end(), keyColumnID);
+        DASSERT(it != info->insertColumnIDs.end());
+        nodeSharedState->partitionKeyColumnIdx = std::distance(info->insertColumnIDs.begin(), it);
+    } else {
+        NodeBatchInsertTarget target;
+        target.table = storageManager->getTable(nodeTableEntry->getTableID())->ptrCast<NodeTable>();
+        nodeSharedState->targets.push_back(std::move(target));
+    }
+
+    for (auto& target : nodeSharedState->targets) {
+        nodeSharedState->initTargetPKIndex(context, target);
+    }
 }
 
 void NodeBatchInsert::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
@@ -502,13 +530,20 @@ void NodeBatchInsert::initLocalStateInternal(ResultSet* resultSet, ExecutionCont
 
     const auto nodeSharedState =
         dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
-    localState = std::make_unique<NodeBatchInsertLocalState>(
-        std::span{nodeInfo->columnTypes.begin(), nodeInfo->outputDataColumns.size()});
+    localState = std::make_unique<NodeBatchInsertLocalState>();
     const auto nodeLocalState = localState->ptrCast<NodeBatchInsertLocalState>();
-    if (nodeSharedState->globalIndexBuilder) {
-        nodeLocalState->localIndexBuilder = nodeSharedState->globalIndexBuilder->clone();
+    nodeLocalState->stats.emplace(
+        std::span{nodeInfo->columnTypes.begin(), nodeInfo->outputDataColumns.size()});
+    nodeLocalState->targets.reserve(nodeSharedState->targets.size());
+    for (auto& sharedTarget : nodeSharedState->targets) {
+        NodeBatchInsertLocalTarget localTarget;
+        if (sharedTarget.globalIndexBuilder) {
+            localTarget.localIndexBuilder = sharedTarget.globalIndexBuilder->clone();
+        }
+        localTarget.errorHandler =
+            createErrorHandler(context, sharedTarget.table, &nodeLocalState->duplicatePKSkipResult);
+        nodeLocalState->targets.push_back(std::move(localTarget));
     }
-    nodeLocalState->errorHandler = createErrorHandler(context);
     nodeLocalState->optimisticAllocator =
         Transaction::Get(*context->clientContext)->getLocalStorage()->addOptimisticAllocator();
 
@@ -525,12 +560,14 @@ void NodeBatchInsert::initLocalStateInternal(ResultSet* resultSet, ExecutionCont
 
 void NodeBatchInsert::executeInternal(ExecutionContext* context) {
     const auto clientContext = context->clientContext;
-    std::optional<ProducerToken> token;
     auto nodeLocalState = localState->ptrCast<NodeBatchInsertLocalState>();
     const auto nodeSharedState =
         dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
-    if (nodeLocalState->localIndexBuilder) {
-        token = nodeLocalState->localIndexBuilder->getProducerToken();
+    std::vector<std::optional<ProducerToken>> tokens(nodeSharedState->targets.size());
+    for (auto i = 0u; i < nodeLocalState->targets.size(); ++i) {
+        if (nodeLocalState->targets[i].localIndexBuilder) {
+            tokens[i] = nodeLocalState->targets[i].localIndexBuilder->getProducerToken();
+        }
     }
     auto transaction = Transaction::Get(*clientContext);
     while (children[0]->getNextTuple(context)) {
@@ -538,20 +575,23 @@ void NodeBatchInsert::executeInternal(ExecutionContext* context) {
         // Evaluate expressions if needed.
         const auto numTuples = nodeLocalState->columnState->getSelVector().getSelSize();
         evaluateExpressions(numTuples);
-        copyToNodeGroup(transaction, MemoryManager::Get(*clientContext)),
-            nodeLocalState->columnState->setSelVector(originalSelVector);
+        copyToNodeGroup(transaction, MemoryManager::Get(*clientContext));
+        nodeLocalState->columnState->setSelVector(originalSelVector);
     }
-    if (nodeLocalState->chunkedGroup && nodeLocalState->chunkedGroup->getNumRows() > 0) {
-        appendIncompleteNodeGroup(transaction, std::move(nodeLocalState->chunkedGroup),
-            nodeLocalState->localIndexBuilder, MemoryManager::Get(*context->clientContext));
-    }
-    if (nodeLocalState->localIndexBuilder) {
-        DASSERT(token);
-        token->quit();
+    for (auto i = 0u; i < nodeLocalState->targets.size(); ++i) {
+        auto& localTarget = nodeLocalState->targets[i];
+        if (localTarget.chunkedGroup && localTarget.chunkedGroup->getNumRows() > 0) {
+            appendIncompleteNodeGroup(transaction, i, std::move(localTarget.chunkedGroup),
+                localTarget.localIndexBuilder, MemoryManager::Get(*context->clientContext));
+        }
+        if (localTarget.localIndexBuilder) {
+            DASSERT(tokens[i]);
+            tokens[i]->quit();
 
-        DASSERT(nodeLocalState->errorHandler.has_value());
-        nodeLocalState->localIndexBuilder->finishedProducing(nodeLocalState->errorHandler.value());
-        nodeLocalState->errorHandler->flushStoredErrors();
+            DASSERT(localTarget.errorHandler.has_value());
+            localTarget.localIndexBuilder->finishedProducing(localTarget.errorHandler.value());
+            localTarget.errorHandler->flushStoredErrors();
+        }
     }
     const auto nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
     if (nodeInfo->skipDuplicatePK) {
@@ -564,8 +604,10 @@ void NodeBatchInsert::executeInternal(ExecutionContext* context) {
             std::make_move_iterator(nodeLocalState->duplicatePKSkipResult.pks.end()));
         nodeLocalState->duplicatePKSkipResult.pks.clear();
     }
-    sharedState->table->cast<NodeTable>().mergeStats(nodeInfo->insertColumnIDs,
-        nodeLocalState->stats);
+    if (nodeSharedState->targets.size() == 1 && nodeLocalState->stats.has_value()) {
+        nodeSharedState->targets[0].table->mergeStats(nodeInfo->insertColumnIDs,
+            *nodeLocalState->stats);
+    }
 }
 
 void NodeBatchInsert::evaluateExpressions(uint64_t numTuples) const {
@@ -586,44 +628,89 @@ void NodeBatchInsert::evaluateExpressions(uint64_t numTuples) const {
 
 void NodeBatchInsert::copyToNodeGroup(transaction::Transaction* transaction,
     MemoryManager* mm) const {
-    auto numAppendedTuples = 0ul;
     const auto nodeLocalState = dynamic_cast_checked<NodeBatchInsertLocalState*>(localState.get());
-    const auto numTuplesToAppend = nodeLocalState->columnState->getSelVector().getSelSize();
-    while (numAppendedTuples < numTuplesToAppend) {
-        if (!nodeLocalState->chunkedGroup) {
-            // Allocate on the first append rather than in initLocalStateInternal so that a worker
-            // that receives no rows allocates nothing. Eager allocation reserves NODE_GROUP_SIZE
-            // rows of every column for every worker before the scan produces a row, which sets
-            // the COPY memory floor to columns x workers regardless of the input size.
-            const auto nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
-            nodeLocalState->chunkedGroup = std::make_unique<InMemChunkedNodeGroup>(*mm,
-                nodeInfo->columnTypes, info->compressionEnabled, StorageConfig::NODE_GROUP_SIZE, 0);
-        }
-        const auto numAppendedTuplesInNodeGroup =
-            nodeLocalState->chunkedGroup->append(nodeLocalState->columnVectors, numAppendedTuples,
-                numTuplesToAppend - numAppendedTuples);
-        numAppendedTuples += numAppendedTuplesInNodeGroup;
-        if (nodeLocalState->chunkedGroup->isFull()) {
-            writeAndResetNodeGroup(transaction, nodeLocalState->chunkedGroup,
-                nodeLocalState->localIndexBuilder, mm, *nodeLocalState->optimisticAllocator);
-        }
-    }
-    const auto nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
-    nodeLocalState->stats.update(nodeLocalState->columnVectors, nodeInfo->outputDataColumns.size());
-    sharedState->incrementNumRows(numAppendedTuples);
-}
-
-NodeBatchInsertErrorHandler NodeBatchInsert::createErrorHandler(ExecutionContext* context) const {
     const auto nodeSharedState =
         dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
-    auto* nodeTable = dynamic_cast_checked<NodeTable*>(sharedState->table);
-    const auto* nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
-    auto* duplicatePKSkipResult = nodeSharedState->duplicatePKSkipResult.get();
-    if (localState != nullptr) {
-        const auto nodeLocalState =
-            dynamic_cast_checked<NodeBatchInsertLocalState*>(localState.get());
-        duplicatePKSkipResult = &nodeLocalState->duplicatePKSkipResult;
+    const auto nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
+
+    const auto numTuples = nodeLocalState->columnState->getSelVector().getSelSize();
+    if (nodeSharedState->targets.size() <= 1) {
+        // Non-partitioned fast path: append the contiguous selection vector directly.
+        auto numAppendedTuples = 0ul;
+        auto& target = nodeLocalState->targets[0];
+        while (numAppendedTuples < numTuples) {
+            if (!target.chunkedGroup) {
+                // Allocate on the first append rather than in initLocalStateInternal so that a
+                // worker that receives no rows allocates nothing. Eager allocation reserves
+                // NODE_GROUP_SIZE rows of every column for every worker before the scan produces
+                // a row, which sets the COPY memory floor to columns x workers regardless of the
+                // input size.
+                target.chunkedGroup =
+                    std::make_unique<InMemChunkedNodeGroup>(*mm, nodeInfo->columnTypes,
+                        info->compressionEnabled, StorageConfig::NODE_GROUP_SIZE, 0);
+            }
+            const auto numAppendedInGroup = target.chunkedGroup->append(
+                nodeLocalState->columnVectors, numAppendedTuples, numTuples - numAppendedTuples);
+            numAppendedTuples += numAppendedInGroup;
+            if (target.chunkedGroup->isFull()) {
+                writeAndResetNodeGroup(transaction, 0, target.chunkedGroup,
+                    target.localIndexBuilder, mm, *nodeLocalState->optimisticAllocator);
+            }
+        }
+        if (nodeLocalState->stats.has_value()) {
+            nodeLocalState->stats->update(nodeLocalState->columnVectors,
+                nodeInfo->outputDataColumns.size());
+        }
+        sharedState->incrementNumRows(numAppendedTuples);
+        return;
     }
+
+    // Partitioned path: compute a partition index per (logical) row, then append runs of
+    // consecutive rows that belong to the same partition. Rows are addressed by their logical
+    // index (i.e. an offset into each vector's own selection vector) so columns backed by
+    // reference/cast/default evaluators all follow the same row order. Each partition subgraph is
+    // an ordinary NodeTable, so its own WAL/MVCC machinery (appendToLastNodeGroup + commit/undo
+    // records) applies the routed write.
+    const auto numPartitions = nodeSharedState->targets.size();
+    const auto& keyVector = *nodeLocalState->columnVectors[nodeSharedState->partitionKeyColumnIdx];
+    computePartitionIndexes(keyVector, numPartitions, nodeLocalState->partitionIdxes);
+
+    for (auto i = 0u; i < numTuples;) {
+        const auto partitionIdx = nodeLocalState->partitionIdxes[i];
+        auto runEnd = i + 1;
+        while (runEnd < numTuples && nodeLocalState->partitionIdxes[runEnd] == partitionIdx) {
+            ++runEnd;
+        }
+
+        auto& target = nodeLocalState->targets[partitionIdx];
+        auto numAppendedTuples = 0ul;
+        while (numAppendedTuples < runEnd - i) {
+            if (!target.chunkedGroup) {
+                target.chunkedGroup =
+                    std::make_unique<InMemChunkedNodeGroup>(*mm, nodeInfo->columnTypes,
+                        info->compressionEnabled, StorageConfig::NODE_GROUP_SIZE, 0);
+            }
+            const auto numAppendedInGroup =
+                target.chunkedGroup->append(nodeLocalState->columnVectors, i + numAppendedTuples,
+                    runEnd - i - numAppendedTuples);
+            numAppendedTuples += numAppendedInGroup;
+            if (target.chunkedGroup->isFull()) {
+                writeAndResetNodeGroup(transaction, partitionIdx, target.chunkedGroup,
+                    target.localIndexBuilder, mm, *nodeLocalState->optimisticAllocator);
+            }
+        }
+        i = runEnd;
+    }
+    // Per-partition table stats are advisory (used by the optimizer); skip them for partitioned
+    // writes rather than over-counting each partition.
+    sharedState->incrementNumRows(numTuples);
+}
+
+NodeBatchInsertErrorHandler NodeBatchInsert::createErrorHandler(ExecutionContext* context,
+    storage::NodeTable* nodeTable, DuplicatePKSkipResult* duplicatePKSkipResult) const {
+    const auto nodeSharedState =
+        dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
+    const auto* nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
     return NodeBatchInsertErrorHandler{context, nodeSharedState->pkType.getLogicalTypeID(),
         nodeTable, WarningContext::Get(*context->clientContext)->getIgnoreErrorsOption(),
         sharedState->numErroredRows, &sharedState->erroredRowMutex, nodeInfo->skipDuplicatePK,
@@ -664,21 +751,23 @@ void NodeBatchInsert::clearToIndex(MemoryManager* mm,
 }
 
 void NodeBatchInsert::writeAndResetNodeGroup(transaction::Transaction* transaction,
-    std::unique_ptr<InMemChunkedNodeGroup>& nodeGroup, std::optional<IndexBuilder>& indexBuilder,
-    MemoryManager* mm, PageAllocator& pageAllocator) const {
+    common::idx_t targetIdx, std::unique_ptr<InMemChunkedNodeGroup>& nodeGroup,
+    std::optional<IndexBuilder>& indexBuilder, MemoryManager* mm,
+    PageAllocator& pageAllocator) const {
     const auto nodeLocalState = localState->ptrCast<NodeBatchInsertLocalState>();
-    DASSERT(nodeLocalState->errorHandler.has_value());
-    writeAndResetNodeGroup(transaction, nodeGroup, indexBuilder, mm,
-        nodeLocalState->errorHandler.value(), pageAllocator);
+    DASSERT(nodeLocalState->targets[targetIdx].errorHandler.has_value());
+    writeAndResetNodeGroup(transaction, targetIdx, nodeGroup, indexBuilder, mm,
+        nodeLocalState->targets[targetIdx].errorHandler.value(), pageAllocator);
 }
 
 void NodeBatchInsert::writeAndResetNodeGroup(transaction::Transaction* transaction,
-    std::unique_ptr<InMemChunkedNodeGroup>& nodeGroup, std::optional<IndexBuilder>& indexBuilder,
-    MemoryManager* mm, NodeBatchInsertErrorHandler& errorHandler,
-    PageAllocator& pageAllocator) const {
+    common::idx_t targetIdx, std::unique_ptr<InMemChunkedNodeGroup>& nodeGroup,
+    std::optional<IndexBuilder>& indexBuilder, MemoryManager* mm,
+    NodeBatchInsertErrorHandler& errorHandler, PageAllocator& pageAllocator) const {
     const auto nodeSharedState =
         dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
-    const auto nodeTable = dynamic_cast_checked<NodeTable*>(sharedState->table);
+    const auto& sharedTarget = nodeSharedState->targets[targetIdx];
+    auto* nodeTable = sharedTarget.table;
 
     uint64_t nodeOffset{};
     uint64_t numRowsWritten{};
@@ -702,14 +791,14 @@ void NodeBatchInsert::writeAndResetNodeGroup(transaction::Transaction* transacti
         }
         indexBuilder->insert(nodeGroup->getColumnChunk(nodeSharedState->pkColumnID),
             warningChunkData, nodeOffset, numRowsWritten, errorHandler);
-    } else if (nodeSharedState->usePrimaryKeyIndexCommitInsert) {
+    } else if (sharedTarget.usePrimaryKeyIndexCommitInsert) {
         auto* index = nodeTable->tryGetPrimaryKeyIndex();
         DASSERT(index != nullptr);
         commitPrimaryKeyIndexInsertions(transaction, *nodeTable, *index,
             nodeGroup->getColumnChunk(nodeSharedState->pkColumnID), nodeOffset, numRowsWritten,
             transaction->getClientContext());
-    } else if (nodeSharedState->noIndexPKValidator) {
-        nodeSharedState->noIndexPKValidator->validate(
+    } else if (sharedTarget.noIndexPKValidator) {
+        sharedTarget.noIndexPKValidator->validate(
             nodeGroup->getColumnChunk(nodeSharedState->pkColumnID), 0, numRowsWritten);
     }
     if (numRowsWritten == nodeGroup->getNumRows()) {
@@ -720,23 +809,23 @@ void NodeBatchInsert::writeAndResetNodeGroup(transaction::Transaction* transacti
 }
 
 void NodeBatchInsert::appendIncompleteNodeGroup(transaction::Transaction* transaction,
-    std::unique_ptr<InMemChunkedNodeGroup> localNodeGroup,
+    common::idx_t targetIdx, std::unique_ptr<InMemChunkedNodeGroup> localNodeGroup,
     std::optional<IndexBuilder>& indexBuilder, MemoryManager* mm) const {
     std::unique_lock xLck{sharedState->mtx};
     const auto nodeLocalState = dynamic_cast_checked<NodeBatchInsertLocalState*>(localState.get());
-    const auto nodeSharedState =
-        dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
-    if (!nodeSharedState->sharedNodeGroup) {
-        nodeSharedState->sharedNodeGroup = std::move(localNodeGroup);
+    auto& sharedTarget =
+        dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get())->targets[targetIdx];
+    if (!sharedTarget.sharedNodeGroup) {
+        sharedTarget.sharedNodeGroup = std::move(localNodeGroup);
         return;
     }
     uint64_t numNodesAppended = 0;
     while (numNodesAppended < localNodeGroup->getNumRows()) {
-        if (nodeSharedState->sharedNodeGroup->isFull()) {
-            writeAndResetNodeGroup(transaction, nodeSharedState->sharedNodeGroup, indexBuilder, mm,
-                *nodeLocalState->optimisticAllocator);
+        if (sharedTarget.sharedNodeGroup->isFull()) {
+            writeAndResetNodeGroup(transaction, targetIdx, sharedTarget.sharedNodeGroup,
+                indexBuilder, mm, *nodeLocalState->optimisticAllocator);
         }
-        numNodesAppended += nodeSharedState->sharedNodeGroup->append(*localNodeGroup,
+        numNodesAppended += sharedTarget.sharedNodeGroup->append(*localNodeGroup,
             numNodesAppended /* offsetInNodeGroup */,
             localNodeGroup->getNumRows() - numNodesAppended);
     }
@@ -747,31 +836,33 @@ void NodeBatchInsert::finalize(ExecutionContext* context) {
     DASSERT(localState == nullptr);
     const auto nodeSharedState =
         dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
-    auto errorHandler = createErrorHandler(context);
     auto clientContext = context->clientContext;
     auto transaction = Transaction::Get(*clientContext);
     auto& pageAllocator = *transaction->getLocalStorage()->addOptimisticAllocator();
-    if (nodeSharedState->sharedNodeGroup) {
-        while (nodeSharedState->sharedNodeGroup->getNumRows() > 0) {
-            writeAndResetNodeGroup(transaction, nodeSharedState->sharedNodeGroup,
-                nodeSharedState->globalIndexBuilder, MemoryManager::Get(*clientContext),
-                errorHandler, pageAllocator);
+    for (auto targetIdx = 0u; targetIdx < nodeSharedState->targets.size(); ++targetIdx) {
+        auto& sharedTarget = nodeSharedState->targets[targetIdx];
+        auto errorHandler = createErrorHandler(context, sharedTarget.table,
+            nodeSharedState->duplicatePKSkipResult.get());
+        if (sharedTarget.sharedNodeGroup) {
+            while (sharedTarget.sharedNodeGroup->getNumRows() > 0) {
+                writeAndResetNodeGroup(transaction, targetIdx, sharedTarget.sharedNodeGroup,
+                    sharedTarget.globalIndexBuilder, MemoryManager::Get(*clientContext),
+                    errorHandler, pageAllocator);
+            }
         }
-    }
-    if (nodeSharedState->globalIndexBuilder) {
-        nodeSharedState->globalIndexBuilder->finalize(context, errorHandler);
-        errorHandler.flushStoredErrors();
-    }
-    if (nodeSharedState->noIndexPKValidator) {
-        // Completes cross-chunk duplicate detection for the no-hash-index COPY path. Sorted runs
-        // spilled to disk during validate() are stream-merged here, so duplicates that span
-        // chunks are reported before the transaction commits.
-        nodeSharedState->noIndexPKValidator->finalize();
-    }
-
-    auto& nodeTable = nodeSharedState->table->cast<NodeTable>();
-    for (auto& index : nodeTable.getIndexes()) {
-        index.finalize(clientContext);
+        if (sharedTarget.globalIndexBuilder) {
+            sharedTarget.globalIndexBuilder->finalize(context, errorHandler);
+            errorHandler.flushStoredErrors();
+        }
+        if (sharedTarget.noIndexPKValidator) {
+            // Completes cross-chunk duplicate detection for the no-hash-index COPY path. Sorted
+            // runs spilled to disk during validate() are stream-merged here, so duplicates that
+            // span chunks are reported before the transaction commits.
+            sharedTarget.noIndexPKValidator->finalize();
+        }
+        for (auto& index : sharedTarget.table->getIndexes()) {
+            index.finalize(clientContext);
+        }
     }
     // we want to flush all index errors before children call finalize
     // as the children (if they are table function calls) are responsible for populating the errors

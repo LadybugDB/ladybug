@@ -9,6 +9,7 @@
 #include "binder/query/query_graph.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/copier_config/file_scan_info.h"
+#include "common/partition_routing.h"
 #include "parser/ddl/parsed_property_definition.h"
 #include "parser/query/graph_pattern/pattern_element.h"
 
@@ -129,7 +130,8 @@ public:
         const std::vector<PropertyDefinition>& properties, const parser::BaseScanSource* source,
         const parser::options_t& parsingOptions,
         const std::vector<std::string>& expectedColumnNames,
-        const std::vector<common::LogicalType>& expectedColumnTypes, bool byColumn);
+        const std::vector<common::LogicalType>& expectedColumnTypes, bool byColumn,
+        std::optional<common::NodePartitionWriteInfo> partitionInfo = std::nullopt);
     BoundCopyFromInfo bindCopyRelFromInfo(std::string tableName,
         const std::vector<PropertyDefinition>& properties, const parser::BaseScanSource* source,
         const parser::options_t& parsingOptions,

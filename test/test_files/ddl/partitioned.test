@@ -53,16 +53,35 @@ Table Events has been created.
 ---- 1
 2
 
--CASE PartitionedWriteToParentRejected
+-CASE PartitionedWriteRouting
 -STATEMENT CREATE NODE TABLE T (id INT64 PRIMARY KEY, k STRING) PARTITION BY HASH (k) PARTITIONS 3;
 ---- 1
 Table T has been created.
--STATEMENT CREATE (:T {id: 1, k: 'a'});
----- error
-Binder exception: Cannot write to partitioned table T. Writes to a partitioned parent are not yet routed; write to its partition subgraphs instead (e.g. T_p0).
+# Every node table is backed by a subgraph: the parent and its partition subgraphs are all visible.
+-STATEMENT CALL show_graphs() RETURN *;
+---- 4
+T|STANDARD
+T_p0|STANDARD
+T_p1|STANDARD
+T_p2|STANDARD
+# Single-row CREATE into the parent is routed into the partition matching the key.
+-STATEMENT CREATE (:T {id: 100, k: 'a'});
+---- ok
+-STATEMENT CREATE (:T {id: 101, k: 'b'});
+---- ok
+# Batched COPY into the parent routes every row into the correct partition subgraph.
 -STATEMENT COPY T FROM '${LBUG_ROOT_DIRECTORY}/test/test_files/ddl/partitioned.csv';
----- error
-Binder exception: Cannot COPY into partitioned table T. Partitioned tables do not own physical storage; copy each row-bundle into its partition subgraphs instead (e.g. T_p0, T_p1, ...).
+---- 1
+5 tuples have been copied to the T table.|0|[]
+-STATEMENT MATCH (n:T) RETURN n.id, n.k ORDER BY n.id;
+---- 7
+1|east
+2|west
+3|north
+4|south
+5|east
+100|a
+101|b
 
 -CASE PartitionedValidation
 -STATEMENT CREATE NODE TABLE Bad1 (id INT64 PRIMARY KEY, data STRING[]) PARTITION BY HASH (data) PARTITIONS 2;
@@ -88,6 +107,9 @@ Table P has been created.
 2
 -STATEMENT DROP TABLE P;
 ---- ok
+# Dropping the parent cascades to its partition subgraphs, which also removes their subgraphs.
+-STATEMENT CALL show_graphs() RETURN *;
+---- 0
 -STATEMENT CALL show_tables() RETURN count(*);
 ---- 1
 0

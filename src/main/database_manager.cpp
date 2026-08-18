@@ -223,6 +223,13 @@ void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContex
     if (!mainCatalog->containsGraph(transaction, graphName)) {
         throw RuntimeException{std::format("No graph named {}.", graphName)};
     }
+    // A node-table subgraph is owned by its table and dropped with it. Refusing a standalone
+    // DROP GRAPH keeps the subgraph-per-node-table invariant intact.
+    if (mainCatalog->containsTable(transaction, graphName)) {
+        throw RuntimeException{std::format(
+            "Cannot drop graph {}: it is a node-table subgraph. Drop the node table instead.",
+            graphName)};
+    }
 
     // Remove from system catalog
     mainCatalog->dropGraph(transaction, graphName);
