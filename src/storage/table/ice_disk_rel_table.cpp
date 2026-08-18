@@ -1,5 +1,6 @@
 #include "storage/table/ice_disk_rel_table.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <queue>
 
@@ -150,8 +151,61 @@ void IceDiskRelTable::initScanState(Transaction* transaction, TableScanState& sc
     }
 
     iceDiskScanState.reset(std::move(boundNodeOffsets));
-    iceDiskScanState.indicesReader->initializeScan(*iceDiskScanState.parquetScanState,
-        rowGroupsToProcess, vfs);
+
+    // Range-limit the indices scan to the file rows that can possibly contain edges of this
+    // bound-node batch. The indices file is CSR-sorted by source node, so the edges of nodes
+    // [minNode, maxNode] live in rows [indptr[minNode], indptr[maxNode + 1]). Scanning only
+    // those rows turns a full-query scan from O(#batches * #edges) into O(#edges) total.
+    // This only applies in the FWD direction (for BWD the bound nodes are targets whose rows
+    // are scattered throughout the file) and when the indptr has been loaded.
+    bool rangeLimited = false;
+    uint64_t startRow = 0;
+    uint64_t numRows = UINT64_MAX;
+    if (layout == IceDiskRelTableLayout::CSR &&
+        iceDiskScanState.direction == RelDataDirection::FWD && !indptrData.empty() &&
+        !iceDiskScanState.boundNodeOffsets.empty()) {
+        common::offset_t minNode = std::numeric_limits<common::offset_t>::max();
+        common::offset_t maxNode = 0;
+        for (auto& entry : iceDiskScanState.boundNodeOffsets) {
+            minNode = std::min(minNode, entry.first);
+            maxNode = std::max(maxNode, entry.first);
+        }
+        // indptr has #nodes + 1 entries; node i's edges span [indptr[i], indptr[i + 1]).
+        if ((uint64_t)minNode + 1 < indptrData.size()) {
+            auto endIdx = std::min<uint64_t>((uint64_t)maxNode + 1, indptrData.size() - 1);
+            startRow = (uint64_t)indptrData[minNode];
+            numRows = (uint64_t)indptrData[endIdx] - startRow;
+            rangeLimited = true;
+        }
+    }
+
+    if (rangeLimited) {
+        // Select only the row groups overlapping [startRow, startRow + numRows).
+        std::vector<uint64_t> groups;
+        uint64_t running = 0;
+        uint64_t firstGroupStart = 0;
+        for (uint64_t i = 0; i < numRowGroups && running < startRow + numRows; ++i) {
+            auto groupNumRows =
+                (uint64_t)iceDiskScanState.indicesReader->getMetadata()->row_groups[i].num_rows;
+            if (startRow < running + groupNumRows && startRow + numRows > running) {
+                if (groups.empty()) {
+                    firstGroupStart = running;
+                }
+                groups.push_back(i);
+            }
+            running += groupNumRows;
+        }
+        auto skipRows = startRow > firstGroupStart ? startRow - firstGroupStart : 0;
+        // Global row indices of the first scanned row, used by scanCSR to map each edge row
+        // back to its source node via the indptr.
+        iceDiskScanState.currentBatchStartOffset = (common::offset_t)startRow;
+        iceDiskScanState.indicesReader->initializeScan(*iceDiskScanState.parquetScanState,
+            std::move(groups), vfs, skipRows, numRows);
+    } else {
+        iceDiskScanState.currentBatchStartOffset = 0;
+        iceDiskScanState.indicesReader->initializeScan(*iceDiskScanState.parquetScanState,
+            std::move(rowGroupsToProcess), vfs, 0, UINT64_MAX);
+    }
 }
 
 void IceDiskRelTable::initializeParquetReaders(Transaction* transaction) const {
