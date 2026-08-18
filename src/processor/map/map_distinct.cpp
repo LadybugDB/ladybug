@@ -14,15 +14,19 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapDistinct(const LogicalOperator*
     auto outSchema = distinct->getSchema();
     auto inSchema = child->getSchema();
     auto prevOperator = mapOperator(child);
-    uint64_t limitNum = 0;
+    uint64_t limitNum = UINT64_MAX;
     if (distinct->hasLimitNum()) {
-        limitNum += distinct->getLimitNum();
-    }
-    if (distinct->hasSkipNum()) {
-        limitNum += distinct->getSkipNum();
-    }
-    if (limitNum == 0) {
-        limitNum = UINT64_MAX;
+        limitNum = distinct->getLimitNum();
+        if (distinct->hasSkipNum()) {
+            if (distinct->getSkipNum() >= UINT64_MAX - limitNum) {
+                limitNum = UINT64_MAX;
+            } else {
+                limitNum += distinct->getSkipNum();
+            }
+        }
+        if (limitNum == 0) {
+            limitNum = UINT64_MAX;
+        }
     }
     auto op = createDistinctHashAggregate(distinct->getKeys(), distinct->getPayloads(), inSchema,
         outSchema, std::move(prevOperator));

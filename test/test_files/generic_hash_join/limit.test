@@ -1,0 +1,45 @@
+-DATASET CSV empty
+
+--
+
+-CASE LimitHashJoinRecursiveExtend
+-STATEMENT CREATE NODE TABLE Frame(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE Page(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE Collection(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE Child(FROM Frame TO Page, FROM Frame TO Collection, FROM Collection TO Page);
+---- ok
+-STATEMENT UNWIND range(0, 9) AS id CREATE (:Frame {id: id});
+---- ok
+-STATEMENT UNWIND range(100, 109) AS id CREATE (:Frame {id: id});
+---- ok
+-STATEMENT CREATE (:Page {id: 1});
+---- ok
+-STATEMENT UNWIND range(0, 9) AS id CREATE (:Collection {id: id});
+---- ok
+-STATEMENT MATCH (f:Frame), (g:Collection) WHERE f.id = g.id CREATE (f)-[:Child]->(g);
+---- ok
+-STATEMENT MATCH (g:Collection), (p:Page {id: 1}) CREATE (g)-[:Child]->(p);
+---- ok
+-STATEMENT MATCH (f:Frame), (p:Page {id: 1}) WHERE f.id >= 100 CREATE (f)-[:Child]->(p);
+---- ok
+-STATEMENT MATCH (a:Frame)-[:Child]->(:Page), (a:Frame)-[:Child*1..]->(b) WITH a.id AS id LIMIT 5 RETURN count(*) AS rows;
+---- 1
+5
+-STATEMENT MATCH (a:Frame)-[r:Child*1..]->(b) WITH a.id AS id LIMIT 5 RETURN count(*) AS rows;
+---- 1
+5
+-STATEMENT MATCH (a:Frame)-[r:Child*1..]->(b) WITH a.id AS id SKIP 3 LIMIT 5 RETURN count(*) AS rows;
+---- 1
+5
+-STATEMENT MATCH (a:Frame)-[r:Child*1..]->(b) WITH a.id AS id SKIP 10 RETURN count(*) AS rows;
+---- 1
+20
+-STATEMENT MATCH (a:Frame) WHERE a.id >= 100 WITH a MATCH (a)-[r:Child*1..]->(b) WITH a.id AS id LIMIT 5 RETURN count(*) AS rows;
+---- 1
+5
+-STATEMENT MATCH (a:Frame)-[r:Child*1..]->(b) WHERE length(r) = 2 WITH a.id AS id LIMIT 5 RETURN count(*) AS rows;
+---- 1
+5
