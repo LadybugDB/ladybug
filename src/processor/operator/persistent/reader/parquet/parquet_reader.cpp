@@ -30,11 +30,14 @@ ParquetReader::ParquetReader(std::string filePath, std::vector<bool> columnSkips
 }
 
 void ParquetReader::initializeScan(ParquetReaderScanState& state,
-    std::vector<uint64_t> groups_to_read, VirtualFileSystem* vfs) {
+    std::vector<uint64_t> groups_to_read, VirtualFileSystem* vfs, uint64_t skipRows,
+    uint64_t numRows) {
     state.currentGroup = -1;
     state.finished = false;
     state.groupOffset = 0;
     state.groupIdxList = std::move(groups_to_read);
+    state.rowsToSkip = skipRows;
+    state.rowsRemaining = numRows;
     if (!state.fileInfo || state.fileInfo->path != filePath) {
         state.prefetchMode = true;
         state.fileInfo =
@@ -121,11 +124,24 @@ bool ParquetReader::scanInternal(ParquetReaderScanState& state, DataChunk& resul
                 trans.PrefetchRegistered();
             }
         }
+
+        // Range-limited scans: skip rows at the start of the first scanned row group. The
+        // skip is queued on every column reader and consumed by the first read() call.
+        if (state.rowsToSkip > 0) {
+            auto& group = getGroup(state);
+            const auto skipNow = std::min<uint64_t>(state.rowsToSkip, group.num_rows);
+            auto rootReader = dynamic_cast_checked<StructColumnReader*>(state.rootReader.get());
+            rootReader->skip(skipNow);
+            state.groupOffset += skipNow;
+            state.rowsToSkip -= skipNow;
+        }
         return true;
     }
 
     auto thisOutputChunkRows =
         std::min<uint64_t>(DEFAULT_VECTOR_CAPACITY, getGroup(state).num_rows - state.groupOffset);
+    // Respect the range-limited scan's row budget.
+    thisOutputChunkRows = std::min<uint64_t>(thisOutputChunkRows, state.rowsRemaining);
     result.state->getSelVectorUnsafe().setSelSize(thisOutputChunkRows);
 
     if (thisOutputChunkRows == 0) {
@@ -169,6 +185,7 @@ bool ParquetReader::scanInternal(ParquetReaderScanState& state, DataChunk& resul
     }
 
     state.groupOffset += thisOutputChunkRows;
+    state.rowsRemaining -= thisOutputChunkRows;
     return true;
 }
 

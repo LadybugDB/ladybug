@@ -35,7 +35,11 @@ ColumnReader::ColumnReader(ParquetReader& reader, LogicalType type,
     uint64_t maxRepeat)
     : schema{schema}, fileIdx{fileIdx}, maxDefine{maxDefinition}, maxRepeat{maxRepeat},
       reader{reader}, type{std::move(type)}, protocol(nullptr), pageRowsAvailable{0},
-      groupRowsAvailable(0), chunkReadOffset(0) {}
+      groupRowsAvailable(0), chunkReadOffset(0) {
+    // Buffers used by applyPendingSkips() (row skipping for range-limited scans).
+    dummyDefine.resize(DEFAULT_VECTOR_CAPACITY);
+    dummyRepeat.resize(DEFAULT_VECTOR_CAPACITY);
+}
 
 void ColumnReader::initializeRead(uint64_t /*rowGroupIdx*/,
     const std::vector<lbug_parquet::format::ColumnChunk>& columns,
@@ -58,6 +62,9 @@ void ColumnReader::initializeRead(uint64_t /*rowGroupIdx*/,
         chunkReadOffset = chunk->meta_data.dictionary_page_offset;
     }
     groupRowsAvailable = chunk->meta_data.num_values;
+    fprintf(stderr, "[DBG] initializeRead fileIdx=%lu groupRowsAvail=%lu pageRowsAvail=%lu chunkReadOff=%lu\n",
+        (unsigned long)fileIdx, (unsigned long)groupRowsAvailable,
+        (unsigned long)pageRowsAvailable, (unsigned long)chunkReadOffset);
 }
 
 void ColumnReader::registerPrefetch(ThriftFileTransport& transport, bool allowMerge) {
@@ -273,9 +280,13 @@ void ColumnReader::prepareRead(parquet_filter_t& /*filter*/) {
     dictDecoder.reset();
     defineDecoder.reset();
     block.reset();
+    auto beforeOff =
+        reinterpret_cast<ThriftFileTransport&>(*protocol->getTransport()).GetLocation();
     lbug_parquet::format::PageHeader pageHdr;
     pageHdr.read(protocol);
-
+    fprintf(stderr, "[DBG] prepareRead fileIdx=%lu off=%lu type=%d pageRowsAvail=%lu\n",
+        (unsigned long)fileIdx, (unsigned long)beforeOff, (int)pageHdr.type,
+        (unsigned long)pageRowsAvailable);
     switch (pageHdr.type) {
     case PageType::DATA_PAGE_V2:
         preparePageV2(pageHdr);

@@ -20,11 +20,11 @@ public:
     uint64_t read(uint64_t num_values, parquet_filter_t& filter, uint8_t* define_out,
         uint8_t* repeat_out, common::ValueVector* result) override;
     ColumnReader* getChildReader(uint64_t childIdx);
+    void skip(uint64_t num_values) override;
 
 private:
     uint64_t getTotalCompressedSize() override;
     void registerPrefetch(ThriftFileTransport& transport, bool allow_merge) override;
-    void skip(uint64_t num_values) override;
     uint64_t getGroupRowsAvailable() override;
 
 private:

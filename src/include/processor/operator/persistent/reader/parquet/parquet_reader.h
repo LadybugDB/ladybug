@@ -29,6 +29,11 @@ struct ParquetReaderScanState {
 
     bool finished = false;
 
+    // Range-limited scan support: rows to skip at the start of the first scanned row
+    // group, and the total number of rows to emit (UINT64_MAX means "scan to end").
+    uint64_t rowsToSkip = 0;
+    uint64_t rowsRemaining = UINT64_MAX;
+
     ResizeableBuffer defineBuf;
     ResizeableBuffer repeatBuf;
 
@@ -43,7 +48,7 @@ public:
     ~ParquetReader() = default;
 
     void initializeScan(ParquetReaderScanState& state, std::vector<uint64_t> groups_to_read,
-        common::VirtualFileSystem* vfs);
+        common::VirtualFileSystem* vfs, uint64_t skipRows = 0, uint64_t numRows = UINT64_MAX);
     bool scanInternal(ParquetReaderScanState& state, common::DataChunk& result);
     void scan(ParquetReaderScanState& state, common::DataChunk& result);
     uint64_t getNumRowGroups() { return metadata->row_groups.size(); }
