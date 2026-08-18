@@ -59,6 +59,9 @@ bool ParquetReader::scanInternal(ParquetReaderScanState& state, DataChunk& resul
     if (state.currentGroup < 0 || (int64_t)state.groupOffset >= getGroup(state).num_rows) {
         state.currentGroup++;
         state.groupOffset = 0;
+        // No rows are produced by a row-group switch; make sure callers do not see a stale
+        // selection size (and re-process the previous chunk's data).
+        result.state->getSelVectorUnsafe().setSelSize(0);
 
         auto& trans =
             dynamic_cast_checked<ThriftFileTransport&>(*state.thriftFileProto->getTransport());

@@ -55,11 +55,6 @@ public:
             result->setNull(rowIdx + resultOffset, false);
             if (filter[rowIdx + resultOffset]) {
                 VALUE_TYPE val = VALUE_CONVERSION::dictRead(*dict, offsets[offsetIdx++], *this);
-                if (rowIdx == 0 && resultOffset == 1048576 % numValues) {
-                    fprintf(stderr, "[DBG] offsets resultOffset=%lu off0=%u dict.ptr=%p val=%llu\n",
-                        (unsigned long)resultOffset, offsets[offsetIdx-1], (void*)dict->ptr,
-                        (unsigned long long)val);
-                }
                 result->setValue(rowIdx + resultOffset, val);
             } else {
                 offsetIdx++;
@@ -76,9 +71,6 @@ public:
     void dictionary(const std::shared_ptr<ResizeableBuffer>& data,
         uint64_t /*num_entries*/) override {
         dict = data;
-        fprintf(stderr, "[DBG] dictionary fileIdx=%lu dict.ptr=%p len=%lu firstval=%llu\n",
-            (unsigned long)fileIdx, (void*)dict->ptr, (unsigned long)dict->len,
-            (unsigned long long)((VALUE_TYPE*)dict->ptr)[0]);
     }
 };
 
