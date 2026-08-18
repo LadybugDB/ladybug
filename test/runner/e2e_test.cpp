@@ -31,6 +31,15 @@ public:
     void SetUp() override {
         setUpDataset();
         BaseGraphTest::SetUp();
+        // ATTACH requires an on-disk `.lbdb` target file, so attach tests cannot run with a
+        // purely in-memory database. Under IN_MEM_MODE=true `databasePath` is empty, which made
+        // `${DATABASE_PATH}/attach_target.lbdb` resolve to the filesystem root and fail to write
+        // with "Read-only file system"/"Permission denied" (see issue #815). Fall back to an
+        // on-disk temp DB so the attach target lands in a writable directory in both modes.
+        if (!attachDataset.empty() && databasePath.empty()) {
+            inMemMode = false;
+            databasePath = TestHelper::getTempDBPathStr(getTestGroupAndName());
+        }
         if (bufferPoolSize) {
             systemConfig->bufferPoolSize = *bufferPoolSize;
         }
@@ -71,10 +80,12 @@ public:
         if (!std::filesystem::exists(schemaPath)) {
             throw TestException("ATTACH_DATASET schema not found: " + schemaPath);
         }
-        // Build into a sub-directory of the test temp dir so TearDown's
-        // removeParentDirectoryOfDBPath() cleans everything up.
+        // Build into a sub-directory of the database's parent dir (which is always a real
+        // temp dir: for attach tests SetUp falls back to an on-disk DB even under
+        // IN_MEM_MODE=true) so TearDown's removeParentDirectoryOfDBPath() cleans everything up.
         const auto buildDir =
-            TestHelper::getTempDir("attach_target_build_" + getTestGroupAndName());
+            std::filesystem::path(databasePath).parent_path().string() + "/attach_target_build";
+        std::filesystem::create_directories(buildDir);
         const auto buildDbPath = buildDir + "/" + TESTING_DB_FILE_NAME;
         {
             auto buildDb = std::make_unique<lbug::main::Database>(buildDbPath, *systemConfig);
