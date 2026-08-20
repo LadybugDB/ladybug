@@ -29,6 +29,11 @@ struct IceDiskRelTableScanState final : RelTableScanState {
     std::unordered_map<common::offset_t, common::sel_t>
         boundNodeOffsets; // Map from bound node offset to selection vector index
 
+    // Monotonic cursor into the indptr array for CSR scans. Since rows are examined in
+    // increasing global (CSR) order, the source node of the current row is found by advancing
+    // this cursor (O(1) amortized) instead of a binary search per row.
+    common::offset_t csrSrcNodeIdx = 0;
+
     // Per-scan-state readers for thread safety
     std::unique_ptr<processor::ParquetReader> indicesReader;
     std::unique_ptr<processor::ParquetReader> indptrReader;
@@ -94,7 +99,6 @@ private:
     void initializeParquetReaders(transaction::Transaction* transaction) const;
     void initializeIndptrReader(transaction::Transaction* transaction) const;
     void loadIndptrData(transaction::Transaction* transaction) const;
-    common::offset_t findSourceNodeForRow(common::offset_t globalRowIdx) const;
     bool scanCSR(transaction::Transaction* transaction, IceDiskRelTableScanState& scanState);
     bool scanFlat(transaction::Transaction* transaction, IceDiskRelTableScanState& scanState);
 };

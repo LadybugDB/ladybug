@@ -206,6 +206,18 @@ void IceDiskRelTable::initScanState(Transaction* transaction, TableScanState& sc
         iceDiskScanState.indicesReader->initializeScan(*iceDiskScanState.parquetScanState,
             std::move(rowGroupsToProcess), vfs, 0, UINT64_MAX);
     }
+
+    // Re-anchor the monotonic CSR source-node cursor to the node that contains the first
+    // scanned row of this batch. scanCSR advances the cursor strictly forward while reading
+    // rows, which is only valid within a single batch because the underlying indices file is
+    // read strictly forward. Bound-node batches are NOT guaranteed to arrive in increasing
+    // offset order (hash joins and other reordered inputs feed arbitrary batches), so the
+    // cursor must be repositioned per batch rather than carried across the whole query.
+    if (layout == IceDiskRelTableLayout::CSR && !indptrData.empty() &&
+        iceDiskScanState.currentBatchStartOffset < indptrData.back()) {
+        iceDiskScanState.csrSrcNodeIdx =
+            findSourceNodeForRowInternal(iceDiskScanState.currentBatchStartOffset, indptrData);
+    }
 }
 
 void IceDiskRelTable::initializeParquetReaders(Transaction* transaction) const {
@@ -334,13 +346,19 @@ bool IceDiskRelTable::scanCSR(Transaction* transaction,
 
         for (; iceDiskScanState.currentLocalRowIdx < selSize && totalRowsCollected < maxRowsPerCall;
              ++iceDiskScanState.currentLocalRowIdx) {
-            // Find which source node this row belongs to.
+            // Find which source node this row belongs to. Rows are examined strictly in
+            // increasing global (CSR) order, so we walk a single monotonic cursor through the
+            // indptr (O(1) amortized per row) instead of a binary search (O(log n) per row).
             const auto currentGlobalRowIdx =
                 iceDiskScanState.currentBatchStartOffset + iceDiskScanState.currentLocalRowIdx;
-            const auto sourceNodeOffset = findSourceNodeForRow(currentGlobalRowIdx);
-            if (sourceNodeOffset == common::INVALID_OFFSET) {
+            if (indptrData.empty()) {
                 continue; // Invalid row
             }
+            while (iceDiskScanState.csrSrcNodeIdx + 1 < indptrData.size() &&
+                   indptrData[iceDiskScanState.csrSrcNodeIdx + 1] <= currentGlobalRowIdx) {
+                ++iceDiskScanState.csrSrcNodeIdx;
+            }
+            const auto sourceNodeOffset = iceDiskScanState.csrSrcNodeIdx;
 
             // Column 0 in indices file is the destination node offset.
             const auto dstOffset =
@@ -529,11 +547,6 @@ bool IceDiskRelTable::scanFlat(Transaction* transaction,
 
     iceDiskScanState.outState->getSelVectorUnsafe().setToFiltered(0);
     return false;
-}
-
-common::offset_t IceDiskRelTable::findSourceNodeForRow(common::offset_t globalRowIdx) const {
-    // Use base class helper for binary search
-    return findSourceNodeForRowInternal(globalRowIdx, indptrData);
 }
 
 row_idx_t IceDiskRelTable::getTotalRowCount(const Transaction* transaction) const {
