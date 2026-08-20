@@ -144,13 +144,31 @@ static bool subPlanContainsFilter(LogicalOperator* root) {
 }
 
 // Probe side is qualified if it is selective.
+static bool subPlanContainsRelScan(LogicalOperator* root) {
+    if (root->getOperatorType() == LogicalOperatorType::EXTEND ||
+        root->getOperatorType() == LogicalOperatorType::PACKED_EXTEND) {
+        return true;
+    }
+    for (auto i = 0u; i < root->getNumChildren(); ++i) {
+        if (subPlanContainsRelScan(root->getChild(i).get())) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool isProbeSideQualified(LogicalOperator* probeRoot) {
     if (probeRoot->getOperatorType() == LogicalOperatorType::ACCUMULATE) {
         // No Acc hash join if probe side has already been accumulated. This can be solved.
         return false;
     }
-    // Probe side is not selective. So we don't apply acc hash join.
-    return subPlanContainsFilter(probeRoot);
+    // A rel-scan rooted at EXTEND/PACKED_EXTEND is bounded by the edges it walks and is
+    // selective enough to seed a probe-to-build semi-mask, even when it has no predicate.
+    if (subPlanContainsFilter(probeRoot)) {
+        return true;
+    }
+    return subPlanContainsRelScan(probeRoot) ||
+           probeRoot->getOperatorType() == LogicalOperatorType::SCAN_NODE_TABLE;
 }
 
 // Find all ScanNodeIDs under root which scans parameter nodeID. Note that there might be
