@@ -1,0 +1,1 @@
+add_lbug_test(processor_test intersect_kernels_test.cpp)
