@@ -231,6 +231,26 @@ static void validatePartitionColumn(const std::vector<PropertyDefinition>& prope
     }
 }
 
+// A rel table physically attaches to node tables through CSR indexes keyed by the node table's
+// ID. A partitioned parent owns no storage, so declaring FROM/TO against it must resolve to its
+// partition subgraphs: one FROM-TO pair per (source partition, destination table). This mirrors
+// how reads expand a partitioned parent into its partitions.
+static std::vector<TableCatalogEntry*> resolveRelEndpoints(Catalog* catalog,
+    const transaction::Transaction* transaction, TableCatalogEntry* entry) {
+    if (entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY) {
+        auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
+        if (nodeEntry->isPartitioned()) {
+            std::vector<TableCatalogEntry*> partitions;
+            partitions.reserve(nodeEntry->getChildTableIDs().size());
+            for (auto childID : nodeEntry->getChildTableIDs()) {
+                partitions.push_back(catalog->getTableCatalogEntry(transaction, childID));
+            }
+            return partitions;
+        }
+    }
+    return {entry};
+}
+
 BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info) {
     auto propertyDefinitions = bindPropertyDefinitions(info->propertyDefinitions, info->tableName);
     auto& extraInfo = info->extraInfo->constCast<ExtraCreateNodeTableInfo>();
@@ -342,6 +362,8 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
         }
     }
     // Bind from to pairs
+    auto* catalog = Catalog::Get(*clientContext);
+    auto* transaction = transaction::Transaction::Get(*clientContext);
     node_table_id_pair_set_t nodePairsSet;
     std::vector<BoundRelTableInfo> relTableInfos;
     for (auto& connection : extraInfo.connections) {
@@ -397,19 +419,25 @@ BoundCreateTableInfo Binder::bindCreateRelTableGroupInfo(const CreateTableInfo* 
 
         // Use the actual shadow table IDs, not FOREIGN_TABLE_ID
         // The shadow tables allow the query planner to distinguish between different node tables
-        auto srcTableID = srcEntry->getTableID();
-        auto dstTableID = dstEntry->getTableID();
-        NodeTableIDPair pair{srcTableID, dstTableID};
-        if (nodePairsSet.contains(pair)) {
-            throw BinderException(
-                std::format("Found duplicate FROM-TO {}-{} pairs.", srcTableName, dstTableName));
+        // A partitioned parent resolves to its partition subgraphs (one pair per partition).
+        for (auto* srcEndpoint : resolveRelEndpoints(catalog, transaction, srcEntry)) {
+            for (auto* dstEndpoint : resolveRelEndpoints(catalog, transaction, dstEntry)) {
+                auto srcTableID = srcEndpoint->getTableID();
+                auto dstTableID = dstEndpoint->getTableID();
+                NodeTableIDPair pair{srcTableID, dstTableID};
+                if (nodePairsSet.contains(pair)) {
+                    throw BinderException(std::format("Found duplicate FROM-TO {}-{} pairs.",
+                        srcTableName, dstTableName));
+                }
+                nodePairsSet.insert(pair);
+                const auto& connectionMultiplicity = connection.relMultiplicity.has_value() ?
+                                                         *connection.relMultiplicity :
+                                                         extraInfo.relMultiplicity;
+                relTableInfos.emplace_back(pair,
+                    RelMultiplicityUtils::getFwd(connectionMultiplicity),
+                    RelMultiplicityUtils::getBwd(connectionMultiplicity));
+            }
         }
-        nodePairsSet.insert(pair);
-        const auto& connectionMultiplicity = connection.relMultiplicity.has_value() ?
-                                                 *connection.relMultiplicity :
-                                                 extraInfo.relMultiplicity;
-        relTableInfos.emplace_back(pair, RelMultiplicityUtils::getFwd(connectionMultiplicity),
-            RelMultiplicityUtils::getBwd(connectionMultiplicity));
     }
     auto boundExtraInfo = std::make_unique<BoundExtraCreateRelTableGroupInfo>(
         std::move(propertyDefinitions), srcMultiplicity, dstMultiplicity, storageDirection,
@@ -668,6 +696,36 @@ std::unique_ptr<BoundStatement> Binder::bindAlter(const Statement& statement) {
 
     // we don't support alter operations on icebug-disk tables
     validateNotIceDiskTable(clientContext, alter.getInfo()->tableName);
+
+    // Partitioned tables have restricted ALTER support until ALTER propagation to partition
+    // subgraphs lands: only RENAME (which renames the <parent>_p<i> partitions along with the
+    // parent) and COMMENT are accepted on the parent, and partitions cannot be altered
+    // directly at all - they are managed by their partitioned parent.
+    {
+        auto* catalog = Catalog::Get(*clientContext);
+        auto* transaction = transaction::Transaction::Get(*clientContext);
+        const auto& tableName = alter.getInfo()->tableName;
+        if (catalog->containsTable(transaction, tableName)) {
+            auto* entry = catalog->getTableCatalogEntry(transaction, tableName);
+            if (entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY) {
+                auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
+                if (nodeEntry->isPartitionChild()) {
+                    auto* parent =
+                        catalog->getTableCatalogEntry(transaction, nodeEntry->getParentTableID());
+                    throw BinderException(std::format(
+                        "Cannot ALTER partition {}: it is managed by partitioned table {}.",
+                        tableName, parent->getName()));
+                }
+                if (nodeEntry->isPartitioned() && alter.getInfo()->type != AlterType::RENAME &&
+                    alter.getInfo()->type != AlterType::COMMENT) {
+                    throw BinderException(std::format(
+                        "Cannot ALTER partitioned table {}: ALTER on a partitioned table is not "
+                        "supported yet. Drop and recreate the table instead.",
+                        tableName));
+                }
+            }
+        }
+    }
 
     switch (alter.getInfo()->type) {
     case AlterType::RENAME: {

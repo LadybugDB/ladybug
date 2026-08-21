@@ -113,3 +113,126 @@ Table P has been created.
 -STATEMENT CALL show_tables() RETURN count(*);
 ---- 1
 0
+
+-CASE PartitionedDropProtection
+-STATEMENT CREATE NODE TABLE P (id INT64 PRIMARY KEY, k STRING) PARTITION BY HASH (k) PARTITIONS 2;
+---- 1
+Table P has been created.
+# A partition subgraph is owned by its table: DROP GRAPH refuses it (and the parent, which is
+# also a node-table subgraph).
+-STATEMENT DROP GRAPH P_p0;
+---- error
+Binder exception: Cannot drop graph P_p0: it is a node-table subgraph. Drop the node table instead.
+-STATEMENT DROP GRAPH P;
+---- error
+Binder exception: Cannot drop graph P: it is a node-table subgraph. Drop the node table instead.
+# Dropping a partition directly would leave the parent pointing at a missing table.
+-STATEMENT DROP TABLE P_p0;
+---- error
+Binder exception: Cannot drop table P_p0 because it is a partition of partitioned table P. Drop P instead.
+
+-CASE PartitionedAlterRestrictions
+-STATEMENT CREATE NODE TABLE P (id INT64 PRIMARY KEY, k STRING) PARTITION BY HASH (k) PARTITIONS 2;
+---- 1
+Table P has been created.
+# Partitions are managed by their parent and cannot be altered directly.
+-STATEMENT ALTER TABLE P_p0 RENAME TO P_zero;
+---- error
+Binder exception: Cannot ALTER partition P_p0: it is managed by partitioned table P.
+-STATEMENT ALTER TABLE P_p0 ADD extra INT64 DEFAULT 0;
+---- error
+Binder exception: Cannot ALTER partition P_p0: it is managed by partitioned table P.
+# Until ALTER propagation lands only RENAME is accepted on the parent.
+-STATEMENT ALTER TABLE P ADD extra INT64 DEFAULT 0;
+---- error
+Binder exception: Cannot ALTER partitioned table P: ALTER on a partitioned table is not supported yet. Drop and recreate the table instead.
+-STATEMENT ALTER TABLE P RENAME TO Q;
+---- 1
+Table P renamed to Q.
+# Renaming the parent keeps the <parent>_p<i> naming of its partitions in step.
+-STATEMENT CALL show_tables() RETURN name ORDER BY name;
+---- 3
+Q
+Q_p0
+Q_p1
+-STATEMENT CREATE (:Q {id: 1, k: 'a'});
+---- ok
+-STATEMENT MATCH (n:Q) RETURN n.id, n.k;
+---- 1
+1|a
+
+-CASE PartitionedUpdateKey
+-STATEMENT CREATE NODE TABLE T (id INT64 PRIMARY KEY, k STRING) PARTITION BY HASH (k) PARTITIONS 2;
+---- 1
+Table T has been created.
+-STATEMENT CREATE (:T {id: 1, k: 'a'});
+---- ok
+# Updating the partition column would require moving rows between partitions, which is not
+# supported: refuse rather than leave the row in a partition that no longer matches its key.
+-STATEMENT MATCH (t:T) SET t.k = 'b';
+---- error
+Binder exception: Cannot set property k in table T_p0 because it is the partition column of partitioned table T. Updating the partition key would move the row to another partition, which is not supported. Try delete and then insert with the new value.
+-STATEMENT MATCH (t:T_p1) SET t.k = 'b';
+---- error
+Binder exception: Cannot set property k in table T_p1 because it is the partition column of partitioned table T. Updating the partition key would move the row to another partition, which is not supported. Try delete and then insert with the new value.
+# MERGE ... ON MATCH SET hits the same restriction.
+-STATEMENT MERGE (t:T {id: 1}) ON MATCH SET t.k = 'c';
+---- error
+Binder exception: Cannot set property k in table T_p0 because it is the partition column of partitioned table T. Updating the partition key would move the row to another partition, which is not supported. Try delete and then insert with the new value.
+# The primary-key restriction still takes precedence for the key column.
+-STATEMENT MATCH (t:T {id: 1}) SET t.id = 2;
+---- error
+Binder exception: Cannot set property id in table T_p0 because it is used as primary key. Try delete and then insert.
+# The delete + re-insert workaround routes the row by its new key value.
+-STATEMENT MATCH (t:T {id: 1}) DELETE t;
+---- ok
+-STATEMENT CREATE (:T {id: 1, k: 'b'});
+---- ok
+-STATEMENT MATCH (t:T) RETURN t.id, t.k;
+---- 1
+1|b
+
+-CASE PartitionedRelTables
+-STATEMENT CREATE NODE TABLE Item (id INT64 PRIMARY KEY);
+---- 1
+Table Item has been created.
+-STATEMENT CREATE NODE TABLE Orders (id INT64 PRIMARY KEY, region STRING) PARTITION BY HASH (region) PARTITIONS 2;
+---- 1
+Table Orders has been created.
+# FROM/TO against a partitioned parent resolves to one pair per partition subgraph.
+-STATEMENT CREATE REL TABLE R (FROM Orders TO Item);
+---- 1
+Table R has been created.
+-STATEMENT CREATE (:Item {id: 100});
+---- ok
+-STATEMENT CREATE (:Orders_p0 {id: 1, region: 'a'});
+---- ok
+-STATEMENT MATCH (o:Orders_p0), (i:Item {id:100}) CREATE (o)-[:R]->(i);
+---- ok
+# Reads through the parent see relationships attached to its partitions.
+-STATEMENT MATCH (o:Orders)-[r:R]->(i:Item) RETURN o.id, i.id ORDER BY o.id;
+---- 1
+1|100
+# Creating a rel pattern against the parent itself is not supported yet: rel writes must go
+# through a specific partition.
+-STATEMENT MATCH (o:Orders), (i:Item) CREATE (o)-[:R]->(i);
+---- error(regex)
+Binder exception: Create rel .* bound by multiple node labels is not supported\. Node table Orders is partitioned; create the relationship against one of its partitions \(Orders_<i>\) instead\.
+# A rel referencing a partition blocks dropping the parent: nothing is detached silently.
+-STATEMENT DROP TABLE Orders;
+---- error
+Binder exception: Cannot delete node table Orders_p0 because it is referenced by relationship table R.
+-STATEMENT MATCH (o:Orders_p0 {id: 1}) DETACH DELETE o;
+---- ok
+-STATEMENT MATCH (:Orders)-[r:R]->(:Item) RETURN count(*);
+---- 1
+0
+-STATEMENT DROP TABLE R;
+---- 1
+Table R has been dropped.
+-STATEMENT DROP TABLE Orders;
+---- 1
+Table Orders has been dropped.
+-STATEMENT CALL show_tables() RETURN name ORDER BY name;
+---- 1
+Item

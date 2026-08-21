@@ -141,7 +141,7 @@ public:
     void pushCreateDropCatalogEntry(catalog::CatalogSet& catalogSet,
         catalog::CatalogEntry& catalogEntry, bool isInternal, bool skipLoggingToWAL = false);
     void pushAlterCatalogEntry(catalog::CatalogSet& catalogSet, catalog::CatalogEntry& catalogEntry,
-        const binder::BoundAlterInfo& alterInfo);
+        const binder::BoundAlterInfo& alterInfo, bool skipLoggingToWAL = false);
     void pushSequenceChange(catalog::SequenceCatalogEntry* sequenceEntry, int64_t kCount,
         const catalog::SequenceRollbackData& data);
     void pushInsertInfo(common::node_group_idx_t nodeGroupIdx, common::row_idx_t startRow,

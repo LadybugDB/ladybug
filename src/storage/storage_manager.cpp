@@ -38,6 +38,13 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace storage {
 
+// A partitioned parent is a logical table: it owns no physical storage, its partition subgraphs
+// do. Storage iteration (checkpoint / serialize / rollback) must skip the parents and touch the
+// partitions, which are ordinary node-table entries in the same catalog set.
+static void erasePartitionedParents(std::vector<NodeTableCatalogEntry*>& entries) {
+    std::erase_if(entries, [](const auto* e) { return e->isPartitioned(); });
+}
+
 StorageManager::StorageManager(const std::string& databasePath, bool readOnly, bool enableChecksums,
     MemoryManager& memoryManager, bool enableCompression, bool enableDefaultHashIndex,
     VirtualFileSystem* vfs)
@@ -346,7 +353,7 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& cat
     auto nodeTableEntries = catalog.getNodeTableEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     const auto relGroupEntries = catalog.getRelGroupEntries(&DUMMY_CHECKPOINT_TRANSACTION);
     // Partitioned parents hold no physical storage; only their partition subgraphs do.
-    std::erase_if(nodeTableEntries, [](const auto* e) { return e->isPartitioned(); });
+    erasePartitionedParents(nodeTableEntries);
 
     std::shared_lock lck{mtx};
     for (const auto entry : nodeTableEntries) {
@@ -381,7 +388,7 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& cat
     auto nodeTableEntries = catalog.getNodeTableEntries(&snapshotTxn);
     const auto relGroupEntries = catalog.getRelGroupEntries(&snapshotTxn);
     // Partitioned parents hold no physical storage; only their partition subgraphs do.
-    std::erase_if(nodeTableEntries, [](const auto* e) { return e->isPartitioned(); });
+    erasePartitionedParents(nodeTableEntries);
 
     std::shared_lock lck{mtx};
     for (const auto entry : nodeTableEntries) {
@@ -463,7 +470,7 @@ void StorageManager::serialize(const Catalog& catalog, Serializer& ser) {
     std::sort(relGroupEntries.begin(), relGroupEntries.end(),
         [](const auto& a, const auto& b) { return a->getTableID() < b->getTableID(); });
     // Partitioned parents own no physical storage; their partitions are serialized individually.
-    std::erase_if(nodeTableEntries, [](const auto* e) { return e->isPartitioned(); });
+    erasePartitionedParents(nodeTableEntries);
     ser.writeDebuggingInfo("num_node_tables");
     ser.write<uint64_t>(nodeTableEntries.size());
     for (const auto tableEntry : nodeTableEntries) {
@@ -497,7 +504,7 @@ void StorageManager::serialize(const Catalog& catalog, const Transaction& snapsh
     std::sort(relGroupEntries.begin(), relGroupEntries.end(),
         [](const auto& a, const auto& b) { return a->getTableID() < b->getTableID(); });
     // Partitioned parents own no physical storage; their partitions are serialized individually.
-    std::erase_if(nodeTableEntries, [](const auto* e) { return e->isPartitioned(); });
+    erasePartitionedParents(nodeTableEntries);
 
     std::shared_lock lck{mtx};
     ser.writeDebuggingInfo("num_node_tables");

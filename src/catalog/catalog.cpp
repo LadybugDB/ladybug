@@ -183,6 +183,7 @@ void Catalog::dropTableEntry(Transaction* transaction, const TableCatalogEntry* 
                 continue;
             }
             auto* child = getTableCatalogEntry(transaction, childID);
+            dropAllIndexes(transaction, childID);
             dropSerialSequence(transaction, child);
             if (tables->containsEntry(transaction, child->getName())) {
                 tables->dropEntry(transaction, child->getName(), child->getOID());
@@ -218,6 +219,28 @@ void Catalog::alterTableEntry(Transaction* transaction, const BoundAlterInfo& in
         const auto& renameInfo = info.extraInfo->constPtrCast<BoundExtraRenameTableInfo>();
         dropNodeTableSubgraph(transaction, info.tableName);
         createNodeTableSubgraph(transaction, renameInfo->newName);
+        // Partition subgraphs are named <parent>_p<i>; keep them in step with the parent so the
+        // naming invariant survives a rename. Children follow their parent's ID-based links, so
+        // this is cosmetic consistency rather than correctness.
+        auto* renamedEntry = getTableCatalogEntry(transaction, renameInfo->newName);
+        if (renamedEntry->getType() == CatalogEntryType::NODE_TABLE_ENTRY) {
+            auto* nodeEntry = renamedEntry->ptrCast<NodeTableCatalogEntry>();
+            for (auto childID : nodeEntry->getChildTableIDs()) {
+                auto* child =
+                    getTableCatalogEntry(transaction, childID)->ptrCast<NodeTableCatalogEntry>();
+                const auto oldChildName = child->getName();
+                auto childRenameInfo = BoundAlterInfo(AlterType::RENAME, oldChildName,
+                    std::make_unique<BoundExtraRenameTableInfo>(
+                        std::format("{}_p{}", renameInfo->newName, child->getPartitionIndex())),
+                    ConflictAction::ON_CONFLICT_THROW);
+                tables->alterTableEntry(transaction, childRenameInfo,
+                    true /* skipLoggingToWAL: implied by the parent's rename record; replaying
+                            that record re-runs this loop */);
+                dropNodeTableSubgraph(transaction, oldChildName);
+                createNodeTableSubgraph(transaction,
+                    childRenameInfo.extraInfo->constPtrCast<BoundExtraRenameTableInfo>()->newName);
+            }
+        }
     }
 }
 

@@ -202,10 +202,10 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
 }
 
 void Transaction::pushAlterCatalogEntry(CatalogSet& catalogSet, CatalogEntry& catalogEntry,
-    const binder::BoundAlterInfo& alterInfo) {
+    const binder::BoundAlterInfo& alterInfo, bool skipLoggingToWAL) {
     undoBuffer->createCatalogEntry(catalogSet, catalogEntry);
     hasCatalogChanges = true;
-    if (shouldLogToWAL()) {
+    if (shouldLogToWAL() && !skipLoggingToWAL) {
         DASSERT(localWAL);
         localWAL->logAlterCatalogEntryRecord(&alterInfo);
     }
