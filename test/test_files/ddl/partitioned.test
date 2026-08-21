@@ -236,3 +236,44 @@ Table Orders has been dropped.
 -STATEMENT CALL show_tables() RETURN name ORDER BY name;
 ---- 1
 Item
+
+-CASE PartitionedSelfRelCrossPartitionEdges
+-STATEMENT CREATE NODE TABLE Orders (id INT64 PRIMARY KEY, region STRING) PARTITION BY HASH (region) PARTITIONS 3;
+---- 1
+Table Orders has been created.
+# A self-rel expands to one pair per (source partition, destination partition), so edges within
+# a partition and across partitions are both expressible.
+-STATEMENT CREATE REL TABLE R (FROM Orders TO Orders, w INT64 DEFAULT 0);
+---- 1
+Table R has been created.
+-STATEMENT CREATE (:Orders_p0 {id: 1, region: 'a'});
+---- ok
+-STATEMENT CREATE (:Orders_p1 {id: 2, region: 'b'});
+---- ok
+-STATEMENT CREATE (:Orders_p2 {id: 3, region: 'c'});
+---- ok
+# Cross-partition edges in both directions, plus a same-partition edge.
+-STATEMENT MATCH (a:Orders_p0 {id:1}), (b:Orders_p1 {id:2}) CREATE (a)-[:R {w: 10}]->(b);
+---- ok
+-STATEMENT MATCH (a:Orders_p1 {id:2}), (b:Orders_p2 {id:3}) CREATE (a)-[:R {w: 20}]->(b);
+---- ok
+-STATEMENT MATCH (a:Orders_p2 {id:3}), (b:Orders_p0 {id:1}) CREATE (a)-[:R {w: 30}]->(b);
+---- ok
+-STATEMENT MATCH (a:Orders_p0 {id:1}), (b:Orders_p0 {id:1}) CREATE (b)-[:R {w: 40}]->(a);
+---- ok
+# Reads through the parent see every edge regardless of which partitions it spans.
+-STATEMENT MATCH (a:Orders)-[r:R]->(b:Orders) RETURN a.id, b.id, r.w ORDER BY r.w;
+---- 4
+1|2|10
+2|3|20
+3|1|30
+1|1|40
+-STATEMENT MATCH (a:Orders_p1)-[r:R]->(b:Orders_p2) RETURN a.id, b.id, r.w;
+---- 1
+2|3|20
+# DETACH DELETE removes the node and its cross-partition edges in both directions.
+-STATEMENT MATCH (o:Orders_p0 {id: 1}) DETACH DELETE o;
+---- ok
+-STATEMENT MATCH (a:Orders)-[r:R]->(b:Orders) RETURN a.id, b.id, r.w ORDER BY r.w;
+---- 1
+2|3|20

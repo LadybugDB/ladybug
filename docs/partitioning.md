@@ -82,6 +82,13 @@ Two kinds of "other tables" can be coupled to a partitioned table:
   * Creating a rel *pattern* against the parent (`MATCH (o:Orders)-[r:R]->(i:Item) CREATE ...`) is
     refused for now — the write must go through a concrete partition (`Orders_p0`). Routing pattern
     writes by the source row's actual partition at runtime is roadmap work; the binder error says so.
+  * **Self-relations and cross-partition edges are allowed.** `FROM Orders TO Orders` expands to
+    the full cross product `(p_i, p_j)` for all partition pairs, so an edge may connect two nodes
+    in different partitions (or the same one); parent-pattern reads see every edge regardless of
+    which partitions it spans, and `DETACH DELETE` removes a node's edges in both directions.
+    Note the cost: a self-rel on an n-partition table materializes n² rel tables (each with its own
+    CSR indexes), which is negligible for typical n but grows quadratically — keep partition counts
+    modest on tables with self-relations until pair creation can be made lazy.
 * **User graphs.** A `GraphCatalogEntry` carries no table membership — it is only a name marker
   surfaced by `SHOW_GRAPHS` — so nothing else can live "inside" a partition's subgraph.
 
