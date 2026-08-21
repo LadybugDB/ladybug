@@ -20,6 +20,12 @@ private:
     void visitIntersect(planner::LogicalOperator* op) override;
 
     void visitPathPropertyProbe(planner::LogicalOperator* op) override;
+
+    // Query-final literal LIMIT that can be pushed into the probe side of
+    // probeLimitTarget, or nullptr when no such push is result-preserving. Both fields
+    // are recomputed (and reset) at the start of every rewrite().
+    std::shared_ptr<binder::Expression> probeLimit;
+    planner::LogicalOperator* probeLimitTarget = nullptr;
 };
 
 } // namespace optimizer
