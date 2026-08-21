@@ -169,8 +169,8 @@ CatalogEntry* CatalogSet::dropEntryNoLock(const Transaction* transaction, const 
     return tombstonePtr->getPrev();
 }
 
-void CatalogSet::alterTableEntry(Transaction* transaction,
-    const binder::BoundAlterInfo& alterInfo) {
+void CatalogSet::alterTableEntry(Transaction* transaction, const binder::BoundAlterInfo& alterInfo,
+    bool skipLoggingToWAL) {
     std::unique_lock lck{mtx};
     // LCOV_EXCL_START
     validateExistNoLock(transaction, alterInfo.tableName);
@@ -186,7 +186,7 @@ void CatalogSet::alterTableEntry(Transaction* transaction,
         dropEntryNoLock(transaction, alterInfo.tableName, entry->getOID());
         auto createdEntry = createEntryNoLock(transaction, std::move(newEntry));
         if (transaction->shouldAppendToUndoBuffer()) {
-            transaction->pushAlterCatalogEntry(*this, *entry, alterInfo);
+            transaction->pushAlterCatalogEntry(*this, *entry, alterInfo, skipLoggingToWAL);
             transaction->pushCreateDropCatalogEntry(*this, *createdEntry, isInternal(),
                 true /* skipLoggingToWAL */);
         }

@@ -2,6 +2,7 @@
 
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/binder.h"
 #include "common/string_utils.h"
@@ -87,22 +88,46 @@ void Drop::dropTable(const main::ClientContext* context) {
     auto entry = catalog->getTableCatalogEntry(transaction, dropInfo.name);
     switch (entry->getType()) {
     case CatalogEntryType::NODE_TABLE_ENTRY: {
-        for (auto& indexEntry : catalog->getIndexEntries(transaction)) {
-            if (indexEntry->getTableID() == entry->getTableID()) {
-                if (StringUtils::caseInsensitiveEquals(indexEntry->getIndexType(), "HASH") ||
-                    StringUtils::caseInsensitiveEquals(indexEntry->getIndexType(), "ART")) {
-                    continue;
-                }
-                throw BinderException(
-                    std::format("Cannot delete node table {} because it is referenced by index {}.",
-                        entry->getName(), indexEntry->getIndexName()));
+        auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
+        if (nodeEntry->isPartitionChild()) {
+            // A partition subgraph is owned by its partitioned parent and is dropped with it.
+            // Dropping it individually would leave the parent pointing at a missing table.
+            auto* parent =
+                catalog->getTableCatalogEntry(transaction, nodeEntry->getParentTableID());
+            throw BinderException(std::format(
+                "Cannot drop table {} because it is a partition of partitioned table {}. "
+                "Drop {} instead.",
+                entry->getName(), parent->getName(), parent->getName()));
+        }
+        // A partitioned parent cascades to its partition subgraphs, so every table that this
+        // DROP would remove must satisfy the reference checks below. This refuses the drop
+        // atomically (before anything is dropped) when any partition is still referenced.
+        std::vector<const NodeTableCatalogEntry*> droppingTables{nodeEntry};
+        if (nodeEntry->isPartitioned()) {
+            droppingTables.reserve(nodeEntry->getChildTableIDs().size() + 1);
+            for (auto childID : nodeEntry->getChildTableIDs()) {
+                droppingTables.push_back(catalog->getTableCatalogEntry(transaction, childID)
+                                             ->ptrCast<NodeTableCatalogEntry>());
             }
         }
-        for (auto& relEntry : catalog->getRelGroupEntries(transaction)) {
-            if (relEntry->isParent(entry->getTableID())) {
-                throw BinderException(std::format("Cannot delete node table {} because it is "
-                                                  "referenced by relationship table {}.",
-                    entry->getName(), relEntry->getName()));
+        for (auto* droppingEntry : droppingTables) {
+            for (auto& indexEntry : catalog->getIndexEntries(transaction)) {
+                if (indexEntry->getTableID() == droppingEntry->getTableID()) {
+                    if (StringUtils::caseInsensitiveEquals(indexEntry->getIndexType(), "HASH") ||
+                        StringUtils::caseInsensitiveEquals(indexEntry->getIndexType(), "ART")) {
+                        continue;
+                    }
+                    throw BinderException(std::format(
+                        "Cannot delete node table {} because it is referenced by index {}.",
+                        droppingEntry->getName(), indexEntry->getIndexName()));
+                }
+            }
+            for (auto& relEntry : catalog->getRelGroupEntries(transaction)) {
+                if (relEntry->isParent(droppingEntry->getTableID())) {
+                    throw BinderException(std::format("Cannot delete node table {} because it is "
+                                                      "referenced by relationship table {}.",
+                        droppingEntry->getName(), relEntry->getName()));
+                }
             }
         }
     } break;
@@ -131,6 +156,18 @@ void Drop::dropGraph(const main::ClientContext* context) {
 
     if (StringUtils::caseInsensitiveEquals(dropInfo.name, "main")) {
         throw BinderException{"Cannot drop the main graph."};
+    }
+
+    // Every node table is registered as a subgraph (partition subgraphs included). Those
+    // subgraphs are owned by their table: dropping one would desynchronize it from its table
+    // (and, for a partition, from its partitioned parent), so refuse and point at the owner.
+    const auto catalog = Catalog::Get(*context);
+    const auto transaction = transaction::Transaction::Get(*context);
+    if (catalog->containsGraph(transaction, dropInfo.name) &&
+        catalog->containsTable(transaction, dropInfo.name, context->useInternalCatalogEntry())) {
+        throw BinderException(std::format(
+            "Cannot drop graph {}: it is a node-table subgraph. Drop the node table instead.",
+            dropInfo.name));
     }
 
     if (!dbManager->hasGraph(dropInfo.name)) {

@@ -16,6 +16,7 @@
 #include "common/exception/binder.h"
 #include "common/json.h"
 #include "common/json_utils.h"
+#include "common/string_utils.h"
 #include "common/types/types.h"
 #include "common/vector/value_vector.h"
 #include "main/client_context.h"
@@ -355,8 +356,47 @@ static TableCatalogEntry* tryPruneMultiLabeled(const RelExpression& rel,
 void Binder::bindInsertRel(std::shared_ptr<RelExpression> rel,
     std::vector<BoundInsertInfo>& infos) {
     if (rel->isBoundByMultiLabeledNode()) {
-        throw BinderException(std::format(
-            "Create rel {} bound by multiple node labels is not supported.", rel->toString()));
+        // If the multi-label comes from expanding a partitioned parent, point the user at the
+        // supported path: relationships attach to individual partition subgraphs.
+        std::string partitionedHint;
+        for (auto& endpoint :
+            std::vector<std::shared_ptr<NodeExpression>>{rel->getSrcNode(), rel->getDstNode()}) {
+            if (!endpoint->isMultiLabeled() || endpoint->getNumEntries() == 0) {
+                continue;
+            }
+            std::optional<common::table_id_t> parentTableID;
+            bool allPartitionsOfOneParent = true;
+            for (auto i = 0u; i < endpoint->getNumEntries(); i++) {
+                auto* e = endpoint->getEntry(i);
+                if (e->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
+                    allPartitionsOfOneParent = false;
+                    break;
+                }
+                auto parentID = e->ptrCast<NodeTableCatalogEntry>()->getParentTableID();
+                if (parentID == common::INVALID_TABLE_ID) {
+                    allPartitionsOfOneParent = false;
+                    break;
+                }
+                if (!parentTableID.has_value()) {
+                    parentTableID = parentID;
+                } else if (*parentTableID != parentID) {
+                    allPartitionsOfOneParent = false;
+                    break;
+                }
+            }
+            if (allPartitionsOfOneParent) {
+                auto* catalog = Catalog::Get(*clientContext);
+                auto* transaction = transaction::Transaction::Get(*clientContext);
+                const auto* parent = catalog->getTableCatalogEntry(transaction, *parentTableID);
+                partitionedHint = std::format(
+                    " Node table {} is partitioned; create the relationship against one of its "
+                    "partitions ({}_<i>) instead.",
+                    parent->getName(), parent->getName());
+            }
+        }
+        throw BinderException(
+            std::format("Create rel {} bound by multiple node labels is not supported.{}",
+                rel->toString(), partitionedHint));
     }
     if (rel->getDirectionType() == RelDirectionType::BOTH) {
         throw BinderException(std::format("Create undirected relationship is not supported. "
@@ -537,6 +577,32 @@ BoundSetPropertyInfo Binder::bindSetPropertyInfo(const ParsedExpression* column,
                     std::format("Cannot set property {} in table {} because it is used as primary "
                                 "key. Try delete and then insert.",
                         property.getPropertyName(), entry->getName()));
+            }
+        }
+        // Check partition-key constraint. A row's partition subgraph is decided by its
+        // partition-key value at write time; updating the key would require moving the row to a
+        // different subgraph, which we don't support (node offsets are referenced by rel tables,
+        // so a move is semantically delete + insert). Refuse rather than silently leave the row
+        // in a partition that no longer matches its key.
+        for (auto entry : nodeOrRel.getEntries()) {
+            auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
+            const NodeTableCatalogEntry* partitionedOwner = nullptr;
+            if (nodeEntry->isPartitioned()) {
+                partitionedOwner = nodeEntry;
+            } else if (nodeEntry->isPartitionChild()) {
+                partitionedOwner =
+                    catalog->getTableCatalogEntry(transaction, nodeEntry->getParentTableID())
+                        ->ptrCast<NodeTableCatalogEntry>();
+            }
+            if (partitionedOwner != nullptr &&
+                StringUtils::caseInsensitiveEquals(property.getPropertyName(),
+                    partitionedOwner->getPartitionColumnName())) {
+                throw BinderException(std::format(
+                    "Cannot set property {} in table {} because it is the partition column of "
+                    "partitioned table {}. Updating the partition key would move the row to "
+                    "another partition, which is not supported. Try delete and then insert with "
+                    "the new value.",
+                    property.getPropertyName(), entry->getName(), partitionedOwner->getName()));
             }
         }
         return BoundSetPropertyInfo(TableType::NODE, expr, boundColumn, boundColumnData);

@@ -36,7 +36,7 @@ public:
         common::oid_t oid);
 
     void alterTableEntry(transaction::Transaction* transaction,
-        const binder::BoundAlterInfo& alterInfo);
+        const binder::BoundAlterInfo& alterInfo, bool skipLoggingToWAL = false);
 
     CatalogEntrySet getEntries(const transaction::Transaction* transaction);
     CatalogEntry* getEntryOfOID(const transaction::Transaction* transaction, common::oid_t oid);

@@ -11,6 +11,11 @@ protocol such as ADBC).
 > (read over all partitions) are implemented. Write-routing (COPY / CREATE / MERGE into the
 > parent) is implemented for HASH partitioning; RANGE reuses the same deterministic hash routing
 > until declarative range bounds land. Predicate-based partition pruning is still future work.
+>
+> Invariant-protection implemented in response to design review: partitions cannot be dropped or
+> altered individually, `DROP GRAPH` refuses node-table subgraphs, dropping a partitioned table is
+> refused while rel tables still reference its partitions, and updates to a partition column are
+> rejected (rows cannot move between partitions). See "Design notes" below.
 
 ## Why subgraph-per-partition
 
@@ -32,6 +37,82 @@ The partitioning model is deliberately "one physical table per partition":
 PostgreSQL's own distinction between *declarative* partitioning (a parent + child tables) and
 *method* partitions (range/list/hash) maps directly: the parent is the declarative shell, the
 children are the method partitions.
+
+## Design notes
+
+Answers to the questions raised while reviewing the partitioning PR.
+
+### (a) The partition/subgraph coupling cannot be broken by accident
+
+Every node table owns a same-named subgraph (`GraphCatalogEntry`), and a partition additionally
+carries a back-reference (`parentTableID`, `partitionIndex`) plus a forward link on the parent
+(`childTableIDs`). Three guards keep the coupling intact:
+
+* **`DROP GRAPH <partition>` is refused.** Node-table subgraphs are owned by their table, so
+  `DROP GRAPH Orders_p0` fails with *"it is a node-table subgraph. Drop the node table instead."*
+  (Before this guard, the command failed with a confusing "does not exist", even though `SHOW_GRAPHS`
+  lists the subgraph.)
+* **`DROP TABLE <partition>` is refused.** Dropping one partition would leave the parent holding a
+  dangling `childTableID`, after which every scan of the parent fails with *Cannot find table
+  catalog entry*. The error points at the parent: drop the whole partitioned table instead.
+* **Renaming the parent renames the partitions.** The `<parent>_p<i>` naming stays consistent
+  because `ALTER TABLE ... RENAME` cascades to the children (and their subgraphs). Child renames
+  are not separately WAL-logged: replaying the parent's single rename record re-runs the
+  child-rename step, and rollback reverts children before the parent, so replay and undo both see
+  one consistent transition.
+
+PostgreSQL reaches the same place with different mechanics (it refuses `DROP TABLE` of a parent
+with partitions and requires explicit `DETACH PARTITION`). Our v1 equivalent of detach is "drop
+the parent".
+
+### (b) Other tables coupled to partitions: refuse, never silently detach
+
+Two kinds of "other tables" can be coupled to a partitioned table:
+
+* **Rel tables.** A rel attaches to node tables by *table ID* through per-pair CSR indexes. A
+  partitioned parent owns no storage, so declaring `FROM Orders TO Item` resolves to **one pair per
+  partition**: `(Orders_p0, Item), ..., (Orders_p3, Item)`. Rels therefore attach to real storage,
+  and reads through the parent work unchanged. Consequently:
+  * Dropping the parent is **refused** while any rel still references *any* partition — the same
+    check a plain node table has always had, applied to every table the cascade would remove, and
+    evaluated before anything is dropped.
+  * We do **not** detach-delete relationships automatically. Cascade-dropping dependent rels is
+    deliberate future work (see roadmap); until then the error names the blocking rel table and the
+    user drops it explicitly.
+  * Creating a rel *pattern* against the parent (`MATCH (o:Orders)-[r:R]->(i:Item) CREATE ...`) is
+    refused for now — the write must go through a concrete partition (`Orders_p0`). Routing pattern
+    writes by the source row's actual partition at runtime is roadmap work; the binder error says so.
+* **User graphs.** A `GraphCatalogEntry` carries no table membership — it is only a name marker
+  surfaced by `SHOW_GRAPHS` — so nothing else can live "inside" a partition's subgraph.
+
+### (c) Updates to the partition column are refused (no row movement yet)
+
+A row's home partition is decided by `hash(key) % n` at write time. If an update changed the key in
+place, the row would sit in a partition that no longer matches its key — invisible to future
+partition pruning and inconsistent with direct-partition scans. Ladybug node offsets are also
+referenced by rel tables' `INTERNAL_ID`s, so a "move" is really delete + insert with reference
+rewiring, which is not implemented today. The binder therefore rejects any SET (including
+`MERGE ... ON MATCH SET`) of the partition column — via the parent or via a partition — with the
+same actionable guidance used for primary keys: delete the row and insert it with the new value.
+PostgreSQL-style row movement remains roadmap work.
+
+### (d) One node-table implementation; "partitioned" is metadata, not a type
+
+Two *roles* exist (logical parent vs physical partition), as in every declarative partitioning
+design, but only **one** node-table implementation and one storage path:
+
+* Every node table — plain, partition child, or foreign-backed — is backed by a subgraph and stored
+  as a `NodeTable`. Partition children differ from plain tables only by a back-reference field.
+* The "partitioned" state of a parent is catalog metadata (`partitionMethod`, key column,
+  `childTableIDs`), not a different table type: reads reuse the existing multi-table node scan,
+  writes reuse the ordinary insert/batch-insert executors behind a small routing shim
+  (`NodePartitionWriteInfo`), and WAL / MVCC / checkpoint run per child exactly as for any table.
+* Storage iteration skips storage-less parents through one shared helper
+  (`erasePartitionedParents`) instead of bespoke branches at each call site.
+
+What remains intentionally asymmetric (and enforced): the parent owns no storage, accepts writes
+only by routing, and propagates only `RENAME` — other `ALTER`s are refused with a clean error until
+alter-propagation lands.
 
 ## Cypher syntax
 
@@ -151,7 +232,13 @@ Because each partition is a real node table, you can also address a specific par
   uniqueness is enforced per partition, not across the parent.
 * **No partition pruning on predicates.** A `WHERE` on the partition key is not yet used to skip
   partitions; all partitions are scanned and unioned.
-* **No `ALTER` propagation.** Altering the parent schema does not alter its partitions.
+* **`ALTER` is limited to `RENAME`.** Renaming the parent renames its `<parent>_p<i>` partitions
+  along with it. Other alter operations (add/drop/rename property, sorted-by) are refused on the
+  parent, and partitions cannot be altered directly at all, until alter propagation lands.
+* **Partition columns are not updatable.** See design note (c): rows cannot move between
+  partitions; delete and re-insert instead.
+* **Rels attach per partition.** `FROM <parent>` expands to one pair per partition; rel pattern
+  writes against the parent are refused (use a specific partition) until runtime rel routing lands.
 * **Range bounds are not declarative.** `PARTITIONS n` builds the range split; per-partition bound
   lists (`PARTITION p0 VALUES < (...), p1 VALUES FROM ... `) are future work.
 * **No remote partitions yet.** Only local (in-process) partition subgraphs exist today.
@@ -176,7 +263,13 @@ The canonical path is `COPY INTO Orders FROM file`. Implemented:
 Remaining for RANGE: replace the hash stand-in with real bound comparison once declarative range
 bounds (`PARTITION p0 VALUES < (...) ...`) are implemented.
 
-### 2. Partition pruning
+### 2. Rel writes against the parent
+
+Route pattern-based rel creation/merge by the source row's actual partition at runtime (mirroring
+`NodeInsertExecutor::resolveTargetTable`): carry the candidate per-pair rel tables in the insert
+info and select by the resolved source node's table ID.
+
+### 3. Partition pruning
 
 Push a predicate on the partition column into the scan: for HASH only equality
 (`region = 'east'`) can prune to a single partition; for RANGE relational comparisons
@@ -184,7 +277,7 @@ Push a predicate on the partition column into the scan: for HASH only equality
 filter-push-down / scan selection (`scan->setNumPartitionsToScan`, etc.) once the partition bounds
 are materialized.
 
-### 3. Declarative range bounds
+### 4. Declarative range bounds
 
 Extend the grammar to accept per-partition bounds:
 
@@ -195,7 +288,20 @@ CREATE NODE TABLE Events (...) PARTITION BY RANGE (ts) (
 );
 ```
 
-### 4. Remote partitions over a columnar protocol (ADBC / Arrow Flight)
+### 5. Row movement, ALTER propagation, and DETACH PARTITION
+
+Lift the v1 restrictions in dependency order:
+
+* **ALTER propagation** — apply add/drop/rename property on the parent to every partition (each
+  partition is a plain node table, so `NodeTable::addColumn` already does the per-table work; the
+  parent alter just fans out to its children's storage).
+* **Partition-column updates with row movement** — implement as delete + insert within one
+  transaction, rewiring rel references, or keep the refusal if rel rewiring proves impractical.
+* **`DETACH PARTITION` / `ATTACH PARTITION`** — split a partition off its parent into a standalone
+  table and back, the PostgreSQL-style escape hatch that today is approximated by "drop the
+  parent"; also revisit cascade-dropping dependent rels at that point.
+
+### 6. Remote partitions over a columnar protocol (ADBC / Arrow Flight)
 
 Each partition subgraph already *is* a `NodeTableCatalogEntry`. A remote partition would be a
 flavor whose storage lives on a server:
