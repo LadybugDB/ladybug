@@ -47,7 +47,7 @@ std::vector<common::nodeID_t> makeSortedIDs(uint64_t count, uint64_t domain,
 } // namespace
 
 TEST(IntersectKernelsTest, MatchesScalarAcrossSizesAndSkews) {
-    for (const auto [leftCount, rightCount] :
+    for (const auto& [leftCount, rightCount] :
         {std::pair{1u, 64u}, std::pair{8u, 8u}, std::pair{16u, 128u}, std::pair{32u, 2048u},
             std::pair{128u, 128u}, std::pair{256u, 2048u}}) {
         for (auto seed = 0u; seed < 20; ++seed) {
