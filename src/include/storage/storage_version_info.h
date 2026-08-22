@@ -30,6 +30,9 @@ struct StorageVersionInfo {
     // Storage version 46 adds PostgreSQL-style table partitioning metadata (RANGE/HASH partition
     // key + per-partition subgraph node-table back-references) to node table catalog entries.
     static constexpr storage_version_t STORAGE_VERSION_46 = 46;
+    // Storage version 47 adds LIST partitioning: the parent node-table entry persists the
+    // encoded-key -> child table id map for its dynamically created list partitions.
+    static constexpr storage_version_t STORAGE_VERSION_47 = 47;
 
     static std::unordered_map<std::string, storage_version_t> getStorageVersionInfo() {
         return {{"0.12.0", STORAGE_VERSION_40}, {"0.12.2", STORAGE_VERSION_40},
@@ -41,7 +44,7 @@ struct StorageVersionInfo {
             {"0.16.1", STORAGE_VERSION_40}, {"0.17.0", STORAGE_VERSION_41},
             {"0.17.1", STORAGE_VERSION_41}, {"0.18.0", STORAGE_VERSION_42},
             {"0.18.1", STORAGE_VERSION_42}, {"0.19.0", STORAGE_VERSION_43},
-            {"0.19.1", STORAGE_VERSION_43}, {"0.20.0", STORAGE_VERSION_46}};
+            {"0.19.1", STORAGE_VERSION_43}, {"0.20.0", STORAGE_VERSION_47}};
     }
 
     static LBUG_API storage_version_t getStorageVersion();

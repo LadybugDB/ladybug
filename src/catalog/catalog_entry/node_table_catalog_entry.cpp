@@ -42,6 +42,21 @@ void NodeTableCatalogEntry::setPartitionInfo(binder::BoundPartitionMethod method
     this->numPartitions = numPartitions;
 }
 
+std::optional<common::table_id_t> NodeTableCatalogEntry::findListPartition(
+    const std::string& encodedKey) const {
+    for (const auto& [key, tableID] : listPartitionKeys) {
+        if (key == encodedKey) {
+            return tableID;
+        }
+    }
+    return std::nullopt;
+}
+
+void NodeTableCatalogEntry::addListPartition(std::string encodedKey, common::table_id_t tableID) {
+    DASSERT(!findListPartition(encodedKey).has_value());
+    listPartitionKeys.emplace_back(std::move(encodedKey), tableID);
+}
+
 void NodeTableCatalogEntry::renameProperty(const std::string& propertyName,
     const std::string& newName) {
     TableCatalogEntry::renameProperty(propertyName, newName);
@@ -77,6 +92,13 @@ void NodeTableCatalogEntry::serialize(common::Serializer& serializer) const {
         serializer.write(partitionColumnID);
         serializer.write(numPartitions);
         serializer.serializeVector(childTableIDs);
+        // LIST-only: encoded key -> child table id, in creation order. Readers gate on the
+        // storage version; writers always emit the current format.
+        serializer.write<uint64_t>(listPartitionKeys.size());
+        for (const auto& [encodedKey, tableID] : listPartitionKeys) {
+            serializer.write(encodedKey);
+            serializer.write(tableID);
+        }
     }
     serializer.writeDebuggingInfo("partitionChild");
     serializer.write(isPartitionChild());
@@ -146,6 +168,19 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
             nodeTableEntry->partitionColumnID = columnID;
             nodeTableEntry->numPartitions = numPartitions;
             nodeTableEntry->childTableIDs = std::move(childTableIDs);
+            if (deserializer.getStorageVersion() >=
+                ::lbug::storage::StorageVersionInfo::STORAGE_VERSION_47) {
+                auto numListKeys = uint64_t{0};
+                deserializer.deserializeValue(numListKeys);
+                nodeTableEntry->listPartitionKeys.reserve(numListKeys);
+                for (auto i = 0u; i < numListKeys; i++) {
+                    std::string encodedKey;
+                    common::table_id_t tableID;
+                    deserializer.deserializeValue(encodedKey);
+                    deserializer.deserializeValue(tableID);
+                    nodeTableEntry->listPartitionKeys.emplace_back(std::move(encodedKey), tableID);
+                }
+            }
         }
         deserializer.validateDebuggingInfo(debuggingInfo, "partitionChild");
         bool isPartitionChild = false;
@@ -214,8 +249,12 @@ std::unique_ptr<BoundExtraCreateCatalogEntryInfo> NodeTableCatalogEntry::getBoun
         partitionInfo =
             binder::BoundPartitionInfo(*partitionMethod, partitionColumnName, numPartitions);
     }
-    return std::make_unique<BoundExtraCreateNodeTableInfo>(primaryKeyName,
+    auto boundExtraInfo = std::make_unique<binder::BoundExtraCreateNodeTableInfo>(primaryKeyName,
         copyVector(getProperties()), storage, storageFormat, std::move(partitionInfo));
+    if (isPartitionChild()) {
+        boundExtraInfo->setPartitionParent(parentTableID, partitionIndex);
+    }
+    return boundExtraInfo;
 }
 
 } // namespace catalog

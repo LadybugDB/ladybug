@@ -119,13 +119,17 @@ iC_CreateNodeTable
 // PostgreSQL-style partitioning. A node table can be declared as a partitioned parent,
 // where each partition is backed by its own subgraph (a hidden node table).
 iC_PartitionBy
-    : PARTITION SP BY SP ( iC_PartitionRange | iC_PartitionHash ) ;
+    : PARTITION SP BY SP ( iC_PartitionRange | iC_PartitionHash | iC_PartitionList ) ;
 
 iC_PartitionHash
     : HASH SP? '(' SP? oC_PropertyKeyName SP? ')' SP PARTITIONS SP oC_IntegerLiteral ;
 
 iC_PartitionRange
     : RANGE SP? '(' SP? oC_PropertyKeyName SP? ')' SP PARTITIONS SP oC_IntegerLiteral ;
+
+// List partitioning: one partition per distinct partition-key value, created on demand.
+iC_PartitionList
+    : LIST SP? '(' SP? oC_PropertyKeyName SP? ')' ;
 
 iC_CreateRelTable
     : CREATE SP REL SP TABLE ( SP GROUP )? ( SP iC_IfNotExists )? SP oC_SchemaName

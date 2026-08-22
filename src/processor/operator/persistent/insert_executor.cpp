@@ -1,5 +1,7 @@
 #include "processor/operator/persistent/insert_executor.h"
 
+#include "catalog/catalog.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "processor/partition_routing.h"
 #include "transaction/transaction.h"
@@ -102,7 +104,32 @@ uint64_t NodeInsertExecutor::currentPartitionIndex() const {
     return partitionIndexes[0];
 }
 
-storage::NodeTable* NodeInsertExecutor::resolveTargetTable() const {
+// Resolves the target partition subgraph for the current row.
+// - LIST parents route through `listRouter`, creating a new partition on first sight of a value.
+// - Empty `partitionTables` means a plain single-table write -> the table itself.
+// - Returns nullptr when the selected partition is routed remotely through the hooks;
+//   callers must branch on that (insertRemotely / hook lookup).
+storage::NodeTable* NodeInsertExecutor::resolveTargetTable(main::ClientContext* context) {
+    if (tableInfo.partitionMethod == common::PartitionMethod::LIST &&
+        tableInfo.parentTableID != common::INVALID_TABLE_ID) {
+        // LIST parents grow their partition set on first sight of a new key value.
+        auto* keyVector = tableInfo.columnDataVectors[tableInfo.partitionKeyColumnID];
+        DASSERT(keyVector->state->getSelVector().getSelSize() == 1);
+        if (tableInfo.listRouter == nullptr) {
+            auto* transaction = Transaction::Get(*context);
+            auto* parent = catalog::Catalog::Get(*context)
+                               ->getTableCatalogEntry(transaction, tableInfo.parentTableID)
+                               ->ptrCast<catalog::NodeTableCatalogEntry>();
+            tableInfo.listRouter =
+                std::make_unique<ListPartitionRouter>(context, parent);
+        }
+        const auto pos = keyVector->state->getSelVector()[0];
+        if (keyVector->isNull(pos)) {
+            throw RuntimeException("Cannot insert into a LIST-partitioned table with a NULL "
+                                   "partition-key value.");
+        }
+        return tableInfo.listRouter->route(*keyVector, pos).table;
+    }
     if (tableInfo.partitionTables.empty()) {
         return tableInfo.table;
     }
@@ -122,8 +149,17 @@ nodeID_t NodeInsertExecutor::insertRemotely(uint64_t index,
         tableInfo.partitionHandles[index], transaction, keyVector, tableInfo.columnDataVectors);
 }
 
-storage::NodeTable* NodeInsertExecutor::resolveTableForNodeID(common::nodeID_t nodeID) const {
+storage::NodeTable* NodeInsertExecutor::resolveTableForNodeID(common::nodeID_t nodeID,
+    main::ClientContext* context) const {
     if (tableInfo.partitionTables.empty()) {
+        if (tableInfo.partitionMethod == common::PartitionMethod::LIST &&
+            tableInfo.parentTableID != common::INVALID_TABLE_ID) {
+            // LIST: the node may live in a partition created after this executor was cloned;
+            // resolve by the table ID recorded in the node ID itself.
+            return storage::StorageManager::Get(*context)
+                ->getTable(nodeID.tableID)
+                ->ptrCast<storage::NodeTable>();
+        }
         return tableInfo.table;
     }
     for (auto i = 0u; i < tableInfo.partitionTables.size(); ++i) {
@@ -144,13 +180,13 @@ nodeID_t NodeInsertExecutor::insert(main::ClientContext* context) {
         evaluator->evaluate();
     }
     auto transaction = Transaction::Get(*context);
+    auto* targetTable = resolveTargetTable(context);
     nodeID_t resultNodeID;
-    if (!tableInfo.partitionTables.empty() && resolveTargetTable() == nullptr) {
+    if (targetTable == nullptr && !tableInfo.partitionTables.empty()) {
         // Remotely routed partition: the wrapper owns conflict handling and returns the
         // remotely-assigned node ID.
         resultNodeID = insertRemotely(currentPartitionIndex(), transaction);
     } else {
-        auto* targetTable = resolveTargetTable();
         if (checkConflict(transaction, targetTable)) {
             return info.getNodeID();
         }
@@ -187,7 +223,7 @@ void NodeInsertExecutor::skipInsert(nodeID_t nodeID, main::ClientContext* contex
         return;
     }
     auto transaction = Transaction::Get(*context);
-    auto* table = resolveTableForNodeID(nodeID);
+    auto* table = resolveTableForNodeID(nodeID, context);
     if (table == nullptr) {
         // Remotely routed partition: fetch the row through the routing hooks.
         const auto* hooks = common::getPartitionRoutingHooks();

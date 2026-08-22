@@ -129,6 +129,17 @@ public:
     common::table_id_t getParentTableID() const { return parentTableID; }
     uint64_t getPartitionIndex() const { return partitionIndex; }
 
+    // ---- LIST partitioning ----
+    // A LIST parent keeps one partition per distinct partition-key value. The value -> partition
+    // mapping is persisted as an opaque encoded key (see processor-side encodeListPartitionKey)
+    // so the catalog does not need typed Value serialization.
+    std::optional<common::table_id_t> findListPartition(
+        const std::string& encodedKey) const; // linear scan; callers cache hot lookups
+    void addListPartition(std::string encodedKey, common::table_id_t tableID);
+    const std::vector<std::pair<std::string, common::table_id_t>>& getListPartitionKeys() const {
+        return listPartitionKeys;
+    }
+
     std::unique_ptr<binder::BoundTableScanInfo> getBoundScanInfo(main::ClientContext* context,
         const std::string& nodeUniqueName = "") override;
 
@@ -163,6 +174,8 @@ private:
     common::property_id_t partitionColumnID = common::INVALID_PROPERTY_ID;
     uint64_t numPartitions = 0;
     std::vector<common::table_id_t> childTableIDs;
+    // LIST-only, parent side: encoded partition-key value -> child table id, in creation order.
+    std::vector<std::pair<std::string, common::table_id_t>> listPartitionKeys;
     common::table_id_t parentTableID = common::INVALID_TABLE_ID;
     uint64_t partitionIndex = 0;
 };

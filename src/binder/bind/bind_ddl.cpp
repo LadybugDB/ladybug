@@ -261,22 +261,36 @@ BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info
     std::optional<BoundPartitionInfo> partitionInfo;
     if (extraInfo.partitionInfo.has_value()) {
         const auto& parsed = *extraInfo.partitionInfo;
-        auto method = parsed.method == ParsedPartitionMethod::HASH ? BoundPartitionMethod::HASH :
-                                                                     BoundPartitionMethod::RANGE;
-        if (method == BoundPartitionMethod::RANGE) {
+        BoundPartitionMethod method;
+        switch (parsed.method) {
+        case ParsedPartitionMethod::HASH:
+            method = BoundPartitionMethod::HASH;
+            break;
+        case ParsedPartitionMethod::LIST:
+            // LIST partitions dynamically: one partition per distinct key value, created on
+            // demand. It takes no PARTITIONS clause.
+            method = BoundPartitionMethod::LIST;
+            validatePartitionColumn(propertyDefinitions, parsed.columnName);
+            partitionInfo = BoundPartitionInfo(method, parsed.columnName, 0 /* numPartitions */);
+            break;
             // Real range partitioning must split on the actual distribution of values (equal
             // domain splits would dump all real-world data into one bucket). Until that dynamic
             // splitting exists, refuse the DDL rather than silently falling back to hash routing.
+        case ParsedPartitionMethod::RANGE:
             throw BinderException(
                 "RANGE partitioning is not implemented yet. RANGE requires partition bounds "
                 "derived from the actual value distribution, which is future work. Use PARTITION "
                 "BY HASH instead.");
+        default:
+            UNREACHABLE_CODE;
         }
-        if (parsed.numPartitions == 0) {
-            throw BinderException("Number of partitions must be greater than 0.");
+        if (method == BoundPartitionMethod::HASH) {
+            if (parsed.numPartitions == 0) {
+                throw BinderException("Number of partitions must be greater than 0.");
+            }
+            validatePartitionColumn(propertyDefinitions, parsed.columnName);
+            partitionInfo = BoundPartitionInfo(method, parsed.columnName, parsed.numPartitions);
         }
-        validatePartitionColumn(propertyDefinitions, parsed.columnName);
-        partitionInfo = BoundPartitionInfo(method, parsed.columnName, parsed.numPartitions);
     }
     auto boundExtraInfo = std::make_unique<BoundExtraCreateNodeTableInfo>(extraInfo.pKName,
         std::move(propertyDefinitions), std::move(storage), std::move(storageFormat),
