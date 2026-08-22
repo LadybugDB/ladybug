@@ -8,8 +8,9 @@
 namespace lbug {
 namespace common {
 
-// PostgreSQL-style partitioning method. Mirrors binder::BoundPartitionMethod (HASH=0, RANGE=1).
-enum class PartitionMethod : uint8_t { HASH = 0, RANGE = 1 };
+// PostgreSQL-style partitioning method. Mirrors binder::BoundPartitionMethod (HASH=0, RANGE=1,
+// LIST=2).
+enum class PartitionMethod : uint8_t { HASH = 0, RANGE = 1, LIST = 2 };
 
 // Write-routing metadata for a partitioned node table. The logical parent owns no physical
 // storage; every write to the parent must be routed into one of its partition subgraphs.

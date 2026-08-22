@@ -74,8 +74,9 @@ struct LBUG_API BoundExtraCreateTableInfo : BoundExtraCreateCatalogEntryInfo {
     }
 };
 
-// PostgreSQL-style partitioning method applied to a node table.
-enum class BoundPartitionMethod : uint8_t { HASH = 0, RANGE = 1 };
+// PostgreSQL-style partitioning method applied to a node table. LIST partitions dynamically: one
+// partition per distinct partition-key value, created on demand (numPartitions is unused).
+enum class BoundPartitionMethod : uint8_t { HASH = 0, RANGE = 1, LIST = 2 };
 
 struct BoundPartitionInfo {
     BoundPartitionMethod method;
@@ -91,6 +92,16 @@ struct BoundExtraCreateNodeTableInfo final : BoundExtraCreateTableInfo {
     std::string storage;
     common::StorageFormat storageFormat = common::StorageFormat::NONE;
     std::optional<BoundPartitionInfo> partitionInfo;
+    // Set when this entry is a dynamically created LIST partition: links the child to its
+    // parent and ordinal so catalog creation (including WAL replay) registers it as a
+    // partition subgraph.
+    common::table_id_t partitionParentTableID = common::INVALID_TABLE_ID;
+    uint64_t partitionChildIndex = 0;
+
+    void setPartitionParent(common::table_id_t parentID, uint64_t index) {
+        partitionParentTableID = parentID;
+        partitionChildIndex = index;
+    }
 
     BoundExtraCreateNodeTableInfo(std::string primaryKeyName,
         std::vector<PropertyDefinition> definitions, std::string storage = "",
@@ -102,7 +113,9 @@ struct BoundExtraCreateNodeTableInfo final : BoundExtraCreateTableInfo {
     BoundExtraCreateNodeTableInfo(const BoundExtraCreateNodeTableInfo& other)
         : BoundExtraCreateTableInfo{copyVector(other.propertyDefinitions)},
           primaryKeyName{other.primaryKeyName}, storage{other.storage},
-          storageFormat{other.storageFormat}, partitionInfo{other.partitionInfo} {}
+          storageFormat{other.storageFormat}, partitionInfo{other.partitionInfo},
+          partitionParentTableID{other.partitionParentTableID}, partitionChildIndex{
+                                                                   other.partitionChildIndex} {}
 
     std::unique_ptr<BoundExtraCreateCatalogEntryInfo> copy() const override {
         return std::make_unique<BoundExtraCreateNodeTableInfo>(*this);

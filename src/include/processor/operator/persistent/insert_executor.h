@@ -1,9 +1,11 @@
 #pragma once
 
 #include "common/enums/conflict_action.h"
+#include "common/partition_routing.h"
 #include "common/partition_routing_hook.h"
 #include "expression_evaluator/expression_evaluator.h"
 #include "processor/execution_context.h"
+#include "processor/partition_routing.h"
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
 
@@ -54,11 +56,17 @@ struct NodeTableInsertInfo {
     // common/partition_routing_hook.h) carry a null table pointer; their entries in
     // `partitionChildIDs` / `partitionRefs` / `partitionHandles` remain valid and describe
     // how to route rows through the hooks instead.
+    // LIST parents route through `listRouter` instead: their partition set grows dynamically, so
+    // targets cannot be fixed at plan time. `parentTableID` lets the executor build the router
+    // lazily (clones of the insert info start with a null router).
     std::vector<storage::NodeTable*> partitionTables;
     std::vector<common::table_id_t> partitionChildIDs;
     std::vector<common::PartitionRef> partitionRefs;
     std::vector<common::PartitionHandle> partitionHandles;
     common::column_id_t partitionKeyColumnID = common::INVALID_COLUMN_ID;
+    common::PartitionMethod partitionMethod = common::PartitionMethod::HASH;
+    common::table_id_t parentTableID = common::INVALID_TABLE_ID;
+    std::unique_ptr<ListPartitionRouter> listRouter;
 
     NodeTableInsertInfo(storage::NodeTable* table,
         evaluator::evaluator_vector_t columnDataEvaluators)
@@ -73,7 +81,8 @@ private:
           pkVector{nullptr}, columnDataVectors{other.columnDataVectors}, columnIDs{other.columnIDs},
           partitionTables{other.partitionTables}, partitionChildIDs{other.partitionChildIDs},
           partitionRefs{other.partitionRefs}, partitionHandles{other.partitionHandles},
-          partitionKeyColumnID{other.partitionKeyColumnID} {}
+          partitionKeyColumnID{other.partitionKeyColumnID},
+          partitionMethod{other.partitionMethod}, parentTableID{other.parentTableID} {}
 };
 
 class NodeInsertExecutor {
@@ -102,11 +111,14 @@ private:
     // value.
     uint64_t currentPartitionIndex() const;
     // Resolves the partition subgraph for the current (already evaluated) partition-key value.
-    // Returns nullptr when that partition is routed remotely.
-    storage::NodeTable* resolveTargetTable() const;
+    // LIST parents resolve (and, on first sight of a value, create) their partition through the
+    // router, so this can grow the parent's partition set. Returns nullptr when that partition
+    // is routed remotely through the hooks; callers must branch on that.
+    storage::NodeTable* resolveTargetTable(main::ClientContext* context);
     // Ships the current row to the routing wrapper for remote partition `index`.
     common::nodeID_t insertRemotely(uint64_t index, transaction::Transaction* transaction) const;
-    storage::NodeTable* resolveTableForNodeID(common::nodeID_t nodeID) const;
+    storage::NodeTable* resolveTableForNodeID(common::nodeID_t nodeID,
+        main::ClientContext* context) const;
 
 private:
     NodeInsertInfo info;

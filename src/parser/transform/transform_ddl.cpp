@@ -99,6 +99,15 @@ std::optional<ParsedPartitionInfo> Transformer::transformPartitionInfo(
         numPartitions = getPartitionCount(*rangeCtx.oC_IntegerLiteral());
         return ParsedPartitionInfo(method, std::move(columnName), numPartitions);
     }
+    if (ctx->iC_PartitionList() != nullptr) {
+        // LIST partitions dynamically: one partition per distinct value. There is no PARTITIONS
+        // clause; numPartitions is left at 0 and grows with the data.
+        method = ParsedPartitionMethod::LIST;
+        auto& listCtx = *ctx->iC_PartitionList();
+        columnName = transformPropertyKeyName(*listCtx.oC_PropertyKeyName());
+        numPartitions = 0;
+        return ParsedPartitionInfo(method, std::move(columnName), numPartitions);
+    }
     throw ParserException("Invalid partition clause.");
 }
 

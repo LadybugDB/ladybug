@@ -674,6 +674,11 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
     for (auto& definition : extraInfo->propertyDefinitions) {
         entry->addProperty(definition);
     }
+    if (extraInfo->partitionParentTableID != common::INVALID_TABLE_ID) {
+        // Dynamically created LIST partition child: register the parent link so reads expand
+        // to it and writes can resolve it.
+        entry->setParentInfo(extraInfo->partitionParentTableID, extraInfo->partitionChildIndex);
+    }
     entry->setHasParent(info.hasParent);
     createSerialSequence(transaction, entry.get(), info.isInternal);
     auto catalogSet = info.isInternal ? internalTables.get() : tables.get();
@@ -693,7 +698,15 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
         auto partitionColumnID = parent->getPropertyID(partitionInfo.columnName);
         parent->setPartitionInfo(partitionInfo.method, partitionInfo.columnName, partitionColumnID,
             partitionInfo.numPartitions);
-        for (auto i = 0u; i < partitionInfo.numPartitions; i++) {
+        // LIST starts with one partition and grows on demand; HASH creates its full set here.
+        // LIST's initial partition keeps the >=1-partition invariant that reads and writes rely
+        // on (partition expansion never yields an empty child set). It stays unkeyed and empty:
+        // rows always route to the partition created for their own key value.
+        const auto numInitialPartitions =
+            partitionInfo.method == binder::BoundPartitionMethod::LIST ?
+                1 :
+                partitionInfo.numPartitions;
+        for (auto i = 0u; i < numInitialPartitions; i++) {
             auto childName = std::format("{}_p{}", info.tableName, i);
             auto child = std::make_unique<NodeTableCatalogEntry>(childName,
                 extraInfo->primaryKeyName, extraInfo->storage, extraInfo->storageFormat);

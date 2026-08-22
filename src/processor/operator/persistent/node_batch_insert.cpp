@@ -524,6 +524,17 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
             std::find(info->insertColumnIDs.begin(), info->insertColumnIDs.end(), keyColumnID);
         DASSERT(it != info->insertColumnIDs.end());
         nodeSharedState->partitionKeyColumnIdx = std::distance(info->insertColumnIDs.begin(), it);
+        if (partitionInfo.method == common::PartitionMethod::LIST) {
+            // The parent entry is reachable through any partition child. Its partition set grows
+            // as workers encounter new key values; the router serializes discovery.
+            const auto* firstChild = catalog->getTableCatalogEntry(transaction,
+                partitionInfo.partitionTableIDs[0])->ptrCast<NodeTableCatalogEntry>();
+            auto* parent =
+                catalog->getTableCatalogEntry(transaction, firstChild->getParentTableID())
+                    ->ptrCast<NodeTableCatalogEntry>();
+            nodeSharedState->listRouter =
+                std::make_unique<ListPartitionRouter>(clientContext, parent);
+        }
     } else {
         NodeBatchInsertTarget target;
         target.table = storageManager->getTable(nodeTableEntry->getTableID())->ptrCast<NodeTable>();
@@ -583,10 +594,13 @@ void NodeBatchInsert::executeInternal(ExecutionContext* context) {
     auto nodeLocalState = localState->ptrCast<NodeBatchInsertLocalState>();
     const auto nodeSharedState =
         dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
-    std::vector<std::optional<ProducerToken>> tokens(nodeSharedState->targets.size());
+    // LIST-partitioned COPYs grow `targets` (and these tokens) mid-copy; pre-existing
+    // partitions register their producers here.
+    nodeLocalState->indexProducerTokens.resize(nodeLocalState->targets.size());
     for (auto i = 0u; i < nodeLocalState->targets.size(); ++i) {
         if (nodeLocalState->targets[i].localIndexBuilder) {
-            tokens[i] = nodeLocalState->targets[i].localIndexBuilder->getProducerToken();
+            nodeLocalState->indexProducerTokens[i] =
+                nodeLocalState->targets[i].localIndexBuilder->getProducerToken();
         }
     }
     auto transaction = Transaction::Get(*clientContext);
@@ -595,7 +609,7 @@ void NodeBatchInsert::executeInternal(ExecutionContext* context) {
         // Evaluate expressions if needed.
         const auto numTuples = nodeLocalState->columnState->getSelVector().getSelSize();
         evaluateExpressions(numTuples);
-        copyToNodeGroup(transaction, MemoryManager::Get(*clientContext));
+        copyToNodeGroup(transaction, MemoryManager::Get(*clientContext), context);
         nodeLocalState->columnState->setSelVector(originalSelVector);
     }
     for (auto i = 0u; i < nodeLocalState->targets.size(); ++i) {
@@ -605,8 +619,9 @@ void NodeBatchInsert::executeInternal(ExecutionContext* context) {
                 localTarget.localIndexBuilder, MemoryManager::Get(*context->clientContext));
         }
         if (localTarget.localIndexBuilder) {
-            DASSERT(tokens[i]);
-            tokens[i]->quit();
+            DASSERT(i < nodeLocalState->indexProducerTokens.size() &&
+                    nodeLocalState->indexProducerTokens[i].has_value());
+            nodeLocalState->indexProducerTokens[i]->quit();
 
             DASSERT(localTarget.errorHandler.has_value());
             localTarget.localIndexBuilder->finishedProducing(localTarget.errorHandler.value());
@@ -647,14 +662,14 @@ void NodeBatchInsert::evaluateExpressions(uint64_t numTuples) const {
 }
 
 void NodeBatchInsert::copyToNodeGroup(transaction::Transaction* transaction,
-    MemoryManager* mm) const {
+    storage::MemoryManager* mm, ExecutionContext* context) const {
     const auto nodeLocalState = dynamic_cast_checked<NodeBatchInsertLocalState*>(localState.get());
     const auto nodeSharedState =
         dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
     const auto nodeInfo = info->ptrCast<NodeBatchInsertInfo>();
 
     const auto numTuples = nodeLocalState->columnState->getSelVector().getSelSize();
-    if (nodeSharedState->targets.size() <= 1) {
+    if (nodeSharedState->targets.size() <= 1 && nodeSharedState->listRouter == nullptr) {
         // Non-partitioned fast path: append the contiguous selection vector directly.
         auto numAppendedTuples = 0ul;
         auto& target = nodeLocalState->targets[0];
@@ -691,9 +706,32 @@ void NodeBatchInsert::copyToNodeGroup(transaction::Transaction* transaction,
     // reference/cast/default evaluators all follow the same row order. Each partition subgraph is
     // an ordinary NodeTable, so its own WAL/MVCC machinery (appendToLastNodeGroup + commit/undo
     // records) applies the routed write.
-    const auto numPartitions = nodeSharedState->targets.size();
     const auto& keyVector = *nodeLocalState->columnVectors[nodeSharedState->partitionKeyColumnIdx];
-    computePartitionIndexes(keyVector, numPartitions, nodeLocalState->partitionIdxes);
+    if (nodeSharedState->listRouter != nullptr) {
+        // LIST: resolve every row's key to its (possibly newly created) partition under the
+        // router lock -- growing the shared and per-worker target arrays atomically with
+        // discovery -- then fall through to the generic run-append loop.
+        nodeLocalState->partitionIdxes.resize(numTuples);
+        const auto& selVector = keyVector.state->getSelVector();
+        nodeSharedState->listRouter->withLock([&]() {
+            std::unordered_map<uint64_t, storage::NodeTable*> freshTables;
+            for (auto i = 0u; i < numTuples; ++i) {
+                const auto pos = selVector[i];
+                if (keyVector.isNull(pos)) {
+                    throw RuntimeException("Cannot COPY a NULL partition-key value into a "
+                                           "LIST-partitioned table.");
+                }
+                const auto route = nodeSharedState->listRouter->getOrCreatePartitionLocked(
+                    encodeListPartitionKey(keyVector, pos));
+                nodeLocalState->partitionIdxes[i] = route.ordinal;
+                freshTables.emplace(route.ordinal, route.table);
+            }
+            growListTargets(context, nodeSharedState, nodeLocalState, freshTables);
+        });
+    } else {
+        computePartitionIndexes(keyVector, nodeSharedState->targets.size(),
+            nodeLocalState->partitionIdxes);
+    }
 
     for (auto i = 0u; i < numTuples;) {
         const auto partitionIdx = nodeLocalState->partitionIdxes[i];
@@ -739,6 +777,40 @@ void NodeBatchInsert::copyToNodeGroup(transaction::Transaction* transaction,
     // Per-partition table stats are advisory (used by the optimizer); skip them for partitioned
     // writes rather than over-counting each partition.
     sharedState->incrementNumRows(numTuples);
+}
+
+void NodeBatchInsert::growListTargets(ExecutionContext* context,
+    NodeBatchInsertSharedState* nodeSharedState, NodeBatchInsertLocalState* nodeLocalState,
+    const std::unordered_map<uint64_t, storage::NodeTable*>& freshTables) const {
+    // Caller holds the router lock: discovery and array growth are atomic across workers.
+    auto maxOrdinal = uint64_t{0};
+    for (const auto& [ordinal, table] : freshTables) {
+        maxOrdinal = std::max(maxOrdinal, ordinal);
+    }
+    const auto prevSize = nodeLocalState->targets.size();
+    if (maxOrdinal + 1 <= prevSize) {
+        return;
+    }
+    for (auto k = nodeSharedState->targets.size(); k <= maxOrdinal; ++k) {
+        NodeBatchInsertTarget target;
+        target.table = freshTables.at(k);
+        nodeSharedState->initTargetPKIndex(context, target);
+        nodeSharedState->targets.push_back(std::move(target));
+    }
+    for (auto k = prevSize; k <= maxOrdinal; ++k) {
+        auto& sharedTarget = nodeSharedState->targets[k];
+        NodeBatchInsertLocalTarget localTarget;
+        if (localTarget.localIndexBuilder) {
+            localTarget.localIndexBuilder = sharedTarget.globalIndexBuilder->clone();
+            nodeLocalState->indexProducerTokens.push_back(
+                localTarget.localIndexBuilder->getProducerToken());
+        } else {
+            nodeLocalState->indexProducerTokens.push_back(std::nullopt);
+        }
+        localTarget.errorHandler =
+            createErrorHandler(context, sharedTarget.table, &nodeLocalState->duplicatePKSkipResult);
+        nodeLocalState->targets.push_back(std::move(localTarget));
+    }
 }
 
 NodeBatchInsertErrorHandler NodeBatchInsert::createErrorHandler(ExecutionContext* context,
