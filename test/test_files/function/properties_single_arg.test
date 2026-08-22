@@ -1,0 +1,37 @@
+-DATASET CSV tinysnb
+
+--
+
+-CASE PropertiesSingleArg
+
+-LOG PropertiesNode
+-STATEMENT MATCH (p:person) WHERE p.ID = 0 RETURN properties(p)
+---- 1
+{ID: 0, fName: Alice, gender: 1, isStudent: True, isWorker: False, age: 35, eyeSight: 5.000000, birthdate: 1900-01-01, registerTime: 2011-08-20 11:25:30, lastJobDuration: 3 years 2 days 13:02:00, workedHours: [10,5], usedNames: [Aida], courseScoresPerTerm: [[10,8],[6,7,8]], grades: [96,54,86,92], height: 1.731000, u: a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11}
+
+-LOG PropertiesRel
+-STATEMENT MATCH (a:person)-[e:knows]->(b:person) WHERE a.ID = 0 AND b.ID = 2 RETURN properties(e)
+---- 1
+{date: 2021-06-30, meetTime: 1986-10-21 21:08:31.521, validInterval: 10 years 5 months 13:00:00.000024, comments: [rnme,m8sihsdnf2990nfiwf], summary: {locations: ['toronto','waterloo'], transfer: {day: 2021-01-02, amount: [100,200]}}, notes: 1, someMap: {a=b}}
+
+-LOG PropertiesStruct
+-STATEMENT RETURN properties({a: 1, b: 'hello'})
+---- 1
+{a: 1, b: hello}
+
+-LOG PropertiesCollect
+-STATEMENT MATCH (p:person) WHERE p.ID < 3 RETURN collect(properties(p).fName)
+---- 1
+[Alice,Bob]
+
+-LOG PropertiesFieldAccess
+-STATEMENT MATCH (p:person) WHERE p.ID = 0 RETURN properties(p).fName
+---- 1
+Alice
+
+-LOG PropertiesTwoArgPathCompatibility
+-STATEMENT MATCH p = (a:person)-[e:knows*1..1]->(b:person) WHERE a.ID = 0 RETURN properties(nodes(p),'fName'), properties(rels(p), 'date')
+---- 3
+[Alice,Bob]|[2021-06-30]
+[Alice,Carol]|[2021-06-30]
+[Alice,Dan]|[2021-06-30]
