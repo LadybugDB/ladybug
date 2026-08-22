@@ -37,9 +37,6 @@
 #include "mbedtls/platform_time.h"
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \name SECTION: Module settings
@@ -131,6 +128,7 @@ extern "C" {
 #else
 /* For size_t */
 #include <stddef.h>
+namespace lbug_mbedtls {
 extern void* mbedtls_calloc(size_t n, size_t size);
 extern void mbedtls_free(void* ptr);
 
@@ -145,6 +143,7 @@ extern void mbedtls_free(void* ptr);
  */
 int mbedtls_platform_set_calloc_free(void* (*calloc_func)(size_t, size_t),
     void (*free_func)(void*));
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PLATFORM_FREE_MACRO && MBEDTLS_PLATFORM_CALLOC_MACRO */
 #else  /* !MBEDTLS_PLATFORM_MEMORY */
 #define mbedtls_free free
@@ -157,6 +156,7 @@ int mbedtls_platform_set_calloc_free(void* (*calloc_func)(size_t, size_t),
 #if defined(MBEDTLS_PLATFORM_FPRINTF_ALT)
 /* We need FILE * */
 #include <stdio.h>
+namespace lbug_mbedtls {
 extern int (*mbedtls_fprintf)(FILE* stream, const char* format, ...);
 
 /**
@@ -169,6 +169,7 @@ extern int (*mbedtls_fprintf)(FILE* stream, const char* format, ...);
  * \return               \c 0.
  */
 int mbedtls_platform_set_fprintf(int (*fprintf_func)(FILE* stream, const char*, ...));
+} // namespace lbug_mbedtls
 #else
 #if defined(MBEDTLS_PLATFORM_FPRINTF_MACRO)
 #define mbedtls_fprintf MBEDTLS_PLATFORM_FPRINTF_MACRO
@@ -181,6 +182,7 @@ int mbedtls_platform_set_fprintf(int (*fprintf_func)(FILE* stream, const char*, 
  * The function pointers for printf
  */
 #if defined(MBEDTLS_PLATFORM_PRINTF_ALT)
+namespace lbug_mbedtls {
 extern int (*mbedtls_printf)(const char* format, ...);
 
 /**
@@ -193,6 +195,7 @@ extern int (*mbedtls_printf)(const char* format, ...);
  * \return              \c 0 on success.
  */
 int mbedtls_platform_set_printf(int (*printf_func)(const char*, ...));
+} // namespace lbug_mbedtls
 #else /* !MBEDTLS_PLATFORM_PRINTF_ALT */
 #if defined(MBEDTLS_PLATFORM_PRINTF_MACRO)
 #define mbedtls_printf MBEDTLS_PLATFORM_PRINTF_MACRO
@@ -212,10 +215,13 @@ int mbedtls_platform_set_printf(int (*printf_func)(const char*, ...));
  */
 #if defined(MBEDTLS_PLATFORM_HAS_NON_CONFORMING_SNPRINTF)
 /* For Windows (inc. MSYS2), we provide our own fixed implementation */
+namespace lbug_mbedtls {
 int mbedtls_platform_win32_snprintf(char* s, size_t n, const char* fmt, ...);
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_PLATFORM_SNPRINTF_ALT)
+namespace lbug_mbedtls {
 extern int (*mbedtls_snprintf)(char* s, size_t n, const char* format, ...);
 
 /**
@@ -227,6 +233,7 @@ extern int (*mbedtls_snprintf)(char* s, size_t n, const char* format, ...);
  * \return                \c 0 on success.
  */
 int mbedtls_platform_set_snprintf(int (*snprintf_func)(char* s, size_t n, const char* format, ...));
+} // namespace lbug_mbedtls
 #else /* MBEDTLS_PLATFORM_SNPRINTF_ALT */
 #if defined(MBEDTLS_PLATFORM_SNPRINTF_MACRO)
 #define mbedtls_snprintf MBEDTLS_PLATFORM_SNPRINTF_MACRO
@@ -247,11 +254,14 @@ int mbedtls_platform_set_snprintf(int (*snprintf_func)(char* s, size_t n, const 
 #if defined(MBEDTLS_PLATFORM_HAS_NON_CONFORMING_VSNPRINTF)
 #include <stdarg.h>
 /* For Older Windows (inc. MSYS2), we provide our own fixed implementation */
+namespace lbug_mbedtls {
 int mbedtls_platform_win32_vsnprintf(char* s, size_t n, const char* fmt, va_list arg);
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_PLATFORM_VSNPRINTF_ALT)
 #include <stdarg.h>
+namespace lbug_mbedtls {
 extern int (*mbedtls_vsnprintf)(char* s, size_t n, const char* format, va_list arg);
 
 /**
@@ -263,6 +273,7 @@ extern int (*mbedtls_vsnprintf)(char* s, size_t n, const char* format, va_list a
  */
 int mbedtls_platform_set_vsnprintf(
     int (*vsnprintf_func)(char* s, size_t n, const char* format, va_list arg));
+} // namespace lbug_mbedtls
 #else /* MBEDTLS_PLATFORM_VSNPRINTF_ALT */
 #if defined(MBEDTLS_PLATFORM_VSNPRINTF_MACRO)
 #define mbedtls_vsnprintf MBEDTLS_PLATFORM_VSNPRINTF_MACRO
@@ -275,6 +286,7 @@ int mbedtls_platform_set_vsnprintf(
  * The function pointers for exit
  */
 #if defined(MBEDTLS_PLATFORM_EXIT_ALT)
+namespace lbug_mbedtls {
 extern void (*mbedtls_exit)(int status);
 
 /**
@@ -287,6 +299,7 @@ extern void (*mbedtls_exit)(int status);
  * \return            \c 0 on success.
  */
 int mbedtls_platform_set_exit(void (*exit_func)(int status));
+} // namespace lbug_mbedtls
 #else
 #if defined(MBEDTLS_PLATFORM_EXIT_MACRO)
 #define mbedtls_exit MBEDTLS_PLATFORM_EXIT_MACRO
@@ -318,11 +331,14 @@ int mbedtls_platform_set_exit(void (*exit_func)(int status));
 #if defined(MBEDTLS_ENTROPY_NV_SEED)
 #if !defined(MBEDTLS_PLATFORM_NO_STD_FUNCTIONS) && defined(MBEDTLS_FS_IO)
 /* Internal standard platform definitions */
+namespace lbug_mbedtls {
 int mbedtls_platform_std_nv_seed_read(unsigned char* buf, size_t buf_len);
 int mbedtls_platform_std_nv_seed_write(unsigned char* buf, size_t buf_len);
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_PLATFORM_NV_SEED_ALT)
+namespace lbug_mbedtls {
 extern int (*mbedtls_nv_seed_read)(unsigned char* buf, size_t buf_len);
 extern int (*mbedtls_nv_seed_write)(unsigned char* buf, size_t buf_len);
 
@@ -337,6 +353,7 @@ extern int (*mbedtls_nv_seed_write)(unsigned char* buf, size_t buf_len);
  */
 int mbedtls_platform_set_nv_seed(int (*nv_seed_read_func)(unsigned char* buf, size_t buf_len),
     int (*nv_seed_write_func)(unsigned char* buf, size_t buf_len));
+} // namespace lbug_mbedtls
 #else
 #if defined(MBEDTLS_PLATFORM_NV_SEED_READ_MACRO) && defined(MBEDTLS_PLATFORM_NV_SEED_WRITE_MACRO)
 #define mbedtls_nv_seed_read MBEDTLS_PLATFORM_NV_SEED_READ_MACRO
@@ -356,10 +373,12 @@ int mbedtls_platform_set_nv_seed(int (*nv_seed_read_func)(unsigned char* buf, si
  * \note    This structure may be used to assist platform-specific
  *          setup or teardown operations.
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_platform_context {
     char MBEDTLS_PRIVATE(dummy); /**< A placeholder member, as empty structs are not portable. */
 } mbedtls_platform_context;
 
+} // namespace lbug_mbedtls
 #else
 #include "platform_alt.h"
 #endif /* !MBEDTLS_PLATFORM_SETUP_TEARDOWN_ALT */
@@ -379,6 +398,7 @@ typedef struct mbedtls_platform_context {
  *
  * \return  \c 0 on success.
  */
+namespace lbug_mbedtls {
 int mbedtls_platform_setup(mbedtls_platform_context* ctx);
 /**
  * \brief   This function performs any platform teardown operations.
@@ -396,8 +416,8 @@ int mbedtls_platform_setup(mbedtls_platform_context* ctx);
  */
 void mbedtls_platform_teardown(mbedtls_platform_context* ctx);
 
-#ifdef __cplusplus
-}
-#endif
 
+} // namespace lbug_mbedtls
 #endif /* platform.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

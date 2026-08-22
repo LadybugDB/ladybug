@@ -55,6 +55,7 @@
 #include <wincrypt.h>
 #include <windows.h>
 
+namespace lbug_mbedtls {
 int mbedtls_platform_entropy_poll(void* data, unsigned char* output, size_t len, size_t* olen) {
     HCRYPTPROV provider;
     ((void)data);
@@ -74,6 +75,7 @@ int mbedtls_platform_entropy_poll(void* data, unsigned char* output, size_t len,
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #else /* _WIN32 && !EFIX64 && !EFI32 */
 
 /*
@@ -89,6 +91,7 @@ int mbedtls_platform_entropy_poll(void* data, unsigned char* output, size_t len,
 #define HAVE_GETRANDOM
 #include <errno.h>
 
+namespace lbug_mbedtls {
 static int getrandom_wrapper(void* buf, size_t buflen, unsigned int flags) {
     /* MemSan cannot understand that the syscall writes to the buffer */
 #if defined(__has_feature)
@@ -98,6 +101,7 @@ static int getrandom_wrapper(void* buf, size_t buflen, unsigned int flags) {
 #endif
     return (syscall(SYS_getrandom, buf, buflen, flags));
 }
+} // namespace lbug_mbedtls
 #endif /* SYS_getrandom */
 #endif /* __linux__ || __midipix__ */
 
@@ -109,9 +113,11 @@ static int getrandom_wrapper(void* buf, size_t buflen, unsigned int flags) {
 
 #include <sys/random.h>
 #define HAVE_GETRANDOM
+namespace lbug_mbedtls {
 static int getrandom_wrapper(void* buf, size_t buflen, unsigned int flags) {
     return getrandom(buf, buflen, flags);
 }
+} // namespace lbug_mbedtls
 #endif /* (__FreeBSD__ && __FreeBSD_version >= 1200000) ||                                         \
           (__DragonFly__ && __DragonFly_version >= 500700) */
 #endif /* __FreeBSD__ || __DragonFly__ */
@@ -130,6 +136,7 @@ static int getrandom_wrapper(void* buf, size_t buflen, unsigned int flags) {
 #if defined(KERN_ARND)
 #define HAVE_SYSCTL_ARND
 
+namespace lbug_mbedtls {
 static int sysctl_arnd_wrapper(unsigned char* buf, size_t buflen) {
     int name[2];
     size_t len;
@@ -146,11 +153,13 @@ static int sysctl_arnd_wrapper(unsigned char* buf, size_t buflen) {
     }
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* KERN_ARND */
 #endif /* __FreeBSD__ || __NetBSD__ */
 
 #include <stdio.h>
 
+namespace lbug_mbedtls {
 int mbedtls_platform_entropy_poll(void* data, unsigned char* output, size_t len, size_t* olen) {
     FILE* file;
     size_t read_len;
@@ -196,10 +205,12 @@ int mbedtls_platform_entropy_poll(void* data, unsigned char* output, size_t len,
     return (0);
 #endif /* HAVE_SYSCTL_ARND */
 }
+} // namespace lbug_mbedtls
 #endif /* _WIN32 && !EFIX64 && !EFI32 */
 #endif /* !MBEDTLS_NO_PLATFORM_ENTROPY */
 
 #if defined(MBEDTLS_ENTROPY_NV_SEED)
+namespace lbug_mbedtls {
 int mbedtls_nv_seed_poll(void* data, unsigned char* output, size_t len, size_t* olen) {
     unsigned char buf[MBEDTLS_ENTROPY_BLOCK_SIZE];
     size_t use_len = MBEDTLS_ENTROPY_BLOCK_SIZE;
@@ -218,6 +229,7 @@ int mbedtls_nv_seed_poll(void* data, unsigned char* output, size_t len, size_t* 
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ENTROPY_NV_SEED */
 
 #endif /* MBEDTLS_ENTROPY_C */

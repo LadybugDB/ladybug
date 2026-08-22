@@ -68,6 +68,7 @@
  * A terminating null byte is always appended. It is included in the announced
  * length only if the data looks like it is PEM encoded.
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_load_file(const char* path, unsigned char** buf, size_t* n) {
     FILE* f;
     long size;
@@ -160,6 +161,7 @@ int mbedtls_pk_parse_public_keyfile(mbedtls_pk_context* ctx, const char* path) {
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_FS_IO */
 
 #if defined(MBEDTLS_ECP_C)
@@ -171,6 +173,7 @@ int mbedtls_pk_parse_public_keyfile(mbedtls_pk_context* ctx, const char* path) {
  *   -- implicitCurve   NULL
  * }
  */
+namespace lbug_mbedtls {
 static int pk_get_ecparams(unsigned char** p, const unsigned char* end, mbedtls_asn1_buf* params) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
 
@@ -202,6 +205,7 @@ static int pk_get_ecparams(unsigned char** p, const unsigned char* end, mbedtls_
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_PK_PARSE_EC_EXTENDED)
 /*
  * Parse a SpecifiedECDomain (SEC 1 C.2) and (mostly) fill the group with it.
@@ -222,6 +226,7 @@ static int pk_get_ecparams(unsigned char** p, const unsigned char* end, mbedtls_
  *
  * We only support prime-field as field type, and ignore hash and cofactor.
  */
+namespace lbug_mbedtls {
 static int pk_group_from_specified(const mbedtls_asn1_buf* params, mbedtls_ecp_group* grp) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
     unsigned char* p = params->p;
@@ -415,6 +420,7 @@ cleanup:
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PK_PARSE_EC_EXTENDED */
 
 /*
@@ -425,6 +431,7 @@ cleanup:
  *   specifiedCurve     SpecifiedECDomain -- = SEQUENCE { ... }
  *   -- implicitCurve   NULL
  */
+namespace lbug_mbedtls {
 static int pk_use_ecparams(const mbedtls_asn1_buf* params, mbedtls_ecp_group* grp) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
     mbedtls_ecp_group_id grp_id;
@@ -475,6 +482,7 @@ static int pk_get_ecpubkey(unsigned char** p, const unsigned char* end, mbedtls_
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECP_C */
 
 #if defined(MBEDTLS_RSA_C)
@@ -484,6 +492,7 @@ static int pk_get_ecpubkey(unsigned char** p, const unsigned char* end, mbedtls_
  *      publicExponent    INTEGER   -- e
  *  }
  */
+namespace lbug_mbedtls {
 static int pk_get_rsapubkey(unsigned char** p, const unsigned char* end, mbedtls_rsa_context* rsa) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
     size_t len;
@@ -522,6 +531,7 @@ static int pk_get_rsapubkey(unsigned char** p, const unsigned char* end, mbedtls
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_RSA_C */
 
 /* Get a PK algorithm identifier
@@ -530,6 +540,7 @@ static int pk_get_rsapubkey(unsigned char** p, const unsigned char* end, mbedtls
  *       algorithm               OBJECT IDENTIFIER,
  *       parameters              ANY DEFINED BY algorithm OPTIONAL  }
  */
+namespace lbug_mbedtls {
 static int pk_get_pk_alg(unsigned char** p, const unsigned char* end, mbedtls_pk_type_t* pk_alg,
     mbedtls_asn1_buf* params) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
@@ -617,6 +628,7 @@ int mbedtls_pk_parse_subpubkey(unsigned char** p, const unsigned char* end,
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_RSA_C)
 /*
  * Wrapper around mbedtls_asn1_get_mpi() that rejects zero.
@@ -628,6 +640,7 @@ int mbedtls_pk_parse_subpubkey(unsigned char** p, const unsigned char* end,
  * Since values can't be omitted in PKCS#1, passing a zero value to
  * rsa_complete() would be incorrect, so reject zero values early.
  */
+namespace lbug_mbedtls {
 static int asn1_get_nonzero_mpi(unsigned char** p, const unsigned char* end, mbedtls_mpi* X) {
     int ret;
 
@@ -781,12 +794,14 @@ cleanup:
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_RSA_C */
 
 #if defined(MBEDTLS_ECP_C)
 /*
  * Parse a SEC1 encoded private EC key
  */
+namespace lbug_mbedtls {
 static int pk_parse_key_sec1_der(mbedtls_ecp_keypair* eck, const unsigned char* key, size_t keylen,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
@@ -893,6 +908,7 @@ static int pk_parse_key_sec1_der(mbedtls_ecp_keypair* eck, const unsigned char* 
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECP_C */
 
 /*
@@ -908,6 +924,7 @@ static int pk_parse_key_sec1_der(mbedtls_ecp_keypair* eck, const unsigned char* 
  *   PK context on failure.
  *
  */
+namespace lbug_mbedtls {
 static int pk_parse_key_pkcs8_unencrypted_der(mbedtls_pk_context* pk, const unsigned char* key,
     size_t keylen, int (*f_rng)(void*, unsigned char*, size_t), void* p_rng) {
     int ret, version;
@@ -999,7 +1016,9 @@ static int pk_parse_key_pkcs8_unencrypted_der(mbedtls_pk_context* pk, const unsi
  * free it after use.
  *
  */
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_PKCS12_C) || defined(MBEDTLS_PKCS5_C)
+namespace lbug_mbedtls {
 static int pk_parse_key_pkcs8_encrypted_der(mbedtls_pk_context* pk, unsigned char* key,
     size_t keylen, const unsigned char* pwd, size_t pwdlen,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng) {
@@ -1087,11 +1106,13 @@ static int pk_parse_key_pkcs8_encrypted_der(mbedtls_pk_context* pk, unsigned cha
 
     return (pk_parse_key_pkcs8_unencrypted_der(pk, buf, len, f_rng, p_rng));
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS12_C || MBEDTLS_PKCS5_C */
 
 /*
  * Parse a private key
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_parse_key(mbedtls_pk_context* pk, const unsigned char* key, size_t keylen,
     const unsigned char* pwd, size_t pwdlen, int (*f_rng)(void*, unsigned char*, size_t),
     void* p_rng) {
@@ -1372,4 +1393,5 @@ int mbedtls_pk_parse_public_key(mbedtls_pk_context* ctx, const unsigned char* ke
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PK_PARSE_C */

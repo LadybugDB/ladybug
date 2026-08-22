@@ -56,13 +56,16 @@
 #define AES_VALIDATE(cond) MBEDTLS_INTERNAL_VALIDATE(cond)
 
 #if defined(MBEDTLS_PADLOCK_C) && (defined(MBEDTLS_HAVE_X86) || defined(MBEDTLS_PADLOCK_ALIGN16))
+namespace lbug_mbedtls {
 static int aes_padlock_ace = -1;
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_AES_ROM_TABLES)
 /*
  * Forward S-box
  */
+namespace lbug_mbedtls {
 static const unsigned char AESFSb[256] = {0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30,
     0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76, 0xCA, 0x82, 0xC9, 0x7D, 0xFA, 0x59, 0x47, 0xF0, 0xAD,
     0xD4, 0xA2, 0xAF, 0x9C, 0xA4, 0x72, 0xC0, 0xB7, 0xFD, 0x93, 0x26, 0x36, 0x3F, 0xF7, 0xCC, 0x34,
@@ -155,9 +158,11 @@ static const unsigned char AESFSb[256] = {0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x
 static const uint32_t FT0[256] = {FT};
 #undef V
 
+} // namespace lbug_mbedtls
 #if !defined(MBEDTLS_AES_FEWER_TABLES)
 
 #define V(a, b, c, d) 0x##b##c##d##a
+namespace lbug_mbedtls {
 static const uint32_t FT1[256] = {FT};
 #undef V
 
@@ -169,6 +174,7 @@ static const uint32_t FT2[256] = {FT};
 static const uint32_t FT3[256] = {FT};
 #undef V
 
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_AES_FEWER_TABLES */
 
 #undef FT
@@ -176,6 +182,7 @@ static const uint32_t FT3[256] = {FT};
 /*
  * Reverse S-box
  */
+namespace lbug_mbedtls {
 static const unsigned char RSb[256] = {0x52, 0x09, 0x6A, 0xD5, 0x30, 0x36, 0xA5, 0x38, 0xBF, 0x40,
     0xA3, 0x9E, 0x81, 0xF3, 0xD7, 0xFB, 0x7C, 0xE3, 0x39, 0x82, 0x9B, 0x2F, 0xFF, 0x87, 0x34, 0x8E,
     0x43, 0x44, 0xC4, 0xDE, 0xE9, 0xCB, 0x54, 0x7B, 0x94, 0x32, 0xA6, 0xC2, 0x23, 0x3D, 0xEE, 0x4C,
@@ -268,9 +275,11 @@ static const unsigned char RSb[256] = {0x52, 0x09, 0x6A, 0xD5, 0x30, 0x36, 0xA5,
 static const uint32_t RT0[256] = {RT};
 #undef V
 
+} // namespace lbug_mbedtls
 #if !defined(MBEDTLS_AES_FEWER_TABLES)
 
 #define V(a, b, c, d) 0x##b##c##d##a
+namespace lbug_mbedtls {
 static const uint32_t RT1[256] = {RT};
 #undef V
 
@@ -282,6 +291,7 @@ static const uint32_t RT2[256] = {RT};
 static const uint32_t RT3[256] = {RT};
 #undef V
 
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_AES_FEWER_TABLES */
 
 #undef RT
@@ -289,36 +299,47 @@ static const uint32_t RT3[256] = {RT};
 /*
  * Round constants
  */
+namespace lbug_mbedtls {
 static const uint32_t RCON[10] = {0x00000001, 0x00000002, 0x00000004, 0x00000008, 0x00000010,
     0x00000020, 0x00000040, 0x00000080, 0x0000001B, 0x00000036};
 
+} // namespace lbug_mbedtls
 #else /* MBEDTLS_AES_ROM_TABLES */
 
 /*
  * Forward S-box & tables
  */
+namespace lbug_mbedtls {
 static unsigned char AESFSb[256];
 static uint32_t FT0[256];
+} // namespace lbug_mbedtls
 #if !defined(MBEDTLS_AES_FEWER_TABLES)
+namespace lbug_mbedtls {
 static uint32_t FT1[256];
 static uint32_t FT2[256];
 static uint32_t FT3[256];
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_AES_FEWER_TABLES */
 
 /*
  * Reverse S-box & tables
  */
+namespace lbug_mbedtls {
 static unsigned char RSb[256];
 static uint32_t RT0[256];
+} // namespace lbug_mbedtls
 #if !defined(MBEDTLS_AES_FEWER_TABLES)
+namespace lbug_mbedtls {
 static uint32_t RT1[256];
 static uint32_t RT2[256];
 static uint32_t RT3[256];
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_AES_FEWER_TABLES */
 
 /*
  * Round constants
  */
+namespace lbug_mbedtls {
 static uint32_t RCON[10];
 
 /*
@@ -406,6 +427,7 @@ static void aes_gen_tables(void) {
 
 #undef ROTL8
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_AES_ROM_TABLES */
 
 #if defined(MBEDTLS_AES_FEWER_TABLES)
@@ -438,6 +460,7 @@ static void aes_gen_tables(void) {
 
 #endif /* MBEDTLS_AES_FEWER_TABLES */
 
+namespace lbug_mbedtls {
 void mbedtls_aes_init(mbedtls_aes_context* ctx) {
     AES_VALIDATE(ctx != NULL);
 
@@ -451,7 +474,9 @@ void mbedtls_aes_free(mbedtls_aes_context* ctx) {
     mbedtls_platform_zeroize(ctx, sizeof(mbedtls_aes_context));
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_XTS)
+namespace lbug_mbedtls {
 void mbedtls_aes_xts_init(mbedtls_aes_xts_context* ctx) {
     AES_VALIDATE(ctx != NULL);
 
@@ -466,12 +491,14 @@ void mbedtls_aes_xts_free(mbedtls_aes_xts_context* ctx) {
     mbedtls_aes_free(&ctx->crypt);
     mbedtls_aes_free(&ctx->tweak);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_XTS */
 
 /*
  * AES key schedule (encryption)
  */
 #if !defined(MBEDTLS_AES_SETKEY_ENC_ALT)
+namespace lbug_mbedtls {
 int mbedtls_aes_setkey_enc(mbedtls_aes_context* ctx, const unsigned char* key,
     unsigned int keybits) {
     unsigned int i;
@@ -577,12 +604,14 @@ int mbedtls_aes_setkey_enc(mbedtls_aes_context* ctx, const unsigned char* key,
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_AES_SETKEY_ENC_ALT */
 
 /*
  * AES key schedule (decryption)
  */
 #if !defined(MBEDTLS_AES_SETKEY_DEC_ALT)
+namespace lbug_mbedtls {
 int mbedtls_aes_setkey_dec(mbedtls_aes_context* ctx, const unsigned char* key,
     unsigned int keybits) {
     int i, j, ret;
@@ -642,9 +671,11 @@ exit:
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_AES_SETKEY_DEC_ALT */
 
 #if defined(MBEDTLS_CIPHER_MODE_XTS)
+namespace lbug_mbedtls {
 static int mbedtls_aes_xts_decode_keys(const unsigned char* key, unsigned int keybits,
     const unsigned char** key1, unsigned int* key1bits, const unsigned char** key2,
     unsigned int* key2bits) {
@@ -711,6 +742,7 @@ int mbedtls_aes_xts_setkey_dec(mbedtls_aes_xts_context* ctx, const unsigned char
     /* Set crypt key for decryption. */
     return mbedtls_aes_setkey_dec(&ctx->crypt, key1, key1bits);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_XTS */
 
 #define AES_FROUND(X0, X1, X2, X3, Y0, Y1, Y2, Y3)                                                 \
@@ -747,6 +779,7 @@ int mbedtls_aes_xts_setkey_dec(mbedtls_aes_xts_context* ctx, const unsigned char
  * AES-ECB block encryption
  */
 #if !defined(MBEDTLS_AES_ENCRYPT_ALT)
+namespace lbug_mbedtls {
 int mbedtls_internal_aes_encrypt(mbedtls_aes_context* ctx, const unsigned char input[16],
     unsigned char output[16]) {
     int i;
@@ -801,12 +834,14 @@ int mbedtls_internal_aes_encrypt(mbedtls_aes_context* ctx, const unsigned char i
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_AES_ENCRYPT_ALT */
 
 /*
  * AES-ECB block decryption
  */
 #if !defined(MBEDTLS_AES_DECRYPT_ALT)
+namespace lbug_mbedtls {
 int mbedtls_internal_aes_decrypt(mbedtls_aes_context* ctx, const unsigned char input[16],
     unsigned char output[16]) {
     int i;
@@ -861,11 +896,13 @@ int mbedtls_internal_aes_decrypt(mbedtls_aes_context* ctx, const unsigned char i
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_AES_DECRYPT_ALT */
 
 /*
  * AES-ECB block encryption/decryption
  */
+namespace lbug_mbedtls {
 int mbedtls_aes_crypt_ecb(mbedtls_aes_context* ctx, int mode, const unsigned char input[16],
     unsigned char output[16]) {
     AES_VALIDATE_RET(ctx != NULL);
@@ -895,10 +932,12 @@ int mbedtls_aes_crypt_ecb(mbedtls_aes_context* ctx, int mode, const unsigned cha
         return (mbedtls_internal_aes_decrypt(ctx, input, output));
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_CBC)
 /*
  * AES-CBC buffer encryption/decryption
  */
+namespace lbug_mbedtls {
 int mbedtls_aes_crypt_cbc(mbedtls_aes_context* ctx, int mode, size_t length, unsigned char iv[16],
     const unsigned char* input, unsigned char* output) {
     int i;
@@ -961,10 +1000,12 @@ int mbedtls_aes_crypt_cbc(mbedtls_aes_context* ctx, int mode, size_t length, uns
 exit:
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
 #if defined(MBEDTLS_CIPHER_MODE_XTS)
 
+namespace lbug_mbedtls {
 typedef unsigned char mbedtls_be128[16];
 
 /*
@@ -1085,12 +1126,14 @@ int mbedtls_aes_crypt_xts(mbedtls_aes_xts_context* ctx, int mode, size_t length,
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_XTS */
 
 #if defined(MBEDTLS_CIPHER_MODE_CFB)
 /*
  * AES-CFB128 buffer encryption/decryption
  */
+namespace lbug_mbedtls {
 int mbedtls_aes_crypt_cfb128(mbedtls_aes_context* ctx, int mode, size_t length, size_t* iv_off,
     unsigned char iv[16], const unsigned char* input, unsigned char* output) {
     int c;
@@ -1179,12 +1222,14 @@ int mbedtls_aes_crypt_cfb8(mbedtls_aes_context* ctx, int mode, size_t length, un
 exit:
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CFB */
 
 #if defined(MBEDTLS_CIPHER_MODE_OFB)
 /*
  * AES-OFB (Output Feedback Mode) buffer encryption/decryption
  */
+namespace lbug_mbedtls {
 int mbedtls_aes_crypt_ofb(mbedtls_aes_context* ctx, size_t length, size_t* iv_off,
     unsigned char iv[16], const unsigned char* input, unsigned char* output) {
     int ret = 0;
@@ -1217,12 +1262,14 @@ int mbedtls_aes_crypt_ofb(mbedtls_aes_context* ctx, size_t length, size_t* iv_of
 exit:
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_OFB */
 
 #if defined(MBEDTLS_CIPHER_MODE_CTR)
 /*
  * AES-CTR buffer encryption/decryption
  */
+namespace lbug_mbedtls {
 int mbedtls_aes_crypt_ctr(mbedtls_aes_context* ctx, size_t length, size_t* nc_off,
     unsigned char nonce_counter[16], unsigned char stream_block[16], const unsigned char* input,
     unsigned char* output) {
@@ -1264,6 +1311,7 @@ int mbedtls_aes_crypt_ctr(mbedtls_aes_context* ctx, size_t length, size_t* nc_of
 exit:
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CTR */
 
 #endif /* !MBEDTLS_AES_ALT */
@@ -1274,6 +1322,7 @@ exit:
  *
  * http://csrc.nist.gov/archive/aes/rijndael/rijndael-vals.zip
  */
+namespace lbug_mbedtls {
 static const unsigned char aes_test_ecb_dec[3][16] = {{0x44, 0x41, 0x6A, 0xC2, 0xD1, 0xF5, 0x3C,
                                                           0x58, 0x33, 0x03, 0x91, 0x7E, 0x6B, 0xE9,
                                                           0xEB, 0xE0},
@@ -1290,7 +1339,9 @@ static const unsigned char aes_test_ecb_enc[3][16] = {{0xC3, 0x4C, 0x05, 0x2C, 0
     {0x8B, 0x79, 0xEE, 0xCC, 0x93, 0xA0, 0xEE, 0x5D, 0xFF, 0x30, 0xB4, 0xEA, 0x21, 0x63, 0x6D,
         0xA4}};
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_CBC)
+namespace lbug_mbedtls {
 static const unsigned char aes_test_cbc_dec[3][16] = {{0xFA, 0xCA, 0x37, 0xE0, 0xB0, 0xC8, 0x53,
                                                           0x73, 0xDF, 0x70, 0x6E, 0x73, 0xF7, 0xC9,
                                                           0xAF, 0x86},
@@ -1306,6 +1357,7 @@ static const unsigned char aes_test_cbc_enc[3][16] = {{0x8A, 0x05, 0xFC, 0x5E, 0
         0x04},
     {0xFE, 0x3C, 0x53, 0x65, 0x3E, 0x2F, 0x45, 0xB5, 0x6F, 0xCD, 0x88, 0xB2, 0xCC, 0x89, 0x8F,
         0xF0}};
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
 #if defined(MBEDTLS_CIPHER_MODE_CFB)
@@ -1314,6 +1366,7 @@ static const unsigned char aes_test_cbc_enc[3][16] = {{0x8A, 0x05, 0xFC, 0x5E, 0
  *
  * http://csrc.nist.gov/publications/nistpubs/800-38a/sp800-38a.pdf
  */
+namespace lbug_mbedtls {
 static const unsigned char aes_test_cfb128_key[3][32] = {{0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2,
                                                              0xA6, 0xAB, 0xF7, 0x15, 0x88, 0x09,
                                                              0xCF, 0x4F, 0x3C},
@@ -1348,6 +1401,7 @@ static const unsigned char aes_test_cfb128_ct[3][64] = {
         0x7B, 0xDF, 0x10, 0x13, 0x24, 0x15, 0xE5, 0x4B, 0x92, 0xA1, 0x3E, 0xD0, 0xA8, 0x26, 0x7A,
         0xE2, 0xF9, 0x75, 0xA3, 0x85, 0x74, 0x1A, 0xB9, 0xCE, 0xF8, 0x20, 0x31, 0x62, 0x3D, 0x55,
         0xB1, 0xE4, 0x71}};
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CFB */
 
 #if defined(MBEDTLS_CIPHER_MODE_OFB)
@@ -1356,6 +1410,7 @@ static const unsigned char aes_test_cfb128_ct[3][64] = {
  *
  * https://csrc.nist.gov/publications/detail/sp/800-38a/final
  */
+namespace lbug_mbedtls {
 static const unsigned char aes_test_ofb_key[3][32] = {{0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2,
                                                           0xA6, 0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF,
                                                           0x4F, 0x3C},
@@ -1390,6 +1445,7 @@ static const unsigned char aes_test_ofb_ct[3][64] = {
         0x8d, 0x71, 0xab, 0x47, 0xa0, 0x86, 0xe8, 0x6e, 0xed, 0xf3, 0x9d, 0x1c, 0x5b, 0xba, 0x97,
         0xc4, 0x08, 0x01, 0x26, 0x14, 0x1d, 0x67, 0xf3, 0x7b, 0xe8, 0x53, 0x8f, 0x5a, 0x8b, 0xe7,
         0x40, 0xe4, 0x84}};
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_OFB */
 
 #if defined(MBEDTLS_CIPHER_MODE_CTR)
@@ -1399,6 +1455,7 @@ static const unsigned char aes_test_ofb_ct[3][64] = {
  * http://www.faqs.org/rfcs/rfc3686.html
  */
 
+namespace lbug_mbedtls {
 static const unsigned char aes_test_ctr_key[3][16] = {{0xAE, 0x68, 0x52, 0xF8, 0x12, 0x10, 0x67,
                                                           0xCC, 0x4B, 0xF7, 0xA5, 0x76, 0x55, 0x77,
                                                           0xF3, 0x9E},
@@ -1438,6 +1495,7 @@ static const unsigned char aes_test_ctr_ct[3][48] = {{0xE4, 0x09, 0x5D, 0x4F, 0x
         0x53, 0x25, 0xB2, 0x07, 0x2F}};
 
 static const int aes_test_ctr_len[3] = {16, 32, 36};
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CTR */
 
 #if defined(MBEDTLS_CIPHER_MODE_XTS)
@@ -1448,6 +1506,7 @@ static const int aes_test_ctr_len[3] = {16, 32, 36};
  * https://web.archive.org/web/20150629024421/http://grouper.ieee.org/groups/1619/email/pdf00086.pdf
  * (Archived from original at http://grouper.ieee.org/groups/1619/email/pdf00086.pdf)
  */
+namespace lbug_mbedtls {
 static const unsigned char aes_test_xts_key[][32] = {
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -1493,11 +1552,13 @@ static const unsigned char aes_test_xts_data_unit[][16] = {
         0x00},
 };
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_XTS */
 
 /*
  * Checkup routine
  */
+namespace lbug_mbedtls {
 int mbedtls_aes_self_test(int verbose) {
     int ret = 0, i, j, u, mode;
     unsigned int keybits;
@@ -1867,6 +1928,7 @@ exit:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
 #endif /* MBEDTLS_AES_C */

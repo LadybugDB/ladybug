@@ -57,13 +57,16 @@
 #if !defined(MBEDTLS_SHA512_ALT)
 
 #if defined(MBEDTLS_SHA512_SMALLER)
+namespace lbug_mbedtls {
 static void sha512_put_uint64_be(uint64_t n, unsigned char* b, uint8_t i) {
     MBEDTLS_PUT_UINT64_BE(n, b, i);
 }
+} // namespace lbug_mbedtls
 #else
 #define sha512_put_uint64_be MBEDTLS_PUT_UINT64_BE
 #endif /* MBEDTLS_SHA512_SMALLER */
 
+namespace lbug_mbedtls {
 void mbedtls_sha512_init(mbedtls_sha512_context* ctx) {
     SHA512_VALIDATE(ctx != NULL);
 
@@ -131,11 +134,13 @@ int mbedtls_sha512_starts(mbedtls_sha512_context* ctx, int is384) {
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #if !defined(MBEDTLS_SHA512_PROCESS_ALT)
 
 /*
  * Round constants
  */
+namespace lbug_mbedtls {
 static const uint64_t K[80] = {UL64(0x428A2F98D728AE22), UL64(0x7137449123EF65CD),
     UL64(0xB5C0FBCFEC4D3B2F), UL64(0xE9B5DBA58189DBBC), UL64(0x3956C25BF348B538),
     UL64(0x59F111F1B605D019), UL64(0x923F82A4AF194F9B), UL64(0xAB1C5ED5DA6D8118),
@@ -266,11 +271,13 @@ int mbedtls_internal_sha512_process(mbedtls_sha512_context* ctx, const unsigned 
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_SHA512_PROCESS_ALT */
 
 /*
  * SHA-512 process buffer
  */
+namespace lbug_mbedtls {
 int mbedtls_sha512_update(mbedtls_sha512_context* ctx, const unsigned char* input, size_t ilen) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
     size_t fill;
@@ -379,11 +386,13 @@ int mbedtls_sha512_finish(mbedtls_sha512_context* ctx, unsigned char* output) {
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_SHA512_ALT */
 
 /*
  * output = SHA-512( input buffer )
  */
+namespace lbug_mbedtls {
 int mbedtls_sha512(const unsigned char* input, size_t ilen, unsigned char* output, int is384) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
     mbedtls_sha512_context ctx;
@@ -413,11 +422,13 @@ exit:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST)
 
 /*
  * FIPS-180-2 test vectors
  */
+namespace lbug_mbedtls {
 static const unsigned char sha512_test_buf[3][113] = {{"abc"},
     {"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnop"
      "qrsmnopqrstnopqrstu"},
@@ -542,6 +553,7 @@ exit:
 
 #undef ARRAY_LENGTH
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
 #endif /* MBEDTLS_SHA512_C */

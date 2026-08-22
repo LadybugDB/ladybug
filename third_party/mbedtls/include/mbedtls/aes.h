@@ -64,9 +64,6 @@
 #define inline __inline
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #if !defined(MBEDTLS_AES_ALT)
 // Regular implementation
@@ -75,6 +72,7 @@ extern "C" {
 /**
  * \brief The AES context-type definition.
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_aes_context {
     int MBEDTLS_PRIVATE(nr);           /*!< The number of rounds. */
     uint32_t* MBEDTLS_PRIVATE(rk);     /*!< AES round keys. */
@@ -88,16 +86,19 @@ typedef struct mbedtls_aes_context {
                      </li></ul> */
 } mbedtls_aes_context;
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_XTS)
 /**
  * \brief The AES XTS context-type definition.
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_aes_xts_context {
     mbedtls_aes_context MBEDTLS_PRIVATE(crypt); /*!< The AES context to use for AES block
                                         encryption or decryption. */
     mbedtls_aes_context MBEDTLS_PRIVATE(tweak); /*!< The AES context used for tweak
                                         computation. */
 } mbedtls_aes_xts_context;
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_XTS */
 
 #else /* MBEDTLS_AES_ALT */
@@ -112,6 +113,7 @@ typedef struct mbedtls_aes_xts_context {
  *
  * \param ctx      The AES context to initialize. This must not be \c NULL.
  */
+namespace lbug_mbedtls {
 void mbedtls_aes_init(mbedtls_aes_context* ctx);
 
 /**
@@ -123,6 +125,7 @@ void mbedtls_aes_init(mbedtls_aes_context* ctx);
  */
 void mbedtls_aes_free(mbedtls_aes_context* ctx);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_XTS)
 /**
  * \brief          This function initializes the specified AES XTS context.
@@ -132,6 +135,7 @@ void mbedtls_aes_free(mbedtls_aes_context* ctx);
  *
  * \param ctx      The AES XTS context to initialize. This must not be \c NULL.
  */
+namespace lbug_mbedtls {
 void mbedtls_aes_xts_init(mbedtls_aes_xts_context* ctx);
 
 /**
@@ -142,6 +146,7 @@ void mbedtls_aes_xts_init(mbedtls_aes_xts_context* ctx);
  *                 Otherwise, the context must have been at least initialized.
  */
 void mbedtls_aes_xts_free(mbedtls_aes_xts_context* ctx);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_XTS */
 
 /**
@@ -159,6 +164,7 @@ void mbedtls_aes_xts_free(mbedtls_aes_xts_context* ctx);
  * \return         \c 0 on success.
  * \return         #MBEDTLS_ERR_AES_INVALID_KEY_LENGTH on failure.
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_setkey_enc(mbedtls_aes_context* ctx, const unsigned char* key,
     unsigned int keybits);
@@ -182,6 +188,7 @@ MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_setkey_dec(mbedtls_aes_context* ctx, const unsigned char* key,
     unsigned int keybits);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_XTS)
 /**
  * \brief          This function prepares an XTS context for encryption and
@@ -199,6 +206,7 @@ int mbedtls_aes_setkey_dec(mbedtls_aes_context* ctx, const unsigned char* key,
  * \return         \c 0 on success.
  * \return         #MBEDTLS_ERR_AES_INVALID_KEY_LENGTH on failure.
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_xts_setkey_enc(mbedtls_aes_xts_context* ctx, const unsigned char* key,
     unsigned int keybits);
@@ -222,6 +230,7 @@ int mbedtls_aes_xts_setkey_enc(mbedtls_aes_xts_context* ctx, const unsigned char
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_xts_setkey_dec(mbedtls_aes_xts_context* ctx, const unsigned char* key,
     unsigned int keybits);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_XTS */
 
 /**
@@ -247,10 +256,12 @@ int mbedtls_aes_xts_setkey_dec(mbedtls_aes_xts_context* ctx, const unsigned char
 
 * \return         \c 0 on success.
 */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_crypt_ecb(mbedtls_aes_context* ctx, int mode, const unsigned char input[16],
     unsigned char output[16]);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_CBC)
 /**
  * \brief  This function performs an AES-CBC encryption or decryption operation
@@ -293,9 +304,11 @@ int mbedtls_aes_crypt_ecb(mbedtls_aes_context* ctx, int mode, const unsigned cha
  * \return         #MBEDTLS_ERR_AES_INVALID_INPUT_LENGTH
  *                 on failure.
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_crypt_cbc(mbedtls_aes_context* ctx, int mode, size_t length, unsigned char iv[16],
     const unsigned char* input, unsigned char* output);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
 #if defined(MBEDTLS_CIPHER_MODE_XTS)
@@ -334,9 +347,11 @@ int mbedtls_aes_crypt_cbc(mbedtls_aes_context* ctx, int mode, size_t length, uns
  *                     smaller than an AES block in size (16 Bytes) or if \p
  *                     length is larger than 2^20 blocks (16 MiB).
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_crypt_xts(mbedtls_aes_xts_context* ctx, int mode, size_t length,
     const unsigned char data_unit[16], const unsigned char* input, unsigned char* output);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_XTS */
 
 #if defined(MBEDTLS_CIPHER_MODE_CFB)
@@ -379,6 +394,7 @@ int mbedtls_aes_crypt_xts(mbedtls_aes_xts_context* ctx, int mode, size_t length,
  *
  * \return         \c 0 on success.
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_crypt_cfb128(mbedtls_aes_context* ctx, int mode, size_t length, size_t* iv_off,
     unsigned char iv[16], const unsigned char* input, unsigned char* output);
@@ -422,6 +438,7 @@ int mbedtls_aes_crypt_cfb128(mbedtls_aes_context* ctx, int mode, size_t length, 
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_crypt_cfb8(mbedtls_aes_context* ctx, int mode, size_t length, unsigned char iv[16],
     const unsigned char* input, unsigned char* output);
+} // namespace lbug_mbedtls
 #endif /*MBEDTLS_CIPHER_MODE_CFB */
 
 #if defined(MBEDTLS_CIPHER_MODE_OFB)
@@ -470,10 +487,12 @@ int mbedtls_aes_crypt_cfb8(mbedtls_aes_context* ctx, int mode, size_t length, un
  *
  * \return         \c 0 on success.
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_crypt_ofb(mbedtls_aes_context* ctx, size_t length, size_t* iv_off,
     unsigned char iv[16], const unsigned char* input, unsigned char* output);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_OFB */
 
 #if defined(MBEDTLS_CIPHER_MODE_CTR)
@@ -549,10 +568,12 @@ int mbedtls_aes_crypt_ofb(mbedtls_aes_context* ctx, size_t length, size_t* iv_of
  *
  * \return                 \c 0 on success.
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_aes_crypt_ctr(mbedtls_aes_context* ctx, size_t length, size_t* nc_off,
     unsigned char nonce_counter[16], unsigned char stream_block[16], const unsigned char* input,
     unsigned char* output);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CTR */
 
 /**
@@ -566,6 +587,7 @@ int mbedtls_aes_crypt_ctr(mbedtls_aes_context* ctx, size_t length, size_t* nc_of
  *
  * \return          \c 0 on success.
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_internal_aes_encrypt(mbedtls_aes_context* ctx, const unsigned char input[16],
     unsigned char output[16]);
@@ -585,6 +607,7 @@ MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_internal_aes_decrypt(mbedtls_aes_context* ctx, const unsigned char input[16],
     unsigned char output[16]);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST)
 /**
  * \brief          Checkup routine.
@@ -592,13 +615,14 @@ int mbedtls_internal_aes_decrypt(mbedtls_aes_context* ctx, const unsigned char i
  * \return         \c 0 on success.
  * \return         \c 1 on failure.
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_CRITICAL
 int mbedtls_aes_self_test(int verbose);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* aes.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

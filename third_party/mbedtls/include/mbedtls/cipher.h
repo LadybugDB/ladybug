@@ -66,9 +66,6 @@
 #define MBEDTLS_CIPHER_VARIABLE_IV_LEN 0x01  /**< Cipher accepts IVs of variable length. */
 #define MBEDTLS_CIPHER_VARIABLE_KEY_LEN 0x02 /**< Cipher accepts keys of variable length. */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \brief     Supported cipher types.
@@ -77,6 +74,7 @@ extern "C" {
  *            constitutes a security risk. Arm recommends considering stronger
  *            ciphers instead.
  */
+namespace lbug_mbedtls {
 typedef enum {
     MBEDTLS_CIPHER_ID_NONE = 0, /**< Placeholder to mark the end of cipher ID lists. */
     MBEDTLS_CIPHER_ID_NULL,     /**< The identity cipher, treated as a stream cipher. */
@@ -252,6 +250,7 @@ enum {
  * This should be kept in sync with MBEDTLS_SSL_MAX_BLOCK_LENGTH defined
  * in library/ssl_misc.h, which however deliberately ignores the case of XTS
  * since the latter isn't used in SSL/TLS. */
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_XTS)
 #define MBEDTLS_MAX_KEY_LENGTH 64
 #else
@@ -261,6 +260,7 @@ enum {
 /**
  * Base cipher information (opaque struct).
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_cipher_base_t mbedtls_cipher_base_t;
 
 /**
@@ -627,6 +627,7 @@ void mbedtls_cipher_free(mbedtls_cipher_context_t* ctx);
  */
 int mbedtls_cipher_setup(mbedtls_cipher_context_t* ctx, const mbedtls_cipher_info_t* cipher_info);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_USE_PSA_CRYPTO)
 /**
  * \brief               This function initializes a cipher context for
@@ -649,8 +650,10 @@ int mbedtls_cipher_setup(mbedtls_cipher_context_t* ctx, const mbedtls_cipher_inf
  * \return              #MBEDTLS_ERR_CIPHER_ALLOC_FAILED if allocation of the
  *                      cipher-specific context fails.
  */
+namespace lbug_mbedtls {
 int mbedtls_cipher_setup_psa(mbedtls_cipher_context_t* ctx,
     const mbedtls_cipher_info_t* cipher_info, size_t taglen);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_USE_PSA_CRYPTO */
 
 /**
@@ -663,6 +666,7 @@ int mbedtls_cipher_setup_psa(mbedtls_cipher_context_t* ctx,
  * \return       \c 1 if the cipher is a stream cipher.
  * \return       \c 0 if \p ctx has not been initialized.
  */
+namespace lbug_mbedtls {
 static inline unsigned int mbedtls_cipher_get_block_size(const mbedtls_cipher_context_t* ctx) {
     MBEDTLS_INTERNAL_VALIDATE_RET(ctx != NULL, 0);
     if (ctx->MBEDTLS_PRIVATE(cipher_info) == NULL)
@@ -809,6 +813,7 @@ static inline unsigned int mbedtls_cipher_get_block_size(const mbedtls_cipher_co
 int mbedtls_cipher_setkey(mbedtls_cipher_context_t* ctx, const unsigned char* key, int key_bitlen,
     const mbedtls_operation_t operation);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_WITH_PADDING)
 /**
  * \brief               This function sets the padding mode, for cipher modes
@@ -826,7 +831,9 @@ int mbedtls_cipher_setkey(mbedtls_cipher_context_t* ctx, const unsigned char* ke
  * \return              #MBEDTLS_ERR_CIPHER_BAD_INPUT_DATA if the cipher mode
  *                      does not support padding.
  */
+namespace lbug_mbedtls {
 int mbedtls_cipher_set_padding_mode(mbedtls_cipher_context_t* ctx, mbedtls_cipher_padding_t mode);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_WITH_PADDING */
 
 /**
@@ -847,6 +854,7 @@ int mbedtls_cipher_set_padding_mode(mbedtls_cipher_context_t* ctx, mbedtls_ciphe
  * \return          #MBEDTLS_ERR_CIPHER_BAD_INPUT_DATA on
  *                  parameter-verification failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_cipher_set_iv(mbedtls_cipher_context_t* ctx, const unsigned char* iv, size_t iv_len);
 
 /**
@@ -883,6 +891,7 @@ int mbedtls_cipher_set_iv(mbedtls_cipher_context_t* ctx, const unsigned char* iv
  */
 int mbedtls_cipher_reset(mbedtls_cipher_context_t* ctx);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_GCM_C) || defined(MBEDTLS_CHACHAPOLY_C)
 /**
  * \brief               This function adds additional data for AEAD ciphers.
@@ -896,7 +905,9 @@ int mbedtls_cipher_reset(mbedtls_cipher_context_t* ctx);
  * \return              \c 0 on success.
  * \return              A specific error code on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_cipher_update_ad(mbedtls_cipher_context_t* ctx, const unsigned char* ad, size_t ad_len);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_GCM_C || MBEDTLS_CHACHAPOLY_C */
 
 /**
@@ -928,6 +939,7 @@ int mbedtls_cipher_update_ad(mbedtls_cipher_context_t* ctx, const unsigned char*
  *                      unsupported mode for a cipher.
  * \return              A cipher-specific error code on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_cipher_update(mbedtls_cipher_context_t* ctx, const unsigned char* input, size_t ilen,
     unsigned char* output, size_t* olen);
 
@@ -955,6 +967,7 @@ int mbedtls_cipher_update(mbedtls_cipher_context_t* ctx, const unsigned char* in
  */
 int mbedtls_cipher_finish(mbedtls_cipher_context_t* ctx, unsigned char* output, size_t* olen);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_GCM_C) || defined(MBEDTLS_CHACHAPOLY_C)
 /**
  * \brief               This function writes a tag for AEAD ciphers.
@@ -972,6 +985,7 @@ int mbedtls_cipher_finish(mbedtls_cipher_context_t* ctx, unsigned char* output, 
  * \return              \c 0 on success.
  * \return              A specific error code on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_cipher_write_tag(mbedtls_cipher_context_t* ctx, unsigned char* tag, size_t tag_len);
 
 /**
@@ -989,6 +1003,7 @@ int mbedtls_cipher_write_tag(mbedtls_cipher_context_t* ctx, unsigned char* tag, 
  */
 int mbedtls_cipher_check_tag(mbedtls_cipher_context_t* ctx, const unsigned char* tag,
     size_t tag_len);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_GCM_C || MBEDTLS_CHACHAPOLY_C */
 
 /**
@@ -1024,9 +1039,11 @@ int mbedtls_cipher_check_tag(mbedtls_cipher_context_t* ctx, const unsigned char*
  *                      while decrypting.
  * \return              A cipher-specific error code on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_cipher_crypt(mbedtls_cipher_context_t* ctx, const unsigned char* iv, size_t iv_len,
     const unsigned char* input, size_t ilen, unsigned char* output, size_t* olen);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_AEAD) || defined(MBEDTLS_NIST_KW_C)
 /**
  * \brief               The authenticated encryption (AEAD/NIST_KW) function.
@@ -1072,6 +1089,7 @@ int mbedtls_cipher_crypt(mbedtls_cipher_context_t* ctx, const unsigned char* iv,
  *                      parameter-verification failure.
  * \return              A cipher-specific error code on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_cipher_auth_encrypt_ext(mbedtls_cipher_context_t* ctx, const unsigned char* iv,
     size_t iv_len, const unsigned char* ad, size_t ad_len, const unsigned char* input, size_t ilen,
     unsigned char* output, size_t output_len, size_t* olen, size_t tag_len);
@@ -1128,9 +1146,9 @@ int mbedtls_cipher_auth_encrypt_ext(mbedtls_cipher_context_t* ctx, const unsigne
 int mbedtls_cipher_auth_decrypt_ext(mbedtls_cipher_context_t* ctx, const unsigned char* iv,
     size_t iv_len, const unsigned char* ad, size_t ad_len, const unsigned char* input, size_t ilen,
     unsigned char* output, size_t output_len, size_t* olen, size_t tag_len);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_AEAD || MBEDTLS_NIST_KW_C */
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* MBEDTLS_CIPHER_H */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

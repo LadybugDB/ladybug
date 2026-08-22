@@ -135,9 +135,6 @@
     ((MBEDTLS_OID_SIZE(oid_str) != (oid_buf_len)) ||                                               \
         memcmp((oid_str), (oid_buf), (oid_buf_len)) != 0)
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \name Functions to parse ASN.1 data structures
@@ -147,6 +144,7 @@ extern "C" {
 /**
  * Type-length-value structure that allows for ASN1 using DER.
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_asn1_buf {
     int tag;          /**< ASN1 type, e.g. MBEDTLS_ASN1_UTF8_STRING. */
     size_t len;       /**< ASN1 length, in octets. */
@@ -502,6 +500,7 @@ int mbedtls_asn1_traverse_sequence_of(unsigned char** p, const unsigned char* en
     unsigned char tag_may_val, int (*cb)(void* ctx, int tag, unsigned char* start, size_t len),
     void* ctx);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_BIGNUM_C)
 /**
  * \brief       Retrieve an integer ASN.1 tag and its value.
@@ -521,7 +520,9 @@ int mbedtls_asn1_traverse_sequence_of(unsigned char** p, const unsigned char* en
  *              not fit in an \c int.
  * \return      An MPI error code if the parsed value is too large.
  */
+namespace lbug_mbedtls {
 int mbedtls_asn1_get_mpi(unsigned char** p, const unsigned char* end, mbedtls_mpi* X);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_BIGNUM_C */
 
 /**
@@ -540,6 +541,7 @@ int mbedtls_asn1_get_mpi(unsigned char** p, const unsigned char* end, mbedtls_mp
  *
  * \return      0 if successful or a specific ASN.1 or MPI error code.
  */
+namespace lbug_mbedtls {
 int mbedtls_asn1_get_alg(unsigned char** p, const unsigned char* end, mbedtls_asn1_buf* alg,
     mbedtls_asn1_buf* params);
 
@@ -592,8 +594,8 @@ void mbedtls_asn1_free_named_data(mbedtls_asn1_named_data* entry);
  */
 void mbedtls_asn1_free_named_data_list(mbedtls_asn1_named_data** head);
 
-#ifdef __cplusplus
-}
-#endif
 
+} // namespace lbug_mbedtls
 #endif /* asn1.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

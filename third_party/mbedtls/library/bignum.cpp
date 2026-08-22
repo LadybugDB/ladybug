@@ -73,6 +73,7 @@
 #define CHARS_TO_LIMBS(i) ((i) / ciL + ((i) % ciL != 0))
 
 /* Implementation that should never be optimized out by the compiler */
+namespace lbug_mbedtls {
 static void mbedtls_mpi_zeroize(mbedtls_mpi_uint* v, size_t n) {
     mbedtls_platform_zeroize(v, ciL * n);
 }
@@ -560,10 +561,12 @@ cleanup:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_FS_IO)
 /*
  * Read X from an opened file
  */
+namespace lbug_mbedtls {
 int mbedtls_mpi_read_file(mbedtls_mpi* X, int radix, FILE* fin) {
     mbedtls_mpi_uint d;
     size_t slen;
@@ -643,11 +646,13 @@ cleanup:
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_FS_IO */
 
 /* Convert a big-endian byte array aligned to the size of mbedtls_mpi_uint
  * into the storage form used by mbedtls_mpi. */
 
+namespace lbug_mbedtls {
 static mbedtls_mpi_uint mpi_uint_bigendian_to_host_c(mbedtls_mpi_uint x) {
     uint8_t i;
     unsigned char* x_ptr;
@@ -2890,3 +2895,4 @@ cleanup:
 #endif /* MBEDTLS_SELF_TEST */
 
 #endif /* MBEDTLS_BIGNUM_C */
+} // namespace lbug_mbedtls

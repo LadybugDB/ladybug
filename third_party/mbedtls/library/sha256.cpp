@@ -50,6 +50,7 @@
 
 #if !defined(MBEDTLS_SHA256_ALT)
 
+namespace lbug_mbedtls {
 void mbedtls_sha256_init(mbedtls_sha256_context* ctx) {
     SHA256_VALIDATE(ctx != NULL);
 
@@ -114,7 +115,9 @@ int mbedtls_sha256_starts(mbedtls_sha256_context* ctx, int is224) {
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #if !defined(MBEDTLS_SHA256_PROCESS_ALT)
+namespace lbug_mbedtls {
 static const uint32_t K[] = {
     0x428A2F98,
     0x71374491,
@@ -292,11 +295,13 @@ int mbedtls_internal_sha256_process(mbedtls_sha256_context* ctx, const unsigned 
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_SHA256_PROCESS_ALT */
 
 /*
  * SHA-256 process buffer
  */
+namespace lbug_mbedtls {
 int mbedtls_sha256_update(mbedtls_sha256_context* ctx, const unsigned char* input, size_t ilen) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
     size_t fill;
@@ -404,11 +409,13 @@ int mbedtls_sha256_finish(mbedtls_sha256_context* ctx, unsigned char* output) {
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_SHA256_ALT */
 
 /*
  * output = SHA-256( input buffer )
  */
+namespace lbug_mbedtls {
 int mbedtls_sha256(const unsigned char* input, size_t ilen, unsigned char* output, int is224) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
     mbedtls_sha256_context ctx;
@@ -439,10 +446,12 @@ exit:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST)
 /*
  * FIPS-180-2 test vectors
  */
+namespace lbug_mbedtls {
 static const unsigned char sha256_test_buf[3][57] = {{"abc"},
     {"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"}, {""}};
 
@@ -544,6 +553,7 @@ exit:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
 #endif /* MBEDTLS_SHA256_C */

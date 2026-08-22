@@ -42,6 +42,7 @@
 /*
  * ASN.1 DER decoding routines
  */
+namespace lbug_mbedtls {
 int mbedtls_asn1_get_len(unsigned char** p, const unsigned char* end, size_t* len) {
     if ((end - *p) < 1)
         return (MBEDTLS_ERR_ASN1_OUT_OF_DATA);
@@ -169,7 +170,9 @@ int mbedtls_asn1_get_enum(unsigned char** p, const unsigned char* end, int* val)
     return (asn1_get_tagged_int(p, end, MBEDTLS_ASN1_ENUMERATED, val));
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_BIGNUM_C)
+namespace lbug_mbedtls {
 int mbedtls_asn1_get_mpi(unsigned char** p, const unsigned char* end, mbedtls_mpi* X) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
     size_t len;
@@ -183,8 +186,10 @@ int mbedtls_asn1_get_mpi(unsigned char** p, const unsigned char* end, mbedtls_mp
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_BIGNUM_C */
 
+namespace lbug_mbedtls {
 int mbedtls_asn1_get_bitstring(unsigned char** p, const unsigned char* end,
     mbedtls_asn1_bitstring* bs) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
@@ -412,4 +417,5 @@ const mbedtls_asn1_named_data* mbedtls_asn1_find_named_data(const mbedtls_asn1_n
     return (list);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ASN1_PARSE_C */

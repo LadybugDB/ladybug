@@ -81,9 +81,6 @@
 #define MBEDTLS_ENTROPY_SOURCE_STRONG 1 /**< Entropy source is strong   */
 #define MBEDTLS_ENTROPY_SOURCE_WEAK 0   /**< Entropy source is weak     */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \brief           Entropy poll callback pointer
@@ -96,6 +93,7 @@ extern "C" {
  * \return          0 if no critical failures occurred,
  *                  MBEDTLS_ERR_ENTROPY_SOURCE_FAILED otherwise
  */
+namespace lbug_mbedtls {
 typedef int (
     *mbedtls_entropy_f_source_ptr)(void* data, unsigned char* output, size_t len, size_t* olen);
 
@@ -132,11 +130,14 @@ typedef struct mbedtls_entropy_context {
 #endif
 } mbedtls_entropy_context;
 
+} // namespace lbug_mbedtls
 #if !defined(MBEDTLS_NO_PLATFORM_ENTROPY)
 /**
  * \brief           Platform-specific entropy poll callback
  */
+namespace lbug_mbedtls {
 int mbedtls_platform_entropy_poll(void* data, unsigned char* output, size_t len, size_t* olen);
+} // namespace lbug_mbedtls
 #endif
 
 /**
@@ -144,6 +145,7 @@ int mbedtls_platform_entropy_poll(void* data, unsigned char* output, size_t len,
  *
  * \param ctx       Entropy context to initialize
  */
+namespace lbug_mbedtls {
 void mbedtls_entropy_init(mbedtls_entropy_context* ctx);
 
 /**
@@ -209,6 +211,7 @@ int mbedtls_entropy_func(void* data, unsigned char* output, size_t len);
 int mbedtls_entropy_update_manual(mbedtls_entropy_context* ctx, const unsigned char* data,
     size_t len);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ENTROPY_NV_SEED)
 /**
  * \brief           Trigger an update of the seed file in NV by using the
@@ -218,7 +221,9 @@ int mbedtls_entropy_update_manual(mbedtls_entropy_context* ctx, const unsigned c
  *
  * \return          0 if successful
  */
+namespace lbug_mbedtls {
 int mbedtls_entropy_update_nv_seed(mbedtls_entropy_context* ctx);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ENTROPY_NV_SEED */
 
 #if defined(MBEDTLS_FS_IO)
@@ -232,6 +237,7 @@ int mbedtls_entropy_update_nv_seed(mbedtls_entropy_context* ctx);
  *                      MBEDTLS_ERR_ENTROPY_FILE_IO_ERROR on file error, or
  *                      MBEDTLS_ERR_ENTROPY_SOURCE_FAILED
  */
+namespace lbug_mbedtls {
 int mbedtls_entropy_write_seed_file(mbedtls_entropy_context* ctx, const char* path);
 
 /**
@@ -247,6 +253,7 @@ int mbedtls_entropy_write_seed_file(mbedtls_entropy_context* ctx, const char* pa
  *                      MBEDTLS_ERR_ENTROPY_SOURCE_FAILED
  */
 int mbedtls_entropy_update_seed_file(mbedtls_entropy_context* ctx, const char* path);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_FS_IO */
 
 #if defined(MBEDTLS_SELF_TEST)
@@ -258,8 +265,10 @@ int mbedtls_entropy_update_seed_file(mbedtls_entropy_context* ctx, const char* p
  *
  * \return         0 if successful, or 1 if a test failed
  */
+namespace lbug_mbedtls {
 int mbedtls_entropy_self_test(int verbose);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ENTROPY_HARDWARE_ALT)
 /**
  * \brief          Checkup routine
@@ -274,12 +283,13 @@ int mbedtls_entropy_self_test(int verbose);
  *
  * \return         0 if successful, or 1 if a test failed
  */
+namespace lbug_mbedtls {
 int mbedtls_entropy_source_self_test(int verbose);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ENTROPY_HARDWARE_ALT */
 #endif /* MBEDTLS_SELF_TEST */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* entropy.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

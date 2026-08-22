@@ -47,6 +47,7 @@
 
 #define ENTROPY_MAX_LOOP 256 /**< Maximum amount to loop before error */
 
+namespace lbug_mbedtls {
 void mbedtls_entropy_init(mbedtls_entropy_context* ctx) {
     ctx->source_count = 0;
     memset(ctx->source, 0, sizeof(ctx->source));
@@ -387,7 +388,9 @@ exit:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ENTROPY_NV_SEED)
+namespace lbug_mbedtls {
 int mbedtls_entropy_update_nv_seed(mbedtls_entropy_context* ctx) {
     int ret = MBEDTLS_ERR_ENTROPY_FILE_IO_ERROR;
     unsigned char buf[MBEDTLS_ENTROPY_BLOCK_SIZE];
@@ -405,9 +408,11 @@ int mbedtls_entropy_update_nv_seed(mbedtls_entropy_context* ctx) {
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ENTROPY_NV_SEED */
 
 #if defined(MBEDTLS_FS_IO)
+namespace lbug_mbedtls {
 int mbedtls_entropy_write_seed_file(mbedtls_entropy_context* ctx, const char* path) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
     FILE* f = NULL;
@@ -469,12 +474,14 @@ int mbedtls_entropy_update_seed_file(mbedtls_entropy_context* ctx, const char* p
 
     return (mbedtls_entropy_write_seed_file(ctx, path));
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_FS_IO */
 
 #if defined(MBEDTLS_SELF_TEST)
 /*
  * Dummy source function
  */
+namespace lbug_mbedtls {
 static int entropy_dummy_source(void* data, unsigned char* output, size_t len, size_t* olen) {
     ((void)data);
 
@@ -484,8 +491,10 @@ static int entropy_dummy_source(void* data, unsigned char* output, size_t len, s
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ENTROPY_HARDWARE_ALT)
 
+namespace lbug_mbedtls {
 static int mbedtls_entropy_source_self_test_gather(unsigned char* buf, size_t buf_len) {
     int ret = 0;
     size_t entropy_len = 0;
@@ -571,6 +580,7 @@ cleanup:
     return (ret != 0);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ENTROPY_HARDWARE_ALT */
 
 /*
@@ -578,6 +588,7 @@ cleanup:
  * test that the functions don't cause errors and write the correct
  * amount of data to buffers.
  */
+namespace lbug_mbedtls {
 int mbedtls_entropy_self_test(int verbose) {
     int ret = 1;
     mbedtls_entropy_context ctx;
@@ -644,6 +655,7 @@ cleanup:
 
     return (ret != 0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
 #endif /* MBEDTLS_ENTROPY_C */

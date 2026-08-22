@@ -29,14 +29,12 @@
 #include "mbedtls/build_info.h"
 #include "mbedtls/md.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * Message digest information.
  * Allows message digest functions to be called in a generic way.
  */
+namespace lbug_mbedtls {
 struct mbedtls_md_info_t {
     /** Name of the message digest */
     const char* name;
@@ -51,30 +49,42 @@ struct mbedtls_md_info_t {
     unsigned char block_size;
 };
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_MD5_C)
+namespace lbug_mbedtls {
 extern const mbedtls_md_info_t mbedtls_md5_info;
+} // namespace lbug_mbedtls
 #endif
 #if defined(MBEDTLS_RIPEMD160_C)
+namespace lbug_mbedtls {
 extern const mbedtls_md_info_t mbedtls_ripemd160_info;
+} // namespace lbug_mbedtls
 #endif
 #if defined(MBEDTLS_SHA1_C)
+namespace lbug_mbedtls {
 extern const mbedtls_md_info_t mbedtls_sha1_info;
+} // namespace lbug_mbedtls
 #endif
 #if defined(MBEDTLS_SHA224_C)
+namespace lbug_mbedtls {
 extern const mbedtls_md_info_t mbedtls_sha224_info;
+} // namespace lbug_mbedtls
 #endif
 #if defined(MBEDTLS_SHA256_C)
+namespace lbug_mbedtls {
 extern const mbedtls_md_info_t mbedtls_sha256_info;
+} // namespace lbug_mbedtls
 #endif
 #if defined(MBEDTLS_SHA384_C)
+namespace lbug_mbedtls {
 extern const mbedtls_md_info_t mbedtls_sha384_info;
+} // namespace lbug_mbedtls
 #endif
 #if defined(MBEDTLS_SHA512_C)
+namespace lbug_mbedtls {
 extern const mbedtls_md_info_t mbedtls_sha512_info;
+} // namespace lbug_mbedtls
 #endif
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* MBEDTLS_MD_WRAP_H */

@@ -75,9 +75,6 @@
  * eg for alternative (PKCS#11) RSA implemenations in the PK layers.
  */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #if !defined(MBEDTLS_RSA_ALT)
 // Regular implementation
@@ -86,6 +83,7 @@ extern "C" {
 /**
  * \brief   The RSA context structure.
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_rsa_context {
     int MBEDTLS_PRIVATE(ver);    /*!<  Reserved for internal purposes.
                                   *    Do not set this field in application
@@ -125,6 +123,7 @@ typedef struct mbedtls_rsa_context {
 #endif
 } mbedtls_rsa_context;
 
+} // namespace lbug_mbedtls
 #else /* MBEDTLS_RSA_ALT */
 #include "rsa_alt.h"
 #endif /* MBEDTLS_RSA_ALT */
@@ -139,6 +138,7 @@ typedef struct mbedtls_rsa_context {
  *
  * \param ctx      The RSA context to initialize. This must not be \c NULL.
  */
+namespace lbug_mbedtls {
 void mbedtls_rsa_init(mbedtls_rsa_context* ctx);
 
 /**
@@ -1034,6 +1034,7 @@ int mbedtls_rsa_copy(mbedtls_rsa_context* dst, const mbedtls_rsa_context* src);
  */
 void mbedtls_rsa_free(mbedtls_rsa_context* ctx);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST)
 
 /**
@@ -1042,12 +1043,13 @@ void mbedtls_rsa_free(mbedtls_rsa_context* ctx);
  * \return         \c 0 on success.
  * \return         \c 1 on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_self_test(int verbose);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* rsa.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers
