@@ -170,15 +170,11 @@ std::string NodeTableCatalogEntry::toCypher(const ToCypherInfo& /*info*/) const 
     return base + ";";
 }
 
-std::optional<function::TableFunction> NodeTableCatalogEntry::getScanFunction() const {
-    return scanFunction;
-}
-
 std::unique_ptr<binder::BoundTableScanInfo> NodeTableCatalogEntry::getBoundScanInfo(
-    main::ClientContext* context, [[maybe_unused]] const std::string& nodeUniqueName) {
+    main::ClientContext* context, const std::string& nodeUniqueName) {
     if (scanFunction.has_value()) {
         // Foreign table - call the extension's bind data function
-        auto bindData = createBindDataFunc(context);
+        auto bindData = createBindDataFunc(context, nodeUniqueName);
         return std::make_unique<binder::BoundTableScanInfo>(*scanFunction, std::move(bindData));
     }
     // Check referenced entry (shadow tables: NodeTableCatalogEntry that wraps a foreign entry)

@@ -2,6 +2,7 @@
 
 #include "binder/expression/property_expression.h"
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/enums/extend_direction_util.h"
@@ -60,8 +61,11 @@ void CardinalityEstimator::init(const NodeExpression& node) {
     auto key = node.getInternalID()->getUniqueName();
     cardinality_t numNodes = 0u;
     for (auto entry : node.getEntries()) {
-        // Skip foreign tables - they don't have storage in the local database
-        if (entry->getType() == catalog::CatalogEntryType::FOREIGN_TABLE_ENTRY) {
+        // Skip foreign tables and other scan-function-backed entries (e.g. remotely routed
+        // partition substitutes) - they don't have storage in the local database.
+        if (entry->getType() == catalog::CatalogEntryType::FOREIGN_TABLE_ENTRY ||
+            (entry->getType() == catalog::CatalogEntryType::NODE_TABLE_ENTRY &&
+                entry->ptrCast<catalog::NodeTableCatalogEntry>()->getScanFunction().has_value())) {
             continue;
         }
         auto tableID = entry->getTableID();
