@@ -500,10 +500,21 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
     if (nodeInfo->partitionInfo.has_value()) {
         const auto& partitionInfo = *nodeInfo->partitionInfo;
         nodeSharedState->targets.reserve(partitionInfo.numPartitions);
-        for (auto tableID : partitionInfo.partitionTableIDs) {
+        const auto* hooks = common::getPartitionRoutingHooks();
+        for (auto i = 0u; i < partitionInfo.partitionTableIDs.size(); ++i) {
+            const auto tableID = partitionInfo.partitionTableIDs[i];
             NodeBatchInsertTarget target;
-            target.table = storageManager->getTable(tableID)->ptrCast<NodeTable>();
+            const auto ref = common::PartitionRef{partitionInfo.parentTableID, i};
+            common::PartitionHandle handle = nullptr;
+            const bool claimed = hooks != nullptr && hooks->locate != nullptr &&
+                                 hooks->locate(hooks->context, ref, &handle);
+            // Remotely routed partitions own no local table; rows are shipped through the
+            // routing hooks in copyToNodeGroup.
+            target.table =
+                claimed ? nullptr : storageManager->getTable(tableID)->ptrCast<NodeTable>();
             nodeSharedState->targets.push_back(std::move(target));
+            nodeSharedState->partitionRefs.push_back(ref);
+            nodeSharedState->partitionHandles.push_back(claimed ? handle : nullptr);
         }
         // The partition-key column id is the catalog property id. Property columns are evaluated
         // in schema order, so its index among the column evaluators equals its position in
@@ -520,6 +531,9 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
     }
 
     for (auto& target : nodeSharedState->targets) {
+        if (target.table == nullptr) {
+            continue; // remotely routed: PK handling is the wrapper's job
+        }
         nodeSharedState->initTargetPKIndex(context, target);
     }
 }
@@ -535,13 +549,19 @@ void NodeBatchInsert::initLocalStateInternal(ResultSet* resultSet, ExecutionCont
     nodeLocalState->stats.emplace(
         std::span{nodeInfo->columnTypes.begin(), nodeInfo->outputDataColumns.size()});
     nodeLocalState->targets.reserve(nodeSharedState->targets.size());
-    for (auto& sharedTarget : nodeSharedState->targets) {
+    for (auto i = 0u; i < nodeSharedState->targets.size(); ++i) {
+        auto& sharedTarget = nodeSharedState->targets[i];
         NodeBatchInsertLocalTarget localTarget;
         if (sharedTarget.globalIndexBuilder) {
             localTarget.localIndexBuilder = sharedTarget.globalIndexBuilder->clone();
         }
-        localTarget.errorHandler =
-            createErrorHandler(context, sharedTarget.table, &nodeLocalState->duplicatePKSkipResult);
+        // Remotely routed targets never receive local appends, so they carry no error handler.
+        if (sharedTarget.table == nullptr) {
+            localTarget.errorHandler = std::nullopt;
+        } else {
+            localTarget.errorHandler = createErrorHandler(context, sharedTarget.table,
+                &nodeLocalState->duplicatePKSkipResult);
+        }
         nodeLocalState->targets.push_back(std::move(localTarget));
     }
     nodeLocalState->optimisticAllocator =
@@ -683,6 +703,21 @@ void NodeBatchInsert::copyToNodeGroup(transaction::Transaction* transaction,
         }
 
         auto& target = nodeLocalState->targets[partitionIdx];
+        if (nodeSharedState->targets[partitionIdx].table == nullptr) {
+            // Remotely routed partition: ship the run through the routing hooks. Rows are
+            // addressed by their logical index in the evaluated row space (the same convention
+            // InMemChunkedNodeGroup::append uses).
+            const auto* hooks = common::getPartitionRoutingHooks();
+            if (hooks == nullptr || hooks->insertChunk == nullptr) {
+                throw RuntimeException("Partition is routed remotely but no routing hooks with "
+                                       "insertChunk are installed.");
+            }
+            hooks->insertChunk(hooks->context, nodeSharedState->partitionRefs[partitionIdx],
+                nodeSharedState->partitionHandles[partitionIdx], transaction, &keyVector,
+                nodeLocalState->columnVectors, i, runEnd - i);
+            i = runEnd;
+            continue;
+        }
         auto numAppendedTuples = 0ul;
         while (numAppendedTuples < runEnd - i) {
             if (!target.chunkedGroup) {
@@ -841,6 +876,10 @@ void NodeBatchInsert::finalize(ExecutionContext* context) {
     auto& pageAllocator = *transaction->getLocalStorage()->addOptimisticAllocator();
     for (auto targetIdx = 0u; targetIdx < nodeSharedState->targets.size(); ++targetIdx) {
         auto& sharedTarget = nodeSharedState->targets[targetIdx];
+        if (sharedTarget.table == nullptr) {
+            // Remotely routed partition: the wrapper owns index finalization.
+            continue;
+        }
         auto errorHandler = createErrorHandler(context, sharedTarget.table,
             nodeSharedState->duplicatePKSkipResult.get());
         if (sharedTarget.sharedNodeGroup) {

@@ -186,8 +186,8 @@ std::unique_ptr<BoundStatement> Binder::bindCopyNodeFrom(const Statement& statem
     if (nodeTableEntry.isPartitioned()) {
         partitionWriteInfo = NodePartitionWriteInfo{
             static_cast<PartitionMethod>(*nodeTableEntry.getPartitionMethod()),
-            nodeTableEntry.getPartitionColumnID(), nodeTableEntry.getNumPartitions(),
-            nodeTableEntry.getChildTableIDs()};
+            nodeTableEntry.getTableID(), nodeTableEntry.getPartitionColumnID(),
+            nodeTableEntry.getNumPartitions(), nodeTableEntry.getChildTableIDs()};
     }
     // Check extension secondary index loaded
     auto catalog = Catalog::Get(*clientContext);

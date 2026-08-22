@@ -19,15 +19,18 @@ enum class PartitionMethod : uint8_t { HASH = 0, RANGE = 1 };
 // partition order (index == partition index).
 struct NodePartitionWriteInfo {
     PartitionMethod method;
+    // Owning partitioned parent. Used to address partitions via PartitionRef.
+    common::table_id_t parentTableID;
     common::column_id_t partitionKeyColumnID;
     uint64_t numPartitions;
     std::vector<common::table_id_t> partitionTableIDs;
 
     NodePartitionWriteInfo() = default;
-    NodePartitionWriteInfo(PartitionMethod method, common::column_id_t partitionKeyColumnID,
-        uint64_t numPartitions, std::vector<common::table_id_t> partitionTableIDs)
-        : method{method}, partitionKeyColumnID{partitionKeyColumnID}, numPartitions{numPartitions},
-          partitionTableIDs{std::move(partitionTableIDs)} {}
+    NodePartitionWriteInfo(PartitionMethod method, common::table_id_t parentTableID,
+        common::column_id_t partitionKeyColumnID, uint64_t numPartitions,
+        std::vector<common::table_id_t> partitionTableIDs)
+        : method{method}, parentTableID{parentTableID}, partitionKeyColumnID{partitionKeyColumnID},
+          numPartitions{numPartitions}, partitionTableIDs{std::move(partitionTableIDs)} {}
 };
 
 } // namespace common
