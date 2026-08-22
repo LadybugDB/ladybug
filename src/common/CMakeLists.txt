@@ -23,6 +23,7 @@ add_library(lbug_common
         md5.cpp
         metric.cpp
         null_mask.cpp
+        partition_routing_hook.cpp
         profiler.cpp
         random_engine.cpp
         roaring_mask.cpp
