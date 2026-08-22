@@ -1,5 +1,6 @@
 #include "processor/operator/persistent/insert_executor.h"
 
+#include "common/exception/runtime.h"
 #include "processor/partition_routing.h"
 #include "transaction/transaction.h"
 
@@ -42,7 +43,8 @@ void NodeTableInsertInfo::init(const ResultSet& resultSet, main::ClientContext* 
         columnDataVectors.push_back(evaluator->resultVector.get());
         columnIDs.push_back(columnIDs.size());
     }
-    pkVector = columnDataVectors[table->getPKColumnID()];
+    // Null table means every partition is routed remotely; PK validation is the wrapper's job.
+    pkVector = table == nullptr ? nullptr : columnDataVectors[table->getPKColumnID()];
 }
 
 void NodeInsertExecutor::init(ResultSet* resultSet, const ExecutionContext* context) {
@@ -92,25 +94,47 @@ void NodeInsertExecutor::setNodeIDVectorToNonNull() const {
     info.nodeIDVector->setNull(info.nodeIDVector->state->getSelVector()[0], false);
 }
 
-storage::NodeTable* NodeInsertExecutor::resolveTargetTable() const {
-    if (tableInfo.partitionTables.empty()) {
-        return tableInfo.table;
-    }
+uint64_t NodeInsertExecutor::currentPartitionIndex() const {
     auto* keyVector = tableInfo.columnDataVectors[tableInfo.partitionKeyColumnID];
     DASSERT(keyVector->state->getSelVector().getSelSize() == 1);
     std::vector<uint64_t> partitionIndexes;
     computePartitionIndexes(*keyVector, tableInfo.partitionTables.size(), partitionIndexes);
-    return tableInfo.partitionTables[partitionIndexes[0]];
+    return partitionIndexes[0];
+}
+
+storage::NodeTable* NodeInsertExecutor::resolveTargetTable() const {
+    if (tableInfo.partitionTables.empty()) {
+        return tableInfo.table;
+    }
+    // Null table = remotely routed partition; callers branch on that.
+    return tableInfo.partitionTables[currentPartitionIndex()];
+}
+
+nodeID_t NodeInsertExecutor::insertRemotely(uint64_t index,
+    transaction::Transaction* transaction) const {
+    const auto* hooks = common::getPartitionRoutingHooks();
+    if (hooks == nullptr || hooks->insertRow == nullptr) {
+        throw RuntimeException(
+            "Partition is routed remotely but no routing hooks with insertRow are installed.");
+    }
+    auto* keyVector = tableInfo.columnDataVectors[tableInfo.partitionKeyColumnID];
+    return hooks->insertRow(hooks->context, tableInfo.partitionRefs[index],
+        tableInfo.partitionHandles[index], transaction, keyVector, tableInfo.columnDataVectors);
 }
 
 storage::NodeTable* NodeInsertExecutor::resolveTableForNodeID(common::nodeID_t nodeID) const {
     if (tableInfo.partitionTables.empty()) {
         return tableInfo.table;
     }
-    for (auto* table : tableInfo.partitionTables) {
-        if (table->getTableID() == nodeID.tableID) {
-            return table;
+    for (auto i = 0u; i < tableInfo.partitionTables.size(); ++i) {
+        if (tableInfo.partitionChildIDs[i] != nodeID.tableID) {
+            continue;
         }
+        if (tableInfo.partitionTables[i] != nullptr) {
+            return tableInfo.partitionTables[i];
+        }
+        // Remotely routed partition: the caller must go through the hooks.
+        return nullptr;
     }
     return tableInfo.table;
 }
@@ -120,16 +144,24 @@ nodeID_t NodeInsertExecutor::insert(main::ClientContext* context) {
         evaluator->evaluate();
     }
     auto transaction = Transaction::Get(*context);
-    auto* targetTable = resolveTargetTable();
-    if (checkConflict(transaction, targetTable)) {
-        return info.getNodeID();
+    nodeID_t resultNodeID;
+    if (!tableInfo.partitionTables.empty() && resolveTargetTable() == nullptr) {
+        // Remotely routed partition: the wrapper owns conflict handling and returns the
+        // remotely-assigned node ID.
+        resultNodeID = insertRemotely(currentPartitionIndex(), transaction);
+    } else {
+        auto* targetTable = resolveTargetTable();
+        if (checkConflict(transaction, targetTable)) {
+            return info.getNodeID();
+        }
+        storage::NodeTableInsertState insertState{*info.nodeIDVector, *tableInfo.pkVector,
+            tableInfo.columnDataVectors};
+        targetTable->initInsertState(context, insertState);
+        targetTable->insert(transaction, insertState);
+        resultNodeID = info.getNodeID();
     }
-    storage::NodeTableInsertState insertState{*info.nodeIDVector, *tableInfo.pkVector,
-        tableInfo.columnDataVectors};
-    targetTable->initInsertState(context, insertState);
-    targetTable->insert(transaction, insertState);
     writeColumnVectors(info.columnVectors, tableInfo.columnDataVectors);
-    return info.getNodeID();
+    return resultNodeID;
 }
 
 void NodeInsertExecutor::skipInsert() const {
@@ -156,6 +188,22 @@ void NodeInsertExecutor::skipInsert(nodeID_t nodeID, main::ClientContext* contex
     }
     auto transaction = Transaction::Get(*context);
     auto* table = resolveTableForNodeID(nodeID);
+    if (table == nullptr) {
+        // Remotely routed partition: fetch the row through the routing hooks.
+        const auto* hooks = common::getPartitionRoutingHooks();
+        if (hooks == nullptr || hooks->lookupRow == nullptr) {
+            throw RuntimeException("Partition is routed remotely but no routing hooks with "
+                                   "lookupRow are installed.");
+        }
+        for (auto i = 0u; i < tableInfo.partitionTables.size(); ++i) {
+            if (tableInfo.partitionChildIDs[i] == nodeID.tableID) {
+                hooks->lookupRow(hooks->context, tableInfo.partitionRefs[i],
+                    tableInfo.partitionHandles[i], transaction, nodeID, outputVectors);
+                return;
+            }
+        }
+        return;
+    }
     storage::NodeTableScanState scanState{info.nodeIDVector, std::move(outputVectors),
         info.nodeIDVector->state};
     scanState.setToTable(transaction, table, std::move(columnIDs), {});

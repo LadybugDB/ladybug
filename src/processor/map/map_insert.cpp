@@ -1,6 +1,7 @@
 #include "binder/expression/rel_expression.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "common/partition_routing_hook.h"
 #include "main/client_context.h"
 #include "planner/operator/persistent/logical_insert.h"
 #include "processor/expression_mapper.h"
@@ -39,30 +40,61 @@ NodeInsertExecutor PlanMapper::getNodeInsertExecutor(const LogicalInsertInfo* bo
     auto columnsPos = populateReturnColumnsPos(*boundInfo, outSchema);
     auto info = NodeInsertInfo(nodeIDPos, columnsPos, boundInfo->conflictAction);
     auto storageManager = StorageManager::Get(*clientContext);
-    auto table = storageManager->getTable(node.getEntry(0)->getTableID())->ptrCast<NodeTable>();
     evaluator_vector_t evaluators;
     auto exprMapper = ExpressionMapper(&inSchema);
     for (auto& expr : boundInfo->columnDataExprs) {
         evaluators.push_back(exprMapper.getEvaluator(expr));
     }
-    auto tableInfo = NodeTableInsertInfo(table, std::move(evaluators));
-    // A partitioned parent is resolved into its partition subgraphs during binding. Route the
-    // row into the partition matching its partition-key value at insert time.
-    if (node.getNumEntries() > 1) {
-        const auto* firstEntry = node.getEntry(0)->ptrCast<NodeTableCatalogEntry>();
+    // A partitioned parent is resolved from catalog truth (not the pattern's entries, which
+    // may contain routing-wrapper scan substitutes). Route each row into the partition matching
+    // its partition-key value at insert time; partitions claimed by routing hooks carry a null
+    // table pointer and are shipped remotely.
+    const auto* firstEntry = node.getEntry(0)->ptrCast<NodeTableCatalogEntry>();
+    // A pattern on the parent itself expands either to all partition children or, when every
+    // partition is routed remotely, to a single wrapper-provided substitute (which carries its
+    // own scan function). A pattern naming one partition subgraph directly is a plain write.
+    const bool parentPattern =
+        firstEntry->isPartitionChild() &&
+        (node.getNumEntries() > 1 || firstEntry->getScanFunction().has_value());
+    if (parentPattern) {
         const auto parentID = firstEntry->getParentTableID();
         DASSERT(parentID != INVALID_TABLE_ID);
         auto transaction = transaction::Transaction::Get(*clientContext);
         const auto* parent = Catalog::Get(*clientContext)
                                  ->getTableCatalogEntry(transaction, parentID)
                                  ->ptrCast<NodeTableCatalogEntry>();
+        DASSERT(parent->isPartitioned());
+        const auto childTableIDs = parent->getChildTableIDs();
+        DASSERT(!childTableIDs.empty());
+        const auto* hooks = common::getPartitionRoutingHooks();
+        common::PartitionHandle handle = nullptr;
+        const bool firstClaimed =
+            hooks != nullptr && hooks->locate != nullptr &&
+            hooks->locate(hooks->context, common::PartitionRef{parentID, 0}, &handle);
+        // The "first partition" table is only used to derive the PK vector position; it can be
+        // null when every partition is routed remotely.
+        auto tableInfo = NodeTableInsertInfo(
+            firstClaimed ? nullptr :
+                           storageManager->getTable(childTableIDs[0])->ptrCast<NodeTable>(),
+            std::move(evaluators));
         tableInfo.partitionKeyColumnID = parent->getPartitionColumnID();
-        tableInfo.partitionTables.reserve(node.getNumEntries());
-        for (auto i = 0u; i < node.getNumEntries(); ++i) {
+        tableInfo.partitionTables.reserve(childTableIDs.size());
+        for (auto i = 0u; i < childTableIDs.size(); ++i) {
+            const auto ref = common::PartitionRef{parentID, i};
+            common::PartitionHandle partHandle = nullptr;
+            const bool claimed = hooks != nullptr && hooks->locate != nullptr &&
+                                 hooks->locate(hooks->context, ref, &partHandle);
             tableInfo.partitionTables.push_back(
-                storageManager->getTable(node.getEntry(i)->getTableID())->ptrCast<NodeTable>());
+                claimed ? nullptr :
+                          storageManager->getTable(childTableIDs[i])->ptrCast<NodeTable>());
+            tableInfo.partitionChildIDs.push_back(childTableIDs[i]);
+            tableInfo.partitionRefs.push_back(ref);
+            tableInfo.partitionHandles.push_back(claimed ? partHandle : nullptr);
         }
+        return NodeInsertExecutor(std::move(info), std::move(tableInfo));
     }
+    auto table = storageManager->getTable(firstEntry->getTableID())->ptrCast<NodeTable>();
+    auto tableInfo = NodeTableInsertInfo(table, std::move(evaluators));
     return NodeInsertExecutor(std::move(info), std::move(tableInfo));
 }
 

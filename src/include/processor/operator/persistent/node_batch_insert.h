@@ -2,6 +2,7 @@
 
 #include "common/enums/column_evaluate_type.h"
 #include "common/partition_routing.h"
+#include "common/partition_routing_hook.h"
 #include "common/types/types.h"
 #include "expression_evaluator/expression_evaluator.h"
 #include "processor/operator/persistent/batch_insert.h"
@@ -96,7 +97,13 @@ struct NodeBatchInsertSharedState final : BatchInsertSharedState {
     std::vector<common::column_id_t> mainDataColumns;
 
     // One write target per partition subgraph (or exactly one for a non-partitioned table).
+    // Targets whose storage is routed remotely (see common/partition_routing_hook.h) carry a
+    // null table pointer; their aligned entries below describe how to route rows through the
+    // hooks instead.
     std::vector<NodeBatchInsertTarget> targets;
+    // Aligned with `targets`; meaningful only when the write goes into a partitioned parent.
+    std::vector<common::PartitionRef> partitionRefs;
+    std::vector<common::PartitionHandle> partitionHandles;
     // Index of the partition-key column among the evaluated column vectors; INVALID when the
     // write is not into a partitioned parent.
     common::column_id_t partitionKeyColumnIdx = common::INVALID_COLUMN_ID;
