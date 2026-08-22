@@ -263,6 +263,15 @@ BoundCreateTableInfo Binder::bindCreateNodeTableInfo(const CreateTableInfo* info
         const auto& parsed = *extraInfo.partitionInfo;
         auto method = parsed.method == ParsedPartitionMethod::HASH ? BoundPartitionMethod::HASH :
                                                                      BoundPartitionMethod::RANGE;
+        if (method == BoundPartitionMethod::RANGE) {
+            // Real range partitioning must split on the actual distribution of values (equal
+            // domain splits would dump all real-world data into one bucket). Until that dynamic
+            // splitting exists, refuse the DDL rather than silently falling back to hash routing.
+            throw BinderException(
+                "RANGE partitioning is not implemented yet. RANGE requires partition bounds "
+                "derived from the actual value distribution, which is future work. Use PARTITION "
+                "BY HASH instead.");
+        }
         if (parsed.numPartitions == 0) {
             throw BinderException("Number of partitions must be greater than 0.");
         }
