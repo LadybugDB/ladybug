@@ -45,9 +45,6 @@
 #define MBEDTLS_MEMORY_VERIFY_FREE (1 << 1)
 #define MBEDTLS_MEMORY_VERIFY_ALWAYS (MBEDTLS_MEMORY_VERIFY_ALLOC | MBEDTLS_MEMORY_VERIFY_FREE)
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \brief   Initialize use of stack-based memory allocator.
@@ -64,6 +61,7 @@ extern "C" {
  * \param buf   buffer to use as heap
  * \param len   size of the buffer
  */
+namespace lbug_mbedtls {
 void mbedtls_memory_buffer_alloc_init(unsigned char* buf, size_t len);
 
 /**
@@ -81,6 +79,7 @@ void mbedtls_memory_buffer_alloc_free(void);
  */
 void mbedtls_memory_buffer_set_verify(int verify);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_MEMORY_DEBUG)
 /**
  * \brief   Print out the status of the allocated memory (primarily for use
@@ -88,6 +87,7 @@ void mbedtls_memory_buffer_set_verify(int verify);
  *          Prints out a list of 'still allocated' blocks and their stack
  *          trace if MBEDTLS_MEMORY_BACKTRACE is defined.
  */
+namespace lbug_mbedtls {
 void mbedtls_memory_buffer_alloc_status(void);
 
 /**
@@ -114,6 +114,7 @@ void mbedtls_memory_buffer_alloc_max_reset(void);
  * \param cur_blocks    Current number of blocks in use, including free and used
  */
 void mbedtls_memory_buffer_alloc_cur_get(size_t* cur_used, size_t* cur_blocks);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_MEMORY_DEBUG */
 
 /**
@@ -127,19 +128,22 @@ void mbedtls_memory_buffer_alloc_cur_get(size_t* cur_used, size_t* cur_blocks);
  *
  * \return             0 if verified, 1 otherwise
  */
+namespace lbug_mbedtls {
 int mbedtls_memory_buffer_alloc_verify(void);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST)
 /**
  * \brief          Checkup routine
  *
  * \return         0 if successful, or 1 if a test failed
  */
+namespace lbug_mbedtls {
 int mbedtls_memory_buffer_alloc_self_test(int verbose);
+} // namespace lbug_mbedtls
 #endif
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* memory_buffer_alloc.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

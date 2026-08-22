@@ -37,6 +37,10 @@
  * \return      Zero if the content of the two buffer is the same,
  *              otherwise non-zero.
  */
+namespace lbug_mbedtls {
 int mbedtls_ct_memcmp(const void* a, const void* b, size_t n);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CONSTANT_TIME_H */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

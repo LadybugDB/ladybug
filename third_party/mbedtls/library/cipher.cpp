@@ -74,6 +74,7 @@
     MBEDTLS_INTERNAL_VALIDATE_RET(cond, MBEDTLS_ERR_CIPHER_BAD_INPUT_DATA)
 #define CIPHER_VALIDATE(cond) MBEDTLS_INTERNAL_VALIDATE(cond)
 
+namespace lbug_mbedtls {
 static int supported_init = 0;
 
 const int* mbedtls_cipher_list(void) {
@@ -199,7 +200,9 @@ int mbedtls_cipher_setup(mbedtls_cipher_context_t* ctx, const mbedtls_cipher_inf
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_USE_PSA_CRYPTO)
+namespace lbug_mbedtls {
 int mbedtls_cipher_setup_psa(mbedtls_cipher_context_t* ctx,
     const mbedtls_cipher_info_t* cipher_info, size_t taglen) {
     psa_algorithm_t alg;
@@ -227,8 +230,10 @@ int mbedtls_cipher_setup_psa(mbedtls_cipher_context_t* ctx,
     ctx->psa_enabled = 1;
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_USE_PSA_CRYPTO */
 
+namespace lbug_mbedtls {
 int mbedtls_cipher_setkey(mbedtls_cipher_context_t* ctx, const unsigned char* key, int key_bitlen,
     const mbedtls_operation_t operation) {
     CIPHER_VALIDATE_RET(ctx != NULL);
@@ -407,7 +412,9 @@ int mbedtls_cipher_reset(mbedtls_cipher_context_t* ctx) {
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_GCM_C) || defined(MBEDTLS_CHACHAPOLY_C)
+namespace lbug_mbedtls {
 int mbedtls_cipher_update_ad(mbedtls_cipher_context_t* ctx, const unsigned char* ad,
     size_t ad_len) {
     CIPHER_VALIDATE_RET(ctx != NULL);
@@ -450,8 +457,10 @@ int mbedtls_cipher_update_ad(mbedtls_cipher_context_t* ctx, const unsigned char*
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_GCM_C || MBEDTLS_CHACHAPOLY_C */
 
+namespace lbug_mbedtls {
 int mbedtls_cipher_update(mbedtls_cipher_context_t* ctx, const unsigned char* input, size_t ilen,
     unsigned char* output, size_t* olen) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
@@ -667,11 +676,13 @@ int mbedtls_cipher_update(mbedtls_cipher_context_t* ctx, const unsigned char* in
     return (MBEDTLS_ERR_CIPHER_FEATURE_UNAVAILABLE);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_WITH_PADDING)
 #if defined(MBEDTLS_CIPHER_PADDING_PKCS7)
 /*
  * PKCS7 (and PKCS5) padding: fill with ll bytes, with ll = padding_len
  */
+namespace lbug_mbedtls {
 static void add_pkcs_padding(unsigned char* output, size_t output_len, size_t data_len) {
     size_t padding_len = output_len - data_len;
     unsigned char i;
@@ -702,12 +713,14 @@ static int get_pkcs_padding(unsigned char* input, size_t input_len, size_t* data
 
     return (MBEDTLS_ERR_CIPHER_INVALID_PADDING * (bad != 0));
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_PADDING_PKCS7 */
 
 #if defined(MBEDTLS_CIPHER_PADDING_ONE_AND_ZEROS)
 /*
  * One and zeros padding: fill with 80 00 ... 00
  */
+namespace lbug_mbedtls {
 static void add_one_and_zeros_padding(unsigned char* output, size_t output_len, size_t data_len) {
     size_t padding_len = output_len - data_len;
     unsigned char i = 0;
@@ -735,12 +748,14 @@ static int get_one_and_zeros_padding(unsigned char* input, size_t input_len, siz
 
     return (MBEDTLS_ERR_CIPHER_INVALID_PADDING * (bad != 0));
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_PADDING_ONE_AND_ZEROS */
 
 #if defined(MBEDTLS_CIPHER_PADDING_ZEROS_AND_LEN)
 /*
  * Zeros and len padding: fill with 00 ... 00 ll, where ll is padding length
  */
+namespace lbug_mbedtls {
 static void add_zeros_and_len_padding(unsigned char* output, size_t output_len, size_t data_len) {
     size_t padding_len = output_len - data_len;
     unsigned char i = 0;
@@ -771,12 +786,14 @@ static int get_zeros_and_len_padding(unsigned char* input, size_t input_len, siz
 
     return (MBEDTLS_ERR_CIPHER_INVALID_PADDING * (bad != 0));
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_PADDING_ZEROS_AND_LEN */
 
 #if defined(MBEDTLS_CIPHER_PADDING_ZEROS)
 /*
  * Zero padding: fill with 00 ... 00
  */
+namespace lbug_mbedtls {
 static void add_zeros_padding(unsigned char* output, size_t output_len, size_t data_len) {
     size_t i;
 
@@ -800,6 +817,7 @@ static int get_zeros_padding(unsigned char* input, size_t input_len, size_t* dat
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_PADDING_ZEROS */
 
 /*
@@ -808,6 +826,7 @@ static int get_zeros_padding(unsigned char* input, size_t input_len, size_t* dat
  * There is no add_padding function (check for NULL in mbedtls_cipher_finish)
  * but a trivial get_padding function
  */
+namespace lbug_mbedtls {
 static int get_no_padding(unsigned char* input, size_t input_len, size_t* data_len) {
     if (NULL == input || NULL == data_len)
         return (MBEDTLS_ERR_CIPHER_BAD_INPUT_DATA);
@@ -816,8 +835,10 @@ static int get_no_padding(unsigned char* input, size_t input_len, size_t* data_l
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_WITH_PADDING */
 
+namespace lbug_mbedtls {
 int mbedtls_cipher_finish(mbedtls_cipher_context_t* ctx, unsigned char* output, size_t* olen) {
     CIPHER_VALIDATE_RET(ctx != NULL);
     CIPHER_VALIDATE_RET(output != NULL);
@@ -904,7 +925,9 @@ int mbedtls_cipher_finish(mbedtls_cipher_context_t* ctx, unsigned char* output, 
     return (MBEDTLS_ERR_CIPHER_FEATURE_UNAVAILABLE);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_WITH_PADDING)
+namespace lbug_mbedtls {
 int mbedtls_cipher_set_padding_mode(mbedtls_cipher_context_t* ctx, mbedtls_cipher_padding_t mode) {
     CIPHER_VALIDATE_RET(ctx != NULL);
 
@@ -960,9 +983,11 @@ int mbedtls_cipher_set_padding_mode(mbedtls_cipher_context_t* ctx, mbedtls_ciphe
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_WITH_PADDING */
 
 #if defined(MBEDTLS_GCM_C) || defined(MBEDTLS_CHACHAPOLY_C)
+namespace lbug_mbedtls {
 int mbedtls_cipher_write_tag(mbedtls_cipher_context_t* ctx, unsigned char* tag, size_t tag_len) {
     CIPHER_VALIDATE_RET(ctx != NULL);
     CIPHER_VALIDATE_RET(tag_len == 0 || tag != NULL);
@@ -1078,11 +1103,13 @@ exit:
     mbedtls_platform_zeroize(check_tag, tag_len);
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_GCM_C || MBEDTLS_CHACHAPOLY_C */
 
 /*
  * Packet-oriented wrapper for non-AEAD modes
  */
+namespace lbug_mbedtls {
 int mbedtls_cipher_crypt(mbedtls_cipher_context_t* ctx, const unsigned char* iv, size_t iv_len,
     const unsigned char* input, size_t ilen, unsigned char* output, size_t* olen) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
@@ -1157,11 +1184,13 @@ int mbedtls_cipher_crypt(mbedtls_cipher_context_t* ctx, const unsigned char* iv,
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_AEAD)
 /*
  * Packet-oriented encryption for AEAD modes: internal function used by
  * mbedtls_cipher_auth_encrypt_ext().
  */
+namespace lbug_mbedtls {
 static int mbedtls_cipher_aead_encrypt(mbedtls_cipher_context_t* ctx, const unsigned char* iv,
     size_t iv_len, const unsigned char* ad, size_t ad_len, const unsigned char* input, size_t ilen,
     unsigned char* output, size_t* olen, unsigned char* tag, size_t tag_len) {
@@ -1305,12 +1334,14 @@ static int mbedtls_cipher_aead_decrypt(mbedtls_cipher_context_t* ctx, const unsi
 
     return (MBEDTLS_ERR_CIPHER_FEATURE_UNAVAILABLE);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_AEAD */
 
 #if defined(MBEDTLS_CIPHER_MODE_AEAD) || defined(MBEDTLS_NIST_KW_C)
 /*
  * Packet-oriented encryption for AEAD/NIST_KW: public function.
  */
+namespace lbug_mbedtls {
 int mbedtls_cipher_auth_encrypt_ext(mbedtls_cipher_context_t* ctx, const unsigned char* iv,
     size_t iv_len, const unsigned char* ad, size_t ad_len, const unsigned char* input, size_t ilen,
     unsigned char* output, size_t output_len, size_t* olen, size_t tag_len) {
@@ -1402,6 +1433,7 @@ int mbedtls_cipher_auth_decrypt_ext(mbedtls_cipher_context_t* ctx, const unsigne
     return (MBEDTLS_ERR_CIPHER_FEATURE_UNAVAILABLE);
 #endif /* MBEDTLS_CIPHER_MODE_AEAD */
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_AEAD || MBEDTLS_NIST_KW_C */
 
 #endif /* MBEDTLS_CIPHER_C */

@@ -42,9 +42,11 @@
  *
  * \return      All-bits-one if \p low <= \p c <= \p high, otherwise zero.
  */
+namespace lbug_mbedtls {
 unsigned char mbedtls_ct_uchar_mask_of_range(unsigned char low, unsigned char high,
     unsigned char c);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_TEST_HOOKS */
 
 #endif /* MBEDTLS_CONSTANT_TIME_INVASIVE_H */

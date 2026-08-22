@@ -72,6 +72,7 @@
 #define RSA_VALIDATE_RET(cond) MBEDTLS_INTERNAL_VALIDATE_RET(cond, MBEDTLS_ERR_RSA_BAD_INPUT_DATA)
 #define RSA_VALIDATE(cond) MBEDTLS_INTERNAL_VALIDATE(cond)
 
+namespace lbug_mbedtls {
 int mbedtls_rsa_import(mbedtls_rsa_context* ctx, const mbedtls_mpi* N, const mbedtls_mpi* P,
     const mbedtls_mpi* Q, const mbedtls_mpi* D, const mbedtls_mpi* E) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
@@ -455,6 +456,7 @@ size_t mbedtls_rsa_get_len(const mbedtls_rsa_context* ctx) {
     return (ctx->len);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_GENPRIME)
 
 /*
@@ -463,6 +465,7 @@ size_t mbedtls_rsa_get_len(const mbedtls_rsa_context* ctx) {
  * This generation method follows the RSA key pair generation procedure of
  * FIPS 186-4 if 2^16 < exponent < 2^256 and nbits = 2048 or nbits = 3072.
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_gen_key(mbedtls_rsa_context* ctx, int (*f_rng)(void*, unsigned char*, size_t),
     void* p_rng, unsigned int nbits, int exponent) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
@@ -570,11 +573,13 @@ cleanup:
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_GENPRIME */
 
 /*
  * Check a public RSA key
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_check_pubkey(const mbedtls_rsa_context* ctx) {
     RSA_VALIDATE_RET(ctx != NULL);
 
@@ -974,6 +979,7 @@ cleanup:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_PKCS1_V21)
 /**
  * Generate and apply the MGF1 operation (from PKCS#1 v2.1) to a buffer.
@@ -984,6 +990,7 @@ cleanup:
  * \param slen      length of the source buffer
  * \param md_ctx    message digest context to use
  */
+namespace lbug_mbedtls {
 static int mgf_mask(unsigned char* dst, size_t dlen, unsigned char* src, size_t slen,
     mbedtls_md_context_t* md_ctx) {
     unsigned char mask[MBEDTLS_MD_MAX_SIZE];
@@ -1028,12 +1035,14 @@ exit:
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V21 */
 
 #if defined(MBEDTLS_PKCS1_V21)
 /*
  * Implementation of the PKCS#1 v2.1 RSAES-OAEP-ENCRYPT function
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_rsaes_oaep_encrypt(mbedtls_rsa_context* ctx,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng, const unsigned char* label,
     size_t label_len, size_t ilen, const unsigned char* input, unsigned char* output) {
@@ -1102,12 +1111,14 @@ exit:
 
     return (mbedtls_rsa_public(ctx, output, output));
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V21 */
 
 #if defined(MBEDTLS_PKCS1_V15)
 /*
  * Implementation of the PKCS#1 v2.1 RSAES-PKCS1-V1_5-ENCRYPT function
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_rsaes_pkcs1_v15_encrypt(mbedtls_rsa_context* ctx,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng, size_t ilen,
     const unsigned char* input, unsigned char* output) {
@@ -1154,11 +1165,13 @@ int mbedtls_rsa_rsaes_pkcs1_v15_encrypt(mbedtls_rsa_context* ctx,
 
     return (mbedtls_rsa_public(ctx, output, output));
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V15 */
 
 /*
  * Add the message padding, then do an RSA operation
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_pkcs1_encrypt(mbedtls_rsa_context* ctx, int (*f_rng)(void*, unsigned char*, size_t),
     void* p_rng, size_t ilen, const unsigned char* input, unsigned char* output) {
     RSA_VALIDATE_RET(ctx != NULL);
@@ -1181,10 +1194,12 @@ int mbedtls_rsa_pkcs1_encrypt(mbedtls_rsa_context* ctx, int (*f_rng)(void*, unsi
     }
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_PKCS1_V21)
 /*
  * Implementation of the PKCS#1 v2.1 RSAES-OAEP-DECRYPT function
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_rsaes_oaep_decrypt(mbedtls_rsa_context* ctx,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng, const unsigned char* label,
     size_t label_len, size_t* olen, const unsigned char* input, unsigned char* output,
@@ -1309,12 +1324,14 @@ cleanup:
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V21 */
 
 #if defined(MBEDTLS_PKCS1_V15)
 /*
  * Implementation of the PKCS#1 v2.1 RSAES-PKCS1-V1_5-DECRYPT function
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_rsaes_pkcs1_v15_decrypt(mbedtls_rsa_context* ctx,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng, size_t* olen,
     const unsigned char* input, unsigned char* output, size_t output_max_len) {
@@ -1347,11 +1364,13 @@ cleanup:
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V15 */
 
 /*
  * Do an RSA operation, then remove the message padding
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_pkcs1_decrypt(mbedtls_rsa_context* ctx, int (*f_rng)(void*, unsigned char*, size_t),
     void* p_rng, size_t* olen, const unsigned char* input, unsigned char* output,
     size_t output_max_len) {
@@ -1378,7 +1397,9 @@ int mbedtls_rsa_pkcs1_decrypt(mbedtls_rsa_context* ctx, int (*f_rng)(void*, unsi
     }
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_PKCS1_V21)
+namespace lbug_mbedtls {
 static int rsa_rsassa_pss_sign(mbedtls_rsa_context* ctx,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng, mbedtls_md_type_t md_alg,
     unsigned int hashlen, const unsigned char* hash, int saltlen, unsigned char* sig) {
@@ -1511,6 +1532,7 @@ int mbedtls_rsa_rsassa_pss_sign(mbedtls_rsa_context* ctx,
     return rsa_rsassa_pss_sign(ctx, f_rng, p_rng, md_alg, hashlen, hash, MBEDTLS_RSA_SALT_LEN_ANY,
         sig);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V21 */
 
 #if defined(MBEDTLS_PKCS1_V15)
@@ -1535,6 +1557,7 @@ int mbedtls_rsa_rsassa_pss_sign(mbedtls_rsa_context* ctx,
  * - dst points to a buffer of size at least dst_len.
  *
  */
+namespace lbug_mbedtls {
 static int rsa_rsassa_pkcs1_v15_encode(mbedtls_md_type_t md_alg, unsigned int hashlen,
     const unsigned char* hash, size_t dst_len, unsigned char* dst) {
     size_t oid_size = 0;
@@ -1697,11 +1720,13 @@ cleanup:
         memset(sig, '!', ctx->len);
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V15 */
 
 /*
  * Do an RSA operation to sign the message digest
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_pkcs1_sign(mbedtls_rsa_context* ctx, int (*f_rng)(void*, unsigned char*, size_t),
     void* p_rng, mbedtls_md_type_t md_alg, unsigned int hashlen, const unsigned char* hash,
     unsigned char* sig) {
@@ -1725,10 +1750,12 @@ int mbedtls_rsa_pkcs1_sign(mbedtls_rsa_context* ctx, int (*f_rng)(void*, unsigne
     }
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_PKCS1_V21)
 /*
  * Implementation of the PKCS#1 v2.1 RSASSA-PSS-VERIFY function
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_rsassa_pss_verify_ext(mbedtls_rsa_context* ctx, mbedtls_md_type_t md_alg,
     unsigned int hashlen, const unsigned char* hash, mbedtls_md_type_t mgf1_hash_id,
     int expected_salt_len, const unsigned char* sig) {
@@ -1870,12 +1897,14 @@ int mbedtls_rsa_rsassa_pss_verify(mbedtls_rsa_context* ctx, mbedtls_md_type_t md
     return (mbedtls_rsa_rsassa_pss_verify_ext(ctx, md_alg, hashlen, hash, mgf1_hash_id,
         MBEDTLS_RSA_SALT_LEN_ANY, sig));
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V21 */
 
 #if defined(MBEDTLS_PKCS1_V15)
 /*
  * Implementation of the PKCS#1 v2.1 RSASSA-PKCS1-v1_5-VERIFY function
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_rsassa_pkcs1_v15_verify(mbedtls_rsa_context* ctx, mbedtls_md_type_t md_alg,
     unsigned int hashlen, const unsigned char* hash, const unsigned char* sig) {
     int ret = 0;
@@ -1932,11 +1961,13 @@ cleanup:
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V15 */
 
 /*
  * Do an RSA operation and check the message digest
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_pkcs1_verify(mbedtls_rsa_context* ctx, mbedtls_md_type_t md_alg,
     unsigned int hashlen, const unsigned char* hash, const unsigned char* sig) {
     RSA_VALIDATE_RET(ctx != NULL);
@@ -2032,6 +2063,7 @@ void mbedtls_rsa_free(mbedtls_rsa_context* ctx) {
 #endif
 }
 
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_RSA_ALT */
 
 #if defined(MBEDTLS_SELF_TEST)
@@ -2083,6 +2115,7 @@ void mbedtls_rsa_free(mbedtls_rsa_context* ctx) {
     "\x11\x22\x33\x0A\x0B\x0C\xCC\xDD\xDD\xDD\xDD\xDD"
 
 #if defined(MBEDTLS_PKCS1_V15)
+namespace lbug_mbedtls {
 static int myrand(void* rng_state, unsigned char* output, size_t len) {
 #if !defined(__OpenBSD__) && !defined(__NetBSD__)
     size_t i;
@@ -2101,11 +2134,13 @@ static int myrand(void* rng_state, unsigned char* output, size_t len) {
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V15 */
 
 /*
  * Checkup routine
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_self_test(int verbose) {
     int ret = 0;
 #if defined(MBEDTLS_PKCS1_V15)
@@ -2230,6 +2265,7 @@ cleanup:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
 #endif /* MBEDTLS_RSA_C */

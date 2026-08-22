@@ -60,9 +60,6 @@
 /** Authenticated decryption failed. */
 #define MBEDTLS_ERR_CCM_AUTH_FAILED -0x000F
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #if !defined(MBEDTLS_CCM_ALT)
 // Regular implementation
@@ -72,6 +69,7 @@ extern "C" {
  * \brief    The CCM context-type definition. The CCM context is passed
  *           to the APIs called.
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_ccm_context {
     unsigned char MBEDTLS_PRIVATE(y)[16];                 /*!< The Y working buffer */
     unsigned char MBEDTLS_PRIVATE(ctr)[16];               /*!< The counter buffer */
@@ -96,6 +94,7 @@ typedef struct mbedtls_ccm_context {
                                                                input */
 } mbedtls_ccm_context;
 
+} // namespace lbug_mbedtls
 #else /* MBEDTLS_CCM_ALT */
 #include "mbedtls/ccm_alt.h"
 #endif /* MBEDTLS_CCM_ALT */
@@ -107,6 +106,7 @@ typedef struct mbedtls_ccm_context {
  *
  * \param ctx       The CCM context to initialize. This must not be \c NULL.
  */
+namespace lbug_mbedtls {
 void mbedtls_ccm_init(mbedtls_ccm_context* ctx);
 
 /**
@@ -491,6 +491,7 @@ int mbedtls_ccm_update(mbedtls_ccm_context* ctx, const unsigned char* input, siz
  */
 int mbedtls_ccm_finish(mbedtls_ccm_context* ctx, unsigned char* tag, size_t tag_len);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST) && defined(MBEDTLS_AES_C)
 /**
  * \brief          The CCM checkup routine.
@@ -498,11 +499,12 @@ int mbedtls_ccm_finish(mbedtls_ccm_context* ctx, unsigned char* tag, size_t tag_
  * \return         \c 0 on success.
  * \return         \c 1 on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_ccm_self_test(int verbose);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST && MBEDTLS_AES_C */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* MBEDTLS_CCM_H */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

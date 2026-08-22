@@ -43,8 +43,10 @@
  *
  * \return          Zero if \p value is zero, otherwise all-bits-one.
  */
+namespace lbug_mbedtls {
 unsigned mbedtls_ct_uint_mask(unsigned value);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SSL_SOME_SUITES_USE_TLS_CBC)
 
 /** Turn a value into a mask:
@@ -58,8 +60,10 @@ unsigned mbedtls_ct_uint_mask(unsigned value);
  *
  * \return          Zero if \p value is zero, otherwise all-bits-one.
  */
+namespace lbug_mbedtls {
 size_t mbedtls_ct_size_mask(size_t value);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SSL_SOME_SUITES_USE_TLS_CBC */
 
 #if defined(MBEDTLS_BIGNUM_C)
@@ -75,8 +79,10 @@ size_t mbedtls_ct_size_mask(size_t value);
  *
  * \return          Zero if \p value is zero, otherwise all-bits-one.
  */
+namespace lbug_mbedtls {
 mbedtls_mpi_uint mbedtls_ct_mpi_uint_mask(mbedtls_mpi_uint value);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_BIGNUM_C */
 
 #if defined(MBEDTLS_SSL_SOME_SUITES_USE_TLS_CBC)
@@ -94,8 +100,10 @@ mbedtls_mpi_uint mbedtls_ct_mpi_uint_mask(mbedtls_mpi_uint value);
  * \return      All-bits-one if \p x is greater or equal than \p y,
  *              otherwise zero.
  */
+namespace lbug_mbedtls {
 size_t mbedtls_ct_size_mask_ge(size_t x, size_t y);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SSL_SOME_SUITES_USE_TLS_CBC */
 
 /** Constant-flow boolean "equal" comparison:
@@ -109,8 +117,10 @@ size_t mbedtls_ct_size_mask_ge(size_t x, size_t y);
  *
  * \return      1 if \p x equals to \p y, otherwise 0.
  */
+namespace lbug_mbedtls {
 unsigned mbedtls_ct_size_bool_eq(size_t x, size_t y);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_BIGNUM_C)
 
 /** Decide if an integer is less than the other, without branches.
@@ -123,8 +133,10 @@ unsigned mbedtls_ct_size_bool_eq(size_t x, size_t y);
  *
  * \return      1 if \p x is less than \p y, otherwise 0.
  */
+namespace lbug_mbedtls {
 unsigned mbedtls_ct_mpi_uint_lt(const mbedtls_mpi_uint x, const mbedtls_mpi_uint y);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_BIGNUM_C */
 
 /** Choose between two integer values without branches.
@@ -138,8 +150,10 @@ unsigned mbedtls_ct_mpi_uint_lt(const mbedtls_mpi_uint x, const mbedtls_mpi_uint
  *
  * \return  \c if1 if \p condition is nonzero, otherwise \c if0.
  */
+namespace lbug_mbedtls {
 unsigned mbedtls_ct_uint_if(unsigned condition, unsigned if1, unsigned if0);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_BIGNUM_C)
 
 /** Conditionally assign a value without branches.
@@ -154,9 +168,11 @@ unsigned mbedtls_ct_uint_if(unsigned condition, unsigned if1, unsigned if0);
  *                      initialized MPI.
  * \param condition     Condition to test, must be 0 or 1.
  */
+namespace lbug_mbedtls {
 void mbedtls_ct_mpi_uint_cond_assign(size_t n, mbedtls_mpi_uint* dest, const mbedtls_mpi_uint* src,
     unsigned char condition);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_BIGNUM_C */
 
 #if defined(MBEDTLS_BASE64_C)
@@ -170,6 +186,7 @@ void mbedtls_ct_mpi_uint_cond_assign(size_t n, mbedtls_mpi_uint* dest, const mbe
  *
  * \return          A base64 digit converted from \p value.
  */
+namespace lbug_mbedtls {
 unsigned char mbedtls_ct_base64_enc_char(unsigned char value);
 
 /** Given a Base64 digit, return its value.
@@ -186,6 +203,7 @@ unsigned char mbedtls_ct_base64_enc_char(unsigned char value);
  */
 signed char mbedtls_ct_base64_dec_value(unsigned char c);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_BASE64_C */
 
 #if defined(MBEDTLS_SSL_SOME_SUITES_USE_TLS_CBC)
@@ -201,6 +219,7 @@ signed char mbedtls_ct_base64_dec_value(unsigned char c);
  * \param c1        The first value to analyze in the condition.
  * \param c2        The second value to analyze in the condition.
  */
+namespace lbug_mbedtls {
 void mbedtls_ct_memcpy_if_eq(unsigned char* dest, const unsigned char* src, size_t len, size_t c1,
     size_t c2);
 
@@ -266,6 +285,7 @@ int mbedtls_ct_hmac(mbedtls_md_context_t* ctx, const unsigned char* add_data, si
     const unsigned char* data, size_t data_len_secret, size_t min_data_len, size_t max_data_len,
     unsigned char* output);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SSL_SOME_SUITES_USE_TLS_CBC */
 
 #if defined(MBEDTLS_PKCS1_V15) && defined(MBEDTLS_RSA_C) && !defined(MBEDTLS_RSA_ALT)
@@ -296,9 +316,11 @@ int mbedtls_ct_hmac(mbedtls_md_context_t* ctx, const unsigned char* add_data, si
  * \return      #MBEDTLS_ERR_RSA_INVALID_PADDING
  *              The input doesn't contain properly formatted padding.
  */
+namespace lbug_mbedtls {
 int mbedtls_ct_rsaes_pkcs1_v15_unpadding(unsigned char* input, size_t ilen, unsigned char* output,
     size_t output_max_len, size_t* olen);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V15 && MBEDTLS_RSA_C && ! MBEDTLS_RSA_ALT */
 
 #endif /* MBEDTLS_CONSTANT_TIME_INTERNAL_H */

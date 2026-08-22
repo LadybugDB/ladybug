@@ -31,9 +31,6 @@
 /** Invalid character in input. */
 #define MBEDTLS_ERR_BASE64_INVALID_CHARACTER -0x002C
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \brief          Encode a buffer into base64 format
@@ -54,6 +51,7 @@ extern "C" {
  * \note           Call this function with dlen = 0 to obtain the
  *                 required buffer size in *olen
  */
+namespace lbug_mbedtls {
 int mbedtls_base64_encode(unsigned char* dst, size_t dlen, size_t* olen, const unsigned char* src,
     size_t slen);
 
@@ -77,18 +75,20 @@ int mbedtls_base64_encode(unsigned char* dst, size_t dlen, size_t* olen, const u
 int mbedtls_base64_decode(unsigned char* dst, size_t dlen, size_t* olen, const unsigned char* src,
     size_t slen);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST)
 /**
  * \brief          Checkup routine
  *
  * \return         0 if successful, or 1 if the test failed
  */
+namespace lbug_mbedtls {
 int mbedtls_base64_self_test(int verbose);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* base64.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

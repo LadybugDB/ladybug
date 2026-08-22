@@ -573,13 +573,11 @@
  *   ecdsa-with-SHA2(3) 4 } */
 #define MBEDTLS_OID_ECDSA_SHA512 MBEDTLS_OID_ANSI_X9_62_SIG_SHA2 "\x04"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \brief Base OID descriptor structure
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_oid_descriptor_t {
     const char* MBEDTLS_PRIVATE(asn1); /*!< OID ASN.1 representation       */
     size_t MBEDTLS_PRIVATE(asn1_len);  /*!< length of asn1                 */
@@ -644,6 +642,7 @@ int mbedtls_oid_get_pk_alg(const mbedtls_asn1_buf* oid, mbedtls_pk_type_t* pk_al
  */
 int mbedtls_oid_get_oid_by_pk_alg(mbedtls_pk_type_t pk_alg, const char** oid, size_t* olen);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ECP_C)
 /**
  * \brief          Translate NamedCurve OID into an EC group identifier
@@ -653,6 +652,7 @@ int mbedtls_oid_get_oid_by_pk_alg(mbedtls_pk_type_t pk_alg, const char** oid, si
  *
  * \return         0 if successful, or MBEDTLS_ERR_OID_NOT_FOUND
  */
+namespace lbug_mbedtls {
 int mbedtls_oid_get_ec_grp(const mbedtls_asn1_buf* oid, mbedtls_ecp_group_id* grp_id);
 
 /**
@@ -665,6 +665,7 @@ int mbedtls_oid_get_ec_grp(const mbedtls_asn1_buf* oid, mbedtls_ecp_group_id* gr
  * \return         0 if successful, or MBEDTLS_ERR_OID_NOT_FOUND
  */
 int mbedtls_oid_get_oid_by_ec_grp(mbedtls_ecp_group_id grp_id, const char** oid, size_t* olen);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECP_C */
 
 #if defined(MBEDTLS_MD_C)
@@ -677,6 +678,7 @@ int mbedtls_oid_get_oid_by_ec_grp(mbedtls_ecp_group_id grp_id, const char** oid,
  *
  * \return         0 if successful, or MBEDTLS_ERR_OID_NOT_FOUND
  */
+namespace lbug_mbedtls {
 int mbedtls_oid_get_sig_alg(const mbedtls_asn1_buf* oid, mbedtls_md_type_t* md_alg,
     mbedtls_pk_type_t* pk_alg);
 
@@ -722,6 +724,7 @@ int mbedtls_oid_get_md_alg(const mbedtls_asn1_buf* oid, mbedtls_md_type_t* md_al
  * \return         0 if successful, or MBEDTLS_ERR_OID_NOT_FOUND
  */
 int mbedtls_oid_get_md_hmac(const mbedtls_asn1_buf* oid, mbedtls_md_type_t* md_hmac);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_MD_C */
 
 #if !defined(MBEDTLS_X509_REMOVE_INFO)
@@ -733,7 +736,9 @@ int mbedtls_oid_get_md_hmac(const mbedtls_asn1_buf* oid, mbedtls_md_type_t* md_h
  *
  * \return         0 if successful, or MBEDTLS_ERR_OID_NOT_FOUND
  */
+namespace lbug_mbedtls {
 int mbedtls_oid_get_extended_key_usage(const mbedtls_asn1_buf* oid, const char** desc);
+} // namespace lbug_mbedtls
 #endif
 
 /**
@@ -744,6 +749,7 @@ int mbedtls_oid_get_extended_key_usage(const mbedtls_asn1_buf* oid, const char**
  *
  * \return         0 if successful, or MBEDTLS_ERR_OID_NOT_FOUND
  */
+namespace lbug_mbedtls {
 int mbedtls_oid_get_certificate_policies(const mbedtls_asn1_buf* oid, const char** desc);
 
 /**
@@ -757,6 +763,7 @@ int mbedtls_oid_get_certificate_policies(const mbedtls_asn1_buf* oid, const char
  */
 int mbedtls_oid_get_oid_by_md(mbedtls_md_type_t md_alg, const char** oid, size_t* olen);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_C)
 /**
  * \brief          Translate encryption algorithm OID into cipher_type
@@ -766,7 +773,9 @@ int mbedtls_oid_get_oid_by_md(mbedtls_md_type_t md_alg, const char** oid, size_t
  *
  * \return         0 if successful, or MBEDTLS_ERR_OID_NOT_FOUND
  */
+namespace lbug_mbedtls {
 int mbedtls_oid_get_cipher_alg(const mbedtls_asn1_buf* oid, mbedtls_cipher_type_t* cipher_alg);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_C */
 
 #if defined(MBEDTLS_PKCS12_C)
@@ -780,12 +789,13 @@ int mbedtls_oid_get_cipher_alg(const mbedtls_asn1_buf* oid, mbedtls_cipher_type_
  *
  * \return         0 if successful, or MBEDTLS_ERR_OID_NOT_FOUND
  */
+namespace lbug_mbedtls {
 int mbedtls_oid_get_pkcs12_pbe_alg(const mbedtls_asn1_buf* oid, mbedtls_md_type_t* md_alg,
     mbedtls_cipher_type_t* cipher_alg);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS12_C */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* oid.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

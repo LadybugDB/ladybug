@@ -77,13 +77,11 @@
 /** The output buffer is too small. */
 #define MBEDTLS_ERR_PK_BUFFER_TOO_SMALL -0x3880
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \brief          Public key types
  */
+namespace lbug_mbedtls {
 typedef enum {
     MBEDTLS_PK_NONE = 0,
     MBEDTLS_PK_RSA,
@@ -119,6 +117,7 @@ typedef struct mbedtls_pk_rsassa_pss_options {
  */
 #define MBEDTLS_PK_SIGNATURE_MAX_SIZE 0
 
+} // namespace lbug_mbedtls
 #if (defined(MBEDTLS_RSA_C) || defined(MBEDTLS_PK_RSA_ALT_SUPPORT)) &&                             \
     MBEDTLS_MPI_MAX_SIZE > MBEDTLS_PK_SIGNATURE_MAX_SIZE
 /* For RSA, the signature can be as large as the bignum module allows.
@@ -159,6 +158,7 @@ typedef struct mbedtls_pk_rsassa_pss_options {
 /**
  * \brief           Types for interfacing with the debug module
  */
+namespace lbug_mbedtls {
 typedef enum {
     MBEDTLS_PK_DEBUG_NONE = 0,
     MBEDTLS_PK_DEBUG_MPI,
@@ -194,17 +194,22 @@ typedef struct mbedtls_pk_context {
     void* MBEDTLS_PRIVATE(pk_ctx);                     /**< Underlying public key context  */
 } mbedtls_pk_context;
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ECDSA_C) && defined(MBEDTLS_ECP_RESTARTABLE)
 /**
  * \brief           Context for resuming operations
  */
+namespace lbug_mbedtls {
 typedef struct {
     const mbedtls_pk_info_t* MBEDTLS_PRIVATE(pk_info); /**< Public key information         */
     void* MBEDTLS_PRIVATE(rs_ctx);                     /**< Underlying restart context     */
 } mbedtls_pk_restart_ctx;
+} // namespace lbug_mbedtls
 #else  /* MBEDTLS_ECDSA_C && MBEDTLS_ECP_RESTARTABLE */
 /* Now we can declare functions that take a pointer to that */
+namespace lbug_mbedtls {
 typedef void mbedtls_pk_restart_ctx;
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECDSA_C && MBEDTLS_ECP_RESTARTABLE */
 
 #if defined(MBEDTLS_RSA_C)
@@ -214,9 +219,11 @@ typedef void mbedtls_pk_restart_ctx;
  * \warning You must make sure the PK context actually holds an RSA context
  * before using this function!
  */
+namespace lbug_mbedtls {
 static inline mbedtls_rsa_context* mbedtls_pk_rsa(const mbedtls_pk_context pk) {
     return ((mbedtls_rsa_context*)(pk).MBEDTLS_PRIVATE(pk_ctx));
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_RSA_C */
 
 #if defined(MBEDTLS_ECP_C)
@@ -226,21 +233,25 @@ static inline mbedtls_rsa_context* mbedtls_pk_rsa(const mbedtls_pk_context pk) {
  * \warning You must make sure the PK context actually holds an EC context
  * before using this function!
  */
+namespace lbug_mbedtls {
 static inline mbedtls_ecp_keypair* mbedtls_pk_ec(const mbedtls_pk_context pk) {
     return ((mbedtls_ecp_keypair*)(pk).MBEDTLS_PRIVATE(pk_ctx));
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECP_C */
 
 #if defined(MBEDTLS_PK_RSA_ALT_SUPPORT)
 /**
  * \brief           Types for RSA-alt abstraction
  */
+namespace lbug_mbedtls {
 typedef int (*mbedtls_pk_rsa_alt_decrypt_func)(void* ctx, size_t* olen, const unsigned char* input,
     unsigned char* output, size_t output_max_len);
 typedef int (*mbedtls_pk_rsa_alt_sign_func)(void* ctx, int (*f_rng)(void*, unsigned char*, size_t),
     void* p_rng, mbedtls_md_type_t md_alg, unsigned int hashlen, const unsigned char* hash,
     unsigned char* sig);
 typedef size_t (*mbedtls_pk_rsa_alt_key_len_func)(void* ctx);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PK_RSA_ALT_SUPPORT */
 
 /**
@@ -250,6 +261,7 @@ typedef size_t (*mbedtls_pk_rsa_alt_key_len_func)(void* ctx);
  *
  * \return          The PK info associated with the type or NULL if not found.
  */
+namespace lbug_mbedtls {
 const mbedtls_pk_info_t* mbedtls_pk_info_from_type(mbedtls_pk_type_t pk_type);
 
 /**
@@ -273,6 +285,7 @@ void mbedtls_pk_init(mbedtls_pk_context* ctx);
  */
 void mbedtls_pk_free(mbedtls_pk_context* ctx);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ECDSA_C) && defined(MBEDTLS_ECP_RESTARTABLE)
 /**
  * \brief           Initialize a restart context
@@ -280,6 +293,7 @@ void mbedtls_pk_free(mbedtls_pk_context* ctx);
  * \param ctx       The context to initialize.
  *                  This must not be \c NULL.
  */
+namespace lbug_mbedtls {
 void mbedtls_pk_restart_init(mbedtls_pk_restart_ctx* ctx);
 
 /**
@@ -289,6 +303,7 @@ void mbedtls_pk_restart_init(mbedtls_pk_restart_ctx* ctx);
  *                  If this is \c NULL, this function does nothing.
  */
 void mbedtls_pk_restart_free(mbedtls_pk_restart_ctx* ctx);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECDSA_C && MBEDTLS_ECP_RESTARTABLE */
 
 /**
@@ -306,8 +321,10 @@ void mbedtls_pk_restart_free(mbedtls_pk_restart_ctx* ctx);
  * \note            For contexts holding an RSA-alt key, use
  *                  \c mbedtls_pk_setup_rsa_alt() instead.
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_setup(mbedtls_pk_context* ctx, const mbedtls_pk_info_t* info);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_USE_PSA_CRYPTO)
 /**
  * \brief           Initialize a PK context to wrap a PSA key.
@@ -337,7 +354,9 @@ int mbedtls_pk_setup(mbedtls_pk_context* ctx, const mbedtls_pk_info_t* info);
  *                  ECC key pair.
  * \return          #MBEDTLS_ERR_PK_ALLOC_FAILED on allocation failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_setup_opaque(mbedtls_pk_context* ctx, const psa_key_id_t key);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_USE_PSA_CRYPTO */
 
 #if defined(MBEDTLS_PK_RSA_ALT_SUPPORT)
@@ -356,9 +375,11 @@ int mbedtls_pk_setup_opaque(mbedtls_pk_context* ctx, const psa_key_id_t key);
  *
  * \note            This function replaces \c mbedtls_pk_setup() for RSA-alt.
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_setup_rsa_alt(mbedtls_pk_context* ctx, void* key,
     mbedtls_pk_rsa_alt_decrypt_func decrypt_func, mbedtls_pk_rsa_alt_sign_func sign_func,
     mbedtls_pk_rsa_alt_key_len_func key_len_func);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PK_RSA_ALT_SUPPORT */
 
 /**
@@ -368,6 +389,7 @@ int mbedtls_pk_setup_rsa_alt(mbedtls_pk_context* ctx, void* key,
  *
  * \return          Key size in bits, or 0 on error
  */
+namespace lbug_mbedtls {
 size_t mbedtls_pk_get_bitlen(const mbedtls_pk_context* ctx);
 
 ///**
@@ -638,6 +660,7 @@ const char* mbedtls_pk_get_name(const mbedtls_pk_context* ctx);
  */
 mbedtls_pk_type_t mbedtls_pk_get_type(const mbedtls_pk_context* ctx);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_PK_PARSE_C)
 /** \ingroup pk_module */
 /**
@@ -670,6 +693,7 @@ mbedtls_pk_type_t mbedtls_pk_get_type(const mbedtls_pk_context* ctx);
  *
  * \return          0 if successful, or a specific PK or PEM error code
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_parse_key(mbedtls_pk_context* ctx, const unsigned char* key, size_t keylen,
     const unsigned char* pwd, size_t pwdlen, int (*f_rng)(void*, unsigned char*, size_t),
     void* p_rng);
@@ -698,6 +722,7 @@ int mbedtls_pk_parse_key(mbedtls_pk_context* ctx, const unsigned char* key, size
  */
 int mbedtls_pk_parse_public_key(mbedtls_pk_context* ctx, const unsigned char* key, size_t keylen);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_FS_IO)
 /** \ingroup pk_module */
 /**
@@ -722,6 +747,7 @@ int mbedtls_pk_parse_public_key(mbedtls_pk_context* ctx, const unsigned char* ke
  *
  * \return          0 if successful, or a specific PK or PEM error code
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_parse_keyfile(mbedtls_pk_context* ctx, const char* path, const char* password,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng);
 
@@ -743,6 +769,7 @@ int mbedtls_pk_parse_keyfile(mbedtls_pk_context* ctx, const char* path, const ch
  * \return          0 if successful, or a specific PK or PEM error code
  */
 int mbedtls_pk_parse_public_keyfile(mbedtls_pk_context* ctx, const char* path);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_FS_IO */
 #endif /* MBEDTLS_PK_PARSE_C */
 
@@ -760,6 +787,7 @@ int mbedtls_pk_parse_public_keyfile(mbedtls_pk_context* ctx, const char* path);
  * \return          length of data written if successful, or a specific
  *                  error code
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_write_key_der(const mbedtls_pk_context* ctx, unsigned char* buf, size_t size);
 
 /**
@@ -777,6 +805,7 @@ int mbedtls_pk_write_key_der(const mbedtls_pk_context* ctx, unsigned char* buf, 
  */
 int mbedtls_pk_write_pubkey_der(const mbedtls_pk_context* ctx, unsigned char* buf, size_t size);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_PEM_WRITE_C)
 /**
  * \brief           Write a public key to a PEM string
@@ -788,6 +817,7 @@ int mbedtls_pk_write_pubkey_der(const mbedtls_pk_context* ctx, unsigned char* bu
  *
  * \return          0 if successful, or a specific error code
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_write_pubkey_pem(const mbedtls_pk_context* ctx, unsigned char* buf, size_t size);
 
 /**
@@ -801,6 +831,7 @@ int mbedtls_pk_write_pubkey_pem(const mbedtls_pk_context* ctx, unsigned char* bu
  * \return          0 if successful, or a specific error code
  */
 int mbedtls_pk_write_key_pem(const mbedtls_pk_context* ctx, unsigned char* buf, size_t size);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PEM_WRITE_C */
 #endif /* MBEDTLS_PK_WRITE_C */
 
@@ -820,7 +851,9 @@ int mbedtls_pk_write_key_pem(const mbedtls_pk_context* ctx, unsigned char* buf, 
  *
  * \return          0 if successful, or a specific PK error code
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_parse_subpubkey(unsigned char** p, const unsigned char* end, mbedtls_pk_context* pk);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PK_PARSE_C */
 
 #if defined(MBEDTLS_PK_WRITE_C)
@@ -834,7 +867,9 @@ int mbedtls_pk_parse_subpubkey(unsigned char** p, const unsigned char* end, mbed
  *
  * \return          the length written or a negative error code
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_write_pubkey(unsigned char** p, unsigned char* start, const mbedtls_pk_context* key);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PK_WRITE_C */
 
 /*
@@ -842,7 +877,9 @@ int mbedtls_pk_write_pubkey(unsigned char** p, unsigned char* start, const mbedt
  * know you do.
  */
 #if defined(MBEDTLS_FS_IO)
+namespace lbug_mbedtls {
 int mbedtls_pk_load_file(const char* path, unsigned char** buf, size_t* n);
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_USE_PSA_CRYPTO)
@@ -866,11 +903,12 @@ int mbedtls_pk_load_file(const char* path, unsigned char** buf, size_t* n);
  * \return          \c 0 if successful.
  * \return          An Mbed TLS error code otherwise.
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_wrap_as_opaque(mbedtls_pk_context* pk, psa_key_id_t* key, psa_algorithm_t hash_alg);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_USE_PSA_CRYPTO */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* MBEDTLS_PK_H */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

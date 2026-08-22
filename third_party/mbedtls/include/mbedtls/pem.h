@@ -52,14 +52,12 @@
 #define MBEDTLS_ERR_PEM_BAD_INPUT_DATA -0x1480
 /* \} name */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #if defined(MBEDTLS_PEM_PARSE_C)
 /**
  * \brief       PEM context structure
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_pem_context {
     unsigned char* MBEDTLS_PRIVATE(buf);  /*!< buffer for decoded data             */
     size_t MBEDTLS_PRIVATE(buflen);       /*!< length of the buffer                */
@@ -104,6 +102,7 @@ int mbedtls_pem_read_buffer(mbedtls_pem_context* ctx, const char* header, const 
  * \param ctx   context to be freed
  */
 void mbedtls_pem_free(mbedtls_pem_context* ctx);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PEM_PARSE_C */
 
 #if defined(MBEDTLS_PEM_WRITE_C)
@@ -133,12 +132,13 @@ void mbedtls_pem_free(mbedtls_pem_context* ctx);
  *                  the required minimum size of \p buf.
  * \return          Another PEM or BASE64 error code on other kinds of failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_pem_write_buffer(const char* header, const char* footer, const unsigned char* der_data,
     size_t der_len, unsigned char* buf, size_t buf_len, size_t* olen);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PEM_WRITE_C */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* pem.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

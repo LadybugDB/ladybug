@@ -8,6 +8,6 @@ DISTURL=	https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v${VERSION}.tar.g
 
 SRCDIR=	mbedtls-${VERSION}
 
-BUILD_COMMANDS=	cp ../../../ports/mbedtls/CMakeLists.txt.custom ../../../mbedtls/CMakeLists.txt && python3 ${SCRIPT_DIR}/scripts/format_c_to_cpp.py ${WRKSRC}
+BUILD_COMMANDS=	cp ../../../ports/mbedtls/CMakeLists.txt.custom ../../../mbedtls/CMakeLists.txt && python3 ../../../ports/mbedtls/do-patch.py .
 
 .include "${.CURDIR}/../bsd.port.mk"

@@ -26,9 +26,6 @@
 
 #include "mbedtls/build_info.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /*
  * Default thresholds for built-in sources, in bytes
@@ -42,7 +39,9 @@ extern "C" {
 /**
  * \brief           Platform-specific entropy poll callback
  */
+namespace lbug_mbedtls {
 int mbedtls_platform_entropy_poll(void* data, unsigned char* output, size_t len, size_t* olen);
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_ENTROPY_HARDWARE_ALT)
@@ -54,7 +53,9 @@ int mbedtls_platform_entropy_poll(void* data, unsigned char* output, size_t len,
  *
  * \note            This must accept NULL as its first argument.
  */
+namespace lbug_mbedtls {
 int mbedtls_hardware_poll(void* data, unsigned char* output, size_t len, size_t* olen);
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_ENTROPY_NV_SEED)
@@ -63,11 +64,10 @@ int mbedtls_hardware_poll(void* data, unsigned char* output, size_t len, size_t*
  *
  * \note            This must accept NULL as its first argument.
  */
+namespace lbug_mbedtls {
 int mbedtls_nv_seed_poll(void* data, unsigned char* output, size_t len, size_t* olen);
+} // namespace lbug_mbedtls
 #endif
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* entropy_poll.h */

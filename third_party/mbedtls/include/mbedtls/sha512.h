@@ -32,9 +32,6 @@
 /** SHA-512 input data was malformed. */
 #define MBEDTLS_ERR_SHA512_BAD_INPUT_DATA -0x0075
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #if !defined(MBEDTLS_SHA512_ALT)
 // Regular implementation
@@ -47,6 +44,7 @@ extern "C" {
  *                 checksum calculations. The choice between these two is
  *                 made in the call to mbedtls_sha512_starts().
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_sha512_context {
     uint64_t MBEDTLS_PRIVATE(total)[2];         /*!< The number of Bytes processed. */
     uint64_t MBEDTLS_PRIVATE(state)[8];         /*!< The intermediate digest state. */
@@ -57,6 +55,7 @@ typedef struct mbedtls_sha512_context {
 #endif
 } mbedtls_sha512_context;
 
+} // namespace lbug_mbedtls
 #else /* MBEDTLS_SHA512_ALT */
 #include "sha512_alt.h"
 #endif /* MBEDTLS_SHA512_ALT */
@@ -67,6 +66,7 @@ typedef struct mbedtls_sha512_context {
  * \param ctx      The SHA-512 context to initialize. This must
  *                 not be \c NULL.
  */
+namespace lbug_mbedtls {
 void mbedtls_sha512_init(mbedtls_sha512_context* ctx);
 
 /**
@@ -176,6 +176,7 @@ int mbedtls_internal_sha512_process(mbedtls_sha512_context* ctx, const unsigned 
  */
 int mbedtls_sha512(const unsigned char* input, size_t ilen, unsigned char* output, int is384);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST)
 
 /**
@@ -184,11 +185,12 @@ int mbedtls_sha512(const unsigned char* input, size_t ilen, unsigned char* outpu
  * \return         \c 0 on success.
  * \return         \c 1 on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_sha512_self_test(int verbose);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* mbedtls_sha512.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

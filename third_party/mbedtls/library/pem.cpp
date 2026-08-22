@@ -45,15 +45,18 @@
 #endif
 
 #if defined(MBEDTLS_PEM_PARSE_C)
+namespace lbug_mbedtls {
 void mbedtls_pem_init(mbedtls_pem_context* ctx) {
     memset(ctx, 0, sizeof(mbedtls_pem_context));
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_MD5_C) && defined(MBEDTLS_CIPHER_MODE_CBC) &&                                  \
     (defined(MBEDTLS_DES_C) || defined(MBEDTLS_AES_C))
 /*
  * Read a 16-byte hex string and convert it to binary
  */
+namespace lbug_mbedtls {
 static int pem_get_iv(const unsigned char* s, unsigned char* iv, size_t iv_len) {
     size_t i, j, k;
 
@@ -132,10 +135,12 @@ exit:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_DES_C)
 /*
  * Decrypt with DES-CBC, using PBKDF1 for key derivation
  */
+namespace lbug_mbedtls {
 static int pem_des_decrypt(unsigned char des_iv[8], unsigned char* buf, size_t buflen,
     const unsigned char* pwd, size_t pwdlen) {
     mbedtls_des_context des_ctx;
@@ -182,12 +187,14 @@ exit:
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_DES_C */
 
 #if defined(MBEDTLS_AES_C)
 /*
  * Decrypt with AES-XXX-CBC, using PBKDF1 for key derivation
  */
+namespace lbug_mbedtls {
 static int pem_aes_decrypt(unsigned char aes_iv[16], unsigned int keylen, unsigned char* buf,
     size_t buflen, const unsigned char* pwd, size_t pwdlen) {
     mbedtls_aes_context aes_ctx;
@@ -209,11 +216,13 @@ exit:
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_AES_C */
 
 #endif /* MBEDTLS_MD5_C && MBEDTLS_CIPHER_MODE_CBC &&                                              \
           ( MBEDTLS_AES_C || MBEDTLS_DES_C ) */
 
+namespace lbug_mbedtls {
 int mbedtls_pem_read_buffer(mbedtls_pem_context* ctx, const char* header, const char* footer,
     const unsigned char* data, const unsigned char* pwd, size_t pwdlen, size_t* use_len) {
     int ret, enc;
@@ -417,9 +426,11 @@ void mbedtls_pem_free(mbedtls_pem_context* ctx) {
 
     mbedtls_platform_zeroize(ctx, sizeof(mbedtls_pem_context));
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PEM_PARSE_C */
 
 #if defined(MBEDTLS_PEM_WRITE_C)
+namespace lbug_mbedtls {
 int mbedtls_pem_write_buffer(const char* header, const char* footer, const unsigned char* der_data,
     size_t der_len, unsigned char* buf, size_t buf_len, size_t* olen) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
@@ -467,5 +478,6 @@ int mbedtls_pem_write_buffer(const char* header, const char* footer, const unsig
     mbedtls_free(encode_buf);
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PEM_WRITE_C */
 #endif /* MBEDTLS_PEM_PARSE_C || MBEDTLS_PEM_WRITE_C */

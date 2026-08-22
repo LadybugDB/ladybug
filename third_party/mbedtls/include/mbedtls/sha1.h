@@ -37,9 +37,6 @@
 /** SHA-1 input data was malformed. */
 #define MBEDTLS_ERR_SHA1_BAD_INPUT_DATA -0x0073
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #if !defined(MBEDTLS_SHA1_ALT)
 // Regular implementation
@@ -53,12 +50,14 @@ extern "C" {
  *                 stronger message digests instead.
  *
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_sha1_context {
     uint32_t MBEDTLS_PRIVATE(total)[2];        /*!< The number of Bytes processed.  */
     uint32_t MBEDTLS_PRIVATE(state)[5];        /*!< The intermediate digest state.  */
     unsigned char MBEDTLS_PRIVATE(buffer)[64]; /*!< The data block being processed. */
 } mbedtls_sha1_context;
 
+} // namespace lbug_mbedtls
 #else /* MBEDTLS_SHA1_ALT */
 #include "sha1_alt.h"
 #endif /* MBEDTLS_SHA1_ALT */
@@ -74,6 +73,7 @@ typedef struct mbedtls_sha1_context {
  *                 This must not be \c NULL.
  *
  */
+namespace lbug_mbedtls {
 void mbedtls_sha1_init(mbedtls_sha1_context* ctx);
 
 /**
@@ -198,6 +198,7 @@ int mbedtls_internal_sha1_process(mbedtls_sha1_context* ctx, const unsigned char
  */
 int mbedtls_sha1(const unsigned char* input, size_t ilen, unsigned char output[20]);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST)
 
 /**
@@ -211,12 +212,13 @@ int mbedtls_sha1(const unsigned char* input, size_t ilen, unsigned char output[2
  * \return         \c 1 on failure.
  *
  */
+namespace lbug_mbedtls {
 int mbedtls_sha1_self_test(int verbose);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* mbedtls_sha1.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

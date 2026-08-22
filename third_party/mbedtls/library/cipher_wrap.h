@@ -31,13 +31,11 @@
 #include "psa/crypto.h"
 #endif /* MBEDTLS_USE_PSA_CRYPTO */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * Base cipher information. The non-mode specific functions and values.
  */
+namespace lbug_mbedtls {
 struct mbedtls_cipher_base_t {
     /** Base Cipher type (e.g. MBEDTLS_CIPHER_ID_AES) */
     mbedtls_cipher_id_t cipher;
@@ -99,7 +97,9 @@ typedef struct {
     const mbedtls_cipher_info_t* info;
 } mbedtls_cipher_definition_t;
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_USE_PSA_CRYPTO)
+namespace lbug_mbedtls {
 typedef enum {
     MBEDTLS_CIPHER_PSA_KEY_UNSET = 0,
     MBEDTLS_CIPHER_PSA_KEY_OWNED,     /* Used for PSA-based cipher contexts which */
@@ -118,14 +118,14 @@ typedef struct {
     psa_key_id_t slot;
     mbedtls_cipher_psa_key_ownership slot_state;
 } mbedtls_cipher_context_psa;
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_USE_PSA_CRYPTO */
 
+namespace lbug_mbedtls {
 extern const mbedtls_cipher_definition_t mbedtls_cipher_definitions[];
 
 extern int mbedtls_cipher_supported[];
 
-#ifdef __cplusplus
-}
-#endif
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_WRAP_H */

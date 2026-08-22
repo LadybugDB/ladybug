@@ -26,6 +26,7 @@
 #include "mbedtls/build_info.h"
 #include "mbedtls/pk.h"
 
+namespace lbug_mbedtls {
 struct mbedtls_pk_info_t {
     /** Public key type */
     mbedtls_pk_type_t type;
@@ -88,35 +89,48 @@ struct mbedtls_pk_info_t {
     /** Interface with the debug module */
     void (*debug_func)(const void* ctx, mbedtls_pk_debug_item* items);
 };
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_PK_RSA_ALT_SUPPORT)
 /* Container for RSA-alt */
+namespace lbug_mbedtls {
 typedef struct {
     void* key;
     mbedtls_pk_rsa_alt_decrypt_func decrypt_func;
     mbedtls_pk_rsa_alt_sign_func sign_func;
     mbedtls_pk_rsa_alt_key_len_func key_len_func;
 } mbedtls_rsa_alt_context;
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_RSA_C)
+namespace lbug_mbedtls {
 extern const mbedtls_pk_info_t mbedtls_rsa_info;
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_ECP_C)
+namespace lbug_mbedtls {
 extern const mbedtls_pk_info_t mbedtls_eckey_info;
 extern const mbedtls_pk_info_t mbedtls_eckeydh_info;
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_ECDSA_C)
+namespace lbug_mbedtls {
 extern const mbedtls_pk_info_t mbedtls_ecdsa_info;
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_PK_RSA_ALT_SUPPORT)
+namespace lbug_mbedtls {
 extern const mbedtls_pk_info_t mbedtls_rsa_alt_info;
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_USE_PSA_CRYPTO)
+namespace lbug_mbedtls {
 extern const mbedtls_pk_info_t mbedtls_pk_opaque_info;
+} // namespace lbug_mbedtls
 #endif
 
 #endif /* MBEDTLS_PK_WRAP_H */

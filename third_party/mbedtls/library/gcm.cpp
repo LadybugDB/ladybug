@@ -59,6 +59,7 @@
 /*
  * Initialize a context
  */
+namespace lbug_mbedtls {
 void mbedtls_gcm_init(mbedtls_gcm_context* ctx) {
     GCM_VALIDATE(ctx != NULL);
     memset(ctx, 0, sizeof(mbedtls_gcm_context));
@@ -574,6 +575,7 @@ void mbedtls_gcm_free(mbedtls_gcm_context* ctx) {
     mbedtls_platform_zeroize(ctx, sizeof(mbedtls_gcm_context));
 }
 
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_GCM_ALT */
 
 #if defined(MBEDTLS_SELF_TEST) && defined(MBEDTLS_AES_C)
@@ -584,6 +586,7 @@ void mbedtls_gcm_free(mbedtls_gcm_context* ctx) {
  */
 #define MAX_TESTS 6
 
+namespace lbug_mbedtls {
 static const int key_index_test_data[MAX_TESTS] = {0, 0, 1, 1, 1, 1};
 
 static const unsigned char key_test_data[MAX_TESTS][32] = {
@@ -949,6 +952,7 @@ exit:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST && MBEDTLS_AES_C */
 
 #endif /* MBEDTLS_GCM_C */

@@ -48,6 +48,7 @@
     MBEDTLS_INTERNAL_VALIDATE_RET(cond, MBEDTLS_ERR_CAMELLIA_BAD_INPUT_DATA)
 #define CAMELLIA_VALIDATE(cond) MBEDTLS_INTERNAL_VALIDATE(cond)
 
+namespace lbug_mbedtls {
 static const unsigned char SIGMA_CHARS[6][8] = {{0xa0, 0x9e, 0x66, 0x7f, 0x3b, 0xcc, 0x90, 0x8b},
     {0xb6, 0x7a, 0xe8, 0x58, 0x4c, 0xaa, 0x73, 0xb2},
     {0xc6, 0xef, 0x37, 0x2f, 0xe9, 0x4f, 0x82, 0xbe},
@@ -55,8 +56,10 @@ static const unsigned char SIGMA_CHARS[6][8] = {{0xa0, 0x9e, 0x66, 0x7f, 0x3b, 0
     {0x10, 0xe5, 0x27, 0xfa, 0xde, 0x68, 0x2d, 0x1d},
     {0xb0, 0x56, 0x88, 0xc2, 0xb3, 0xe6, 0xc1, 0xfd}};
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CAMELLIA_SMALL_MEMORY)
 
+namespace lbug_mbedtls {
 static const unsigned char FSb[256] = {112, 130, 44, 236, 179, 39, 192, 229, 228, 133, 87, 53, 234,
     12, 174, 65, 35, 239, 107, 147, 69, 25, 165, 33, 237, 14, 79, 78, 29, 101, 146, 189, 134, 184,
     175, 143, 124, 235, 31, 206, 62, 48, 220, 95, 94, 197, 11, 26, 166, 225, 57, 202, 213, 71, 93,
@@ -76,8 +79,10 @@ static const unsigned char FSb[256] = {112, 130, 44, 236, 179, 39, 192, 229, 228
 #define SBOX3(n) (unsigned char)((FSb[(n)] >> 1 ^ FSb[(n)] << 7) & 0xff)
 #define SBOX4(n) FSb[((n) << 1 ^ (n) >> 7) & 0xff]
 
+} // namespace lbug_mbedtls
 #else /* MBEDTLS_CAMELLIA_SMALL_MEMORY */
 
+namespace lbug_mbedtls {
 static const unsigned char FSb[256] = {112, 130, 44, 236, 179, 39, 192, 229, 228, 133, 87, 53, 234,
     12, 174, 65, 35, 239, 107, 147, 69, 25, 165, 33, 237, 14, 79, 78, 29, 101, 146, 189, 134, 184,
     175, 143, 124, 235, 31, 206, 62, 48, 220, 95, 94, 197, 11, 26, 166, 225, 57, 202, 213, 71, 93,
@@ -139,8 +144,10 @@ static const unsigned char FSb4[256] = {112, 44, 179, 192, 228, 87, 234, 174, 35
 #define SBOX3(n) FSb3[(n)]
 #define SBOX4(n) FSb4[(n)]
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CAMELLIA_SMALL_MEMORY */
 
+namespace lbug_mbedtls {
 static const unsigned char shifts[2][4][4] = {{
                                                   {1, 1, 1, 1}, /* KL */
                                                   {0, 0, 0, 0}, /* KR */
@@ -469,10 +476,12 @@ int mbedtls_camellia_crypt_ecb(mbedtls_camellia_context* ctx, int mode,
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_CBC)
 /*
  * Camellia-CBC buffer encryption/decryption
  */
+namespace lbug_mbedtls {
 int mbedtls_camellia_crypt_cbc(mbedtls_camellia_context* ctx, int mode, size_t length,
     unsigned char iv[16], const unsigned char* input, unsigned char* output) {
     int i;
@@ -516,12 +525,14 @@ int mbedtls_camellia_crypt_cbc(mbedtls_camellia_context* ctx, int mode, size_t l
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
 #if defined(MBEDTLS_CIPHER_MODE_CFB)
 /*
  * Camellia-CFB128 buffer encryption/decryption
  */
+namespace lbug_mbedtls {
 int mbedtls_camellia_crypt_cfb128(mbedtls_camellia_context* ctx, int mode, size_t length,
     size_t* iv_off, unsigned char iv[16], const unsigned char* input, unsigned char* output) {
     int c;
@@ -563,12 +574,14 @@ int mbedtls_camellia_crypt_cfb128(mbedtls_camellia_context* ctx, int mode, size_
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CFB */
 
 #if defined(MBEDTLS_CIPHER_MODE_CTR)
 /*
  * Camellia-CTR buffer encryption/decryption
  */
+namespace lbug_mbedtls {
 int mbedtls_camellia_crypt_ctr(mbedtls_camellia_context* ctx, size_t length, size_t* nc_off,
     unsigned char nonce_counter[16], unsigned char stream_block[16], const unsigned char* input,
     unsigned char* output) {
@@ -603,6 +616,7 @@ int mbedtls_camellia_crypt_ctr(mbedtls_camellia_context* ctx, size_t length, siz
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CTR */
 #endif /* !MBEDTLS_CAMELLIA_ALT */
 
@@ -618,6 +632,7 @@ int mbedtls_camellia_crypt_ctr(mbedtls_camellia_context* ctx, size_t length, siz
  */
 #define CAMELLIA_TESTS_ECB 2
 
+namespace lbug_mbedtls {
 static const unsigned char camellia_test_ecb_key[3][CAMELLIA_TESTS_ECB][32] = {
     {{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32,
          0x10},
@@ -655,9 +670,11 @@ static const unsigned char camellia_test_ecb_cipher[3][CAMELLIA_TESTS_ECB][16] =
         {0x05, 0x03, 0xFB, 0x10, 0xAB, 0x24, 0x1E, 0x7C, 0xF4, 0x5D, 0x8C, 0xDE, 0xEE, 0x47, 0x43,
             0x35}}};
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_CBC)
 #define CAMELLIA_TESTS_CBC 3
 
+namespace lbug_mbedtls {
 static const unsigned char camellia_test_cbc_key[3][32] = {{0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE,
                                                                0xD2, 0xA6, 0xAB, 0xF7, 0x15, 0x88,
                                                                0x09, 0xCF, 0x4F, 0x3C},
@@ -700,6 +717,7 @@ static const unsigned char camellia_test_cbc_cipher[3][CAMELLIA_TESTS_CBC][16] =
             0x50},
         {0xE3, 0x1A, 0x60, 0x55, 0x29, 0x7D, 0x96, 0xCA, 0x33, 0x30, 0xCD, 0xF1, 0xB1, 0x86, 0x0A,
             0x83}}};
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
 #if defined(MBEDTLS_CIPHER_MODE_CTR)
@@ -709,6 +727,7 @@ static const unsigned char camellia_test_cbc_cipher[3][CAMELLIA_TESTS_CBC][16] =
  * http://www.faqs.org/rfcs/rfc5528.html
  */
 
+namespace lbug_mbedtls {
 static const unsigned char camellia_test_ctr_key[3][16] = {{0xAE, 0x68, 0x52, 0xF8, 0x12, 0x10,
                                                                0x67, 0xCC, 0x4B, 0xF7, 0xA5, 0x76,
                                                                0x55, 0x77, 0xF3, 0x9E},
@@ -748,11 +767,13 @@ static const unsigned char camellia_test_ctr_ct[3][48] = {{0xD0, 0x9D, 0xC2, 0x9
         0xCD, 0xDF, 0x50, 0x86, 0x96}};
 
 static const int camellia_test_ctr_len[3] = {16, 32, 36};
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CTR */
 
 /*
  * Checkup routine
  */
+namespace lbug_mbedtls {
 int mbedtls_camellia_self_test(int verbose) {
     int i, j, u, v;
     unsigned char key[32];
@@ -919,6 +940,7 @@ exit:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
 #endif /* MBEDTLS_CAMELLIA_C */

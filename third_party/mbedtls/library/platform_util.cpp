@@ -63,6 +63,7 @@
  * mbedtls_platform_zeroize() to use a suitable implementation for their
  * platform and needs.
  */
+namespace lbug_mbedtls {
 static void* (*const volatile memset_func)(void*, int, size_t) = memset;
 
 void mbedtls_platform_zeroize(void* buf, size_t len) {
@@ -71,6 +72,7 @@ void mbedtls_platform_zeroize(void* buf, size_t len) {
     if (len > 0)
         memset_func(buf, 0, len);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PLATFORM_ZEROIZE_ALT */
 
 #if defined(MBEDTLS_HAVE_TIME_DATE) && !defined(MBEDTLS_PLATFORM_GMTIME_R_ALT)
@@ -98,6 +100,7 @@ void mbedtls_platform_zeroize(void* buf, size_t len) {
              ( defined(_POSIX_THREAD_SAFE_FUNCTIONS ) &&                                           \
                 _POSIX_THREAD_SAFE_FUNCTIONS >= 200112L ) ) */
 
+namespace lbug_mbedtls {
 struct tm* mbedtls_platform_gmtime_r(const mbedtls_time_t* tt, struct tm* tm_buf) {
 #if defined(_WIN32) && !defined(EFIX64) && !defined(EFI32)
     return ((gmtime_s(tm_buf, tt) == 0) ? tm_buf : NULL);
@@ -125,8 +128,11 @@ struct tm* mbedtls_platform_gmtime_r(const mbedtls_time_t* tt, struct tm* tm_buf
     return ((lt == NULL) ? NULL : tm_buf);
 #endif /* _WIN32 && !EFIX64 && !EFI32 */
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_HAVE_TIME_DATE && MBEDTLS_PLATFORM_GMTIME_R_ALT */
 
 #if defined(MBEDTLS_TEST_HOOKS)
+namespace lbug_mbedtls {
 void (*mbedtls_test_hook_test_fail)(const char*, int, const char*);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_TEST_HOOKS */

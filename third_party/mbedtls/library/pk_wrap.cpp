@@ -62,6 +62,7 @@
 #include <stdint.h>
 
 #if defined(MBEDTLS_RSA_C)
+namespace lbug_mbedtls {
 static int rsa_can_do(mbedtls_pk_type_t type) {
     return (type == MBEDTLS_PK_RSA || type == MBEDTLS_PK_RSASSA_PSS);
 }
@@ -201,12 +202,14 @@ const mbedtls_pk_info_t mbedtls_rsa_info = {
 #endif
     rsa_debug,
 };
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_RSA_C */
 
 #if defined(MBEDTLS_ECP_C)
 /*
  * Generic EC key
  */
+namespace lbug_mbedtls {
 static int eckey_can_do(mbedtls_pk_type_t type) {
     return (type == MBEDTLS_PK_ECKEY || type == MBEDTLS_PK_ECKEY_DH || type == MBEDTLS_PK_ECDSA);
 }
@@ -215,8 +218,10 @@ static size_t eckey_get_bitlen(const void* ctx) {
     return (((mbedtls_ecp_keypair*)ctx)->grp.pbits);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ECDSA_C)
 /* Forward declarations */
+namespace lbug_mbedtls {
 static int ecdsa_verify_wrap(void* ctx, mbedtls_md_type_t md_alg, const unsigned char* hash,
     size_t hash_len, const unsigned char* sig, size_t sig_len);
 
@@ -255,8 +260,10 @@ static int eckey_sign_wrap(void* ctx, mbedtls_md_type_t md_alg, const unsigned c
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ECP_RESTARTABLE)
 /* Forward declarations */
+namespace lbug_mbedtls {
 static int ecdsa_verify_rs_wrap(void* ctx, mbedtls_md_type_t md_alg, const unsigned char* hash,
     size_t hash_len, const unsigned char* sig, size_t sig_len, void* rs_ctx);
 
@@ -342,9 +349,11 @@ static int eckey_sign_rs_wrap(void* ctx, mbedtls_md_type_t md_alg, const unsigne
 cleanup:
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECP_RESTARTABLE */
 #endif /* MBEDTLS_ECDSA_C */
 
+namespace lbug_mbedtls {
 static int eckey_check_pair(const void* pub, const void* prv,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng) {
     return (mbedtls_ecp_check_pub_priv((const mbedtls_ecp_keypair*)pub,
@@ -419,18 +428,22 @@ const mbedtls_pk_info_t mbedtls_eckeydh_info = {
 #endif
     eckey_debug, /* Same underlying key structure */
 };
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECP_C */
 
 #if defined(MBEDTLS_ECDSA_C)
+namespace lbug_mbedtls {
 static int ecdsa_can_do(mbedtls_pk_type_t type) {
     return (type == MBEDTLS_PK_ECDSA);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_USE_PSA_CRYPTO)
 /*
  * An ASN.1 encoded signature is a sequence of two ASN.1 integers. Parse one of
  * those integers and convert it to the fixed-length encoding expected by PSA.
  */
+namespace lbug_mbedtls {
 static int extract_ecdsa_sig_int(unsigned char** from, const unsigned char* end, unsigned char* to,
     size_t to_len) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
@@ -549,7 +562,9 @@ cleanup:
     psa_destroy_key(key_id);
     return (ret);
 }
+} // namespace lbug_mbedtls
 #else  /* MBEDTLS_USE_PSA_CRYPTO */
+namespace lbug_mbedtls {
 static int ecdsa_verify_wrap(void* ctx, mbedtls_md_type_t md_alg, const unsigned char* hash,
     size_t hash_len, const unsigned char* sig, size_t sig_len) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
@@ -562,8 +577,10 @@ static int ecdsa_verify_wrap(void* ctx, mbedtls_md_type_t md_alg, const unsigned
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_USE_PSA_CRYPTO */
 
+namespace lbug_mbedtls {
 static int ecdsa_sign_wrap(void* ctx, mbedtls_md_type_t md_alg, const unsigned char* hash,
     size_t hash_len, unsigned char* sig, size_t sig_size, size_t* sig_len,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng) {
@@ -571,7 +588,9 @@ static int ecdsa_sign_wrap(void* ctx, mbedtls_md_type_t md_alg, const unsigned c
         sig_size, sig_len, f_rng, p_rng));
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ECP_RESTARTABLE)
+namespace lbug_mbedtls {
 static int ecdsa_verify_rs_wrap(void* ctx, mbedtls_md_type_t md_alg, const unsigned char* hash,
     size_t hash_len, const unsigned char* sig, size_t sig_len, void* rs_ctx) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
@@ -592,8 +611,10 @@ static int ecdsa_sign_rs_wrap(void* ctx, mbedtls_md_type_t md_alg, const unsigne
     return (mbedtls_ecdsa_write_signature_restartable((mbedtls_ecdsa_context*)ctx, md_alg, hash,
         hash_len, sig, sig_size, sig_len, f_rng, p_rng, (mbedtls_ecdsa_restart_ctx*)rs_ctx));
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECP_RESTARTABLE */
 
+namespace lbug_mbedtls {
 static void* ecdsa_alloc_wrap(void) {
     void* ctx = mbedtls_calloc(1, sizeof(mbedtls_ecdsa_context));
 
@@ -608,7 +629,9 @@ static void ecdsa_free_wrap(void* ctx) {
     mbedtls_free(ctx);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ECP_RESTARTABLE)
+namespace lbug_mbedtls {
 static void* ecdsa_rs_alloc(void) {
     void* ctx = mbedtls_calloc(1, sizeof(mbedtls_ecdsa_restart_ctx));
 
@@ -622,8 +645,10 @@ static void ecdsa_rs_free(void* ctx) {
     mbedtls_ecdsa_restart_free(ctx);
     mbedtls_free(ctx);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECP_RESTARTABLE */
 
+namespace lbug_mbedtls {
 const mbedtls_pk_info_t mbedtls_ecdsa_info = {
     MBEDTLS_PK_ECDSA, "ECDSA", eckey_get_bitlen, /* Compatible key structures */
     ecdsa_can_do, ecdsa_verify_wrap, ecdsa_sign_wrap,
@@ -637,6 +662,7 @@ const mbedtls_pk_info_t mbedtls_ecdsa_info = {
 #endif
     eckey_debug, /* Compatible key structures */
 };
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECDSA_C */
 
 #if defined(MBEDTLS_PK_RSA_ALT_SUPPORT)
@@ -644,6 +670,7 @@ const mbedtls_pk_info_t mbedtls_ecdsa_info = {
  * Support for alternative RSA-private implementations
  */
 
+namespace lbug_mbedtls {
 static int rsa_alt_can_do(mbedtls_pk_type_t type) {
     return (type == MBEDTLS_PK_RSA);
 }
@@ -688,7 +715,9 @@ static int rsa_alt_decrypt_wrap(void* ctx, const unsigned char* input, size_t il
     return (rsa_alt->decrypt_func(rsa_alt->key, olen, input, output, osize));
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_RSA_C)
+namespace lbug_mbedtls {
 static int rsa_alt_check_pair(const void* pub, const void* prv,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng) {
     unsigned char sig[MBEDTLS_MPI_MAX_SIZE];
@@ -712,8 +741,10 @@ static int rsa_alt_check_pair(const void* pub, const void* prv,
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_RSA_C */
 
+namespace lbug_mbedtls {
 static void* rsa_alt_alloc_wrap(void) {
     void* ctx = mbedtls_calloc(1, sizeof(mbedtls_rsa_alt_context));
 
@@ -755,10 +786,12 @@ const mbedtls_pk_info_t mbedtls_rsa_alt_info = {
     NULL,
 };
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PK_RSA_ALT_SUPPORT */
 
 #if defined(MBEDTLS_USE_PSA_CRYPTO)
 
+namespace lbug_mbedtls {
 static void* pk_opaque_alloc_wrap(void) {
     void* ctx = mbedtls_calloc(1, sizeof(psa_key_id_t));
 
@@ -792,6 +825,7 @@ static int pk_opaque_can_do(mbedtls_pk_type_t type) {
     return (type == MBEDTLS_PK_ECKEY || type == MBEDTLS_PK_ECDSA);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ECDSA_C)
 
 /*
@@ -803,6 +837,7 @@ static int pk_opaque_can_do(mbedtls_pk_type_t type) {
  * start: start of the output buffer, and also of the mpi to write at the end
  * n_len: length of the mpi to read from start
  */
+namespace lbug_mbedtls {
 static int asn1_write_mpibuf(unsigned char** p, unsigned char* start, size_t n_len) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
     size_t len = 0;
@@ -869,8 +904,10 @@ static int pk_ecdsa_sig_asn1_from_psa(unsigned char* sig, size_t* sig_len, size_
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECDSA_C */
 
+namespace lbug_mbedtls {
 static int pk_opaque_sign_wrap(void* ctx, mbedtls_md_type_t md_alg, const unsigned char* hash,
     size_t hash_len, unsigned char* sig, size_t sig_size, size_t* sig_len,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng) {
@@ -923,6 +960,7 @@ const mbedtls_pk_info_t mbedtls_pk_opaque_info = {
     NULL, /* debug - could be done later, or even left NULL */
 };
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_USE_PSA_CRYPTO */
 
 #endif /* MBEDTLS_PK_C */

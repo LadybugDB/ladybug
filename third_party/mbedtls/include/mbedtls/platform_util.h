@@ -32,9 +32,6 @@
 #include "mbedtls/platform_time.h"
 #endif /* MBEDTLS_HAVE_TIME_DATE */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* Internal macros meant to be called only from within the library. */
 #define MBEDTLS_INTERNAL_VALIDATE_RET(cond, ret)                                                   \
@@ -48,10 +45,12 @@ extern "C" {
 #if !defined(MBEDTLS_DEPRECATED_REMOVED)
 #if defined(MBEDTLS_DEPRECATED_WARNING)
 #define MBEDTLS_DEPRECATED __attribute__((deprecated))
+namespace lbug_mbedtls {
 MBEDTLS_DEPRECATED typedef char const* mbedtls_deprecated_string_constant_t;
 #define MBEDTLS_DEPRECATED_STRING_CONSTANT(VAL) ((mbedtls_deprecated_string_constant_t)(VAL))
 MBEDTLS_DEPRECATED typedef int mbedtls_deprecated_numeric_constant_t;
 #define MBEDTLS_DEPRECATED_NUMERIC_CONSTANT(VAL) ((mbedtls_deprecated_numeric_constant_t)(VAL))
+} // namespace lbug_mbedtls
 #else /* MBEDTLS_DEPRECATED_WARNING */
 #define MBEDTLS_DEPRECATED
 #define MBEDTLS_DEPRECATED_STRING_CONSTANT(VAL) VAL
@@ -170,8 +169,10 @@ MBEDTLS_DEPRECATED typedef int mbedtls_deprecated_numeric_constant_t;
  * \param len   Length of the buffer in bytes
  *
  */
+namespace lbug_mbedtls {
 void mbedtls_platform_zeroize(void* buf, size_t len);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_HAVE_TIME_DATE)
 /**
  * \brief      Platform-specific implementation of gmtime_r()
@@ -199,11 +200,12 @@ void mbedtls_platform_zeroize(void* buf, size_t len);
  * \return      Pointer to an object of type struct tm on success, otherwise
  *              NULL
  */
+namespace lbug_mbedtls {
 struct tm* mbedtls_platform_gmtime_r(const mbedtls_time_t* tt, struct tm* tm_buf);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_HAVE_TIME_DATE */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* MBEDTLS_PLATFORM_UTIL_H */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

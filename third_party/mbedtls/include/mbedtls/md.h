@@ -39,9 +39,6 @@
 /** Opening or reading of file failed. */
 #define MBEDTLS_ERR_MD_FILE_IO_ERROR -0x5200
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \brief     Supported message digests.
@@ -51,6 +48,7 @@ extern "C" {
  *            stronger message digests instead.
  *
  */
+namespace lbug_mbedtls {
 typedef enum {
     MBEDTLS_MD_NONE = 0,  /**< None. */
     MBEDTLS_MD_MD5,       /**< The MD5 message digest. */
@@ -62,6 +60,7 @@ typedef enum {
     MBEDTLS_MD_RIPEMD160, /**< The RIPEMD-160 message digest. */
 } mbedtls_md_type_t;
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SHA512_C)
 #define MBEDTLS_MD_MAX_SIZE 64 /* longest known is SHA512 */
 #else
@@ -84,6 +83,7 @@ typedef enum {
  * #mbedtls_md_get_type and #mbedtls_md_get_name.
  */
 /* Defined internally in library/md_wrap.h. */
+namespace lbug_mbedtls {
 typedef struct mbedtls_md_info_t mbedtls_md_info_t;
 
 /**
@@ -315,6 +315,7 @@ MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_md(const mbedtls_md_info_t* md_info, const unsigned char* input, size_t ilen,
     unsigned char* output);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_FS_IO)
 /**
  * \brief          This function calculates the message-digest checksum
@@ -333,8 +334,10 @@ int mbedtls_md(const mbedtls_md_info_t* md_info, const unsigned char* input, siz
  *                 the file pointed by \p path.
  * \return         #MBEDTLS_ERR_MD_BAD_INPUT_DATA if \p md_info was NULL.
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_md_file(const mbedtls_md_info_t* md_info, const char* path, unsigned char* output);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_FS_IO */
 
 /**
@@ -355,6 +358,7 @@ int mbedtls_md_file(const mbedtls_md_info_t* md_info, const char* path, unsigned
  * \return          #MBEDTLS_ERR_MD_BAD_INPUT_DATA on parameter-verification
  *                  failure.
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_md_hmac_starts(mbedtls_md_context_t* ctx, const unsigned char* key, size_t keylen);
 
@@ -449,8 +453,8 @@ int mbedtls_md_hmac(const mbedtls_md_info_t* md_info, const unsigned char* key, 
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_md_process(mbedtls_md_context_t* ctx, const unsigned char* data);
 
-#ifdef __cplusplus
-}
-#endif
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_MD_H */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers
