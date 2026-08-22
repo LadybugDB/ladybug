@@ -25,11 +25,20 @@ struct RelationshipsFunction {
 
 struct PropertiesBindData : public FunctionBindData {
     common::idx_t childIdx;
+    std::vector<common::struct_field_idx_t> fieldIndices;
 
     PropertiesBindData(common::LogicalType dataType, common::idx_t childIdx)
         : FunctionBindData{std::move(dataType)}, childIdx{childIdx} {}
 
+    PropertiesBindData(common::LogicalType dataType,
+        std::vector<common::struct_field_idx_t> fieldIndices)
+        : FunctionBindData{std::move(dataType)}, childIdx{0}, fieldIndices{
+                                                                  std::move(fieldIndices)} {}
+
     inline std::unique_ptr<FunctionBindData> copy() const override {
+        if (!fieldIndices.empty()) {
+            return std::make_unique<PropertiesBindData>(resultType.copy(), fieldIndices);
+        }
         return std::make_unique<PropertiesBindData>(resultType.copy(), childIdx);
     }
 };
