@@ -127,8 +127,10 @@
 #if !defined(MBEDTLS_HAVE_INT64)
 #define MBEDTLS_HAVE_INT64
 #endif /* !MBEDTLS_HAVE_INT64 */
+namespace lbug_mbedtls {
 typedef int64_t mbedtls_mpi_sint;
 typedef uint64_t mbedtls_mpi_uint;
+} // namespace lbug_mbedtls
 #elif defined(__GNUC__) &&                                                                         \
     (defined(__amd64__) || defined(__x86_64__) || defined(__ppc64__) || defined(__powerpc64__) ||  \
         defined(__ia64__) || defined(__alpha__) || (defined(__sparc__) && defined(__arch64__)) ||  \
@@ -136,12 +138,16 @@ typedef uint64_t mbedtls_mpi_uint;
 #if !defined(MBEDTLS_HAVE_INT64)
 #define MBEDTLS_HAVE_INT64
 #endif /* MBEDTLS_HAVE_INT64 */
+namespace lbug_mbedtls {
 typedef int64_t mbedtls_mpi_sint;
 typedef uint64_t mbedtls_mpi_uint;
+} // namespace lbug_mbedtls
 #if !defined(MBEDTLS_NO_UDBL_DIVISION)
 /* mbedtls_t_udbl defined as 128-bit unsigned int */
+namespace lbug_mbedtls {
 typedef unsigned int mbedtls_t_udbl __attribute__((mode(TI)));
 #define MBEDTLS_HAVE_UDBL
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_NO_UDBL_DIVISION */
 #elif defined(__ARMCC_VERSION) && defined(__aarch64__)
 /*
@@ -151,17 +157,23 @@ typedef unsigned int mbedtls_t_udbl __attribute__((mode(TI)));
 #if !defined(MBEDTLS_HAVE_INT64)
 #define MBEDTLS_HAVE_INT64
 #endif /* !MBEDTLS_HAVE_INT64 */
+namespace lbug_mbedtls {
 typedef int64_t mbedtls_mpi_sint;
 typedef uint64_t mbedtls_mpi_uint;
+} // namespace lbug_mbedtls
 #if !defined(MBEDTLS_NO_UDBL_DIVISION)
 /* mbedtls_t_udbl defined as 128-bit unsigned int */
+namespace lbug_mbedtls {
 typedef __uint128_t mbedtls_t_udbl;
 #define MBEDTLS_HAVE_UDBL
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_NO_UDBL_DIVISION */
 #elif defined(MBEDTLS_HAVE_INT64)
 /* Force 64-bit integers with unknown compiler */
+namespace lbug_mbedtls {
 typedef int64_t mbedtls_mpi_sint;
 typedef uint64_t mbedtls_mpi_uint;
+} // namespace lbug_mbedtls
 #endif
 #endif /* !MBEDTLS_HAVE_INT32 */
 
@@ -170,21 +182,23 @@ typedef uint64_t mbedtls_mpi_uint;
 #if !defined(MBEDTLS_HAVE_INT32)
 #define MBEDTLS_HAVE_INT32
 #endif /* !MBEDTLS_HAVE_INT32 */
+namespace lbug_mbedtls {
 typedef int32_t mbedtls_mpi_sint;
 typedef uint32_t mbedtls_mpi_uint;
+} // namespace lbug_mbedtls
 #if !defined(MBEDTLS_NO_UDBL_DIVISION)
+namespace lbug_mbedtls {
 typedef uint64_t mbedtls_t_udbl;
 #define MBEDTLS_HAVE_UDBL
+} // namespace lbug_mbedtls
 #endif /* !MBEDTLS_NO_UDBL_DIVISION */
 #endif /* !MBEDTLS_HAVE_INT64 */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \brief          MPI structure
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_mpi {
     int MBEDTLS_PRIVATE(s);               /*!<  Sign: -1 if the mpi is negative, 1 otherwise */
     size_t MBEDTLS_PRIVATE(n);            /*!<  total # of limbs  */
@@ -437,6 +451,7 @@ int mbedtls_mpi_read_string(mbedtls_mpi* X, int radix, const char* s);
 int mbedtls_mpi_write_string(const mbedtls_mpi* X, int radix, char* buf, size_t buflen,
     size_t* olen);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_FS_IO)
 /**
  * \brief          Read an MPI from a line in an opened file.
@@ -459,6 +474,7 @@ int mbedtls_mpi_write_string(const mbedtls_mpi* X, int radix, char* buf, size_t 
  *                 is too small.
  * \return         Another negative error code on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_mpi_read_file(mbedtls_mpi* X, int radix, FILE* fin);
 
 /**
@@ -477,6 +493,7 @@ int mbedtls_mpi_read_file(mbedtls_mpi* X, int radix, FILE* fin);
  * \return         A negative error code on failure.
  */
 int mbedtls_mpi_write_file(const char* p, const mbedtls_mpi* X, int radix, FILE* fout);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_FS_IO */
 
 /**
@@ -491,6 +508,7 @@ int mbedtls_mpi_write_file(const char* p, const mbedtls_mpi* X, int radix, FILE*
  * \return         #MBEDTLS_ERR_MPI_ALLOC_FAILED if memory allocation failed.
  * \return         Another negative error code on different kinds of failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_mpi_read_binary(mbedtls_mpi* X, const unsigned char* buf, size_t buflen);
 
 /**
@@ -982,6 +1000,7 @@ typedef enum {
 int mbedtls_mpi_gen_prime(mbedtls_mpi* X, size_t nbits, int flags,
     int (*f_rng)(void*, unsigned char*, size_t), void* p_rng);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST)
 
 /**
@@ -989,12 +1008,13 @@ int mbedtls_mpi_gen_prime(mbedtls_mpi* X, size_t nbits, int flags,
  *
  * \return         0 if successful, or 1 if the test failed
  */
+namespace lbug_mbedtls {
 int mbedtls_mpi_self_test(int verbose);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* bignum.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

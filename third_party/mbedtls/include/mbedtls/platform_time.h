@@ -24,9 +24,6 @@
 
 #include "mbedtls/build_info.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \name SECTION: Module settings
@@ -40,17 +37,22 @@ extern "C" {
  * The time_t datatype
  */
 #if defined(MBEDTLS_PLATFORM_TIME_TYPE_MACRO)
+namespace lbug_mbedtls {
 typedef MBEDTLS_PLATFORM_TIME_TYPE_MACRO mbedtls_time_t;
+} // namespace lbug_mbedtls
 #else
 /* For time_t */
 #include <time.h>
+namespace lbug_mbedtls {
 typedef time_t mbedtls_time_t;
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PLATFORM_TIME_TYPE_MACRO */
 
 /*
  * The function pointers for time
  */
 #if defined(MBEDTLS_PLATFORM_TIME_ALT)
+namespace lbug_mbedtls {
 extern mbedtls_time_t (*mbedtls_time)(mbedtls_time_t* time);
 
 /**
@@ -61,6 +63,7 @@ extern mbedtls_time_t (*mbedtls_time)(mbedtls_time_t* time);
  * \return              0
  */
 int mbedtls_platform_set_time(mbedtls_time_t (*time_func)(mbedtls_time_t* time));
+} // namespace lbug_mbedtls
 #else
 #if defined(MBEDTLS_PLATFORM_TIME_MACRO)
 #define mbedtls_time MBEDTLS_PLATFORM_TIME_MACRO
@@ -69,8 +72,7 @@ int mbedtls_platform_set_time(mbedtls_time_t (*time_func)(mbedtls_time_t* time))
 #endif /* MBEDTLS_PLATFORM_TIME_MACRO */
 #endif /* MBEDTLS_PLATFORM_TIME_ALT */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* platform_time.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

@@ -157,6 +157,7 @@
 /*
  * For X520 attribute types
  */
+namespace lbug_mbedtls {
 typedef struct {
     mbedtls_oid_descriptor_t descriptor;
     const char* short_name;
@@ -300,7 +301,9 @@ static const oid_x509_ext_t oid_x509_ext[] = {
 FN_OID_TYPED_FROM_ASN1(oid_x509_ext_t, x509_ext, oid_x509_ext)
 FN_OID_GET_ATTR1(mbedtls_oid_get_x509_ext_type, oid_x509_ext_t, x509_ext, int, ext_type)
 
+} // namespace lbug_mbedtls
 #if !defined(MBEDTLS_X509_REMOVE_INFO)
+namespace lbug_mbedtls {
 static const mbedtls_oid_descriptor_t oid_ext_key_usage[] = {
     OID_DESCRIPTOR(MBEDTLS_OID_SERVER_AUTH, "id-kp-serverAuth", "TLS Web Server Authentication"),
     OID_DESCRIPTOR(MBEDTLS_OID_CLIENT_AUTH, "id-kp-clientAuth", "TLS Web Client Authentication"),
@@ -325,12 +328,14 @@ static const mbedtls_oid_descriptor_t oid_certificate_policies[] = {
 FN_OID_TYPED_FROM_ASN1(mbedtls_oid_descriptor_t, certificate_policies, oid_certificate_policies)
 FN_OID_GET_ATTR1(mbedtls_oid_get_certificate_policies, mbedtls_oid_descriptor_t,
     certificate_policies, const char*, description)
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_X509_REMOVE_INFO */
 
 #if defined(MBEDTLS_MD_C)
 /*
  * For SignatureAlgorithmIdentifier
  */
+namespace lbug_mbedtls {
 typedef struct {
     mbedtls_oid_descriptor_t descriptor;
     mbedtls_md_type_t md_alg;
@@ -442,20 +447,26 @@ static const oid_sig_alg_t oid_sig_alg[] = {
 
 FN_OID_TYPED_FROM_ASN1(oid_sig_alg_t, sig_alg, oid_sig_alg)
 
+} // namespace lbug_mbedtls
 #if !defined(MBEDTLS_X509_REMOVE_INFO)
+namespace lbug_mbedtls {
 FN_OID_GET_DESCRIPTOR_ATTR1(mbedtls_oid_get_sig_alg_desc, oid_sig_alg_t, sig_alg, const char*,
     description)
+} // namespace lbug_mbedtls
 #endif
 
+namespace lbug_mbedtls {
 FN_OID_GET_ATTR2(mbedtls_oid_get_sig_alg, oid_sig_alg_t, sig_alg, mbedtls_md_type_t, md_alg,
     mbedtls_pk_type_t, pk_alg)
 FN_OID_GET_OID_BY_ATTR2(mbedtls_oid_get_oid_by_sig_alg, oid_sig_alg_t, oid_sig_alg,
     mbedtls_pk_type_t, pk_alg, mbedtls_md_type_t, md_alg)
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_MD_C */
 
 /*
  * For PublicKeyInfo (PKCS1, RFC 5480)
  */
+namespace lbug_mbedtls {
 typedef struct {
     mbedtls_oid_descriptor_t descriptor;
     mbedtls_pk_type_t pk_alg;
@@ -485,10 +496,12 @@ FN_OID_GET_ATTR1(mbedtls_oid_get_pk_alg, oid_pk_alg_t, pk_alg, mbedtls_pk_type_t
 FN_OID_GET_OID_BY_ATTR1(mbedtls_oid_get_oid_by_pk_alg, oid_pk_alg_t, oid_pk_alg, mbedtls_pk_type_t,
     pk_alg)
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ECP_C)
 /*
  * For namedCurve (RFC 5480)
  */
+namespace lbug_mbedtls {
 typedef struct {
     mbedtls_oid_descriptor_t descriptor;
     mbedtls_ecp_group_id grp_id;
@@ -571,12 +584,14 @@ FN_OID_TYPED_FROM_ASN1(oid_ecp_grp_t, grp_id, oid_ecp_grp)
 FN_OID_GET_ATTR1(mbedtls_oid_get_ec_grp, oid_ecp_grp_t, grp_id, mbedtls_ecp_group_id, grp_id)
 FN_OID_GET_OID_BY_ATTR1(mbedtls_oid_get_oid_by_ec_grp, oid_ecp_grp_t, oid_ecp_grp,
     mbedtls_ecp_group_id, grp_id)
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECP_C */
 
 #if defined(MBEDTLS_CIPHER_C)
 /*
  * For PKCS#5 PBES2 encryption algorithm
  */
+namespace lbug_mbedtls {
 typedef struct {
     mbedtls_oid_descriptor_t descriptor;
     mbedtls_cipher_type_t cipher_alg;
@@ -600,12 +615,14 @@ static const oid_cipher_alg_t oid_cipher_alg[] = {
 FN_OID_TYPED_FROM_ASN1(oid_cipher_alg_t, cipher_alg, oid_cipher_alg)
 FN_OID_GET_ATTR1(mbedtls_oid_get_cipher_alg, oid_cipher_alg_t, cipher_alg, mbedtls_cipher_type_t,
     cipher_alg)
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_C */
 
 #if defined(MBEDTLS_MD_C)
 /*
  * For digestAlgorithm
  */
+namespace lbug_mbedtls {
 typedef struct {
     mbedtls_oid_descriptor_t descriptor;
     mbedtls_md_type_t md_alg;
@@ -712,12 +729,14 @@ static const oid_md_hmac_t oid_md_hmac[] = {
 
 FN_OID_TYPED_FROM_ASN1(oid_md_hmac_t, md_hmac, oid_md_hmac)
 FN_OID_GET_ATTR1(mbedtls_oid_get_md_hmac, oid_md_hmac_t, md_hmac, mbedtls_md_type_t, md_hmac)
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_MD_C */
 
 #if defined(MBEDTLS_PKCS12_C)
 /*
  * For PKCS#12 PBEs
  */
+namespace lbug_mbedtls {
 typedef struct {
     mbedtls_oid_descriptor_t descriptor;
     mbedtls_md_type_t md_alg;
@@ -747,6 +766,7 @@ static const oid_pkcs12_pbe_alg_t oid_pkcs12_pbe_alg[] = {
 FN_OID_TYPED_FROM_ASN1(oid_pkcs12_pbe_alg_t, pkcs12_pbe_alg, oid_pkcs12_pbe_alg)
 FN_OID_GET_ATTR2(mbedtls_oid_get_pkcs12_pbe_alg, oid_pkcs12_pbe_alg_t, pkcs12_pbe_alg,
     mbedtls_md_type_t, md_alg, mbedtls_cipher_type_t, cipher_alg)
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS12_C */
 
 #define OID_SAFE_SNPRINTF                                                                          \
@@ -759,9 +779,11 @@ FN_OID_GET_ATTR2(mbedtls_oid_get_pkcs12_pbe_alg, oid_pkcs12_pbe_alg_t, pkcs12_pb
     } while (0)
 
 /* Return the x.y.z.... style numeric string for the given OID */
+namespace lbug_mbedtls {
 int mbedtls_oid_get_numeric_string(char*, size_t, const mbedtls_asn1_buf*) {
     return MBEDTLS_ERR_ERROR_GENERIC_ERROR; // patched because it used to require printf which would
                                             // fail on Windows
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_OID_C */

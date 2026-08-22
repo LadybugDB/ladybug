@@ -46,15 +46,13 @@
 /** An output buffer is too small. */
 #define MBEDTLS_ERR_GCM_BUFFER_TOO_SMALL -0x0016
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #if !defined(MBEDTLS_GCM_ALT)
 
 /**
  * \brief          The GCM context structure.
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_gcm_context {
     mbedtls_cipher_context_t MBEDTLS_PRIVATE(cipher_ctx); /*!< The cipher context used. */
     uint64_t MBEDTLS_PRIVATE(HL)[16];                     /*!< Precalculated HTable low. */
@@ -69,6 +67,7 @@ typedef struct mbedtls_gcm_context {
                                       #MBEDTLS_GCM_DECRYPT. */
 } mbedtls_gcm_context;
 
+} // namespace lbug_mbedtls
 #else /* !MBEDTLS_GCM_ALT */
 #include "mbedtls/gcm_alt.h"
 #endif /* !MBEDTLS_GCM_ALT */
@@ -84,6 +83,7 @@ typedef struct mbedtls_gcm_context {
  *
  * \param ctx       The GCM context to initialize. This must not be \c NULL.
  */
+namespace lbug_mbedtls {
 void mbedtls_gcm_init(mbedtls_gcm_context* ctx);
 
 /**
@@ -333,6 +333,7 @@ int mbedtls_gcm_finish(mbedtls_gcm_context* ctx, unsigned char* output, size_t o
  */
 void mbedtls_gcm_free(mbedtls_gcm_context* ctx);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST)
 
 /**
@@ -341,12 +342,13 @@ void mbedtls_gcm_free(mbedtls_gcm_context* ctx);
  * \return         \c 0 on success.
  * \return         \c 1 on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_gcm_self_test(int verbose);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* gcm.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

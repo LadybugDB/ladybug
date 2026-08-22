@@ -103,9 +103,6 @@
  * Module dependent error code (5 bits 0x.00.-0x.F8.)
  */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /** Generic error */
 #define MBEDTLS_ERR_ERROR_GENERIC_ERROR -0x0001
@@ -130,7 +127,9 @@ extern "C" {
  * \brief Testing hook called before adding/combining two error codes together.
  *        Only used when invasive testing is enabled via MBEDTLS_TEST_HOOKS.
  */
+namespace lbug_mbedtls {
 extern void (*mbedtls_test_hook_error_add)(int, int, const char*, int);
+} // namespace lbug_mbedtls
 #endif
 
 /**
@@ -151,6 +150,7 @@ extern void (*mbedtls_test_hook_error_add)(int, int, const char*, int);
  * \param file      file where this error code addition occurred.
  * \param line      line where this error code addition occurred.
  */
+namespace lbug_mbedtls {
 static inline int mbedtls_error_add(int high, int low, const char* file, int line) {
 #if defined(MBEDTLS_TEST_HOOKS)
     if (*mbedtls_test_hook_error_add != NULL)
@@ -203,8 +203,8 @@ const char* mbedtls_high_level_strerr(int error_code);
  */
 const char* mbedtls_low_level_strerr(int error_code);
 
-#ifdef __cplusplus
-}
-#endif
 
+} // namespace lbug_mbedtls
 #endif /* error.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

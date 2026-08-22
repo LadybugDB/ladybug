@@ -59,6 +59,7 @@
  * of (a) and (b) above to attempt to factor N.
  *
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_deduce_primes(mbedtls_mpi const* N, mbedtls_mpi const* E, mbedtls_mpi const* D,
     mbedtls_mpi* P, mbedtls_mpi* Q) {
     int ret = 0;
@@ -423,4 +424,5 @@ cleanup:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_RSA_C */

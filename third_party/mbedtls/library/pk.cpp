@@ -49,6 +49,7 @@
 /*
  * Initialise a mbedtls_pk_context
  */
+namespace lbug_mbedtls {
 void mbedtls_pk_init(mbedtls_pk_context* ctx) {
     PK_VALIDATE(ctx != NULL);
 
@@ -69,10 +70,12 @@ void mbedtls_pk_free(mbedtls_pk_context* ctx) {
     mbedtls_platform_zeroize(ctx, sizeof(mbedtls_pk_context));
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ECDSA_C) && defined(MBEDTLS_ECP_RESTARTABLE)
 /*
  * Initialize a restart context
  */
+namespace lbug_mbedtls {
 void mbedtls_pk_restart_init(mbedtls_pk_restart_ctx* ctx) {
     PK_VALIDATE(ctx != NULL);
     ctx->pk_info = NULL;
@@ -92,11 +95,13 @@ void mbedtls_pk_restart_free(mbedtls_pk_restart_ctx* ctx) {
     ctx->pk_info = NULL;
     ctx->rs_ctx = NULL;
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECDSA_C && MBEDTLS_ECP_RESTARTABLE */
 
 /*
  * Get pk_info structure from type
  */
+namespace lbug_mbedtls {
 const mbedtls_pk_info_t* mbedtls_pk_info_from_type(mbedtls_pk_type_t pk_type) {
     switch (pk_type) {
 #if defined(MBEDTLS_RSA_C)
@@ -135,10 +140,12 @@ int mbedtls_pk_setup(mbedtls_pk_context* ctx, const mbedtls_pk_info_t* info) {
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_USE_PSA_CRYPTO)
 /*
  * Initialise a PSA-wrapping context
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_setup_opaque(mbedtls_pk_context* ctx, const psa_key_id_t key) {
     const mbedtls_pk_info_t* const info = &mbedtls_pk_opaque_info;
     psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
@@ -167,12 +174,14 @@ int mbedtls_pk_setup_opaque(mbedtls_pk_context* ctx, const psa_key_id_t key) {
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_USE_PSA_CRYPTO */
 
 #if defined(MBEDTLS_PK_RSA_ALT_SUPPORT)
 /*
  * Initialize an RSA-alt context
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_setup_rsa_alt(mbedtls_pk_context* ctx, void* key,
     mbedtls_pk_rsa_alt_decrypt_func decrypt_func, mbedtls_pk_rsa_alt_sign_func sign_func,
     mbedtls_pk_rsa_alt_key_len_func key_len_func) {
@@ -197,11 +206,13 @@ int mbedtls_pk_setup_rsa_alt(mbedtls_pk_context* ctx, void* key,
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PK_RSA_ALT_SUPPORT */
 
 /*
  * Tell if a PK can do the operations of the given type
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_can_do(const mbedtls_pk_context* ctx, mbedtls_pk_type_t type) {
     /* A context with null pk_info is not set up yet and can't do anything.
      * For backward compatibility, also accept NULL instead of a context
@@ -228,10 +239,12 @@ static inline int pk_hashlen_helper(mbedtls_md_type_t md_alg, size_t* hash_len) 
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_ECDSA_C) && defined(MBEDTLS_ECP_RESTARTABLE)
 /*
  * Helper to set up a restart context if needed
  */
+namespace lbug_mbedtls {
 static int pk_restart_setup(mbedtls_pk_restart_ctx* ctx, const mbedtls_pk_info_t* info) {
     /* Don't do anything if already set up or invalid */
     if (ctx == NULL || ctx->pk_info != NULL)
@@ -248,11 +261,13 @@ static int pk_restart_setup(mbedtls_pk_restart_ctx* ctx, const mbedtls_pk_info_t
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_ECDSA_C && MBEDTLS_ECP_RESTARTABLE */
 
 /*
  * Verify a signature (restartable)
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_verify_restartable(mbedtls_pk_context* ctx, mbedtls_md_type_t md_alg,
     const unsigned char* hash, size_t hash_len, const unsigned char* sig, size_t sig_len,
     mbedtls_pk_restart_ctx* rs_ctx) {
@@ -522,6 +537,7 @@ mbedtls_pk_type_t mbedtls_pk_get_type(const mbedtls_pk_context* ctx) {
     return (ctx->pk_info->type);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_USE_PSA_CRYPTO)
 /*
  * Load the key to a PSA key slot,
@@ -529,6 +545,7 @@ mbedtls_pk_type_t mbedtls_pk_get_type(const mbedtls_pk_context* ctx) {
  *
  * Currently only works for EC private keys.
  */
+namespace lbug_mbedtls {
 int mbedtls_pk_wrap_as_opaque(mbedtls_pk_context* pk, psa_key_id_t* key, psa_algorithm_t hash_alg) {
 #if !defined(MBEDTLS_ECP_C)
     ((void)pk);
@@ -574,5 +591,6 @@ int mbedtls_pk_wrap_as_opaque(mbedtls_pk_context* pk, psa_key_id_t* key, psa_alg
     return (mbedtls_pk_setup_opaque(pk, *key));
 #endif /* MBEDTLS_ECP_C */
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_USE_PSA_CRYPTO */
 #endif /* MBEDTLS_PK_C */

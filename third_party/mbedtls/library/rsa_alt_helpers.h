@@ -58,9 +58,6 @@
 #include "mbedtls/bignum.h"
 #include "mbedtls/build_info.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * \brief          Compute RSA prime moduli P, Q from public modulus N=PQ
@@ -86,6 +83,7 @@ extern "C" {
  *                 use the helper function \c mbedtls_rsa_validate_params.
  *
  */
+namespace lbug_mbedtls {
 int mbedtls_rsa_deduce_primes(mbedtls_mpi const* N, mbedtls_mpi const* E, mbedtls_mpi const* D,
     mbedtls_mpi* P, mbedtls_mpi* Q);
 
@@ -202,8 +200,6 @@ int mbedtls_rsa_validate_params(const mbedtls_mpi* N, const mbedtls_mpi* P, cons
 int mbedtls_rsa_validate_crt(const mbedtls_mpi* P, const mbedtls_mpi* Q, const mbedtls_mpi* D,
     const mbedtls_mpi* DP, const mbedtls_mpi* DQ, const mbedtls_mpi* QP);
 
-#ifdef __cplusplus
-}
-#endif
 
+} // namespace lbug_mbedtls
 #endif /* rsa_alt_helpers.h */

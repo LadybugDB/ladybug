@@ -47,6 +47,7 @@
 
 #include <string.h>
 
+namespace lbug_mbedtls {
 int mbedtls_ct_memcmp(const void* a, const void* b, size_t n) {
     size_t i;
     volatile const unsigned char* A = (volatile const unsigned char*)a;
@@ -84,8 +85,10 @@ unsigned mbedtls_ct_uint_mask(unsigned value) {
 #endif
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SSL_SOME_SUITES_USE_TLS_CBC)
 
+namespace lbug_mbedtls {
 size_t mbedtls_ct_size_mask(size_t value) {
     /* MSVC has a warning about unary minus on unsigned integer types,
      * but this is well-defined and precisely what we want to do here. */
@@ -99,10 +102,12 @@ size_t mbedtls_ct_size_mask(size_t value) {
 #endif
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SSL_SOME_SUITES_USE_TLS_CBC */
 
 #if defined(MBEDTLS_BIGNUM_C)
 
+namespace lbug_mbedtls {
 mbedtls_mpi_uint mbedtls_ct_mpi_uint_mask(mbedtls_mpi_uint value) {
     /* MSVC has a warning about unary minus on unsigned, but this is
      * well-defined and precisely what we want to do here */
@@ -116,6 +121,7 @@ mbedtls_mpi_uint mbedtls_ct_mpi_uint_mask(mbedtls_mpi_uint value) {
 #endif
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_BIGNUM_C */
 
 #if defined(MBEDTLS_SSL_SOME_SUITES_USE_TLS_CBC)
@@ -132,6 +138,7 @@ mbedtls_mpi_uint mbedtls_ct_mpi_uint_mask(mbedtls_mpi_uint value) {
  *
  * \return      All-bits-one if \p x is less than \p y, otherwise zero.
  */
+namespace lbug_mbedtls {
 static size_t mbedtls_ct_size_mask_lt(size_t x, size_t y) {
     /* This has the most significant bit set if and only if x < y */
     const size_t sub = x - y;
@@ -149,6 +156,7 @@ size_t mbedtls_ct_size_mask_ge(size_t x, size_t y) {
     return (~mbedtls_ct_size_mask_lt(x, y));
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SSL_SOME_SUITES_USE_TLS_CBC */
 
 #if defined(MBEDTLS_BASE64_C)
@@ -157,6 +165,7 @@ size_t mbedtls_ct_size_mask_ge(size_t x, size_t y) {
  *
  * Constant flow with respect to c.
  */
+namespace lbug_mbedtls {
 MBEDTLS_STATIC_TESTABLE
 unsigned char mbedtls_ct_uchar_mask_of_range(unsigned char low, unsigned char high,
     unsigned char c) {
@@ -167,8 +176,10 @@ unsigned char mbedtls_ct_uchar_mask_of_range(unsigned char low, unsigned char hi
     return (~(low_mask | high_mask) & 0xff);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_BASE64_C */
 
+namespace lbug_mbedtls {
 unsigned mbedtls_ct_size_bool_eq(size_t x, size_t y) {
     /* diff = 0 if x == y, non-zero otherwise */
     const size_t diff = x ^ y;
@@ -193,6 +204,7 @@ unsigned mbedtls_ct_size_bool_eq(size_t x, size_t y) {
     return (1 ^ diff1);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_PKCS1_V15) && defined(MBEDTLS_RSA_C) && !defined(MBEDTLS_RSA_ALT)
 
 /** Constant-flow "greater than" comparison:
@@ -206,15 +218,18 @@ unsigned mbedtls_ct_size_bool_eq(size_t x, size_t y) {
  *
  * \return      1 if \p x greater than \p y, otherwise 0.
  */
+namespace lbug_mbedtls {
 static unsigned mbedtls_ct_size_gt(size_t x, size_t y) {
     /* Return the sign bit (1 for negative) of (y - x). */
     return ((y - x) >> (sizeof(size_t) * 8 - 1));
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V15 && MBEDTLS_RSA_C && ! MBEDTLS_RSA_ALT */
 
 #if defined(MBEDTLS_BIGNUM_C)
 
+namespace lbug_mbedtls {
 unsigned mbedtls_ct_mpi_uint_lt(const mbedtls_mpi_uint x, const mbedtls_mpi_uint y) {
     mbedtls_mpi_uint ret;
     mbedtls_mpi_uint cond;
@@ -240,13 +255,16 @@ unsigned mbedtls_ct_mpi_uint_lt(const mbedtls_mpi_uint x, const mbedtls_mpi_uint
     return (unsigned)ret;
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_BIGNUM_C */
 
+namespace lbug_mbedtls {
 unsigned mbedtls_ct_uint_if(unsigned condition, unsigned if1, unsigned if0) {
     unsigned mask = mbedtls_ct_uint_mask(condition);
     return ((mask & if1) | (~mask & if0));
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_BIGNUM_C)
 
 /** Select between two sign values without branches.
@@ -263,6 +281,7 @@ unsigned mbedtls_ct_uint_if(unsigned condition, unsigned if1, unsigned if0) {
  *
  * \return  \c if1 if \p condition is nonzero, otherwise \c if0.
  * */
+namespace lbug_mbedtls {
 static int mbedtls_ct_cond_select_sign(unsigned char condition, int if1, int if0) {
     /* In order to avoid questions about what we can reasonably assume about
      * the representations of signed integers, move everything to unsigned
@@ -302,10 +321,12 @@ void mbedtls_ct_mpi_uint_cond_assign(size_t n, mbedtls_mpi_uint* dest, const mbe
         dest[i] = (src[i] & mask) | (dest[i] & ~mask);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_BIGNUM_C */
 
 #if defined(MBEDTLS_BASE64_C)
 
+namespace lbug_mbedtls {
 unsigned char mbedtls_ct_base64_enc_char(unsigned char value) {
     unsigned char digit = 0;
     /* For each range of values, if value is in that range, mask digit with
@@ -335,6 +356,7 @@ signed char mbedtls_ct_base64_dec_value(unsigned char c) {
     return (val - 1);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_BASE64_C */
 
 #if defined(MBEDTLS_PKCS1_V15) && defined(MBEDTLS_RSA_C) && !defined(MBEDTLS_RSA_ALT)
@@ -355,6 +377,7 @@ signed char mbedtls_ct_base64_dec_value(unsigned char c) {
  * \param total     Total size of the buffer.
  * \param offset    Offset from which to copy \p total - \p offset bytes.
  */
+namespace lbug_mbedtls {
 static void mbedtls_ct_mem_move_to_left(void* start, size_t total, size_t offset) {
     volatile unsigned char* buf = (volatile unsigned char*)start;
     size_t i, n;
@@ -374,10 +397,12 @@ static void mbedtls_ct_mem_move_to_left(void* start, size_t total, size_t offset
     }
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V15 && MBEDTLS_RSA_C && ! MBEDTLS_RSA_ALT */
 
 #if defined(MBEDTLS_SSL_SOME_SUITES_USE_TLS_CBC)
 
+namespace lbug_mbedtls {
 void mbedtls_ct_memcpy_if_eq(unsigned char* dest, const unsigned char* src, size_t len, size_t c1,
     size_t c2) {
     /* mask = c1 == c2 ? 0xff : 0x00 */
@@ -474,6 +499,7 @@ cleanup:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SSL_SOME_SUITES_USE_TLS_CBC */
 
 #if defined(MBEDTLS_BIGNUM_C)
@@ -485,6 +511,7 @@ cleanup:
  * about whether the assignment was made or not.
  * (Leaking information about the respective sizes of X and Y is ok however.)
  */
+namespace lbug_mbedtls {
 int mbedtls_mpi_safe_cond_assign(mbedtls_mpi* X, const mbedtls_mpi* Y, unsigned char assign) {
     int ret = 0;
     size_t i;
@@ -609,10 +636,12 @@ int mbedtls_mpi_lt_mpi_ct(const mbedtls_mpi* X, const mbedtls_mpi* Y, unsigned* 
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_BIGNUM_C */
 
 #if defined(MBEDTLS_PKCS1_V15) && defined(MBEDTLS_RSA_C) && !defined(MBEDTLS_RSA_ALT)
 
+namespace lbug_mbedtls {
 int mbedtls_ct_rsaes_pkcs1_v15_unpadding(unsigned char* input, size_t ilen, unsigned char* output,
     size_t output_max_len, size_t* olen) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
@@ -724,4 +753,5 @@ int mbedtls_ct_rsaes_pkcs1_v15_unpadding(unsigned char* input, size_t ilen, unsi
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_PKCS1_V15 && MBEDTLS_RSA_C && ! MBEDTLS_RSA_ALT */

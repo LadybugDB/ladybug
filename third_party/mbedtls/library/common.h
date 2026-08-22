@@ -49,6 +49,7 @@
 #endif
 
 #if defined(MBEDTLS_TEST_HOOKS)
+namespace lbug_mbedtls {
 extern void (*mbedtls_test_hook_test_fail)(const char* test, int line, const char* file);
 #define MBEDTLS_TEST_HOOK_TEST_ASSERT(TEST)                                                        \
     do {                                                                                           \
@@ -56,6 +57,7 @@ extern void (*mbedtls_test_hook_test_fail)(const char* test, int line, const cha
             (*mbedtls_test_hook_test_fail)(#TEST, __LINE__, __FILE__);                             \
         }                                                                                          \
     } while (0)
+} // namespace lbug_mbedtls
 #else
 #define MBEDTLS_TEST_HOOK_TEST_ASSERT(TEST)
 #endif /* defined(MBEDTLS_TEST_HOOKS) */

@@ -37,9 +37,6 @@
 /** Invalid data input length. */
 #define MBEDTLS_ERR_CAMELLIA_INVALID_INPUT_LENGTH -0x0026
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #if !defined(MBEDTLS_CAMELLIA_ALT)
 // Regular implementation
@@ -48,11 +45,13 @@ extern "C" {
 /**
  * \brief          CAMELLIA context structure
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_camellia_context {
     int MBEDTLS_PRIVATE(nr);          /*!<  number of rounds  */
     uint32_t MBEDTLS_PRIVATE(rk)[68]; /*!<  CAMELLIA round keys    */
 } mbedtls_camellia_context;
 
+} // namespace lbug_mbedtls
 #else /* MBEDTLS_CAMELLIA_ALT */
 #include "mbedtls/camellia_alt.h"
 #endif /* MBEDTLS_CAMELLIA_ALT */
@@ -63,6 +62,7 @@ typedef struct mbedtls_camellia_context {
  * \param ctx      The CAMELLIA context to be initialized.
  *                 This must not be \c NULL.
  */
+namespace lbug_mbedtls {
 void mbedtls_camellia_init(mbedtls_camellia_context* ctx);
 
 /**
@@ -122,6 +122,7 @@ int mbedtls_camellia_setkey_dec(mbedtls_camellia_context* ctx, const unsigned ch
 int mbedtls_camellia_crypt_ecb(mbedtls_camellia_context* ctx, int mode,
     const unsigned char input[16], unsigned char output[16]);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_CBC)
 /**
  * \brief          Perform a CAMELLIA-CBC buffer encryption/decryption operation.
@@ -151,8 +152,10 @@ int mbedtls_camellia_crypt_ecb(mbedtls_camellia_context* ctx, int mode,
  * \return         \c 0 if successful.
  * \return         A negative error code on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_camellia_crypt_cbc(mbedtls_camellia_context* ctx, int mode, size_t length,
     unsigned char iv[16], const unsigned char* input, unsigned char* output);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
 #if defined(MBEDTLS_CIPHER_MODE_CFB)
@@ -193,8 +196,10 @@ int mbedtls_camellia_crypt_cbc(mbedtls_camellia_context* ctx, int mode, size_t l
  * \return         \c 0 if successful.
  * \return         A negative error code on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_camellia_crypt_cfb128(mbedtls_camellia_context* ctx, int mode, size_t length,
     size_t* iv_off, unsigned char iv[16], const unsigned char* input, unsigned char* output);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CFB */
 
 #if defined(MBEDTLS_CIPHER_MODE_CTR)
@@ -272,9 +277,11 @@ int mbedtls_camellia_crypt_cfb128(mbedtls_camellia_context* ctx, int mode, size_
  * \return              \c 0 if successful.
  * \return              A negative error code on failure.
  */
+namespace lbug_mbedtls {
 int mbedtls_camellia_crypt_ctr(mbedtls_camellia_context* ctx, size_t length, size_t* nc_off,
     unsigned char nonce_counter[16], unsigned char stream_block[16], const unsigned char* input,
     unsigned char* output);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CTR */
 
 #if defined(MBEDTLS_SELF_TEST)
@@ -284,12 +291,13 @@ int mbedtls_camellia_crypt_ctr(mbedtls_camellia_context* ctx, size_t length, siz
  *
  * \return         0 if successful, or 1 if the test failed
  */
+namespace lbug_mbedtls {
 int mbedtls_camellia_self_test(int verbose);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* camellia.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

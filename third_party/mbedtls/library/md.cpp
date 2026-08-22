@@ -61,71 +61,86 @@
 #endif
 
 #if defined(MBEDTLS_MD5_C)
+namespace lbug_mbedtls {
 const mbedtls_md_info_t mbedtls_md5_info = {
     "MD5",
     MBEDTLS_MD_MD5,
     16,
     64,
 };
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_RIPEMD160_C)
+namespace lbug_mbedtls {
 const mbedtls_md_info_t mbedtls_ripemd160_info = {
     "RIPEMD160",
     MBEDTLS_MD_RIPEMD160,
     20,
     64,
 };
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_SHA1_C)
+namespace lbug_mbedtls {
 const mbedtls_md_info_t mbedtls_sha1_info = {
     "SHA1",
     MBEDTLS_MD_SHA1,
     20,
     64,
 };
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_SHA224_C)
+namespace lbug_mbedtls {
 const mbedtls_md_info_t mbedtls_sha224_info = {
     "SHA224",
     MBEDTLS_MD_SHA224,
     28,
     64,
 };
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_SHA256_C)
+namespace lbug_mbedtls {
 const mbedtls_md_info_t mbedtls_sha256_info = {
     "SHA256",
     MBEDTLS_MD_SHA256,
     32,
     64,
 };
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_SHA384_C)
+namespace lbug_mbedtls {
 const mbedtls_md_info_t mbedtls_sha384_info = {
     "SHA384",
     MBEDTLS_MD_SHA384,
     48,
     128,
 };
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_SHA512_C)
+namespace lbug_mbedtls {
 const mbedtls_md_info_t mbedtls_sha512_info = {
     "SHA512",
     MBEDTLS_MD_SHA512,
     64,
     128,
 };
+} // namespace lbug_mbedtls
 #endif
 
 /*
  * Reminder: update profiles in x509_crt.c when adding a new hash!
  */
+namespace lbug_mbedtls {
 static const int supported_digests[] = {
 
 #if defined(MBEDTLS_SHA512_C)
@@ -566,7 +581,9 @@ int mbedtls_md(const mbedtls_md_info_t* md_info, const unsigned char* input, siz
     }
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_FS_IO)
+namespace lbug_mbedtls {
 int mbedtls_md_file(const mbedtls_md_info_t* md_info, const char* path, unsigned char* output) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
     FILE* f;
@@ -604,8 +621,10 @@ cleanup:
 
     return (ret);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_FS_IO */
 
+namespace lbug_mbedtls {
 int mbedtls_md_hmac_starts(mbedtls_md_context_t* ctx, const unsigned char* key, size_t keylen) {
     int ret = MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
     unsigned char sum[MBEDTLS_MD_MAX_SIZE];
@@ -776,4 +795,5 @@ const char* mbedtls_md_get_name(const mbedtls_md_info_t* md_info) {
     return md_info->name;
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_MD_C */

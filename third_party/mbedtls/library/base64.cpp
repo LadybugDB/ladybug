@@ -41,6 +41,7 @@
 /*
  * Encode a buffer into base64 format
  */
+namespace lbug_mbedtls {
 int mbedtls_base64_encode(unsigned char* dst, size_t dlen, size_t* olen, const unsigned char* src,
     size_t slen) {
     size_t i, n;
@@ -194,8 +195,10 @@ int mbedtls_base64_decode(unsigned char* dst, size_t dlen, size_t* olen, const u
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST)
 
+namespace lbug_mbedtls {
 static const unsigned char base64_test_dec[64] = {0x24, 0x48, 0x6E, 0x56, 0x87, 0x62, 0x5A, 0xBD,
     0xBF, 0x17, 0xD9, 0xA2, 0xC4, 0x17, 0x1A, 0x01, 0x94, 0xED, 0x8F, 0x1E, 0x11, 0xB3, 0xD7, 0x09,
     0x0C, 0xB6, 0xE9, 0x10, 0x6F, 0x22, 0xEE, 0x13, 0xCA, 0xB3, 0x07, 0x05, 0x76, 0xC9, 0xFA, 0x31,
@@ -245,6 +248,7 @@ int mbedtls_base64_self_test(int verbose) {
     return (0);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
 #endif /* MBEDTLS_BASE64_C */

@@ -41,9 +41,6 @@
 
 #define MBEDTLS_DES_KEY_SIZE 8
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #if !defined(MBEDTLS_DES_ALT)
 // Regular implementation
@@ -56,6 +53,7 @@ extern "C" {
  *                 security risk. We recommend considering stronger ciphers
  *                 instead.
  */
+namespace lbug_mbedtls {
 typedef struct mbedtls_des_context {
     uint32_t MBEDTLS_PRIVATE(sk)[32]; /*!<  DES subkeys       */
 } mbedtls_des_context;
@@ -67,6 +65,7 @@ typedef struct mbedtls_des3_context {
     uint32_t MBEDTLS_PRIVATE(sk)[96]; /*!<  3DES subkeys      */
 } mbedtls_des3_context;
 
+} // namespace lbug_mbedtls
 #else /* MBEDTLS_DES_ALT */
 #include "des_alt.h"
 #endif /* MBEDTLS_DES_ALT */
@@ -80,6 +79,7 @@ typedef struct mbedtls_des3_context {
  *                 security risk. We recommend considering stronger ciphers
  *                 instead.
  */
+namespace lbug_mbedtls {
 void mbedtls_des_init(mbedtls_des_context* ctx);
 
 /**
@@ -247,6 +247,7 @@ MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_des_crypt_ecb(mbedtls_des_context* ctx, const unsigned char input[8],
     unsigned char output[8]);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_CBC)
 /**
  * \brief          DES-CBC buffer encryption/decryption
@@ -270,9 +271,11 @@ int mbedtls_des_crypt_ecb(mbedtls_des_context* ctx, const unsigned char input[8]
  *                 security risk. We recommend considering stronger ciphers
  *                 instead.
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_des_crypt_cbc(mbedtls_des_context* ctx, int mode, size_t length, unsigned char iv[8],
     const unsigned char* input, unsigned char* output);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
 /**
@@ -284,10 +287,12 @@ int mbedtls_des_crypt_cbc(mbedtls_des_context* ctx, int mode, size_t length, uns
  *
  * \return         0 if successful
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_des3_crypt_ecb(mbedtls_des3_context* ctx, const unsigned char input[8],
     unsigned char output[8]);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_CBC)
 /**
  * \brief          3DES-CBC buffer encryption/decryption
@@ -309,9 +314,11 @@ int mbedtls_des3_crypt_ecb(mbedtls_des3_context* ctx, const unsigned char input[
  *
  * \return         0 if successful, or MBEDTLS_ERR_DES_INVALID_INPUT_LENGTH
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_TYPICAL
 int mbedtls_des3_crypt_cbc(mbedtls_des3_context* ctx, int mode, size_t length, unsigned char iv[8],
     const unsigned char* input, unsigned char* output);
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
 /**
@@ -326,8 +333,10 @@ int mbedtls_des3_crypt_cbc(mbedtls_des3_context* ctx, int mode, size_t length, u
  *                 security risk. We recommend considering stronger ciphers
  *                 instead.
  */
+namespace lbug_mbedtls {
 void mbedtls_des_setkey(uint32_t SK[32], const unsigned char key[MBEDTLS_DES_KEY_SIZE]);
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_SELF_TEST)
 
 /**
@@ -335,13 +344,14 @@ void mbedtls_des_setkey(uint32_t SK[32], const unsigned char key[MBEDTLS_DES_KEY
  *
  * \return         0 if successful, or 1 if the test failed
  */
+namespace lbug_mbedtls {
 MBEDTLS_CHECK_RETURN_CRITICAL
 int mbedtls_des_self_test(int verbose);
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* des.h */
+
+using namespace lbug_mbedtls; // keep unqualified names for in-tree consumers

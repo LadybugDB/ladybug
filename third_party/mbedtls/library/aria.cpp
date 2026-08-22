@@ -65,20 +65,24 @@
 /* armcc5 --gnu defines __GNUC__ but doesn't support GNU's extended asm */
 #if defined(__GNUC__) && (!defined(__ARMCC_VERSION) || __ARMCC_VERSION >= 6000000) &&              \
     __ARM_ARCH >= 6
+namespace lbug_mbedtls {
 static inline uint32_t aria_p1(uint32_t x) {
     uint32_t r;
     __asm("rev16 %0, %1" : "=l"(r) : "l"(x));
     return (r);
 }
 #define ARIA_P1 aria_p1
+} // namespace lbug_mbedtls
 #elif defined(__ARMCC_VERSION) && __ARMCC_VERSION < 6000000 &&                                     \
     (__TARGET_ARCH_ARM >= 6 || __TARGET_ARCH_THUMB >= 3)
+namespace lbug_mbedtls {
 static inline uint32_t aria_p1(uint32_t x) {
     uint32_t r;
     __asm("rev16 r, x");
     return (r);
 }
 #define ARIA_P1 aria_p1
+} // namespace lbug_mbedtls
 #endif
 #endif /* arm */
 #if defined(__GNUC__) && defined(__i386__) || defined(__amd64__) || defined(__x86_64__)
@@ -112,28 +116,34 @@ static inline uint32_t aria_p1(uint32_t x) {
 /* armcc5 --gnu defines __GNUC__ but doesn't support GNU's extended asm */
 #if defined(__GNUC__) && (!defined(__ARMCC_VERSION) || __ARMCC_VERSION >= 6000000) &&              \
     __ARM_ARCH >= 6
+namespace lbug_mbedtls {
 static inline uint32_t aria_p3(uint32_t x) {
     uint32_t r;
     __asm("rev %0, %1" : "=l"(r) : "l"(x));
     return (r);
 }
 #define ARIA_P3 aria_p3
+} // namespace lbug_mbedtls
 #elif defined(__ARMCC_VERSION) && __ARMCC_VERSION < 6000000 &&                                     \
     (__TARGET_ARCH_ARM >= 6 || __TARGET_ARCH_THUMB >= 3)
+namespace lbug_mbedtls {
 static inline uint32_t aria_p3(uint32_t x) {
     uint32_t r;
     __asm("rev r, x");
     return (r);
 }
 #define ARIA_P3 aria_p3
+} // namespace lbug_mbedtls
 #endif
 #endif /* arm */
 #if defined(__GNUC__) && defined(__i386__) || defined(__amd64__) || defined(__x86_64__)
+namespace lbug_mbedtls {
 static inline uint32_t aria_p3(uint32_t x) {
     __asm("bswap %0" : "=r"(x) : "0"(x));
     return (x);
 }
 #define ARIA_P3 aria_p3
+} // namespace lbug_mbedtls
 #endif /* x86 gnuc */
 #endif /* MBEDTLS_HAVE_ASM && GNUC */
 #if !defined(ARIA_P3)
@@ -163,6 +173,7 @@ static inline uint32_t aria_p3(uint32_t x) {
  * half of App. B.1 in [1] in terms of 4-byte operators P1, P2, P3 and P4.
  * The implementation below uses only P1 and P2 as they are sufficient.
  */
+namespace lbug_mbedtls {
 static inline void aria_a(uint32_t* a, uint32_t* b, uint32_t* c, uint32_t* d) {
     uint32_t ta, tb, tc;
     ta = *b;                    // 4567
@@ -507,10 +518,12 @@ void mbedtls_aria_free(mbedtls_aria_context* ctx) {
     mbedtls_platform_zeroize(ctx, sizeof(mbedtls_aria_context));
 }
 
+} // namespace lbug_mbedtls
 #if defined(MBEDTLS_CIPHER_MODE_CBC)
 /*
  * ARIA-CBC buffer encryption/decryption
  */
+namespace lbug_mbedtls {
 int mbedtls_aria_crypt_cbc(mbedtls_aria_context* ctx, int mode, size_t length,
     unsigned char iv[MBEDTLS_ARIA_BLOCKSIZE], const unsigned char* input, unsigned char* output) {
     int i;
@@ -555,12 +568,14 @@ int mbedtls_aria_crypt_cbc(mbedtls_aria_context* ctx, int mode, size_t length,
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
 #if defined(MBEDTLS_CIPHER_MODE_CFB)
 /*
  * ARIA-CFB128 buffer encryption/decryption
  */
+namespace lbug_mbedtls {
 int mbedtls_aria_crypt_cfb128(mbedtls_aria_context* ctx, int mode, size_t length, size_t* iv_off,
     unsigned char iv[MBEDTLS_ARIA_BLOCKSIZE], const unsigned char* input, unsigned char* output) {
     unsigned char c;
@@ -607,12 +622,14 @@ int mbedtls_aria_crypt_cfb128(mbedtls_aria_context* ctx, int mode, size_t length
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CFB */
 
 #if defined(MBEDTLS_CIPHER_MODE_CTR)
 /*
  * ARIA-CTR buffer encryption/decryption
  */
+namespace lbug_mbedtls {
 int mbedtls_aria_crypt_ctr(mbedtls_aria_context* ctx, size_t length, size_t* nc_off,
     unsigned char nonce_counter[MBEDTLS_ARIA_BLOCKSIZE],
     unsigned char stream_block[MBEDTLS_ARIA_BLOCKSIZE], const unsigned char* input,
@@ -652,6 +669,7 @@ int mbedtls_aria_crypt_ctr(mbedtls_aria_context* ctx, size_t length, size_t* nc_
 
     return (0);
 }
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CTR */
 #endif /* !MBEDTLS_ARIA_ALT */
 
@@ -660,6 +678,7 @@ int mbedtls_aria_crypt_ctr(mbedtls_aria_context* ctx, size_t length, size_t* nc_
 /*
  * Basic ARIA ECB test vectors from RFC 5794
  */
+namespace lbug_mbedtls {
 static const uint8_t aria_test1_ecb_key[32] = // test key
     {
         0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, // 128 bit
@@ -686,8 +705,10 @@ static const uint8_t aria_test1_ecb_ct[3][MBEDTLS_ARIA_BLOCKSIZE] = // ciphertex
  * Mode tests from "Test Vectors for ARIA"  Version 1.0
  * http://210.104.33.10/ARIA/doc/ARIA-testvector-e.pdf
  */
+} // namespace lbug_mbedtls
 #if (defined(MBEDTLS_CIPHER_MODE_CBC) || defined(MBEDTLS_CIPHER_MODE_CFB) ||                       \
      defined(MBEDTLS_CIPHER_MODE_CTR))
+namespace lbug_mbedtls {
 static const uint8_t aria_test2_key[32] = {
     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, // 128 bit
     0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
@@ -745,16 +766,20 @@ static const uint8_t aria_test2_pt[48] = {
     0xbb,
     0xbb,
 };
+} // namespace lbug_mbedtls
 #endif
 
 #if (defined(MBEDTLS_CIPHER_MODE_CBC) || defined(MBEDTLS_CIPHER_MODE_CFB))
+namespace lbug_mbedtls {
 static const uint8_t aria_test2_iv[MBEDTLS_ARIA_BLOCKSIZE] = {
     0x0f, 0x1e, 0x2d, 0x3c, 0x4b, 0x5a, 0x69, 0x78, // same for CBC, CFB
     0x87, 0x96, 0xa5, 0xb4, 0xc3, 0xd2, 0xe1, 0xf0  // CTR has zero IV
 };
+} // namespace lbug_mbedtls
 #endif
 
 #if defined(MBEDTLS_CIPHER_MODE_CBC)
+namespace lbug_mbedtls {
 static const uint8_t aria_test2_cbc_ct[3][48] =       // CBC ciphertext
     {{0x49, 0xd6, 0x18, 0x60, 0xb1, 0x49, 0x09, 0x10, // 128-bit key
          0x9c, 0xef, 0x0d, 0x22, 0xa9, 0x26, 0x81, 0x34, 0xfa, 0xdf, 0x9f, 0xb2, 0x31, 0x51, 0xe9,
@@ -768,9 +793,11 @@ static const uint8_t aria_test2_cbc_ct[3][48] =       // CBC ciphertext
             0x55, 0xfd, 0xd2, 0x8d, 0xbc, 0x34, 0xe1, 0xab, 0x7b, 0x9b, 0x42, 0x43, 0x2a, 0xd8,
             0xb2, 0xef, 0xb9, 0x6e, 0x23, 0xb1, 0x3f, 0x0a, 0x6e, 0x52, 0xf3, 0x61, 0x85, 0xd5,
             0x0a, 0xd0, 0x02, 0xc5, 0xf6, 0x01, 0xbe, 0xe5, 0x49, 0x3f, 0x11, 0x8b}};
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CBC */
 
 #if defined(MBEDTLS_CIPHER_MODE_CFB)
+namespace lbug_mbedtls {
 static const uint8_t aria_test2_cfb_ct[3][48] =       // CFB ciphertext
     {{0x37, 0x20, 0xe5, 0x3b, 0xa7, 0xd6, 0x15, 0x38, // 128-bit key
          0x34, 0x06, 0xb0, 0x9f, 0x0a, 0x05, 0xa2, 0x00, 0xc0, 0x7c, 0x21, 0xe6, 0x37, 0x0f, 0x41,
@@ -784,9 +811,11 @@ static const uint8_t aria_test2_cfb_ct[3][48] =       // CFB ciphertext
             0x58, 0x8d, 0x4a, 0x7f, 0x09, 0x00, 0x96, 0x35, 0xf2, 0x8b, 0xb9, 0x3d, 0x8c, 0x31,
             0xf8, 0x70, 0xec, 0x1e, 0x0b, 0xdb, 0x08, 0x2b, 0x66, 0xfa, 0x40, 0x2d, 0xd9, 0xc2,
             0x02, 0xbe, 0x30, 0x0c, 0x45, 0x17, 0xd1, 0x96, 0xb1, 0x4d, 0x4c, 0xe1}};
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CFB */
 
 #if defined(MBEDTLS_CIPHER_MODE_CTR)
+namespace lbug_mbedtls {
 static const uint8_t aria_test2_ctr_ct[3][48] =       // CTR ciphertext
     {{0xac, 0x5d, 0x7d, 0xe8, 0x05, 0xa0, 0xbf, 0x1c, // 128-bit key
          0x57, 0xc8, 0x54, 0x50, 0x1a, 0xf6, 0x0f, 0xa1, 0x14, 0x97, 0xe2, 0xa3, 0x45, 0x19, 0xde,
@@ -800,6 +829,7 @@ static const uint8_t aria_test2_ctr_ct[3][48] =       // CTR ciphertext
             0x21, 0x17, 0x8b, 0x99, 0xc0, 0xa1, 0xf1, 0xb2, 0xf0, 0x69, 0x40, 0x25, 0x3f, 0x7b,
             0x30, 0x89, 0xe2, 0xa3, 0x0e, 0xa8, 0x6a, 0xa3, 0xc8, 0x8f, 0x59, 0x40, 0xf0, 0x5a,
             0xd7, 0xee, 0x41, 0xd7, 0x13, 0x47, 0xbb, 0x72, 0x61, 0xe3, 0x48, 0xf1}};
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_CIPHER_MODE_CFB */
 
 #define ARIA_SELF_TEST_IF_FAIL                                                                     \
@@ -816,6 +846,7 @@ static const uint8_t aria_test2_ctr_ct[3][48] =       // CTR ciphertext
 /*
  * Checkup routine
  */
+namespace lbug_mbedtls {
 int mbedtls_aria_self_test(int verbose) {
     int i;
     uint8_t blk[MBEDTLS_ARIA_BLOCKSIZE];
@@ -950,6 +981,7 @@ exit:
     return (ret);
 }
 
+} // namespace lbug_mbedtls
 #endif /* MBEDTLS_SELF_TEST */
 
 #endif /* MBEDTLS_ARIA_C */
