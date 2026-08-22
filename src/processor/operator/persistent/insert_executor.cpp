@@ -1,5 +1,8 @@
 #include "processor/operator/persistent/insert_executor.h"
 
+#include "catalog/catalog.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "common/exception/runtime.h"
 #include "processor/partition_routing.h"
 #include "transaction/transaction.h"
 
@@ -92,7 +95,27 @@ void NodeInsertExecutor::setNodeIDVectorToNonNull() const {
     info.nodeIDVector->setNull(info.nodeIDVector->state->getSelVector()[0], false);
 }
 
-storage::NodeTable* NodeInsertExecutor::resolveTargetTable() const {
+storage::NodeTable* NodeInsertExecutor::resolveTargetTable(main::ClientContext* context) {
+    if (tableInfo.partitionMethod == common::PartitionMethod::LIST &&
+        tableInfo.parentTableID != common::INVALID_TABLE_ID) {
+        // LIST parents grow their partition set on first sight of a new key value.
+        auto* keyVector = tableInfo.columnDataVectors[tableInfo.partitionKeyColumnID];
+        DASSERT(keyVector->state->getSelVector().getSelSize() == 1);
+        if (tableInfo.listRouter == nullptr) {
+            auto* transaction = Transaction::Get(*context);
+            auto* parent = catalog::Catalog::Get(*context)
+                               ->getTableCatalogEntry(transaction, tableInfo.parentTableID)
+                               ->ptrCast<catalog::NodeTableCatalogEntry>();
+            tableInfo.listRouter =
+                std::make_unique<ListPartitionRouter>(context, parent);
+        }
+        const auto pos = keyVector->state->getSelVector()[0];
+        if (keyVector->isNull(pos)) {
+            throw RuntimeException("Cannot insert into a LIST-partitioned table with a NULL "
+                                   "partition-key value.");
+        }
+        return tableInfo.listRouter->route(*keyVector, pos).table;
+    }
     if (tableInfo.partitionTables.empty()) {
         return tableInfo.table;
     }
@@ -103,8 +126,17 @@ storage::NodeTable* NodeInsertExecutor::resolveTargetTable() const {
     return tableInfo.partitionTables[partitionIndexes[0]];
 }
 
-storage::NodeTable* NodeInsertExecutor::resolveTableForNodeID(common::nodeID_t nodeID) const {
+storage::NodeTable* NodeInsertExecutor::resolveTableForNodeID(common::nodeID_t nodeID,
+    main::ClientContext* context) const {
     if (tableInfo.partitionTables.empty()) {
+        if (tableInfo.partitionMethod == common::PartitionMethod::LIST &&
+            tableInfo.parentTableID != common::INVALID_TABLE_ID) {
+            // LIST: the node may live in a partition created after this executor was cloned;
+            // resolve by the table ID recorded in the node ID itself.
+            return storage::StorageManager::Get(*context)
+                ->getTable(nodeID.tableID)
+                ->ptrCast<storage::NodeTable>();
+        }
         return tableInfo.table;
     }
     for (auto* table : tableInfo.partitionTables) {
@@ -120,7 +152,7 @@ nodeID_t NodeInsertExecutor::insert(main::ClientContext* context) {
         evaluator->evaluate();
     }
     auto transaction = Transaction::Get(*context);
-    auto* targetTable = resolveTargetTable();
+    auto* targetTable = resolveTargetTable(context);
     if (checkConflict(transaction, targetTable)) {
         return info.getNodeID();
     }
@@ -155,7 +187,7 @@ void NodeInsertExecutor::skipInsert(nodeID_t nodeID, main::ClientContext* contex
         return;
     }
     auto transaction = Transaction::Get(*context);
-    auto* table = resolveTableForNodeID(nodeID);
+    auto* table = resolveTableForNodeID(nodeID, context);
     storage::NodeTableScanState scanState{info.nodeIDVector, std::move(outputVectors),
         info.nodeIDVector->state};
     scanState.setToTable(transaction, table, std::move(columnIDs), {});

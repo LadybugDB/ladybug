@@ -6,6 +6,7 @@
 #include "expression_evaluator/expression_evaluator.h"
 #include "processor/operator/persistent/batch_insert.h"
 #include "processor/operator/persistent/index_builder.h"
+#include "processor/partition_routing.h"
 #include "storage/stats/table_stats.h"
 #include "storage/table/chunked_node_group.h"
 
@@ -96,10 +97,15 @@ struct NodeBatchInsertSharedState final : BatchInsertSharedState {
     std::vector<common::column_id_t> mainDataColumns;
 
     // One write target per partition subgraph (or exactly one for a non-partitioned table).
+    // LIST parents append to this vector as new partitions are discovered mid-COPY (under the
+    // router lock); workers mirror the growth in their own `NodeBatchInsertLocalState`.
     std::vector<NodeBatchInsertTarget> targets;
     // Index of the partition-key column among the evaluated column vectors; INVALID when the
     // write is not into a partitioned parent.
     common::column_id_t partitionKeyColumnIdx = common::INVALID_COLUMN_ID;
+    // Set only for LIST-partitioned parents: creates partitions on first sight of a new key
+    // value and serializes discovery across COPY workers.
+    std::unique_ptr<ListPartitionRouter> listRouter;
 
     std::shared_ptr<DuplicatePKSkipResult> duplicatePKSkipResult;
 
@@ -126,6 +132,11 @@ struct NodeBatchInsertLocalState final : BatchInsertLocalState {
 
     // Scratch buffer reused to hold the partition index of every row in the current chunk.
     std::vector<uint64_t> partitionIdxes;
+
+    // Producer tokens for each target's local index builder. LIST COPYs grow this alongside
+    // `targets` when a new partition is created mid-copy, so its builder joins the producer
+    // count like any pre-existing partition's.
+    std::vector<std::optional<ProducerToken>> indexProducerTokens;
 
     // Per-operator table stats for the non-partitioned (single target) path only. Partitioned
     // COPYs skip per-partition stats collection for now (stats are advisory, not required for
@@ -175,7 +186,15 @@ private:
         std::unique_ptr<storage::InMemChunkedNodeGroup>& nodeGroup,
         common::offset_t startIndexInGroup) const;
 
-    void copyToNodeGroup(transaction::Transaction* transaction, storage::MemoryManager* mm) const;
+    void copyToNodeGroup(transaction::Transaction* transaction, storage::MemoryManager* mm,
+        ExecutionContext* context) const;
+
+    // LIST-only: appends shared + local targets for partitions created mid-copy. `freshTables`
+    // maps the ordinal of every newly discovered partition to its table. Called under the router
+    // lock.
+    void growListTargets(ExecutionContext* context, NodeBatchInsertSharedState* nodeSharedState,
+        NodeBatchInsertLocalState* nodeLocalState,
+        const std::unordered_map<uint64_t, storage::NodeTable*>& freshTables) const;
 
     NodeBatchInsertErrorHandler createErrorHandler(ExecutionContext* context,
         storage::NodeTable* nodeTable, DuplicatePKSkipResult* duplicatePKSkipResult) const;

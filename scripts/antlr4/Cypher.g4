@@ -140,6 +140,8 @@ KEY : ( 'K' | 'k' ) ( 'E' | 'e' ) ( 'Y' | 'y' ) ;
 
 LIMIT : ( 'L' | 'l' ) ( 'I' | 'i' ) ( 'M' | 'm' ) ( 'I' | 'i' ) ( 'T' | 't' ) ;
 
+LIST : ( 'L' | 'l' ) ( 'I' | 'i' ) ( 'S' | 's' ) ( 'T' | 't' ) ;
+
 LOAD : ( 'L' | 'l' ) ( 'O' | 'o' ) ( 'A' | 'a' ) ( 'D' | 'd' ) ;
 
 LOGICAL : ( 'L' | 'l' ) ( 'O' | 'o' ) ( 'G' | 'g' ) ( 'I' | 'i' ) ( 'C' | 'c' ) ( 'A' | 'a' ) ( 'L' | 'l' ) ;
@@ -386,13 +388,17 @@ iC_CreateNodeTable
 // PostgreSQL-style partitioning. A node table can be declared as a partitioned parent,
 // where each partition is backed by its own subgraph (a hidden node table).
 iC_PartitionBy
-    : PARTITION SP BY SP ( iC_PartitionRange | iC_PartitionHash ) ;
+    : PARTITION SP BY SP ( iC_PartitionRange | iC_PartitionHash | iC_PartitionList ) ;
 
 iC_PartitionHash
     : HASH SP? '(' SP? oC_PropertyKeyName SP? ')' SP PARTITIONS SP oC_IntegerLiteral ;
 
 iC_PartitionRange
     : RANGE SP? '(' SP? oC_PropertyKeyName SP? ')' SP PARTITIONS SP oC_IntegerLiteral ;
+
+// List partitioning: one partition per distinct partition-key value, created on demand.
+iC_PartitionList
+    : LIST SP? '(' SP? oC_PropertyKeyName SP? ')' ;
 
 iC_CreateRelTable
     : CREATE SP REL SP TABLE ( SP GROUP )? ( SP iC_IfNotExists )? SP oC_SchemaName

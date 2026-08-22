@@ -303,12 +303,18 @@ Unblocks `PARTITION BY RANGE` (currently refused at DDL). Two shapes, in increas
   learned range go to an overflow partition or trigger resplitting). This is what makes
   `RANGE(ts)` place rows monotonically without asking the user for bounds.
 
-### 5. LIST partitioning (per-distinct-value partitions)
+### 5. LIST partitioning (per-distinct-value partitions) — IMPLEMENTED
 
-`PARTITION BY LIST (col)` where every distinct key value gets its own partition, created on demand:
-100 distinct cluster IDs → 100 partitions. Requires dynamic partition creation at write time
-(catalog entry + storage + WAL create record inside the inserting transaction) and a persisted
-value→partition map on the parent entry.
+`PARTITION BY LIST (col)` creates one partition per distinct key value on demand: 100 distinct
+cluster IDs → ~100 partitions. The first partition is created at DDL time (unkeyed, stays empty);
+every other partition is created at first sight of a new value, inside the writing transaction,
+via the same machinery as CREATE NODE TABLE (catalog entry + serial sequence + subgraph +
+storage + WAL create record), so rollback, WAL replay, and checkpointing behave like ordinary DDL.
+The encoded-key → child-table-ID map persists on the parent entry (storage version 47). Writes
+route through `ListPartitionRouter` (single-row inserts and COPY alike; COPY grows its target
+arrays under the router lock as workers discover values). Rel patterns bound against a LIST
+parent attach to the partitions that exist when they are bound; partitions created later need new
+rel tables (see roadmap item 2).
 
 ### 6. Row movement, ALTER propagation, and DETACH PARTITION
 

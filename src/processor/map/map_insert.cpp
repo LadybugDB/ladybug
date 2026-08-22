@@ -47,9 +47,13 @@ NodeInsertExecutor PlanMapper::getNodeInsertExecutor(const LogicalInsertInfo* bo
     }
     auto tableInfo = NodeTableInsertInfo(table, std::move(evaluators));
     // A partitioned parent is resolved into its partition subgraphs during binding. Route the
-    // row into the partition matching its partition-key value at insert time.
-    if (node.getNumEntries() > 1) {
-        const auto* firstEntry = node.getEntry(0)->ptrCast<NodeTableCatalogEntry>();
+    // row into the partition matching its partition-key value at insert time. HASH routes by
+    // modulo over the fixed partition set; LIST grows the set on demand via its router.
+    //
+    // A LIST parent starts with exactly one (unkeyed) partition, so it is detected through its
+    // parent link rather than the expanded-entry count.
+    const auto* firstEntry = node.getEntry(0)->ptrCast<NodeTableCatalogEntry>();
+    if (node.getNumEntries() > 1 || firstEntry->isPartitionChild()) {
         const auto parentID = firstEntry->getParentTableID();
         DASSERT(parentID != INVALID_TABLE_ID);
         auto transaction = transaction::Transaction::Get(*clientContext);
@@ -57,10 +61,15 @@ NodeInsertExecutor PlanMapper::getNodeInsertExecutor(const LogicalInsertInfo* bo
                                  ->getTableCatalogEntry(transaction, parentID)
                                  ->ptrCast<NodeTableCatalogEntry>();
         tableInfo.partitionKeyColumnID = parent->getPartitionColumnID();
-        tableInfo.partitionTables.reserve(node.getNumEntries());
-        for (auto i = 0u; i < node.getNumEntries(); ++i) {
-            tableInfo.partitionTables.push_back(
-                storageManager->getTable(node.getEntry(i)->getTableID())->ptrCast<NodeTable>());
+        tableInfo.partitionMethod =
+            static_cast<common::PartitionMethod>(*parent->getPartitionMethod());
+        tableInfo.parentTableID = parentID;
+        if (tableInfo.partitionMethod != common::PartitionMethod::LIST) {
+            tableInfo.partitionTables.reserve(node.getNumEntries());
+            for (auto i = 0u; i < node.getNumEntries(); ++i) {
+                tableInfo.partitionTables.push_back(
+                    storageManager->getTable(node.getEntry(i)->getTableID())->ptrCast<NodeTable>());
+            }
         }
     }
     return NodeInsertExecutor(std::move(info), std::move(tableInfo));
