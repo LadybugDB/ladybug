@@ -3,6 +3,7 @@
 #include "binder/bound_scan_source.h"
 #include "binder/expression_visitor.h"
 #include "catalog/catalog_entry/catalog_entry_type.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/enums/join_type.h"
 #include "common/enums/rel_direction.h"
 #include "common/enums/table_type.h"
@@ -309,6 +310,17 @@ void Planner::planNodeScan(uint32_t nodePos) {
                 node.get());
         }
     } else {
+        // Defensive: entries that provide their own scan function (e.g. remotely routed
+        // partition substitutes installed by the binder) can only be planned as the single
+        // entry of a pattern. The binder rejects mixes earlier; this guards against paths
+        // that assemble entry sets without going through that expansion.
+        for (auto* entry : node->getEntries()) {
+            if (entry->getType() == catalog::CatalogEntryType::NODE_TABLE_ENTRY &&
+                entry->ptrCast<catalog::NodeTableCatalogEntry>()->getScanFunction().has_value()) {
+                throw RuntimeException(
+                    "Cannot scan a mix of local tables and scan-function-backed entries.");
+            }
+        }
         appendScanNodeTable(node->getInternalID(), node->getTableIDs(), properties, plan,
             node.get());
     }

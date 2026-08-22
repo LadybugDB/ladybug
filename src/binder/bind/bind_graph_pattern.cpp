@@ -1,3 +1,6 @@
+#include <mutex>
+#include <unordered_map>
+
 #include "binder/binder.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/path_expression.h"
@@ -9,6 +12,7 @@
 #include "common/constants.h"
 #include "common/enums/rel_direction.h"
 #include "common/exception/binder.h"
+#include "common/partition_routing_hook.h"
 #include "common/types/types.h"
 #include "common/utils.h"
 #include "function/cast/functions/cast_from_string_functions.h"
@@ -775,12 +779,67 @@ static std::vector<TableCatalogEntry*> sortEntries(const table_catalog_entry_set
     return entries;
 }
 
+namespace {
+
+// Scan-substitute entries (local child clones carrying a wrapper scan function) must outlive
+// the bound statement that references them. Cache them per PartitionRef so repeated binds of
+// the same remote partition reuse one stable entry. Note: a wrapper that swaps its scan
+// function for an already-bound partition within one process lifetime will keep serving the
+// function captured at first bind.
+std::mutex& scanEntryMutex() {
+    static std::mutex mtx;
+    return mtx;
+}
+
+struct ScanEntryKey {
+    const void* database;
+    const void* scanFunction;
+    bool operator==(const ScanEntryKey& other) const {
+        return database == other.database && scanFunction == other.scanFunction;
+    }
+};
+
+struct ScanEntryKeyHasher {
+    uint64_t operator()(const ScanEntryKey& key) const {
+        return std::hash<const void*>{}(key.database) * 31 +
+               std::hash<const void*>{}(key.scanFunction);
+    }
+};
+
+std::unordered_map<ScanEntryKey, std::unique_ptr<TableCatalogEntry>, ScanEntryKeyHasher>&
+scanEntryCache() {
+    static std::unordered_map<ScanEntryKey, std::unique_ptr<TableCatalogEntry>, ScanEntryKeyHasher>
+        cache;
+    return cache;
+}
+
+// Entries are cached per (database, wrapper scan function) so repeated binds reuse one stable
+// substitute without leaking state across databases.
+TableCatalogEntry* retainPartitionedScanEntry(std::unique_ptr<TableCatalogEntry> entry,
+    main::ClientContext* clientContext, const void* scanFunctionIdentity) {
+    ScanEntryKey key{clientContext->getDatabase(), scanFunctionIdentity};
+    std::lock_guard lck{scanEntryMutex()};
+    auto [it, inserted] = scanEntryCache().emplace(key, std::move(entry));
+    return it->second.get();
+}
+
+} // namespace
+
 // A partitioned parent node table owns no physical storage; its records live across its
 // partition subgraphs. When a node label resolves to a partitioned parent we expand it into the
 // child partition tables so the (existing) multi-table node scan unions over every partition.
+//
+// If a routing wrapper (see common/partition_routing_hook.h) claims a partition via `locate`,
+// the local child owns no storage and cannot be scanned; instead the wrapper supplies a scan
+// function through `bindScan`, which the engine attaches to an internal clone of the child's
+// catalog entry (keeping schema, table ID, and partition lineage). Scanning a parent that
+// mixes claimed and unclaimed partitions cannot be planned, so it is rejected at bind time.
 static table_catalog_entry_set_t expandPartitionedNodeTables(catalog::Catalog* catalog,
-    const transaction::Transaction* transaction, const table_catalog_entry_set_t& entrySet) {
+    const transaction::Transaction* transaction, const table_catalog_entry_set_t& entrySet,
+    main::ClientContext* clientContext) {
     table_catalog_entry_set_t expanded;
+    bool anyClaimed = false;
+    std::string claimedParentName;
     for (auto entry : entrySet) {
         if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
             expanded.insert(entry);
@@ -791,10 +850,62 @@ static table_catalog_entry_set_t expandPartitionedNodeTables(catalog::Catalog* c
             expanded.insert(entry);
             continue;
         }
+        const auto* hooks = common::getPartitionRoutingHooks();
         for (auto childID : nodeEntry->getChildTableIDs()) {
             auto* child = catalog->getTableCatalogEntry(transaction, childID);
-            expanded.insert(child);
+            const auto ref = common::PartitionRef{nodeEntry->getTableID(),
+                child->ptrCast<NodeTableCatalogEntry>()->getPartitionIndex()};
+            common::PartitionHandle handle = nullptr;
+            if (hooks == nullptr || hooks->locate == nullptr ||
+                !hooks->locate(hooks->context, ref, &handle)) {
+                expanded.insert(child);
+                continue;
+            }
+            anyClaimed = true;
+            claimedParentName = nodeEntry->getName();
+            if (hooks->bindScan == nullptr) {
+                throw BinderException(
+                    std::format("Partition index {} of table {} is routed remotely, but the "
+                                "partition routing hooks do not provide bindScan.",
+                        ref.partitionIndex, nodeEntry->getName()));
+            }
+            common::PartitionScanSpec spec;
+            if (!hooks->bindScan(hooks->context, ref, handle, &spec)) {
+                throw BinderException(std::format("Partition routing hooks did not provide a "
+                                                  "scan for partition index {} of table {}.",
+                    ref.partitionIndex, nodeEntry->getName()));
+            }
+            if (spec.scanFunction == nullptr || spec.createBindData == nullptr) {
+                throw BinderException(std::format("Partition routing hooks provided an invalid "
+                                                  "scan for partition index {} of table {}.",
+                    ref.partitionIndex, nodeEntry->getName()));
+            }
+            // Attach the wrapper's scan to a clone of the child entry so the substitute keeps
+            // the parent's schema, table ID, and partition lineage.
+            auto patched = child->copy();
+            auto* patchedNode = patched->ptrCast<NodeTableCatalogEntry>();
+            patchedNode->setScanFunction(*spec.scanFunction);
+            patchedNode->setCreateBindDataFunc(
+                [createBindData = std::move(spec.createBindData)](main::ClientContext*,
+                    const std::string& nodeUniqueName) { return createBindData(nodeUniqueName); });
+            if (patchedNode->getBoundScanInfo(clientContext, "") == nullptr) {
+                throw BinderException(std::format(
+                    "The scan function provided by the partition routing hooks for partition "
+                    "index {} of table {} did not produce a valid scan.",
+                    ref.partitionIndex, nodeEntry->getName()));
+            }
+            // Partitions routed to the same wrapper scan share one substitute entry, so a
+            // fully-claimed parent collapses to a single entry in the set below.
+            expanded.insert(
+                retainPartitionedScanEntry(std::move(patched), clientContext, spec.scanFunction));
         }
+    }
+    if (anyClaimed && expanded.size() > 1) {
+        throw BinderException(std::format(
+            "Table {}: scanning a mix of locally stored and remotely routed partitions is not "
+            "supported. A routing wrapper must claim either all or none of a scanned parent's "
+            "partitions and expose them as one consolidated scan entry.",
+            claimedParentName));
     }
     return expanded;
 }
@@ -851,7 +962,7 @@ Binder::bindNodeTableEntries(const std::vector<std::string>& tableNames) const {
         }
     }
     // Expand partitioned parents into their partition subgraphs for scanning.
-    entrySet = expandPartitionedNodeTables(catalog, transaction, entrySet);
+    entrySet = expandPartitionedNodeTables(catalog, transaction, entrySet, clientContext);
     return {sortEntries(entrySet), std::move(dbNames)};
 }
 

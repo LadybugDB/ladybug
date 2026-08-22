@@ -25,10 +25,13 @@ struct SortedByProperty {
     static SortedByProperty deserialize(common::Deserializer& deserializer);
 };
 
-// Callback to create bind data for foreign tables
-// This allows extensions to provide bind data creation without core needing to know extension types
-using CreateBindDataFunc =
-    std::function<std::unique_ptr<function::TableFuncBindData>(main::ClientContext* context)>;
+// Callback to create bind data for foreign tables.
+// `nodeUniqueName` is the unique expression name of the node pattern being bound (empty for
+// standalone function binds). Implementations must name their output columns
+// "<nodeUniqueName>.<property>" and "<nodeUniqueName>._ID" so planner schema lookups on node
+// property expressions resolve against the scan output.
+using CreateBindDataFunc = std::function<std::unique_ptr<function::TableFuncBindData>(
+    main::ClientContext* context, const std::string& nodeUniqueName)>;
 
 // Tag for shadow table constructor
 struct ShadowTag {};
@@ -90,8 +93,13 @@ public:
     void setSortedByProperties(std::vector<SortedByProperty> properties) {
         sortedByProperties = std::move(properties);
     }
-    std::optional<function::TableFunction> getScanFunction() const override;
-    const CreateBindDataFunc& getCreateBindDataFunc() const { return createBindDataFunc; }
+    std::optional<function::TableFunction> getScanFunction() const override { return scanFunction; }
+    void setScanFunction(function::TableFunction scanFunction_) {
+        scanFunction = std::move(scanFunction_);
+    }
+    void setCreateBindDataFunc(CreateBindDataFunc createBindDataFunc_) {
+        createBindDataFunc = std::move(createBindDataFunc_);
+    }
     const std::string& getForeignDatabaseName() const { return foreignDatabaseName; }
 
     void setReferencedEntry(TableCatalogEntry* entry) { referencedEntry = entry; }
