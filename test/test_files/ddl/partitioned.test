@@ -38,20 +38,11 @@ Orders_p3
 2
 
 -CASE PartitionedCreateRange
+# RANGE partitioning is blocked until dynamic, distribution-aware splitting exists: refuse the
+# DDL instead of silently falling back to hash routing.
 -STATEMENT CREATE NODE TABLE Events (id INT64 PRIMARY KEY, ts TIMESTAMP, value DOUBLE) PARTITION BY RANGE (ts) PARTITIONS 5;
----- 1
-Table Events has been created.
--STATEMENT CREATE (:Events_p2 {id: 1, ts: timestamp('2024-03-01 10:00:00'), value: 1.5});
----- ok
--STATEMENT CREATE (:Events_p4 {id: 2, ts: timestamp('2024-07-15 08:30:00'), value: 2.5});
----- ok
--STATEMENT MATCH (e:Events) RETURN e.id ORDER BY e.id;
----- 2
-1
-2
--STATEMENT MATCH (e:Events) WHERE e.value > 2 RETURN e.id;
----- 1
-2
+---- error
+Binder exception: RANGE partitioning is not implemented yet. RANGE requires partition bounds derived from the actual value distribution, which is future work. Use PARTITION BY HASH instead.
 
 -CASE PartitionedWriteRouting
 -STATEMENT CREATE NODE TABLE T (id INT64 PRIMARY KEY, k STRING) PARTITION BY HASH (k) PARTITIONS 3;
@@ -95,7 +86,7 @@ Binder exception: Partition column nope does not exist. A partition column must 
 Binder exception: Number of partitions must be greater than 0.
 
 -CASE PartitionedDropCascades
--STATEMENT CREATE NODE TABLE P (id INT64 PRIMARY KEY, k STRING) PARTITION BY RANGE (id) PARTITIONS 2;
+-STATEMENT CREATE NODE TABLE P (id INT64 PRIMARY KEY, k STRING) PARTITION BY HASH (id) PARTITIONS 2;
 ---- 1
 Table P has been created.
 -STATEMENT CREATE (:P_p0 {id: 1, k: 'a'});

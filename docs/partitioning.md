@@ -9,8 +9,10 @@ protocol such as ADBC).
 
 > Status: **v1 (foundational).** DDL, catalog, storage, persistence, drop-cascade and query
 > (read over all partitions) are implemented. Write-routing (COPY / CREATE / MERGE into the
-> parent) is implemented for HASH partitioning; RANGE reuses the same deterministic hash routing
-> until declarative range bounds land. Predicate-based partition pruning is still future work.
+> parent) is implemented for HASH partitioning. **`PARTITION BY RANGE` is refused at DDL time**:
+> real range partitioning must derive partition bounds from the actual value distribution, which
+> is not implemented yet — refusing beats silently falling back to hash routing. Predicate-based
+> partition pruning is still future work.
 >
 > Invariant-protection implemented in response to design review: partitions cannot be dropped or
 > altered individually, `DROP GRAPH` refuses node-table subgraphs, dropping a partitioned table is
@@ -130,14 +132,10 @@ CREATE NODE TABLE Orders (
     region STRING,
     amount INT64
 ) PARTITION BY HASH (region) PARTITIONS 4;
-
--- Range partitioning (bounds are derived; see design below).
-CREATE NODE TABLE Events (
-    id    INT64 PRIMARY KEY,
-    ts    TIMESTAMP,
-    value DOUBLE
-) PARTITION BY RANGE (ts) PARTITIONS 5;
 ```
+
+The grammar still accepts `PARTITION BY RANGE (<col>) PARTITIONS n`, but the binder refuses it:
+RANGE partitioning is not implemented yet (see the status note above).
 
 The grammar extension lives in `src/antlr4/Cypher.g4`:
 
@@ -233,10 +231,8 @@ Because each partition is a real node table, you can also address a specific par
 
 * **Write-routing.** `COPY INTO <parent>`, `CREATE (n:<parent>)` and `MERGE` against a
   partitioned parent are routed into the partition matching each row's partition-key value. HASH
-  partitions use the same value hashing as the built-in `HASH()` function; RANGE partitions
-  currently reuse that hash (there are no declarative bounds yet), which keeps writes
-  deterministic and findable because parent reads union over all partitions. Primary-key
-  uniqueness is enforced per partition, not across the parent.
+  partitions use the same value hashing as the built-in `HASH()` function. Primary-key uniqueness
+  is enforced per partition, not across the parent.
 * **No partition pruning on predicates.** A `WHERE` on the partition key is not yet used to skip
   partitions; all partitions are scanned and unioned.
 * **`ALTER` is limited to `RENAME`.** Renaming the parent renames its `<parent>_p<i>` partitions
@@ -246,8 +242,9 @@ Because each partition is a real node table, you can also address a specific par
   partitions; delete and re-insert instead.
 * **Rels attach per partition.** `FROM <parent>` expands to one pair per partition; rel pattern
   writes against the parent are refused (use a specific partition) until runtime rel routing lands.
-* **Range bounds are not declarative.** `PARTITIONS n` builds the range split; per-partition bound
-  lists (`PARTITION p0 VALUES < (...), p1 VALUES FROM ... `) are future work.
+* **RANGE is refused at DDL time.** Meaningful range partitioning needs bounds derived from the
+  actual value distribution (declarative bounds or data-driven splitting); a static stand-in would
+  misplace rows silently. See the roadmap.
 * **No remote partitions yet.** Only local (in-process) partition subgraphs exist today.
 
 ## Roadmap
@@ -258,17 +255,23 @@ The canonical path is `COPY INTO Orders FROM file`. Implemented:
 
 * `BoundCopyFromInfo`/`NodeBatchInsertInfo` carry the partition method, partition-key column id,
   and the child table list (`common::NodePartitionWriteInfo`).
-* `NodeBatchInsert` evaluates each row's partition-key value, computes `hash(value) % n` (for both
-  HASH and, for now, RANGE), and routes consecutive same-partition runs into the correct child
-  `NodeTable`'s node group. Each child is an ordinary `NodeTable`, so its own WAL/MVCC machinery
-  (`appendToLastNodeGroup` + commit/undo records) applies the routed write.
+* `NodeBatchInsert` evaluates each row's partition-key value, computes `hash(value) % n`, and
+  routes consecutive same-partition runs into the correct child `NodeTable`'s node group. Each
+  child is an ordinary `NodeTable`, so its own WAL/MVCC machinery (`appendToLastNodeGroup` +
+  commit/undo records) applies the routed write.
 * Primary-key duplicate detection is per partition (each child has its own PK index), matching how
   a direct `COPY` into a partition subgraph behaves.
 * Single-row `CREATE`/`MERGE` routes at runtime in `NodeInsertExecutor`: the partition key is
   evaluated, the matching child table is selected, and the row is inserted there.
 
-Remaining for RANGE: replace the hash stand-in with real bound comparison once declarative range
-bounds (`PARTITION p0 VALUES < (...) ...`) are implemented.
+### 1b. RANGE partitioning (not implemented; DDL refuses it)
+
+Real RANGE needs bounds that reflect the data: either user-declared bounds
+(`PARTITION p0 VALUES < (...)`) or dynamic, distribution-aware splitting of the input (min/max or
+equi-depth histograms computed during COPY, persisted with the parent). Equal splits of the *type
+domain* were considered and rejected: every realistic timestamp lands in one middle bucket.
+Until one of those exists, the binder refuses `PARTITION BY RANGE` instead of silently routing by
+hash.
 
 ### 2. Rel writes against the parent
 
@@ -284,18 +287,30 @@ Push a predicate on the partition column into the scan: for HASH only equality
 filter-push-down / scan selection (`scan->setNumPartitionsToScan`, etc.) once the partition bounds
 are materialized.
 
-### 4. Declarative range bounds
+### 4. RANGE partitioning: dynamic, distribution-aware splits
 
-Extend the grammar to accept per-partition bounds:
+Unblocks `PARTITION BY RANGE` (currently refused at DDL). Two shapes, in increasing ambition:
 
-```cypher
-CREATE NODE TABLE Events (...) PARTITION BY RANGE (ts) (
-    PARTITION p2023 VALUES < DATE '2024-01-01',
-    PARTITION p2024 VALUES >= DATE '2024-01-01' AND < DATE '2025-01-01'
-);
-```
+* **Declarative bounds** — extend the grammar to accept per-partition bounds:
+  ```cypher
+  CREATE NODE TABLE Events (...) PARTITION BY RANGE (ts) (
+      PARTITION p2023 VALUES < DATE '2024-01-01',
+      PARTITION p2024 VALUES >= DATE '2024-01-01' AND < DATE '2025-01-01'
+  );
+  ```
+* **Dynamic splitting** — derive bounds from the actual value distribution (min/max or equi-depth
+  histograms computed over the COPY input, persisted with the parent; late rows outside the
+  learned range go to an overflow partition or trigger resplitting). This is what makes
+  `RANGE(ts)` place rows monotonically without asking the user for bounds.
 
-### 5. Row movement, ALTER propagation, and DETACH PARTITION
+### 5. LIST partitioning (per-distinct-value partitions)
+
+`PARTITION BY LIST (col)` where every distinct key value gets its own partition, created on demand:
+100 distinct cluster IDs → 100 partitions. Requires dynamic partition creation at write time
+(catalog entry + storage + WAL create record inside the inserting transaction) and a persisted
+value→partition map on the parent entry.
+
+### 6. Row movement, ALTER propagation, and DETACH PARTITION
 
 Lift the v1 restrictions in dependency order:
 
@@ -308,7 +323,7 @@ Lift the v1 restrictions in dependency order:
   table and back, the PostgreSQL-style escape hatch that today is approximated by "drop the
   parent"; also revisit cascade-dropping dependent rels at that point.
 
-### 6. Remote partitions over a columnar protocol (ADBC / Arrow Flight)
+### 7. Remote partitions over a columnar protocol (ADBC / Arrow Flight)
 
 Each partition subgraph already *is* a `NodeTableCatalogEntry`. A remote partition would be a
 flavor whose storage lives on a server:
