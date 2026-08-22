@@ -7,6 +7,7 @@
 #include "common/constants.h"
 #include "common/enums/storage_format.h"
 #include "common/file_system/virtual_file_system.h"
+#include "common/partition_routing_hook.h"
 #include "common/random_engine.h"
 #include "common/serializer/in_mem_file_writer.h"
 #include "main/attached_database.h"
@@ -141,8 +142,39 @@ void StorageManager::recover(main::ClientContext& clientContext, bool throwOnWal
     walReplayer->replay(throwOnWalReplayFailure, enableChecksums);
 }
 
+namespace {
+
+// True if the entry is a partition subgraph whose storage is routed elsewhere by
+// an installed PartitionRoutingHooks. Such partitions keep full catalog metadata
+// but own no local table/WAL/checkpoint state.
+bool isRemotelyRoutedPartition(const catalog::TableCatalogEntry* entry) {
+    if (entry->getType() != CatalogEntryType::NODE_TABLE_ENTRY) {
+        return false;
+    }
+    auto* nodeEntry = entry->constPtrCast<catalog::NodeTableCatalogEntry>();
+    if (!nodeEntry->isPartitionChild()) {
+        return false;
+    }
+    const auto* hooks = common::getPartitionRoutingHooks();
+    if (hooks == nullptr || hooks->locate == nullptr) {
+        return false;
+    }
+    common::PartitionHandle handle = nullptr;
+    return hooks->locate(hooks->context,
+        common::PartitionRef{nodeEntry->getParentTableID(), nodeEntry->getPartitionIndex()},
+        &handle);
+}
+
+} // namespace
+
 void StorageManager::createNodeTable(NodeTableCatalogEntry* entry, main::ClientContext* context) {
     tableNameCache[entry->getTableID()] = entry->getName();
+
+    // A partition subgraph claimed by the routing wrapper owns no local storage:
+    // no table object, no WAL records, no checkpoint work.
+    if (isRemotelyRoutedPartition(entry)) {
+        return;
+    }
 
     if (entry->getStorageFormat() != StorageFormat::NONE) {
         if (entry->getStorageFormat() == StorageFormat::ICEBUG_DISK) {
@@ -357,6 +389,10 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& cat
 
     std::shared_lock lck{mtx};
     for (const auto entry : nodeTableEntries) {
+        // Partition subgraphs claimed by the routing wrapper hold no local state.
+        if (isRemotelyRoutedPartition(entry)) {
+            continue;
+        }
         if (!tables.contains(entry->getTableID())) {
             throw RuntimeException(std::format(
                 "Checkpoint failed: table {} not found in storage manager.", entry->getName()));
@@ -392,6 +428,10 @@ bool StorageManager::checkpoint(main::ClientContext* context, const Catalog& cat
 
     std::shared_lock lck{mtx};
     for (const auto entry : nodeTableEntries) {
+        // Partition subgraphs claimed by the routing wrapper hold no local state.
+        if (isRemotelyRoutedPartition(entry)) {
+            continue;
+        }
         if (!tables.contains(entry->getTableID())) {
             throw RuntimeException(std::format(
                 "Checkpoint failed: table {} not found in storage manager.", entry->getName()));
@@ -445,6 +485,10 @@ void StorageManager::rollbackCheckpoint(const Catalog& catalog) {
             tableEntry->ptrCast<NodeTableCatalogEntry>()->isPartitioned()) {
             continue;
         }
+        // Remotely routed partition subgraphs hold no local state.
+        if (isRemotelyRoutedPartition(tableEntry)) {
+            continue;
+        }
         DASSERT(tables.contains(tableEntry->getTableID()));
         tables.at(tableEntry->getTableID())->rollbackCheckpoint();
     }
@@ -474,6 +518,10 @@ void StorageManager::serialize(const Catalog& catalog, Serializer& ser) {
     ser.writeDebuggingInfo("num_node_tables");
     ser.write<uint64_t>(nodeTableEntries.size());
     for (const auto tableEntry : nodeTableEntries) {
+        // Remotely routed partition subgraphs hold no local state to serialize.
+        if (isRemotelyRoutedPartition(tableEntry)) {
+            continue;
+        }
         DASSERT(tables.contains(tableEntry->getTableID()));
         ser.writeDebuggingInfo("table_id");
         ser.write<table_id_t>(tableEntry->getTableID());
@@ -510,6 +558,10 @@ void StorageManager::serialize(const Catalog& catalog, const Transaction& snapsh
     ser.writeDebuggingInfo("num_node_tables");
     ser.write<uint64_t>(nodeTableEntries.size());
     for (const auto tableEntry : nodeTableEntries) {
+        // Remotely routed partition subgraphs hold no local state to serialize.
+        if (isRemotelyRoutedPartition(tableEntry)) {
+            continue;
+        }
         DASSERT(tables.contains(tableEntry->getTableID()));
         ser.writeDebuggingInfo("table_id");
         ser.write<table_id_t>(tableEntry->getTableID());

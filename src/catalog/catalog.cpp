@@ -12,6 +12,7 @@
 #include "catalog/catalog_entry/type_catalog_entry.h"
 #include "common/exception/catalog.h"
 #include "common/exception/runtime.h"
+#include "common/partition_routing_hook.h"
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
 #include "extension/extension_manager.h"
@@ -28,6 +29,42 @@ using namespace lbug::transaction;
 
 namespace lbug {
 namespace catalog {
+
+namespace {
+
+// Notify the routing wrapper (if any) that a partition subgraph entry now exists
+// or is about to be dropped, so it can provision/decommission the remote copy.
+// Creation notifications fire for every partition regardless of placement - this is
+// how a wrapper learns about newly provisioned partitions and decides where they
+// live; later locate() calls are answered from the wrapper's own records.
+void notifyPartitionCreated(common::table_id_t parentTableID, uint64_t partitionIndex) {
+    const auto* hooks = common::getPartitionRoutingHooks();
+    if (hooks == nullptr || hooks->onPartitionCreate == nullptr) {
+        return;
+    }
+    common::PartitionHandle handle = nullptr;
+    if (hooks->locate != nullptr) {
+        hooks->locate(hooks->context, common::PartitionRef{parentTableID, partitionIndex}, &handle);
+    }
+    hooks->onPartitionCreate(hooks->context, common::PartitionRef{parentTableID, partitionIndex},
+        handle);
+}
+
+void notifyPartitionDropped(common::table_id_t parentTableID, uint64_t partitionIndex) {
+    const auto* hooks = common::getPartitionRoutingHooks();
+    if (hooks == nullptr || hooks->onPartitionDrop == nullptr) {
+        return;
+    }
+    common::PartitionHandle handle = nullptr;
+    if (hooks->locate != nullptr &&
+        hooks->locate(hooks->context, common::PartitionRef{parentTableID, partitionIndex},
+            &handle)) {
+        hooks->onPartitionDrop(hooks->context, common::PartitionRef{parentTableID, partitionIndex},
+            handle);
+    }
+}
+
+} // namespace
 
 Catalog::Catalog() : version{0} {
     initCatalogSets();
@@ -185,6 +222,8 @@ void Catalog::dropTableEntry(Transaction* transaction, const TableCatalogEntry* 
             auto* child = getTableCatalogEntry(transaction, childID);
             dropAllIndexes(transaction, childID);
             dropSerialSequence(transaction, child);
+            notifyPartitionDropped(nodeEntry->getTableID(),
+                child->ptrCast<NodeTableCatalogEntry>()->getPartitionIndex());
             if (tables->containsEntry(transaction, child->getName())) {
                 tables->dropEntry(transaction, child->getName(), child->getOID());
             } else {
@@ -668,6 +707,10 @@ CatalogEntry* Catalog::createNodeTableEntry(Transaction* transaction,
             // Each partition subgraph is a node table and therefore its own subgraph.
             createNodeTableSubgraph(transaction, childName);
             parent->addChildTableID(childOID);
+            // Let the routing wrapper provision remote storage for this partition.
+            // Renames are not reported: PartitionRef is ID-based and IDs survive
+            // renames.
+            notifyPartitionCreated(parent->getTableID(), i);
         }
     }
     return parentEntry;
