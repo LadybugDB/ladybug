@@ -32,8 +32,8 @@ struct PropertiesBindData : public FunctionBindData {
 
     PropertiesBindData(common::LogicalType dataType,
         std::vector<common::struct_field_idx_t> fieldIndices)
-        : FunctionBindData{std::move(dataType)}, childIdx{0}, fieldIndices{
-                                                                  std::move(fieldIndices)} {}
+        : FunctionBindData{std::move(dataType)}, childIdx{0},
+          fieldIndices{std::move(fieldIndices)} {}
 
     inline std::unique_ptr<FunctionBindData> copy() const override {
         if (!fieldIndices.empty()) {
