@@ -35,3 +35,18 @@ Alice
 [Alice,Bob]|[2021-06-30]
 [Alice,Carol]|[2021-06-30]
 [Alice,Dan]|[2021-06-30]
+
+-LOG PropertiesNullNodeOptionalMatch
+-STATEMENT OPTIONAL MATCH (p:person) WHERE p.ID = 999 RETURN properties(p), properties(p) IS NULL
+---- 1
+|True
+
+-LOG PropertiesNullRelOptionalMatch
+-STATEMENT MATCH (a:person) WHERE a.ID = 0 OPTIONAL MATCH (a)-[e:knows]->(b:person) WHERE b.ID = 999 RETURN properties(e), properties(e) IS NULL
+---- 1
+|True
+
+-LOG PropertiesNullStruct
+-STATEMENT RETURN properties(cast(null, "STRUCT(a INT64, b STRING)")) IS NULL
+---- 1
+True

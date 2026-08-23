@@ -89,11 +89,17 @@ static void singleArgCompileFunc(FunctionBindData* bindData,
     const std::vector<std::shared_ptr<ValueVector>>& parameters,
     std::shared_ptr<ValueVector>& result) {
     DASSERT(parameters[0]->dataType.getPhysicalType() == PhysicalTypeID::STRUCT);
-    auto& propertiesBindData = bindData->cast<PropertiesBindData>();
-    for (auto i = 0u; i < propertiesBindData.fieldIndices.size(); ++i) {
-        auto inFieldVector =
-            StructVector::getFieldVector(parameters[0].get(), propertiesBindData.fieldIndices[i]);
-        if (inFieldVector->state == result->state) {
+    // Contract:
+    // If parameters[0] and result share the same DataChunkState (the common unflat pipeline case),
+    // child vectors can be referenced directly without copying property data.
+    // In this case, singleArgExecFunc only propagates the outer null mask.
+    // Otherwise, singleArgExecFunc performs a flat-to-unflat copy of all property values and null
+    // masks.
+    if (parameters[0]->state.get() == result->state.get()) {
+        auto& propertiesBindData = bindData->cast<PropertiesBindData>();
+        for (auto i = 0u; i < propertiesBindData.fieldIndices.size(); ++i) {
+            auto inFieldVector = StructVector::getFieldVector(parameters[0].get(),
+                propertiesBindData.fieldIndices[i]);
             StructVector::referenceVector(result.get(), i, inFieldVector);
         }
     }
@@ -119,10 +125,44 @@ static void singleArgExecFunc(const std::vector<std::shared_ptr<common::ValueVec
     common::SelectionVector* resultSelVector, void* dataPtr) {
     auto* bindData = static_cast<PropertiesBindData*>(dataPtr);
     auto* parameterSelVector = parameterSelVectors[0];
-    for (auto i = 0u; i < bindData->fieldIndices.size(); i++) {
-        if (parameterSelVector == resultSelVector) {
-            continue;
+
+    // Reference path: child vectors are already referenced by singleArgCompileFunc.
+    // We only need to propagate the outer null mask.
+    if (parameterSelVector == resultSelVector) {
+        if (parameters[0]->state->isFlat()) {
+            auto pos = (*parameterSelVector)[0];
+            result.setNull(pos, parameters[0]->isNull(pos));
+        } else {
+            if (parameters[0]->hasNoNullsGuarantee()) {
+                result.setAllNonNull();
+            } else if (parameterSelVector->isUnfiltered()) {
+                result.setNullFromBits(parameters[0]->getNullMask().getData(), 0, 0,
+                    parameterSelVector->getSelSize());
+            } else {
+                for (auto i = 0u; i < parameterSelVector->getSelSize(); i++) {
+                    auto pos = (*parameterSelVector)[i];
+                    result.setNull(pos, parameters[0]->isNull(pos));
+                }
+            }
         }
+        return;
+    }
+
+    // Copy path (e.g. flat parameter into unflat result):
+    DASSERT(parameters[0]->state->isFlat());
+    auto paramPos = (*parameterSelVector)[0];
+    auto isParamNull = parameters[0]->isNull(paramPos);
+    if (result.state->isFlat()) {
+        auto pos = (*resultSelVector)[0];
+        result.setNull(pos, isParamNull);
+    } else {
+        for (auto i = 0u; i < resultSelVector->getSelSize(); i++) {
+            auto pos = (*resultSelVector)[i];
+            result.setNull(pos, isParamNull);
+        }
+    }
+
+    for (auto i = 0u; i < bindData->fieldIndices.size(); i++) {
         auto inFieldVector =
             StructVector::getFieldVector(parameters[0].get(), bindData->fieldIndices[i]);
         auto outFieldVector = StructVector::getFieldVector(&result, i);
