@@ -135,7 +135,7 @@ The first difference is how the queries get displayed. In the `refreshLine()` fu
 
 Once truncation is done, continue markers are added. These are visual symbols added to the front of the line to indicate what line you are currently adding and make the terminal look nicer. Once the continuation markers are added, the highlight callback from before is called. Again, a buffer is used to clear the screen and write all changes at once.
 
-For multiline, better highlighting is implemented due to the whole query being avaiable. Multiline comments and errors are able to be highlighted in this mode. After the query is tokenized, the highlight errors function is called. This function iterates over every character and checks for comments, unclosed strings, and unclosed brackets. If any errors are found, the highlighting is changed to indicate an error. Highlighting then continues as normal.
+For multiline, better highlighting is implemented due to the whole query being available. Multiline comments and errors are able to be highlighted in this mode. After the query is tokenized, the highlight errors function is called. This function iterates over every character and checks for comments, unclosed strings, and unclosed brackets. If any errors are found, the highlighting is changed to indicate an error. Highlighting then continues as normal.
 
 For history, the newlines and comments do not need to be ignored as the shell is able to display those characters. Currently, history search is still only `:singleline` mode so when `ctrl_r` is pressed, newlines and returns are converted into spaces. However, when the search is selected, these spaces return back into newlines and are properly displayed by `refreshLine()`.
 
