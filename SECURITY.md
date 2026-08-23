@@ -14,4 +14,4 @@ To report a security issue, please email [security@ladybugdb.com](mailto:securit
 
 ## Threat Model
 
-Ladybug's current threat model is documented in [security/threat-model.md](security/threat-model.md).
+Ladybug's current threat model is documented in [security/threat_model.md](security/threat_model.md).
