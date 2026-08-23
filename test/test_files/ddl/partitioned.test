@@ -268,3 +268,54 @@ Table R has been created.
 -STATEMENT MATCH (a:Orders)-[r:R]->(b:Orders) RETURN a.id, b.id, r.w ORDER BY r.w;
 ---- 1
 2|3|20
+-CASE PartitionedListDynamic
+-STATEMENT CREATE NODE TABLE L (id INT64, cluster INT64, PRIMARY KEY(id)) PARTITION BY LIST (cluster);
+---- ok
+-STATEMENT CREATE (:L {id: 1, cluster: 100});
+---- ok
+-STATEMENT CREATE (:L {id: 2, cluster: 200});
+---- ok
+-STATEMENT CREATE (:L {id: 3, cluster: 100});
+---- ok
+-STATEMENT CREATE (:L {id: 4, cluster: 300});
+---- ok
+-STATEMENT CALL show_tables() RETURN name ORDER BY name;
+---- 5
+L
+L_p0
+L_p1
+L_p2
+L_p3
+# Every distinct value got its own partition; rows are findable through the parent.
+-STATEMENT MATCH (n:L) RETURN n.id ORDER BY n.id;
+---- 4
+1
+2
+3
+4
+# Same value reuses its partition.
+-STATEMENT MATCH (n:L_p1) RETURN n.id ORDER BY n.id;
+---- 2
+1
+3
+# Routing survives reopen (catalog persistence + WAL replay).
+-RELOADDB
+-STATEMENT CALL show_tables() RETURN name ORDER BY name;
+---- 5
+L
+L_p0
+L_p1
+L_p2
+L_p3
+-STATEMENT CREATE (:L {id: 5, cluster: 200});
+---- ok
+-STATEMENT MATCH (n:L_p2) RETURN n.id;
+---- 2
+2
+5
+# Drop the parent explicitly: cascades remove every partition (the FSM leak
+# checker otherwise iterates tables in reopened-catalog order and would try to
+# drop a partition child directly).
+-STATEMENT DROP TABLE L;
+---- 1
+Table L has been dropped.
