@@ -329,6 +329,31 @@ Lift the v1 restrictions in dependency order:
   table and back, the PostgreSQL-style escape hatch that today is approximated by "drop the
   parent"; also revisit cascade-dropping dependent rels at that point.
 
+### 6b. Per-partition storage files (`test.<parent>_p<i>.db`) — DESIGNED, NOT IMPLEMENTED
+
+Partition children currently share the parent's StorageManager, so their bytes live inside
+`test.db`. Goal: each partition gets its own file, like graphs created via CREATE GRAPH
+(`DatabaseManager::createGraph` builds a per-graph Catalog + StorageManager at path
+`StorageUtils::getGraphPath(dbPath, name)`).
+
+Phase B1 (shared catalog, separate files):
+* Registry: `table_id_t -> std::unique_ptr<StorageManager>` owned by DatabaseManager.
+* Creation: DDL seed partitions and ListPartitionRouter creations build a dedicated
+  StorageManager for the child (path = getGraphPath(dbPath, childName)) instead of calling
+  main-SM createTable; register it.
+* Resolution: all `StorageManager::Get(...)->getTable(id)` sites that can see a partition child
+  go through one helper that checks the registry, then lazily opens the child's SM from catalog
+  metadata on first touch after reopen. Known sites: plan_mapper.cpp:270 (scans), map_insert.cpp,
+  node_batch_insert.cpp (init + growth), insert_executor.cpp resolveTableForNodeID,
+  partition_routing.cpp pre-check.
+* Lifecycle: checkpoint iterates registered SMs; DROP-parent cascade closes+deletes files;
+  rolled-back dynamic partitions delete their file; WAL replay recreates via the same creation
+  helper.
+
+Phase A (later): promote each partition to a full standalone graph-database (own Catalog like
+CREATE GRAPH), making cross-partition queries identical to cross-graph ones; requires
+catalog-aware table-ID resolution everywhere.
+
 ### 7. Remote partitions over a columnar protocol (ADBC / Arrow Flight)
 
 Each partition subgraph already *is* a `NodeTableCatalogEntry`. A remote partition would be a
