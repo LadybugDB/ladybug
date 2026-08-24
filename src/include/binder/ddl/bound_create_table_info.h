@@ -114,8 +114,8 @@ struct BoundExtraCreateNodeTableInfo final : BoundExtraCreateTableInfo {
         : BoundExtraCreateTableInfo{copyVector(other.propertyDefinitions)},
           primaryKeyName{other.primaryKeyName}, storage{other.storage},
           storageFormat{other.storageFormat}, partitionInfo{other.partitionInfo},
-          partitionParentTableID{other.partitionParentTableID}, partitionChildIndex{
-                                                                   other.partitionChildIndex} {}
+          partitionParentTableID{other.partitionParentTableID},
+          partitionChildIndex{other.partitionChildIndex} {}
 
     std::unique_ptr<BoundExtraCreateCatalogEntryInfo> copy() const override {
         return std::make_unique<BoundExtraCreateNodeTableInfo>(*this);
