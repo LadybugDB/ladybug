@@ -350,6 +350,27 @@ Phase B1 (shared catalog, separate files):
   rolled-back dynamic partitions delete their file; WAL replay recreates via the same creation
   helper.
 
+Compatibility with PR #829 (`common::PartitionRoutingHooks`, remote partition subgraphs):
+
+* The hooks and B split the same seams along orthogonal axes: 829 handles *claimed* (remote)
+  partitions, B gives *unclaimed* (local) partitions their own file. Decision order at every
+  shared seam is: consult `locate` first; claimed -> wrapper owns it, no local state (existing
+  829 behavior); unclaimed -> B's dedicated StorageManager.
+* Creation (`storage_manager.cpp:271`) becomes one decision tree: claimed -> onPartitionCreate
+  only; unclaimed -> build + register the per-partition SM. Because claimed partitions never
+  reach B's registry, checkpoint/rollback iterate exactly the unclaimed set with no extra
+  filtering -- the two mechanisms cannot double-handle a partition.
+* Reads: 829 swaps claimed partitions for scan-function-backed substitutes at bind time
+  (`expandPartitionedNodeTables`), so plan-time resolution (B's helper) never sees a remote
+  child; no ordering hazard.
+* Drops: onPartitionDrop fires for claimed partitions; B closes+deletes files and registry
+  entries for unclaimed ones. Disjoint by construction.
+* File naming follows the child's catalog name (getGraphPath scheme); parent-rename cascades
+  must rename child files alongside entry renames. PartitionRef stays ID-based as in 829;
+  names are only consulted when opening/reopening a file.
+* Phase A remains compatible: promoting an unclaimed partition to a standalone graph-database
+  changes what its registry entry holds (Catalog+SM instead of bare SM), not the seams.
+
 Phase A (later): promote each partition to a full standalone graph-database (own Catalog like
 CREATE GRAPH), making cross-partition queries identical to cross-graph ones; requires
 catalog-aware table-ID resolution everywhere.
