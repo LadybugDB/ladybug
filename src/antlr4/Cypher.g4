@@ -842,6 +842,7 @@ iC_NonReservedKeywords
         | STRUCT
         | L_SKIP
         | LIMIT
+        | LIST
         | TRANSACTION
         | TYPE
         | USE
