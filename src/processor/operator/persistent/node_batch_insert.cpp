@@ -516,8 +516,9 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
         if (partitionInfo.method == common::PartitionMethod::LIST) {
             // The parent entry is reachable through any partition child. Its partition set grows
             // as workers encounter new key values; the router serializes discovery.
-            const auto* firstChild = catalog->getTableCatalogEntry(transaction,
-                partitionInfo.partitionTableIDs[0])->ptrCast<NodeTableCatalogEntry>();
+            const auto* firstChild =
+                catalog->getTableCatalogEntry(transaction, partitionInfo.partitionTableIDs[0])
+                    ->ptrCast<NodeTableCatalogEntry>();
             auto* parent =
                 catalog->getTableCatalogEntry(transaction, firstChild->getParentTableID())
                     ->ptrCast<NodeTableCatalogEntry>();

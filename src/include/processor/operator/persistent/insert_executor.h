@@ -71,8 +71,8 @@ private:
     NodeTableInsertInfo(const NodeTableInsertInfo& other)
         : table{other.table}, columnDataEvaluators{copyVector(other.columnDataEvaluators)},
           pkVector{nullptr}, partitionTables{other.partitionTables},
-          partitionKeyColumnID{other.partitionKeyColumnID},
-          partitionMethod{other.partitionMethod}, parentTableID{other.parentTableID} {}
+          partitionKeyColumnID{other.partitionKeyColumnID}, partitionMethod{other.partitionMethod},
+          parentTableID{other.parentTableID} {}
 };
 
 class NodeInsertExecutor {

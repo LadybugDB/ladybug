@@ -106,8 +106,7 @@ storage::NodeTable* NodeInsertExecutor::resolveTargetTable(main::ClientContext* 
             auto* parent = catalog::Catalog::Get(*context)
                                ->getTableCatalogEntry(transaction, tableInfo.parentTableID)
                                ->ptrCast<catalog::NodeTableCatalogEntry>();
-            tableInfo.listRouter =
-                std::make_unique<ListPartitionRouter>(context, parent);
+            tableInfo.listRouter = std::make_unique<ListPartitionRouter>(context, parent);
         }
         const auto pos = keyVector->state->getSelVector()[0];
         if (keyVector->isNull(pos)) {

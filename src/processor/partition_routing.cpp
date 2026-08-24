@@ -173,9 +173,9 @@ ListPartitionRouter::Route ListPartitionRouter::getOrCreatePartitionLocked(
     for (const auto& definition : parent->getProperties()) {
         propertyDefinitions.push_back(definition.copy());
     }
-    auto extraInfo = std::make_unique<binder::BoundExtraCreateNodeTableInfo>(
-        parent->getPrimaryKeyName(), std::move(propertyDefinitions), parent->getStorage(),
-        parent->getStorageFormat());
+    auto extraInfo =
+        std::make_unique<binder::BoundExtraCreateNodeTableInfo>(parent->getPrimaryKeyName(),
+            std::move(propertyDefinitions), parent->getStorage(), parent->getStorageFormat());
     // Register the parent link so the child is a proper partition subgraph, including across
     // WAL replay (the create record rebuilds via this extra info).
     extraInfo->setPartitionParent(parent->getTableID(), ordinal);
