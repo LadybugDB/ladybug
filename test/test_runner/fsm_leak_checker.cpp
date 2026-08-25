@@ -30,6 +30,12 @@ std::uint64_t getNumFreePagesImpl(main::Connection* conn) {
     return std::accumulate(entries.begin(), entries.end(), 0ULL,
         [](std::uint64_t a, const auto& b) { return a + b.numPages; });
 }
+
+std::unique_ptr<main::QueryResult> dropTableIfExists(main::Connection* conn,
+    const std::string& name) {
+    return conn->query(
+        std::format("drop table if exists {}", common::StringUtils::quoteIdentifier(name)));
+}
 } // namespace
 
 void FSMLeakChecker::checkForLeakedPages(main::Connection* conn) {
@@ -90,22 +96,37 @@ void FSMLeakChecker::checkForLeakedPages(main::Connection* conn) {
         tableNames.emplace_back(next->getValue(0)->toString(), next->getValue(1)->toString());
     }
 
-    // Drop rel tables first. Use IF EXISTS because dropping a partitioned parent already cascades
-    // to (and removes) its partition subgraphs, which may still appear in the collected listing.
+    // Drop rel tables first, then non-rel: a node table referenced by a rel table refuses to
+    // drop. Use IF EXISTS because dropping a partitioned parent already cascades to (and
+    // removes) its partition subgraphs, which may still appear in the collected listing.
+    // Dropping such a subgraph directly is refused even with IF EXISTS while its parent exists,
+    // and the listing comes from unordered catalog storage whose iteration order differs across
+    // platforms (e.g. native vs WASM), so a subgraph can be listed before its parent. Defer any
+    // failed drop and retry it after everything else is dropped: by then the parent has cascaded
+    // its subgraphs away and IF EXISTS turns the retry into a no-op.
+    std::vector<std::pair<std::string, std::string>> deferredDrops; // (name, first error)
+    const auto tryDropTable = [&](const auto& name) {
+        if (auto result = dropTableIfExists(conn, name); !result->isSuccess()) {
+            deferredDrops.emplace_back(name, result->getErrorMessage());
+        }
+    };
     for (const auto& [name, type] : tableNames) {
         if (type == common::TableTypeUtils::toString(common::TableType::REL)) {
-            ASSERT_TRUE(conn->query(std::format("drop table if exists {}",
-                                        common::StringUtils::quoteIdentifier(name)))
-                            ->isSuccess());
+            tryDropTable(name);
         }
     }
     // Then non-rel
     for (const auto& [name, type] : tableNames) {
         if (type != common::TableTypeUtils::toString(common::TableType::REL)) {
-            ASSERT_TRUE(conn->query(std::format("drop table if exists {}",
-                                        common::StringUtils::quoteIdentifier(name)))
-                            ->isSuccess());
+            tryDropTable(name);
         }
+    }
+
+    for (const auto& [name, firstError] : deferredDrops) {
+        auto result = dropTableIfExists(conn, name);
+        ASSERT_TRUE(result->isSuccess())
+            << "Failed to drop table " << name << ": " << result->getErrorMessage()
+            << " (first attempt failed with: " << firstError << ")" << std::endl;
     }
 
     ASSERT_TRUE(conn->query("call enable_internal_catalog=false")->isSuccess());
