@@ -1,5 +1,7 @@
 #include "processor/operator/query_primary_key_lookup.h"
 
+#include <algorithm>
+
 #include "binder/expression/expression_util.h"
 #include "processor/execution_context.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -51,21 +53,39 @@ bool QueryPrimaryKeyLookup::getNextTuplesInternal(ExecutionContext* context) {
         saveSelVector(*nodeIDVector->state);
         keyEvaluator->evaluate();
         auto* keyVector = keyEvaluator->resultVector.get();
-        const auto& inputSelVector = keyVector->state->getSelVector();
+        // The key evaluator's result vector may own a DataChunkState that is independent of the
+        // input chunk. When the key is not a direct reference to an in-scope expression (e.g. an
+        // implicit CAST wrapped around a correlated variable, such as comparing a SERIAL primary
+        // key with an INT64 UNWIND element), ExpressionMapper hands back an evaluator whose
+        // already-flat children give it a fresh state pinned at position 0, so its selection does
+        // not track the rows exposed by the child operator. The evaluator contract aligns the i-th
+        // selected entry of a result with the i-th selected entry of each operand, so zip the two
+        // selections by index and drive everything from the input chunk's selection: indexing the
+        // node-id vector with the key result's positions resolved node IDs into slot 0 and
+        // collapsed the shared output selection to [0], freezing every downstream read of
+        // pre-lookup variables (and any later lookup's key) at the first input row.
+        // If the key result shares this state, both selections are the same object; writing
+        // outputSelVector[outputSize] with outputSize <= i only rewrites slots at or before the
+        // one being read, so no snapshot is needed.
+        const auto& inputSelVector = nodeIDVector->state->getSelVector();
+        const auto& keySelVector = keyVector->state->getSelVector();
+        const auto numRows =
+            std::min<sel_t>(inputSelVector.getSelSize(), keySelVector.getSelSize());
         auto& outputSelVector = nodeIDVector->state->getSelVectorUnsafe();
         outputSelVector.setToFiltered();
         outputSize = 0;
-        for (sel_t i = 0; i < inputSelVector.getSelSize(); ++i) {
-            const auto pos = inputSelVector[i];
-            if (keyVector->isNull(pos)) {
+        for (sel_t i = 0; i < numRows; ++i) {
+            const auto inputPos = inputSelVector[i];
+            const auto keyPos = keySelVector[i];
+            if (keyVector->isNull(keyPos)) {
                 continue;
             }
             offset_t offset;
-            if (!table->lookupPK(transaction, keyVector, pos, offset)) {
+            if (!table->lookupPK(transaction, keyVector, keyPos, offset)) {
                 continue;
             }
-            nodeIDVector->setValue<nodeID_t>(pos, {offset, table->getTableID()});
-            outputSelVector[outputSize++] = pos;
+            nodeIDVector->setValue<nodeID_t>(inputPos, {offset, table->getTableID()});
+            outputSelVector[outputSize++] = inputPos;
         }
         outputSelVector.setSelSize(outputSize);
     } while (outputSize == 0);
