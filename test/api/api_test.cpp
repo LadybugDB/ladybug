@@ -240,6 +240,82 @@ TEST_F(ApiTest, UnwindQueryPrimaryKeyLookupLeadingMissThenHits) {
     ASSERT_EQ(TestHelper::convertResultToString(*result), (std::vector<std::string>{"20", "30"}));
 }
 
+// Regression for issue #822: when the lookup key needs an implicit cast (SERIAL primary key vs
+// INT64 UNWIND element), the key evaluator's result vector owns a DataChunkState pinned at
+// position 0 instead of sharing the input chunk's state. The operator used to index the node-id
+// vector and the output selection with that state, so with two sequential MATCH ... WHERE clauses
+// every created relationship pointed at the first UNWIND row's node (row count was correct, the
+// content was not). Each row must resolve to its own endpoints.
+TEST_F(ApiTest, UnwindQueryPrimaryKeyLookupTwoMatchesWithCastKey) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE Item(id SERIAL, kind STRING, PRIMARY KEY(id));"
+                            "CREATE REL TABLE Contains(FROM Item TO Item, label STRING);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:Item {kind: 'container'});"
+                            "CREATE (:Item {kind: 'leaf1'});"
+                            "CREATE (:Item {kind: 'leaf2'});"
+                            "CREATE (:Item {kind: 'leaf3'});")
+                    ->isSuccess());
+
+    auto explain = conn->query("EXPLAIN UNWIND [{src: 0, tgt: 1}, {src: 0, tgt: 2}, "
+                               "{src: 0, tgt: 3}] AS item "
+                               "MATCH (s:Item) WHERE s.id = item.src "
+                               "MATCH (t:Item) WHERE t.id = item.tgt "
+                               "RETURN s.id, t.id");
+    ASSERT_TRUE(explain->isSuccess());
+    EXPECT_NE(explain->toString().find("QUERY_PRIMARY_KEY_LOOKUP"), std::string::npos);
+
+    auto create =
+        conn->query("UNWIND [{src: 0, tgt: 1}, {src: 0, tgt: 2}, {src: 0, tgt: 3}] AS item "
+                    "MATCH (s:Item) WHERE s.id = item.src "
+                    "MATCH (t:Item) WHERE t.id = item.tgt "
+                    "CREATE (s)-[:Contains {label: 'contains'}]->(t)");
+    ASSERT_TRUE(create->isSuccess());
+
+    auto edges =
+        conn->query("MATCH (a:Item)-[:Contains]->(b:Item) RETURN a.id, b.id ORDER BY b.id");
+    ASSERT_TRUE(edges->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*edges),
+        (std::vector<std::string>{"0|1", "0|2", "0|3"}));
+}
+
+// Regression for issue #822 (single lookup variant): reading an UNWIND variable after a MATCH
+// whose primary-key equality needed an implicit cast used to return the first row's value on
+// every row. The unwind variable must stay aligned with the looked-up node per row.
+TEST_F(ApiTest, UnwindQueryPrimaryKeyLookupKeepsUnwindValuesAligned) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE AlignedItem(id SERIAL, v STRING, PRIMARY KEY(id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:AlignedItem {v: 'v0'});"
+                            "CREATE (:AlignedItem {v: 'v1'});"
+                            "CREATE (:AlignedItem {v: 'v2'});")
+                    ->isSuccess());
+
+    auto result = conn->query("UNWIND [2, 0, 1] AS i "
+                              "MATCH (t:AlignedItem) WHERE t.id = i "
+                              "RETURN i, t.v ORDER BY i");
+    ASSERT_TRUE(result->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*result),
+        (std::vector<std::string>{"0|v0", "1|v1", "2|v2"}));
+
+    // Misses and NULL keys must still be skipped without disturbing later rows.
+    auto sparse = conn->query("UNWIND [9, 2, NULL, 0] AS i "
+                              "MATCH (t:AlignedItem) WHERE t.id = i "
+                              "RETURN i, t.v ORDER BY i");
+    ASSERT_TRUE(sparse->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*sparse),
+        (std::vector<std::string>{"0|v0", "2|v2"}));
+
+    // A batch larger than the vector capacity forces the upstream Flatten to refill mid-run;
+    // alignment must survive the refill as well.
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE AlignedBatch(id SERIAL, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:AlignedBatch);CREATE (:AlignedBatch);CREATE (:AlignedBatch);")
+                    ->isSuccess());
+    auto capped = conn->query("UNWIND range(0, 2500) AS x MATCH (t:AlignedBatch) WHERE t.id = x "
+                              "RETURN count(t)");
+    ASSERT_TRUE(capped->isSuccess());
+    ASSERT_EQ(TestHelper::convertResultToString(*capped), (std::vector<std::string>{"3"}));
+}
+
 TEST_F(ApiTest, Profile) {
     auto result =
         conn->query("EXPLAIN MATCH (a:person) WHERE EXISTS { MATCH (a)-[:knows]->(b:person) WHERE "

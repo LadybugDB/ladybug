@@ -1,0 +1,51 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue822UnwindTwoMatchesPrimaryKeyLookup
+# Reproduction for github issue #822:
+# UNWIND + two sequential MATCH ... WHERE clauses on primary keys bound every created
+# relationship to the first UNWIND row's node when the key comparison needed an implicit
+# cast (SERIAL primary key vs INT64 unwind element). Row count was correct; content was not.
+
+-STATEMENT CREATE NODE TABLE Item(id SERIAL, kind STRING, PRIMARY KEY(id));
+---- ok
+
+-STATEMENT CREATE REL TABLE Contains(FROM Item TO Item, label STRING);
+---- ok
+
+-STATEMENT CREATE (:Item {kind: 'container'});
+---- ok
+
+-STATEMENT CREATE (:Item {kind: 'leaf1'});
+---- ok
+
+-STATEMENT CREATE (:Item {kind: 'leaf2'});
+---- ok
+
+-STATEMENT CREATE (:Item {kind: 'leaf3'});
+---- ok
+
+# Read-only variant: every row must pair its own unwind values with its own matched nodes.
+-STATEMENT UNWIND [{src: 0, tgt: 1},{src: 0, tgt: 2},{src: 0, tgt: 3}] AS item MATCH (s:Item) WHERE s.id = item.src MATCH (t:Item) WHERE t.id = item.tgt RETURN item.tgt, s.id, t.id ORDER BY item.tgt;
+---- 3
+1|0|1
+2|0|2
+3|0|3
+
+# The bug: all created edges collapsed onto the first unwound target.
+-STATEMENT UNWIND [{src: 0, tgt: 1},{src: 0, tgt: 2},{src: 0, tgt: 3}] AS item MATCH (s:Item) WHERE s.id = item.src MATCH (t:Item) WHERE t.id = item.tgt CREATE (s)-[:Contains {label: 'contains'}]->(t);
+---- ok
+
+-STATEMENT MATCH (a:Item)-[r:Contains]->(b:Item) RETURN a.id, b.id ORDER BY b.id;
+---- 3
+0|1
+0|2
+0|3
+
+# Single-MATCH variant: reading the unwind variable after the lookup must stay aligned per row.
+-STATEMENT UNWIND [3, 0, 2] AS i MATCH (t:Item) WHERE t.id = i RETURN i, t.kind ORDER BY i;
+---- 3
+0|container
+2|leaf2
+3|leaf3
