@@ -5,6 +5,7 @@
 #include "planner/operator/persistent/logical_delete.h"
 #include "processor/operator/persistent/delete.h"
 #include "processor/plan_mapper.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 
 using namespace lbug::binder;
@@ -50,9 +51,9 @@ std::vector<RelTable*> getBwdRelTables(table_id_t nodeTableID, const main::Clien
 
 NodeTableDeleteInfo PlanMapper::getNodeTableDeleteInfo(const TableCatalogEntry& entry,
     DataPos pkPos) const {
-    auto storageManager = StorageManager::Get(*clientContext);
     auto tableID = entry.getTableID();
-    auto table = storageManager->getTable(tableID)->ptrCast<NodeTable>();
+    auto table = storage::PartitionStorageRegistry::resolveNodeTableByID(clientContext, tableID)
+                     ->ptrCast<NodeTable>();
     std::unordered_set<RelTable*> fwdRelTables;
     std::unordered_set<RelTable*> bwdRelTables;
     auto& nodeEntry = entry.constCast<NodeTableCatalogEntry>();

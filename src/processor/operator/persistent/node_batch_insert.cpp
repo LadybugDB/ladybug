@@ -28,6 +28,7 @@
 #include "processor/warning_context.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/local_storage/local_storage.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/chunked_node_group.h"
 #include "storage/table/node_table.h"
@@ -511,7 +512,15 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
             // Remotely routed partitions own no local table; rows are shipped through the
             // routing hooks in copyToNodeGroup.
             target.table =
-                claimed ? nullptr : storageManager->getTable(tableID)->ptrCast<NodeTable>();
+                claimed ?
+                    nullptr :
+                    storage::PartitionStorageRegistry::resolveNodeTableByID(clientContext, tableID);
+            // Allocate pages from the file that owns the target table (a partition child
+            // flushes into its own data file, not the main database file).
+            if (target.table != nullptr) {
+                target.optimisticAllocator = transaction->getLocalStorage()->addOptimisticAllocator(
+                    target.table->getStorageManager());
+            }
             nodeSharedState->targets.push_back(std::move(target));
             nodeSharedState->partitionRefs.push_back(ref);
             nodeSharedState->partitionHandles.push_back(claimed ? handle : nullptr);
@@ -539,6 +548,8 @@ void NodeBatchInsert::initGlobalStateInternal(ExecutionContext* context) {
     } else {
         NodeBatchInsertTarget target;
         target.table = storageManager->getTable(nodeTableEntry->getTableID())->ptrCast<NodeTable>();
+        target.optimisticAllocator = transaction->getLocalStorage()->addOptimisticAllocator(
+            target.table->getStorageManager());
         nodeSharedState->targets.push_back(std::move(target));
     }
 
@@ -576,8 +587,6 @@ void NodeBatchInsert::initLocalStateInternal(ResultSet* resultSet, ExecutionCont
         }
         nodeLocalState->targets.push_back(std::move(localTarget));
     }
-    nodeLocalState->optimisticAllocator =
-        Transaction::Get(*context->clientContext)->getLocalStorage()->addOptimisticAllocator();
 
     nodeLocalState->columnVectors.resize(numColumns);
 
@@ -690,7 +699,10 @@ void NodeBatchInsert::copyToNodeGroup(transaction::Transaction* transaction,
             numAppendedTuples += numAppendedInGroup;
             if (target.chunkedGroup->isFull()) {
                 writeAndResetNodeGroup(transaction, 0, target.chunkedGroup,
-                    target.localIndexBuilder, mm, *nodeLocalState->optimisticAllocator);
+                    target.localIndexBuilder, mm,
+                    *sharedState->ptrCast<NodeBatchInsertSharedState>()
+                         ->targets[0]
+                         .optimisticAllocator);
             }
         }
         if (nodeLocalState->stats.has_value()) {
@@ -770,7 +782,8 @@ void NodeBatchInsert::copyToNodeGroup(transaction::Transaction* transaction,
             numAppendedTuples += numAppendedInGroup;
             if (target.chunkedGroup->isFull()) {
                 writeAndResetNodeGroup(transaction, partitionIdx, target.chunkedGroup,
-                    target.localIndexBuilder, mm, *nodeLocalState->optimisticAllocator);
+                    target.localIndexBuilder, mm,
+                    *nodeSharedState->targets[partitionIdx].optimisticAllocator);
             }
         }
         i = runEnd;
@@ -795,6 +808,12 @@ void NodeBatchInsert::growListTargets(ExecutionContext* context,
     for (auto k = nodeSharedState->targets.size(); k <= maxOrdinal; ++k) {
         NodeBatchInsertTarget target;
         target.table = freshTables.at(k);
+        // LIST partitions discover targets mid-copy; scope their allocations to the file
+        // owning the newly created partition child, same as pre-declared HASH targets.
+        target.optimisticAllocator =
+            Transaction::Get(*context->clientContext)
+                ->getLocalStorage()
+                ->addOptimisticAllocator(target.table->getStorageManager());
         nodeSharedState->initTargetPKIndex(context, target);
         nodeSharedState->targets.push_back(std::move(target));
     }
@@ -920,9 +939,8 @@ void NodeBatchInsert::appendIncompleteNodeGroup(transaction::Transaction* transa
     common::idx_t targetIdx, std::unique_ptr<InMemChunkedNodeGroup> localNodeGroup,
     std::optional<IndexBuilder>& indexBuilder, MemoryManager* mm) const {
     std::unique_lock xLck{sharedState->mtx};
-    const auto nodeLocalState = dynamic_cast_checked<NodeBatchInsertLocalState*>(localState.get());
-    auto& sharedTarget =
-        dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get())->targets[targetIdx];
+    auto* nodeSharedState = dynamic_cast_checked<NodeBatchInsertSharedState*>(sharedState.get());
+    auto& sharedTarget = nodeSharedState->targets[targetIdx];
     if (!sharedTarget.sharedNodeGroup) {
         sharedTarget.sharedNodeGroup = std::move(localNodeGroup);
         return;
@@ -931,7 +949,7 @@ void NodeBatchInsert::appendIncompleteNodeGroup(transaction::Transaction* transa
     while (numNodesAppended < localNodeGroup->getNumRows()) {
         if (sharedTarget.sharedNodeGroup->isFull()) {
             writeAndResetNodeGroup(transaction, targetIdx, sharedTarget.sharedNodeGroup,
-                indexBuilder, mm, *nodeLocalState->optimisticAllocator);
+                indexBuilder, mm, *nodeSharedState->targets[targetIdx].optimisticAllocator);
         }
         numNodesAppended += sharedTarget.sharedNodeGroup->append(*localNodeGroup,
             numNodesAppended /* offsetInNodeGroup */,

@@ -6,6 +6,7 @@
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/constants.h"
 #include "common/enums/extend_direction_util.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
@@ -76,7 +77,11 @@ PlannerTableStats buildPlannerTableStats(StorageManager& storageManager, const C
     const Transaction* transaction, const TableCatalogEntry& tableEntry, table_id_t physicalTableID,
     PlannerStatsMode mode) {
     auto tableID = physicalTableID == INVALID_TABLE_ID ? tableEntry.getTableID() : physicalTableID;
-    auto* table = storageManager.getTable(tableID);
+    // Partition children resolve through their own StorageManager (phase-B per-partition files).
+    auto* table = storageManager.containsTable(tableID) ?
+                      storageManager.getTable(tableID) :
+                      PartitionStorageRegistry::resolveNodeTableByID(
+                          transaction->getClientContext(), tableID);
     auto plannerStats = PlannerTableStats{};
     plannerStats.tableID = tableID;
     plannerStats.tableType = tableEntry.getTableType();

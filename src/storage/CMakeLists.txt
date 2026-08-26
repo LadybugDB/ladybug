@@ -21,6 +21,7 @@ add_library(lbug_storage
         page_manager.cpp
         shadow_file.cpp
         shadow_utils.cpp
+        partition_storage_registry.cpp
         storage_manager.cpp
         storage_utils.cpp
         storage_version_info.cpp

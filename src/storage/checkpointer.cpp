@@ -22,6 +22,7 @@
 #include "main/db_config.h"
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/database_header.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/shadow_utils.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
@@ -186,7 +187,7 @@ PageRange Checkpointer::serializeMetadataSnapshot(const catalog::Catalog& catalo
     common::Serializer metadataSerializer(metadataWriter);
     const transaction::Transaction snapshotTxn(transaction::TransactionType::CHECKPOINT,
         transaction::Transaction::DUMMY_TRANSACTION_ID, snapshotTS);
-    storageManager.serialize(catalog, snapshotTxn, metadataSerializer);
+    storageManager.serialize(catalog, snapshotTxn, &clientContext, metadataSerializer);
 
     auto& pageManager = *storageManager.getDataFH()->getPageManager();
     const auto pagesForPageManager = pageManager.estimatePagesNeededForSerialize();
@@ -205,7 +206,7 @@ PageRange Checkpointer::serializeMetadata(const catalog::Catalog& catalog,
     auto metadataWriter =
         std::make_shared<common::InMemFileWriter>(*MemoryManager::Get(clientContext));
     common::Serializer metadataSerializer(metadataWriter);
-    storageManager.serialize(catalog, metadataSerializer);
+    storageManager.serialize(catalog, &clientContext, metadataSerializer);
 
     // We need to preallocate the pages for the page manager before we actually serialize it,
     // this is because the page manager needs to track the pages used for itself.
@@ -248,6 +249,8 @@ void Checkpointer::writeCheckpoint() {
     hasStorageVersionUpgrade = oldStorageVersion != databaseHeader.storageVersion;
     bool localHasStorageChanges = checkpointStorage();
     serializeCatalogAndMetadata(databaseHeader, localHasStorageChanges);
+    // Durable-before-commit ordering for partition child files (see persistPartitionChildFiles).
+    persistPartitionChildFiles();
     databaseHeader.dataFileNumPages = mainStorageManager->getDataFH()->getNumPages();
     writeDatabaseHeader(databaseHeader);
     logCheckpointAndApplyShadowPages(walRotatedByManager.at(mainStorageManager));
@@ -300,6 +303,17 @@ void Checkpointer::beginCheckpoint(common::transaction_t snapshotTimestamp) {
         tableEpochWatermarksByManager[target.storageManager] =
             target.storageManager->captureChangeEpochs();
     }
+    // Partition children are checkpointed through the main storage manager; their epoch
+    // watermarks must be captured under the write gate too so snapshot isolation covers
+    // writes routed to per-partition files.
+    if (auto* dbManager = main::DatabaseManager::Get(clientContext)) {
+        auto& mainWatermarks = tableEpochWatermarksByManager[mainStorageManager];
+        for (auto* sm : dbManager->getPartitionStorageRegistry()->getAllManagers()) {
+            for (const auto& [tableID, epoch] : sm->captureChangeEpochs()) {
+                mainWatermarks.emplace(tableID, epoch);
+            }
+        }
+    }
     catalogVersionAtCheckpoint =
         catalogVersionAtCheckpointByCatalog[clientContext.getDatabase()->getCatalog()];
     pageManagerVersionAtCheckpoint = pageManagerVersionAtCheckpointByManager[mainStorageManager];
@@ -313,6 +327,39 @@ void Checkpointer::checkpointStoragePhase() {
     hasStorageChanges = checkpointStorage();
 }
 
+void Checkpointer::persistPartitionChildFiles() {
+    if (isInMemory) {
+        return;
+    }
+    auto* dbManager = main::DatabaseManager::Get(clientContext);
+    if (dbManager == nullptr) {
+        return;
+    }
+    for (auto* sm : dbManager->getPartitionStorageRegistry()->getAllManagers()) {
+        auto* dataFH = sm->getDataFH();
+        auto& pageManager = *dataFH->getPageManager();
+        // Serialize the child's page manager into its own file through its shadow file,
+        // mirroring how the main file persists its metadata. The child's table metadata
+        // itself is serialized through the main file's stream; only the free-space state
+        // lives here.
+        auto writer = std::make_shared<common::InMemFileWriter>(*MemoryManager::Get(clientContext));
+        common::Serializer ser(writer);
+        const auto pagesForPageManager = pageManager.estimatePagesNeededForSerialize();
+        const auto allocatedPages =
+            pageManager.allocatePageRange(writer->getNumPagesToFlush() + pagesForPageManager);
+        pageManager.serialize(ser);
+        writer->flush(allocatedPages, pageManager.getDataFH(), sm->getShadowFile());
+
+        auto header = *sm->getOrInitDatabaseHeader(clientContext);
+        header.freeMetadataPageRange(pageManager);
+        header.metadataPageRange = allocatedPages;
+        header.dataFileNumPages = dataFH->getNumPages();
+        writeDatabaseHeaderToStorage(clientContext, header, *sm);
+        // Durable BEFORE the main database's commit point (see comment in checkpointer.h).
+        sm->getShadowFile().flushAll(clientContext);
+    }
+}
+
 void Checkpointer::finishCheckpoint() {
     if (isInMemory) {
         return;
@@ -324,6 +371,8 @@ void Checkpointer::finishCheckpoint() {
     // which serializes only catalog entries whose commit timestamp is <= snapshotTS, so no
     // post-gate DDL mutation is visible in the serialized snapshot.
     serializeCatalogAndMetadata(checkpointHeader, hasStorageChanges);
+    // Durable-before-commit ordering for partition child files (see persistPartitionChildFiles).
+    persistPartitionChildFiles();
     checkpointHeader.dataFileNumPages = mainStorageManager->getDataFH()->getNumPages();
     writeDatabaseHeader(checkpointHeader);
     logCheckpointAndApplyShadowPages(walRotatedByManager.at(mainStorageManager));
@@ -352,6 +401,13 @@ void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) {
             continue;
         }
         target.storageManager->finalizeCheckpoint();
+    }
+    // Finalize partition children's page managers: their allocations were committed when the
+    // main header was written and their shadow pages applied.
+    if (auto* dbManager = main::DatabaseManager::Get(clientContext)) {
+        for (auto* sm : dbManager->getPartitionStorageRegistry()->getAllManagers()) {
+            sm->getDataFH()->getPageManager()->finalizeCheckpoint();
+        }
     }
     auto bufferManager = MemoryManager::Get(clientContext)->getBufferManager();
     bufferManager->removeEvictedCandidates();
@@ -458,6 +514,31 @@ void Checkpointer::writeDatabaseHeader(const DatabaseHeader& header) {
 
 void Checkpointer::logCheckpointAndApplyShadowPages(bool walRotated_) {
     logCheckpointAndApplyShadowPagesForStorage(clientContext, *mainStorageManager, walRotated_);
+    applyShadowPagesForPartitionChildren();
+}
+
+// Partition children keep their own data files and shadow files but no WAL (the main database
+// WAL stays the single logical WAL); their shadow pages are applied directly here.
+void Checkpointer::applyShadowPagesForPartitionChildren() {
+    if (isInMemory) {
+        return;
+    }
+    auto* dbManager = main::DatabaseManager::Get(clientContext);
+    if (dbManager == nullptr) {
+        return;
+    }
+    auto bufferManager = MemoryManager::Get(clientContext)->getBufferManager();
+    for (auto* sm : dbManager->getPartitionStorageRegistry()->getAllManagers()) {
+        auto& shadowFile = sm->getShadowFile();
+        if (!shadowFile.hasShadowingFH()) {
+            continue;
+        }
+        // Durability was established by persistPartitionChildFiles() BEFORE the main commit
+        // point; here we only apply the pending pages and drop the shadow file.
+        shadowFile.applyShadowPages(*sm, clientContext);
+        sm->getDataFH()->flushAllDirtyPagesInFrames();
+        shadowFile.clear(*bufferManager);
+    }
 }
 
 void Checkpointer::rollback() {
@@ -466,7 +547,18 @@ void Checkpointer::rollback() {
     }
     // Any pages freed during the checkpoint are no longer freed
     for (const auto& target : checkpointTargets) {
-        target.storageManager->rollbackCheckpoint(*target.catalog);
+        target.storageManager->rollbackCheckpoint(*target.catalog, &clientContext);
+    }
+    // Discard children's in-progress shadow pages so a later open cannot replay them.
+    if (!isInMemory) {
+        auto bufferManager = MemoryManager::Get(clientContext)->getBufferManager();
+        for (auto* sm : main::DatabaseManager::Get(clientContext)
+                            ->getPartitionStorageRegistry()
+                            ->getAllManagers()) {
+            if (sm->getShadowFile().hasShadowingFH()) {
+                sm->getShadowFile().clear(*bufferManager);
+            }
+        }
     }
     releaseCheckpointLocks();
 }
@@ -524,6 +616,9 @@ void Checkpointer::readCheckpoint(main::ClientContext* context, catalog::Catalog
         deSer.getReader()->cast<common::BufferedFileReader>()->resetReadOffset(
             currentHeader->metadataPageRange.startPageIdx * common::LBUG_PAGE_SIZE);
         storageManager->deserialize(context, catalog, deSer);
+        // Ensure every partition child in the catalog has live storage (children absent from
+        // older snapshots get freshly created files).
+        PartitionStorageRegistry::Get(context)->openAllChildren(context, *catalog);
         storageManager->getDataFH()->getPageManager()->deserialize(deSer);
         storageManager->getDataFH()->getPageManager()->reclaimTailPagesIfNeeded(
             currentHeader->dataFileNumPages);

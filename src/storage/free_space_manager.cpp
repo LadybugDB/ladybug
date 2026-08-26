@@ -174,6 +174,10 @@ void FreeSpaceManager::deserialize(common::Deserializer& deSer) {
     std::string key;
 
     deSer.validateDebuggingInfo(key, "page_manager");
+    // Replace (not merge with) any previously loaded free lists: the page manager can be
+    // deserialized twice for a file whose shadow pages are replayed after an initial load.
+    resetFreeLists();
+
     deSer.validateDebuggingInfo(key, "numEntries");
     common::row_idx_t numEntries{};
     deSer.deserializeValue<common::row_idx_t>(numEntries);

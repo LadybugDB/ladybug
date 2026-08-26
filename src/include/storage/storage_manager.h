@@ -60,12 +60,15 @@ public:
     // write gate so that no active writers can bump epochs concurrently.
     std::unordered_map<common::table_id_t, uint64_t> captureChangeEpochs() const;
     void finalizeCheckpoint();
-    void rollbackCheckpoint(const catalog::Catalog& catalog);
+    void rollbackCheckpoint(const catalog::Catalog& catalog, main::ClientContext* context);
 
     WAL& getWAL() const;
     ShadowFile& getShadowFile() const;
     FileHandle* getDataFH() const { return dataFH; }
     std::string getDatabasePath() const { return databasePath; }
+    // Phase-B per-partition files: retarget this manager (and its shadow file) after the
+    // owning partition child is renamed. Caller must have closed the file handle.
+    void setDatabasePath(const std::string& newPath);
     bool isReadOnly() const { return readOnly; }
     bool compressionEnabled() const { return enableCompression; }
     bool isInMemory() const { return inMemory; }
@@ -84,9 +87,10 @@ public:
     std::optional<std::reference_wrapper<const IndexType>> getIndexType(
         const std::string& typeName) const;
 
-    void serialize(const catalog::Catalog& catalog, common::Serializer& ser);
-    void serialize(const catalog::Catalog& catalog, const transaction::Transaction& snapshotTxn,
+    void serialize(const catalog::Catalog& catalog, main::ClientContext* context,
         common::Serializer& ser);
+    void serialize(const catalog::Catalog& catalog, const transaction::Transaction& snapshotTxn,
+        main::ClientContext* context, common::Serializer& ser);
     // We need to pass in the catalog and storageManager explicitly as they can be from
     // attachedDatabase.
     void deserialize(main::ClientContext* context, const catalog::Catalog* catalog,

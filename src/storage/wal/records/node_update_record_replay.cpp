@@ -1,3 +1,4 @@
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "storage/wal/wal_replayer.h"
@@ -11,7 +12,8 @@ namespace storage {
 void WALReplayer::replayNodeUpdateRecord(const WALRecord& walRecord) const {
     const auto& updateRecord = walRecord.constCast<NodeUpdateRecord>();
     const auto tableID = updateRecord.tableID;
-    auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<NodeTable>();
+    auto& table = storage::PartitionStorageRegistry::resolveNodeTableByID(&clientContext, tableID)
+                      ->cast<NodeTable>();
     const auto anchorState = updateRecord.ownedPropertyVector->state;
     DASSERT(anchorState->getSelVector().getSelSize() == 1);
     const auto nodeIDVector = std::make_unique<ValueVector>(LogicalType::INTERNAL_ID());

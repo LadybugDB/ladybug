@@ -5,6 +5,7 @@
 #include "function/table/bind_data.h"
 #include "function/table/bind_input.h"
 #include "function/table/simple_table_function.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "transaction/transaction.h"
@@ -72,8 +73,8 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const ClientContext* context,
         columnNames.push_back(propDef.getName() + "_distinct_count");
         columnTypes.push_back(LogicalType::INT64());
     }
-    const auto storageManager = storage::StorageManager::Get(*context);
-    auto table = storageManager->getTable(tableEntry->getTableID());
+    auto table = storage::PartitionStorageRegistry::resolveNodeTableByID(
+        const_cast<main::ClientContext*>(context), tableEntry->getTableID());
     columnNames = TableFunction::extractYieldVariables(columnNames, input->yieldVariables);
     auto columns = input->binder->createVariables(columnNames, columnTypes);
     return std::make_unique<StatsInfoBindData>(columns, tableEntry, table, context);

@@ -5,6 +5,7 @@
 #include "processor/expression_mapper.h"
 #include "processor/operator/persistent/set.h"
 #include "processor/plan_mapper.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/table.h"
 
@@ -29,8 +30,10 @@ static column_id_t getColumnID(const TableCatalogEntry& entry,
 }
 
 static NodeTableSetInfo getNodeTableSetInfo(const TableCatalogEntry& entry, const Expression& expr,
-    StorageManager* storageManager) {
-    auto table = storageManager->getTable(entry.getTableID())->ptrCast<NodeTable>();
+    main::ClientContext* clientContext) {
+    auto table =
+        storage::PartitionStorageRegistry::resolveNodeTableByID(clientContext, entry.getTableID())
+            ->ptrCast<NodeTable>();
     auto columnID = getColumnID(entry, expr.constCast<PropertyExpression>());
     return NodeTableSetInfo(table, columnID);
 }
@@ -59,8 +62,7 @@ std::unique_ptr<NodeSetExecutor> PlanMapper::getNodeSetExecutor(
         table_id_map_t<NodeTableSetInfo> tableInfos;
         for (auto entry : node.getEntries()) {
             auto tableID = entry->getTableID();
-            auto tableInfo =
-                getNodeTableSetInfo(*entry, property, StorageManager::Get(*clientContext));
+            auto tableInfo = getNodeTableSetInfo(*entry, property, clientContext);
             if (tableInfo.columnID == INVALID_COLUMN_ID) {
                 continue;
             }
@@ -70,8 +72,7 @@ std::unique_ptr<NodeSetExecutor> PlanMapper::getNodeSetExecutor(
             std::move(tableInfos));
     }
     DASSERT(node.getNumEntries() == 1);
-    auto tableInfo =
-        getNodeTableSetInfo(*node.getEntry(0), property, StorageManager::Get(*clientContext));
+    auto tableInfo = getNodeTableSetInfo(*node.getEntry(0), property, clientContext);
     return std::make_unique<SingleLabelNodeSetExecutor>(std::move(setInfo), std::move(tableInfo));
 }
 

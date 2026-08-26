@@ -12,6 +12,7 @@
 #include "planner/operator/logical_aggregate.h"
 #include "planner/operator/logical_hash_join.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/stats/planner_stats.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
@@ -32,7 +33,10 @@ static PlannerTableStats getPlannerStats(main::ClientContext* context,
     catalog::TableCatalogEntry& tableEntry, table_id_t physicalTableID = INVALID_TABLE_ID) {
     const auto tableID =
         physicalTableID == INVALID_TABLE_ID ? tableEntry.getTableID() : physicalTableID;
-    auto* table = storageManager.getTable(tableID);
+    auto* table = storageManager.containsTable(tableID) ?
+                      storageManager.getTable(tableID) :
+                      // Partition children resolve through their own StorageManager.
+                      storage::PartitionStorageRegistry::resolveNodeTableByID(context, tableID);
     if (auto cachedStats = storageManager.getCachedPlannerTableStats(tableID);
         cachedStats.has_value() && cachedStats->tableChangeEpoch == table->getChangeEpoch()) {
         return std::move(cachedStats.value());

@@ -57,12 +57,19 @@ public:
     static bool canAutoCheckpoint(const main::ClientContext& clientContext,
         const transaction::Transaction& transaction);
 
+    // Persist each partition child's page manager + database header into its own file (through
+    // its shadow file) and fsync it. Must run BEFORE the main database's commit point so that a
+    // crash either loses all pending child updates (recovery removes their shadow files) or,
+    // once the main header is committed, finds them durable and applies them during recovery.
+    void persistPartitionChildFiles();
+
 protected:
     virtual bool checkpointStorage();
     virtual void serializeCatalogAndMetadata(DatabaseHeader& databaseHeader,
         bool hasStorageChanges);
     virtual void writeDatabaseHeader(const DatabaseHeader& header);
     virtual void logCheckpointAndApplyShadowPages(bool walRotated = false);
+    void applyShadowPagesForPartitionChildren();
 
 private:
     struct CheckpointTarget {

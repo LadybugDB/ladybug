@@ -81,6 +81,9 @@ struct NodeBatchInsertInfo final : BatchInsertInfo {
 // shared (cross-worker) leftover node group.
 struct NodeBatchInsertTarget {
     storage::NodeTable* table = nullptr;
+    // Optimistic allocator scoped to the file that owns `table` (main file or a per-partition
+    // child file). Set during shared-state init; owned by the transaction's LocalStorage.
+    storage::PageAllocator* optimisticAllocator = nullptr;
     std::optional<IndexBuilder> globalIndexBuilder;
     std::unique_ptr<NoIndexPKValidator> noIndexPKValidator;
     bool usePrimaryKeyIndexCommitInsert = false;

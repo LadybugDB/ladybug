@@ -11,6 +11,7 @@
 #include "storage/database_header.h"
 #include "storage/index/hash_index.h"
 #include "storage/page_manager.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/list_chunk_data.h"
 #include "storage/table/node_table.h"
@@ -169,7 +170,9 @@ static std::vector<DiskSizeEntry> collectDiskSizeInfo(const ClientContext* conte
     auto relGroupEntries = catalog->getRelGroupEntries(&transaction::DUMMY_CHECKPOINT_TRANSACTION);
 
     for (const auto tableEntry : nodeTableEntries) {
-        auto& nodeTable = storageManager->getTable(tableEntry->getTableID())->cast<NodeTable>();
+        auto& nodeTable = storage::PartitionStorageRegistry::resolveNodeTableByID(
+            const_cast<ClientContext*>(context), tableEntry->getTableID())
+                              ->cast<NodeTable>();
         uint64_t tablePages = 0;
         auto numNodeGroups = nodeTable.getNumNodeGroups();
         for (auto i = 0ul; i < numNodeGroups; i++) {

@@ -81,8 +81,8 @@ private:
           pkVector{nullptr}, columnDataVectors{other.columnDataVectors}, columnIDs{other.columnIDs},
           partitionTables{other.partitionTables}, partitionChildIDs{other.partitionChildIDs},
           partitionRefs{other.partitionRefs}, partitionHandles{other.partitionHandles},
-          partitionKeyColumnID{other.partitionKeyColumnID},
-          partitionMethod{other.partitionMethod}, parentTableID{other.parentTableID} {}
+          partitionKeyColumnID{other.partitionKeyColumnID}, partitionMethod{other.partitionMethod},
+          parentTableID{other.parentTableID} {}
 };
 
 class NodeInsertExecutor {

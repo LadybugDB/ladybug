@@ -2,6 +2,7 @@
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "storage/index/art_index.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "storage/wal/wal_replayer.h"
@@ -23,7 +24,9 @@ void WALReplayer::replayCreateIndexRecord(WALRecord& walRecord) const {
             indexCatalogEntry.getIndexName())) {
         catalog->createIndex(trx, std::move(record.ownedCatalogEntry));
     }
-    auto* table = storageManager->getTable(record.indexInfo->tableID)->ptrCast<NodeTable>();
+    auto* table = storage::PartitionStorageRegistry::resolveNodeTableByID(&clientContext,
+        record.indexInfo->tableID)
+                      ->ptrCast<NodeTable>();
     if (table->getIndex(record.indexInfo->name).has_value()) {
         return;
     }

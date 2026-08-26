@@ -7,6 +7,7 @@
 #include "function/table/simple_table_function.h"
 #include "processor/execution_context.h"
 #include "storage/local_cached_column.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/list_chunk_data.h"
 #include "storage/table/node_table.h"
@@ -92,8 +93,9 @@ struct CacheArrayColumnLocalState final : TableFuncLocalState {
     CacheArrayColumnLocalState(const main::ClientContext& context, table_id_t tableID,
         column_id_t columnID)
         : dataChunk{2, std::make_shared<DataChunkState>()} {
-        auto& table =
-            storage::StorageManager::Get(context)->getTable(tableID)->cast<storage::NodeTable>();
+        auto& table = storage::PartitionStorageRegistry::resolveNodeTableByID(
+            const_cast<main::ClientContext*>(&context), tableID)
+                          ->cast<storage::NodeTable>();
         dataChunk.insert(0, std::make_shared<ValueVector>(LogicalType::INTERNAL_ID()));
         dataChunk.insert(1,
             std::make_shared<ValueVector>(table.getColumn(columnID).getDataType().copy()));

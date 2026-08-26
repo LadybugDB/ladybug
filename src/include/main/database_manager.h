@@ -1,6 +1,7 @@
 #pragma once
 
 #include "attached_database.h"
+#include "storage/partition_storage_registry.h"
 
 namespace lbug {
 namespace catalog {
@@ -10,6 +11,8 @@ class Catalog;
 namespace storage {
 class MemoryManager;
 class StorageManager;
+
+class PartitionStorageRegistry;
 } // namespace storage
 
 namespace main {
@@ -57,6 +60,14 @@ private:
     std::vector<std::unique_ptr<AttachedDatabase>> attachedDatabases;
     std::string defaultDatabase;
     std::vector<std::unique_ptr<catalog::Catalog>> graphs;
+    // Owns the per-partition data files of partitioned node tables (phase-B per-partition
+    // storage; see docs/partitioning.md 6b).
+    storage::PartitionStorageRegistry partitionStorageRegistry;
+
+public:
+    storage::PartitionStorageRegistry* getPartitionStorageRegistry() {
+        return &partitionStorageRegistry;
+    }
     std::string defaultGraph;
 };
 
