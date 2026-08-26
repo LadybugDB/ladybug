@@ -1063,13 +1063,22 @@ std::vector<std::unique_ptr<ColumnChunkData>> ColumnChunkData::split(bool target
     // times in the inner loop below.
     auto meta = getMetadataToFlush();
     auto dataPages = meta.getNumDataPages(dataType.getPhysicalType());
-    uint64_t nullSize = 0;
-    if (nullData) {
-        nullSize = nullData->getSizeOnDisk();
-    }
-    auto totalSize = dataPages * common::LBUG_PAGE_SIZE + nullSize;
+    // Use the virtual getSizeOnDisk() instead of recomputing the size from base-class metadata
+    // alone: subclasses can own additional storage that must be counted when sizing segments
+    // (StringChunkData adds its index and dictionary chunks). The previously inlined formula
+    // reported a size of 0 for variable-size types (numBytesPerValue == 0), which collapsed
+    // targetSize below to 0 on the checkpoint compaction path and shattered chunks into
+    // single-batch segments: a 131072-value string chunk became 2048 segments instead of ~3,
+    // bloating files ~2x and slowing down COPY FROM (gh-835).
+    auto totalSize = getSizeOnDisk();
 
     auto targetSize = targetMaxSize ? maxSegmentSize : std::min(totalSize / 2, maxSegmentSize);
+    // Defensive fallback: if the size computation still degenerates to 0 for a non-empty chunk
+    // (which would fragment it into one minimal segment per batch), split by the maximum
+    // segment size instead.
+    if (targetSize == 0 && numValues > 0) {
+        targetSize = maxSegmentSize;
+    }
 
     // For fixed-size types, compute a count-based bound directly from the compression metadata.
     // Using pages * valuesPerPage is accurate because it respects page boundaries and avoids the
@@ -1086,6 +1095,10 @@ std::vector<std::unique_ptr<ColumnChunkData>> ColumnChunkData::split(bool target
     std::vector<std::unique_ptr<ColumnChunkData>> newSegments;
     uint64_t pos = 0;
     const uint64_t chunkSize = 64;
+    // A chunk large enough to require splitting must receive a target size of at least one
+    // page; a smaller (especially zero) target fragments it into single-batch segments.
+    DASSERT(numValues <= chunkSize || getSizeOnDisk() <= common::StorageConfig::MAX_SEGMENT_SIZE ||
+            targetSize >= common::LBUG_PAGE_SIZE);
     uint64_t initialCapacity = std::min(chunkSize, numValues);
     while (pos < numValues) {
         std::unique_ptr<ColumnChunkData> newSegment =
@@ -1133,6 +1146,24 @@ std::vector<std::unique_ptr<ColumnChunkData>> ColumnChunkData::split(bool target
         }
         newSegments.push_back(std::move(newSegment));
     }
+    // Guard against excessive segmentation: apart from the trailing remainder, a segment must
+    // not stop after a single batch while still fitting comfortably within the target size.
+    // That is the signature of a degenerate targetSize (gh-835). Single-batch segments holding
+    // genuinely large values (e.g., multi-KB strings exceeding the target size) are legitimate
+    // and excluded by the size condition.
+    DASSERT([&]() {
+        if (newSegments.size() <= 1 || numValues <= 2 * chunkSize) {
+            return true;
+        }
+        for (auto iter = newSegments.begin(); iter != newSegments.end() - 1; ++iter) {
+            const auto& segment = **iter;
+            if (segment.getNumValues() <= chunkSize &&
+                segment.getSizeOnDiskInMemoryStats() <= targetSize / 2) {
+                return false;
+            }
+        }
+        return true;
+    }());
     return newSegments;
 }
 
