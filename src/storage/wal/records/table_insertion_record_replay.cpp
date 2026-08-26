@@ -1,5 +1,6 @@
 #include "common/exception/runtime.h"
 #include "storage/local_storage/local_rel_table.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
@@ -29,7 +30,9 @@ void WALReplayer::replayTableInsertionRecord(const WALRecord& walRecord) const {
 void WALReplayer::replayNodeTableInsertRecord(const WALRecord& walRecord) const {
     const auto& insertionRecord = walRecord.constCast<TableInsertionRecord>();
     const auto tableID = insertionRecord.tableID;
-    auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<NodeTable>();
+    // Partition children live in their own data files (phase-B); dispatch by table ID.
+    auto& table = storage::PartitionStorageRegistry::resolveNodeTableByID(&clientContext, tableID)
+                      ->cast<NodeTable>();
     DASSERT(!insertionRecord.ownedVectors.empty());
     const auto anchorState = insertionRecord.ownedVectors[0]->state;
     const auto numNodes = anchorState->getSelVector().getSelSize();

@@ -47,15 +47,29 @@ public:
     void flushAll(main::ClientContext& context) const;
     // Clear any buffer in the WAL writer. Also truncate the WAL file to 0 bytes.
     void clear(BufferManager& bm);
+    bool hasShadowingFH() const { return shadowingFH != nullptr; }
+    void setDatabasePath(const std::string& databasePath);
     // Reset the WAL writer to nullptr, and remove the WAL file if it exists.
     void reset();
 
     // Replay shadow page records from the shadow file to the original data file. This is used
     // during recovery.
     static void replayShadowPageRecords(main::ClientContext& context);
+    // Same as above, but for an arbitrary database file (e.g. a partition child's data file)
+    // rather than the main database path. `databasePath` is the DATA file path; the shadow
+    // path is derived from it.
+    static void replayShadowPageRecords(main::ClientContext& context,
+        const std::string& databasePath);
+    // Variant for files whose handle is already open and locked by the given storage manager
+    // (partition children during recovery): avoids taking a second lock on the data file.
+    static void replayShadowPageRecordsForStorageManager(main::ClientContext& context,
+        StorageManager& storageManager);
 
 private:
     FileHandle* getOrCreateShadowingFH();
+
+    static void replayShadowPageRecordsCore(common::FileInfo& shadowFileInfo,
+        common::FileInfo& dataFileInfo);
 
 private:
     BufferManager& bm;

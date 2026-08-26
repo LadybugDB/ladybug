@@ -25,7 +25,12 @@ public:
     // Return nullptr if no local table exists.
     LocalTable* getLocalTable(common::table_id_t tableID) const;
 
-    PageAllocator* addOptimisticAllocator();
+    // Optimistic page allocation is scoped to one storage manager (each partition child has
+    // its own data file and page manager). `sm == nullptr` selects the main database file.
+    // Allocators are cached per StorageManager so repeated calls for the same file (e.g. one
+    // call per batch-insert target) share a single allocator, and commit/rollback covers each
+    // file exactly once.
+    PageAllocator* addOptimisticAllocator(StorageManager* sm = nullptr);
 
     void commit();
     void rollback();
@@ -37,6 +42,7 @@ private:
     // The mutex is only needed when working with the optimistic allocators
     std::mutex mtx;
     std::vector<std::unique_ptr<OptimisticAllocator>> optimisticAllocators;
+    std::unordered_map<StorageManager*, OptimisticAllocator*> allocatorsByStorageManager;
 };
 
 } // namespace storage

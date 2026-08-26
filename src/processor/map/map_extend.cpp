@@ -12,6 +12,7 @@
 #include "processor/operator/scan/scan_multi_rel_tables.h"
 #include "processor/operator/scan/scan_rel_table.h"
 #include "processor/plan_mapper.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/ice_disk_rel_table.h"
 #include "storage/table/node_table.h"
@@ -259,7 +260,11 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
                             cat = catalog::Catalog::Get(*clientContext);
                             sm = storage::StorageManager::Get(*clientContext);
                         }
-                        auto table = sm->getTable(tableID)->ptrCast<NodeTable>();
+                        auto table = sm->containsTable(tableID) ?
+                                         sm->getTable(tableID)->ptrCast<NodeTable>() :
+                                         storage::PartitionStorageRegistry::resolveNodeTableByID(
+                                             clientContext, tableID)
+                                             ->ptrCast<NodeTable>();
                         sourceNodeTables.push_back(table);
                         auto tableEntry = cat->getTableCatalogEntry(transaction, tableID);
                         sourceNodeTableInfos.push_back(

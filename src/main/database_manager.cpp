@@ -19,6 +19,7 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/checkpointer.h"
 #include "storage/database_header.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/shadow_utils.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
@@ -307,6 +308,14 @@ void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManage
 
     for (auto* graphEntry : graphEntries) {
         auto graphName = graphEntry->getName();
+        // Partition subgraphs are registered as graphs in the catalog (so show_graphs lists
+        // them and queries can address them), but their data files are owned by the partition
+        // storage registry through the main StorageManager. Loading them here would open a
+        // second StorageManager on the same file and turn them into checkpoint targets whose
+        // empty catalogs treat every live partition as orphaned (deleting its data on close).
+        if (mainCatalog->containsTable(transaction, graphName)) {
+            continue;
+        }
 
         // Check if graph is already loaded
         auto upperCaseName = StringUtils::getUpper(graphName);
@@ -420,6 +429,23 @@ std::pair<catalog::Catalog*, storage::StorageManager*> DatabaseManager::resolveT
     auto* mainSM = storage::StorageManager::Get(context);
     if (mainSM->containsTable(tableID)) {
         return {catalog::Catalog::Get(context), mainSM};
+    }
+    // Partition children live in their own data files (phase-B per-partition storage);
+    // lazily open the child's file from its catalog entry on first touch after reopen.
+    {
+        auto& registry = *Get(context)->getPartitionStorageRegistry();
+        if (registry.tryGet(tableID) != nullptr ||
+            catalog::Catalog::Get(context)->containsTable(transaction::Transaction::Get(context),
+                tableID)) {
+            auto* entry = catalog::Catalog::Get(context)->getTableCatalogEntry(
+                transaction::Transaction::Get(context), tableID);
+            auto& sm = registry.getOrCreate(const_cast<ClientContext*>(&context), tableID,
+                entry->getName());
+            if (!sm.containsTable(tableID) && !sm.isReadOnly()) {
+                sm.createTable(entry, const_cast<ClientContext*>(&context));
+            }
+            return {catalog::Catalog::Get(context), &sm};
+        }
     }
     auto* dbManager = DatabaseManager::Get(context);
     for (auto* attachedDB : dbManager->getAttachedDatabases()) {

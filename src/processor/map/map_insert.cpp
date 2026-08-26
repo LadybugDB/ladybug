@@ -50,11 +50,23 @@ NodeInsertExecutor PlanMapper::getNodeInsertExecutor(const LogicalInsertInfo* bo
     // partition is routed remotely, to a single wrapper-provided substitute (which carries its
     // own scan function). A pattern naming one partition subgraph directly is a plain write.
     // A LIST parent starts with exactly one (unkeyed) partition, so it is detected through its
-    // parent link rather than the expanded-entry count.
+    // parent link rather than the expanded-entry count: rows must still route through the
+    // list router so new partitions are created on first sight of a key value.
     const auto* firstEntry = node.getEntry(0)->ptrCast<NodeTableCatalogEntry>();
+    bool isListParent = false;
+    if (firstEntry->isPartitionChild()) {
+        auto transaction = transaction::Transaction::Get(*clientContext);
+        const auto* parentEntry =
+            Catalog::Get(*clientContext)
+                ->getTableCatalogEntry(transaction, firstEntry->getParentTableID())
+                ->ptrCast<NodeTableCatalogEntry>();
+        isListParent = parentEntry->isPartitioned() &&
+                       static_cast<common::PartitionMethod>(*parentEntry->getPartitionMethod()) ==
+                           common::PartitionMethod::LIST;
+    }
     const bool parentPattern =
         firstEntry->isPartitionChild() &&
-        (node.getNumEntries() > 1 || firstEntry->getScanFunction().has_value());
+        (node.getNumEntries() > 1 || firstEntry->getScanFunction().has_value() || isListParent);
     if (parentPattern) {
         const auto parentID = firstEntry->getParentTableID();
         DASSERT(parentID != INVALID_TABLE_ID);
@@ -72,10 +84,9 @@ NodeInsertExecutor PlanMapper::getNodeInsertExecutor(const LogicalInsertInfo* bo
             hooks->locate(hooks->context, common::PartitionRef{parentID, 0}, &handle);
         // The "first partition" table is only used to derive the PK vector position; it can be
         // null when every partition is routed remotely.
-        auto firstTable =
-            firstClaimed ? nullptr :
-                           storage::PartitionStorageRegistry::resolveNodeTableByID(clientContext,
-                               childTableIDs[0]);
+        auto firstTable = firstClaimed ? nullptr :
+                                         storage::PartitionStorageRegistry::resolveNodeTableByID(
+                                             clientContext, childTableIDs[0]);
         auto tableInfo = NodeTableInsertInfo(firstTable, std::move(evaluators));
         tableInfo.partitionKeyColumnID = parent->getPartitionColumnID();
         tableInfo.partitionMethod =
@@ -90,8 +101,8 @@ NodeInsertExecutor PlanMapper::getNodeInsertExecutor(const LogicalInsertInfo* bo
                                      hooks->locate(hooks->context, ref, &partHandle);
                 tableInfo.partitionTables.push_back(
                     claimed ? nullptr :
-                              storage::PartitionStorageRegistry::resolveNodeTableByID(
-                                  clientContext, childTableIDs[i]));
+                              storage::PartitionStorageRegistry::resolveNodeTableByID(clientContext,
+                                  childTableIDs[i]));
                 tableInfo.partitionChildIDs.push_back(childTableIDs[i]);
                 tableInfo.partitionRefs.push_back(ref);
                 tableInfo.partitionHandles.push_back(claimed ? partHandle : nullptr);
@@ -102,8 +113,6 @@ NodeInsertExecutor PlanMapper::getNodeInsertExecutor(const LogicalInsertInfo* bo
     // Plain single-table write (including a direct pattern on one partition subgraph).
     auto table =
         storage::PartitionStorageRegistry::resolveNodeTable(clientContext, *node.getEntry(0));
-    auto tableInfo = NodeTableInsertInfo(table, std::move(evaluators));
-    return NodeInsertExecutor(std::move(info), std::move(tableInfo));
     auto tableInfo = NodeTableInsertInfo(table, std::move(evaluators));
     return NodeInsertExecutor(std::move(info), std::move(tableInfo));
 }

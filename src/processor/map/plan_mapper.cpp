@@ -1,10 +1,12 @@
 #include "processor/plan_mapper.h"
 
+#include "catalog/catalog.h"
 #include "main/client_context.h"
 #include "main/database.h"
 #include "planner/operator/logical_plan.h"
 #include "processor/operator/profile.h"
 #include "processor/physical_plan_util.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 
@@ -267,7 +269,10 @@ FactorizedTableSchema PlanMapper::createFlatFTableSchema(const expression_vector
 }
 
 std::unique_ptr<SemiMask> PlanMapper::createSemiMask(table_id_t tableID) const {
-    auto table = StorageManager::Get(*clientContext)->getTable(tableID)->ptrCast<NodeTable>();
+    auto* entry =
+        catalog::Catalog::Get(*clientContext)
+            ->getTableCatalogEntry(transaction::Transaction::Get(*clientContext), tableID);
+    auto* table = storage::PartitionStorageRegistry::resolveNodeTable(clientContext, *entry);
     return SemiMaskUtil::createMask(
         table->getNumTotalRows(transaction::Transaction::Get(*clientContext)));
 }

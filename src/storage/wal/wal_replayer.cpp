@@ -14,9 +14,11 @@
 #include "common/type_utils.h"
 #include "common/types/types.h"
 #include "main/client_context.h"
+#include "main/database_manager.h"
 #include "storage/checkpointer.h"
 #include "storage/file_db_id_utils.h"
 #include "storage/local_storage/local_rel_table.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
 #include "storage/wal/checksum_reader.h"
@@ -39,6 +41,47 @@ static constexpr std::string_view checksumMismatchMessage =
     "Checksum verification failed, the WAL file is corrupted.";
 static constexpr std::string_view readOnlyCheckpointInProgressMessage =
     "Cannot open database in read-only mode while checkpoint is in progress. Please retry later.";
+
+// Partition children persist their pending updates into their own shadow files durably BEFORE
+// the main database's commit point. Recovery therefore mirrors the main file's decision:
+// when the WAL ends in a checkpoint record the child shadow pages are applied; otherwise they
+// are discarded so WAL redo replays the lost updates against the last committed state.
+static void replayPartitionChildShadowPages(main::ClientContext& clientContext) {
+    auto* dbManager = main::DatabaseManager::Get(clientContext);
+    if (dbManager == nullptr) {
+        return;
+    }
+    auto* registry = dbManager->getPartitionStorageRegistry();
+    auto vfs = VirtualFileSystem::GetUnsafe(clientContext);
+    bool replayedAny = false;
+    for (auto* sm : registry->getAllManagers()) {
+        const auto& dbPath = sm->getDatabasePath();
+        if (!vfs->fileOrPathExists(StorageUtils::getShadowFilePath(dbPath), &clientContext)) {
+            continue;
+        }
+        // Replays through the child's already-open file handle (no second lock on the data
+        // file).
+        ShadowFile::replayShadowPageRecordsForStorageManager(clientContext, *sm);
+        replayedAny = true;
+    }
+    if (replayedAny) {
+        // The applied shadows may have replaced the children's on-disk headers and
+        // page-manager serializations; refresh the in-memory copies.
+        registry->reloadPageManagers();
+    }
+}
+
+static void removePartitionChildShadowFiles(main::ClientContext& clientContext) {
+    auto* dbManager = main::DatabaseManager::Get(clientContext);
+    if (dbManager == nullptr) {
+        return;
+    }
+    auto vfs = VirtualFileSystem::GetUnsafe(clientContext);
+    for (auto* sm : dbManager->getPartitionStorageRegistry()->getAllManagers()) {
+        vfs->removeFileIfExists(StorageUtils::getShadowFilePath(sm->getDatabasePath()),
+            &clientContext);
+    }
+}
 
 static void syncParentDirectoryForLocalPath(const std::string& path) {
 #ifdef _WIN32
@@ -165,6 +208,7 @@ void WALReplayer::replay(bool throwOnWalReplayFailure, bool enableChecksums) con
     if (!hasFrozenWAL && !hasActiveWAL) {
         removeFileAndSyncParentDirectory(shadowFilePath);
         checkpointer.readCheckpoint();
+        removePartitionChildShadowFiles(clientContext);
         return;
     }
 
@@ -188,6 +232,7 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
         fileInfo.reset();
         removeWALAndShadowFiles(checkpointWalPath);
         checkpointer.readCheckpoint();
+        removePartitionChildShadowFiles(clientContext);
         return;
     }
     syncWALFile(*fileInfo);
@@ -201,9 +246,11 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
             fileInfo.reset();
             removeWALAndShadowFiles(checkpointWalPath);
             checkpointer.readCheckpoint();
+            replayPartitionChildShadowPages(clientContext);
         } else {
             removeFileAndSyncParentDirectory(shadowFilePath);
             checkpointer.readCheckpoint();
+            removePartitionChildShadowFiles(clientContext);
             Deserializer deserializer = initDeserializer(*fileInfo, clientContext, enableChecksums);
             if (offsetDeserialized > 0) {
                 deserializer.getReader()->onObjectBegin();
@@ -236,6 +283,7 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
     if (fileInfo->getFileSize() == 0) {
         fileInfo.reset();
         removeWALAndShadowFiles(walPath);
+        removePartitionChildShadowFiles(clientContext);
         return;
     }
     syncWALFile(*fileInfo);
@@ -249,8 +297,10 @@ void WALReplayer::replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalRep
             fileInfo.reset();
             removeWALAndShadowFiles(walPath);
             checkpointer.readCheckpoint();
+            replayPartitionChildShadowPages(clientContext);
         } else {
             removeFileAndSyncParentDirectory(shadowFilePath);
+            removePartitionChildShadowFiles(clientContext);
             Deserializer deserializer = initDeserializer(*fileInfo, clientContext, enableChecksums);
             if (offsetDeserialized > 0) {
                 deserializer.getReader()->onObjectBegin();

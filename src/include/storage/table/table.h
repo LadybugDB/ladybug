@@ -160,6 +160,9 @@ public:
     common::TableType getTableType() const { return tableType; }
     common::table_id_t getTableID() const { return tableID; }
     std::string getTableName() const { return tableName; }
+    // The StorageManager that owns this table's data file. Partition children report their
+    // own per-partition manager, not the main database's.
+    StorageManager* getStorageManager() const { return storageManager; }
 
     // Note that `resetCachedBoundNodeIDs` is only applicable to RelTable for now.
     virtual void initScanState(transaction::Transaction* transaction, TableScanState& readState,
@@ -217,6 +220,7 @@ protected:
     std::string tableName;
     bool enableCompression;
     MemoryManager* memoryManager;
+    StorageManager* storageManager;
     ShadowFile* shadowFile;
     std::atomic<uint64_t> changeEpoch;
     // Epoch watermark of the last successful checkpoint for this table.

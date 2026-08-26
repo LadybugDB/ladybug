@@ -9,6 +9,7 @@
 #include "common/types/types.h"
 #include "function/hash/vector_hash_functions.h"
 #include "main/client_context.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "transaction/transaction.h"
@@ -150,12 +151,13 @@ ListPartitionRouter::Route ListPartitionRouter::getOrCreatePartitionLocked(
     }
     // A partition for this key may already exist (created before this router was constructed, or
     // by a previous query after reopen).
+    auto* catalog = Catalog::Get(*context);
+    auto* transaction = transaction::Transaction::Get(*context);
     const auto& existingKeys = parent->getListPartitionKeys();
     for (auto i = 0u; i < existingKeys.size(); i++) {
         if (existingKeys[i].first == encodedKey) {
-            auto* table = storage::StorageManager::Get(*context)
-                              ->getTable(existingKeys[i].second)
-                              ->ptrCast<storage::NodeTable>();
+            auto* childEntry = catalog->getTableCatalogEntry(transaction, existingKeys[i].second);
+            auto* table = storage::PartitionStorageRegistry::resolveNodeTable(context, *childEntry);
             Route route{table, i};
             routesByKey.emplace(encodedKey, route);
             return route;
@@ -163,9 +165,6 @@ ListPartitionRouter::Route ListPartitionRouter::getOrCreatePartitionLocked(
     }
     // Create the partition: an ordinary node table with the parent's schema, via the same
     // catalog + storage machinery as CREATE NODE TABLE.
-    auto* catalog = Catalog::Get(*context);
-    auto* transaction = transaction::Transaction::Get(*context);
-    auto* storageManager = storage::StorageManager::Get(*context);
     const auto ordinal = parent->getChildTableIDs().size();
     auto childName = std::format("{}_p{}", parent->getName(), ordinal);
     std::vector<binder::PropertyDefinition> propertyDefinitions;
@@ -183,11 +182,18 @@ ListPartitionRouter::Route ListPartitionRouter::getOrCreatePartitionLocked(
         ConflictAction::ON_CONFLICT_THROW, std::move(extraInfo), false /* isInternal */);
     auto* childEntry =
         catalog->createTableEntry(transaction, childInfo)->ptrCast<TableCatalogEntry>();
-    storageManager->createTable(childEntry, context);
     const auto tableID = childEntry->getTableID();
+    // Own data file per partition (phase-B); see docs/partitioning.md 6b.
+    storage::PartitionStorageRegistry::Get(context)
+        ->getOrCreate(context, tableID, childName)
+        .createTable(childEntry, context);
     parent->addChildTableID(tableID);
     parent->addListPartition(encodedKey, tableID);
-    Route route{storageManager->getTable(tableID)->ptrCast<storage::NodeTable>(), ordinal};
+    Route route{storage::PartitionStorageRegistry::Get(context)
+                    ->getOrCreate(context, tableID, childName)
+                    .getTable(tableID)
+                    ->ptrCast<storage::NodeTable>(),
+        ordinal};
     routesByKey.emplace(encodedKey, route);
     return route;
 }

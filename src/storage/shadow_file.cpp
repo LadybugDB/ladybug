@@ -40,6 +40,10 @@ ShadowFile::ShadowFile(BufferManager& bm, VirtualFileSystem* vfs, const std::str
     DASSERT(vfs);
 }
 
+void ShadowFile::setDatabasePath(const std::string& databasePath_) {
+    shadowFilePath = StorageUtils::getShadowFilePath(databasePath_);
+}
+
 void ShadowFile::clearShadowPage(file_idx_t originalFile, page_idx_t originalPage) {
     if (hasShadowPage(originalFile, originalPage)) {
         shadowPagesMap.at(originalFile).erase(originalPage);
@@ -91,17 +95,21 @@ static uuid getOldDatabaseID(FileInfo& dataFileInfo) {
 }
 
 void ShadowFile::replayShadowPageRecords(ClientContext& context) {
+    replayShadowPageRecords(context, context.getDatabasePath());
+}
+
+void ShadowFile::replayShadowPageRecords(ClientContext& context, const std::string& databasePath) {
     if (context.getDBConfig()->readOnly) {
         throw RuntimeException("Couldn't replay shadow pages under read-only mode. Please re-open "
                                "the database with read-write mode to replay shadow pages.");
     }
     auto vfs = VirtualFileSystem::GetUnsafe(context);
-    auto shadowFilePath = StorageUtils::getShadowFilePath(context.getDatabasePath());
+    auto shadowFilePath = StorageUtils::getShadowFilePath(databasePath);
     auto shadowFileInfo = vfs->openFile(shadowFilePath, FileOpenFlags(FileFlags::READ_ONLY));
 
     std::unique_ptr<FileInfo> dataFileInfo;
     try {
-        dataFileInfo = vfs->openFile(context.getDatabasePath(),
+        dataFileInfo = vfs->openFile(databasePath,
             FileOpenFlags{FileFlags::WRITE | FileFlags::READ_ONLY, FileLockType::WRITE_LOCK});
     } catch (IOException& e) {
         throw RuntimeException(std::format(
@@ -110,21 +118,39 @@ void ShadowFile::replayShadowPageRecords(ClientContext& context) {
             "to do so, please delete this file and restart the database.",
             shadowFilePath));
     }
+    replayShadowPageRecordsCore(*shadowFileInfo, *dataFileInfo);
+}
 
+void ShadowFile::replayShadowPageRecordsForStorageManager(ClientContext& context,
+    StorageManager& storageManager) {
+    // Variant for files whose handle is already open and locked by the given storage manager
+    // (partition children during recovery): avoids taking a second lock on the data file,
+    // which fails on platforms with per-handle locks (Windows).
+    if (context.getDBConfig()->readOnly) {
+        throw RuntimeException("Couldn't replay shadow pages under read-only mode. Please re-open "
+                               "the database with read-write mode to replay shadow pages.");
+    }
+    auto vfs = VirtualFileSystem::GetUnsafe(context);
+    auto shadowFilePath = StorageUtils::getShadowFilePath(storageManager.getDatabasePath());
+    auto shadowFileInfo = vfs->openFile(shadowFilePath, FileOpenFlags(FileFlags::READ_ONLY));
+    replayShadowPageRecordsCore(*shadowFileInfo, *storageManager.getDataFH()->getFileInfo());
+}
+
+void ShadowFile::replayShadowPageRecordsCore(FileInfo& shadowFileInfo, FileInfo& dataFileInfo) {
     ShadowFileHeader header;
     const auto headerBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
-    shadowFileInfo->readFromFile(headerBuffer.get(), LBUG_PAGE_SIZE, 0);
+    shadowFileInfo.readFromFile(headerBuffer.get(), LBUG_PAGE_SIZE, 0);
     memcpy(&header, headerBuffer.get(), sizeof(ShadowFileHeader));
 
     // When replaying the shadow file we haven't read the database ID from the database
     // header yet
     // So we need to do it separately here to verify the shadow file matches the database
-    auto oldDatabaseID = getOldDatabaseID(*dataFileInfo);
-    FileDBIDUtils::verifyDatabaseID(*shadowFileInfo, oldDatabaseID, header.databaseID);
+    auto oldDatabaseID = getOldDatabaseID(dataFileInfo);
+    FileDBIDUtils::verifyDatabaseID(shadowFileInfo, oldDatabaseID, header.databaseID);
 
     std::vector<ShadowPageRecord> shadowPageRecords;
     shadowPageRecords.reserve(header.numShadowPages);
-    auto reader = std::make_unique<BufferedFileReader>(*shadowFileInfo);
+    auto reader = std::make_unique<BufferedFileReader>(shadowFileInfo);
     reader->resetReadOffset((header.numShadowPages + 1) * LBUG_PAGE_SIZE);
     Deserializer deSer(std::move(reader));
     deSer.deserializeVector(shadowPageRecords);
@@ -132,13 +158,13 @@ void ShadowFile::replayShadowPageRecords(ClientContext& context) {
     const auto pageBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
     page_idx_t shadowPageIdx = 1;
     for (const auto& record : shadowPageRecords) {
-        shadowFileInfo->readFromFile(pageBuffer.get(), LBUG_PAGE_SIZE,
+        shadowFileInfo.readFromFile(pageBuffer.get(), LBUG_PAGE_SIZE,
             shadowPageIdx * LBUG_PAGE_SIZE);
-        dataFileInfo->writeFile(pageBuffer.get(), LBUG_PAGE_SIZE,
+        dataFileInfo.writeFile(pageBuffer.get(), LBUG_PAGE_SIZE,
             record.originalPageIdx * LBUG_PAGE_SIZE);
         shadowPageIdx++;
     }
-    dataFileInfo->syncFile();
+    dataFileInfo.syncFile();
 }
 
 void ShadowFile::flushAll(main::ClientContext& context) const {

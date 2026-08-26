@@ -4,7 +4,9 @@
 #include "storage/local_storage/local_node_table.h"
 #include "storage/local_storage/local_rel_table.h"
 #include "storage/local_storage/local_table.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
 #include "storage/table/rel_table.h"
 #include "storage/table/table.h"
 
@@ -45,15 +47,22 @@ LocalTable* LocalStorage::getLocalTable(table_id_t tableID) const {
     return nullptr;
 }
 
-PageAllocator* LocalStorage::addOptimisticAllocator() {
-    auto* dataFH = StorageManager::Get(clientContext)->getDataFH();
+PageAllocator* LocalStorage::addOptimisticAllocator(StorageManager* sm) {
+    auto* effectiveSM = sm != nullptr ? sm : StorageManager::Get(clientContext);
+    auto* dataFH = effectiveSM->getDataFH();
     if (dataFH->isInMemoryMode()) {
         return dataFH->getPageManager();
     }
     UniqLock lck{mtx};
+    if (const auto it = allocatorsByStorageManager.find(effectiveSM);
+        it != allocatorsByStorageManager.end()) {
+        return it->second;
+    }
     optimisticAllocators.emplace_back(
         std::make_unique<OptimisticAllocator>(*dataFH->getPageManager()));
-    return optimisticAllocators.back().get();
+    auto* allocator = optimisticAllocators.back().get();
+    allocatorsByStorageManager[effectiveSM] = allocator;
+    return allocator;
 }
 
 void LocalStorage::commit() {
@@ -63,7 +72,8 @@ void LocalStorage::commit() {
     for (auto& [tableID, localTable] : tables) {
         if (localTable->getTableType() == TableType::NODE) {
             const auto tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
-            const auto table = storageManager->getTable(tableID);
+            const auto table =
+                storage::PartitionStorageRegistry::resolveNodeTableByID(&clientContext, tableID);
             table->commit(&clientContext, tableEntry, localTable.get());
         }
     }

@@ -11,6 +11,7 @@
 #include "function/table/simple_table_function.h"
 #include "main/client_context.h"
 #include "processor/execution_context.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/list_chunk_data.h"
 #include "storage/table/list_column.h"
@@ -283,7 +284,8 @@ static offset_t tableFunc(const TableFuncInput& input, TableFuncOutput& output) 
         switch (bindData->tableEntry->getTableType()) {
         case TableType::NODE: {
             outputData.tableType = "NODE";
-            auto table = storageManager->getTable(bindData->tableEntry->getTableID());
+            auto table = storage::PartitionStorageRegistry::resolveNodeTableByID(
+                input.context->clientContext, bindData->tableEntry->getTableID());
             auto& nodeTable = table->cast<NodeTable>();
             std::vector<const Column*> columns;
             for (auto columnID = 0u; columnID < nodeTable.getNumColumns(); columnID++) {

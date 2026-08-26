@@ -4,6 +4,7 @@
 #include "planner/operator/scan/logical_count_rel_table.h"
 #include "processor/operator/scan/count_rel_table.h"
 #include "processor/plan_mapper.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 
 using namespace lbug::common;
@@ -32,10 +33,25 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCountRelTable(
         }
     }
 
-    // Get the node tables for scanning bound nodes
+    // Get the node tables for scanning bound nodes. For attached LBUG databases the
+    // node table IDs belong to the attached catalog/storage manager, not the main one.
     std::vector<NodeTable*> nodeTables;
+    auto* attachedLbugDB = static_cast<main::AttachedLbugDatabase*>(nullptr);
+    if (!dbName.empty()) {
+        auto* attachedDB = main::DatabaseManager::Get(*clientContext)->getAttachedDatabase(dbName);
+        if (attachedDB->getDBType() == common::ATTACHED_LBUG_DB_TYPE) {
+            attachedLbugDB = static_cast<main::AttachedLbugDatabase*>(attachedDB);
+        }
+    }
     for (auto tableID : logicalCountRelTable.getBoundNodeTableIDs()) {
-        nodeTables.push_back(storageManager->getTable(tableID)->ptrCast<NodeTable>());
+        if (attachedLbugDB != nullptr) {
+            auto* attachedSM = attachedLbugDB->getStorageManager();
+            nodeTables.push_back(attachedSM->getTable(tableID)->ptrCast<NodeTable>());
+        } else {
+            nodeTables.push_back(
+                storage::PartitionStorageRegistry::resolveNodeTableByID(clientContext, tableID)
+                    ->ptrCast<NodeTable>());
+        }
     }
 
     // Get the rel tables

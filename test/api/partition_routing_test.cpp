@@ -14,6 +14,8 @@
 #include "common/partition_routing_hook.h"
 #include "function/table/bind_data.h"
 #include "function/table/simple_table_function.h"
+#include "main/database_manager.h"
+#include "storage/partition_storage_registry.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "transaction/transaction.h"
@@ -242,7 +244,11 @@ table_id_t getTableID(Connection* con, const std::string& name) {
 }
 
 bool hasLocalStorage(Connection* con, table_id_t tableID) {
-    return StorageManager::Get(*con->getClientContext())->containsTable(tableID);
+    auto* context = con->getClientContext();
+    // Per-partition storage files (phase B1): partition children live in their own
+    // StorageManagers, tracked by the PartitionStorageRegistry.
+    return StorageManager::Get(*context)->containsTable(tableID) ||
+           PartitionStorageRegistry::Get(context)->tryGet(tableID) != nullptr;
 }
 
 std::string sortLines(std::string s) {

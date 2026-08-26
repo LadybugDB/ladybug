@@ -4,6 +4,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "processor/partition_routing.h"
+#include "storage/partition_storage_registry.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -154,10 +155,10 @@ storage::NodeTable* NodeInsertExecutor::resolveTableForNodeID(common::nodeID_t n
         if (tableInfo.partitionMethod == common::PartitionMethod::LIST &&
             tableInfo.parentTableID != common::INVALID_TABLE_ID) {
             // LIST: the node may live in a partition created after this executor was cloned;
-            // resolve by the table ID recorded in the node ID itself.
-            return storage::StorageManager::Get(*context)
-                ->getTable(nodeID.tableID)
-                ->ptrCast<storage::NodeTable>();
+            // resolve by the table ID recorded in the node ID itself (own data file).
+            auto* entry = catalog::Catalog::Get(*context)->getTableCatalogEntry(
+                transaction::Transaction::Get(*context), nodeID.tableID);
+            return storage::PartitionStorageRegistry::resolveNodeTable(context, *entry);
         }
         return tableInfo.table;
     }
