@@ -49,6 +49,13 @@ void PrimaryKeyScanNodeTable::initLocalStateInternal(ResultSet* resultSet,
     }
 }
 
+void PrimaryKeyScanNodeTable::initGlobalStateInternal(ExecutionContext* /*context*/) {
+    // Repeated executions of a cached physical plan clone the operator tree but share this
+    // shared state, so the table cursor must be re-armed for every execution (mirrors
+    // ScanNodeTable::initGlobalStateInternal).
+    sharedState->resetForReuse();
+}
+
 bool PrimaryKeyScanNodeTable::getNextTuplesInternal(ExecutionContext* context) {
     if (isRange) {
         return lookupRange(context);

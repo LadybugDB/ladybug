@@ -9,6 +9,10 @@
 #include "processor/operator/aggregate/base_aggregate.h"
 
 namespace lbug {
+namespace storage {
+class MemoryManager;
+} // namespace storage
+
 namespace processor {
 
 // NOLINTNEXTLINE(cppcoreguidelines-virtual-class-destructor): This is a final class.
@@ -30,6 +34,13 @@ public:
     void finalizeAggregateStates();
 
     std::pair<uint64_t, uint64_t> getNextRangeToRead() override;
+
+    // Re-arm this shared state for another execution of the same cached physical plan: the
+    // object is aliased across clones of that plan (copy() passes the shared_ptr through),
+    // so per-execution state must be reset before each execution. Distinct partitions are
+    // consumed by finalizePartitions during the previous execution and are rebuilt here.
+    void resetForReuse(storage::MemoryManager* memoryManager,
+        const std::vector<AggregateInfo>& aggInfos);
 
     function::AggregateState* getAggregateState(uint64_t idx) {
         return globalAggregateStates[idx].get();
@@ -135,15 +146,29 @@ public:
         : Sink{type_, id, std::move(printInfo)}, sharedState{std::move(sharedState)},
           aggInfos{std::move(aggInfos)} {}
 
+    SimpleAggregateFinalize(std::shared_ptr<SimpleAggregateSharedState> sharedState,
+        std::vector<AggregateInfo> aggInfos, std::unique_ptr<PhysicalOperator> child,
+        physical_op_id id, std::unique_ptr<OPPrintInfo> printInfo)
+        : Sink{type_, std::move(child), id, std::move(printInfo)},
+          sharedState{std::move(sharedState)}, aggInfos{std::move(aggInfos)} {}
+
     bool isSource() const override { return true; }
 
     void executeInternal(ExecutionContext* context) override;
 
     void finalizeInternal(ExecutionContext* context) override;
 
+    void prepareForReuse(storage::MemoryManager* memoryManager) override {
+        sharedState->resetForReuse(memoryManager, aggInfos);
+        PhysicalOperator::prepareForReuse(memoryManager);
+    }
+
+    // Note: The child must be preserved. PlanMapper attaches the aggregate pipeline below this
+    // operator, and physical-plan caching relies on copy() producing a complete tree; dropping
+    // the child here would silently remove whole pipelines from cloned plans.
     std::unique_ptr<PhysicalOperator> copy() override {
-        return std::make_unique<SimpleAggregateFinalize>(sharedState, copyVector(aggInfos), id,
-            printInfo->copy());
+        return std::make_unique<SimpleAggregateFinalize>(sharedState, copyVector(aggInfos),
+            children[0]->copy(), id, printInfo->copy());
     }
 
 private:

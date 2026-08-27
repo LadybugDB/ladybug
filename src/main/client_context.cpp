@@ -22,6 +22,7 @@
 #include "parser/visitor/standalone_call_rewriter.h"
 #include "parser/visitor/statement_read_write_analyzer.h"
 #include "planner/planner.h"
+#include "processor/operator/sink.h"
 #include "processor/plan_mapper.h"
 #include "processor/processor.h"
 #include "storage/buffer_manager/buffer_manager.h"
@@ -552,6 +553,40 @@ ClientContext::PrepareResult ClientContext::prepareNoLock(
     return {std::move(preparedStatement), std::move(cachedStatement)};
 }
 
+namespace {
+
+// Walks an operator tree in preorder, snapshotting (slow path) or re-attaching (fast path)
+// the ResultSetDescriptor of every pipeline-head sink. Operator::copy() does not propagate
+// descriptors: only the root of a cloned plan would otherwise get one re-attached, leaving
+// sub-pipeline tasks without a descriptor and unable to build their ResultSet.
+void collectSinkDescriptors(const processor::PhysicalOperator* op,
+    std::vector<std::unique_ptr<processor::ResultSetDescriptor>>& sinks) {
+    if (const auto* sink = dynamic_cast<const processor::Sink*>(op)) {
+        sinks.push_back(sink->getDescriptor() == nullptr ? nullptr : sink->getDescriptor()->copy());
+    } else {
+        sinks.push_back(nullptr);
+    }
+    for (common::idx_t i = 0; i < op->getNumChildren(); ++i) {
+        collectSinkDescriptors(op->getChild(i), sinks);
+    }
+}
+
+void attachSinkDescriptors(processor::PhysicalOperator* op,
+    const std::vector<std::unique_ptr<processor::ResultSetDescriptor>>& sinks, common::idx_t& pos) {
+    if (auto* sink = dynamic_cast<processor::Sink*>(op)) {
+        auto& desc = sinks[pos];
+        if (desc != nullptr) {
+            sink->setDescriptor(desc->copy());
+        }
+    }
+    ++pos;
+    for (common::idx_t i = 0; i < op->getNumChildren(); ++i) {
+        attachSinkDescriptors(op->getChild(i), sinks, pos);
+    }
+}
+
+} // namespace
+
 std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* preparedStatement,
     CachedPreparedStatement* cachedStatement, std::optional<uint64_t> queryID,
     QueryConfig queryConfig, bool cachePhysicalPlan) {
@@ -588,11 +623,11 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                     physicalPlan = std::make_unique<PhysicalPlan>(
                         cachedStatement->physicalPlanCache->lastOperator->copy());
                     physicalPlan->lastOperator->prepareForReuse(storage::MemoryManager::Get(*this));
-                    // Re-attach the ResultSetDescriptor (not propagated by copy()).
-                    if (cachedStatement->resultSetDescriptor) {
-                        auto* sink = physicalPlan->lastOperator->ptrCast<Sink>();
-                        sink->setDescriptor(cachedStatement->resultSetDescriptor->copy());
-                    }
+                    // Re-attach the ResultSetDescriptors (not propagated by copy()) of every
+                    // pipeline-head sink, so each sub-task can build its ResultSet.
+                    common::idx_t pos = 0;
+                    attachSinkDescriptors(physicalPlan->lastOperator.get(),
+                        cachedStatement->sinkResultSetDescriptors, pos);
                 } else {
                     auto mapper = PlanMapper(executionContext.get());
                     physicalPlan = mapper.getPhysicalPlan(cachedStatement->logicalPlan.get(),
@@ -601,12 +636,11 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                         // Cache the operator tree template for future reuse.
                         cachedStatement->physicalPlanCache =
                             std::make_unique<PhysicalPlan>(physicalPlan->lastOperator->copy());
-                        // Also save the ResultSetDescriptor separately (copy() doesn't
-                        // propagate it, and the cloned sink needs it for getResultSet).
-                        auto* sink = physicalPlan->lastOperator->ptrCast<Sink>();
-                        if (sink->getDescriptor()) {
-                            cachedStatement->resultSetDescriptor = sink->getDescriptor()->copy();
-                        }
+                        // Snapshot the ResultSetDescriptor of every pipeline-head sink
+                        // (copy() doesn't propagate them; each cloned sink needs one for
+                        // getResultSet).
+                        collectSinkDescriptors(physicalPlan->lastOperator.get(),
+                            cachedStatement->sinkResultSetDescriptors);
                     }
                 }
                 if (isTransactionStatement) {

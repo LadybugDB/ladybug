@@ -110,6 +110,50 @@ void SimpleAggregateSharedState::finalizeAggregateStates() {
     }
 }
 
+void SimpleAggregateSharedState::resetForReuse(storage::MemoryManager* memoryManager,
+    const std::vector<AggregateInfo>& aggInfos) {
+    // A cached physical plan aliases this state across executions of the operator tree, so the
+    // scan cursor and the accumulated aggregate states must be re-armed before each execution.
+    std::unique_lock lck{mtx};
+    currentOffset.store(0);
+    readyForFinalization = false;
+    std::unique_ptr<common::InMemOverflowBuffer> buf;
+    while (overflow.pop(buf)) {}
+    aggregateOverflowBuffer.resetBuffer();
+    for (size_t i = 0; i < aggregateFunctions.size(); ++i) {
+        globalAggregateStates[i] = aggregateFunctions[i].createInitialNullAggregateState();
+    }
+    if (!hasDistinct) {
+        return;
+    }
+    // Distinct partitions are consumed (tables and queues reset) by finalizePartitions during
+    // the previous execution; rebuild them so the next execution starts from an empty slate.
+    // Mirrors the partition construction in the constructor.
+    for (auto& partition : globalPartitions) {
+        for (size_t funcIdx = 0; funcIdx < aggregateFunctions.size(); funcIdx++) {
+            auto& aggregateFunction = aggregateFunctions[funcIdx];
+            if (!aggregateFunction.isDistinct) {
+                continue;
+            }
+            const auto& distinctKeyType = aggInfos[funcIdx].distinctAggKeyType;
+            std::vector<LogicalType> keyTypes(1);
+            keyTypes[0] = distinctKeyType.copy();
+            auto schema = AggregateHashTableUtils::getTableSchemaForKeys(std::vector<LogicalType>{},
+                distinctKeyType);
+            auto hashTable =
+                std::make_unique<AggregateHashTable>(*memoryManager, std::move(keyTypes),
+                    std::vector<LogicalType>{} /*payloadTypes*/, std::vector<AggregateFunction>{},
+                    std::vector<LogicalType>{} /*payloadTypes*/, 0, schema.copy());
+            auto queue = std::make_unique<HashTableQueue>(memoryManager,
+                AggregateHashTableUtils::getTableSchemaForKeys(std::vector<LogicalType>{},
+                    distinctKeyType));
+            partition.distinctTables[funcIdx] = Partition::DistinctData{std::move(hashTable),
+                std::move(queue), aggregateFunction.createInitialNullAggregateState()};
+        }
+        partition.finalized = false;
+    }
+}
+
 std::pair<uint64_t, uint64_t> SimpleAggregateSharedState::getNextRangeToRead() {
     std::unique_lock lck{mtx};
     if (currentOffset >= 1) {
