@@ -4,6 +4,7 @@
 #include "processor/operator/scan/scan_rel_table.h"
 #include "storage/storage_manager.h"
 #include "transaction/transaction.h"
+#include <format>
 
 namespace lbug {
 namespace storage {
@@ -47,19 +48,18 @@ void ForeignRelTable::initScanState([[maybe_unused]] transaction::Transaction* t
 }
 
 bool ForeignRelTable::scanInternal([[maybe_unused]] transaction::Transaction* transaction,
-    TableScanState& scanState) {
-    auto& foreignRelScanState = static_cast<ForeignRelTableScanState&>(scanState);
-    if (!scanBindData || scanFunction.tableFunc == nullptr) {
-        return false;
-    }
-    function::TableFuncInput input{scanBindData.get(), foreignRelScanState.localState.get(),
-        foreignRelScanState.sharedState.get(), nullptr /* clientContext */};
-    common::DataChunk dc;
-    dc.valueVectors = foreignRelScanState.dataChunk.valueVectors;
-    dc.state = foreignRelScanState.dataChunk.state;
-    function::TableFuncOutput output{std::move(dc)};
-    auto numTuples = scanFunction.tableFunc(input, output);
-    return numTuples > 0;
+    [[maybe_unused]] TableScanState& scanState) {
+    // Extending over a foreign-backed rel table requires translating the raw
+    // foreign-key values returned by the scan function into lbug internal node
+    // IDs. That mapping layer is not implemented yet, so a physical scan
+    // cannot produce valid extend output (vectors are wired for node IDs, not
+    // raw columns). Queries that can be rewritten by the foreign join
+    // push-down optimizer never reach this path; everything else fails fast
+    // instead of producing garbage or crashing.
+    throw common::RuntimeException(
+        std::format("MATCH traversal over foreign-backed rel table \"{}\" is not supported "
+                    "yet: the foreign key to internal ID mapping layer is not implemented",
+            tableName));
 }
 
 common::row_idx_t ForeignRelTable::getNumTotalRows(

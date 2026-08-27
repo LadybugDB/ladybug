@@ -161,6 +161,11 @@ static bool relTablesForExtend(const LogicalExtend& extend, std::vector<table_id
     }
     DASSERT(rel->getNumEntries() == 1);
     relGroupEntry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
+    // Foreign-backed rel tables are scan-driven and own no CSR metadata to count
+    // from; let the regular aggregate pipeline scan them instead.
+    if (relGroupEntry->getScanFunction().has_value()) {
+        return false;
+    }
     auto boundNodeTableIDs = extend.getBoundNode()->getTableIDsSet();
     auto nbrNodeTableIDs = extend.getNbrNode()->getTableIDsSet();
     for (auto& info : relGroupEntry->getRelEntryInfos()) {
@@ -211,6 +216,16 @@ bool CountRelTableOptimizer::canOptimize(LogicalOperator* aggregate) const {
     auto rel = extend.getRel();
     if (rel->isMultiLabeled()) {
         return false;
+    }
+
+    // Foreign-backed rel tables are scan-driven and own no CSR metadata to
+    // count from (ForeignRelTable::getNumTotalRows is not a CSR count); let
+    // the regular aggregate pipeline scan them instead.
+    for (auto entryIdx = 0u; entryIdx < rel->getNumEntries(); ++entryIdx) {
+        auto* relGroupEntry = rel->getEntry(entryIdx)->ptrCast<RelGroupCatalogEntry>();
+        if (relGroupEntry != nullptr && relGroupEntry->getScanFunction().has_value()) {
+            return false;
+        }
     }
 
     if (!isCountStar(aggregate) && !isCountRelID(aggregate, *rel)) {

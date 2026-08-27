@@ -12,6 +12,7 @@
 #include "storage/table/columnar_rel_table_base.h"
 #include "storage/table/csr_chunked_node_group.h"
 #include "storage/table/csr_node_group.h"
+#include "storage/table/foreign_rel_table.h"
 #include "storage/table/rel_table_data.h"
 #include "transaction/transaction.h"
 
@@ -40,6 +41,13 @@ bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
 
     for (auto* relTable : relTables) {
         if (dynamic_cast<ColumnarRelTableBase*>(relTable) != nullptr) {
+            totalCount += relTable->getNumTotalRows(transaction);
+            continue;
+        }
+
+        // Foreign-backed rel tables are scan-driven and own no CSR metadata.
+        // Count via the scan function (ForeignRelTable::getNumTotalRows).
+        if (dynamic_cast<ForeignRelTable*>(relTable) != nullptr) {
             totalCount += relTable->getNumTotalRows(transaction);
             continue;
         }
