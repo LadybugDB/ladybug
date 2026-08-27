@@ -118,6 +118,33 @@ HashAggregateSharedState::HashAggregateSharedState(main::ClientContext* context,
     }
 }
 
+void HashAggregateSharedState::resetForReuse() {
+    // A cached physical plan aliases this state across executions of the operator tree, so the
+    // scan cursor and the accumulated partition tables must be re-armed before each execution.
+    // Mirrors what a freshly mapped plan would start with (see the constructor).
+    std::unique_lock lck{mtx};
+    currentOffset.store(0);
+    readyForFinalization = false;
+    std::unique_ptr<common::InMemOverflowBuffer> buf;
+    while (overflow.pop(buf)) {}
+    auto* mm = memoryManager;
+    for (auto& partition : globalPartitions) {
+        partition.finalized = false;
+        if (partition.queue) {
+            partition.queue = std::make_unique<HashTableQueue>(mm, aggInfo.tableSchema.copy());
+        }
+        for (auto& distinctQueue : partition.distinctTableQueues) {
+            if (distinctQueue) {
+                distinctQueue = distinctQueue->copy();
+            }
+        }
+        if (partition.hashTable) {
+            partition.hashTable =
+                std::make_unique<AggregateHashTable>(partition.hashTable->createEmptyCopy());
+        }
+    }
+}
+
 std::pair<uint64_t, uint64_t> HashAggregateSharedState::getNextRangeToRead() {
     std::unique_lock lck{mtx};
     auto startOffset = currentOffset.load();

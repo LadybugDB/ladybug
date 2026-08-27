@@ -44,9 +44,12 @@ struct CachedPreparedStatement {
     // this operator-tree template is cloned and its sink state is refreshed for each call,
     // avoiding the PlanMapper::mapOperator recursion entirely.
     std::unique_ptr<processor::PhysicalPlan> physicalPlanCache;
-    // Cached result-set descriptor. copy() does not propagate the descriptor from an
-    // operator tree, so we store it here separately and re-attach it on the cloned sink.
-    std::unique_ptr<processor::ResultSetDescriptor> resultSetDescriptor;
+    // Cached ResultSetDescriptors of every pipeline-head sink, in preorder position order.
+    // Operator::copy() does not propagate descriptors, and multi-pipeline plans (e.g.
+    // aggregates) clone into several tasks that each need a descriptor to build their
+    // ResultSet, so we snapshot them all from the freshly mapped tree and re-attach them onto
+    // each cloned instance.
+    std::vector<std::unique_ptr<processor::ResultSetDescriptor>> sinkResultSetDescriptors;
 
     CachedPreparedStatement();
     ~CachedPreparedStatement();

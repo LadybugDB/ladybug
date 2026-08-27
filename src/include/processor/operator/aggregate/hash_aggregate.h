@@ -73,6 +73,12 @@ public:
 
     std::pair<uint64_t, uint64_t> getNextRangeToRead() override;
 
+    // Re-arm this shared state for another execution of the same cached physical plan: the
+    // object is aliased across clones of that plan (copy() passes the shared_ptr through),
+    // so per-execution state (scan cursor, accumulated partitions) must be reset before each
+    // execution. Mirrors what a freshly mapped plan would start with.
+    void resetForReuse();
+
     void scan(std::span<uint8_t*> entries, std::vector<common::ValueVector*>& keyVectors,
         common::offset_t startOffset, common::offset_t numRowsToScan,
         std::vector<uint32_t>& columnIndices);
@@ -183,6 +189,12 @@ public:
         std::unique_ptr<OPPrintInfo> printInfo)
         : Sink{type_, id, std::move(printInfo)}, sharedState{std::move(sharedState)} {}
 
+    HashAggregateFinalize(std::shared_ptr<HashAggregateSharedState> sharedState,
+        std::unique_ptr<PhysicalOperator> child, physical_op_id id,
+        std::unique_ptr<OPPrintInfo> printInfo)
+        : Sink{type_, std::move(child), id, std::move(printInfo)},
+          sharedState{std::move(sharedState)} {}
+
     bool isSource() const override { return true; }
 
     void executeInternal(ExecutionContext* /*context*/) override {
@@ -193,8 +205,17 @@ public:
         sharedState->assertFinalized();
     }
 
+    void prepareForReuse(storage::MemoryManager* memoryManager) override {
+        sharedState->resetForReuse();
+        PhysicalOperator::prepareForReuse(memoryManager);
+    }
+
+    // Note: The child must be preserved. PlanMapper attaches the aggregate pipeline below this
+    // operator, and physical-plan caching relies on copy() producing a complete tree; dropping
+    // the child here would silently remove whole pipelines from cloned plans.
     std::unique_ptr<PhysicalOperator> copy() override {
-        return make_unique<HashAggregateFinalize>(sharedState, id, printInfo->copy());
+        return make_unique<HashAggregateFinalize>(sharedState, children[0]->copy(), id,
+            printInfo->copy());
     }
 
 private:

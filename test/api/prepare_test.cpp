@@ -258,3 +258,119 @@ TEST_F(ApiTest, ParameterWith) {
     auto groupTruth = std::vector<std::string>{"abc"};
     ASSERT_EQ(groupTruth, TestHelper::convertResultToString(*result));
 }
+
+// Regression tests for re-executing prepared statements whose physical plan is cached.
+// The cached-plan fast path used to consume per-execution shared state on the first run,
+// so the second and later executions returned empty results for primary-key/index scans
+// and stale/truncated results once aggregates were involved.
+static void createItemTableWithArtIndex(lbug::main::Connection* conn) {
+    ASSERT_TRUE(conn->query("CALL enable_default_hash_index=false")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE Item(id INT64, name STRING, price DOUBLE, PRIMARY KEY(id))")
+            ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE ART INDEX item_id_idx FOR (a:Item) ON (a.id)")->isSuccess());
+}
+
+TEST_F(ApiTest, RepeatedExecutePreparedStatementPrimaryKeyScan) {
+    createItemTableWithArtIndex(conn.get());
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 50000, name: 'x'})")->isSuccess());
+
+    auto preparedStatement = conn->prepare("MATCH (i:Item) WHERE i.id = 50000 RETURN i.name");
+    ASSERT_TRUE(preparedStatement->isSuccess());
+    auto groundTruth = std::vector<std::string>{"x"};
+    for (auto run = 0u; run < 5; run++) {
+        auto result = conn->execute(preparedStatement.get());
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        ASSERT_EQ(groundTruth,
+            TestHelper::convertResultToString(*result, true /* checkOutputOrder */))
+            << "run " << run;
+    }
+}
+
+TEST_F(ApiTest, RepeatedExecutePreparedStatementPrimaryKeyScanWithParams) {
+    createItemTableWithArtIndex(conn.get());
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 50000, name: 'x'})")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 1, name: 'y'})")->isSuccess());
+
+    auto preparedStatement = conn->prepare("MATCH (i:Item) WHERE i.id = $id RETURN i.name");
+    ASSERT_TRUE(preparedStatement->isSuccess());
+    struct ParamCase {
+        int64_t id;
+        std::vector<std::string> groundTruth;
+    };
+    const std::vector<ParamCase> cases = {{50000, {"x"}}, {1, {"y"}}, {50000, {"x"}},
+        // A key that is not in the index must return an empty result, also on repeats.
+        {9999, {}}};
+    for (auto run = 0u; run < cases.size(); run++) {
+        const auto& paramCase = cases[run];
+        auto result =
+            conn->execute(preparedStatement.get(), std::make_pair(std::string("id"), paramCase.id));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        ASSERT_EQ(paramCase.groundTruth, TestHelper::convertResultToString(*result))
+            << "run " << run;
+    }
+}
+
+TEST_F(ApiTest, RepeatedExecutePreparedStatementAggregateOverIndexScan) {
+    createItemTableWithArtIndex(conn.get());
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 1, name: 'a', price: 1.0})")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 2, name: 'b', price: 2.0})")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 3, name: 'c', price: 3.0})")->isSuccess());
+
+    auto countPS = conn->prepare("MATCH (i:Item) WHERE i.id >= 1 AND i.id <= 3 RETURN COUNT(*)");
+    ASSERT_TRUE(countPS->isSuccess());
+    auto rangePS = conn->prepare("MATCH (i:Item) WHERE i.id >= 2 AND i.id <= 1000 RETURN i.id");
+    ASSERT_TRUE(rangePS->isSuccess());
+    auto countGroundTruth = std::vector<std::string>{"3"};
+    auto rangeGroundTruth = std::vector<std::string>{"2", "3"};
+    for (auto run = 0u; run < 5; run++) {
+        auto result = conn->execute(countPS.get());
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        ASSERT_EQ(countGroundTruth, TestHelper::convertResultToString(*result)) << "run " << run;
+
+        result = conn->execute(rangePS.get());
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        ASSERT_EQ(rangeGroundTruth,
+            TestHelper::convertResultToString(*result, true /* checkOutputOrder */))
+            << "run " << run;
+    }
+}
+
+TEST_F(ApiTest, RepeatedExecutePreparedStatementGroupByDistinctOrderBy) {
+    createItemTableWithArtIndex(conn.get());
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 1, name: 'a', price: 1.0})")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 2, name: 'b', price: 2.0})")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 3, name: 'a', price: 3.0})")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 4, name: 'b', price: 4.0})")->isSuccess());
+
+    auto groupByPS = conn->prepare("MATCH (i:Item) RETURN i.name, COUNT(*) AS c ORDER BY i.name");
+    ASSERT_TRUE(groupByPS->isSuccess());
+    auto distinctPS = conn->prepare("MATCH (i:Item) RETURN DISTINCT i.name ORDER BY i.name");
+    ASSERT_TRUE(distinctPS->isSuccess());
+    auto orderByLimitPS = conn->prepare("MATCH (i:Item) RETURN i.id ORDER BY i.id DESC LIMIT 3");
+    ASSERT_TRUE(orderByLimitPS->isSuccess());
+
+    auto groupByGroundTruth = std::vector<std::string>{"a|2", "b|2"};
+    auto distinctGroundTruth = std::vector<std::string>{"a", "b"};
+    auto orderByLimitGroundTruth = std::vector<std::string>{"4", "3", "2"};
+    // Interleave different prepared statements to exercise descriptor reuse across plans.
+    for (auto run = 0u; run < 5; run++) {
+        auto result = conn->execute(groupByPS.get());
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        ASSERT_EQ(groupByGroundTruth,
+            TestHelper::convertResultToString(*result, true /* checkOutputOrder */))
+            << "run " << run;
+
+        result = conn->execute(distinctPS.get());
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        ASSERT_EQ(distinctGroundTruth,
+            TestHelper::convertResultToString(*result, true /* checkOutputOrder */))
+            << "run " << run;
+
+        result = conn->execute(orderByLimitPS.get());
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        ASSERT_EQ(orderByLimitGroundTruth,
+            TestHelper::convertResultToString(*result, true /* checkOutputOrder */))
+            << "run " << run;
+    }
+}

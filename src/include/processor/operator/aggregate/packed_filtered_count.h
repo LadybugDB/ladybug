@@ -40,6 +40,17 @@ struct PackedFilteredCountSharedState {
     void merge(std::unordered_map<int64_t, uint64_t>&& localCounts);
     void finalize();
     std::pair<common::offset_t, common::offset_t> getNextRangeToRead();
+
+    // Re-arm this state for another execution of the same cached physical plan: the object is
+    // aliased across clones of that plan, so accumulated counts must be cleared before each
+    // execution.
+    void resetForReuse() {
+        std::unique_lock lck{mtx};
+        counts.clear();
+        finalizedCounts.clear();
+        nextOffset = 0;
+        finalized = false;
+    }
 };
 
 struct PackedFilteredCountPrintInfo final : OPPrintInfo {
@@ -75,6 +86,11 @@ public:
     void initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) override;
 
     void executeInternal(ExecutionContext* context) override;
+
+    void prepareForReuse(storage::MemoryManager* memoryManager) override {
+        sharedState->resetForReuse();
+        PhysicalOperator::prepareForReuse(memoryManager);
+    }
 
     std::unique_ptr<PhysicalOperator> copy() override {
         return std::make_unique<PackedFilteredCount>(sharedState, info, children[0]->copy(), id,

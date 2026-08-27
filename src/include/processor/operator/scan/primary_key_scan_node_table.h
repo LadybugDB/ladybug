@@ -37,6 +37,14 @@ struct PrimaryKeyScanSharedState {
 
     explicit PrimaryKeyScanSharedState(common::idx_t numTables) : numTables{numTables}, cursor{0} {}
 
+    // Reset the cursor so a new execution of the operator tree starts scanning from the first
+    // table again. Needed because repeated executions of a cached physical plan share this
+    // object: getTableIdx() hands out each index exactly once until the cursor is reset.
+    void resetForReuse() {
+        std::unique_lock lck{mtx};
+        cursor = 0;
+    }
+
     common::idx_t getTableIdx();
 };
 
@@ -60,6 +68,8 @@ public:
     bool isSource() const override { return true; }
 
     void initLocalStateInternal(ResultSet*, ExecutionContext*) override;
+
+    void initGlobalStateInternal(ExecutionContext* context) override;
 
     bool getNextTuplesInternal(ExecutionContext* context) override;
 
