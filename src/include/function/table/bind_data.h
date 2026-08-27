@@ -1,5 +1,8 @@
 #pragma once
 
+#include <optional>
+#include <utility>
+
 #include "common/types/types.h"
 #include "optional_params.h"
 #include "storage/predicate/column_predicate.h"
@@ -54,6 +57,16 @@ struct LBUG_API TableFuncBindData {
     std::string getOrderBy() const { return orderBy; }
 
     virtual bool getIgnoreErrorsOption() const;
+
+    // For foreign-backed rel tables whose src/dst columns carry node offsets
+    // directly (the csr_rel_* contract: foreign keys are usable as table
+    // offsets by design), the positions of the src and dst columns in the
+    // scan output. nullopt means the scan output cannot be interpreted as
+    // internal node IDs, so MATCH traversal over the table is unsupported.
+    virtual std::optional<std::pair<common::column_id_t, common::column_id_t>>
+    getSrcDstColumnPositions() const {
+        return std::nullopt;
+    }
 
     virtual std::unique_ptr<TableFuncBindData> copy() const;
 

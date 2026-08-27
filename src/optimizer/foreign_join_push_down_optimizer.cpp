@@ -106,14 +106,27 @@ static std::string getRelForeignDatabaseName(const RelExpression* rel,
     if (!relEntry) {
         return "";
     }
-    // First try the stored foreignDatabaseName
+    // First try the stored foreignDatabaseName. Stored names come in two
+    // shapes: "db(TYPE)" from DDL-created rel tables (bind_ddl.cpp) and the
+    // raw attached-db name from extension-registered groups. Normalize both
+    // to the "db(TYPE)" format used by getNodeForeignDatabaseName so the
+    // three-way equality check below works.
     auto storedName = relEntry->getForeignDatabaseName();
     if (!storedName.empty()) {
+        auto rawName = storedName;
+        auto parenPos = storedName.find('(');
+        if (parenPos != std::string::npos) {
+            rawName = storedName.substr(0, parenPos);
+        }
         auto dbManager = main::DatabaseManager::Get(*context);
         if (!dbManager) {
             return storedName;
         }
-        return storedName;
+        auto* attachedDB = dbManager->getAttachedDatabase(rawName);
+        if (!attachedDB) {
+            return storedName;
+        }
+        return std::format("{}({})", rawName, attachedDB->getDBType());
     }
     // For foreign rel tables, extract from storage
     auto storage = relEntry->getStorage();

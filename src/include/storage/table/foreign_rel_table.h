@@ -67,6 +67,7 @@ public:
     common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) override;
 
 private:
+    catalog::RelGroupCatalogEntry* relGroupEntry;
     function::TableFunction scanFunction;
     std::shared_ptr<function::TableFuncBindData> scanBindData;
 };
