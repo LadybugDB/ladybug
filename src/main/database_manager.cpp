@@ -422,9 +422,12 @@ std::pair<catalog::Catalog*, storage::StorageManager*> DatabaseManager::resolveT
             if (attachedLbug->getStorageManager()->containsTable(tableID)) {
                 return {attachedDB->getCatalog(), attachedLbug->getStorageManager()};
             }
+            throw common::RuntimeException(
+                std::format("Table with ID {} not found in database {}.", tableID, dbName));
         }
-        throw common::RuntimeException(
-            std::format("Table with ID {} not found in database {}.", tableID, dbName));
+        // Foreign attached databases (duckdb, sqlite, postgres) register their
+        // tables in the main catalog/storage manager (shadow entries guarantee
+        // table ID uniqueness); fall through to the main-path resolution.
     }
     auto* mainSM = storage::StorageManager::Get(context);
     if (mainSM->containsTable(tableID)) {
