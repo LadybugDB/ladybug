@@ -30,6 +30,11 @@ struct LBUG_API ResultSetDescriptor {
     // prevention).  Thread-local ResultSet caching in ProcessorTask::run()
     // compares this ID instead of the raw pointer so that a descriptor
     // allocated at the same address as a freed one is never confused with it.
+    // copy() preserves the id: a copy semantically represents the same descriptor
+    // slot (same plan position, same content). In particular the per-execution
+    // re-attach of cached-plan sink descriptors (ClientContext::attachSinkDescriptors)
+    // must carry the same id across executions, otherwise the thread-local cache
+    // would miss on every execution of the same prepared statement.
     static inline std::atomic<uint64_t> nextID{0};
     uint64_t id;
 
