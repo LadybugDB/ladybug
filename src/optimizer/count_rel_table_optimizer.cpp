@@ -78,9 +78,9 @@ bool CountRelTableOptimizer::isSimpleCount(LogicalOperator* op) const {
     }
     auto& aggFuncExpr = aggExpr->constCast<AggregateFunctionExpression>();
     const auto& functionName = aggFuncExpr.getFunction().name;
-    if (functionName == function::AggregateSumFunction::name) {
-        return isConstantSum(op);
-    }
+    // Constant SUM is handled only by the COUNT_REL_TABLE rewrite below. The RelDegreeTable
+    // rewrites write the raw degree as INT64 and cannot express SUM(constant) semantics
+    // (no constant multiplier, no NULL-on-empty-input), so isSimpleCount must stay COUNT-only.
     if (functionName != function::CountStarFunction::name &&
         functionName != function::CountFunction::name) {
         return false;
@@ -351,7 +351,7 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
     if (auto rewritten = tryRewriteSortedOffsetCount(op); rewritten != op) {
         return rewritten;
     }
-    if (!isSimpleCount(op.get())) {
+    if (!isSimpleCount(op.get()) && !isConstantSum(op.get())) {
         return op;
     }
 

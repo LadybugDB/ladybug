@@ -402,6 +402,35 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     ASSERT_FALSE(hasOperatorType(planSumDistinct->getLastOperator().get(),
         planner::LogicalOperatorType::COUNT_REL_TABLE));
 
+    // A CSR-declared bound node with a primary-key equality filter must not route constant SUM
+    // into the RelDegreeTable rewrite: that path writes the raw degree as INT64 and can neither
+    // apply the constant multiplier nor preserve SUM's NULL-on-empty semantics. Data must be
+    // inserted before the CSR declaration; mutations afterwards invalidate the rewrite gate.
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE opt_csr_user(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_csr_user {id: 1});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_csr_user {id: 2});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE opt_csr_follows(FROM opt_csr_user TO opt_csr_user);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_csr_user), (b:opt_csr_user) "
+                            "WHERE a.id = 1 AND b.id = 2 "
+                            "CREATE (a)-[:opt_csr_follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("ALTER TABLE opt_csr_user SET SORTED BY (id ASC) CSR;")->isSuccess());
+    auto planSumPkFilter = getRoot(
+        "MATCH (a:opt_csr_user)-[e:opt_csr_follows]->(b:opt_csr_user) WHERE a.id = 1 RETURN "
+        "SUM(2);");
+    ASSERT_FALSE(hasOperatorType(planSumPkFilter->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto resultSumPkFilter = conn->query(
+        "MATCH (a:opt_csr_user)-[e:opt_csr_follows]->(b:opt_csr_user) WHERE a.id = 1 RETURN "
+        "SUM(2) AS total;");
+    ASSERT_TRUE(resultSumPkFilter->isSuccess());
+    ASSERT_EQ(resultSumPkFilter->getNext()->getValue(0)->getValue<common::int128_t>(),
+        common::int128_t{int64_t{2}});
+
+    // SUM over an empty input is NULL, unlike COUNT(*) * c.
+
     // SUM over an empty input is NULL, unlike COUNT(*) * c. Verify both rewrite shapes preserve it.
     ASSERT_TRUE(
         conn->query("CREATE REL TABLE opt_empty_follows(FROM opt_user TO opt_user);")->isSuccess());
