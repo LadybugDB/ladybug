@@ -32,6 +32,8 @@ class LogicalPlan;
 
 namespace main {
 
+class CachedPreparedStatementManager;
+
 // Prepared statement cached in client context and NEVER serialized to client side.
 struct CachedPreparedStatement {
     bool useInternalCatalogEntry = false;
@@ -104,6 +106,11 @@ private:
     std::string errMsg;
     PreparedSummary preparedSummary;
     std::string cachedPreparedStatementName;
+    // Weak back-reference to the manager this statement was registered with (via
+    // ClientContext::prepareWithParams). The destructor uses it to unregister itself so the
+    // cached plan is freed promptly. Weak so that a statement destroyed after its connection
+    // (possible through the C API) does not access a freed manager.
+    std::weak_ptr<CachedPreparedStatementManager> ownerManager;
     std::unordered_set<std::string> unknownParameters;
     std::unordered_map<std::string, std::shared_ptr<common::Value>> parameterMap;
 };

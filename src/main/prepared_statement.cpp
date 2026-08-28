@@ -3,6 +3,7 @@
 #include "binder/expression/expression.h" // IWYU pragma: keep
 #include "common/exception/binder.h"
 #include "common/types/value/value.h"
+#include "main/prepared_statement_manager.h"
 #include "planner/operator/logical_plan.h" // IWYU pragma: keep
 #include "processor/physical_plan.h"       // IWYU pragma: keep
 #include <format>
@@ -109,7 +110,18 @@ void PreparedStatement::setParameter(const std::string& name, Value value) {
     *oldValue = std::move(value);
 }
 
-PreparedStatement::~PreparedStatement() = default;
+PreparedStatement::~PreparedStatement() {
+    // Unregister from the CachedPreparedStatementManager so the cached parsed statement,
+    // logical plan, and physical plan are freed with the statement instead of living until
+    // the connection is closed (see https://github.com/LadybugDB/ladybug/issues/849).
+    // Statements that failed to prepare were never registered (empty name), and if the
+    // owning ClientContext is already gone the weak_ptr is expired - both no-ops.
+    if (!cachedPreparedStatementName.empty()) {
+        if (auto manager = ownerManager.lock()) {
+            manager->removeStatement(cachedPreparedStatementName);
+        }
+    }
+}
 
 std::unique_ptr<PreparedStatement> PreparedStatement::getPreparedStatementWithError(
     const std::string& errorMessage) {

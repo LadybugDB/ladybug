@@ -25,5 +25,10 @@ CachedPreparedStatement* CachedPreparedStatementManager::getCachedStatement(
     return statementMap.at(name).get();
 }
 
+void CachedPreparedStatementManager::removeStatement(const std::string& name) {
+    std::unique_lock lck{mtx};
+    statementMap.erase(name);
+}
+
 } // namespace main
 } // namespace lbug

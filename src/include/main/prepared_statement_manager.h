@@ -16,6 +16,11 @@ public:
 
     std::string addStatement(std::unique_ptr<CachedPreparedStatement> statement);
 
+    // Removes the cached statement registered under `name` (if any). Called when the owning
+    // PreparedStatement is destroyed, so the parsed statement, logical plan, and cached
+    // physical plan are freed instead of living until the connection is closed.
+    void removeStatement(const std::string& name);
+
     bool containsStatement(const std::string& name) const { return statementMap.contains(name); }
 
     CachedPreparedStatement* getCachedStatement(const std::string& name) const;
