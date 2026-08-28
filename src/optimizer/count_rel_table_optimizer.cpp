@@ -1,6 +1,8 @@
 #include "optimizer/count_rel_table_optimizer.h"
 
+#include "binder/binder.h"
 #include "binder/expression/aggregate_function_expression.h"
+#include "binder/expression/case_expression.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/literal_expression.h"
 #include "binder/expression/node_expression.h"
@@ -11,6 +13,8 @@
 #include "common/enums/path_semantic.h"
 #include "function/aggregate/count.h"
 #include "function/aggregate/count_star.h"
+#include "function/aggregate_function.h"
+#include "function/arithmetic/vector_arithmetic_functions.h"
 #include "function/gds/rec_joins.h"
 #include "main/client_context.h"
 #include "planner/operator/extend/logical_extend.h"
@@ -74,6 +78,9 @@ bool CountRelTableOptimizer::isSimpleCount(LogicalOperator* op) const {
     }
     auto& aggFuncExpr = aggExpr->constCast<AggregateFunctionExpression>();
     const auto& functionName = aggFuncExpr.getFunction().name;
+    if (functionName == function::AggregateSumFunction::name) {
+        return isConstantSum(op);
+    }
     if (functionName != function::CountStarFunction::name &&
         functionName != function::CountFunction::name) {
         return false;
@@ -84,6 +91,74 @@ bool CountRelTableOptimizer::isSimpleCount(LogicalOperator* op) const {
     }
 
     return true;
+}
+
+bool CountRelTableOptimizer::isConstantSum(LogicalOperator* op) const {
+    if (op->getOperatorType() != LogicalOperatorType::AGGREGATE) {
+        return false;
+    }
+    auto& aggregate = op->constCast<LogicalAggregate>();
+    if (aggregate.hasKeys() || aggregate.getAggregates().size() != 1) {
+        return false;
+    }
+    auto aggregates = aggregate.getAggregates();
+    auto aggregateExpression = aggregates[0];
+    if (aggregateExpression->expressionType != ExpressionType::AGGREGATE_FUNCTION) {
+        return false;
+    }
+    auto& aggregateFunction = aggregateExpression->constCast<AggregateFunctionExpression>();
+    if (aggregateFunction.getFunction().name != function::AggregateSumFunction::name ||
+        aggregateFunction.isDistinct() || aggregateFunction.getNumChildren() != 1) {
+        return false;
+    }
+    auto child = aggregateFunction.getChild(0);
+    return child->expressionType == ExpressionType::LITERAL &&
+           !child->constCast<LiteralExpression>().isNull();
+}
+
+bool CountRelTableOptimizer::isLiteralOne(const Expression& expression) {
+    if (expression.expressionType != ExpressionType::LITERAL) {
+        return false;
+    }
+    auto value = expression.constCast<LiteralExpression>().getValue();
+    if (value.isNull()) {
+        return false;
+    }
+    switch (value.getDataType().getPhysicalType()) {
+    case PhysicalTypeID::INT8:
+        return value.getValue<int8_t>() == 1;
+    case PhysicalTypeID::INT16:
+        return value.getValue<int16_t>() == 1;
+    case PhysicalTypeID::INT32:
+        return value.getValue<int32_t>() == 1;
+    case PhysicalTypeID::INT64:
+        return value.getValue<int64_t>() == 1;
+    case PhysicalTypeID::INT128:
+        return value.getValue<int128_t>() == int128_t{int64_t{1}};
+    case PhysicalTypeID::UINT8:
+        return value.getValue<uint8_t>() == 1;
+    case PhysicalTypeID::UINT16:
+        return value.getValue<uint16_t>() == 1;
+    case PhysicalTypeID::UINT32:
+        return value.getValue<uint32_t>() == 1;
+    case PhysicalTypeID::UINT64:
+        return value.getValue<uint64_t>() == 1;
+    case PhysicalTypeID::UINT128:
+        return value.getValue<uint128_t>() == uint128_t{uint64_t{1}};
+    default:
+        return false;
+    }
+}
+
+std::shared_ptr<Expression> CountRelTableOptimizer::getConstantSumChild(LogicalOperator* op) {
+    DASSERT(op->getOperatorType() == LogicalOperatorType::AGGREGATE);
+    auto& aggregate = op->constCast<LogicalAggregate>();
+    DASSERT(aggregate.getAggregates().size() == 1);
+    auto& aggregateFunction =
+        aggregate.getAggregates()[0]->constCast<AggregateFunctionExpression>();
+    DASSERT(aggregateFunction.getFunction().name == function::AggregateSumFunction::name);
+    DASSERT(aggregateFunction.getNumChildren() == 1);
+    return aggregateFunction.getChild(0);
 }
 
 bool CountRelTableOptimizer::isCountStar(LogicalOperator* op) const {
@@ -228,7 +303,7 @@ bool CountRelTableOptimizer::canOptimize(LogicalOperator* aggregate) const {
         }
     }
 
-    if (!isCountStar(aggregate) && !isCountRelID(aggregate, *rel)) {
+    if (!isCountStar(aggregate) && !isCountRelID(aggregate, *rel) && !isConstantSum(aggregate)) {
         return false;
     }
 
@@ -243,6 +318,7 @@ bool CountRelTableOptimizer::canOptimize(LogicalOperator* aggregate) const {
     for (auto* projection : projections) {
         for (auto& expression : projection->getExpressionsToProject()) {
             if (expression->expressionType != ExpressionType::AGGREGATE_FUNCTION &&
+                expression->expressionType != ExpressionType::LITERAL &&
                 !isRelIDExpression(expression, *rel)) {
                 return false;
             }
@@ -333,21 +409,63 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
         return op;
     }
 
-    // Get the count expression from the original aggregate
+    // Get the result expression from the original aggregate.
     auto& aggregate = op->constCast<LogicalAggregate>();
-    auto countExpr = aggregate.getAggregates()[0];
+    auto resultExpr = aggregate.getAggregates()[0];
 
     // Get the bound node table IDs as a vector
     std::vector<table_id_t> boundNodeTableIDsVec(boundNodeTableIDs.begin(),
         boundNodeTableIDs.end());
 
-    // Create the new COUNT_REL_TABLE operator with all necessary information for scanning
+    const auto constantSum = isConstantSum(op.get());
+    auto directConstantSum = false;
+    if (constantSum) {
+        directConstantSum = isLiteralOne(*getConstantSumChild(op.get()));
+    }
+
+    // SUM(1) can use the aggregate's expression as the count output directly. The physical
+    // operator writes the count using SUM's result type and returns NULL for an empty input.
+    if (!constantSum || directConstantSum) {
+        auto countRelTable = std::make_shared<LogicalCountRelTable>(relGroupEntry,
+            std::move(relTableIDs), std::move(boundNodeTableIDsVec), boundNode,
+            extend.getDirection(), resultExpr, directConstantSum, rel->getDbName(relGroupEntry));
+        countRelTable->computeFlatSchema();
+        return countRelTable;
+    }
+
+    // For SUM(c), produce an INT64 metadata count and evaluate one typed multiplication above it.
+    // The CASE preserves SUM's NULL-on-empty-input semantics.
+    auto binder = Binder(_context);
+    auto* expressionBinder = binder.getExpressionBinder();
+    auto countExpr = binder.createInvisibleVariable("__count_rel_table", LogicalType::INT64());
     auto countRelTable = std::make_shared<LogicalCountRelTable>(relGroupEntry,
         std::move(relTableIDs), std::move(boundNodeTableIDsVec), boundNode, extend.getDirection(),
-        countExpr, rel->getDbName(relGroupEntry));
+        countExpr, false, rel->getDbName(relGroupEntry));
     countRelTable->computeFlatSchema();
 
-    return countRelTable;
+    auto resultType = resultExpr->getDataType().copy();
+    auto countForProduct = expressionBinder->implicitCastIfNecessary(countExpr, resultType);
+    auto constantValue = getConstantSumChild(op.get())->constCast<LiteralExpression>().getValue();
+    auto constantForProduct = expressionBinder->createLiteralExpression(constantValue);
+    constantForProduct = expressionBinder->implicitCastIfNecessary(constantForProduct, resultType);
+    auto product = expressionBinder->bindScalarFunctionExpression(
+        {countForProduct, constantForProduct}, function::MultiplyFunction::name);
+
+    auto zero = expressionBinder->createLiteralExpression(Value{int64_t{0}});
+    auto countIsZero = expressionBinder->createEqualityComparisonExpression(countExpr, zero);
+    auto nullResult =
+        expressionBinder->createNullLiteralExpression(Value::createNullValue(resultType));
+    auto projectedSum =
+        std::make_shared<CaseExpression>(resultType.copy(), product, resultExpr->getUniqueName());
+    projectedSum->addCaseAlternative(countIsZero, nullResult);
+    if (resultExpr->hasAlias()) {
+        projectedSum->setAlias(resultExpr->getAlias());
+    }
+
+    auto projection = std::make_shared<LogicalProjection>(
+        expression_vector{std::move(projectedSum)}, std::move(countRelTable));
+    projection->computeFlatSchema();
+    return projection;
 }
 
 static LogicalOperator* skipProjections(LogicalOperator* op) {

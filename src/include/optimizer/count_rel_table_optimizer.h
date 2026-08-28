@@ -18,9 +18,10 @@ namespace optimizer {
 /**
  * This optimizer detects patterns where we're counting all rows from a single rel table
  * without any filters, and replaces the scan + aggregate with a direct count from table metadata.
+ * It also rewrites SUM(constant) using the same metadata count.
  *
  * Pattern detected:
- *   AGGREGATE (COUNT_STAR or COUNT(rel), no keys) →
+ *   AGGREGATE (COUNT_STAR, COUNT(rel), or SUM(literal), no keys) →
  *   PROJECTION (empty or pass-through) →
  *   EXTEND (single rel table) →
  *   SCAN_NODE_TABLE
@@ -43,8 +44,13 @@ private:
     std::shared_ptr<planner::LogicalOperator> visitOrderByReplace(
         std::shared_ptr<planner::LogicalOperator> op) override;
 
-    // Check if the aggregate is a simple COUNT(*) or COUNT(expr) with no keys.
+    // Check if the aggregate is a simple COUNT or constant SUM with no keys.
     bool isSimpleCount(planner::LogicalOperator* op) const;
+
+    // Check if the aggregate is SUM(non-NULL literal) without DISTINCT or grouping keys.
+    bool isConstantSum(planner::LogicalOperator* op) const;
+    static bool isLiteralOne(const binder::Expression& expression);
+    static std::shared_ptr<binder::Expression> getConstantSumChild(planner::LogicalOperator* op);
 
     bool isCountStar(planner::LogicalOperator* op) const;
     bool isCountRelID(planner::LogicalOperator* op, const binder::RelExpression& rel) const;

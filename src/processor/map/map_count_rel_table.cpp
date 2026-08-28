@@ -79,7 +79,8 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapCountRelTable(
         logicalCountRelTable.getRelGroupEntry()->getName());
 
     return std::make_unique<CountRelTable>(std::move(nodeTables), std::move(relTables),
-        relDirection, countOutputPos, getOperatorID(), std::move(printInfo));
+        relDirection, countOutputPos, logicalCountRelTable.getReturnNullOnZero(), getOperatorID(),
+        std::move(printInfo));
 }
 
 } // namespace processor
