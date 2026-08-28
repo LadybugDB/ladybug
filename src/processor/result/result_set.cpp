@@ -46,6 +46,14 @@ void ResultSet::resetForReuse() {
         if (dataChunk == nullptr) {
             continue;
         }
+        // Restore the DataChunkState to its freshly-constructed condition: identity
+        // (unfiltered) selection with size 1 for flat / 0 for unflat states, and no packed
+        // child slices. Producers set the real selection for each run; without this, stale
+        // filtered positions or packed slices from a prior execution would be observed by
+        // operators that assume a fresh state.
+        auto& state = dataChunk->state;
+        state->clearPackedChildSlices();
+        state->getSelVectorUnsafe().setToUnfiltered(state->isFlat() ? 1 : 0);
         for (auto& valueVector : dataChunk->valueVectors) {
             // setAllNonNull() clears any null bits the previous run may have
             // set (operators that only call setValue<T>() don't touch the null
