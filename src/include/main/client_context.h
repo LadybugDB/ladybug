@@ -129,7 +129,7 @@ public:
     AttachedLbugDatabase* getAttachedDatabase() const;
 
     const CachedPreparedStatementManager& getCachedPreparedStatementManager() const {
-        return cachedPreparedStatementManager;
+        return *cachedPreparedStatementManager;
     }
 
     bool isInMemory() const;
@@ -239,8 +239,11 @@ private:
     ClientConfig clientConfig;
     // Current query.
     ActiveQuery activeQuery;
-    // Cache prepare statement.
-    CachedPreparedStatementManager cachedPreparedStatementManager;
+    // Cache prepare statement. Shared (rather than held inline) so prepared statements can
+    // hold a weak back-reference and unregister themselves from their destructor without
+    // dangling when they outlive the client context.
+    std::shared_ptr<CachedPreparedStatementManager> cachedPreparedStatementManager =
+        std::make_shared<CachedPreparedStatementManager>();
     // Transaction context.
     std::unique_ptr<transaction::TransactionContext> transactionContext;
     // Replace external object as pointer Value;
