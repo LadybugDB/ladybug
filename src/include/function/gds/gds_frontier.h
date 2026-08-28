@@ -97,6 +97,7 @@ private:
 // Dense frontier implementation assuming the number of nodes is large.
 // Use an array of iteration number. The array is allocated to max offset
 class LBUG_API DenseFrontier : public Frontier {
+    friend class DenseFrontierInitVertexCompute;
     friend class SparseFrontier;
     friend class DenseFrontierReference;
     friend class SPFrontierPair;
