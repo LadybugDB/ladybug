@@ -1,5 +1,7 @@
 #include "function/gds/gds_frontier.h"
 
+#include <algorithm>
+
 #include "function/gds/gds_utils.h"
 #include "processor/execution_context.h"
 #include "transaction/transaction.h"
@@ -22,11 +24,12 @@ void SparseFrontier::addNode(nodeID_t nodeID, iteration_t iter) {
 
 void SparseFrontier::addNode(offset_t offset, iteration_t iter) {
     DASSERT(curData);
-    if (!curData->contains(offset)) {
-        curData->insert({offset, iter});
-    } else {
-        curData->at(offset) = iter;
-    }
+    // The underlying map can be mutated from multiple worker threads (e.g. parallel
+    // frontier tasks adding to a sparse next frontier), so map operations must be
+    // serialized. Concurrent unsynchronized mutations can rehash the map while other
+    // threads iterate/insert into it, corrupting the heap.
+    std::lock_guard lck{sparseObjects.getMtx()};
+    (*curData)[offset] = iter;
 }
 
 void SparseFrontier::addNodes(const std::vector<nodeID_t>& nodeIDs, iteration_t iter) {
@@ -38,6 +41,9 @@ void SparseFrontier::addNodes(const std::vector<nodeID_t>& nodeIDs, iteration_t 
 
 iteration_t SparseFrontier::getIteration(offset_t offset) const {
     DASSERT(curData);
+    // See SparseFrontier::addNode. Readers must be synchronized against concurrent
+    // rehashes of the underlying map.
+    std::lock_guard lck{sparseObjects.getMtx()};
     if (!curData->contains(offset)) {
         return FRONTIER_UNVISITED;
     }
@@ -50,11 +56,9 @@ void SparseFrontierReference::pinTableID(table_id_t tableID) {
 
 void SparseFrontierReference::addNode(offset_t offset, iteration_t iter) {
     DASSERT(curData);
-    if (!curData->contains(offset)) {
-        curData->insert({offset, iter});
-    } else {
-        curData->at(offset) = iter;
-    }
+    // See SparseFrontier::addNode.
+    std::lock_guard lck{sparseObjects.getMtx()};
+    (*curData)[offset] = iter;
 }
 
 void SparseFrontierReference::addNode(nodeID_t nodeID, iteration_t iter) {
@@ -71,6 +75,8 @@ void SparseFrontierReference::addNodes(const std::vector<nodeID_t>& nodeIDs, ite
 
 iteration_t SparseFrontierReference::getIteration(offset_t offset) const {
     DASSERT(curData);
+    // See SparseFrontier::getIteration.
+    std::lock_guard lck{sparseObjects.getMtx()};
     if (!curData->contains(offset)) {
         return FRONTIER_UNVISITED;
     }
@@ -87,7 +93,13 @@ public:
         return true;
     }
 
-    void vertexCompute(offset_t startOffset, offset_t endOffset, table_id_t) override {
+    void vertexCompute(offset_t startOffset, offset_t endOffset, table_id_t tableID) override {
+        // The morsel range is derived from a re-read of the table's total row count,
+        // which is not snapshot-isolated: a concurrent committing transaction can grow
+        // the table after the frontier buffer was allocated. Clamp the range to the
+        // allocated size so we never write past the end of the frontier buffer.
+        const auto allocatedSize = frontier.nodeMaxOffsetMap.at(tableID);
+        endOffset = std::min(endOffset, allocatedSize);
         for (auto i = startOffset; i < endOffset; ++i) {
             frontier.addNode(i, val);
         }
@@ -172,6 +184,13 @@ std::unique_ptr<DenseFrontier> DenseFrontier::getVisitedFrontier(ExecutionContex
     auto frontier = std::make_unique<DenseFrontier>(graph->getMaxOffsetMap(transaction));
     frontier->init(context, graph, FRONTIER_INITIAL_VISITED);
     for (auto [tableID, numNodes] : graph->getMaxOffsetMap(transaction)) {
+        // numNodes comes from a re-read of the (non-snapshot-isolated) total row count and
+        // can exceed the allocated frontier size if the table grew in between. Clamp to the
+        // allocated size to avoid writing past the end of the frontier buffer.
+        if (!frontier->nodeMaxOffsetMap.contains(tableID)) {
+            continue;
+        }
+        numNodes = std::min(numNodes, frontier->nodeMaxOffsetMap.at(tableID));
         frontier->pinTableID(tableID);
         if (maskMap->containsTableID(tableID)) {
             auto mask = maskMap->getOffsetMask(tableID);

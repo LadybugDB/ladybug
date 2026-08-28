@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <mutex>
 #include <vector>
 
 #include "storage/buffer_manager/memory_manager.h"
@@ -242,8 +243,15 @@ public:
         return result;
     }
 
+    // Mutex guarding the per-table maps. The maps can be mutated (and thus rehashed)
+    // concurrently by multiple worker threads through the sparse frontier interfaces, so
+    // all accesses to the maps must hold this mutex. The mutex is shared between a
+    // sparse frontier object and all its references (which alias the same manager).
+    std::mutex& getMtx() const { return mtx; }
+
 private:
     common::table_id_map_t<std::unordered_map<common::offset_t, T>> mapPerTable;
+    mutable std::mutex mtx;
 };
 
 } // namespace function
