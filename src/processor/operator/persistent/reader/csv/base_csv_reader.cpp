@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "common/file_system/virtual_file_system.h"
+#include "common/simd/cpu_features.h"
 #include "common/string_utils.h"
 #include "common/system_message.h"
 #include "common/utils.h"
@@ -609,11 +610,7 @@ findNextCSVStructuralByteAVX2(const char* buffer, uint64_t position, uint64_t bu
 }
 
 static bool hasAVX2() {
-#if defined(__GNUC__) || defined(__clang__)
-    return __builtin_cpu_supports("avx2");
-#else
-    return false;
-#endif
+    return common::simd::cpuSupportsAVX2();
 }
 #endif
 

@@ -7,6 +7,7 @@
 #include "common/data_chunk/sel_vector.h"
 #include "common/exception/runtime.h"
 #include "common/null_mask.h"
+#include "common/simd/cpu_features.h"
 #include "common/vector/value_vector.h"
 
 #if defined(_MSC_VER) && defined(LBUG_SIMD_COMPILED_AVX2)
@@ -169,27 +170,7 @@ bool isSupportedType(common::PhysicalTypeID type) {
 
 #if defined(LBUG_SIMD_COMPILED_AVX2)
 bool cpuSupportsAVX2() {
-#if defined(_MSC_VER)
-    int registers[4] = {};
-    __cpuid(registers, 0);
-    if (registers[0] < 7) {
-        return false;
-    }
-    __cpuidex(registers, 1, 0);
-    constexpr int OSXSAVE = 1 << 27;
-    constexpr int AVX = 1 << 28;
-    if ((registers[2] & (OSXSAVE | AVX)) != (OSXSAVE | AVX) || (_xgetbv(0) & 0x6) != 0x6) {
-        return false;
-    }
-    __cpuidex(registers, 7, 0);
-    constexpr int AVX2 = 1 << 5;
-    return (registers[1] & AVX2) != 0;
-#elif defined(__GNUC__) || defined(__clang__)
-    __builtin_cpu_init();
-    return __builtin_cpu_supports("avx2");
-#else
-    return false;
-#endif
+    return common::simd::cpuSupportsAVX2();
 }
 
 bool useAVX2() {
