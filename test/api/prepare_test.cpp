@@ -374,3 +374,99 @@ TEST_F(ApiTest, RepeatedExecutePreparedStatementGroupByDistinctOrderBy) {
             << "run " << run;
     }
 }
+
+// Regression test for https://github.com/LadybugDB/ladybug/issues/849: closing/destroying a
+// prepared statement must release its entry in CachedPreparedStatementManager (parsed
+// statement, logical plan and cached physical plan). Before the fix every successful
+// prepare() permanently registered the entry and memory grew with every prepare() call.
+TEST_F(ApiTest, PreparedStatementCloseUnregistersCachedPlan) {
+    auto& manager = conn->getClientContext()->getCachedPreparedStatementManager();
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE T849 (id INT64 PRIMARY KEY, name STRING)")->isSuccess());
+
+    constexpr auto numCycles = 100;
+    std::vector<std::string> names;
+    names.reserve(numCycles);
+    for (auto i = 0u; i < numCycles; i++) {
+        auto preparedStatement = conn->prepare("MATCH (t:T849) WHERE t.id = $id RETURN t.name");
+        ASSERT_TRUE(preparedStatement->isSuccess());
+        const auto name = preparedStatement->getName();
+        // The statement is registered while it is alive.
+        ASSERT_TRUE(manager.containsStatement(name)) << "cycle " << i;
+        auto result =
+            conn->execute(preparedStatement.get(), std::make_pair(std::string("id"), (int64_t)i));
+        ASSERT_TRUE(result->isSuccess()) << "cycle " << i;
+        names.push_back(name);
+        // Destroying the statement must unregister (free) its cached plan ...
+        preparedStatement.reset();
+        ASSERT_FALSE(manager.containsStatement(name)) << "cycle " << i;
+    }
+    // ... and none of the entries from earlier cycles may have accumulated.
+    for (auto& name : names) {
+        ASSERT_FALSE(manager.containsStatement(name));
+    }
+
+    // Statements that are prepared but never executed must be released as well.
+    auto preparedStatement = conn->prepare("RETURN $1 + 1");
+    ASSERT_TRUE(preparedStatement->isSuccess());
+    const auto name = preparedStatement->getName();
+    ASSERT_TRUE(manager.containsStatement(name));
+    preparedStatement.reset();
+    ASSERT_FALSE(manager.containsStatement(name));
+}
+
+TEST_F(ApiTest, FailedPrepareIsReleasedOnDestroy) {
+    auto& manager = conn->getClientContext()->getCachedPreparedStatementManager();
+
+    // Binder errors: the (mostly empty) cached statement is still registered, so destroying
+    // the failed statement must unregister it.
+    auto preparedStatement = conn->prepare("MATCH (n:NoSuchTable849) RETURN n");
+    ASSERT_FALSE(preparedStatement->isSuccess());
+    ASSERT_FALSE(preparedStatement->getName().empty());
+    const auto name = preparedStatement->getName();
+    preparedStatement.reset();
+    ASSERT_FALSE(manager.containsStatement(name));
+
+    // Parse errors return an unregistered error statement (empty name); destroying it must
+    // not touch the manager at all.
+    auto parseErrorStatement = conn->prepare("THIS IS NOT CYPHER");
+    ASSERT_FALSE(parseErrorStatement->isSuccess());
+    ASSERT_TRUE(parseErrorStatement->getName().empty());
+    parseErrorStatement.reset();
+}
+
+// Exercise the thread-local ResultSet reuse path with variable-length data: with the cached
+// plan (and cached ResultSet) reused across executions, string overflow buffers and null
+// masks from a prior execution must not leak into later ones.
+TEST_F(ApiTest, RepeatedExecutePreparedStatementVariableLengthResults) {
+    createItemTableWithArtIndex(conn.get());
+    // The long names force the use of out-of-line string overflow buffers.
+    const std::string longNameA(120, 'a');
+    const std::string longNameB(90, 'b');
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 1, name: 'short', price: 1.0})")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE (:Item {id: 2, name: '" + longNameA + "', price: 2.5})")->isSuccess());
+    // No price: exercises null-mask reset across executions.
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 3, name: 'with_null_price'})")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 4, name: '" + longNameB + "'})")->isSuccess());
+
+    auto preparedStatement =
+        conn->prepare("MATCH (i:Item) WHERE i.id = $id RETURN i.name, i.price");
+    ASSERT_TRUE(preparedStatement->isSuccess());
+
+    struct ParamCase {
+        int64_t id;
+        std::vector<std::string> groundTruth;
+    };
+    const std::vector<ParamCase> cases = {{2, {longNameA + "|2.500000"}}, {1, {"short|1.000000"}},
+        {3, {"with_null_price|"}}, {4, {longNameB + "|"}}, {2, {longNameA + "|2.500000"}},
+        {1, {"short|1.000000"}}};
+    for (auto run = 0u; run < cases.size(); run++) {
+        const auto& paramCase = cases[run];
+        auto result =
+            conn->execute(preparedStatement.get(), std::make_pair(std::string("id"), paramCase.id));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        ASSERT_EQ(paramCase.groundTruth, TestHelper::convertResultToString(*result))
+            << "run " << run;
+    }
+}
