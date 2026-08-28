@@ -291,6 +291,10 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
                             "WHERE a.id = 1 AND b.id = 2 "
                             "CREATE (a)-[:opt_follows {date: date('2020-01-01')}]->(b);")
                     ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_user), (b:opt_user) "
+                            "WHERE a.id = 2 AND b.id = 1 "
+                            "CREATE (a)-[:opt_follows {date: date('2020-01-02')}]->(b);")
+                    ->isSuccess());
 
     // Test that COUNT(*) over a single rel table is optimized to COUNT_REL_TABLE
     auto q1 = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN COUNT(*);";
@@ -302,7 +306,7 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     ASSERT_TRUE(result1->isSuccess());
     ASSERT_EQ(result1->getNumTuples(), 1);
     auto tuple1 = result1->getNext();
-    ASSERT_EQ(tuple1->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_EQ(tuple1->getValue(0)->getValue<int64_t>(), 2);
 
     // Test that COUNT(*) with GROUP BY is NOT optimized (has keys)
     auto q2 = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN a.id, COUNT(*);";
@@ -331,7 +335,7 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     ASSERT_TRUE(result5->isSuccess());
     ASSERT_EQ(result5->getNumTuples(), 1);
     auto tuple5 = result5->getNext();
-    ASSERT_EQ(tuple5->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_EQ(tuple5->getValue(0)->getValue<int64_t>(), 2);
 
     // Test that COUNT(node) is NOT optimized by the rel-table fast path
     auto q6 = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN COUNT(a);";
@@ -344,6 +348,73 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     auto plan7 = getRoot(q7);
     ASSERT_FALSE(hasOperatorType(plan7->getLastOperator().get(),
         planner::LogicalOperatorType::COUNT_REL_TABLE));
+
+    // SUM(1) uses COUNT_REL_TABLE directly while preserving SUM's INT128 result type.
+    auto qSumOne = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN SUM(1) AS total;";
+    auto planSumOne = getRoot(qSumOne);
+    ASSERT_EQ(planSumOne->getLastOperator()->getOperatorType(),
+        planner::LogicalOperatorType::PROJECTION);
+    ASSERT_EQ(planSumOne->getLastOperator()->getChild(0)->getOperatorType(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE);
+    auto resultSumOne = conn->query(qSumOne);
+    ASSERT_TRUE(resultSumOne->isSuccess());
+    auto valueSumOne = resultSumOne->getNext()->getValue(0);
+    ASSERT_EQ(valueSumOne->getDataType().getLogicalTypeID(), common::LogicalTypeID::INT128);
+    ASSERT_EQ(valueSumOne->getValue<common::int128_t>(), common::int128_t{int64_t{2}});
+
+    // Other integer constants use a single projection over the metadata count.
+    auto qSumTen = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN SUM(10) AS total;";
+    auto planSumTen = getRoot(qSumTen);
+    ASSERT_EQ(planSumTen->getLastOperator()->getOperatorType(),
+        planner::LogicalOperatorType::PROJECTION);
+    ASSERT_EQ(planSumTen->getLastOperator()->getChild(0)->getOperatorType(),
+        planner::LogicalOperatorType::PROJECTION);
+    ASSERT_EQ(planSumTen->getLastOperator()->getChild(0)->getChild(0)->getOperatorType(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE);
+    auto resultSumTen = conn->query(qSumTen);
+    ASSERT_TRUE(resultSumTen->isSuccess());
+    auto valueSumTen = resultSumTen->getNext()->getValue(0);
+    ASSERT_EQ(valueSumTen->getDataType().getLogicalTypeID(), common::LogicalTypeID::INT128);
+    ASSERT_EQ(valueSumTen->getValue<common::int128_t>(), common::int128_t{int64_t{20}});
+
+    // Floating-point constants retain SUM's DOUBLE return type.
+    auto qSumDouble = "MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN SUM(2.5) AS total;";
+    auto planSumDouble = getRoot(qSumDouble);
+    ASSERT_TRUE(hasOperatorType(planSumDouble->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+    auto resultSumDouble = conn->query(qSumDouble);
+    ASSERT_TRUE(resultSumDouble->isSuccess());
+    auto valueSumDouble = resultSumDouble->getNext()->getValue(0);
+    ASSERT_EQ(valueSumDouble->getDataType().getLogicalTypeID(), common::LogicalTypeID::DOUBLE);
+    ASSERT_DOUBLE_EQ(valueSumDouble->getValue<double>(), 5.0);
+
+    // Filters, grouping keys, and DISTINCT must keep the regular aggregate path.
+    auto planSumWhere =
+        getRoot("MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) WHERE a.id > 0 RETURN SUM(1);");
+    ASSERT_FALSE(hasOperatorType(planSumWhere->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+    auto planSumGroup =
+        getRoot("MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN a.id, SUM(1);");
+    ASSERT_FALSE(hasOperatorType(planSumGroup->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+    auto planSumDistinct =
+        getRoot("MATCH (a:opt_user)-[e:opt_follows]->(b:opt_user) RETURN SUM(DISTINCT 1);");
+    ASSERT_FALSE(hasOperatorType(planSumDistinct->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_REL_TABLE));
+
+    // SUM over an empty input is NULL, unlike COUNT(*) * c. Verify both rewrite shapes preserve it.
+    ASSERT_TRUE(
+        conn->query("CREATE REL TABLE opt_empty_follows(FROM opt_user TO opt_user);")->isSuccess());
+    for (auto expression : {"SUM(1)", "SUM(10)", "SUM(2.5)"}) {
+        auto query = std::format("MATCH (a:opt_user)-[:opt_empty_follows]->(b:opt_user) RETURN {};",
+            expression);
+        auto plan = getRoot(query);
+        ASSERT_TRUE(hasOperatorType(plan->getLastOperator().get(),
+            planner::LogicalOperatorType::COUNT_REL_TABLE));
+        auto result = conn->query(query);
+        ASSERT_TRUE(result->isSuccess());
+        ASSERT_TRUE(result->getNext()->getValue(0)->isNull());
+    }
 
     // Test active-write degree queries over native rel tables.
     ASSERT_TRUE(

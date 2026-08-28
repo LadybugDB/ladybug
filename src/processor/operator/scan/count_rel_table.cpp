@@ -1,6 +1,8 @@
 #include "processor/operator/scan/count_rel_table.h"
 
 #include "common/system_config.h"
+#include "common/types/int128_t.h"
+#include "common/types/uint128_t.h"
 #include "main/client_context.h"
 #include "main/database.h"
 #include "processor/execution_context.h"
@@ -142,7 +144,24 @@ bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
 
     // Write the count to the output vector (single value)
     countVector->state->getSelVectorUnsafe().setToUnfiltered(1);
-    countVector->setValue<int64_t>(0, static_cast<int64_t>(totalCount));
+    if (returnNullOnZero && totalCount == 0) {
+        countVector->setNull(0, true);
+        return true;
+    }
+    countVector->setNull(0, false);
+    switch (countVector->dataType.getPhysicalType()) {
+    case PhysicalTypeID::INT64:
+        countVector->setValue<int64_t>(0, static_cast<int64_t>(totalCount));
+        break;
+    case PhysicalTypeID::INT128:
+        countVector->setValue<int128_t>(0, int128_t{totalCount});
+        break;
+    case PhysicalTypeID::UINT128:
+        countVector->setValue<uint128_t>(0, uint128_t{totalCount});
+        break;
+    default:
+        UNREACHABLE_CODE;
+    }
 
     return true;
 }
