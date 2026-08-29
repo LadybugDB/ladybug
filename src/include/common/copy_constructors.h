@@ -67,7 +67,7 @@
 // NOLINTEND(bugprone-macro-parentheses):
 
 template<typename T>
-static std::vector<T> copyVector(const std::vector<T>& objects) {
+inline std::vector<T> copyVector(const std::vector<T>& objects) {
     std::vector<T> result;
     result.reserve(objects.size());
     for (auto& object : objects) {
@@ -77,7 +77,7 @@ static std::vector<T> copyVector(const std::vector<T>& objects) {
 }
 
 template<typename T>
-static std::vector<std::shared_ptr<T>> copyVector(const std::vector<std::shared_ptr<T>>& objects) {
+inline std::vector<std::shared_ptr<T>> copyVector(const std::vector<std::shared_ptr<T>>& objects) {
     std::vector<std::shared_ptr<T>> result;
     result.reserve(objects.size());
     for (auto& object : objects) {
@@ -88,7 +88,7 @@ static std::vector<std::shared_ptr<T>> copyVector(const std::vector<std::shared_
 }
 
 template<typename T>
-static std::vector<std::unique_ptr<T>> copyVector(const std::vector<std::unique_ptr<T>>& objects) {
+inline std::vector<std::unique_ptr<T>> copyVector(const std::vector<std::unique_ptr<T>>& objects) {
     std::vector<std::unique_ptr<T>> result;
     result.reserve(objects.size());
     for (auto& object : objects) {
@@ -99,7 +99,7 @@ static std::vector<std::unique_ptr<T>> copyVector(const std::vector<std::unique_
 }
 
 template<typename K, typename V>
-static std::unordered_map<K, V> copyUnorderedMap(const std::unordered_map<K, V>& objects) {
+inline std::unordered_map<K, V> copyUnorderedMap(const std::unordered_map<K, V>& objects) {
     std::unordered_map<K, V> result;
     for (auto& [k, v] : objects) {
         result.insert({k, v.copy()});
@@ -108,7 +108,7 @@ static std::unordered_map<K, V> copyUnorderedMap(const std::unordered_map<K, V>&
 }
 
 template<typename K, typename V>
-static std::map<K, V> copyMap(const std::map<K, V>& objects) {
+inline std::map<K, V> copyMap(const std::map<K, V>& objects) {
     std::map<K, V> result;
     for (auto& [k, v] : objects) {
         result.insert({k, v.copy()});
