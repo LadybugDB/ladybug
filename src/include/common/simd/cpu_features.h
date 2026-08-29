@@ -15,7 +15,7 @@ namespace simd {
 // __builtin_cpu_supports() because Apple Clang lowers that builtin to a reference to the
 // __cpu_model symbol, which Apple's toolchain does not provide for x86_64 static linking
 // (https://github.com/LadybugDB/ladybug/issues/848).
-inline bool cpuSupportsAVX2() {
+inline bool detectAVX2Support() {
 #if defined(__x86_64__) || defined(_M_X64)
 #if defined(_MSC_VER)
     int registers[4] = {};
@@ -65,6 +65,12 @@ inline bool cpuSupportsAVX2() {
 #else
     return false;
 #endif
+}
+
+// Public entry point. CPUID results never change at runtime, so detect once and cache.
+inline bool cpuSupportsAVX2() {
+    static const bool supported = detectAVX2Support();
+    return supported;
 }
 
 } // namespace simd
