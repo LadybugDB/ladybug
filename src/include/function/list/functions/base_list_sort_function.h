@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include "common/exception/runtime.h"
 #include "common/string_utils.h"
 #include "common/vector/value_vector.h"

@@ -1,6 +1,6 @@
 #include "processor/result/base_hash_table.h"
 
-#include "math.h"
+#include <cmath>
 
 #include "common/constants.h"
 #include "common/null_buffer.h"
