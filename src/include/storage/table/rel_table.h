@@ -28,6 +28,22 @@ struct RelTableScanState : TableScanState {
     // This is a reference of the original selVector of the input boundNodeIDVector.
     common::SelectionVector cachedBoundNodeSelVector;
 
+    // Per-node-group scan plan for the current batch of bound nodes. When the input is a
+    // node table scan, the bound node IDs form a contiguous sequence within a single node
+    // group. However, when this scan extends from the output of a previous extend (e.g.
+    // planning (a)->(b)->(c) as scan(a) -> extend(a->b) -> extend(b->c)), the bound nodes
+    // are the children of a single parent and can have arbitrary offsets, spanning
+    // multiple node groups. Such batches are scanned one node group at a time: each plan
+    // entry holds a node group and the positions (into nodeIDVector) of the bound nodes
+    // that belong to it. Empty when the batch is covered by a single node group (the
+    // common case).
+    std::vector<std::pair<NodeGroup*, std::vector<common::sel_t>>> boundNodeGroupPlan;
+    // All bound node positions of the current batch. Only populated for multi-group
+    // batches, so cachedBoundNodeSelVector can be restored to the full batch once all node
+    // groups have been scanned (the local/uncommitted scan and downstream resume paths
+    // iterate over the full batch).
+    std::vector<common::sel_t> allBoundNodePositions;
+
     std::unique_ptr<LocalRelTableScanState> localTableScanState;
 
     // Optional state used by Arrow-backed relationship tables. Keep it on the common scan state so
@@ -57,6 +73,12 @@ struct RelTableScanState : TableScanState {
         bool resetCachedBoundNodeIDs = true) override;
 
     bool scanNext(transaction::Transaction* transaction) override;
+
+    // Advance to the next node group of a multi-group bound node batch (see
+    // boundNodeGroupPlan). Returns false if the batch is exhausted.
+    bool startNextBoundNodeGroup(transaction::Transaction* transaction);
+
+    void setCachedBoundNodeSelVectorToPositions(const std::vector<common::sel_t>& positions);
 
     void setNodeIDVectorToFlat(common::sel_t selPos) const;
 
