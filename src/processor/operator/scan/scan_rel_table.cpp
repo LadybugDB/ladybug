@@ -226,6 +226,9 @@ void ScanRelTable::updatePackedChildSlices(sel_t outputSize) const {
         scanState->outState->clearPackedChildSlices();
         return;
     }
+    // See docs/multi_parent_lifetime.md for the representation/lifetime contract of the
+    // descriptor written here (owned copy; synchronous consumption only).
+    //
     // The CSR scan sets nodeIDVector to flat, pointing its selVector[0] at the actual parent
     // whose children are currently materialized in the output vector (see
     // RelTableScanState::setNodeIDVectorToFlat). We must use that position as the parent

@@ -16,6 +16,30 @@ enum class FStateType : uint8_t {
 
 class LBUG_API DataChunkState {
 public:
+    // Describes how the children in the current output batch map back to their parents. Used by
+    // the PACKED_EXTEND physical operator; see docs/multi_parent_lifetime.md for the full
+    // lifetime & representation rationale.
+    //
+    // Representation (current CSR scan processes ONE parent per output batch):
+    //   - parentPositions is an OWNED copy holding only the parents that produced children
+    //     (parents with no matches are dropped at scan time). It must never be replaced by a
+    //     pointer/alias into the parent's SelectionVector: the vector object is shared_ptr-held
+    //     but its contents are rewritten in place (setToFiltered/setToUnfiltered), so an alias
+    //     would silently track whatever the input batch holds next.
+    //   - offsets is a prefix sum with offsets.size() == parentPositions.size() + 1; the
+    //     children of parent p occupy output positions [offsets[p], offsets[p+1]).
+    //
+    // Lifetime rule: the descriptor is valid only for synchronous consumption of this output
+    // batch. Do not persist it across a materialization boundary (e.g. appending to a
+    // FactorizedTable and reading back later) — the input batch advances and the descriptor is
+    // cleared/reset (ResultSet::resetForReuse, next scan call).
+    //
+    // Deferred (true multi-parent packed scan, many parents per output batch): point at the
+    // parent's selection vector kept alive via shared_ptr (getSelVectorShared()), include ALL
+    // parents (zero-child ones too), and switch offsets to a prefix sum over all parents
+    // (offsets[i] == offsets[i+1] means parent i has no children) so the consumer skips
+    // zero-length ranges. Until that scan exists, the owned-copy representation below is the
+    // contract.
     struct PackedChildSlices {
         std::vector<sel_t> parentPositions;
         std::vector<sel_t> offsets;
