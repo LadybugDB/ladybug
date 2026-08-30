@@ -216,9 +216,9 @@ void RelTable::initScanState(Transaction* transaction, TableScanState& scanState
     // the input sel vector; when resuming a batch (e.g. a multi rel table scan moving to
     // the next rel table over the same bound nodes) they were cached by the previous init.
     std::vector<common::sel_t> positions;
-    const auto& sel =
-        resetCachedBoundNodeSelVec ? relScanState.nodeIDVector->state->getSelVector() :
-                                     relScanState.cachedBoundNodeSelVector;
+    const auto& sel = resetCachedBoundNodeSelVec ?
+                          relScanState.nodeIDVector->state->getSelVector() :
+                          relScanState.cachedBoundNodeSelVector;
     positions.resize(sel.getSelSize());
     for (auto i = 0u; i < sel.getSelSize(); i++) {
         positions[i] = sel[i];
@@ -231,11 +231,10 @@ void RelTable::initScanState(Transaction* transaction, TableScanState& scanState
     // children of a single parent and come in arbitrary order, so sort them by offset.
     // Parents whose CSR list lies before the current scan position would otherwise be
     // silently skipped by CSRNodeGroup::scanCommittedPersistentWithCache.
-    std::sort(positions.begin(), positions.end(),
-        [&](common::sel_t a, common::sel_t b) {
-            return relScanState.nodeIDVector->readNodeOffset(a) <
-                   relScanState.nodeIDVector->readNodeOffset(b);
-        });
+    std::sort(positions.begin(), positions.end(), [&](common::sel_t a, common::sel_t b) {
+        return relScanState.nodeIDVector->readNodeOffset(a) <
+               relScanState.nodeIDVector->readNodeOffset(b);
+    });
     // Partition the bound nodes by node group. They form a contiguous sequence within a
     // single node group when the input is a node table scan. However, the children of a
     // single parent can span multiple node groups, in which case the batch is scanned one

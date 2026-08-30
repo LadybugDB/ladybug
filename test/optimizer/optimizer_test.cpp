@@ -235,11 +235,11 @@ TEST_F(OptimizerTest, SingleNodeTwoHopJoins) {
     auto q2 = "MATCH (a:person)-[e:knows]->(b:person)-[e2:knows]->(c:person) WHERE a.ID=0 "
               "RETURN a,b,c;";
     ASSERT_STREQ(getEncodedPlan(q2).c_str(),
-        "HJ(c._ID){S(c)}{HJ(b._ID){E(c)S(b)}{E(b)IndexScan(a)}}");
+        "HJ(b._ID){S(b)}{HJ(c._ID){S(c)}{E(c)E(b)IndexScan(a)}}");
     auto q3 = "MATCH (a:person)-[e:knows]->(b:person)-[e2:knows]->(c:person) WHERE c.ID=0 "
               "RETURN a,b,c;";
     ASSERT_STREQ(getEncodedPlan(q3).c_str(),
-        "HJ(a._ID){S(a)}{HJ(b._ID){E(a)S(b)}{E(b)IndexScan(c)}}");
+        "HJ(a._ID){S(a)}{HJ(b._ID){S(b)}{E(a)E(b)IndexScan(c)}}");
 #endif
 }
 
