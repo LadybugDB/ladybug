@@ -200,3 +200,18 @@ Binder exception: Number of columns mismatch. Expected .+
 ---- 2
 Adam|30|2020-06-22
 Karissa|40|2019-05-12
+
+-LOG LoadFromMatchOnPrimaryKey
+-STATEMENT LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" (header=true) MATCH (p:person {ID: id}) RETURN COUNT(*);
+---- 1
+5
+-STATEMENT LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" (header=true) MATCH (p:person) WHERE p.ID = id RETURN COUNT(*);
+---- 1
+5
+-STATEMENT LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/tinysnb/vPerson.csv" (header=true) MATCH (p:person {ID: id}) SET p.fName = fName RETURN p.fName ORDER BY id;
+---- 5
+Alice
+Bob
+Carol
+Dan
+Elizabeth

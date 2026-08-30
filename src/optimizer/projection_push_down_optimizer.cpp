@@ -23,6 +23,7 @@
 #include "planner/operator/persistent/logical_insert.h"
 #include "planner/operator/persistent/logical_merge.h"
 #include "planner/operator/persistent/logical_set.h"
+#include "planner/operator/scan/logical_query_primary_key_lookup.h"
 
 using namespace lbug::common;
 using namespace lbug::planner;
@@ -185,6 +186,15 @@ void ProjectionPushDownOptimizer::visitOrderBy(LogicalOperator* op) {
 void ProjectionPushDownOptimizer::visitUnwind(LogicalOperator* op) {
     auto& unwind = op->constCast<LogicalUnwind>();
     collectExpressionsInUse(unwind.getInExpr());
+}
+
+void ProjectionPushDownOptimizer::visitQueryPrimaryKeyLookup(LogicalOperator* op) {
+    auto& lookup = op->constCast<LogicalQueryPrimaryKeyLookup>();
+    // The key expression is evaluated on top of the child pipeline (e.g. a table function
+    // scan). If it is not collected here, the scan column it references may be pruned,
+    // causing the key to silently evaluate to NULL and the lookup to return no rows.
+    collectExpressionsInUse(lookup.getKey());
+    collectExpressionsInUse(lookup.getNodeID());
 }
 
 void ProjectionPushDownOptimizer::visitInsert(LogicalOperator* op) {
