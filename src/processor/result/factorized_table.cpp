@@ -333,6 +333,13 @@ void FactorizedTable::setNonOverflowColNull(uint8_t* nullBuffer, ft_col_idx_t co
 }
 
 void FactorizedTable::clear() {
+    if (tableSchema.isEmpty()) {
+        // Tables with an empty schema (e.g. the root ResultCollector of a CREATE / DDL
+        // statement) never allocate block collections or an overflow buffer; there is
+        // nothing to reset. Mirrors the constructor, which skips allocation entirely for
+        // an empty schema.
+        return;
+    }
     numTuples = 0;
     // Reuse the first DataBlock (zeroed) and drop the rest. This skips the
     // 256KB malloc on the next append while preserving the dense-packing

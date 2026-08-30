@@ -470,3 +470,74 @@ TEST_F(ApiTest, RepeatedExecutePreparedStatementVariableLengthResults) {
             << "run " << run;
     }
 }
+
+// Regression test for https://github.com/LadybugDB/ladybug/issues/862: re-executing the
+// prepared statement of the same parameterized write query string (which takes the cached
+// physical-plan fast path once the statement was prepared WITH its parameters) crashed with
+// SIGSEGV. The root ResultCollector of a write statement has an empty result schema, so its
+// FactorizedTable never allocates block collections or an overflow buffer; clear() in
+// prepareForReuse() dereferenced the null collection.
+static std::unordered_map<std::string, std::unique_ptr<Value>> makeIdValueParams(int64_t id,
+    std::string val) {
+    std::unordered_map<std::string, std::unique_ptr<Value>> params;
+    params["id"] = std::make_unique<Value>(id);
+    params["val"] = std::make_unique<Value>(std::move(val));
+    return params;
+}
+
+TEST_F(ApiTest, RepeatedExecuteCachedPlanParameterizedWrite) {
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE Log(id INT64, value STRING, PRIMARY KEY(id))")->isSuccess());
+
+    // Parameterized CREATE, same statement executed repeatedly (fast path on every run but
+    // the first).
+    const std::string createQuery = "CREATE (:Log {id: $id, value: $val})";
+    auto createStmt = conn->prepareWithParams(createQuery, makeIdValueParams(1, "a"));
+    ASSERT_TRUE(createStmt->isSuccess());
+    for (auto run = 0u; run < 3; run++) {
+        auto result = conn->executeWithParams(createStmt.get(),
+            makeIdValueParams(run + 1, "v" + std::to_string(run)));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+    }
+
+    // Parameterized MATCH ... SET, same statement executed repeatedly.
+    const std::string setQuery = "MATCH (l:Log) WHERE l.id = $id SET l.value = $val";
+    auto setStmt = conn->prepareWithParams(setQuery, makeIdValueParams(1, "x"));
+    ASSERT_TRUE(setStmt->isSuccess());
+    for (auto run = 0u; run < 2; run++) {
+        auto result = conn->executeWithParams(setStmt.get(),
+            makeIdValueParams(run + 1, "x" + std::to_string(run)));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+    }
+
+    // Same string writes inside an explicit transaction.
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION")->isSuccess());
+    auto txStmt = conn->prepareWithParams(createQuery, makeIdValueParams(10, "t1"));
+    ASSERT_TRUE(txStmt->isSuccess());
+    for (auto run = 0u; run < 2; run++) {
+        auto result = conn->executeWithParams(txStmt.get(),
+            makeIdValueParams(10 + run, "t" + std::to_string(run)));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+    }
+    ASSERT_TRUE(conn->query("COMMIT")->isSuccess());
+
+    ASSERT_EQ(std::vector<std::string>{"5"},
+        TestHelper::convertResultToString(*conn->query("MATCH (l:Log) RETURN COUNT(l)")));
+}
+
+TEST_F(ApiTest, RepeatedExecuteCachedPlanParameterizedRead) {
+    createItemTableWithArtIndex(conn.get());
+    ASSERT_TRUE(conn->query("CREATE (:Item {id: 1, name: 'a', price: 1.0})")->isSuccess());
+
+    // Reads through the fast path must keep working too (they were unaffected by #862, but
+    // guard the empty-schema fix against regressing the non-empty-schema case).
+    auto readStmt = conn->prepareWithParams("MATCH (i:Item) WHERE i.id = $id RETURN i.name",
+        makeIdValueParams(1, "a"));
+    ASSERT_TRUE(readStmt->isSuccess());
+    for (auto run = 0u; run < 3; run++) {
+        auto result = conn->executeWithParams(readStmt.get(), makeIdValueParams(1, "a"));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        ASSERT_EQ(std::vector<std::string>{"a"}, TestHelper::convertResultToString(*result))
+            << "run " << run;
+    }
+}
