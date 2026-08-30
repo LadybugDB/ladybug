@@ -1,5 +1,6 @@
 #include "c_api/helpers.h"
 
+#include <cstdlib>
 #include <cstring>
 
 #include "c_api/lbug.h"
@@ -70,7 +71,7 @@ char* takeLastCAPIErrorMessage() {
 
 char* convertToOwnedCString(const std::string& str) {
     size_t src_len = str.size();
-    auto* c_str = (char*)malloc(sizeof(char) * (src_len + 1));
+    auto* c_str = static_cast<char*>(std::malloc(sizeof(char) * (src_len + 1)));
     if (c_str == nullptr) {
         return nullptr;
     }
