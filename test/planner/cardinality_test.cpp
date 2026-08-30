@@ -290,5 +290,35 @@ TEST_F(CardinalityTest, TestPackedChildSliceAppend) {
     }
 }
 
+TEST_F(CardinalityTest, TestPackedChildSliceOwnedCopyLifetime) {
+    common::DataChunkState state;
+    // Simulate the CSR scan: the bound-node (parent) selection vector is flat with selSize 1,
+    // pointing its position 0 at parent row 9.
+    auto& selVector = state.getSelVectorUnsafe();
+    selVector.setToFiltered(1);
+    selVector[0] = 9;
+
+    state.setSingleParentPackedChildSlice(selVector[0], 5);
+    {
+        const auto& slices = state.getPackedChildSlices();
+        ASSERT_EQ(1, slices.getNumParents());
+        EXPECT_EQ(9, slices.parentPositions[0]);
+        EXPECT_EQ(5, slices.getNumValues());
+    }
+
+    // The selection vector's contents are mutable in place (setToFiltered/setToUnfiltered
+    // rewrite the buffer). Rewriting it here is what the next input batch would do. Since
+    // parentPositions is an OWNED copy — not an alias into the selection vector — the
+    // descriptor must keep the parent position recorded for this batch. See
+    // docs/multi_parent_lifetime.md for the synchronous-consumption lifetime rule.
+    selVector[0] = 42;
+    selVector.setToUnfiltered(1);
+    {
+        const auto& slices = state.getPackedChildSlices();
+        EXPECT_EQ(9, slices.parentPositions[0]);
+        EXPECT_EQ(5, slices.getNumValues());
+    }
+}
+
 } // namespace testing
 } // namespace lbug
