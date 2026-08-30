@@ -16,6 +16,9 @@ jobs:
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout dataset and benchmarks
+        run: |
+          git submodule update --init dataset benchmark # needed for demo db
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -35,6 +38,9 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout dataset and benchmarks
+        run: |
+          git submodule update --init dataset benchmark # needed for demo db
       - name: Install build dependencies
         run: |
           sudo apt-get update
