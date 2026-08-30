@@ -47,6 +47,13 @@ std::unordered_set<uint32_t> SubqueryGraph::getNodeNbrPositions() const {
 
 std::unordered_set<uint32_t> SubqueryGraph::getRelNbrPositions() const {
     std::unordered_set<uint32_t> result;
+    // Nodes in the subgraph: explicitly selected nodes plus endpoints of selected rels
+    // (rel-implied nodes). A neighboring rel is any unselected rel touching any of them.
+    // Considering rel-implied nodes allows the join enumerator to attach a rel to a
+    // subgraph through the node bound by a previous extend (e.g. planning
+    // (a)-[e1]->(b)-[e2]->(c) as scan(a) -> extend(e1) -> extend(e2)), instead of
+    // requiring an explicit node-table scan join first.
+    const auto nodePosSet = getNodePositionsIgnoringNodeSelector();
     for (auto relPos = 0u; relPos < queryGraph.getNumQueryRels(); ++relPos) {
         if (queryRelsSelector[relPos]) { // rel already in subgraph, cannot be rel neighbour
             continue;
@@ -54,7 +61,7 @@ std::unordered_set<uint32_t> SubqueryGraph::getRelNbrPositions() const {
         auto rel = queryGraph.getQueryRel(relPos);
         auto srcNodePos = queryGraph.getQueryNodeIdx(*rel->getSrcNode());
         auto dstNodePos = queryGraph.getQueryNodeIdx(*rel->getDstNode());
-        if (queryNodesSelector[srcNodePos] || queryNodesSelector[dstNodePos]) {
+        if (nodePosSet.contains(srcNodePos) || nodePosSet.contains(dstNodePos)) {
             result.insert(relPos);
         }
     }
@@ -77,13 +84,13 @@ subquery_graph_set_t SubqueryGraph::getNbrSubgraphs(uint32_t size) const {
 
 std::vector<uint32_t> SubqueryGraph::getConnectedNodePos(const SubqueryGraph& nbr) const {
     std::vector<uint32_t> result;
-    for (auto& nodePos : getNodeNbrPositions()) {
-        if (nbr.queryNodesSelector[nodePos]) {
-            result.push_back(nodePos);
-        }
-    }
-    for (auto& nodePos : nbr.getNodeNbrPositions()) {
-        if (queryNodesSelector[nodePos]) {
+    // Join nodes are the intersection of the full node sets (selected nodes plus
+    // rel-implied nodes), so joins through nodes that are only bound by a previous
+    // extend (not explicitly scanned) are discovered as well.
+    const auto thisNodePos = getNodePositionsIgnoringNodeSelector();
+    const auto nbrNodePos = nbr.getNodePositionsIgnoringNodeSelector();
+    for (auto& nodePos : thisNodePos) {
+        if (nbrNodePos.contains(nodePos)) {
             result.push_back(nodePos);
         }
     }

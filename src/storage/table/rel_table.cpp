@@ -1,6 +1,7 @@
 #include "storage/table/rel_table.h"
 
 #include <algorithm>
+#include <map>
 #include <queue>
 #include <unordered_map>
 
@@ -119,12 +120,47 @@ void RelTableScanState::initStateForUncommitted() {
     localTableScanState->localRelTable->initializeScan(*this);
 }
 
+void RelTableScanState::setCachedBoundNodeSelVectorToPositions(
+    const std::vector<common::sel_t>& positions) {
+    DASSERT(!positions.empty());
+    cachedBoundNodeSelVector.setToFiltered();
+    std::memcpy(cachedBoundNodeSelVector.getMutableBuffer().data(), positions.data(),
+        positions.size() * sizeof(common::sel_t));
+    cachedBoundNodeSelVector.setSelSize(positions.size());
+}
+
+bool RelTableScanState::startNextBoundNodeGroup(Transaction* transaction) {
+    if (boundNodeGroupPlan.empty()) {
+        return false;
+    }
+    auto [nodeGroupToScan, positions] = std::move(boundNodeGroupPlan.front());
+    boundNodeGroupPlan.erase(boundNodeGroupPlan.begin());
+    // Note: deliberately do NOT update nodeGroupIdx here. CSRNodeGroup::initializeScanState
+    // detects the node group change (stale nodeGroupIdx != its own idx) and runs
+    // initScanForCommittedPersistent, which loads this group's CSR header.
+    setCachedBoundNodeSelVectorToPositions(positions);
+    // initState sets this->nodeGroup, resets currBoundNodeIdx and initializes the CSR scan
+    // state of the node group. reset=false: cachedBoundNodeSelVector already holds exactly
+    // the positions of this group's bound nodes.
+    initState(transaction, nodeGroupToScan, false /*resetCachedBoundNodeIDs*/);
+    return true;
+}
+
 bool RelTableScanState::scanNext(Transaction* transaction) {
     while (true) {
         switch (source) {
         case TableScanSource::COMMITTED: {
             const auto scanResult = nodeGroup->scan(transaction, *this);
             if (scanResult == NODE_GROUP_SCAN_EMPTY_RESULT) {
+                if (startNextBoundNodeGroup(transaction)) {
+                    continue;
+                }
+                if (!allBoundNodePositions.empty()) {
+                    // Restore the full set of bound node positions so that the local
+                    // (uncommitted) scan and downstream resume paths iterate over the
+                    // whole batch, not just the last node group's subset.
+                    setCachedBoundNodeSelVectorToPositions(allBoundNodePositions);
+                }
                 if (hasUnCommittedData()) {
                     initStateForUncommitted();
                 } else {
@@ -176,22 +212,90 @@ RelTable::RelTable(RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
 void RelTable::initScanState(Transaction* transaction, TableScanState& scanState,
     bool resetCachedBoundNodeSelVec) const {
     auto& relScanState = scanState.cast<RelTableScanState>();
-    // Note there we directly read node at pos 0 here regardless the selVector is filtered or not.
-    // This is because we're assuming the nodeIDVector is always a sequence here.
-    const auto boundNodePos = resetCachedBoundNodeSelVec ?
-                                  relScanState.nodeIDVector->state->getSelVector()[0] :
-                                  relScanState.cachedBoundNodeSelVector[0];
-    const auto boundNodeID = relScanState.nodeIDVector->getValue<nodeID_t>(boundNodePos);
-    NodeGroup* nodeGroup = nullptr;
-    // Check if the node group idx is same as previous scan.
-    const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(boundNodeID.offset);
-    if (relScanState.nodeGroupIdx != nodeGroupIdx) {
-        // We need to re-initialize the node group scan state.
-        nodeGroup = getDirectedTableData(relScanState.direction)->getNodeGroup(nodeGroupIdx);
-    } else {
-        nodeGroup = relScanState.nodeGroup;
+    // Collect the positions of this batch's bound nodes. On a fresh batch they come from
+    // the input sel vector; when resuming a batch (e.g. a multi rel table scan moving to
+    // the next rel table over the same bound nodes) they were cached by the previous init.
+    std::vector<common::sel_t> positions;
+    const auto& sel =
+        resetCachedBoundNodeSelVec ? relScanState.nodeIDVector->state->getSelVector() :
+                                     relScanState.cachedBoundNodeSelVector;
+    positions.resize(sel.getSelSize());
+    for (auto i = 0u; i < sel.getSelSize(); i++) {
+        positions[i] = sel[i];
     }
-    scanState.initState(transaction, nodeGroup, resetCachedBoundNodeSelVec);
+    // The CSR scan processes the bound nodes of a batch in a single forward pass over the
+    // CSR lists, which are laid out in ascending bound-node-offset order within each node
+    // group. Bound node IDs are only guaranteed to be ascending when the input is a node
+    // table scan. When we extend from the output of a previous extend (e.g. planning
+    // (a)->(b)->(c) as scan(a) -> extend(a->b) -> extend(b->c)), the bound nodes are the
+    // children of a single parent and come in arbitrary order, so sort them by offset.
+    // Parents whose CSR list lies before the current scan position would otherwise be
+    // silently skipped by CSRNodeGroup::scanCommittedPersistentWithCache.
+    std::sort(positions.begin(), positions.end(),
+        [&](common::sel_t a, common::sel_t b) {
+            return relScanState.nodeIDVector->readNodeOffset(a) <
+                   relScanState.nodeIDVector->readNodeOffset(b);
+        });
+    // Partition the bound nodes by node group. They form a contiguous sequence within a
+    // single node group when the input is a node table scan. However, the children of a
+    // single parent can span multiple node groups, in which case the batch is scanned one
+    // node group at a time; see RelTableScanState::boundNodeGroupPlan.
+    std::map<node_group_idx_t, std::vector<common::sel_t>> groups;
+    for (const auto pos : positions) {
+        const auto boundNodeID = relScanState.nodeIDVector->getValue<nodeID_t>(pos);
+        groups[StorageUtils::getNodeGroupIdx(boundNodeID.offset)].push_back(pos);
+    }
+    if (groups.size() <= 1) {
+        // Single node group (the common case): historical fast path.
+        relScanState.boundNodeGroupPlan.clear();
+        relScanState.allBoundNodePositions.clear();
+        // Note there we directly read node at pos 0 here regardless the selVector is
+        // filtered or not. This is because we're assuming the nodeIDVector is always a
+        // sequence here.
+        const auto boundNodePos = resetCachedBoundNodeSelVec ?
+                                      relScanState.nodeIDVector->state->getSelVector()[0] :
+                                      relScanState.cachedBoundNodeSelVector[0];
+        const auto boundNodeID = relScanState.nodeIDVector->getValue<nodeID_t>(boundNodePos);
+        NodeGroup* nodeGroup = nullptr;
+        // Check if the node group idx is same as previous scan.
+        const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(boundNodeID.offset);
+        if (relScanState.nodeGroupIdx != nodeGroupIdx) {
+            // We need to re-initialize the node group scan state.
+            nodeGroup = getDirectedTableData(relScanState.direction)->getNodeGroup(nodeGroupIdx);
+        } else {
+            nodeGroup = relScanState.nodeGroup;
+        }
+        // If the sorted bound node order differs from the input sel vector order, install
+        // the sorted positions into cachedBoundNodeSelVector (initState would otherwise
+        // re-copy the unsorted input order and out-of-order parents would be skipped by
+        // the forward CSR scan).
+        auto inputSelMatchesSorted = true;
+        if (resetCachedBoundNodeSelVec) {
+            const auto& inputSel = relScanState.nodeIDVector->state->getSelVector();
+            for (auto i = 0u; i < positions.size(); i++) {
+                if (positions[i] != inputSel[i]) {
+                    inputSelMatchesSorted = false;
+                    break;
+                }
+            }
+        }
+        if (resetCachedBoundNodeSelVec && !inputSelMatchesSorted) {
+            relScanState.setCachedBoundNodeSelVectorToPositions(positions);
+            scanState.initState(transaction, nodeGroup, false /*resetCachedBoundNodeIDs*/);
+        } else {
+            scanState.initState(transaction, nodeGroup, resetCachedBoundNodeSelVec);
+        }
+        return;
+    }
+    // Multi-group batch: scan one node group at a time.
+    relScanState.allBoundNodePositions = std::move(positions);
+    relScanState.boundNodeGroupPlan.clear();
+    for (auto& [groupIdx, groupPositions] : groups) {
+        relScanState.boundNodeGroupPlan.emplace_back(
+            getDirectedTableData(relScanState.direction)->getNodeGroup(groupIdx),
+            std::move(groupPositions));
+    }
+    relScanState.startNextBoundNodeGroup(transaction);
 }
 
 bool RelTable::scanInternal(Transaction* transaction, TableScanState& scanState) {

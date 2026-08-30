@@ -13,6 +13,7 @@
 #include "planner/join_order/cost_model.h"
 #include "planner/join_order/join_plan_solver.h"
 #include "planner/join_order/join_tree_constructor.h"
+#include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "planner/planner.h"
 
@@ -506,31 +507,40 @@ void Planner::planWCOJoin(uint32_t leftLevel, uint32_t rightLevel) {
     }
 }
 
-static LogicalOperator* getSequentialScan(LogicalOperator* op) {
-    switch (op->getOperatorType()) {
-    case LogicalOperatorType::FLATTEN:
-    case LogicalOperatorType::FILTER:
-    case LogicalOperatorType::EXTEND:
-    case LogicalOperatorType::PACKED_EXTEND:
-    case LogicalOperatorType::PROJECTION: { // operators we directly search through
-        return getSequentialScan(op->getChild(0).get());
-    }
-    case LogicalOperatorType::SCAN_NODE_TABLE: {
-        return op;
-    }
-    default:
-        return nullptr;
-    }
-}
-
 // Check whether given node ID has sequential guarantee on the plan.
+// A node is sequential if it is either the node scanned at the plan's root, or the neighbor
+// node bound by the outermost extend: each tuple produced by an extend carries exactly one
+// value for the newly bound neighbor, so index (CSR) seeks on it are valid and we can
+// continue extending (index nested loop join) from it. This allows linear multi-hop
+// patterns to be planned as extend chains rooted at a selective node scan (e.g. a primary
+// key or index scan), instead of falling back to hash joins after the first hop.
 static bool isNodeSequentialOnPlan(const LogicalPlan& plan, const NodeExpression& node) {
-    const auto seqScan = getSequentialScan(plan.getLastOperator().get());
-    if (seqScan == nullptr) {
-        return false;
+    const auto targetID = node.getInternalID()->getUniqueName();
+    auto* op = plan.getLastOperator().get();
+    while (op != nullptr) {
+        switch (op->getOperatorType()) {
+        case LogicalOperatorType::EXTEND:
+        case LogicalOperatorType::PACKED_EXTEND: {
+            const auto& extend = op->constCast<LogicalExtend>();
+            if (extend.getNbrNode()->getInternalID()->getUniqueName() == targetID) {
+                return true;
+            }
+            op = op->getChild(0).get();
+        } break;
+        case LogicalOperatorType::FLATTEN:
+        case LogicalOperatorType::FILTER:
+        case LogicalOperatorType::PROJECTION: { // operators we directly search through
+            op = op->getChild(0).get();
+        } break;
+        case LogicalOperatorType::SCAN_NODE_TABLE: {
+            const auto& scan = op->constCast<LogicalScanNodeTable>();
+            return scan.getNodeID()->getUniqueName() == targetID;
+        }
+        default:
+            return false;
+        }
     }
-    const auto sequentialScan = dynamic_cast_checked<LogicalScanNodeTable*>(seqScan);
-    return sequentialScan->getNodeID()->getUniqueName() == node.getInternalID()->getUniqueName();
+    return false;
 }
 
 // As a heuristic for wcoj, we always pick rel scan that starts from the bound node.
@@ -668,7 +678,8 @@ bool Planner::tryPlanPackedINLJoin(const SubqueryGraph& subgraph,
     if (!subgraph.isSingleRel() && !otherSubgraph.isSingleRel()) {
         return false;
     }
-    if (subgraph.isSingleRel()) {
+    if (subgraph.isSingleRel() && !otherSubgraph.isSingleRel()) {
+        // Always put single rel subgraph to right.
         return tryPlanPackedINLJoin(otherSubgraph, subgraph, joinNodes);
     }
     auto relPos = UINT32_MAX;
@@ -726,7 +737,8 @@ bool Planner::tryPlanINLJoin(const SubqueryGraph& subgraph, const SubqueryGraph&
     if (!subgraph.isSingleRel() && !otherSubgraph.isSingleRel()) {
         return false;
     }
-    if (subgraph.isSingleRel()) { // Always put single rel subgraph to right.
+    if (subgraph.isSingleRel() && !otherSubgraph.isSingleRel()) {
+        // Always put single rel subgraph to right.
         return tryPlanINLJoin(otherSubgraph, subgraph, joinNodes);
     }
     auto relPos = UINT32_MAX;
