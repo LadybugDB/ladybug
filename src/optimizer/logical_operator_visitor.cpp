@@ -46,6 +46,9 @@ void LogicalOperatorVisitor::visitOperatorSwitch(LogicalOperator* op) {
     case LogicalOperatorType::HASH_JOIN: {
         visitHashJoin(op);
     } break;
+    case LogicalOperatorType::INDEX_LOOK_UP: {
+        visitIndexLookUp(op);
+    } break;
     case LogicalOperatorType::INTERSECT: {
         visitIntersect(op);
     } break;
@@ -96,6 +99,9 @@ void LogicalOperatorVisitor::visitOperatorSwitch(LogicalOperator* op) {
     } break;
     case LogicalOperatorType::UNWIND: {
         visitUnwind(op);
+    } break;
+    case LogicalOperatorType::UNWIND_DEDUPLICATE: {
+        visitUnwindDeduplicate(op);
     } break;
     case LogicalOperatorType::CROSS_PRODUCT: {
         visitCrossProduct(op);

@@ -18,11 +18,13 @@
 #include "planner/operator/logical_projection.h"
 #include "planner/operator/logical_table_function_call.h"
 #include "planner/operator/logical_unwind.h"
+#include "planner/operator/logical_unwind_deduplicate.h"
 #include "planner/operator/persistent/logical_copy_from.h"
 #include "planner/operator/persistent/logical_delete.h"
 #include "planner/operator/persistent/logical_insert.h"
 #include "planner/operator/persistent/logical_merge.h"
 #include "planner/operator/persistent/logical_set.h"
+#include "planner/operator/scan/logical_index_look_up.h"
 #include "planner/operator/scan/logical_query_primary_key_lookup.h"
 
 using namespace lbug::common;
@@ -122,6 +124,20 @@ void ProjectionPushDownOptimizer::visitHashJoin(LogicalOperator* op) {
     preAppendProjection(op, 1, expressionsAfterPruning);
 }
 
+void ProjectionPushDownOptimizer::visitIndexLookUp(LogicalOperator* op) {
+    auto& indexLookup = op->constCast<LogicalPrimaryKeyLookup>();
+    // The lookup key is evaluated on top of the child pipeline (the copy-from source scan). If
+    // it is not collected here, the source column it references may be pruned, causing the key
+    // to silently evaluate to NULL and the lookup to produce no offsets.
+    for (auto i = 0u; i < indexLookup.getNumInfos(); ++i) {
+        const auto& info = indexLookup.getInfo(i);
+        collectExpressionsInUse(info.key);
+        for (auto& warningExpr : info.warningExprs) {
+            collectExpressionsInUse(warningExpr);
+        }
+    }
+}
+
 void ProjectionPushDownOptimizer::visitIntersect(LogicalOperator* op) {
     auto& intersect = op->constCast<LogicalIntersect>();
     collectExpressionsInUse(intersect.getIntersectNodeID());
@@ -195,6 +211,14 @@ void ProjectionPushDownOptimizer::visitQueryPrimaryKeyLookup(LogicalOperator* op
     // causing the key to silently evaluate to NULL and the lookup to return no rows.
     collectExpressionsInUse(lookup.getKey());
     collectExpressionsInUse(lookup.getNodeID());
+}
+
+void ProjectionPushDownOptimizer::visitUnwindDeduplicate(LogicalOperator* op) {
+    auto& dedup = op->constCast<LogicalUnwindDeduplicate>();
+    // Deduplication keys are consumed by this operator but are not part of its output schema.
+    for (auto& key : dedup.getKeyExpressions()) {
+        collectExpressionsInUse(key);
+    }
 }
 
 void ProjectionPushDownOptimizer::visitInsert(LogicalOperator* op) {

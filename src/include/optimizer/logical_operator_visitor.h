@@ -93,6 +93,12 @@ protected:
         return op;
     }
 
+    virtual void visitIndexLookUp(planner::LogicalOperator* /*op*/) {}
+    virtual std::shared_ptr<planner::LogicalOperator> visitIndexLookUpReplace(
+        std::shared_ptr<planner::LogicalOperator> op) {
+        return op;
+    }
+
     virtual void visitIntersect(planner::LogicalOperator* /*op*/) {}
     virtual std::shared_ptr<planner::LogicalOperator> visitIntersectReplace(
         std::shared_ptr<planner::LogicalOperator> op) {
@@ -191,6 +197,12 @@ protected:
 
     virtual void visitUnwind(planner::LogicalOperator* /*op*/) {}
     virtual std::shared_ptr<planner::LogicalOperator> visitUnwindReplace(
+        std::shared_ptr<planner::LogicalOperator> op) {
+        return op;
+    }
+
+    virtual void visitUnwindDeduplicate(planner::LogicalOperator* /*op*/) {}
+    virtual std::shared_ptr<planner::LogicalOperator> visitUnwindDeduplicateReplace(
         std::shared_ptr<planner::LogicalOperator> op) {
         return op;
     }
