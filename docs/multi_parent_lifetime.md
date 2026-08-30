@@ -1,5 +1,17 @@
 # Multi-parent packed child slices: lifetime & representation
 
+> **Status update (multi-parent scan implemented):** the deferred change described below has
+> been implemented. `PackedChildSlices` now holds a `shared_ptr<SelectionVector>` aliasing the
+> bound (parent) chunk state's selection vector plus a prefix-sum `offsets` over ALL served
+> parents (zeros allowed, zero-length ranges skipped by consumers). The CSR scan packs children
+> of multiple parents per output batch in `CSRNodeGroupScanState::tryScanCachedTuplesPacked`
+> (persistent with-cache path only). Multi-parent batches are enabled per-consumer:
+> `ScanRelTable::setMultiParentPackedScanEnabled(true)` is set by the plan mapper only when the
+> packed-aware `PackedFilteredCount` consumes the scan output directly. Plans that materialize
+> the scan output across a `FactorizedTable` (e.g. when the filter predicate touches an nbr
+> node property, which routes the property fetch through a hash join) keep the
+> one-parent-per-batch contract — exactly the materialization hazard described below.
+
 Context: the `enable_packed_path_extend` path reuses the adjacency-list (CSR)
 rel scan to implement a physical packed extend. `ScanRelTable` attaches a
 `PackedChildSlices` descriptor to the **output** `DataChunkState`

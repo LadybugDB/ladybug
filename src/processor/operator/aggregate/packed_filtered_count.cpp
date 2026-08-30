@@ -64,13 +64,47 @@ uint64_t PackedFilteredCount::countMatchesForCurrentTuple() {
     for (auto* state : multiplicityStates) {
         baseMultiplicity *= state->getSelSize();
     }
-    if (baseMultiplicity == 0 || selectState->getSelSize() == 0 || flatState->getSelSize() == 0) {
-        return 0;
-    }
-
     uint64_t result = 0;
     const auto& lhsSelVector = lhsValueVector->state->getSelVector();
     const auto& rhsSelVector = rhsValueVector->state->getSelVector();
+    const auto packed = rhsValueVector->state->hasPackedChildSlices();
+    if (packed) {
+        // Multi-parent packed batch: the child chunk state carries a PackedChildSlices
+        // descriptor whose parentSelVector aliases the bound (parent) chunk's selection vector
+        // and whose offsets prefix-sum the children per parent (zero-length ranges are parents
+        // without children in this batch and are skipped). The lhs and group key live in the
+        // same (bound) chunk as the parent selection, and the child range
+        // [offsets[p], offsets[p+1]) indexes into the child chunk's selection vector. Per-parent
+        // counts are accumulated into localCounts here (the batch spans multiple group keys, so
+        // the caller cannot attribute the returned total to a single key). See
+        // docs/multi_parent_lifetime.md.
+        const auto& slices = rhsValueVector->state->getPackedChildSlices();
+        const auto& parentSelVector = *slices.parentSelVector;
+        for (sel_t parentIdx = 0; parentIdx < parentSelVector.getSelSize(); ++parentIdx) {
+            const auto start = slices.offsets[parentIdx];
+            const auto end = slices.offsets[parentIdx + 1];
+            if (start == end) {
+                continue;
+            }
+            const auto lhsValue = lhsValueVector->getValue<int64_t>(parentSelVector[parentIdx]);
+            uint64_t parentCount = 0;
+            for (auto rhsIdx = start; rhsIdx < end; ++rhsIdx) {
+                const auto rhsValue = rhsValueVector->getValue<int64_t>(rhsSelVector[rhsIdx]);
+                if ((lhsValue + rhsValue) % 10 == 0) {
+                    parentCount += baseMultiplicity;
+                }
+            }
+            if (parentCount > 0) {
+                localCounts[groupKeyVector->getValue<int64_t>(parentSelVector[parentIdx])] +=
+                    parentCount;
+                result += parentCount;
+            }
+        }
+        return result;
+    }
+    if (baseMultiplicity == 0 || selectState->getSelSize() == 0 || flatState->getSelSize() == 0) {
+        return 0;
+    }
     for (auto lhsIdx = 0u; lhsIdx < lhsSelVector.getSelSize(); ++lhsIdx) {
         const auto lhsValue = lhsValueVector->getValue<int64_t>(lhsSelVector[lhsIdx]);
         for (auto rhsIdx = 0u; rhsIdx < rhsSelVector.getSelSize(); ++rhsIdx) {
@@ -85,9 +119,13 @@ uint64_t PackedFilteredCount::countMatchesForCurrentTuple() {
 
 void PackedFilteredCount::executeInternal(ExecutionContext* context) {
     while (children[0]->getNextTuple(context)) {
-        const auto groupKeyPos = groupKeyVector->state->getSelVector()[0];
+        const auto packed = rhsValueVector->state->hasPackedChildSlices();
         const auto count = countMatchesForCurrentTuple();
-        if (count > 0) {
+        if (count > 0 && !packed) {
+            // Single-parent batch: attribute the whole batch's count to the one group key. For
+            // multi-parent packed batches, countMatchesForCurrentTuple() has already attributed
+            // per-parent counts to each parent's group key via localCounts.
+            const auto groupKeyPos = groupKeyVector->state->getSelVector()[0];
             localCounts[groupKeyVector->getValue<int64_t>(groupKeyPos)] += count;
         }
         metrics->numOutputTuple.incrementByOne();

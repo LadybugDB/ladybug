@@ -143,6 +143,14 @@ struct CSRNodeGroupScanState final : NodeGroupScanState {
     }
 
     bool tryScanCachedTuples(RelTableScanState& tableScanState);
+
+    // Multi-parent variant of tryScanCachedTuples (packedMultiParentScan): serves the children
+    // of as many consecutive parents as fit into one output batch. On success the batch is
+    // described by the output chunk's (filtered) selection vector plus
+    // RelTableScanState::packedChildOffsets (prefix sum over the served parents) and the bound
+    // node vector's chunk state, which holds the served parents in its selection vector. See
+    // docs/multi_parent_lifetime.md.
+    bool tryScanCachedTuplesPacked(RelTableScanState& tableScanState);
 };
 
 struct CSRNodeGroupCheckpointState final : NodeGroupCheckpointState {

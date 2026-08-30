@@ -44,6 +44,17 @@ struct RelTableScanState : TableScanState {
     // iterate over the full batch).
     std::vector<common::sel_t> allBoundNodePositions;
 
+    // Multi-parent packed scan support (see docs/multi_parent_lifetime.md). When
+    // packedMultiParentScan is true, the CSR scan may serve children of MULTIPLE bound parents
+    // in a single output batch: the bound node vector's chunk state is set to unflat with its
+    // selection vector holding the served parents, and packedChildOffsets holds the prefix-sum
+    // offsets over those parents (offsets.size() == numServedParents + 1; zero-length ranges
+    // are skipped by consumers). Only the persistent with-cache CSR scan path packs multiple
+    // parents; all other paths keep the one-parent-per-batch contract (bound vector flat with
+    // selSize 1, packedChildOffsets left empty).
+    bool packedMultiParentScan = false;
+    std::vector<common::sel_t> packedChildOffsets;
+
     std::unique_ptr<LocalRelTableScanState> localTableScanState;
 
     // Optional state used by Arrow-backed relationship tables. Keep it on the common scan state so

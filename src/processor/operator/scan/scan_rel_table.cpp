@@ -110,6 +110,7 @@ void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext
         scanState = std::make_unique<RelTableScanState>(*MemoryManager::Get(*clientContext),
             boundNodeIDVector, outVectors, nbrNodeIDVector->state);
     }
+    scanState->packedMultiParentScan = multiParentPackedScanEnabled;
     tableInfo.initScanState(*scanState, outVectors, clientContext);
     // The native RelTable::initScanState reads from the bound-node
     // nodeIDVector to pick a node group, so it must run after a child tuple
@@ -226,38 +227,26 @@ void ScanRelTable::updatePackedChildSlices(sel_t outputSize) const {
         scanState->outState->clearPackedChildSlices();
         return;
     }
-    // See docs/multi_parent_lifetime.md for the representation/lifetime contract of the
-    // descriptor written here (owned copy; synchronous consumption only).
-    //
-    // The CSR scan sets nodeIDVector to flat, pointing its selVector[0] at the actual parent
-    // whose children are currently materialized in the output vector (see
-    // RelTableScanState::setNodeIDVectorToFlat). We must use that position as the parent
-    // position, NOT currBoundNodeIdx, because currBoundNodeIdx may already have advanced past
-    // this parent by the time we get here (it is incremented when a parent's CSR list is fully
-    // consumed within a single scan() call). The current scan architecture processes one parent
-    // per output batch, so we set a single-parent slice (overwriting any previous one).
-    const auto& boundSelVector = scanState->nodeIDVector->state->getSelVector();
-    DASSERT(boundSelVector.getSelSize() == 1);
-    scanState->outState->setSingleParentPackedChildSlice(boundSelVector[0], outputSize);
-}
-
-void ScanRelTable::reservePackedChildSlicesForBatch() const {
-    if (operatorType != PhysicalOperatorType::PACKED_EXTEND) {
-        return;
+    // Attach the PackedChildSlices descriptor to the output (nbr/child) chunk state. See
+    // docs/multi_parent_lifetime.md for the representation/lifetime contract: the descriptor
+    // aliases the bound chunk state's selection vector via shared_ptr and is valid only for
+    // synchronous consumption of this output batch.
+    const auto boundSelVector = scanState->nodeIDVector->state->getSelVectorShared();
+    if (boundSelVector->getSelSize() > 1) {
+        // Multi-parent packed batch: the CSR scan served the children of several parents and
+        // recorded the prefix-sum offsets over the served parents in packedChildOffsets (the
+        // bound vector's chunk state was switched to unflat holding exactly those parents).
+        DASSERT(!scanState->packedChildOffsets.empty());
+        DASSERT(scanState->packedChildOffsets.back() == outputSize);
+        scanState->outState->setPackedChildSlices(boundSelVector,
+            std::move(scanState->packedChildOffsets));
+    } else {
+        // Single-parent batch: the bound vector is flat pointing its selVector[0] at the actual
+        // parent whose children are currently materialized in the output vector (see
+        // RelTableScanState::setNodeIDVectorToFlat).
+        DASSERT(boundSelVector->getSelSize() == 1);
+        scanState->outState->setSingleParentPackedChildSlice(boundSelVector, outputSize);
     }
-    // cachedBoundNodeSelVector holds the bound-node positions for the current input batch and is
-    // (re)populated by RelTableScanState::initCachedBoundNodeIDSelVector() during initScanState.
-    // Its selSize is the number of parents that may produce children in this batch.
-    //
-    // Only reserve when more than one parent is in flight: the single-parent path uses
-    // setSingleParentPackedChildSlice (overwrite), which replaces the descriptor and would throw
-    // away a reservation. Reserving for numParents > 1 keeps the multi-parent append() path
-    // reallocation-free without adding a wasted allocation to the common single-parent path.
-    const auto numParents = scanState->cachedBoundNodeSelVector.getSelSize();
-    if (numParents <= 1) {
-        return;
-    }
-    scanState->outState->reservePackedChildSlices(numParents);
 }
 
 bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
@@ -276,9 +265,6 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
             if (!fetchNextBoundNodeBatch(transaction)) {
                 return false;
             }
-            // fetchNextBoundNodeBatch established a new input batch (and repopulated
-            // cachedBoundNodeSelVector via initScanState); reserve for the new parent count.
-            reservePackedChildSlicesForBatch();
         }
     }
     while (true) {
@@ -295,9 +281,6 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
             return false;
         }
         tableInfo.table->initScanState(transaction, *scanState);
-        // A new input batch was just pulled and initScanState repopulated
-        // cachedBoundNodeSelVector; reserve for the new parent count.
-        reservePackedChildSlicesForBatch();
     }
 }
 

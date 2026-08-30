@@ -17,6 +17,7 @@
 #include "processor/operator/aggregate/packed_filtered_count.h"
 #include "processor/operator/aggregate/simple_aggregate.h"
 #include "processor/operator/aggregate/simple_aggregate_scan.h"
+#include "processor/operator/scan/scan_rel_table.h"
 #include "processor/plan_mapper.h"
 #include "processor/result/result_set_descriptor.h"
 
@@ -231,8 +232,17 @@ static std::unique_ptr<PhysicalOperator> tryMapPackedFilteredCount(PlanMapper& m
         DataPos{packedChildSchema->getExpressionPos(*predicateInputs->first)},
         DataPos{packedChildSchema->getExpressionPos(*predicateInputs->second)},
         dependentGroupsVector[0], dependentGroupsVector[1], std::move(multiplicityChunks)};
+    auto packedChildPhysicalOp = mapper.mapOperator(packedChild);
+    // Enable multi-parent packed batches on the underlying rel scan (if it is a single-table
+    // ScanRelTable): PackedFilteredCount is packed-aware and consumes the PackedChildSlices
+    // descriptor, so it can attribute children of many parents per batch. Other consumers of
+    // packed extend output keep the one-parent-per-batch contract. See
+    // docs/multi_parent_lifetime.md.
+    if (auto* scanRelTable = dynamic_cast<ScanRelTable*>(packedChildPhysicalOp.get())) {
+        scanRelTable->setMultiParentPackedScanEnabled(true);
+    }
     auto sink = std::make_unique<PackedFilteredCount>(sharedState, info,
-        mapper.mapOperator(packedChild), mapper.getOperatorID(),
+        std::move(packedChildPhysicalOp), mapper.getOperatorID(),
         std::make_unique<PackedFilteredCountPrintInfo>(logicalFilter.getPredicate(),
             agg.getKeys()));
     sink->setDescriptor(std::make_unique<ResultSetDescriptor>(packedChildSchema));

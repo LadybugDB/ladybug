@@ -20,61 +20,30 @@ public:
     // the PACKED_EXTEND physical operator; see docs/multi_parent_lifetime.md for the full
     // lifetime & representation rationale.
     //
-    // Representation (current CSR scan processes ONE parent per output batch):
-    //   - parentPositions is an OWNED copy holding only the parents that produced children
-    //     (parents with no matches are dropped at scan time). It must never be replaced by a
-    //     pointer/alias into the parent's SelectionVector: the vector object is shared_ptr-held
-    //     but its contents are rewritten in place (setToFiltered/setToUnfiltered), so an alias
-    //     would silently track whatever the input batch holds next.
-    //   - offsets is a prefix sum with offsets.size() == parentPositions.size() + 1; the
-    //     children of parent p occupy output positions [offsets[p], offsets[p+1]).
+    // Representation (multi-parent packed scan):
+    //   - parentSelVector aliases the bound (parent) chunk state's selection vector for the
+    //     current output batch. The shared_ptr keeps the SelectionVector OBJECT alive even if
+    //     the input state is reused, but the buffer contents are NOT snapshotted: they are
+    //     whatever the bound chunk's selection vector currently holds (the parents whose
+    //     children are materialized in this batch).
+    //   - offsets is a prefix sum over ALL parents in parentSelVector, with
+    //     offsets.size() == parentSelVector->getSelSize() + 1; the children of parent i occupy
+    //     output positions [offsets[i], offsets[i+1]) in the child chunk's selection vector.
+    //     offsets[i] == offsets[i+1] means parent i produced no children in this batch
+    //     (consumers must skip zero-length ranges).
     //
     // Lifetime rule: the descriptor is valid only for synchronous consumption of this output
     // batch. Do not persist it across a materialization boundary (e.g. appending to a
-    // FactorizedTable and reading back later) — the input batch advances and the descriptor is
-    // cleared/reset (ResultSet::resetForReuse, next scan call).
-    //
-    // Deferred (true multi-parent packed scan, many parents per output batch): point at the
-    // parent's selection vector kept alive via shared_ptr (getSelVectorShared()), include ALL
-    // parents (zero-child ones too), and switch offsets to a prefix sum over all parents
-    // (offsets[i] == offsets[i+1] means parent i has no children) so the consumer skips
-    // zero-length ranges. Until that scan exists, the owned-copy representation below is the
-    // contract.
+    // FactorizedTable and reading back later): the aliased buffer is rewritten in place by the
+    // next input batch (setToFiltered/setToUnfiltered) and the descriptor is cleared/reset
+    // (ResultSet::resetForReuse, next scan call).
     struct PackedChildSlices {
-        std::vector<sel_t> parentPositions;
+        std::shared_ptr<SelectionVector> parentSelVector;
         std::vector<sel_t> offsets;
 
-        void clear() {
-            parentPositions.clear();
-            offsets.clear();
-        }
-
-        bool empty() const { return parentPositions.empty(); }
-        sel_t getNumParents() const { return parentPositions.size(); }
+        bool empty() const { return parentSelVector == nullptr; }
+        sel_t getNumParents() const { return empty() ? 0 : parentSelVector->getSelSize(); }
         sel_t getNumValues() const { return offsets.empty() ? 0 : offsets.back(); }
-
-        // Pre-allocate for an expected number of parents. Call this before a sequence of
-        // append() calls so each append is O(1) amortized with no reallocation.
-        // offsets holds one more entry than parentPositions (prefix-sum invariant), so reserve
-        // numParents+1 for it.
-        void reserve(size_t numParents) {
-            parentPositions.reserve(numParents);
-            offsets.reserve(numParents + 1);
-        }
-
-        // Append a parent slice: parent position and number of values for that parent.
-        // Maintains the invariant offsets.size() == parentPositions.size() + 1
-        void append(sel_t parentPosition, sel_t numValues) {
-            if (offsets.empty()) {
-                // initialize offsets with {0, numValues}
-                parentPositions.push_back(parentPosition);
-                offsets.push_back(0);
-                offsets.push_back(numValues);
-                return;
-            }
-            parentPositions.push_back(parentPosition);
-            offsets.push_back(offsets.back() + numValues);
-        }
     };
 
     DataChunkState();
@@ -103,30 +72,17 @@ public:
         DASSERT(packedChildSlices.has_value());
         return *packedChildSlices;
     }
-    void setPackedChildSlices(std::vector<sel_t> parentPositions, std::vector<sel_t> offsets) {
-        DASSERT(offsets.size() == parentPositions.size() + 1);
-        packedChildSlices = PackedChildSlices{std::move(parentPositions), std::move(offsets)};
+    void setPackedChildSlices(std::shared_ptr<SelectionVector> parentSelVector,
+        std::vector<sel_t> offsets) {
+        DASSERT(parentSelVector != nullptr);
+        DASSERT(offsets.size() == parentSelVector->getSelSize() + 1);
+        packedChildSlices = PackedChildSlices{std::move(parentSelVector), std::move(offsets)};
     }
-    void setSingleParentPackedChildSlice(sel_t parentPosition, sel_t numValues) {
-        setPackedChildSlices({parentPosition}, {0, numValues});
-    }
-
-    // Append a packed child slice for a parent. Creates packedChildSlices if not present.
-    void appendPackedChildSlice(sel_t parentPosition, sel_t numValues) {
-        if (!packedChildSlices.has_value()) {
-            setSingleParentPackedChildSlice(parentPosition, numValues);
-            return;
-        }
-        packedChildSlices->append(parentPosition, numValues);
-    }
-
-    // Pre-allocate the packed child slices for an expected number of parents. Creates the
-    // optional if not present so subsequent appendPackedChildSlice() calls don't reallocate.
-    void reservePackedChildSlices(size_t numParents) {
-        if (!packedChildSlices.has_value()) {
-            packedChildSlices = PackedChildSlices{};
-        }
-        packedChildSlices->reserve(numParents);
+    // Single-parent convenience: parentSelVector must hold exactly one parent position.
+    void setSingleParentPackedChildSlice(std::shared_ptr<SelectionVector> parentSelVector,
+        sel_t numValues) {
+        DASSERT(parentSelVector->getSelSize() == 1);
+        setPackedChildSlices(std::move(parentSelVector), {0, numValues});
     }
 
     void clearPackedChildSlices() { packedChildSlices.reset(); }

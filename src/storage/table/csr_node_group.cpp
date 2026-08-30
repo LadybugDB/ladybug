@@ -58,6 +58,96 @@ bool CSRNodeGroupScanState::tryScanCachedTuples(RelTableScanState& tableScanStat
     return true;
 }
 
+bool CSRNodeGroupScanState::tryScanCachedTuplesPacked(RelTableScanState& tableScanState) {
+    if (numCachedRows == 0 ||
+        tableScanState.currBoundNodeIdx >= tableScanState.cachedBoundNodeSelVector.getSelSize()) {
+        return false;
+    }
+    auto& outSelVector = tableScanState.outState->getSelVectorUnsafe();
+    outSelVector.setToFiltered();
+    auto& boundSelVector = tableScanState.nodeIDVector->state->getSelVectorUnsafe();
+    boundSelVector.setToFiltered();
+    auto& packedChildOffsets = tableScanState.packedChildOffsets;
+    packedChildOffsets.clear();
+    packedChildOffsets.push_back(0);
+    sel_t numSelected = 0;
+    sel_t numServedParents = 0;
+    while (tableScanState.currBoundNodeIdx < tableScanState.cachedBoundNodeSelVector.getSelSize()) {
+        const auto boundNodePos =
+            tableScanState.cachedBoundNodeSelVector[tableScanState.currBoundNodeIdx];
+        const auto boundNodeOffset = tableScanState.nodeIDVector->readNodeOffset(boundNodePos);
+        const auto boundNodeOffsetInGroup = boundNodeOffset % StorageConfig::NODE_GROUP_SIZE;
+        const auto startCSROffset = header->getStartCSROffset(boundNodeOffsetInGroup);
+        const auto csrLength = header->getCSRLength(boundNodeOffsetInGroup);
+        if (startCSROffset > nextCachedRowToScan) {
+            // Jump forward to this parent's list. Parents are visited in CSR order, so this
+            // only skips over rows of parents already fully consumed.
+            nextCachedRowToScan = startCSROffset;
+        }
+        if (nextCachedRowToScan >= nextRowToScan ||
+            nextCachedRowToScan < nextRowToScan - numCachedRows) {
+            // This parent's list is outside the cached window. Return the batch accumulated so
+            // far; the outer scan loop refreshes the cache and resumes with this parent.
+            break;
+        }
+        const auto numRowsToScan =
+            std::min(nextRowToScan, startCSROffset + csrLength) - nextCachedRowToScan;
+        const auto numToScan =
+            std::min<sel_t>(numRowsToScan, DEFAULT_VECTOR_CAPACITY - numSelected);
+        const auto startCachedRow = nextCachedRowToScan - (nextRowToScan - numCachedRows);
+        sel_t numSelectedForParent = 0;
+        if (cachedScannedVectorsSelBitset.has_value()) {
+            const auto& cachedScannedVectorsSelBitset = *this->cachedScannedVectorsSelBitset;
+            for (auto i = 0u; i < numToScan; i++) {
+                const auto rowIdx = startCachedRow + i;
+                outSelVector[numSelected] = rowIdx;
+                numSelected += cachedScannedVectorsSelBitset[rowIdx];
+                numSelectedForParent += cachedScannedVectorsSelBitset[rowIdx];
+            }
+        } else {
+            for (auto i = 0u; i < numToScan; i++) {
+                outSelVector[numSelected++] = startCachedRow + i;
+            }
+            numSelectedForParent = numToScan;
+        }
+        nextCachedRowToScan += numToScan;
+        if (numSelectedForParent > 0) {
+            boundSelVector[numServedParents++] = boundNodePos;
+            packedChildOffsets.push_back(numSelected);
+        }
+        if (numToScan < numRowsToScan) {
+            // Output capacity reached mid-list (numToScan == 0 with rows remaining also lands
+            // here): return the batch and let the next one continue with this parent.
+            break;
+        }
+        if ((startCSROffset + csrLength) <= nextCachedRowToScan) {
+            // Parent's list fully consumed (also covers zero-length lists); move on to the next
+            // parent within this batch.
+            tableScanState.currBoundNodeIdx++;
+            nextCachedRowToScan = 0;
+            continue;
+        }
+        // The parent's list continues beyond the cached window; return the batch and resume
+        // this parent after the cache is refreshed.
+        break;
+    }
+    if (numServedParents == 0) {
+        packedChildOffsets.clear();
+        return false;
+    }
+    if (numServedParents == 1) {
+        // Preserve the one-parent-per-batch contract when only a single parent was served.
+        tableScanState.setNodeIDVectorToFlat(boundSelVector[0]);
+    } else {
+        tableScanState.nodeIDVector->state->setToUnflat();
+        boundSelVector.setSelSize(numServedParents);
+    }
+    outSelVector.setSelSize(numSelected);
+    DASSERT(packedChildOffsets.size() == size_t(numServedParents) + 1);
+    DASSERT(packedChildOffsets.back() == numSelected);
+    return true;
+}
+
 void CSRNodeGroup::initializeScanState(const Transaction* transaction,
     TableScanState& state) const {
     auto& relScanState = state.cast<RelTableScanState>();
@@ -181,7 +271,9 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedPersistent(const Transaction* tra
 NodeGroupScanResult CSRNodeGroup::scanCommittedPersistentWithCache(const Transaction* transaction,
     RelTableScanState& tableState, CSRNodeGroupScanState& nodeGroupScanState) const {
     while (true) {
-        while (nodeGroupScanState.tryScanCachedTuples(tableState)) {
+        while (tableState.packedMultiParentScan ?
+                   nodeGroupScanState.tryScanCachedTuplesPacked(tableState) :
+                   nodeGroupScanState.tryScanCachedTuples(tableState)) {
             if (tableState.outState->getSelVector().getSelSize() > 0) {
                 // Note: This is a dummy return value.
                 return NodeGroupScanResult{nodeGroupScanState.nextRowToScan,
