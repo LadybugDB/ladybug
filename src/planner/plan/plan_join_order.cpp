@@ -508,32 +508,50 @@ void Planner::planWCOJoin(uint32_t leftLevel, uint32_t rightLevel) {
 }
 
 // Check whether given node ID has sequential guarantee on the plan.
-// A node is sequential if it is either the node scanned at the plan's root, or the neighbor
-// node bound by the outermost extend: each tuple produced by an extend carries exactly one
-// value for the newly bound neighbor, so index (CSR) seeks on it are valid and we can
-// continue extending (index nested loop join) from it. This allows linear multi-hop
-// patterns to be planned as extend chains rooted at a selective node scan (e.g. a primary
-// key or index scan), instead of falling back to hash joins after the first hop.
+// A node is sequential if it is either the node scanned at the plan's root, or a neighbor
+// node bound by an extend: each tuple produced by an extend carries exactly one value for
+// the newly bound neighbor, so index (CSR) seeks on it are valid and we can continue
+// extending (index nested loop join) from it. This allows linear multi-hop patterns to be
+// planned as extend chains rooted at a selective node scan (e.g. a primary key or index
+// scan), instead of falling back to hash joins after the first hop.
 static bool isNodeSequentialOnPlan(const LogicalPlan& plan, const NodeExpression& node) {
     const auto targetID = node.getInternalID()->getUniqueName();
     auto* op = plan.getLastOperator().get();
+    // Whether the target node is bound by an extend in the chain below the root scan. Such
+    // nodes are only safe to keep extending (index nested loop join) when the chain is
+    // selective. Chains without any selective predicate grow multiplicatively with each
+    // hop (full scan -> all its neighbors -> all their neighbors, ...) and get materialized
+    // as hash join build sides, which can exhaust the buffer pool on cyclic queries (e.g.
+    // LSQB q3). We detect selectivity by the presence of a filter inside the chain (below
+    // at least one extend). Filters on top of the outermost extend do not count: the
+    // blowup happens below them.
+    bool boundByExtend = false;
+    bool sawExtend = false;
+    bool filterInsideChain = false;
     while (op != nullptr) {
         switch (op->getOperatorType()) {
         case LogicalOperatorType::EXTEND:
         case LogicalOperatorType::PACKED_EXTEND: {
             const auto& extend = op->constCast<LogicalExtend>();
             if (extend.getNbrNode()->getInternalID()->getUniqueName() == targetID) {
-                return true;
+                boundByExtend = true;
             }
+            sawExtend = true;
             op = op->getChild(0).get();
         } break;
         case LogicalOperatorType::FLATTEN:
         case LogicalOperatorType::FILTER:
         case LogicalOperatorType::PROJECTION: { // operators we directly search through
+            if (op->getOperatorType() == LogicalOperatorType::FILTER && sawExtend) {
+                filterInsideChain = true;
+            }
             op = op->getChild(0).get();
         } break;
         case LogicalOperatorType::SCAN_NODE_TABLE: {
             const auto& scan = op->constCast<LogicalScanNodeTable>();
+            if (boundByExtend) {
+                return filterInsideChain;
+            }
             return scan.getNodeID()->getUniqueName() == targetID;
         }
         default:
