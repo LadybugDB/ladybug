@@ -1,5 +1,6 @@
 #include "c_api/helpers.h"
 
+#include <cstdlib>
 #include <cstring>
 
 #include "c_api/lbug.h"

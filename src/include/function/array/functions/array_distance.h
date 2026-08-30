@@ -1,6 +1,6 @@
 #pragma once
 
-#include "math.h"
+#include <cmath>
 
 #include "common/vector/value_vector.h"
 #include "function/array/functions/array_squared_distance.h"

@@ -2,6 +2,7 @@
 
 #include "main/client_context.h"
 #include "processor/operator/aggregate/aggregate_hash_table.h"
+#include <bit>
 
 using namespace lbug::function;
 
