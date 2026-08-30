@@ -36,10 +36,12 @@ private:
     void visitFilter(planner::LogicalOperator* op) override;
     void visitNodeLabelFilter(planner::LogicalOperator* op) override;
     void visitHashJoin(planner::LogicalOperator* op) override;
+    void visitIndexLookUp(planner::LogicalOperator* op) override;
     void visitIntersect(planner::LogicalOperator* op) override;
     void visitProjection(planner::LogicalOperator* op) override;
     void visitOrderBy(planner::LogicalOperator* op) override;
     void visitUnwind(planner::LogicalOperator* op) override;
+    void visitUnwindDeduplicate(planner::LogicalOperator* op) override;
     void visitQueryPrimaryKeyLookup(planner::LogicalOperator* op) override;
     void visitSetProperty(planner::LogicalOperator* op) override;
     void visitInsert(planner::LogicalOperator* op) override;
