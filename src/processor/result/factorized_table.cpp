@@ -492,7 +492,10 @@ void FactorizedTable::copyUnflatVectorToFlatColumn(const ValueVector& vector,
 // factorizedTable. NullMasks are stored inside the overflow buffer.
 void FactorizedTable::copyVectorToUnflatColumn(const ValueVector& vector,
     const BlockAppendingInfo& blockAppendInfo, ft_col_idx_t colIdx) {
-    DASSERT(!vector.state->isFlat());
+    // A flat vector is stored as a one-element unflat value. This happens when a group is
+    // unflat at plan time but flat at run time, e.g. the packed extend's bound node chunk
+    // (flat with selSize 1 per output batch) appended by an Accumulate directly above it.
+    DASSERT(!vector.state->isFlat() || vector.state->getSelVector().getSelSize() == 1);
     auto unflatTupleValue = appendVectorToUnflatTupleBlocks(vector, colIdx);
     auto blockPtr = blockAppendInfo.data + tableSchema.getColOffset(colIdx);
     for (auto i = 0u; i < blockAppendInfo.numTuplesToAppend; i++) {
@@ -512,7 +515,9 @@ void FactorizedTable::copyVectorToColumn(const ValueVector& vector,
 
 overflow_value_t FactorizedTable::appendVectorToUnflatTupleBlocks(const ValueVector& vector,
     ft_col_idx_t colIdx) {
-    DASSERT(!vector.state->isFlat());
+    // See copyVectorToUnflatColumn: flat vectors (single selected value) are allowed and are
+    // stored as a one-element unflat value.
+    DASSERT(!vector.state->isFlat() || vector.state->getSelVector().getSelSize() == 1);
     auto numFlatTuplesInVector = vector.state->getSelVector().getSelSize();
     auto numBytesPerValue = LogicalTypeUtils::getRowLayoutSize(vector.dataType);
     auto numBytesForData = numBytesPerValue * numFlatTuplesInVector;
