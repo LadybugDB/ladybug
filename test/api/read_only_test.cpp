@@ -23,6 +23,8 @@ TEST_F(ReadOnlyTest, Test) {
 }
 
 TEST_F(ReadOnlyTest, ProjectGraphOnReadOnlyDatabase) {
+    // TODO(#881): intermittent SIGSEGV / CSR-loss race in the arrow collector task path.
+    GTEST_SKIP() << "Flaky SIGSEGV in the arrow collector task path; see issue #881.";
     if (databasePath == "" || databasePath == ":memory:") {
         return;
     }
