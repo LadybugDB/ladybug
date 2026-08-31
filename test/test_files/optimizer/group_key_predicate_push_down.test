@@ -1,0 +1,32 @@
+-DATASET CSV empty
+-BUFFER_POOL_SIZE 67108864
+
+--
+
+# Without group-key predicate push-down, the second aggregate builds 25 million groups and
+# exhausts this 64 MiB buffer pool before the post-aggregate equality filter can run.
+-CASE GroupKeyPredicatePushDownAvoidsAggregateOOM
+-SKIP_PAGE_SIZE_TESTS
+-STATEMENT CREATE NODE TABLE Person(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(1, 5000) AS i CREATE (:Person {id: i});
+---- ok
+-STATEMENT MATCH (p0:Person)
+           WITH p0.id AS entity_id, COUNT(p0.id) AS metric_0_value
+           MATCH (p1:Person)
+           WITH entity_id, metric_0_value, p1.id AS metric_1_entity_id,
+                AVG(p1.id) AS metric_1_value
+           WHERE metric_1_entity_id = entity_id
+           WITH entity_id, metric_0_value, metric_1_value
+           MATCH (p2:Person)
+           WITH entity_id, metric_0_value, metric_1_value,
+                p2.id AS metric_2_entity_id, SUM(p2.id) AS metric_2_value
+           WHERE metric_2_entity_id = entity_id
+           WITH entity_id, metric_0_value, metric_1_value, metric_2_value
+           MATCH (p3:Person)
+           WITH entity_id, metric_0_value, metric_1_value, metric_2_value,
+                p3.id AS metric_3_entity_id, COUNT(p3.id) AS metric_3_value
+           WHERE metric_3_entity_id = entity_id
+           RETURN COUNT(*);
+---- 1
+5000

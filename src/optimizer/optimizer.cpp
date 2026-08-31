@@ -10,6 +10,7 @@
 #include "optimizer/factorization_rewriter.h"
 #include "optimizer/filter_push_down_optimizer.h"
 #include "optimizer/foreign_join_push_down_optimizer.h"
+#include "optimizer/group_key_predicate_push_down_optimizer.h"
 #include "optimizer/limit_push_down_optimizer.h"
 #include "optimizer/order_by_push_down_optimizer.h"
 #include "optimizer/projection_push_down_optimizer.h"
@@ -58,6 +59,12 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
         // contradictory or always-true predicates are simplified first.
         auto boolFoldingOptimizer = BoolFoldingOptimizer();
         boolFoldingOptimizer.rewrite(plan);
+
+        // A WITH ... WHERE predicate that depends only on aggregate grouping keys can be
+        // evaluated before aggregation. Moving it first allows regular filter push-down to turn
+        // otherwise quadratic cross products into joins.
+        auto groupKeyPredicatePushDownOptimizer = GroupKeyPredicatePushDownOptimizer();
+        groupKeyPredicatePushDownOptimizer.rewrite(plan);
 
         auto filterPushDownOptimizer = FilterPushDownOptimizer(context, &cardinalityEstimator);
         filterPushDownOptimizer.rewrite(plan);

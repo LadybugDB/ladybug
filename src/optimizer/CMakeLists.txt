@@ -9,6 +9,7 @@ add_library(lbug_optimizer
         factorization_rewriter.cpp
         filter_push_down_optimizer.cpp
         foreign_join_push_down_optimizer.cpp
+        group_key_predicate_push_down_optimizer.cpp
         logical_operator_collector.cpp
         logical_operator_visitor.cpp
         optimizer.cpp
