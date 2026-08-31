@@ -182,6 +182,93 @@ TEST_F(OptimizerTest, FilterPushDownTest) {
     ASSERT_STREQ(getEncodedPlan(q1).c_str(), "E(b)Filter()Filter()S(a)");
 }
 
+TEST_F(OptimizerTest, GroupKeyPredicatePushDownEliminatesCrossProduct) {
+    auto query = "MATCH (a:person) "
+                 "WITH a.ID AS entity_id, COUNT(a.ID) AS metric_0 "
+                 "MATCH (b:person) "
+                 "WITH entity_id, metric_0, b.ID AS metric_1_entity_id, AVG(b.ID) AS metric_1 "
+                 "WHERE metric_1_entity_id = entity_id "
+                 "RETURN entity_id, metric_0, metric_1 ORDER BY entity_id";
+    auto explicitJoinQuery =
+        "MATCH (a:person) "
+        "WITH a.ID AS entity_id, COUNT(a.ID) AS metric_0 "
+        "MATCH (b:person) WHERE b.ID = entity_id "
+        "WITH entity_id, metric_0, b.ID AS metric_1_entity_id, AVG(b.ID) AS metric_1 "
+        "RETURN entity_id, metric_0, metric_1 ORDER BY entity_id";
+
+    auto plan = getRoot(query);
+    ASSERT_FALSE(hasOperatorType(plan->getLastOperator().get(),
+        planner::LogicalOperatorType::CROSS_PRODUCT));
+    ASSERT_TRUE(
+        hasOperatorType(plan->getLastOperator().get(), planner::LogicalOperatorType::HASH_JOIN));
+
+    auto result = conn->query(query);
+    auto expected = conn->query(explicitJoinQuery);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(expected->isSuccess()) << expected->getErrorMessage();
+    ASSERT_EQ(TestHelper::convertResultToString(*result),
+        TestHelper::convertResultToString(*expected));
+}
+
+TEST_F(OptimizerTest, GroupKeyPredicatePushDownThroughOptionalMatch) {
+    auto query = "MATCH (a:person) "
+                 "OPTIONAL MATCH (a)-[:knows]->(aFriend:person) "
+                 "WITH a.ID AS entity_id, COUNT(aFriend.ID) AS metric_0 "
+                 "MATCH (b:person) "
+                 "OPTIONAL MATCH (b)-[:knows]->(bFriend:person) "
+                 "WITH entity_id, metric_0, b.ID AS metric_1_entity_id, AVG(b.age) AS metric_1 "
+                 "WHERE metric_1_entity_id = entity_id "
+                 "RETURN entity_id, metric_0, metric_1 ORDER BY entity_id";
+    auto explicitJoinQuery =
+        "MATCH (a:person) "
+        "OPTIONAL MATCH (a)-[:knows]->(aFriend:person) "
+        "WITH a.ID AS entity_id, COUNT(aFriend.ID) AS metric_0 "
+        "MATCH (b:person) WHERE b.ID = entity_id "
+        "OPTIONAL MATCH (b)-[:knows]->(bFriend:person) "
+        "WITH entity_id, metric_0, b.ID AS metric_1_entity_id, AVG(b.age) AS metric_1 "
+        "RETURN entity_id, metric_0, metric_1 ORDER BY entity_id";
+
+    auto plan = getRoot(query);
+    ASSERT_FALSE(hasOperatorType(plan->getLastOperator().get(),
+        planner::LogicalOperatorType::CROSS_PRODUCT));
+
+    auto result = conn->query(query);
+    auto expected = conn->query(explicitJoinQuery);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(expected->isSuccess()) << expected->getErrorMessage();
+    ASSERT_EQ(TestHelper::convertResultToString(*result),
+        TestHelper::convertResultToString(*expected));
+}
+
+TEST_F(OptimizerTest, GroupKeyPredicatePushDownKeepsAggregatePredicate) {
+    auto query = "MATCH (a:person) "
+                 "WITH a.ID AS entity_id, COUNT(a.ID) AS metric_0 "
+                 "MATCH (b:person) "
+                 "WITH entity_id, metric_0, b.ID AS metric_1_entity_id, AVG(b.ID) AS metric_1 "
+                 "WHERE metric_1_entity_id = entity_id AND metric_1 > 3 "
+                 "RETURN entity_id, metric_0, metric_1 ORDER BY entity_id";
+    auto explicitJoinQuery =
+        "MATCH (a:person) "
+        "WITH a.ID AS entity_id, COUNT(a.ID) AS metric_0 "
+        "MATCH (b:person) WHERE b.ID = entity_id "
+        "WITH entity_id, metric_0, b.ID AS metric_1_entity_id, AVG(b.ID) AS metric_1 "
+        "WHERE metric_1 > 3 "
+        "RETURN entity_id, metric_0, metric_1 ORDER BY entity_id";
+
+    auto plan = getRoot(query);
+    ASSERT_FALSE(hasOperatorType(plan->getLastOperator().get(),
+        planner::LogicalOperatorType::CROSS_PRODUCT));
+    ASSERT_TRUE(
+        hasOperatorType(plan->getLastOperator().get(), planner::LogicalOperatorType::FILTER));
+
+    auto result = conn->query(query);
+    auto expected = conn->query(explicitJoinQuery);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(expected->isSuccess()) << expected->getErrorMessage();
+    ASSERT_EQ(TestHelper::convertResultToString(*result),
+        TestHelper::convertResultToString(*expected));
+}
+
 TEST_F(OptimizerTest, IndexScanTest) {
     auto q1 = "MATCH (a:person) "
               "WHERE a.ID = 0 AND a.fName='Alice' "
