@@ -376,7 +376,11 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     if (!preparedStatement->isSuccess()) {
         return QueryResult::getQueryResultWithError(preparedStatement->errMsg);
     }
-    const auto useCachedPlan = preparedStatement->canReuseCachedPlanWith(inputParams);
+    // Physical-plan reuse is currently safe only for read-only statements. Write operators can
+    // project transaction-local IDs (for example, MERGE relation IDs consumed by a following
+    // SET), which must not survive into the next auto-commit transaction.
+    const auto useCachedPlan =
+        preparedStatement->isReadOnly() && preparedStatement->canReuseCachedPlanWith(inputParams);
     try {
         bindParametersNoLock(*preparedStatement, inputParams);
     } catch (std::exception& e) {
@@ -399,7 +403,8 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
         prepareNoLock(cachedStatement->parsedStatement, false /*shouldCommitNewTransaction*/,
             preparedStatement->parameterMap);
     useInternalCatalogEntry_ = false;
-    return executeNoLock(newPreparedStatement.get(), newCachedStatement.get(), queryID, {}, true);
+    return executeNoLock(newPreparedStatement.get(), newCachedStatement.get(), queryID, {},
+        preparedStatement->isReadOnly());
 }
 
 std::unique_ptr<QueryResult> ClientContext::query(std::string_view query,
