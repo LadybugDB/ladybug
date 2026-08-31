@@ -39,6 +39,10 @@ public:
 
     virtual TableFuncMorsel getMorsel();
 
+    // Reset the scan position so a reused physical plan (cached-plan fast path)
+    // rescans from the beginning instead of finding an exhausted morsel cursor.
+    void resetState() override { curRowIdx = 0; }
+
     common::row_idx_t curRowIdx = 0;
     common::offset_t maxMorselSize = common::DEFAULT_VECTOR_CAPACITY;
 };
