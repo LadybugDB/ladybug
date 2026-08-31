@@ -1,6 +1,8 @@
 #include "main/settings.h"
 
+#include "common/assert.h"
 #include "common/exception/runtime.h"
+#include "common/string_utils.h"
 #include "common/task_system/progress_bar.h"
 #include "main/attached_database.h"
 #include "main/client_context.h"
@@ -10,6 +12,7 @@
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/storage_utils.h"
+#include <format>
 
 namespace lbug {
 namespace main {
@@ -239,6 +242,53 @@ void EnablePackedPathExtendSetting::setContext(ClientContext* context,
 
 common::Value EnablePackedPathExtendSetting::getSetting(const ClientContext* context) {
     return common::Value::createValue(context->getClientConfig()->enablePackedPathExtend);
+}
+
+CachedPreparedStatementScope CachedPreparedStatementScopeUtils::fromString(const std::string& str) {
+    auto normalizedStr = common::StringUtils::getUpper(str);
+    if (normalizedStr == "READS") {
+        return CachedPreparedStatementScope::READS;
+    }
+    if (normalizedStr == "WRITES") {
+        return CachedPreparedStatementScope::WRITES;
+    }
+    if (normalizedStr == "BOTH") {
+        return CachedPreparedStatementScope::BOTH;
+    }
+    if (normalizedStr == "NONE") {
+        return CachedPreparedStatementScope::NONE;
+    }
+    throw common::RuntimeException(
+        std::format("Cannot parse {} as a cached prepared statement scope. "
+                    "Supported inputs are [READS, WRITES, BOTH, NONE]",
+            str));
+}
+
+std::string CachedPreparedStatementScopeUtils::toString(CachedPreparedStatementScope scope) {
+    switch (scope) {
+    case CachedPreparedStatementScope::READS:
+        return "READS";
+    case CachedPreparedStatementScope::WRITES:
+        return "WRITES";
+    case CachedPreparedStatementScope::BOTH:
+        return "BOTH";
+    case CachedPreparedStatementScope::NONE:
+        return "NONE";
+    default:
+        UNREACHABLE_CODE;
+    }
+}
+
+void EnableCachedPreparedStatementSetting::setContext(ClientContext* context,
+    const common::Value& parameter) {
+    parameter.validateType(inputType);
+    context->getClientConfigUnsafe()->cachedPreparedStatementScope =
+        CachedPreparedStatementScopeUtils::fromString(parameter.getValue<std::string>());
+}
+
+common::Value EnableCachedPreparedStatementSetting::getSetting(const ClientContext* context) {
+    return common::Value::createValue(CachedPreparedStatementScopeUtils::toString(
+        context->getClientConfig()->cachedPreparedStatementScope));
 }
 
 void SpillToDiskSetting::setContext(ClientContext* context, const common::Value& parameter) {

@@ -166,5 +166,15 @@ struct EnablePackedPathExtendSetting {
     static common::Value getSetting(const ClientContext* context);
 };
 
+struct EnableCachedPreparedStatementSetting {
+    static constexpr auto name = "enable_cached_prepared_statement";
+    static constexpr auto inputType = common::LogicalTypeID::STRING;
+    // One of [READS, WRITES, BOTH, NONE] (case-insensitive): which statement kinds may
+    // reuse a cached physical plan when a parameterized prepared statement is re-executed.
+    // Safety valve for latent plan-cache state-reuse bugs; NONE disables the optimization.
+    static void setContext(ClientContext* context, const common::Value& parameter);
+    static common::Value getSetting(const ClientContext* context);
+};
+
 } // namespace main
 } // namespace lbug

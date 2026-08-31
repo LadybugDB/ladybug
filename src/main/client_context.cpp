@@ -588,6 +588,21 @@ void attachSinkDescriptors(processor::PhysicalOperator* op,
 
 } // namespace
 
+bool ClientContext::isCachedPlanAllowedFor(const PreparedStatement& preparedStatement) const {
+    switch (clientConfig.cachedPreparedStatementScope) {
+    case CachedPreparedStatementScope::READS:
+        return preparedStatement.isReadOnly();
+    case CachedPreparedStatementScope::WRITES:
+        return !preparedStatement.isReadOnly();
+    case CachedPreparedStatementScope::BOTH:
+        return true;
+    case CachedPreparedStatementScope::NONE:
+        return false;
+    default:
+        UNREACHABLE_CODE;
+    }
+}
+
 std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* preparedStatement,
     CachedPreparedStatement* cachedStatement, std::optional<uint64_t> queryID,
     QueryConfig queryConfig, bool cachePhysicalPlan) {
@@ -618,7 +633,11 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                 auto executionContext =
                     std::make_unique<ExecutionContext>(profiler.get(), this, *queryID);
                 std::unique_ptr<PhysicalPlan> physicalPlan;
-                if (cachePhysicalPlan && cachedStatement->physicalPlanCache) {
+                // The `enable_cached_prepared_statement` setting gates both cache reuse and
+                // cache population, so a disabled scope never serves (or fills) the plan cache.
+                const bool cachedPlanAllowed =
+                    cachePhysicalPlan && isCachedPlanAllowedFor(*preparedStatement);
+                if (cachedPlanAllowed && cachedStatement->physicalPlanCache) {
                     // Fast path: clone cached operator tree and refresh sink state.
                     // Avoids the PlanMapper::mapOperator recursion entirely.
                     physicalPlan = std::make_unique<PhysicalPlan>(
@@ -633,7 +652,7 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                     auto mapper = PlanMapper(executionContext.get());
                     physicalPlan = mapper.getPhysicalPlan(cachedStatement->logicalPlan.get(),
                         cachedStatement->columns, queryConfig.resultType, queryConfig.arrowConfig);
-                    if (cachePhysicalPlan) {
+                    if (cachedPlanAllowed) {
                         // Cache the operator tree template for future reuse.
                         cachedStatement->physicalPlanCache =
                             std::make_unique<PhysicalPlan>(physicalPlan->lastOperator->copy());
