@@ -32,6 +32,12 @@ public:
 
     void mergeToGlobal();
 
+    // Re-arm the state for another execution of a cached physical plan. Local states (and the
+    // masks they fill) are recreated by every worker thread via appendLocalState(); keeping
+    // entries from a previous execution would re-merge that execution's node offsets into the
+    // global masks.
+    void resetForReuse() { localInfos.clear(); }
+
 private:
     common::table_id_map_t<std::vector<common::SemiMask*>> masksPerTable;
     std::vector<std::shared_ptr<SemiMaskerLocalState>> localInfos;
@@ -64,6 +70,12 @@ protected:
         std::unique_ptr<OPPrintInfo> printInfo)
         : PhysicalOperator{type_, std::move(child), id, std::move(printInfo)}, keyPos{keyPos},
           keyVector{nullptr}, sharedState{std::move(sharedState)}, localState{nullptr} {}
+
+    void initGlobalStateInternal(ExecutionContext* /*context*/) override {
+        // Runs once per execution, before worker threads call initLocalStateInternal(). Drop
+        // local mask states left over from the previous execution of a cached plan.
+        sharedState->resetForReuse();
+    }
 
     void initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) override;
 

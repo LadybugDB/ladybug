@@ -46,6 +46,12 @@ std::unique_ptr<PhysicalPlan> PlanMapper::getPhysicalPlan(const LogicalPlan* log
             root = createResultCollector(AccumulateType::REGULAR, expressions,
                 logicalPlan->getSchema(), std::move(root));
         }
+        // The plan root collector is the only one whose table is handed to the client via
+        // getQueryResult(); every other ResultCollector feeds other operators of the same
+        // plan and must be cleared in place (not replaced) on reuse.
+        if (root->getOperatorType() == PhysicalOperatorType::RESULT_COLLECTOR) {
+            root->ptrCast<ResultCollector>()->setResultExposedToClient();
+        }
     }
     auto physicalPlan = std::make_unique<PhysicalPlan>(std::move(root));
     if (logicalPlan->isProfile()) {

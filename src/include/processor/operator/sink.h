@@ -116,7 +116,11 @@ public:
     void executeInternal(ExecutionContext*) override {}
 
     std::unique_ptr<PhysicalOperator> copy() override {
-        return std::make_unique<DummySimpleSink>(messageTable, id);
+        auto result = std::make_unique<DummySimpleSink>(messageTable, id);
+        for (auto& child : children) {
+            result->addChild(child->copy());
+        }
+        return result;
     }
 };
 

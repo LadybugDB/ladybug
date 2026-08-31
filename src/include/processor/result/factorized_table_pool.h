@@ -25,6 +25,15 @@ public:
 
     std::shared_ptr<FactorizedTable> getGlobalTable() const { return globalTable; }
 
+    // Re-arm the pool for another execution of a cached physical plan. The global table is
+    // shared with FTableScan operators (via their bind data), so it is cleared in place rather
+    // than replaced; the per-execution local tables are dropped entirely.
+    void resetForReuse() {
+        globalTable->clear();
+        availableLocalTables = {};
+        localTables.clear();
+    }
+
 private:
     std::mutex mtx;
     std::shared_ptr<FactorizedTable> globalTable;

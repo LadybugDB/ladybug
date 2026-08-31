@@ -47,8 +47,12 @@ public:
     bool getNextTuplesInternal(ExecutionContext* context) override;
 
     std::unique_ptr<PhysicalOperator> copy() override {
-        return std::make_unique<Intersect>(outputDataPos, intersectDataInfos, sharedHTs,
+        auto result = std::make_unique<Intersect>(outputDataPos, intersectDataInfos, sharedHTs,
             children[0]->copy(), id, printInfo->copy());
+        for (auto i = 1u; i < children.size(); ++i) {
+            result->addChild(children[i]->copy());
+        }
+        return result;
     }
 
 private:

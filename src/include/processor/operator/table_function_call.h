@@ -74,7 +74,12 @@ public:
     double getProgress(ExecutionContext* context) const override;
 
     std::unique_ptr<PhysicalOperator> copy() override {
-        return std::make_unique<TableFunctionCall>(info.copy(), sharedState, id, printInfo->copy());
+        auto result =
+            std::make_unique<TableFunctionCall>(info.copy(), sharedState, id, printInfo->copy());
+        for (auto& child : children) {
+            result->addChild(child->copy());
+        }
+        return result;
     }
 
 private:

@@ -20,6 +20,17 @@ struct RecursiveExtendSharedState {
         }
     }
 
+    // Re-arm the state for another execution of a cached physical plan: drop the rows
+    // accumulated in the factorized table pool and the limit counter of the previous
+    // execution. The node offset masks don't need resetting here: the semi masker that fills
+    // them replaces their contents wholesale on every execution.
+    void resetForReuse() {
+        if (counter != nullptr) {
+            counter->reset();
+        }
+        factorizedTablePool.resetForReuse();
+    }
+
     void setInputNodeMask(std::unique_ptr<common::NodeOffsetMaskMap> maskMap) {
         inputNodeMask = std::move(maskMap);
     }

@@ -44,7 +44,10 @@ public:
     void initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) override;
 
     std::unique_ptr<PhysicalOperator> copy() override {
-        return std::make_unique<OrderByScan>(outVectorPos, sharedState, id, printInfo->copy());
+        auto result =
+            std::make_unique<OrderByScan>(outVectorPos, sharedState, id, printInfo->copy());
+        result->addChild(children[0]->copy());
+        return result;
     }
 
     double getProgress(ExecutionContext* context) const override;

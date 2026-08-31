@@ -4,6 +4,7 @@
 
 #include "binder/expression/expression_util.h"
 #include "common/metric.h"
+#include "processor/operator/sink.h"
 
 using namespace lbug::common;
 
@@ -47,6 +48,12 @@ void UnionAllScan::initLocalStateInternal(ResultSet* /*resultSet_*/,
     for (auto& dataPos : info.outputPositions) {
         vectors.push_back(resultSet->getValueVector(dataPos).get());
     }
+}
+
+void UnionAllScan::initGlobalStateInternal(ExecutionContext* /*context*/) {
+    // Runs once per execution (the scan pipeline starts after the child collector pipelines
+    // have completed). Rewind the scan cursors for the tables refilled by this execution.
+    sharedState->resetForReuse();
 }
 
 bool UnionAllScan::getNextTuplesInternal(ExecutionContext* /*context*/) {

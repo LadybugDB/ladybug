@@ -87,9 +87,18 @@ public:
 
     std::unique_ptr<main::QueryResult> getQueryResult() const override;
 
+    // Marks this collector as the statement's result collector, i.e. the plan root whose
+    // FactorizedTable is handed to the client via getQueryResult(). Collectors created for
+    // intermediate pipelines (union branches, cross-product/accumulate/SIP builds) default to
+    // internal: their tables are only read by other operators of the same plan, so reuse can
+    // clear them in place even though the plan itself keeps extra references to them.
+    void setResultExposedToClient() { internalResultTable = false; }
+
     std::unique_ptr<PhysicalOperator> copy() override {
-        return std::make_unique<ResultCollector>(info.copy(), sharedState, children[0]->copy(), id,
-            printInfo->copy());
+        auto result = std::make_unique<ResultCollector>(info.copy(), sharedState,
+            children[0]->copy(), id, printInfo->copy());
+        result->internalResultTable = internalResultTable;
+        return result;
     }
 
 private:
@@ -100,6 +109,7 @@ private:
 private:
     ResultCollectorInfo info;
     std::shared_ptr<ResultCollectorSharedState> sharedState;
+    bool internalResultTable = true;
     std::vector<common::ValueVector*> payloadVectors;
     std::vector<common::ValueVector*> payloadAndMarkVectors;
 

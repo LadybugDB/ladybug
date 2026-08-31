@@ -53,6 +53,12 @@ void HashJoinBuild::setKeyState(common::DataChunkState* state) {
     }
 }
 
+void HashJoinBuild::initGlobalStateInternal(ExecutionContext* /*context*/) {
+    // Runs once per execution (before the build pipeline fills the table). Clears rows and
+    // hash slots left over from the previous execution of the cached plan.
+    sharedState->resetForReuse();
+}
+
 void HashJoinBuild::finalizeInternal(ExecutionContext* /*context*/) {
     auto numTuples = sharedState->getHashTable()->getNumEntries();
     sharedState->getHashTable()->allocateHashSlots(numTuples);

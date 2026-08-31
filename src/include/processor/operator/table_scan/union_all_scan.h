@@ -57,6 +57,14 @@ public:
 
     std::unique_ptr<UnionAllScanMorsel> getMorsel();
 
+    // Re-arm the state for another execution of a cached physical plan: scan from the
+    // beginning. The child ResultCollectors are internal, so their tables are cleared in
+    // place by ResultCollector::prepareForReuse() and stay valid.
+    void resetForReuse() {
+        tableIdx = 0;
+        nextTupleIdxToScan = 0;
+    }
+
 private:
     std::unique_ptr<UnionAllScanMorsel> getMorselNoLock(FactorizedTable* table);
 
@@ -79,12 +87,19 @@ public:
 
     bool isSource() const final { return true; }
 
+    void initGlobalStateInternal(ExecutionContext* context) override;
+
     void initLocalStateInternal(ResultSet* resultSet_, ExecutionContext* context) final;
 
     bool getNextTuplesInternal(ExecutionContext* context) final;
 
     std::unique_ptr<PhysicalOperator> copy() override {
-        return std::make_unique<UnionAllScan>(info.copy(), sharedState, id, printInfo->copy());
+        auto result =
+            std::make_unique<UnionAllScan>(info.copy(), sharedState, id, printInfo->copy());
+        for (auto i = 0u; i < children.size(); ++i) {
+            result->addChild(children[i]->copy());
+        }
+        return result;
     }
 
 private:

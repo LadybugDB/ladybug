@@ -40,9 +40,22 @@ public:
 
     void executeInternal(ExecutionContext* context) override;
 
+    // The reset must happen in prepareForReuse() rather than initGlobalStateInternal(): this
+    // operator's task only starts after the semi-masker child pipeline has filled the node
+    // offset masks, so resetting there would run too late. prepareForReuse() runs on the whole
+    // plan before any task of the new execution starts.
+    void prepareForReuse(storage::MemoryManager* memoryManager) override {
+        sharedState->resetForReuse();
+        PhysicalOperator::prepareForReuse(memoryManager);
+    }
+
     std::unique_ptr<PhysicalOperator> copy() override {
-        return std::make_unique<RecursiveExtend>(function->copy(), bindData, sharedState, id,
+        auto result = std::make_unique<RecursiveExtend>(function->copy(), bindData, sharedState, id,
             printInfo->copy());
+        for (auto& child : children) {
+            result->addChild(child->copy());
+        }
+        return result;
     }
 
 private:

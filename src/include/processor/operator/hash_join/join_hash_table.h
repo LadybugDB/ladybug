@@ -43,6 +43,14 @@ public:
         factorizedTable->lookup(vectors, colIdxesToScan, tuplesToRead, startPos, numTuplesToRead);
     }
     void merge(JoinHashTable& other) { factorizedTable->merge(*other.factorizedTable); }
+    // Drop all entries and hash slots so the table can be re-built on the next execution of a
+    // cached physical plan. Nothing outside the owning HashJoinSharedState references the
+    // factorized table, so clearing in place is safe.
+    void resetForReuse() {
+        factorizedTable->clear();
+        hashSlotsBlocks.clear();
+        maxNumHashSlots = 0;
+    }
     uint8_t** getPrevTuple(const uint8_t* tuple) const {
         return (uint8_t**)(tuple + prevPtrColOffset);
     }

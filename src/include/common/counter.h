@@ -17,6 +17,9 @@ public:
 
     bool exceedLimit() const { return counter.load() >= limitNumber; }
 
+    // Re-arm the counter for another execution of a cached physical plan.
+    void reset() { counter.store(0); }
+
 private:
     common::offset_t limitNumber;
     std::atomic<common::offset_t> counter;
