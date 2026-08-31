@@ -8,6 +8,24 @@
 namespace lbug {
 namespace main {
 
+// Scope of statements for which the cached-physical-plan fast path (see
+// CachedPreparedStatement::physicalPlanCache) may be used when a parameterized prepared
+// statement is re-executed. This is a safety valve for latent state-reuse bugs in the plan
+// cache: setting it to READS, WRITES or NONE trades the optimization for protection.
+enum class CachedPreparedStatementScope {
+    READS = 0,  // cache and reuse plans of read-only statements only
+    WRITES = 1, // cache and reuse plans of write statements only
+    BOTH = 2,   // cache and reuse plans of reads and writes
+    NONE = 3,   // disable plan caching entirely (re-map the plan on every execution)
+};
+
+struct CachedPreparedStatementScopeUtils {
+    // Parses one of [READS, WRITES, BOTH, NONE] (case-insensitive); throws a
+    // RuntimeException otherwise. Defined in settings.cpp.
+    static CachedPreparedStatementScope fromString(const std::string& str);
+    static std::string toString(CachedPreparedStatementScope scope);
+};
+
 struct ClientConfigDefault {
     // 0 means timeout is disabled by default.
     static constexpr uint64_t TIMEOUT_IN_MS = 0;
@@ -24,6 +42,10 @@ struct ClientConfigDefault {
     static constexpr bool ENABLE_PLAN_OPTIMIZER = true;
     static constexpr bool ENABLE_INTERNAL_CATALOG = false;
     static constexpr bool ENABLE_PACKED_PATH_EXTEND = false;
+    // Statement kinds for which the cached-physical-plan fast path is enabled.
+    // BOTH preserves the historical behaviour (all parameterized statements).
+    static constexpr CachedPreparedStatementScope CACHED_PREPARED_STATEMENT_SCOPE =
+        CachedPreparedStatementScope::BOTH;
     // Memory budget (in bytes) for the in-memory primary-key uniqueness buffer used when COPY-ing
     // into a primary-key node table that has no hash index. Once the buffer exceeds this budget it
     // is sorted and spilled to disk as a sorted run; cross-run duplicates are detected during a
@@ -69,6 +91,10 @@ struct ClientConfig {
     // Memory budget (bytes) for the no-hash-index COPY primary-key validator before it spills
     // sorted runs to disk. See ClientConfigDefault::PK_VALIDATOR_SPILL_THRESHOLD.
     uint64_t pkValidatorSpillThreshold = ClientConfigDefault::PK_VALIDATOR_SPILL_THRESHOLD;
+    // Which statement kinds may reuse a cached physical plan when a parameterized prepared
+    // statement is re-executed. See CachedPreparedStatementScope for the safety rationale.
+    CachedPreparedStatementScope cachedPreparedStatementScope =
+        ClientConfigDefault::CACHED_PREPARED_STATEMENT_SCOPE;
 };
 
 } // namespace main

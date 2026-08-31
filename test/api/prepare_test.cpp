@@ -612,3 +612,104 @@ TEST_F(ApiTest, RepeatedParameterizedCachedPlanExecution877) {
         }
     }
 }
+
+// Returns true iff the cached physical plan of the prepared statement named `ps.getName()`
+// has been populated (i.e. the statement is allowed to take the cached-plan fast path).
+static bool cachedPlanExists(Connection* conn, const PreparedStatement& ps) {
+    const auto& manager = conn->getClientContext()->getCachedPreparedStatementManager();
+    if (!manager.containsStatement(ps.getName())) {
+        return false;
+    }
+    return manager.getCachedStatement(ps.getName())->physicalPlanCache != nullptr;
+}
+
+// Regression coverage for the `enable_cached_prepared_statement` setting: a kill switch for
+// latent state-reuse bugs in the cached-physical-plan fast path (see issue #877 and friends).
+TEST_F(ApiTest, EnableCachedPreparedStatementSetting) {
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE Log(id INT64, value STRING, PRIMARY KEY(id))")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:Log {id: 1, value: 'a'})")->isSuccess());
+    const std::string readQuery = "MATCH (l:Log) WHERE l.id = $id RETURN l.value";
+    const std::string writeQuery = "CREATE (:Log {id: $id, value: $val})";
+
+    // The setting round-trips and rejects invalid values.
+    ASSERT_TRUE(conn->query("CALL enable_cached_prepared_statement='reads';")->isSuccess());
+    ASSERT_EQ(std::vector<std::string>{"READS"},
+        TestHelper::convertResultToString(
+            *conn->query("CALL current_setting('enable_cached_prepared_statement') RETURN *")));
+    ASSERT_FALSE(conn->query("CALL enable_cached_prepared_statement='banana';")->isSuccess());
+    // The default is BOTH: read and write statements both populate the plan cache.
+    ASSERT_TRUE(conn->query("CALL enable_cached_prepared_statement='both';")->isSuccess());
+    ASSERT_EQ(std::vector<std::string>{"BOTH"},
+        TestHelper::convertResultToString(
+            *conn->query("CALL current_setting('enable_cached_prepared_statement') RETURN *")));
+    auto readStmt = conn->prepareWithParams(readQuery, makeIdValueParams(1, "a"));
+    ASSERT_TRUE(readStmt->isSuccess());
+    for (auto run = 0; run < 2; ++run) {
+        auto result = conn->executeWithParams(readStmt.get(), makeIdValueParams(1, "a"));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        ASSERT_EQ(std::vector<std::string>{"a"}, TestHelper::convertResultToString(*result))
+            << "run " << run;
+    }
+    ASSERT_TRUE(cachedPlanExists(conn.get(), *readStmt));
+
+    auto writeStmt = conn->prepareWithParams(writeQuery, makeIdValueParams(100, "w0"));
+    ASSERT_TRUE(writeStmt->isSuccess());
+    for (auto run = 0; run < 2; ++run) {
+        auto result = conn->executeWithParams(writeStmt.get(),
+            makeIdValueParams(100 + run, "w" + std::to_string(run)));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+    }
+    ASSERT_TRUE(cachedPlanExists(conn.get(), *writeStmt));
+
+    // READS: read plans are cached, write plans are not.
+    ASSERT_TRUE(conn->query("CALL enable_cached_prepared_statement='reads';")->isSuccess());
+    auto writeStmtReads = conn->prepareWithParams(writeQuery, makeIdValueParams(200, "r0"));
+    ASSERT_TRUE(writeStmtReads->isSuccess());
+    for (auto run = 0; run < 2; ++run) {
+        auto result = conn->executeWithParams(writeStmtReads.get(),
+            makeIdValueParams(200 + run, "r" + std::to_string(run)));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+    }
+    ASSERT_FALSE(cachedPlanExists(conn.get(), *writeStmtReads));
+
+    auto readStmtReads = conn->prepareWithParams(readQuery, makeIdValueParams(1, "a"));
+    ASSERT_TRUE(readStmtReads->isSuccess());
+    auto result = conn->executeWithParams(readStmtReads.get(), makeIdValueParams(1, "a"));
+    ASSERT_TRUE(result->isSuccess());
+    ASSERT_EQ(std::vector<std::string>{"a"}, TestHelper::convertResultToString(*result));
+    ASSERT_TRUE(cachedPlanExists(conn.get(), *readStmtReads));
+
+    // WRITES: write plans are cached, read plans are not.
+    ASSERT_TRUE(conn->query("CALL enable_cached_prepared_statement='writes';")->isSuccess());
+    auto readStmtWrites = conn->prepareWithParams(readQuery, makeIdValueParams(1, "a"));
+    ASSERT_TRUE(readStmtWrites->isSuccess());
+    result = conn->executeWithParams(readStmtWrites.get(), makeIdValueParams(1, "a"));
+    ASSERT_TRUE(result->isSuccess());
+    ASSERT_EQ(std::vector<std::string>{"a"}, TestHelper::convertResultToString(*result));
+    ASSERT_FALSE(cachedPlanExists(conn.get(), *readStmtWrites));
+
+    auto writeStmtWrites = conn->prepareWithParams(writeQuery, makeIdValueParams(300, "s0"));
+    ASSERT_TRUE(writeStmtWrites->isSuccess());
+    for (auto run = 0; run < 2; ++run) {
+        result = conn->executeWithParams(writeStmtWrites.get(),
+            makeIdValueParams(300 + run, "s" + std::to_string(run)));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+    }
+    ASSERT_TRUE(cachedPlanExists(conn.get(), *writeStmtWrites));
+
+    // NONE: no plan caching at all, but repeated executions still return correct results.
+    ASSERT_TRUE(conn->query("CALL enable_cached_prepared_statement='none';")->isSuccess());
+    auto readStmtNone = conn->prepareWithParams(readQuery, makeIdValueParams(1, "a"));
+    ASSERT_TRUE(readStmtNone->isSuccess());
+    for (auto run = 0; run < 3; ++run) {
+        result = conn->executeWithParams(readStmtNone.get(), makeIdValueParams(1, "a"));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        ASSERT_EQ(std::vector<std::string>{"a"}, TestHelper::convertResultToString(*result))
+            << "run " << run;
+    }
+    ASSERT_FALSE(cachedPlanExists(conn.get(), *readStmtNone));
+
+    // Restore the default.
+    ASSERT_TRUE(conn->query("CALL enable_cached_prepared_statement='both';")->isSuccess());
+}

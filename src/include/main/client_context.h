@@ -226,6 +226,9 @@ private:
         CachedPreparedStatement* cachedPreparedStatement,
         std::optional<uint64_t> queryID = std::nullopt, QueryConfig config = {},
         bool cachePhysicalPlan = false);
+    // Whether the cached-physical-plan fast path may be used for the given statement, per the
+    // `enable_cached_prepared_statement` setting.
+    bool isCachedPlanAllowedFor(const PreparedStatement& preparedStatement) const;
     std::unique_ptr<QueryResult> queryNoLock(std::string_view query,
         std::optional<uint64_t> queryID = std::nullopt, QueryConfig config = {});
 
