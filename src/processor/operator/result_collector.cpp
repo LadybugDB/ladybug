@@ -58,9 +58,21 @@ void ResultCollector::executeInternal(ExecutionContext* context) {
 }
 
 void ResultCollector::prepareForReuse(storage::MemoryManager* memoryManager) {
-    // Clear the existing result table instead of freeing + re-allocating.
-    // This keeps the DataBlocks alive so the next execution reuses them.
-    sharedState->getTable()->clear();
+    auto table = sharedState->getTable();
+    if (table.use_count() <= 1) {
+        // No QueryResult outside this shared state references the table, so we can
+        // keep the DataBlocks alive and reset the bookkeeping (Phase 2 fast path).
+        table->clear();
+    } else {
+        // A previous execution's QueryResult still holds this table (e.g. overlapping
+        // AsyncConnection executions of the same prepared statement on the cached-plan
+        // fast path, which shares one ResultCollectorSharedState with the plan template).
+        // Clearing it would corrupt that live result, so hand this execution a fresh
+        // table with the same schema instead. The old table stays alive until the
+        // QueryResult that references it is destroyed.
+        sharedState->setTable(
+            std::make_shared<FactorizedTable>(memoryManager, info.tableSchema.copy()));
+    }
     PhysicalOperator::prepareForReuse(memoryManager);
 }
 

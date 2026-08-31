@@ -22,6 +22,8 @@ public:
 
     std::shared_ptr<FactorizedTable> getTable() { return table; }
 
+    void setTable(std::shared_ptr<FactorizedTable> newTable) { table = std::move(newTable); }
+
 private:
     std::mutex mtx;
     std::shared_ptr<FactorizedTable> table;
