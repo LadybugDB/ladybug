@@ -39,6 +39,12 @@ public:
 
     bool getNextTuplesInternal(ExecutionContext* context) override;
 
+    void initGlobalStateInternal(ExecutionContext* /*context*/) override {
+        // Runs once per execution. Reset the shared counter so a re-executed cached plan
+        // starts skipping from zero again.
+        counter->store(0);
+    }
+
     std::unique_ptr<PhysicalOperator> copy() override {
         return make_unique<Skip>(skipNumber, counter, dataChunkToSelectPos, dataChunksPosInScope,
             children[0]->copy(), id, printInfo->copy());

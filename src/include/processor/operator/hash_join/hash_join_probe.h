@@ -79,8 +79,12 @@ public:
     bool getNextTuplesInternal(ExecutionContext* context) override;
 
     std::unique_ptr<PhysicalOperator> copy() override {
-        return make_unique<HashJoinProbe>(sharedState, joinType, flatProbe, probeDataInfo,
+        auto result = make_unique<HashJoinProbe>(sharedState, joinType, flatProbe, probeDataInfo,
             children[0]->copy(), id, printInfo->copy());
+        for (auto i = 1u; i < children.size(); ++i) {
+            result->addChild(children[i]->copy());
+        }
+        return result;
     }
 
 private:

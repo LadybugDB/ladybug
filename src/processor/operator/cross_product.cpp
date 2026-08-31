@@ -1,6 +1,7 @@
 #include "processor/operator/cross_product.h"
 
 #include "common/metric.h"
+#include "processor/operator/sink.h"
 
 namespace lbug {
 namespace processor {

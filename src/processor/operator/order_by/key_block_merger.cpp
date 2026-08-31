@@ -315,7 +315,10 @@ void KeyBlockMergeTaskDispatcher::init(MemoryManager* memoryManager,
     std::queue<std::shared_ptr<MergedKeyBlocks>>* sortedKeyBlocks,
     std::vector<FactorizedTable*> factorizedTables, std::vector<StrKeyColInfo>& strKeyColsInfo,
     uint64_t numBytesPerTuple) {
-    DASSERT(this->keyBlockMerger == nullptr);
+    // This is called once per execution. On the cached physical-plan fast path the same
+    // dispatcher instance is reused, so drop the merge tasks of the previous execution
+    // before re-initializing.
+    activeKeyBlockMergeTasks.clear();
     this->memoryManager = memoryManager;
     this->sortedKeyBlocks = sortedKeyBlocks;
     this->keyBlockMerger = std::make_unique<KeyBlockMerger>(std::move(factorizedTables),

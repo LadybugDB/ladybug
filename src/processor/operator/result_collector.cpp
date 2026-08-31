@@ -59,17 +59,20 @@ void ResultCollector::executeInternal(ExecutionContext* context) {
 
 void ResultCollector::prepareForReuse(storage::MemoryManager* memoryManager) {
     auto table = sharedState->getTable();
-    if (table.use_count() <= 1) {
-        // No QueryResult outside this shared state references the table, so we can
-        // keep the DataBlocks alive and reset the bookkeeping (Phase 2 fast path).
+    if (internalResultTable || table.use_count() <= 1) {
+        // Internal collectors (union branches, cross-product / accumulate / SIP builds) are
+        // only read by other operators of the same plan, which keep references to the same
+        // table object — so it must be cleared in place, never replaced. This is also the
+        // fast path for the root collector when no external QueryResult references the table
+        // anymore: keep the DataBlocks alive and reset the bookkeeping (Phase 2 fast path).
         table->clear();
     } else {
-        // A previous execution's QueryResult still holds this table (e.g. overlapping
-        // AsyncConnection executions of the same prepared statement on the cached-plan
-        // fast path, which shares one ResultCollectorSharedState with the plan template).
-        // Clearing it would corrupt that live result, so hand this execution a fresh
-        // table with the same schema instead. The old table stays alive until the
-        // QueryResult that references it is destroyed.
+        // The plan root's table is handed to the client via getQueryResult(). A previous
+        // execution's QueryResult still holds it (e.g. overlapping AsyncConnection executions
+        // of the same prepared statement on the cached-plan fast path, which shares one
+        // ResultCollectorSharedState with the plan template), so clearing it would corrupt
+        // that live result. Hand this execution a fresh table with the same schema instead;
+        // the old table stays alive until the QueryResult referencing it is destroyed.
         sharedState->setTable(
             std::make_shared<FactorizedTable>(memoryManager, info.tableSchema.copy()));
     }

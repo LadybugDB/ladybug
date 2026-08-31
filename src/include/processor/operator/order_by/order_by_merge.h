@@ -25,7 +25,10 @@ public:
     void executeInternal(ExecutionContext* context) override;
 
     std::unique_ptr<PhysicalOperator> copy() override {
-        return std::make_unique<OrderByMerge>(sharedState, sharedDispatcher, id, printInfo->copy());
+        auto result =
+            std::make_unique<OrderByMerge>(sharedState, sharedDispatcher, id, printInfo->copy());
+        result->addChild(children[0]->copy());
+        return result;
     }
 
 private:

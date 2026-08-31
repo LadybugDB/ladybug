@@ -1,6 +1,7 @@
 #include "api_test/api_test.h"
 
 using namespace lbug::common;
+using namespace lbug::main;
 using namespace lbug::testing;
 
 static void checkTuple(lbug::processor::FlatTuple* tuple, const std::string& groundTruth) {
@@ -539,5 +540,75 @@ TEST_F(ApiTest, RepeatedExecuteCachedPlanParameterizedRead) {
         ASSERT_TRUE(result->isSuccess()) << "run " << run;
         ASSERT_EQ(std::vector<std::string>{"a"}, TestHelper::convertResultToString(*result))
             << "run " << run;
+    }
+}
+
+// Regression test for issue #877: re-executing the same parameterized query string (the
+// recommended form, which reuses the cached physical plan) returned the first execution's
+// rows whenever the plan contained a sort, top-k, join, OPTIONAL MATCH, UNION, subquery or
+// a LIMIT/SKIP counter. Root causes: operator copy() dropped sub-pipelines from the cached
+// plan tree, and shared states kept per-execution state across executions.
+TEST_F(ApiTest, RepeatedParameterizedCachedPlanExecution877) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE M(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE E(FROM N TO M);")->isSuccess());
+    for (auto i = 1; i <= 3; ++i) {
+        auto id = std::to_string(i);
+        ASSERT_TRUE(conn->query("CREATE (:N {id: " + id + "});")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE (:M {id: " + id + "});")->isSuccess());
+        ASSERT_TRUE(conn->query("MATCH (a:N {id: " + id + "}), (b:M {id: " + id +
+                                "}) CREATE (a)-[:E]->(b);")
+                        ->isSuccess());
+    }
+
+    // Mirrors the recommended Python usage: execute(query, params) prepares the query string
+    // and executes it with parameters each time, taking the cached-physical-plan fast path
+    // from the second execution on.
+    // Mirrors the recommended Python usage: execute(query, params) implicitly prepares the
+    // query WITH typed parameters once, then re-executes the same prepared statement with
+    // different parameter values, taking the cached-physical-plan fast path from the second
+    // execution on.
+    auto prepareAndExecute = [&](const std::string& query, int64_t v) {
+        static std::unordered_map<std::string, std::unique_ptr<PreparedStatement>> cache;
+        auto it = cache.find(query);
+        if (it == cache.end()) {
+            std::unordered_map<std::string, std::unique_ptr<Value>> prepareParams;
+            prepareParams["v"] = std::make_unique<Value>(v);
+            auto prepared = conn->prepareWithParams(query, std::move(prepareParams));
+            EXPECT_TRUE(prepared->isSuccess()) << query;
+            it = cache.emplace(query, std::move(prepared)).first;
+        }
+        std::unordered_map<std::string, std::unique_ptr<Value>> params;
+        params["v"] = std::make_unique<Value>(v);
+        return conn->executeWithParams(it->second.get(), std::move(params));
+    };
+
+    // {query, expected result rows for v = 1, 2, 3}
+    const std::vector<std::tuple<std::string, std::vector<std::vector<std::string>>>> cases = {
+        {"MATCH (n:N) WHERE n.id = $v RETURN count(n)", {{"1"}, {"1"}, {"1"}}},
+        {"MATCH (n:N) WHERE n.id = $v RETURN n.id ORDER BY n.id", {{"1"}, {"2"}, {"3"}}},
+        {"MATCH (n:N) WHERE n.id <= $v RETURN n.id ORDER BY n.id LIMIT 2",
+            {{"1"}, {"1", "2"}, {"1", "2"}}},
+        {"MATCH (n:N) WHERE n.id = $v RETURN n.id ORDER BY n.id LIMIT 1", {{"1"}, {"2"}, {"3"}}},
+        {"MATCH (a:N)-[:E]->(b:M) WHERE a.id = $v RETURN b.id", {{"1"}, {"2"}, {"3"}}},
+        {"MATCH (a:N), (b:M) WHERE a.id = $v AND b.id = $v RETURN b.id", {{"1"}, {"2"}, {"3"}}},
+        {"MATCH (n:N) WHERE n.id = $v OPTIONAL MATCH (n)-[:E]->(m) RETURN n.id",
+            {{"1"}, {"2"}, {"3"}}},
+        {"MATCH (n:N) WHERE n.id = $v RETURN n.id UNION ALL MATCH (m:M) WHERE m.id = $v "
+         "RETURN m.id",
+            {{"1", "1"}, {"2", "2"}, {"3", "3"}}},
+        {"MATCH (n:N) WHERE n.id = $v AND EXISTS { MATCH (n)-[:E]->(m) } RETURN n.id",
+            {{"1"}, {"2"}, {"3"}}},
+        {"MATCH (a:N)-[:E*1..2]->(b:M) WHERE a.id = $v RETURN b.id", {{"1"}, {"2"}, {"3"}}},
+    };
+    for (auto& [query, expectedPerV] : cases) {
+        for (auto v = 1; v <= 3; ++v) {
+            // First execution populates the plan cache; the rest exercise the fast path.
+            prepareAndExecute(query, v);
+            auto result = prepareAndExecute(query, v);
+            ASSERT_TRUE(result->isSuccess()) << query;
+            ASSERT_EQ(expectedPerV[v - 1], TestHelper::convertResultToString(*result))
+                << query << " with v=" << v;
+        }
     }
 }

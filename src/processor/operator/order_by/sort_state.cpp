@@ -11,6 +11,15 @@ namespace lbug {
 namespace processor {
 
 void SortSharedState::init(const OrderByDataInfo& orderByDataInfo) {
+    // This is called once per execution (via OrderBy::initGlobalStateInternal). On the cached
+    // physical-plan fast path the same shared state is reused across executions, so clear any
+    // state accumulated by the previous execution; otherwise stale sorted key blocks and
+    // payload tables from earlier executions would be scanned again.
+    payloadTables.clear();
+    sortedKeyBlocks = std::make_unique<std::queue<std::shared_ptr<MergedKeyBlocks>>>();
+    nextTableIdx = 0;
+    numBytesPerTuple = 0;
+    strKeyColsInfo.clear();
     auto encodedKeyBlockColOffset = 0ul;
     for (auto i = 0u; i < orderByDataInfo.keysPos.size(); ++i) {
         const auto& dataType = orderByDataInfo.keyTypes[i];

@@ -23,7 +23,11 @@ public:
     void executeInternal(ExecutionContext* context) override;
 
     std::unique_ptr<PhysicalOperator> copy() override {
-        return std::make_unique<Profile>(info, messageTable, id, printInfo->copy());
+        auto result = std::make_unique<Profile>(info, messageTable, id, printInfo->copy());
+        for (auto& child : children) {
+            result->addChild(child->copy());
+        }
+        return result;
     }
 
 private:

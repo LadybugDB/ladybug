@@ -47,6 +47,11 @@ public:
 
     JoinHashTable* getHashTable() { return hashTable.get(); }
 
+    // Re-arm the shared state for another execution of a cached physical plan: drop the rows
+    // and hash slots accumulated by the previous execution. Without this, later executions
+    // probe stale rows from earlier executions.
+    void resetForReuse() { hashTable->resetForReuse(); }
+
 protected:
     std::mutex mtx;
     std::unique_ptr<JoinHashTable> hashTable;
@@ -82,6 +87,8 @@ public:
           sharedState{std::move(sharedState)}, info{std::move(info)} {}
 
     std::shared_ptr<HashJoinSharedState> getSharedState() const { return sharedState; }
+
+    void initGlobalStateInternal(ExecutionContext* context) override;
 
     void initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) override;
 
