@@ -1,3 +1,5 @@
+#include <cctype>
+
 #include "binder/binder.h"
 #include "binder/bound_scan_source.h"
 #include "binder/expression/literal_expression.h"
@@ -120,12 +122,48 @@ bool handleFileViaFunction(main::ClientContext* context, std::vector<std::string
     return handleFileViaFunction;
 }
 
+// Qualified Iceberg REST table names are not filesystem paths and must bypass
+// local globbing before the Iceberg extension resolves them.
+bool isIcebergCatalogName(const main::ClientContext* context, const std::string& source,
+    const case_insensitive_map_t<Value>& options) {
+    // Keep this workaround scoped to a loaded Iceberg REST configuration.
+    auto warehouseOption = context->getExtensionOption("iceberg_warehouse");
+    if (warehouseOption == nullptr ||
+        context->getCurrentSetting("iceberg_warehouse").toString().empty()) {
+        return false;
+    }
+    auto format = options.find(FileScanInfo::FILE_FORMAT_OPTION_NAME);
+    if (format == options.end() || StringUtils::getLower(format->second.toString()) != "iceberg") {
+        return false;
+    }
+    if (source.find('/') != std::string::npos || source.find('\\') != std::string::npos) {
+        return false;
+    }
+    idx_t dot_count = 0;
+    for (idx_t i = 0; i < source.size(); i++) {
+        auto c = static_cast<unsigned char>(source[i]);
+        if (source[i] == '.') {
+            dot_count++;
+            continue;
+        }
+        if ((i == 0 || source[i - 1] == '.') && !std::isalpha(c) && source[i] != '_') {
+            return false;
+        }
+        if (!std::isalnum(c) && source[i] != '_' && source[i] != '$') {
+            return false;
+        }
+    }
+    return dot_count == 1 || dot_count == 2;
+}
+
 std::unique_ptr<BoundBaseScanSource> Binder::bindFileScanSource(const BaseScanSource& scanSource,
     const options_t& options, const std::vector<std::string>& columnNames,
     const std::vector<LogicalType>& columnTypes) {
     auto fileSource = scanSource.constPtrCast<FileScanSource>();
-    auto filePaths = bindFilePaths(fileSource->filePaths);
     auto boundOptions = bindParsingOptions(options);
+    bool catalogName = fileSource->filePaths.size() == 1 &&
+                       isIcebergCatalogName(clientContext, fileSource->filePaths[0], boundOptions);
+    auto filePaths = catalogName ? fileSource->filePaths : bindFilePaths(fileSource->filePaths);
     FileTypeInfo fileTypeInfo;
 
     if (boundOptions.contains(FileScanInfo::FILE_FORMAT_OPTION_NAME)) {
@@ -136,7 +174,7 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindFileScanSource(const BaseScanSo
     }
     // If we defined a certain FileType, we have to ensure the path is a file, not something else
     // (e.g. an existed directory)
-    if (fileTypeInfo.fileType != FileType::UNKNOWN) {
+    if (fileTypeInfo.fileType != FileType::UNKNOWN && !catalogName) {
         for (const auto& filePath : filePaths) {
             if (!LocalFileSystem::fileExists(filePath) && LocalFileSystem::isLocalPath(filePath)) {
                 throw BinderException{std::format("Provided path is not a file: {}.", filePath)};
