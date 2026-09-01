@@ -715,10 +715,11 @@ TEST_F(ApiTest, EnableCachedPreparedStatementSetting) {
 }
 
 // A predicate built only from parameters reads nothing from the input, so it holds for every row
-// or for none. It used to hold for every row regardless: the filter narrowed the shared
-// single-value data chunk state rather than the chunk the rows travel in, so it discarded nothing
-// and the predicate was silently absent. The equivalent literal predicate is folded by the binder
-// and so never reached that path, which is why only the parameterised form was affected.
+// or for none. It used to hold for every row regardless: the join-order planner claimed such a
+// predicate for a query graph (its variable check passes vacuously for a variable-free predicate)
+// but never emitted it, because the same emptiness makes the join-order search report it as
+// already matched -- no FILTER was planned at all. The equivalent literal predicate is folded by
+// the binder and so never reached that path, which is why only the parameterised form was affected.
 TEST_F(ApiTest, ParameterOnlyPredicateFilters) {
     auto falsePredicate = conn->prepare("MATCH (a:person) WHERE $depth >= 2 RETURN a.ID;");
     ASSERT_TRUE(falsePredicate->isSuccess()) << falsePredicate->getErrorMessage();
