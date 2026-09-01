@@ -39,6 +39,7 @@ void QueryPrimaryKeyLookup::initLocalStateInternal(ResultSet* resultSet,
 bool QueryPrimaryKeyLookup::getNextTuplesInternal(ExecutionContext* context) {
     auto transaction = transaction::Transaction::Get(*context->clientContext);
     sel_t outputSize = 0;
+    bool inputWasFlat = false;
     do {
         // The node-id vector shares its DataChunkState with the child (the key expression lives
         // in the same group). Restoring the saved selection vector hands control back to the
@@ -50,6 +51,9 @@ bool QueryPrimaryKeyLookup::getNextTuplesInternal(ExecutionContext* context) {
         if (!children[0]->getNextTuple(context)) {
             return false;
         }
+        // Recorded before the selection is rewritten below, so the group can be handed back in the
+        // shape the child produced it (see the flatness restore after the loop).
+        inputWasFlat = nodeIDVector->state->isFlat();
         saveSelVector(*nodeIDVector->state);
         keyEvaluator->evaluate();
         auto* keyVector = keyEvaluator->resultVector.get();
@@ -91,7 +95,21 @@ bool QueryPrimaryKeyLookup::getNextTuplesInternal(ExecutionContext* context) {
     } while (outputSize == 0);
     table->lookupMultiple(transaction, *scanState);
     tableInfo.castColumns();
-    scanState->outState->setToUnflat();
+    // Only widen the group if it was already carrying more than one row.
+    //
+    // This state belongs to the child, not to this operator: the lookup writes into the same group
+    // its key is read from, so `scanState->outState` is the chunk the rows arrived in and other
+    // variables live in it too. Forcing it unflat unconditionally leaves it unflat for the *child's
+    // next call*, and a hash join probing on a key in this group then reads a key vector it
+    // requires to be flat — `BaseHashTable::matchFlatVecWithEntry` asserts on exactly that, and
+    // without assertions compiled in it silently compares position 0 only.
+    //
+    // The lookup emits at most one row per input row, so the output is flat whenever the input was:
+    // preserving the incoming flatness is both correct here and what leaves the child's state as it
+    // found it.
+    if (!inputWasFlat) {
+        scanState->outState->setToUnflat();
+    }
     metrics->numOutputTuple.increase(outputSize);
     return true;
 }

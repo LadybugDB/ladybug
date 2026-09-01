@@ -74,3 +74,44 @@ c1
 ---- 2
 c0
 c1
+
+# The lookup writes into the group its key is read from, which is a group the child owns and other
+# variables live in. Forcing that group unflat on the way out left it unflat for the child's next
+# call, and a hash join probing on a key in the same group then read a key vector it requires to be
+# flat. Two loop elements that each match is the smallest case that enters the lookup twice;
+# they need not be duplicates.
+-CASE UnwindPrimaryKeyLookupPreservesGroupFlatness
+-STATEMENT CREATE NODE TABLE CI(node_id SERIAL, namespace STRING, concept STRING, PRIMARY KEY(node_id));
+---- ok
+-STATEMENT CREATE NODE TABLE RI(edge_id SERIAL, namespace STRING, source_node_id INT64, PRIMARY KEY(edge_id));
+---- ok
+-STATEMENT CREATE (:CI {namespace: 'ns', concept: 'c0'});
+---- ok
+-STATEMENT CREATE (:CI {namespace: 'ns', concept: 'c1'});
+---- ok
+-STATEMENT CREATE (:RI {namespace: 'ns', source_node_id: 0});
+---- ok
+-STATEMENT CREATE (:RI {namespace: 'ns', source_node_id: 1});
+---- ok
+
+-STATEMENT UNWIND ['ns', 'ns'] AS nsv MATCH (ri:RI) WHERE ri.namespace = nsv MATCH (src:CI) WHERE src.node_id = ri.source_node_id RETURN src.concept ORDER BY src.concept;
+---- 4
+c0
+c0
+c1
+c1
+
+-STATEMENT UNWIND ['ns', 'ns', 'ns'] AS nsv MATCH (ri:RI) WHERE ri.namespace = nsv MATCH (src:CI) WHERE src.node_id = ri.source_node_id RETURN src.concept ORDER BY src.concept;
+---- 6
+c0
+c0
+c0
+c1
+c1
+c1
+
+# A single element must still resolve, i.e. the flatness restore did not simply disable the walk.
+-STATEMENT UNWIND ['ns'] AS nsv MATCH (ri:RI) WHERE ri.namespace = nsv MATCH (src:CI) WHERE src.node_id = ri.source_node_id RETURN src.concept ORDER BY src.concept;
+---- 2
+c0
+c1
