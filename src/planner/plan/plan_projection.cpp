@@ -9,11 +9,21 @@ namespace planner {
 
 void Planner::planProjectionBody(const BoundProjectionBody* projectionBody, LogicalPlan& plan) {
     auto expressionsToProject = projectionBody->getProjectionExpressions();
-    if (expressionsToProject.empty()) {
-        return;
-    }
+    // Seed the plan before the empty-projection check, not after.
+    //
+    // A projection body binds to no expressions at all when everything it projects is constant
+    // and nothing downstream reads it (`WITH 1 AS gate ...`). Returning here used to leave the
+    // plan empty, and `planQueryPart` then appended this body's WHERE onto that empty plan --
+    // building a LogicalFilter whose child is null, which segfaults the process as soon as the
+    // planner asks the child for its schema.
+    //
+    // A projection body over no input is one row, so the dummy scan is the correct input for it
+    // whether or not there is anything left to project.
     if (plan.isEmpty()) { // e.g. RETURN 1, COUNT(2)
         appendDummyScan(plan);
+    }
+    if (expressionsToProject.empty()) {
+        return;
     }
     auto expressionsToAggregate = projectionBody->getAggregateExpressions();
     auto expressionsToGroupBy = projectionBody->getGroupByExpressions();

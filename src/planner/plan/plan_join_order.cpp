@@ -22,6 +22,15 @@ using namespace lbug::common;
 namespace lbug {
 namespace planner {
 
+// True when the expression reads at least one node or relationship variable. A predicate for which
+// this is false is constant for the whole query -- a literal, or an expression over parameters,
+// whose values are fixed for one execution but unknown at plan time.
+static bool dependsOnAnyVariable(const std::shared_ptr<Expression>& expression) {
+    auto collector = DependentVarNameCollector();
+    collector.visit(expression);
+    return !collector.getVarNames().empty();
+}
+
 LogicalPlan Planner::planQueryGraphCollectionInNewContext(
     const QueryGraphCollection& queryGraphCollection, const QueryGraphPlanningInfo& info) {
     auto prevContext = enterNewContext();
@@ -90,7 +99,18 @@ LogicalPlan Planner::planQueryGraphCollection(const QueryGraphCollection& queryG
         // Extract predicates for current query graph
         std::unordered_set<uint32_t> predicateToEvaluateIndices;
         for (auto j = 0u; j < info.predicates.size(); ++j) {
-            if (info.predicates[j]->expressionType == ExpressionType::LITERAL) {
+            // A predicate that depends on no variable cannot be assigned to a query graph, even
+            // though `canProjectExpression` answers true for it (vacuously — it has no variable
+            // that the graph fails to contain). Assigning it marks it evaluated, and the join
+            // order search below then never emits it: `isExpressionNewlyMatched` reports an
+            // empty variable set as already matched in the previous subgraph, at every step.
+            // The predicate would be silently dropped from the plan.
+            //
+            // Literals were already excluded here, which is why `WHERE 1 = 2` still filtered
+            // while `WHERE $depth >= 2` did not: a predicate built from parameters is not a
+            // literal and cannot be folded, because its value arrives only at execution.
+            // Leaving both to the remaining-predicate pass below gives them a real filter.
+            if (!dependsOnAnyVariable(info.predicates[j])) {
                 continue;
             }
             if (evaluatedPredicatesIndices.contains(j)) {

@@ -32,6 +32,10 @@ public:
     }
 
 private:
+    // Resolves the group the node ID and properties are written into, from the current schema.
+    f_group_pos resolveOutputGroupPos() const;
+
+private:
     common::table_id_t tableID;
     std::shared_ptr<binder::Expression> nodeID;
     binder::expression_vector properties;
