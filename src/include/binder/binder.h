@@ -188,7 +188,8 @@ public:
     common::case_insensitive_map_t<common::Value> bindParsingOptions(
         const parser::options_t& parsingOptions);
     common::FileTypeInfo bindFileTypeInfo(const std::vector<std::string>& filePaths) const;
-    std::vector<std::string> bindFilePaths(const std::vector<std::string>& filePaths) const;
+    std::vector<std::string> bindFilePaths(const std::vector<std::string>& filePaths,
+        bool passThroughOnNoMatch = false) const;
 
     /*** bind query ***/
     std::unique_ptr<BoundRegularQuery> bindQuery(const parser::Statement& statement);
