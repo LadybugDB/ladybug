@@ -35,8 +35,6 @@ public:
 };
 
 TEST_F(ProjectGraphCsrTest, materializesArrowCsr) {
-    // TODO(#881): intermittent SIGSEGV / CSR-loss race in the arrow collector task path.
-    GTEST_SKIP() << "Flaky SIGSEGV in the arrow collector task path; see issue #881.";
     ASSERT_TRUE(conn->query("CALL PROJECT_GRAPH('CsrG', ['CsrNode'], ['CsrEdge'])")->isSuccess());
     const auto& entry = getNativeEntry("CsrG");
     ASSERT_EQ(entry.relCsrResults.size(), 1u);
@@ -51,8 +49,6 @@ TEST_F(ProjectGraphCsrTest, materializesArrowCsr) {
 }
 
 TEST_F(ProjectGraphCsrTest, materializedCsrSurvivesConsumingQueries) {
-    // TODO(#881): intermittent SIGSEGV / CSR-loss race in the arrow collector task path.
-    GTEST_SKIP() << "Flaky SIGSEGV in the arrow collector task path; see issue #881.";
     ASSERT_TRUE(conn->query("CALL PROJECT_GRAPH('CsrG', ['CsrNode'], ['CsrEdge'])")->isSuccess());
     // The pinned result must stay valid across later statements on the same connection.
     ASSERT_TRUE(conn->query("MATCH (a:CsrNode) RETURN COUNT(*)")->isSuccess());

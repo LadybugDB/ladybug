@@ -495,9 +495,6 @@ TEST_F(ArrowTest, resultToArrow) {
 }
 
 TEST_F(ArrowTest, queryAsArrow) {
-    // TODO(#881): intermittent SIGSEGV race in the arrow collector task path (worker threads
-    // execute a corrupted task clone). Skip until the race is fixed.
-    GTEST_SKIP() << "Flaky SIGSEGV in the arrow collector task path; see issue #881.";
     auto query = "MATCH (a:person) WHERE a.fName = 'Bob' RETURN a.fName";
     auto result = conn->queryAsArrow(query, 1);
     auto arrowArray = result->getNextArrowChunk(1);
@@ -511,8 +508,6 @@ TEST_F(ArrowTest, queryAsArrow) {
 }
 
 TEST_F(ArrowTest, getArrowResult) {
-    // TODO(#881): intermittent SIGSEGV race in the arrow collector task path. Skip until fixed.
-    GTEST_SKIP() << "Flaky SIGSEGV in the arrow collector task path; see issue #881.";
     auto query = "MATCH (a:person) WHERE a.fName = 'Bob' RETURN a.fName";
     auto result = conn->queryAsArrow(query, 1);
     try {
@@ -599,8 +594,6 @@ TEST_F(ArrowTest, mapColumnArrowSchemaHasNonNullableEntriesAndKey) {
 }
 
 TEST_F(ArrowTest, queryAsArrowDirectCSRRowIDProjection) {
-    // TODO(#881): intermittent SIGSEGV / CSR-loss race in the arrow collector task path.
-    GTEST_SKIP() << "Flaky SIGSEGV in the arrow collector task path; see issue #881.";
     ASSERT_TRUE(
         conn->query("CREATE NODE TABLE DirectPerson(id INT64, PRIMARY KEY(id));")->isSuccess());
     ASSERT_TRUE(conn->query("CREATE REL TABLE DirectKnows(FROM DirectPerson TO DirectPerson);")
@@ -653,8 +646,6 @@ TEST_F(ArrowTest, queryAsArrowDirectCSRRowIDProjection) {
 }
 
 TEST_F(ArrowTest, queryAsArrowDirectCSRRowIDProjectionKeepsCSRMetadataWithFourThreads) {
-    // TODO(#881): intermittent SIGSEGV / CSR-loss race in the arrow collector task path.
-    GTEST_SKIP() << "Flaky SIGSEGV in the arrow collector task path; see issue #881.";
     auto query = "MATCH (a:person)-[b:knows]->(c:person) RETURN a.rowid, b.rowid, c.rowid "
                  "ORDER BY a.rowid, b.rowid, c.rowid";
     conn->setMaxNumThreadForExec(4);
@@ -665,8 +656,6 @@ TEST_F(ArrowTest, queryAsArrowDirectCSRRowIDProjectionKeepsCSRMetadataWithFourTh
 }
 
 TEST_F(ArrowTest, queryAsArrowTracksCSRMetadataWithoutRelIDs) {
-    // TODO(#881): intermittent SIGSEGV / CSR-loss race in the arrow collector task path.
-    GTEST_SKIP() << "Flaky SIGSEGV in the arrow collector task path; see issue #881.";
     auto query =
         "MATCH (a:person)-[:knows]->(b:person) RETURN a.rowid, b.rowid ORDER BY a.rowid, b.rowid";
     auto rowResult = conn->query(query);
@@ -712,8 +701,6 @@ TEST_F(ArrowTest, queryAsArrowTracksCSRMetadataWithoutRelIDs) {
 }
 
 TEST_F(ArrowTest, queryAsArrowTracksCSRMetadataWithRelIDsAndExtraColumns) {
-    // TODO(#881): intermittent SIGSEGV / CSR-loss race in the arrow collector task path.
-    GTEST_SKIP() << "Flaky SIGSEGV in the arrow collector task path; see issue #881.";
     auto query = "MATCH (a:person)-[e:knows]->(b:person) "
                  "RETURN a.rowid, e.rowid, b.rowid, e.date, b.fName "
                  "ORDER BY a.rowid, e.rowid, b.rowid";
@@ -756,8 +743,6 @@ TEST_F(ArrowTest, queryAsArrowTracksCSRMetadataWithRelIDsAndExtraColumns) {
 }
 
 TEST_F(ArrowTest, queryAsArrowDoesNotTrackCSRMetadataForNonCSRShape) {
-    // TODO(#881): intermittent SIGSEGV / CSR-loss race in the arrow collector task path.
-    GTEST_SKIP() << "Flaky SIGSEGV in the arrow collector task path; see issue #881.";
     auto query = "MATCH (a:person)-[e:knows]->(b:person) RETURN a.rowid, e.date ORDER BY a.rowid";
     auto result = conn->queryAsArrow(query, 8);
     auto* arrowResult = dynamic_cast<ArrowQueryResult*>(result.get());
