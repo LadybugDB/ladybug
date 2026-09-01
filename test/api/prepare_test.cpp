@@ -715,10 +715,11 @@ TEST_F(ApiTest, EnableCachedPreparedStatementSetting) {
 }
 
 // A predicate built only from parameters reads nothing from the input, so it holds for every row
-// or for none. It used to hold for every row regardless: the filter narrowed the shared
-// single-value data chunk state rather than the chunk the rows travel in, so it discarded nothing
-// and the predicate was silently absent. The equivalent literal predicate is folded by the binder
-// and so never reached that path, which is why only the parameterised form was affected.
+// or for none. It used to hold for every row regardless: the join-order planner claimed such a
+// predicate for a query graph (its variable check passes vacuously for a variable-free predicate)
+// but never emitted it, because the same emptiness makes the join-order search report it as
+// already matched -- no FILTER was planned at all. The equivalent literal predicate is folded by
+// the binder and so never reached that path, which is why only the parameterised form was affected.
 TEST_F(ApiTest, ParameterOnlyPredicateFilters) {
     auto falsePredicate = conn->prepare("MATCH (a:person) WHERE $depth >= 2 RETURN a.ID;");
     ASSERT_TRUE(falsePredicate->isSuccess()) << falsePredicate->getErrorMessage();
@@ -734,16 +735,14 @@ TEST_F(ApiTest, ParameterOnlyPredicateFilters) {
     ASSERT_EQ(included->getNumTuples(), 8u);
 
     // Mixed with a predicate that does read the input, in both conjunct orders.
-    auto mixed = conn->prepare(
-        "MATCH (a:person) WHERE $depth >= 2 AND a.ID >= 0 RETURN a.ID;");
+    auto mixed = conn->prepare("MATCH (a:person) WHERE $depth >= 2 AND a.ID >= 0 RETURN a.ID;");
     ASSERT_TRUE(mixed->isSuccess()) << mixed->getErrorMessage();
-    auto mixedResult =
-        conn->execute(mixed.get(), std::make_pair(std::string("depth"), (int64_t)1));
+    auto mixedResult = conn->execute(mixed.get(), std::make_pair(std::string("depth"), (int64_t)1));
     ASSERT_TRUE(mixedResult->isSuccess()) << mixedResult->getErrorMessage();
     ASSERT_EQ(mixedResult->getNumTuples(), 0u);
 
-    auto mixedReversed = conn->prepare(
-        "MATCH (a:person) WHERE a.ID >= 0 AND $depth >= 2 RETURN a.ID;");
+    auto mixedReversed =
+        conn->prepare("MATCH (a:person) WHERE a.ID >= 0 AND $depth >= 2 RETURN a.ID;");
     ASSERT_TRUE(mixedReversed->isSuccess()) << mixedReversed->getErrorMessage();
     auto mixedReversedResult =
         conn->execute(mixedReversed.get(), std::make_pair(std::string("depth"), (int64_t)1));
@@ -761,8 +760,8 @@ TEST_F(ApiTest, ParameterOnlyPredicateFilters) {
 // The same predicate placed after a WITH that projects only a constant. This gated a MATCH below
 // it and used to terminate the process rather than return rows.
 TEST_F(ApiTest, ParameterOnlyPredicateAfterConstantWith) {
-    auto statement = conn->prepare(
-        "WITH 1 AS gate WHERE $depth >= 2 MATCH (a:person) RETURN a.ID;");
+    auto statement =
+        conn->prepare("WITH 1 AS gate WHERE $depth >= 2 MATCH (a:person) RETURN a.ID;");
     ASSERT_TRUE(statement->isSuccess()) << statement->getErrorMessage();
     auto excluded =
         conn->execute(statement.get(), std::make_pair(std::string("depth"), (int64_t)1));

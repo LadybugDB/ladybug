@@ -45,7 +45,8 @@ FileTypeInfo Binder::bindFileTypeInfo(const std::vector<std::string>& filePaths)
     return expectedFileType;
 }
 
-std::vector<std::string> Binder::bindFilePaths(const std::vector<std::string>& filePaths) const {
+std::vector<std::string> Binder::bindFilePaths(const std::vector<std::string>& filePaths,
+    bool passThroughOnNoMatch) const {
     std::vector<std::string> boundFilePaths;
     for (auto& filePath : filePaths) {
         // This is a temporary workaround because we use duckdb to read from iceberg/delta/azure.
@@ -64,6 +65,13 @@ std::vector<std::string> Binder::bindFilePaths(const std::vector<std::string>& f
         auto globbedFilePaths =
             VirtualFileSystem::GetUnsafe(*clientContext)->glob(clientContext, filePath);
         if (globbedFilePaths.empty()) {
+            if (passThroughOnNoMatch) {
+                // The format's scan function owns the interpretation of the scan source, so
+                // leave the source unmodified for the extension to resolve (e.g. as a
+                // REST catalog table identifier) and to produce its own error if invalid.
+                boundFilePaths.push_back(filePath);
+                continue;
+            }
             throw BinderException{
                 std::format("No file found that matches the pattern: {}.", filePath)};
         }
@@ -124,18 +132,30 @@ std::unique_ptr<BoundBaseScanSource> Binder::bindFileScanSource(const BaseScanSo
     const options_t& options, const std::vector<std::string>& columnNames,
     const std::vector<LogicalType>& columnTypes) {
     auto fileSource = scanSource.constPtrCast<FileScanSource>();
-    auto filePaths = bindFilePaths(fileSource->filePaths);
     auto boundOptions = bindParsingOptions(options);
+    auto formatOption = boundOptions.find(FileScanInfo::FILE_FORMAT_OPTION_NAME);
+    // An explicitly declared format that is not one of the built-in file types is provided by
+    // an extension (e.g. 'iceberg', 'delta'). The <FORMAT>_SCAN table function registered by
+    // that extension owns the interpretation of the scan source: it may be a filesystem path,
+    // but it can also be a logical identifier (e.g. an Iceberg REST catalog table name) that
+    // must not be validated against the filesystem. When globbing finds no match, the source
+    // is therefore passed through verbatim so the extension can resolve it and produce its
+    // own error if invalid.
+    const bool extensionFormat =
+        formatOption != boundOptions.end() &&
+        FileTypeUtils::fromString(formatOption->second.toString()) == FileType::UNKNOWN;
+    auto filePaths =
+        bindFilePaths(fileSource->filePaths, extensionFormat /* passThroughOnNoMatch */);
     FileTypeInfo fileTypeInfo;
 
-    if (boundOptions.contains(FileScanInfo::FILE_FORMAT_OPTION_NAME)) {
-        auto fileFormat = boundOptions.at(FileScanInfo::FILE_FORMAT_OPTION_NAME).toString();
+    if (formatOption != boundOptions.end()) {
+        auto fileFormat = formatOption->second.toString();
         fileTypeInfo = FileTypeInfo{FileTypeUtils::fromString(fileFormat), fileFormat};
     } else {
         fileTypeInfo = bindFileTypeInfo(filePaths);
     }
     // If we defined a certain FileType, we have to ensure the path is a file, not something else
-    // (e.g. an existed directory)
+    // (e.g. an existed directory). Extension-provided formats interpret the source themselves.
     if (fileTypeInfo.fileType != FileType::UNKNOWN) {
         for (const auto& filePath : filePaths) {
             if (!LocalFileSystem::fileExists(filePath) && LocalFileSystem::isLocalPath(filePath)) {

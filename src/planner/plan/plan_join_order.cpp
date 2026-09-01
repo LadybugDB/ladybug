@@ -22,9 +22,10 @@ using namespace lbug::common;
 namespace lbug {
 namespace planner {
 
-// True when the expression reads at least one node or relationship variable. A predicate for which
-// this is false is constant for the whole query -- a literal, or an expression over parameters,
-// whose values are fixed for one execution but unknown at plan time.
+// True when the expression reads at least one variable (a node, relationship or scalar variable
+// introduced by WITH). A predicate for which this is false is constant for the whole query -- a
+// literal, or an expression over parameters, whose values are fixed for one execution but unknown
+// at plan time.
 static bool dependsOnAnyVariable(const std::shared_ptr<Expression>& expression) {
     auto collector = DependentVarNameCollector();
     collector.visit(expression);
