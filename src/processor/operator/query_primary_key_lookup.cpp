@@ -91,7 +91,13 @@ bool QueryPrimaryKeyLookup::getNextTuplesInternal(ExecutionContext* context) {
     } while (outputSize == 0);
     table->lookupMultiple(transaction, *scanState);
     tableInfo.castColumns();
-    scanState->outState->setToUnflat();
+    // The out vectors live in the same group as the node-id vector, whose state is the one the
+    // child drives -- marking it unflat here would leak that flip into the child's next batch (e.g.
+    // a hash join probe expecting flat keys). The group's flatness is already managed by the
+    // operators below us.
+    if (scanState->outState != nodeIDVector->state) {
+        scanState->outState->setToUnflat();
+    }
     metrics->numOutputTuple.increase(outputSize);
     return true;
 }
