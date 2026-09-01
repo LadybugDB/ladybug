@@ -146,7 +146,12 @@ inline void Hash::operation(const std::string_view& key, common::hash_t& result)
     }
     uint64_t last = 0;
     for (size_t i = 0u; i < key.size() % 8; i++) {
-        last |= static_cast<uint64_t>(key[key.size() / 8 * 8 + i]) << i * 8;
+        // Zero-extend the byte explicitly so the hash is identical on platforms where plain
+        // `char` is signed (x86-64, macOS arm64, wasm32) and unsigned (aarch64/riscv64 linux).
+        // This matches the convention of PostgreSQL, BerkeleyDB, SQLite and MySQL, and keeps
+        // behavior identical on unsigned-char platforms (aarch64/riscv64 linux).
+        last |= static_cast<uint64_t>(static_cast<unsigned char>(key[key.size() / 8 * 8 + i]))
+                << i * 8;
     }
     hashValue = lbug::function::combineHashScalar(hashValue, lbug::function::murmurhash64(last));
     result = hashValue;
