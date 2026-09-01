@@ -45,11 +45,14 @@ std::unique_ptr<PhysicalPlan> PlanMapper::getPhysicalPlan(const LogicalPlan* log
         } else {
             root = createResultCollector(AccumulateType::REGULAR, expressions,
                 logicalPlan->getSchema(), std::move(root));
-        }
-        // The plan root collector is the only one whose table is handed to the client via
-        // getQueryResult(); every other ResultCollector feeds other operators of the same
-        // plan and must be cleared in place (not replaced) on reuse.
-        if (root->getOperatorType() == PhysicalOperatorType::RESULT_COLLECTOR) {
+            // The plan root collector is the only one whose table is handed to the client via
+            // getQueryResult(); every other ResultCollector feeds other operators of the same
+            // plan and must be cleared in place (not replaced) on reuse.
+            // NOTE: This must only run on the regular (factorized-table) ResultCollector.
+            // ArrowResultCollector shares PhysicalOperatorType::RESULT_COLLECTOR but is NOT a
+            // ResultCollector — downcasting it here is undefined behaviour (and trips the
+            // checked dynamic_cast under RUNTIME_CHECKS), so the flag is set inside the
+            // non-arrow branch instead of after the if/else via an operator-type check.
             root->ptrCast<ResultCollector>()->setResultExposedToClient();
         }
     }
