@@ -1,0 +1,76 @@
+-DATASET CSV empty
+
+--
+
+# An UNWIND correlated with a MATCH puts a hash join underneath the primary-key
+# lookup that resolves the second MATCH. The lookup writes its node ID into the
+# group its key is read from; that group is renumbered when the join is planned
+# in, so the lookup used to write into a group carrying no rows, read an empty
+# selection and silently return nothing -- taking every MATCH hanging off it.
+-CASE UnwindCorrelatedWithPrimaryKeyLookup
+-STATEMENT CREATE NODE TABLE CI(node_id SERIAL, namespace STRING, concept STRING, PRIMARY KEY(node_id));
+---- ok
+-STATEMENT CREATE NODE TABLE SK(name STRING, namespace STRING, PRIMARY KEY(name));
+---- ok
+-STATEMENT CREATE NODE TABLE RI(edge_id SERIAL, namespace STRING, source_node_id INT64, sname STRING, PRIMARY KEY(edge_id));
+---- ok
+-STATEMENT CREATE (:CI {namespace: 'ns', concept: 'c0'});
+---- ok
+-STATEMENT CREATE (:CI {namespace: 'ns', concept: 'c1'});
+---- ok
+-STATEMENT CREATE (:CI {namespace: 'ns', concept: 'c2'});
+---- ok
+-STATEMENT CREATE (:SK {name: 's0', namespace: 'ns'});
+---- ok
+-STATEMENT CREATE (:SK {name: 's1', namespace: 'ns'});
+---- ok
+-STATEMENT CREATE (:RI {namespace: 'ns', source_node_id: 0, sname: 's0'});
+---- ok
+-STATEMENT CREATE (:RI {namespace: 'ns', source_node_id: 1, sname: 's1'});
+---- ok
+
+# The reported shape: the loop variable is compared in the first MATCH, and a
+# second MATCH resolves a primary key from the first one's output.
+-STATEMENT UNWIND ['ns'] AS nsv MATCH (ri:RI) WHERE ri.namespace = nsv MATCH (src:CI) WHERE src.node_id = ri.source_node_id RETURN src.concept ORDER BY src.concept;
+---- 2
+c0
+c1
+
+# The same join written as a property map rather than a WHERE.
+-STATEMENT UNWIND ['ns'] AS nsv MATCH (ri:RI) WHERE ri.namespace = nsv MATCH (src:CI {node_id: ri.source_node_id}) RETURN src.concept ORDER BY src.concept;
+---- 2
+c0
+c1
+
+# A STRING primary key: the key needs no implicit cast, so the failure does not
+# depend on one being inserted.
+-STATEMENT UNWIND ['ns'] AS nsv MATCH (ri:RI) WHERE ri.namespace = nsv MATCH (s:SK) WHERE s.name = ri.sname RETURN s.name ORDER BY s.name;
+---- 2
+s0
+s1
+
+# Two loop elements: the walk must run once per element, not collapse.
+-STATEMENT UNWIND ['ns', 'ns'] AS nsv MATCH (ri:RI) WHERE ri.namespace = nsv MATCH (src:CI) WHERE src.node_id = ri.source_node_id RETURN src.concept ORDER BY src.concept;
+---- 4
+c0
+c0
+c1
+c1
+
+# Two lookups chained off the same scan.
+-STATEMENT UNWIND ['ns'] AS nsv MATCH (ri:RI) WHERE ri.namespace = nsv MATCH (src:CI) WHERE src.node_id = ri.source_node_id MATCH (s:SK) WHERE s.name = ri.sname RETURN src.concept, s.name ORDER BY src.concept;
+---- 2
+c0|s0
+c1|s1
+
+# An uncorrelated UNWIND still works: this shape was never broken and must stay so.
+-STATEMENT UNWIND ['ns'] AS nsv MATCH (ri:RI) WHERE ri.namespace = 'ns' MATCH (src:CI) WHERE src.node_id = ri.source_node_id RETURN src.concept ORDER BY src.concept;
+---- 2
+c0
+c1
+
+# No UNWIND at all: the control that kept passing throughout.
+-STATEMENT MATCH (ri:RI) WHERE ri.namespace IN ['ns'] MATCH (src:CI) WHERE src.node_id = ri.source_node_id RETURN src.concept ORDER BY src.concept;
+---- 2
+c0
+c1
