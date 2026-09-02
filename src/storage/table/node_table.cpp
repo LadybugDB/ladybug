@@ -27,6 +27,17 @@ using namespace lbug::evaluator;
 
 namespace lbug {
 namespace storage {
+namespace {
+// Whether index maintenance for an update must run AFTER the new value has been written to
+// the node table. The HNSW index re-scans the updated node's embedding from the node table
+// during re-insertion (see OnDiskHNSWIndex), so it must observe the NEW value. All other
+// index kinds (e.g. FTS, which re-tokenizes the OLD document from the node table while
+// deleting its entries) must run before the write. We key on the serialized index type
+// name to avoid extending the extension-facing Index API.
+bool updatesAfterTableWrite(const Index& index) {
+    return index.getIndexInfo().indexType == "HNSW";
+}
+} // namespace
 
 NodeTableVersionRecordHandler::NodeTableVersionRecordHandler(NodeTable* table) : table(table) {}
 
@@ -528,18 +539,22 @@ void NodeTable::update(Transaction* transaction, TableUpdateState& updateState) 
         throw RuntimeException("Cannot update pk.");
     }
     const auto nodeOffset = nodeUpdateState.nodeIDVector.readNodeOffset(pos);
+    // Indexes that need to read the OLD value from the node table (e.g. FTS re-tokenizing the
+    // document being deleted) must be updated before the row is written.
     for (auto i = 0u; i < indexes.size(); i++) {
         // Skip unloaded (orphaned) index holders; see initUpdateState().
         if (!indexes[i].isLoaded()) {
             continue;
         }
         auto index = indexes[i].getIndex();
-        if (!nodeUpdateState.needToUpdateIndex(i)) {
+        if (!nodeUpdateState.needToUpdateIndex(i) || updatesAfterTableWrite(*index)) {
             continue;
         }
         index->update(transaction, nodeUpdateState.nodeIDVector, nodeUpdateState.propertyVector,
             *nodeUpdateState.indexUpdateState[i]);
     }
+    // Indexes that re-scan the node table to observe the NEW value during update (e.g. HNSW)
+    // must be updated after the row is written.
     if (transaction->isUnCommitted(tableID, nodeOffset)) {
         const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
         DASSERT(localTable);
@@ -551,6 +566,18 @@ void NodeTable::update(Transaction* transaction, TableUpdateState& updateState) 
         nodeGroups->getNodeGroup(nodeGroupIdx)
             ->update(transaction, rowIdxInGroup, nodeUpdateState.columnID,
                 nodeUpdateState.propertyVector);
+    }
+    for (auto i = 0u; i < indexes.size(); i++) {
+        // Skip unloaded (orphaned) index holders; see initUpdateState().
+        if (!indexes[i].isLoaded()) {
+            continue;
+        }
+        auto index = indexes[i].getIndex();
+        if (!nodeUpdateState.needToUpdateIndex(i) || !updatesAfterTableWrite(*index)) {
+            continue;
+        }
+        index->update(transaction, nodeUpdateState.nodeIDVector, nodeUpdateState.propertyVector,
+            *nodeUpdateState.indexUpdateState[i]);
     }
     if (updateState.logToWAL && transaction->shouldLogToWAL()) {
         DASSERT(transaction->isWriteTransaction());
