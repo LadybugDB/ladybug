@@ -251,7 +251,17 @@ public:
         if (loaded) {
             DASSERT(index);
             index->reclaimStorage(pageAllocator);
+            return;
         }
+        // An unloaded holder has no Index object to reclaim from. This is safe because:
+        // * Built-in indexes (PK hash / ART) are always force-loaded in NodeTable::deserialize(),
+        //   so an unloaded holder can never be a built-in index that owns raw page ranges.
+        // * Extension indexes own no raw pages at the holder level: their data lives in
+        //   catalog-managed internal tables and is reclaimed through the catalog when those
+        //   tables are dropped (their Index::reclaimStorage is a no-op even when loaded).
+        // If a future built-in index is not force-loaded, or an extension starts owning raw
+        // pages, holders dropped while unloaded would silently leak their pages.
+        DASSERT(!indexInfo.isBuiltin);
     }
     std::vector<IndexStorageEntry> getStorageEntries() const {
         if (!loaded) {

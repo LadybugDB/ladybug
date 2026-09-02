@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/cast.h"
 #include "common/exception/message.h"
@@ -686,6 +687,23 @@ void NodeTable::commit(main::ClientContext* context, TableCatalogEntry* tableEnt
         // which is null for an unloaded (orphan) holder — e.g. after a WAL-replayed DROP INDEX
         // that removed only the catalog entry — and would segfault during commit/recovery.
         if (!index.isLoaded()) {
+            // An unloaded holder is either an orphan (its catalog entry is already gone, so
+            // there is nothing to maintain), or a cataloged index whose extension is not
+            // loaded. For the latter, the binder refuses INSERT/DELETE/COPY and SET of indexed
+            // columns on tables with cataloged-but-unloaded indexes, so user transactions can
+            // only reach commit() with the orphan case, which we skip silently. WAL replay
+            // bypasses the binder, but throwing during recovery would prevent the database
+            // from opening at all, so the index is left stale (rebuildable) there. The check
+            // below is a tripwire for future paths that bypass the binder: rows were appended
+            // in step 1 and would never be indexed — fail loudly instead of silently
+            // committing them.
+            if (!transaction->isRecovery() && numLocalRows > 0 &&
+                Catalog::Get(*context)->containsIndex(transaction, tableEntry->getTableID(),
+                    index.getName())) {
+                throw RuntimeException(
+                    "Cannot commit index insertions for index " + index.getName() +
+                    ", because it is not loaded. Please load the extension for the index first.");
+            }
             continue;
         }
         if (!index.needCommitInsert()) {
@@ -1054,7 +1072,8 @@ void NodeTable::dropIndex(const std::string& name) {
             // "Index ... not loaded yet" and trapping the cross-set residue state.
             // Retain the holder so its page range is known; the pages are reclaimed at the
             // next checkpoint (reclaimDroppedIndexes), not here, since freeing them within the
-            // dropping transaction would be unsafe on rollback.
+            // dropping transaction would be unsafe on rollback. (An unloaded holder owns no
+            // holder-level pages — see IndexHolder::reclaimStorage.)
             droppedIndexes.push_back(std::move(*it));
             indexes.erase(it);
             setHasChanges();
