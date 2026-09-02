@@ -439,6 +439,13 @@ void NodeTable::initInsertState(main::ClientContext* context, TableInsertState& 
     nodeInsertState.indexInsertStates.resize(indexes.size());
     for (auto i = 0u; i < indexes.size(); i++) {
         auto& indexHolder = indexes[i];
+        // Skip unloaded (orphaned) index holders — e.g. after a WAL-replayed DROP INDEX that
+        // could not reach the storage layer, the holder survives without its index object.
+        // Dereferencing it here would segfault on the next insert; see insert().
+        if (!indexHolder.isLoaded()) {
+            nodeInsertState.indexInsertStates[i] = nullptr;
+            continue;
+        }
         const auto index = indexHolder.getIndex();
         nodeInsertState.indexInsertStates[i] =
             index->initInsertState(context, [&](offset_t offset) {
@@ -459,6 +466,12 @@ void NodeTable::insert(Transaction* transaction, TableInsertState& insertState) 
     validatePkNotExists(transaction, const_cast<ValueVector*>(&nodeInsertState.pkVector));
     localTable->insert(transaction, insertState);
     for (auto i = 0u; i < indexes.size(); i++) {
+        // Skip unloaded (orphaned) index holders; getIndex() would return a null pointer
+        // and index->insert() would segfault. Such a holder has no catalog entry, so no
+        // index maintenance is expected.
+        if (!indexes[i].isLoaded()) {
+            continue;
+        }
         auto index = indexes[i].getIndex();
         std::vector<ValueVector*> indexedPropertyVectors;
         for (const auto columnID : index->getIndexInfo().columnIDs) {
@@ -482,6 +495,12 @@ void NodeTable::initUpdateState(main::ClientContext* context, TableUpdateState& 
     nodeUpdateState.indexUpdateState.resize(indexes.size());
     for (auto i = 0u; i < indexes.size(); i++) {
         auto& indexHolder = indexes[i];
+        // Skip unloaded (orphaned) index holders; getIndex() would return a null pointer
+        // and index->isPrimary() would segfault.
+        if (!indexHolder.isLoaded()) {
+            nodeUpdateState.indexUpdateState[i] = nullptr;
+            continue;
+        }
         auto index = indexHolder.getIndex();
         if (index->isPrimary() || !index->isBuiltOnColumn(nodeUpdateState.columnID)) {
             nodeUpdateState.indexUpdateState[i] = nullptr;
@@ -509,6 +528,10 @@ void NodeTable::update(Transaction* transaction, TableUpdateState& updateState) 
     }
     const auto nodeOffset = nodeUpdateState.nodeIDVector.readNodeOffset(pos);
     for (auto i = 0u; i < indexes.size(); i++) {
+        // Skip unloaded (orphaned) index holders; see initUpdateState().
+        if (!indexes[i].isLoaded()) {
+            continue;
+        }
         auto index = indexes[i].getIndex();
         if (!nodeUpdateState.needToUpdateIndex(i)) {
             continue;
@@ -547,6 +570,11 @@ bool NodeTable::delete_(Transaction* transaction, TableDeleteState& deleteState)
     bool isDeleted = false;
     const auto nodeOffset = nodeDeleteState.nodeIDVector.readNodeOffset(pos);
     for (auto& index : indexes) {
+        // Skip unloaded (orphaned) index holders; getIndex() would return a null pointer
+        // and delete_() would segfault. See insert().
+        if (!index.isLoaded()) {
+            continue;
+        }
         auto indexDeleteState = index.getIndex()->initDeleteState(transaction, memoryManager,
             getVisibleFunc(transaction));
         index.getIndex()->delete_(transaction, nodeDeleteState.nodeIDVector, *indexDeleteState);
@@ -654,13 +682,14 @@ void NodeTable::commit(main::ClientContext* context, TableCatalogEntry* tableEnt
 
     // 3. Scan index columns for newly inserted tuples.
     for (auto& index : indexes) {
-        if (!index.needCommitInsert()) {
+        // Check isLoaded BEFORE needCommitInsert(): the latter dereferences the index object,
+        // which is null for an unloaded (orphan) holder — e.g. after a WAL-replayed DROP INDEX
+        // that removed only the catalog entry — and would segfault during commit/recovery.
+        if (!index.isLoaded()) {
             continue;
         }
-        if (!index.isLoaded()) {
-            throw RuntimeException(
-                "Cannot commit index insertions for index " + index.getName() +
-                ", because it is not loaded. Please load the extension for the index first.");
+        if (!index.needCommitInsert()) {
+            continue;
         }
         UncommittedIndexInserter indexInserter{startNodeOffset, this, index.getIndex(),
             getVisibleFunc(transaction)};
@@ -985,8 +1014,20 @@ void NodeTable::scanIndexColumns(main::ClientContext* context, IndexScanHelper& 
 }
 
 void NodeTable::addIndex(std::unique_ptr<Index> index) {
-    if (getIndex(index->getName()).has_value()) {
-        throw RuntimeException("Index with name " + index->getName() + " already exists.");
+    // If a holder with the same name already exists (including an unloaded orphan left by a
+    // torn DROP INDEX whose catalog entry is gone), remove it before adding the new one so a
+    // rebuild in place succeeds. Previously this called getIndex(), which throws
+    // "Index ... not loaded yet" for an unloaded holder and made CREATE_FTS_INDEX fail on
+    // the cross-set residue state.
+    for (auto it = indexes.begin(); it != indexes.end(); ++it) {
+        if (StringUtils::caseInsensitiveEquals(it->getName(), index->getName())) {
+            if (it->isLoaded()) {
+                throw RuntimeException("Index with name " + index->getName() + " already exists.");
+            }
+            droppedIndexes.push_back(std::move(*it));
+            indexes.erase(it);
+            break;
+        }
     }
     indexes.push_back(IndexHolder{std::move(index)});
     setHasChanges();
@@ -1005,10 +1046,12 @@ void NodeTable::buildIndexAndAdd(main::ClientContext* context, std::unique_ptr<I
 }
 
 void NodeTable::dropIndex(const std::string& name) {
-    DASSERT(getIndex(name) != nullptr);
     for (auto it = indexes.begin(); it != indexes.end(); ++it) {
         if (StringUtils::caseInsensitiveEquals(it->getName(), name)) {
-            DASSERT(it->isLoaded());
+            // Also allow dropping an unloaded (orphan) holder — e.g. after a WAL-replayed
+            // DROP INDEX that removed only the catalog entry. Previously the DASSERTs here
+            // (and getIndex() above) failed on such a holder, blocking DROP INDEX with
+            // "Index ... not loaded yet" and trapping the cross-set residue state.
             // Retain the holder so its page range is known; the pages are reclaimed at the
             // next checkpoint (reclaimDroppedIndexes), not here, since freeing them within the
             // dropping transaction would be unsafe on rollback.

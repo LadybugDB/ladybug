@@ -223,7 +223,10 @@ void Drop::dropIndex(const main::ClientContext* context) {
     // An index may live in the catalog (user-created indexes), in storage only (the default
     // built-in PK hash index), or in both. Drop whichever are present.
     const auto inCatalog = catalog->containsIndex(transaction, tableID, dropInfo.indexName);
-    const auto inStorage = nodeTable->getIndex(dropInfo.indexName).has_value();
+    // Use getIndexHolder (not getIndex) so an unloaded/orphan holder — whose catalog entry
+    // is already gone — is still recognized as present and can be dropped, instead of
+    // throwing "Index ... not loaded yet".
+    const auto inStorage = nodeTable->getIndexHolder(dropInfo.indexName).has_value();
     if (!inCatalog && !inStorage) {
         auto message =
             std::format("Index {} does not exist in table {}.", dropInfo.indexName, dropInfo.name);
