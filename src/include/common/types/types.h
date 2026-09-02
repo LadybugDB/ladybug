@@ -68,7 +68,11 @@ constexpr property_id_t INVALID_PROPERTY_ID = UINT32_MAX;
 using transaction_t = uint64_t;
 constexpr transaction_t INVALID_TRANSACTION = UINT64_MAX;
 using executor_id_t = uint64_t;
-using executor_info = std::unordered_map<executor_id_t, uint64_t>;
+// Maps an insert executor index to the indices of the factorized table columns that store the
+// ID of the pattern it inserted. A single insert executor can feed multiple ON MATCH SET
+// executors (e.g. ``ON MATCH SET r.a = ..., r.b = ...``), so a vector of column indices is
+// needed. See PatternCreationInfo::updateID.
+using executor_info = std::unordered_map<executor_id_t, std::vector<uint64_t>>;
 
 // table id type alias
 using table_id_t = oid_t;

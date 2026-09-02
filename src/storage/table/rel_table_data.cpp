@@ -114,9 +114,17 @@ bool RelTableData::update(Transaction* transaction, ValueVector& boundNodeIDVect
         return false;
     }
     const auto [source, rowIdx] = findMatchingRow(transaction, boundNodeIDVector, relIDVector);
+    // A stale or uninitialized rel ID can point to a row that does not exist (e.g. an invalid
+    // ID left over from a MERGE pattern lookup). Skip the update instead of corrupting memory.
+    if (rowIdx == INVALID_ROW_IDX || source == CSRNodeGroupScanSource::NONE) {
+        return false;
+    }
     DASSERT(rowIdx != INVALID_ROW_IDX);
     const auto boundNodeOffset = boundNodeIDVector.getValue<nodeID_t>(boundNodePos).offset;
     const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(boundNodeOffset);
+    if (nodeGroupIdx >= getNumNodeGroups()) {
+        return false;
+    }
     auto& csrNodeGroup = getNodeGroup(nodeGroupIdx)->cast<CSRNodeGroup>();
     csrNodeGroup.update(transaction, source, rowIdx, columnID, dataVector);
     return true;
@@ -131,11 +139,14 @@ bool RelTableData::delete_(Transaction* transaction, ValueVector& boundNodeIDVec
         return false;
     }
     const auto [source, rowIdx] = findMatchingRow(transaction, boundNodeIDVector, relIDVector);
-    if (rowIdx == INVALID_ROW_IDX) {
+    if (rowIdx == INVALID_ROW_IDX || source == CSRNodeGroupScanSource::NONE) {
         return false;
     }
     const auto boundNodeOffset = boundNodeIDVector.getValue<nodeID_t>(boundNodePos).offset;
     const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(boundNodeOffset);
+    if (nodeGroupIdx >= getNumNodeGroups()) {
+        return false;
+    }
     auto& csrNodeGroup = getNodeGroup(nodeGroupIdx)->cast<CSRNodeGroup>();
     bool isDeleted = csrNodeGroup.delete_(transaction, source, rowIdx);
     if (isDeleted && transaction->shouldAppendToUndoBuffer()) {
@@ -160,6 +171,11 @@ std::pair<CSRNodeGroupScanSource, row_idx_t> RelTableData::findMatchingRow(Trans
     const auto boundNodeOffset = boundNodeIDVector.getValue<nodeID_t>(boundNodePos).offset;
     const auto relOffset = relIDVector.getValue<nodeID_t>(relIDPos).offset;
     const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(boundNodeOffset);
+    if (nodeGroupIdx >= getNumNodeGroups()) {
+        // The bound node's node group does not exist (e.g. the rel table is still empty), so
+        // there cannot be a matching row.
+        return {CSRNodeGroupScanSource::NONE, INVALID_ROW_IDX};
+    }
 
     DataChunk scanChunk(1);
     // RelID output vector.

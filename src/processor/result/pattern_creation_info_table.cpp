@@ -13,8 +13,13 @@ void PatternCreationInfo::updateID(common::executor_id_t executorID,
     if (!executorInfo.contains(executorID)) {
         return;
     }
-    auto ftColIndex = executorInfo.at(executorID);
-    *(common::nodeID_t*)(tuple + ftColIndex * sizeof(common::nodeID_t)) = nodeID;
+    // Write the pattern ID to every factorized table column that corresponds to this insert
+    // executor. Multiple columns can map to the same executor when several ON MATCH SET
+    // executors read the ID of the same inserted pattern (e.g. ``ON MATCH SET r.a = ...,
+    // r.b = ...``).
+    for (auto ftColIndex : executorInfo.at(executorID)) {
+        *(common::nodeID_t*)(tuple + ftColIndex * sizeof(common::nodeID_t)) = nodeID;
+    }
 }
 
 PatternCreationInfoTable::PatternCreationInfoTable(storage::MemoryManager& memoryManager,

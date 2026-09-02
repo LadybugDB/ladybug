@@ -53,7 +53,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapMerge(const LogicalOperator* lo
         auto& info = logicalMerge.getOnMatchSetNodeInfos()[i];
         for (auto j = 0u; j < logicalMerge.getInsertNodeInfos().size(); j++) {
             if (*info.pattern == *logicalMerge.getInsertNodeInfos()[j].pattern) {
-                executorInfo.emplace(j, i);
+                executorInfo[j].push_back(i);
             }
         }
         onMatchNodeSetExecutors.push_back(getNodeSetExecutor(info, *inSchema));
@@ -63,7 +63,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapMerge(const LogicalOperator* lo
         auto& info = logicalMerge.getOnMatchSetRelInfos()[i];
         for (auto j = 0u; j < logicalMerge.getInsertRelInfos().size(); j++) {
             if (*info.pattern == *logicalMerge.getInsertRelInfos()[j].pattern) {
-                executorInfo.emplace(j + logicalMerge.getInsertNodeInfos().size(),
+                executorInfo[j + logicalMerge.getInsertNodeInfos().size()].push_back(
                     i + logicalMerge.getOnMatchSetNodeInfos().size());
             }
         }
