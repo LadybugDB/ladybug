@@ -148,7 +148,8 @@ void ScanRelTable::initGlobalStateInternal(ExecutionContext* context) {
     for (auto i = 0u; i < sourceNodeTableInfos.size(); ++i) {
         sourceNodeSharedStates[i]->initialize(
             transaction::Transaction::Get(*context->clientContext),
-            sourceNodeTableInfos[i].table->ptrCast<NodeTable>(), *sourceNodeProgressSharedState);
+            sourceNodeTableInfos[i].table->ptrCast<NodeTable>(), *sourceNodeProgressSharedState,
+            context->clientContext);
     }
 }
 

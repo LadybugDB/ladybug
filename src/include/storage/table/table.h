@@ -37,6 +37,12 @@ struct LBUG_API TableScanState {
     common::node_group_idx_t nodeGroupIdx;
     NodeGroup* nodeGroup = nullptr;
     std::unique_ptr<NodeGroupScanState> nodeGroupScanState;
+    // Optional row-range restriction on the scan of `nodeGroup`, expressed as row indexes
+    // within the node group (start inclusive, end exclusive). Used to split a node group
+    // into sub-morsels when the source table has fewer node groups than worker threads
+    // (see ScanNodeTableSharedState::nextMorsel). Default values scan the whole group.
+    common::row_idx_t scanStartRowInGroup = 0;
+    common::row_idx_t scanEndRowInGroup = common::INVALID_ROW_IDX;
 
     std::vector<ColumnPredicateSet> columnPredicateSets;
 

@@ -9,6 +9,10 @@ namespace storage {
 class MemoryManager;
 } // namespace storage
 
+namespace main {
+class ClientContext;
+} // namespace main
+
 namespace processor {
 
 std::unique_ptr<storage::TableScanState> createNodeTableScanState(storage::NodeTable* table,
@@ -30,7 +34,7 @@ public:
           numUnCommittedNodeGroups{0}, semiMask{std::move(semiMask)} {};
 
     void initialize(const transaction::Transaction* transaction, storage::NodeTable* table,
-        ScanNodeTableProgressSharedState& progressSharedState);
+        ScanNodeTableProgressSharedState& progressSharedState, main::ClientContext* context);
 
     void nextMorsel(storage::TableScanState& scanState,
         ScanNodeTableProgressSharedState& progressSharedState);
@@ -45,6 +49,17 @@ private:
     common::node_group_idx_t numCommittedNodeGroups;
     common::node_group_idx_t numUnCommittedNodeGroups;
     std::unique_ptr<common::SemiMask> semiMask;
+    // Sub-node-group morsel support. When the table has fewer node groups than worker
+    // threads, group-granularity morsels leave downstream traversals (which can only be
+    // parallelized through the scan's morsels) mostly serial. In that case each node group
+    // is split into morsels of `committedMorselSize` rows instead, so parallelism is
+    // recovered within the small source table.
+    // INVALID_ROW_IDX means one node group per morsel (the default).
+    common::row_idx_t committedMorselSize = common::INVALID_ROW_IDX;
+    // Number of rows in each committed node group. Only populated when splitting.
+    std::vector<common::row_idx_t> committedGroupNumRows;
+    // Next row (within the current committed node group) to hand out as a morsel.
+    common::row_idx_t currentGroupNextRow = 0;
 };
 
 struct ScanNodeTablePrintInfo final : OPPrintInfo {

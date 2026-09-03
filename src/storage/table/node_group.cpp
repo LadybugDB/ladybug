@@ -180,7 +180,9 @@ void NodeGroup::initializeScanState(const Transaction*, const UniqLock& lock,
     auto& nodeGroupScanState = *state.nodeGroupScanState;
     nodeGroupScanState.chunkedGroupIdx = 0;
     ChunkedNodeGroup* firstChunkedGroup = chunkedGroups.getFirstGroup(lock);
-    nodeGroupScanState.nextRowToScan = firstChunkedGroup->getStartRowIdx();
+    // A sub-node-group morsel may start after the first row of the group.
+    nodeGroupScanState.nextRowToScan =
+        std::max(firstChunkedGroup->getStartRowIdx(), state.scanStartRowInGroup);
     initializeScanStateForChunkedGroup(state, firstChunkedGroup);
 }
 
@@ -205,8 +207,14 @@ NodeGroupScanResult NodeGroup::scan(const Transaction* transaction, TableScanSta
     DASSERT(nodeGroupScanState.nextRowToScan >= chunkedGroupToScan.getStartRowIdx());
     const auto rowIdxInChunkToScan =
         nodeGroupScanState.nextRowToScan - chunkedGroupToScan.getStartRowIdx();
-    const auto numRowsToScan =
+    auto numRowsToScan =
         std::min(chunkedGroupToScan.getNumRows() - rowIdxInChunkToScan, DEFAULT_VECTOR_CAPACITY);
+    // Honor sub-node-group morsel boundaries (see ScanNodeTableSharedState::nextMorsel).
+    numRowsToScan = std::min<row_idx_t>(numRowsToScan,
+        state.scanEndRowInGroup - nodeGroupScanState.nextRowToScan);
+    if (numRowsToScan == 0) {
+        return NODE_GROUP_SCAN_EMPTY_RESULT;
+    }
     bool enableSemiMask =
         state.source == TableScanSource::COMMITTED && state.semiMask && state.semiMask->isEnabled();
     if (enableSemiMask) {
