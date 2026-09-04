@@ -191,16 +191,18 @@ NodeGroupScanResult NodeGroup::scan(const Transaction* transaction, TableScanSta
     const auto lock = chunkedGroups.lock();
     auto& nodeGroupScanState = *state.nodeGroupScanState;
     DASSERT(nodeGroupScanState.chunkedGroupIdx < chunkedGroups.getNumGroups(lock));
-    const auto chunkedGroup = chunkedGroups.getGroup(lock, nodeGroupScanState.chunkedGroupIdx);
-    if (nodeGroupScanState.nextRowToScan >=
-        chunkedGroup->getNumRows() + chunkedGroup->getStartRowIdx()) {
+    // A sub-node-group morsel may start several chunked groups past the beginning of the
+    // node group, so keep advancing until the chunk containing nextRowToScan is reached.
+    // (A plain sequential scan only ever advances a single chunk per call.)
+    auto chunkedGroup = chunkedGroups.getGroup(lock, nodeGroupScanState.chunkedGroupIdx);
+    while (nodeGroupScanState.nextRowToScan >=
+           chunkedGroup->getNumRows() + chunkedGroup->getStartRowIdx()) {
         nodeGroupScanState.chunkedGroupIdx++;
         if (nodeGroupScanState.chunkedGroupIdx >= chunkedGroups.getNumGroups(lock)) {
             return NODE_GROUP_SCAN_EMPTY_RESULT;
         }
-        ChunkedNodeGroup* currentChunkedGroup =
-            chunkedGroups.getGroup(lock, nodeGroupScanState.chunkedGroupIdx);
-        initializeScanStateForChunkedGroup(state, currentChunkedGroup);
+        chunkedGroup = chunkedGroups.getGroup(lock, nodeGroupScanState.chunkedGroupIdx);
+        initializeScanStateForChunkedGroup(state, chunkedGroup);
     }
     const auto& chunkedGroupToScan =
         *chunkedGroups.getGroup(lock, nodeGroupScanState.chunkedGroupIdx);
