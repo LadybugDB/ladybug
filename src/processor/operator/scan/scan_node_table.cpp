@@ -176,7 +176,7 @@ void ScanNodeTableSharedState::nextMorsel(TableScanState& scanState,
         return;
     }
     if (currentUnCommittedGroupIdx < numUnCommittedNodeGroups) {
-        nodeScanState.nodeGroupIdx = currentUnCommittedGroupIdx;
+        nodeScanState.nodeGroupIdx = currentUnCommittedGroupIdx++;
         nodeScanState.source = TableScanSource::UNCOMMITTED;
         nodeScanState.scanStartRowInGroup = 0;
         nodeScanState.scanEndRowInGroup = common::INVALID_ROW_IDX;
