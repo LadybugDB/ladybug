@@ -59,6 +59,8 @@ protected:
         HashTableQueue(storage::MemoryManager* memoryManager, FactorizedTableSchema tableSchema);
 
         std::unique_ptr<HashTableQueue> copy() const {
+            // Only valid on a live queue: mergeInto() consumes the queue (nulling headBlock).
+            DASSERT(headBlock.load() != nullptr);
             return std::make_unique<HashTableQueue>(headBlock.load()->table.getMemoryManager(),
                 headBlock.load()->table.getTableSchema()->copy());
         }

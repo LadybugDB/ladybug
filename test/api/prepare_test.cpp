@@ -615,6 +615,40 @@ TEST_F(ApiTest, RepeatedParameterizedCachedPlanExecution877) {
 
 // Returns true iff the cached physical plan of the prepared statement named `ps.getName()`
 // has been populated (i.e. the statement is allowed to take the cached-plan fast path).
+static bool cachedPlanExists(Connection* conn, const PreparedStatement& ps);
+
+// Regression test for issue #906 (LDBC query 11 shape): re-executing a DISTINCT aggregate
+// through the cached-physical-plan fast path segfaulted in FactorizedTableSchema::copy.
+// Root cause: HashTableQueue::mergeInto() consumes a queue (nulling its headBlock), and
+// HashAggregateSharedState::resetForReuse() rebuilt the per-function distinct queues via
+// distinctQueue->copy(), dereferencing the nulled headBlock. The queues are now rebuilt
+// from schemas saved at construction time.
+TEST_F(ApiTest, RepeatedDistinctAggregateCachedPlanExecution906) {
+    // LDBC query 11 shape against the tinysnb graph loaded by the fixture: traversal join,
+    // DISTINCT hash aggregate grouped by key, ORDER BY plus LIMIT.
+    const std::string query = "MATCH (p:person)-[:workAt]->(o:organisation) WHERE o.ID > 0 "
+                              "RETURN COUNT(DISTINCT p.ID) AS num_e, o.name "
+                              "ORDER BY num_e DESC LIMIT 1;";
+    std::unordered_map<std::string, std::unique_ptr<Value>> noParams;
+    auto prepared = conn->prepareWithParams(query, std::move(noParams));
+    ASSERT_TRUE(prepared->isSuccess()) << prepared->getErrorMessage();
+    // First execution populates the plan cache; the second takes the fast path that crashed.
+    std::vector<std::string> first;
+    for (auto run = 0; run < 3; run++) {
+        std::unordered_map<std::string, std::unique_ptr<Value>> params;
+        auto result = conn->executeWithParams(prepared.get(), std::move(params));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        auto rows = TestHelper::convertResultToString(*result);
+        ASSERT_FALSE(rows.empty()) << "run " << run;
+        if (run == 0) {
+            first = rows;
+        } else {
+            ASSERT_EQ(first, rows) << "run " << run;
+        }
+    }
+    ASSERT_TRUE(cachedPlanExists(conn.get(), *prepared));
+}
+
 static bool cachedPlanExists(Connection* conn, const PreparedStatement& ps) {
     const auto& manager = conn->getClientContext()->getCachedPreparedStatementManager();
     if (!manager.containsStatement(ps.getName())) {
