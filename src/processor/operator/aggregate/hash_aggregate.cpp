@@ -68,6 +68,7 @@ HashAggregateSharedState::HashAggregateSharedState(main::ClientContext* context,
     auto& partition = globalPartitions[0];
     partition.queue = std::make_unique<HashTableQueue>(MemoryManager::Get(*context),
         this->aggInfo.tableSchema.copy());
+    distinctTableSchemas.resize(aggregateFunctions.size());
 
     // Always create a hash table for the first partition. Any other partitions which are non-empty
     // when finalizing will create an empty copy of this table
@@ -94,6 +95,7 @@ HashAggregateSharedState::HashAggregateSharedState(main::ClientContext* context,
             distinctTableSchema.appendColumn(
                 ColumnSchema(false /* isUnFlat */, 0 /* groupID */, sizeof(hash_t)));
 
+            distinctTableSchemas[functionIdx] = distinctTableSchema.copy();
             partition.distinctTableQueues.emplace_back(std::make_unique<HashTableQueue>(
                 MemoryManager::Get(*context), std::move(distinctTableSchema)));
         } else {
@@ -133,9 +135,14 @@ void HashAggregateSharedState::resetForReuse() {
         if (partition.queue) {
             partition.queue = std::make_unique<HashTableQueue>(mm, aggInfo.tableSchema.copy());
         }
-        for (auto& distinctQueue : partition.distinctTableQueues) {
-            if (distinctQueue) {
-                distinctQueue = distinctQueue->copy();
+        for (size_t i = 0; i < partition.distinctTableQueues.size(); i++) {
+            if (partition.distinctTableQueues[i]) {
+                // Rebuild from the saved schema: mergeInto() consumes the queue (nulling
+                // its headBlock), so the old queue cannot serve as a copy source. A fresh
+                // queue also drops the previous execution's tuples, mirroring a new plan.
+                DASSERT(distinctTableSchemas[i].has_value());
+                partition.distinctTableQueues[i] = std::make_unique<HashTableQueue>(mm,
+                    distinctTableSchemas[i]->copy());
             }
         }
         if (partition.hashTable) {
