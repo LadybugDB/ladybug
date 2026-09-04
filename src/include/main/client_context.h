@@ -110,6 +110,9 @@ public:
     // Parallelism
     void setMaxNumThreadForExec(uint64_t numThreads);
     uint64_t getMaxNumThreadForExec() const;
+    // Whether node groups may be split into sub-node-group morsels for a statement of the
+    // given write-ness, per the `enable_sub_node_group_morsels` setting.
+    bool isSubNodeGroupMorselEnabled(bool isWriteStatement) const;
 
     // Replace function.
     void addScanReplace(function::ScanReplacement scanReplacement);

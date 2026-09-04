@@ -95,7 +95,11 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
     // mostly serial, because those pipelines can only draw parallelism from this scan's
     // morsels. Split each node group into smaller row-range morsels instead.
     auto numMorsels = numCommittedNodeGroups;
-    if (numCommittedNodeGroups > 0 && dynamic_cast<ArrowNodeTable*>(table) == nullptr &&
+    const auto subMorselEnabled =
+        context == nullptr || context->isSubNodeGroupMorselEnabled(
+                                  transaction != nullptr && transaction->isWriteTransaction());
+    if (subMorselEnabled && numCommittedNodeGroups > 0 &&
+        dynamic_cast<ArrowNodeTable*>(table) == nullptr &&
         dynamic_cast<IceDiskNodeTable*>(table) == nullptr) {
         const auto maxNumThreads = context != nullptr ? context->getMaxNumThreadForExec() : 1;
         if (numCommittedNodeGroups < maxNumThreads) {

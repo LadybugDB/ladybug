@@ -176,5 +176,15 @@ struct EnableCachedPreparedStatementSetting {
     static common::Value getSetting(const ClientContext* context);
 };
 
+struct EnableSubNodeGroupMorselsSetting {
+    static constexpr auto name = "enable_sub_node_group_morsels";
+    static constexpr auto inputType = common::LogicalTypeID::STRING;
+    // One of [READS, WRITES, BOTH, NONE] (case-insensitive): which statement kinds may
+    // split node groups into sub-node-group morsels. Safety valve for latent bugs in
+    // the sub-morsel path; NONE disables the optimization.
+    static void setContext(ClientContext* context, const common::Value& parameter);
+    static common::Value getSetting(const ClientContext* context);
+};
+
 } // namespace main
 } // namespace lbug
