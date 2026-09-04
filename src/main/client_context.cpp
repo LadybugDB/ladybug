@@ -603,6 +603,21 @@ bool ClientContext::isCachedPlanAllowedFor(const PreparedStatement& preparedStat
     }
 }
 
+bool ClientContext::isSubNodeGroupMorselEnabled(bool isWriteStatement) const {
+    switch (clientConfig.subNodeGroupMorselScope) {
+    case SubNodeGroupMorselScope::READS:
+        return !isWriteStatement;
+    case SubNodeGroupMorselScope::WRITES:
+        return isWriteStatement;
+    case SubNodeGroupMorselScope::BOTH:
+        return true;
+    case SubNodeGroupMorselScope::NONE:
+        return false;
+    default:
+        UNREACHABLE_CODE;
+    }
+}
+
 std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* preparedStatement,
     CachedPreparedStatement* cachedStatement, std::optional<uint64_t> queryID,
     QueryConfig queryConfig, bool cachePhysicalPlan) {

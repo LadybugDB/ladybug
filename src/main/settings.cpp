@@ -279,6 +279,40 @@ std::string CachedPreparedStatementScopeUtils::toString(CachedPreparedStatementS
     }
 }
 
+SubNodeGroupMorselScope SubNodeGroupMorselScopeUtils::fromString(const std::string& str) {
+    auto normalizedStr = common::StringUtils::getUpper(str);
+    if (normalizedStr == "READS") {
+        return SubNodeGroupMorselScope::READS;
+    }
+    if (normalizedStr == "WRITES") {
+        return SubNodeGroupMorselScope::WRITES;
+    }
+    if (normalizedStr == "BOTH") {
+        return SubNodeGroupMorselScope::BOTH;
+    }
+    if (normalizedStr == "NONE") {
+        return SubNodeGroupMorselScope::NONE;
+    }
+    throw common::RuntimeException(std::format("Cannot parse {} as a sub-node-group morsel scope. "
+                                               "Supported inputs are [READS, WRITES, BOTH, NONE]",
+        str));
+}
+
+std::string SubNodeGroupMorselScopeUtils::toString(SubNodeGroupMorselScope scope) {
+    switch (scope) {
+    case SubNodeGroupMorselScope::READS:
+        return "READS";
+    case SubNodeGroupMorselScope::WRITES:
+        return "WRITES";
+    case SubNodeGroupMorselScope::BOTH:
+        return "BOTH";
+    case SubNodeGroupMorselScope::NONE:
+        return "NONE";
+    default:
+        UNREACHABLE_CODE;
+    }
+}
+
 void EnableCachedPreparedStatementSetting::setContext(ClientContext* context,
     const common::Value& parameter) {
     parameter.validateType(inputType);
@@ -289,6 +323,18 @@ void EnableCachedPreparedStatementSetting::setContext(ClientContext* context,
 common::Value EnableCachedPreparedStatementSetting::getSetting(const ClientContext* context) {
     return common::Value::createValue(CachedPreparedStatementScopeUtils::toString(
         context->getClientConfig()->cachedPreparedStatementScope));
+}
+
+void EnableSubNodeGroupMorselsSetting::setContext(ClientContext* context,
+    const common::Value& parameter) {
+    parameter.validateType(inputType);
+    context->getClientConfigUnsafe()->subNodeGroupMorselScope =
+        SubNodeGroupMorselScopeUtils::fromString(parameter.getValue<std::string>());
+}
+
+common::Value EnableSubNodeGroupMorselsSetting::getSetting(const ClientContext* context) {
+    return common::Value::createValue(SubNodeGroupMorselScopeUtils::toString(
+        context->getClientConfig()->subNodeGroupMorselScope));
 }
 
 void SpillToDiskSetting::setContext(ClientContext* context, const common::Value& parameter) {

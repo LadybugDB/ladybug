@@ -26,7 +26,8 @@ static ConfigurationOption options[] = { // NOLINT(cert-err58-cpp):
     GET_CONFIGURATION(PKValidatorSpillThresholdSetting), GET_CONFIGURATION(EnableOptimizerSetting),
     GET_CONFIGURATION(EnableInternalCatalogSetting),
     GET_CONFIGURATION(EnablePackedPathExtendSetting),
-    GET_CONFIGURATION(EnableCachedPreparedStatementSetting)};
+    GET_CONFIGURATION(EnableCachedPreparedStatementSetting),
+    GET_CONFIGURATION(EnableSubNodeGroupMorselsSetting)};
 
 DBConfig::DBConfig(const SystemConfig& systemConfig)
     : bufferPoolSize{systemConfig.bufferPoolSize}, maxNumThreads{systemConfig.maxNumThreads},

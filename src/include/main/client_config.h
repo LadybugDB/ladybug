@@ -26,6 +26,24 @@ struct CachedPreparedStatementScopeUtils {
     static std::string toString(CachedPreparedStatementScope scope);
 };
 
+// Scope of statements for which node groups are split into sub-node-group morsels
+// (see ScanNodeTableSharedState). Safety valve for latent bugs in the sub-morsel path:
+// setting it to WRITES, BOTH or NONE trades the optimization for protection.
+// READS (default) keeps the fast path for read-only statements only.
+enum class SubNodeGroupMorselScope {
+    READS = 0,  // split morsels for read-only statements only
+    WRITES = 1, // split morsels for write statements only
+    BOTH = 2,   // split morsels for reads and writes
+    NONE = 3,   // disable sub-node-group morsels entirely
+};
+
+struct SubNodeGroupMorselScopeUtils {
+    // Parses one of [READS, WRITES, BOTH, NONE] (case-insensitive); throws a
+    // RuntimeException otherwise. Defined in settings.cpp.
+    static SubNodeGroupMorselScope fromString(const std::string& str);
+    static std::string toString(SubNodeGroupMorselScope scope);
+};
+
 struct ClientConfigDefault {
     // 0 means timeout is disabled by default.
     static constexpr uint64_t TIMEOUT_IN_MS = 0;
@@ -46,6 +64,10 @@ struct ClientConfigDefault {
     // BOTH preserves the historical behaviour (all parameterized statements).
     static constexpr CachedPreparedStatementScope CACHED_PREPARED_STATEMENT_SCOPE =
         CachedPreparedStatementScope::BOTH;
+    // Statement kinds for which node groups are split into sub-node-group morsels.
+    // READS keeps the optimization for read-only statements while disabling it for writes.
+    static constexpr SubNodeGroupMorselScope SUB_NODE_GROUP_MORSEL_SCOPE =
+        SubNodeGroupMorselScope::READS;
     // Memory budget (in bytes) for the in-memory primary-key uniqueness buffer used when COPY-ing
     // into a primary-key node table that has no hash index. Once the buffer exceeds this budget it
     // is sorted and spilled to disk as a sorted run; cross-run duplicates are detected during a
@@ -95,6 +117,10 @@ struct ClientConfig {
     // statement is re-executed. See CachedPreparedStatementScope for the safety rationale.
     CachedPreparedStatementScope cachedPreparedStatementScope =
         ClientConfigDefault::CACHED_PREPARED_STATEMENT_SCOPE;
+    // Which statement kinds may split node groups into sub-node-group morsels.
+    // See SubNodeGroupMorselScope for the safety rationale.
+    SubNodeGroupMorselScope subNodeGroupMorselScope =
+        ClientConfigDefault::SUB_NODE_GROUP_MORSEL_SCOPE;
 };
 
 } // namespace main
