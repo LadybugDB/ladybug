@@ -141,8 +141,8 @@ void HashAggregateSharedState::resetForReuse() {
                 // its headBlock), so the old queue cannot serve as a copy source. A fresh
                 // queue also drops the previous execution's tuples, mirroring a new plan.
                 DASSERT(distinctTableSchemas[i].has_value());
-                partition.distinctTableQueues[i] = std::make_unique<HashTableQueue>(mm,
-                    distinctTableSchemas[i]->copy());
+                partition.distinctTableQueues[i] =
+                    std::make_unique<HashTableQueue>(mm, distinctTableSchemas[i]->copy());
             }
         }
         if (partition.hashTable) {
