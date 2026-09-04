@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "aggregate_hash_table.h"
@@ -117,6 +118,11 @@ public:
     uint64_t limitNumber;
     storage::MemoryManager* memoryManager;
     std::vector<Partition> globalPartitions;
+    // Table schemas for the per-function distinct queues, indexed by aggregate function
+    // (std::nullopt for non-distinct functions). Saved at construction so resetForReuse()
+    // can rebuild the queues from scratch: mergeInto() consumes a queue (nulling its
+    // headBlock), so the old queue cannot be used as a copy source on the next execution.
+    std::vector<std::optional<FactorizedTableSchema>> distinctTableSchemas;
 };
 
 struct HashAggregateLocalState {
