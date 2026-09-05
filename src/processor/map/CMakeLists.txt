@@ -9,6 +9,7 @@ add_library(lbug_processor_mapper
         map_aggregate.cpp
         map_analyze.cpp
         map_count_rel_table.cpp
+        map_count_extend_chain.cpp
         map_standalone_call.cpp
         map_table_function_call.cpp
         map_copy_to.cpp

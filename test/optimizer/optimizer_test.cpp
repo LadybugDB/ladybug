@@ -111,7 +111,7 @@ TEST_F(OptimizerTest, JoinHint) {
     ASSERT_STREQ(getEncodedPlan(q3).c_str(), "HJ(c._ID){HJ(a._ID){E(c)E(a)S(b)}{S(a)}}{S(c)}");
     auto q4 = "MATCH (a:person)-[e1:knows]->(b:person)-[e2:knows]->(c:person) "
               "HINT (((a JOIN e1) JOIN b) JOIN e2) JOIN c "
-              "RETURN COUNT(*)";
+              "RETURN COUNT(e1.date)";
     ASSERT_STREQ(getEncodedPlan(q4).c_str(), "HJ(b._ID){E(b)S(a)}{E(c)S(b)}");
     // Cycle
     auto q5 = "MATCH (a:person)-[e1:knows]->(b:person)-[e2:knows]->(a) "

@@ -90,6 +90,9 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapOperator(const LogicalOperator*
     case LogicalOperatorType::COUNT_REL_TABLE: {
         physicalOperator = mapCountRelTable(logicalOperator);
     } break;
+    case LogicalOperatorType::COUNT_EXTEND_CHAIN: {
+        physicalOperator = mapCountExtendChain(logicalOperator);
+    } break;
     case LogicalOperatorType::CREATE_MACRO: {
         physicalOperator = mapCreateMacro(logicalOperator);
     } break;
