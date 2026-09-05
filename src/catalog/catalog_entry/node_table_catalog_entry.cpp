@@ -202,6 +202,9 @@ std::string NodeTableCatalogEntry::toCypher(const ToCypherInfo& /*info*/) const 
         base += std::format(" PARTITION BY {}({}) PARTITIONS {}", method,
             common::StringUtils::quoteIdentifier(partitionColumnName), numPartitions);
     }
+    if (storageFormat == common::StorageFormat::ICEBUG_DISK) {
+        base += std::format(" WITH (storage = '{}', format = 'icebug-disk')", storage);
+    }
     return base + ";";
 }
 

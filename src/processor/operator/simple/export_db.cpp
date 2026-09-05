@@ -3,11 +3,9 @@
 #include <sstream>
 
 #include "catalog/catalog.h"
-#include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
-#include "common/copier_config/csv_reader_config.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/string_utils.h"
 #include "extension/extension_manager.h"
@@ -51,77 +49,6 @@ static void writeStringStreamToFile(ClientContext* context, const std::string& s
         0 /* offset */);
 }
 
-static std::string getTablePropertyDefinitions(const TableCatalogEntry* entry) {
-    std::string columns;
-    auto properties = entry->getProperties();
-    auto propertyIdx = 0u;
-    for (auto& property : properties) {
-        propertyIdx++;
-        if (property.getType() == LogicalType::INTERNAL_ID()) {
-            continue;
-        }
-        columns += common::StringUtils::quoteIdentifier(property.getName());
-        columns += propertyIdx == properties.size() ? "" : ",";
-    }
-    return columns;
-}
-
-static void writeCopyNodeStatement(stringstream& ss, const TableCatalogEntry* entry,
-    const FileScanInfo* info,
-    const std::unordered_map<std::string, const std::atomic<bool>*>& canUseParallelReader) {
-    const auto csvConfig = CSVReaderConfig::construct(info->options);
-    // TODO(Ziyi): We should pass fileName from binder phase to here.
-    auto fileName = entry->getName() + "." + StringUtils::getLower(info->fileTypeInfo.fileTypeStr);
-    std::string columns = getTablePropertyDefinitions(entry);
-    bool useParallelReader = true;
-    if (canUseParallelReader.contains(fileName)) {
-        useParallelReader = canUseParallelReader.at(fileName)->load();
-    }
-    auto copyOptionsCypher = CSVOption::toCypher(csvConfig.option.toOptionsMap(useParallelReader));
-    if (columns.empty()) {
-        ss << std::format("COPY {} FROM \"{}\" {};\n",
-            common::StringUtils::quoteIdentifier(entry->getName()), fileName, copyOptionsCypher);
-    } else {
-        ss << std::format("COPY {} ({}) FROM \"{}\" {};\n",
-            common::StringUtils::quoteIdentifier(entry->getName()), columns, fileName,
-            copyOptionsCypher);
-    }
-}
-
-static void writeCopyRelStatement(stringstream& ss, const ClientContext* context,
-    const TableCatalogEntry* entry, const FileScanInfo* info,
-    const std::unordered_map<std::string, const std::atomic<bool>*>& canUseParallelReader) {
-    const auto csvConfig = CSVReaderConfig::construct(info->options);
-    std::string columns = getTablePropertyDefinitions(entry);
-    auto transaction = Transaction::Get(*context);
-    const auto catalog = Catalog::Get(*context);
-    for (auto& entryInfo : entry->constCast<RelGroupCatalogEntry>().getRelEntryInfos()) {
-        auto fromTableName =
-            catalog->getTableCatalogEntry(transaction, entryInfo.nodePair.srcTableID)->getName();
-        auto toTableName =
-            catalog->getTableCatalogEntry(transaction, entryInfo.nodePair.dstTableID)->getName();
-        // TODO(Ziyi): We should pass fileName from binder phase to here.
-        auto fileName = std::format("{}_{}_{}.{}", entry->getName(), fromTableName, toTableName,
-            StringUtils::getLower(info->fileTypeInfo.fileTypeStr));
-        bool useParallelReader = true;
-        if (canUseParallelReader.contains(fileName)) {
-            useParallelReader = canUseParallelReader.at(fileName)->load();
-        }
-        auto copyOptionsMap = csvConfig.option.toOptionsMap(useParallelReader);
-        copyOptionsMap["from"] = std::format("'{}'", fromTableName);
-        copyOptionsMap["to"] = std::format("'{}'", toTableName);
-        auto copyOptions = CSVOption::toCypher(copyOptionsMap);
-        if (columns.empty()) {
-            ss << std::format("COPY {} FROM \"{}\" {};\n",
-                common::StringUtils::quoteIdentifier(entry->getName()), fileName, copyOptions);
-        } else {
-            ss << std::format("COPY {} ({}) FROM \"{}\" {};\n",
-                common::StringUtils::quoteIdentifier(entry->getName()), columns, fileName,
-                copyOptions);
-        }
-    }
-}
-
 static void exportLoadedExtensions(stringstream& ss, const ClientContext* clientContext) {
     auto extensionCypher = extension::ExtensionManager::Get(*clientContext)->toCypher();
     if (!extensionCypher.empty()) {
@@ -129,7 +56,28 @@ static void exportLoadedExtensions(stringstream& ss, const ClientContext* client
     }
 }
 
-std::string getSchemaCypher(ClientContext* clientContext) {
+// Attach an icebug-disk storage clause to a CREATE TABLE statement so the exported
+// schema mounts the parquet files in place instead of re-ingesting them.
+// The data files (nodes_<table>.parquet, indices_<rel>.parquet, indptr_<rel>.parquet)
+// are written by sibling COPY TO pipelines into the same directory.
+static std::string withIcebugStorage(const std::string& createStatement,
+    const std::string& exportDir) {
+    auto escapedDir = exportDir;
+    StringUtils::replaceAll(escapedDir, "'", "\\'");
+    auto clause = std::format(" WITH (storage = '{}', format = 'icebug-disk')", escapedDir);
+    // Drop any pre-existing storage clause (e.g. re-exporting an icebug-disk table)
+    // and the trailing ';', then attach the new clause.
+    auto base = createStatement;
+    if (auto withPos = base.find(" WITH ("); withPos != std::string::npos) {
+        base = base.substr(0, withPos);
+    }
+    if (auto semiPos = base.rfind(';'); semiPos != std::string::npos) {
+        base = base.substr(0, semiPos);
+    }
+    return base + clause + ";";
+}
+
+std::string getSchemaCypher(ClientContext* clientContext, const std::string& exportDir) {
     stringstream ss;
     exportLoadedExtensions(ss, clientContext);
     const auto catalog = Catalog::Get(*clientContext);
@@ -137,11 +85,11 @@ std::string getSchemaCypher(ClientContext* clientContext) {
     ToCypherInfo toCypherInfo;
     for (const auto& nodeTableEntry :
         catalog->getNodeTableEntries(transaction, false /* useInternal */)) {
-        ss << nodeTableEntry->toCypher(toCypherInfo) << std::endl;
+        ss << withIcebugStorage(nodeTableEntry->toCypher(toCypherInfo), exportDir) << std::endl;
     }
     RelGroupToCypherInfo relTableToCypherInfo{clientContext};
     for (const auto& entry : catalog->getRelGroupEntries(transaction, false /* useInternal */)) {
-        ss << entry->toCypher(relTableToCypherInfo) << std::endl;
+        ss << withIcebugStorage(entry->toCypher(relTableToCypherInfo), exportDir) << std::endl;
     }
     RelGroupToCypherInfo relGroupToCypherInfo{clientContext};
     for (const auto sequenceEntry : catalog->getSequenceEntries(transaction)) {
@@ -154,51 +102,15 @@ std::string getSchemaCypher(ClientContext* clientContext) {
     return ss.str();
 }
 
-std::string getCopyCypher(const ClientContext* context, const FileScanInfo* boundFileInfo,
-    const std::unordered_map<std::string, const std::atomic<bool>*>& canUseParallelReader) {
-    stringstream ss;
-    auto transaction = Transaction::Get(*context);
-    const auto catalog = Catalog::Get(*context);
-    for (const auto& nodeTableEntry :
-        catalog->getNodeTableEntries(transaction, false /* useInternal */)) {
-        writeCopyNodeStatement(ss, nodeTableEntry, boundFileInfo, canUseParallelReader);
-    }
-    for (const auto& entry : catalog->getRelGroupEntries(transaction, false /* useInternal */)) {
-        writeCopyRelStatement(ss, context, entry, boundFileInfo, canUseParallelReader);
-    }
-    return ss.str();
-}
-
-std::string getIndexCypher(ClientContext* clientContext, const FileScanInfo& exportFileInfo) {
-    stringstream ss;
-    IndexToCypherInfo info{clientContext, exportFileInfo};
-    auto transaction = Transaction::Get(*clientContext);
-    auto catalog = Catalog::Get(*clientContext);
-    for (auto entry : catalog->getIndexEntries(transaction)) {
-        auto indexCypher = entry->toCypher(info);
-        if (!indexCypher.empty()) {
-            ss << indexCypher << std::endl;
-        }
-    }
-    return ss.str();
-}
-
 void ExportDB::executeInternal(ExecutionContext* context) {
     const auto clientContext = context->clientContext;
-    // write the schema.cypher file
-    writeStringStreamToFile(clientContext, getSchemaCypher(clientContext),
-        boundFileInfo.filePaths[0] + "/" + PortDBConstants::SCHEMA_FILE_NAME);
-    if (schemaOnly) {
-        return;
-    }
-    // write the copy.cypher file
-    // for every table, we write COPY FROM statement
+    // The export layout is icebug-disk: sibling COPY TO pipelines write
+    // nodes_<table>.parquet / indices_<rel>.parquet / indptr_<rel>.parquet, and the
+    // schema mounts them in place, so no copy.cypher (data movement) is needed.
+    // Icebug-disk tables are immutable, so there is no index.cypher either.
     writeStringStreamToFile(clientContext,
-        getCopyCypher(clientContext, &boundFileInfo, sharedState->canUseParallelReader),
-        boundFileInfo.filePaths[0] + "/" + PortDBConstants::COPY_FILE_NAME);
-    // write the index.cypher file
-    writeStringStreamToFile(clientContext, getIndexCypher(clientContext, boundFileInfo),
-        boundFileInfo.filePaths[0] + "/" + PortDBConstants::INDEX_FILE_NAME);
+        getSchemaCypher(clientContext, boundFileInfo.filePaths[0]),
+        boundFileInfo.filePaths[0] + "/" + PortDBConstants::SCHEMA_FILE_NAME);
     appendMessage("Exported database successfully.", storage::MemoryManager::Get(*clientContext));
 }
 

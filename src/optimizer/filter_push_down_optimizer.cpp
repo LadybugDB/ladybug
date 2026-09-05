@@ -25,6 +25,7 @@
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "storage/index/art_index.h"
 #include "storage/storage_manager.h"
+#include "storage/table/columnar_node_table_base.h"
 #include "storage/table/node_table.h"
 
 using namespace lbug::binder;
@@ -271,8 +272,12 @@ std::shared_ptr<LogicalOperator> FilterPushDownOptimizer::visitScanNodeTableRepl
     }
     if (primaryKeyEqualityComparison != nullptr) { // Try rewrite index scan
         auto* table = getResolvedTable(tableIDs[0]);
+        // Columnar-backed tables (icebug-disk, Arrow) have no usable primary key index;
+        // keep the scan + filter instead of rewriting to an index lookup that misses.
         auto rhs = primaryKeyEqualityComparison->getChild(1);
-        if (table->tryGetPrimaryKeyIndex() != nullptr && isConstantExpression(rhs)) {
+        if (dynamic_cast<storage::ColumnarNodeTableBase*>(table) != nullptr) {
+            predicateSet.addPredicate(primaryKeyEqualityComparison);
+        } else if (table->tryGetPrimaryKeyIndex() != nullptr && isConstantExpression(rhs)) {
             auto extraInfo = std::make_unique<PrimaryKeyScanInfo>(rhs);
             scan.setScanType(LogicalScanNodeTableType::PRIMARY_KEY_SCAN);
             scan.setExtraInfo(std::move(extraInfo));

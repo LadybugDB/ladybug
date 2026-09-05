@@ -248,7 +248,11 @@ std::string RelGroupCatalogEntry::toCypher(const ToCypherInfo& info) const {
         }
     }
     ss << ", " << propertyCollection.toCypher()
-       << getMultiplicityStr(srcMultiplicity, dstMultiplicity) << ");";
+       << getMultiplicityStr(srcMultiplicity, dstMultiplicity);
+    if (storageFormat == common::StorageFormat::ICEBUG_DISK) {
+        ss << std::format(" WITH (storage = '{}', format = 'icebug-disk')", storage);
+    }
+    ss << ");";
     return ss.str();
 }
 
