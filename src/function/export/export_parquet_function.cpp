@@ -7,6 +7,7 @@
 #include "processor/operator/persistent/writer/parquet/parquet_writer.h"
 #include "processor/result/factorized_table.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include "storage/table/ice_disk_constants.h"
 #include <format>
 
 namespace lbug {
@@ -18,16 +19,31 @@ using namespace processor;
 struct ParquetOptions {
     lbug_parquet::format::CompressionCodec::type codec =
         lbug_parquet::format::CompressionCodec::SNAPPY;
+    std::vector<lbug_parquet::format::KeyValue> keyValueMetadata;
 
     explicit ParquetOptions(case_insensitive_map_t<common::Value> parsingOptions) {
         for (auto& [name, value] : parsingOptions) {
             if (name == "COMPRESSION") {
                 setCompression(value);
+            } else if (name == storage::IceDiskConstants::VERSION_METADATA_KEY) {
+                setVersionMetadata(value);
             } else {
                 throw common::RuntimeException{
                     std::format("Unrecognized parquet option: {}.", name)};
             }
         }
+    }
+
+    void setVersionMetadata(common::Value& value) {
+        if (value.getDataType().getLogicalTypeID() != LogicalTypeID::STRING) {
+            throw common::RuntimeException{std::format(
+                "Parquet {} option expects a string value, got: {}.",
+                storage::IceDiskConstants::VERSION_METADATA_KEY, value.getDataType().toString())};
+        }
+        lbug_parquet::format::KeyValue kv;
+        kv.__set_key(std::string(storage::IceDiskConstants::VERSION_METADATA_KEY));
+        kv.__set_value(value.getValue<std::string>());
+        keyValueMetadata.push_back(std::move(kv));
     }
 
     void setCompression(common::Value& value) {
@@ -101,8 +117,8 @@ struct ExportParquetSharedState : public ExportFuncSharedState {
         auto& exportParquetBindData = bindData.constCast<ExportParquetBindData>();
         writer = std::make_unique<ParquetWriter>(exportParquetBindData.fileName,
             common::LogicalType::copy(exportParquetBindData.types),
-            exportParquetBindData.columnNames, exportParquetBindData.parquetOptions.codec,
-            &context);
+            exportParquetBindData.columnNames, exportParquetBindData.parquetOptions.codec, &context,
+            exportParquetBindData.parquetOptions.keyValueMetadata);
     }
 };
 

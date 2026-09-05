@@ -4,12 +4,14 @@
 #include <vector>
 
 #include "common/data_chunk/data_chunk.h"
+#include "common/exception/runtime.h"
 #include "common/types/types.h"
 #include "function/export/export_function.h"
 #include "main/client_context.h"
 #include "processor/operator/persistent/writer/parquet/parquet_writer.h"
 #include "processor/result/factorized_table.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include "storage/table/ice_disk_constants.h"
 
 using namespace lbug::common;
 using namespace lbug::processor;
@@ -19,11 +21,16 @@ namespace lbug {
 namespace function {
 
 struct IndptrExportBindData : public ExportFuncBindData {
-    IndptrExportBindData(std::vector<std::string> names, std::string fileName)
-        : ExportFuncBindData{std::move(names), std::move(fileName)} {}
+    std::vector<lbug_parquet::format::KeyValue> keyValueMetadata;
+
+    IndptrExportBindData(std::vector<std::string> names, std::string fileName,
+        std::vector<lbug_parquet::format::KeyValue> keyValueMetadata = {})
+        : ExportFuncBindData{std::move(names), std::move(fileName)},
+          keyValueMetadata{std::move(keyValueMetadata)} {}
 
     std::unique_ptr<ExportFuncBindData> copy() const override {
-        auto bindData = std::make_unique<IndptrExportBindData>(columnNames, fileName);
+        auto bindData =
+            std::make_unique<IndptrExportBindData>(columnNames, fileName, keyValueMetadata);
         bindData->types = LogicalType::copy(types);
         return bindData;
     }
@@ -39,16 +46,35 @@ struct IndptrExportSharedState final : public ExportFuncSharedState {
     std::vector<std::pair<int64_t, int64_t>> pairs;
     std::mutex mtx;
     std::string fileName;
+    std::vector<lbug_parquet::format::KeyValue> keyValueMetadata;
     main::ClientContext* context = nullptr;
 
     void init(main::ClientContext& context_, const ExportFuncBindData& bindData) override {
         context = &context_;
         fileName = bindData.fileName;
+        keyValueMetadata = bindData.constCast<IndptrExportBindData>().keyValueMetadata;
     }
 };
 
 static std::unique_ptr<ExportFuncBindData> bindFunc(ExportFuncBindInput& bindInput) {
-    return std::make_unique<IndptrExportBindData>(bindInput.columnNames, bindInput.filePath);
+    // The icedisk version is carried as parquet key-value metadata on the written file.
+    std::vector<lbug_parquet::format::KeyValue> keyValues;
+    for (auto& [name, value] : bindInput.parsingOptions) {
+        if (name == storage::IceDiskConstants::VERSION_METADATA_KEY) {
+            if (value.getDataType().getLogicalTypeID() != LogicalTypeID::STRING) {
+                throw RuntimeException{
+                    std::format("Parquet {} option expects a string value, got: {}.",
+                        storage::IceDiskConstants::VERSION_METADATA_KEY,
+                        value.getDataType().toString())};
+            }
+            lbug_parquet::format::KeyValue kv;
+            kv.__set_key(std::string(storage::IceDiskConstants::VERSION_METADATA_KEY));
+            kv.__set_value(value.getValue<std::string>());
+            keyValues.push_back(std::move(kv));
+        }
+    }
+    return std::make_unique<IndptrExportBindData>(bindInput.columnNames, bindInput.filePath,
+        std::move(keyValues));
 }
 
 static std::unique_ptr<ExportFuncLocalState> initLocalStateFunc(main::ClientContext& /*context*/,
@@ -122,7 +148,7 @@ static void finalizeFunc(ExportFuncSharedState& sharedState) {
     ptrTypes.push_back(LogicalType::INT64());
     auto writer = std::make_unique<ParquetWriter>(shared.fileName, std::move(ptrTypes),
         std::vector<std::string>{"ptr"}, lbug_parquet::format::CompressionCodec::SNAPPY,
-        shared.context);
+        shared.context, shared.keyValueMetadata);
     writer->flush(outFT);
     writer->finalize();
 }

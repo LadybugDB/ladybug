@@ -326,7 +326,7 @@ iC_ExportDatabase
     : EXPORT SP DATABASE SP StringLiteral ( SP? '(' SP? iC_Options SP? ')' )? ;
 
 iC_ImportDatabase
-    : IMPORT SP DATABASE SP StringLiteral;
+    : IMPORT SP DATABASE SP StringLiteral ( SP? '(' SP? iC_Options SP? ')' )? ;
 
 iC_AttachDatabase
     : ATTACH SP StringLiteral (SP AS SP oC_SchemaName)? SP '(' SP? DBTYPE SP oC_SymbolicName (SP? ',' SP? iC_Options)? SP? ')' ;

@@ -11,6 +11,7 @@
 #include "parser/parser.h"
 #include "parser/port_db.h"
 #include "parser/query/regular_query.h"
+#include "storage/table/ice_disk_constants.h"
 #include "transaction/transaction.h"
 #include <format>
 
@@ -107,6 +108,20 @@ static std::string getExportRelIndptrQuery(const TableCatalogEntry& relGroupEntr
         StringUtils::quoteIdentifier(dstEntry.getName()));
 }
 
+static std::string getExportRelFlatQuery(const TableCatalogEntry& relGroupEntry,
+    const NodeTableCatalogEntry& srcEntry, const NodeTableCatalogEntry& dstEntry) {
+    // Flat relationship file for native re-import: source/target primary-key values
+    // (COPY FROM resolves them back to node offsets) followed by edge properties.
+    return std::format("match (a:{})-[r:{}]->(b:{}) return {}.{} as {}, {}.{} as {}{};",
+        StringUtils::quoteIdentifier(srcEntry.getName()),
+        StringUtils::quoteIdentifier(relGroupEntry.getName()),
+        StringUtils::quoteIdentifier(dstEntry.getName()), "a",
+        StringUtils::quoteIdentifier(srcEntry.getPrimaryKeyDefinition().getName()),
+        StringUtils::quoteIdentifier("from"), "b",
+        StringUtils::quoteIdentifier(dstEntry.getPrimaryKeyDefinition().getName()),
+        StringUtils::quoteIdentifier("to"), getPropertyReturnList(relGroupEntry, "r"));
+}
+
 static std::vector<ExportedTableData> getExportInfo(const Catalog& catalog,
     main::ClientContext* context, Binder* binder, [[maybe_unused]] FileTypeInfo& fileTypeInfo) {
     auto transaction = Transaction::Get(*context);
@@ -147,6 +162,15 @@ static std::vector<ExportedTableData> getExportInfo(const Catalog& catalog,
             bindExportTableData(indptrData,
                 getExportRelIndptrQuery(relGroupEntry, srcEntry, dstEntry), context, binder);
             exportData.push_back(std::move(indptrData));
+            // Flat relationship file (from/to primary-key values + properties), used by
+            // IMPORT DATABASE to ingest the relationship table into native storage. It is
+            // ignored when the export is mounted as icebug-disk (which uses the CSR files).
+            ExportedTableData flatRelData;
+            flatRelData.tableName = entry->getName();
+            flatRelData.fileName = std::format("rels_{}.parquet", relGroupEntry.getName());
+            bindExportTableData(flatRelData,
+                getExportRelFlatQuery(relGroupEntry, srcEntry, dstEntry), context, binder);
+            exportData.push_back(std::move(flatRelData));
         }
     }
 
@@ -196,6 +220,12 @@ std::unique_ptr<BoundStatement> Binder::bindExportDatabaseClause(const Statement
     }
     auto exportData =
         getExportInfo(*Catalog::Get(*clientContext), clientContext, this, fileTypeInfo);
+    // Stamp every exported parquet file with the icebug-disk format version so that
+    // IceDiskUtils::checkVersionCompatibility can validate it when the export is mounted.
+    if (fileTypeInfo.fileType == FileType::PARQUET && !exportSchemaOnly) {
+        parsedOptions.insert_or_assign(PortDBConstants::ICEBUG_DISK_VERSION_OPTION,
+            Value{std::string{storage::IceDiskConstants::CURRENT_VERSION}});
+    }
     auto boundFilePath = VirtualFileSystem::GetUnsafe(*clientContext)
                              ->expandPath(clientContext, exportDB.getFilePath());
     return std::make_unique<BoundExportDatabase>(boundFilePath, fileTypeInfo, std::move(exportData),
