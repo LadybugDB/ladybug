@@ -53,7 +53,7 @@ struct StorageVersionInfo {
         return storageVersion == STORAGE_VERSION_40 || storageVersion == STORAGE_VERSION_41 ||
                storageVersion == STORAGE_VERSION_42 || storageVersion == STORAGE_VERSION_43 ||
                storageVersion == STORAGE_VERSION_44 || storageVersion == STORAGE_VERSION_45 ||
-               storageVersion == getStorageVersion();
+               storageVersion == STORAGE_VERSION_46 || storageVersion == getStorageVersion();
     }
 
     static constexpr const char* MAGIC_BYTES = "LBUG";
