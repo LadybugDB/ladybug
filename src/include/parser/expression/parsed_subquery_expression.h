@@ -31,6 +31,7 @@ public:
     }
     bool hasWhereClause() const { return whereClause != nullptr; }
     const ParsedExpression* getWhereClause() const { return whereClause.get(); }
+    ParsedExpression* getWhereClauseUnsafe() { return whereClause.get(); }
 
     void setHint(std::shared_ptr<JoinHintNode> root) { hintRoot = std::move(root); }
     bool hasHint() const { return hintRoot != nullptr; }
