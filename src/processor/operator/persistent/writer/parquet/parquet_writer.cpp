@@ -18,9 +18,10 @@ using namespace lbug::common;
 
 ParquetWriter::ParquetWriter(std::string fileName, std::vector<common::LogicalType> types,
     std::vector<std::string> columnNames, lbug_parquet::format::CompressionCodec::type codec,
-    main::ClientContext* context)
+    main::ClientContext* context, std::vector<lbug_parquet::format::KeyValue> keyValueMetadata)
     : fileName{std::move(fileName)}, types{std::move(types)}, columnNames{std::move(columnNames)},
-      codec{codec}, fileOffset{0}, mm{storage::MemoryManager::Get(*context)} {
+      codec{codec}, keyValueMetadata{std::move(keyValueMetadata)}, fileOffset{0},
+      mm{storage::MemoryManager::Get(*context)} {
     fileInfo = VirtualFileSystem::GetUnsafe(*context)->openFile(this->fileName,
         FileOpenFlags(FileFlags::WRITE | FileFlags::CREATE_AND_TRUNCATE_IF_EXISTS), context);
     // Parquet files start with the string "PAR1".
@@ -290,6 +291,10 @@ void ParquetWriter::readFromFT(FactorizedTable& ft, std::vector<ValueVector*> ve
 }
 
 void ParquetWriter::finalize() {
+    if (!keyValueMetadata.empty()) {
+        fileMetaData.key_value_metadata = keyValueMetadata;
+        fileMetaData.__isset.key_value_metadata = true;
+    }
     auto startOffset = fileOffset;
     fileMetaData.write(protocol.get());
     uint32_t metadataSize = fileOffset - startOffset;

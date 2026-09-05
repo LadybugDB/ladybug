@@ -213,6 +213,11 @@ struct PortDBConstants {
     static constexpr const char* SCHEMA_ONLY_OPTION = "SCHEMA_ONLY";
     static constexpr const char* EXPORT_FORMAT_OPTION = "FORMAT";
     static constexpr const char* DEFAULT_EXPORT_FORMAT_OPTION = "PARQUET";
+    // IMPORT DATABASE option: when set to 'icebug-disk', the exported icedisk files are
+    // mounted in place instead of being ingested into native tables (the default).
+    static constexpr const char* IMPORT_STORAGE_FORMAT_OPTION = "STORAGE_FORMAT";
+    // Parquet key-value metadata key written on every EXPORT DATABASE data file.
+    static constexpr const char* ICEBUG_DISK_VERSION_OPTION = "icebug_disk_version";
 };
 
 struct WarningConstants {

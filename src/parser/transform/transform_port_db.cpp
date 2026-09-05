@@ -19,7 +19,11 @@ std::unique_ptr<Statement> Transformer::transformExportDatabase(
 std::unique_ptr<Statement> Transformer::transformImportDatabase(
     CypherParser::IC_ImportDatabaseContext& ctx) {
     std::string filePath = transformStringLiteral(*ctx.StringLiteral());
-    return std::make_unique<ImportDB>(std::move(filePath));
+    auto importDB = std::make_unique<ImportDB>(std::move(filePath));
+    if (ctx.iC_Options()) {
+        importDB->setParsingOption(transformOptions(*ctx.iC_Options()));
+    }
+    return importDB;
 }
 
 } // namespace parser

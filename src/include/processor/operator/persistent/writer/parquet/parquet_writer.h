@@ -47,7 +47,8 @@ class ParquetWriter {
 public:
     ParquetWriter(std::string fileName, std::vector<common::LogicalType> types,
         std::vector<std::string> names, lbug_parquet::format::CompressionCodec::type codec,
-        main::ClientContext* context);
+        main::ClientContext* context,
+        std::vector<lbug_parquet::format::KeyValue> keyValueMetadata = {});
 
     inline common::offset_t getOffset() const { return fileOffset; }
     inline void write(const uint8_t* buf, uint32_t len) {
@@ -86,6 +87,7 @@ private:
     lbug_parquet::format::FileMetaData fileMetaData;
     std::mutex lock;
     std::vector<std::unique_ptr<ColumnWriter>> columnWriters;
+    std::vector<lbug_parquet::format::KeyValue> keyValueMetadata;
     common::offset_t fileOffset;
     storage::MemoryManager* mm;
 };

@@ -513,6 +513,7 @@ public:
     antlr4::tree::TerminalNode* SP(size_t i);
     antlr4::tree::TerminalNode *DATABASE();
     antlr4::tree::TerminalNode *StringLiteral();
+    IC_OptionsContext *iC_Options();
 
    
   };
