@@ -29,6 +29,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "BATCH_INSERT";
     case PhysicalOperatorType::COPY_TO:
         return "COPY_TO";
+    case PhysicalOperatorType::COUNT_ANTI_EDGE_CHAIN:
+        return "COUNT_ANTI_EDGE_CHAIN";
     case PhysicalOperatorType::COUNT_EXTEND_CHAIN:
         return "COUNT_EXTEND_CHAIN";
     case PhysicalOperatorType::COUNT_REL_TABLE:

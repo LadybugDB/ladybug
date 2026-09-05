@@ -10,6 +10,8 @@
 #include "binder/expression/rel_expression.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_id_pair.h"
+#include "common/enums/extend_direction_util.h"
+#include "common/enums/join_type.h"
 #include "common/enums/path_semantic.h"
 #include "common/enums/storage_format.h"
 #include "function/aggregate/count.h"
@@ -26,6 +28,7 @@
 #include "planner/operator/logical_order_by.h"
 #include "planner/operator/logical_path_property_probe.h"
 #include "planner/operator/logical_projection.h"
+#include "planner/operator/scan/logical_count_anti_edge_chain.h"
 #include "planner/operator/scan/logical_count_extend_chain.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
 #include "planner/operator/scan/logical_reachable_count.h"
@@ -54,6 +57,423 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitOperator(
         op->setChild(i, visitOperator(op->getChild(i)));
     }
     auto result = visitOperatorReplaceSwitch(op);
+    result->computeFlatSchema();
+    return result;
+}
+
+static LogicalOperator* skipProjections(LogicalOperator* op);
+static bool containsOp(const LogicalOperator* root, const LogicalOperator* target);
+
+std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteAntiEdgeChainCount(
+    std::shared_ptr<LogicalOperator> op) {
+    // Target pattern (LSQB q9 shape): COUNT(*) over an inner hash join of
+    //   probe: FILTER[NOT(EXISTS{MATCH (a)-[:R]-(b)})] over
+    //          HASH_JOIN[MARK keys={a,b}] of
+    //            probe: FILTER[id(a)<>id(b)] over chain(a--R--n1--R--b) from scan(n1)
+    //            build: anti-edge R-extend over scan(a)
+    //   build: filter-free chain of extends from scan(n2=b)
+    // i.e. a path n0-R-n1-R-n2-...-nN whose first two hops are R extends from the scan of the
+    // middle node n1 (any FWD/BWD/BOTH direction combination), plus an anti-edge between n0
+    // and n2 (same rel R), plus a filter-free suffix chain from n2. The count is computed with
+    // count arithmetic T - A - S (see CountAntiEdgeChain), parameterized by the enumeration
+    // directions of the two chain hops and of the anti-edge match.
+    if (op->getOperatorType() != LogicalOperatorType::AGGREGATE) {
+        return op;
+    }
+    auto aggregate = op->ptrCast<LogicalAggregate>();
+    if (aggregate->hasKeys() || aggregate->getDependentKeys().size() != 0 ||
+        aggregate->getAggregates().size() != 1) {
+        return op;
+    }
+    auto aggExpr = aggregate->getAggregates()[0];
+    if (aggExpr->expressionType != ExpressionType::AGGREGATE_FUNCTION) {
+        return op;
+    }
+    auto aggFuncExpr = aggExpr->ptrCast<AggregateFunctionExpression>();
+    if (aggFuncExpr->getFunction().name != function::CountStarFunction::name ||
+        aggFuncExpr->isDistinct() || aggFuncExpr->getNumChildren() != 0) {
+        return op;
+    }
+    auto transaction = transaction::Transaction::Get(*_context);
+    if (transaction != nullptr && transaction->isWriteTransaction()) {
+        return op;
+    }
+
+    // Collect the subtree. Allowed ops: projections, extends, node-ID hash joins,
+    // unrestricted scans, and filters (classified below).
+    std::vector<LogicalExtend*> extends;
+    std::vector<LogicalHashJoin*> joins;
+    std::vector<LogicalFilter*> filters;
+    std::function<bool(LogicalOperator*)> collect = [&](LogicalOperator* current) -> bool {
+        switch (current->getOperatorType()) {
+        case LogicalOperatorType::PROJECTION:
+            return collect(current->getChild(0).get());
+        case LogicalOperatorType::SCAN_NODE_TABLE: {
+            auto scan = current->ptrCast<LogicalScanNodeTable>();
+            if (scan->getScanType() == LogicalScanNodeTableType::PRIMARY_KEY_SCAN) {
+                return false;
+            }
+            for (auto& predicateSet : scan->getPropertyPredicates()) {
+                if (!predicateSet.isEmpty()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        case LogicalOperatorType::EXTEND:
+        case LogicalOperatorType::PACKED_EXTEND:
+            extends.push_back(current->ptrCast<LogicalExtend>());
+            return collect(current->getChild(0).get());
+        case LogicalOperatorType::HASH_JOIN:
+            joins.push_back(current->ptrCast<LogicalHashJoin>());
+            return collect(current->getChild(0).get()) && collect(current->getChild(1).get());
+        case LogicalOperatorType::FILTER:
+            filters.push_back(current->ptrCast<LogicalFilter>());
+            return collect(current->getChild(0).get());
+        default:
+            return false;
+        }
+    };
+    if (!collect(op->getChild(0).get())) {
+        return op;
+    }
+
+    // Exactly one MARK join and exactly one other (top) join, and >= 4 extends
+    // (2 triangle hops + anti-edge + >= 1 suffix hop).
+    LogicalHashJoin* markJoin = nullptr;
+    LogicalHashJoin* topJoin = nullptr;
+    for (auto* join : joins) {
+        if (join->getJoinType() == JoinType::MARK) {
+            if (markJoin != nullptr) {
+                return op;
+            }
+            markJoin = join;
+        } else {
+            if (topJoin != nullptr) {
+                return op;
+            }
+            topJoin = join;
+        }
+    }
+    if (markJoin == nullptr || topJoin == nullptr || extends.size() < 4) {
+        return op;
+    }
+    if (topJoin->getJoinType() != JoinType::INNER || topJoin->getJoinNodeIDs().size() != 1) {
+        return op;
+    }
+    const auto topKey = topJoin->getJoinNodeIDs()[0];
+
+    // The anti-filter must be NOT(X) where X is the mark expression of the MARK join.
+    if (!markJoin->hasMark()) {
+        return op;
+    }
+    const auto& markExpr = markJoin->getMark();
+    LogicalFilter* antiFilter = nullptr;
+    for (auto* filter : filters) {
+        if (filter->getPredicate()->expressionType == ExpressionType::NOT &&
+            *filter->getPredicate()->getChild(0) == *markExpr) {
+            if (antiFilter != nullptr) {
+                return op;
+            }
+            antiFilter = filter;
+        }
+    }
+    if (antiFilter == nullptr) {
+        return op;
+    }
+
+    // All other filters must be NOT_EQUALS between internal-ID properties.
+    for (auto* filter : filters) {
+        if (filter == antiFilter) {
+            continue;
+        }
+        const auto& predicate = filter->getPredicate();
+        if (predicate->expressionType != ExpressionType::NOT_EQUALS ||
+            predicate->getNumChildren() != 2 ||
+            predicate->getChild(0)->expressionType != ExpressionType::PROPERTY ||
+            predicate->getChild(1)->expressionType != ExpressionType::PROPERTY ||
+            !predicate->getChild(0)->ptrCast<PropertyExpression>()->isInternalID() ||
+            !predicate->getChild(1)->ptrCast<PropertyExpression>()->isInternalID()) {
+            return op;
+        }
+    }
+
+    // Anti-edge endpoints come from the MARK join keys; the rel table comes from the single
+    // anti-edge extend, which must be one of the MARK join's children.
+    std::shared_ptr<NodeExpression> antiNodeA;
+    std::shared_ptr<NodeExpression> antiNodeB;
+    catalog::RelGroupCatalogEntry* antiRelEntry = nullptr;
+    LogicalExtend* antiEdgeExtend = nullptr;
+    common::ExtendDirection antiEdgeDir = common::ExtendDirection::BOTH;
+    LogicalOperator* markProbeChild = nullptr;
+    {
+        const auto markKeys = markJoin->getJoinNodeIDs();
+        if (markKeys.size() != 2) {
+            return op;
+        }
+        std::vector<std::string> keyNames;
+        for (auto& key : markKeys) {
+            if (key->expressionType != ExpressionType::PROPERTY ||
+                !key->ptrCast<PropertyExpression>()->isInternalID()) {
+                return op;
+            }
+            keyNames.push_back(key->ptrCast<PropertyExpression>()->getVariableName());
+        }
+        if (keyNames[0] == keyNames[1]) {
+            return op;
+        }
+        for (auto ci = 0u; ci < 2; ++ci) {
+            auto* child = skipProjections(markJoin->getChild(ci).get());
+            if (child->getOperatorType() != LogicalOperatorType::EXTEND &&
+                child->getOperatorType() != LogicalOperatorType::PACKED_EXTEND) {
+                continue;
+            }
+            auto ext = child->ptrCast<LogicalExtend>();
+            auto rel = ext->getRel();
+            if (rel->getNumEntries() != 1) {
+                continue;
+            }
+            auto* relGroupEntry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
+            if (relGroupEntry->getScanFunction().has_value()) {
+                continue;
+            }
+            auto* extendChild = skipProjections((ext->getChild(0).get()));
+            if (extendChild->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE) {
+                continue;
+            }
+            const auto boundName = ext->getBoundNode()->getUniqueName();
+            const auto nbrName = ext->getNbrNode()->getUniqueName();
+            const bool match = (boundName == keyNames[0] && nbrName == keyNames[1]) ||
+                               (boundName == keyNames[1] && nbrName == keyNames[0]);
+            if (!match) {
+                continue;
+            }
+            antiRelEntry = relGroupEntry;
+            antiEdgeExtend = ext;
+            antiEdgeDir = ext->getDirection();
+            markProbeChild = markJoin->getChild(1 - ci).get();
+            // Resolve node expressions: the extend endpoints are the nodes named by the keys.
+            auto nodeByName = [&](const std::string& name) -> std::shared_ptr<NodeExpression> {
+                return boundName == name ? ext->getBoundNode() : ext->getNbrNode();
+            };
+            antiNodeA = nodeByName(keyNames[0]);
+            antiNodeB = nodeByName(keyNames[1]);
+            break;
+        }
+        if (antiEdgeExtend == nullptr) {
+            return op;
+        }
+    }
+
+    // Parse the MARK join's other child (the prefix chain): exactly 2 extends of the anti rel
+    // group, both sharing the scan root node, with other endpoints {antiNodeA, antiNodeB};
+    // only id(a)<>id(b) NOT_EQUALS filters allowed. The scan root is the middle node n1. The
+    // hop directions (FWD/BWD/BOTH) are recorded per endpoint for the operator arithmetic.
+    std::shared_ptr<NodeExpression> midNode;
+    common::ExtendDirection chainN0Dir = common::ExtendDirection::BOTH;
+    common::ExtendDirection chainN2Dir = common::ExtendDirection::BOTH;
+    {
+        auto* current = skipProjections(markProbeChild);
+        std::vector<LogicalExtend*> chainExtends;
+        LogicalScanNodeTable* scanNode = nullptr;
+        while (true) {
+            if (current->getOperatorType() == LogicalOperatorType::FILTER) {
+                const auto predicate = current->ptrCast<LogicalFilter>()->getPredicate();
+                if (predicate->expressionType != ExpressionType::NOT_EQUALS ||
+                    predicate->getNumChildren() != 2) {
+                    return op;
+                }
+                const auto& c0 = predicate->getChild(0);
+                const auto& c1 = predicate->getChild(1);
+                const auto isIdProp = [&](const std::shared_ptr<Expression>& e) {
+                    return e->expressionType == ExpressionType::PROPERTY &&
+                           e->ptrCast<PropertyExpression>()->isInternalID();
+                };
+                if (!isIdProp(c0) || !isIdProp(c1)) {
+                    return op;
+                }
+                const auto n0 = antiNodeA->getUniqueName();
+                const auto n2 = antiNodeB->getUniqueName();
+                const auto v0 = c0->ptrCast<PropertyExpression>()->getVariableName();
+                const auto v1 = c1->ptrCast<PropertyExpression>()->getVariableName();
+                if (!((v0 == n0 && v1 == n2) || (v0 == n2 && v1 == n0))) {
+                    return op;
+                }
+                current = skipProjections(current->getChild(0).get());
+                continue;
+            }
+            if (current->getOperatorType() == LogicalOperatorType::EXTEND ||
+                current->getOperatorType() == LogicalOperatorType::PACKED_EXTEND) {
+                chainExtends.push_back(current->ptrCast<LogicalExtend>());
+                current = skipProjections(current->getChild(0).get());
+                continue;
+            }
+            break;
+        }
+        if (current->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE ||
+            chainExtends.size() != 2) {
+            return op;
+        }
+        scanNode = current->ptrCast<LogicalScanNodeTable>();
+        // The scan's nodeID is the internal-ID property of the mid node; recover the mid node
+        // variable name from it and the mid NodeExpression from the chain extends (each
+        // extension shares the scan root as one endpoint).
+        if (scanNode->getNodeID()->expressionType != ExpressionType::PROPERTY ||
+            !scanNode->getNodeID()->ptrCast<PropertyExpression>()->isInternalID()) {
+            return op;
+        }
+        const auto midName =
+            scanNode->getNodeID()->ptrCast<PropertyExpression>()->getVariableName();
+        midNode = nullptr;
+        for (auto* ext : chainExtends) {
+            if (ext->getBoundNode()->getUniqueName() == midName) {
+                midNode = ext->getBoundNode();
+                break;
+            }
+            if (ext->getNbrNode()->getUniqueName() == midName) {
+                midNode = ext->getNbrNode();
+            }
+        }
+        if (midNode == nullptr) {
+            return op;
+        }
+        const auto aName = antiNodeA->getUniqueName();
+        const auto bName = antiNodeB->getUniqueName();
+        // Both extends must share the scan root as one endpoint, with the two anti-edge
+        // endpoints as the other endpoints (one each).
+        std::unordered_set<std::string> others;
+        std::unordered_map<std::string, common::ExtendDirection> hopDirByOther;
+        for (auto* ext : chainExtends) {
+            if (ext->getRel()->getEntry(0)->ptrCast<RelGroupCatalogEntry>() != antiRelEntry) {
+                return op;
+            }
+            const auto boundName = ext->getBoundNode()->getUniqueName();
+            const auto nbrName = ext->getNbrNode()->getUniqueName();
+            if (boundName == midName) {
+                others.insert(nbrName);
+                hopDirByOther[nbrName] = ext->getDirection();
+            } else if (nbrName == midName) {
+                others.insert(boundName);
+                hopDirByOther[boundName] = ext->getDirection();
+            } else {
+                return op;
+            }
+        }
+        if (others.size() != 2 || !others.contains(aName) || !others.contains(bName)) {
+            return op;
+        }
+        chainN0Dir = hopDirByOther.at(aName);
+        chainN2Dir = hopDirByOther.at(bName);
+    }
+
+    // Parse the top join's other child as the filter-free suffix chain rooted at the scan of
+    // the top join key node (n2).
+    std::vector<CountChainHop> suffixHops;
+    {
+        auto* suffixChild = containsOp(topJoin->getChild(0).get(), antiFilter) ?
+                                topJoin->getChild(1).get() :
+                                topJoin->getChild(0).get();
+        auto* current = skipProjections(suffixChild);
+        std::vector<LogicalExtend*> chainExtends;
+        LogicalScanNodeTable* scanNode = nullptr;
+        while (true) {
+            if (current->getOperatorType() == LogicalOperatorType::EXTEND ||
+                current->getOperatorType() == LogicalOperatorType::PACKED_EXTEND) {
+                chainExtends.push_back(current->ptrCast<LogicalExtend>());
+                current = skipProjections(current->getChild(0).get());
+                continue;
+            }
+            break;
+        }
+        if (current->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE ||
+            chainExtends.empty()) {
+            return op;
+        }
+        scanNode = current->ptrCast<LogicalScanNodeTable>();
+        const auto cName = topKey->ptrCast<PropertyExpression>()->getVariableName();
+        if (scanNode->getNodeID()->expressionType != ExpressionType::PROPERTY ||
+            scanNode->getNodeID()->ptrCast<PropertyExpression>()->getVariableName() != cName) {
+            return op;
+        }
+        // Build suffix hops in n2-outward order (reverse of the top-down walk order). Each hop
+        // must extend from the previous hop's "to" node (starting at n2 = c).
+        auto currentName = cName;
+        for (auto it = chainExtends.rbegin(); it != chainExtends.rend(); ++it) {
+            auto* ext = *it;
+            auto rel = ext->getRel();
+            if (rel->getNumEntries() != 1) {
+                return op;
+            }
+            auto* relGroupEntry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
+            if (relGroupEntry->getScanFunction().has_value()) {
+                return op;
+            }
+            if (ext->getDirection() == ExtendDirection::BOTH) {
+                return op;
+            }
+            const auto boundName = ext->getBoundNode()->getUniqueName();
+            const auto nbrName = ext->getNbrNode()->getUniqueName();
+            const bool fromIsBound = boundName == currentName;
+            const bool fromIsNbr = nbrName == currentName;
+            if (!fromIsBound && !fromIsNbr) {
+                return op;
+            }
+            const auto toName = fromIsBound ? nbrName : boundName;
+            const bool fromIsSrc =
+                fromIsBound ? ext->extendFromSourceNode() : !ext->extendFromSourceNode();
+            const auto scanDirection = fromIsSrc ? RelDataDirection::FWD : RelDataDirection::BWD;
+            const auto fromIsSrcFinal = fromIsSrc;
+            CountChainHop hop;
+            auto matched = false;
+            const auto fromTableID = fromIsSrcFinal ?
+                                         relGroupEntry->getRelEntryInfos()[0].nodePair.srcTableID :
+                                         relGroupEntry->getRelEntryInfos()[0].nodePair.dstTableID;
+            const auto toTableID = fromIsSrcFinal ?
+                                       relGroupEntry->getRelEntryInfos()[0].nodePair.dstTableID :
+                                       relGroupEntry->getRelEntryInfos()[0].nodePair.srcTableID;
+            // The from/to node expressions must be single-table and match the rel entry pair.
+            const NodeExpression* fromNode = nullptr;
+            const NodeExpression* toNode = nullptr;
+            if (fromIsBound) {
+                fromNode = ext->getBoundNode().get();
+                toNode = ext->getNbrNode().get();
+            } else {
+                fromNode = ext->getNbrNode().get();
+                toNode = ext->getBoundNode().get();
+            }
+            if (fromNode->isMultiLabeled() || toNode->isMultiLabeled() ||
+                fromNode->getNumEntries() != 1 || toNode->getNumEntries() != 1) {
+                return op;
+            }
+            if (fromTableID != fromNode->getTableIDs()[0] ||
+                toTableID != toNode->getTableIDs()[0]) {
+                return op;
+            }
+            hop.relScans.push_back({relGroupEntry->getRelEntryInfos()[0].oid, scanDirection,
+                fromTableID, toTableID, relGroupEntry->getName()});
+            matched = true;
+            (void)matched;
+            suffixHops.push_back(std::move(hop));
+            currentName = toName;
+        }
+    }
+
+    // n0, n1, n2 must all bind the same single node table.
+    const auto midTableID = midNode->getTableIDs()[0];
+    if (antiNodeA->isMultiLabeled() || antiNodeB->isMultiLabeled() ||
+        antiNodeA->getNumEntries() != 1 || antiNodeB->getNumEntries() != 1 ||
+        midNode->isMultiLabeled() || midNode->getNumEntries() != 1) {
+        return op;
+    }
+    if (antiNodeA->getTableIDs()[0] != midTableID || antiNodeB->getTableIDs()[0] != midTableID) {
+        return op;
+    }
+
+    std::vector<common::table_id_t> antiRelTableIDs;
+    antiRelTableIDs.push_back(antiRelEntry->getRelEntryInfos()[0].oid);
+    auto result = std::make_shared<LogicalCountAntiEdgeChain>(std::move(suffixHops), antiRelEntry,
+        std::move(antiRelTableIDs), midTableID, chainN0Dir, chainN2Dir, antiEdgeDir,
+        true /* hasNotEquals */, aggExpr);
     result->computeFlatSchema();
     return result;
 }
@@ -577,8 +997,23 @@ bool CountRelTableOptimizer::canOptimize(LogicalOperator* aggregate) const {
     return true;
 }
 
+static bool containsOp(const LogicalOperator* root, const LogicalOperator* target) {
+    if (root == target) {
+        return true;
+    }
+    for (auto i = 0u; i < root->getNumChildren(); ++i) {
+        if (containsOp(root->getChild(i).get(), target)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
     std::shared_ptr<LogicalOperator> op) {
+    if (auto rewritten = tryRewriteAntiEdgeChainCount(op); rewritten != op) {
+        return rewritten;
+    }
     if (auto rewritten = tryRewriteExtendChainCount(op); rewritten != op) {
         return rewritten;
     }
