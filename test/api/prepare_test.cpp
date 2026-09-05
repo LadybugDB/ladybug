@@ -1,3 +1,7 @@
+#include <algorithm>
+#include <memory>
+#include <vector>
+
 #include "api_test/api_test.h"
 
 using namespace lbug::common;
@@ -806,4 +810,70 @@ TEST_F(ApiTest, ParameterOnlyPredicateAfterConstantWith) {
         conn->execute(statement.get(), std::make_pair(std::string("depth"), (int64_t)5));
     ASSERT_TRUE(included->isSuccess()) << included->getErrorMessage();
     ASSERT_EQ(included->getNumTuples(), 8u);
+}
+
+// Regression test for LadybugDB/ladybug-rust#32: a parameter used inside a COUNT subquery's
+// WHERE clause was invisible to the binder's parameter collection, because the parsed subquery
+// expression's where clause is not stored as a child expression and visitors did not descend
+// into it. When the statement was prepared without parameters, the subquery's parameters were
+// never registered, so at execute time the subquery's predicate was replaced by a placeholder
+// and changing the parameter values had no effect (stale results).
+TEST_F(ApiTest, ParameterizedCountSubqueryWithParameterizedComparison) {
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE IssueUser(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE IssuePost(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE REL TABLE IssueLikes(FROM IssueUser TO IssuePost);")->isSuccess());
+    for (auto id = 0; id < 3; id++) {
+        ASSERT_TRUE(
+            conn->query("CREATE (:IssueUser {id: " + std::to_string(id) + "});")->isSuccess());
+        ASSERT_TRUE(
+            conn->query("CREATE (:IssuePost {id: " + std::to_string(id) + "});")->isSuccess());
+    }
+    // u0 likes posts 0,1,2; u1 likes posts 0,1; u2 likes posts 1,2 (mirrors the issue dataset)
+    const std::vector<std::pair<int64_t, int64_t>> likes = {{0, 0}, {0, 1}, {0, 2}, {1, 0}, {1, 1},
+        {2, 1}, {2, 2}};
+    for (auto& [u, p] : likes) {
+        ASSERT_TRUE(conn->query("MATCH (u:IssueUser {id: " + std::to_string(u) +
+                                "}), (p:IssuePost {id: " + std::to_string(p) +
+                                "}) CREATE (u)-[:IssueLikes]->(p);")
+                        ->isSuccess());
+    }
+
+    // Users that like exactly the posts in $posts, i.e. COUNT{...} = $count.
+    const auto query = "MATCH (u:IssueUser) WHERE COUNT { "
+                       "MATCH (u)-[:IssueLikes]->(p:IssuePost) WHERE p.id IN $posts "
+                       "} = $count RETURN u.id;";
+    auto preparedStatement = conn->prepare(query);
+    ASSERT_TRUE(preparedStatement->isSuccess()) << preparedStatement->getErrorMessage();
+
+    auto makePostsParam = [](std::vector<int64_t> ids) {
+        std::vector<std::unique_ptr<Value>> children;
+        children.reserve(ids.size());
+        for (auto id : ids) {
+            children.push_back(std::make_unique<Value>(id));
+        }
+        return Value(LogicalType::LIST(LogicalType::INT64()), std::move(children));
+    };
+
+    // First execution: users liking exactly posts [1, 2] are u0 and u2.
+    auto result = conn->execute(preparedStatement.get(),
+        std::make_pair(std::string("posts"), makePostsParam({1, 2})),
+        std::make_pair(std::string("count"), (int64_t)2));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    auto rows = TestHelper::convertResultToString(*result);
+    std::sort(rows.begin(), rows.end());
+    ASSERT_EQ((std::vector<std::string>{"0", "2"}), rows);
+
+    // Re-executing the SAME prepared statement with changed parameter values must pick up the
+    // new values: users liking exactly posts [0, 1] are u0 and u1. Before the fix the $posts
+    // parameter was never registered and its values were ignored (stale results).
+    result = conn->execute(preparedStatement.get(),
+        std::make_pair(std::string("posts"), makePostsParam({0, 1})),
+        std::make_pair(std::string("count"), (int64_t)2));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    rows = TestHelper::convertResultToString(*result);
+    std::sort(rows.begin(), rows.end());
+    ASSERT_EQ((std::vector<std::string>{"0", "1"}), rows);
 }

@@ -6,6 +6,7 @@
 #include "parser/expression/parsed_case_expression.h"
 #include "parser/expression/parsed_function_expression.h"
 #include "parser/expression/parsed_lambda_expression.h"
+#include "parser/expression/parsed_subquery_expression.h"
 #include "transaction/transaction.h"
 
 using namespace lbug::common;
@@ -93,6 +94,19 @@ void ParsedExpressionVisitor::visitChildren(const ParsedExpression& expr) {
         auto& lambda = expr.constCast<ParsedLambdaExpression>();
         visit(lambda.getFunctionExpr());
     } break;
+    case ExpressionType::SUBQUERY: {
+        // The where clause of a parsed subquery is not stored as a child expression, so it must
+        // be visited explicitly. Otherwise parameter expressions (or any other nested parsed
+        // expressions) inside e.g. "WHERE p.id IN $posts" of a COUNT subquery are invisible to
+        // visitors like ParsedParamExprCollector.
+        auto& subquery = expr.constCast<ParsedSubqueryExpression>();
+        if (subquery.hasWhereClause()) {
+            visit(subquery.getWhereClause());
+        }
+        for (auto i = 0u; i < expr.getNumChildren(); ++i) {
+            visit(expr.getChild(i));
+        }
+    } break;
     default: {
         for (auto i = 0u; i < expr.getNumChildren(); ++i) {
             visit(expr.getChild(i));
@@ -105,6 +119,15 @@ void ParsedExpressionVisitor::visitChildrenUnsafe(ParsedExpression& expr) {
     switch (expr.getExpressionType()) {
     case ExpressionType::CASE_ELSE: {
         visitCaseChildrenUnsafe(expr);
+    } break;
+    case ExpressionType::SUBQUERY: {
+        auto& subquery = expr.cast<ParsedSubqueryExpression>();
+        if (subquery.hasWhereClause()) {
+            visitUnsafe(subquery.getWhereClauseUnsafe());
+        }
+        for (auto i = 0u; i < expr.getNumChildren(); ++i) {
+            visitUnsafe(expr.getChild(i));
+        }
     } break;
     default: {
         for (auto i = 0u; i < expr.getNumChildren(); ++i) {
