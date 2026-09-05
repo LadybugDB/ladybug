@@ -174,8 +174,24 @@ static std::vector<ExportedTableData> getExportInfo(const Catalog& catalog,
         }
     }
 
-    // Note: indexes are not exported. Icebug-disk tables are immutable, so indexes
-    // cannot be rebuilt on import; only the schema, nodes CSR, and rel CSR are kept.
+    // Index aux tables (e.g. the FTS internal stopwords table) are not part of the CSR
+    // layout, but index.cypher needs them on import when the original stopwords source
+    // table no longer exists. Export them as <tableName>.parquet; the FTS index's
+    // toCypher references the file path in that case.
+    for (auto indexEntry : catalog.getIndexEntries(transaction)) {
+        auto auxEntry = indexEntry->getTableEntryToExport(context);
+        if (auxEntry == nullptr) {
+            continue;
+        }
+        ExportedTableData tableData;
+        tableData.tableName = auxEntry->getName();
+        tableData.fileName = std::format("{}.parquet", auxEntry->getName());
+        bindExportTableData(tableData,
+            std::format("match (a:{}) return a.*",
+                StringUtils::quoteIdentifier(auxEntry->getName())),
+            context, binder);
+        exportData.push_back(std::move(tableData));
+    }
     return exportData;
 }
 
