@@ -1,5 +1,6 @@
 add_library(lbug_processor_operator_scan
         OBJECT
+        count_anti_edge_chain.cpp
         count_extend_chain.cpp
         count_rel_table.cpp
         primary_key_scan_node_table.cpp

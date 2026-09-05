@@ -93,6 +93,8 @@ public:
     std::unique_ptr<PhysicalOperator> mapCopyTo(const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapCountRelTable(
         const planner::LogicalOperator* logicalOperator);
+    std::unique_ptr<PhysicalOperator> mapCountAntiEdgeChain(
+        const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapCountExtendChain(
         const planner::LogicalOperator* logicalOperator);
     std::unique_ptr<PhysicalOperator> mapCreateMacro(
