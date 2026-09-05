@@ -252,8 +252,7 @@ Binder exception: Export database only supports the parquet (icebug-disk CSR) fo
 ---- ok
 -IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_property_name1"
 -STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/special_property_name1";
----- error(regex)
-.*Cannot open file.*nodes_User\.parquet.*
+---- ok
 
 -CASE ExportEmptyDBSchemaOnly
 -SKIP_WASM
@@ -262,8 +261,7 @@ Binder exception: Export database only supports the parquet (icebug-disk CSR) fo
 ---- ok
 -IMPORT_DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/empty-db-schema-only"
 -STATEMENT IMPORT DATABASE "${LBUG_EXPORT_DB_DIRECTORY}_special/empty-db-schema-only";
----- error(regex)
-.*Cannot open file.*nodes_.*parquet.*
+---- ok
 
 -CASE ExportDBWithQuotedDelim
 -SKIP_WASM
