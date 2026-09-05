@@ -104,5 +104,13 @@ struct ExportParquetFunction : public ExportFunction {
     static function_set getFunctionSet();
 };
 
+// Consumes (src OFFSET, degree INT64) rows and writes a CSR indptr table: a single
+// "ptr" INT64 column with N+1 prefix-summed offsets, sorted by source offset.
+struct IndptrExportFunction : public ExportFunction {
+    static constexpr const char* name = "COPY_INDPTR";
+
+    static function_set getFunctionSet();
+};
+
 } // namespace function
 } // namespace lbug

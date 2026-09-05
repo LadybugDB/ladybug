@@ -34,7 +34,9 @@ std::vector<std::shared_ptr<LogicalOperator>> Planner::planExportTableData(
     auto func = function::BuiltInFunctionsUtils::matchFunction(name,
         entry->ptrCast<FunctionCatalogEntry>());
     DASSERT(func != nullptr);
-    auto exportFunc = *func->constPtrCast<function::ExportFunction>();
+    auto parquetExportFunc = *func->constPtrCast<function::ExportFunction>();
+    auto indptrFuncs = function::IndptrExportFunction::getFunctionSet();
+    auto indptrExportFunc = *indptrFuncs[0]->constPtrCast<function::ExportFunction>();
     for (auto& exportTableData : *boundExportDatabase.getExportData()) {
         auto regularQuery = exportTableData.getRegularQuery();
         DASSERT(regularQuery->getStatementType() == StatementType::QUERY);
@@ -43,6 +45,9 @@ std::vector<std::shared_ptr<LogicalOperator>> Planner::planExportTableData(
                         ->joinPath(boundExportDatabase.getFilePath(), exportTableData.fileName);
         function::ExportFuncBindInput bindInput{exportTableData.columnNames, std::move(path),
             boundExportDatabase.getExportOptions()};
+        // CSR indptr tables are prefix-summed by a dedicated export function; everything
+        // else is a plain parquet copy.
+        auto& exportFunc = exportTableData.isIndptr ? indptrExportFunc : parquetExportFunc;
         auto copyTo = std::make_shared<LogicalCopyTo>(exportFunc.bind(bindInput), exportFunc,
             tablePlan.getLastOperator());
         logicalOperators.push_back(std::move(copyTo));

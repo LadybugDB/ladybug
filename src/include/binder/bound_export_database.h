@@ -10,6 +10,9 @@ namespace binder {
 struct ExportedTableData {
     std::string tableName;
     std::string fileName;
+    // True for CSR indptr tables, which are computed (prefix-summed) rather than
+    // plain-copied, and need the dedicated indptr export function in the planner.
+    bool isIndptr = false;
     std::unique_ptr<BoundRegularQuery> regularQuery;
     std::vector<std::string> columnNames;
     std::vector<common::LogicalType> columnTypes;
