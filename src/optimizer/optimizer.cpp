@@ -1,5 +1,10 @@
 #include "optimizer/optimizer.h"
 
+#include <cstdio>
+#include <cstdlib>
+#include <unordered_set>
+
+#include "common/enums/extend_direction_util.h"
 #include "main/client_context.h"
 #include "optimizer/acc_hash_join_optimizer.h"
 #include "optimizer/agg_key_dependency_optimizer.h"
@@ -21,14 +26,94 @@
 #include "optimizer/schema_populator.h"
 #include "optimizer/top_k_optimizer.h"
 #include "optimizer/unwind_dedup_optimizer.h"
+#include "planner/operator/extend/logical_extend.h"
+#include "planner/operator/logical_aggregate.h"
 #include "planner/operator/logical_explain.h"
+#include "planner/operator/logical_filter.h"
+#include "planner/operator/logical_hash_join.h"
+#include "planner/operator/logical_operator.h"
+#include "planner/operator/scan/logical_scan_node_table.h"
 #include "transaction/transaction.h"
 
 namespace lbug {
 namespace optimizer {
 
+namespace {
+
+// Prints one operator per line as an indented tree. Enabled by setting LBUG_DUMP_LOGICAL in the
+// environment; unlike EXPLAIN LOGICAL this needs no query changes and shows the plan exactly as
+// the optimizer sees it, before and after optimization.
+void dumpLogicalTree(const planner::LogicalOperator* op, int depth,
+    std::unordered_set<const planner::LogicalOperator*>& visited) {
+    if (depth > 40 || visited.contains(op)) {
+        for (auto i = 0; i < depth; ++i) {
+            fprintf(stderr, "  ");
+        }
+        fprintf(stderr, "...\n");
+        return;
+    }
+    visited.insert(op);
+    for (auto i = 0; i < depth; ++i) {
+        fprintf(stderr, "  ");
+    }
+    fprintf(stderr, "%s",
+        planner::LogicalOperatorUtils::logicalOperatorTypeToString(op->getOperatorType()).c_str());
+    if (op->getOperatorType() == planner::LogicalOperatorType::EXTEND ||
+        op->getOperatorType() == planner::LogicalOperatorType::PACKED_EXTEND) {
+        auto& ext = op->constCast<planner::LogicalExtend>();
+        fprintf(stderr, " [%s %s bound=%s nbr=%s]", ext.getRel()->detailsToString().c_str(),
+            common::ExtendDirectionUtil::toString(ext.getDirection()).c_str(),
+            ext.getBoundNode()->getUniqueName().c_str(), ext.getNbrNode()->getUniqueName().c_str());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::FILTER) {
+        fprintf(stderr, " [%s]",
+            op->constCast<planner::LogicalFilter>().getPredicate()->toString().c_str());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::HASH_JOIN) {
+        auto& join = op->constCast<planner::LogicalHashJoin>();
+        auto jt = join.getJoinType() == common::JoinType::INNER ? "INNER" :
+                  join.getJoinType() == common::JoinType::MARK  ? "MARK" :
+                  join.getJoinType() == common::JoinType::LEFT  ? "LEFT" :
+                                                                  "COUNT";
+        fprintf(stderr, " [%s keys=%s", jt,
+            join.getJoinNodeIDs().size() == 1 ? join.getJoinNodeIDs()[0]->toString().c_str() :
+                                                "...");
+        if (join.hasMark()) {
+            fprintf(stderr, " mark=%s]", join.getMark()->toString().c_str());
+        } else {
+            fprintf(stderr, "]");
+        }
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::AGGREGATE) {
+        fprintf(stderr, " [keys=%llu aggs=%s]",
+            (unsigned long long)op->constCast<planner::LogicalAggregate>().getKeys().size(),
+            op->constCast<planner::LogicalAggregate>().getAggregates()[0]->toString().c_str());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::SCAN_NODE_TABLE) {
+        fprintf(stderr, " [%s]",
+            op->constCast<planner::LogicalScanNodeTable>().getNodeID()->toString().c_str());
+    }
+    fprintf(stderr, "\n");
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        dumpLogicalTree(op->getChild(i).get(), depth + 1, visited);
+    }
+}
+
+void dumpLogicalPlan(const planner::LogicalPlan* plan, const char* label) {
+    fprintf(stderr, "=== LOGICAL PLAN (%s) ===\n", label);
+    auto* root = plan->getLastOperator().get();
+    if (root == nullptr) {
+        return;
+    }
+    std::unordered_set<const planner::LogicalOperator*> visited;
+    dumpLogicalTree(root, 0, visited);
+    fprintf(stderr, "=== END LOGICAL PLAN ===\n");
+}
+
+} // namespace
+
 void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* context,
     const planner::CardinalityEstimator& cardinalityEstimator) {
+    static const bool dumpLogicalEnabled = getenv("LBUG_DUMP_LOGICAL") != nullptr;
+    if (dumpLogicalEnabled) {
+        dumpLogicalPlan(plan, "before optimization");
+    }
     if (context->getClientConfig()->enablePlanOptimizer) {
         // Factorization structure should be removed before further optimization can be applied.
         auto removeFactorizationRewriter = RemoveFactorizationRewriter();
@@ -124,6 +209,9 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
         // disabled
         auto schemaPopulator = SchemaPopulator{};
         schemaPopulator.rewrite(plan);
+    }
+    if (dumpLogicalEnabled) {
+        dumpLogicalPlan(plan, "after optimization");
     }
 }
 
