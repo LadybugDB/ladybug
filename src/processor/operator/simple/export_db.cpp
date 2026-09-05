@@ -3,6 +3,7 @@
 #include <sstream>
 
 #include "catalog/catalog.h"
+#include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
@@ -102,15 +103,31 @@ std::string getSchemaCypher(ClientContext* clientContext, const std::string& exp
     return ss.str();
 }
 
+std::string getIndexCypher(ClientContext* clientContext, const FileScanInfo& exportFileInfo) {
+    stringstream ss;
+    IndexToCypherInfo info{clientContext, exportFileInfo};
+    auto transaction = Transaction::Get(*clientContext);
+    auto catalog = Catalog::Get(*clientContext);
+    for (auto entry : catalog->getIndexEntries(transaction)) {
+        auto indexCypher = entry->toCypher(info);
+        if (!indexCypher.empty()) {
+            ss << indexCypher << std::endl;
+        }
+    }
+    return ss.str();
+}
+
 void ExportDB::executeInternal(ExecutionContext* context) {
     const auto clientContext = context->clientContext;
     // The export layout is icebug-disk: sibling COPY TO pipelines write
     // nodes_<table>.parquet / indices_<rel>.parquet / indptr_<rel>.parquet, and the
     // schema mounts them in place, so no copy.cypher (data movement) is needed.
-    // Icebug-disk tables are immutable, so there is no index.cypher either.
+    // Secondary structures (HNSW, FTS, ...) are rebuilt from index.cypher on import.
     writeStringStreamToFile(clientContext,
         getSchemaCypher(clientContext, boundFileInfo.filePaths[0]),
         boundFileInfo.filePaths[0] + "/" + PortDBConstants::SCHEMA_FILE_NAME);
+    writeStringStreamToFile(clientContext, getIndexCypher(clientContext, boundFileInfo),
+        boundFileInfo.filePaths[0] + "/" + PortDBConstants::INDEX_FILE_NAME);
     appendMessage("Exported database successfully.", storage::MemoryManager::Get(*clientContext));
 }
 

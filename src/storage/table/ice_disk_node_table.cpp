@@ -4,10 +4,13 @@
 #include <mutex>
 
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "common/data_chunk/data_chunk.h"
 #include "common/data_chunk/sel_vector.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/string_utils.h"
+#include "common/vector/value_vector.h"
+#include "function/cast/vector_cast_functions.h"
 #include "main/client_context.h"
 #include "processor/operator/persistent/reader/parquet/parquet_reader.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -252,8 +255,29 @@ bool IceDiskNodeTable::scanInternal(Transaction* transaction, TableScanState& sc
             }
             auto& srcVector = parquetDataChunk.getValueVector(parquetCol);
             size_t row = 0;
-            for (auto sourceRow : selectedPositions) {
-                dstVector->copyFromVectorData(row++, &srcVector, sourceRow);
+            if (srcVector.dataType.getPhysicalType() == dstVector->dataType.getPhysicalType()) {
+                for (auto sourceRow : selectedPositions) {
+                    dstVector->copyFromVectorData(row++, &srcVector, sourceRow);
+                }
+            } else {
+                // Parquet stores some logical types more coarsely than the catalog (e.g.
+                // JSON becomes STRING). Cast the parquet vector to the catalog type before
+                // copying, mirroring what COPY FROM parquet does.
+                auto castFunc = function::CastFunction::bindCastFunction("cast", srcVector.dataType,
+                    dstVector->dataType)
+                                    ->execFunc;
+                auto castVector = std::make_shared<ValueVector>(dstVector->dataType.copy(),
+                    MemoryManager::Get(*transaction->getClientContext()), parquetDataChunk.state);
+                std::vector<std::shared_ptr<ValueVector>> srcVecs;
+                srcVecs.push_back(std::shared_ptr<ValueVector>(std::shared_ptr<ValueVector>(),
+                    const_cast<ValueVector*>(&srcVector)));
+                std::vector<SelectionVector*> selVecs{
+                    &parquetDataChunk.state->getSelVectorUnsafe()};
+                castFunc(srcVecs, selVecs, *castVector, castVector->getSelVectorPtr(),
+                    nullptr /* dataPtr */);
+                for (auto sourceRow : selectedPositions) {
+                    dstVector->copyFromVectorData(row++, castVector.get(), sourceRow);
+                }
             }
         }
 
