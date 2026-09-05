@@ -11,6 +11,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_id_pair.h"
 #include "common/enums/path_semantic.h"
+#include "common/enums/storage_format.h"
 #include "function/aggregate/count.h"
 #include "function/aggregate/count_star.h"
 #include "function/aggregate_function.h"
@@ -25,12 +26,14 @@
 #include "planner/operator/logical_order_by.h"
 #include "planner/operator/logical_path_property_probe.h"
 #include "planner/operator/logical_projection.h"
+#include "planner/operator/scan/logical_count_extend_chain.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
 #include "planner/operator/scan/logical_reachable_count.h"
 #include "planner/operator/scan/logical_rel_degree_table.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
 #include "storage/storage_manager.h"
 #include "storage/table/table.h"
+#include "transaction/transaction.h"
 
 using namespace lbug::common;
 using namespace lbug::planner;
@@ -51,6 +54,240 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitOperator(
         op->setChild(i, visitOperator(op->getChild(i)));
     }
     auto result = visitOperatorReplaceSwitch(op);
+    result->computeFlatSchema();
+    return result;
+}
+
+std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteExtendChainCount(
+    std::shared_ptr<LogicalOperator> op) {
+    // Must be a keyless COUNT_STAR aggregate. Single-hop chains are handled by the (cheaper,
+    // metadata-based) COUNT_REL_TABLE rewrite below, so require >= 2 hops.
+    if (op->getOperatorType() != LogicalOperatorType::AGGREGATE) {
+        return op;
+    }
+    auto& aggregate = op->constCast<LogicalAggregate>();
+    if (aggregate.hasKeys() || aggregate.getDependentKeys().size() != 0 ||
+        aggregate.getAggregates().size() != 1) {
+        return op;
+    }
+    auto aggExpr = aggregate.getAggregates()[0];
+    if (aggExpr->expressionType != ExpressionType::AGGREGATE_FUNCTION) {
+        return op;
+    }
+    auto& aggFuncExpr = aggExpr->constCast<AggregateFunctionExpression>();
+    if (aggFuncExpr.getFunction().name != function::CountStarFunction::name ||
+        aggFuncExpr.isDistinct() || aggFuncExpr.getNumChildren() != 0) {
+        return op;
+    }
+
+    // The fast path enumerates the committed offset space of the node tables; it must not run
+    // for transactions that can carry uncommitted node inserts beyond that space.
+    auto transaction = transaction::Transaction::Get(*_context);
+    if (transaction != nullptr && transaction->isWriteTransaction()) {
+        return op;
+    }
+
+    // Collect the extends in the subtree. Only row-count-invariant operators may appear:
+    // projections and node-ID-only inner hash joins; scans are ignored. Anything else
+    // (filters, multiplicity reducers, ...) can change row counts and disqualifies.
+    std::vector<const LogicalExtend*> extends;
+    std::function<bool(const LogicalOperator*)> collect =
+        [&](const LogicalOperator* current) -> bool {
+        switch (current->getOperatorType()) {
+        case LogicalOperatorType::PROJECTION: {
+            return collect(current->getChild(0).get());
+        }
+        case LogicalOperatorType::SCAN_NODE_TABLE: {
+            // The planner can fold node predicates (e.g. a name lookup) into the scan as
+            // property predicates or a primary-key scan. Such a scan yields a restricted node
+            // set, but the count chain iterates ALL node offsets, so a restricted scan
+            // disqualifies the rewrite.
+            auto& scan = current->constCast<LogicalScanNodeTable>();
+            if (scan.getScanType() == LogicalScanNodeTableType::PRIMARY_KEY_SCAN) {
+                return false;
+            }
+            for (auto& predicateSet : scan.getPropertyPredicates()) {
+                if (!predicateSet.isEmpty()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        case LogicalOperatorType::EXTEND:
+        case LogicalOperatorType::PACKED_EXTEND: {
+            extends.push_back(&current->constCast<LogicalExtend>());
+            return collect(current->getChild(0).get());
+        }
+        case LogicalOperatorType::HASH_JOIN: {
+            auto& join = current->constCast<LogicalHashJoin>();
+            const auto joinConditions = join.getJoinConditions();
+            if (join.getJoinType() != JoinType::INNER || joinConditions.size() != 1) {
+                return false;
+            }
+            const auto& probeKey = joinConditions[0].first;
+            const auto& buildKey = joinConditions[0].second;
+            auto isNodeInternalID = [](const std::shared_ptr<Expression>& expression) {
+                return expression->expressionType == ExpressionType::PROPERTY &&
+                       expression->constCast<PropertyExpression>().isInternalID();
+            };
+            if (!isNodeInternalID(probeKey) || !isNodeInternalID(buildKey) ||
+                probeKey->constCast<PropertyExpression>().getVariableName() !=
+                    buildKey->constCast<PropertyExpression>().getVariableName()) {
+                return false;
+            }
+            return collect(current->getChild(0).get()) && collect(current->getChild(1).get());
+        }
+        default:
+            return false;
+        }
+    };
+    if (!collect(op->getChild(0).get())) {
+        return op;
+    }
+    if (extends.size() < 2) {
+        return op;
+    }
+
+    // Validate the extends form a simple path over single-table nodes with single-entry,
+    // storage-backed rel groups.
+    // The fast path below iterates the committed node-group grid of native node tables and
+    // reads the CSR of native rel tables. Arrow-backed and icebug-disk tables have neither,
+    // so they must be left to the regular plan.
+    auto isNativeRelGroupEntry = [](const RelGroupCatalogEntry* entry) {
+        return entry->getStorage().empty() && entry->getStorageFormat() == StorageFormat::NONE;
+    };
+    auto isNativeNodeEntry = [](const NodeTableCatalogEntry* entry) {
+        return entry->getStorage().empty() && entry->getStorageFormat() == StorageFormat::NONE;
+    };
+    struct ChainEdge {
+        std::string u;
+        std::string v;
+        const LogicalExtend* extend;
+        bool used = false;
+    };
+    std::vector<ChainEdge> edges;
+    edges.reserve(extends.size());
+    std::unordered_map<std::string, std::shared_ptr<NodeExpression>> chainNodes;
+    for (auto extend : extends) {
+        auto rel = extend->getRel();
+        if (rel->getRelType() != QueryRelType::NON_RECURSIVE ||
+            extend->getDirection() == ExtendDirection::BOTH || rel->getNumEntries() != 1) {
+            return op;
+        }
+        auto* relGroupEntry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
+        if (relGroupEntry->getScanFunction().has_value() || !isNativeRelGroupEntry(relGroupEntry)) {
+            return op;
+        }
+        auto boundNode = extend->getBoundNode();
+        auto nbrNode = extend->getNbrNode();
+        if (boundNode->isMultiLabeled() || nbrNode->isMultiLabeled() ||
+            boundNode->getNumEntries() != 1 || nbrNode->getNumEntries() != 1) {
+            return op;
+        }
+        if (!isNativeNodeEntry(boundNode->getEntry(0)->ptrCast<NodeTableCatalogEntry>()) ||
+            !isNativeNodeEntry(nbrNode->getEntry(0)->ptrCast<NodeTableCatalogEntry>())) {
+            return op;
+        }
+        chainNodes.emplace(boundNode->getUniqueName(), boundNode);
+        chainNodes.emplace(nbrNode->getUniqueName(), nbrNode);
+        edges.push_back({boundNode->getUniqueName(), nbrNode->getUniqueName(), extend});
+    }
+    std::unordered_map<std::string, uint32_t> degrees;
+    for (auto& edge : edges) {
+        degrees[edge.u]++;
+        degrees[edge.v]++;
+        if (degrees[edge.u] > 2 || degrees[edge.v] > 2) {
+            return op;
+        }
+    }
+    if (edges.size() != chainNodes.size() - 1) {
+        return op;
+    }
+
+    // Order the path starting at a degree-1 endpoint. At each interior node exactly one
+    // incident edge is already used, so the next unused incident edge continues the path.
+    std::string start;
+    for (auto& [name, degree] : degrees) {
+        if (degree == 1) {
+            start = name;
+            break;
+        }
+    }
+    if (start.empty()) {
+        return op;
+    }
+    std::vector<std::string> ordered;
+    ordered.push_back(start);
+    auto current = start;
+    for (auto step = 0u; step < edges.size(); ++step) {
+        auto found = false;
+        for (auto& edge : edges) {
+            if (edge.used) {
+                continue;
+            }
+            if (edge.u == current) {
+                edge.used = true;
+                current = edge.v;
+                found = true;
+                break;
+            }
+            if (edge.v == current) {
+                edge.used = true;
+                current = edge.u;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return op;
+        }
+        ordered.push_back(current);
+    }
+
+    // Build the hop specs. For each hop the scan direction is the rel direction keyed by the
+    // hop's from-node: FWD when the from-node is the rel's src side, BWD when it is the dst.
+    std::vector<CountChainHop> hops;
+    hops.reserve(ordered.size() - 1);
+    for (auto j = 0u; j + 1 < ordered.size(); ++j) {
+        const auto& xName = ordered[j];
+        const auto& yName = ordered[j + 1];
+        auto x = chainNodes.at(xName);
+        auto y = chainNodes.at(yName);
+        const LogicalExtend* extend = nullptr;
+        for (auto& edge : edges) {
+            if ((edge.u == xName && edge.v == yName) || (edge.u == yName && edge.v == xName)) {
+                extend = edge.extend;
+                break;
+            }
+        }
+        DASSERT(extend != nullptr);
+        auto rel = extend->getRel();
+        auto* relGroupEntry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
+        const auto extendFromSource = extend->extendFromSourceNode();
+        const auto xIsBound = xName == extend->getBoundNode()->getUniqueName();
+        const auto fromIsSrc = xIsBound ? extendFromSource : !extendFromSource;
+        const auto scanDirection = fromIsSrc ? RelDataDirection::FWD : RelDataDirection::BWD;
+        const auto xTableID = x->getTableIDs()[0];
+        const auto yTableID = y->getTableIDs()[0];
+        CountChainHop hop;
+        auto matched = false;
+        for (auto& info : relGroupEntry->getRelEntryInfos()) {
+            const auto fromTableID =
+                fromIsSrc ? info.nodePair.srcTableID : info.nodePair.dstTableID;
+            const auto toTableID = fromIsSrc ? info.nodePair.dstTableID : info.nodePair.srcTableID;
+            if (fromTableID == xTableID && toTableID == yTableID) {
+                hop.relScans.push_back(
+                    {info.oid, scanDirection, fromTableID, toTableID, relGroupEntry->getName()});
+                matched = true;
+            }
+        }
+        if (!matched) {
+            return op;
+        }
+        hops.push_back(std::move(hop));
+    }
+
+    auto result = std::make_shared<LogicalCountExtendChain>(std::move(hops), aggExpr);
     result->computeFlatSchema();
     return result;
 }
@@ -342,6 +579,9 @@ bool CountRelTableOptimizer::canOptimize(LogicalOperator* aggregate) const {
 
 std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
     std::shared_ptr<LogicalOperator> op) {
+    if (auto rewritten = tryRewriteExtendChainCount(op); rewritten != op) {
+        return rewritten;
+    }
     if (auto rewritten = tryRewriteReachableCount(op); rewritten != op) {
         return rewritten;
     }

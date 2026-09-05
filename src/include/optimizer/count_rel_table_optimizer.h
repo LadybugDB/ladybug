@@ -44,6 +44,11 @@ private:
     std::shared_ptr<planner::LogicalOperator> visitOrderByReplace(
         std::shared_ptr<planner::LogicalOperator> op) override;
 
+    // Rewrite COUNT(*) over a chain of >= 2 extends (a pure path, possibly connected by
+    // node-ID hash joins) into a count-only chain operator.
+    std::shared_ptr<planner::LogicalOperator> tryRewriteExtendChainCount(
+        std::shared_ptr<planner::LogicalOperator> op);
+
     // Check if the aggregate is a simple (non-distinct) COUNT with no keys.
     bool isSimpleCount(planner::LogicalOperator* op) const;
 
