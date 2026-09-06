@@ -191,31 +191,62 @@ void ShadowFile::flushAll(main::ClientContext& context) const {
 
 void ShadowFile::clear(BufferManager& bm) {
     DASSERT(shadowingFH);
-    // TODO(Guodong): We should remove shadow file here. This requires changes:
-    // 1. We need to make shadow file not going through BM.
-    // 2. We need to remove fileHandles held in BM, so that BM only keeps FH for the data file.
+    // Evict pages, truncate to zero pages (which also truncates the on-disk file), then unlink
+    // the path and drop the stale fd so no leftover .shadow file exists at rest (a present
+    // .shadow is treated as "checkpoint in progress" by recovery/startup probes). The
+    // retained FileHandle keeps its VM frame groups (see reset()); the file is re-created
+    // lazily by getOrCreateShadowingFH on the next checkpoint, which also re-reserves the
+    // header page.
     bm.removeFilePagesFromFrames(*shadowingFH);
     shadowingFH->resetToZeroPagesAndPageCapacity();
+    shadowingFH->resetFileInfo();
+    vfs->removeFileIfExists(shadowFilePath);
     shadowPagesMap.clear();
     shadowPageRecords.clear();
-    // Reserve header page.
-    shadowingFH->addNewPage();
 }
 
 void ShadowFile::reset() {
-    shadowingFH->resetFileInfo();
-    shadowingFH = nullptr;
-    vfs->removeFileIfExists(shadowFilePath);
+    // Keep the shadowing FileHandle (and its VM frame groups) alive across checkpoints:
+    // each FileHandle allocates VMRegion frame groups that count against max_db_size and
+    // are never reclaimed, so orphaning the handle here exhausted max_db_size after a
+    // handful of checkpoints (see #924). Evict pages, truncate to zero pages (which also
+    // truncates the on-disk file), drop the stale fd, and unlink the path so
+    // recovery/startup probes — which treat a present .shadow file as "checkpoint in
+    // progress" — don't trip on it. getOrCreateShadowingFH re-opens the path into the
+    // same retained handle on the next checkpoint, so subsequent shadow pages land in a
+    // real on-disk file visible to recovery (which replays by path).
+    if (shadowingFH == nullptr) {
+        return;
+    }
+    // If clear() already ran (the normal checkpoint flow calls both), the file was truncated,
+    // unlinked and the fd dropped; just make sure the in-memory maps are empty.
+    if (shadowingFH->getFileInfo() != nullptr) {
+        bm.removeFilePagesFromFrames(*shadowingFH);
+        shadowingFH->resetToZeroPagesAndPageCapacity();
+        shadowingFH->resetFileInfo();
+        vfs->removeFileIfExists(shadowFilePath);
+    }
+    shadowPagesMap.clear();
+    shadowPageRecords.clear();
 }
 
 FileHandle* ShadowFile::getOrCreateShadowingFH() {
     if (!shadowingFH) {
         shadowingFH = bm.getFileHandle(shadowFilePath,
             FileHandle::O_PERSISTENT_FILE_CREATE_NOT_EXISTS, vfs, nullptr);
-        if (shadowingFH->getNumPages() == 0) {
-            // Reserve the first page for the header.
-            shadowingFH->addNewPage();
-        }
+    } else if (shadowingFH->getFileInfo() == nullptr) {
+        // reset() unlinked the on-disk file and dropped the stale fd (which pointed at the
+        // unlinked inode): re-open the same retained FileHandle in place so its identity
+        // (fileIndex, frame groups) is preserved and no new VM accounting is consumed.
+        // Matches constructPersistentFileHandle's flags for O_PERSISTENT_FILE_CREATE_NOT_EXISTS.
+        shadowingFH->setFileInfo(vfs->openFile(shadowFilePath,
+            FileOpenFlags(
+                FileFlags::WRITE | FileFlags::READ_ONLY | FileFlags::CREATE_IF_NOT_EXISTS),
+            nullptr));
+    }
+    if (shadowingFH->getNumPages() == 0) {
+        // Reserve the first page for the header.
+        shadowingFH->addNewPage();
     }
     return shadowingFH;
 }

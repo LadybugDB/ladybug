@@ -72,6 +72,10 @@ page_idx_t FileHandle::addNewPages(page_idx_t numNewPages) {
 page_idx_t FileHandle::addNewPageWithoutLock() {
     if (numPages == pageCapacity) {
         addNewPageGroupWithoutLock();
+    } else if (numPages >= static_cast<page_idx_t>(pageStates.size())) {
+        // Reusing retained capacity after a truncate: re-expose the already-allocated slots.
+        // ConcurrentVector::resize never deallocates, so this is cheap and leak-free.
+        pageStates.resize(pageCapacity);
     }
     pageStates[numPages].resetToEvicted();
     const auto pageIdx = numPages++;
@@ -133,14 +137,13 @@ void FileHandle::removePageIdxAndTruncateIfNecessary(page_idx_t pageIdx) {
         return;
     }
     numPages = pageIdx;
-    pageStates.resize(numPages);
-    const auto numPageGroups = getNumPageGroups();
-    if (numPageGroups == frameGroupIdxes.size()) {
-        return;
+    // Keep frameGroupIdxes and pageCapacity at their high-water mark so truncated page groups
+    // reuse their already-allocated VM frame groups when the file grows again. Shrinking them
+    // here permanently leaks a VMRegion frame group per truncated page group
+    // (VMRegion::addNewFrameGroup only grows up to max_db_size).
+    if (pageStates.size() > numPages) {
+        pageStates.resize(numPages);
     }
-    DASSERT(numPageGroups < frameGroupIdxes.size());
-    frameGroupIdxes.resize(numPageGroups);
-    pageCapacity = numPageGroups * StorageConstants::PAGE_GROUP_SIZE;
 }
 
 void FileHandle::removePageFromFrameIfNecessary(page_idx_t pageIdx) {
