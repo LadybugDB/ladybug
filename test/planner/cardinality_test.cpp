@@ -374,7 +374,6 @@ TEST_F(CardinalityTest, TestMultiParentPackedScan) {
     };
 
     std::unordered_map<common::offset_t, std::vector<common::offset_t>> edges;
-    uint64_t numBatches = 0;
     uint64_t numMultiParentBatches = 0;
     ASSERT_TRUE(feedNextParentBatch());
     for (;;) {
@@ -384,7 +383,6 @@ TEST_F(CardinalityTest, TestMultiParentPackedScan) {
             }
             continue;
         }
-        numBatches++;
         const auto& boundSelVector = scanState.nodeIDVector->state->getSelVector();
         const auto numParentsInBatch = boundSelVector.getSelSize();
         if (numParentsInBatch > 1) {
