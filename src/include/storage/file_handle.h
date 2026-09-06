@@ -104,6 +104,9 @@ public:
     common::page_idx_t getNumPages() const { return numPages; }
     common::FileInfo* getFileInfo() const { return fileInfo.get(); }
     void resetFileInfo() { fileInfo.reset(); }
+    void setFileInfo(std::unique_ptr<common::FileInfo> fileInfo_) {
+        fileInfo = std::move(fileInfo_);
+    }
 
     uint64_t getPageSize() const {
         return isLargePaged() ? common::TEMP_PAGE_SIZE : common::LBUG_PAGE_SIZE;

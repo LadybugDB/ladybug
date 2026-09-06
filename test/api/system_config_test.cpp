@@ -101,6 +101,29 @@ TEST_F(SystemConfigTest, testMaxDBSize) {
     }
 }
 
+TEST_F(SystemConfigTest, testRepeatedCheckpointsDoNotExhaustMaxDBSize) {
+    // Regression test for https://github.com/LadybugDB/ladybug/issues/924: each CHECKPOINT
+    // used to permanently consume ~1 VM frame group of max_db_size accounting (the shadowing
+    // FileHandle was orphaned on every checkpoint), so ~7 checkpoints exhausted a 64 MiB cap.
+    if (databasePath == "" || databasePath == ":memory:") {
+        GTEST_SKIP();
+    }
+    systemConfig->maxDBSize = 64 * 1024 * 1024;
+    auto db = std::make_unique<Database>(databasePath, *systemConfig);
+    auto con = std::make_unique<Connection>(db.get());
+    assertQuery(*con->query("CREATE NODE TABLE Node(id STRING, payload STRING, PRIMARY KEY(id))"));
+    for (auto i = 0; i < 50; ++i) {
+        auto res = con->query("MERGE (n:Node {id: 'node-" + std::to_string(i % 10) +
+                              "'}) ON CREATE SET n.payload = 'x' ON MATCH SET n.payload = 'x'");
+        ASSERT_TRUE(res->isSuccess()) << res->toString();
+        auto checkpoint = con->query("CHECKPOINT");
+        ASSERT_TRUE(checkpoint->isSuccess()) << checkpoint->toString();
+    }
+    auto count = con->query("MATCH (n:Node) RETURN COUNT(*)");
+    ASSERT_TRUE(count->isSuccess()) << count->toString();
+    ASSERT_EQ(TestHelper::convertResultToString(*count), std::vector<std::string>{"10"});
+}
+
 TEST_F(SystemConfigTest, testBufferPoolSize) {
     systemConfig->bufferPoolSize = 1024;
     try {
