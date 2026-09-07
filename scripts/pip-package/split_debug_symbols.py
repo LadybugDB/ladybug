@@ -96,12 +96,34 @@ def _find_extensions(tree: Path, suffixes: tuple[str, ...]) -> list[Path]:
     hits = []
     for suffix in suffixes:
         hits.extend(tree.rglob(f"_lbug*{suffix}"))
-    # Skip files that live inside symbol bundles/dirs themselves.
+    # Skip files that live inside symbol bundles/dirs themselves. NOTE: a
+    # dSYM bundle dir is named "<binary>.dSYM", so ".dSYM" is a suffix of
+    # a path part, not a standalone part -- check endswith, not membership.
     return [
         p
         for p in hits
-        if p.is_file() and ".dSYM" not in p.parts and not p.name.endswith(".debug")
+        if p.is_file()
+        and not any(part.endswith(".dSYM") for part in p.parts)
+        and not p.name.endswith(".debug")
     ]
+
+
+def _mach_o_has_dwarf(shared_obj: Path) -> bool:
+    """Best-effort check for a __DWARF segment (False if unknown is unsafe).
+    Returns True when unsure so callers attempt a split rather than reuse."""
+    otool = shutil.which("otool")
+    if otool is None:
+        return True
+    try:
+        out = subprocess.run(
+            [otool, "-l", str(shared_obj)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return "__DWARF" in out.stdout
+    except OSError:
+        return True
 
 
 def _split_linux(wheel_path: Path, tree: Path, symbols_dir: Path) -> None:
@@ -148,14 +170,24 @@ def _split_macos(wheel_path: Path, tree: Path, symbols_dir: Path) -> None:
         print("dsymutil/strip not found; leaving macOS wheel unstripped.", flush=True)
         return
     for so in _find_extensions(tree, (".so",)):
-        # Drop any pre-repair dSYM shipped inside the wheel; regenerate below so
-        # the bundle matches the final delocated binary.
-        for stale in tree.rglob("*.dSYM"):
+        stem = f"{wheel_path.stem}-{so.name}"
+        shipped = [d for d in tree.rglob("*.dSYM")]
+        if shipped and not _mach_o_has_dwarf(so):
+            # In-build split already stripped this binary; reuse its bundle.
+            for dsym in shipped:
+                dest = symbols_dir / f"{stem}.dSYM"
+                if dest.exists():
+                    shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
+                print(f"Reusing shipped dSYM {dsym} -> {dest}", flush=True)
+                shutil.move(str(dsym), str(dest))
+            continue
+        # Otherwise drop any stale pre-repair bundle and regenerate below so
+        # the dSYM matches the final delocated binary.
+        for stale in shipped:
             if stale.is_dir():
                 shutil.rmtree(stale)
-            else:
+            elif stale.is_file():
                 stale.unlink()
-        stem = f"{wheel_path.stem}-{so.name}"
         dsym_out = Path(tempfile.mkdtemp()) / f"{so.name}.dSYM"
         _run([dsymutil, str(so), "-o", str(dsym_out)])
         _run([strip, "-S", str(so)])
