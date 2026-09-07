@@ -1,6 +1,7 @@
 #include "graph_test/private_graph_test.h"
 #include "main/connection.h"
 #include "main/database.h"
+#include <format>
 
 namespace lbug {
 namespace testing {
@@ -148,6 +149,46 @@ TEST_F(MergeOnMatchSetTest, PersistentDelete) {
     ASSERT_TRUE(relResult->isSuccess()) << relResult->getErrorMessage();
     ASSERT_EQ(relResult->getNext()->getValue(0)->getValue<int64_t>(), 0);
     ASSERT_FALSE(relResult->hasNext());
+}
+
+// A duplicate-PK-only COPY must not leave a stale HASH PK entry that makes a later UNWIND +
+// MERGE dereference an invalid node offset during PK validation. The CSV contains one duplicate
+// row (id=10); the subsequent MERGE matches ids 10 and 24 and inserts id 99.
+TEST_F(MergeOnMatchSetTest, CopySkipDuplicatePKThenUnwindMerge) {
+    runQuery("CREATE NODE TABLE copy_merge_person (id STRING, name STRING, PRIMARY KEY(id));");
+    runQuery(std::format(
+        "COPY copy_merge_person FROM \"{}/dataset/copy-fault-tests/duplicate-ids/vPerson.csv\" "
+        "(IGNORE_ERRORS=true (DUPLICATE_PK_ONLY), PARALLEL=false);",
+        LBUG_ROOT_DIRECTORY));
+
+    auto result = conn->query("UNWIND ["
+                              "{id: '10', name: 'updated'},"
+                              "{id: '24', name: 'matched'},"
+                              "{id: '99', name: 'inserted'}"
+                              "] AS row "
+                              "MERGE (p:copy_merge_person {id: row.id}) "
+                              "SET p.name = row.name "
+                              "RETURN count(*);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
+    ASSERT_FALSE(result->hasNext());
+
+    result = conn->query("MATCH (p:copy_merge_person) RETURN p.id, p.name ORDER BY p.id;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNumTuples(), 4);
+    auto tuple = result->getNext();
+    ASSERT_EQ(tuple->getValue(0)->getValue<std::string>(), "10");
+    ASSERT_EQ(tuple->getValue(1)->getValue<std::string>(), "updated");
+    tuple = result->getNext();
+    ASSERT_EQ(tuple->getValue(0)->getValue<std::string>(), "24");
+    ASSERT_EQ(tuple->getValue(1)->getValue<std::string>(), "matched");
+    tuple = result->getNext();
+    ASSERT_EQ(tuple->getValue(0)->getValue<std::string>(), "31");
+    ASSERT_EQ(tuple->getValue(1)->getValue<std::string>(), "Xiyang");
+    tuple = result->getNext();
+    ASSERT_EQ(tuple->getValue(0)->getValue<std::string>(), "99");
+    ASSERT_EQ(tuple->getValue(1)->getValue<std::string>(), "inserted");
+    ASSERT_FALSE(result->hasNext());
 }
 
 } // namespace testing
