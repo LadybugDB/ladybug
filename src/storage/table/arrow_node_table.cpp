@@ -41,11 +41,21 @@ static std::vector<std::optional<common::ArrowLogicalTypeInfo>> resolveColumnLog
 
 ArrowNodeTable::ArrowNodeTable(const StorageManager* storageManager,
     const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
-    ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays, std::string arrowId)
+    std::shared_ptr<ArrowTableData> arrowData, std::string arrowId)
     : ColumnarNodeTableBase{storageManager, nodeTableEntry, memoryManager,
           std::make_unique<ArrowNodeTableScanSharedState>(scanMorselSize)},
-      schema{std::move(schema)}, arrays{std::move(arrays)}, totalRows{0},
-      arrowId{std::move(arrowId)} {
+      arrowData{std::move(arrowData)}, totalRows{0}, arrowId{std::move(arrowId)} {
+    if (!this->arrowData) {
+        throw common::RuntimeException("Arrow data is null");
+    }
+    // Shallow non-owning views into the pinned registry data. Safe because
+    // `arrowData` keeps the underlying Arrow buffers alive for the table's
+    // lifetime, even after the registry entry is erased.
+    this->schema = createShallowCopy(this->arrowData->schema);
+    this->arrays.reserve(this->arrowData->arrays.size());
+    for (const auto& array : this->arrowData->arrays) {
+        this->arrays.push_back(createShallowCopy(array));
+    }
     // Note: release may be nullptr if schema is managed by registry
     if (!this->schema.format) {
         throw common::RuntimeException("Arrow schema format cannot be null");

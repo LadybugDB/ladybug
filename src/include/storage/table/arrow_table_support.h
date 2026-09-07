@@ -22,6 +22,16 @@ struct ArrowRelTableData {
     std::string dstColumnName = "to";
 };
 
+// Registry-owned Arrow node-table payload. Stored as a shared_ptr in the
+// process-wide registry so that tables can pin the data they view: the
+// shared_ptr copy returned by getArrowData()/getArrowRelData() keeps the
+// underlying Arrow buffers alive even if another thread unregisters (erases)
+// the registry entry concurrently (CWE-416/667, issue #933).
+struct ArrowTableData {
+    ArrowSchemaWrapper schema;
+    std::vector<ArrowArrayWrapper> arrays;
+};
+
 // Result of creating an arrow table view
 struct ArrowTableCreationResult {
     std::unique_ptr<main::QueryResult> queryResult;
@@ -37,12 +47,15 @@ public:
     // Register Arrow relationship data and return an ID
     static std::string registerArrowRelData(ArrowRelTableData data);
 
-    // Retrieve Arrow data by ID (returns pointers to data in registry)
-    static bool getArrowData(const std::string& id, ArrowSchemaWrapper*& schema,
-        std::vector<ArrowArrayWrapper>*& arrays);
+    // Retrieve Arrow data by ID. Returns a shared_ptr pinning the registry
+    // entry's lifetime: the caller may safely dereference it after the
+    // registry lock is released, even if another thread concurrently
+    // unregisters the same ID. Returns nullptr when the ID is unknown.
+    static std::shared_ptr<ArrowTableData> getArrowData(const std::string& id);
 
-    // Retrieve Arrow relationship data by ID (returns pointer to data in registry)
-    static bool getArrowRelData(const std::string& id, ArrowRelTableData*& data);
+    // Retrieve Arrow relationship data by ID (same lifetime semantics as
+    // getArrowData above). Returns nullptr when the ID is unknown.
+    static std::shared_ptr<ArrowRelTableData> getArrowRelData(const std::string& id);
 
     // Unregister Arrow data by ID
     static void unregisterArrowData(const std::string& id);

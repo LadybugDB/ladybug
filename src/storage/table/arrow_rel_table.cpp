@@ -108,14 +108,27 @@ void ArrowRelTableScanState::setToTable(const transaction::Transaction* transact
 
 ArrowRelTable::ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, table_id_t fromTableID,
     table_id_t toTableID, const StorageManager* storageManager, MemoryManager* memoryManager,
-    const NodeTable* fromNodeTable, const NodeTable* toNodeTable, ArrowRelTableLayout layout,
-    ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays,
-    ArrowSchemaWrapper indptrSchema, std::vector<ArrowArrayWrapper> indptrArrays,
-    std::string arrowId, std::string dstColumnName)
+    const NodeTable* fromNodeTable, const NodeTable* toNodeTable,
+    std::shared_ptr<ArrowRelTableData> arrowData, std::string arrowId)
     : ColumnarRelTableBase{relGroupEntry, fromTableID, toTableID, storageManager, memoryManager},
-      fromNodeTable{fromNodeTable}, toNodeTable{toNodeTable}, layout{layout},
-      schema{std::move(schema)}, arrays{std::move(arrays)}, indptrSchema{std::move(indptrSchema)},
-      indptrArrays{std::move(indptrArrays)}, arrowId{std::move(arrowId)} {
+      fromNodeTable{fromNodeTable}, toNodeTable{toNodeTable}, arrowData{std::move(arrowData)},
+      arrowId{std::move(arrowId)} {
+    if (!this->arrowData) {
+        throw RuntimeException("Arrow relationship data is null");
+    }
+    // Shallow non-owning views into the pinned registry data (see ArrowNodeTable).
+    this->layout = this->arrowData->layout;
+    const std::string dstColumnName = this->arrowData->dstColumnName;
+    this->schema = createShallowCopy(this->arrowData->schema);
+    this->arrays.reserve(this->arrowData->arrays.size());
+    for (const auto& array : this->arrowData->arrays) {
+        this->arrays.push_back(createShallowCopy(array));
+    }
+    this->indptrSchema = createShallowCopy(this->arrowData->indptrSchema);
+    this->indptrArrays.reserve(this->arrowData->indptrArrays.size());
+    for (const auto& array : this->arrowData->indptrArrays) {
+        this->indptrArrays.push_back(createShallowCopy(array));
+    }
     if (!this->schema.format) {
         throw RuntimeException("Arrow schema format cannot be null");
     }
