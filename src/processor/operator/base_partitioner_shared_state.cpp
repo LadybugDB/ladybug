@@ -19,7 +19,8 @@ void PartitionerSharedState::initialize(const common::logical_type_vec_t&,
 }
 
 common::partition_idx_t PartitionerSharedState::getNextPartition(common::idx_t partitioningIdx) {
-    auto nextPartitionIdxToReturn = nextPartitionIdx++;
+    DASSERT(partitioningIdx < DIRECTIONS);
+    auto nextPartitionIdxToReturn = nextPartitionIdx[partitioningIdx]++;
     if (nextPartitionIdxToReturn >= numPartitions[partitioningIdx]) {
         return common::INVALID_PARTITION_IDX;
     }
@@ -31,7 +32,8 @@ common::partition_idx_t PartitionerSharedState::getNumPartitionsFromRows(common:
            common::StorageConfig::NODE_GROUP_SIZE;
 }
 
-void PartitionerSharedState::resetState(common::idx_t) {
-    nextPartitionIdx = 0;
+void PartitionerSharedState::resetState(common::idx_t partitioningIdx) {
+    DASSERT(partitioningIdx < DIRECTIONS);
+    nextPartitionIdx[partitioningIdx] = 0;
 }
 } // namespace lbug::processor
