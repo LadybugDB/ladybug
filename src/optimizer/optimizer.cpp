@@ -5,7 +5,6 @@
 #include <unordered_set>
 
 #include "binder/expression/expression_util.h"
-
 #include "common/enums/extend_direction_util.h"
 #include "main/client_context.h"
 #include "optimizer/acc_hash_join_optimizer.h"
@@ -116,8 +115,8 @@ void dumpLogicalTree(const planner::LogicalOperator* op, int depth,
         fprintf(stderr, "]");
     } else if (op->getOperatorType() == planner::LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN) {
         auto& count = op->constCast<planner::LogicalCountAntiEdgeChain>();
-        fprintf(stderr, " [%s antiDir=%s hops=%llu id<>=",
-            count.getAntiRelEntry()->getName().c_str(),
+        fprintf(stderr,
+            " [%s antiDir=%s hops=%llu id<>=", count.getAntiRelEntry()->getName().c_str(),
             common::ExtendDirectionUtil::toString(count.getAntiEdgeDir()).c_str(),
             (unsigned long long)count.getSuffixHops().size());
         fprintf(stderr, "%s]", count.getHasNotEquals() ? "true" : "false");
@@ -135,19 +134,21 @@ void dumpLogicalTree(const planner::LogicalOperator* op, int depth,
             common::ExtendDirectionUtil::toString(degree.getDirection()).c_str(),
             degree.getMode() == planner::RelDegreeTableMode::ACTIVE_BOUND_COUNT ?
                 "ACTIVE_BOUND_COUNT" :
-                degree.getMode() == planner::RelDegreeTableMode::TOP_K_DEGREES ? "TOP_K_DEGREES" :
-                                                                                 "OFFSET_COUNT");
-    } else if (op->getOperatorType() ==
-               planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP) {
+            degree.getMode() == planner::RelDegreeTableMode::TOP_K_DEGREES ? "TOP_K_DEGREES" :
+                                                                             "OFFSET_COUNT");
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP) {
         auto& lookup = op->constCast<planner::LogicalQueryPrimaryKeyLookup>();
         fprintf(stderr, " [table=%llu key=%s]", (unsigned long long)lookup.getTableID(),
             lookup.getKey()->toString().c_str());
     } else if (op->getOperatorType() == planner::LogicalOperatorType::UNWIND_DEDUPLICATE) {
         auto& dedup = op->constCast<planner::LogicalUnwindDeduplicate>();
-        fprintf(stderr, " [keys=%s]", binder::ExpressionUtil::toString(dedup.getKeyExpressions()).c_str());
+        fprintf(stderr, " [keys=%s]",
+            binder::ExpressionUtil::toString(dedup.getKeyExpressions()).c_str());
     } else if (op->getOperatorType() == planner::LogicalOperatorType::PARTITIONER) {
         fprintf(stderr, " [keys=%llu]",
-            (unsigned long long)op->constCast<planner::LogicalPartitioner>().getInfo().getNumInfos());
+            (unsigned long long)op->constCast<planner::LogicalPartitioner>()
+                .getInfo()
+                .getNumInfos());
     } else {
         // Generic fallback for operators without a dedicated handler above.
         auto exprs = op->getExpressionsForPrinting();

@@ -24,6 +24,8 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
         return "COPY_FROM";
     case LogicalOperatorType::COPY_TO:
         return "COPY_TO";
+    case LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN:
+        return "COUNT_ANTI_EDGE_CHAIN";
     case LogicalOperatorType::COUNT_EXTEND_CHAIN:
         return "COUNT_EXTEND_CHAIN";
     case LogicalOperatorType::COUNT_REL_TABLE:
@@ -132,9 +134,11 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
         return "EXTENSION_CLAUSE";
     case LogicalOperatorType::UNWIND_DEDUPLICATE:
         return "UNWIND_DEDUPLICATE";
-    default:
-        throw RuntimeException("Unknown logical operator type.");
     }
+    // No default label: -Wswitch then enforces that every LogicalOperatorType enumerator is
+    // handled above, so adding a new operator fails the build here instead of failing at
+    // runtime. The throw only guards against out-of-range values (e.g. deserialized data).
+    throw RuntimeException("Unknown logical operator type.");
 }
 // LCOV_EXCL_STOP
 
