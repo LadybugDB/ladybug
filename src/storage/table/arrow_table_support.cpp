@@ -12,16 +12,18 @@ namespace lbug {
 
 // Global registry for Arrow table data
 // Memory Management:
-// - Registry owns the Arrow data (ArrowSchemaWrapper/ArrowArrayWrapper with release callbacks)
-// - Arrow-backed tables store shallow copies (no release callbacks) and the arrowId
+// - Registry owns the Arrow data via shared_ptr (ArrowSchemaWrapper/ArrowArrayWrapper with
+//   release callbacks). getArrowData()/getArrowRelData() return a shared_ptr copy taken under
+//   the mutex, so callers pin the data past the lock scope; erasing the map entry only drops
+//   the registry's reference while live tables keep buffers valid (issue #933).
+// - Arrow-backed tables hold a shared_ptr pin plus shallow copies (no release callbacks) and
+//   the arrowId
 // - When a table is dropped (via DROP TABLE or unregisterArrowTable), the table's
 //   destructor automatically calls unregisterArrowData to clean up the registry entry
 // - The wrappers' destructors call the release callbacks to free the actual Arrow memory
 static std::mutex g_arrowRegistryMutex;
-static std::unordered_map<std::string,
-    std::pair<ArrowSchemaWrapper, std::vector<ArrowArrayWrapper>>>
-    g_arrowRegistry;
-static std::unordered_map<std::string, ArrowRelTableData> g_arrowRelRegistry;
+static std::unordered_map<std::string, std::shared_ptr<ArrowTableData>> g_arrowRegistry;
+static std::unordered_map<std::string, std::shared_ptr<ArrowRelTableData>> g_arrowRelRegistry;
 
 std::string join(const std::vector<std::string>& strings, const std::string& delimiter) {
     if (strings.empty())
@@ -58,8 +60,11 @@ std::string ArrowTableSupport::registerArrowData(ArrowSchemaWrapper schema,
     static size_t nextId = 0;
     std::string id = "arrow_" + std::to_string(nextId++);
 
-    // Store in registry
-    g_arrowRegistry[id] = std::make_pair(std::move(schema), std::move(arrays));
+    // Store in registry (shared ownership so live tables can pin the data).
+    auto entry = std::make_shared<ArrowTableData>();
+    entry->schema = std::move(schema);
+    entry->arrays = std::move(arrays);
+    g_arrowRegistry[id] = std::move(entry);
 
     return id;
 }
@@ -69,34 +74,33 @@ std::string ArrowTableSupport::registerArrowRelData(ArrowRelTableData data) {
 
     static size_t nextRelId = 0;
     std::string id = "arrow_rel_" + std::to_string(nextRelId++);
-    g_arrowRelRegistry[id] = std::move(data);
+    auto entry = std::make_shared<ArrowRelTableData>(std::move(data));
+    g_arrowRelRegistry[id] = std::move(entry);
     return id;
 }
 
-bool ArrowTableSupport::getArrowData(const std::string& id, ArrowSchemaWrapper*& schema,
-    std::vector<ArrowArrayWrapper>*& arrays) {
+std::shared_ptr<ArrowTableData> ArrowTableSupport::getArrowData(const std::string& id) {
     std::lock_guard<std::mutex> lock(g_arrowRegistryMutex);
 
     auto it = g_arrowRegistry.find(id);
     if (it == g_arrowRegistry.end()) {
-        return false;
+        return nullptr;
     }
 
-    // Return pointers to the data in the registry (not copies)
-    schema = &it->second.first;
-    arrays = &it->second.second;
-    return true;
+    // Copy the shared_ptr under the lock: the caller pins the data's lifetime
+    // past the lock scope, so a concurrent unregisterArrowData() (erase)
+    // cannot free the buffers out from under it.
+    return it->second;
 }
 
-bool ArrowTableSupport::getArrowRelData(const std::string& id, ArrowRelTableData*& data) {
+std::shared_ptr<ArrowRelTableData> ArrowTableSupport::getArrowRelData(const std::string& id) {
     std::lock_guard<std::mutex> lock(g_arrowRegistryMutex);
 
     auto it = g_arrowRelRegistry.find(id);
     if (it == g_arrowRelRegistry.end()) {
-        return false;
+        return nullptr;
     }
-    data = &it->second;
-    return true;
+    return it->second;
 }
 
 void ArrowTableSupport::unregisterArrowData(const std::string& id) {

@@ -211,24 +211,19 @@ void StorageManager::createNodeTable(NodeTableCatalogEntry* entry, main::ClientC
             // Extract Arrow ID from storage string
             std::string arrowId = entry->getStorage().substr(8);
 
-            // Retrieve Arrow data from registry (as pointers to registry data)
-            ArrowSchemaWrapper* schema = nullptr;
-            std::vector<ArrowArrayWrapper>* arrays = nullptr;
-            if (!ArrowTableSupport::getArrowData(arrowId, schema, arrays)) {
+            // Retrieve Arrow data from registry. The returned shared_ptr pins
+            // the entry's lifetime past the registry lock, so a concurrent
+            // DROP TABLE / unregister cannot free the buffers while we build
+            // the table's shallow views below (issue #933).
+            auto arrowData = ArrowTableSupport::getArrowData(arrowId);
+            if (!arrowData) {
                 throw common::RuntimeException("Failed to retrieve Arrow data for ID: " + arrowId);
             }
 
-            // Create wrappers that reference registry memory while registry keeps ownership.
-            ArrowSchemaWrapper schemaCopy = createShallowCopy(*schema);
-            std::vector<ArrowArrayWrapper> arraysCopy;
-            arraysCopy.reserve(arrays->size());
-            for (const auto& arr : *arrays) {
-                arraysCopy.push_back(createShallowCopy(arr));
-            }
-
-            // Create Arrow-backed node table
+            // Create Arrow-backed node table (it keeps its own pin plus
+            // shallow non-owning views into the pinned data).
             tables[entry->getTableID()] = std::make_unique<ArrowNodeTable>(this, entry,
-                &memoryManager, std::move(schemaCopy), std::move(arraysCopy), arrowId);
+                &memoryManager, std::move(arrowData), arrowId);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage option for node table: " + entry->getStorage());
@@ -262,8 +257,8 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
     } else if (!entry->getStorage().empty()) {
         if (entry->getStorage().substr(0, 8) == "arrow://") {
             std::string arrowId = entry->getStorage().substr(8);
-            ArrowRelTableData* relData = nullptr;
-            if (!ArrowTableSupport::getArrowRelData(arrowId, relData)) {
+            auto relData = ArrowTableSupport::getArrowRelData(arrowId);
+            if (!relData) {
                 throw common::RuntimeException("Failed to retrieve Arrow data for ID: " + arrowId);
             }
             if (!tables.contains(info.nodePair.srcTableID) ||
@@ -277,23 +272,9 @@ void StorageManager::addRelTable(RelGroupCatalogEntry* entry, const RelTableCata
                 throw common::RuntimeException(
                     "Arrow rel table currently supports only regular node tables");
             }
-            ArrowSchemaWrapper schemaCopy = createShallowCopy(relData->schema);
-            std::vector<ArrowArrayWrapper> arraysCopy;
-            arraysCopy.reserve(relData->arrays.size());
-            for (const auto& arr : relData->arrays) {
-                arraysCopy.push_back(createShallowCopy(arr));
-            }
-            ArrowSchemaWrapper indptrSchemaCopy = createShallowCopy(relData->indptrSchema);
-            std::vector<ArrowArrayWrapper> indptrArraysCopy;
-            indptrArraysCopy.reserve(relData->indptrArrays.size());
-            for (const auto& arr : relData->indptrArrays) {
-                indptrArraysCopy.push_back(createShallowCopy(arr));
-            }
             tables[info.oid] = std::make_unique<ArrowRelTable>(entry, info.nodePair.srcTableID,
                 info.nodePair.dstTableID, this, &memoryManager, fromNodeTable, toNodeTable,
-                relData->layout, std::move(schemaCopy), std::move(arraysCopy),
-                std::move(indptrSchemaCopy), std::move(indptrArraysCopy), arrowId,
-                relData->dstColumnName);
+                std::move(relData), arrowId);
         } else {
             throw common::RuntimeException(
                 "Unsupported storage option for rel table: " + entry->getStorage());
