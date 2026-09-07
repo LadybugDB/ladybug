@@ -13,6 +13,7 @@
 #include "storage/table/columnar_node_table_base.h"
 
 namespace lbug {
+struct ArrowTableData;
 namespace storage {
 
 struct ArrowNodeTableScanState final : ColumnarNodeTableScanState {
@@ -75,7 +76,7 @@ class ArrowNodeTable final : public ColumnarNodeTableBase {
 public:
     ArrowNodeTable(const StorageManager* storageManager,
         const catalog::NodeTableCatalogEntry* nodeTableEntry, MemoryManager* memoryManager,
-        ArrowSchemaWrapper schema, std::vector<ArrowArrayWrapper> arrays, std::string arrowId);
+        std::shared_ptr<ArrowTableData> arrowData, std::string arrowId);
 
     ~ArrowNodeTable();
 
@@ -121,6 +122,10 @@ private:
         const std::vector<int64_t>& outputToArrowColumnIdx) const;
 
 private:
+    // Pin on the registry entry: keeps the Arrow buffers alive even after
+    // unregisterArrowData() erases the registry map entry (issue #933).
+    // `schema`/`arrays` below are shallow non-owning views into `arrowData`.
+    std::shared_ptr<ArrowTableData> arrowData;
     ArrowSchemaWrapper schema;
     std::vector<ArrowArrayWrapper> arrays;
     std::vector<std::optional<common::ArrowLogicalTypeInfo>> columnLogicalTypeInfos;

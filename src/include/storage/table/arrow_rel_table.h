@@ -32,10 +32,7 @@ public:
     ArrowRelTable(catalog::RelGroupCatalogEntry* relGroupEntry, common::table_id_t fromTableID,
         common::table_id_t toTableID, const StorageManager* storageManager,
         MemoryManager* memoryManager, const NodeTable* fromNodeTable, const NodeTable* toNodeTable,
-        ArrowRelTableLayout layout, ArrowSchemaWrapper schema,
-        std::vector<ArrowArrayWrapper> arrays, ArrowSchemaWrapper indptrSchema,
-        std::vector<ArrowArrayWrapper> indptrArrays, std::string arrowId,
-        std::string dstColumnName = "to");
+        std::shared_ptr<ArrowRelTableData> arrowData, std::string arrowId);
     ~ArrowRelTable();
 
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,
@@ -78,6 +75,9 @@ private:
 
     const NodeTable* fromNodeTable;
     const NodeTable* toNodeTable;
+    // Pin on the registry entry (issue #933); `schema`/`arrays`/`indptrSchema`/
+    // `indptrArrays` below are shallow non-owning views into `arrowData`.
+    std::shared_ptr<ArrowRelTableData> arrowData;
     ArrowRelTableLayout layout;
     ArrowSchemaWrapper schema;
     std::vector<ArrowArrayWrapper> arrays;
