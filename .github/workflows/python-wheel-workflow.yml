@@ -271,8 +271,46 @@ jobs:
           source .venv/bin/activate
           python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse "${LBUG_PYTHON_CIBW_SOURCE_DIR}"
 
+      # --- Cross-platform symbol separation (see recipe in
+      # tools/python_api/CMakeLists.txt): split debug info out of the final
+      # repaired wheels so shipped wheels stay stripped while crash reports
+      # remain debuggable via the uploaded symbol artifacts.
+      - name: Separate debug symbols (Linux)
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          python3 scripts/pip-package/split_debug_symbols.py \
+            --wheel-dir scripts/pip-package/wheelhouse \
+            --symbols-dir scripts/pip-package/symbols \
+            --os linux
+
+      - name: Separate debug symbols (macOS)
+        if: matrix.os == 'macos'
+        shell: bash
+        run: |
+          python3 scripts/pip-package/split_debug_symbols.py \
+            --wheel-dir scripts/pip-package/wheelhouse \
+            --symbols-dir scripts/pip-package/symbols \
+            --os macos
+
+      - name: Separate debug symbols (Windows)
+        if: matrix.os == 'windows'
+        shell: bash
+        run: |
+          python scripts/pip-package/split_debug_symbols.py \
+            --wheel-dir scripts/pip-package/wheelhouse \
+            --symbols-dir scripts/pip-package/symbols \
+            --os windows
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || matrix.os }}-wheels-${{ matrix.platform }}
           path: ./scripts/pip-package/wheelhouse/*.whl
+
+      - name: Upload debug symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || matrix.os }}-symbols-${{ matrix.platform }}
+          path: ./scripts/pip-package/symbols/*
+          if-no-files-found: warn
