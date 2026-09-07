@@ -25,11 +25,18 @@ struct LBUG_API PartitionerSharedState {
     std::array<common::offset_t, DIRECTIONS> numNodes;
     std::array<common::partition_idx_t, DIRECTIONS>
         numPartitions; // num of partitions in each direction.
-    std::atomic<common::partition_idx_t> nextPartitionIdx;
+    // One partition cursor per direction. The FWD and BWD RelBatchInsert pipelines share this
+    // state and run concurrently, so a single shared cursor lets workers steal each other's
+    // partition indices, and lets one direction's resetState() re-issue partitions the other
+    // direction is still processing (two workers mutating the same partition buffer in place).
+    std::array<std::atomic<common::partition_idx_t>, DIRECTIONS> nextPartitionIdx;
 
     PartitionerSharedState()
         : srcNodeTable{nullptr}, dstNodeTable{nullptr}, relTable(nullptr), numNodes{0, 0},
-          numPartitions{0, 0}, nextPartitionIdx{0} {}
+          numPartitions{0, 0} {
+        nextPartitionIdx[0] = 0;
+        nextPartitionIdx[1] = 0;
+    }
     virtual ~PartitionerSharedState() = default;
 
     template<class TARGET>
