@@ -3,6 +3,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "common/cast.h"
 #include "common/exception/message.h"
+#include "common/exception/runtime.h"
 #include "common/types/types.h"
 #include "common/types/value/value.h"
 #include "storage/index/hash_index.h"
@@ -42,9 +43,19 @@ void LocalNodeTable::initLocalHashIndex(MemoryManager& mm) {
 }
 
 bool LocalNodeTable::isVisible(const Transaction* transaction, offset_t offset) const {
+    if (offset < startOffset) {
+        throw RuntimeException(
+            "Primary-key index contains an invalid local node offset. Please drop and rebuild "
+            "the _PK index.");
+    }
     auto [nodeGroupIdx, offsetInGroup] =
         StorageUtils::getNodeGroupIdxAndOffsetInChunk(offset - startOffset);
-    auto* nodeGroup = nodeGroups.getNodeGroup(nodeGroupIdx);
+    auto* nodeGroup = nodeGroups.getNodeGroup(nodeGroupIdx, true /*mayOutOfBound*/);
+    if (nodeGroup == nullptr || offsetInGroup >= nodeGroup->getNumRows()) {
+        throw RuntimeException(
+            "Primary-key index contains an invalid local node offset. Please drop and rebuild "
+            "the _PK index.");
+    }
     if (nodeGroup->isDeleted(transaction, offsetInGroup)) {
         return false;
     }
