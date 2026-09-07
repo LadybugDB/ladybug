@@ -63,6 +63,8 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitOperator(
 
 static LogicalOperator* skipProjections(LogicalOperator* op);
 static bool containsOp(const LogicalOperator* root, const LogicalOperator* target);
+static bool isNativeRelGroupEntry(const RelGroupCatalogEntry* entry);
+static bool isNativeNodeEntry(const NodeTableCatalogEntry* entry);
 
 std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteAntiEdgeChainCount(
     std::shared_ptr<LogicalOperator> op) {
@@ -234,7 +236,8 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteAntiEdgeChain
                 continue;
             }
             auto* relGroupEntry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
-            if (relGroupEntry->getScanFunction().has_value()) {
+            if (relGroupEntry->getScanFunction().has_value() ||
+                !isNativeRelGroupEntry(relGroupEntry)) {
                 continue;
             }
             auto* extendChild = skipProjections((ext->getChild(0).get()));
@@ -405,7 +408,8 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteAntiEdgeChain
                 return op;
             }
             auto* relGroupEntry = rel->getEntry(0)->ptrCast<RelGroupCatalogEntry>();
-            if (relGroupEntry->getScanFunction().has_value()) {
+            if (relGroupEntry->getScanFunction().has_value() ||
+                !isNativeRelGroupEntry(relGroupEntry)) {
                 return op;
             }
             if (ext->getDirection() == ExtendDirection::BOTH) {
@@ -466,6 +470,11 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteAntiEdgeChain
         return op;
     }
     if (antiNodeA->getTableIDs()[0] != midTableID || antiNodeB->getTableIDs()[0] != midTableID) {
+        return op;
+    }
+    // n0, n1 and n2 all bind midTableID, so gating that one entry covers every node the
+    // operator's node-group arithmetic touches.
+    if (!isNativeNodeEntry(midNode->getEntry(0)->ptrCast<NodeTableCatalogEntry>())) {
         return op;
     }
 
@@ -570,15 +579,6 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteExtendChainCo
 
     // Validate the extends form a simple path over single-table nodes with single-entry,
     // storage-backed rel groups.
-    // The fast path below iterates the committed node-group grid of native node tables and
-    // reads the CSR of native rel tables. Arrow-backed and icebug-disk tables have neither,
-    // so they must be left to the regular plan.
-    auto isNativeRelGroupEntry = [](const RelGroupCatalogEntry* entry) {
-        return entry->getStorage().empty() && entry->getStorageFormat() == StorageFormat::NONE;
-    };
-    auto isNativeNodeEntry = [](const NodeTableCatalogEntry* entry) {
-        return entry->getStorage().empty() && entry->getStorageFormat() == StorageFormat::NONE;
-    };
     struct ChainEdge {
         std::string u;
         std::string v;
@@ -1141,6 +1141,17 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
         expression_vector{std::move(projectedSum)}, std::move(countRelTable));
     projection->computeFlatSchema();
     return projection;
+}
+
+// The count-chain fast paths iterate the committed node-group grid of native node tables and
+// read the CSR of native rel tables. Arrow-backed and icebug-disk tables have neither, so they
+// must be left to the regular plan.
+static bool isNativeRelGroupEntry(const RelGroupCatalogEntry* entry) {
+    return entry->getStorage().empty() && entry->getStorageFormat() == StorageFormat::NONE;
+}
+
+static bool isNativeNodeEntry(const NodeTableCatalogEntry* entry) {
+    return entry->getStorage().empty() && entry->getStorageFormat() == StorageFormat::NONE;
 }
 
 static LogicalOperator* skipProjections(LogicalOperator* op) {
