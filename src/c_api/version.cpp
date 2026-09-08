@@ -7,7 +7,7 @@ char* lbug_get_version() {
     LBUG_C_API_GUARD_BEGIN
     auto version = lbug::main::Version::getVersion();
     if (version == nullptr || version[0] == '\0') {
-        version = "0.20.2";
+        version = "0.20.3";
     }
     return convertToOwnedCString(version);
     LBUG_C_API_GUARD_END(nullptr)
