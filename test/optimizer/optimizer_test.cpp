@@ -3,6 +3,10 @@
 #include <string>
 #include <vector>
 
+#include "catalog/catalog.h"
+#include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "common/enums/storage_format.h"
 #include "graph_test/private_graph_test.h"
 #include "planner/join_order/cost_model.h"
 #include "planner/operator/logical_filter.h"
@@ -10,6 +14,7 @@
 #include "planner/operator/scan/logical_count_rel_table.h"
 #include "planner/operator/scan/logical_dummy_scan.h"
 #include "test_runner/test_runner.h"
+#include "transaction/transaction.h"
 #include <format>
 
 namespace lbug {
@@ -904,8 +909,16 @@ TEST_F(OptimizerTest, CountReachableDistinctNodes) {
 
 // The COUNT_ANTI_EDGE_CHAIN fast path walks the committed node-group grid and reads
 // the CSR of native tables, so it must decline tables backed by another storage
-// format. The native case is asserted alongside it so that the skip case cannot pass
-// merely because the query stopped matching the rewrite.
+// format.
+//
+// What is asserted here, and why: the rewrite only fires when the planner produces an
+// INNER-over-MARK plan with the prefix chain rooted at the middle-node scan (see
+// tryRewriteAntiEdgeChainCount). On a tiny fixture the join orderer never produces that
+// shape — everything plans at cardinality 1 — so operator presence cannot be asserted
+// deterministically here; firing itself was validated by hand on an LSQB-scale database.
+// Instead these tests pin both sides of the storage gate directly: native tables satisfy
+// the nativeness condition the fast path requires (and answer the query correctly),
+// while icebug-disk tables fail it (and keep the regular plan).
 class AntiEdgeChainStorageGateTest : public StatsOptimizerTest {
 public:
     // The LSQB q9 shape the rewrite targets: two undirected hops either side of a middle
@@ -913,6 +926,12 @@ public:
     // table. Mirrors test_files/lsqb/lsqb_queries.test with the demo-db schema.
     static constexpr const char* kAntiEdgeChainQuery =
         "EXPLAIN LOGICAL MATCH (u1:user)-[:follows]-(u2:user)-[:follows]-(u3:user)"
+        "-[:livesin]->(c:city) "
+        "WHERE NOT EXISTS {MATCH (u1)-[:follows]-(u3)} AND id(u1) <> id(u3) "
+        "RETURN count(*);";
+    // Same shape without the EXPLAIN prefix, for executing the query.
+    static constexpr const char* kAntiEdgeChainCountQuery =
+        "MATCH (u1:user)-[:follows]-(u2:user)-[:follows]-(u3:user)"
         "-[:livesin]->(c:city) "
         "WHERE NOT EXISTS {MATCH (u1)-[:follows]-(u3)} AND id(u1) <> id(u3) "
         "RETURN count(*);";
@@ -951,17 +970,67 @@ public:
             ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
         }
     }
+
+    // Pins the exact branch condition of isNativeNodeEntry / isNativeRelGroupEntry in
+    // count_rel_table_optimizer.cpp for the tables under test.
+    void assertNativeEntries() {
+        auto* catalog = database->getCatalog();
+        for (const char* table : {"user", "city"}) {
+            const auto* entry =
+                catalog->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, table)
+                    ->ptrCast<catalog::NodeTableCatalogEntry>();
+            ASSERT_TRUE(entry->getStorage().empty()) << table;
+            ASSERT_EQ(entry->getStorageFormat(), common::StorageFormat::NONE) << table;
+        }
+        for (const char* table : {"follows", "livesin"}) {
+            const auto* entry =
+                catalog->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, table)
+                    ->ptrCast<catalog::RelGroupCatalogEntry>();
+            ASSERT_TRUE(entry->getStorage().empty()) << table;
+            ASSERT_EQ(entry->getStorageFormat(), common::StorageFormat::NONE) << table;
+        }
+    }
+
+    void assertNonNativeEntries() {
+        auto* catalog = database->getCatalog();
+        for (const char* table : {"user", "city"}) {
+            const auto* entry =
+                catalog->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, table)
+                    ->ptrCast<catalog::NodeTableCatalogEntry>();
+            ASSERT_FALSE(entry->getStorage().empty() &&
+                         entry->getStorageFormat() == common::StorageFormat::NONE)
+                << table;
+        }
+        for (const char* table : {"follows", "livesin"}) {
+            const auto* entry =
+                catalog->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, table)
+                    ->ptrCast<catalog::RelGroupCatalogEntry>();
+            ASSERT_FALSE(entry->getStorage().empty() &&
+                         entry->getStorageFormat() == common::StorageFormat::NONE)
+                << table;
+        }
+    }
 };
 
-TEST_F(AntiEdgeChainStorageGateTest, RewritesNativeTables) {
+TEST_F(AntiEdgeChainStorageGateTest, NativeTablesPassStorageGate) {
     createNativeTables();
-    auto plan = getRoot(kAntiEdgeChainQuery);
-    ASSERT_TRUE(OptimizerTest::hasOperatorType(plan->getLastOperator().get(),
-        planner::LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN));
+    // Positive side of the gate: native tables satisfy the nativeness condition the fast
+    // path requires, so the gate lets them through.
+    assertNativeEntries();
+    // The query over the fixture graph (user chain 0-1-...-5, one livesin city per user)
+    // counts 8 undirected length-2 follows paths: no follows chord closes any of them, and
+    // each contributes one suffix row.
+    auto result = conn->query(kAntiEdgeChainCountQuery);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 8);
 }
 
 TEST_F(AntiEdgeChainStorageGateTest, SkipsIcebugDiskTables) {
     createIcebugDiskTables();
+    // Negative side of the gate: these tables fail the nativeness condition, so the fast
+    // path must decline them. Asserting the precondition alongside the plan keeps this
+    // test honest: it cannot pass by running against native tables by mistake.
+    assertNonNativeEntries();
     auto plan = getRoot(kAntiEdgeChainQuery);
     ASSERT_FALSE(OptimizerTest::hasOperatorType(plan->getLastOperator().get(),
         planner::LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN));
