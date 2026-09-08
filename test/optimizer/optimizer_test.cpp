@@ -1,5 +1,6 @@
 #include <functional>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "graph_test/private_graph_test.h"
@@ -907,37 +908,48 @@ TEST_F(OptimizerTest, CountReachableDistinctNodes) {
 // merely because the query stopped matching the rewrite.
 class AntiEdgeChainStorageGateTest : public StatsOptimizerTest {
 public:
+    // The LSQB q9 shape the rewrite targets: two undirected hops either side of a middle
+    // node, an anti-edge between the outer two, and a directed suffix hop into another
+    // table. Mirrors test_files/lsqb/lsqb_queries.test with the demo-db schema.
     static constexpr const char* kAntiEdgeChainQuery =
-        "EXPLAIN LOGICAL MATCH (a:user)<-[:follows]-(n1:user)-[:follows]->(b:user) "
-        "WHERE id(a) <> id(b) AND NOT (a)-[:follows]->(b) "
-        "RETURN COUNT(*);";
+        "EXPLAIN LOGICAL MATCH (u1:user)-[:follows]-(u2:user)-[:follows]-(u3:user)"
+        "-[:livesin]->(c:city) "
+        "WHERE NOT EXISTS {MATCH (u1)-[:follows]-(u3)} AND id(u1) <> id(u3) "
+        "RETURN count(*);";
 
     void createIcebugDiskTables() {
-        const auto storage = TestHelper::appendLbugRootPath("dataset/demo-db/icebug-disk/");
-        auto nodeResult = conn->query(
-            std::format("CREATE NODE TABLE user(id INT32, name STRING, age INT64, "
-                        "PRIMARY KEY(id)) WITH (storage = '{}', format = 'icebug-disk');",
-                storage));
-        ASSERT_TRUE(nodeResult->isSuccess()) << nodeResult->getErrorMessage();
-        auto relResult =
-            conn->query(std::format("CREATE REL TABLE follows(FROM user TO user, since INT32) "
-                                    "WITH (storage = '{}', format = 'icebug-disk');",
-                storage));
-        ASSERT_TRUE(relResult->isSuccess()) << relResult->getErrorMessage();
+        // The demo-db icebug-disk dataset carries exactly this schema.
+        const std::string storage = TestHelper::appendLbugRootPath("dataset/demo-db/icebug-disk/");
+        const std::string backing = " WITH (storage = '" + storage + "', format = 'icebug-disk');";
+        const std::vector<std::string> ddl{
+            "CREATE NODE TABLE city(id INT32, name STRING, population INT64, "
+            "PRIMARY KEY(id))" +
+                backing,
+            "CREATE NODE TABLE user(id INT32, name STRING, age INT64, PRIMARY KEY(id))" + backing,
+            "CREATE REL TABLE follows(FROM user TO user, since INT32)" + backing,
+            "CREATE REL TABLE livesin(FROM user TO city)" + backing};
+        for (const auto& statement : ddl) {
+            auto result = conn->query(statement);
+            ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        }
     }
 
     void createNativeTables() {
-        ASSERT_TRUE(conn->query("CREATE NODE TABLE user(id INT32, name STRING, age INT64, "
-                                "PRIMARY KEY(id));")
-                        ->isSuccess());
-        ASSERT_TRUE(
-            conn->query("CREATE REL TABLE follows(FROM user TO user, since INT32);")->isSuccess());
-        auto rows = conn->query("UNWIND range(0, 5) AS i "
-                                "CREATE (:user {id: i, name: 'u', age: i});");
-        ASSERT_TRUE(rows->isSuccess()) << rows->getErrorMessage();
-        auto edges = conn->query("MATCH (x:user), (y:user) WHERE x.id + 1 = y.id "
-                                 "CREATE (x)-[:follows {since: 2020}]->(y);");
-        ASSERT_TRUE(edges->isSuccess()) << edges->getErrorMessage();
+        const std::vector<std::string> ddl{
+            "CREATE NODE TABLE city(id INT32, name STRING, population INT64, "
+            "PRIMARY KEY(id));",
+            "CREATE NODE TABLE user(id INT32, name STRING, age INT64, PRIMARY KEY(id));",
+            "CREATE REL TABLE follows(FROM user TO user, since INT32);",
+            "CREATE REL TABLE livesin(FROM user TO city);",
+            "UNWIND range(0, 5) AS i CREATE (:user {id: i, name: 'u', age: i});",
+            "UNWIND range(0, 2) AS i CREATE (:city {id: i, name: 'c', population: i});",
+            "MATCH (x:user), (y:user) WHERE x.id + 1 = y.id "
+            "CREATE (x)-[:follows {since: 2020}]->(y);",
+            "MATCH (u:user), (c:city) WHERE u.id % 3 = c.id CREATE (u)-[:livesin]->(c);"};
+        for (const auto& statement : ddl) {
+            auto result = conn->query(statement);
+            ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        }
     }
 };
 
