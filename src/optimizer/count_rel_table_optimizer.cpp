@@ -453,6 +453,14 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteAntiEdgeChain
                 toTableID != toNode->getTableIDs()[0]) {
                 return op;
             }
+            // Parity with the extend-chain path, which gates every node it touches. The
+            // binder refuses to mix icebug-disk tables with native ones, but there is no
+            // equivalent guard for Arrow-backed tables, so the rel group's format alone
+            // cannot vouch for its endpoints.
+            if (!isNativeNodeEntry(fromNode->getEntry(0)->ptrCast<NodeTableCatalogEntry>()) ||
+                !isNativeNodeEntry(toNode->getEntry(0)->ptrCast<NodeTableCatalogEntry>())) {
+                return op;
+            }
             hop.relScans.push_back({relGroupEntry->getRelEntryInfos()[0].oid, scanDirection,
                 fromTableID, toTableID, relGroupEntry->getName()});
             matched = true;

@@ -901,5 +901,59 @@ TEST_F(OptimizerTest, CountReachableDistinctNodes) {
     ASSERT_EQ(resultNoCsr->getNext()->getValue(0)->getValue<int64_t>(), 2);
 }
 
+// The COUNT_ANTI_EDGE_CHAIN fast path walks the committed node-group grid and reads
+// the CSR of native tables, so it must decline tables backed by another storage
+// format. The native case is asserted alongside it so that the skip case cannot pass
+// merely because the query stopped matching the rewrite.
+class AntiEdgeChainStorageGateTest : public StatsOptimizerTest {
+public:
+    static constexpr const char* kAntiEdgeChainQuery =
+        "EXPLAIN LOGICAL MATCH (a:user)<-[:follows]-(n1:user)-[:follows]->(b:user) "
+        "WHERE id(a) <> id(b) AND NOT (a)-[:follows]->(b) "
+        "RETURN COUNT(*);";
+
+    void createIcebugDiskTables() {
+        const auto storage = TestHelper::appendLbugRootPath("dataset/demo-db/icebug-disk/");
+        auto nodeResult = conn->query(
+            std::format("CREATE NODE TABLE user(id INT32, name STRING, age INT64, "
+                        "PRIMARY KEY(id)) WITH (storage = '{}', format = 'icebug-disk');",
+                storage));
+        ASSERT_TRUE(nodeResult->isSuccess()) << nodeResult->getErrorMessage();
+        auto relResult =
+            conn->query(std::format("CREATE REL TABLE follows(FROM user TO user, since INT32) "
+                                    "WITH (storage = '{}', format = 'icebug-disk');",
+                storage));
+        ASSERT_TRUE(relResult->isSuccess()) << relResult->getErrorMessage();
+    }
+
+    void createNativeTables() {
+        ASSERT_TRUE(conn->query("CREATE NODE TABLE user(id INT32, name STRING, age INT64, "
+                                "PRIMARY KEY(id));")
+                        ->isSuccess());
+        ASSERT_TRUE(
+            conn->query("CREATE REL TABLE follows(FROM user TO user, since INT32);")->isSuccess());
+        auto rows = conn->query("UNWIND range(0, 5) AS i "
+                                "CREATE (:user {id: i, name: 'u', age: i});");
+        ASSERT_TRUE(rows->isSuccess()) << rows->getErrorMessage();
+        auto edges = conn->query("MATCH (x:user), (y:user) WHERE x.id + 1 = y.id "
+                                 "CREATE (x)-[:follows {since: 2020}]->(y);");
+        ASSERT_TRUE(edges->isSuccess()) << edges->getErrorMessage();
+    }
+};
+
+TEST_F(AntiEdgeChainStorageGateTest, RewritesNativeTables) {
+    createNativeTables();
+    auto plan = getRoot(kAntiEdgeChainQuery);
+    ASSERT_TRUE(OptimizerTest::hasOperatorType(plan->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN));
+}
+
+TEST_F(AntiEdgeChainStorageGateTest, SkipsIcebugDiskTables) {
+    createIcebugDiskTables();
+    auto plan = getRoot(kAntiEdgeChainQuery);
+    ASSERT_FALSE(OptimizerTest::hasOperatorType(plan->getLastOperator().get(),
+        planner::LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN));
+}
+
 } // namespace testing
 } // namespace lbug
