@@ -867,6 +867,10 @@ bool NodeTable::isVisible(const Transaction* transaction, offset_t offset) const
 }
 
 bool NodeTable::isVisibleNoLock(const Transaction* transaction, offset_t offset) const {
+    if (offset == INVALID_OFFSET) {
+        throw RuntimeException(
+            "Index contains an invalid node offset. Please drop and rebuild the index.");
+    }
     if (transaction && transaction->isUnCommitted(tableID, offset)) {
         const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
         DASSERT(localTable);
@@ -874,11 +878,13 @@ bool NodeTable::isVisibleNoLock(const Transaction* transaction, offset_t offset)
     }
     auto [nodeGroupIdx, offsetInGroup] = StorageUtils::getNodeGroupIdxAndOffsetInChunk(offset);
     if (nodeGroupIdx >= nodeGroups->getNumNodeGroupsNoLock()) {
-        return false;
+        throw RuntimeException(
+            "Index contains an invalid node offset. Please drop and rebuild the index.");
     }
     const auto* nodeGroup = getNodeGroupNoLock(nodeGroupIdx);
-    if (nodeGroup == nullptr) {
-        return false;
+    if (nodeGroup == nullptr || offsetInGroup >= nodeGroup->getNumRows()) {
+        throw RuntimeException(
+            "Index contains an invalid node offset. Please drop and rebuild the index.");
     }
     return nodeGroup->isVisibleNoLock(transaction, offsetInGroup);
 }
@@ -931,32 +937,7 @@ bool NodeTable::lookupPK(const Transaction* transaction, ValueVector* keyVector,
     }
     if (auto* pkIndex = tryGetPrimaryKeyIndex()) {
         return pkIndex->lookupPrimaryKey(transaction, keyVector, vectorPos, result,
-            [&](offset_t offset) {
-                // A stale/corrupt PK index entry must not reach isVisibleNoLock(), where an
-                // invalid node offset could otherwise be dereferenced in a release build. Keep
-                // this validation O(1) on the normal lookup path and fail the transaction instead
-                // of treating a corrupt entry as a missing key.
-                if (offset == INVALID_OFFSET) {
-                    throw RuntimeException(
-                        "Primary-key index contains an invalid node offset. Please drop and "
-                        "rebuild the _PK index.");
-                }
-                const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(offset);
-                if (nodeGroupIdx >= nodeGroups->getNumNodeGroupsNoLock()) {
-                    throw RuntimeException(
-                        "Primary-key index points to a missing node group. Please drop and "
-                        "rebuild the _PK index.");
-                }
-                const auto* nodeGroup = getNodeGroupNoLock(nodeGroupIdx);
-                const auto offsetInGroup =
-                    offset - StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
-                if (nodeGroup == nullptr || offsetInGroup >= nodeGroup->getNumRows()) {
-                    throw RuntimeException(
-                        "Primary-key index contains an out-of-range node offset. Please drop "
-                        "and rebuild the _PK index.");
-                }
-                return isVisibleNoLock(transaction, offset);
-            });
+            [&](offset_t offset) { return isVisibleNoLock(transaction, offset); });
     }
     auto keyToLookup = keyVector->getAsValue(vectorPos);
     ColumnPredicateSet predicateSet;

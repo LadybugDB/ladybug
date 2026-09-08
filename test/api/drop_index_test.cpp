@@ -75,6 +75,18 @@ TEST_F(DropIndexTest, DropDefaultHashIndex) {
     EXPECT_EQ(TestHelper::convertResultToString(*countRes), std::vector<std::string>{"3"});
 }
 
+// An index entry can point into the allocated capacity of a node group while still being past
+// its actual row count. Visibility checks must reject that offset before reading version arrays.
+TEST_F(DropIndexTest, RejectOutOfRangeNodeOffsetInVisibilityCheck) {
+    auto& con = *conn;
+    assertQuery(*con.query("CREATE NODE TABLE invalid_offset_person(ID INT64, PRIMARY KEY(ID))"));
+    assertQuery(*con.query("CREATE (:invalid_offset_person {ID: 1})"));
+
+    EXPECT_THROW(
+        getNodeTable("invalid_offset_person").isVisibleNoLock(&DUMMY_CHECKPOINT_TRANSACTION, 1),
+        RuntimeException);
+}
+
 // Dropping a non-existent index without IF EXISTS must error.
 TEST_F(DropIndexTest, DropNonExistentIndexThrows) {
     auto& con = *conn;
