@@ -12,12 +12,14 @@
 #include "common/concurrent_vector.h"
 #include "common/constants.h"
 #include "common/copy_constructors.h"
+#include "common/exception/runtime.h"
 #include "common/file_system/file_info.h"
 #include "common/types/types.h"
 #include "storage/buffer_manager/page_state.h"
 #include "storage/buffer_manager/vm_region.h"
 #include "storage/enums/page_read_policy.h"
 #include "storage/page_manager.h"
+#include <format>
 
 namespace lbug {
 namespace main {
@@ -91,6 +93,17 @@ public:
     void readPageFromDisk(uint8_t* frame, common::page_idx_t pageIdx) const {
         DASSERT(!isInMemoryMode());
         DASSERT(pageIdx < numPages);
+        // Fail fast with an actionable error instead of issuing a wild pread far
+        // beyond EOF (issue #843: a corrupted PIP chain turned into
+        // "Cannot read from file ... position: 4727899947008"). DASSERT alone is
+        // stripped in release builds.
+        if (pageIdx >= numPages) {
+            const auto numPagesSnapshot = numPages.load();
+            throw common::RuntimeException(
+                std::format("Cannot read page {} from disk: out of bounds for file with {} pages. "
+                            "The database file may be corrupted.",
+                    pageIdx, numPagesSnapshot));
+        }
         fileInfo->readFromFile(frame, getPageSize(), pageIdx * getPageSize());
     }
     void writePageToFile(const uint8_t* buffer, common::page_idx_t pageIdx) {

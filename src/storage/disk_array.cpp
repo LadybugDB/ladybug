@@ -33,6 +33,14 @@ PageStorageInfo::PageStorageInfo(uint64_t elementSize)
 
 PIPWrapper::PIPWrapper(const FileHandle& fileHandle, page_idx_t pipPageIdx)
     : pipPageIdx(pipPageIdx) {
+    // Validate before issuing the read so a corrupted PIP pointer fails fast with
+    // the offending index instead of a wild pread beyond EOF (issue #843).
+    if (pipPageIdx >= fileHandle.getNumPages()) {
+        throw RuntimeException(std::format("Cannot read PIP page {} from disk: out of bounds "
+                                           "for file with {} pages. The database file may be "
+                                           "corrupted.",
+            pipPageIdx, fileHandle.getNumPages()));
+    }
     fileHandle.readPageFromDisk(reinterpret_cast<uint8_t*>(&pipContents), pipPageIdx);
 }
 
