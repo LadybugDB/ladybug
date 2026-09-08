@@ -6,12 +6,44 @@
 #include "processor/operator/sink.h"
 #include "processor/physical_plan.h"
 #include "processor/processor_task.h"
+#include "processor/result/result_set.h"
 
 using namespace lbug::common;
 using namespace lbug::storage;
 
 namespace lbug {
 namespace processor {
+
+std::shared_ptr<ResultSet> ResultSetPool::getOrCreate(ResultSetDescriptor* descriptor,
+    MemoryManager* memoryManager) {
+    const auto threadID = std::this_thread::get_id();
+    std::shared_ptr<ResultSet> reusable;
+    {
+        std::lock_guard lock{mtx};
+        auto& entry = entries[threadID];
+        if (entry.resultSet && entry.descriptorID == descriptor->id) {
+            reusable = entry.resultSet;
+        }
+    }
+    if (reusable) {
+        // Same prepared statement on this thread: reuse the allocation. Only this thread touches
+        // its slot's ResultSet, so the reset happens after the lock is released.
+        reusable->resetForReuse();
+        return reusable;
+    }
+    // First time on this thread, or a different prepared statement: allocate fresh outside the
+    // lock, then swap it in and release the previous ResultSet after unlocking.
+    auto resultSet = std::make_shared<ResultSet>(descriptor, memoryManager);
+    std::shared_ptr<ResultSet> previous;
+    {
+        std::lock_guard lock{mtx};
+        auto& entry = entries[threadID];
+        previous = std::move(entry.resultSet);
+        entry.resultSet = resultSet;
+        entry.descriptorID = descriptor->id;
+    }
+    return resultSet;
+}
 
 #if defined(__APPLE__)
 QueryProcessor::QueryProcessor(uint64_t numThreads, uint32_t threadQos) {
