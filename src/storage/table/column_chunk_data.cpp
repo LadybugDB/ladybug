@@ -375,7 +375,15 @@ void ColumnChunkData::initializeScanState(SegmentState& state, const Column* col
 
 void ColumnChunkData::scan(ValueVector& output, offset_t offset, length_t length,
     sel_t posInOutputVector) const {
+    // Scanning zero rows must not touch data buffers: empty (e.g. freshly created)
+    // chunks may hold null/zero-size buffers, and memcpy with a null source is UB
+    // even when the byte count is 0 (issue #840: SIGSEGV in memmove under
+    // NodeTableScanState::scanNext on empty tables via a parallel scan morsel).
+    if (length == 0) {
+        return;
+    }
     DASSERT(offset + length <= numValues);
+    DASSERT(getData() != nullptr);
     if (nullData) {
         nullData->scan(output, offset, length, posInOutputVector);
     }
@@ -785,6 +793,9 @@ std::unique_ptr<NullChunkData> NullChunkData::deserialize(MemoryManager& memoryM
 
 void NullChunkData::scan(ValueVector& output, offset_t offset, length_t length,
     sel_t posInOutputVector) const {
+    if (length == 0) {
+        return;
+    }
     output.setNullFromBits(getNullMask().getData(), offset, posInOutputVector, length);
 }
 
