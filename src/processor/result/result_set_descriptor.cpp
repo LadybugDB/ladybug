@@ -28,8 +28,8 @@ std::unique_ptr<ResultSetDescriptor> ResultSetDescriptor::copy() const {
         std::make_unique<ResultSetDescriptor>(std::move(dataChunkDescriptorsCopy));
     // A copy is the same descriptor slot with identical content (copies are never mutated
     // afterwards), so it inherits the source's identity. This keeps the id stable across
-    // executions of a prepared statement's cached plan, letting the thread-local ResultSet
-    // cache in ProcessorTask::run() actually hit. Two live descriptors with the same id are
+    // executions of a prepared statement's cached plan, letting the per-database ResultSetPool
+    // used by ProcessorTask::run() actually hit. Two live descriptors with the same id are
     // by construction content-identical, so cache reuse remains safe.
     descriptorCopy->id = id;
     return descriptorCopy;

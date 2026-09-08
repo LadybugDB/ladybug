@@ -171,3 +171,57 @@ TEST_F(SystemConfigTest, testDisableDefaultHashIndexFromDBConfig) {
     auto& nodeTable = db->getStorageManager()->getTable(entry->getTableID())->cast<NodeTable>();
     ASSERT_EQ(nodeTable.tryGetPKIndex(), nullptr);
 }
+
+// Regression: the per-thread reusable ResultSet used to live in a process-wide thread_local, so
+// on single-threaded builds (where the calling thread runs ProcessorTask::run, e.g. the
+// single-threaded Wasm package) it outlived Database::~Database and released (or reused)
+// ValueVector buffers through the destroyed database's MemoryManager the next time any database
+// ran a query on that thread. That is a heap-use-after-free under AddressSanitizer and silent heap
+// corruption otherwise; on Wasm it surfaced as "RuntimeError: null function" after a
+// prepared-write / close / reopen sequence. The pool is now owned by the database. On
+// multithreaded builds worker threads (and their former thread_local) are joined with the
+// database, so this test only demonstrates the bug in a SINGLE_THREADED (+ASan) configuration;
+// elsewhere it still checks reuse and data visibility across the reopen.
+TEST_F(SystemConfigTest, testResultSetReuseDoesNotOutliveDatabase) {
+    if (databasePath == "" || databasePath == ":memory:") {
+        GTEST_SKIP() << "Requires an on-disk database that can be closed and reopened";
+    }
+    systemConfig->readOnly = false;
+    for (auto round = 0u; round < 3; ++round) {
+        auto db = std::make_unique<Database>(databasePath, *systemConfig);
+        auto con = std::make_unique<Connection>(db.get());
+        if (round == 0) {
+            assertQuery(
+                *con->query("CREATE NODE TABLE Meta(key STRING, value STRING, PRIMARY KEY(key))"));
+        }
+        // Prepared write executed once: the executing thread caches a ResultSet whose
+        // string buffers belong to this database's MemoryManager.
+        auto del = con->prepare("MATCH (m:Meta) WHERE m.key = $key DELETE m");
+        assertQuery(*con->execute(del.get(),
+            std::make_pair(std::string("key"), std::string("graphIdentitySchemaVersion"))));
+        auto ins = con->prepare("CREATE (:Meta {key: $key, value: $value})");
+        assertQuery(*con->execute(ins.get(),
+            std::make_pair(std::string("key"), std::string("graphIdentitySchemaVersion")),
+            std::make_pair(std::string("value"), std::string("qualified-scope-id-v2-round-x"))));
+        // Reuse across executions of the same prepared statement must still work.
+        assertQuery(*con->execute(del.get(),
+            std::make_pair(std::string("key"), std::string("graphIdentitySchemaVersion"))));
+        assertQuery(*con->execute(ins.get(),
+            std::make_pair(std::string("key"), std::string("graphIdentitySchemaVersion")),
+            std::make_pair(std::string("value"), std::string("qualified-scope-id-v2"))));
+        del.reset();
+        ins.reset();
+        con.reset();
+        db.reset();
+        // Reopen on the same thread and run a query with a different descriptor: before the fix
+        // this released the previous database's cached ResultSet through a dangling
+        // MemoryManager.
+        db = std::make_unique<Database>(databasePath, *systemConfig);
+        con = std::make_unique<Connection>(db.get());
+        auto result = con->query("MATCH (m:Meta) RETURN m.key, m.value ORDER BY m.key");
+        assertQuery(*result);
+        ASSERT_EQ(result->getNumTuples(), 1u);
+        ASSERT_EQ(result->getNext()->toString(),
+            "graphIdentitySchemaVersion|qualified-scope-id-v2\n");
+    }
+}

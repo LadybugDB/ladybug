@@ -2,8 +2,10 @@
 
 #include "common/task_system/progress_bar.h"
 #include "main/client_context.h"
+#include "main/database.h"
 #include "main/settings.h"
 #include "processor/execution_context.h"
+#include "processor/processor.h"
 #include "processor/result/result_set.h"
 #include "storage/buffer_manager/memory_manager.h"
 
@@ -33,30 +35,21 @@ void ProcessorTask::run() {
     //     for i in range(n): conn.execute("RETURN $i", {"i": i})
     // that's a 16KB+ calloc on every iteration.
     //
-    // We instead keep a thread-local shared_ptr<ResultSet> whose descriptor
-    // matches this sink's, so each thread of a multi-threaded task gets
-    // its own allocation-free slot. The thread owns the ResultSet outright
-    // (no aliasing), so the lifetime is straightforward: dropped when the
-    // thread exits, or when a different prepared statement runs on this
-    // thread and the descriptor pointer no longer matches.
+    // The reusable ResultSet is cached per executing thread in the database-owned
+    // ResultSetPool (see QueryProcessor), never in a process-wide thread_local: the cached
+    // vectors' buffers belong to this database's MemoryManager, and a thread_local slot would
+    // outlive Database::~Database and free (or reuse) them through a dangling MemoryManager the
+    // next time any database runs a query on this thread. Holding the shared_ptr here keeps the
+    // ResultSet alive even if a nested query on this thread replaces the slot.
     ResultSet* resultSetPtr = nullptr;
     std::unique_ptr<ResultSet> ownedResultSet;
+    std::shared_ptr<ResultSet> pooledResultSet;
+    auto* clientContext = executionContext->clientContext;
     if (auto* desc = sink->getDescriptor()) {
-        thread_local uint64_t cachedDescID = UINT64_MAX;
-        thread_local std::shared_ptr<processor::ResultSet> cachedResultSet;
-        if (cachedDescID == desc->id && cachedResultSet) {
-            // Same prepared statement on this thread: reuse the allocation.
-            cachedResultSet->resetForReuse();
-            resultSetPtr = cachedResultSet.get();
-        } else {
-            // First time on this thread, or a different prepared statement:
-            // allocate fresh. Owning shared_ptr; lifetime ends with the
-            // thread (or when the descriptor changes).
-            cachedResultSet = std::make_shared<processor::ResultSet>(desc,
-                storage::MemoryManager::Get(*executionContext->clientContext));
-            cachedDescID = desc->id;
-            resultSetPtr = cachedResultSet.get();
-        }
+        pooledResultSet =
+            clientContext->getDatabase()->getQueryProcessor()->getResultSetPool().getOrCreate(desc,
+                storage::MemoryManager::Get(*clientContext));
+        resultSetPtr = pooledResultSet.get();
     } else {
         // No descriptor (e.g. OrderByMerge): fall back to per-call allocation.
         ownedResultSet =
