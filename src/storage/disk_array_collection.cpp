@@ -7,6 +7,7 @@
 #include "common/types/types.h"
 #include "storage/file_handle.h"
 #include "storage/shadow_utils.h"
+#include <format>
 
 using namespace lbug::common;
 
@@ -29,6 +30,14 @@ DiskArrayCollection::DiskArrayCollection(FileHandle& fileHandle, ShadowFile& sha
     // Read headers from disk (no external state in lambda: optimistic read may run multiple times)
     page_idx_t headerPageIdx = firstHeaderPage;
     do {
+        // Fail fast on a corrupted nextHeaderPage link instead of issuing a wild
+        // read far beyond EOF (issue #843).
+        if (headerPageIdx >= fileHandle.getNumPages()) {
+            throw RuntimeException(std::format("Cannot read header page {} from disk: out of "
+                                               "bounds for file with {} pages. The database file "
+                                               "may be corrupted.",
+                headerPageIdx, fileHandle.getNumPages()));
+        }
         std::unique_ptr<HeaderPage> headerPage;
         page_idx_t nextHeaderPageIdx = INVALID_PAGE_IDX;
         fileHandle.optimisticReadPage(headerPageIdx, [&](auto* frame) {
