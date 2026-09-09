@@ -9,6 +9,7 @@ OptimisticAllocator::OptimisticAllocator(PageManager& pageManager)
 PageRange OptimisticAllocator::allocatePageRange(common::page_idx_t numPages) {
     auto pageRange = pageManager.allocatePageRange(numPages);
     if (numPages > 0) {
+        std::unique_lock lck{mtx};
         optimisticallyAllocatedPages.push_back(pageRange);
     }
     return pageRange;
@@ -19,6 +20,7 @@ void OptimisticAllocator::freePageRange(PageRange block) {
 }
 
 void OptimisticAllocator::rollback() {
+    std::unique_lock lck{mtx};
     for (const auto& entry : optimisticallyAllocatedPages) {
         pageManager.freeImmediatelyRewritablePageRange(pageManager.getDataFH(), entry);
     }
@@ -26,6 +28,7 @@ void OptimisticAllocator::rollback() {
 }
 
 void OptimisticAllocator::commit() {
+    std::unique_lock lck{mtx};
     optimisticallyAllocatedPages.clear();
 }
 } // namespace lbug::storage
