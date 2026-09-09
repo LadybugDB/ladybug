@@ -1,4 +1,5 @@
 add_lbug_test(types_test
+        hash_test.cpp
         int128_test.cpp
         uint128_test.cpp
         date_test.cpp
