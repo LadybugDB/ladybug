@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <unordered_set>
 
@@ -139,9 +140,10 @@ inline void Hash::operation(const float& key, common::hash_t& result) {
 template<>
 inline void Hash::operation(const std::string_view& key, common::hash_t& result) {
     common::hash_t hashValue = 0;
-    auto data64 = reinterpret_cast<const uint64_t*>(key.data());
     for (size_t i = 0u; i < key.size() / 8; i++) {
-        auto blockHash = lbug::function::murmurhash64(*(data64 + i));
+        uint64_t block = 0;
+        std::memcpy(&block, key.data() + i * sizeof(block), sizeof(block));
+        auto blockHash = lbug::function::murmurhash64(block);
         hashValue = lbug::function::combineHashScalar(hashValue, blockHash);
     }
     uint64_t last = 0;
