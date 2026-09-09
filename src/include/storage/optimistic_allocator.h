@@ -1,5 +1,8 @@
 #pragma once
 
+#include <mutex>
+#include <vector>
+
 #include "storage/page_allocator.h"
 
 namespace lbug {
@@ -10,7 +13,8 @@ class PageManager;
 /**
  * Manages any optimistically allocated pages (e.g. during COPY) so that they can be freed if a
  * rollback occurs.
- * This class is designed to be thread-local so accesses are not guaranteed to be thread-safe.
+ * Instances are shared across worker threads (LocalStorage caches one allocator per
+ * StorageManager), so all accesses to the tracked page ranges are synchronized internally.
  */
 class OptimisticAllocator : public PageAllocator {
 public:
@@ -25,6 +29,7 @@ public:
 
 private:
     PageManager& pageManager;
+    std::mutex mtx;
     std::vector<PageRange> optimisticallyAllocatedPages;
 };
 } // namespace storage
