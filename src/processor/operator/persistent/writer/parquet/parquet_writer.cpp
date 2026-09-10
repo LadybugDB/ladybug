@@ -183,10 +183,16 @@ void ParquetWriter::flush(FactorizedTable& ft) {
         return;
     }
 
-    std::lock_guard<std::mutex> glock(lock);
+    // Prepare runs lock-free in parallel: it only reads shared immutable state
+    // (columnWriters layout, types, schema, codec) and writes to the thread-local
+    // PreparedRowGroup (including per-state null counts). Only the commit below
+    // touches fileOffset / file bytes / fileMetaData and is serialized.
     PreparedRowGroup preparedRowGroup;
     prepareRowGroup(ft, preparedRowGroup);
-    flushRowGroup(preparedRowGroup);
+    {
+        std::lock_guard<std::mutex> glock(lock);
+        flushRowGroup(preparedRowGroup);
+    }
     ft.clear();
 }
 
