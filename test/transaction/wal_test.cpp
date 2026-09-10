@@ -812,3 +812,58 @@ TEST_F(WalTest, ReadOnlyRecoveryNoWALFile) {
     ASSERT_TRUE(res->isSuccess());
     ASSERT_EQ(res->getNumTuples(), 0);
 }
+
+// Regression test for https://github.com/LadybugDB/ladybug/issues/771.
+// A single WAL record larger than the 4KB checksum entry buffer must survive
+// WAL replay. ChecksumWriter/ChecksumReader used to discard the already
+// buffered bytes when growing the entry buffer, corrupting the record framing
+// (writer) and failing checksum verification (reader).
+TEST_F(WalTest, LargeWALRecordReplay) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    systemConfig->throwOnWalReplayFailure = true;
+    conn->query("CALL force_checkpoint_on_close=false");
+    conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, content STRING);");
+    const std::string big(5000, 'x');
+    {
+        // Destroy the result before tearing down the DB below.
+        auto insertRes = conn->query(std::format("CREATE (:test {{id: 1, content: '{}'}});", big));
+        ASSERT_TRUE(insertRes->isSuccess()) << insertRes->getErrorMessage();
+    }
+    conn.reset();
+    database.reset();
+
+    createDBAndConn();
+    auto res = conn->query("MATCH (n:test) RETURN n.content;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_EQ(res->getNumTuples(), 1);
+    ASSERT_TRUE(res->hasNext());
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<std::string>(), big);
+}
+
+// Same as above, but the original Database is still alive when the second one
+// replays the WAL (e.g. undisposed handles keeping the first instance around).
+TEST_F(WalTest, LargeWALRecordReplayWithPreviousDBAlive) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL force_checkpoint_on_close=false");
+    conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, content STRING);");
+    const std::string big(5000, 'x');
+    {
+        auto insertRes = conn->query(std::format("CREATE (:test {{id: 1, content: '{}'}});", big));
+        ASSERT_TRUE(insertRes->isSuccess()) << insertRes->getErrorMessage();
+    }
+
+    lbug::main::SystemConfig roConfig = *systemConfig;
+    roConfig.readOnly = true;
+    roConfig.throwOnWalReplayFailure = true;
+    auto db2 = std::make_unique<lbug::main::Database>(databasePath, roConfig);
+    auto conn2 = std::make_unique<lbug::main::Connection>(db2.get());
+    auto res = conn2->query("MATCH (n:test) RETURN n.content;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_EQ(res->getNumTuples(), 1);
+    ASSERT_TRUE(res->hasNext());
+    EXPECT_EQ(res->getNext()->getValue(0)->getValue<std::string>(), big);
+}
