@@ -5,6 +5,7 @@
 #include <queue>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "common/assert.h"
 #include "common/data_chunk/sel_vector.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
@@ -231,7 +232,12 @@ void IceDiskRelTable::initializeParquetReaders(Transaction* transaction) const {
     }
 }
 
-void IceDiskRelTable::initializeIndptrReader(Transaction* transaction) const {
+void IceDiskRelTable::initializeIndptrReader(Transaction* transaction,
+    const std::unique_lock<std::mutex>& indptrDataLock) const {
+    // The caller must hold indptrDataMutex: it serializes all writers of indptrReader,
+    // which is what makes the unsynchronized read below data-race-free.
+    DASSERT(indptrDataLock.owns_lock() && indptrDataLock.mutex() == &indptrDataMutex);
+    UNUSED(indptrDataLock);
     if (!indptrFilePath.empty() && !indptrReader) {
         std::lock_guard lock(parquetReaderMutex);
         if (!indptrReader) {
@@ -243,9 +249,18 @@ void IceDiskRelTable::initializeIndptrReader(Transaction* transaction) const {
 }
 
 void IceDiskRelTable::loadIndptrData(Transaction* transaction) const {
-    std::lock_guard lock(indptrDataMutex);
-    if (!indptrFilePath.empty() && indptrData.empty()) {
-        initializeIndptrReader(transaction);
+    // Fast path: indptrFilePath is immutable after construction, so checking it first
+    // avoids even an atomic load for FLAT tables. Once loaded, indptrData is read-only
+    // and the acquire load synchronizes with the release store below, so no mutex needed.
+    if (indptrFilePath.empty() || indptrDataLoaded.load(std::memory_order_acquire)) {
+        return;
+    }
+    std::unique_lock lock(indptrDataMutex);
+    if (indptrDataLoaded.load(std::memory_order_relaxed)) {
+        return;
+    }
+    {
+        initializeIndptrReader(transaction, lock);
         if (!indptrReader)
             return;
 
@@ -289,6 +304,10 @@ void IceDiskRelTable::loadIndptrData(Transaction* transaction) const {
                 indptrData.push_back(value);
             }
         }
+        // Publish after the vector is fully populated (still under lock); readers use
+        // acquire loads so they see the complete contents. Set even when zero rows were
+        // read so an empty indptr file doesn't trigger a parquet re-scan on every call.
+        indptrDataLoaded.store(true, std::memory_order_release);
     }
 }
 
