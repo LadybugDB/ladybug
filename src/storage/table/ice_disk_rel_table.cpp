@@ -243,53 +243,50 @@ void IceDiskRelTable::initializeIndptrReader(Transaction* transaction) const {
 }
 
 void IceDiskRelTable::loadIndptrData(Transaction* transaction) const {
-    if (indptrData.empty() && !indptrFilePath.empty()) {
-        std::lock_guard lock(indptrDataMutex);
-        if (indptrData.empty()) {
-            initializeIndptrReader(transaction);
-            if (!indptrReader)
-                return;
+    std::lock_guard lock(indptrDataMutex);
+    if (!indptrFilePath.empty() && indptrData.empty()) {
+        initializeIndptrReader(transaction);
+        if (!indptrReader)
+            return;
 
-            // Initialize scan to populate column types
-            auto context = transaction->getClientContext();
-            auto vfs = VirtualFileSystem::GetUnsafe(*context);
-            std::vector<uint64_t> groupsToRead;
-            for (uint64_t i = 0; i < indptrReader->getNumRowGroups(); ++i) {
-                groupsToRead.push_back(i);
-            }
+        // Initialize scan to populate column types
+        auto context = transaction->getClientContext();
+        auto vfs = VirtualFileSystem::GetUnsafe(*context);
+        std::vector<uint64_t> groupsToRead;
+        for (uint64_t i = 0; i < indptrReader->getNumRowGroups(); ++i) {
+            groupsToRead.push_back(i);
+        }
 
-            ParquetReaderScanState scanState;
-            indptrReader->initializeScan(scanState, groupsToRead, vfs);
+        ParquetReaderScanState scanState;
+        indptrReader->initializeScan(scanState, groupsToRead, vfs);
 
-            // Check if the indptr file has any columns after scan initialization
-            auto numColumns = indptrReader->getNumColumns();
-            if (numColumns == 0) {
-                throw RuntimeException("Indptr parquet file has no columns");
-            }
+        // Check if the indptr file has any columns after scan initialization
+        auto numColumns = indptrReader->getNumColumns();
+        if (numColumns == 0) {
+            throw RuntimeException("Indptr parquet file has no columns");
+        }
 
-            // Validate column type for indptr
-            const auto& indptrType = indptrReader->getColumnType(0);
-            if (!LogicalTypeUtils::isIntegral(indptrType.getLogicalTypeID())) {
-                throw RuntimeException(
-                    "Indptr parquet file column must be integer type (column 0)");
-            }
+        // Validate column type for indptr
+        const auto& indptrType = indptrReader->getColumnType(0);
+        if (!LogicalTypeUtils::isIntegral(indptrType.getLogicalTypeID())) {
+            throw RuntimeException("Indptr parquet file column must be integer type (column 0)");
+        }
 
-            // Read the indptr column
-            DataChunk dataChunk(1);
+        // Read the indptr column
+        DataChunk dataChunk(1);
 
-            // Now get the column type after scan is initialized
-            const auto& columnTypeRef = indptrReader->getColumnType(0);
-            auto columnType = columnTypeRef.copy();
-            auto vector = std::make_shared<ValueVector>(std::move(columnType));
-            dataChunk.insert(0, vector);
+        // Now get the column type after scan is initialized
+        const auto& columnTypeRef = indptrReader->getColumnType(0);
+        auto columnType = columnTypeRef.copy();
+        auto vector = std::make_shared<ValueVector>(std::move(columnType));
+        dataChunk.insert(0, vector);
 
-            // Read all indptr values
-            while (indptrReader->scanInternal(scanState, dataChunk)) {
-                auto selSize = dataChunk.state->getSelVector().getSelSize();
-                for (size_t i = 0; i < selSize; ++i) {
-                    auto value = dataChunk.getValueVector(0).getValue<common::offset_t>(i);
-                    indptrData.push_back(value);
-                }
+        // Read all indptr values
+        while (indptrReader->scanInternal(scanState, dataChunk)) {
+            auto selSize = dataChunk.state->getSelVector().getSelSize();
+            for (size_t i = 0; i < selSize; ++i) {
+                auto value = dataChunk.getValueVector(0).getValue<common::offset_t>(i);
+                indptrData.push_back(value);
             }
         }
     }
