@@ -11,6 +11,7 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <utility>
 #include <vector>
@@ -34,12 +35,27 @@ struct AlpEncode {
 	static constexpr uint8_t EXACT_TYPE_BITSIZE = sizeof(EXACT_TYPE) * 8;
 
 	/*
+	 * Bounds of values that can be cast to ENCODED_TYPE without undefined behaviour, as a double.
+	 * ENCODING_UPPER_LIMIT / ENCODING_LOWER_LIMIT are int64-scale, which is correct for
+	 * AlpEncode<double> (ENCODED_TYPE = int64_t) but ~4e9x too permissive for AlpEncode<float>,
+	 * whose ENCODED_TYPE is int32_t. Both int32 bounds are exactly representable as doubles, so
+	 * they can be used directly; the int64 ones cannot, which is why the existing constants are
+	 * the largest doubles strictly inside the int64 range rather than INT64_MIN/MAX.
+	 */
+	static constexpr double ENCODED_TYPE_UPPER_LIMIT =
+	    sizeof(ENCODED_TYPE) == 8 ? ENCODING_UPPER_LIMIT
+	                              : static_cast<double>(std::numeric_limits<int32_t>::max());
+	static constexpr double ENCODED_TYPE_LOWER_LIMIT =
+	    sizeof(ENCODED_TYPE) == 8 ? ENCODING_LOWER_LIMIT
+	                              : static_cast<double>(std::numeric_limits<int32_t>::lowest());
+
+	/*
 	 * Check for special values which are impossible for ALP to encode
-	 * because they cannot be cast to int64 without an undefined behaviour
+	 * because they cannot be cast to ENCODED_TYPE without an undefined behaviour
 	 */
 	static inline bool is_impossible_to_encode(const T n) {
-		return !std::isfinite(n) || std::isnan(n) || n > ENCODING_UPPER_LIMIT || n < ENCODING_LOWER_LIMIT ||
-		       (n == 0.0 && std::signbit(n)); //! Verification for -0.0
+		return !std::isfinite(n) || std::isnan(n) || n > ENCODED_TYPE_UPPER_LIMIT ||
+		       n < ENCODED_TYPE_LOWER_LIMIT || (n == 0.0 && std::signbit(n)); //! Verification for -0.0
 	}
 
 	//! Scalar encoding a single value with ALP
@@ -47,7 +63,9 @@ struct AlpEncode {
 	static ENCODED_TYPE encode_value(const T value, const factor_idx_t factor_idx, const exponent_idx_t exponent_idx) {
 		T tmp_encoded_value = value * Constants<T>::EXP_ARR[exponent_idx] * Constants<T>::FRAC_ARR[factor_idx];
 		if constexpr (SAFE) {
-			if (is_impossible_to_encode(tmp_encoded_value)) { return static_cast<ENCODED_TYPE>(ENCODING_UPPER_LIMIT); }
+			if (is_impossible_to_encode(tmp_encoded_value)) {
+				return static_cast<ENCODED_TYPE>(ENCODED_TYPE_UPPER_LIMIT);
+			}
 		}
 		tmp_encoded_value = tmp_encoded_value + Constants<T>::MAGIC_NUMBER - Constants<T>::MAGIC_NUMBER;
 		return static_cast<ENCODED_TYPE>(tmp_encoded_value);
