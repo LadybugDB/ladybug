@@ -23,6 +23,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build python3 python3-pip git ccache curl
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639 # v1.2
+        with:
+          key: nightly-sanitizers-asan-ubsan-${{ runner.os }}-${{ github.ref }}
+          max-size: 2G
+          restore-keys: |
+            nightly-sanitizers-asan-ubsan-${{ runner.os }}-refs/heads/main
+            nightly-sanitizers-asan-ubsan-${{ runner.os }}-
+
       - name: Build (RelWithDebInfo, ASan+UBSan)
         run: BM_MALLOC=1 ASAN=1 UBSAN=1 make relwithdebinfo NUM_THREADS=$(nproc)
       - name: Test
@@ -45,6 +55,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build python3 python3-pip git ccache curl
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639 # v1.2
+        with:
+          key: nightly-sanitizers-tsan-${{ runner.os }}-${{ github.ref }}
+          max-size: 2G
+          restore-keys: |
+            nightly-sanitizers-tsan-${{ runner.os }}-refs/heads/main
+            nightly-sanitizers-tsan-${{ runner.os }}-
+
       - name: Build (RelWithDebInfo, TSan)
         run: BM_MALLOC=1 TSAN=1 make relwithdebinfo NUM_THREADS=$(nproc)
       - name: Test
