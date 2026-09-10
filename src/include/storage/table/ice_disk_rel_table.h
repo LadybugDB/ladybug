@@ -1,6 +1,8 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
+#include <mutex>
 
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/runtime.h"
@@ -95,9 +97,15 @@ private:
     mutable std::mutex parquetReaderMutex;
     mutable std::mutex indptrDataMutex;
     mutable std::vector<common::offset_t> indptrData; // Cached indptr data for CSR format
+    // Set to true once indptrData has been populated (even if the file contained zero rows,
+    // so an empty indptr doesn't trigger a reload on every scan). Read with acquire /
+    // written with release to publish the vector contents to lock-free readers.
+    mutable std::atomic<bool> indptrDataLoaded{false};
 
     void initializeParquetReaders(transaction::Transaction* transaction) const;
-    void initializeIndptrReader(transaction::Transaction* transaction) const;
+    // Requires the caller to hold indptrDataMutex (passed as proof, asserted in debug builds).
+    void initializeIndptrReader(transaction::Transaction* transaction,
+        const std::unique_lock<std::mutex>& indptrDataLock) const;
     void loadIndptrData(transaction::Transaction* transaction) const;
     bool scanCSR(transaction::Transaction* transaction, IceDiskRelTableScanState& scanState);
     bool scanFlat(transaction::Transaction* transaction, IceDiskRelTableScanState& scanState);
