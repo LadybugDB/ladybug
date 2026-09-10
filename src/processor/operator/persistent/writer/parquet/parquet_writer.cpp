@@ -183,6 +183,7 @@ void ParquetWriter::flush(FactorizedTable& ft) {
         return;
     }
 
+    std::lock_guard<std::mutex> glock(lock);
     PreparedRowGroup preparedRowGroup;
     prepareRowGroup(ft, preparedRowGroup);
     flushRowGroup(preparedRowGroup);
@@ -263,7 +264,6 @@ void ParquetWriter::prepareRowGroup(FactorizedTable& ft, PreparedRowGroup& resul
 }
 
 void ParquetWriter::flushRowGroup(PreparedRowGroup& rowGroup) {
-    std::lock_guard<std::mutex> glock(lock);
     auto& parquetRowGroup = rowGroup.rowGroup;
     auto& states = rowGroup.states;
     if (states.empty()) {
