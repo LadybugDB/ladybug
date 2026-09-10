@@ -54,7 +54,7 @@ struct ParquetTimestampSOperator : public BaseParquetOperator {
 ColumnWriter::ColumnWriter(ParquetWriter& writer, uint64_t schemaIdx,
     std::vector<std::string> schemaPath, uint64_t maxRepeat, uint64_t maxDefine, bool canHaveNulls)
     : writer{writer}, schemaIdx{schemaIdx}, schemaPath{std::move(schemaPath)}, maxRepeat{maxRepeat},
-      maxDefine{maxDefine}, canHaveNulls{canHaveNulls}, nullCount{0} {}
+      maxDefine{maxDefine}, canHaveNulls{canHaveNulls} {}
 
 std::unique_ptr<ColumnWriter> ColumnWriter::createWriterRecursive(
     std::vector<lbug_parquet::format::SchemaElement>& schemas, ParquetWriter& writer,
@@ -298,7 +298,7 @@ void ColumnWriter::handleDefineLevels(ColumnWriterState& state, ColumnWriterStat
                     throw RuntimeException(
                         "Parquet writer: map key column is not allowed to contain NULL values");
                 }
-                nullCount++;
+                state.nullCount++;
                 state.definitionLevels.push_back(nullValue);
             }
             if (parent->isEmpty.empty() || !parent->isEmpty[currentIdx]) {
@@ -315,7 +315,7 @@ void ColumnWriter::handleDefineLevels(ColumnWriterState& state, ColumnWriterStat
                     throw RuntimeException(
                         "Parquet writer: map key column is not allowed to contain NULL values");
                 }
-                nullCount++;
+                state.nullCount++;
                 state.definitionLevels.push_back(nullValue);
             }
         }

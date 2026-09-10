@@ -42,6 +42,9 @@ public:
     std::vector<uint16_t> definitionLevels;
     std::vector<uint16_t> repetitionLevels;
     std::vector<bool> isEmpty;
+    // Nulls counted while preparing THIS row group. Lives on the (thread-local)
+    // state so prepareRowGroup() needs no lock; only the commit phase is serialized.
+    uint64_t nullCount = 0;
 };
 
 class ColumnWriterStatistics {
@@ -95,8 +98,6 @@ public:
     uint64_t maxRepeat;
     uint64_t maxDefine;
     bool canHaveNulls;
-    // collected stats
-    uint64_t nullCount;
 
 protected:
     void handleDefineLevels(ColumnWriterState& state, ColumnWriterState* parent,
