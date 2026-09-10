@@ -271,7 +271,7 @@ void BasicColumnWriter::writeDictionary(BasicColumnWriterState& state,
 void BasicColumnWriter::setParquetStatistics(BasicColumnWriterState& state,
     lbug_parquet::format::ColumnChunk& column) {
     if (maxRepeat == 0) {
-        column.meta_data.statistics.null_count = nullCount;
+        column.meta_data.statistics.null_count = state.nullCount;
         column.meta_data.statistics.__isset.null_count = true;
         column.meta_data.__isset.statistics = true;
     }

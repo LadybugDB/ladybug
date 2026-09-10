@@ -91,7 +91,7 @@ void StructColumnWriter::finalizeWrite(ColumnWriterState& state_p) {
     auto& state = reinterpret_cast<StructColumnWriterState&>(state_p);
     for (auto child_idx = 0u; child_idx < childWriters.size(); child_idx++) {
         // we add the null count of the struct to the null count of the children
-        childWriters[child_idx]->nullCount += nullCount;
+        state.childStates[child_idx]->nullCount += state.nullCount;
         childWriters[child_idx]->finalizeWrite(*state.childStates[child_idx]);
     }
 }
