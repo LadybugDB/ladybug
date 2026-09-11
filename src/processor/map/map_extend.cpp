@@ -4,6 +4,7 @@
 #include "catalog/catalog.h"
 #include "common/constants.h"
 #include "common/enums/extend_direction_util.h"
+#include "common/mask.h"
 #include "main/attached_database.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
@@ -151,6 +152,24 @@ static bool scanSingleRelTable(const RelExpression& rel, const NodeExpression& b
            extendDirection != ExtendDirection::BOTH;
 }
 
+// Nbr-node semi masks backing hash-join SIP on extend output (SemiMaskTargetType::
+// EXTEND_NBR_NODE). One mask per nbr node table, filled by a SemiMasker on the other
+// side of the join. Unconditionally created (like ScanNodeTable masks) but left
+// disabled until a SemiMasker targets this extend; while disabled the scan ignores them.
+// No mask is created when the extend does not scan the nbr ID, since outVectors[0]
+// would not hold neighbour IDs to filter on.
+static std::shared_ptr<NodeOffsetMaskMap> createNbrNodeMaskMap(PlanMapper* mapper,
+    const NodeExpression& nbrNode, bool shouldScanNbrID) {
+    if (!shouldScanNbrID) {
+        return nullptr;
+    }
+    auto maskMap = std::make_shared<NodeOffsetMaskMap>();
+    for (auto tableID : nbrNode.getTableIDs()) {
+        maskMap->addMask(tableID, mapper->createSemiMask(tableID));
+    }
+    return maskMap;
+}
+
 static ScanNodeTableInfo getNodeTableScanInfo(const LogicalScanNodeTable& scan,
     storage::NodeTable* table, const catalog::TableCatalogEntry* tableEntry,
     main::ClientContext* clientContext) {
@@ -284,29 +303,40 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
                     auto sourceNodeScanInfo =
                         ScanOpInfo(inNodeIDPos, std::move(sourceOutVectorsPos));
                     auto progressSharedState = std::make_shared<ScanNodeTableProgressSharedState>();
-                    return std::make_unique<ScanRelTable>(std::move(scanInfo),
-                        std::move(scanRelInfo), std::move(sourceNodeTableInfos),
-                        std::move(sourceNodeSharedStates), std::move(progressSharedState),
-                        std::move(sourceNodeScanInfo), getOperatorID(), printInfo->copy(),
-                        physicalOperatorType);
+                    auto scanRel =
+                        std::make_unique<ScanRelTable>(std::move(scanInfo), std::move(scanRelInfo),
+                            std::move(sourceNodeTableInfos), std::move(sourceNodeSharedStates),
+                            std::move(progressSharedState), std::move(sourceNodeScanInfo),
+                            getOperatorID(), printInfo->copy(), physicalOperatorType);
+                    scanRel->setNbrNodeMaskMap(
+                        createNbrNodeMaskMap(this, *nbrNode, extend->shouldScanNbrID()));
+                    return scanRel;
                 }
                 // Only apply the existing no-property optimization if scan node is not already
                 // mapped (e.g., by a semi-masker).
                 if (!sourceNodeTables.empty() &&
                     !logicalOpToPhysicalOpMap.contains(logicalOperator->getChild(0).get())) {
                     if (!scanNode->getProperties().empty()) {
-                        return std::make_unique<ScanRelTable>(std::move(scanInfo),
+                        auto scanRel = std::make_unique<ScanRelTable>(std::move(scanInfo),
                             std::move(scanRelInfo), std::move(prevOperator), getOperatorID(),
                             printInfo->copy(), physicalOperatorType);
+                        scanRel->setNbrNodeMaskMap(
+                            createNbrNodeMaskMap(this, *nbrNode, extend->shouldScanNbrID()));
+                        return scanRel;
                     }
-                    return std::make_unique<ScanRelTable>(std::move(scanInfo),
+                    auto sourceScanRel = std::make_unique<ScanRelTable>(std::move(scanInfo),
                         std::move(scanRelInfo), std::move(sourceNodeTables), getOperatorID(),
                         printInfo->copy(), physicalOperatorType);
+                    sourceScanRel->setNbrNodeMaskMap(
+                        createNbrNodeMaskMap(this, *nbrNode, extend->shouldScanNbrID()));
+                    return sourceScanRel;
                 }
             }
         }
-        return std::make_unique<ScanRelTable>(std::move(scanInfo), std::move(scanRelInfo),
+        auto scanRel = std::make_unique<ScanRelTable>(std::move(scanInfo), std::move(scanRelInfo),
             std::move(prevOperator), getOperatorID(), printInfo->copy(), physicalOperatorType);
+        scanRel->setNbrNodeMaskMap(createNbrNodeMaskMap(this, *nbrNode, extend->shouldScanNbrID()));
+        return scanRel;
     }
     // map to generic extend
     auto directionInfo = DirectionInfo();
@@ -333,9 +363,12 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
             }
         }
     }
-    return std::make_unique<ScanMultiRelTable>(std::move(scanInfo), std::move(directionInfo),
-        std::move(scanners), std::move(prevOperator), getOperatorID(), printInfo->copy(),
-        physicalOperatorType);
+    auto scanMultiRel = std::make_unique<ScanMultiRelTable>(std::move(scanInfo),
+        std::move(directionInfo), std::move(scanners), std::move(prevOperator), getOperatorID(),
+        printInfo->copy(), physicalOperatorType);
+    scanMultiRel->setNbrNodeMaskMap(
+        createNbrNodeMaskMap(this, *nbrNode, extend->shouldScanNbrID()));
+    return scanMultiRel;
 }
 
 } // namespace processor
