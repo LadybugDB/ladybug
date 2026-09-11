@@ -219,11 +219,15 @@ NodeGroupScanResult NodeGroup::scan(const Transaction* transaction, TableScanSta
     }
     bool enableSemiMask =
         state.source == TableScanSource::COMMITTED && state.semiMask && state.semiMask->isEnabled();
+    const auto startNodeOffset = nodeGroupScanState.nextRowToScan +
+                                 StorageUtils::getStartOffsetOfNodeGroup(state.nodeGroupIdx);
     if (enableSemiMask) {
-        const auto startNodeOffset = nodeGroupScanState.nextRowToScan +
-                                     StorageUtils::getStartOffsetOfNodeGroup(state.nodeGroupIdx);
-        NodeTable::applySemiMaskFilter(state, startNodeOffset, numRowsToScan,
-            state.outState->getSelVectorUnsafe());
+        // Cheap chunk pre-check: skip column I/O entirely when the chunk holds no masked
+        // row. Reset the selection first: it still holds the previous chunk's (possibly
+        // filtered) state, which applySemiMaskFilter would otherwise intersect with.
+        auto& selVector = state.outState->getSelVectorUnsafe();
+        selVector.setToUnfiltered(numRowsToScan);
+        NodeTable::applySemiMaskFilter(state, startNodeOffset, numRowsToScan, selVector);
         if (state.outState->getSelVector().getSelSize() == 0) {
             state.nodeGroupScanState->nextRowToScan += numRowsToScan;
             return NodeGroupScanResult{nodeGroupScanState.nextRowToScan, 0};
@@ -233,6 +237,18 @@ NodeGroupScanResult NodeGroup::scan(const Transaction* transaction, TableScanSta
         numRowsToScan);
     const auto startRow = nodeGroupScanState.nextRowToScan;
     nodeGroupScanState.nextRowToScan += numRowsToScan;
+    if (enableSemiMask) {
+        // The chunk scan above resets the selection (visibility/zonemap), discarding the
+        // pre-check's subset. Intersect the mask with the surviving rows so only masked
+        // rows are materialized instead of the whole chunk. Like the pre-check above,
+        // report an empty chunk as {nextRow, 0} (not EMPTY) so the caller keeps scanning
+        // the rest of the node group.
+        NodeTable::applySemiMaskFilter(state, startNodeOffset, numRowsToScan,
+            state.outState->getSelVectorUnsafe());
+        if (state.outState->getSelVector().getSelSize() == 0) {
+            return NodeGroupScanResult{nodeGroupScanState.nextRowToScan, 0};
+        }
+    }
     return NodeGroupScanResult{startRow, numRowsToScan};
 }
 
@@ -240,23 +256,42 @@ NodeGroupScanResult NodeGroup::scan(Transaction* transaction, TableScanState& st
     offset_t startOffsetInGroup, offset_t numRowsToScan) const {
     bool enableSemiMask =
         state.source == TableScanSource::COMMITTED && state.semiMask && state.semiMask->isEnabled();
+    const auto startNodeOffset =
+        startOffsetInGroup + StorageUtils::getStartOffsetOfNodeGroup(state.nodeGroupIdx);
     if (enableSemiMask) {
-        const auto startNodeOffset =
-            startOffsetInGroup + StorageUtils::getStartOffsetOfNodeGroup(state.nodeGroupIdx);
-        NodeTable::applySemiMaskFilter(state, startNodeOffset, numRowsToScan,
-            state.outState->getSelVectorUnsafe());
+        // See the sequential overload above: reset the selection first so the chunk
+        // pre-check does not intersect with a stale selection, then skip column I/O
+        // when the range holds no masked row.
+        auto& selVector = state.outState->getSelVectorUnsafe();
+        selVector.setToUnfiltered(numRowsToScan);
+        NodeTable::applySemiMaskFilter(state, startNodeOffset, numRowsToScan, selVector);
         if (state.outState->getSelVector().getSelSize() == 0) {
             state.nodeGroupScanState->nextRowToScan += numRowsToScan;
             return NodeGroupScanResult{state.nodeGroupScanState->nextRowToScan, 0};
         }
     }
+    NodeGroupScanResult scanResult;
     if (state.outputVectors.size() == 0) {
         DASSERT(scanInternal(chunkedGroups.lock(), transaction, state, startOffsetInGroup,
                     numRowsToScan) == NodeGroupScanResult(startOffsetInGroup, numRowsToScan));
-        return NodeGroupScanResult{startOffsetInGroup, numRowsToScan};
+        scanResult = NodeGroupScanResult{startOffsetInGroup, numRowsToScan};
+    } else {
+        scanResult = scanInternal(chunkedGroups.lock(), transaction, state, startOffsetInGroup,
+            numRowsToScan);
     }
-    return scanInternal(chunkedGroups.lock(), transaction, state, startOffsetInGroup,
-        numRowsToScan);
+    // With no output vectors no chunk scan populates the selection, so the pre-check's
+    // subset above stands as is.
+    if (enableSemiMask && !state.outputVectors.empty()) {
+        // scanInternal resets the selection; intersect the mask with the surviving rows.
+        // Only the actually scanned prefix (scanResult.numRows) is valid: the requested
+        // range may span chunked groups while a single call scans the first one.
+        NodeTable::applySemiMaskFilter(state, startNodeOffset, scanResult.numRows,
+            state.outState->getSelVectorUnsafe());
+        if (state.outState->getSelVector().getSelSize() == 0) {
+            return NodeGroupScanResult{state.nodeGroupScanState->nextRowToScan, 0};
+        }
+    }
+    return scanResult;
 }
 
 NodeGroupScanResult NodeGroup::scanInternal(const UniqLock& lock, Transaction* transaction,

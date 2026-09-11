@@ -1,7 +1,9 @@
 #include "function/gds/gds.h"
 #include "planner/operator/sip/logical_semi_masker.h"
 #include "processor/operator/recursive_extend.h"
+#include "processor/operator/scan/scan_multi_rel_tables.h"
 #include "processor/operator/scan/scan_node_table.h"
+#include "processor/operator/scan/scan_rel_table.h"
 #include "processor/operator/semi_masker.h"
 #include "processor/operator/table_function_call.h"
 #include "processor/plan_mapper.h"
@@ -46,6 +48,22 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapSemiMasker(
             DASSERT(semiMasker.getTargetType() == SemiMaskTargetType::SCAN_NODE);
             auto scan = physicalOp->ptrCast<ScanNodeTable>();
             initMask(masksPerTable, scan->getSemiMasks());
+        } break;
+        case PhysicalOperatorType::SCAN_REL_TABLE: {
+            DASSERT(semiMasker.getTargetType() == SemiMaskTargetType::EXTEND_NBR_NODE);
+            // ScanMultiRelTable shares the SCAN_REL_TABLE physical type; both
+            // expose nbr-node masks with identical semantics.
+            if (auto multiRel = dynamic_cast<ScanMultiRelTable*>(physicalOp)) {
+                initMask(masksPerTable, multiRel->getNbrNodeMasks());
+            } else {
+                auto scanRel = physicalOp->ptrCast<ScanRelTable>();
+                initMask(masksPerTable, scanRel->getNbrNodeMasks());
+            }
+        } break;
+        case PhysicalOperatorType::PACKED_EXTEND: {
+            DASSERT(semiMasker.getTargetType() == SemiMaskTargetType::EXTEND_NBR_NODE);
+            auto scanRel = physicalOp->ptrCast<ScanRelTable>();
+            initMask(masksPerTable, scanRel->getNbrNodeMasks());
         } break;
         case PhysicalOperatorType::TABLE_FUNCTION_CALL: {
             auto sharedState = physicalOp->ptrCast<TableFunctionCall>()->getSharedState();

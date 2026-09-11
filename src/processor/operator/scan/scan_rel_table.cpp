@@ -85,8 +85,64 @@ void ScanRelTableInfo::initScanState(TableScanState& scanState,
     initScanStateVectors(scanState, outVectors, MemoryManager::Get(*context));
 }
 
+void ScanRelTable::refreshNbrMaskCache() {
+    nbrEnabledMasks.clear();
+    nbrSingleEnabledMask = nullptr;
+    if (nbrNodeMaskMap == nullptr) {
+        return;
+    }
+    for (auto& [tableID, mask] : nbrNodeMaskMap->getMasks()) {
+        if (mask->isEnabled()) {
+            nbrEnabledMasks.emplace_back(tableID, mask);
+        }
+    }
+    if (nbrEnabledMasks.size() == 1) {
+        nbrSingleEnabledMask = nbrEnabledMasks[0].second;
+    }
+}
+
+common::sel_t ScanRelTable::applyNbrNodeMask() {
+    auto& selVector = scanState->outState->getSelVectorUnsafe();
+    const auto selSize = selVector.getSelSize();
+    if (multiParentPackedScanEnabled ||
+        (nbrSingleEnabledMask == nullptr && nbrEnabledMasks.empty())) {
+        return selSize;
+    }
+    auto* nbrVector = outVectors[0];
+    auto buffer = selVector.getMutableBuffer();
+    sel_t selectedSize = 0;
+    if (nbrSingleEnabledMask != nullptr) {
+        for (auto i = 0u; i < selSize; ++i) {
+            auto pos = selVector[i];
+            buffer[selectedSize] = pos;
+            selectedSize +=
+                nbrSingleEnabledMask->isMasked(nbrVector->getValue<nodeID_t>(pos).offset);
+        }
+    } else {
+        for (auto i = 0u; i < selSize; ++i) {
+            auto pos = selVector[i];
+            auto nbrID = nbrVector->getValue<nodeID_t>(pos);
+            buffer[selectedSize] = pos;
+            auto keep = true;
+            for (auto& [tableID, mask] : nbrEnabledMasks) {
+                if (nbrID.tableID == tableID) {
+                    keep = mask->isMasked(nbrID.offset);
+                    break;
+                }
+            }
+            selectedSize += keep;
+        }
+    }
+    if (selectedSize == selSize) {
+        return selSize;
+    }
+    selVector.setToFiltered(selectedSize);
+    return selectedSize;
+}
+
 void ScanRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     ScanTable::initLocalStateInternal(resultSet, context);
+    refreshNbrMaskCache();
     auto clientContext = context->clientContext;
     auto boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
@@ -257,9 +313,13 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
             while (tableInfo.table->scan(transaction, *scanState)) {
                 const auto outputSize = scanState->outState->getSelVector().getSelSize();
                 if (outputSize > 0) {
-                    updatePackedChildSlices(outputSize);
+                    const auto filteredSize = applyNbrNodeMask();
+                    if (filteredSize == 0) {
+                        continue;
+                    }
+                    updatePackedChildSlices(filteredSize);
                     tableInfo.castColumns();
-                    metrics->numOutputTuple.increase(outputSize);
+                    metrics->numOutputTuple.increase(filteredSize);
                     return true;
                 }
             }
@@ -272,9 +332,13 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
         while (tableInfo.table->scan(transaction, *scanState)) {
             const auto outputSize = scanState->outState->getSelVector().getSelSize();
             if (outputSize > 0) {
-                updatePackedChildSlices(outputSize);
+                const auto filteredSize = applyNbrNodeMask();
+                if (filteredSize == 0) {
+                    continue;
+                }
+                updatePackedChildSlices(filteredSize);
                 tableInfo.castColumns();
-                metrics->numOutputTuple.increase(outputSize);
+                metrics->numOutputTuple.increase(filteredSize);
                 return true;
             }
         }

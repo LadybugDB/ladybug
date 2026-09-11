@@ -60,8 +60,63 @@ bool RelTableCollectionScanner::scan(main::ClientContext* context, RelTableScanS
     }
 }
 
+void ScanMultiRelTable::refreshNbrMaskCache() {
+    nbrEnabledMasks.clear();
+    nbrSingleEnabledMask = nullptr;
+    if (nbrNodeMaskMap == nullptr) {
+        return;
+    }
+    for (auto& [tableID, mask] : nbrNodeMaskMap->getMasks()) {
+        if (mask->isEnabled()) {
+            nbrEnabledMasks.emplace_back(tableID, mask);
+        }
+    }
+    if (nbrEnabledMasks.size() == 1) {
+        nbrSingleEnabledMask = nbrEnabledMasks[0].second;
+    }
+}
+
+common::sel_t ScanMultiRelTable::applyNbrNodeMask() {
+    auto& selVector = scanState->outState->getSelVectorUnsafe();
+    const auto selSize = selVector.getSelSize();
+    if (nbrSingleEnabledMask == nullptr && nbrEnabledMasks.empty()) {
+        return selSize;
+    }
+    auto* nbrVector = outVectors[0];
+    auto buffer = selVector.getMutableBuffer();
+    sel_t selectedSize = 0;
+    if (nbrSingleEnabledMask != nullptr) {
+        for (auto i = 0u; i < selSize; ++i) {
+            auto pos = selVector[i];
+            buffer[selectedSize] = pos;
+            selectedSize +=
+                nbrSingleEnabledMask->isMasked(nbrVector->getValue<nodeID_t>(pos).offset);
+        }
+    } else {
+        for (auto i = 0u; i < selSize; ++i) {
+            auto pos = selVector[i];
+            auto nbrID = nbrVector->getValue<nodeID_t>(pos);
+            buffer[selectedSize] = pos;
+            auto keep = true;
+            for (auto& [tableID, mask] : nbrEnabledMasks) {
+                if (nbrID.tableID == tableID) {
+                    keep = mask->isMasked(nbrID.offset);
+                    break;
+                }
+            }
+            selectedSize += keep;
+        }
+    }
+    if (selectedSize == selSize) {
+        return selSize;
+    }
+    selVector.setToFiltered(selectedSize);
+    return selectedSize;
+}
+
 void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     ScanTable::initLocalStateInternal(resultSet, context);
+    refreshNbrMaskCache();
     auto clientContext = context->clientContext;
     boundNodeIDVector = resultSet->getValueVector(opInfo.nodeIDPos).get();
     auto nbrNodeIDVector = outVectors[0];
@@ -115,7 +170,11 @@ bool ScanMultiRelTable::getNextTuplesInternal(ExecutionContext* context) {
     while (true) {
         if (currentScanner != nullptr &&
             currentScanner->scan(context->clientContext, *scanState, outVectors)) {
-            metrics->numOutputTuple.increase(scanState->outState->getSelVector().getSelSize());
+            const auto filteredSize = applyNbrNodeMask();
+            if (filteredSize == 0) {
+                continue;
+            }
+            metrics->numOutputTuple.increase(filteredSize);
             return true;
         }
         if (!children[0]->getNextTuple(context)) {

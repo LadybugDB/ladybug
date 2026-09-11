@@ -2,7 +2,10 @@
 
 #include "binder/expression/expression_util.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
+#include "common/constants.h"
 #include "optimizer/logical_operator_collector.h"
+#include "planner/operator/extend/base_logical_extend.h"
+#include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/extend/logical_recursive_extend.h"
 #include "planner/operator/logical_accumulate.h"
 #include "planner/operator/logical_hash_join.h"
@@ -41,6 +44,11 @@ static std::vector<table_id_t> getTableIDs(const LogicalOperator* op,
     switch (op->getOperatorType()) {
     case LogicalOperatorType::SCAN_NODE_TABLE: {
         return op->constCast<LogicalScanNodeTable>().getTableIDs();
+    }
+    case LogicalOperatorType::EXTEND:
+    case LogicalOperatorType::PACKED_EXTEND: {
+        DASSERT(targetType == SemiMaskTargetType::EXTEND_NBR_NODE);
+        return getTableIDs(op->constCast<BaseLogicalExtend>().getNbrNode()->getEntries());
     }
     case LogicalOperatorType::RECURSIVE_EXTEND: {
         auto& bindData = op->constCast<LogicalRecursiveExtend>().getBindData();
@@ -264,8 +272,47 @@ static std::vector<LogicalOperator*> getRecursiveExtendOutputNodeCandidates(
     return result;
 }
 
+// Find all (packed) extends under root whose neighbour node is parameter nodeID. The
+// neighbour IDs are produced by the rel scan, so a semi mask on them prunes the scan
+// itself instead of materializing every expanded edge. PACKED_EXTEND is not covered by
+// the operator visitor, hence the manual traversal.
+static void collectExtendNbrCandidates(const Expression& nodeID, LogicalOperator* root,
+    std::vector<LogicalOperator*>& result) {
+    auto type = root->getOperatorType();
+    if (type == LogicalOperatorType::EXTEND || type == LogicalOperatorType::PACKED_EXTEND) {
+        // LogicalPackedExtend derives from LogicalExtend, so this cast covers both.
+        auto& extend = root->constCast<LogicalExtend>();
+        // The mask filters outVectors[0], which only holds neighbour IDs when the
+        // extend scans them.
+        if (extend.shouldScanNbrID() &&
+            nodeID.getUniqueName() == extend.getNbrNode()->getInternalID()->getUniqueName()) {
+            result.push_back(root);
+        }
+    }
+    for (auto i = 0u; i < root->getNumChildren(); ++i) {
+        collectExtendNbrCandidates(nodeID, root->getChild(i).get(), result);
+    }
+}
+
+static bool sanityCheckExtendCandidates(const std::vector<LogicalOperator*>& ops) {
+    DASSERT(!ops.empty());
+    for (auto op : ops) {
+        auto type = op->getOperatorType();
+        if (type != LogicalOperatorType::EXTEND && type != LogicalOperatorType::PACKED_EXTEND) {
+            return false;
+        }
+    }
+    return haveSameTableIDs(ops, SemiMaskTargetType::EXTEND_NBR_NODE);
+}
+
+// Probe-to-build SIP materializes and rescans the probe side, which costs ~1ms even for
+// tiny probes. Only target build-side rel scans whose estimated output is large enough
+// to amortize that: a bounded chain expanding a few hundred edges is already cheap, so
+// masking it is pure overhead (e.g. a single-tag probe masking a 274-edge expand).
+static constexpr cardinality_t MIN_EXTEND_OUTPUT_FOR_PROBE_TO_BUILD_SIP = 10000;
+
 static std::shared_ptr<LogicalOperator> tryApplySemiMask(std::shared_ptr<Expression> nodeID,
-    std::shared_ptr<LogicalOperator> fromRoot, LogicalOperator* toRoot) {
+    std::shared_ptr<LogicalOperator> fromRoot, LogicalOperator* toRoot, bool isProbeToBuild) {
     // TODO(Xiyang): Check if a semi mask can/need to be applied to ScanNodeTable, RecursiveJoin &
     // GDS at the same time
     auto recursiveExtendInputNodeCandidates =
@@ -290,11 +337,34 @@ static std::shared_ptr<LogicalOperator> tryApplySemiMask(std::shared_ptr<Express
             recursiveExtendNodeCandidates, std::move(fromRoot));
     }
     auto scanNodeCandidates = getScanNodeCandidates(*nodeID, toRoot);
-    if (!scanNodeCandidates.empty()) {
-        return appendSemiMasker(SemiMaskKeyType::NODE, SemiMaskTargetType::SCAN_NODE,
-            std::move(nodeID), scanNodeCandidates, std::move(fromRoot));
+    std::vector<LogicalOperator*> extendNbrCandidates;
+    collectExtendNbrCandidates(*nodeID, toRoot, extendNbrCandidates);
+    if (isProbeToBuild) {
+        std::erase_if(extendNbrCandidates, [](const LogicalOperator* op) {
+            return op->getCardinality() < MIN_EXTEND_OUTPUT_FOR_PROBE_TO_BUILD_SIP;
+        });
     }
-    return nullptr;
+    if (scanNodeCandidates.empty() && extendNbrCandidates.empty()) {
+        return nullptr;
+    }
+    // Chain one masker per target kind; each masker passes its input through, so a
+    // single pass over fromRoot fills both the node-table and the rel-scan masks.
+    auto result = std::move(fromRoot);
+    auto hasSemiMaskApplied = false;
+    if (!scanNodeCandidates.empty()) {
+        result = appendSemiMasker(SemiMaskKeyType::NODE, SemiMaskTargetType::SCAN_NODE, nodeID,
+            scanNodeCandidates, std::move(result));
+        hasSemiMaskApplied = true;
+    }
+    if (!extendNbrCandidates.empty() && sanityCheckExtendCandidates(extendNbrCandidates)) {
+        result = appendSemiMasker(SemiMaskKeyType::NODE, SemiMaskTargetType::EXTEND_NBR_NODE,
+            nodeID, extendNbrCandidates, std::move(result));
+        hasSemiMaskApplied = true;
+    }
+    if (!hasSemiMaskApplied) {
+        return nullptr;
+    }
+    return result;
 }
 
 // The pushed limit is result-preserving only if every probe row matches exactly one build
@@ -330,7 +400,8 @@ static bool tryProbeToBuildHJSIP(LogicalOperator* op,
     auto buildRoot = hashJoin.getChild(1);
     auto hasSemiMaskApplied = false;
     for (auto& nodeID : hashJoin.getJoinNodeIDs()) {
-        auto newProbeRoot = tryApplySemiMask(nodeID, probeRoot, buildRoot.get());
+        auto newProbeRoot =
+            tryApplySemiMask(nodeID, probeRoot, buildRoot.get(), true /* isProbeToBuild */);
         if (newProbeRoot != nullptr) {
             probeRoot = newProbeRoot;
             hasSemiMaskApplied = true;
@@ -372,20 +443,33 @@ static bool isBuildSideQualified(LogicalOperator* buildRoot) {
     return op->getOperatorType() == LogicalOperatorType::RECURSIVE_EXTEND;
 }
 
+// A build without filters can still seed an effective semi mask when it is far smaller
+// than the probe side (e.g. a PK-anchored chain of a few thousand rows vs a multi-million
+// row probe scan): the mask then prunes the bulk of the probe scan. This mirrors the
+// planner's SIP_RATIO guard, which prohibits the reverse (probe-to-build) direction when
+// the probe outweighs the build by the same ratio.
+static bool isBuildSmallRelativeToProbe(LogicalOperator* op) {
+    auto& hashJoin = op->cast<LogicalHashJoin>();
+    const auto probeCard = hashJoin.getChild(0)->getCardinality();
+    const auto buildCard = hashJoin.getChild(1)->getCardinality();
+    return probeCard / PlannerKnobs::SIP_RATIO > buildCard;
+}
+
 static bool tryBuildToProbeHJSIP(LogicalOperator* op) {
     auto& hashJoin = op->cast<LogicalHashJoin>();
     if (hashJoin.getJoinType() != JoinType::INNER) {
         return false;
     }
     if (hashJoin.getSIPInfo().direction != SIPDirection::FORCE_BUILD_TO_PROBE &&
-        !isBuildSideQualified(op->getChild(1).get())) {
+        !isBuildSideQualified(op->getChild(1).get()) && !isBuildSmallRelativeToProbe(op)) {
         return false;
     }
     auto probeRoot = hashJoin.getChild(0);
     auto buildRoot = hashJoin.getChild(1);
     auto hasSemiMaskApplied = false;
     for (auto& nodeID : hashJoin.getJoinNodeIDs()) {
-        auto newBuildRoot = tryApplySemiMask(nodeID, buildRoot, probeRoot.get());
+        auto newBuildRoot =
+            tryApplySemiMask(nodeID, buildRoot, probeRoot.get(), false /* isProbeToBuild */);
         if (newBuildRoot != nullptr) {
             buildRoot = newBuildRoot;
             hasSemiMaskApplied = true;

@@ -115,6 +115,7 @@ public:
                 children[0]->copy(), id, printInfo->copy(), operatorType);
         }
         result->multiParentPackedScanEnabled = multiParentPackedScanEnabled;
+        result->nbrNodeMaskMap = nbrNodeMaskMap;
         return result;
     }
 
@@ -134,7 +135,31 @@ protected:
 public:
     void setMultiParentPackedScanEnabled(bool enabled) { multiParentPackedScanEnabled = enabled; }
 
+    // Semi mask on the neighbour node (outVectors[0]). Created at map time for every
+    // extend that scans the nbr ID; enabled (populated) only when a hash-join SIP
+    // SemiMasker targets this operator. Shared across plan copies so every copy filters
+    // by the same masks, mirroring ScanNodeTableSharedState behaviour.
+    void setNbrNodeMaskMap(std::shared_ptr<common::NodeOffsetMaskMap> maskMap) {
+        nbrNodeMaskMap = std::move(maskMap);
+    }
+    common::table_id_map_t<common::SemiMask*> getNbrNodeMasks() const {
+        if (nbrNodeMaskMap == nullptr) {
+            return {};
+        }
+        return nbrNodeMaskMap->getMasks();
+    }
+
 protected:
+    // Filter the current scan output batch by the nbr node mask. Returns the number of
+    // rows surviving the filter (0 means the caller should keep scanning).
+    common::sel_t applyNbrNodeMask();
+    // Lazily (re-)evaluated per execution: which nbr masks are enabled, plus a
+    // single-table fast path. Masks are enabled once at map time, before execution.
+    void refreshNbrMaskCache();
+    std::shared_ptr<common::NodeOffsetMaskMap> nbrNodeMaskMap;
+    std::vector<std::pair<common::table_id_t, common::SemiMask*>> nbrEnabledMasks;
+    common::SemiMask* nbrSingleEnabledMask = nullptr;
+
     ScanRelTableInfo tableInfo;
     std::unique_ptr<storage::RelTableScanState> scanState;
     std::vector<storage::NodeTable*> sourceNodeTables;

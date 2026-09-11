@@ -72,15 +72,33 @@ public:
     bool getNextTuplesInternal(ExecutionContext* context) override;
 
     std::unique_ptr<PhysicalOperator> copy() override {
-        return make_unique<ScanMultiRelTable>(opInfo.copy(), directionInfo.copy(),
+        auto result = make_unique<ScanMultiRelTable>(opInfo.copy(), directionInfo.copy(),
             copyUnorderedMap(scanners), children[0]->copy(), id, printInfo->copy(), operatorType);
+        result->nbrNodeMaskMap = nbrNodeMaskMap;
+        return result;
+    }
+
+    void setNbrNodeMaskMap(std::shared_ptr<common::NodeOffsetMaskMap> maskMap) {
+        nbrNodeMaskMap = std::move(maskMap);
+    }
+    common::table_id_map_t<common::SemiMask*> getNbrNodeMasks() const {
+        if (nbrNodeMaskMap == nullptr) {
+            return {};
+        }
+        return nbrNodeMaskMap->getMasks();
     }
 
 private:
     void resetState();
     void initCurrentScanner(const common::nodeID_t& nodeID);
+    common::sel_t applyNbrNodeMask();
+    void refreshNbrMaskCache();
 
 private:
+    std::shared_ptr<common::NodeOffsetMaskMap> nbrNodeMaskMap;
+    std::vector<std::pair<common::table_id_t, common::SemiMask*>> nbrEnabledMasks;
+    common::SemiMask* nbrSingleEnabledMask = nullptr;
+
     DirectionInfo directionInfo;
     std::unique_ptr<storage::RelTableScanState> scanState;
 
