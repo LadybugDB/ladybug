@@ -102,7 +102,16 @@ struct AlpDecode {
 
 	//! Scalar decoding a single value with ALP
 	static inline T decode_value(const int64_t encoded_value, const uint8_t factor, const uint8_t exponent) {
-		const T decoded_value = encoded_value * FACT_ARR[factor] * alp::Constants<T>::FRAC_ARR[exponent];
+		// NB: kept semantically identical to upstream's expression. The product is
+		// computed in uint64_t, where wraparound is well-defined, and converted back
+		// (modular since C++20), so the result is bit-identical to the historical
+		// two's-complement wrap while staying UBSan-clean. This matters: exact
+		// (non-wrapping) arithmetic would let degenerate factor/exponent combos verify
+		// during sampling and change compression decisions (see CompressChunkTest
+		// in-place-update tests).
+		const auto product = static_cast<int64_t>(
+		    static_cast<uint64_t>(encoded_value) * static_cast<uint64_t>(FACT_ARR[factor]));
+		const T decoded_value = product * alp::Constants<T>::FRAC_ARR[exponent];
 		return decoded_value;
 	}
 

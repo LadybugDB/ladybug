@@ -59,8 +59,12 @@ uint64_t AggregateHashTable::append(const std::vector<ValueVector*>& keyVectors,
 }
 
 hash_t getHash(const FactorizedTable& table, ft_tuple_idx_t tupleIdx) {
-    return *(hash_t*)(table.getTuple(tupleIdx) + table.getTableSchema()->getColOffset(
-                                                     table.getTableSchema()->getNumColumns() - 1));
+    hash_t hash;
+    memcpy(&hash,
+        table.getTuple(tupleIdx) +
+            table.getTableSchema()->getColOffset(table.getTableSchema()->getNumColumns() - 1),
+        sizeof(hash_t));
+    return hash;
 }
 
 void AggregateHashTable::merge(FactorizedTable&& table) {
@@ -232,8 +236,11 @@ void AggregateHashTable::resize(uint64_t newSize) {
     for (auto& block : hashSlotsBlocks) {
         block->resetToZero();
     }
-    factorizedTable->forEach(
-        [&](auto tuple) { fillHashSlot(*(hash_t*)(tuple + hashColOffsetInFT), tuple); });
+    factorizedTable->forEach([&](auto tuple) {
+        hash_t hash;
+        memcpy(&hash, tuple + hashColOffsetInFT, sizeof(hash_t));
+        fillHashSlot(hash, tuple);
+    });
 }
 
 uint64_t AggregateHashTable::matchFTEntries(std::span<const ValueVector*> keyVectors,

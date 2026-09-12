@@ -274,7 +274,12 @@ uint64_t FactorizedTable::getNumFlatTuples(ft_tuple_idx_t tupleIdx) const {
         auto groupID = column->getGroupID();
         if (!calculatedGroups.contains(groupID)) {
             calculatedGroups[groupID] = true;
-            numFlatTuples *= column->isFlat() ? 1 : ((overflow_value_t*)tupleBuffer)->numElements;
+            if (!column->isFlat()) {
+                // Tuple data is packed without alignment padding; use memcpy.
+                overflow_value_t overflowValue;
+                memcpy(&overflowValue, tupleBuffer, sizeof(overflow_value_t));
+                numFlatTuples *= overflowValue.numElements;
+            }
         }
         tupleBuffer += column->getNumBytes();
     }
@@ -567,8 +572,9 @@ overflow_value_t FactorizedTable::appendVectorToUnflatTupleBlocks(const ValueVec
 
 void FactorizedTable::readUnflatCol(uint8_t** tuplesToRead, ft_col_idx_t colIdx,
     ValueVector& vector) const {
-    auto overflowColValue =
-        *(overflow_value_t*)(tuplesToRead[0] + tableSchema.getColOffset(colIdx));
+    overflow_value_t overflowColValue;
+    memcpy(&overflowColValue, tuplesToRead[0] + tableSchema.getColOffset(colIdx),
+        sizeof(overflow_value_t));
     DASSERT(vector.state->getSelVector().isUnfiltered());
     auto numBytesPerValue = LogicalTypeUtils::getRowLayoutSize(vector.dataType);
     if (hasNoNullGuarantee(colIdx)) {
@@ -597,7 +603,9 @@ void FactorizedTable::readUnflatCol(uint8_t** tuplesToRead, ft_col_idx_t colIdx,
 
 void FactorizedTable::readUnflatCol(const uint8_t* tupleToRead, const SelectionVector& selVector,
     ft_col_idx_t colIdx, ValueVector& vector) const {
-    auto vectorOverflowValue = *(overflow_value_t*)(tupleToRead + tableSchema.getColOffset(colIdx));
+    overflow_value_t vectorOverflowValue;
+    memcpy(&vectorOverflowValue, tupleToRead + tableSchema.getColOffset(colIdx),
+        sizeof(overflow_value_t));
     DASSERT(vector.state->getSelVector().isUnfiltered());
     if (hasNoNullGuarantee(colIdx)) {
         vector.setAllNonNull();
@@ -709,15 +717,16 @@ void FactorizedTableIterator::resetState() {
 
 void FactorizedTableIterator::readUnflatColToFlatTuple(ft_col_idx_t colIdx, uint8_t* valueBuffer,
     FlatTuple& tuple) {
-    auto overflowValue =
-        (overflow_value_t*)(valueBuffer + factorizedTable.getTableSchema()->getColOffset(colIdx));
+    overflow_value_t overflowValue;
+    memcpy(&overflowValue, valueBuffer + factorizedTable.getTableSchema()->getColOffset(colIdx),
+        sizeof(overflow_value_t));
     auto groupID = factorizedTable.getTableSchema()->getColumn(colIdx)->getGroupID();
     auto tupleSizeInOverflowBuffer =
         LogicalTypeUtils::getRowLayoutSize(tuple[colIdx].getDataType());
-    valueBuffer = overflowValue->value +
+    valueBuffer = overflowValue.value +
                   tupleSizeInOverflowBuffer * flatTuplePositionsInDataChunk[groupID].first;
     auto isNull = factorizedTable.isOverflowColNull(
-        overflowValue->value + tupleSizeInOverflowBuffer * overflowValue->numElements,
+        overflowValue.value + tupleSizeInOverflowBuffer * overflowValue.numElements,
         flatTuplePositionsInDataChunk[groupID].first, colIdx);
     tuple[colIdx].setNull(isNull);
     if (!isNull) {
@@ -758,10 +767,13 @@ void FactorizedTableIterator::updateNumElementsInDataChunk() {
         auto groupID = column->getGroupID();
         // If this is an unflat column, the number of elements is stored in the
         // overflow_value_t struct. Otherwise, the number of elements is 1.
-        auto numElementsInDataChunk =
-            column->isFlat() ?
-                1 :
-                ((overflow_value_t*)(currentTupleBuffer + colOffsetInTupleBuffer))->numElements;
+        uint64_t numElementsInDataChunk = 1;
+        if (!column->isFlat()) {
+            overflow_value_t overflowValue;
+            memcpy(&overflowValue, currentTupleBuffer + colOffsetInTupleBuffer,
+                sizeof(overflow_value_t));
+            numElementsInDataChunk = overflowValue.numElements;
+        }
         if (groupID >= flatTuplePositionsInDataChunk.size()) {
             flatTuplePositionsInDataChunk.resize(groupID + 1);
         }

@@ -182,8 +182,10 @@ void OrderByKeyEncoder::encodeFTIdx(uint32_t numEntriesToEncode, uint8_t* tupleI
         auto nextBatchOfEntries = std::min(numEntriesToEncode - numUpdatedFTInfoEntries,
             numTuplesPerBlockInFT - ftBlockOffset);
         for (auto i = 0u; i < nextBatchOfEntries; i++) {
-            *(uint32_t*)tupleInfoPtr = ftBlockIdx;
-            *(uint32_t*)(tupleInfoPtr + 4) = ftBlockOffset;
+            // tupleInfoPtr is packed at the end of variable-length keys and may be
+            // misaligned; use memcpy for the 4-byte stores (UBSan).
+            memcpy(tupleInfoPtr, &ftBlockIdx, sizeof(uint32_t));
+            memcpy(tupleInfoPtr + 4, &ftBlockOffset, sizeof(uint32_t));
             *(uint8_t*)(tupleInfoPtr + 7) = ftIdx;
             tupleInfoPtr += numBytesPerTuple;
             ftBlockOffset++;
@@ -352,13 +354,19 @@ void OrderByKeyEncoder::encodeData(bool data, uint8_t* resultPtr, bool /*swapByt
 
 template<>
 void OrderByKeyEncoder::encodeData(double data, uint8_t* resultPtr, bool swapBytes) {
+    // resultPtr points into a packed key buffer with no alignment guarantee, so all
+    // multi-byte access goes through memcpy / byte-wise ops (UBSan).
     memcpy(resultPtr, &data, sizeof(data));
-    uint64_t* dataBytes = (uint64_t*)resultPtr;
     if (swapBytes) {
-        *dataBytes = BSWAP64(*dataBytes);
+        uint64_t dataBytes;
+        memcpy(&dataBytes, resultPtr, sizeof(dataBytes));
+        dataBytes = BSWAP64(dataBytes);
+        memcpy(resultPtr, &dataBytes, sizeof(dataBytes));
     }
     if (data < (double)0) {
-        *dataBytes = ~*dataBytes;
+        for (auto i = 0u; i < sizeof(double); i++) {
+            resultPtr[i] = ~resultPtr[i];
+        }
     } else {
         resultPtr[0] = flipSign(resultPtr[0]);
     }
@@ -399,13 +407,18 @@ void OrderByKeyEncoder::encodeData(string_t data, uint8_t* resultPtr, bool /*swa
 
 template<>
 void OrderByKeyEncoder::encodeData(float data, uint8_t* resultPtr, bool swapBytes) {
+    // See above: resultPtr may be misaligned.
     memcpy(resultPtr, &data, sizeof(data));
-    uint32_t* dataBytes = (uint32_t*)resultPtr;
     if (swapBytes) {
-        *dataBytes = BSWAP32(*dataBytes);
+        uint32_t dataBytes;
+        memcpy(&dataBytes, resultPtr, sizeof(dataBytes));
+        dataBytes = BSWAP32(dataBytes);
+        memcpy(resultPtr, &dataBytes, sizeof(dataBytes));
     }
     if (data < (float)0) {
-        *dataBytes = ~*dataBytes;
+        for (auto i = 0u; i < sizeof(float); i++) {
+            resultPtr[i] = ~resultPtr[i];
+        }
     } else {
         resultPtr[0] = flipSign(resultPtr[0]);
     }

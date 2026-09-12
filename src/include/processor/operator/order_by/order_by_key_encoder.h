@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstring>
 #include <functional>
 #include <vector>
 
@@ -54,13 +55,17 @@ public:
     static uint32_t getNumBytesPerTuple(const std::vector<common::ValueVector*>& keyVectors);
 
     static inline uint32_t getEncodedFTBlockIdx(const uint8_t* tupleInfoPtr) {
-        return *(uint32_t*)tupleInfoPtr;
+        uint32_t result;
+        memcpy(&result, tupleInfoPtr, sizeof(uint32_t));
+        return result;
     }
 
     // Note: We only encode 3 bytes for ftBlockOffset, but we are reading 4 bytes from tupleInfoPtr.
     // We need to do a bit mask to set the most significant byte to 0x00.
     static inline uint32_t getEncodedFTBlockOffset(const uint8_t* tupleInfoPtr) {
-        return (*(uint32_t*)(tupleInfoPtr + 4) & 0x00FFFFFF);
+        uint32_t result;
+        memcpy(&result, tupleInfoPtr + 4, sizeof(uint32_t));
+        return (result & 0x00FFFFFF);
     }
 
     static inline uint8_t getEncodedFTIdx(const uint8_t* tupleInfoPtr) {

@@ -100,7 +100,11 @@ void ValueVector::copyFromRowData(uint32_t pos, const uint8_t* rowData) {
     } break;
     case PhysicalTypeID::STRING:
     case PhysicalTypeID::JSON: {
-        StringVector::addString(this, pos, *(string_t*)rowData);
+        // Row-layout data is packed without alignment padding, so rowData may be
+        // misaligned for string_t (8-byte aligned). Copy to an aligned temporary.
+        string_t srcStr;
+        memcpy(&srcStr, rowData, sizeof(string_t));
+        StringVector::addString(this, pos, srcStr);
     } break;
     default: {
         auto dataTypeSize = LogicalTypeUtils::getRowLayoutSize(dataType);
@@ -568,7 +572,9 @@ void StringVector::addString(lbug::common::ValueVector* vector, string_t& dstStr
 void StringVector::copyToRowData(const ValueVector* vector, uint32_t pos, uint8_t* rowData,
     InMemOverflowBuffer* rowOverflowBuffer) {
     auto& srcStr = vector->getValue<string_t>(pos);
-    auto& dstStr = *(string_t*)rowData;
+    // rowData is packed without alignment guarantees; build an aligned temporary
+    // and memcpy it out to avoid misaligned string_t access (UBSan).
+    string_t dstStr;
     if (string_t::isShortString(srcStr.len)) {
         dstStr.setShortString(srcStr);
     } else {
@@ -576,6 +582,7 @@ void StringVector::copyToRowData(const ValueVector* vector, uint32_t pos, uint8_
             reinterpret_cast<uint64_t>(rowOverflowBuffer->allocateSpace(srcStr.len));
         dstStr.setLongString(srcStr);
     }
+    memcpy(rowData, &dstStr, sizeof(string_t));
 }
 
 void ListVector::copyListEntryAndBufferMetaData(ValueVector& vector,
@@ -600,7 +607,9 @@ void ListVector::copyListEntryAndBufferMetaData(ValueVector& vector,
 
 void ListVector::copyFromRowData(ValueVector* vector, uint32_t pos, const uint8_t* rowData) {
     DASSERT(validateType(*vector));
-    auto& srcList = *(list_t*)rowData;
+    // Row data is packed without alignment padding; copy to an aligned temporary.
+    list_t srcList;
+    memcpy(&srcList, rowData, sizeof(list_t));
     auto srcNullBytes = reinterpret_cast<uint8_t*>(srcList.overflowPtr);
     auto srcListValues = srcNullBytes + NullBuffer::getNumBytesForNullValues(srcList.size);
     auto dstListEntry = addList(vector, srcList.size);
@@ -623,7 +632,8 @@ void ListVector::copyToRowData(const ValueVector* vector, uint32_t pos, uint8_t*
     InMemOverflowBuffer* rowOverflowBuffer) {
     auto& srcListEntry = vector->getValue<list_entry_t>(pos);
     auto srcListDataVector = ListVector::getDataVector(vector);
-    auto& dstListEntry = *(list_t*)rowData;
+    // Row data may be misaligned for list_t; build locally and memcpy out at the end.
+    list_t dstListEntry;
     dstListEntry.size = srcListEntry.size;
     auto nullBytesSize = NullBuffer::getNumBytesForNullValues(dstListEntry.size);
     auto dataRowLayoutSize = LogicalTypeUtils::getRowLayoutSize(srcListDataVector->dataType);
@@ -641,6 +651,7 @@ void ListVector::copyToRowData(const ValueVector* vector, uint32_t pos, uint8_t*
         }
         dstListValues += dataRowLayoutSize;
     }
+    memcpy(rowData, &dstListEntry, sizeof(list_t));
 }
 
 void ListVector::copyFromVectorData(ValueVector* dstVector, uint8_t* dstData,

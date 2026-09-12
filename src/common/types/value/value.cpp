@@ -347,6 +347,8 @@ Value::Value(const Value& other) : isNull_{other.isNull_} {
 }
 
 void Value::copyFromRowLayout(const uint8_t* value) {
+    // Row-layout buffers are packed without alignment padding, so all multi-byte
+    // loads must go through memcpy to stay UBSan-clean (misaligned access is UB).
     switch (dataType.getLogicalTypeID()) {
     case LogicalTypeID::SERIAL:
     case LogicalTypeID::TIMESTAMP_NS:
@@ -355,86 +357,96 @@ void Value::copyFromRowLayout(const uint8_t* value) {
     case LogicalTypeID::TIMESTAMP_TZ:
     case LogicalTypeID::TIMESTAMP:
     case LogicalTypeID::INT64: {
-        val.int64Val = *((int64_t*)value);
+        memcpy(&val.int64Val, value, sizeof(int64_t));
     } break;
     case LogicalTypeID::DATE:
     case LogicalTypeID::INT32: {
-        val.int32Val = *((int32_t*)value);
+        memcpy(&val.int32Val, value, sizeof(int32_t));
     } break;
     case LogicalTypeID::INT16: {
-        val.int16Val = *((int16_t*)value);
+        memcpy(&val.int16Val, value, sizeof(int16_t));
     } break;
     case LogicalTypeID::INT8: {
-        val.int8Val = *((int8_t*)value);
+        memcpy(&val.int8Val, value, sizeof(int8_t));
     } break;
     case LogicalTypeID::UINT64: {
-        val.uint64Val = *((uint64_t*)value);
+        memcpy(&val.uint64Val, value, sizeof(uint64_t));
     } break;
     case LogicalTypeID::UINT32: {
-        val.uint32Val = *((uint32_t*)value);
+        memcpy(&val.uint32Val, value, sizeof(uint32_t));
     } break;
     case LogicalTypeID::UINT16: {
-        val.uint16Val = *((uint16_t*)value);
+        memcpy(&val.uint16Val, value, sizeof(uint16_t));
     } break;
     case LogicalTypeID::UINT8: {
-        val.uint8Val = *((uint8_t*)value);
+        memcpy(&val.uint8Val, value, sizeof(uint8_t));
     } break;
     case LogicalTypeID::INT128: {
-        val.int128Val = *((int128_t*)value);
+        memcpy(&val.int128Val, value, sizeof(int128_t));
     } break;
     case LogicalTypeID::BOOL: {
-        val.booleanVal = *((bool*)value);
+        memcpy(&val.booleanVal, value, sizeof(bool));
     } break;
     case LogicalTypeID::DOUBLE: {
-        val.doubleVal = *((double*)value);
+        memcpy(&val.doubleVal, value, sizeof(double));
     } break;
     case LogicalTypeID::FLOAT: {
-        val.floatVal = *((float*)value);
+        memcpy(&val.floatVal, value, sizeof(float));
     } break;
     case LogicalTypeID::DECIMAL: {
         switch (dataType.getPhysicalType()) {
         case PhysicalTypeID::INT16:
-            val.int16Val = (*(int16_t*)value);
+            memcpy(&val.int16Val, value, sizeof(int16_t));
             break;
         case PhysicalTypeID::INT32:
-            val.int32Val = (*(int32_t*)value);
+            memcpy(&val.int32Val, value, sizeof(int32_t));
             break;
         case PhysicalTypeID::INT64:
-            val.int64Val = (*(int64_t*)value);
+            memcpy(&val.int64Val, value, sizeof(int64_t));
             break;
         case PhysicalTypeID::INT128:
-            val.int128Val = (*(int128_t*)value);
+            memcpy(&val.int128Val, value, sizeof(int128_t));
             break;
         default:
             UNREACHABLE_CODE;
         }
     } break;
     case LogicalTypeID::INTERVAL: {
-        val.intervalVal = *((interval_t*)value);
+        memcpy(&val.intervalVal, value, sizeof(interval_t));
     } break;
     case LogicalTypeID::INTERNAL_ID: {
-        val.internalIDVal = *((nodeID_t*)value);
+        memcpy(&val.internalIDVal, value, sizeof(nodeID_t));
     } break;
     case LogicalTypeID::UINT128: {
-        val.uint128Val = *((uint128_t*)value);
+        memcpy(&val.uint128Val, value, sizeof(uint128_t));
     } break;
     case LogicalTypeID::BLOB: {
-        strVal = ((blob_t*)value)->value.getAsString();
+        blob_t blob;
+        memcpy(&blob, value, sizeof(blob_t));
+        strVal = blob.value.getAsString();
     } break;
     case LogicalTypeID::UUID: {
-        val.int128Val = ((uuid*)value)->value;
-        strVal = UUID::toString(*((uuid*)value));
+        uuid uuidVal;
+        memcpy(&uuidVal, value, sizeof(uuid));
+        val.int128Val = uuidVal.value;
+        strVal = UUID::toString(uuidVal);
     } break;
     case LogicalTypeID::JSON:
     case LogicalTypeID::STRING: {
-        strVal = ((string_t*)value)->getAsString();
+        string_t str;
+        memcpy(&str, value, sizeof(string_t));
+        strVal = str.getAsString();
     } break;
     case LogicalTypeID::MAP:
     case LogicalTypeID::LIST: {
-        copyFromRowLayoutList(*(list_t*)value, ListType::getChildType(dataType));
+        list_t list;
+        memcpy(&list, value, sizeof(list_t));
+        copyFromRowLayoutList(list, ListType::getChildType(dataType));
     } break;
     case LogicalTypeID::ARRAY: {
-        copyFromRowLayoutList(*(list_t*)value, ArrayType::getChildType(dataType));
+        list_t list;
+        memcpy(&list, value, sizeof(list_t));
+        copyFromRowLayoutList(list, ArrayType::getChildType(dataType));
     } break;
     case LogicalTypeID::UNION: {
         copyFromUnion(value);
@@ -446,7 +458,7 @@ void Value::copyFromRowLayout(const uint8_t* value) {
         copyFromRowLayoutStruct(value);
     } break;
     case LogicalTypeID::POINTER: {
-        val.pointer = *((uint8_t**)value);
+        memcpy(&val.pointer, value, sizeof(uint8_t*));
     } break;
     default:
         UNREACHABLE_CODE;
@@ -757,7 +769,9 @@ void Value::copyFromUnion(const uint8_t* unionValue) {
     auto unionValues = unionNullValues + NullBuffer::getNumBytesForNullValues(childrenTypes.size());
     // For union dataType, only one member can be active at a time. So we don't need to copy all
     // union fields into value.
-    auto activeFieldIdx = UnionType::getInternalFieldIdx(*(union_field_idx_t*)unionValues);
+    union_field_idx_t tag;
+    memcpy(&tag, unionValues, sizeof(union_field_idx_t));
+    auto activeFieldIdx = UnionType::getInternalFieldIdx(tag);
     // Create default value now that we know the active field
     auto childValue = Value::createDefaultValue(*childrenTypes[activeFieldIdx]);
     auto curMemberIdx = 0u;

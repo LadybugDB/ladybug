@@ -93,9 +93,13 @@ static std::vector<overflow_value_t> fetchListsToIntersectFromTuples(
     const std::vector<uint8_t*>& tuples, const std::vector<bool>& isFlatValue) {
     std::vector<overflow_value_t> listsToIntersect(tuples.size());
     for (auto i = 0u; i < tuples.size(); i++) {
-        listsToIntersect[i] =
-            isFlatValue[i] ? overflow_value_t{1 /* numElements */, tuples[i] + sizeof(nodeID_t)} :
-                             *(overflow_value_t*)(tuples[i] + sizeof(nodeID_t));
+        if (isFlatValue[i]) {
+            listsToIntersect[i] =
+                overflow_value_t{1 /* numElements */, tuples[i] + sizeof(nodeID_t)};
+        } else {
+            // Tuples are packed without alignment padding; use memcpy.
+            memcpy(&listsToIntersect[i], tuples[i] + sizeof(nodeID_t), sizeof(overflow_value_t));
+        }
     }
     return listsToIntersect;
 }
