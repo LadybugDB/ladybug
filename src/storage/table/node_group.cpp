@@ -279,12 +279,13 @@ NodeGroupScanResult NodeGroup::scan(Transaction* transaction, TableScanState& st
         scanResult = scanInternal(chunkedGroups.lock(), transaction, state, startOffsetInGroup,
             numRowsToScan);
     }
-    // With no output vectors no chunk scan populates the selection, so the pre-check's
-    // subset above stands as is.
-    if (enableSemiMask && !state.outputVectors.empty()) {
-        // scanInternal resets the selection; intersect the mask with the surviving rows.
-        // Only the actually scanned prefix (scanResult.numRows) is valid: the requested
-        // range may span chunked groups while a single call scans the first one.
+    // scanInternal resets the selection (visibility/zonemap), clobbering the pre-check's
+    // subset even when outputVectors is empty (the anchor sel vector is rewritten before
+    // the column loop). Intersect the mask with the surviving rows in all cases so only
+    // masked rows are reported. Only the actually scanned prefix (scanResult.numRows) is
+    // valid: the requested range may span chunked groups while a single call scans the
+    // first one.
+    if (enableSemiMask) {
         NodeTable::applySemiMaskFilter(state, startNodeOffset, scanResult.numRows,
             state.outState->getSelVectorUnsafe());
         if (state.outState->getSelVector().getSelSize() == 0) {

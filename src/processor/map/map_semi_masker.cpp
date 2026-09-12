@@ -49,21 +49,20 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapSemiMasker(
             auto scan = physicalOp->ptrCast<ScanNodeTable>();
             initMask(masksPerTable, scan->getSemiMasks());
         } break;
-        case PhysicalOperatorType::SCAN_REL_TABLE: {
+        case PhysicalOperatorType::SCAN_REL_TABLE:
+        case PhysicalOperatorType::PACKED_EXTEND: {
             DASSERT(semiMasker.getTargetType() == SemiMaskTargetType::EXTEND_NBR_NODE);
-            // ScanMultiRelTable shares the SCAN_REL_TABLE physical type; both
-            // expose nbr-node masks with identical semantics.
+            // Both physical types map to either concrete class: mapExtend assigns
+            // SCAN_REL_TABLE to the generic (multi-rel) extend and PACKED_EXTEND to
+            // the packed one, so e.g. a multi-rel packed extend is a ScanMultiRelTable
+            // carrying the PACKED_EXTEND type. Dispatch on the concrete class rather
+            // than the physical type.
             if (auto multiRel = dynamic_cast<ScanMultiRelTable*>(physicalOp)) {
                 initMask(masksPerTable, multiRel->getNbrNodeMasks());
             } else {
                 auto scanRel = physicalOp->ptrCast<ScanRelTable>();
                 initMask(masksPerTable, scanRel->getNbrNodeMasks());
             }
-        } break;
-        case PhysicalOperatorType::PACKED_EXTEND: {
-            DASSERT(semiMasker.getTargetType() == SemiMaskTargetType::EXTEND_NBR_NODE);
-            auto scanRel = physicalOp->ptrCast<ScanRelTable>();
-            initMask(masksPerTable, scanRel->getNbrNodeMasks());
         } break;
         case PhysicalOperatorType::TABLE_FUNCTION_CALL: {
             auto sharedState = physicalOp->ptrCast<TableFunctionCall>()->getSharedState();

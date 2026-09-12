@@ -61,57 +61,11 @@ bool RelTableCollectionScanner::scan(main::ClientContext* context, RelTableScanS
 }
 
 void ScanMultiRelTable::refreshNbrMaskCache() {
-    nbrEnabledMasks.clear();
-    nbrSingleEnabledMask = nullptr;
-    if (nbrNodeMaskMap == nullptr) {
-        return;
-    }
-    for (auto& [tableID, mask] : nbrNodeMaskMap->getMasks()) {
-        if (mask->isEnabled()) {
-            nbrEnabledMasks.emplace_back(tableID, mask);
-        }
-    }
-    if (nbrEnabledMasks.size() == 1) {
-        nbrSingleEnabledMask = nbrEnabledMasks[0].second;
-    }
+    refreshNbrMasks(nbrNodeMaskMap.get());
 }
 
 common::sel_t ScanMultiRelTable::applyNbrNodeMask() {
-    auto& selVector = scanState->outState->getSelVectorUnsafe();
-    const auto selSize = selVector.getSelSize();
-    if (nbrSingleEnabledMask == nullptr && nbrEnabledMasks.empty()) {
-        return selSize;
-    }
-    auto* nbrVector = outVectors[0];
-    auto buffer = selVector.getMutableBuffer();
-    sel_t selectedSize = 0;
-    if (nbrSingleEnabledMask != nullptr) {
-        for (auto i = 0u; i < selSize; ++i) {
-            auto pos = selVector[i];
-            buffer[selectedSize] = pos;
-            selectedSize +=
-                nbrSingleEnabledMask->isMasked(nbrVector->getValue<nodeID_t>(pos).offset);
-        }
-    } else {
-        for (auto i = 0u; i < selSize; ++i) {
-            auto pos = selVector[i];
-            auto nbrID = nbrVector->getValue<nodeID_t>(pos);
-            buffer[selectedSize] = pos;
-            auto keep = true;
-            for (auto& [tableID, mask] : nbrEnabledMasks) {
-                if (nbrID.tableID == tableID) {
-                    keep = mask->isMasked(nbrID.offset);
-                    break;
-                }
-            }
-            selectedSize += keep;
-        }
-    }
-    if (selectedSize == selSize) {
-        return selSize;
-    }
-    selVector.setToFiltered(selectedSize);
-    return selectedSize;
+    return applyNbrMaskFilter(scanState->outState->getSelVectorUnsafe(), outVectors[0]);
 }
 
 void ScanMultiRelTable::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {

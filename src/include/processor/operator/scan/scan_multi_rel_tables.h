@@ -91,13 +91,12 @@ public:
 private:
     void resetState();
     void initCurrentScanner(const common::nodeID_t& nodeID);
+    // Thin wrappers over the shared ScanTable nbr-node semi mask helpers.
     common::sel_t applyNbrNodeMask();
     void refreshNbrMaskCache();
 
 private:
     std::shared_ptr<common::NodeOffsetMaskMap> nbrNodeMaskMap;
-    std::vector<std::pair<common::table_id_t, common::SemiMask*>> nbrEnabledMasks;
-    common::SemiMask* nbrSingleEnabledMask = nullptr;
 
     DirectionInfo directionInfo;
     std::unique_ptr<storage::RelTableScanState> scanState;
