@@ -35,6 +35,8 @@ jobs:
 
       - name: Build (RelWithDebInfo, ASan+UBSan)
         run: BM_MALLOC=1 ASAN=1 UBSAN=1 make relwithdebinfo NUM_THREADS=$(nproc)
+      - name: Generate test fixtures
+        run: uv run --with pyarrow python3 scripts/generate-dictionary-bug-fixture.py
       - name: Test
         run: BM_MALLOC=1 ASAN=1 UBSAN=1 make test NUM_THREADS=$(nproc)
         env:
@@ -67,6 +69,8 @@ jobs:
 
       - name: Build (RelWithDebInfo, TSan)
         run: BM_MALLOC=1 TSAN=1 make relwithdebinfo NUM_THREADS=$(nproc)
+      - name: Generate test fixtures
+        run: uv run --with pyarrow python3 scripts/generate-dictionary-bug-fixture.py
       - name: Test
         run: BM_MALLOC=1 TSAN=1 make test NUM_THREADS=$(nproc)
         env:

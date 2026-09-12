@@ -187,7 +187,9 @@ sel_t JoinHashTable::matchUnFlatKey(ValueVector* keyVector, uint8_t** probedTupl
 }
 
 uint8_t** JoinHashTable::findHashSlot(const uint8_t* tuple) const {
-    auto hash = *(hash_t*)(tuple + getHashValueColOffset());
+    // Hash column lives in a packed factorized-table tuple with no alignment padding.
+    hash_t hash;
+    memcpy(&hash, tuple + getHashValueColOffset(), sizeof(hash_t));
     auto slotIdx = getSlotIdxForHash(hash);
     return (uint8_t**)(hashSlotsBlocks[slotIdx >> numSlotsPerBlockLog2]->getData() +
                        (slotIdx & slotIdxInBlockMask) * sizeof(uint8_t*));

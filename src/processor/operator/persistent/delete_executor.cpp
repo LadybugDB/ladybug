@@ -104,6 +104,11 @@ void SingleLabelNodeDeleteExecutor::init(ResultSet* resultSet, ExecutionContext*
 }
 
 void SingleLabelNodeDeleteExecutor::finalize(ExecutionContext* context) {
+    // Batch vectors are only allocated for DETACH_DELETE. Dereferencing them for a
+    // plain DELETE (or when nothing was batched) is a null dereference.
+    if (info.deleteType != DeleteNodeType::DETACH_DELETE || batchNodeIDs.empty()) {
+        return;
+    }
     auto transaction = Transaction::Get(*context->clientContext);
     flushBatch(batchNodeIDs, *batchSrcNodeIDVector, tableInfo.fwdRelTables, tableInfo.bwdRelTables,
         transaction);
@@ -147,6 +152,10 @@ void MultiLabelNodeDeleteExecutor::init(ResultSet* resultSet, ExecutionContext* 
 }
 
 void MultiLabelNodeDeleteExecutor::finalize(ExecutionContext* context) {
+    // Batch vectors are only allocated for DETACH_DELETE. See above.
+    if (info.deleteType != DeleteNodeType::DETACH_DELETE || batchNodeIDs.empty()) {
+        return;
+    }
     auto transaction = Transaction::Get(*context->clientContext);
     table_id_map_t<std::vector<internalID_t>> tableIDToNodeIDs;
     for (const auto nodeID : batchNodeIDs) {
