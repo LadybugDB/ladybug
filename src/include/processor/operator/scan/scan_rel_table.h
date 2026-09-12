@@ -150,15 +150,12 @@ public:
     }
 
 protected:
-    // Filter the current scan output batch by the nbr node mask. Returns the number of
-    // rows surviving the filter (0 means the caller should keep scanning).
+    // Thin wrappers over the shared ScanTable helpers; ScanRelTable additionally skips
+    // filtering for multi-parent packed batches (packed output violates the one-parent-
+    // per-batch contract the filter assumes).
     common::sel_t applyNbrNodeMask();
-    // Lazily (re-)evaluated per execution: which nbr masks are enabled, plus a
-    // single-table fast path. Masks are enabled once at map time, before execution.
     void refreshNbrMaskCache();
     std::shared_ptr<common::NodeOffsetMaskMap> nbrNodeMaskMap;
-    std::vector<std::pair<common::table_id_t, common::SemiMask*>> nbrEnabledMasks;
-    common::SemiMask* nbrSingleEnabledMask = nullptr;
 
     ScanRelTableInfo tableInfo;
     std::unique_ptr<storage::RelTableScanState> scanState;

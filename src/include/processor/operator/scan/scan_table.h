@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "binder/expression/expression.h"
+#include "common/mask.h"
 #include "processor/operator/physical_operator.h"
 #include "storage/table/table.h"
 
@@ -110,6 +111,21 @@ public:
 
 protected:
     void initLocalStateInternal(ResultSet*, ExecutionContext*) override;
+
+    // Shared helpers for neighbour-node semi masks (SemiMaskTargetType::EXTEND_NBR_NODE),
+    // used by both ScanRelTable and ScanMultiRelTable. The mask map itself lives on the
+    // subclasses (created at map time for every extend that scans the nbr ID; enabled and
+    // populated by a hash-join SIP SemiMasker).
+    // Lazily (re-)evaluated per execution: which nbr masks are enabled, plus a single-table
+    // fast path. Masks are enabled once at map time, before execution.
+    void refreshNbrMasks(const common::NodeOffsetMaskMap* maskMap);
+    // Filter the current scan output batch by the nbr node mask (nbrVector is
+    // outVectors[0]). Returns the number of rows surviving the filter (0 means the caller
+    // should keep scanning); returns selSize untouched when no mask is enabled.
+    common::sel_t applyNbrMaskFilter(common::SelectionVector& selVector,
+        common::ValueVector* nbrVector) const;
+    std::vector<std::pair<common::table_id_t, common::SemiMask*>> nbrEnabledMasks;
+    common::SemiMask* nbrSingleEnabledMask = nullptr;
 
 protected:
     ScanOpInfo opInfo;

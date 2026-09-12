@@ -3,7 +3,6 @@
 #include "binder/expression/scalar_function_expression.h"
 #include "common/json_utils.h"
 #include "common/vector/value_vector.h"
-
 using namespace lbug::common;
 using namespace lbug::storage;
 
@@ -84,6 +83,59 @@ void ScanTableInfo::initScanStateVectors(TableScanState& scanState,
             scanState.outputVectors.push_back(caster.getVectorBeforeCasting());
         }
     }
+}
+
+void ScanTable::refreshNbrMasks(const common::NodeOffsetMaskMap* maskMap) {
+    nbrEnabledMasks.clear();
+    nbrSingleEnabledMask = nullptr;
+    if (maskMap == nullptr) {
+        return;
+    }
+    for (auto& [tableID, mask] : maskMap->getMasks()) {
+        if (mask->isEnabled()) {
+            nbrEnabledMasks.emplace_back(tableID, mask);
+        }
+    }
+    if (nbrEnabledMasks.size() == 1) {
+        nbrSingleEnabledMask = nbrEnabledMasks[0].second;
+    }
+}
+
+common::sel_t ScanTable::applyNbrMaskFilter(common::SelectionVector& selVector,
+    common::ValueVector* nbrVector) const {
+    const auto selSize = selVector.getSelSize();
+    if (nbrSingleEnabledMask == nullptr && nbrEnabledMasks.empty()) {
+        return selSize;
+    }
+    auto buffer = selVector.getMutableBuffer();
+    sel_t selectedSize = 0;
+    if (nbrSingleEnabledMask != nullptr) {
+        for (auto i = 0u; i < selSize; ++i) {
+            auto pos = selVector[i];
+            buffer[selectedSize] = pos;
+            selectedSize +=
+                nbrSingleEnabledMask->isMasked(nbrVector->getValue<nodeID_t>(pos).offset);
+        }
+    } else {
+        for (auto i = 0u; i < selSize; ++i) {
+            auto pos = selVector[i];
+            auto nbrID = nbrVector->getValue<nodeID_t>(pos);
+            buffer[selectedSize] = pos;
+            auto keep = true;
+            for (auto& [tableID, mask] : nbrEnabledMasks) {
+                if (nbrID.tableID == tableID) {
+                    keep = mask->isMasked(nbrID.offset);
+                    break;
+                }
+            }
+            selectedSize += keep;
+        }
+    }
+    if (selectedSize == selSize) {
+        return selSize;
+    }
+    selVector.setToFiltered(selectedSize);
+    return selectedSize;
 }
 
 void ScanTable::initLocalStateInternal(ResultSet*, ExecutionContext*) {
