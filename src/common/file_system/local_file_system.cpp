@@ -118,8 +118,17 @@ std::unique_ptr<FileInfo> LocalFileSystem::openFile(const std::string& path, Fil
         DWORD dwFlags = flags.lockType == FileLockType::READ_LOCK ?
                             LOCKFILE_FAIL_IMMEDIATELY :
                             LOCKFILE_FAIL_IMMEDIATELY | LOCKFILE_EXCLUSIVE_LOCK;
+        // Lock a single byte near INT64_MAX, far beyond any data page. Locking byte 0
+        // overlaps the database header/first page, so on Windows (mandatory locking) a second
+        // handle in the same process (e.g. a read-only Database opened while the read-write
+        // Database is still alive, as in WalTest.LargeWALRecordReplayWithPreviousDBAlive)
+        // fails reads with ERROR_LOCK_VIOLATION (33) even though POSIX fcntl locks (per-process)
+        // allow same-process shared access. Locking outside the data range preserves mutual
+        // exclusion at open time (both sides lock the same byte) without blocking I/O at
+        // offsets 0..filesize.
         OVERLAPPED overlapped = {};
-        overlapped.Offset = 0;
+        overlapped.Offset = 0xFFFFFFFE;
+        overlapped.OffsetHigh = 0x7FFFFFFF;
         BOOL rc = LockFileEx(handle, dwFlags, 0 /*reserved*/, 1 /*numBytesLow*/, 0 /*numBytesHigh*/,
             &overlapped);
         if (!rc) {
