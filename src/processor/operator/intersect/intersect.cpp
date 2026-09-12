@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "function/hash/hash_functions.h"
+#include "processor/operator/intersect/intersect_kernels.h"
 #include "processor/result/factorized_table.h"
 
 using namespace lbug::common;
@@ -67,24 +68,9 @@ void Intersect::twoWayIntersect(nodeID_t* leftNodeIDs, SelectionVector& lSelVect
     DASSERT(lSelVector.getSelSize() <= rSelVector.getSelSize());
     auto leftPositionBuffer = lSelVector.getMutableBuffer();
     auto rightPositionBuffer = rSelVector.getMutableBuffer();
-    sel_t leftPosition = 0, rightPosition = 0;
-    uint64_t outputValuePosition = 0;
-    while (leftPosition < lSelVector.getSelSize() && rightPosition < rSelVector.getSelSize()) {
-        auto leftNodeID = leftNodeIDs[leftPosition];
-        auto rightNodeID = rightNodeIDs[rightPosition];
-        if (leftNodeID < rightNodeID) {
-            leftPosition++;
-        } else if (leftNodeID > rightNodeID) {
-            rightPosition++;
-        } else {
-            leftPositionBuffer[outputValuePosition] = leftPosition;
-            rightPositionBuffer[outputValuePosition] = rightPosition;
-            leftNodeIDs[outputValuePosition] = leftNodeID;
-            leftPosition++;
-            rightPosition++;
-            outputValuePosition++;
-        }
-    }
+    const auto outputValuePosition =
+        intersectNodeIDs(leftNodeIDs, lSelVector.getSelSize(), rightNodeIDs,
+            rSelVector.getSelSize(), leftPositionBuffer.data(), rightPositionBuffer.data());
     lSelVector.setToFiltered(outputValuePosition);
     rSelVector.setToFiltered(outputValuePosition);
 }
