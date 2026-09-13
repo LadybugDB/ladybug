@@ -315,9 +315,10 @@ TEST_F(CardinalityTest, TestMultiParentPackedScan) {
         }
         return counts;
     };
+    using CountMap = std::map<int64_t, uint64_t>;
     auto expectCountsEqual = [&](const std::unordered_map<int64_t, uint64_t>& actual) {
-        EXPECT_EQ(std::map<int64_t, uint64_t>(expectedCounts.begin(), expectedCounts.end()),
-            std::map<int64_t, uint64_t>(actual.begin(), actual.end()));
+        EXPECT_EQ(CountMap(expectedCounts.begin(), expectedCounts.end()),
+            CountMap(actual.begin(), actual.end()));
     };
     ASSERT_TRUE(conn->query("CALL enable_packed_path_extend=true")->isSuccess());
     expectCountsEqual(collectCounts(packedCountQuery));
