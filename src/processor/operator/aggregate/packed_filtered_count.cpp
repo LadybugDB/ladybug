@@ -1,5 +1,7 @@
 #include "processor/operator/aggregate/packed_filtered_count.h"
 
+#include <algorithm>
+
 #include "binder/expression/expression_util.h"
 #include "common/system_config.h"
 #include "processor/execution_context.h"
@@ -25,6 +27,11 @@ void PackedFilteredCountSharedState::finalize() {
     for (auto& [key, count] : counts) {
         finalizedCounts.emplace_back(key, count);
     }
+    // Sort by key for a stable, cross-platform scan output order: unordered_map iteration
+    // order differs between MSVC and libstdc++, which otherwise yields nondeterministic
+    // result ordering.
+    std::sort(finalizedCounts.begin(), finalizedCounts.end(),
+        [](const auto& a, const auto& b) { return a.first < b.first; });
     finalized = true;
 }
 

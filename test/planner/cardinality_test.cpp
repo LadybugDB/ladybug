@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <unordered_map>
 
 #include "catalog/catalog.h"
@@ -314,10 +315,14 @@ TEST_F(CardinalityTest, TestMultiParentPackedScan) {
         }
         return counts;
     };
+    auto expectCountsEqual = [&](const std::unordered_map<int64_t, uint64_t>& actual) {
+        EXPECT_EQ(std::map<int64_t, uint64_t>(expectedCounts.begin(), expectedCounts.end()),
+            std::map<int64_t, uint64_t>(actual.begin(), actual.end()));
+    };
     ASSERT_TRUE(conn->query("CALL enable_packed_path_extend=true")->isSuccess());
-    EXPECT_EQ(expectedCounts, collectCounts(packedCountQuery));
+    expectCountsEqual(collectCounts(packedCountQuery));
     ASSERT_TRUE(conn->query("CALL enable_packed_path_extend=false")->isSuccess());
-    EXPECT_EQ(expectedCounts, collectCounts(packedCountQuery));
+    expectCountsEqual(collectCounts(packedCountQuery));
 
     // Standard consumers keep the one-parent-per-batch contract and must see every edge.
     ASSERT_TRUE(conn->query("CALL enable_packed_path_extend=true")->isSuccess());
