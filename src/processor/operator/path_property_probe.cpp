@@ -1,5 +1,7 @@
 #include "processor/operator/path_property_probe.h"
 
+#include <cstring>
+
 #include "common/constants.h"
 #include "common/exception/runtime.h"
 #include "function/hash/hash_functions.h"
@@ -306,11 +308,13 @@ void PathPropertyProbe::probe(lbug::processor::JoinHashTable* hashTable, uint64_
         auto id = idVector->getValue<internalID_t>(sizeProbed + i);
         while (localState.probedTuples[i]) {
             auto currentTuple = localState.probedTuples[i];
-            if (*(internalID_t*)currentTuple == id) {
+            internalID_t tupleID;
+            memcpy(&tupleID, currentTuple, sizeof(internalID_t));
+            if (tupleID == id) {
                 localState.matchedTuples[i] = currentTuple;
                 break;
             }
-            localState.probedTuples[i] = *hashTable->getPrevTuple(currentTuple);
+            localState.probedTuples[i] = hashTable->getPrevTupleValue(currentTuple);
         }
         if (localState.matchedTuples[i] == nullptr) {
             throw RuntimeException(std::format(

@@ -54,6 +54,16 @@ public:
     uint8_t** getPrevTuple(const uint8_t* tuple) const {
         return (uint8_t**)(tuple + prevPtrColOffset);
     }
+    // Misaligned-safe accessors: the prev-pointer column lives in a packed tuple and may
+    // itself be misaligned, so dereference via memcpy instead of *getPrevTuple().
+    uint8_t* getPrevTupleValue(const uint8_t* tuple) const {
+        uint8_t* prev = nullptr;
+        memcpy(&prev, tuple + prevPtrColOffset, sizeof(uint8_t*));
+        return prev;
+    }
+    void setPrevTupleValue(uint8_t* tuple, uint8_t* prev) const {
+        memcpy(tuple + prevPtrColOffset, &prev, sizeof(uint8_t*));
+    }
     uint8_t* getTupleForHash(common::hash_t hash) {
         auto slotIdx = getSlotIdxForHash(hash);
         DASSERT(slotIdx < maxNumHashSlots);

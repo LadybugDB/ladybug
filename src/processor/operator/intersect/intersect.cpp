@@ -1,6 +1,7 @@
 #include "processor/operator/intersect/intersect.h"
 
 #include <algorithm>
+#include <cstring>
 
 #include "function/hash/hash_functions.h"
 #include "processor/result/factorized_table.h"
@@ -54,10 +55,12 @@ void Intersect::probeHTs() {
         function::Hash::operation<nodeID_t>(key, false, hashVal);
         auto flatTuple = sharedHTs[i]->getHashTable()->getTupleForHash(hashVal);
         while (flatTuple) {
-            if (*(nodeID_t*)flatTuple == key) {
+            nodeID_t tupleKey;
+            memcpy(&tupleKey, flatTuple, sizeof(nodeID_t));
+            if (tupleKey == key) {
                 probedFlatTuples[i].push_back(flatTuple);
             }
-            flatTuple = *sharedHTs[i]->getHashTable()->getPrevTuple(flatTuple);
+            flatTuple = sharedHTs[i]->getHashTable()->getPrevTupleValue(flatTuple);
         }
     }
 }

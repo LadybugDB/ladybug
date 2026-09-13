@@ -53,7 +53,13 @@ static bool compareEntry(const common::ValueVector* vector, uint32_t vectorPos,
     const uint8_t* entry) {
     uint8_t result = 0;
     auto key = vector->getData() + vectorPos * vector->getNumBytesPerValue();
-    function::Equals::operation(*(T*)key, *(T*)entry, result, nullptr /* leftVector */,
+    // Factorized-table tuples are packed with no alignment padding, so entry may be
+    // misaligned for T. Copy out before dereferencing to avoid UBSAN misalignment errors.
+    T keyVal;
+    T entryVal;
+    memcpy(&keyVal, key, sizeof(T));
+    memcpy(&entryVal, entry, sizeof(T));
+    function::Equals::operation(keyVal, entryVal, result, nullptr /* leftVector */,
         nullptr /* rightVector */);
     return result != 0;
 }
@@ -61,7 +67,11 @@ static bool compareEntry(const common::ValueVector* vector, uint32_t vectorPos,
 template<typename T>
 static bool factorizedTableCompareEntry(const uint8_t* entry1, const uint8_t* entry2,
     const LogicalType&) {
-    return function::Equals::operation(*(T*)entry1, *(T*)entry2);
+    T val1;
+    T val2;
+    memcpy(&val1, entry1, sizeof(T));
+    memcpy(&val2, entry2, sizeof(T));
+    return function::Equals::operation(val1, val2);
 }
 
 static ft_compare_function_t getFactorizedTableCompareEntryFunc(const LogicalType& type);
