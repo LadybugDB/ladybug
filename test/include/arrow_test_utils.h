@@ -130,7 +130,10 @@ inline void createInt32Array(ArrowArray* array, const std::vector<int32_t>& data
     auto* private_data = new ArrayPrivateData();
     private_data->validity = nullptr; // No nulls
     private_data->data = malloc(data.size() * sizeof(int32_t));
-    memcpy(private_data->data, data.data(), data.size() * sizeof(int32_t));
+    if (!data.empty()) {
+
+        memcpy(private_data->data, data.data(), data.size() * sizeof(int32_t));
+    }
 
     array->length = data.size();
     array->null_count = 0;
@@ -178,7 +181,10 @@ inline void createInt64Array(ArrowArray* array, const std::vector<int64_t>& data
     auto* private_data = new ArrayPrivateData();
     private_data->validity = nullptr; // No nulls
     private_data->data = malloc(data.size() * sizeof(int64_t));
-    memcpy(private_data->data, data.data(), data.size() * sizeof(int64_t));
+    if (!data.empty()) {
+
+        memcpy(private_data->data, data.data(), data.size() * sizeof(int64_t));
+    }
 
     array->length = data.size();
     array->null_count = 0;
@@ -294,7 +300,10 @@ inline void createDoubleArray(ArrowArray* array, const std::vector<double>& data
     auto* private_data = new ArrayPrivateData();
     private_data->validity = nullptr; // No nulls
     private_data->data = malloc(data.size() * sizeof(double));
-    memcpy(private_data->data, data.data(), data.size() * sizeof(double));
+    if (!data.empty()) {
+
+        memcpy(private_data->data, data.data(), data.size() * sizeof(double));
+    }
 
     array->length = data.size();
     array->null_count = 0;
@@ -342,7 +351,10 @@ inline void createFloatArray(ArrowArray* array, const std::vector<float>& data) 
     auto* private_data = new ArrayPrivateData();
     private_data->validity = nullptr; // No nulls
     private_data->data = malloc(data.size() * sizeof(float));
-    memcpy(private_data->data, data.data(), data.size() * sizeof(float));
+    if (!data.empty()) {
+
+        memcpy(private_data->data, data.data(), data.size() * sizeof(float));
+    }
 
     array->length = data.size();
     array->null_count = 0;
@@ -403,7 +415,10 @@ inline void createUint64Array(ArrowArray* array, const std::vector<uint64_t>& da
     auto* private_data = new ArrayPrivateData();
     private_data->validity = nullptr;
     private_data->data = malloc(data.size() * sizeof(uint64_t));
-    memcpy(private_data->data, data.data(), data.size() * sizeof(uint64_t));
+    if (!data.empty()) {
+
+        memcpy(private_data->data, data.data(), data.size() * sizeof(uint64_t));
+    }
 
     array->length = static_cast<int64_t>(data.size());
     array->null_count = 0;

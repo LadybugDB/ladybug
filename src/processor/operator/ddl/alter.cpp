@@ -23,7 +23,12 @@ namespace processor {
 
 void Alter::initLocalStateInternal(ResultSet* resultSet, ExecutionContext* context) {
     if (defaultValueEvaluator) {
-        defaultValueEvaluator->init(*resultSet, context->clientContext);
+        // Sinks have no child so resultSet can be null; the default-value evaluator does
+        // not read input vectors, so bind against an empty ResultSet instead of
+        // dereferencing null (UBSAN null-pointer reference binding).
+        static ResultSet emptyResultSet;
+        defaultValueEvaluator->init(resultSet ? *resultSet : emptyResultSet,
+            context->clientContext);
     }
 }
 

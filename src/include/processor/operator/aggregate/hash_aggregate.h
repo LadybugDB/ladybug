@@ -52,7 +52,9 @@ public:
         auto numBytesPerTuple = factorizedTable.getTableSchema()->getNumBytesPerTuple();
         for (ft_tuple_idx_t tupleIdx = 0; tupleIdx < factorizedTable.getNumTuples(); tupleIdx++) {
             auto tuple = factorizedTable.getTuple(tupleIdx);
-            auto hash = *reinterpret_cast<common::hash_t*>(tuple + hashOffset);
+            // Tuples are packed without alignment padding; use memcpy for the hash load.
+            common::hash_t hash;
+            memcpy(&hash, tuple + hashOffset, sizeof(common::hash_t));
             auto& partition =
                 globalPartitions[(hash >> shiftForPartitioning) % globalPartitions.size()];
             partition.queue->appendTuple(std::span(tuple, numBytesPerTuple));

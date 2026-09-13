@@ -118,7 +118,7 @@ void JoinHashTable::buildHashSlots() {
         uint8_t* tuple = tupleBlock->getData();
         for (auto i = 0u; i < tupleBlock->numTuples; i++) {
             auto lastSlotEntryInHT = insertEntry(tuple);
-            auto prevPtr = getPrevTuple(tuple);
+            auto prevPtr = tuple + prevPtrColOffset;
             memcpy(reinterpret_cast<void*>(prevPtr), reinterpret_cast<void*>(&lastSlotEntryInHT),
                 sizeof(uint8_t*));
             tuple += getTableSchema()->getNumBytesPerTuple();
@@ -161,7 +161,7 @@ sel_t JoinHashTable::matchFlatKeys(const std::vector<ValueVector*>& keyVectors,
         auto currentTuple = probedTuples[0];
         matchedTuples[numMatchedTuples] = currentTuple;
         numMatchedTuples += matchFlatVecWithEntry(keyVectors, currentTuple);
-        probedTuples[0] = *getPrevTuple(currentTuple);
+        probedTuples[0] = getPrevTupleValue(currentTuple);
     }
     return numMatchedTuples;
 }
@@ -180,7 +180,7 @@ sel_t JoinHashTable::matchUnFlatKey(ValueVector* keyVector, uint8_t** probedTupl
                 numMatchedTuples++;
                 break;
             }
-            probedTuples[i] = *getPrevTuple(currentTuple);
+            probedTuples[i] = getPrevTupleValue(currentTuple);
         }
     }
     return numMatchedTuples;
