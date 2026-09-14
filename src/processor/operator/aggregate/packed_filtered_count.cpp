@@ -112,13 +112,23 @@ uint64_t PackedFilteredCount::countMatchesForCurrentTuple() {
     if (baseMultiplicity == 0 || selectState->getSelSize() == 0 || flatState->getSelSize() == 0) {
         return 0;
     }
+    // Batches from a hash-join probe may carry several group keys in one batch (e.g. the
+    // probe/build side assignment differs across platforms, so batch shapes differ too).
+    // Attribute each lhs row's matches to its own group key. The group key lives in the same
+    // chunk as lhs (the mapper places lhs in the key group), so lhs positions index it.
     for (auto lhsIdx = 0u; lhsIdx < lhsSelVector.getSelSize(); ++lhsIdx) {
-        const auto lhsValue = lhsValueVector->getValue<int64_t>(lhsSelVector[lhsIdx]);
+        const auto lhsPos = lhsSelVector[lhsIdx];
+        const auto lhsValue = lhsValueVector->getValue<int64_t>(lhsPos);
+        uint64_t keyCount = 0;
         for (auto rhsIdx = 0u; rhsIdx < rhsSelVector.getSelSize(); ++rhsIdx) {
             const auto rhsValue = rhsValueVector->getValue<int64_t>(rhsSelVector[rhsIdx]);
             if ((lhsValue + rhsValue) % 10 == 0) {
-                result += baseMultiplicity;
+                keyCount += baseMultiplicity;
             }
+        }
+        if (keyCount > 0) {
+            localCounts[groupKeyVector->getValue<int64_t>(lhsPos)] += keyCount;
+            result += keyCount;
         }
     }
     return result;
@@ -126,15 +136,10 @@ uint64_t PackedFilteredCount::countMatchesForCurrentTuple() {
 
 void PackedFilteredCount::executeInternal(ExecutionContext* context) {
     while (children[0]->getNextTuple(context)) {
-        const auto packed = rhsValueVector->state->hasPackedChildSlices();
-        const auto count = countMatchesForCurrentTuple();
-        if (count > 0 && !packed) {
-            // Single-parent batch: attribute the whole batch's count to the one group key. For
-            // multi-parent packed batches, countMatchesForCurrentTuple() has already attributed
-            // per-parent counts to each parent's group key via localCounts.
-            const auto groupKeyPos = groupKeyVector->state->getSelVector()[0];
-            localCounts[groupKeyVector->getValue<int64_t>(groupKeyPos)] += count;
-        }
+        // Both branches of countMatchesForCurrentTuple() attribute per-key counts into
+        // localCounts directly (packed batches span several group keys, and hash-join probe
+        // batches may also carry several keys), so there is nothing left to attribute here.
+        countMatchesForCurrentTuple();
         metrics->numOutputTuple.incrementByOne();
     }
     sharedState->merge(std::move(localCounts));
