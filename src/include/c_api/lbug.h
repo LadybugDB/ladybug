@@ -511,6 +511,19 @@ LBUG_C_API bool lbug_prepared_statement_is_read_only(lbug_prepared_statement* pr
 LBUG_C_API char* lbug_prepared_statement_get_error_message(
     lbug_prepared_statement* prepared_statement);
 /**
+ * @brief Returns the prepared statement's result schema as ArrowSchema, without executing
+ * the query. The schema is derived from the bound and planned statement, so this is cheap
+ * even for expensive queries.
+ * @param prepared_statement The prepared statement instance.
+ * @param[out] out_schema The output parameter that will hold the datatypes of the columns as an
+ * arrow schema.
+ * @return The state indicating the success or failure of the operation.
+ *
+ * It is the caller's responsibility to call the release function to release the underlying data
+ */
+LBUG_C_API lbug_state lbug_prepared_statement_get_arrow_schema(
+    lbug_prepared_statement* prepared_statement, struct ArrowSchema* out_schema);
+/**
  * @brief Binds the given boolean value to the given parameter name in the prepared statement.
  * @param prepared_statement The prepared statement instance to bind the value.
  * @param param_name The parameter name to bind the value.

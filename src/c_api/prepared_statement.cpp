@@ -2,6 +2,7 @@
 
 #include "c_api/helpers.h"
 #include "c_api/lbug.h"
+#include "common/arrow/arrow_converter.h"
 #include "common/types/value/value.h"
 
 using namespace lbug::common;
@@ -67,6 +68,29 @@ char* lbug_prepared_statement_get_error_message(lbug_prepared_statement* prepare
     }
     return convertToOwnedCString(error_message);
     LBUG_C_API_GUARD_END(nullptr)
+}
+
+lbug_state lbug_prepared_statement_get_arrow_schema(lbug_prepared_statement* prepared_statement,
+    ArrowSchema* out_schema) {
+    if (prepared_statement == nullptr || prepared_statement->_prepared_statement == nullptr ||
+        out_schema == nullptr) {
+        return LbugError;
+    }
+    LBUG_C_API_GUARD_BEGIN
+    try {
+        auto* statement = static_cast<PreparedStatement*>(prepared_statement->_prepared_statement);
+        if (!statement->isSuccess()) {
+            setLastCAPIErrorMessage(statement->getErrorMessage());
+            return LbugError;
+        }
+        *out_schema = *ArrowConverter::toArrowSchema(statement->getColumnTypes(),
+            statement->getColumnNames(), false /* fallbackExtensionTypes */);
+        return LbugSuccess;
+    } catch (Exception& e) {
+        setLastCAPIErrorMessage(e.what());
+        return LbugError;
+    }
+    LBUG_C_API_GUARD_END(LbugError)
 }
 
 lbug_state lbug_prepared_statement_bind_bool(lbug_prepared_statement* prepared_statement,
