@@ -82,6 +82,16 @@ public:
      * @return the prepared statement is read-only or not.
      */
     LBUG_API bool isReadOnly() const;
+    /**
+     * @return the column names of the query result, populated at prepare time
+     * (parse + bind + plan) without executing the query.
+     */
+    LBUG_API std::vector<std::string> getColumnNames() const;
+    /**
+     * @return the column data types of the query result, populated at prepare time
+     * without executing the query.
+     */
+    LBUG_API std::vector<common::LogicalType> getColumnTypes() const;
 
     const std::unordered_set<std::string>& getUnknownParameters() const {
         return unknownParameters;

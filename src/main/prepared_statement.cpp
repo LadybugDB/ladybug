@@ -51,6 +51,24 @@ StatementType PreparedStatement::getStatementType() const {
     return preparedSummary.statementType;
 }
 
+std::vector<std::string> PreparedStatement::getColumnNames() const {
+    if (auto manager = ownerManager.lock()) {
+        if (auto* cached = manager->getCachedStatement(cachedPreparedStatementName)) {
+            return cached->getColumnNames();
+        }
+    }
+    return {};
+}
+
+std::vector<LogicalType> PreparedStatement::getColumnTypes() const {
+    if (auto manager = ownerManager.lock()) {
+        if (auto* cached = manager->getCachedStatement(cachedPreparedStatementName)) {
+            return cached->getColumnTypes();
+        }
+    }
+    return {};
+}
+
 bool PreparedStatement::canReuseCachedPlanWith(
     const std::unordered_map<std::string, std::unique_ptr<Value>>& inputParams) const {
     if (!unknownParameters.empty()) {
