@@ -5,6 +5,7 @@
 
 #include "common/data_chunk/data_chunk.h"
 #include "common/exception/runtime.h"
+#include "common/system_config.h"
 #include "common/types/types.h"
 #include "function/export/export_function.h"
 #include "main/client_context.h"
@@ -139,11 +140,19 @@ static void finalizeFunc(ExportFuncSharedState& sharedState) {
     auto outFT = FactorizedTable(mm, tableSchema.copy());
     auto vec = std::make_shared<ValueVector>(LogicalType::INT64(), mm);
     vec->setState(std::make_shared<DataChunkState>());
-    for (auto i = 0u; i < ptr.size(); i++) {
-        vec->setValue<int64_t>(i, ptr[i]);
+    // ValueVector (and its SelectionVector) hold at most DEFAULT_VECTOR_CAPACITY rows,
+    // but ptr has N+1 entries which can exceed that. Append in chunks to avoid
+    // out-of-bounds writes/reads (heap corruption -> crash in setToUnfiltered).
+    size_t offset = 0;
+    while (offset < ptr.size()) {
+        auto chunkSize = std::min<size_t>(ptr.size() - offset, DEFAULT_VECTOR_CAPACITY);
+        for (size_t i = 0; i < chunkSize; i++) {
+            vec->setValue<int64_t>(i, ptr[offset + i]);
+        }
+        vec->state->getSelVectorUnsafe().setToUnfiltered(chunkSize);
+        outFT.append({vec.get()});
+        offset += chunkSize;
     }
-    vec->state->getSelVectorUnsafe().setToUnfiltered(ptr.size());
-    outFT.append({vec.get()});
     std::vector<LogicalType> ptrTypes;
     ptrTypes.push_back(LogicalType::INT64());
     auto writer = std::make_unique<ParquetWriter>(shared.fileName, std::move(ptrTypes),
