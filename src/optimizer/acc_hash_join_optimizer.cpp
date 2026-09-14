@@ -396,6 +396,16 @@ static bool tryProbeToBuildHJSIP(LogicalOperator* op,
     if (!isProbeSideQualified(op->getChild(0).get())) {
         return false;
     }
+    // Probe-to-build SIP materializes and rescans the whole probe side (ACCUMULATE +
+    // READ_FTABLE, one morsel per factorized-table row) to seed the build-side semi mask.
+    // When the probe side is at least as large as the build side, the mask can prune at most
+    // buildCard rows while materialization pays collect + rescan over probeCard rows, so the
+    // optimization cannot pay off: keep the plain pipelined hash join. Exempt the LIMIT
+    // pushdown path (probeLimit), whose capped probe still benefits from the mask.
+    if (probeLimit == nullptr &&
+        hashJoin.getChild(0)->getCardinality() >= hashJoin.getChild(1)->getCardinality()) {
+        return false;
+    }
     auto probeRoot = hashJoin.getChild(0);
     auto buildRoot = hashJoin.getChild(1);
     auto hasSemiMaskApplied = false;
