@@ -2,7 +2,6 @@
 
 #include "c_api/helpers.h"
 #include "c_api/lbug.h"
-#include "common/arrow/arrow_converter.h"
 #include "common/types/value/value.h"
 
 using namespace lbug::common;
@@ -83,8 +82,7 @@ lbug_state lbug_prepared_statement_get_arrow_schema(lbug_prepared_statement* pre
             setLastCAPIErrorMessage(statement->getErrorMessage());
             return LbugError;
         }
-        *out_schema = *ArrowConverter::toArrowSchema(statement->getColumnTypes(),
-            statement->getColumnNames(), false /* fallbackExtensionTypes */);
+        *out_schema = *statement->getArrowSchema();
         return LbugSuccess;
     } catch (Exception& e) {
         setLastCAPIErrorMessage(e.what());
