@@ -1,0 +1,102 @@
+name: "Repro issue #971 (Windows x64 extension crash)"
+
+# Manual repro for https://github.com/LadybugDB/ladybug/issues/971:
+# the v0.20.0 win_amd64 `vector` and `fts` extension binaries served from
+# https://extension.ladybugdb.com crash the Windows CLI (0xC0000005),
+# while the v0.19.0 pairs work on the same machine.
+#
+# Run with e.g.:
+#   gh workflow run test-issue-971.yml -f cli_version=v0.20.4
+# Control (known good per the issue): -f cli_version=v0.19.0
+#
+# The vector query below is verbatim /tmp/x. The fts query is the companion
+# repro from the issue body. Each runs in its own fresh process against a
+# new database, matching the reporter's setup.
+#
+# Verdict is by process exit code: 0 = OK, -1073741819 (0xC0000005) = crash,
+# killed after 5 min = hang (the issue reports one hang at CREATE_VECTOR_INDEX).
+
+on:
+  workflow_dispatch:
+    inputs:
+      cli_version:
+        description: 'lbug CLI release tag to test (e.g. v0.20.4, v0.20.0, v0.19.0)'
+        required: false
+        default: 'v0.20.4'
+        type: string
+
+jobs:
+  repro:
+    name: "repro #971 (${{ inputs.cli_version }}, windows x64)"
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - name: Download Windows x64 CLI
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ inputs.cli_version }}" --pattern 'lbug_cli-windows-x86_64.zip' --dir cli-dl
+          Expand-Archive cli-dl\lbug_cli-windows-x86_64.zip -DestinationPath cli
+          Get-ChildItem -Recurse cli | Select-Object FullName
+
+      - name: Stage OpenSSL 3 DLLs next to lbug.exe (see #685 / #942)
+        shell: pwsh
+        run: |
+          choco install openssl -y --no-progress
+          $exe = Get-ChildItem -Recurse -Path cli -Filter lbug.exe | Select-Object -First 1
+          if (-not $exe) { Write-Error 'lbug.exe not found in downloaded archive'; exit 1 }
+          Add-Content -Encoding utf8 -Path $env:GITHUB_ENV -Value "LBUG_EXE=$($exe.FullName)"
+          Add-Content -Encoding utf8 -Path $env:GITHUB_ENV -Value "LBUG_DIR=$(Split-Path $exe.FullName)"
+          $ssl = Get-ChildItem -Path 'C:\Program Files\OpenSSL*' -Recurse -Filter 'libssl-3-x64.dll' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $ssl) { Write-Error 'libssl-3-x64.dll not found after choco install openssl'; exit 1 }
+          Copy-Item (Join-Path (Split-Path $ssl.FullName) 'libssl-3-x64.dll'), (Join-Path (Split-Path $ssl.FullName) 'libcrypto-3-x64.dll') -Destination (Split-Path $exe.FullName)
+          Get-ChildItem (Split-Path $exe.FullName)
+
+      - name: Write repro queries
+        shell: pwsh
+        run: |
+          @'
+          install vector; load vector;
+          CREATE NODE TABLE T(id INT64 PRIMARY KEY, v FLOAT[4]);
+          CREATE (:T {id: 1, v: [0.1, 0.2, 0.3, 0.4]});
+          CREATE (:T {id: 2, v: [0.9, 0.1, 0.0, 0.0]});
+          CREATE (:T {id: 3, v: [0.1, 0.2, 0.31, 0.39]});
+          CALL CREATE_VECTOR_INDEX('T', 'vidx', 'v');
+          CALL QUERY_VECTOR_INDEX('T', 'vidx', [0.1, 0.2, 0.3, 0.4], 2) RETURN node.id, distance;
+          '@ | Set-Content -NoNewline -Encoding ascii vector.cypher
+          @'
+          install fts; load fts;
+          CREATE NODE TABLE D(id INT64 PRIMARY KEY, txt STRING);
+          CREATE (:D {id: 1, txt: 'the cat sat on the mat'});
+          CREATE (:D {id: 2, txt: 'a violin in the orchestra'});
+          CALL CREATE_FTS_INDEX('D', 'fidx', ['txt']);
+          CALL QUERY_FTS_INDEX('D', 'fidx', 'cat') RETURN node.id, score;
+          '@ | Set-Content -NoNewline -Encoding ascii fts.cypher
+
+      - name: Run vector repro (exact /tmp/x query)
+        shell: pwsh
+        run: |
+          $in = Join-Path $env:GITHUB_WORKSPACE 'vector.cypher'
+          $out = Join-Path $env:GITHUB_WORKSPACE 'vector-out.txt'
+          $err = Join-Path $env:GITHUB_WORKSPACE 'vector-err.txt'
+          $p = Start-Process -FilePath $env:LBUG_EXE -ArgumentList 'vectordb' -WorkingDirectory $env:LBUG_DIR -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
+          if (-not $p.WaitForExit(300000)) { $p.Kill(); Write-Host 'RESULT vector: TIMEOUT after 5 min (possible hang)'; exit 1 }
+          Write-Host "RESULT vector: exit code $($p.ExitCode)"
+          Get-Content $out; Get-Content $err
+          if ($p.ExitCode -ne 0) { Write-Host 'RESULT vector: CRASH (non-zero exit)'; exit 1 }
+          Write-Host 'RESULT vector: OK'
+
+      - name: Run fts repro (companion query from issue body)
+        if: always()
+        shell: pwsh
+        run: |
+          $in = Join-Path $env:GITHUB_WORKSPACE 'fts.cypher'
+          $out = Join-Path $env:GITHUB_WORKSPACE 'fts-out.txt'
+          $err = Join-Path $env:GITHUB_WORKSPACE 'fts-err.txt'
+          $p = Start-Process -FilePath $env:LBUG_EXE -ArgumentList 'ftsdb' -WorkingDirectory $env:LBUG_DIR -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
+          if (-not $p.WaitForExit(300000)) { $p.Kill(); Write-Host 'RESULT fts: TIMEOUT after 5 min (possible hang)'; exit 1 }
+          Write-Host "RESULT fts: exit code $($p.ExitCode)"
+          Get-Content $out; Get-Content $err
+          if ($p.ExitCode -ne 0) { Write-Host 'RESULT fts: CRASH (non-zero exit)'; exit 1 }
+          Write-Host 'RESULT fts: OK'
