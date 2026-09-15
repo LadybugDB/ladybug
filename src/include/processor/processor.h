@@ -25,6 +25,9 @@ struct ResultSetDescriptor;
 // owned by (and destroyed with) the database rather than living in a process-wide thread_local:
 // a thread_local slot outlives Database::~Database and later releases (or worse, reuses) buffers
 // through a dangling MemoryManager pointer when the next database runs a query on that thread.
+// EXTENSION ABI: extensions ship once per minor version and must keep working with
+// patch-release CLIs, while inline accessors bake member offsets into extension binaries.
+// NEVER reorder/remove data members; ALWAYS append new members at the END (see #971).
 class ResultSetPool {
 public:
     // Returns the ResultSet cached for the calling thread when its descriptor id matches,
@@ -67,6 +70,10 @@ private:
     // Declared before the scheduler so worker threads are joined before the pool is destroyed.
     // The pool never outlives the buffers it caches because Database destroys its QueryProcessor
     // before its MemoryManager.
+    // EXTENSION ABI: extensions ship once per minor version and must keep working with
+    // patch-release CLIs, while inline accessors (getTaskScheduler/getResultSetPool) bake
+    // member offsets into extension binaries. NEVER reorder/remove data members; ALWAYS append
+    // new members at the END (see #971).
     ResultSetPool resultSetPool;
     std::unique_ptr<common::TaskScheduler> taskScheduler;
 };

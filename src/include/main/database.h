@@ -195,6 +195,10 @@ private:
     void validatePathInReadOnly() const;
 
 private:
+    // EXTENSION ABI: extensions ship once per minor version and must keep working with
+    // patch-release CLIs, while inline accessors (getCatalog/getQueryProcessor/...) bake
+    // member offsets into extension binaries. NEVER reorder/remove data members; ALWAYS append
+    // new members at the END (see #971).
     std::string databasePath;
     std::unique_ptr<DBConfig> dbConfig;
     std::unique_ptr<common::VirtualFileSystem> vfs;

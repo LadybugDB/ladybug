@@ -12,6 +12,8 @@
 namespace lbug {
 namespace common {
 
+// EXTENSION ABI: see TaskScheduler below. NEVER reorder/remove data members; ALWAYS append
+// new members at the END (see #971).
 struct ScheduledTask {
     ScheduledTask(std::shared_ptr<Task> task, uint64_t ID) : task{std::move(task)}, ID{ID} {};
     std::shared_ptr<Task> task;
@@ -40,6 +42,10 @@ struct ScheduledTask {
  * completion.
  */
 #ifndef __SINGLE_THREADED__
+// EXTENSION ABI: extensions ship once per minor version and must keep working with
+// patch-release CLIs, but the extension binaries carry their own compiled copy of this class
+// and access scheduler objects owned by the CLI. Inline accessors bake member offsets in.
+// NEVER reorder/remove data members; ALWAYS append new members at the END (see #971).
 class LBUG_API TaskScheduler {
 public:
 #if defined(__APPLE__)
@@ -85,6 +91,8 @@ private:
 };
 #else
 // Single-threaded version of TaskScheduler
+// EXTENSION ABI: same rule as above. NEVER reorder/remove data members; ALWAYS append new
+// members at the END (see #971).
 class TaskScheduler {
 public:
     explicit TaskScheduler(uint64_t numWorkerThreads);
