@@ -11,7 +11,6 @@ namespace processor {
 FactorizedTableSchema FactorizedTableUtils::createFTableSchema(const expression_vector& exprs,
     const Schema& schema) {
     auto tableSchema = FactorizedTableSchema();
-    std::unordered_set<common::idx_t> groupIDSet;
     for (auto& e : exprs) {
         auto groupPos = schema.getExpressionPos(*e).first;
         auto group = schema.getGroup(groupPos);

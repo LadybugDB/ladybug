@@ -159,9 +159,7 @@ std::unique_ptr<FunctionBindData> arrayTemplateBindFunc(std::string functionName
     input.definition->ptrCast<ScalarFunction>()->execFunc =
         std::move(getScalarExecFunc<OPERATION>(paramType.copy()));
     auto bindData = std::make_unique<FunctionBindData>(ArrayType::getChildType(paramType).copy());
-    std::vector<LogicalType> paramTypes;
-    for (auto& _ : input.arguments) {
-        (void)_;
+    for (auto i = 0u; i < input.arguments.size(); ++i) {
         bindData->paramTypes.push_back(paramType.copy());
     }
     return bindData;
