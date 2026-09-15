@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "common/api.h"
+#include "common/arrow/arrow.h"
 #include "common/types/value/value.h"
 #include "query_summary.h"
 
@@ -92,6 +93,15 @@ public:
      * without executing the query.
      */
     LBUG_API std::vector<common::LogicalType> getColumnTypes() const;
+    /**
+     * @brief Returns the arrow schema of the query result, derived from the bound
+     * and planned statement without executing the query.
+     * @return datatypes of the columns as an arrow schema
+     *
+     * It is the caller's responsibility to call the release function to release the underlying
+     * data. If converting to another arrow type, this is usually handled automatically.
+     */
+    LBUG_API std::unique_ptr<ArrowSchema> getArrowSchema() const;
 
     const std::unordered_set<std::string>& getUnknownParameters() const {
         return unknownParameters;
