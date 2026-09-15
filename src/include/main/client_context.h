@@ -240,6 +240,9 @@ private:
     std::unique_ptr<QueryResult> handleFailedExecution(std::optional<uint64_t> queryID,
         const std::exception& e) const;
 
+    // EXTENSION ABI: extensions ship once per minor version and must keep working with
+    // patch-release CLIs, while inline accessors bake member offsets into extension binaries.
+    // NEVER reorder/remove data members; ALWAYS append new members at the END (see #971).
     std::mutex mtx;
     // Client side configurable settings.
     ClientConfig clientConfig;

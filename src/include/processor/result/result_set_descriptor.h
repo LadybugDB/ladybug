@@ -11,6 +11,9 @@ class Schema;
 
 namespace processor {
 
+// EXTENSION ABI: descriptors cross the extension boundary (e.g. ResultSet pooling compares
+// them across binaries). NEVER reorder/remove data members; ALWAYS append new members at the
+// END (see #971).
 struct DataChunkDescriptor {
     bool isSingleState;
     std::vector<common::LogicalType> logicalTypes;
@@ -25,6 +28,8 @@ struct DataChunkDescriptor {
     }
 };
 
+// EXTENSION ABI: see DataChunkDescriptor above. NEVER reorder/remove data members; ALWAYS
+// append new members at the END (see #971).
 struct LBUG_API ResultSetDescriptor {
     // Monotonically increasing identity that survives pointer reuse (ABA
     // prevention).  Per-database ResultSet pooling in ProcessorTask::run()

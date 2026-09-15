@@ -24,6 +24,10 @@ using lock_t = std::unique_lock<std::mutex>;
  * finalize, users should save it somewhere that can be accessed in
  * finalize(). See ProcessorTask for an example of this.
  */
+// EXTENSION ABI: extensions subclass Task and ship once per minor version, so they must keep
+// working with patch-release CLIs. Inline methods and the vtable bake member offsets into
+// extension binaries. NEVER reorder/remove data members; ALWAYS append new members at the END
+// (see #971).
 class LBUG_API Task {
     friend class TaskScheduler;
 
