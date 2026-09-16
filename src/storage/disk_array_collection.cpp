@@ -1,6 +1,7 @@
 #include "storage/disk_array_collection.h"
 
 #include <memory>
+#include <unordered_set>
 
 #include "common/exception/runtime.h"
 #include "common/system_config.h"
@@ -29,7 +30,18 @@ DiskArrayCollection::DiskArrayCollection(FileHandle& fileHandle, ShadowFile& sha
       numHeaders{0} {
     // Read headers from disk (no external state in lambda: optimistic read may run multiple times)
     page_idx_t headerPageIdx = firstHeaderPage;
-    do {
+    std::unordered_set<page_idx_t> visitedHeaderPages;
+    while (true) {
+        if (headerPageIdx == 0) {
+            throw RuntimeException(
+                "Cannot read disk array header page 0: page 0 is reserved for the database "
+                "header. The database file may be corrupted.");
+        }
+        if (headerPageIdx == INVALID_PAGE_IDX) {
+            throw RuntimeException(
+                "Cannot read disk array header: the first header page is invalid. The database "
+                "file may be corrupted.");
+        }
         // Fail fast on a corrupted nextHeaderPage link instead of issuing a wild
         // read far beyond EOF (issue #843).
         if (headerPageIdx >= fileHandle.getNumPages()) {
@@ -37,6 +49,12 @@ DiskArrayCollection::DiskArrayCollection(FileHandle& fileHandle, ShadowFile& sha
                                                "bounds for file with {} pages. The database file "
                                                "may be corrupted.",
                 headerPageIdx, fileHandle.getNumPages()));
+        }
+        if (!visitedHeaderPages.insert(headerPageIdx).second) {
+            throw RuntimeException(std::format(
+                "Cannot read disk array header page {}: the header page chain contains a cycle. "
+                "The database file may be corrupted.",
+                headerPageIdx));
         }
         std::unique_ptr<HeaderPage> headerPage;
         page_idx_t nextHeaderPageIdx = INVALID_PAGE_IDX;
@@ -48,11 +66,20 @@ DiskArrayCollection::DiskArrayCollection(FileHandle& fileHandle, ShadowFile& sha
         if (!headerPage) {
             throw RuntimeException("Failed to read header page from disk.");
         }
+        if (headerPage->numHeaders > HeaderPage::NUM_HEADERS_PER_PAGE) {
+            throw RuntimeException(std::format(
+                "Cannot read disk array header page {}: it contains {} headers, but a page can "
+                "contain at most {}. The database file may be corrupted.",
+                headerPageIdx, headerPage->numHeaders, HeaderPage::NUM_HEADERS_PER_PAGE));
+        }
         numHeaders += headerPage->numHeaders;
         headersForReadTrx.push_back(std::make_unique<HeaderPage>(*headerPage));
         headersForWriteTrx.push_back(std::move(headerPage));
         headerPageIdx = nextHeaderPageIdx;
-    } while (headerPageIdx != INVALID_PAGE_IDX);
+        if (headerPageIdx == INVALID_PAGE_IDX) {
+            break;
+        }
+    }
     headerPagesOnDisk = headersForReadTrx.size();
 }
 
