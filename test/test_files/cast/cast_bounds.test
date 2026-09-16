@@ -67,3 +67,40 @@ Overflow exception: Value 128 is not within INT8 range
 ---- error
 Overflow exception: Value -129 is not within INT8 range
 
+-CASE double
+-STATEMENT RETURN CAST("1.7976931348623157e308" AS DOUBLE) = 1.7976931348623157e308
+---- 1
+True
+-STATEMENT RETURN CAST("4.9e-324" AS DOUBLE) > 0
+---- 1
+True
+-LOG DoubleOverflowIsInfinity
+-STATEMENT RETURN CAST("1.8e308" AS DOUBLE)
+---- 1
+inf
+-STATEMENT RETURN CAST("-1.8e308" AS DOUBLE)
+---- 1
+-inf
+-LOG DoubleUnderflowIsZero
+-STATEMENT RETURN CAST("1e-400" AS DOUBLE) = 0
+---- 1
+True
+
+-CASE float
+-STATEMENT RETURN CAST("3.4028235e38" AS FLOAT) = CAST(3.4028235e38 AS FLOAT)
+---- 1
+True
+-STATEMENT RETURN CAST("1.4e-45" AS FLOAT) > 0
+---- 1
+True
+-LOG FloatOverflowIsInfinity
+-STATEMENT RETURN CAST("1e39" AS FLOAT)
+---- 1
+inf
+-STATEMENT RETURN CAST("-1e39" AS FLOAT)
+---- 1
+-inf
+-LOG FloatUnderflowIsZero
+-STATEMENT RETURN CAST("1e-50" AS FLOAT) = 0
+---- 1
+True
