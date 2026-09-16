@@ -30,6 +30,49 @@ inline common::sel_t lowerBoundOffset(const common::nodeID_t* values, common::se
     return begin;
 }
 
+// Branchless lower bound over offsets, in the style of CRoaring's binarySearch: the caller
+// advances the base monotonically, so every probe searches a shrinking suffix. Unlike galloping
+// there is no exponential probing phase; each left element pays a full binary search.
+inline common::sel_t lowerBoundOffsetBranchless(const common::nodeID_t* values, common::sel_t count,
+    common::offset_t target) {
+    const auto* base = values;
+    auto n = count;
+    while (n > 1) {
+        const auto half = n >> 1;
+        base = (base[half].offset < target) ? &base[half] : base;
+        n -= half;
+    }
+    if (n == 0) {
+        return 0;
+    }
+    return static_cast<common::sel_t>((base[0].offset < target) + (base - values));
+}
+
+// CRoaring-style skewed intersection (cf. intersect_skewed_uint16): one branchless binary search
+// per left element over the remaining right suffix. Same output contract as the galloping path:
+// matches are compacted into left[] and both sides' positions are recorded.
+inline common::sel_t intersectSameTableBatchedSearch(common::nodeID_t* left,
+    common::sel_t leftCount, const common::nodeID_t* right, common::sel_t rightCount,
+    common::sel_t* leftPositions, common::sel_t* rightPositions) {
+    common::sel_t rightPosition = 0;
+    common::sel_t outputPosition = 0;
+    for (common::sel_t leftPosition = 0; leftPosition < leftCount; ++leftPosition) {
+        const auto leftNodeID = left[leftPosition];
+        rightPosition += lowerBoundOffsetBranchless(right + rightPosition,
+            rightCount - rightPosition, leftNodeID.offset);
+        if (rightPosition == rightCount) {
+            break;
+        }
+        if (right[rightPosition].offset == leftNodeID.offset) {
+            leftPositions[outputPosition] = leftPosition;
+            rightPositions[outputPosition] = rightPosition;
+            left[outputPosition++] = leftNodeID;
+            ++rightPosition;
+        }
+    }
+    return outputPosition;
+}
+
 inline common::sel_t intersectSameTableGalloping(common::nodeID_t* left, common::sel_t leftCount,
     const common::nodeID_t* right, common::sel_t rightCount, common::sel_t* leftPositions,
     common::sel_t* rightPositions) {
@@ -88,6 +131,23 @@ inline common::sel_t intersectNodeIDsScalar(common::nodeID_t* left, common::sel_
         }
     }
     return outputPosition;
+}
+
+// Same gating as intersectNodeIDs but uses the CRoaring-style batched binary search for the
+// same-table fast path. Exists for differential testing and benchmarking against galloping.
+inline common::sel_t intersectNodeIDsBatched(common::nodeID_t* left, common::sel_t leftCount,
+    const common::nodeID_t* right, common::sel_t rightCount, common::sel_t* leftPositions,
+    common::sel_t* rightPositions) {
+    DASSERT(leftCount <= rightCount);
+    using namespace intersect_kernels_detail;
+    if (leftCount == 0 || rightCount < MIN_GALLOPING_RIGHT_COUNT ||
+        rightCount / leftCount < MIN_GALLOPING_SIZE_RATIO || !isHomogeneous(left, leftCount) ||
+        !isHomogeneous(right, rightCount) || left[0].tableID != right[0].tableID) {
+        return intersectNodeIDsScalar(left, leftCount, right, rightCount, leftPositions,
+            rightPositions);
+    }
+    return intersectSameTableBatchedSearch(left, leftCount, right, rightCount, leftPositions,
+        rightPositions);
 }
 
 // Selects the skew-aware same-table fast path when it is profitable and otherwise uses the
