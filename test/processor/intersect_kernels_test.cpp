@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <random>
 #include <vector>
 
@@ -14,15 +16,21 @@ namespace {
 void verifyMatchesScalar(std::vector<common::nodeID_t> left,
     const std::vector<common::nodeID_t>& right) {
     auto scalarLeft = left;
+    auto batchedLeft = left;
     std::vector<common::sel_t> scalarLeftPositions(left.size());
     std::vector<common::sel_t> scalarRightPositions(left.size());
     std::vector<common::sel_t> fastLeftPositions(left.size());
     std::vector<common::sel_t> fastRightPositions(left.size());
+    std::vector<common::sel_t> batchedLeftPositions(left.size());
+    std::vector<common::sel_t> batchedRightPositions(left.size());
 
     const auto scalarCount = processor::intersectNodeIDsScalar(scalarLeft.data(), scalarLeft.size(),
         right.data(), right.size(), scalarLeftPositions.data(), scalarRightPositions.data());
     const auto fastCount = processor::intersectNodeIDs(left.data(), left.size(), right.data(),
         right.size(), fastLeftPositions.data(), fastRightPositions.data());
+    const auto batchedCount =
+        processor::intersectNodeIDsBatched(batchedLeft.data(), batchedLeft.size(), right.data(),
+            right.size(), batchedLeftPositions.data(), batchedRightPositions.data());
 
     ASSERT_EQ(fastCount, scalarCount);
     EXPECT_TRUE(std::equal(left.begin(), left.begin() + fastCount, scalarLeft.begin()));
@@ -30,6 +38,13 @@ void verifyMatchesScalar(std::vector<common::nodeID_t> left,
         scalarLeftPositions.begin()));
     EXPECT_TRUE(std::equal(fastRightPositions.begin(), fastRightPositions.begin() + fastCount,
         scalarRightPositions.begin()));
+    ASSERT_EQ(batchedCount, scalarCount);
+    EXPECT_TRUE(
+        std::equal(batchedLeft.begin(), batchedLeft.begin() + batchedCount, scalarLeft.begin()));
+    EXPECT_TRUE(std::equal(batchedLeftPositions.begin(),
+        batchedLeftPositions.begin() + batchedCount, scalarLeftPositions.begin()));
+    EXPECT_TRUE(std::equal(batchedRightPositions.begin(),
+        batchedRightPositions.begin() + batchedCount, scalarRightPositions.begin()));
 }
 
 std::vector<common::nodeID_t> makeSortedIDs(uint64_t count, uint64_t domain,
@@ -87,4 +102,75 @@ TEST(IntersectKernelsTest, HandlesEmptyLeftInput) {
     std::vector<common::nodeID_t> left;
     std::vector<common::nodeID_t> right = {{1, 7}, {2, 7}};
     verifyMatchesScalar(left, right);
+}
+
+namespace {
+
+struct BenchmarkConfig {
+    uint64_t leftCount;
+    uint64_t rightCount;
+    uint64_t domain;
+    const char* label;
+};
+
+template<typename Kernel>
+uint64_t timeKernel(Kernel kernel, const std::vector<common::nodeID_t>& left,
+    const std::vector<common::nodeID_t>& right, int iterations) {
+    std::vector<common::nodeID_t> workLeft(left.size());
+    std::vector<common::sel_t> leftPositions(left.size());
+    std::vector<common::sel_t> rightPositions(left.size());
+    // Warm up.
+    for (auto i = 0; i < 100; ++i) {
+        std::copy(left.begin(), left.end(), workLeft.begin());
+        kernel(workLeft.data(), workLeft.size(), right.data(), right.size(), leftPositions.data(),
+            rightPositions.data());
+    }
+    volatile uint64_t sink = 0;
+    const auto start = std::chrono::steady_clock::now();
+    for (auto i = 0; i < iterations; ++i) {
+        std::copy(left.begin(), left.end(), workLeft.begin());
+        sink += kernel(workLeft.data(), workLeft.size(), right.data(), right.size(),
+            leftPositions.data(), rightPositions.data());
+    }
+    const auto end = std::chrono::steady_clock::now();
+    if (sink == UINT64_MAX) {
+        std::printf("unreachable\n");
+    }
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() / iterations;
+}
+
+} // namespace
+
+TEST(IntersectKernelsTest, BenchmarkSkewedPaths) {
+    constexpr int kIterations = 2000;
+    constexpr uint64_t kRightCount = 2048;
+    const BenchmarkConfig configs[] = {
+        {8, kRightCount, kRightCount * 64, "sparse"},
+        {32, kRightCount, kRightCount * 64, "sparse"},
+        {256, kRightCount, kRightCount * 64, "sparse"},
+        {8, kRightCount, kRightCount * 2, "dense"},
+        {32, kRightCount, kRightCount * 2, "dense"},
+        {256, kRightCount, kRightCount * 2, "dense"},
+    };
+    std::printf("\n%-16s %8s %12s %12s %12s %12s %12s\n", "config", "matches", "scalar(ns)",
+        "gallop(ns)", "batched(ns)", "gallop/scal", "batch/scal");
+    for (const auto& config : configs) {
+        uint64_t scalarNs = 0, gallopNs = 0, batchedNs = 0, matches = 0;
+        for (auto seed = 0u; seed < 3; ++seed) {
+            const auto left = makeSortedIDs(config.leftCount, config.domain, 7, seed);
+            const auto right = makeSortedIDs(config.rightCount, config.domain, 7, seed + 1000);
+            verifyMatchesScalar(left, right);
+            std::vector<common::nodeID_t> probe = left;
+            std::vector<common::sel_t> lPos(left.size()), rPos(left.size());
+            matches += processor::intersectNodeIDsScalar(probe.data(), probe.size(), right.data(),
+                right.size(), lPos.data(), rPos.data());
+            scalarNs += timeKernel(processor::intersectNodeIDsScalar, left, right, kIterations);
+            gallopNs += timeKernel(processor::intersectNodeIDs, left, right, kIterations);
+            batchedNs += timeKernel(processor::intersectNodeIDsBatched, left, right, kIterations);
+        }
+        std::printf("L=%-4lu R=%-4lu %-6s %8lu %12lu %12lu %12lu %11.2fx %11.2fx\n",
+            config.leftCount, config.rightCount, config.label, matches / 3, scalarNs / 3,
+            gallopNs / 3, batchedNs / 3, static_cast<double>(scalarNs) / gallopNs,
+            static_cast<double>(scalarNs) / batchedNs);
+    }
 }
