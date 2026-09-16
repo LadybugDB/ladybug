@@ -2,9 +2,11 @@
 
 #include <cstdint>
 
+#include "common/exception/runtime.h"
 #include "common/types/types.h"
 #include "disk_array.h"
 #include "storage/page_range.h"
+#include <format>
 
 namespace lbug {
 namespace storage {
@@ -53,7 +55,12 @@ public:
 
     template<typename T>
     std::unique_ptr<DiskArray<T>> getDiskArray(uint32_t idx) {
-        DASSERT(idx < numHeaders);
+        if (idx >= numHeaders) {
+            throw common::RuntimeException(std::format(
+                "Cannot access disk array {}: disk array collection contains only {} arrays. "
+                "The database file may be corrupted.",
+                idx, numHeaders));
+        }
         auto& readHeader = headersForReadTrx[idx / HeaderPage::NUM_HEADERS_PER_PAGE]
                                ->headers[idx % HeaderPage::NUM_HEADERS_PER_PAGE];
         auto& writeHeader = headersForWriteTrx[idx / HeaderPage::NUM_HEADERS_PER_PAGE]
@@ -63,6 +70,8 @@ public:
     }
 
     size_t addDiskArray();
+
+    uint64_t getNumHeaders() const { return numHeaders; }
 
     void populateNextHeaderPage(PageAllocator& pageAllocator, common::page_idx_t indexInMemory);
 

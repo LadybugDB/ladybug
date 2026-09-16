@@ -22,6 +22,7 @@
 #include "storage/shadow_utils.h"
 #include "storage/storage_manager.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::common;
 using namespace lbug::transaction;
@@ -493,6 +494,8 @@ PrimaryKeyIndex::PrimaryKeyIndex(IndexInfo indexInfo, std::unique_ptr<IndexStora
     ShadowFile* shadowFile)
     : Index{std::move(indexInfo), std::move(storageInfo)}, shadowFile{*shadowFile} {
     auto& hashIndexStorageInfo = this->storageInfo->cast<PrimaryKeyIndexStorageInfo>();
+    auto* dataFH = pageAllocator.getDataFH();
+    const auto numPages = dataFH->getNumPages();
     if (hashIndexStorageInfo.firstHeaderPage == INVALID_PAGE_IDX) {
         DASSERT(hashIndexStorageInfo.overflowHeaderPage == INVALID_PAGE_IDX);
         hashIndexHeadersForReadTrx.resize(NUM_HASH_INDEXES);
@@ -504,6 +507,21 @@ PrimaryKeyIndex::PrimaryKeyIndex(IndexInfo indexInfo, std::unique_ptr<IndexStora
             hashIndexDiskArrays->addDiskArray();
         }
     } else {
+        if (numPages < INDEX_HEADER_PAGES || hashIndexStorageInfo.firstHeaderPage == 0 ||
+            hashIndexStorageInfo.firstHeaderPage > numPages - INDEX_HEADER_PAGES) {
+            throw RuntimeException(std::format(
+                "Cannot read primary key index header pages starting at {} from a database file "
+                "with {} pages. The database file may be corrupted.",
+                hashIndexStorageInfo.firstHeaderPage, numPages));
+        }
+        if (hashIndexStorageInfo.overflowHeaderPage != INVALID_PAGE_IDX &&
+            (hashIndexStorageInfo.overflowHeaderPage == 0 ||
+                hashIndexStorageInfo.overflowHeaderPage >= numPages)) {
+            throw RuntimeException(std::format(
+                "Cannot read primary key index overflow header page {} from a database file with "
+                "{} pages. The database file may be corrupted.",
+                hashIndexStorageInfo.overflowHeaderPage, numPages));
+        }
         for (size_t headerPageIdx = 0; headerPageIdx < INDEX_HEADER_PAGES; headerPageIdx++) {
             size_t startHeaderIdx = headerPageIdx * INDEX_HEADERS_PER_PAGE;
             pageAllocator.getDataFH()->optimisticReadPage(
@@ -522,6 +540,12 @@ PrimaryKeyIndex::PrimaryKeyIndex(IndexInfo indexInfo, std::unique_ptr<IndexStora
             hashIndexStorageInfo.firstHeaderPage +
                 INDEX_HEADER_PAGES /*firstHeaderPage for the DAC follows the index header pages*/,
             true /*bypassShadowing*/);
+    }
+    if (hashIndexDiskArrays->getNumHeaders() != NUM_HASH_INDEXES * 2) {
+        throw RuntimeException(std::format(
+            "Cannot load primary key index: expected {} disk arrays, but found {}. The database "
+            "file may be corrupted.",
+            NUM_HASH_INDEXES * 2, hashIndexDiskArrays->getNumHeaders()));
     }
     initOverflowAndSubIndices(inMemMode, memoryManager, pageAllocator, hashIndexStorageInfo);
 }
