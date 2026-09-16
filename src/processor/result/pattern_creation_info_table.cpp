@@ -1,5 +1,7 @@
 #include "processor/result/pattern_creation_info_table.h"
 
+#include <cstring>
+
 namespace lbug {
 namespace processor {
 
@@ -7,7 +9,8 @@ void PatternCreationInfo::updateID(common::executor_id_t executorID,
     common::executor_info executorInfo, bool storeInsertedPatternIDs,
     common::nodeID_t nodeID) const {
     if (storeInsertedPatternIDs) {
-        *(common::nodeID_t*)(tuple + executorID * sizeof(common::nodeID_t)) = nodeID;
+        // Tuple storage is packed without alignment padding; use memcpy for the store.
+        memcpy(tuple + executorID * sizeof(common::nodeID_t), &nodeID, sizeof(common::nodeID_t));
         return;
     }
     if (!executorInfo.contains(executorID)) {
@@ -18,7 +21,7 @@ void PatternCreationInfo::updateID(common::executor_id_t executorID,
     // executors read the ID of the same inserted pattern (e.g. ``ON MATCH SET r.a = ...,
     // r.b = ...``).
     for (auto ftColIndex : executorInfo.at(executorID)) {
-        *(common::nodeID_t*)(tuple + ftColIndex * sizeof(common::nodeID_t)) = nodeID;
+        memcpy(tuple + ftColIndex * sizeof(common::nodeID_t), &nodeID, sizeof(common::nodeID_t));
     }
 }
 

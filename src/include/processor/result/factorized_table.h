@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstring>
 #include <numeric>
 
 #include "common/in_mem_overflow_buffer.h"
@@ -161,7 +162,12 @@ public:
     template<typename TYPE>
     TYPE getData(ft_block_idx_t blockIdx, ft_block_offset_t blockOffset,
         ft_col_offset_t colOffset) const {
-        return *((TYPE*)getCell(blockIdx, blockOffset, colOffset));
+        // Tuple storage is packed without alignment padding, so the cell may be
+        // misaligned for TYPE. Copy through an aligned temporary (memcpy takes
+        // void* and has no alignment requirement).
+        TYPE result;
+        memcpy(&result, getCell(blockIdx, blockOffset, colOffset), sizeof(TYPE));
+        return result;
     }
 
     uint8_t* getTuple(ft_tuple_idx_t tupleIdx) const;

@@ -8,18 +8,17 @@ namespace function {
 
 void CountStarFunction::updateAll(uint8_t* state_, ValueVector* input, uint64_t multiplicity,
     InMemOverflowBuffer* /*overflowBuffer*/) {
-    auto state = reinterpret_cast<CountState*>(state_);
     DASSERT(input == nullptr);
     (void)input;
-    state->count += multiplicity;
+    // state_ may point into a packed factorized-table tuple without alignment padding.
+    addToCount(state_, multiplicity);
 }
 
 void CountStarFunction::updatePos(uint8_t* state_, ValueVector* input, uint64_t multiplicity,
     uint32_t /*pos*/, InMemOverflowBuffer* /*overflowBuffer*/) {
-    auto state = reinterpret_cast<CountState*>(state_);
     DASSERT(input == nullptr);
     (void)input;
-    state->count += multiplicity;
+    addToCount(state_, multiplicity);
 }
 
 function_set CountStarFunction::getFunctionSet() {
