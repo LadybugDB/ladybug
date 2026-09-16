@@ -135,10 +135,19 @@ void Intersect::intersectLists(const std::vector<overflow_value_t>& listsToInter
     std::vector<SelectionVector*> selVectorsForIntersectedLists;
     intersectSelVectors[0]->setToUnfiltered(listsToIntersect[0].numElements);
     selVectorsForIntersectedLists.push_back(intersectSelVectors[0].get());
+    // Reusable aligned buffer for the right-hand adjacency list. Lists live in packed
+    // factorized-table/unflat storage without alignment padding, so the raw value pointer
+    // may be misaligned for nodeID_t; copy it into aligned storage before intersecting.
+    std::vector<nodeID_t> alignedRightList;
     for (auto i = 0u; i < listsToIntersect.size() - 1; i++) {
         intersectSelVectors[i + 1]->setToUnfiltered(listsToIntersect[i + 1].numElements);
-        twoWayIntersect((nodeID_t*)outKeyVector->getData(), lSelVector,
-            (nodeID_t*)listsToIntersect[i + 1].value, *intersectSelVectors[i + 1]);
+        alignedRightList.resize(listsToIntersect[i + 1].numElements);
+        if (!alignedRightList.empty()) {
+            memcpy(alignedRightList.data(), listsToIntersect[i + 1].value,
+                listsToIntersect[i + 1].numElements * sizeof(nodeID_t));
+        }
+        twoWayIntersect((nodeID_t*)outKeyVector->getData(), lSelVector, alignedRightList.data(),
+            *intersectSelVectors[i + 1]);
         // Here we need to slice all selVectors that have been previously intersected, as all these
         // lists need to be selected synchronously to read payloads correctly.
         sliceSelVectors(selVectorsForIntersectedLists, lSelVector);

@@ -13,8 +13,8 @@ namespace function {
 
 void CountFunction::updateAll(uint8_t* state_, ValueVector* input, uint64_t multiplicity,
     InMemOverflowBuffer* /*overflowBuffer*/) {
-    auto state = reinterpret_cast<CountState*>(state_);
-    state->count += multiplicity * input->countNonNull();
+    // state_ may point into a packed factorized-table tuple without alignment padding.
+    addToCount(state_, multiplicity * input->countNonNull());
 }
 
 void CountFunction::paramRewriteFunc(expression_vector& arguments) {

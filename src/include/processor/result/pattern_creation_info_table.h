@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstring>
+
 #include "processor/operator/aggregate/aggregate_hash_table.h"
 
 namespace lbug {
@@ -11,7 +13,11 @@ struct PatternCreationInfo {
 
     common::nodeID_t getPatternID(common::executor_id_t matchExecutorID) const {
         auto ftColIndex = matchExecutorID;
-        return *(common::nodeID_t*)(tuple + ftColIndex * sizeof(common::nodeID_t));
+        // The tuple may start at a misaligned offset inside a packed factorized-table
+        // tuple; use memcpy instead of dereferencing a possibly-misaligned pointer.
+        common::nodeID_t result;
+        memcpy(&result, tuple + ftColIndex * sizeof(common::nodeID_t), sizeof(common::nodeID_t));
+        return result;
     }
 
     void updateID(common::executor_id_t executorID, common::executor_info executorInfo,
