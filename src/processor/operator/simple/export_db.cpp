@@ -1,5 +1,6 @@
 #include "processor/operator/simple/export_db.h"
 
+#include <cctype>
 #include <sstream>
 
 #include "catalog/catalog.h"
@@ -74,6 +75,15 @@ static std::string withIcebugStorage(const std::string& createStatement,
     }
     if (auto semiPos = base.rfind(';'); semiPos != std::string::npos) {
         base = base.substr(0, semiPos);
+    }
+    // The WITH clause lives outside the CREATE TABLE parens. Defensively restore
+    // the ')' in case the input emitted WITH inside the parens (old rel-table
+    // generator did), since truncating at " WITH (" would otherwise drop it.
+    while (!base.empty() && std::isspace(static_cast<unsigned char>(base.back()))) {
+        base.pop_back();
+    }
+    if (!base.empty() && base.back() != ')') {
+        base += ')';
     }
     return base + clause + ";";
 }
