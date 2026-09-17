@@ -26,7 +26,8 @@ class Statement;
 }
 namespace binder {
 class Expression;
-}
+class ParameterExpression;
+} // namespace binder
 namespace planner {
 class LogicalPlan;
 }
@@ -53,6 +54,19 @@ struct CachedPreparedStatement {
     // ResultSet, so we snapshot them all from the freshly mapped tree and re-attach them onto
     // each cloned instance.
     std::vector<std::unique_ptr<processor::ResultSetDescriptor>> sinkResultSetDescriptors;
+
+    // Every typed parameter bound for this statement. Scanned for parameters whose values
+    // were frozen into a plan at plan-build time (ParameterExpression::wasBakedIntoPlan) —
+    // e.g. SKIP/LIMIT numbers baked to uint64_t by the mapper, or evaluated numbers baked
+    // into operators by optimizers. The scan is operator-agnostic, so future operators that
+    // bake parameter values (through a marking helper) are covered without touching this
+    // code (see https://github.com/LadybugDB/ladybug/issues/985).
+    std::vector<std::shared_ptr<binder::ParameterExpression>> boundParameters;
+    // True when a bound parameter was baked into a plan during prepare (bind/optimize), or
+    // during a previous physical mapping. Such statements always rebind/replan on
+    // re-execution and never populate or serve the physical-plan cache, since a cached
+    // plan would keep serving the first execution's frozen values.
+    bool hasBakedParameters = false;
 
     CachedPreparedStatement();
     ~CachedPreparedStatement();

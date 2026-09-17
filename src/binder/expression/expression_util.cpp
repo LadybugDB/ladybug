@@ -457,6 +457,13 @@ Value ExpressionUtil::evaluateAsLiteralValue(const Expression& expr) {
 }
 
 uint64_t ExpressionUtil::evaluateAsSkipLimit(const Expression& expr) {
+    if (expr.expressionType == ExpressionType::PARAMETER) {
+        // This value is frozen into the plan (physical Limit/Skip/TopK numbers, pushed-down
+        // limits, cardinalities). Mark the parameter so statements that bake parameters can
+        // be kept off the physical-plan cache (see
+        // https://github.com/LadybugDB/ladybug/issues/985).
+        expr.constCast<ParameterExpression>().markBakedIntoPlan();
+    }
     auto value = evaluateAsLiteralValue(expr);
     auto errorMsg = "The number of rows to skip/limit must be a non-negative integer.";
     uint64_t number = INVALID_LIMIT;

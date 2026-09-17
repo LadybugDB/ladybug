@@ -34,7 +34,11 @@ public:
     std::shared_ptr<binder::Expression> getLimitNum() const { return limitNum; }
 
     std::unique_ptr<LogicalOperator> copy() override {
-        return make_unique<LogicalOrderBy>(expressionsToOrderBy, isAscOrders, children[0]->copy());
+        auto result =
+            make_unique<LogicalOrderBy>(expressionsToOrderBy, isAscOrders, children[0]->copy());
+        result->skipNum = skipNum;
+        result->limitNum = limitNum;
+        return result;
     }
 
 private:

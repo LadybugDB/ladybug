@@ -1,6 +1,7 @@
 #pragma once
 
 #include "binder/expression/expression.h"
+#include "binder/expression/parameter_expression.h"
 #include "common/types/value/value.h"
 #include "parser/expression/parsed_expression.h"
 
@@ -138,6 +139,13 @@ public:
     getKnownParameters() const {
         return knownParameters;
     }
+    // Every typed ParameterExpression created by this binder, in bind order. ClientContext
+    // scans it for parameters baked into the plan (ParameterExpression::wasBakedIntoPlan)
+    // to decide whether the statement may use the cached physical plan, without knowing
+    // which operators bake — so future baking operators are covered automatically.
+    const std::vector<std::shared_ptr<ParameterExpression>>& getBoundParameters() const {
+        return boundParameters;
+    }
 
     std::string getUniqueName(const std::string& name) const;
 
@@ -155,6 +163,7 @@ private:
     main::ClientContext* context;
     std::unordered_set<std::string> unknownParameters;
     std::unordered_map<std::string, std::shared_ptr<common::Value>> knownParameters;
+    std::vector<std::shared_ptr<ParameterExpression>> boundParameters;
     ExpressionBinderConfig config;
 };
 

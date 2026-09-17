@@ -944,3 +944,94 @@ TEST_F(ApiTest, PreparePercentileDiscMixedAnyWithTimestampParam) {
     auto rows = TestHelper::convertResultToString(*result);
     ASSERT_EQ((std::vector<std::string>{"1"}), rows);
 }
+
+// Regression test for https://github.com/LadybugDB/ladybug/issues/985: re-executing a query
+// with different SKIP/LIMIT parameter values returned the first call's page. Parameters
+// baked into a plan at plan-build time (skip/limit frozen to uint64_t by the mapper, or
+// evaluated numbers baked into operators by optimizers) go stale on the cached
+// physical-plan fast path, which only re-checks parameter types. Statements with baked
+// parameters now always rebind/replan and never populate or serve the plan cache; the
+// bake check is operator-agnostic (ParameterExpression::wasBakedIntoPlan), so future
+// baking operators are covered too.
+TEST_F(ApiTest, RepeatedExecuteParameterizedSkipLimit985) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE P985(id INT64, PRIMARY KEY(id))")->isSuccess());
+    for (auto i = 0; i < 6; ++i) {
+        ASSERT_TRUE(conn->query("CREATE (:P985 {id: " + std::to_string(i) + "})")->isSuccess());
+    }
+    auto makeSkipLimitParams = [](int64_t skip, int64_t limit) {
+        std::unordered_map<std::string, std::unique_ptr<Value>> params;
+        params["o"] = std::make_unique<Value>(skip);
+        params["l"] = std::make_unique<Value>(limit);
+        return params;
+    };
+    auto runPage = [&](PreparedStatement* ps, int64_t skip, int64_t limit) {
+        auto result = conn->executeWithParams(ps, makeSkipLimitParams(skip, limit));
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        return TestHelper::convertResultToString(*result, true /* checkOutputOrder */);
+    };
+
+    // ORDER BY + SKIP/LIMIT parameters: TopK path.
+    auto topKStmt = conn->prepareWithParams(
+        "MATCH (p:P985) RETURN p.id ORDER BY p.id SKIP $o LIMIT $l", makeSkipLimitParams(0, 2));
+    ASSERT_TRUE(topKStmt->isSuccess()) << topKStmt->getErrorMessage();
+    ASSERT_EQ((std::vector<std::string>{"0", "1"}), runPage(topKStmt.get(), 0, 2));
+    ASSERT_EQ((std::vector<std::string>{"0", "1", "2", "3", "4", "5"}),
+        runPage(topKStmt.get(), 0, 10));
+    ASSERT_EQ((std::vector<std::string>{"4", "5"}), runPage(topKStmt.get(), 4, 2));
+    ASSERT_EQ((std::vector<std::string>{"2", "3", "4"}), runPage(topKStmt.get(), 2, 3));
+    // Parameterized SKIP/LIMIT must stay off the physical-plan fast path.
+    ASSERT_FALSE(cachedPlanExists(conn.get(), *topKStmt));
+
+    // Bare SKIP/LIMIT parameters without ORDER BY: Skip/Limit path (unordered comparison:
+    // paging without ORDER BY has no defined row order).
+    auto limitStmt = conn->prepareWithParams("MATCH (p:P985) RETURN p.id SKIP $o LIMIT $l",
+        makeSkipLimitParams(0, 2));
+    ASSERT_TRUE(limitStmt->isSuccess()) << limitStmt->getErrorMessage();
+    auto runUnorderedPage = [&](int64_t skip, int64_t limit) {
+        auto result = conn->executeWithParams(limitStmt.get(), makeSkipLimitParams(skip, limit));
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        return TestHelper::convertResultToString(*result);
+    };
+    ASSERT_EQ((std::vector<std::string>{"0", "1"}), runUnorderedPage(0, 2));
+    ASSERT_EQ((std::vector<std::string>{"4", "5"}), runUnorderedPage(4, 2));
+    ASSERT_FALSE(cachedPlanExists(conn.get(), *limitStmt));
+
+    // DISTINCT + ORDER BY + SKIP/LIMIT parameters: the limit-push-down optimizer bakes
+    // evaluated numbers into the logical DISTINCT operator itself, so correctness here
+    // requires a full replan, not just skipping the physical-plan cache.
+    auto distinctStmt = conn->prepareWithParams(
+        "MATCH (p:P985) RETURN DISTINCT p.id ORDER BY p.id SKIP $o LIMIT $l",
+        makeSkipLimitParams(0, 2));
+    ASSERT_TRUE(distinctStmt->isSuccess()) << distinctStmt->getErrorMessage();
+    ASSERT_EQ((std::vector<std::string>{"0", "1"}), runPage(distinctStmt.get(), 0, 2));
+    ASSERT_EQ((std::vector<std::string>{"0", "1", "2", "3", "4", "5"}),
+        runPage(distinctStmt.get(), 0, 10));
+    ASSERT_EQ((std::vector<std::string>{"4", "5"}), runPage(distinctStmt.get(), 4, 2));
+    ASSERT_FALSE(cachedPlanExists(conn.get(), *distinctStmt));
+
+    // WITH + SKIP/LIMIT parameters (second shape from the issue report).
+    auto withStmt = conn->prepareWithParams(
+        "MATCH (p:P985) WITH p.id AS id ORDER BY id SKIP $o LIMIT $l RETURN count(id)",
+        makeSkipLimitParams(0, 2));
+    ASSERT_TRUE(withStmt->isSuccess()) << withStmt->getErrorMessage();
+    auto runCount = [&](int64_t skip, int64_t limit) {
+        auto result = conn->executeWithParams(withStmt.get(), makeSkipLimitParams(skip, limit));
+        EXPECT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        return TestHelper::convertResultToString(*result);
+    };
+    ASSERT_EQ(std::vector<std::string>{"2"}, runCount(0, 2));
+    ASSERT_EQ(std::vector<std::string>{"6"}, runCount(0, 10));
+    ASSERT_EQ(std::vector<std::string>{"2"}, runCount(4, 2));
+
+    // Literal SKIP/LIMIT still goes through the fast path and stays correct.
+    auto literalStmt = conn->prepare("MATCH (p:P985) RETURN p.id ORDER BY p.id SKIP 0 LIMIT 3");
+    ASSERT_TRUE(literalStmt->isSuccess()) << literalStmt->getErrorMessage();
+    for (auto run = 0; run < 2; ++run) {
+        auto result = conn->execute(literalStmt.get());
+        ASSERT_TRUE(result->isSuccess()) << "run " << run;
+        ASSERT_EQ((std::vector<std::string>{"0", "1", "2"}),
+            TestHelper::convertResultToString(*result, true /* checkOutputOrder */))
+            << "run " << run;
+    }
+    ASSERT_TRUE(cachedPlanExists(conn.get(), *literalStmt));
+}
