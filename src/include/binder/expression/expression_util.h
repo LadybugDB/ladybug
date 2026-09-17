@@ -63,6 +63,11 @@ struct LBUG_API ExpressionUtil {
 
     static bool canEvaluateAsLiteral(const Expression& expr);
     static common::Value evaluateAsLiteralValue(const Expression& expr);
+    // Freezes a skip/limit value into the plan. Marks PARAMETER expressions as baked (see
+    // ParameterExpression::markBakedIntoPlan) so the statement is kept off the
+    // physical-plan cache. New plan-time bakes of parameter values must mark likewise;
+    // execution-time reads must instead re-read the shared Value per execution (cf.
+    // LiteralExpressionEvaluator::resolveResultVector).
     static uint64_t evaluateAsSkipLimit(const Expression& expr);
 
     template<typename T>

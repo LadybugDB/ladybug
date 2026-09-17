@@ -1,8 +1,10 @@
 #include "main/client_context.h"
 
+#include <algorithm>
 #include <cstdlib>
 
 #include "binder/binder.h"
+#include "binder/expression/parameter_expression.h"
 #include "common/exception/checkpoint.h"
 #include "common/exception/connection.h"
 #include "common/exception/runtime.h"
@@ -391,7 +393,10 @@ std::unique_ptr<QueryResult> ClientContext::executeWithParams(PreparedStatement*
     }
     // LCOV_EXCL_STOP
     auto cachedStatement = cachedPreparedStatementManager->getCachedStatement(name);
-    if (useCachedPlan) {
+    // Statements with parameters baked into a plan (e.g. parameter-valued SKIP/LIMIT
+    // frozen to uint64_t) must rebind/replan on every execution instead of reusing any
+    // cached plan (https://github.com/LadybugDB/ladybug/issues/985).
+    if (useCachedPlan && !cachedStatement->hasBakedParameters) {
         return executeNoLock(preparedStatement, cachedStatement, queryID, {}, true);
     }
     // rebind
@@ -503,6 +508,22 @@ void ClientContext::validateTransaction(bool readOnly, bool requireTransaction) 
     }
 }
 
+namespace {
+
+// Operator-agnostic bake check: true if any bound parameter had its value frozen into a
+// plan. Marks are set by plan-time baking helpers (e.g.
+// ExpressionUtil::evaluateAsSkipLimit) during bind/optimize/map, so this covers baking
+// operators present and future without enumerating operator types. The mark is monotonic
+// on the bound expression object, so a rescan also picks up marks left by a previous
+// physical mapping.
+bool hasBakedParameters(
+    const std::vector<std::shared_ptr<binder::ParameterExpression>>& boundParameters) {
+    return std::any_of(boundParameters.begin(), boundParameters.end(),
+        [](const auto& param) { return param->wasBakedIntoPlan(); });
+}
+
+} // namespace
+
 ClientContext::PrepareResult ClientContext::prepareNoLock(
     std::shared_ptr<Statement> parsedStatement, bool shouldCommitNewTransaction,
     std::unordered_map<std::string, std::shared_ptr<Value>> inputParams) {
@@ -539,6 +560,9 @@ ClientContext::PrepareResult ClientContext::prepareNoLock(
                 auto bestPlan = planner.planStatement(*boundStatement);
                 optimizer::Optimizer::optimize(&bestPlan, this, planner.getCardinalityEstimator());
                 cachedStatement->logicalPlan = std::make_unique<LogicalPlan>(std::move(bestPlan));
+                cachedStatement->boundParameters = expressionBinder->getBoundParameters();
+                cachedStatement->hasBakedParameters =
+                    hasBakedParameters(cachedStatement->boundParameters);
             },
             preparedStatement->isReadOnly(),
             preparedStatement->getStatementType() == StatementType::TRANSACTION,
@@ -650,8 +674,13 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                 std::unique_ptr<PhysicalPlan> physicalPlan;
                 // The `enable_cached_prepared_statement` setting gates both cache reuse and
                 // cache population, so a disabled scope never serves (or fills) the plan cache.
-                const bool cachedPlanAllowed =
-                    cachePhysicalPlan && isCachedPlanAllowedFor(*preparedStatement);
+                // Statements with parameters baked into a plan (e.g. parameter-valued
+                // SKIP/LIMIT frozen to uint64_t) are additionally kept off the fast path: a
+                // cached plan would serve the first execution's frozen values
+                // (https://github.com/LadybugDB/ladybug/issues/985).
+                const bool cachedPlanAllowed = cachePhysicalPlan &&
+                                               isCachedPlanAllowedFor(*preparedStatement) &&
+                                               !cachedStatement->hasBakedParameters;
                 if (cachedPlanAllowed && cachedStatement->physicalPlanCache) {
                     // Fast path: clone cached operator tree and refresh sink state.
                     // Avoids the PlanMapper::mapOperator recursion entirely.
@@ -667,7 +696,14 @@ std::unique_ptr<QueryResult> ClientContext::executeNoLock(PreparedStatement* pre
                     auto mapper = PlanMapper(executionContext.get());
                     physicalPlan = mapper.getPhysicalPlan(cachedStatement->logicalPlan.get(),
                         cachedStatement->columns, queryConfig.resultType, queryConfig.arrowConfig);
-                    if (cachedPlanAllowed) {
+                    // Re-scan after mapping: mapping itself can bake parameters (e.g. the
+                    // physical Limit/Skip/TopK numbers), including for operators that did not
+                    // exist when the prepare-time check ran. A plan baked at map time is still
+                    // correct for this execution (fresh values were just read) but must not be
+                    // cached for reuse.
+                    cachedStatement->hasBakedParameters =
+                        hasBakedParameters(cachedStatement->boundParameters);
+                    if (cachedPlanAllowed && !cachedStatement->hasBakedParameters) {
                         // Cache the operator tree template for future reuse.
                         cachedStatement->physicalPlanCache =
                             std::make_unique<PhysicalPlan>(physicalPlan->lastOperator->copy());

@@ -1,6 +1,7 @@
 #include "main/prepared_statement.h"
 
-#include "binder/expression/expression.h" // IWYU pragma: keep
+#include "binder/expression/expression.h"           // IWYU pragma: keep
+#include "binder/expression/parameter_expression.h" // IWYU pragma: keep
 #include "common/arrow/arrow_converter.h"
 #include "common/exception/binder.h"
 #include "common/types/value/value.h"

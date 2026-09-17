@@ -35,7 +35,11 @@ public:
     common::offset_t getLimitNum() const { return limitNum; }
 
     std::unique_ptr<LogicalOperator> copy() override {
-        return make_unique<LogicalDistinct>(operatorType, keys, payloads, children[0]->copy());
+        auto result =
+            make_unique<LogicalDistinct>(operatorType, keys, payloads, children[0]->copy());
+        result->skipNum = skipNum;
+        result->limitNum = limitNum;
+        return result;
     }
 
 protected:
