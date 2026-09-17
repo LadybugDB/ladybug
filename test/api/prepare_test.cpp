@@ -877,3 +877,52 @@ TEST_F(ApiTest, ParameterizedCountSubqueryWithParameterizedComparison) {
     std::sort(rows.begin(), rows.end());
     ASSERT_EQ((std::vector<std::string>{"0", "1"}), rows);
 }
+
+// Regression test for issue #962: SUM over a CASE whose condition compares a TIMESTAMP column
+// against TIMESTAMP($param) must bind when the statement is prepared before parameter values are
+// known (the C API defers parameter binding to execute time). During that first bind pass the
+// parameter is replaced by an ANY-typed placeholder, so aggregate overload validation has to be
+// deferred to the mandatory re-bind instead of failing with "Function SUM did not receive
+// correct arguments".
+TEST_F(ApiTest, PrepareSumCaseWithTimestampParam) {
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE P (id INT64, ts TIMESTAMP, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 1, ts: TIMESTAMP('2021-01-01')});")->isSuccess());
+    const auto query =
+        "MATCH (p:P) WITH CASE WHEN p.ts >= TIMESTAMP($s) THEN 1 ELSE 0 END AS v RETURN SUM(v)";
+    auto preparedStatement = conn->prepare(query);
+    ASSERT_TRUE(preparedStatement->isSuccess()) << preparedStatement->getErrorMessage();
+    auto result = conn->execute(preparedStatement.get(),
+        std::make_pair(std::string("s"), std::string("2020-01-01 00:00:00")));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    auto rows = TestHelper::convertResultToString(*result);
+    ASSERT_EQ((std::vector<std::string>{"1"}), rows);
+}
+
+// Control: the same query shape with a timestamp literal needs no parameter resolution.
+TEST_F(ApiTest, SumCaseWithTimestampLiteral) {
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE P (id INT64, ts TIMESTAMP, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 1, ts: TIMESTAMP('2021-01-01')});")->isSuccess());
+    const auto query = "MATCH (p:P) WITH CASE WHEN p.ts >= TIMESTAMP('2020-01-01 00:00:00') THEN 1 "
+                       "ELSE 0 END AS v RETURN SUM(v)";
+    auto result = conn->query(query);
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    auto rows = TestHelper::convertResultToString(*result);
+    ASSERT_EQ((std::vector<std::string>{"1"}), rows);
+}
+
+// Direct aggregate over a CASE mixing a stored column with a parameter-dependent call.
+TEST_F(ApiTest, SumDirectCaseWithTimestampParam) {
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE P (id INT64, ts TIMESTAMP, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 1, ts: TIMESTAMP('2021-01-01')});")->isSuccess());
+    const auto query = "MATCH (p:P) RETURN SUM(CASE WHEN p.ts >= TIMESTAMP($s) THEN 1 ELSE 0 END)";
+    auto preparedStatement = conn->prepare(query);
+    ASSERT_TRUE(preparedStatement->isSuccess()) << preparedStatement->getErrorMessage();
+    auto result = conn->execute(preparedStatement.get(),
+        std::make_pair(std::string("s"), std::string("2020-01-01 00:00:00")));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    auto rows = TestHelper::convertResultToString(*result);
+    ASSERT_EQ((std::vector<std::string>{"1"}), rows);
+}
