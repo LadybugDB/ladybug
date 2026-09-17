@@ -21,6 +21,13 @@ public:
     const function::AggregateFunction& getFunction() const { return function; }
     function::FunctionBindData* getBindData() const { return bindData.get(); }
     bool isDistinct() const { return function.isDistinct; }
+    // Aggregates whose bindFunc derives the result type from their children (e.g.
+    // PERCENTILEDISC) can be ANY-typed while those children are still unresolved ANY
+    // placeholders for parameters with unknown values. Such statements are always re-bound with
+    // concrete parameter types before execution, so resolving the provisional ANY here (as the
+    // DefaultTypeSolver does for every other ANY-typed projection expression) is safe. Casts
+    // away from a concrete type remain rejected as before.
+    void cast(const common::LogicalType& type) override;
 
     std::string toStringInternal() const override;
 

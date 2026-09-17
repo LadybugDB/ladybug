@@ -926,3 +926,21 @@ TEST_F(ApiTest, SumDirectCaseWithTimestampParam) {
     auto rows = TestHelper::convertResultToString(*result);
     ASSERT_EQ((std::vector<std::string>{"1"}), rows);
 }
+
+// Multi-argument aggregates must defer binding too when only some inputs are unresolved ANY
+// placeholders: here the aggregated value is ANY while the percentile literal is DOUBLE, so the
+// (ANY, DOUBLE) input has no exact overload during the first bind pass.
+TEST_F(ApiTest, PreparePercentileDiscMixedAnyWithTimestampParam) {
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE P (id INT64, ts TIMESTAMP, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:P {id: 1, ts: TIMESTAMP('2021-01-01')});")->isSuccess());
+    const auto query = "MATCH (p:P) WITH CASE WHEN p.ts >= TIMESTAMP($s) THEN 1 ELSE 0 END AS v "
+                       "RETURN PERCENTILEDISC(v, 0.5)";
+    auto preparedStatement = conn->prepare(query);
+    ASSERT_TRUE(preparedStatement->isSuccess()) << preparedStatement->getErrorMessage();
+    auto result = conn->execute(preparedStatement.get(),
+        std::make_pair(std::string("s"), std::string("2020-01-01 00:00:00")));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    auto rows = TestHelper::convertResultToString(*result);
+    ASSERT_EQ((std::vector<std::string>{"1"}), rows);
+}
