@@ -75,6 +75,12 @@ DiskArrayCollection::DiskArrayCollection(FileHandle& fileHandle, ShadowFile& sha
         numHeaders += headerPage->numHeaders;
         headersForReadTrx.push_back(std::make_unique<HeaderPage>(*headerPage));
         headersForWriteTrx.push_back(std::move(headerPage));
+        if (headersForReadTrx.size() > fileHandle.getNumPages()) {
+            throw RuntimeException(std::format(
+                "Cannot read disk array header chain: it contains more pages than the database "
+                "file has pages ({}). The database file may be corrupted.",
+                fileHandle.getNumPages()));
+        }
         headerPageIdx = nextHeaderPageIdx;
         if (headerPageIdx == INVALID_PAGE_IDX) {
             break;

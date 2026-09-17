@@ -1,6 +1,7 @@
 #include "storage/index/hash_index.h"
 
 #include <bitset>
+#include <limits>
 
 #include "common/assert.h"
 #include "common/exception/message.h"
@@ -40,6 +41,42 @@ HashIndex<T>::HashIndex(MemoryManager& memoryManager, OverflowFileHandle* overfl
       memoryManager{memoryManager} {
     pSlots = diskArrays.getDiskArray<OnDiskSlotType>(indexPos);
     oSlots = diskArrays.getDiskArray<OnDiskSlotType>(NUM_HASH_INDEXES + indexPos);
+
+    const auto numPrimarySlots = pSlots->getNumElements();
+    const auto numOverflowSlots = oSlots->getNumElements();
+    constexpr auto maxUint64 = std::numeric_limits<uint64_t>::max();
+    if (numPrimarySlots > maxUint64 / PERSISTENT_SLOT_CAPACITY) {
+        throw RuntimeException(std::format(
+            "Cannot load hash index {}: the primary slot count is too large. The database file "
+            "may be corrupted.",
+            indexPos));
+    }
+    const auto maxPrimaryEntries = numPrimarySlots * PERSISTENT_SLOT_CAPACITY;
+    if (numOverflowSlots > (maxUint64 - maxPrimaryEntries) / PERSISTENT_SLOT_CAPACITY) {
+        throw RuntimeException(std::format(
+            "Cannot load hash index {}: the overflow slot count is too large. The database file "
+            "may be corrupted.",
+            indexPos));
+    }
+    const auto maxEntries = maxPrimaryEntries + numOverflowSlots * PERSISTENT_SLOT_CAPACITY;
+    if (indexHeaderForReadTrx.numEntries > maxEntries) {
+        throw RuntimeException(std::format(
+            "Cannot load hash index {}: header contains {} entries, but its slots can contain at "
+            "most {} entries. The database file may be corrupted.",
+            indexPos, indexHeaderForReadTrx.numEntries, maxEntries));
+    }
+    const auto numSlotsAtCurrentLevel = 1ull << indexHeaderForReadTrx.currentLevel;
+    const auto isNewEmptyIndex = indexHeaderForReadTrx.numEntries == 0 && numPrimarySlots == 0;
+    if ((isNewEmptyIndex && (indexHeaderForReadTrx.currentLevel != 1 ||
+                                indexHeaderForReadTrx.nextSplitSlotId != 0)) ||
+        (!isNewEmptyIndex && (numSlotsAtCurrentLevel > numPrimarySlots ||
+                                 indexHeaderForReadTrx.nextSplitSlotId >
+                                     numPrimarySlots - numSlotsAtCurrentLevel))) {
+        throw RuntimeException(std::format(
+            "Cannot load hash index {}: header requires more primary slots than are present. The "
+            "database file may be corrupted.",
+            indexPos));
+    }
 }
 
 template<typename T>
@@ -233,7 +270,7 @@ void HashIndex<T>::reserve(PageAllocator& pageAllocator, const Transaction* tran
     // Can be no fewer slots than the current level requires
     auto numRequiredSlots =
         std::max((numRequiredEntries + PERSISTENT_SLOT_CAPACITY - 1) / PERSISTENT_SLOT_CAPACITY,
-            static_cast<slot_id_t>(1ul << this->indexHeaderForWriteTrx.currentLevel));
+            static_cast<slot_id_t>(1ull << this->indexHeaderForWriteTrx.currentLevel));
     // Always start with at least one page worth of slots.
     // This guarantees that when splitting the source and destination slot are never on the same
     // page, which allows safe use of multiple disk array iterators.
@@ -243,8 +280,8 @@ void HashIndex<T>::reserve(PageAllocator& pageAllocator, const Transaction* tran
     if (this->indexHeaderForWriteTrx.numEntries == 0) {
         pSlots->resize(pageAllocator, transaction, numRequiredSlots);
 
-        auto numSlotsOfCurrentLevel = 1u << this->indexHeaderForWriteTrx.currentLevel;
-        while ((numSlotsOfCurrentLevel << 1) <= numRequiredSlots) {
+        auto numSlotsOfCurrentLevel = 1ull << this->indexHeaderForWriteTrx.currentLevel;
+        while (numSlotsOfCurrentLevel <= numRequiredSlots / 2) {
             this->indexHeaderForWriteTrx.incrementLevel();
             numSlotsOfCurrentLevel <<= 1;
         }
@@ -529,6 +566,7 @@ PrimaryKeyIndex::PrimaryKeyIndex(IndexInfo indexInfo, std::unique_ptr<IndexStora
                     const auto onDiskHeaders = reinterpret_cast<HashIndexHeaderOnDisk*>(frame);
                     for (size_t i = 0;
                          i < INDEX_HEADERS_PER_PAGE && startHeaderIdx + i < NUM_HASH_INDEXES; i++) {
+                        HashIndexHeader::validateOnDisk(onDiskHeaders[i]);
                         hashIndexHeadersForReadTrx.emplace_back(onDiskHeaders[i]);
                     }
                 });

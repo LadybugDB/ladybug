@@ -1,6 +1,8 @@
 #pragma once
 
+#include "common/exception/runtime.h"
 #include "hash_index_slot.h"
+#include <format>
 
 namespace lbug {
 namespace storage {
@@ -19,21 +21,44 @@ static_assert(std::has_unique_object_representations_v<HashIndexHeaderOnDisk>);
 
 class HashIndexHeader {
 public:
+    static constexpr uint64_t MAX_CURRENT_LEVEL = 63;
+
     explicit HashIndexHeader()
         : currentLevel{1}, levelHashMask{1}, higherLevelHashMask{3}, nextSplitSlotId{0},
           numEntries{0}, firstFreeOverflowSlotId{SlotHeader::INVALID_OVERFLOW_SLOT_ID} {}
 
     explicit HashIndexHeader(const HashIndexHeaderOnDisk& onDiskHeader)
-        : currentLevel{onDiskHeader.currentLevel}, levelHashMask{(1ull << this->currentLevel) - 1},
-          higherLevelHashMask{(1ull << (this->currentLevel + 1)) - 1},
+        : currentLevel{onDiskHeader.currentLevel}, levelHashMask{getHashMask(this->currentLevel)},
+          higherLevelHashMask{getHashMask(this->currentLevel + 1)},
           nextSplitSlotId{onDiskHeader.nextSplitSlotId}, numEntries{onDiskHeader.numEntries},
-          firstFreeOverflowSlotId{onDiskHeader.firstFreeOverflowSlotId} {}
+          firstFreeOverflowSlotId{onDiskHeader.firstFreeOverflowSlotId} {
+        validateOnDisk(onDiskHeader);
+    }
+
+    static void validateOnDisk(const HashIndexHeaderOnDisk& onDiskHeader) {
+        if (onDiskHeader.currentLevel > MAX_CURRENT_LEVEL) {
+            throw common::RuntimeException(std::format(
+                "Invalid hash index header: current level {} is out of bounds. The database file "
+                "may be corrupted.",
+                onDiskHeader.currentLevel));
+        }
+        if (onDiskHeader.nextSplitSlotId >= (1ull << onDiskHeader.currentLevel)) {
+            throw common::RuntimeException(std::format(
+                "Invalid hash index header: next split slot ID {} is invalid for current level {}. "
+                "The database file may be corrupted.",
+                onDiskHeader.nextSplitSlotId, onDiskHeader.currentLevel));
+        }
+    }
 
     inline void incrementLevel() {
+        if (currentLevel >= MAX_CURRENT_LEVEL) {
+            throw common::RuntimeException(
+                "Cannot increase hash index header level: the maximum level was reached.");
+        }
         currentLevel++;
         nextSplitSlotId = 0;
-        levelHashMask = (1 << currentLevel) - 1;
-        higherLevelHashMask = (1 << (currentLevel + 1)) - 1;
+        levelHashMask = getHashMask(currentLevel);
+        higherLevelHashMask = getHashMask(currentLevel + 1);
     }
     inline void incrementNextSplitSlotId() {
         if (nextSplitSlotId < (1ull << currentLevel) - 1) {
@@ -48,6 +73,12 @@ public:
         onDiskHeader.nextSplitSlotId = nextSplitSlotId;
         onDiskHeader.numEntries = numEntries;
         onDiskHeader.firstFreeOverflowSlotId = firstFreeOverflowSlotId;
+    }
+
+private:
+    static constexpr uint64_t getHashMask(uint64_t level) {
+        // A shift by 64 is undefined, while a level of 63 is valid for a uint64_t hash.
+        return level >= 64 ? UINT64_MAX : (1ull << level) - 1;
     }
 
 public:
