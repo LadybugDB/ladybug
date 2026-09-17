@@ -50,6 +50,8 @@ DiskArrayCollection::DiskArrayCollection(FileHandle& fileHandle, ShadowFile& sha
                                                "may be corrupted.",
                 headerPageIdx, fileHandle.getNumPages()));
         }
+        // The visited set also bounds the chain length: at most one page per file page is
+        // read before hitting either this cycle check or the out-of-bounds check above.
         if (!visitedHeaderPages.insert(headerPageIdx).second) {
             throw RuntimeException(std::format(
                 "Cannot read disk array header page {}: the header page chain contains a cycle. "
@@ -75,12 +77,6 @@ DiskArrayCollection::DiskArrayCollection(FileHandle& fileHandle, ShadowFile& sha
         numHeaders += headerPage->numHeaders;
         headersForReadTrx.push_back(std::make_unique<HeaderPage>(*headerPage));
         headersForWriteTrx.push_back(std::move(headerPage));
-        if (headersForReadTrx.size() > fileHandle.getNumPages()) {
-            throw RuntimeException(std::format(
-                "Cannot read disk array header chain: it contains more pages than the database "
-                "file has pages ({}). The database file may be corrupted.",
-                fileHandle.getNumPages()));
-        }
         headerPageIdx = nextHeaderPageIdx;
         if (headerPageIdx == INVALID_PAGE_IDX) {
             break;
