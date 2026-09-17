@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include "storage/index/hash_index_header.h"
 #include "storage/local_storage/local_hash_index.h"
 #include "storage/overflow_file.h"
 
@@ -66,4 +67,14 @@ TEST(LocalHashIndexTests, LocalStringInserts) {
     for (int64_t i = 0u; i < 100; i++) {
         ASSERT_FALSE(hashIndex->insert(keys[i], i * 2, isVisible));
     }
+}
+
+TEST(HashIndexHeaderTests, RejectsCorruptedOnDiskHeader) {
+    HashIndexHeaderOnDisk header;
+    header.currentLevel = 64;
+    EXPECT_THROW(HashIndexHeader{header}, RuntimeException);
+
+    header.currentLevel = 4;
+    header.nextSplitSlotId = 16;
+    EXPECT_THROW(HashIndexHeader{header}, RuntimeException);
 }
