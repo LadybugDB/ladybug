@@ -168,9 +168,13 @@ TEST(IntersectKernelsTest, BenchmarkSkewedPaths) {
             gallopNs += timeKernel(processor::intersectNodeIDs, left, right, kIterations);
             batchedNs += timeKernel(processor::intersectNodeIDsBatched, left, right, kIterations);
         }
-        std::printf("L=%-4lu R=%-4lu %-6s %8lu %12lu %12lu %12lu %11.2fx %11.2fx\n",
-            config.leftCount, config.rightCount, config.label, matches / 3, scalarNs / 3,
-            gallopNs / 3, batchedNs / 3, static_cast<double>(scalarNs) / gallopNs,
-            static_cast<double>(scalarNs) / batchedNs);
+        std::printf("L=%-4llu R=%-4llu %-6s %8llu %12llu %12llu %12llu %11.2fx %11.2fx\n",
+            static_cast<unsigned long long>(config.leftCount),
+            static_cast<unsigned long long>(config.rightCount), config.label,
+            static_cast<unsigned long long>(matches / 3),
+            static_cast<unsigned long long>(scalarNs / 3),
+            static_cast<unsigned long long>(gallopNs / 3),
+            static_cast<unsigned long long>(batchedNs / 3),
+            static_cast<double>(scalarNs) / gallopNs, static_cast<double>(scalarNs) / batchedNs);
     }
 }
