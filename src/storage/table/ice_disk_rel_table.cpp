@@ -221,33 +221,6 @@ void IceDiskRelTable::initScanState(Transaction* transaction, TableScanState& sc
     }
 }
 
-void IceDiskRelTable::initializeParquetReaders(Transaction* transaction) const {
-    if (!indicesReader) {
-        std::lock_guard lock(parquetReaderMutex);
-        if (!indicesReader) {
-            std::vector<bool> columnSkips; // Read all columns
-            auto context = transaction->getClientContext();
-            indicesReader = std::make_unique<ParquetReader>(indicesFilePath, columnSkips, context);
-        }
-    }
-}
-
-void IceDiskRelTable::initializeIndptrReader(Transaction* transaction,
-    const std::unique_lock<std::mutex>& indptrDataLock) const {
-    // The caller must hold indptrDataMutex: it serializes all writers of indptrReader,
-    // which is what makes the unsynchronized read below data-race-free.
-    DASSERT(indptrDataLock.owns_lock() && indptrDataLock.mutex() == &indptrDataMutex);
-    UNUSED(indptrDataLock);
-    if (!indptrFilePath.empty() && !indptrReader) {
-        std::lock_guard lock(parquetReaderMutex);
-        if (!indptrReader) {
-            std::vector<bool> columnSkips; // Read all columns
-            auto context = transaction->getClientContext();
-            indptrReader = std::make_unique<ParquetReader>(indptrFilePath, columnSkips, context);
-        }
-    }
-}
-
 void IceDiskRelTable::loadIndptrData(Transaction* transaction) const {
     // Fast path: indptrFilePath is immutable after construction, so checking it first
     // avoids even an atomic load for FLAT tables. Once loaded, indptrData is read-only
@@ -260,12 +233,15 @@ void IceDiskRelTable::loadIndptrData(Transaction* transaction) const {
         return;
     }
     {
-        initializeIndptrReader(transaction, lock);
+        // Use a local reader: this function already holds indptrDataMutex, so no shared
+        // mutable reader (and no double-checked locking) is needed.
+        std::vector<bool> columnSkips; // Read all columns
+        auto context = transaction->getClientContext();
+        auto indptrReader = std::make_unique<ParquetReader>(indptrFilePath, columnSkips, context);
         if (!indptrReader)
             return;
 
         // Initialize scan to populate column types
-        auto context = transaction->getClientContext();
         auto vfs = VirtualFileSystem::GetUnsafe(*context);
         std::vector<uint64_t> groupsToRead;
         for (uint64_t i = 0; i < indptrReader->getNumRowGroups(); ++i) {
@@ -566,12 +542,31 @@ bool IceDiskRelTable::scanFlat(Transaction* transaction,
 }
 
 row_idx_t IceDiskRelTable::getTotalRowCount(const Transaction* transaction) const {
-    initializeParquetReaders(const_cast<Transaction*>(transaction));
-    if (!indicesReader) {
+    const auto cached = cachedRowCount.load(std::memory_order_relaxed);
+    if (cached != INVALID_ROW_IDX) {
+        return cached;
+    }
+    // Use a temporary reader instead of a lazily-initialized shared reader. The previous
+    // double-checked locking on a plain (non-atomic) unique_ptr was a data race under
+    // the C++ memory model: the outer unsynchronized read could race with the write
+    // under lock. A temp reader also avoids retaining a ClientContext* on the table.
+    auto context = transaction->getClientContext();
+    if (!context) {
         return 0;
     }
-    auto metadata = indicesReader->getMetadata();
-    return metadata ? metadata->num_rows : 0;
+    try {
+        auto reader =
+            std::make_unique<ParquetReader>(indicesFilePath, std::vector<bool>{}, context);
+        if (!reader) {
+            return 0;
+        }
+        auto metadata = reader->getMetadata();
+        const auto count = metadata ? static_cast<row_idx_t>(metadata->num_rows) : 0;
+        cachedRowCount.store(count, std::memory_order_relaxed);
+        return count;
+    } catch (const std::exception&) {
+        return 0;
+    }
 }
 
 row_idx_t IceDiskRelTable::getActiveBoundNodeCount(const Transaction* transaction,

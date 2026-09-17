@@ -92,20 +92,17 @@ private:
     IceDiskRelTableLayout layout;
     std::string indicesFilePath;
     std::string indptrFilePath;
-    mutable std::unique_ptr<processor::ParquetReader> indicesReader;
-    mutable std::unique_ptr<processor::ParquetReader> indptrReader;
-    mutable std::mutex parquetReaderMutex;
     mutable std::mutex indptrDataMutex;
+    // Cached total row count, populated on first getTotalRowCount() call. A temporary
+    // ParquetReader is used instead of a shared cached reader so no lock is needed
+    // (at worst two threads populate the same value concurrently).
     mutable std::vector<common::offset_t> indptrData; // Cached indptr data for CSR format
     // Set to true once indptrData has been populated (even if the file contained zero rows,
     // so an empty indptr doesn't trigger a reload on every scan). Read with acquire /
     // written with release to publish the vector contents to lock-free readers.
     mutable std::atomic<bool> indptrDataLoaded{false};
+    mutable std::atomic<common::row_idx_t> cachedRowCount{common::INVALID_ROW_IDX};
 
-    void initializeParquetReaders(transaction::Transaction* transaction) const;
-    // Requires the caller to hold indptrDataMutex (passed as proof, asserted in debug builds).
-    void initializeIndptrReader(transaction::Transaction* transaction,
-        const std::unique_lock<std::mutex>& indptrDataLock) const;
     void loadIndptrData(transaction::Transaction* transaction) const;
     bool scanCSR(transaction::Transaction* transaction, IceDiskRelTableScanState& scanState);
     bool scanFlat(transaction::Transaction* transaction, IceDiskRelTableScanState& scanState);
