@@ -1,6 +1,7 @@
 #include "storage/table/dictionary_chunk.h"
 
 #include "common/constants.h"
+#include "common/exception/storage.h"
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
 #include "storage/enums/residency_state.h"
@@ -40,16 +41,27 @@ void DictionaryChunk::resetToEmpty() {
 }
 
 uint64_t DictionaryChunk::getStringLength(string_index_t index) const {
-    if (stringDataChunk->getNumValues() == 0) {
-        return 0;
+    const auto numOffsets = offsetChunk->getNumValues();
+    if (index >= numOffsets) [[unlikely]] {
+        throw StorageException("String dictionary index is outside the offset table.");
     }
-    if (index + 1 < offsetChunk->getNumValues()) {
-        DASSERT(offsetChunk->getValue<string_offset_t>(index + 1) >=
-                offsetChunk->getValue<string_offset_t>(index));
-        return offsetChunk->getValue<string_offset_t>(index + 1) -
-               offsetChunk->getValue<string_offset_t>(index);
+
+    const auto startOffset = offsetChunk->getValue<string_offset_t>(index);
+    const auto nextIndex = static_cast<uint64_t>(index) + 1;
+    const auto endOffset = nextIndex < numOffsets ?
+                               offsetChunk->getValue<string_offset_t>(nextIndex) :
+                               stringDataChunk->getNumValues();
+    validateStringRange(startOffset, endOffset);
+    return endOffset - startOffset;
+}
+
+void DictionaryChunk::validateStringRange(string_offset_t startOffset,
+    string_offset_t endOffset) const {
+    const auto dataSize = stringDataChunk->getNumValues();
+    if (startOffset > dataSize || endOffset > dataSize || endOffset < startOffset) [[unlikely]] {
+        throw StorageException(
+            "String dictionary contains a non-monotonic or out-of-range string offset.");
     }
-    return stringDataChunk->getNumValues() - offsetChunk->getValue<string_offset_t>(index);
 }
 
 DictionaryChunk::string_index_t DictionaryChunk::appendString(std::string_view val) {
@@ -80,9 +92,8 @@ DictionaryChunk::string_index_t DictionaryChunk::appendString(std::string_view v
 }
 
 std::string_view DictionaryChunk::getString(string_index_t index) const {
-    DASSERT(index < offsetChunk->getNumValues());
-    const auto startOffset = offsetChunk->getValue<string_offset_t>(index);
     const auto length = getStringLength(index);
+    const auto startOffset = offsetChunk->getValue<string_offset_t>(index);
     return std::string_view(reinterpret_cast<const char*>(stringDataChunk->getData()) + startOffset,
         length);
 }

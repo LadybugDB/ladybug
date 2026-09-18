@@ -51,6 +51,8 @@ private:
 
     void scanOffsets(const SegmentState& state, DictionaryChunk::string_offset_t* offsets,
         uint64_t index, uint64_t numValues, uint64_t dataSize) const;
+    static void validateOffsets(const DictionaryChunk::string_offset_t* offsets, uint64_t numValues,
+        uint64_t dataSize, bool requireFirstOffsetZero);
     void scanValue(const SegmentState& dataState, uint64_t startOffset, uint64_t endOffset,
         common::ValueVector* resultVector, uint64_t offsetInVector) const;
     DictionaryChunk::string_index_t appendScannedValueToDictionary(const SegmentState& dataState,

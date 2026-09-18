@@ -51,6 +51,11 @@ public:
     void flush(PageAllocator& pageAllocator);
 
 private:
+    // Validate the range before constructing a string_view. This must not be a debug-only
+    // assertion: dictionaries are persisted and a corrupt offset otherwise becomes an unsigned
+    // underflow that is later used as a string_view length.
+    void validateStringRange(string_offset_t startOffset, string_offset_t endOffset) const;
+
     bool enableCompression;
     // String data is stored as a UINT8 chunk, using the numValues in the chunk to track the number
     // of characters stored.

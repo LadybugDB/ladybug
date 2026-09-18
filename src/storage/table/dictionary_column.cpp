@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 
+#include "common/exception/storage.h"
 #include "common/types/string_t.h"
 #include "common/types/types.h"
 #include "common/vector/value_vector.h"
@@ -60,10 +62,17 @@ void DictionaryColumn::scan(const SegmentState& state, DictionaryChunk& dictChun
         StringColumn::getChildState(state, StringColumn::ChildStateIndex::OFFSET), offsetChunk, 0,
         StringColumn::getChildState(state, StringColumn::ChildStateIndex::OFFSET)
             .metadata.numValues);
+    const auto numScannedOffsets = offsetMetadata.numValues;
+    auto* scannedOffsets = offsetChunk->getData<string_offset_t>() + initialDictSize;
+    validateOffsets(scannedOffsets, numScannedOffsets, dataMetadata.numValues,
+        true /* requireFirstOffsetZero */);
     // Each offset needs to be incremented by the initial size of the dictionary data chunk
-    for (row_idx_t i = initialDictSize; i < offsetChunk->getNumValues(); i++) {
-        offsetChunk->setValue<string_offset_t>(
-            offsetChunk->getValue<string_offset_t>(i) + initialDictDataSize, i);
+    for (row_idx_t i = 0; i < numScannedOffsets; i++) {
+        if (scannedOffsets[i] > std::numeric_limits<string_offset_t>::max() - initialDictDataSize) {
+            throw StorageException("String dictionary offset overflows while being materialized.");
+        }
+        offsetChunk->setValue<string_offset_t>(scannedOffsets[i] + initialDictDataSize,
+            initialDictSize + i);
     }
 }
 
@@ -101,8 +110,11 @@ void DictionaryColumn::scan(const SegmentState& offsetState, const SegmentState&
     for (auto pos = 0u; pos < offsetsToScan.size(); pos++) {
         auto startOffset = offsets[offsetsToScan[pos].first - firstOffsetToScan];
         auto endOffset = offsets[offsetsToScan[pos].first - firstOffsetToScan + 1];
+        if (endOffset < startOffset || endOffset > dataState.metadata.numValues) [[unlikely]] {
+            throw StorageException(
+                "String dictionary contains a non-monotonic or out-of-range string offset.");
+        }
         auto lengthToScan = endOffset - startOffset;
-        DASSERT(endOffset >= startOffset);
         scanValue(dataState, startOffset, lengthToScan, result, offsetsToScan[pos].second);
         // For each string which has the same index in the dictionary as the one we scanned,
         // copy the scanned string to its position in the result vector.
@@ -147,8 +159,11 @@ DictionaryColumn::materializeToStringChunkDictionary(const SegmentState& offsetS
     for (const auto indexToScan : indexesToScan) {
         auto startOffset = offsets[indexToScan - firstOffsetToScan];
         auto endOffset = offsets[indexToScan - firstOffsetToScan + 1];
+        if (endOffset < startOffset || endOffset > dataState.metadata.numValues) [[unlikely]] {
+            throw StorageException(
+                "String dictionary contains a non-monotonic or out-of-range string offset.");
+        }
         auto lengthToScan = endOffset - startOffset;
-        DASSERT(endOffset >= startOffset);
         auto newIndex =
             appendScannedValueToDictionary(dataState, startOffset, lengthToScan, result);
         mapping.emplace_back(indexToScan, newIndex);
@@ -169,6 +184,10 @@ string_index_t DictionaryColumn::append(const DictionaryChunk& dictChunk, Segmen
 void DictionaryColumn::scanOffsets(const SegmentState& state,
     DictionaryChunk::string_offset_t* offsets, uint64_t index, uint64_t numValues,
     uint64_t dataSize) const {
+    if (numValues == 0 || index >= state.metadata.numValues ||
+        numValues > state.metadata.numValues - index) [[unlikely]] {
+        throw StorageException("String dictionary index is outside the offset table.");
+    }
     // We either need to read the next value, or store the maximum string offset at the end.
     // Otherwise we won't know what the length of the last string is.
     if (index + numValues < state.metadata.numValues) {
@@ -176,6 +195,23 @@ void DictionaryColumn::scanOffsets(const SegmentState& state,
     } else {
         offsetColumn->scanSegment(state, index, numValues, (uint8_t*)offsets);
         offsets[numValues] = dataSize;
+    }
+    validateOffsets(offsets, numValues + 1, dataSize, false /* requireFirstOffsetZero */);
+}
+
+void DictionaryColumn::validateOffsets(const string_offset_t* offsets, uint64_t numValues,
+    uint64_t dataSize, bool requireFirstOffsetZero) {
+    if (numValues == 0) {
+        return;
+    }
+    if ((requireFirstOffsetZero && offsets[0] != 0) || offsets[0] > dataSize) [[unlikely]] {
+        throw StorageException("String dictionary has an invalid first offset.");
+    }
+    for (uint64_t i = 1; i < numValues; ++i) {
+        if (offsets[i] < offsets[i - 1] || offsets[i] > dataSize) [[unlikely]] {
+            throw StorageException(
+                "String dictionary contains a non-monotonic or out-of-range string offset.");
+        }
     }
 }
 
