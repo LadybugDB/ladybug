@@ -1,6 +1,9 @@
 #include "storage/compression/float_compression.h"
 
+#include <limits>
+
 #include "alp/encode.hpp"
+#include "common/exception/storage.h"
 #include "common/system_config.h"
 #include "common/utils.h"
 #include <ranges>
@@ -10,6 +13,32 @@ namespace storage {
 
 namespace {
 static constexpr common::idx_t BITPACKING_CHILD_IDX = 0;
+
+template<std::floating_point T>
+const ALPMetadata& validateALPMetadata(const CompressionMetadata& metadata) {
+    if (metadata.compression != CompressionType::ALP || !metadata.extraMetadata.has_value())
+        [[unlikely]] {
+        throw common::StorageException(
+            "ALP compression metadata is missing or has an invalid type.");
+    }
+    const auto* floatMetadata =
+        dynamic_cast<const ALPMetadata*>(metadata.extraMetadata.value().get());
+    if (!floatMetadata) [[unlikely]] {
+        throw common::StorageException(
+            "ALP compression metadata has an invalid extra metadata type.");
+    }
+    if (metadata.children.size() != CompressionMetadata::getChildCount(CompressionType::ALP))
+        [[unlikely]] {
+        throw common::StorageException("ALP compression metadata has an invalid child count.");
+    }
+    const auto childCompression = metadata.children[BITPACKING_CHILD_IDX].compression;
+    if (childCompression != CompressionType::CONSTANT &&
+        childCompression != CompressionType::INTEGER_BITPACKING) [[unlikely]] {
+        throw common::StorageException(
+            "ALP compression metadata has an invalid child compression.");
+    }
+    return *floatMetadata;
+}
 
 template<std::floating_point T>
 common::LogicalType getBitpackingLogicalType() {
@@ -70,7 +99,7 @@ uint64_t FloatCompression<T>::compressNextPageWithExceptions(const uint8_t*& src
     uint64_t srcOffset, uint64_t numValuesRemaining, uint8_t* dstBuffer, uint64_t dstBufferSize,
     EncodeExceptionView<T> exceptionBuffer, [[maybe_unused]] uint64_t exceptionBufferSize,
     uint64_t& exceptionCount, const struct CompressionMetadata& metadata) const {
-    DASSERT(metadata.compression == CompressionType::ALP);
+    const auto& floatMetadata = getValidatedMetadata(metadata);
 
     const size_t numValuesToCompress =
         std::min(numValuesRemaining, numValues(dstBufferSize, metadata));
@@ -78,15 +107,21 @@ uint64_t FloatCompression<T>::compressNextPageWithExceptions(const uint8_t*& src
     std::vector<EncodedType> integerEncodedValues(numValuesToCompress);
     for (size_t posInPage = 0; posInPage < numValuesToCompress; ++posInPage) {
         const auto floatValue = reinterpret_cast<const T*>(srcBuffer)[posInPage];
-        const auto* floatMetadata = metadata.floatMetadata();
         const EncodedType encodedValue =
-            alp::AlpEncode<T>::encode_value(floatValue, floatMetadata->fac, floatMetadata->exp);
+            alp::AlpEncode<T>::encode_value(floatValue, floatMetadata.fac, floatMetadata.exp);
         const double decodedValue =
-            alp::AlpDecode<T>::decode_value(encodedValue, floatMetadata->fac, floatMetadata->exp);
+            alp::AlpDecode<T>::decode_value(encodedValue, floatMetadata.fac, floatMetadata.exp);
 
         if (floatValue != decodedValue) {
-            DASSERT(
-                (exceptionCount + 1) * EncodeException<T>::sizeInBytes() <= exceptionBufferSize);
+            if (exceptionCount >= exceptionBufferSize / EncodeException<T>::sizeInBytes())
+                [[unlikely]] {
+                throw common::StorageException(
+                    "ALP exception buffer capacity was exceeded during compression.");
+            }
+            if (srcOffset > std::numeric_limits<uint32_t>::max() ||
+                posInPage > std::numeric_limits<uint32_t>::max() - srcOffset) [[unlikely]] {
+                throw common::StorageException("ALP exception position exceeds its on-disk range.");
+            }
             exceptionBuffer.setValue(
                 {.value = floatValue,
                     .posInChunk = common::safeIntegerConversion<uint32_t>(srcOffset + posInPage)},
@@ -112,6 +147,11 @@ uint64_t FloatCompression<T>::compressNextPageWithExceptions(const uint8_t*& src
 
     // since we already do the zeroing we return the size of the whole page
     return dstBufferSize;
+}
+
+template<std::floating_point T>
+const ALPMetadata& FloatCompression<T>::getValidatedMetadata(const CompressionMetadata& metadata) {
+    return validateALPMetadata<T>(metadata);
 }
 
 template<std::floating_point T>
@@ -231,8 +271,13 @@ bool FloatCompression<T>::canUpdateInPlace(std::span<const T> value,
 template<std::floating_point T>
 common::page_idx_t FloatCompression<T>::getNumDataPages(common::page_idx_t numTotalPages,
     const CompressionMetadata& compMeta) {
-    return numTotalPages -
-           EncodeException<T>::numPagesFromExceptions(compMeta.floatMetadata()->exceptionCapacity);
+    const auto& floatMetadata = getValidatedMetadata(compMeta);
+    const auto numExceptionPages =
+        EncodeException<T>::numPagesFromExceptions(floatMetadata.exceptionCapacity);
+    if (numExceptionPages > numTotalPages) [[unlikely]] {
+        throw common::StorageException("ALP exception pages exceed the column chunk page range.");
+    }
+    return numTotalPages - numExceptionPages;
 }
 
 template class FloatCompression<double>;

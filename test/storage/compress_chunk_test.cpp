@@ -1,5 +1,6 @@
 #include "alp/decode.hpp"
 #include "alp/encode.hpp"
+#include "common/exception/storage.h"
 #include "gmock/gmock-matchers.h"
 #include "graph_test/private_graph_test.h"
 #include "gtest/gtest.h"
@@ -217,6 +218,28 @@ TEST_F(CompressChunkTest, TestDoubleWithExceptions) {
     }
 
     testCheckWholeOutput(src);
+}
+
+TEST_F(CompressChunkTest, TestDoubleExceptionIndexBounds) {
+    std::vector<double> src(256, 5.6);
+    src[0] = 0;
+    src[2] = 54387589437957.834;
+
+    testCompressChunk(src, [](ColumnReadWriter*, SegmentState& state, const LogicalType& dataType) {
+        if (state.metadata.compMeta.compression != CompressionType::ALP) {
+            GTEST_SKIP();
+        }
+
+        auto* exceptionChunk = state.getExceptionChunk<double>();
+        const auto exceptionCount = exceptionChunk->getExceptionCount();
+        ASSERT_GT(exceptionCount, 0);
+
+        EXPECT_THROW(exceptionChunk->getExceptionAt(exceptionCount), StorageException);
+        EXPECT_THROW(exceptionChunk->removeExceptionAt(exceptionCount), StorageException);
+        EXPECT_THROW(exceptionChunk->writeException({0.0, 0}, exceptionCount), StorageException);
+
+        EXPECT_EQ(dataType.getPhysicalType(), PhysicalTypeID::DOUBLE);
+    });
 }
 
 TEST_F(CompressChunkTest, TestFloatWithExceptions) {

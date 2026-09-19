@@ -1,6 +1,9 @@
 #include "storage/table/column_reader_writer.h"
 
+#include <limits>
+
 #include "alp/encode.hpp"
+#include "common/exception/storage.h"
 #include "common/utils.h"
 #include "common/vector/value_vector.h"
 #include "storage/compression/float_compression.h"
@@ -265,20 +268,39 @@ private:
     void patchFloatExceptions(const SegmentState& state, offset_t startOffsetInChunk,
         size_t numValuesToScan, OutputType result, offset_t startOffsetInResult,
         const std::optional<filter_func_t>& filterFunc) {
+        if (startOffsetInChunk > state.metadata.numValues ||
+            numValuesToScan > state.metadata.numValues - startOffsetInChunk) [[unlikely]] {
+            throw StorageException("ALP exception read range exceeds the column chunk.");
+        }
         auto* exceptionChunk = state.getExceptionChunkConst<T>();
         offset_t curExceptionIdx =
             exceptionChunk->findFirstExceptionAtOrPastOffset(startOffsetInChunk);
         for (; curExceptionIdx < exceptionChunk->getExceptionCount(); ++curExceptionIdx) {
             const auto curException = exceptionChunk->getExceptionAt(curExceptionIdx);
-            DASSERT(curExceptionIdx == 0 ||
-                    curException.posInChunk >
-                        exceptionChunk->getExceptionAt(curExceptionIdx - 1).posInChunk);
-            DASSERT(curException.posInChunk >= curExceptionIdx);
-            if (curException.posInChunk >= startOffsetInChunk + numValuesToScan) {
+            if (curException.posInChunk >= state.metadata.numValues ||
+                curException.posInChunk < curExceptionIdx) [[unlikely]] {
+                throw StorageException("ALP exception position is outside the column chunk.");
+            }
+            if (curExceptionIdx > 0 &&
+                curException.posInChunk <=
+                    exceptionChunk->getExceptionAt(curExceptionIdx - 1).posInChunk) [[unlikely]] {
+                throw StorageException("ALP exception positions are not strictly ordered.");
+            }
+            if (curException.posInChunk < startOffsetInChunk) [[unlikely]] {
+                throw StorageException("ALP exception position precedes the requested range.");
+            }
+            const auto exceptionOffset = curException.posInChunk - startOffsetInChunk;
+            if (exceptionOffset >= numValuesToScan) {
                 break;
             }
-            const offset_t offsetInResult =
-                startOffsetInResult + curException.posInChunk - startOffsetInChunk;
+            if (startOffsetInResult > std::numeric_limits<offset_t>::max() - exceptionOffset)
+                [[unlikely]] {
+                throw StorageException("ALP exception result offset exceeds its range.");
+            }
+            const offset_t offsetInResult = startOffsetInResult + exceptionOffset;
+            if (offsetInResult == std::numeric_limits<offset_t>::max()) [[unlikely]] {
+                throw StorageException("ALP exception result offset exceeds its range.");
+            }
             if (!filterFunc.has_value() || filterFunc.value()(offsetInResult, offsetInResult + 1)) {
                 if constexpr (std::is_same_v<uint8_t*, OutputType>) {
                     reinterpret_cast<T*>(result)[offsetInResult] = curException.value;
@@ -338,15 +360,27 @@ private:
 
         auto writeToPageBufferHelper = getWriteToPageBufferHelper<InputType, T>(data, numValues);
 
+        const auto& floatMetadata = FloatCompression<T>::getValidatedMetadata(metadata.compMeta);
         const auto bitpackHeader = FloatCompression<T>::getBitpackInfo(state.metadata.compMeta);
         offset_t curExceptionIdx =
             exceptionChunk->findFirstExceptionAtOrPastOffset(offsetInSegment);
 
+        const auto getExceptionPosition = [&](offset_t exceptionIdx) {
+            const auto exception = exceptionChunk->getExceptionAt(exceptionIdx);
+            if (exception.posInChunk >= metadata.numValues) [[unlikely]] {
+                throw StorageException("ALP exception position is outside the column chunk.");
+            }
+            return exception.posInChunk;
+        };
+
+        if (numValues > std::numeric_limits<offset_t>::max() ||
+            offsetInSegment > std::numeric_limits<offset_t>::max() - numValues) [[unlikely]] {
+            throw StorageException("ALP write range exceeds the offset range.");
+        }
         const auto maxWrittenPosInChunk = offsetInSegment + numValues;
-        uint32_t curExceptionPosInChunk =
-            (curExceptionIdx < exceptionChunk->getExceptionCount()) ?
-                exceptionChunk->getExceptionAt(curExceptionIdx).posInChunk :
-                maxWrittenPosInChunk;
+        offset_t curExceptionPosInChunk = (curExceptionIdx < exceptionChunk->getExceptionCount()) ?
+                                              getExceptionPosition(curExceptionIdx) :
+                                              maxWrittenPosInChunk;
 
         for (size_t i = 0; i < numValues; ++i) {
             const size_t writeOffset = offsetInSegment + i;
@@ -359,19 +393,17 @@ private:
             while (curExceptionPosInChunk < writeOffset) {
                 ++curExceptionIdx;
                 if (curExceptionIdx < exceptionChunk->getExceptionCount()) {
-                    curExceptionPosInChunk =
-                        exceptionChunk->getExceptionAt(curExceptionIdx).posInChunk;
+                    curExceptionPosInChunk = getExceptionPosition(curExceptionIdx);
                 } else {
                     curExceptionPosInChunk = maxWrittenPosInChunk;
                 }
             }
 
             const T newValue = writeToPageBufferHelper.getValue(readOffset);
-            const auto* floatMetadata = metadata.compMeta.floatMetadata();
             const auto encodedValue =
-                alp::AlpEncode<T>::encode_value(newValue, floatMetadata->fac, floatMetadata->exp);
-            const T decodedValue = alp::AlpDecode<T>::decode_value(encodedValue, floatMetadata->fac,
-                floatMetadata->exp);
+                alp::AlpEncode<T>::encode_value(newValue, floatMetadata.fac, floatMetadata.exp);
+            const T decodedValue =
+                alp::AlpDecode<T>::decode_value(encodedValue, floatMetadata.fac, floatMetadata.exp);
 
             bool newValueIsException = newValue != decodedValue;
             writeToPageBufferHelper.setValue(i,
@@ -381,15 +413,21 @@ private:
             // either overwrite it (if the new value is also an exception) or remove it
             if (curExceptionPosInChunk == writeOffset) {
                 if (newValueIsException) {
+                    if (writeOffset > std::numeric_limits<uint32_t>::max()) [[unlikely]] {
+                        throw StorageException("ALP exception position exceeds its on-disk range.");
+                    }
                     exceptionChunk->writeException(
-                        EncodeException<T>{newValue, safeIntegerConversion<uint32_t>(writeOffset)},
+                        EncodeException<T>{newValue, static_cast<uint32_t>(writeOffset)},
                         curExceptionIdx);
                 } else {
                     exceptionChunk->removeExceptionAt(curExceptionIdx);
                 }
             } else if (newValueIsException) {
+                if (writeOffset > std::numeric_limits<uint32_t>::max()) [[unlikely]] {
+                    throw StorageException("ALP exception position exceeds its on-disk range.");
+                }
                 exceptionChunk->addException(
-                    EncodeException<T>{newValue, safeIntegerConversion<uint32_t>(writeOffset)});
+                    EncodeException<T>{newValue, static_cast<uint32_t>(writeOffset)});
             }
         }
 

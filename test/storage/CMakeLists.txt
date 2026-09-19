@@ -1,5 +1,6 @@
 add_lbug_test(node_insertion_deletion_test node_insertion_deletion_test.cpp)
 add_lbug_test(compression_test compression_test.cpp compress_chunk_test.cpp)
+add_lbug_test(alp_exception_chunk_test alp_exception_chunk_test.cpp)
 add_lbug_test(column_chunk_metadata_test column_chunk_metadata_test.cpp)
 add_lbug_test(local_hash_index_test local_hash_index_test.cpp)
 add_lbug_test(disk_array_collection_test disk_array_collection_test.cpp)
