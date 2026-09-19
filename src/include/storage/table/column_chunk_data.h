@@ -7,6 +7,7 @@
 
 #include "common/data_chunk/sel_vector.h"
 #include "common/enums/rel_multiplicity.h"
+#include "common/exception/storage.h"
 #include "common/null_mask.h"
 #include "common/system_config.h"
 #include "common/types/types.h"
@@ -75,15 +76,27 @@ struct SegmentState {
     template<std::floating_point T>
     InMemoryExceptionChunk<T>* getExceptionChunk() {
         using GetType = std::unique_ptr<InMemoryExceptionChunk<T>>;
-        DASSERT(std::holds_alternative<GetType>(alpExceptionChunk));
-        return std::get<GetType>(alpExceptionChunk).get();
+        if (!std::holds_alternative<GetType>(alpExceptionChunk)) [[unlikely]] {
+            throw common::StorageException("ALP exception chunk has an unexpected physical type.");
+        }
+        auto* exceptionChunk = std::get<GetType>(alpExceptionChunk).get();
+        if (!exceptionChunk) [[unlikely]] {
+            throw common::StorageException("ALP exception chunk is not initialized.");
+        }
+        return exceptionChunk;
     }
 
     template<std::floating_point T>
     const InMemoryExceptionChunk<T>* getExceptionChunkConst() const {
         using GetType = std::unique_ptr<InMemoryExceptionChunk<T>>;
-        DASSERT(std::holds_alternative<GetType>(alpExceptionChunk));
-        return std::get<GetType>(alpExceptionChunk).get();
+        if (!std::holds_alternative<GetType>(alpExceptionChunk)) [[unlikely]] {
+            throw common::StorageException("ALP exception chunk has an unexpected physical type.");
+        }
+        const auto* exceptionChunk = std::get<GetType>(alpExceptionChunk).get();
+        if (!exceptionChunk) [[unlikely]] {
+            throw common::StorageException("ALP exception chunk is not initialized.");
+        }
+        return exceptionChunk;
     }
 
     void reclaimAllocatedPages(PageAllocator& pageAllocator) const;

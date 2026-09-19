@@ -41,10 +41,19 @@ public:
     void writeException(EncodeException<T> exception, size_t exceptionIdx);
 
 private:
+    static void validateMetadata(const SegmentState& state);
+    static const ALPMetadata& getValidatedMetadata(const SegmentState& state);
+    void validateInMemoryState() const;
+    void validateExceptionIndex(size_t exceptionIdx) const;
+    // Bulk operations call validateInMemoryState() once and use these helpers to avoid repeating
+    // the full structural validation for every exception record.
+    EncodeException<T> getExceptionAtUnchecked(size_t exceptionIdx) const;
+    void writeExceptionUnchecked(EncodeException<T> exception, size_t exceptionIdx);
+
     static PageCursor getExceptionPageCursor(const ColumnChunkMetadata& metadata,
         PageCursor pageBaseCursor, size_t exceptionCapacity);
 
-    void finalize(SegmentState& state);
+    void finalize(SegmentState& state, const ALPMetadata& floatMetadata);
 
     static constexpr common::PhysicalTypeID physicalType =
         std::is_same_v<T, float> ? common::PhysicalTypeID::ALP_EXCEPTION_FLOAT :

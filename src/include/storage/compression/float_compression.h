@@ -79,6 +79,9 @@ public:
 
     static BitpackInfo<EncodedType> getBitpackInfo(const CompressionMetadata& metadata);
 
+    // Validate ALP metadata before any operation that dereferences its extra metadata or child.
+    static const ALPMetadata& getValidatedMetadata(const CompressionMetadata& metadata);
+
     // Returns number of pages for storing bitpacked ALP values (excluding pages reserved for
     // exceptions)
     static common::page_idx_t getNumDataPages(common::page_idx_t numTotalPages,
