@@ -8,6 +8,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "common/exception/runtime.h"
+#include "common/string_utils.h"
 #include "main/database_manager.h"
 #include "planner/operator/extend/logical_extend.h"
 #include "planner/operator/logical_filter.h"
@@ -165,17 +166,6 @@ struct ForeignJoinPatternInfo {
     std::string relTable;
     std::string dbName; // Foreign database name
 };
-
-static std::string getUnqualifiedTableName(std::string tableName) {
-    auto dotPos = tableName.rfind('.');
-    if (dotPos != std::string::npos) {
-        tableName = tableName.substr(dotPos + 1);
-    }
-    if (tableName.size() >= 2 && tableName.front() == '"' && tableName.back() == '"') {
-        tableName = tableName.substr(1, tableName.size() - 2);
-    }
-    return tableName;
-}
 
 // Try to match the foreign join pattern and extract info
 static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator* op,
@@ -346,7 +336,11 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
     return info;
 }
 
-// Helper to get column names from a foreign table
+// Helper to get column names from a foreign table. tableName may be a bare
+// table name or a qualified `catalog[.schema].table` reference; the attached
+// database scopes the lookup when qualification is present. Falls back to the
+// unqualified table name so that attached databases from older extension
+// builds (which only match bare names) keep working.
 static std::vector<std::string> getForeignTableColumnNames(const std::string& dbName,
     const std::string& tableName, main::ClientContext* context) {
     if (dbName.empty() || tableName.empty() || !context) {
@@ -360,7 +354,15 @@ static std::vector<std::string> getForeignTableColumnNames(const std::string& db
     if (!attachedDB) {
         return {};
     }
-    return attachedDB->getTableColumnNames(tableName);
+    auto columnNames = attachedDB->getTableColumnNames(tableName);
+    if (!columnNames.empty() || tableName.find('.') == std::string::npos) {
+        return columnNames;
+    }
+    auto unqualified = tableName.substr(tableName.rfind('.') + 1);
+    if (unqualified.size() >= 2 && unqualified.front() == '"' && unqualified.back() == '"') {
+        unqualified = unqualified.substr(1, unqualified.size() - 2);
+    }
+    return attachedDB->getTableColumnNames(unqualified);
 }
 
 struct JoinQueryInfo {
@@ -400,10 +402,12 @@ static JoinQueryInfo buildJoinQuery(const ForeignJoinPatternInfo& info,
     std::string dstAlias = dstNode->getVariableName();
     std::string relAlias = rel->getVariableName();
 
-    // Determine join columns based on direction and foreign table schema
+    // Determine join columns based on direction and foreign table schema.
+    // Prefer endpoint columns identified by the src/dst naming convention
+    // (SQL catalogs such as Iceberg or Unity Catalog do not guarantee that
+    // the endpoint columns come first); fall back to the first two columns.
     std::string srcJoinCol, dstJoinCol;
-    auto tableColumnNames =
-        getForeignTableColumnNames(info.dbName, getUnqualifiedTableName(info.relTable), context);
+    auto tableColumnNames = getForeignTableColumnNames(info.dbName, info.relTable, context);
     if (tableColumnNames.size() < 2) {
         throw RuntimeException(std::format(
             "Foreign join push down optimizer: unable to retrieve column names for table '{}.{}', "
@@ -413,6 +417,25 @@ static JoinQueryInfo buildJoinQuery(const ForeignJoinPatternInfo& info,
 
     std::string firstCol = tableColumnNames[0];
     std::string secondCol = tableColumnNames[1];
+    auto findEndpointColumn = [&](bool wantSrc) -> std::string {
+        for (auto& column : tableColumnNames) {
+            auto lowerCol = column;
+            common::StringUtils::toLower(lowerCol);
+            const bool isSrc = lowerCol == "src_id" || lowerCol.rfind("src", 0) == 0;
+            const bool isDst = lowerCol == "dst_id" || lowerCol.rfind("dst", 0) == 0 ||
+                               lowerCol.rfind("dest", 0) == 0;
+            if ((wantSrc && isSrc && !isDst) || (!wantSrc && isDst && !isSrc)) {
+                return column;
+            }
+        }
+        return "";
+    };
+    auto srcCol = findEndpointColumn(true /* wantSrc */);
+    auto dstCol = findEndpointColumn(false /* wantSrc */);
+    if (!srcCol.empty() && !dstCol.empty()) {
+        firstCol = srcCol;
+        secondCol = dstCol;
+    }
     if (extend->getDirection() == ExtendDirection::FWD) {
         srcJoinCol = firstCol;
         dstJoinCol = secondCol;
@@ -422,8 +445,7 @@ static JoinQueryInfo buildJoinQuery(const ForeignJoinPatternInfo& info,
     }
 
     auto getNodeIDColumn = [&](const std::string& tableName) {
-        auto columnNames =
-            getForeignTableColumnNames(info.dbName, getUnqualifiedTableName(tableName), context);
+        auto columnNames = getForeignTableColumnNames(info.dbName, tableName, context);
         if (columnNames.empty()) {
             return std::string{InternalKeyword::ID};
         }
