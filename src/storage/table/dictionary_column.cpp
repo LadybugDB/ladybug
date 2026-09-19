@@ -110,7 +110,8 @@ void DictionaryColumn::scan(const SegmentState& offsetState, const SegmentState&
     for (auto pos = 0u; pos < offsetsToScan.size(); pos++) {
         auto startOffset = offsets[offsetsToScan[pos].first - firstOffsetToScan];
         auto endOffset = offsets[offsetsToScan[pos].first - firstOffsetToScan + 1];
-        if (endOffset < startOffset || endOffset > dataState.metadata.numValues) [[unlikely]] {
+        if (startOffset > dataState.metadata.numValues || endOffset < startOffset ||
+            endOffset > dataState.metadata.numValues) [[unlikely]] {
             throw StorageException(
                 "String dictionary contains a non-monotonic or out-of-range string offset.");
         }
@@ -159,7 +160,8 @@ DictionaryColumn::materializeToStringChunkDictionary(const SegmentState& offsetS
     for (const auto indexToScan : indexesToScan) {
         auto startOffset = offsets[indexToScan - firstOffsetToScan];
         auto endOffset = offsets[indexToScan - firstOffsetToScan + 1];
-        if (endOffset < startOffset || endOffset > dataState.metadata.numValues) [[unlikely]] {
+        if (startOffset > dataState.metadata.numValues || endOffset < startOffset ||
+            endOffset > dataState.metadata.numValues) [[unlikely]] {
             throw StorageException(
                 "String dictionary contains a non-monotonic or out-of-range string offset.");
         }
@@ -184,8 +186,11 @@ string_index_t DictionaryColumn::append(const DictionaryChunk& dictChunk, Segmen
 void DictionaryColumn::scanOffsets(const SegmentState& state,
     DictionaryChunk::string_offset_t* offsets, uint64_t index, uint64_t numValues,
     uint64_t dataSize) const {
-    if (numValues == 0 || index >= state.metadata.numValues ||
-        numValues > state.metadata.numValues - index) [[unlikely]] {
+    if (numValues == 0) {
+        return;
+    }
+    if (index >= state.metadata.numValues || numValues > state.metadata.numValues - index)
+        [[unlikely]] {
         throw StorageException("String dictionary index is outside the offset table.");
     }
     // We either need to read the next value, or store the maximum string offset at the end.

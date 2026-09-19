@@ -41,6 +41,11 @@ void DictionaryChunk::resetToEmpty() {
 }
 
 uint64_t DictionaryChunk::getStringLength(string_index_t index) const {
+    const auto range = getStringRange(index);
+    return range.endOffset - range.startOffset;
+}
+
+DictionaryChunk::StringRange DictionaryChunk::getStringRange(string_index_t index) const {
     const auto numOffsets = offsetChunk->getNumValues();
     if (index >= numOffsets) [[unlikely]] {
         throw StorageException("String dictionary index is outside the offset table.");
@@ -52,7 +57,7 @@ uint64_t DictionaryChunk::getStringLength(string_index_t index) const {
                                offsetChunk->getValue<string_offset_t>(nextIndex) :
                                stringDataChunk->getNumValues();
     validateStringRange(startOffset, endOffset);
-    return endOffset - startOffset;
+    return {startOffset, endOffset};
 }
 
 void DictionaryChunk::validateStringRange(string_offset_t startOffset,
@@ -92,14 +97,39 @@ DictionaryChunk::string_index_t DictionaryChunk::appendString(std::string_view v
 }
 
 std::string_view DictionaryChunk::getString(string_index_t index) const {
-    const auto length = getStringLength(index);
-    const auto startOffset = offsetChunk->getValue<string_offset_t>(index);
-    return std::string_view(reinterpret_cast<const char*>(stringDataChunk->getData()) + startOffset,
-        length);
+    const auto range = getStringRange(index);
+    return std::string_view(reinterpret_cast<const char*>(stringDataChunk->getData()) +
+                                range.startOffset,
+        range.endOffset - range.startOffset);
 }
 
 bool DictionaryChunk::sanityCheck() const {
-    return offsetChunk->getNumValues() <= offsetChunk->getNumValues();
+    if (!stringDataChunk->sanityCheck() || !offsetChunk->sanityCheck()) {
+        return false;
+    }
+
+    const auto numOffsets = offsetChunk->getNumValues();
+    if (numOffsets == 0) {
+        return stringDataChunk->getNumValues() == 0;
+    }
+
+    // sanityCheck is an explicit diagnostic check, not part of the normal read/write path. Check
+    // every range here, while getStringRange validates only the range that is actually consumed.
+    try {
+        if (offsetChunk->getValue<string_offset_t>(0) != 0) {
+            return false;
+        }
+        for (uint64_t index = 0; index < numOffsets; ++index) {
+            const auto startOffset = offsetChunk->getValue<string_offset_t>(index);
+            const auto endOffset = index + 1 < numOffsets ?
+                                       offsetChunk->getValue<string_offset_t>(index + 1) :
+                                       stringDataChunk->getNumValues();
+            validateStringRange(startOffset, endOffset);
+        }
+    } catch (const StorageException&) {
+        return false;
+    }
+    return true;
 }
 
 void DictionaryChunk::resetNumValuesFromMetadata() {
@@ -131,6 +161,9 @@ std::unique_ptr<DictionaryChunk> DictionaryChunk::deserialize(MemoryManager& mem
     chunk->offsetChunk = ColumnChunkData::deserialize(memoryManager, deSer);
     deSer.validateDebuggingInfo(key, "string_data_chunk");
     chunk->stringDataChunk = ColumnChunkData::deserialize(memoryManager, deSer);
+    // Keep dictionaries on disk after deserialization. Eagerly validating every offset here would
+    // materialize and scan all dictionary pages during database open. Instead, all consumers
+    // validate the range they use and fail closed with StorageException before dereferencing it.
     return chunk;
 }
 

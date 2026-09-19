@@ -51,6 +51,15 @@ public:
     void flush(PageAllocator& pageAllocator);
 
 private:
+    struct StringRange {
+        string_offset_t startOffset;
+        string_offset_t endOffset;
+    };
+
+    // Read and validate both offsets once. Keeping the validated range together prevents callers
+    // from re-reading an offset after validation.
+    StringRange getStringRange(string_index_t index) const;
+
     // Validate the range before constructing a string_view. This must not be a debug-only
     // assertion: dictionaries are persisted and a corrupt offset otherwise becomes an unsigned
     // underflow that is later used as a string_view length.
