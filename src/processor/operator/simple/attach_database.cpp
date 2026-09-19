@@ -53,7 +53,8 @@ void AttachDatabase::executeInternal(ExecutionContext* context) {
     auto errMsg =
         std::format("No loaded extension can handle database type: {}.", attachInfo.dbType);
     auto dbType = common::StringUtils::getLower(attachInfo.dbType);
-    if (dbType == "adbc" || dbType == "duckdb" || dbType == "postgres" || dbType == "sqlite") {
+    if (dbType == "adbc" || dbType == "duckdb" || dbType == "postgres" || dbType == "sqlite" ||
+        dbType == "iceberg" || dbType == "uc_catalog") {
         errMsg += std::format("\nDid you forget to load {} extension?\nYou can load it by: load "
                               "extension {};",
             dbType, dbType);

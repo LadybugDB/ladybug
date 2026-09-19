@@ -9,7 +9,8 @@ namespace optimizer {
 
 /**
  * This optimizer detects graph patterns where all nodes and relationships are backed by
- * foreign tables (e.g., DuckDB, Postgres, SQLite) from the same database. When detected,
+ * foreign tables (e.g., DuckDB, Postgres, SQLite, Iceberg, Unity Catalog) from the same
+ * database. When detected,
  * it rewrites the entire pattern into a single SQL JOIN query pushed down to the foreign
  * database.
  *
