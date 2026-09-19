@@ -2,7 +2,9 @@
 
 #include <type_traits>
 
+#include "common/exception/storage.h"
 #include "common/types/types.h"
+#include "common/utils.h"
 #include "storage/file_handle.h"
 #include "storage/page_manager.h"
 #include "storage/table/column_chunk_data.h"
@@ -66,26 +68,46 @@ std::pair<std::unique_ptr<uint8_t[]>, uint64_t> flushCompressedFloats(const Comp
     const PageRange& entry, const ColumnChunkMetadata& metadata) {
     const auto& castedAlg = dynamic_cast_checked<const FloatCompression<T>&>(alg);
 
-    const auto* floatMetadata = metadata.compMeta.floatMetadata();
-    DASSERT(floatMetadata->exceptionCapacity >= floatMetadata->exceptionCount);
+    const auto& floatMetadata = FloatCompression<T>::getValidatedMetadata(metadata.compMeta);
+    if (floatMetadata.exceptionCapacity < floatMetadata.exceptionCount) [[unlikely]] {
+        throw StorageException("ALP exception count exceeds its declared capacity.");
+    }
 
     auto valuesRemaining = metadata.numValues;
-    DASSERT(valuesRemaining <= buffer.size_bytes() / sizeof(T));
+    if (valuesRemaining > buffer.size_bytes() / sizeof(T)) [[unlikely]] {
+        throw StorageException("ALP compression input buffer is smaller than its metadata.");
+    }
 
     const size_t exceptionBufferSize =
-        EncodeException<T>::numPagesFromExceptions(floatMetadata->exceptionCapacity) *
+        EncodeException<T>::numPagesFromExceptions(floatMetadata.exceptionCapacity) *
         LBUG_PAGE_SIZE;
     auto exceptionBuffer = std::make_unique<uint8_t[]>(exceptionBufferSize);
     std::byte* exceptionBufferCursor = reinterpret_cast<std::byte*>(exceptionBuffer.get());
 
     const auto numValuesPerPage = metadata.compMeta.numValues(LBUG_PAGE_SIZE, dataType);
-    DASSERT(numValuesPerPage * metadata.getNumDataPages(dataType) >= metadata.numValues);
+    const auto numDataPages = metadata.getNumDataPages(dataType);
+    const auto requiredDataPages =
+        numValuesPerPage == 0          ? UINT64_MAX :
+        numValuesPerPage == UINT64_MAX ? (metadata.numValues == 0 ? 0 : 1) :
+                                         common::ceilDiv(metadata.numValues, numValuesPerPage);
+    if (numValuesPerPage == 0 || requiredDataPages > numDataPages) [[unlikely]] {
+        throw StorageException("ALP data page capacity is inconsistent with column metadata.");
+    }
+    const auto numExceptionPages =
+        EncodeException<T>::numPagesFromExceptions(floatMetadata.exceptionCapacity);
+    if (numExceptionPages > entry.numPages ||
+        requiredDataPages > entry.numPages - numExceptionPages ||
+        entry.startPageIdx == INVALID_PAGE_IDX ||
+        static_cast<uint64_t>(entry.startPageIdx) + entry.numPages > dataFH->getNumPages())
+        [[unlikely]] {
+        throw StorageException("ALP column page range is invalid during compression.");
+    }
 
     const auto compressedBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
     const uint8_t* bufferCursor = buffer.data();
     auto numPages = 0u;
     size_t remainingExceptionBufferSize = exceptionBufferSize;
-    RUNTIME_CHECK(size_t totalExceptionCount = 0);
+    size_t totalExceptionCount = 0;
 
     while (valuesRemaining > 0) {
         uint64_t pageExceptionCount = 0;
@@ -96,7 +118,7 @@ std::pair<std::unique_ptr<uint8_t[]>, uint64_t> flushCompressedFloats(const Comp
 
         exceptionBufferCursor += pageExceptionCount * EncodeException<T>::sizeInBytes();
         remainingExceptionBufferSize -= pageExceptionCount * EncodeException<T>::sizeInBytes();
-        RUNTIME_CHECK(totalExceptionCount += pageExceptionCount);
+        totalExceptionCount += pageExceptionCount;
 
         // Avoid underflows (when data is compressed to nothing, numValuesPerPage may be
         // UINT64_MAX)
@@ -105,13 +127,18 @@ std::pair<std::unique_ptr<uint8_t[]>, uint64_t> flushCompressedFloats(const Comp
         } else {
             valuesRemaining -= numValuesPerPage;
         }
-        DASSERT(numPages < entry.numPages);
-        DASSERT(dataFH->getNumPages() >= entry.startPageIdx + numPages);
+        if (numPages >= entry.numPages - numExceptionPages ||
+            static_cast<uint64_t>(entry.startPageIdx) + numPages >= dataFH->getNumPages())
+            [[unlikely]] {
+            throw StorageException("ALP data page range was exhausted during compression.");
+        }
         dataFH->writePageToFile(compressedBuffer.get(), entry.startPageIdx + numPages);
         numPages++;
     }
 
-    DASSERT(totalExceptionCount == floatMetadata->exceptionCount);
+    if (totalExceptionCount != floatMetadata.exceptionCount) [[unlikely]] {
+        throw StorageException("ALP exception count does not match column metadata.");
+    }
 
     return {std::move(exceptionBuffer), exceptionBufferSize};
 }
@@ -122,12 +149,24 @@ void flushALPExceptions(std::span<const uint8_t> exceptionBuffer, FileHandle* da
     const auto encodedType = std::is_same_v<T, float> ? PhysicalTypeID::ALP_EXCEPTION_FLOAT :
                                                         PhysicalTypeID::ALP_EXCEPTION_DOUBLE;
     // we don't care about the min/max values for exceptions
+    const auto& floatMetadata = FloatCompression<T>::getValidatedMetadata(metadata.compMeta);
     const auto preExceptionMetadata = uncompressedGetMetadata(encodedType,
-        metadata.compMeta.floatMetadata()->exceptionCapacity, StorageValue{0}, StorageValue{0});
+        floatMetadata.exceptionCapacity, StorageValue{0}, StorageValue{0});
+    const auto expectedExceptionBufferSize =
+        static_cast<uint64_t>(preExceptionMetadata.getNumPages()) * LBUG_PAGE_SIZE;
+    if (exceptionBuffer.size_bytes() < expectedExceptionBufferSize) [[unlikely]] {
+        throw StorageException("ALP exception buffer is smaller than its metadata.");
+    }
+
+    if (preExceptionMetadata.getNumPages() > entry.numPages ||
+        entry.startPageIdx == INVALID_PAGE_IDX ||
+        static_cast<uint64_t>(entry.startPageIdx) + entry.numPages > dataFH->getNumPages())
+        [[unlikely]] {
+        throw StorageException("ALP exception page range is invalid during flush.");
+    }
 
     const auto exceptionStartPageIdx =
         entry.startPageIdx + entry.numPages - preExceptionMetadata.getNumPages();
-    DASSERT(exceptionStartPageIdx + preExceptionMetadata.getNumPages() <= dataFH->getNumPages());
     PageRange exceptionBlock{exceptionStartPageIdx, preExceptionMetadata.getNumPages()};
 
     CompressedFlushBuffer exceptionFlushBuffer{
@@ -154,8 +193,9 @@ ColumnChunkMetadata CompressedFloatFlushBuffer<T>::operator()(std::span<const ui
         return CompressedFlushBuffer{std::make_shared<Uncompressed>(dataType), dataType}.operator()(
             buffer, dataFH, entry, metadata);
     }
-    // FlushBuffer should not be called with constant compression
-    DASSERT(metadata.compMeta.compression == CompressionType::ALP);
+    if (metadata.compMeta.compression != CompressionType::ALP) [[unlikely]] {
+        throw StorageException("ALP flush buffer received non-ALP compression metadata.");
+    }
 
     auto [exceptionBuffer, exceptionBufferSize] =
         flushCompressedFloats<T>(*alg, dataType, buffer, dataFH, entry, metadata);
