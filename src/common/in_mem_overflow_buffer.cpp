@@ -23,6 +23,14 @@ uint8_t* BufferBlock::data() const {
 }
 
 uint8_t* InMemOverflowBuffer::allocateSpace(uint64_t size) {
+    if (!blocks.empty()) {
+        // Keep every allocation 8-byte aligned: consumers store pointers and uint64s in
+        // overflow memory (e.g. COLLECT/HISTOGRAM linked-list elements), and an unaligned
+        // bump offset would make those accesses UB (UBSan: "store to misaligned address").
+        static constexpr uint64_t OVERFLOW_ALIGNMENT = 8;
+        currentBlock()->currentOffset =
+            (currentBlock()->currentOffset + OVERFLOW_ALIGNMENT - 1) & ~(OVERFLOW_ALIGNMENT - 1);
+    }
     if (requireNewBlock(size)) {
         if (!blocks.empty() && currentBlock()->currentOffset == 0) {
             blocks.pop_back();

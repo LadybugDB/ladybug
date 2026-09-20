@@ -1,6 +1,7 @@
 #include "processor/result/base_hash_table.h"
 
 #include <cmath>
+#include <cstring>
 
 #include "common/constants.h"
 #include "common/null_buffer.h"
@@ -79,8 +80,13 @@ static ft_compare_function_t getFactorizedTableCompareEntryFunc(const LogicalTyp
 template<>
 bool factorizedTableCompareEntry<list_entry_t>(const uint8_t* entry1, const uint8_t* entry2,
     const LogicalType& type) {
-    const auto* list1 = reinterpret_cast<const list_t*>(entry1);
-    const auto* list2 = reinterpret_cast<const list_t*>(entry2);
+    // entries point into packed factorized-table tuples without alignment padding, so they
+    // may be misaligned for list_t (8-byte alignment). Copy through aligned temporaries.
+    list_t list1Copy, list2Copy;
+    memcpy(&list1Copy, entry1, sizeof(list_t));
+    memcpy(&list2Copy, entry2, sizeof(list_t));
+    const auto* list1 = &list1Copy;
+    const auto* list2 = &list2Copy;
     if (list1->size != list2->size) {
         return false;
     }
@@ -164,7 +170,12 @@ template<>
     uint32_t vectorPos, const uint8_t* entry) {
     auto dataVector = ListVector::getDataVector(vector);
     auto listToCompare = vector->getValue<list_entry_t>(vectorPos);
-    auto listEntry = reinterpret_cast<const list_t*>(entry);
+    // `entry` points into a packed factorized-table tuple without alignment padding, so it
+    // may be misaligned for list_t (8-byte alignment). Copy through an aligned temporary
+    // (memcpy has no alignment requirement) instead of touching members in place.
+    list_t listEntryCopy;
+    memcpy(&listEntryCopy, entry, sizeof(list_t));
+    auto listEntry = &listEntryCopy;
     auto entryNullBytes = reinterpret_cast<uint8_t*>(listEntry->overflowPtr);
     auto entryValues = entryNullBytes + NullBuffer::getNumBytesForNullValues(listEntry->size);
     auto rowLayoutSize = LogicalTypeUtils::getRowLayoutSize(dataVector->dataType);

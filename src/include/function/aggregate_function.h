@@ -1,7 +1,11 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <functional>
 #include <utility>
+#include <vector>
 
 #include "common/in_mem_overflow_buffer.h"
 #include "common/vector/value_vector.h"
@@ -33,6 +37,37 @@ using aggr_update_pos_function_t = std::function<void(uint8_t* state, common::Va
 using aggr_combine_function_t = std::function<void(uint8_t* state, uint8_t* otherState,
     common::InMemOverflowBuffer* overflowBuffer)>;
 using aggr_finalize_function_t = std::function<void(uint8_t* state)>;
+
+namespace detail {
+// Aggregate states stored in packed factorized-table tuples may be misaligned for their
+// concrete state type (tuples have no alignment padding). The per-function update/combine/
+// finalize implementations reinterpret_cast the raw bytes and touch members, which is UB on
+// a misaligned pointer (UBSan: "member access within misaligned address"). Route every call
+// through an aligned staging buffer: states that already satisfy the strictest fundamental
+// alignment go straight through (the common case, e.g. heap-allocated simple-aggregate
+// states); the rest are copied in with memcpy, executed on the aligned copy, and copied
+// back. Two slots are provided so combine() can stage both inputs. See also
+// copyStateToAlignedBuffer in processor/map/map_aggregate.cpp for the scan path.
+inline constexpr size_t AGG_STATE_ALIGNMENT = alignof(std::max_align_t);
+
+inline bool isAggregateStateAligned(const uint8_t* state) {
+    return reinterpret_cast<uintptr_t>(state) % AGG_STATE_ALIGNMENT == 0;
+}
+
+inline std::vector<uint8_t>& stagedAggregateStateBuffer(int slot) {
+    thread_local std::vector<uint8_t> buffers[2];
+    return buffers[slot];
+}
+
+inline uint8_t* stageAggregateState(const uint8_t* state, uint32_t size, int slot) {
+    auto& buffer = stagedAggregateStateBuffer(slot);
+    if (buffer.size() < size) {
+        buffer.resize(size);
+    }
+    memcpy(buffer.data(), state, size);
+    return buffer.data();
+}
+} // namespace detail
 
 struct AggregateFunction final : public ScalarOrAggregateFunction {
     bool isDistinct;
@@ -75,20 +110,47 @@ struct AggregateFunction final : public ScalarOrAggregateFunction {
 
     void updateAllState(uint8_t* state, common::ValueVector* input, uint64_t multiplicity,
         common::InMemOverflowBuffer* overflowBuffer) const {
-        return updateAllFunc(state, input, multiplicity, overflowBuffer);
+        if (detail::isAggregateStateAligned(state)) {
+            return updateAllFunc(state, input, multiplicity, overflowBuffer);
+        }
+        auto size = static_cast<uint32_t>(getAggregateStateSize());
+        auto* staged = detail::stageAggregateState(state, size, 0);
+        updateAllFunc(staged, input, multiplicity, overflowBuffer);
+        memcpy(state, staged, size);
     }
 
     void updatePosState(uint8_t* state, common::ValueVector* input, uint64_t multiplicity,
         uint32_t pos, common::InMemOverflowBuffer* overflowBuffer) const {
-        return updatePosFunc(state, input, multiplicity, pos, overflowBuffer);
+        if (detail::isAggregateStateAligned(state)) {
+            return updatePosFunc(state, input, multiplicity, pos, overflowBuffer);
+        }
+        auto size = static_cast<uint32_t>(getAggregateStateSize());
+        auto* staged = detail::stageAggregateState(state, size, 0);
+        updatePosFunc(staged, input, multiplicity, pos, overflowBuffer);
+        memcpy(state, staged, size);
     }
 
     void combineState(uint8_t* state, uint8_t* otherState,
         common::InMemOverflowBuffer* overflowBuffer) const {
-        return combineFunc(state, otherState, overflowBuffer);
+        if (detail::isAggregateStateAligned(state) && detail::isAggregateStateAligned(otherState)) {
+            return combineFunc(state, otherState, overflowBuffer);
+        }
+        auto size = static_cast<uint32_t>(getAggregateStateSize());
+        auto* staged = detail::stageAggregateState(state, size, 0);
+        auto* stagedOther = detail::stageAggregateState(otherState, size, 1);
+        combineFunc(staged, stagedOther, overflowBuffer);
+        memcpy(state, staged, size);
     }
 
-    void finalizeState(uint8_t* state) const { return finalizeFunc(state); }
+    void finalizeState(uint8_t* state) const {
+        if (detail::isAggregateStateAligned(state)) {
+            return finalizeFunc(state);
+        }
+        auto size = static_cast<uint32_t>(getAggregateStateSize());
+        auto* staged = detail::stageAggregateState(state, size, 0);
+        finalizeFunc(staged);
+        memcpy(state, staged, size);
+    }
 
     bool isFunctionDistinct() const { return isDistinct; }
 

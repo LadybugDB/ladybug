@@ -47,9 +47,14 @@ int64_t Find::alignedNeedleSizeFind(const uint8_t* haystack, uint32_t haystackLe
     if (sizeof(UNSIGNED) > haystackLen) {
         return -1;
     }
-    auto needleVal = *((UNSIGNED*)needle);
+    // haystack + offset is inherently misaligned for most offsets (and needle itself comes
+    // from an unaligned string buffer), so compare through memcpy'd locals instead of
+    // dereferencing possibly-misaligned pointers (UBSan: "load of misaligned address").
+    UNSIGNED needleVal;
+    memcpy(&needleVal, needle, sizeof(UNSIGNED));
     for (auto offset = 0u; offset <= haystackLen - sizeof(UNSIGNED); offset++) {
-        auto haystackVal = *((UNSIGNED*)(haystack + offset));
+        UNSIGNED haystackVal;
+        memcpy(&haystackVal, haystack + offset, sizeof(UNSIGNED));
         if (needleVal == haystackVal) {
             return firstMatchCharOffset + offset;
         }
