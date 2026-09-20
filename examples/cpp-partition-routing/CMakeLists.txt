@@ -1,0 +1,4 @@
+add_executable(example_cpp_partition_routing main.cpp)
+target_link_libraries(example_cpp_partition_routing lbug_shared)
+target_include_directories(example_cpp_partition_routing PRIVATE ${CMAKE_BINARY_DIR}/src)
+add_dependencies(example_cpp_partition_routing single_file_header)

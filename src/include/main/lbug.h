@@ -20,3 +20,10 @@
 #include "main/version.h"                     // IWYU pragma: export
 #include "processor/result/flat_tuple.h"      // IWYU pragma: export
 #include "storage/storage_version_info.h"     // IWYU pragma: export
+
+// ===== Distributed API: partition routing hooks =====
+// Kept separate from the client API above. These hooks let an external wrapper own
+// remote partition subgraphs (placement, lifecycle, reads, writes, lookups) while the
+// engine stays embedded and distribution-agnostic. Wrappers need nothing beyond this
+// amalgamated header to implement them.
+#include "main/lbug_distributed.h" // IWYU pragma: export
