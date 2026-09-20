@@ -74,6 +74,16 @@ void CardinalityEstimator::init(const NodeExpression& node) {
         }
         auto tableID = entry->getTableID();
         auto dbName = node.getDbName(entry);
+        if (!dbName.empty()) {
+            // Entries from non-lbug attached databases (DuckDB, Postgres,
+            // Iceberg, ...) have no local storage stats. Skipping them also
+            // avoids downcasting a foreign attached database to
+            // AttachedLbugDatabase, which is undefined behaviour.
+            auto* attachedDB = main::DatabaseManager::Get(*context)->getAttachedDatabase(dbName);
+            if (attachedDB == nullptr || attachedDB->getDBType() != common::ATTACHED_LBUG_DB_TYPE) {
+                continue;
+            }
+        }
         storage::StorageManager* storageManager;
         catalog::Catalog* cat;
         if (!dbName.empty()) {
@@ -103,6 +113,14 @@ void CardinalityEstimator::init(const RelExpression& rel) {
             continue;
         }
         auto dbName = rel.getDbName(entry);
+        if (!dbName.empty()) {
+            // See the node overload above: foreign attached tables carry no
+            // local stats and must not be downcast to AttachedLbugDatabase.
+            auto* attachedDB = main::DatabaseManager::Get(*context)->getAttachedDatabase(dbName);
+            if (attachedDB == nullptr || attachedDB->getDBType() != common::ATTACHED_LBUG_DB_TYPE) {
+                continue;
+            }
+        }
         storage::StorageManager* storageManager;
         catalog::Catalog* cat;
         if (!dbName.empty()) {

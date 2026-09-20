@@ -189,15 +189,44 @@ And rewrites it into a single `TABLE_FUNCTION_CALL` that executes one SQL JOIN
 query on the foreign database.
 
 **Requirements for the rewrite:**
-1. Both node scans must use `TABLE_FUNCTION_CALL` with `supportsPushDown = true`
-2. The rel table must have a `scanFunction` (foreign-backed)
-3. All three tables must be from the **same** foreign database
+1. Every node scan in the pattern must use `TABLE_FUNCTION_CALL` with
+   `supportsPushDown = true`
+2. Every rel table must have a `scanFunction` (foreign-backed)
+3. All tables must be from the **same** foreign database
 
-**Current status:** This optimizer exists (`ForeignJoinPushDownOptimizer`) but
-is not yet producing optimal SQL for complex graph traversals. The Ladybug
-planner does not currently optimize general graph traversal patterns into
-recursive SQL joins — the pushdown is limited to simple star patterns.
-Optimizing arbitrary graph traversals (e.g., variable-length path patterns,
+**Supported patterns** (`ForeignJoinPushDownOptimizer` collects hash-join
+subtrees bottom-up, so nesting variants are all accepted):
+
+- **N-hop traversals** (`MATCH (a)-[r1]->(b)-[r2]->(c) ...`): the hops are
+  emitted as one multi-way SQL JOIN (BFS order from the first hop's bound
+  node; already-bound neighbours contribute extra `ON` conjuncts, so cycles
+  and diamonds stay correct inner joins). `FILTER` predicates found anywhere
+  inside the matched subtree — filters on node properties and filters on
+  edge properties alike — are re-attached above the pushed scan; the regular
+  filter push-down pass folds the translatable ones into SQL `WHERE` clauses
+  (`alias.column` references resolve against the pushed JOIN aliases).
+- **Aggregations** (`RETURN a.name, count(*) ...`): a supported `AGGREGATE`
+  (`COUNT`/`SUM`/`AVG`/`MIN`/`MAX`, `COUNT DISTINCT` only for `COUNT`) over a
+  pushed scan is folded into the pushed SQL as `GROUP BY` and the operator is
+  dropped. Anything else stays local.
+- **ORDER BY** over a pushed scan is folded into the pushed SQL as
+  `ORDER BY` (the operator is dropped). Sort keys may reference pushed table
+  columns or pushed select-item aliases; anything else stays local. The
+  order-by push-down pass additionally resolves sort keys against pushed
+  scan output aliases, and never drops an `ORDER BY` it could not push
+  (previously an untranslatable key silently lost the sort).
+- **Variable-length (N-hop, recursive) traversals**
+  (`MATCH (a)-[e*1..4]->(b)`): matched top-down along the root spine and
+  rewritten to a SQL `WITH RECURSIVE` query (edge-level anchor plus
+  depth-capped recursive member, endpoints joined to their node tables).
+  Requires plain `WALK` semantics, a finite upper bound, a single directed
+  (`FWD`/`BWD`) rel, no intermediate node predicate, and parent-required
+  outputs limited to endpoint properties/IDs and the path length. Inline rel
+  predicates (`-[e:REL*1..4 {prop: val}]->`) bake into the anchor and the
+  recursive term. Anything else (path objects, rel properties, shortest-path
+  variants) keeps the pattern local.
+
+**Current status:** Optimizing arbitrary graph traversals (e.g., mixed
 multi-hop traversals) into efficient SQL remains open work.
 
 ### 3.4. Copy `csr_rel_*` Tables into the Ladybug Catalog at Attach Time

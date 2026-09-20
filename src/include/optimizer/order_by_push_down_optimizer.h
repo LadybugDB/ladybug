@@ -1,5 +1,6 @@
 #pragma once
 
+#include "function/table/bind_data.h"
 #include "planner/operator/logical_plan.h"
 
 namespace lbug {
@@ -15,6 +16,8 @@ private:
 
     static std::string buildOrderByString(const binder::expression_vector& expressions,
         const std::vector<bool>& isAscOrders);
+    static std::string buildOrderByString(const binder::expression_vector& expressions,
+        const std::vector<bool>& isAscOrders, const lbug::function::TableFuncBindData* target);
 };
 
 } // namespace optimizer
