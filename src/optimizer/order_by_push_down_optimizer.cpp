@@ -42,6 +42,9 @@ void OrderByPushDownOptimizer::rewrite(LogicalPlan* plan) {
     plan->setLastOperator(visitOperator(plan->getLastOperator()));
 }
 
+static const lbug::function::TableFuncBindData* findPushdownScanTarget(
+    planner::LogicalOperator* op);
+
 std::shared_ptr<LogicalOperator> OrderByPushDownOptimizer::visitOperator(
     std::shared_ptr<LogicalOperator> op, std::string currentOrderBy) {
     switch (op->getOperatorType()) {
@@ -51,10 +54,17 @@ std::shared_ptr<LogicalOperator> OrderByPushDownOptimizer::visitOperator(
         if (!currentOrderBy.empty()) {
             newOrderBy += ", ";
         }
-        newOrderBy +=
-            buildOrderByString(orderBy.getExpressionsToOrderBy(), orderBy.getIsAscOrders());
+        // Resolve sort keys against the pushdown scan they flow into so
+        // multi-table (joined) scans sort by "table.column" references.
+        auto* scanTarget = findPushdownScanTarget(orderBy.getChild(0).get());
+        newOrderBy += buildOrderByString(orderBy.getExpressionsToOrderBy(),
+            orderBy.getIsAscOrders(), scanTarget);
         auto newChild = visitOperator(orderBy.getChild(0), newOrderBy);
-        if (isPushDownSupported(newChild.get())) {
+        // Only drop the ORDER BY when sort keys were actually pushed: an
+        // untranslatable key (e.g. an aggregate call over a pushed scan)
+        // leaves newOrderBy empty and must stay local, otherwise the sort is
+        // silently lost.
+        if (!newOrderBy.empty() && isPushDownSupported(newChild.get())) {
             return newChild;
         }
         return std::make_shared<LogicalOrderBy>(orderBy.getExpressionsToOrderBy(),
@@ -85,8 +95,47 @@ std::shared_ptr<LogicalOperator> OrderByPushDownOptimizer::visitOperator(
     }
 }
 
+// Find the single pushdown scan an ORDER BY would flow into through
+// pass-through operators (mirrors isPushDownSupported). Returns nullptr when
+// there is no such scan.
+static const function::TableFuncBindData* findPushdownScanTarget(planner::LogicalOperator* op) {
+    auto current = op;
+    while (current != nullptr) {
+        switch (current->getOperatorType()) {
+        case planner::LogicalOperatorType::TABLE_FUNCTION_CALL: {
+            auto& tableFunc = current->constCast<planner::LogicalTableFunctionCall>();
+            if (!tableFunc.getTableFunc().supportsPushDownFunc()) {
+                return nullptr;
+            }
+            return tableFunc.getBindData();
+        }
+        case planner::LogicalOperatorType::MULTIPLICITY_REDUCER:
+        case planner::LogicalOperatorType::EXPLAIN:
+        case planner::LogicalOperatorType::ACCUMULATE:
+        case planner::LogicalOperatorType::FILTER:
+        case planner::LogicalOperatorType::PROJECTION:
+        case planner::LogicalOperatorType::LIMIT: {
+            if (current->getNumChildren() != 1) {
+                return nullptr;
+            }
+            current = current->getChild(0).get();
+            break;
+        }
+        default:
+            return nullptr;
+        }
+    }
+    return nullptr;
+}
+
 std::string OrderByPushDownOptimizer::buildOrderByString(
     const binder::expression_vector& expressions, const std::vector<bool>& isAscOrders) {
+    return buildOrderByString(expressions, isAscOrders, nullptr);
+}
+
+std::string OrderByPushDownOptimizer::buildOrderByString(
+    const binder::expression_vector& expressions, const std::vector<bool>& isAscOrders,
+    const lbug::function::TableFuncBindData* target) {
     if (expressions.empty()) {
         return "";
     }
@@ -95,15 +144,39 @@ std::string OrderByPushDownOptimizer::buildOrderByString(
     for (size_t i = 0; i < expressions.size(); ++i) {
         auto& expr = expressions[i];
         std::string colName;
-        if (expr->expressionType == common::ExpressionType::VARIABLE) {
-            auto& var = expr->constCast<binder::VariableExpression>();
-            colName = var.getVariableName();
-        } else if (expr->expressionType == common::ExpressionType::PROPERTY) {
-            auto& prop = expr->constCast<binder::PropertyExpression>();
-            colName = prop.getPropertyName();
-        } else {
-            // Skip expressions that cannot be pushed down
-            continue;
+        // Prefer the scan's own output alias when the expression denotes a
+        // pushed column (matched by unique name). For joined scans the alias
+        // is a "table.column" reference that resolves against the pushed
+        // query's range variables; for single-table scans it is the bare
+        // column name, matching the historical behaviour.
+        if (target != nullptr) {
+            for (auto& column : target->columns) {
+                if (column->getUniqueName() == expr->getUniqueName()) {
+                    colName = column->getAlias();
+                    break;
+                }
+            }
+            // Internal-ID aliases ("var._ID") have no SQL counterpart in
+            // the pushed query (the external ID column is selected instead);
+            // the whole ORDER BY must stay local then.
+            if (!colName.empty() && colName.size() >= 4 &&
+                colName.compare(colName.size() - 4, 4, "._ID") == 0) {
+                return "";
+            }
+        }
+        if (colName.empty()) {
+            if (expr->expressionType == common::ExpressionType::VARIABLE) {
+                auto& var = expr->constCast<binder::VariableExpression>();
+                colName = var.getVariableName();
+            } else if (expr->expressionType == common::ExpressionType::PROPERTY) {
+                auto& prop = expr->constCast<binder::PropertyExpression>();
+                colName = prop.getPropertyName();
+            } else {
+                // One untranslatable key keeps the whole ORDER BY local:
+                // pushing a prefix while dropping the operator would silently
+                // lose the remaining sort keys.
+                return "";
+            }
         }
         if (!first) {
             result += ", ";
@@ -111,10 +184,6 @@ std::string OrderByPushDownOptimizer::buildOrderByString(
         result += colName;
         result += isAscOrders[i] ? " ASC" : " DESC";
         first = false;
-    }
-    if (first) {
-        // No expressions could be pushed down
-        return "";
     }
     return result;
 }

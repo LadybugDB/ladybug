@@ -159,7 +159,14 @@ void Planner::appendRecursiveExtend(const std::shared_ptr<NodeExpression>& bound
     if (!recursiveInfo->relProjectionList.empty()) {
         auto pathRelPropertyScanPlan = LogicalPlan();
         auto relProperties = recursiveInfo->relProjectionList;
-        relProperties.push_back(recursiveInfo->rel->getInternalID());
+        // Foreign-backed rels expose only the foreign columns and carry no
+        // internal _ID property expression; look it up defensively so
+        // planning a variable-length pattern over attached tables does not
+        // throw (local execution still reports the unsupported scan later,
+        // and the push-down optimizer replaces the whole subtree anyway).
+        if (recursiveInfo->rel->hasPropertyExpression(InternalKeyword::ID)) {
+            relProperties.push_back(recursiveInfo->rel->getInternalID());
+        }
         bool extendFromSource = *boundNode == *rel->getSrcNode();
         createPathRelPropertyScanPlan(recursiveInfo->node, recursiveInfo->nodeCopy,
             recursiveInfo->rel, direction, extendFromSource, relProperties,
