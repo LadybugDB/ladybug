@@ -336,6 +336,22 @@ static std::optional<ForeignJoinPatternInfo> matchPattern(const LogicalOperator*
     return info;
 }
 
+static std::string stripIdentifierQuotes(const std::string& name) {
+    if (name.size() >= 2 && name.front() == '"' && name.back() == '"') {
+        return name.substr(1, name.size() - 2);
+    }
+    return name;
+}
+
+// Drop the catalog/schema qualifier: `catalog[.schema]."table"` -> `table`.
+// Note: dots inside a quoted identifier are not handled; such names simply
+// miss both lookups and surface as empty below.
+static std::string unqualifyTableName(const std::string& tableName) {
+    auto dotPos = tableName.rfind('.');
+    auto unqualified = dotPos == std::string::npos ? tableName : tableName.substr(dotPos + 1);
+    return stripIdentifierQuotes(unqualified);
+}
+
 // Helper to get column names from a foreign table. tableName may be a bare
 // table name or a qualified `catalog[.schema].table` reference; the attached
 // database scopes the lookup when qualification is present. Falls back to the
@@ -358,11 +374,23 @@ static std::vector<std::string> getForeignTableColumnNames(const std::string& db
     if (!columnNames.empty() || tableName.find('.') == std::string::npos) {
         return columnNames;
     }
-    auto unqualified = tableName.substr(tableName.rfind('.') + 1);
-    if (unqualified.size() >= 2 && unqualified.front() == '"' && unqualified.back() == '"') {
-        unqualified = unqualified.substr(1, unqualified.size() - 2);
-    }
-    return attachedDB->getTableColumnNames(unqualified);
+    // Last resort for older extension builds. Note getTableColumnNames()
+    // reports both "not found" and genuine errors as empty, so a qualified
+    // miss retries against the attached database's default scope and could
+    // bind a same-named table in a different schema. Accepted for backward
+    // compatibility; current extension builds scope the qualified lookup first.
+    return attachedDB->getTableColumnNames(unqualifyTableName(tableName));
+}
+
+// Endpoint-column convention shared with DuckDBCatalog::createForeignRelTable
+// (extension): relationship endpoint columns carry src/dst/dest prefixes
+// (e.g. src_id, dst, destination). Keep the two in sync. The prefixes are
+// disjoint, so a column matches at most one side.
+static bool isEndpointColumn(const std::string& lowerColumnName, bool wantSrc) {
+    const bool isSrc = lowerColumnName.rfind("src", 0) == 0;
+    const bool isDst =
+        lowerColumnName.rfind("dst", 0) == 0 || lowerColumnName.rfind("dest", 0) == 0;
+    return wantSrc ? isSrc : isDst;
 }
 
 struct JoinQueryInfo {
@@ -421,10 +449,7 @@ static JoinQueryInfo buildJoinQuery(const ForeignJoinPatternInfo& info,
         for (auto& column : tableColumnNames) {
             auto lowerCol = column;
             common::StringUtils::toLower(lowerCol);
-            const bool isSrc = lowerCol == "src_id" || lowerCol.rfind("src", 0) == 0;
-            const bool isDst = lowerCol == "dst_id" || lowerCol.rfind("dst", 0) == 0 ||
-                               lowerCol.rfind("dest", 0) == 0;
-            if ((wantSrc && isSrc && !isDst) || (!wantSrc && isDst && !isSrc)) {
+            if (isEndpointColumn(lowerCol, wantSrc)) {
                 return column;
             }
         }
@@ -432,6 +457,10 @@ static JoinQueryInfo buildJoinQuery(const ForeignJoinPatternInfo& info,
     };
     auto srcCol = findEndpointColumn(true /* wantSrc */);
     auto dstCol = findEndpointColumn(false /* wantSrc */);
+    // All-or-nothing: a lone prefix match without its counterpart is ambiguous
+    // (it may be a non-endpoint property that happens to share the prefix), so
+    // fall back to ordinal position for both columns to preserve the prior
+    // "first two columns" invariant.
     if (!srcCol.empty() && !dstCol.empty()) {
         firstCol = srcCol;
         secondCol = dstCol;
@@ -444,15 +473,40 @@ static JoinQueryInfo buildJoinQuery(const ForeignJoinPatternInfo& info,
         dstJoinCol = firstCol;
     }
 
-    auto getNodeIDColumn = [&](const std::string& tableName) {
+    // Resolve the node-table ID column without assuming column order. The
+    // bound catalog entry's primary key is the single source of truth (the
+    // extension registers foreign column names as property names, so it names
+    // the foreign column directly); only fall back to a foreign lookup when
+    // the entry carries no primary key (e.g. FOREIGN_TABLE_ENTRY).
+    auto getNodeIDColumn = [&](const NodeExpression* node, const std::string& tableName) {
+        if (node && node->getNumEntries() == 1) {
+            if (auto entry = node->getEntry(0);
+                entry && entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY) {
+                if (auto nodeEntry = entry->ptrCast<NodeTableCatalogEntry>(); nodeEntry) {
+                    auto pkName = nodeEntry->getPrimaryKeyName();
+                    if (!pkName.empty()) {
+                        return pkName;
+                    }
+                }
+            }
+        }
         auto columnNames = getForeignTableColumnNames(info.dbName, tableName, context);
         if (columnNames.empty()) {
             return std::string{InternalKeyword::ID};
         }
+        // SQL catalogs do not guarantee the PK column comes first; prefer a
+        // column literally named `id` over ordinal position.
+        for (auto& column : columnNames) {
+            auto lowerCol = column;
+            common::StringUtils::toLower(lowerCol);
+            if (lowerCol == "id") {
+                return column;
+            }
+        }
         return columnNames[0];
     };
-    auto srcIDCol = getNodeIDColumn(info.srcTable);
-    auto dstIDCol = getNodeIDColumn(info.dstTable);
+    auto srcIDCol = getNodeIDColumn(srcNode.get(), info.srcTable);
+    auto dstIDCol = getNodeIDColumn(dstNode.get(), info.dstTable);
 
     // Build SELECT items from output columns and collect column names
     std::vector<std::string> columnNames;
