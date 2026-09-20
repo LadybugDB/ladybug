@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <cstring>
+#include <vector>
 
 #include "binder/expression/aggregate_function_expression.h"
 #include "binder/expression/literal_expression.h"
@@ -91,29 +93,55 @@ static std::vector<AggregateFunction> getAggFunctions(const expression_vector& a
     return aggregateFunctions;
 }
 
+// Aggregate states are stored in packed factorized-table tuples without alignment padding,
+// so a state pointer derived from a tuple may be misaligned for AggregateState (which
+// requires 8-byte alignment because of its vptr). Virtual dispatch on such a pointer -- and
+// member access inside the callee -- is UB, reported by UBSan as "member access within
+// misaligned address". Copy the state bytes into an aligned thread-local buffer first
+// (memcpy has no alignment requirement) and dispatch on the aligned copy. The copy carries
+// the vptr bit pattern, so the dynamic type is preserved. Thread-local storage keeps the
+// buffer reusable across calls without data races between scan threads.
+static AggregateState* copyStateToAlignedBuffer(AggregateState* aggregateState,
+    uint32_t stateSize) {
+    thread_local std::vector<uint8_t> alignedBuffer;
+    if (alignedBuffer.size() < stateSize) {
+        alignedBuffer.resize(stateSize);
+    }
+    memcpy(alignedBuffer.data(), aggregateState, stateSize);
+    return reinterpret_cast<AggregateState*>(alignedBuffer.data());
+}
+
 static void writeAggResultWithNullToVector(ValueVector& vector, uint64_t pos,
-    AggregateState* aggregateState) {
-    auto isNull = aggregateState->constCast<AggregateStateWithNull>().isNull;
+    AggregateState* aggregateState, uint32_t stateSize) {
+    auto* alignedState = copyStateToAlignedBuffer(aggregateState, stateSize);
+    auto isNull = alignedState->constCast<AggregateStateWithNull>().isNull;
     vector.setNull(pos, isNull);
     if (!isNull) {
-        aggregateState->writeToVector(&vector, pos);
+        alignedState->writeToVector(&vector, pos);
     }
 }
 
 static void writeAggResultWithoutNullToVector(ValueVector& vector, uint64_t pos,
-    AggregateState* aggregateState) {
+    AggregateState* aggregateState, uint32_t stateSize) {
     vector.setNull(pos, false);
-    aggregateState->writeToVector(&vector, pos);
+    copyStateToAlignedBuffer(aggregateState, stateSize)->writeToVector(&vector, pos);
 }
 
 static std::vector<move_agg_result_to_vector_func> getMoveAggResultToVectorFuncs(
     std::vector<AggregateFunction>& aggregateFunctions) {
     std::vector<move_agg_result_to_vector_func> moveAggResultToVectorFuncs;
     for (auto& aggregateFunction : aggregateFunctions) {
+        auto stateSize = static_cast<uint32_t>(aggregateFunction.getAggregateStateSize());
         if (aggregateFunction.needToHandleNulls) {
-            moveAggResultToVectorFuncs.push_back(writeAggResultWithoutNullToVector);
+            moveAggResultToVectorFuncs.push_back(
+                [stateSize](ValueVector& vector, uint64_t pos, AggregateState* aggregateState) {
+                    writeAggResultWithoutNullToVector(vector, pos, aggregateState, stateSize);
+                });
         } else {
-            moveAggResultToVectorFuncs.push_back(writeAggResultWithNullToVector);
+            moveAggResultToVectorFuncs.push_back(
+                [stateSize](ValueVector& vector, uint64_t pos, AggregateState* aggregateState) {
+                    writeAggResultWithNullToVector(vector, pos, aggregateState, stateSize);
+                });
         }
     }
     return moveAggResultToVectorFuncs;

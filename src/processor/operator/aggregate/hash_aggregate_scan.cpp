@@ -24,14 +24,20 @@ bool HashAggregateScan::getNextTuplesInternal(ExecutionContext* /*context*/) {
     entries.resize(numRowsToScan);
     sharedState->scan(entries, groupByKeyVectors, startOffset, numRowsToScan,
         groupByKeyVectorsColIdxes);
+    // Aggregate states are packed without alignment padding, so `entry + offset` may be
+    // misaligned for AggregateState: never call virtuals (e.g. getStateSize()) on it here.
+    // State byte sizes come from the table schema instead (each state column was sized with
+    // AggregateFunction::getAggregateStateSize() at plan time); the move funcs copy each
+    // state to an aligned buffer before dispatching.
+    auto tableSchema = sharedState->getTableSchema();
     for (auto pos = 0u; pos < numRowsToScan; ++pos) {
         auto entry = entries[pos];
-        auto offset = sharedState->getTableSchema()->getColOffset(groupByKeyVectors.size());
+        auto offset = tableSchema->getColOffset(groupByKeyVectors.size());
         for (auto i = 0u; i < aggregateVectors.size(); i++) {
             auto vector = aggregateVectors[i];
             auto aggState = reinterpret_cast<AggregateState*>(entry + offset);
             scanInfo.moveAggResultToVectorFuncs[i](*vector, pos, aggState);
-            offset += aggState->getStateSize();
+            offset += tableSchema->getColumn(groupByKeyVectors.size() + i)->getNumBytes();
         }
     }
     metrics->numOutputTuple.increase(numRowsToScan);
