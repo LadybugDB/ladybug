@@ -1,5 +1,7 @@
 # Please keep this list sorted. All headers should be relative to the root of the repository
 src/include/binder/expression/expression.h
+src/include/binder/expression/expression_util.h
+src/include/binder/expression/variable_expression.h
 src/include/common/api.h
 src/include/common/array_utils.h
 src/include/common/arrow/arrow.h
@@ -16,7 +18,9 @@ src/include/common/data_chunk/data_chunk.h
 src/include/common/data_chunk/data_chunk_state.h
 src/include/common/data_chunk/sel_vector.h
 src/include/common/enums/expression_type.h
+src/include/common/enums/extend_direction.h
 src/include/common/enums/path_semantic.h
+src/include/common/enums/zone_map_check_result.h
 src/include/common/exception/binder.h
 src/include/common/exception/catalog.h
 src/include/common/exception/exception.h
@@ -25,6 +29,7 @@ src/include/common/exception/overflow.h
 src/include/common/in_mem_overflow_buffer.h
 src/include/common/mask.h
 src/include/common/null_mask.h
+src/include/common/partition_routing_hook.h
 src/include/common/timer.h
 src/include/common/type_utils.h
 src/include/common/types/blob.h
@@ -53,8 +58,12 @@ src/include/function/const_function_executor.h
 src/include/function/function.h
 src/include/function/pointer_function_executor.h
 src/include/function/scalar_function.h
+src/include/function/table/bind_data.h
 src/include/function/table/bind_input.h
+src/include/function/table/optional_params.h
 src/include/function/table/scan_replacement.h
+src/include/function/table/simple_table_function.h
+${BUILD_DIR}/src/include/common/system_config.h
 src/include/function/ternary_function_executor.h
 src/include/function/udf_function.h
 src/include/function/unary_function_executor.h
@@ -64,6 +73,7 @@ src/include/main/client_context.h
 src/include/main/connection.h
 src/include/main/database.h
 src/include/main/lbug.h
+src/include/main/lbug_distributed.h
 src/include/main/lbug_fwd.h
 src/include/main/prepared_statement.h
 src/include/main/prepared_statement_manager.h
@@ -78,4 +88,5 @@ src/include/processor/operator/physical_operator.h
 src/include/processor/result/result_set.h
 src/include/processor/result/result_set_descriptor.h
 src/include/processor/result/flat_tuple.h
+src/include/storage/predicate/column_predicate.h
 src/include/storage/storage_version_info.h

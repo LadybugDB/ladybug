@@ -4,10 +4,19 @@
 
 #include "common/api.h"
 #include "common/types/types.h"
-#include "common/vector/value_vector.h"
 #include <span>
 
+// Public ABI notes. This header is deliberately light: it ships in the amalgamated
+// lbug.hpp (distributed API section), so wrappers include nothing else to implement these
+// hooks. `table_id_t` / `nodeID_t` come from common/types/types.h; aliases cannot be
+// forward-declared, and redefining them here would clash inside the amalgamation.
+// `ValueVector` needs only a forward declaration below: hooks take pointers, while the
+// full definition (for reading/writing row cells) is likewise amalgamated.
+
 namespace lbug {
+namespace common {
+class ValueVector;
+} // namespace common
 namespace function {
 struct TableFunction;
 struct TableFuncBindData;

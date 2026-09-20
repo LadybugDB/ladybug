@@ -301,9 +301,8 @@ void StorageManager::createTable(TableCatalogEntry* entry, main::ClientContext* 
         if (nodeEntry->isPartitioned()) {
             // A partitioned parent is a logical table: it has no physical storage of its own.
             // Each partition gets its own StorageManager and data file
-            // (<base>.<childName>.db); see docs/partitioning.md 6b. When partition-routing
-            // hooks land (PR 829), consult locate() here and skip local storage for claimed
-            // partitions.
+            // (<base>.<childName>.db); see docs/partitioning.md 6b. Partitions claimed by a
+            // partition-routing wrapper own no local storage (see below).
             auto* catalog = Catalog::Get(*context);
             auto* registry = PartitionStorageRegistry::Get(context);
             for (auto childTableID : nodeEntry->getChildTableIDs()) {
