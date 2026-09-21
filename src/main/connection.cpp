@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "common/random_engine.h"
+#include "main/schema_graph.h"
 #include "transaction/transaction.h"
 #include "transaction/transaction_manager.h"
 
@@ -47,17 +48,26 @@ uint64_t Connection::getMaxNumThreadForExec() {
 
 std::unique_ptr<PreparedStatement> Connection::prepare(std::string_view query) {
     dbLifeCycleManager->checkDatabaseClosedOrThrow();
+    if (QueryReferencesSchemaGraph(query)) {
+        EnsureSchemaGraphFresh(clientContext.get());
+    }
     return clientContext->prepareWithParams(query);
 }
 
 std::unique_ptr<PreparedStatement> Connection::prepareWithParams(std::string_view query,
     std::unordered_map<std::string, std::unique_ptr<common::Value>> inputParams) {
     dbLifeCycleManager->checkDatabaseClosedOrThrow();
+    if (QueryReferencesSchemaGraph(query)) {
+        EnsureSchemaGraphFresh(clientContext.get());
+    }
     return clientContext->prepareWithParams(query, std::move(inputParams));
 }
 
 std::unique_ptr<QueryResult> Connection::query(std::string_view queryStatement) {
     dbLifeCycleManager->checkDatabaseClosedOrThrow();
+    if (QueryReferencesSchemaGraph(queryStatement)) {
+        EnsureSchemaGraphFresh(clientContext.get());
+    }
     auto queryResult = clientContext->query(queryStatement);
     queryResult->setDBLifeCycleManager(dbLifeCycleManager);
     return queryResult;
@@ -65,6 +75,9 @@ std::unique_ptr<QueryResult> Connection::query(std::string_view queryStatement) 
 
 std::unique_ptr<QueryResult> Connection::queryAsArrow(std::string_view query, int64_t chunkSize) {
     dbLifeCycleManager->checkDatabaseClosedOrThrow();
+    if (QueryReferencesSchemaGraph(query)) {
+        EnsureSchemaGraphFresh(clientContext.get());
+    }
     auto queryResult = clientContext->query(query, std::nullopt,
         {QueryResultType::ARROW, ArrowResultConfig{chunkSize}});
     queryResult->setDBLifeCycleManager(dbLifeCycleManager);
@@ -74,6 +87,9 @@ std::unique_ptr<QueryResult> Connection::queryAsArrow(std::string_view query, in
 std::unique_ptr<QueryResult> Connection::queryWithID(std::string_view queryStatement,
     uint64_t queryID) {
     dbLifeCycleManager->checkDatabaseClosedOrThrow();
+    if (QueryReferencesSchemaGraph(queryStatement)) {
+        EnsureSchemaGraphFresh(clientContext.get());
+    }
     auto queryResult = clientContext->query(queryStatement, queryID);
     queryResult->setDBLifeCycleManager(dbLifeCycleManager);
     return queryResult;

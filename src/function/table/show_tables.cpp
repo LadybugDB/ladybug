@@ -3,6 +3,7 @@
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
+#include "catalog/schema_graph.h"
 #include "function/table/bind_data.h"
 #include "function/table/simple_table_function.h"
 #include "main/client_context.h"
@@ -79,6 +80,12 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
         auto catalog = context->getDatabase()->getCatalog();
         for (auto& entry :
             catalog->getTableEntries(transaction, context->useInternalCatalogEntry())) {
+            // Hide the schema-graph system tables from normal listings, but show
+            // them when the internal catalog is enabled so tooling (e.g. the
+            // test leak checker, which drops every listed table) can clean up.
+            if (!context->useInternalCatalogEntry() && isSchemaGraphTableName(entry->getName())) {
+                continue;
+            }
             std::string dbName = LOCAL_DB_NAME;
             // For foreign-backed rel tables, use the foreign database name
             if (entry->getType() == CatalogEntryType::REL_GROUP_ENTRY) {
@@ -104,6 +111,9 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
         auto graphName = graph->getCatalogName();
         for (auto& entry :
             graph->getTableEntries(transaction, context->useInternalCatalogEntry())) {
+            if (!context->useInternalCatalogEntry() && isSchemaGraphTableName(entry->getName())) {
+                continue;
+            }
             tableInfos.emplace_back(entry->getName(), entry->getTableID(),
                 TableTypeUtils::toString(entry->getTableType()),
                 std::format("{}(graph)", graphName), entry->getComment());
@@ -116,6 +126,9 @@ static std::unique_ptr<TableFuncBindData> bindFunc(const main::ClientContext* co
         auto databaseType = attachedDatabase->getDBType();
         for (auto& entry : attachedDatabase->getCatalog()->getTableEntries(transaction,
                  context->useInternalCatalogEntry())) {
+            if (!context->useInternalCatalogEntry() && isSchemaGraphTableName(entry->getName())) {
+                continue;
+            }
             auto tableInfo = TableInfo{entry->getName(), entry->getTableID(),
                 TableTypeUtils::toString(entry->getTableType()),
                 std::format("{}({})", databaseName, databaseType), entry->getComment()};

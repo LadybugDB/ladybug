@@ -15,7 +15,8 @@ add_library(lbug_main
         storage_driver.cpp
         version.cpp
         db_config.cpp
-        settings.cpp)
+        settings.cpp
+        schema_graph.cpp)
 
 set(ALL_OBJECT_FILES
         ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:lbug_main>
