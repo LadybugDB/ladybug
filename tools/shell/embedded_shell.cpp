@@ -24,6 +24,7 @@
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/scalar_macro_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
+#include "catalog/schema_graph.h"
 #include "common/exception/parser.h"
 #include "common/types/value/nested.h"
 #include "common/types/value/value.h"
@@ -1711,10 +1712,16 @@ void EmbeddedShell::printSchema() {
     catalog::ToCypherInfo toCypherInfo;
     for (const auto& nodeTableEntry :
         catalog->getNodeTableEntries(transaction, false /* useInternal */)) {
+        if (catalog::isSchemaGraphTableName(nodeTableEntry->getName())) {
+            continue;
+        }
         ss << nodeTableEntry->toCypher(toCypherInfo) << std::endl;
     }
     catalog::RelGroupToCypherInfo relTableToCypherInfo(clientContext);
     for (const auto& entry : catalog->getRelGroupEntries(transaction, false /* useInternal */)) {
+        if (catalog::isSchemaGraphTableName(entry->getName())) {
+            continue;
+        }
         ss << entry->toCypher(relTableToCypherInfo) << std::endl;
     }
     catalog::RelGroupToCypherInfo relGroupToCypherInfo(clientContext);

@@ -1,0 +1,48 @@
+-DATASET CSV empty
+--
+
+-CASE SchemaGraphNodes
+-STATEMENT CREATE NODE TABLE User(name STRING, age INT64, PRIMARY KEY(name));
+---- ok
+-STATEMENT CREATE NODE TABLE City(name STRING, population INT64, PRIMARY KEY(name));
+---- ok
+-STATEMENT CREATE REL TABLE Follows(FROM User TO User, since INT64, MANY_MANY);
+---- ok
+-STATEMENT CREATE REL TABLE LivesIn(FROM User TO City, MANY_MANY);
+---- ok
+-STATEMENT MATCH (t:schema_table) RETURN t.name, t.type ORDER BY t.name;
+---- 4
+City|NODE
+Follows|REL
+LivesIn|REL
+User|NODE
+-STATEMENT MATCH (s:schema_table)-[r:schema_rel]->(d:schema_table) RETURN s.name, r.name, d.name ORDER BY s.name, r.name, d.name;
+---- 2
+User|Follows|User
+User|LivesIn|City
+-STATEMENT CALL show_tables() RETURN name ORDER BY name;
+---- 4
+City
+Follows
+LivesIn
+User
+
+-CASE SchemaGraphRefresh
+-STATEMENT CREATE NODE TABLE User(name STRING, PRIMARY KEY(name));
+---- ok
+-STATEMENT CREATE NODE TABLE City(name STRING, PRIMARY KEY(name));
+---- ok
+-STATEMENT CREATE REL TABLE Follows(FROM User TO User, MANY_MANY);
+---- ok
+-STATEMENT CREATE REL TABLE LivesIn(FROM User TO City, MANY_MANY);
+---- ok
+-STATEMENT DROP TABLE LivesIn;
+---- ok
+-STATEMENT MATCH (s:schema_table)-[r:schema_rel]->(d:schema_table) RETURN s.name, r.name, d.name ORDER BY s.name, r.name, d.name;
+---- 1
+User|Follows|User
+-STATEMENT MATCH (t:schema_table) RETURN t.name ORDER BY t.name;
+---- 3
+City
+Follows
+User

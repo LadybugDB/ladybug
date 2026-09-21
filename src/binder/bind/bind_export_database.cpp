@@ -4,6 +4,7 @@
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "catalog/schema_graph.h"
 #include "common/exception/binder.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/string_utils.h"
@@ -127,6 +128,9 @@ static std::vector<ExportedTableData> getExportInfo(const Catalog& catalog,
     auto transaction = Transaction::Get(*context);
     std::vector<ExportedTableData> exportData;
     for (auto entry : catalog.getNodeTableEntries(transaction, false /*useInternal*/)) {
+        if (isSchemaGraphTableName(entry->getName())) {
+            continue;
+        }
         ExportedTableData tableData;
         tableData.tableName = entry->getName();
         tableData.fileName = std::format("nodes_{}.parquet", entry->getName());
@@ -135,6 +139,9 @@ static std::vector<ExportedTableData> getExportInfo(const Catalog& catalog,
         exportData.push_back(std::move(tableData));
     }
     for (auto entry : catalog.getRelGroupEntries(transaction, false /* useInternal */)) {
+        if (isSchemaGraphTableName(entry->getName())) {
+            continue;
+        }
         auto& relGroupEntry = entry->constCast<RelGroupCatalogEntry>();
         if (relGroupEntry.getRelEntryInfos().size() != 1) {
             throw BinderException(std::format(

@@ -9,6 +9,7 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "catalog/schema_graph.h"
 #include "common/constants.h"
 #include "common/enums/rel_direction.h"
 #include "common/exception/binder.h"
@@ -933,6 +934,9 @@ Binder::bindNodeTableEntries(const std::vector<std::string>& tableNames) const {
     std::unordered_map<TableCatalogEntry*, std::string> dbNames;
     if (tableNames.empty()) { // Rewrite as all node tables in the active catalog.
         for (auto entry : catalog->getNodeTableEntries(transaction, useInternal)) {
+            if (!useInternal && isSchemaGraphTableName(entry->getName())) {
+                continue;
+            }
             entrySet.insert(entry);
             if (!activeDbName.empty()) {
                 dbNames[entry] = activeDbName;
@@ -1054,6 +1058,9 @@ Binder::bindRelGroupEntries(const std::vector<std::string>& tableNames,
     std::unordered_map<TableCatalogEntry*, std::string> dbNames;
     if (tableNames.empty()) { // Rewrite as all rel groups in the active catalog.
         for (auto entry : catalog->getRelGroupEntries(transaction, useInternal)) {
+            if (!useInternal && isSchemaGraphTableName(entry->getName())) {
+                continue;
+            }
             entrySet.insert(entry);
             if (!activeDbName.empty()) {
                 dbNames[entry] = activeDbName;
