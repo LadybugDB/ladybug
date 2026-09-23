@@ -1,11 +1,19 @@
 #include "main/schema_graph.h"
 
+#include <map>
+#include <tuple>
+
+#include "catalog/catalog.h"
+#include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/schema_graph.h"
 #include "common/constants.h"
+#include "common/enums/rel_multiplicity.h"
 #include "common/string_utils.h"
 #include "main/client_context.h"
 #include "main/query_result.h"
 #include "processor/result/flat_tuple.h"
+#include "transaction/transaction.h"
+#include "transaction/transaction_context.h"
 
 namespace lbug {
 namespace main {
@@ -61,9 +69,52 @@ void EnsureSchemaGraphFresh(ClientContext* context) {
         }
         if (!execIgnoreErrors(context,
                 "CREATE REL TABLE IF NOT EXISTS schema_rel(FROM schema_table TO schema_table, "
-                "name STRING, id UINT64, MANY_MANY)")) {
+                "name STRING, id UINT64, multiplicity STRING, MANY_MANY)")) {
             return;
         }
+        // Migrate databases created before the multiplicity column existed.
+        // Fails silently when the column is already present.
+        execIgnoreErrors(context,
+            "ALTER TABLE schema_rel ADD multiplicity STRING DEFAULT 'MANY_MANY'");
+        // Snapshot per-connection multiplicities from the catalog before doing
+        // any writes (each context->query below runs in its own transaction).
+        // Keyed by (rel name, src name, dst name); combined SRC_DST convention
+        // matches DDL syntax, e.g. MANY_ONE.
+        std::map<std::tuple<std::string, std::string, std::string>, std::string> multMap;
+        try {
+            auto* txnCtx = transaction::TransactionContext::Get(*context);
+            bool startedTxn = false;
+            if (transaction::Transaction::Get(*context) == nullptr) {
+                txnCtx->beginReadTransaction();
+                startedTxn = true;
+            }
+            try {
+                auto* txn = transaction::Transaction::Get(*context);
+                auto* catalog = catalog::Catalog::Get(*context);
+                for (auto* relEntry : catalog->getRelGroupEntries(txn, false)) {
+                    if (catalog::isSchemaGraphTableName(relEntry->getName())) {
+                        continue;
+                    }
+                    for (auto& info : relEntry->getRelEntryInfos()) {
+                        auto* srcEntry =
+                            catalog->getTableCatalogEntry(txn, info.nodePair.srcTableID);
+                        auto* dstEntry =
+                            catalog->getTableCatalogEntry(txn, info.nodePair.dstTableID);
+                        if (srcEntry == nullptr || dstEntry == nullptr) {
+                            continue;
+                        }
+                        multMap[{relEntry->getName(), srcEntry->getName(), dstEntry->getName()}] =
+                            common::RelMultiplicityUtils::toString(info.srcMultiplicity) + "_" +
+                            common::RelMultiplicityUtils::toString(info.dstMultiplicity);
+                    }
+                }
+            } catch (...) {}
+            if (startedTxn) {
+                try {
+                    txnCtx->commit();
+                } catch (...) {}
+            }
+        } catch (...) {}
         // 2. Snapshot user tables in the main database. SHOW_TABLES also lists
         // graphs / attached databases; restrict to the main database so table
         // names stay unique (schema_table has PRIMARY KEY(name)).
@@ -125,11 +176,13 @@ void EnsureSchemaGraphFresh(ClientContext* context) {
                 auto row = connResult->getNext();
                 auto srcName = row->getValue(0)->toString();
                 auto dstName = row->getValue(1)->toString();
+                auto multIt = multMap.find({t.name, srcName, dstName});
+                auto multiplicity = multIt == multMap.end() ? "MANY_MANY" : multIt->second;
                 auto q = "MATCH (s:schema_table), (d:schema_table) WHERE s.name = '" +
                          escapeCypherStringLiteral(srcName) + "' AND d.name = '" +
                          escapeCypherStringLiteral(dstName) + "' CREATE (s)-[:schema_rel {name: '" +
                          escapeCypherStringLiteral(t.name) + "', id: " + std::to_string(t.id) +
-                         "}]->(d)";
+                         ", multiplicity: '" + multiplicity + "'}]->(d)";
                 execIgnoreErrors(context, q);
             }
         }

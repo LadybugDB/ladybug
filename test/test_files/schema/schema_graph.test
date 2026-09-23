@@ -46,3 +46,20 @@ User|Follows|User
 City
 Follows
 User
+
+-CASE SchemaGraphMultiplicity
+-STATEMENT CREATE NODE TABLE User(name STRING, PRIMARY KEY(name));
+---- ok
+-STATEMENT CREATE NODE TABLE City(name STRING, PRIMARY KEY(name));
+---- ok
+-STATEMENT CREATE REL TABLE Follows(FROM User TO User, MANY_MANY);
+---- ok
+-STATEMENT CREATE REL TABLE LivesIn(FROM User TO City, MANY_ONE);
+---- ok
+-STATEMENT CREATE REL TABLE CapitalOf(FROM City TO City, ONE_ONE);
+---- ok
+-STATEMENT MATCH (s:schema_table)-[r:schema_rel]->(d:schema_table) RETURN s.name, r.name, r.multiplicity, d.name ORDER BY s.name, r.name;
+---- 3
+City|CapitalOf|ONE_ONE|City
+User|Follows|MANY_MANY|User
+User|LivesIn|MANY_ONE|City
