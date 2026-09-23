@@ -35,6 +35,9 @@ jobs:
 
       - name: Build (RelWithDebInfo, ASan+UBSan)
         run: BM_MALLOC=1 ASAN=1 UBSAN=1 make relwithdebinfo NUM_THREADS=$(nproc)
+        env:
+          CFLAGS: -fno-sanitize=alignment
+          CXXFLAGS: -fno-sanitize=alignment
 
       - name: Install uv
         run: pip3 install uv
