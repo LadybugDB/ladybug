@@ -303,8 +303,10 @@ void TransactionManager::tryCheckpoint(main::ClientContext& clientContext) {
 void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     QueryProgressScope progress{clientContext, 0.01};
     // We only need to wait for active write transactions to leave the system before
-    // checkpointing. Read transactions can continue safely because they use MVCC snapshot
-    // isolation and shadow pages are applied with per-page locking.
+    // checkpointing. Read transactions can continue because they use MVCC snapshot isolation.
+    // Column chunk metadata of in-place checkpointed data is published before the shadow pages
+    // are applied, so column reads resolve such in-flight pages through the shadow file (see
+    // ColumnReadWriter::readFromPage); applying shadow pages uses per-page locking.
     UniqLock writeGate;
     try {
         writeGate = stopNewWriteTransactionsAndWaitUntilAllWriteTransactionsLeave();

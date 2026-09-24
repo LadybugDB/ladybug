@@ -12,14 +12,16 @@ namespace storage {
 ShadowPageAndFrame ShadowUtils::createShadowVersionIfNecessaryAndPinPage(page_idx_t originalPage,
     bool skipReadingOriginalPage, FileHandle& fileHandle, ShadowFile& shadowFile) {
     DASSERT(!fileHandle.isInMemoryMode());
-    const auto hasShadowPage = shadowFile.hasShadowPage(fileHandle.getFileIndex(), originalPage);
-    auto shadowPage = shadowFile.getOrCreateShadowPage(fileHandle.getFileIndex(), originalPage);
+    const auto fileIdx = fileHandle.getFileIndex();
+    page_idx_t shadowPage = INVALID_PAGE_IDX;
     uint8_t* shadowFrame = nullptr;
     try {
-        if (hasShadowPage) {
+        if (shadowFile.hasShadowPage(fileIdx, originalPage)) {
+            shadowPage = shadowFile.getShadowPage(fileIdx, originalPage);
             shadowFrame =
                 shadowFile.getShadowingFH().pinPage(shadowPage, PageReadPolicy::READ_PAGE);
         } else {
+            shadowPage = shadowFile.createShadowPage(fileIdx, originalPage);
             shadowFrame =
                 shadowFile.getShadowingFH().pinPage(shadowPage, PageReadPolicy::DONT_READ_PAGE);
             if (!skipReadingOriginalPage) {
@@ -27,6 +29,11 @@ ShadowPageAndFrame ShadowUtils::createShadowVersionIfNecessaryAndPinPage(page_id
                     memcpy(shadowFrame, frame, LBUG_PAGE_SIZE);
                 });
             }
+            // Publish the shadow page only once it holds the original contents, since read
+            // transactions may read shadow pages concurrently (see
+            // ShadowFile::readShadowVersionIfExists). The page stays locked until it is unpinned,
+            // so concurrent optimistic readers wait for the caller's update to finish.
+            shadowFile.publishShadowPage(fileIdx, originalPage, shadowPage);
         }
         // The shadow page existing already does not mean that it's already dirty
         // It may have been flushed to disk to free memory and then read again

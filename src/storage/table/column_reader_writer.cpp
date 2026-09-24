@@ -8,6 +8,7 @@
 #include "common/vector/value_vector.h"
 #include "storage/compression/float_compression.h"
 #include "storage/file_handle.h"
+#include "storage/shadow_file.h"
 #include "storage/shadow_utils.h"
 #include "storage/storage_utils.h"
 #include "storage/table/column_chunk_data.h"
@@ -461,6 +462,12 @@ void ColumnReadWriter::readFromPage(page_idx_t pageIdx,
     // decompression only requires metadata
     if (pageIdx == INVALID_PAGE_IDX) {
         return readFunc(nullptr);
+    }
+    // A checkpoint in progress may already have published metadata which refers to in-place
+    // updates that so far only exist in shadow pages.
+    if (shadowFile &&
+        shadowFile->readShadowVersionIfExists(dataFH->getFileIndex(), pageIdx, readFunc)) {
+        return;
     }
     dataFH->optimisticReadPage(pageIdx, readFunc);
 }
