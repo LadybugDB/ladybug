@@ -55,16 +55,23 @@ public:
             // Tuples are packed without alignment padding; use memcpy for the hash load.
             common::hash_t hash;
             memcpy(&hash, tuple + hashOffset, sizeof(common::hash_t));
-            auto& partition =
-                globalPartitions[(hash >> shiftForPartitioning) % globalPartitions.size()];
+            // shiftForPartitioning is 64 when there is a single partition
+            // (64 - bit_width(0)); shifting a 64-bit value by 64 is UB, and the
+            // partition index is trivially 0 in that case.
+            const auto partitionIdx = shiftForPartitioning >= 64 ?
+                                          0 :
+                                          (hash >> shiftForPartitioning) % globalPartitions.size();
+            auto& partition = globalPartitions[partitionIdx];
             partition.queue->appendTuple(std::span(tuple, numBytesPerTuple));
         }
     }
 
     void appendDistinctTuple(size_t distinctFuncIndex, std::span<uint8_t> tuple,
         common::hash_t hash) override {
-        auto& partition =
-            globalPartitions[(hash >> shiftForPartitioning) % globalPartitions.size()];
+        const auto partitionIdx = shiftForPartitioning >= 64 ?
+                                      0 :
+                                      (hash >> shiftForPartitioning) % globalPartitions.size();
+        auto& partition = globalPartitions[partitionIdx];
         partition.distinctTableQueues[distinctFuncIndex]->appendTuple(tuple);
     }
 

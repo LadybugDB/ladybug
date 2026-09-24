@@ -339,7 +339,12 @@ if(${ENABLE_UBSAN})
     if(MSVC)
         message(FATAL_ERROR "Undefined behavior sanitizer is not supported on MSVC")
     else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined -fno-omit-frame-pointer")
+        # Alignment checks are disabled: factorized-table tuples and overflow buffers pack
+        # data without padding, so misaligned accesses are pervasive by design and are
+        # handled via memcpy where it matters. Append -fno-sanitize=alignment after
+        # -fsanitize=undefined so it takes effect regardless of CFLAGS/CXXFLAGS ordering.
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined -fno-sanitize=alignment -fno-omit-frame-pointer")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=undefined -fno-sanitize=alignment -fno-omit-frame-pointer")
     endif()
 endif()
 
