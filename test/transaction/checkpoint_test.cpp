@@ -2,14 +2,20 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <mutex>
 #include <thread>
+#include <unordered_set>
 
 #include "api_test/private_api_test.h"
+#include "catalog/catalog.h"
+#include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "storage/checkpointer.h"
 #include "storage/storage_manager.h"
+#include "storage/table/node_table.h"
+#include "storage/table/string_chunk_data.h"
 #include "storage/wal/wal.h"
 #include "test_env.h"
 #include "transaction/transaction_manager.h"
@@ -307,6 +313,122 @@ TEST_F(FlakyCheckpointerTest, ShadowFileDatabaseIDMismatchCorruptedDB) {
     // The shadow file replay should now fail
     EXPECT_THROW(createDBAndConn(), InternalException);
 }
+
+// A checkpoint publishes the new chunk metadata of a node group during its storage phase, but
+// in-place updates to existing pages are only written to the shadow file until the shadow pages
+// are applied at the end of the checkpoint. Read-only transactions are not blocked by a
+// checkpoint, so a scan that starts in between must not observe the new metadata together with
+// the old page contents (e.g. appended string dictionary offsets that are not on disk yet).
+class CheckpointerWithReadBeforeApplyingShadowPages final : public Checkpointer {
+public:
+    CheckpointerWithReadBeforeApplyingShadowPages(main::ClientContext& clientContext,
+        std::function<void()> readFunc)
+        : Checkpointer(clientContext), readFunc(std::move(readFunc)) {}
+
+    void logCheckpointAndApplyShadowPages(bool walRotated) override {
+        readFunc();
+        Checkpointer::logCheckpointAndApplyShadowPages(walRotated);
+    }
+
+private:
+    std::function<void()> readFunc;
+};
+
+#ifndef __SINGLE_THREADED__
+TEST_F(FlakyCheckpointerTest, ReadBeforeShadowPagesAreAppliedSeesCommittedStrings) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL force_checkpoint_on_close=false;");
+    conn->query("CALL auto_checkpoint=false;");
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    // Strings longer than the inline limit, few enough that the appended values below fit in
+    // the pages already allocated to the dictionary, so the checkpoint updates them in place.
+    auto getName = [](uint64_t i) { return std::format("persistent string value {:04}", i); };
+    auto insertRows = [&](uint64_t start, uint64_t end) {
+        for (auto i = start; i < end; i++) {
+            auto res =
+                conn->query(std::format("CREATE (:test {{id: {}, name: '{}'}});", i, getName(i)));
+            ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        }
+    };
+    constexpr uint64_t numInitialRows = 20;
+    constexpr uint64_t numRows = 25;
+    insertRows(0, numInitialRows);
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    insertRows(numInitialRows, numRows);
+
+    // Pages of the persistent `name` column chunk (dictionary offsets, string data and indices).
+    // An in-place checkpoint of the column updates these pages through the shadow file, while an
+    // out-of-place checkpoint writes new pages and leaves these untouched.
+    auto context = getClientContext(*conn);
+    auto storageManager = StorageManager::Get(*context);
+    const auto tableEntry = catalog::Catalog::Get(*context)->getTableCatalogEntry(
+        &DUMMY_CHECKPOINT_TRANSACTION, "test");
+    auto& nodeTable = storageManager->getTable(tableEntry->getTableID())->cast<NodeTable>();
+    const auto* persistentGroup = nodeTable.getNodeGroup(0)->getChunkedNodeGroup(0);
+    ASSERT_EQ(persistentGroup->getResidencyState(), ResidencyState::ON_DISK);
+    std::unordered_set<page_idx_t> namePages;
+    for (const auto* segment :
+        persistentGroup->getColumnChunk(tableEntry->getColumnID("name")).getSegments()) {
+        const auto& stringChunk = segment->cast<StringChunkData>();
+        for (const auto* chunk :
+            std::initializer_list<const ColumnChunkData*>{stringChunk.getIndexColumnChunk(),
+                stringChunk.getDictionaryChunk().getOffsetChunk(),
+                stringChunk.getDictionaryChunk().getStringDataChunk()}) {
+            const auto& metadata = chunk->getMetadata();
+            for (auto i = 0u; i < metadata.getNumPages(); i++) {
+                namePages.insert(metadata.getStartPageIdx() + i);
+            }
+        }
+    }
+    ASSERT_FALSE(namePages.empty());
+
+    bool readRan = false;
+    uint64_t numShadowedNamePages = 0;
+    std::string readError;
+    std::vector<std::string> readNames;
+    auto readFunc = [&]() {
+        // Make sure the `name` column was checkpointed in place, i.e. its updated pages are still
+        // pending in the shadow file; otherwise the read below would not read shadow pages.
+        auto& shadowFile = storageManager->getShadowFile();
+        for (const auto pageIdx : namePages) {
+            if (shadowFile.hasShadowPage(storageManager->getDataFH()->getFileIndex(), pageIdx)) {
+                numShadowedNamePages++;
+            }
+        }
+        // Run on a separate thread with its own connection, like a concurrent reader would.
+        std::thread reader([&]() {
+            auto readConn = std::make_unique<main::Connection>(database.get());
+            auto res = readConn->query("MATCH (t:test) RETURN t.name ORDER BY t.id;");
+            readRan = true;
+            if (!res->isSuccess()) {
+                readError = res->getErrorMessage();
+                return;
+            }
+            while (res->hasNext()) {
+                readNames.push_back(res->getNext()->getValue(0)->getValue<std::string>());
+            }
+        });
+        reader.join();
+    };
+    FlakyCheckpointer checkpointer([&](main::ClientContext& clientContext) {
+        return std::make_unique<CheckpointerWithReadBeforeApplyingShadowPages>(clientContext,
+            readFunc);
+    });
+    checkpointer.setCheckpointer(*context);
+    auto res = conn->query("CHECKPOINT;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_TRUE(readRan);
+    ASSERT_GT(numShadowedNamePages, 0u);
+    ASSERT_TRUE(readError.empty()) << readError;
+    ASSERT_EQ(readNames.size(), numRows);
+    for (auto i = 0u; i < numRows; i++) {
+        EXPECT_EQ(readNames[i], getName(i));
+    }
+}
+#endif // __SINGLE_THREADED__
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ReviewFixesTest
