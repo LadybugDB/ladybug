@@ -96,18 +96,16 @@ std::string Int128_t::toString(int128_t input) {
 bool Int128_t::addInPlace(int128_t& lhs, int128_t rhs) {
     bool lhsPositive = lhs.high >= 0;
     bool rhsPositive = rhs.high >= 0;
-    int overflow = lhs.low + rhs.low < lhs.low;
-    if (rhs.high >= 0) {
-        if (lhs.high > INT64_MAX - rhs.high - overflow) {
-            return false;
-        }
-        lhs.high = lhs.high + rhs.high + overflow;
-    } else {
-        if (lhs.high < INT64_MIN - rhs.high - overflow) {
-            return false;
-        }
-        lhs.high = lhs.high + rhs.high + overflow;
+    // low is unsigned, so wrapping addition and the carry check are well-defined.
+    int carry = (lhs.low + rhs.low < lhs.low) ? 1 : 0;
+    // Compute the high part in __int128 so the intermediate sum cannot overflow
+    // int64 (e.g. INT64_MIN + -1 + 1, where the final result fits but
+    // (lhs.high + rhs.high) alone overflows and trips UBSan).
+    __int128 highSum = (__int128)lhs.high + (__int128)rhs.high + carry;
+    if (highSum > INT64_MAX || highSum < INT64_MIN) {
+        return false;
     }
+    lhs.high = (int64_t)highSum;
     lhs.low += rhs.low;
     if (lhsPositive && rhsPositive && lhs.high == INT64_MIN && lhs.low == 0) {
         return false;
@@ -116,18 +114,15 @@ bool Int128_t::addInPlace(int128_t& lhs, int128_t rhs) {
 }
 
 bool Int128_t::subInPlace(int128_t& lhs, int128_t rhs) {
-    int underflow = lhs.low - rhs.low > lhs.low;
-    if (rhs.high >= 0) {
-        if (lhs.high < INT64_MIN + rhs.high + underflow) {
-            return false;
-        }
-        lhs.high = lhs.high - rhs.high - underflow;
-    } else {
-        if (lhs.high > INT64_MIN && lhs.high - 1 >= INT64_MAX + rhs.high + underflow) {
-            return false;
-        }
-        lhs.high = lhs.high - rhs.high - underflow;
+    // low is unsigned, so wrapping subtraction and the borrow check are well-defined.
+    int borrow = (lhs.low - rhs.low > lhs.low) ? 1 : 0;
+    // Compute the high part in __int128 so intermediate values like
+    // INT64_MAX - (-1) cannot overflow int64 even when the final result fits.
+    __int128 highDiff = (__int128)lhs.high - (__int128)rhs.high - borrow;
+    if (highDiff > INT64_MAX || highDiff < INT64_MIN) {
+        return false;
     }
+    lhs.high = (int64_t)highDiff;
     lhs.low -= rhs.low;
     if (lhs.high == INT64_MIN && lhs.low == 0) {
         return false;

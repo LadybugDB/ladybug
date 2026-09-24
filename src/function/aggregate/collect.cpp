@@ -1,3 +1,5 @@
+#include <cstring>
+
 #include "function/aggregate_function.h"
 #include "storage/storage_utils.h"
 
@@ -21,13 +23,21 @@ struct CollectListElement {
     CollectListElement() : elementPtr(nullptr) {}
     explicit CollectListElement(uint8_t* elementPtr) : elementPtr(elementPtr) {}
 
-    CollectListElement getNextElement() const { return CollectListElement{*getNextElementPtr()}; }
-    uint8_t** getNextElementPtr() const { return reinterpret_cast<uint8_t**>(elementPtr); }
-    void setNextElement(CollectListElement next) const {
-        DASSERT(*getNextElementPtr() == nullptr);
-        *getNextElementPtr() = next.elementPtr;
+    CollectListElement getNextElement() const {
+        // elementPtr points into the overflow buffer and may be misaligned for uint8_t*;
+        // use memcpy instead of dereferencing a misaligned uint8_t** (UB).
+        uint8_t* next = nullptr;
+        memcpy(&next, elementPtr, sizeof(next));
+        return CollectListElement{next};
     }
-    void setNextElement(std::nullptr_t next) const { *getNextElementPtr() = next; }
+    void setNextElement(CollectListElement next) const {
+        DASSERT(!getNextElement().valid());
+        memcpy(elementPtr, &next.elementPtr, sizeof(next.elementPtr));
+    }
+    void setNextElement(std::nullptr_t) const {
+        uint8_t* next = nullptr;
+        memcpy(elementPtr, &next, sizeof(next));
+    }
     uint8_t* getDataPtr() const { return elementPtr + sizeof(uint8_t*); }
 
     static uint64_t size(LogicalType& elementType) {

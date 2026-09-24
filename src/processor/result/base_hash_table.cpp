@@ -1,6 +1,7 @@
 #include "processor/result/base_hash_table.h"
 
 #include <cmath>
+#include <cstring>
 
 #include "common/constants.h"
 #include "common/null_buffer.h"
@@ -79,19 +80,23 @@ static ft_compare_function_t getFactorizedTableCompareEntryFunc(const LogicalTyp
 template<>
 bool factorizedTableCompareEntry<list_entry_t>(const uint8_t* entry1, const uint8_t* entry2,
     const LogicalType& type) {
-    const auto* list1 = reinterpret_cast<const list_t*>(entry1);
-    const auto* list2 = reinterpret_cast<const list_t*>(entry2);
-    if (list1->size != list2->size) {
+    // Factorized-table tuples are packed without alignment padding, so entry may be
+    // misaligned for list_t. Copy out before dereferencing to avoid UBSan errors.
+    list_t list1;
+    list_t list2;
+    memcpy(&list1, entry1, sizeof(list_t));
+    memcpy(&list2, entry2, sizeof(list_t));
+    if (list1.size != list2.size) {
         return false;
     }
     const auto& childType = ListType::getChildType(type);
     const auto childSize = LogicalTypeUtils::getRowLayoutSize(childType);
-    const auto nullPtr1 = reinterpret_cast<const uint8_t*>(list1->overflowPtr);
-    const auto nullPtr2 = reinterpret_cast<const uint8_t*>(list2->overflowPtr);
-    const auto dataPtr1 = nullPtr1 + NullBuffer::getNumBytesForNullValues(list1->size);
-    const auto dataPtr2 = nullPtr2 + NullBuffer::getNumBytesForNullValues(list2->size);
+    const auto nullPtr1 = reinterpret_cast<const uint8_t*>(list1.overflowPtr);
+    const auto nullPtr2 = reinterpret_cast<const uint8_t*>(list2.overflowPtr);
+    const auto dataPtr1 = nullPtr1 + NullBuffer::getNumBytesForNullValues(list1.size);
+    const auto dataPtr2 = nullPtr2 + NullBuffer::getNumBytesForNullValues(list2.size);
     auto compareFunc = getFactorizedTableCompareEntryFunc(childType);
-    for (size_t index = 0; index < list1->size; index++) {
+    for (size_t index = 0; index < list1.size; index++) {
         const bool child1IsNull = NullBuffer::isNull(nullPtr1, index);
         const bool child2IsNull = NullBuffer::isNull(nullPtr2, index);
         if (child1IsNull != child2IsNull) {
@@ -164,15 +169,18 @@ template<>
     uint32_t vectorPos, const uint8_t* entry) {
     auto dataVector = ListVector::getDataVector(vector);
     auto listToCompare = vector->getValue<list_entry_t>(vectorPos);
-    auto listEntry = reinterpret_cast<const list_t*>(entry);
-    auto entryNullBytes = reinterpret_cast<uint8_t*>(listEntry->overflowPtr);
-    auto entryValues = entryNullBytes + NullBuffer::getNumBytesForNullValues(listEntry->size);
+    // Factorized-table tuples are packed without alignment padding, so entry may be
+    // misaligned for list_t. Copy out before dereferencing.
+    list_t listEntry;
+    memcpy(&listEntry, entry, sizeof(list_t));
+    auto entryNullBytes = reinterpret_cast<uint8_t*>(listEntry.overflowPtr);
+    auto entryValues = entryNullBytes + NullBuffer::getNumBytesForNullValues(listEntry.size);
     auto rowLayoutSize = LogicalTypeUtils::getRowLayoutSize(dataVector->dataType);
     compare_function_t compareFunc = getCompareEntryFunc(dataVector->dataType);
-    if (listToCompare.size != listEntry->size) {
+    if (listToCompare.size != listEntry.size) {
         return false;
     }
-    for (auto i = 0u; i < listEntry->size; i++) {
+    for (auto i = 0u; i < listEntry.size; i++) {
         const bool entryChildIsNull = NullBuffer::isNull(entryNullBytes, i);
         const bool vectorChildIsNull = dataVector->isNull(listToCompare.offset + i);
         if (entryChildIsNull != vectorChildIsNull) {

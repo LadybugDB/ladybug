@@ -21,12 +21,22 @@ FactorizedTableSchema::FactorizedTableSchema(const FactorizedTableSchema& other)
 }
 
 void FactorizedTableSchema::appendColumn(ColumnSchema column) {
+    // Factorized-table tuples are accessed via direct casts to 8-byte types
+    // (hash_t, list_t/string_t overflow pointers, aggregate states holding vptrs).
+    // Packing columns without padding leaves those accesses misaligned whenever a
+    // preceding small column shifts the offset, which UBSan flags. Align every
+    // column offset to 8 bytes and pad the tuple size to 8 so that all tuple bases
+    // stay 8-byte aligned (block bases from malloc/page pinning are aligned).
+    constexpr uint32_t ALIGNMENT = 8;
+    auto alignUp = [](uint32_t v, uint32_t align) { return (v + align - 1) / align * align; };
+    if (!colOffsets.empty()) {
+        numBytesForDataPerTuple = alignUp(numBytesForDataPerTuple, ALIGNMENT);
+    }
+    colOffsets.push_back(numBytesForDataPerTuple);
     numBytesForDataPerTuple += column.getNumBytes();
     columns.push_back(std::move(column));
-    colOffsets.push_back(
-        colOffsets.empty() ? 0 : colOffsets.back() + getColumn(columns.size() - 2)->getNumBytes());
     numBytesForNullMapPerTuple = NullBuffer::getNumBytesForNullValues(getNumColumns());
-    numBytesPerTuple = numBytesForDataPerTuple + numBytesForNullMapPerTuple;
+    numBytesPerTuple = alignUp(numBytesForDataPerTuple + numBytesForNullMapPerTuple, ALIGNMENT);
 }
 
 bool FactorizedTableSchema::operator==(const FactorizedTableSchema& other) const {

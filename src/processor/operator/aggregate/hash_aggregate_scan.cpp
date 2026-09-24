@@ -26,12 +26,14 @@ bool HashAggregateScan::getNextTuplesInternal(ExecutionContext* /*context*/) {
         groupByKeyVectorsColIdxes);
     for (auto pos = 0u; pos < numRowsToScan; ++pos) {
         auto entry = entries[pos];
-        auto offset = sharedState->getTableSchema()->getColOffset(groupByKeyVectors.size());
+        // Columns are 8-byte aligned (see FactorizedTableSchema), so aggregate states
+        // are suitably aligned for virtual dispatch. Use schema offsets rather than a
+        // packed sum of state sizes.
         for (auto i = 0u; i < aggregateVectors.size(); i++) {
             auto vector = aggregateVectors[i];
+            auto offset = sharedState->getTableSchema()->getColOffset(groupByKeyVectors.size() + i);
             auto aggState = reinterpret_cast<AggregateState*>(entry + offset);
             scanInfo.moveAggResultToVectorFuncs[i](*vector, pos, aggState);
-            offset += aggState->getStateSize();
         }
     }
     metrics->numOutputTuple.increase(numRowsToScan);

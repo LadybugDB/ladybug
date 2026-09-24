@@ -174,9 +174,12 @@ void SimpleAggregateSharedState::SimpleAggregatePartitioningData::appendTuples(
         // Tuples are packed without alignment padding; use memcpy for the hash load.
         common::hash_t hash;
         memcpy(&hash, tuple + hashOffset, sizeof(common::hash_t));
-        auto& partition =
-            sharedState->globalPartitions[(hash >> sharedState->shiftForPartitioning) %
-                                          sharedState->globalPartitions.size()];
+        // shiftForPartitioning is 64 with a single partition; shifting by 64 is UB.
+        const auto partitionIdx =
+            sharedState->shiftForPartitioning >= 64 ?
+                0 :
+                (hash >> sharedState->shiftForPartitioning) % sharedState->globalPartitions.size();
+        auto& partition = sharedState->globalPartitions[partitionIdx];
         partition.distinctTables[functionIdx].queue->appendTuple(
             std::span(tuple, numBytesPerTuple));
     }
