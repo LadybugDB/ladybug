@@ -230,6 +230,13 @@ popSecondaryARTEqualityComparison(PredicateSet& predicateSet, const Expression& 
         if (property.isPrimaryKey(tableID) || !property.hasProperty(tableID)) {
             continue;
         }
+        // Bind-time property presence (hasProperty) can disagree with the catalog entry
+        // resolved here (e.g. ANY-graph tables share IDs with main-catalog tables and
+        // resolveTableStorage with an empty dbName prefers the main catalog). Never throw
+        // from the optimizer on that mismatch; skip the rewrite and keep scan + filter.
+        if (!tableEntry->containsProperty(property.getPropertyName())) {
+            continue;
+        }
         const auto propertyID = tableEntry->getPropertyID(property.getPropertyName());
         for (auto* indexEntry : cat->getIndexEntries(transaction, tableID)) {
             if (!indexEntry->containsPropertyID(propertyID) ||
