@@ -57,6 +57,11 @@ bool WAL::rotateForCheckpoint(main::ClientContext* /*context*/) {
     if (inMemory) {
         return false;
     }
+    if (vfs->fileOrPathExists(checkpointWalPath)) {
+        throw RuntimeException(
+            "Cannot checkpoint: the frozen WAL of an earlier checkpoint is still "
+            "pending. Reopen the database to recover it.");
+    }
     if (!serializer && !vfs->fileOrPathExists(walPath)) {
         return false;
     }
@@ -68,7 +73,25 @@ bool WAL::rotateForCheckpoint(main::ClientContext* /*context*/) {
         serializer.reset();
     }
     vfs->renameFile(walPath, checkpointWalPath);
+    frozenWALHasCheckpointRecord = false;
     return true;
+}
+
+void WAL::undoRotationForCheckpoint() noexcept {
+    std::unique_lock lck{mtx};
+    if (inMemory || frozenWALHasCheckpointRecord || serializer) {
+        return;
+    }
+    // The checkpoint holds the write gate from rotation until rollback, so nothing can have
+    // written a new active WAL in the meantime. If the rename is not possible, keep the frozen
+    // WAL: recovery replays it, and rotateForCheckpoint() refuses to overwrite it.
+    try {
+        if (vfs->fileOrPathExists(walPath) || !vfs->fileOrPathExists(checkpointWalPath)) {
+            return;
+        }
+        vfs->renameFile(checkpointWalPath, walPath);
+    } catch (...) { // NOLINT(bugprone-empty-catch): the frozen WAL stays for recovery.
+    }
 }
 
 void WAL::logAndFlushCheckpointToFrozen(main::ClientContext* context) {
@@ -78,6 +101,11 @@ void WAL::logAndFlushCheckpointToFrozen(main::ClientContext* context) {
     }
     auto frozenFileInfo = vfs->openFile(checkpointWalPath,
         FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE), context);
+    {
+        // From here on, the CHECKPOINT record may reach the frozen WAL.
+        std::unique_lock lck{mtx};
+        frozenWALHasCheckpointRecord = true;
+    }
 
     std::shared_ptr<Writer> writer = std::make_shared<BufferedFileWriter>(*frozenFileInfo);
     auto& bufferedWriter = writer->cast<BufferedFileWriter>();
@@ -111,7 +139,9 @@ void WAL::logAndFlushCheckpointToFrozen(main::ClientContext* context) {
 }
 
 void WAL::clearFrozenWAL() {
+    std::unique_lock lck{mtx};
     vfs->removeFileIfExists(checkpointWalPath);
+    frozenWALHasCheckpointRecord = false;
 }
 
 // NOLINTNEXTLINE(readability-make-member-function-const): semantically non-const function.

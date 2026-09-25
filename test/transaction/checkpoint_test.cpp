@@ -40,6 +40,11 @@ public:
         TransactionManager::Get(context)->initCheckpointerFunc = initFunc;
     }
 
+    static void resetCheckpointer(main::ClientContext& context) {
+        TransactionManager::Get(context)->initCheckpointerFunc =
+            TransactionManager::initCheckpointer;
+    }
+
 private:
     TransactionManager::init_checkpointer_func_t initFunc;
 };
@@ -87,6 +92,92 @@ TEST_F(FlakyCheckpointerTest, RecoverFromCheckpointStorageFailure) {
     };
     FlakyCheckpointer flakyCheckpointer(initFlakyCheckpointer);
     runTest(flakyCheckpointer);
+}
+
+class CheckpointRetryAfterFailureTest : public FlakyCheckpointerTest {
+public:
+    void SetUp() override {
+        FlakyCheckpointerTest::SetUp();
+        ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+        ASSERT_TRUE(
+            conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+        ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    }
+
+    void insertNodes(int64_t begin, int64_t end) const {
+        for (auto i = begin; i < end; i++) {
+            auto res =
+                conn->query(std::format("CREATE (a:test {{id: {}, name: 'name_{}'}});", i, i));
+            ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        }
+    }
+
+    // Runs one CHECKPOINT with the given failing checkpointer, then restores the default one.
+    template<typename FAILING_CHECKPOINTER>
+    void failCheckpointWith() const {
+        FlakyCheckpointer flakyCheckpointer([](main::ClientContext& context) {
+            return std::make_unique<FAILING_CHECKPOINTER>(context);
+        });
+        auto context = getClientContext(*conn);
+        flakyCheckpointer.setCheckpointer(*context);
+        ASSERT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
+        FlakyCheckpointer::resetCheckpointer(*context);
+    }
+
+    void failCheckpoint() const { failCheckpointWith<FlakyCheckpointerFailsOnCheckpointStorage>(); }
+
+    void checkpoint() const {
+        auto res = conn->query("CHECKPOINT;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    }
+
+    void checkNodes(int64_t expectedCount) const {
+        auto res = conn->query("MATCH (a:test) RETURN COUNT(a), MIN(a.id), MAX(a.id);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        auto tuple = res->getNext();
+        ASSERT_EQ(tuple->getValue(0)->getValue<int64_t>(), expectedCount);
+        ASSERT_EQ(tuple->getValue(1)->getValue<int64_t>(), 0);
+        ASSERT_EQ(tuple->getValue(2)->getValue<int64_t>(), expectedCount - 1);
+    }
+};
+
+TEST_F(CheckpointRetryAfterFailureTest, RetrySucceedsWithoutNewWrites) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpoint();
+    checkpoint();
+    EXPECT_FALSE(std::filesystem::exists(StorageUtils::getCheckpointWALFilePath(databasePath)));
+    createDBAndConn();
+    checkNodes(100);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, RetrySucceedsWithNewWrites) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpoint();
+    insertNodes(100, 200);
+    checkpoint();
+    EXPECT_FALSE(std::filesystem::exists(StorageUtils::getCheckpointWALFilePath(databasePath)));
+    createDBAndConn();
+    checkNodes(200);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, RetryFailsWithNewWritesThenReopen) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpoint();
+    insertNodes(100, 200);
+    failCheckpoint();
+    // Close without checkpointing, as a crash would.
+    createDBAndConn();
+    checkNodes(200);
 }
 
 class FlakyCheckpointerFailsOnSerialization final : public Checkpointer {
@@ -204,6 +295,35 @@ TEST_F(FlakyCheckpointerTest, RecoverFromCheckpointApplyingShadowFailure) {
     };
     FlakyCheckpointer flakyCheckpointer(initFlakyCheckpointer);
     runTest(flakyCheckpointer);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, RetryAfterFailureWithDurableCheckpointRecord) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+    insertNodes(100, 200);
+    // The frozen WAL now holds a durable CHECKPOINT record that only recovery can apply, so a
+    // retry must not replace it.
+    EXPECT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
+    createDBAndConn();
+    checkNodes(200);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, FailedRetryKeepsDurableCheckpointRecord) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+    insertNodes(100, 200);
+    // A retry that fails in its storage phase must not replace the frozen WAL that holds the
+    // first checkpoint's CHECKPOINT record.
+    failCheckpoint();
+    // Close without checkpointing, as a crash would.
+    createDBAndConn();
+    checkNodes(200);
 }
 
 class FlakyCheckpointerFailsOnClearingFiles final : public Checkpointer {

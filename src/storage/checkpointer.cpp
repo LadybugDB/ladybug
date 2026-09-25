@@ -364,12 +364,11 @@ void Checkpointer::finishCheckpoint() {
     if (isInMemory) {
         return;
     }
-    // NOTE: finishCheckpoint() runs after the write gate has been released (when WAL rotation
-    // occurred).  New DDL/write transactions may therefore be active, but they assign timestamps
-    // strictly greater than the snapshotTS captured under the gate in beginCheckpoint().
-    // serializeCatalogAndMetadata() uses snapshotTS > 0 to choose serializeCatalogSnapshot(),
-    // which serializes only catalog entries whose commit timestamp is <= snapshotTS, so no
-    // post-gate DDL mutation is visible in the serialized snapshot.
+    // NOTE: The write gate is held from beginCheckpoint() until the checkpoint completes or is
+    // rolled back (see TransactionManager::checkpointNoLock()), so no write transaction commits
+    // in between. serializeCatalogAndMetadata() still uses snapshotTS > 0 to choose
+    // serializeCatalogSnapshot(), which serializes only catalog entries whose commit timestamp is
+    // <= snapshotTS.
     serializeCatalogAndMetadata(checkpointHeader, hasStorageChanges);
     // Durable-before-commit ordering for partition child files (see persistPartitionChildFiles).
     persistPartitionChildFiles();
@@ -558,6 +557,14 @@ void Checkpointer::rollback() {
             if (sm->getShadowFile().hasShadowingFH()) {
                 sm->getShadowFile().clear(*bufferManager);
             }
+        }
+    }
+    // Move frozen records back into the active WAL. Otherwise a retry either leaves the frozen WAL
+    // behind (to be replayed again over the retry's checkpoint) or overwrites it with a newer WAL.
+    // This never throws: if the rename fails, the frozen WAL stays for recovery to replay.
+    for (const auto& [storageManager, rotated] : walRotatedByManager) {
+        if (rotated) {
+            storageManager->getWAL().undoRotationForCheckpoint();
         }
     }
     releaseCheckpointLocks();
