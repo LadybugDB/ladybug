@@ -174,6 +174,9 @@ struct PlannerKnobs {
     // Avoid doing probe to build SIP if we have to accumulate a probe side that is much bigger than
     // build side. Also avoid doing build to probe SIP if probe side is not much bigger than build.
     static constexpr uint64_t SIP_RATIO = 5;
+    // Recursive extend runs one graph search per bound source node. Measured per-source setup
+    // cost vs per-output-pair cost is ~1000:1, so seed cardinality dominates direction choice.
+    static constexpr uint64_t RECURSIVE_EXTEND_SOURCE_COST = 1000;
 };
 
 struct OrderByConstants {

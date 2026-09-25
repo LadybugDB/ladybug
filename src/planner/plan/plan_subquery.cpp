@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <unordered_set>
 
 #include "binder/expression/expression_util.h"
 #include "binder/expression/property_expression.h"
@@ -30,6 +31,100 @@ static bool isNodePrimaryKey(const Expression& expression, const NodeExpression&
     auto& property = expression.constCast<PropertyExpression>();
     return property.getVariableName() == node.getInternalID()->getVariableName() &&
            property.isPrimaryKey(tableID);
+}
+
+// Correlated variant of tryPlanQueryPrimaryKeyLookup for OPTIONAL MATCH: when the optional
+// clause matches a single node by primary key against outer expressions (e.g.
+// OPTIONAL MATCH (p:Post {ID: msgId})), plan the right side as an expressions scan of the
+// correlated bindings feeding a keyed PK lookup, then LEFT-hash-join as usual. PK
+// uniqueness guarantees at most one match per outer row, so this preserves Left Join
+// semantics exactly while avoiding a full node-table scan (which the generic correlated
+// path would build). Returns false (caller falls back) when inapplicable.
+bool Planner::tryPlanCorrelatedPrimaryKeyLookup(const QueryGraphCollection& queryGraphCollection,
+    const expression_vector& predicates, const expression_vector& corrExprs,
+    const Schema& outerSchema, cardinality_t corrExprsCard, LogicalPlan& rightPlan) {
+    if (queryGraphCollection.getNumQueryGraphs() != 1) {
+        return false;
+    }
+    auto queryGraph = queryGraphCollection.getQueryGraph(0);
+    if (queryGraph->getNumQueryNodes() != 1 || queryGraph->getNumQueryRels() != 0) {
+        return false;
+    }
+    auto node = queryGraph->getQueryNode(0);
+    auto tableIDs = node->getTableIDs();
+    if (tableIDs.size() != 1) {
+        return false;
+    }
+    auto tableID = tableIDs[0];
+    auto table = storage::StorageManager::Get(*clientContext)
+                     ->getTable(tableID)
+                     ->ptrCast<storage::NodeTable>();
+    if (table->tryGetPrimaryKeyIndex() == nullptr) {
+        return false;
+    }
+    std::unordered_set<std::string> corrNames;
+    for (auto& expr : corrExprs) {
+        corrNames.insert(expr->getUniqueName());
+    }
+    std::shared_ptr<Expression> key;
+    expression_vector residualPredicates;
+    for (auto& predicate : predicates) {
+        if (predicate->expressionType != ExpressionType::EQUALS) {
+            residualPredicates.push_back(predicate);
+            continue;
+        }
+        auto lhs = predicate->getChild(0);
+        auto rhs = predicate->getChild(1);
+        if (isNodePrimaryKey(*rhs, *node, tableID)) {
+            std::swap(lhs, rhs);
+        }
+        // The key must be computable from the correlated bindings alone: every outer
+        // expression it depends on has to be part of the expressions scan below.
+        auto usableKey = false;
+        if (key == nullptr && isNodePrimaryKey(*lhs, *node, tableID)) {
+            usableKey = true;
+            for (auto& dep : getDependentExprs(rhs, outerSchema)) {
+                if (!corrNames.contains(dep->getUniqueName())) {
+                    usableKey = false;
+                    break;
+                }
+            }
+            if (getDependentExprs(rhs, outerSchema).empty()) {
+                usableKey = false;
+            }
+        }
+        if (!usableKey) {
+            residualPredicates.push_back(predicate);
+            continue;
+        }
+        key = rhs;
+    }
+    if (key == nullptr) {
+        return false;
+    }
+    appendExpressionsScan(corrExprs, rightPlan);
+    rightPlan.getLastOperator()->setCardinality(corrExprsCard);
+    appendDistinct(corrExprs, rightPlan);
+    appendFlattens(rightPlan.getSchema()->getGroupsPosInScope(), rightPlan);
+    auto properties = getProperties(*node);
+    properties.erase(std::remove_if(properties.begin(), properties.end(),
+                         [](const std::shared_ptr<Expression>& expression) {
+                             return expression->constCast<PropertyExpression>().isInternalID();
+                         }),
+        properties.end());
+    const auto dependentExprs = getDependentExprs(key, *rightPlan.getSchema());
+    DASSERT(!dependentExprs.empty());
+    const auto outputGroupPos = rightPlan.getSchema()->getGroupPos(*dependentExprs[0]);
+    for ([[maybe_unused]] auto& dependentExpr : dependentExprs) {
+        DASSERT(rightPlan.getSchema()->getGroupPos(*dependentExpr) == outputGroupPos);
+    }
+    auto lookup = std::make_shared<LogicalQueryPrimaryKeyLookup>(tableID, node->getInternalID(),
+        properties, key, outputGroupPos, rightPlan.getLastOperator());
+    lookup->computeFactorizedSchema();
+    lookup->setCardinality(rightPlan.getCardinality());
+    rightPlan.setLastOperator(std::move(lookup));
+    appendFilters(residualPredicates, rightPlan);
+    return true;
 }
 
 bool Planner::tryPlanQueryPrimaryKeyLookup(const QueryGraphCollection& queryGraphCollection,
@@ -116,6 +211,44 @@ expression_vector Planner::getCorrelatedExprs(const QueryGraphCollection& collec
     return ExpressionUtil::removeDuplication(result);
 }
 
+// An equality with a constant (variable-free) side, e.g. a re-stated outer filter such
+// as a.ID = 123 inside OPTIONAL MATCH, is a filter rather than a correlated join
+// condition: the literal side can never serve as an unnestable join key. Treating it as
+// correlated fails analysis and needlessly blocks unnesting (forcing expression-scan +
+// full-scan plans). Keep it as a filter inside the subplan instead.
+// The variable side must reference the inner query graph: a constant predicate over a
+// variable that does not occur inside (e.g. an outer-only filter visible to an EXISTS
+// subquery) cannot be applied there and must stay correlated, otherwise it is silently
+// dropped and unnesting produces wrong results.
+static bool isRoutableConstantEquality(const std::shared_ptr<Expression>& predicate,
+    const binder::QueryGraphCollection& collection) {
+    if (predicate->expressionType != common::ExpressionType::EQUALS) {
+        return false;
+    }
+    std::unordered_set<std::string> innerNames;
+    for (auto& node : collection.getQueryNodes()) {
+        innerNames.insert(node->getUniqueName());
+    }
+    for (auto& rel : collection.getQueryRels()) {
+        innerNames.insert(rel->getUniqueName());
+    }
+    bool hasConstantSide = false;
+    for (auto i = 0u; i < 2u; ++i) {
+        auto collector = DependentVarNameCollector();
+        collector.visit(predicate->getChild(i));
+        if (collector.getVarNames().empty()) {
+            hasConstantSide = true;
+            continue;
+        }
+        for (auto& varName : collector.getVarNames()) {
+            if (!innerNames.contains(varName)) {
+                return false;
+            }
+        }
+    }
+    return hasConstantSide;
+}
+
 class SubqueryPredicatePullUpAnalyzer {
 public:
     SubqueryPredicatePullUpAnalyzer(const Schema& schema,
@@ -125,7 +258,8 @@ public:
     bool analyze(const expression_vector& predicates) {
         expression_vector correlatedPredicates;
         for (auto& predicate : predicates) {
-            if (getDependentExprs(predicate, schema).empty()) {
+            if (getDependentExprs(predicate, schema).empty() ||
+                isRoutableConstantEquality(predicate, queryGraphCollection)) {
                 nonCorrelatedPredicates.push_back(predicate);
             } else {
                 correlatedPredicates.push_back(predicate);
@@ -227,9 +361,45 @@ void Planner::planOptionalMatch(const QueryGraphCollection& queryGraphCollection
     // Plan correlated subquery
     info.corrExprsCard = leftPlan.getCardinality();
     auto analyzer = SubqueryPredicatePullUpAnalyzer(*leftPlan.getSchema(), queryGraphCollection);
+    bool canUnnest = analyzer.analyze(predicates);
+    // Unnesting re-plans the subquery standalone and joins afterward. That wins when the
+    // inner plan is selective on its own, i.e. every correlated node carries a constant
+    // filter inside the clause (e.g. Q14's legs filter a.ID and b.ID). When selectivity
+    // comes only from the outer bindings, the standalone inner plan scans everything
+    // (e.g. Q7's like-branches would read all persons' likes) and correlated execution
+    // with outer-driven semi masks wins, so keep the correlated plan in that case.
+    bool innerSelective = true;
+    if (canUnnest && !leftPlan.isEmpty()) {
+        std::unordered_set<std::string> constFilteredVars;
+        for (auto& pred : predicates) {
+            if (!isRoutableConstantEquality(pred, queryGraphCollection)) {
+                continue;
+            }
+            auto collector = DependentVarNameCollector();
+            collector.visit(pred);
+            constFilteredVars.insert(collector.getVarNames().begin(),
+                collector.getVarNames().end());
+        }
+        for (auto& node : queryGraphCollection.getQueryNodes()) {
+            if (leftPlan.getSchema()->isExpressionInScope(*node->getInternalID()) &&
+                !constFilteredVars.contains(node->getUniqueName())) {
+                innerSelective = false;
+                break;
+            }
+        }
+    }
+    // Recursive patterns (and the path variables they feed) do not unnest correctly:
+    // their path construction relies on correlated execution. Keep them correlated.
+    bool hasRecursiveRel = false;
+    for (auto& rel : queryGraphCollection.getQueryRels()) {
+        if (common::QueryRelTypeUtils::isRecursive(rel->getRelType())) {
+            hasRecursiveRel = true;
+            break;
+        }
+    }
     std::vector<expression_pair> joinConditions;
     LogicalPlan rightPlan;
-    if (analyzer.analyze(predicates)) {
+    if (canUnnest && innerSelective && !hasRecursiveRel) {
         // Unnest as left join
         info.subqueryType = SubqueryPlanningType::UNNEST_CORRELATED;
         info.corrExprs = analyzer.getCorrelatedInternalIDs();
@@ -244,7 +414,13 @@ void Planner::planOptionalMatch(const QueryGraphCollection& queryGraphCollection
         for (auto& expr : correlatedExprs) {
             joinConditions.emplace_back(expr, expr);
         }
-        rightPlan = planQueryGraphCollectionInNewContext(queryGraphCollection, info);
+        // A single node matched by primary key against outer expressions needs no
+        // table scan: probe the PK index per outer binding instead (Left Join
+        // semantics preserved by PK uniqueness).
+        if (!tryPlanCorrelatedPrimaryKeyLookup(queryGraphCollection, predicates, correlatedExprs,
+                *leftPlan.getSchema(), info.corrExprsCard, rightPlan)) {
+            rightPlan = planQueryGraphCollectionInNewContext(queryGraphCollection, info);
+        }
         appendAccumulate(correlatedExprs, leftPlan);
     }
     if (leftPlan.hasUpdate()) {

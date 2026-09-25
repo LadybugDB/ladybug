@@ -240,6 +240,9 @@ public:
         LogicalPlan& plan, const binder::NodeOrRelExpression* nodeOrRel = nullptr);
     bool tryPlanQueryPrimaryKeyLookup(const binder::QueryGraphCollection& queryGraphCollection,
         const binder::expression_vector& predicates, LogicalPlan& plan);
+    bool tryPlanCorrelatedPrimaryKeyLookup(const binder::QueryGraphCollection& queryGraphCollection,
+        const binder::expression_vector& predicates, const binder::expression_vector& corrExprs,
+        const Schema& outerSchema, common::cardinality_t corrExprsCard, LogicalPlan& rightPlan);
 
     // Append extend operators
     void appendNonRecursiveExtend(const std::shared_ptr<binder::NodeExpression>& boundNode,

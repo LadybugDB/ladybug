@@ -33,6 +33,31 @@ static bool dependsOnAnyVariable(const std::shared_ptr<Expression>& expression) 
     return !collector.getVarNames().empty();
 }
 
+// True when the predicates contain an equality between an expression over the given node
+// and a constant (variable-free) expression, e.g. a restated outer filter like a.ID = 123
+// inside an OPTIONAL MATCH / EXISTS subquery. Shared with the subquery unnesting logic in
+// plan_subquery.cpp (which treats such predicates as filters rather than join keys).
+static bool hasConstantPredicate(const binder::NodeExpression& node,
+    const binder::expression_vector& predicates) {
+    for (auto& predicate : predicates) {
+        if (predicate->expressionType != common::ExpressionType::EQUALS) {
+            continue;
+        }
+        auto lhsHasVars = dependsOnAnyVariable(predicate->getChild(0));
+        auto rhsHasVars = dependsOnAnyVariable(predicate->getChild(1));
+        if (lhsHasVars == rhsHasVars) {
+            continue;
+        }
+        auto side = lhsHasVars ? predicate->getChild(0) : predicate->getChild(1);
+        auto collector = DependentVarNameCollector();
+        collector.visit(side);
+        if (collector.getVarNames().contains(node.getUniqueName())) {
+            return true;
+        }
+    }
+    return false;
+}
+
 LogicalPlan Planner::planQueryGraphCollectionInNewContext(
     const QueryGraphCollection& queryGraphCollection, const QueryGraphPlanningInfo& info) {
     auto prevContext = enterNewContext();
@@ -267,7 +292,16 @@ void Planner::planBaseTableScans(const QueryGraphPlanningInfo& info) {
                 // query ("(a)-[e1]->(b)") needs to scan a, which is already scanned in the outer
                 // query (a). To avoid scanning storage twice, we keep track of node table "a" and
                 // make sure when planning inner query, we only scan internal ID of "a".
-                planNodeIDScan(nodePos);
+                // Exception: a correlated node carrying a constant predicate (e.g. a restated
+                // outer filter like a.ID = 123) must be scanned with properties so the
+                // predicate is applied as a filter. An ID-only scan would silently drop it
+                // (level-1 filter emission only sees full node scans), producing wrong
+                // results for unnested EXISTS/OPTIONAL subqueries.
+                if (hasConstantPredicate(*queryNode, info.predicates)) {
+                    planNodeScan(nodePos);
+                } else {
+                    planNodeIDScan(nodePos);
+                }
             } else {
                 planNodeScan(nodePos);
             }
