@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
-#include <tuple>
 
 #include "common/assert.h"
 #include "common/data_chunk/sel_vector.h"
@@ -447,7 +446,7 @@ void Column::checkpointNullData(const ColumnCheckpointState& checkpointState,
     if (!newNullData.empty()) {
         DASSERT(newNullData.size() == 1);
         auto* nullChunk = &newNullData[0]->cast<NullChunkData>();
-        std::ignore = newNullData[0].release();
+        [[maybe_unused]] auto* released = newNullData[0].release();
         checkpointState.persistentData.setNullData(std::unique_ptr<NullChunkData>(nullChunk));
     }
 }
