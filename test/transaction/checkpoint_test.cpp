@@ -13,6 +13,8 @@
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "storage/checkpointer.h"
+#include "storage/page_allocator.h"
+#include "storage/page_manager.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "storage/table/string_chunk_data.h"
@@ -233,6 +235,110 @@ TEST_F(FlakyCheckpointerTest, RecoverFromCheckpointClearingFilesFailure) {
     };
     FlakyCheckpointer flakyCheckpointer(initFlakyCheckpointer);
     runTest(flakyCheckpointer);
+}
+
+// Page allocator that fails the first page allocation. In-place checkpoints do not allocate
+// pages, so during the storage phase of a checkpoint that only updates a node group with
+// persistent data, the first allocation is the flush of an out-of-place column chunk rewrite and
+// the failure lands in the middle of that rewrite.
+class FailFirstAllocationPageAllocator final : public PageAllocator {
+public:
+    FailFirstAllocationPageAllocator(PageAllocator& inner, bool& failed)
+        : PageAllocator(inner.getDataFH()), inner{inner}, failed{failed} {}
+
+    PageRange allocatePageRange(page_idx_t numPages) override {
+        if (!failed) {
+            failed = true;
+            throw RuntimeException("checkpoint failed.");
+        }
+        return inner.allocatePageRange(numPages);
+    }
+    void freePageRange(PageRange block) override { inner.freePageRange(block); }
+
+private:
+    PageAllocator& inner;
+    bool& failed;
+};
+
+class FlakyCheckpointerFailsDuringOutOfPlaceRewrite final : public Checkpointer {
+public:
+    FlakyCheckpointerFailsDuringOutOfPlaceRewrite(main::ClientContext& context, bool& failed)
+        : Checkpointer(context), failed{failed} {}
+
+    bool checkpointStorage() override {
+        for (const auto& target : checkpointTargets) {
+            FailFirstAllocationPageAllocator pageAllocator(
+                *target.storageManager->getDataFH()->getPageManager(), failed);
+            const Transaction snapshotTxn(TransactionType::CHECKPOINT,
+                Transaction::DUMMY_TRANSACTION_ID, snapshotTS);
+            target.storageManager->checkpoint(&clientContext, *target.catalog, snapshotTxn,
+                pageAllocator, tableEpochWatermarksByManager.at(target.storageManager));
+        }
+        throw RuntimeException("expected the injected page allocation failure to fire.");
+    }
+
+private:
+    bool& failed;
+};
+
+// A checkpoint that fails while a column chunk segment is being rewritten out of place must
+// leave that segment as it was, so that the data stays readable and later checkpoints succeed.
+TEST_F(FlakyCheckpointerTest, RecoverFromFailureDuringOutOfPlaceCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    conn->query("CALL force_checkpoint_on_close=false;");
+    conn->query("CALL auto_checkpoint=false;");
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    constexpr int64_t numInitialRows = 3000;
+    constexpr int64_t numRows = 6000;
+    constexpr std::string_view namePrefix = "a longer name so the pages fill up ";
+    auto nameOf = [&](int64_t i) { return std::format("{}{}", namePrefix, i); };
+    auto insertRows = [&](int64_t start, int64_t end) {
+        auto res = conn->query(std::format("UNWIND range({}, {}) AS i CREATE (a:test {{id: i, "
+                                           "name: concat('{}', CAST(i AS STRING))}});",
+            start, end - 1, namePrefix));
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    };
+    auto checkRows = [&]() {
+        auto res = conn->query("MATCH (a:test) RETURN COUNT(a), CAST(SUM(a.id) AS INT64), "
+                               "CAST(SUM(SIZE(a.name)) AS INT64), MIN(a.name), MAX(a.name);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        auto row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), numRows);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), numRows * (numRows - 1) / 2);
+        int64_t totalNameSize = 0;
+        for (auto i = 0; i < numRows; i++) {
+            totalNameSize += nameOf(i).size();
+        }
+        ASSERT_EQ(row->getValue(2)->getValue<int64_t>(), totalNameSize);
+        ASSERT_EQ(row->getValue(3)->getValue<std::string>(), nameOf(0));
+        ASSERT_EQ(row->getValue(4)->getValue<std::string>(), nameOf(999));
+    };
+    insertRows(0, numInitialRows);
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    // Appending to the persistent node group outgrows the pages of its column chunks, so the
+    // next checkpoint has to rewrite them out of place.
+    insertRows(numInitialRows, numRows);
+
+    auto context = getClientContext(*conn);
+    bool failed = false;
+    FlakyCheckpointer flakyCheckpointer([&failed](main::ClientContext& ctx) {
+        return std::make_unique<FlakyCheckpointerFailsDuringOutOfPlaceRewrite>(ctx, failed);
+    });
+    flakyCheckpointer.setCheckpointer(*context);
+    auto res = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(res->isSuccess());
+    ASSERT_TRUE(failed);
+    checkRows();
+
+    FlakyCheckpointer defaultCheckpointer(
+        [](main::ClientContext& ctx) { return std::make_unique<Checkpointer>(ctx); });
+    defaultCheckpointer.setCheckpointer(*context);
+    res = conn->query("CHECKPOINT;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    checkRows();
 }
 
 // Simulates a situation where a database attempts to replay a shadow file from an older database

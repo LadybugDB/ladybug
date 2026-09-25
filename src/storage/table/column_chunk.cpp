@@ -311,8 +311,8 @@ void ColumnChunk::checkpoint(Column& column,
             }
         }
         auto segmentEnd = segmentStart + segment->getNumValues();
-        // If the segment was split during checkpointing we need to insert the new segments into the
-        // ColumnChunk
+        // If the segment was rewritten out of place (and possibly split) during checkpointing we
+        // need to replace it with the new segments in the ColumnChunk
         auto newSegments = column.checkpointSegment(
             ColumnCheckpointState(*segment, std::move(segmentCheckpointStates)), pageAllocator);
         if (!newSegments.empty()) {

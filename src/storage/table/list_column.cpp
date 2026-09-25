@@ -403,10 +403,14 @@ std::vector<std::unique_ptr<ColumnChunkData>> ListColumn::checkpointSegment(
     }
 
     // We do not allow nested splitting of offset/size segments
-    offsetColumn->checkpointSegment(
+    auto newOffsetChunk = offsetColumn->checkpointSegment(
         ColumnCheckpointState(*persistentListChunk.getOffsetColumnChunk(),
             std::move(offsetChunkCheckpointStates)),
         pageAllocator, false);
+    if (!newOffsetChunk.empty()) {
+        DASSERT(newOffsetChunk.size() == 1);
+        persistentListChunk.setOffsetColumnChunk(std::move(newOffsetChunk[0]));
+    }
 
     // Checkpoint size data.
     std::vector<SegmentCheckpointState> sizeChunkCheckpointStates;
@@ -416,9 +420,14 @@ std::vector<std::unique_ptr<ColumnChunkData>> ListColumn::checkpointSegment(
             segmentCheckpointState.startRowInData, segmentCheckpointState.offsetInSegment,
             segmentCheckpointState.numRows});
     }
-    sizeColumn->checkpointSegment(ColumnCheckpointState(*persistentListChunk.getSizeColumnChunk(),
-                                      std::move(sizeChunkCheckpointStates)),
+    auto newSizeChunk = sizeColumn->checkpointSegment(
+        ColumnCheckpointState(*persistentListChunk.getSizeColumnChunk(),
+            std::move(sizeChunkCheckpointStates)),
         pageAllocator, false);
+    if (!newSizeChunk.empty()) {
+        DASSERT(newSizeChunk.size() == 1);
+        persistentListChunk.setSizeColumnChunk(std::move(newSizeChunk[0]));
+    }
     // Checkpoint null data.
     Column::checkpointNullData(checkpointState, pageAllocator);
 

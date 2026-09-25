@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <tuple>
 
 #include "common/assert.h"
 #include "common/data_chunk/sel_vector.h"
@@ -439,42 +440,63 @@ void Column::checkpointNullData(const ColumnCheckpointState& checkpointState,
             segmentCheckpointState.numRows);
     }
     DASSERT(checkpointState.persistentData.hasNullData());
-    nullColumn->checkpointSegment(
+    auto newNullData = nullColumn->checkpointSegment(
         ColumnCheckpointState(*checkpointState.persistentData.getNullData(),
             std::move(nullSegmentCheckpointStates)),
         pageAllocator, false);
+    if (!newNullData.empty()) {
+        DASSERT(newNullData.size() == 1);
+        auto* nullChunk = &newNullData[0]->cast<NullChunkData>();
+        std::ignore = newNullData[0].release();
+        checkpointState.persistentData.setNullData(std::unique_ptr<NullChunkData>(nullChunk));
+    }
+}
+
+static std::unique_ptr<ColumnChunkData> createInMemoryChunkLike(const ColumnChunkData& chunk,
+    uint64_t capacity) {
+    if (dynamic_cast<const NullChunkData*>(&chunk) != nullptr) {
+        return ColumnChunkFactory::createNullChunkData(chunk.getMemoryManager(),
+            chunk.isCompressionEnabled(), capacity, ResidencyState::IN_MEMORY);
+    }
+    return ColumnChunkFactory::createColumnChunkData(chunk.getMemoryManager(),
+        chunk.getDataType().copy(), chunk.isCompressionEnabled(), capacity,
+        ResidencyState::IN_MEMORY, chunk.hasNullData());
 }
 
 std::vector<std::unique_ptr<ColumnChunkData>> Column::checkpointColumnChunkOutOfPlace(
     const SegmentState& state, const ColumnCheckpointState& checkpointState,
     PageAllocator& pageAllocator, bool canSplitSegment) const {
     const auto numRows = std::max(checkpointState.endRowIdxToWrite, state.metadata.numValues);
-    checkpointState.persistentData.setToInMemory();
-    checkpointState.persistentData.resize(numRows);
-    DASSERT(checkpointState.persistentData.getNumValues() == 0);
-    scanSegment(state, &checkpointState.persistentData, 0, state.metadata.numValues);
-    state.reclaimAllocatedPages(pageAllocator);
+    // Rewrite the segment into a new chunk instead of converting persistentData to an in-memory
+    // chunk in place. If the rewrite fails part way (e.g. the buffer pool is full), the checkpoint
+    // is rolled back but the segment is kept, so it must still describe its on-disk pages for the
+    // data to stay readable and for the next checkpoint to be able to rewrite it.
+    auto newData = createInMemoryChunkLike(checkpointState.persistentData, numRows);
+    DASSERT(newData->getNumValues() == 0);
+    scanSegment(state, newData.get(), 0, state.metadata.numValues);
     // TODO(bmwinger): for simple compression types, we can predict whether or not we will need to
     // split the segment and avoid having to re-write it multiple times
     for (auto& segmentCheckpointState : checkpointState.segmentCheckpointStates) {
-        checkpointState.persistentData.write(&segmentCheckpointState.chunkData,
-            segmentCheckpointState.startRowInData, segmentCheckpointState.offsetInSegment,
-            segmentCheckpointState.numRows);
+        newData->write(&segmentCheckpointState.chunkData, segmentCheckpointState.startRowInData,
+            segmentCheckpointState.offsetInSegment, segmentCheckpointState.numRows);
     }
     // Finalize is necessary prior to splitting for strings and lists so that pruned values don't
     // have an impact on the number/size of segments It should not be necessary after splitting
     // since the function is used to prune unused values (or duplicated dictionary entries in the
     // case of strings) and those will never be introduced when splitting.
-    checkpointState.persistentData.finalize();
-    if (canSplitSegment && checkpointState.persistentData.shouldSplit()) {
-        auto newSegments = checkpointState.persistentData.split();
-        for (auto& segment : newSegments) {
-            segment->flush(pageAllocator);
-        }
-        return newSegments;
+    newData->finalize();
+    std::vector<std::unique_ptr<ColumnChunkData>> newSegments;
+    if (canSplitSegment && newData->shouldSplit()) {
+        newSegments = newData->split();
+    } else {
+        newSegments.push_back(std::move(newData));
     }
-    checkpointState.persistentData.flush(pageAllocator);
-    return {};
+    for (auto& segment : newSegments) {
+        segment->flush(pageAllocator);
+    }
+    // Only free the old pages once the replacement is on disk.
+    state.reclaimAllocatedPages(pageAllocator);
+    return newSegments;
 }
 
 bool Column::canCheckpointInPlace(const SegmentState& state,

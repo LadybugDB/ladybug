@@ -95,8 +95,8 @@ public:
         return common::dynamic_cast_checked<TARGET&>(*this);
     }
 
-    // Return value is the new segments if segment splitting occurs during an out of place
-    // checkpoint
+    // Return value is the new segment(s) replacing the persistent segment if it was checkpointed
+    // out of place (more than one if it was split), or empty if it was checkpointed in place
     virtual std::vector<std::unique_ptr<ColumnChunkData>> checkpointSegment(
         ColumnCheckpointState&& checkpointState, PageAllocator& pageAllocator,
         bool canSplitSegment = true) const;
