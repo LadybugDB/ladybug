@@ -33,3 +33,44 @@
 ---- 2
 0|1010101010.300000
 1341|1010101010.200000
+
+-CASE ListInPlaceWithOutOfPlaceOffsetsAndNulls
+-STATEMENT CALL auto_checkpoint=false;
+---- ok
+-STATEMENT CREATE NODE TABLE t2(id INT64 PRIMARY KEY, l INT64[]);
+---- ok
+-STATEMENT UNWIND range(0, 4094) AS i CREATE (:t2 {id: i, l: [0, 1]});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (a:t2) WHERE a.id = 5 SET a.l = [1,0,1,0,1,0,1,0,1,0];
+---- ok
+-STATEMENT MATCH (a:t2) WHERE a.id = 7 SET a.l = NULL;
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (a:t2) RETURN COUNT(a.l);
+---- 1
+4094
+-STATEMENT MATCH (a:t2) UNWIND a.l AS x RETURN COUNT(x), SUM(x);
+---- 1
+8196|4098
+-STATEMENT MATCH (a:t2) WHERE a.id = 5 RETURN SIZE(a.l), a.l[1], a.l[2];
+---- 1
+10|1|0
+-STATEMENT MATCH (a:t2) WHERE a.id = 6 RETURN SIZE(a.l), a.l[1], a.l[2];
+---- 1
+2|0|1
+-RELOADDB
+-STATEMENT MATCH (a:t2) RETURN COUNT(a.l);
+---- 1
+4094
+-STATEMENT MATCH (a:t2) UNWIND a.l AS x RETURN COUNT(x), SUM(x);
+---- 1
+8196|4098
+-STATEMENT MATCH (a:t2) WHERE a.id = 5 RETURN SIZE(a.l), a.l[1], a.l[2];
+---- 1
+10|1|0
+-STATEMENT MATCH (a:t2) WHERE a.id = 4094 RETURN SIZE(a.l), a.l[1], a.l[2];
+---- 1
+2|0|1

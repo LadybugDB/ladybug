@@ -114,6 +114,9 @@ std::vector<std::unique_ptr<ColumnChunkData>> StructColumn::checkpointSegment(
     auto result =
         Column::checkpointSegment(std::move(checkpointState), pageAllocator, canSplitSegment);
     persistentStructChunk.syncNumValues();
+    for (auto& segment : result) {
+        segment->syncNumValues();
+    }
     return result;
 }
 

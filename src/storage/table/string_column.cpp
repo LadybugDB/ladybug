@@ -116,6 +116,9 @@ std::vector<std::unique_ptr<ColumnChunkData>> StringColumn::checkpointSegment(
     auto result =
         Column::checkpointSegment(std::move(checkpointState), pageAllocator, canSplitSegment);
     persistentData.syncNumValues();
+    for (auto& segment : result) {
+        segment->syncNumValues();
+    }
     return result;
 }
 
