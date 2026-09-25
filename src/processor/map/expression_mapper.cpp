@@ -6,11 +6,13 @@
 #include "binder/expression/literal_expression.h"
 #include "binder/expression/node_expression.h"
 #include "binder/expression/parameter_expression.h"
+#include "binder/expression/property_expression.h"
 #include "binder/expression/rel_expression.h"
 #include "binder/expression_visitor.h" // IWYU pragma: keep (used in assert)
 #include "common/exception/not_implemented.h"
 #include "expression_evaluator/case_evaluator.h"
 #include "expression_evaluator/function_evaluator.h"
+#include "expression_evaluator/internal_id_evaluator.h"
 #include "expression_evaluator/lambda_evaluator.h"
 #include "expression_evaluator/literal_evaluator.h"
 #include "expression_evaluator/path_evaluator.h"
@@ -72,6 +74,30 @@ std::unique_ptr<ExpressionEvaluator> ExpressionMapper::getEvaluator(
         return getFunctionEvaluator(std::move(expression));
     } else if (parentEvaluator != nullptr) {
         return getLambdaParamEvaluator(std::move(expression));
+    } else if (expressionType == ExpressionType::PROPERTY && schema != nullptr &&
+               expression->constCast<binder::PropertyExpression>().isInternalID()) {
+        // Internal IDs are stored inline in node/relationship values: when the base value
+        // is bound but no ID vector was materialized (e.g. nodes produced by UNWIND),
+        // evaluate the ID straight from the base vector. Other properties live in separate
+        // vectors and still require scan-sourced bindings. Only fires where evaluation
+        // previously threw, so working plans are unaffected.
+        auto& property = expression->constCast<binder::PropertyExpression>();
+        for (auto& scoped : schema->getExpressionsInScope()) {
+            if (scoped->getUniqueName() == property.getVariableName() &&
+                (ExpressionUtil::isNodePattern(*scoped) || ExpressionUtil::isRelPattern(*scoped))) {
+                return std::make_unique<InternalIDExpressionEvaluator>(expression,
+                    getEvaluator(scoped));
+            }
+        }
+        // The base node/rel value is not bound here (e.g. a correlated ID whose carrier
+        // was never planned into this subplan). Fall through to the throw below: returning
+        // nothing from a non-void function is UB and has historically surfaced as a
+        // late-execution segfault in cloned evaluators rather than a clean error.
+        // LCOV_EXCL_START
+        throw NotImplementedException(
+            std::format("Cannot evaluate internal ID {}: base variable {} is not in scope.",
+                expression->toString(), property.getVariableName()));
+        // LCOV_EXCL_STOP
     } else {
         // LCOV_EXCL_START
         throw NotImplementedException(std::format("Cannot evaluate expression with type {}.",

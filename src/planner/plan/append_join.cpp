@@ -45,9 +45,22 @@ void Planner::appendHashJoin(const std::vector<expression_pair>& joinConditions,
     const auto estimatedOutputCardinality = cardinalityEstimator.estimateHashJoin(joinConditions,
         probePlan.getLastOperatorRef(), buildPlan.getLastOperatorRef());
     hashJoin->setCardinality(estimatedOutputCardinality);
-    resultPlan.setCost(
-        CostModel::computeHashJoinCost(LogicalHashJoin::getJoinNodeIDs(joinConditions), probePlan,
-            buildPlan, estimatedOutputCardinality));
+    // Cost the build side with the build keys (same filter as getJoinNodeIDs, applied to
+    // pair.second). For cross-variable conditions (e.g. an unnested OPTIONAL MATCH
+    // equating different variables) the probe keys are not in the build schema at all;
+    // same-variable joins are unaffected (both sides match by unique name).
+    binder::expression_vector buildKeyNodeIDs;
+    for (auto& [_, buildKey] : joinConditions) {
+        if (buildKey->expressionType != ExpressionType::PROPERTY) {
+            continue;
+        }
+        if (buildKey->dataType.getLogicalTypeID() != LogicalTypeID::INTERNAL_ID) {
+            continue;
+        }
+        buildKeyNodeIDs.push_back(buildKey);
+    }
+    resultPlan.setCost(CostModel::computeHashJoinCost(buildKeyNodeIDs, probePlan, buildPlan,
+        estimatedOutputCardinality));
     resultPlan.setLastOperator(std::move(hashJoin));
 }
 
