@@ -190,7 +190,7 @@ static bool isConstantExpression(const std::shared_ptr<Expression> expression) {
     // TODO(Xiyang): fold parameter expression in binder.
     case ExpressionType::FUNCTION: {
         auto& func = expression->constCast<ScalarFunctionExpression>();
-        if (func.getFunction().name == "CAST") {
+        if (func.getFunction().name.starts_with("CAST")) {
             return isConstantExpression(func.getChild(0));
         } else {
             return false;
