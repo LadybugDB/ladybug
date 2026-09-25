@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_map>
+
 #include "common/vector/value_vector.h"
 
 namespace lbug::evaluator {
@@ -96,11 +98,26 @@ public:
         return {sliceListEntryState->getSelVector()[i], sliceDataState->getSelVector()[i]};
     }
 
+    void incrementQuantifierCount(common::sel_t listEntryPos) {
+        quantifierSelectedCounts[listEntryPos]++;
+    }
+
+    uint64_t getQuantifierCount(common::sel_t listEntryPos) const {
+        auto it = quantifierSelectedCounts.find(listEntryPos);
+        return it == quantifierSelectedCounts.end() ? 0 : it->second;
+    }
+
 private:
     void updateSelVector();
 
     // offset/size refer to the data vector
     common::offset_t resultSliceOffset;
+
+    // Accumulates, per list entry pos, the number of data elements in processed
+    // slices whose lambda predicate evaluated to true. Used by quantifier exec
+    // funcs (ANY/ALL/NONE/SINGLE), whose lists may span multiple slices.
+    // Lifetime is one evaluateInternal() call, so it is fresh per data chunk.
+    std::unordered_map<common::sel_t, uint64_t> quantifierSelectedCounts;
 
     ListEntryTracker listEntryTracker;
 
