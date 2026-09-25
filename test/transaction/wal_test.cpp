@@ -867,3 +867,208 @@ TEST_F(WalTest, LargeWALRecordReplayWithPreviousDBAlive) {
     ASSERT_TRUE(res->hasNext());
     EXPECT_EQ(res->getNext()->getValue(0)->getValue<std::string>(), big);
 }
+
+class FrozenWALRecoveryTest : public WalTest {
+protected:
+    void SetUp() override {
+        WalTest::SetUp();
+        if (inMemMode || systemConfig->checkpointThreshold == 0) {
+            GTEST_SKIP();
+        }
+        walFilePath = lbug::storage::StorageUtils::getWALFilePath(databasePath);
+        frozenWALFilePath = lbug::storage::StorageUtils::getCheckpointWALFilePath(databasePath);
+        ASSERT_TRUE(conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY);")->isSuccess());
+        ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+        // From here on nothing is checkpointed unless a test (or recovery) asks for it, so the
+        // WAL files are the only durable copy of the writes below.
+        systemConfig->autoCheckpoint = false;
+        systemConfig->forceCheckpointOnClose = false;
+        createDBAndConn();
+    }
+
+    void closeDB() {
+        conn.reset();
+        database.reset();
+    }
+
+    void insertRange(int64_t start, int64_t end) const {
+        auto res = conn->query(
+            std::format("UNWIND range({}, {}) AS i CREATE (:test {{id: i}});", start, end - 1));
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    }
+
+    int64_t countTestNodes() const {
+        auto res = conn->query("MATCH (n:test) RETURN COUNT(n);");
+        EXPECT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        if (!res->isSuccess() || !res->hasNext()) {
+            return -1;
+        }
+        return res->getNext()->getValue(0)->getValue<int64_t>();
+    }
+
+    int64_t queryCount(const std::string& query) const {
+        auto res = conn->query(query);
+        EXPECT_TRUE(res->isSuccess()) << query << ": " << res->getErrorMessage();
+        if (!res->isSuccess() || !res->hasNext()) {
+            return -1;
+        }
+        return res->getNext()->getValue(0)->getValue<int64_t>();
+    }
+
+    void runQuery(const std::string& query) const {
+        auto res = conn->query(query);
+        ASSERT_TRUE(res->isSuccess()) << query << ": " << res->getErrorMessage();
+    }
+
+    std::string walFilePath;
+    std::string frozenWALFilePath;
+};
+
+// A crash after a checkpoint rotated the WAL but before it wrote its CHECKPOINT record leaves a
+// frozen WAL without a CHECKPOINT record. Recovery replays it; its records must stay durable
+// until a checkpoint commits them, even if the recovered database is closed without one.
+TEST_F(FrozenWALRecoveryTest, FrozenWALWithoutCheckpointRecordSurvivesSecondRecovery) {
+    systemConfig->throwOnWalReplayFailure = true;
+    insertRange(0, 100);
+    closeDB();
+    ASSERT_FALSE(std::filesystem::exists(frozenWALFilePath));
+    std::filesystem::rename(walFilePath, frozenWALFilePath);
+
+    createDBAndConn();
+    EXPECT_EQ(countTestNodes(), 100);
+    EXPECT_FALSE(std::filesystem::exists(frozenWALFilePath));
+    closeDB();
+
+    createDBAndConn();
+    EXPECT_EQ(countTestNodes(), 100);
+    insertRange(100, 150);
+    closeDB();
+
+    createDBAndConn();
+    EXPECT_EQ(countTestNodes(), 150);
+}
+
+// Same as above, but writes committed after the interrupted checkpoint are in an active WAL next
+// to the frozen one. Recovery must apply the frozen WAL first and keep both durable.
+TEST_F(FrozenWALRecoveryTest, FrozenAndActiveWALSurviveSecondRecovery) {
+    systemConfig->throwOnWalReplayFailure = true;
+    const auto dataFileCopy = databasePath + ".before_frozen";
+    const auto frozenWALCopy = databasePath + ".frozen_wal";
+    insertRange(0, 100);
+    closeDB();
+    // The data file as of the interrupted checkpoint, and the WAL that checkpoint froze.
+    std::filesystem::copy_file(databasePath, dataFileCopy);
+    std::filesystem::copy_file(walFilePath, frozenWALCopy);
+
+    // Produce an active WAL that holds only writes made after the frozen WAL's records.
+    createDBAndConn();
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    insertRange(100, 150);
+    closeDB();
+    ASSERT_TRUE(std::filesystem::exists(walFilePath));
+
+    std::filesystem::copy_file(dataFileCopy, databasePath,
+        std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(frozenWALCopy, frozenWALFilePath);
+
+    createDBAndConn();
+    EXPECT_EQ(countTestNodes(), 150);
+    EXPECT_FALSE(std::filesystem::exists(frozenWALFilePath));
+    closeDB();
+
+    createDBAndConn();
+    EXPECT_EQ(countTestNodes(), 150);
+    insertRange(150, 160);
+    closeDB();
+
+    createDBAndConn();
+    EXPECT_EQ(countTestNodes(), 160);
+}
+
+// A frozen WAL without a CHECKPOINT record whose last transaction is torn. Only the committed
+// prefix is recovered, and it must recover the same way on every later open.
+TEST_F(FrozenWALRecoveryTest, FrozenWALWithTornTailRecoversConsistently) {
+    systemConfig->throwOnWalReplayFailure = false;
+    insertRange(0, 100);
+    insertRange(100, 200);
+    closeDB();
+    ASSERT_GT(std::filesystem::file_size(walFilePath), 10u);
+    std::filesystem::resize_file(walFilePath, std::filesystem::file_size(walFilePath) - 10);
+    std::filesystem::rename(walFilePath, frozenWALFilePath);
+
+    createDBAndConn();
+    EXPECT_EQ(countTestNodes(), 100);
+    closeDB();
+
+    systemConfig->throwOnWalReplayFailure = true;
+    createDBAndConn();
+    EXPECT_EQ(countTestNodes(), 100);
+    insertRange(100, 200);
+    closeDB();
+
+    createDBAndConn();
+    EXPECT_EQ(countTestNodes(), 200);
+}
+
+// The frozen WAL creates tables and data that the active WAL then deletes, updates and links to.
+// Replaying the active WAL without the frozen WAL's records does not just lose rows: it refers to
+// tables that do not exist. A stale shadow file models the interrupted checkpoint's pages.
+TEST_F(FrozenWALRecoveryTest, FrozenWALWithDDLAndDependentActiveWALSurvivesRecoveries) {
+    systemConfig->throwOnWalReplayFailure = true;
+    const auto dataFileCopy = databasePath + ".before_frozen";
+    const auto frozenWALCopy = databasePath + ".frozen_wal";
+    const auto shadowFilePath = lbug::storage::StorageUtils::getShadowFilePath(databasePath);
+
+    runQuery("CREATE NODE TABLE P(id INT64 PRIMARY KEY, v INT64);");
+    runQuery("CREATE REL TABLE K(FROM P TO P);");
+    runQuery("UNWIND range(0, 2999) AS i CREATE (:P {id: i, v: 0});");
+    runQuery("UNWIND range(0, 2998) AS i MATCH (a:P {id: i}), (b:P {id: i + 1}) "
+             "CREATE (a)-[:K]->(b);");
+    closeDB();
+    std::filesystem::copy_file(databasePath, dataFileCopy);
+    std::filesystem::copy_file(walFilePath, frozenWALCopy);
+
+    createDBAndConn();
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    runQuery("MATCH (p:P {id: 0}) DETACH DELETE p;");
+    runQuery("MATCH (p:P) WHERE p.id >= 1 AND p.id <= 100 SET p.v = 7;");
+    runQuery("CREATE (:P {id: 3000, v: 1});");
+    runQuery("MATCH (a:P {id: 3000}), (b:P {id: 5}) CREATE (a)-[:K]->(b);");
+    runQuery("UNWIND range(3001, 3099) AS i CREATE (:P {id: i, v: 2});");
+    closeDB();
+    ASSERT_TRUE(std::filesystem::exists(walFilePath));
+
+    std::filesystem::copy_file(dataFileCopy, databasePath,
+        std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(frozenWALCopy, frozenWALFilePath);
+    {
+        std::ofstream shadow(shadowFilePath, std::ios::binary);
+        const std::string garbage(2 * LBUG_PAGE_SIZE, '\xAB');
+        shadow.write(garbage.data(), static_cast<std::streamsize>(garbage.size()));
+    }
+
+    const auto checkState = [&]() {
+        EXPECT_EQ(queryCount("MATCH (p:P) RETURN COUNT(p);"), 3099);
+        EXPECT_EQ(queryCount("MATCH (:P)-[k:K]->(:P) RETURN COUNT(k);"), 2999);
+        EXPECT_EQ(queryCount("MATCH (p:P) WHERE p.v = 7 RETURN COUNT(p);"), 100);
+        EXPECT_EQ(queryCount("MATCH (p:P) WHERE p.v = 2 RETURN COUNT(p);"), 99);
+        EXPECT_EQ(queryCount("MATCH (p:P {id: 0}) RETURN COUNT(p);"), 0);
+        EXPECT_EQ(queryCount("MATCH (:P {id: 3000})-[:K]->(b:P {id: 5}) RETURN COUNT(b);"), 1);
+        EXPECT_EQ(queryCount("MATCH (a:P {id: 0})-[:K]->() RETURN COUNT(a);"), 0);
+    };
+    for (auto reopen = 0; reopen < 3; reopen++) {
+        createDBAndConn();
+        checkState();
+        EXPECT_FALSE(std::filesystem::exists(frozenWALFilePath));
+        EXPECT_FALSE(std::filesystem::exists(shadowFilePath));
+        closeDB();
+    }
+
+    createDBAndConn();
+    runQuery("CREATE (:P {id: 0, v: 3});");
+    EXPECT_FALSE(conn->query("CREATE (:P {id: 1, v: 3});")->isSuccess());
+    closeDB();
+    createDBAndConn();
+    EXPECT_EQ(queryCount("MATCH (p:P) RETURN COUNT(p);"), 3100);
+    EXPECT_EQ(queryCount("MATCH (p:P {id: 0}) WHERE p.v = 3 RETURN COUNT(p);"), 1);
+}

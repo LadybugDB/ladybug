@@ -49,6 +49,9 @@ private:
         bool enableChecksums) const;
     void replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalReplayFailure,
         bool enableChecksums) const;
+    // Checkpoints the state replayed from a frozen WAL without a CHECKPOINT record, committing
+    // that frozen WAL instead of rotating the active WAL.
+    void completeInterruptedCheckpoint() const;
 
     void removeWALAndShadowFiles(const std::string& walFilePath) const;
     void removeFileAndSyncParentDirectory(const std::string& path) const;
