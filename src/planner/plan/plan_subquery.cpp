@@ -397,9 +397,14 @@ void Planner::planOptionalMatch(const QueryGraphCollection& queryGraphCollection
             break;
         }
     }
+    // MERGE existence checks (mark != nullptr) and explicit join hints rely on the legacy
+    // unnested shape: the correlated path (expression-scan + accumulate) breaks MERGE's
+    // existence-mark semantics, and hints dictate a join order that only exists in the
+    // unnested plan. Keep them on the unnest path whenever analysis allows it.
+    bool forceUnnest = mark != nullptr || hint != nullptr;
     std::vector<expression_pair> joinConditions;
     LogicalPlan rightPlan;
-    if (canUnnest && innerSelective && !hasRecursiveRel) {
+    if (canUnnest && (forceUnnest || (innerSelective && !hasRecursiveRel))) {
         // Unnest as left join
         info.subqueryType = SubqueryPlanningType::UNNEST_CORRELATED;
         info.corrExprs = analyzer.getCorrelatedInternalIDs();
@@ -416,8 +421,10 @@ void Planner::planOptionalMatch(const QueryGraphCollection& queryGraphCollection
         }
         // A single node matched by primary key against outer expressions needs no
         // table scan: probe the PK index per outer binding instead (Left Join
-        // semantics preserved by PK uniqueness).
-        if (!tryPlanCorrelatedPrimaryKeyLookup(queryGraphCollection, predicates, correlatedExprs,
+        // semantics preserved by PK uniqueness). Skipped for MERGE existence checks,
+        // which require the legacy correlated shape below.
+        if (mark != nullptr ||
+            !tryPlanCorrelatedPrimaryKeyLookup(queryGraphCollection, predicates, correlatedExprs,
                 *leftPlan.getSchema(), info.corrExprsCard, rightPlan)) {
             rightPlan = planQueryGraphCollectionInNewContext(queryGraphCollection, info);
         }

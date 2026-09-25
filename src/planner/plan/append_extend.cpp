@@ -196,12 +196,6 @@ void Planner::appendRecursiveExtend(const std::shared_ptr<NodeExpression>& bound
     // looks as cheap as seeding from 70 tag classes whenever the (direction-independent)
     // output estimates tie, even though the former does ~200x more per-source GDS setup
     // work (measured ~0.5ms/source vs ~0.5us/output pair on LDBC SNB SF1, hence the factor).
-    // Recursive execution runs one graph search per bound source node (see
-    // RecursiveExtend::executeInternal), so its cost grows with the number of sources, not
-    // just the input/output cardinalities. Without a per-source term, seeding from 16k tags
-    // looks as cheap as seeding from 70 tag classes whenever the (direction-independent)
-    // output estimates tie, even though the former does ~200x more per-source GDS setup
-    // work (measured ~0.5ms/source vs ~0.5us/output pair on LDBC SNB SF1, hence the factor).
     probePlan.setCost(plan.getCardinality() * PlannerKnobs::RECURSIVE_EXTEND_SOURCE_COST);
 
     // Join with input node
