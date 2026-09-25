@@ -54,6 +54,14 @@ void WAL::logAndFlushCheckpoint(main::ClientContext* context) {
 bool WAL::rotateForCheckpoint(main::ClientContext* /*context*/) {
     std::unique_lock lck{mtx};
     throwIfPoisonedNoLock();
+    if (adoptFrozenWAL) {
+        // The frozen WAL on disk becomes this checkpoint's frozen WAL. The active WAL, if any,
+        // holds later records that recovery replays after this checkpoint, so it is left alone.
+        // It has no CHECKPOINT record yet, so any state tracking whether the frozen WAL holds
+        // one must read "no" here, as it does after a fresh rotation.
+        adoptFrozenWAL = false;
+        return true;
+    }
     if (inMemory) {
         return false;
     }
@@ -205,6 +213,11 @@ uint64_t WAL::getFileSize() {
 void WAL::throwIfPoisoned() {
     std::unique_lock lck{mtx};
     throwIfPoisonedNoLock();
+}
+
+void WAL::setAdoptFrozenWALForCheckpoint(bool adopt) {
+    std::unique_lock lck{mtx};
+    adoptFrozenWAL = adopt;
 }
 
 void WAL::throwIfPoisonedNoLock() const {

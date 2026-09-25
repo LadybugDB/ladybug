@@ -35,6 +35,9 @@ public:
 
     uint64_t getFileSize();
     void throwIfPoisoned();
+    // Recovery only: while set, the next checkpoint commits the frozen WAL of an interrupted
+    // checkpoint, whose records recovery has replayed, instead of rotating the active WAL.
+    void setAdoptFrozenWALForCheckpoint(bool adopt);
 
     static WAL* Get(const main::ClientContext& context);
 
@@ -58,6 +61,7 @@ private:
     std::condition_variable groupCommitCV;
     uint64_t appendedCommitSequence = 0;
     uint64_t durableCommitSequence = 0;
+    bool adoptFrozenWAL = false;
     bool syncInProgress = false;
     bool poisoned = false;
     std::string poisonReason;
