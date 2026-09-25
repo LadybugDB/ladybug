@@ -1,7 +1,9 @@
 #include "optimizer/agg_key_dependency_optimizer.h"
 
+#include "binder/expression/aggregate_function_expression.h"
 #include "binder/expression/expression_util.h"
 #include "binder/expression/property_expression.h"
+#include "function/aggregate_function.h"
 #include "planner/operator/logical_aggregate.h"
 #include "planner/operator/logical_distinct.h"
 
@@ -29,6 +31,24 @@ void AggKeyDependencyOptimizer::visitAggregate(planner::LogicalOperator* op) {
     auto [keys, dependentKeys] = resolveKeysAndDependentKeys(agg->getKeys());
     agg->setKeys(keys);
     agg->setDependentKeys(dependentKeys);
+    // A COLLECT built per group key set K0 yields exactly one list per K0 group, so the
+    // collected variable is functionally determined by K0. Record that for downstream
+    // DISTINCT/GROUP BY key reduction below. Binder unique names distinguish rebinding.
+    for (auto& aggExpr : agg->getAggregates()) {
+        if (aggExpr->expressionType != ExpressionType::AGGREGATE_FUNCTION) {
+            continue;
+        }
+        auto& aggFunc = aggExpr->constCast<AggregateFunctionExpression>();
+        if (aggFunc.getFunction().name != function::CollectFunction::name ||
+            aggFunc.getNumChildren() != 1) {
+            continue;
+        }
+        std::unordered_set<std::string> groupNames;
+        for (auto& key : agg->getKeys()) {
+            groupNames.insert(key->getUniqueName());
+        }
+        collectVarDeps[aggExpr->getUniqueName()] = std::move(groupNames);
+    }
 }
 
 void AggKeyDependencyOptimizer::visitDistinct(planner::LogicalOperator* op) {
@@ -55,10 +75,35 @@ AggKeyDependencyOptimizer::resolveKeysAndDependentKeys(const expression_vector& 
             }
         }
     }
+    // Collect input key names for collect-built dependency checks below.
+    std::unordered_set<std::string> inputKeyNames;
+    for (auto& key : inputKeys) {
+        inputKeyNames.insert(key->getUniqueName());
+    }
     // Resolve key dependency.
     binder::expression_vector keys;
     binder::expression_vector dependentKeys;
     for (auto& key : inputKeys) {
+        // A COLLECT-built list is functionally determined by the group keys it was built
+        // over. If those are all present here, rows agreeing on the remaining keys
+        // agree on the list too, so it rides as payload instead of being hashed.
+        auto collectIt = collectVarDeps.find(key->getUniqueName());
+        // An empty group-key set would match vacuously; a global (keyless) collect is a
+        // single group and must stay a key (dropping it collapses grouping and can
+        // crash on empty key sets).
+        if (collectIt != collectVarDeps.end() && !collectIt->second.empty()) {
+            bool determined = true;
+            for (auto& groupName : collectIt->second) {
+                if (!inputKeyNames.contains(groupName)) {
+                    determined = false;
+                    break;
+                }
+            }
+            if (determined) {
+                dependentKeys.push_back(key);
+                continue;
+            }
+        }
         if (key->expressionType == ExpressionType::PROPERTY) {
             auto property = (PropertyExpression*)key.get();
             if (property->isPrimaryKey() ||
