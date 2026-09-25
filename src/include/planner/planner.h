@@ -50,6 +50,53 @@ struct QueryGraphPlanningInfo {
     bool containsCorrExpr(const binder::Expression& expr) const;
 };
 
+// How to plan a correlated OPTIONAL MATCH leg once predicate analysis is done.
+// Computed purely from named gates (see decide()) so the branch policy is reviewable
+// and unit-testable in isolation; planOptionalMatch only executes the chosen strategy.
+struct CorrelatedOptionalLegDecision {
+    // MERGE existence check or explicit join hint: keep pre-change behavior.
+    bool legacyPath = false;
+    // Every correlated predicate is an unnestable equality.
+    bool canUnnest = false;
+    // Every correlated node is constant-filtered inside the leg, so the standalone
+    // leg plan is selective on its own.
+    bool innerSelective = false;
+    // Some join condition equates different variables (e.g. an outer element ID
+    // equated with a different leg-local variable's ID): correlated execution cannot
+    // turn it into a scan-side semi mask, so every outer batch would re-run full leg
+    // scans behind a filter.
+    bool hasCrossVariableJoin = false;
+    // The leg contains a recursive pattern: path construction relies on correlated
+    // execution.
+    bool hasRecursiveRel = false;
+    // A single node matched by primary key against outer expressions: probe the PK
+    // index per outer binding. Eligibility requires the key to depend on outer
+    // expressions (a constant key never qualifies), so this strategy cannot steal
+    // legs the unnest branch would serve better.
+    bool pkLookupEligible = false;
+
+    enum class Strategy { PRIMARY_KEY_LOOKUP, UNNEST_LEFT_JOIN, CORRELATED };
+    Strategy decide() const {
+        if (!legacyPath && !hasRecursiveRel && pkLookupEligible) {
+            return Strategy::PRIMARY_KEY_LOOKUP;
+        }
+        if (canUnnest &&
+            (legacyPath || ((innerSelective || hasCrossVariableJoin) && !hasRecursiveRel))) {
+            return Strategy::UNNEST_LEFT_JOIN;
+        }
+        return Strategy::CORRELATED;
+    }
+};
+
+// True when an operator only passes through, filters, or combines already-bound rows,
+// so it cannot introduce null bindings (used by the collect-membership rewrite's
+// null-supply check). Every
+// LogicalOperatorType enumerator is listed explicitly with no default label, so
+// -Wswitch turns an unclassified new operator into a build failure (see #935)
+// instead of a silent behavior change; unlisted-in-spirit newcomers must be added to
+// one of the two arms below. Declared here so the classification table is unit-testable.
+bool isNullFreeOperator(LogicalOperatorType type);
+
 // Group property expressions based on node/relationship.
 class PropertyExprCollection {
 public:
@@ -243,6 +290,23 @@ public:
     bool tryPlanCorrelatedPrimaryKeyLookup(const binder::QueryGraphCollection& queryGraphCollection,
         const binder::expression_vector& predicates, const binder::expression_vector& corrExprs,
         const Schema& outerSchema, common::cardinality_t corrExprsCard, LogicalPlan& rightPlan);
+    // Pure eligibility half of tryPlanCorrelatedPrimaryKeyLookup (no plan mutation):
+    // single node, single table with a PK index, and an equality of the node's PK
+    // against an expression computable from the correlated bindings. On success fills
+    // the usable key and the remaining (residual) predicates. Safe to call
+    // speculatively from the branch decision (see CorrelatedOptionalLegDecision).
+    bool findCorrelatedPrimaryKeyLookupKey(const binder::QueryGraphCollection& queryGraphCollection,
+        const binder::expression_vector& predicates, const binder::expression_vector& corrExprs,
+        const Schema& outerSchema, std::shared_ptr<binder::Expression>& key,
+        binder::expression_vector& residualPredicates);
+    // Unnest an IN-membership test over an outer COLLECT-built node list: WITH k,
+    // COLLECT(x) AS C ... OPTIONAL MATCH ... WHERE y IN C becomes (group key, element)
+    // rows plus y = x, so the membership test hash-joins instead of scanning a list
+    // per row. Rewrites predicates in place; extends leftPlan with UNWIND + DISTINCT.
+    // Returns false (leaving everything untouched) unless the shape provably preserves
+    // semantics. See plan_subquery.cpp for the conditions.
+    bool tryUnnestCollectMembership(const binder::QueryGraphCollection& queryGraphCollection,
+        binder::expression_vector& predicates, LogicalPlan& leftPlan);
 
     // Append extend operators
     void appendNonRecursiveExtend(const std::shared_ptr<binder::NodeExpression>& boundNode,

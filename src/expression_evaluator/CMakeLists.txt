@@ -5,6 +5,7 @@ add_library(lbug_expression_evaluator
         expression_evaluator_utils.cpp
         expression_evaluator_visitor.cpp
         function_evaluator.cpp
+        internal_id_evaluator.cpp
         lambda_evaluator.cpp
         list_slice_info.cpp
         literal_evaluator.cpp
