@@ -251,15 +251,20 @@ static bool isRoutableConstantEquality(const std::shared_ptr<Expression>& predic
 
 class SubqueryPredicatePullUpAnalyzer {
 public:
+    // When routeConstantEqualities is false, constant-equality predicates keep the legacy
+    // treatment (correlated), so analysis behaves exactly as before the unnesting change.
+    // Used for MERGE existence checks and explicit join hints (see planOptionalMatch).
     SubqueryPredicatePullUpAnalyzer(const Schema& schema,
-        const QueryGraphCollection& queryGraphCollection)
-        : schema{schema}, queryGraphCollection{queryGraphCollection} {}
+        const QueryGraphCollection& queryGraphCollection, bool routeConstantEqualities = true)
+        : schema{schema}, queryGraphCollection{queryGraphCollection},
+          routeConstantEqualities{routeConstantEqualities} {}
 
     bool analyze(const expression_vector& predicates) {
         expression_vector correlatedPredicates;
         for (auto& predicate : predicates) {
             if (getDependentExprs(predicate, schema).empty() ||
-                isRoutableConstantEquality(predicate, queryGraphCollection)) {
+                (routeConstantEqualities &&
+                    isRoutableConstantEquality(predicate, queryGraphCollection))) {
                 nonCorrelatedPredicates.push_back(predicate);
             } else {
                 correlatedPredicates.push_back(predicate);
@@ -317,6 +322,7 @@ private:
 private:
     const Schema& schema;
     const QueryGraphCollection& queryGraphCollection;
+    bool routeConstantEqualities;
 
     expression_vector nonCorrelatedPredicates;
     std::vector<binder::expression_pair> joinConditions;
@@ -359,8 +365,14 @@ void Planner::planOptionalMatch(const QueryGraphCollection& queryGraphCollection
         return;
     }
     // Plan correlated subquery
+    // MERGE existence checks (mark != nullptr) and explicit join hints keep legacy predicate
+    // analysis: rerouting constant equalities into the subplan breaks MERGE's existence-mark
+    // semantics (node-pattern values such as a.ID = 100 must stay on the outer join), and
+    // hints pin a join order that only exists under legacy analysis.
+    bool legacyPath = mark != nullptr || hint != nullptr;
     info.corrExprsCard = leftPlan.getCardinality();
-    auto analyzer = SubqueryPredicatePullUpAnalyzer(*leftPlan.getSchema(), queryGraphCollection);
+    auto analyzer =
+        SubqueryPredicatePullUpAnalyzer(*leftPlan.getSchema(), queryGraphCollection, !legacyPath);
     bool canUnnest = analyzer.analyze(predicates);
     // Unnesting re-plans the subquery standalone and joins afterward. That wins when the
     // inner plan is selective on its own, i.e. every correlated node carries a constant
@@ -397,14 +409,11 @@ void Planner::planOptionalMatch(const QueryGraphCollection& queryGraphCollection
             break;
         }
     }
-    // MERGE existence checks (mark != nullptr) and explicit join hints rely on the legacy
-    // unnested shape: the correlated path (expression-scan + accumulate) breaks MERGE's
-    // existence-mark semantics, and hints dictate a join order that only exists in the
-    // unnested plan. Keep them on the unnest path whenever analysis allows it.
-    bool forceUnnest = mark != nullptr || hint != nullptr;
+    // Legacy paths keep the pre-change branch decision as well: the selective-unnest gate
+    // below must not redirect a plan the legacy analysis chose to unnest (or vice versa).
     std::vector<expression_pair> joinConditions;
     LogicalPlan rightPlan;
-    if (canUnnest && (forceUnnest || (innerSelective && !hasRecursiveRel))) {
+    if (canUnnest && (legacyPath || (innerSelective && !hasRecursiveRel))) {
         // Unnest as left join
         info.subqueryType = SubqueryPlanningType::UNNEST_CORRELATED;
         info.corrExprs = analyzer.getCorrelatedInternalIDs();
@@ -421,9 +430,9 @@ void Planner::planOptionalMatch(const QueryGraphCollection& queryGraphCollection
         }
         // A single node matched by primary key against outer expressions needs no
         // table scan: probe the PK index per outer binding instead (Left Join
-        // semantics preserved by PK uniqueness). Skipped for MERGE existence checks,
-        // which require the legacy correlated shape below.
-        if (mark != nullptr ||
+        // semantics preserved by PK uniqueness). Skipped on legacy paths (MERGE
+        // existence checks, join hints), which require the legacy correlated shape below.
+        if (legacyPath ||
             !tryPlanCorrelatedPrimaryKeyLookup(queryGraphCollection, predicates, correlatedExprs,
                 *leftPlan.getSchema(), info.corrExprsCard, rightPlan)) {
             rightPlan = planQueryGraphCollectionInNewContext(queryGraphCollection, info);
