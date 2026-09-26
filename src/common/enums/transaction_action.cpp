@@ -22,9 +22,8 @@ std::string TransactionActionUtils::toString(TransactionAction action) {
     case TransactionAction::CHECKPOINT: {
         return "CHECKPOINT";
     }
-    default:
-        UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 } // namespace transaction

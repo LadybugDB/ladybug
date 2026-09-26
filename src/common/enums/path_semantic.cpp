@@ -31,9 +31,8 @@ std::string PathSemanticUtils::toString(PathSemantic semantic) {
         return "TRAIL";
     case PathSemantic::ACYCLIC:
         return "ACYCLIC";
-    default:
-        UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 } // namespace common

@@ -10,6 +10,8 @@ namespace common {
 
 PathSemantic QueryRelTypeUtils::getPathSemantic(QueryRelType queryRelType) {
     switch (queryRelType) {
+    case QueryRelType::NON_RECURSIVE:
+        UNREACHABLE_CODE;
     case QueryRelType::VARIABLE_LENGTH_WALK:
         return PathSemantic::WALK;
     case QueryRelType::VARIABLE_LENGTH_TRAIL:
@@ -20,13 +22,14 @@ PathSemantic QueryRelTypeUtils::getPathSemantic(QueryRelType queryRelType) {
     case QueryRelType::WEIGHTED_SHORTEST:
     case QueryRelType::ALL_WEIGHTED_SHORTEST:
         return PathSemantic::ACYCLIC;
-    default:
-        UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 std::unique_ptr<function::RJAlgorithm> QueryRelTypeUtils::getFunction(QueryRelType type) {
     switch (type) {
+    case QueryRelType::NON_RECURSIVE:
+        UNREACHABLE_CODE;
     case QueryRelType::VARIABLE_LENGTH_WALK:
     case QueryRelType::VARIABLE_LENGTH_TRAIL:
     case QueryRelType::VARIABLE_LENGTH_ACYCLIC: {
@@ -44,9 +47,8 @@ std::unique_ptr<function::RJAlgorithm> QueryRelTypeUtils::getFunction(QueryRelTy
     case QueryRelType::ALL_WEIGHTED_SHORTEST: {
         return AllWeightedSPPathsFunction::getAlgorithm();
     }
-    default:
-        UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 } // namespace common

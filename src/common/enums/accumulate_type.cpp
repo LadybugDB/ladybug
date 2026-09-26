@@ -13,9 +13,8 @@ std::string AccumulateTypeUtil::toString(AccumulateType type) {
     case AccumulateType::OPTIONAL_: {
         return "OPTIONAL";
     }
-    default:
-        UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 } // namespace common
