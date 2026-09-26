@@ -1559,10 +1559,55 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteDegreeTopK(
     }
     auto& extend = aggregateChild->constCast<LogicalExtend>();
     auto boundNode = extend.getBoundNode();
-    if (boundNode->isMultiLabeled() ||
+    if (boundNode->isMultiLabeled() || boundNode->getNumEntries() != 1 ||
         !(*nodeKey == *boundNode->getPrimaryKey(boundNode->getTableIDs()[0])) ||
         !isCountNbr(current, *extend.getNbrNode()) || !extend.getProperties().empty()) {
         return op;
+    }
+    // TOP_K_DEGREES writes raw storage offsets as the group key, so it is only valid when
+    // primary_key == rowid is explicitly declared (CSR) and unmutated since declaration.
+    // Without this gate a STRING pk segfaults in writeNodeKey and a non-contiguous INT pk
+    // silently returns offsets instead of key values (see #1031).
+    {
+        auto tableID = boundNode->getTableIDs()[0];
+        auto* nodeEntry = boundNode->getEntry(0)->ptrCast<NodeTableCatalogEntry>();
+        if (!nodeEntry->isCsr()) {
+            return op;
+        }
+        auto* table = storage::StorageManager::Get(*_context)->getTable(tableID);
+        if (!table || table->getChangeEpoch() != nodeEntry->getCsrChangeEpoch()) {
+            return op;
+        }
+        // Exhaustive per #935: no `default:` so -Wswitch fails the build when a new
+        // PhysicalTypeID is added, forcing a conscious allow/reject decision here.
+        switch (nodeKey->getDataType().getPhysicalType()) {
+        case PhysicalTypeID::INT8:
+        case PhysicalTypeID::INT16:
+        case PhysicalTypeID::INT32:
+        case PhysicalTypeID::INT64:
+        case PhysicalTypeID::UINT8:
+        case PhysicalTypeID::UINT16:
+        case PhysicalTypeID::UINT32:
+        case PhysicalTypeID::UINT64:
+        case PhysicalTypeID::INT128:
+        case PhysicalTypeID::UINT128:
+            break;
+        case PhysicalTypeID::ANY:
+        case PhysicalTypeID::BOOL:
+        case PhysicalTypeID::DOUBLE:
+        case PhysicalTypeID::FLOAT:
+        case PhysicalTypeID::INTERVAL:
+        case PhysicalTypeID::INTERNAL_ID:
+        case PhysicalTypeID::ALP_EXCEPTION_FLOAT:
+        case PhysicalTypeID::ALP_EXCEPTION_DOUBLE:
+        case PhysicalTypeID::STRING:
+        case PhysicalTypeID::JSON:
+        case PhysicalTypeID::LIST:
+        case PhysicalTypeID::ARRAY:
+        case PhysicalTypeID::STRUCT:
+        case PhysicalTypeID::POINTER:
+            return op;
+        }
     }
     auto* scan = aggregateChild->getChild(0).get();
     if (scan->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE) {
