@@ -653,6 +653,76 @@ TEST_F(ApiTest, RepeatedDistinctAggregateCachedPlanExecution906) {
     ASSERT_TRUE(cachedPlanExists(conn.get(), *prepared));
 }
 
+// Regression test for issue #1030: re-running a cached parameterized rel scan after a
+// committed transaction that inserted a node segfaulted in NodeTable::initScanState.
+// Root cause: ScanNodeTableSharedState is shared across cached physical plan clones, but
+// initialize() never reset numUnCommittedNodeGroups. After the in-transaction execution
+// saw the new node's local group, a later read execution was handed an UNCOMMITTED morsel
+// whose local table was gone with the committed transaction, dereferencing null (+0x68).
+TEST_F(ApiTest, RepeatedScanAfterNodeInsertCachedPlanExecution1030) {
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE N(id STRING, PRIMARY KEY(id))")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE R(FROM N TO N, tag STRING)")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:N {id: 'a'}), (:N {id: 'b'})")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("MATCH (a:N {id: 'a'}), (b:N {id: 'b'}) CREATE (a)-[:R {tag: 't'}]->(b)")
+            ->isSuccess());
+    const std::string scan = "MATCH ()-[r:R]->() WHERE r.tag = $tag RETURN count(r)";
+    std::unordered_map<std::string, std::unique_ptr<Value>> prepareParams;
+    prepareParams["tag"] = std::make_unique<Value>(std::string("x"));
+    auto prepared = conn->prepareWithParams(scan, std::move(prepareParams));
+    ASSERT_TRUE(prepared->isSuccess()) << prepared->getErrorMessage();
+    auto executeWithTag = [&](const std::string& tag) {
+        std::unordered_map<std::string, std::unique_ptr<Value>> params;
+        params["tag"] = std::make_unique<Value>(tag);
+        return conn->executeWithParams(prepared.get(), std::move(params));
+    };
+    // Execute inside an explicit write transaction that inserts a node, populating the
+    // shared scan state (and the plan cache) with uncommitted morsels.
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:N {id: 'c'})")->isSuccess());
+    auto inTxnResult = executeWithTag("x");
+    ASSERT_TRUE(inTxnResult->isSuccess()) << inTxnResult->getErrorMessage();
+    ASSERT_TRUE(conn->query("COMMIT")->isSuccess());
+    ASSERT_TRUE(cachedPlanExists(conn.get(), *prepared));
+    // Re-running the same cached plan after the commit must not touch the committed
+    // transaction's local storage. Before the fix this segfaulted.
+    for (auto run = 0; run < 3; run++) {
+        auto result = executeWithTag("t");
+        ASSERT_TRUE(result->isSuccess()) << "run " << run << ": " << result->getErrorMessage();
+        ASSERT_EQ(std::vector<std::string>{"1"}, TestHelper::convertResultToString(*result))
+            << "run " << run;
+        result = executeWithTag("x");
+        ASSERT_TRUE(result->isSuccess()) << "run " << run << ": " << result->getErrorMessage();
+        ASSERT_EQ(std::vector<std::string>{"0"}, TestHelper::convertResultToString(*result))
+            << "run " << run;
+    }
+    // The same shape as a write must also reuse the plan safely.
+    const std::string deleteShape = "MATCH ()-[r:R]->() WHERE r.tag = $tag DELETE r";
+    std::unordered_map<std::string, std::unique_ptr<Value>> deletePrepareParams;
+    deletePrepareParams["tag"] = std::make_unique<Value>(std::string("t"));
+    auto deletePrepared = conn->prepareWithParams(deleteShape, std::move(deletePrepareParams));
+    ASSERT_TRUE(deletePrepared->isSuccess()) << deletePrepared->getErrorMessage();
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:N {id: 'd'})")->isSuccess());
+    {
+        std::unordered_map<std::string, std::unique_ptr<Value>> params;
+        params["tag"] = std::make_unique<Value>(std::string("z"));
+        auto inTxnDelete = conn->executeWithParams(deletePrepared.get(), std::move(params));
+        ASSERT_TRUE(inTxnDelete->isSuccess()) << inTxnDelete->getErrorMessage();
+    }
+    ASSERT_TRUE(conn->query("COMMIT")->isSuccess());
+    for (auto run = 0; run < 2; run++) {
+        std::unordered_map<std::string, std::unique_ptr<Value>> params;
+        params["tag"] = std::make_unique<Value>(std::string("z"));
+        auto result = conn->executeWithParams(deletePrepared.get(), std::move(params));
+        ASSERT_TRUE(result->isSuccess()) << "run " << run << ": " << result->getErrorMessage();
+    }
+    // The rel from the setup is untouched by the 'z' deletes.
+    auto result = executeWithTag("t");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(std::vector<std::string>{"1"}, TestHelper::convertResultToString(*result));
+}
+
 static bool cachedPlanExists(Connection* conn, const PreparedStatement& ps) {
     const auto& manager = conn->getClientContext()->getCachedPreparedStatementManager();
     if (!manager.containsStatement(ps.getName())) {

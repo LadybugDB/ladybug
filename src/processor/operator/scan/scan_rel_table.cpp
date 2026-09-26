@@ -157,6 +157,10 @@ void ScanRelTable::initGlobalStateInternal(ExecutionContext* context) {
         return;
     }
     DASSERT(sourceNodeTableInfos.size() == sourceNodeSharedStates.size());
+    // The progress state is shared across cached physical plan clones, so reset it per
+    // execution (ScanNodeTableSharedState::initialize only accumulates into it).
+    sourceNodeProgressSharedState->numMorsels = 0;
+    sourceNodeProgressSharedState->numMorselsScanned = 0;
     for (auto i = 0u; i < sourceNodeTableInfos.size(); ++i) {
         sourceNodeSharedStates[i]->initialize(
             transaction::Transaction::Get(*context->clientContext),

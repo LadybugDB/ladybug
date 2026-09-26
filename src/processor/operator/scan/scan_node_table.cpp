@@ -59,6 +59,14 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
     this->currentUnCommittedGroupIdx = 0;
     this->currentGroupNextRow = 0;
     this->committedMorselSize = common::INVALID_ROW_IDX;
+    // This shared state is shared across cached physical plan clones (see
+    // ScanNodeTable::copy), so every per-execution field must be reset here. In
+    // particular numUnCommittedNodeGroups must not survive a write transaction: a later
+    // read would otherwise be handed an UNCOMMITTED morsel whose local table is gone
+    // (see https://github.com/LadybugDB/ladybug/issues/1030).
+    this->numCommittedNodeGroups = 0;
+    this->numUnCommittedNodeGroups = 0;
+    this->committedGroupNumRows.clear();
 
     // Initialize table-specific scan coordination (e.g., for IceDiskNodeTable)
     table->initializeScanCoordination(transaction);
@@ -225,6 +233,10 @@ void ScanNodeTable::initCurrentTable(ExecutionContext* context) {
 
 void ScanNodeTable::initGlobalStateInternal(ExecutionContext* context) {
     DASSERT(sharedStates.size() == tableInfos.size());
+    // The progress state is shared across cached physical plan clones, so reset it per
+    // execution (ScanNodeTableSharedState::initialize only accumulates into it).
+    progressSharedState->numMorsels = 0;
+    progressSharedState->numMorselsScanned = 0;
     for (auto i = 0u; i < tableInfos.size(); i++) {
         sharedStates[i]->initialize(transaction::Transaction::Get(*context->clientContext),
             tableInfos[i].table->ptrCast<NodeTable>(), *progressSharedState,

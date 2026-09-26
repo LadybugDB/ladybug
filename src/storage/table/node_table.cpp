@@ -314,7 +314,15 @@ void NodeTable::initScanState(Transaction* transaction, TableScanState& scanStat
     } break;
     case TableScanSource::UNCOMMITTED: {
         const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
-        DASSERT(localTable);
+        // An UNCOMMITTED morsel without a local table means a stale scan shared state
+        // survived from an earlier (committed) write transaction (see
+        // https://github.com/LadybugDB/ladybug/issues/1030). Throw instead of
+        // dereferencing null.
+        if (localTable == nullptr) {
+            throw common::RuntimeException(
+                "Node table scan reached uncommitted data that is no longer available. "
+                "The scan state is stale; please retry the query.");
+        }
         const auto& localNodeTable = localTable->cast<LocalNodeTable>();
         nodeGroup = localNodeTable.getNodeGroup(nodeScanState.nodeGroupIdx);
         DASSERT(nodeGroup);
