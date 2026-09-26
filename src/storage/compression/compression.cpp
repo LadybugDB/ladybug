@@ -519,23 +519,32 @@ void ConstantCompression::copyFromPage(const uint8_t* srcBuffer, uint64_t srcOff
 }
 
 template<typename T>
-inline T abs(T value);
+inline common::numeric_utils::MakeUnSignedT<T> unsignedAbs(T value);
 
 template<typename T>
     requires std::is_unsigned_v<T>
-inline T abs(T value) {
+inline T unsignedAbs(T value) {
     return value;
 }
 
 template<typename T>
-    requires std::is_signed_v<T>
-inline T abs(T value) {
-    return std::abs(value);
+    requires(std::is_signed_v<T> && !std::same_as<T, int128_t>)
+inline common::numeric_utils::MakeUnSignedT<T> unsignedAbs(T value) {
+    using U = common::numeric_utils::MakeUnSignedT<T>;
+    // Negating the minimum signed value (e.g. INT64_MIN) is UB in the signed
+    // domain, so convert to unsigned first and negate there.
+    return value >= 0 ? static_cast<U>(value) : static_cast<U>(0u - static_cast<U>(value));
 }
 
 template<>
-inline int128_t abs<int128_t>(int128_t value) {
-    return value >= 0 ? value : -value;
+inline int128_t unsignedAbs<int128_t>(int128_t value) {
+    // INT128_MIN has no positive counterpart; the caller early-returns a
+    // full-width layout for chunks containing it, so saturate here to avoid
+    // signed overflow on negation.
+    if (value.high == std::numeric_limits<int64_t>::min() && value.low == 0) {
+        return int128_t{std::numeric_limits<uint64_t>::max(), std::numeric_limits<int64_t>::max()};
+    }
+    return value >= 0 ? value : static_cast<int128_t>(-value);
 }
 
 template<IntegerBitpackingType T>
@@ -574,13 +583,13 @@ BitpackInfo<T> IntegerBitpacking<T>::getPackingInfo(const CompressionMetadata& m
         // when inserting
         hasNegative = true;
     } else if (min < 0) {
-        bitWidth =
-            static_cast<uint8_t>(numeric_utils::bitWidth((U)std::max(abs<T>(min), abs<T>(max)))) +
-            1;
+        bitWidth = static_cast<uint8_t>(
+                       numeric_utils::bitWidth(std::max(unsignedAbs(min), unsignedAbs(max)))) +
+                   1;
         hasNegative = true;
     } else {
-        bitWidth =
-            static_cast<uint8_t>(numeric_utils::bitWidth((U)std::max(abs<T>(min), abs<T>(max))));
+        bitWidth = static_cast<uint8_t>(
+            numeric_utils::bitWidth(std::max(unsignedAbs(min), unsignedAbs(max))));
         hasNegative = false;
     }
     if constexpr (std::same_as<T, int128_t>) {
