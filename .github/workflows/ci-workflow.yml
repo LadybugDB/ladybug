@@ -140,9 +140,24 @@ jobs:
     name: minimal test (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     needs: [ sanity-checks ]
+    # Static matrix (cf. icebug ci-matrix.yml); platform selection is done via `if`.
+    # schedule / dispatch `all` -> all platforms; dispatch `<platform>` -> that
+    # platform; pull_request / push / dispatch `linux` (default) -> linux only.
+    if: >-
+      github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'all')
+      || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == matrix.platform)
+      || (matrix.platform == 'linux' && (github.event_name == 'pull_request' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'linux')))
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON((github.event_name == 'schedule' && '{"include":[{"platform":"linux","runner":"ubuntu-latest"},{"platform":"macos","runner":"macos-latest"},{"platform":"windows","runner":"windows-2022"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'all' && '{"include":[{"platform":"linux","runner":"ubuntu-latest"},{"platform":"macos","runner":"macos-latest"},{"platform":"windows","runner":"windows-2022"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'macos' && '{"include":[{"platform":"macos","runner":"macos-latest"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'windows' && '{"include":[{"platform":"windows","runner":"windows-2022"}]}') || '{"include":[{"platform":"linux","runner":"ubuntu-latest"}]}') }}
+      matrix:
+        include:
+          - platform: linux
+            runner: ubuntu-latest
+          - platform: macos
+            runner: macos-latest
+          - platform: windows
+            runner: windows-2022
     env:
       GEN: Ninja
       TEST_JOBS: 4
