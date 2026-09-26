@@ -155,9 +155,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "USE_GRAPH";
     case PhysicalOperatorType::UNINSTALL_EXTENSION:
         return "UNINSTALL_EXTENSION";
-    default:
-        throw RuntimeException("Unknown physical operator type.");
     }
+    throw RuntimeException("Unknown physical operator type.");
 }
 
 std::string PhysicalOperatorUtils::operatorToString(const PhysicalOperator* physicalOp) {

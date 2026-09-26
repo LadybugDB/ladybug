@@ -23,9 +23,10 @@ idx_t RelDirectionUtils::relDirectionToKeyIdx(RelDataDirection direction) {
         return 0;
     case RelDataDirection::BWD:
         return 1;
-    default:
+    case RelDataDirection::INVALID:
         UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 table_id_t RelDirectionUtils::getNbrTableID(RelDataDirection direction, table_id_t srcTableID,
@@ -35,9 +36,10 @@ table_id_t RelDirectionUtils::getNbrTableID(RelDataDirection direction, table_id
         return dstTableID;
     case RelDataDirection::BWD:
         return srcTableID;
-    default:
+    case RelDataDirection::INVALID:
         UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 } // namespace common

@@ -13,9 +13,10 @@ std::string ConflictActionUtil::toString(ConflictAction action) {
     case ConflictAction::ON_CONFLICT_DO_NOTHING: {
         return "ON_CONFLICT_DO_NOTHING";
     }
-    default:
+    case ConflictAction::INVALID:
         UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 } // namespace common

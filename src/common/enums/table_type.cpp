@@ -19,9 +19,8 @@ std::string TableTypeUtils::toString(TableType tableType) {
     case TableType::FOREIGN: {
         return "ATTACHED";
     }
-    default:
-        UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 } // namespace common

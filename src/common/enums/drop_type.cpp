@@ -17,9 +17,8 @@ std::string DropTypeUtils::toString(DropType type) {
         return "Graph";
     case DropType::INDEX:
         return "Index";
-    default:
-        UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 } // namespace common

@@ -34,9 +34,8 @@ std::string RelMultiplicityUtils::toString(RelMultiplicity multiplicity) {
         return "ONE";
     case RelMultiplicity::MANY:
         return "MANY";
-    default:
-        UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 } // namespace common

@@ -103,9 +103,10 @@ std::string ExpressionTypeUtil::toString(ExpressionType type) {
         return "GRAPH";
     case ExpressionType::LAMBDA:
         return "LAMBDA";
-    default:
+    case ExpressionType::INVALID:
         UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 std::string ExpressionTypeUtil::toParsableString(ExpressionType type) {

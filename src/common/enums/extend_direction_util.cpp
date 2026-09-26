@@ -28,9 +28,8 @@ std::string ExtendDirectionUtil::toString(ExtendDirection direction) {
         return "bwd";
     case ExtendDirection::BOTH:
         return "both";
-    default:
-        UNREACHABLE_CODE;
     }
+    UNREACHABLE_CODE;
 }
 
 } // namespace common

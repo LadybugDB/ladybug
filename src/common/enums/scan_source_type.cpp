@@ -19,9 +19,14 @@ std::string ScanSourceTypeUtils::toString(ScanSourceType type) {
     case ScanSourceType::QUERY: {
         return "QUERY";
     }
-    default:
-        UNREACHABLE_CODE;
+    case ScanSourceType::TABLE_FUNC: {
+        return "TABLE_FUNC";
     }
+    case ScanSourceType::PARAM: {
+        return "PARAM";
+    }
+    }
+    UNREACHABLE_CODE;
 }
 
 } // namespace common

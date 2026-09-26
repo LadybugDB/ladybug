@@ -4,6 +4,7 @@ add_lbug_test(types_test
         int128_test.cpp
         uint128_test.cpp
         date_test.cpp
+        enum_to_string_test.cpp
         extension_proxy_test.cpp
         extension_ca_cert_test.cpp
         interval_test.cpp
