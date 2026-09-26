@@ -28,12 +28,19 @@
 #include "optimizer/top_k_optimizer.h"
 #include "optimizer/unwind_dedup_optimizer.h"
 #include "planner/operator/extend/logical_extend.h"
+#include "planner/operator/extend/logical_recursive_extend.h"
 #include "planner/operator/logical_aggregate.h"
+#include "planner/operator/logical_distinct.h"
 #include "planner/operator/logical_explain.h"
 #include "planner/operator/logical_filter.h"
 #include "planner/operator/logical_hash_join.h"
+#include "planner/operator/logical_intersect.h"
+#include "planner/operator/logical_limit.h"
 #include "planner/operator/logical_operator.h"
+#include "planner/operator/logical_order_by.h"
 #include "planner/operator/logical_partitioner.h"
+#include "planner/operator/logical_projection.h"
+#include "planner/operator/logical_unwind.h"
 #include "planner/operator/logical_unwind_deduplicate.h"
 #include "planner/operator/scan/logical_count_anti_edge_chain.h"
 #include "planner/operator/scan/logical_count_extend_chain.h"
@@ -42,12 +49,34 @@
 #include "planner/operator/scan/logical_reachable_count.h"
 #include "planner/operator/scan/logical_rel_degree_table.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
+#include "planner/operator/sip/logical_semi_masker.h"
 #include "transaction/transaction.h"
 
 namespace lbug {
 namespace optimizer {
 
 namespace {
+
+// Compact one-line summary of an expression list: first 2 entries plus the total count.
+// Keeps the dump readable for operators with many expressions (e.g. wide projections).
+std::string compactExprs(const binder::expression_vector& exprs, size_t maxExprs = 2) {
+    if (exprs.empty()) {
+        return "";
+    }
+    if (exprs.size() <= maxExprs) {
+        return binder::ExpressionUtil::toString(exprs);
+    }
+    binder::expression_vector head(exprs.begin(), exprs.begin() + maxExprs);
+    return binder::ExpressionUtil::toString(head) + ", ... (" + std::to_string(exprs.size()) +
+           " total)";
+}
+
+std::string truncate(std::string s, size_t maxLen = 120) {
+    if (s.size() <= maxLen) {
+        return s;
+    }
+    return s.substr(0, maxLen) + "...";
+}
 
 // Prints one operator per line as an indented tree. Enabled by setting LBUG_DUMP_LOGICAL in the
 // environment; unlike EXPLAIN LOGICAL this needs no query changes and shows the plan exactly as
@@ -91,12 +120,54 @@ void dumpLogicalTree(const planner::LogicalOperator* op, int depth,
             fprintf(stderr, "]");
         }
     } else if (op->getOperatorType() == planner::LogicalOperatorType::AGGREGATE) {
-        fprintf(stderr, " [keys=%llu aggs=%s]",
-            (unsigned long long)op->constCast<planner::LogicalAggregate>().getKeys().size(),
-            op->constCast<planner::LogicalAggregate>().getAggregates()[0]->toString().c_str());
-    } else if (op->getOperatorType() == planner::LogicalOperatorType::SCAN_NODE_TABLE) {
+        auto& agg = op->constCast<planner::LogicalAggregate>();
+        fprintf(stderr, " [keys=%s aggs=%s]", compactExprs(agg.getKeys()).c_str(),
+            compactExprs(agg.getAggregates()).c_str());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::PROJECTION) {
+        auto& proj = op->constCast<planner::LogicalProjection>();
+        fprintf(stderr, " [%s]", truncate(compactExprs(proj.getExpressionsToProject())).c_str());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::ORDER_BY) {
+        auto& orderBy = op->constCast<planner::LogicalOrderBy>();
+        fprintf(stderr, " [%s]", truncate(compactExprs(orderBy.getExpressionsToOrderBy())).c_str());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::LIMIT) {
         fprintf(stderr, " [%s]",
-            op->constCast<planner::LogicalScanNodeTable>().getNodeID()->toString().c_str());
+            op->constCast<planner::LogicalLimit>().getExpressionsForPrinting().c_str());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::UNWIND) {
+        auto& unwind = op->constCast<planner::LogicalUnwind>();
+        fprintf(stderr, " [%s -> %s]", unwind.getInExpr()->toString().c_str(),
+            unwind.getOutExpr()->toString().c_str());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::DISTINCT) {
+        auto& distinct = op->constCast<planner::LogicalDistinct>();
+        fprintf(stderr, " [%s]", truncate(compactExprs(distinct.getKeys())).c_str());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::RECURSIVE_EXTEND) {
+        auto& extend = op->constCast<planner::LogicalRecursiveExtend>();
+        fprintf(stderr, " [%s]", extend.getFunction().getFunctionName().c_str());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::INTERSECT) {
+        fprintf(stderr, " [%s]",
+            op->constCast<planner::LogicalIntersect>().getIntersectNodeID()->toString().c_str());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::SEMI_MASKER) {
+        fprintf(stderr, " [%s]",
+            op->constCast<planner::LogicalSemiMasker>().getKey()->toString().c_str());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::SCAN_NODE_TABLE) {
+        auto& scan = op->constCast<planner::LogicalScanNodeTable>();
+        std::string info = scan.getNodeID()->toString();
+        if (scan.getScanType() == planner::LogicalScanNodeTableType::PRIMARY_KEY_SCAN) {
+            info += " PK_SCAN";
+            if (scan.getExtraInfo() != nullptr) {
+                auto& pkInfo = scan.getExtraInfo()->constCast<planner::PrimaryKeyScanInfo>();
+                info += pkInfo.isRange ? " range" : (" key=" + pkInfo.key->toString());
+            }
+        } else if (scan.getScanType() == planner::LogicalScanNodeTableType::SECONDARY_INDEX_SCAN) {
+            info += " IDX_SCAN";
+            if (scan.getExtraInfo() != nullptr) {
+                info += " " +
+                        scan.getExtraInfo()->constCast<planner::SecondaryIndexScanInfo>().indexName;
+            }
+        }
+        if (!scan.getProperties().empty()) {
+            info += " props=" + compactExprs(scan.getProperties());
+        }
+        fprintf(stderr, " [%s]", truncate(info).c_str());
     } else if (op->getOperatorType() == planner::LogicalOperatorType::COUNT_REL_TABLE) {
         auto& count = op->constCast<planner::LogicalCountRelTable>();
         fprintf(stderr, " [%s dir=%s bound=%s]", count.getRelGroupEntry()->getName().c_str(),
@@ -151,9 +222,10 @@ void dumpLogicalTree(const planner::LogicalOperator* op, int depth,
                 .getNumInfos());
     } else {
         // Generic fallback for operators without a dedicated handler above.
+        // Truncated so wide operators don't crowd the one-line representation.
         auto exprs = op->getExpressionsForPrinting();
         if (!exprs.empty()) {
-            fprintf(stderr, " [%s]", exprs.c_str());
+            fprintf(stderr, " [%s]", truncate(exprs).c_str());
         }
     }
     fprintf(stderr, "\n");
