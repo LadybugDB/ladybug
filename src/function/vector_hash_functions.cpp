@@ -120,32 +120,64 @@ void BinaryHashFunctionExecutor::execute(const common::ValueVector& left,
     }
 }
 
-static std::unique_ptr<ValueVector> computeDataVecHash(const ValueVector& operand) {
+static std::unique_ptr<ValueVector> computeDataVecHash(const ValueVector& operand,
+    const SelectionView& operandSelVec, uint64_t& rangeBaseOut) {
+    // Hash only the child entries covered by the selected rows. Hashing the entire
+    // backing data vector on every call is pathological when list hashing runs
+    // row-at-a-time (e.g. multi-key hash-join probes force flat keys): each call
+    // re-hashed the whole store plus allocated a full-size buffer for it
+    // (LDBC SNB Q10 spent ~11s parallel-sum hashing one constant 18-element list
+    // per probe row). The covered union is all finalizeDataVecHash ever reads, so
+    // the produced hashes are identical.
+    uint64_t minOffset = UINT64_MAX;
+    uint64_t maxOffset = 0;
+    for (auto i = 0u; i < operandSelVec.getSelSize(); i++) {
+        auto pos = operandSelVec[i];
+        if (operand.isNull(pos)) {
+            continue;
+        }
+        auto entry = operand.getValue<list_entry_t>(pos);
+        if (entry.size == 0) {
+            continue;
+        }
+        minOffset = std::min(minOffset, static_cast<uint64_t>(entry.offset));
+        maxOffset = std::max(maxOffset, static_cast<uint64_t>(entry.offset) + entry.size);
+    }
     auto hashVector = std::make_unique<ValueVector>(LogicalType::LIST(LogicalType::HASH()));
-    auto numValuesInDataVec = ListVector::getDataVectorSize(&operand);
-    ListVector::resizeDataVector(hashVector.get(), numValuesInDataVec);
+    if (maxOffset <= minOffset) {
+        rangeBaseOut = 0;
+        return hashVector;
+    }
+    rangeBaseOut = minOffset;
+    auto rangeLen = maxOffset - minOffset;
+    ListVector::resizeDataVector(hashVector.get(), rangeLen);
     // TODO(Ziyi): Allow selection size to be greater than default vector capacity, so we don't have
     // to chunk the selectionVector.
-    SelectionVector selectionVector{DEFAULT_VECTOR_CAPACITY};
-    selectionVector.setToFiltered();
+    SelectionVector srcSelection{DEFAULT_VECTOR_CAPACITY};
+    SelectionVector dstSelection{DEFAULT_VECTOR_CAPACITY};
+    srcSelection.setToFiltered();
+    dstSelection.setToFiltered();
     auto numValuesComputed = 0u;
     uint64_t numValuesToComputeHash = 0;
-    while (numValuesComputed < numValuesInDataVec) {
+    while (numValuesComputed < rangeLen) {
         numValuesToComputeHash =
-            std::min(DEFAULT_VECTOR_CAPACITY, numValuesInDataVec - numValuesComputed);
+            std::min<uint64_t>(DEFAULT_VECTOR_CAPACITY, rangeLen - numValuesComputed);
         for (auto i = 0u; i < numValuesToComputeHash; i++) {
-            selectionVector[i] = numValuesComputed;
+            srcSelection[i] = static_cast<sel_t>(minOffset + numValuesComputed);
+            dstSelection[i] = static_cast<sel_t>(numValuesComputed);
             numValuesComputed++;
         }
-        selectionVector.setSelSize(numValuesToComputeHash);
-        VectorHashFunction::computeHash(*ListVector::getDataVector(&operand), selectionVector,
-            *ListVector::getDataVector(hashVector.get()), selectionVector);
+        srcSelection.setSelSize(numValuesToComputeHash);
+        dstSelection.setSelSize(numValuesToComputeHash);
+        VectorHashFunction::computeHash(*ListVector::getDataVector(&operand), srcSelection,
+            *ListVector::getDataVector(hashVector.get()), dstSelection);
     }
     return hashVector;
 }
 
 static void finalizeDataVecHash(const ValueVector& operand, const SelectionView& operandSelVec,
-    ValueVector& result, const SelectionView& resultSelVec, ValueVector& tmpHashVec) {
+    ValueVector& result, const SelectionView& resultSelVec, ValueVector& tmpHashVec,
+    uint64_t rangeBase) {
     for (auto i = 0u; i < operandSelVec.getSelSize(); i++) {
         auto pos = operandSelVec[i];
         auto resultPos = resultSelVec[i];
@@ -156,7 +188,8 @@ static void finalizeDataVecHash(const ValueVector& operand, const SelectionView&
             auto hashValue = NULL_HASH;
             for (auto j = 0u; j < entry.size; j++) {
                 hashValue = combineHashScalar(hashValue,
-                    ListVector::getDataVector(&tmpHashVec)->getValue<hash_t>(entry.offset + j));
+                    ListVector::getDataVector(&tmpHashVec)
+                        ->getValue<hash_t>(entry.offset + j - rangeBase));
             }
             result.setValue(resultPos, hashValue);
         }
@@ -165,8 +198,10 @@ static void finalizeDataVecHash(const ValueVector& operand, const SelectionView&
 
 static void computeListVectorHash(const ValueVector& operand, const SelectionView& operandSelectVec,
     ValueVector& result, const SelectionView& resultSelectVec) {
-    auto dataVecHash = computeDataVecHash(operand);
-    finalizeDataVecHash(operand, operandSelectVec, result, resultSelectVec, *dataVecHash);
+    uint64_t rangeBase = 0;
+    auto dataVecHash = computeDataVecHash(operand, operandSelectVec, rangeBase);
+    finalizeDataVecHash(operand, operandSelectVec, result, resultSelectVec, *dataVecHash,
+        rangeBase);
 }
 
 static void computeStructVecHash(const ValueVector& operand, const SelectionView& operandSelVec,
