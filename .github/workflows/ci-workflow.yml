@@ -21,6 +21,7 @@ on:
           - linux
           - macos
           - windows
+          - all
 
       auto_checkpoint:
         description: 'Database config - auto checkpoint'
@@ -141,7 +142,7 @@ jobs:
     needs: [ sanity-checks ]
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON((github.event_name == 'schedule' && '{"include":[{"platform":"linux","runner":"ubuntu-latest"},{"platform":"macos","runner":"macos-latest"},{"platform":"windows","runner":"windows-2022"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'macos' && '{"include":[{"platform":"macos","runner":"macos-latest"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'windows' && '{"include":[{"platform":"windows","runner":"windows-2022"}]}') || '{"include":[{"platform":"linux","runner":"ubuntu-latest"}]}') }}
+      matrix: ${{ fromJSON((github.event_name == 'schedule' && '{"include":[{"platform":"linux","runner":"ubuntu-latest"},{"platform":"macos","runner":"macos-latest"},{"platform":"windows","runner":"windows-2022"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'all' && '{"include":[{"platform":"linux","runner":"ubuntu-latest"},{"platform":"macos","runner":"macos-latest"},{"platform":"windows","runner":"windows-2022"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'macos' && '{"include":[{"platform":"macos","runner":"macos-latest"}]}') || (github.event_name == 'workflow_dispatch' && github.event.inputs.platform == 'windows' && '{"include":[{"platform":"windows","runner":"windows-2022"}]}') || '{"include":[{"platform":"linux","runner":"ubuntu-latest"}]}') }}
     env:
       GEN: Ninja
       TEST_JOBS: 4
@@ -300,7 +301,7 @@ jobs:
   minimal-linux-extension-test:
     name: minimal linux extension test
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'linux' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'linux' || github.event.inputs.platform == 'all' }}
     env:
       GEN: Ninja
       UW_S3_ACCESS_KEY_ID: ${{ secrets.UW_S3_ACCESS_KEY_ID }}
