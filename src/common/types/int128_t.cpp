@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
 #include "common/exception/runtime.h"
 #include "common/numeric_utils.h"
@@ -93,19 +94,86 @@ std::string Int128_t::toString(int128_t input) {
     return negative ? "-" + result : result;
 }
 
+// Portable overflow-checked int64 addition/subtraction with a carry/borrow.
+// MSVC does not support __int128, and a naive `a + b + carry` in int64 can
+// overflow the intermediate (e.g. INT64_MIN + -1 + 1) even when the final
+// result fits, tripping UBSan. The helpers below use only well-defined
+// unsigned wrapping arithmetic plus sign analysis, so they are safe on all
+// compilers (MSVC/GCC/Clang) and under UBSan.
+//
+// For addition, write S = a + b + carry with ua/ub the 2's-complement bit
+// patterns. Let U = ua + ub + carry (0..2^65-1), carry2 = U / 2^64 in {0,1},
+// k = (a<0) + (b<0), and usum = U mod 2^64. Then S = (carry2-k)*2^64 + usum.
+// With t = carry2-k in {-2..1}: t==1/t==-2 always overflows, t==0 needs sign
+// bit 0, t==-1 needs sign bit 1. Subtraction is analogous with
+// S = a - b - borrow = Dmod + (kb-ka-borrow2)*2^64.
+static bool addInt64WithCarry(int64_t a, int64_t b, int carry, int64_t& out) {
+    uint64_t ua = 0;
+    uint64_t ub = 0;
+    static_assert(sizeof(ua) == sizeof(a));
+    std::memcpy(&ua, &a, sizeof(a));
+    std::memcpy(&ub, &b, sizeof(b));
+    uint64_t tmp = ua + ub;
+    int c1 = (tmp < ua) ? 1 : 0;
+    uint64_t usum = tmp + static_cast<uint64_t>(carry);
+    int c2 = (usum < tmp) ? 1 : 0;
+    int carry2 = c1 + c2;
+    int k = (a < 0 ? 1 : 0) + (b < 0 ? 1 : 0);
+    int t = carry2 - k;
+    bool sign = (usum >> 63) != 0;
+    bool overflow = false;
+    if (t == 1 || t == -2) {
+        overflow = true;
+    } else if (t == 0) {
+        overflow = sign;
+    } else { // t == -1
+        overflow = !sign;
+    }
+    if (overflow) {
+        return false;
+    }
+    std::memcpy(&out, &usum, sizeof(out));
+    return true;
+}
+
+static bool subInt64WithBorrow(int64_t a, int64_t b, int borrow, int64_t& out) {
+    uint64_t ua = 0;
+    uint64_t ub = 0;
+    static_assert(sizeof(ua) == sizeof(a));
+    std::memcpy(&ua, &a, sizeof(a));
+    std::memcpy(&ub, &b, sizeof(b));
+    uint64_t tmp = ua - ub;
+    int b1 = (ua < ub) ? 1 : 0;
+    uint64_t udiff = tmp - static_cast<uint64_t>(borrow);
+    int b2 = (tmp < static_cast<uint64_t>(borrow)) ? 1 : 0;
+    int borrow2 = b1 + b2;
+    int t = (b < 0 ? 1 : 0) - (a < 0 ? 1 : 0) - borrow2;
+    bool sign = (udiff >> 63) != 0;
+    bool overflow = false;
+    if (t == 1 || t == -2) {
+        overflow = true;
+    } else if (t == 0) {
+        overflow = sign;
+    } else { // t == -1
+        overflow = !sign;
+    }
+    if (overflow) {
+        return false;
+    }
+    std::memcpy(&out, &udiff, sizeof(out));
+    return true;
+}
+
 bool Int128_t::addInPlace(int128_t& lhs, int128_t rhs) {
     bool lhsPositive = lhs.high >= 0;
     bool rhsPositive = rhs.high >= 0;
     // low is unsigned, so wrapping addition and the carry check are well-defined.
     int carry = (lhs.low + rhs.low < lhs.low) ? 1 : 0;
-    // Compute the high part in __int128 so the intermediate sum cannot overflow
-    // int64 (e.g. INT64_MIN + -1 + 1, where the final result fits but
-    // (lhs.high + rhs.high) alone overflows and trips UBSan).
-    __int128 highSum = (__int128)lhs.high + (__int128)rhs.high + carry;
-    if (highSum > INT64_MAX || highSum < INT64_MIN) {
+    int64_t highSum = 0;
+    if (!addInt64WithCarry(lhs.high, rhs.high, carry, highSum)) {
         return false;
     }
-    lhs.high = (int64_t)highSum;
+    lhs.high = highSum;
     lhs.low += rhs.low;
     if (lhsPositive && rhsPositive && lhs.high == INT64_MIN && lhs.low == 0) {
         return false;
@@ -116,13 +184,11 @@ bool Int128_t::addInPlace(int128_t& lhs, int128_t rhs) {
 bool Int128_t::subInPlace(int128_t& lhs, int128_t rhs) {
     // low is unsigned, so wrapping subtraction and the borrow check are well-defined.
     int borrow = (lhs.low - rhs.low > lhs.low) ? 1 : 0;
-    // Compute the high part in __int128 so intermediate values like
-    // INT64_MAX - (-1) cannot overflow int64 even when the final result fits.
-    __int128 highDiff = (__int128)lhs.high - (__int128)rhs.high - borrow;
-    if (highDiff > INT64_MAX || highDiff < INT64_MIN) {
+    int64_t highDiff = 0;
+    if (!subInt64WithBorrow(lhs.high, rhs.high, borrow, highDiff)) {
         return false;
     }
-    lhs.high = (int64_t)highDiff;
+    lhs.high = highDiff;
     lhs.low -= rhs.low;
     if (lhs.high == INT64_MIN && lhs.low == 0) {
         return false;
