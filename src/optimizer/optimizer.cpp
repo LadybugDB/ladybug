@@ -5,6 +5,7 @@
 #include <unordered_set>
 
 #include "binder/expression/expression_util.h"
+#include "catalog/catalog.h"
 #include "common/enums/extend_direction_util.h"
 #include "main/client_context.h"
 #include "optimizer/acc_hash_join_optimizer.h"
@@ -78,11 +79,39 @@ std::string truncate(std::string s, size_t maxLen = 120) {
     return s.substr(0, maxLen) + "...";
 }
 
+// Table names for the given table IDs, e.g. "person" or "person|org".
+// Expression::toString() only prints the variable name, so without this the dump never shows
+// which table is scanned. Never throws: IDs missing from the catalog fall back to table_<id>.
+std::string tableNames(catalog::Catalog* catalog, const transaction::Transaction* transaction,
+    const std::vector<common::table_id_t>& tableIDs, size_t maxTables = 2) {
+    if (tableIDs.empty()) {
+        return "";
+    }
+    std::string result;
+    auto n = std::min(tableIDs.size(), maxTables);
+    for (auto i = 0u; i < n; ++i) {
+        if (i > 0) {
+            result += "|";
+        }
+        if (catalog != nullptr && transaction != nullptr &&
+            catalog->containsTable(transaction, tableIDs[i])) {
+            result += catalog->getTableCatalogEntry(transaction, tableIDs[i])->getName();
+        } else {
+            result += "table_" + std::to_string(tableIDs[i]);
+        }
+    }
+    if (tableIDs.size() > maxTables) {
+        result += ", ... (" + std::to_string(tableIDs.size()) + " total)";
+    }
+    return result;
+}
+
 // Prints one operator per line as an indented tree. Enabled by setting LBUG_DUMP_LOGICAL in the
 // environment; unlike EXPLAIN LOGICAL this needs no query changes and shows the plan exactly as
 // the optimizer sees it, before and after optimization.
 void dumpLogicalTree(const planner::LogicalOperator* op, int depth,
-    std::unordered_set<const planner::LogicalOperator*>& visited) {
+    std::unordered_set<const planner::LogicalOperator*>& visited, catalog::Catalog* catalog,
+    const transaction::Transaction* transaction) {
     if (depth > 40 || visited.contains(op)) {
         for (auto i = 0; i < depth; ++i) {
             fprintf(stderr, "  ");
@@ -99,7 +128,16 @@ void dumpLogicalTree(const planner::LogicalOperator* op, int depth,
     if (op->getOperatorType() == planner::LogicalOperatorType::EXTEND ||
         op->getOperatorType() == planner::LogicalOperatorType::PACKED_EXTEND) {
         auto& ext = op->constCast<planner::LogicalExtend>();
-        fprintf(stderr, " [%s %s bound=%s nbr=%s]", ext.getRel()->detailsToString().c_str(),
+        auto relInfo = ext.getRel()->detailsToString();
+        auto relTables = tableNames(catalog, transaction, ext.getRel()->getTableIDs());
+        if (!relTables.empty()) {
+            if (relInfo == ext.getRel()->getVariableName()) {
+                relInfo += ":" + relTables;
+            } else {
+                relInfo += "(" + relTables + ")";
+            }
+        }
+        fprintf(stderr, " [%s %s bound=%s nbr=%s]", relInfo.c_str(),
             common::ExtendDirectionUtil::toString(ext.getDirection()).c_str(),
             ext.getBoundNode()->getUniqueName().c_str(), ext.getNbrNode()->getUniqueName().c_str());
     } else if (op->getOperatorType() == planner::LogicalOperatorType::FILTER) {
@@ -150,7 +188,9 @@ void dumpLogicalTree(const planner::LogicalOperator* op, int depth,
             op->constCast<planner::LogicalSemiMasker>().getKey()->toString().c_str());
     } else if (op->getOperatorType() == planner::LogicalOperatorType::SCAN_NODE_TABLE) {
         auto& scan = op->constCast<planner::LogicalScanNodeTable>();
-        std::string info = scan.getNodeID()->toString();
+        auto tables = tableNames(catalog, transaction, scan.getTableIDs());
+        std::string info = tables.empty() ? scan.getNodeID()->toString() :
+                                            tables + " " + scan.getNodeID()->toString();
         if (scan.getScanType() == planner::LogicalScanNodeTableType::PRIMARY_KEY_SCAN) {
             info += " PK_SCAN";
             if (scan.getExtraInfo() != nullptr) {
@@ -163,9 +203,6 @@ void dumpLogicalTree(const planner::LogicalOperator* op, int depth,
                 info += " " +
                         scan.getExtraInfo()->constCast<planner::SecondaryIndexScanInfo>().indexName;
             }
-        }
-        if (!scan.getProperties().empty()) {
-            info += " props=" + compactExprs(scan.getProperties());
         }
         fprintf(stderr, " [%s]", truncate(info).c_str());
     } else if (op->getOperatorType() == planner::LogicalOperatorType::COUNT_REL_TABLE) {
@@ -230,18 +267,19 @@ void dumpLogicalTree(const planner::LogicalOperator* op, int depth,
     }
     fprintf(stderr, "\n");
     for (auto i = 0u; i < op->getNumChildren(); ++i) {
-        dumpLogicalTree(op->getChild(i).get(), depth + 1, visited);
+        dumpLogicalTree(op->getChild(i).get(), depth + 1, visited, catalog, transaction);
     }
 }
 
-void dumpLogicalPlan(const planner::LogicalPlan* plan, const char* label) {
+void dumpLogicalPlan(const planner::LogicalPlan* plan, const char* label, catalog::Catalog* catalog,
+    const transaction::Transaction* transaction) {
     fprintf(stderr, "=== LOGICAL PLAN (%s) ===\n", label);
     auto* root = plan->getLastOperator().get();
     if (root == nullptr) {
         return;
     }
     std::unordered_set<const planner::LogicalOperator*> visited;
-    dumpLogicalTree(root, 0, visited);
+    dumpLogicalTree(root, 0, visited, catalog, transaction);
     fprintf(stderr, "=== END LOGICAL PLAN ===\n");
 }
 
@@ -251,7 +289,8 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
     const planner::CardinalityEstimator& cardinalityEstimator) {
     static const bool dumpLogicalEnabled = getenv("LBUG_DUMP_LOGICAL") != nullptr;
     if (dumpLogicalEnabled) {
-        dumpLogicalPlan(plan, "before optimization");
+        dumpLogicalPlan(plan, "before optimization", catalog::Catalog::Get(*context),
+            transaction::Transaction::Get(*context));
     }
     if (context->getClientConfig()->enablePlanOptimizer) {
         // Factorization structure should be removed before further optimization can be applied.
@@ -350,7 +389,8 @@ void Optimizer::optimize(planner::LogicalPlan* plan, main::ClientContext* contex
         schemaPopulator.rewrite(plan);
     }
     if (dumpLogicalEnabled) {
-        dumpLogicalPlan(plan, "after optimization");
+        dumpLogicalPlan(plan, "after optimization", catalog::Catalog::Get(*context),
+            transaction::Transaction::Get(*context));
     }
 }
 
