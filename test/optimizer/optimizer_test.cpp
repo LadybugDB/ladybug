@@ -674,6 +674,10 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     ASSERT_TRUE(conn->query("MATCH (a:opt_multi_user), (b:opt_multi_target) "
                             "WHERE a.id = 1 AND b.id = 1 CREATE (a)-[:opt_multi]->(b);")
                     ->isSuccess());
+    // TOP_K_DEGREES writes raw storage offsets as the group key, so it requires the CSR
+    // primary_key == rowid declaration (see #1031). Declare after loading: later mutations
+    // invalidate it via the change-epoch gate.
+    ASSERT_TRUE(conn->query("ALTER TABLE opt_multi_user SET SORTED BY (id ASC) CSR;")->isSuccess());
     auto q11 = "MATCH (u:opt_multi_user)-[:opt_multi]->(v) "
                "RETURN u.id, count(*) AS deg ORDER BY deg DESC LIMIT 2;";
     auto plan11 = getRoot(q11);
@@ -705,6 +709,84 @@ TEST_F(OptimizerTest, CountRelTableOptimizer) {
     auto resultSortedOffsetAfterMutation = conn->query(qSortedOffset);
     ASSERT_TRUE(resultSortedOffsetAfterMutation->isSuccess());
     ASSERT_EQ(resultSortedOffsetAfterMutation->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    // The same mutation must invalidate the degree top-k rewrite, which shares the CSR gate.
+    auto planTopKAfterMutation = getRoot(q9);
+    ASSERT_FALSE(hasOperatorType(planTopKAfterMutation->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto resultTopKAfterMutation = conn->query(q9);
+    ASSERT_TRUE(resultTopKAfterMutation->isSuccess());
+    ASSERT_EQ(resultTopKAfterMutation->getNext()->getValue(0)->getValue<int64_t>(), 0);
+
+    // Regression test for #1031: a STRING primary key must never take the degree top-k
+    // rewrite (offsets are not keys; writing one into a STRING vector segfaulted).
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE opt_str_user(id STRING, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE opt_str_follows(FROM opt_str_user TO "
+                            "opt_str_user);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_str_user {id: 'a'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_str_user {id: 'b'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_str_user {id: 'c'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_str_user {id: 'd'});")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_str_user), (b:opt_str_user) "
+                            "WHERE a.id = 'a' AND b.id = 'b' "
+                            "CREATE (a)-[:opt_str_follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_str_user), (b:opt_str_user) "
+                            "WHERE a.id = 'a' AND b.id = 'c' "
+                            "CREATE (a)-[:opt_str_follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_str_user), (b:opt_str_user) "
+                            "WHERE a.id = 'a' AND b.id = 'd' "
+                            "CREATE (a)-[:opt_str_follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_str_user), (b:opt_str_user) "
+                            "WHERE a.id = 'b' AND b.id = 'c' "
+                            "CREATE (a)-[:opt_str_follows]->(b);")
+                    ->isSuccess());
+    auto qStrTopK = "MATCH (u:opt_str_user)-[:opt_str_follows]->(v) "
+                    "RETURN u.id, count(*) AS deg ORDER BY deg DESC LIMIT 1;";
+    auto planStrTopK = getRoot(qStrTopK);
+    ASSERT_FALSE(hasOperatorType(planStrTopK->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto resultStrTopK = conn->query(qStrTopK);
+    ASSERT_TRUE(resultStrTopK->isSuccess());
+    auto tupleStrTopK = resultStrTopK->getNext();
+    ASSERT_EQ(tupleStrTopK->getValue(0)->getValue<std::string>(), "a");
+    ASSERT_EQ(tupleStrTopK->getValue(1)->getValue<int64_t>(), 3);
+
+    // A non-CSR INT primary key whose values differ from storage offsets must not rewrite
+    // either: the fast path would silently return offsets instead of key values.
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE opt_gap_user(id INT64, PRIMARY KEY(id));")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE opt_gap_follows(FROM opt_gap_user TO "
+                            "opt_gap_user);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_gap_user {id: 1000});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_gap_user {id: 1001});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:opt_gap_user {id: 1002});")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_gap_user), (b:opt_gap_user) "
+                            "WHERE a.id = 1001 AND b.id = 1000 "
+                            "CREATE (a)-[:opt_gap_follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_gap_user), (b:opt_gap_user) "
+                            "WHERE a.id = 1001 AND b.id = 1002 "
+                            "CREATE (a)-[:opt_gap_follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:opt_gap_user), (b:opt_gap_user) "
+                            "WHERE a.id = 1000 AND b.id = 1002 "
+                            "CREATE (a)-[:opt_gap_follows]->(b);")
+                    ->isSuccess());
+    auto qGapTopK = "MATCH (u:opt_gap_user)-[:opt_gap_follows]->(v) "
+                    "RETURN u.id, count(*) AS deg ORDER BY deg DESC LIMIT 1;";
+    auto planGapTopK = getRoot(qGapTopK);
+    ASSERT_FALSE(hasOperatorType(planGapTopK->getLastOperator().get(),
+        planner::LogicalOperatorType::REL_DEGREE_TABLE));
+    auto resultGapTopK = conn->query(qGapTopK);
+    ASSERT_TRUE(resultGapTopK->isSuccess());
+    auto tupleGapTopK = resultGapTopK->getNext();
+    ASSERT_EQ(tupleGapTopK->getValue(0)->getValue<int64_t>(), 1001);
+    ASSERT_EQ(tupleGapTopK->getValue(1)->getValue<int64_t>(), 2);
 }
 
 TEST_F(StatsOptimizerTest, FilterPushDownOrdersMostSelectivePredicateFirst) {
