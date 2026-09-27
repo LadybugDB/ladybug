@@ -16,6 +16,20 @@ namespace storage {
 class LocalWAL;
 class WAL {
 public:
+    // Recovery only: adopt the frozen WAL for one checkpoint, clearing the request on exit even
+    // if the checkpoint fails before rotation.
+    class FrozenWALAdoptionGuard {
+    public:
+        explicit FrozenWALAdoptionGuard(WAL& wal);
+        ~FrozenWALAdoptionGuard();
+
+        FrozenWALAdoptionGuard(const FrozenWALAdoptionGuard&) = delete;
+        FrozenWALAdoptionGuard& operator=(const FrozenWALAdoptionGuard&) = delete;
+
+    private:
+        WAL& wal;
+    };
+
     WAL(const std::string& dbPath, bool readOnly, bool enableChecksums,
         common::VirtualFileSystem* vfs);
     ~WAL();
@@ -42,9 +56,6 @@ public:
 
     uint64_t getFileSize();
     void throwIfPoisoned();
-    // Recovery only: while set, the next checkpoint commits the frozen WAL of an interrupted
-    // checkpoint, whose records recovery has replayed, instead of rotating the active WAL.
-    void setAdoptFrozenWALForCheckpoint(bool adopt);
 
     static WAL* Get(const main::ClientContext& context);
 

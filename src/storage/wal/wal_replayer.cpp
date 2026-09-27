@@ -10,7 +10,6 @@
 #include "common/file_system/file_system.h"
 #include "common/file_system/local_file_system.h"
 #include "common/file_system/virtual_file_system.h"
-#include "common/finally_wrapper.h"
 #include "common/serializer/buffered_file.h"
 #include "common/system_message.h"
 #include "common/type_utils.h"
@@ -295,11 +294,8 @@ void WALReplayer::replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalRep
 }
 
 void WALReplayer::completeInterruptedCheckpoint() const {
-    auto* wal = WAL::Get(clientContext);
-    wal->setAdoptFrozenWALForCheckpoint(true);
-    // Never leave the adoption pending: a checkpoint that fails before it rotates must not make a
-    // later checkpoint skip rotating the active WAL.
-    FinallyWrapper resetAdoption{[wal] { wal->setAdoptFrozenWALForCheckpoint(false); }};
+    // Only the main WAL adopts its frozen file; attached-graph WALs rotate normally.
+    WAL::FrozenWALAdoptionGuard adoption{*WAL::Get(clientContext)};
     try {
         TransactionManager::Get(clientContext)->checkpoint(clientContext);
     } catch (const std::exception& e) {

@@ -41,9 +41,8 @@ public:
 
     void writeCheckpoint();
     void beginCheckpoint(common::transaction_t snapshotTS);
-    // Storage materialization phase. Safe to call after the write gate is released when WAL
-    // rotation occurred — node-data reads use the frozen WAL bounded to snapshotTS.
-    // See transaction_manager.cpp for the hash-index timestamp caveat.
+    // Materialize storage while the write gate remains held. WAL rotation alone does not protect
+    // the version chains and update metadata scanned and reset in this phase.
     void checkpointStoragePhase();
     void finishCheckpoint();
     // Cleanup after the core checkpoint. If the write gate is held, page-manager changes made by
