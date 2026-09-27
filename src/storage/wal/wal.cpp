@@ -19,6 +19,16 @@ using namespace lbug::common;
 namespace lbug {
 namespace storage {
 
+WAL::FrozenWALAdoptionGuard::FrozenWALAdoptionGuard(WAL& wal) : wal{wal} {
+    std::unique_lock lck{wal.mtx};
+    wal.adoptFrozenWAL = true;
+}
+
+WAL::FrozenWALAdoptionGuard::~FrozenWALAdoptionGuard() {
+    std::unique_lock lck{wal.mtx};
+    wal.adoptFrozenWAL = false;
+}
+
 WAL::WAL(const std::string& dbPath, bool readOnly, bool enableChecksums, VirtualFileSystem* vfs)
     : walPath{StorageUtils::getWALFilePath(dbPath)},
       checkpointWalPath{StorageUtils::getCheckpointWALFilePath(dbPath)},
@@ -54,6 +64,9 @@ void WAL::logAndFlushCheckpoint(main::ClientContext* context) {
 bool WAL::rotateForCheckpoint(main::ClientContext* /*context*/) {
     std::unique_lock lck{mtx};
     throwIfPoisonedNoLock();
+    if (inMemory) {
+        return false;
+    }
     if (adoptFrozenWAL) {
         // The frozen WAL on disk becomes this checkpoint's frozen WAL. The active WAL, if any,
         // holds later records that recovery replays after this checkpoint, so it is left alone.
@@ -61,9 +74,6 @@ bool WAL::rotateForCheckpoint(main::ClientContext* /*context*/) {
         // one must read "no" here, as it does after a fresh rotation.
         adoptFrozenWAL = false;
         return true;
-    }
-    if (inMemory) {
-        return false;
     }
     if (vfs->fileOrPathExists(checkpointWalPath)) {
         throw RuntimeException(
@@ -243,11 +253,6 @@ uint64_t WAL::getFileSize() {
 void WAL::throwIfPoisoned() {
     std::unique_lock lck{mtx};
     throwIfPoisonedNoLock();
-}
-
-void WAL::setAdoptFrozenWALForCheckpoint(bool adopt) {
-    std::unique_lock lck{mtx};
-    adoptFrozenWAL = adopt;
 }
 
 void WAL::throwIfPoisonedNoLock() const {
