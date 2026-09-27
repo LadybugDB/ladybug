@@ -11,12 +11,15 @@
 #include "binder/expression_binder.h"
 #include "binder/expression_visitor.h"
 #include "common/exception/runtime.h"
+#include "function/aggregate/count.h"
 #include "function/list/vector_list_functions.h"
 #include "planner/operator/factorization/flatten_resolver.h"
 #include "planner/operator/logical_accumulate.h"
 #include "planner/operator/logical_aggregate.h"
 #include "planner/operator/logical_distinct.h"
+#include "planner/operator/logical_flatten.h"
 #include "planner/operator/logical_hash_join.h"
+#include "planner/operator/logical_projection.h"
 #include "planner/operator/logical_unwind.h"
 #include "planner/operator/scan/logical_query_primary_key_lookup.h"
 #include "planner/planner.h"
@@ -794,6 +797,338 @@ bool Planner::tryUnnestCollectMembership(const QueryGraphCollection& queryGraphC
     for (auto i = 0u; i < convertibles.size(); ++i) {
         predicates[convertibles[i].predIdx] = newPreds[i];
     }
+    return true;
+}
+
+// ---- Staged distinct pre-aggregation over LEFT-join chains ----
+// Shape: AGGREGATE(keys=K, aggs=[COUNT DISTINCT x_1 .. x_m]) over a left-deep chain
+// of LEFT joins J_1..J_n (n>=2, each probe = previous output, build = one leg), e.g.
+// LDBC SNB Q14's four OPTIONAL MATCH diamonds feeding four COUNT(DISTINCT)s. The legs
+// compound multiplicatively (656k rows from a single-row outer) into one final hash
+// aggregation. COUNT(DISTINCT) is invariant under row duplication and ignores NULLs,
+// so each leg's distinct set can be counted as soon as its leg joins, grouping by the
+// same keys K: insert AGGREGATE(keys=K, aggs=[CDs of leg i]) between J_i and J_{i+1}
+// and shrink the top to AGGREGATE(keys=K, aggs=[CDs of leg n], payloads=[CDs of legs
+// below]). Row counts collapse per stage (Q14: 656k -> ~300) while every join keeps
+// its original keys and every expression keeps its unique name.
+// Soundness conditions (anything else: untouched):
+// - every aggregate is COUNT DISTINCT (duplication-invariant; anything else aborts);
+// - only PROJECTION/FLATTEN (pass-through for the old agg, dropped with it) may sit
+//   between the agg and the top LEFT join; the chain itself is LEFT-only, left-deep;
+// - every group-key dependency is bound at the chain base (stages regroup by K);
+// - every COUNT DISTINCT arg comes from exactly one leg's build scope, never the base
+//   (assigns each count to the stage that first sees its values);
+// - everything carried through a stage aggregation (group-key deps for regrouping K,
+//   later probe-side join keys) is provably constant within a K-group: identical to
+//   a key, a child of K's single LIST_CREATION pack (list equality is elementwise),
+//   or node-determined (property/pattern of var v with v's internal ID or primary
+//   key in the determinant set). Payload counts from earlier stages are constant per
+//   group structurally (one probe row per group fans out downstream).
+// Runs at appendAggregate time (planner): ancestors above do not exist yet, so no
+// schema recompute above is needed; schemas along the edited spine are recomputed
+// bottom-up with the standard append machinery. Accumulates feeding correlated legs
+// sit below each insertion point and keep seeing full rows.
+
+static std::unordered_set<std::string> collectOpScopeNames(planner::LogicalOperator* op) {
+    std::unordered_set<std::string> names;
+    if (op == nullptr || op->getSchema() == nullptr) {
+        return names;
+    }
+    for (auto& expr : op->getSchema()->getExpressionsInScope()) {
+        names.insert(expr->getUniqueName());
+    }
+    return names;
+}
+
+static std::unordered_set<std::string> collectOpDepNames(const std::shared_ptr<Expression>& expr,
+    planner::LogicalOperator* scopeOp) {
+    std::unordered_set<std::string> names;
+    if (scopeOp == nullptr || scopeOp->getSchema() == nullptr) {
+        return names;
+    }
+    for (auto& dep : getDependentExprs(expr, *scopeOp->getSchema())) {
+        names.insert(dep->getUniqueName());
+    }
+    return names;
+}
+
+static bool isCountDistinctAgg(const std::shared_ptr<Expression>& expr,
+    std::shared_ptr<Expression>& argOut) {
+    if (expr->expressionType != ExpressionType::AGGREGATE_FUNCTION) {
+        return false;
+    }
+    auto& aggFunc = expr->constCast<AggregateFunctionExpression>();
+    if (aggFunc.getFunction().name != function::CountFunction::name || !aggFunc.isDistinct() ||
+        aggFunc.getNumChildren() != 1) {
+        return false;
+    }
+    argOut = aggFunc.getChild(0);
+    return true;
+}
+
+static bool isListPackExpr(const std::shared_ptr<Expression>& expr) {
+    if (expr->expressionType != ExpressionType::FUNCTION) {
+        return false;
+    }
+    return expr->constCast<ScalarFunctionExpression>().getFunction().name ==
+           function::ListCreationFunction::name;
+}
+
+// True when needExpr takes a single value per K-group (see header comment).
+static bool isKDetermined(const std::shared_ptr<Expression>& needExpr,
+    const std::unordered_set<std::string>& kNames, const std::unordered_set<std::string>& kPackDeps,
+    planner::LogicalOperator* scopeOp) {
+    auto uname = needExpr->getUniqueName();
+    if (kNames.contains(uname) || kPackDeps.contains(uname)) {
+        return true;
+    }
+    std::string varName;
+    if (needExpr->expressionType == ExpressionType::PROPERTY) {
+        varName = needExpr->constCast<PropertyExpression>().getVariableName();
+    } else if (ExpressionUtil::isNodePattern(*needExpr) ||
+               ExpressionUtil::isRelPattern(*needExpr)) {
+        varName = uname;
+    } else {
+        return false;
+    }
+    if (scopeOp == nullptr || scopeOp->getSchema() == nullptr) {
+        return false;
+    }
+    for (auto& expr : scopeOp->getSchema()->getExpressionsInScope()) {
+        auto ename = expr->getUniqueName();
+        if (ExpressionUtil::isNodePattern(*expr) || ExpressionUtil::isRelPattern(*expr)) {
+            if (ename != varName) {
+                continue;
+            }
+            std::shared_ptr<Expression> internalID;
+            if (ExpressionUtil::isNodePattern(*expr)) {
+                internalID = expr->constCast<NodeExpression>().getInternalID();
+            } else {
+                internalID = expr->constCast<RelExpression>().getInternalID();
+            }
+            if (kNames.contains(internalID->getUniqueName()) ||
+                kPackDeps.contains(internalID->getUniqueName())) {
+                return true;
+            }
+        } else if (expr->expressionType == ExpressionType::PROPERTY) {
+            auto& prop = expr->constCast<PropertyExpression>();
+            if (prop.getVariableName() == varName && prop.isPrimaryKey() &&
+                (kNames.contains(ename) || kPackDeps.contains(ename))) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool Planner::tryPreAggregateDistinctLeftChain(const expression_vector& keys,
+    const expression_vector& aggregates, LogicalPlan& plan) {
+    if (plan.isEmpty() || keys.empty()) {
+        return false;
+    }
+    struct CountDistinct {
+        std::shared_ptr<Expression> agg;
+        std::shared_ptr<Expression> arg;
+    };
+    std::vector<CountDistinct> cds;
+    for (auto& agg : aggregates) {
+        CountDistinct cd;
+        if (!isCountDistinctAgg(agg, cd.arg)) {
+            return false;
+        }
+        cd.agg = agg;
+        cds.push_back(std::move(cd));
+    }
+    auto cur = plan.getLastOperator();
+    while (cur->getOperatorType() == LogicalOperatorType::PROJECTION ||
+           cur->getOperatorType() == LogicalOperatorType::FLATTEN) {
+        if (cur->getNumChildren() != 1) {
+            return false;
+        }
+        cur = cur->getChild(0);
+    }
+    struct ChainLeg {
+        std::shared_ptr<LogicalOperator> joinOp;
+        std::shared_ptr<LogicalOperator> build;
+    };
+    std::vector<ChainLeg> legs; // legs[0] = deepest join J_1 after reverse
+    while (cur->getOperatorType() == LogicalOperatorType::HASH_JOIN &&
+           cur->constCast<LogicalHashJoin>().getJoinType() == JoinType::LEFT) {
+        if (cur->getNumChildren() != 2) {
+            return false;
+        }
+        legs.push_back({cur, cur->getChild(1)});
+        cur = cur->getChild(0);
+    }
+    if (legs.size() < 2) {
+        return false;
+    }
+    std::reverse(legs.begin(), legs.end());
+    const auto n = legs.size();
+    auto baseOp = cur;
+    auto baseNames = collectOpScopeNames(baseOp.get());
+    std::unordered_set<std::string> kNames;
+    std::unordered_set<std::string> kDepNames;
+    for (auto& key : keys) {
+        kNames.insert(key->getUniqueName());
+        for (auto& dep : collectOpDepNames(key, baseOp.get())) {
+            kDepNames.insert(dep);
+        }
+    }
+    if (kDepNames.empty()) {
+        return false;
+    }
+    for (auto& dep : kDepNames) {
+        if (!baseNames.contains(dep)) {
+            return false;
+        }
+    }
+    std::unordered_set<std::string> kPackDeps;
+    if (keys.size() == 1 && isListPackExpr(keys[0])) {
+        for (auto& child : keys[0]->getChildren()) {
+            kPackDeps.insert(child->getUniqueName());
+        }
+    }
+    std::vector<std::vector<std::shared_ptr<Expression>>> legAggs(n);
+    std::vector<std::unordered_set<std::string>> buildNames(n);
+    for (auto i = 0u; i < n; ++i) {
+        buildNames[i] = collectOpScopeNames(legs[i].build.get());
+    }
+    for (auto& cd : cds) {
+        auto argName = cd.arg->getUniqueName();
+        if (baseNames.contains(argName)) {
+            return false;
+        }
+        int owner = -1;
+        for (auto i = 0u; i < n; ++i) {
+            if (buildNames[i].contains(argName)) {
+                if (owner >= 0) {
+                    return false;
+                }
+                owner = static_cast<int>(i);
+            }
+        }
+        if (owner < 0) {
+            return false;
+        }
+        legAggs[owner].push_back(cd.agg);
+    }
+    // NEED[i]: carried by stage i (group-key deps for regrouping K, later probe-side
+    // join keys, earlier counts). Probe-side key deps of J_{i+1}.. (pair.first).
+    std::unordered_set<std::string> cdNames;
+    for (auto& cd : cds) {
+        cdNames.insert(cd.agg->getUniqueName());
+    }
+    std::vector<expression_vector> needExprs(n);
+    for (auto i = 0u; i + 1 < n; ++i) {
+        std::unordered_set<std::string> names = kDepNames;
+        for (auto j = i + 1; j < n; ++j) {
+            auto probeScopeOp = legs[j].joinOp->getChild(0).get();
+            for (auto& cond : legs[j].joinOp->constCast<LogicalHashJoin>().getJoinConditions()) {
+                for (auto& dep : collectOpDepNames(cond.first, probeScopeOp)) {
+                    names.insert(dep);
+                }
+            }
+        }
+        for (auto j = 0u; j <= i; ++j) {
+            for (auto& aggObj : legAggs[j]) {
+                names.insert(aggObj->getUniqueName());
+            }
+        }
+        auto stageScopeOp = legs[i].joinOp.get();
+        if (stageScopeOp->getSchema() == nullptr) {
+            return false;
+        }
+        auto stageNames = collectOpScopeNames(stageScopeOp);
+        expression_vector exprs;
+        for (auto& name : names) {
+            if (kNames.contains(name) || cdNames.contains(name)) {
+                continue;
+            }
+            if (!stageNames.contains(name)) {
+                return false;
+            }
+            auto found = findInScope(*stageScopeOp->getSchema(), name);
+            if (found == nullptr || !isKDetermined(found, kNames, kPackDeps, stageScopeOp)) {
+                return false;
+            }
+            exprs.push_back(found);
+        }
+        for (auto j = 0u; j <= i; ++j) {
+            for (auto& aggObj : legAggs[j]) {
+                exprs.push_back(aggObj);
+            }
+        }
+        needExprs[i] = std::move(exprs);
+    }
+    auto appendStageAgg = [&](std::shared_ptr<LogicalOperator> childTop,
+                              const expression_vector& stageAggs,
+                              const expression_vector& payloads) {
+        auto stageAgg = std::make_shared<LogicalAggregate>(keys, stageAggs, childTop);
+        stageAgg->setDependentKeys(payloads);
+        for (auto groupPos : stageAgg->getGroupsPosToFlatten()) {
+            auto child = stageAgg->getChild(0);
+            auto group = child->getSchema()->getGroup(groupPos);
+            if (group->isFlat()) {
+                continue;
+            }
+            auto flatten = std::make_shared<LogicalFlatten>(groupPos, child,
+                cardinalityEstimator.estimateFlatten(*child, groupPos));
+            flatten->computeFactorizedSchema();
+            stageAgg->setChild(0, flatten);
+        }
+        stageAgg->computeFactorizedSchema();
+        stageAgg->setCardinality(cardinalityEstimator.estimateAggregate(*stageAgg));
+        return stageAgg;
+    };
+    // Materialize K above the chain base so every stage input carries the group key
+    // as a bound column (aggregates group by scope columns; K is otherwise only
+    // evaluable from its deps, which the hash-aggregate mapper cannot resolve).
+    // Joins pass probe columns through, so one projection serves all stages.
+    if (baseOp->getSchema() != nullptr) {
+        expression_vector projExprs;
+        for (auto& expr : baseOp->getSchema()->getExpressionsInScope()) {
+            projExprs.push_back(expr);
+        }
+        bool needProj = false;
+        for (auto& key : keys) {
+            bool present = false;
+            for (auto& expr : projExprs) {
+                if (expr->getUniqueName() == key->getUniqueName()) {
+                    present = true;
+                    break;
+                }
+            }
+            if (!present) {
+                projExprs.push_back(key);
+                needProj = true;
+            }
+        }
+        if (needProj) {
+            auto keyProj = std::make_shared<LogicalProjection>(projExprs, baseOp);
+            keyProj->computeFactorizedSchema();
+            keyProj->setCardinality(baseOp->getCardinality());
+            legs[0].joinOp->setChild(0, keyProj);
+            for (auto i = 0u; i < n; ++i) {
+                legs[i].joinOp->computeFactorizedSchema();
+            }
+        }
+    }
+    for (auto i = 0u; i + 1 < n; ++i) {
+        auto stageAgg = appendStageAgg(legs[i].joinOp, legAggs[i], needExprs[i]);
+        legs[i + 1].joinOp->setChild(0, stageAgg);
+    }
+    for (auto i = 0u; i < n; ++i) {
+        legs[i].joinOp->computeFactorizedSchema();
+    }
+    expression_vector topPayloads;
+    for (auto i = 0u; i + 1 < n; ++i) {
+        for (auto& aggObj : legAggs[i]) {
+            topPayloads.push_back(aggObj);
+        }
+    }
+    auto topAgg = appendStageAgg(legs[n - 1].joinOp, legAggs[n - 1], topPayloads);
+    plan.setLastOperator(topAgg);
     return true;
 }
 

@@ -1,0 +1,26 @@
+-DATASET CSV tinysnb
+--
+
+-CASE StagedDistinctPreAggregation
+
+-LOG StagedDistinctPreAggregationSingleGroup
+-STATEMENT MATCH (a:person) WHERE a.ID = 0 OPTIONAL MATCH (a)-[:knows]->(b:person) OPTIONAL MATCH (a)-[:knows]->(c:person) RETURN a.ID, COUNT(DISTINCT b), COUNT(DISTINCT c)
+---- 1
+0|3|3
+
+-LOG StagedDistinctPreAggregationMultiGroup
+-STATEMENT MATCH (a:person) WHERE a.ID < 11 OPTIONAL MATCH (a)-[:knows]->(b:person) OPTIONAL MATCH (a)-[:knows]->(c:person) RETURN a.ID, COUNT(DISTINCT b), COUNT(DISTINCT c) ORDER BY a.ID
+---- 8
+0|3|3
+2|3|3
+3|3|3
+5|3|3
+7|2|2
+8|0|0
+9|0|0
+10|0|0
+
+-LOG StagedDistinctPreAggregationThreeLegs
+-STATEMENT MATCH (a:person) WHERE a.ID = 2 OPTIONAL MATCH (a)-[:knows]->(b:person) OPTIONAL MATCH (a)-[:knows]->(c:person) OPTIONAL MATCH (a)-[:knows]->(d:person) RETURN a.ID, COUNT(DISTINCT b), COUNT(DISTINCT c), COUNT(DISTINCT d)
+---- 1
+2|3|3|3
