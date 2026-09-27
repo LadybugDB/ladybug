@@ -30,6 +30,24 @@ void AggKeyDependencyOptimizer::visitAggregate(planner::LogicalOperator* op) {
     auto agg = (LogicalAggregate*)op;
     auto [keys, dependentKeys] = resolveKeysAndDependentKeys(agg->getKeys());
     agg->setKeys(keys);
+    // Preserve payloads installed by earlier planner passes (e.g. staged
+    // pre-aggregation carries join keys/group deps its own soundness analysis proved
+    // constant per group). Dropping them would leave downstream scopes referencing
+    // non-existent columns. Keep only those still bound in the agg's input scope.
+    if (op->getNumChildren() == 1 && op->getChild(0)->getSchema() != nullptr) {
+        auto& inSchema = *op->getChild(0)->getSchema();
+        std::unordered_set<std::string> payloadNames;
+        for (auto& dep : dependentKeys) {
+            payloadNames.insert(dep->getUniqueName());
+        }
+        for (auto& existing : agg->getDependentKeys()) {
+            if (!payloadNames.contains(existing->getUniqueName()) &&
+                inSchema.isExpressionInScope(*existing)) {
+                payloadNames.insert(existing->getUniqueName());
+                dependentKeys.push_back(existing);
+            }
+        }
+    }
     agg->setDependentKeys(dependentKeys);
     // A COLLECT built per group key set K0 yields exactly one list per K0 group, so the
     // collected variable is functionally determined by K0. Record that for downstream

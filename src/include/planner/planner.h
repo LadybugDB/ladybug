@@ -307,6 +307,12 @@ public:
     // semantics. See plan_subquery.cpp for the conditions.
     bool tryUnnestCollectMembership(const binder::QueryGraphCollection& queryGraphCollection,
         binder::expression_vector& predicates, LogicalPlan& leftPlan);
+    // Staged distinct pre-aggregation over LEFT-join chains: AGGREGATE(keys=K, all COUNT
+    // DISTINCT) over a left-deep LEFT-only chain becomes per-stage aggregates grouping
+    // by K plus payloads (see plan_subquery.cpp). Runs at appendAggregate time;
+    // returns true when the plan was rewritten (caller appends nothing).
+    bool tryPreAggregateDistinctLeftChain(const binder::expression_vector& keys,
+        const binder::expression_vector& aggregates, LogicalPlan& plan);
 
     // Append extend operators
     void appendNonRecursiveExtend(const std::shared_ptr<binder::NodeExpression>& boundNode,
