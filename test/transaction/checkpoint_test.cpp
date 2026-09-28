@@ -461,6 +461,117 @@ TEST_F(FlakyCheckpointerTest, RecoverFromFailureDuringOutOfPlaceCheckpoint) {
     checkRows();
 }
 
+// A checkpoint that fails inside a CSR node group, after the rel data columns were
+// checkpointed but before the CSR header, must leave the rel table readable: the failed
+// group's in-place data rewrites are undone and its shadow pages dropped, so reads see the
+// old data under the old header and a retried checkpoint persists the correct data.
+// See LadybugDB/ladybug#1051.
+TEST_F(FlakyCheckpointerTest, CSRGroupReadsBackAfterFailedCSRHeaderCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE N(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE R(FROM N TO N, w INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(0, 999) AS i CREATE (:N {id: i});")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    // 1000 rels i -> (i+1) % 1000 with w = i.
+    auto res = conn->query("UNWIND range(0, 999) AS i MATCH (a:N), (b:N) WHERE a.id = i AND "
+                           "b.id = (i + 1) % 1000 CREATE (a)-[:R {w: i}]->(b);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    // One new rel. The data columns still fit in their pages and are rewritten in place,
+    // while the shifted CSR offsets are rewritten out of place, so the injected allocation
+    // failure lands in the CSR header checkpoint, mid-node-group.
+    res = conn->query("MATCH (a:N), (b:N) WHERE a.id = 0 AND b.id = 500 "
+                      "CREATE (a)-[:R {w: 1000}]->(b);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    // A pending update on a committed rel, so the restore must also preserve uncheckpointed
+    // update info (which is not part of the metadata snapshot).
+    res = conn->query("MATCH (:N {id: 5})-[e:R]->(:N) SET e.w = 5000;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+
+    auto checkRels = [&]() {
+        auto res =
+            conn->query("MATCH (a:N)-[e:R]->(b:N) RETURN COUNT(e), CAST(SUM(e.w) AS INT64);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        auto row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 1001);
+        // 499500 (initial w sum) + 1000 (new rel) - 5 + 5000 (updated rel 5 -> 6).
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 505495);
+        // 0 -> {1, 500}.
+        res = conn->query("MATCH (a:N {id: 0})-[e:R]->(b:N) RETURN b.id, e.w ORDER BY b.id;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        ASSERT_TRUE(res->hasNext());
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 1);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 0);
+        ASSERT_TRUE(res->hasNext());
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 500);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 1000);
+        ASSERT_FALSE(res->hasNext());
+        // 1 -> 2, 5 -> 6 (updated), 999 -> 0.
+        res = conn->query("MATCH (a:N {id: 1})-[e:R]->(b:N) RETURN b.id, e.w;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 2);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 1);
+        res = conn->query("MATCH (a:N {id: 5})-[e:R]->(b:N) RETURN b.id, e.w;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 6);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 5000);
+        res = conn->query("MATCH (a:N {id: 999})-[e:R]->(b:N) RETURN b.id, e.w;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 0);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 999);
+        // Backward direction is unaffected: 0 <- 999, 500 <- {499, 0}.
+        res = conn->query("MATCH (a:N)-[e:R]->(b:N {id: 0}) RETURN a.id, e.w;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 999);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 999);
+        res = conn->query("MATCH (a:N)-[e:R]->(b:N {id: 500}) RETURN a.id, e.w ORDER BY a.id;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        ASSERT_TRUE(res->hasNext());
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 0);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 1000);
+        ASSERT_TRUE(res->hasNext());
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 499);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 499);
+        ASSERT_FALSE(res->hasNext());
+    };
+    checkRels();
+
+    auto context = getClientContext(*conn);
+    bool failed = false;
+    FlakyCheckpointer flakyCheckpointer([&failed](main::ClientContext& ctx) {
+        return std::make_unique<FlakyCheckpointerFailsDuringOutOfPlaceRewrite>(ctx, failed);
+    });
+    flakyCheckpointer.setCheckpointer(*context);
+    res = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(res->isSuccess());
+    ASSERT_TRUE(failed);
+    // Reads must be unaffected by the failed checkpoint...
+    checkRels();
+
+    FlakyCheckpointer::resetCheckpointer(*context);
+    res = conn->query("CHECKPOINT;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    checkRels();
+
+    // ...and the retried checkpoint must have persisted the correct data. Release query
+    // results before reopening: they borrow the old database's memory.
+    res.reset();
+    createDBAndConn();
+    checkRels();
+}
+
 // Simulates a situation where a database attempts to replay a shadow file from an older database
 // with the same path
 TEST_F(FlakyCheckpointerTest, ShadowFileDatabaseIDMismatchExistingDB) {

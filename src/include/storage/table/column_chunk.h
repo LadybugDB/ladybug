@@ -223,6 +223,8 @@ public:
         return state;
     }
     bool hasUpdates() const { return updateInfo.isSet(); }
+    // Moves pending updates from `other`'s chunk (see UpdateInfo::adoptUpdates).
+    void adoptUpdateInfo(ColumnChunk& other) { updateInfo.adoptUpdates(other.updateInfo); }
     bool hasUpdates(const transaction::Transaction* transaction, common::row_idx_t startRow,
         common::length_t numRows) const;
     void resetUpdateInfo() { updateInfo.reset(); }

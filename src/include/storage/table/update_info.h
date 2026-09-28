@@ -110,6 +110,16 @@ public:
         std::shared_lock lock{mtx};
         return !updates.empty();
     }
+    // Moves all pending updates from `other` into this, leaving `other` empty. The caller
+    // must guarantee `other` holds this object's pre-checkpoint updates (checkpoint reads
+    // update info but only resets it on success). Used to preserve uncheckpointed updates
+    // when restoring a node group's persistent chunks after a failed checkpoint (see #1051).
+    void adoptUpdates(UpdateInfo& other) {
+        std::unique_lock lock{mtx};
+        std::unique_lock otherLock{other.mtx};
+        DASSERT(updates.empty());
+        updates = std::move(other.updates);
+    }
     void reset() {
         std::unique_lock lock{mtx};
         updates.clear();
