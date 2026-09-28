@@ -1,6 +1,7 @@
 #include "storage/compression/compression.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -30,22 +31,71 @@ using namespace lbug::common;
 namespace lbug {
 namespace storage {
 
+// NaN is unordered, so it must neither seed nor update a min/max fold: every
+// comparison against NaN is false, which would otherwise pin a leading NaN as both
+// min and max (gh-1043) and poison zone-map statistics. NaNs are skipped; if every
+// non-null value is NaN, the first one is reported for both so callers still see a
+// real min/max (the CONSTANT decision is guarded separately by a bitwise check).
+template<std::floating_point T>
+void updateFloatMinMax(T value, std::optional<StorageValue>& min, std::optional<StorageValue>& max,
+    std::optional<T>& first) {
+    if (!first.has_value()) {
+        first = value;
+    }
+    if (std::isnan(value)) {
+        return;
+    }
+    if (!min || value < min->get<T>()) {
+        min = StorageValue(value);
+    }
+    if (!max || value > max->get<T>()) {
+        max = StorageValue(value);
+    }
+}
+
+template<std::floating_point T>
+void fallbackToFirstIfAllNaN(std::optional<StorageValue>& min, std::optional<StorageValue>& max,
+    const std::optional<T>& first) {
+    if (!min && first.has_value()) {
+        min = StorageValue(*first);
+        max = StorageValue(*first);
+    }
+}
+
 template<typename T>
 auto getTypedMinMax(std::span<const T> data, const NullMask* nullMask, uint64_t nullMaskOffset) {
     std::optional<StorageValue> min, max;
     DASSERT(data.size() > 0);
     if (!nullMask || nullMask->hasNoNullsGuarantee()) {
-        auto [minRaw, maxRaw] = std::minmax_element(data.begin(), data.end());
-        min = StorageValue(*minRaw);
-        max = StorageValue(*maxRaw);
+        if constexpr (std::floating_point<T>) {
+            std::optional<T> first;
+            for (const auto value : data) {
+                updateFloatMinMax(value, min, max, first);
+            }
+            fallbackToFirstIfAllNaN(min, max, first);
+        } else {
+            auto [minRaw, maxRaw] = std::minmax_element(data.begin(), data.end());
+            min = StorageValue(*minRaw);
+            max = StorageValue(*maxRaw);
+        }
     } else {
-        for (uint64_t i = 0; i < data.size(); i++) {
-            if (!nullMask->isNull(nullMaskOffset + i)) {
-                if (!min || data[i] < min->get<T>()) {
-                    min = StorageValue(data[i]);
+        if constexpr (std::floating_point<T>) {
+            std::optional<T> first;
+            for (uint64_t i = 0; i < data.size(); i++) {
+                if (!nullMask->isNull(nullMaskOffset + i)) {
+                    updateFloatMinMax(data[i], min, max, first);
                 }
-                if (!max || data[i] > max->get<T>()) {
-                    max = StorageValue(data[i]);
+            }
+            fallbackToFirstIfAllNaN(min, max, first);
+        } else {
+            for (uint64_t i = 0; i < data.size(); i++) {
+                if (!nullMask->isNull(nullMaskOffset + i)) {
+                    if (!min || data[i] < min->get<T>()) {
+                        min = StorageValue(data[i]);
+                    }
+                    if (!max || data[i] > max->get<T>()) {
+                        max = StorageValue(data[i]);
+                    }
                 }
             }
         }

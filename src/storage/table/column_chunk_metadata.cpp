@@ -1,5 +1,7 @@
 #include "storage/table/column_chunk_metadata.h"
 
+#include <cstring>
+
 #include "alp/decode.hpp"
 #include "alp/encode.hpp"
 #include "common/serializer/deserializer.h"
@@ -10,13 +12,54 @@
 #include "common/utils.h"
 #include "storage/compression/compression.h"
 #include "storage/compression/float_compression.h"
+#include <concepts>
 
 namespace lbug::storage {
 using namespace common;
 
+namespace {
+// Returns true iff every value in the buffer is bitwise identical.
+// This stricter-than-min-equals-max check is required for float types: NaN is
+// unordered, so a min/max fold can land on min == max == NaN while the chunk holds
+// other distinct values, and -0.0 compares equal to 0.0 while differing bitwise.
+// Declaring such chunks CONSTANT would silently replace every value with a single
+// one on flush (gh-1043). Bitwise comparison also keeps distinct NaN payloads apart.
+template<std::floating_point T>
+bool isBitwiseConstant(std::span<const uint8_t> buffer, uint64_t numValues) {
+    if (numValues <= 1) {
+        return true;
+    }
+    std::span<const T> values{reinterpret_cast<const T*>(buffer.data()), (size_t)numValues};
+    const T first = values[0];
+    for (uint64_t i = 1; i < numValues; ++i) {
+        if (std::memcmp(&values[i], &first, sizeof(T)) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// True when the chunk must NOT use CONSTANT compression despite min == max.
+// Note: the scan covers the raw buffer including null slots, matching the
+// in-memory ConstantCompression::analyze behavior (which memcmps null slots too).
+// This is conservative: a constant value with differently-stuffed null slots falls
+// back to ALP/uncompressed, which is always correct.
+bool isFalseConstantFloat(PhysicalTypeID physicalType, std::span<const uint8_t> buffer,
+    uint64_t numValues) {
+    switch (physicalType) {
+    case PhysicalTypeID::DOUBLE:
+        return !isBitwiseConstant<double>(buffer, numValues);
+    case PhysicalTypeID::FLOAT:
+        return !isBitwiseConstant<float>(buffer, numValues);
+    default:
+        return false;
+    }
+}
+} // namespace
+
 ColumnChunkMetadata GetCompressionMetadata::operator()(std::span<const uint8_t> buffer,
     uint64_t numValues, StorageValue min, StorageValue max) const {
-    if (min == max) {
+    if (min == max && !isFalseConstantFloat(dataType.getPhysicalType(), buffer, numValues)) {
         return ColumnChunkMetadata(INVALID_PAGE_IDX, 0, numValues,
             CompressionMetadata(min, max, CompressionType::CONSTANT));
     }
@@ -206,7 +249,9 @@ ColumnChunkMetadata GetFloatCompressionMetadata<T>::operator()(std::span<const u
     const PhysicalTypeID physicalType =
         std::same_as<T, double> ? PhysicalTypeID::DOUBLE : PhysicalTypeID::FLOAT;
 
-    if (min == max) {
+    // min == max alone is not sufficient for floats (see isBitwiseConstant above:
+    // NaN folds and -0.0/0.0 would wrongly collapse to CONSTANT, gh-1043).
+    if (min == max && isBitwiseConstant<T>(buffer, numValues)) {
         return getConstantFloatMetadata(physicalType, numValues, min, max);
     }
 
