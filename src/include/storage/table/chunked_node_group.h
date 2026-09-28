@@ -165,6 +165,11 @@ public:
     void setVersionInfo(std::unique_ptr<VersionInfo> versionInfo) {
         this->versionInfo = std::move(versionInfo);
     }
+    // Moves out the group's version info, leaving it null. Used to preserve uncheckpointed
+    // deletes when restoring persistent chunks after a failed checkpoint (see #1051); the
+    // checkpoint reads version info but only resets it on success, so the live object still
+    // holds pre-checkpoint state when the checkpoint throws.
+    std::unique_ptr<VersionInfo> moveVersionInfo() { return std::move(versionInfo); }
     void resetVersionAndUpdateInfo();
 
     uint64_t append(const transaction::Transaction* transaction,

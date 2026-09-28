@@ -285,6 +285,38 @@ std::unique_ptr<ChunkedCSRNodeGroup> ChunkedCSRNodeGroup::deserialize(MemoryMana
     return chunkedGroup;
 }
 
+void ChunkedCSRNodeGroup::serializeForCheckpointRollback(Serializer& serializer) const {
+    // Mirrors serialize(), minus the group version info. Must stay in sync with
+    // deserializeForCheckpointRollback().
+    DASSERT(csrHeader.offset && csrHeader.length);
+    serializer.writeDebuggingInfo("csr_header_offset");
+    csrHeader.offset->serialize(serializer);
+    serializer.writeDebuggingInfo("csr_header_length");
+    csrHeader.length->serialize(serializer);
+    serializer.writeDebuggingInfo("chunks");
+    serializer.serializeVectorOfPtrs(chunks);
+    serializer.writeDebuggingInfo("startRowIdx");
+    serializer.write(startRowIdx);
+}
+
+std::unique_ptr<ChunkedCSRNodeGroup> ChunkedCSRNodeGroup::deserializeForCheckpointRollback(
+    MemoryManager& memoryManager, Deserializer& deSer) {
+    std::string key;
+    deSer.validateDebuggingInfo(key, "csr_header_offset");
+    auto offset = ColumnChunk::deserialize(memoryManager, deSer);
+    deSer.validateDebuggingInfo(key, "csr_header_length");
+    auto length = ColumnChunk::deserialize(memoryManager, deSer);
+    std::vector<std::unique_ptr<ColumnChunk>> chunks;
+    deSer.validateDebuggingInfo(key, "chunks");
+    deSer.deserializeVectorOfPtrs<ColumnChunk>(chunks,
+        [&](Deserializer& deser) { return ColumnChunk::deserialize(memoryManager, deser); });
+    deSer.validateDebuggingInfo(key, "startRowIdx");
+    row_idx_t startRowIdx = 0;
+    deSer.deserializeValue<row_idx_t>(startRowIdx);
+    return std::make_unique<ChunkedCSRNodeGroup>(
+        ChunkedCSRHeader{std::move(offset), std::move(length)}, std::move(chunks), startRowIdx);
+}
+
 ChunkedCSRNodeGroup::ChunkedCSRNodeGroup(InMemChunkedCSRNodeGroup& base,
     const std::vector<common::column_id_t>& selectedColumns)
     : ChunkedNodeGroup{base, selectedColumns},
