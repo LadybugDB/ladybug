@@ -1258,6 +1258,11 @@ bool Planner::tryPlanPropertySeededChain(const QueryGraphCollection& queryGraphC
 // Operator types whose copy() is audited for the key-subplan deep copy: recursive
 // children, immutable shared definitions, no positional execution state. Everything
 // else bails the rewrite (graceful fallback, never wrong results).
+// Operator types whose copy() is audited for the key-subplan deep copy: recursive
+// children, immutable shared definitions, no positional execution state. Everything
+// else bails the rewrite (graceful fallback, never wrong results). Every enumerator
+// is classified explicitly with no default label, so -Wswitch fails the build on
+// unclassified new operators (#935).
 static bool isCopyableForSeed(planner::LogicalOperatorType type) {
     switch (type) {
     case planner::LogicalOperatorType::SCAN_NODE_TABLE:
@@ -1279,9 +1284,55 @@ static bool isCopyableForSeed(planner::LogicalOperatorType type) {
     case planner::LogicalOperatorType::ACCUMULATE:
     case planner::LogicalOperatorType::EXPRESSIONS_SCAN:
         return true;
-    default:
+    case planner::LogicalOperatorType::ALTER:
+    case planner::LogicalOperatorType::ANALYZE:
+    case planner::LogicalOperatorType::ATTACH_DATABASE:
+    case planner::LogicalOperatorType::COPY_FROM:
+    case planner::LogicalOperatorType::COPY_TO:
+    case planner::LogicalOperatorType::COUNT_ANTI_EDGE_CHAIN:
+    case planner::LogicalOperatorType::COUNT_EXTEND_CHAIN:
+    case planner::LogicalOperatorType::COUNT_REL_TABLE:
+    case planner::LogicalOperatorType::CREATE_GRAPH:
+    case planner::LogicalOperatorType::CREATE_INDEX:
+    case planner::LogicalOperatorType::CREATE_MACRO:
+    case planner::LogicalOperatorType::CREATE_SEQUENCE:
+    case planner::LogicalOperatorType::CREATE_TABLE:
+    case planner::LogicalOperatorType::CREATE_TYPE:
+    case planner::LogicalOperatorType::DELETE:
+    case planner::LogicalOperatorType::DETACH_DATABASE:
+    case planner::LogicalOperatorType::DROP:
+    case planner::LogicalOperatorType::DUMMY_SCAN:
+    case planner::LogicalOperatorType::DUMMY_SINK:
+    case planner::LogicalOperatorType::EMPTY_RESULT:
+    case planner::LogicalOperatorType::EXPLAIN:
+    case planner::LogicalOperatorType::EXPORT_DATABASE:
+    case planner::LogicalOperatorType::EXTENSION:
+    case planner::LogicalOperatorType::IMPORT_DATABASE:
+    case planner::LogicalOperatorType::INDEX_LOOK_UP:
+    case planner::LogicalOperatorType::INTERSECT:
+    case planner::LogicalOperatorType::INSERT:
+    case planner::LogicalOperatorType::MERGE:
+    case planner::LogicalOperatorType::MULTIPLICITY_REDUCER:
+    case planner::LogicalOperatorType::NODE_LABEL_FILTER:
+    case planner::LogicalOperatorType::NOOP:
+    case planner::LogicalOperatorType::PARTITIONER:
+    case planner::LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP:
+    case planner::LogicalOperatorType::REACHABLE_COUNT:
+    case planner::LogicalOperatorType::REL_DEGREE_TABLE:
+    case planner::LogicalOperatorType::SET_PROPERTY:
+    case planner::LogicalOperatorType::STANDALONE_CALL:
+    case planner::LogicalOperatorType::TABLE_FUNCTION_CALL:
+    case planner::LogicalOperatorType::TRANSACTION:
+    case planner::LogicalOperatorType::UNION_ALL:
+    case planner::LogicalOperatorType::UNWIND_DEDUPLICATE:
+    case planner::LogicalOperatorType::USE_DATABASE:
+    case planner::LogicalOperatorType::USE_GRAPH:
+    case planner::LogicalOperatorType::EXTENSION_CLAUSE:
         return false;
     }
+    // No default label: -Wswitch enforces that every enumerator is classified above;
+    // this guards only out-of-range values.
+    return false;
 }
 
 // Parallel fixup of a deep-copied subtree: verify isomorphism, restore cardinalities,
