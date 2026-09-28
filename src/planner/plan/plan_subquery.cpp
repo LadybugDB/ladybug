@@ -1226,6 +1226,452 @@ bool Planner::tryPlanPropertySeededChain(const QueryGraphCollection& queryGraphC
     return true;
 }
 
+// ---- Scalar-seeded chain for correlated PK equalities (Q6) ----
+// Shape: MATCH <leg> WHERE n.Prop = <outer scalar> with n.Prop the node's single-table
+// primary key, e.g. Q6's (t:Tag {ID: knownTagId}) where knownTagId is bound outside.
+// The equality is pulled above the outer join (outer-dependent), so the DP enumerator
+// plans the leg standalone and can only seed from full scans. Instead the leg is
+// planned from the seed value directly, in one of two modes:
+// - dedup (preferred): an independent key subplan (deep copy of the outer prefix)
+//   computes the chain once per DISTINCT key value and hash-joins back onto the outer
+//   plan. The copy must be deep: sharing operator objects with the probe side would
+//   share physical execution state. Only audited operator types are copied; anything
+//   else falls back gracefully without touching the outer plan.
+// - append (fallback): the chain is appended onto the outer plan directly (correct
+//   but repeats the walk per outer row).
+// Chain construction in both modes:
+//   1. PK lookup of the seed node keyed by the seed value (exact);
+//   2. tree-walk extends covering every rel, preferring outer-bound neighbors (they
+//      correlate early): the neighbor of a bound node is extended normally when
+//      unbound, or via a FRESH variable copy when already bound in the outer scope
+//      (extending into a bound variable would collide scopes, and the physical extend
+//      overwrites rather than joins). In dedup mode the fresh copies join back; in
+//      append mode they filter.
+//   3. deferred residual filters, then property-attach joins for leg-node properties
+//      the extends did not fetch (same as the property-seeded chain above).
+// Fires only for a single-graph, non-recursive leg with exactly one convertible
+// equality whose key is outer-evaluable with at least one outer dependent (pure
+// constants stay on the regular path), no other leg-variable-touching predicate except
+// deferred filters, and full rel coverage without cycles. Anything else returns false
+// and the caller falls back to regular planning.
+
+// Operator types whose copy() is audited for the key-subplan deep copy: recursive
+// children, immutable shared definitions, no positional execution state. Everything
+// else bails the rewrite (graceful fallback, never wrong results).
+static bool isCopyableForSeed(planner::LogicalOperatorType type) {
+    switch (type) {
+    case planner::LogicalOperatorType::SCAN_NODE_TABLE:
+    case planner::LogicalOperatorType::FILTER:
+    case planner::LogicalOperatorType::HASH_JOIN:
+    case planner::LogicalOperatorType::EXTEND:
+    case planner::LogicalOperatorType::PACKED_EXTEND:
+    case planner::LogicalOperatorType::RECURSIVE_EXTEND:
+    case planner::LogicalOperatorType::PATH_PROPERTY_PROBE:
+    case planner::LogicalOperatorType::SEMI_MASKER:
+    case planner::LogicalOperatorType::PROJECTION:
+    case planner::LogicalOperatorType::AGGREGATE:
+    case planner::LogicalOperatorType::FLATTEN:
+    case planner::LogicalOperatorType::DISTINCT:
+    case planner::LogicalOperatorType::UNWIND:
+    case planner::LogicalOperatorType::CROSS_PRODUCT:
+    case planner::LogicalOperatorType::LIMIT:
+    case planner::LogicalOperatorType::ORDER_BY:
+    case planner::LogicalOperatorType::ACCUMULATE:
+    case planner::LogicalOperatorType::EXPRESSIONS_SCAN:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Parallel fixup of a deep-copied subtree: verify isomorphism, restore cardinalities,
+// recompute factorized schemas bottom-up. Any anomaly fails loudly here (false) while
+// the outer plan is still untouched.
+static bool syncCopiedSubtree(planner::LogicalOperator* newOp, planner::LogicalOperator* oldOp) {
+    if (newOp->getOperatorType() != oldOp->getOperatorType() ||
+        newOp->getNumChildren() != oldOp->getNumChildren() ||
+        !isCopyableForSeed(newOp->getOperatorType())) {
+        return false;
+    }
+    for (auto i = 0u; i < newOp->getNumChildren(); ++i) {
+        if (!syncCopiedSubtree(newOp->getChild(i).get(), oldOp->getChild(i).get())) {
+            return false;
+        }
+    }
+    newOp->setCardinality(oldOp->getCardinality());
+    try {
+        newOp->computeFactorizedSchema();
+    } catch (const std::exception&) {
+        return false;
+    }
+    return true;
+}
+
+static bool cloneSeedKeyPlan(planner::LogicalPlan& src, planner::LogicalPlan& dst) {
+    std::shared_ptr<planner::LogicalOperator> copied;
+    try {
+        copied = std::shared_ptr<planner::LogicalOperator>(src.getLastOperator()->copy());
+    } catch (const std::exception&) {
+        return false;
+    }
+    if (!syncCopiedSubtree(copied.get(), src.getLastOperator().get())) {
+        return false;
+    }
+    dst.setLastOperator(std::move(copied));
+    dst.setCost(src.getCost());
+    return true;
+}
+bool Planner::tryPlanScalarSeededChain(const QueryGraphCollection& queryGraphCollection,
+    const expression_vector& predicates, LogicalPlan& leftPlan) {
+    if (leftPlan.isEmpty() || leftPlan.hasUpdate() ||
+        queryGraphCollection.getNumQueryGraphs() != 1) {
+        return false;
+    }
+    auto queryGraph = queryGraphCollection.getQueryGraph(0);
+    if (queryGraph->getNumQueryRels() == 0) {
+        return false;
+    }
+    for (auto i = 0u; i < queryGraph->getNumQueryRels(); ++i) {
+        if (queryGraph->getQueryRel(i)->getRelType() != QueryRelType::NON_RECURSIVE) {
+            return false;
+        }
+    }
+    auto outerScope = collectOuterScopeNames(*leftPlan.getSchema());
+    auto legVars = collectGraphVarNames(queryGraphCollection);
+    // The collect-membership rewrite above owns IN-list predicates; stay clear of them.
+    for (auto& pred : predicates) {
+        if (isListContainsFunc(pred)) {
+            return false;
+        }
+        if (containsSubqueryOrLambda(pred)) {
+            return false;
+        }
+    }
+    // 1. Find the single convertible PK equality: node PK vs. an outer-evaluable key
+    // with at least one outer variable and no leg variables.
+    std::shared_ptr<NodeExpression> seedNode;
+    std::shared_ptr<Expression> seedKey;
+    int convertIdx = -1;
+    for (auto i = 0u; i < predicates.size(); ++i) {
+        auto& pred = predicates[i];
+        if (pred->expressionType != ExpressionType::EQUALS) {
+            continue;
+        }
+        auto lhs = pred->getChild(0);
+        auto rhs = pred->getChild(1);
+        for (auto n = 0u; n < queryGraph->getNumQueryNodes(); ++n) {
+            auto node = queryGraph->getQueryNode(n);
+            if (node->getTableIDs().size() != 1) {
+                continue;
+            }
+            auto tableID = node->getTableIDs()[0];
+            auto l = lhs;
+            auto r = rhs;
+            if (isNodePrimaryKey(*r, *node, tableID)) {
+                std::swap(l, r);
+            }
+            if (!isNodePrimaryKey(*l, *node, tableID)) {
+                continue;
+            }
+            // The key must be computable from the outer bindings alone: evaluable in
+            // the outer scope (schema-based, so WITH-aliases resolve) with at least
+            // one outer dependent. A constant key (no dependents) never qualifies, so
+            // this cannot steal legs better served by constant-driven planning, and a
+            // key needing leg-planned values is not evaluable yet.
+            if (!leftPlan.getSchema()->evaluable(*r) ||
+                getDependentExprs(r, *leftPlan.getSchema()).empty()) {
+                continue;
+            }
+            if (convertIdx >= 0) {
+                return false;
+            }
+            convertIdx = static_cast<int>(i);
+            seedNode = node;
+            seedKey = r;
+        }
+    }
+    if (convertIdx < 0) {
+        return false;
+    }
+    if (outerScope.contains(seedNode->getUniqueName()) ||
+        outerScope.contains(seedNode->getInternalID()->getUniqueName())) {
+        return false;
+    }
+    auto seedTableID = seedNode->getTableIDs()[0];
+    auto seedTable = storage::StorageManager::Get(*clientContext)
+                         ->getTable(seedTableID)
+                         ->ptrCast<storage::NodeTable>();
+    if (seedTable->tryGetPrimaryKeyIndex() == nullptr) {
+        return false;
+    }
+    // Every other predicate must be a deferred filter: no hidden constructs, and all
+    // dependent variables bound by the chain (leg vars) or already bound (outer).
+    for (auto i = 0u; i < predicates.size(); ++i) {
+        if (static_cast<int>(i) == convertIdx) {
+            continue;
+        }
+        auto collector = DependentVarNameCollector();
+        collector.visit(predicates[i]);
+        for (auto& var : collector.getVarNames()) {
+            if (!legVars.contains(var) && !outerScope.contains(var)) {
+                return false;
+            }
+        }
+    }
+    // 2. Tree-walk coverage from the seed. A neighbor whose internal ID is already
+    // bound in the outer scope (correlation may live at the ID level while the node
+    // itself was rebound under a different name) gets a fresh variable copy plus an
+    // equality filter; anything else must be unbound (a rel with both ends bound is
+    // a cycle: bail).
+    struct WalkStep {
+        std::shared_ptr<RelExpression> rel;
+        std::shared_ptr<NodeExpression> bound;
+        std::shared_ptr<NodeExpression> nbr;
+        bool nbrIsOuter;
+    };
+    std::unordered_set<std::string> boundNames{seedNode->getUniqueName()};
+    std::unordered_set<std::string> usedRels;
+    std::vector<WalkStep> steps;
+    auto numRels = queryGraph->getNumQueryRels();
+    while (usedRels.size() < numRels) {
+        // Among all attachable rels prefer steps toward outer-bound neighbors: they
+        // correlate (filter) the chain early, while unbound fan-outs (Q6: post->tag
+        // at ~3.5 per post) would otherwise multiply rows that later steps discard.
+        std::optional<WalkStep> outerStep;
+        std::optional<WalkStep> plainStep;
+        for (auto i = 0u; i < numRels; ++i) {
+            auto rel = queryGraph->getQueryRel(i);
+            if (usedRels.contains(rel->getUniqueName())) {
+                continue;
+            }
+            auto srcName = rel->getSrcNode()->getUniqueName();
+            auto dstName = rel->getDstNode()->getUniqueName();
+            if (srcName == dstName) {
+                return false;
+            }
+            auto srcBound = boundNames.contains(srcName);
+            auto dstBound = boundNames.contains(dstName);
+            if (srcBound && dstBound) {
+                return false;
+            }
+            std::shared_ptr<NodeExpression> boundObj;
+            std::shared_ptr<NodeExpression> nbrObj;
+            if (srcBound && !dstBound) {
+                boundObj = rel->getSrcNode();
+                nbrObj = rel->getDstNode();
+            } else if (dstBound && !srcBound) {
+                boundObj = rel->getDstNode();
+                nbrObj = rel->getSrcNode();
+            } else {
+                continue;
+            }
+            auto isOuter = outerScope.contains(nbrObj->getInternalID()->getUniqueName());
+            if (isOuter && !outerStep.has_value()) {
+                outerStep = WalkStep{rel, boundObj, nbrObj, true};
+            } else if (!isOuter && !plainStep.has_value()) {
+                plainStep = WalkStep{rel, boundObj, nbrObj, false};
+            }
+        }
+        const WalkStep* chosen = nullptr;
+        if (outerStep.has_value()) {
+            chosen = &outerStep.value();
+        } else if (plainStep.has_value()) {
+            chosen = &plainStep.value();
+        } else {
+            return false;
+        }
+        auto rel = chosen->rel;
+        auto nbrObj = chosen->nbr;
+        if (chosen->nbrIsOuter) {
+            // The scoped outer object must be the internal ID itself so the
+            // mutation phase can compare against it; anything else bails here,
+            // before any plan mutation.
+            auto outerID =
+                findInScope(*leftPlan.getSchema(), nbrObj->getInternalID()->getUniqueName());
+            if (outerID == nullptr || outerID->expressionType != ExpressionType::PROPERTY) {
+                return false;
+            }
+        } else {
+            boundNames.insert(nbrObj->getUniqueName());
+        }
+        steps.push_back(*chosen);
+        usedRels.insert(rel->getUniqueName());
+    }
+    // 3. Plan the chain. Preferred: an independent key subplan (deep copy of the outer
+    // prefix, validated operator types only) computes the chain once per DISTINCT key
+    // value and hash-joins back onto the outer plan. Fallback: append the chain onto
+    // the outer plan directly (correct but repeats the walk per outer row).
+    cardinalityEstimator.init(*queryGraph);
+    Binder binder(clientContext);
+    ExpressionBinder expressionBinder(&binder, clientContext);
+    LogicalPlan keyPlan;
+    auto haveKeyPlan = cloneSeedKeyPlan(leftPlan, keyPlan);
+    LogicalPlan* target = haveKeyPlan ? &keyPlan : &leftPlan;
+    expression_vector chainOutputs;
+    if (haveKeyPlan) {
+        // Collapse to distinct key values: everything below depends only on the key.
+        // Nothing is appended to the outer plan yet, so bailing here is clean.
+        auto distinctKey = findInScope(*target->getSchema(), seedKey->getUniqueName());
+        if (distinctKey == nullptr) {
+            return false;
+        }
+        chainOutputs.push_back(distinctKey);
+        auto distinct = std::make_shared<LogicalDistinct>(expression_vector{distinctKey},
+            target->getLastOperator());
+        distinct->setPayloads(expression_vector{});
+        appendFlattens(distinct->getGroupsPosToFlatten(), *target);
+        distinct->setChild(0, target->getLastOperator());
+        distinct->computeFactorizedSchema();
+        target->setLastOperator(distinct);
+    }
+    auto keyScoped = findInScope(*target->getSchema(), seedKey->getUniqueName());
+    if (keyScoped == nullptr) {
+        return false;
+    }
+    appendFlattens(target->getSchema()->getGroupsPosInScope(), *target);
+    auto seedProps = getProperties(*seedNode);
+    seedProps.erase(std::remove_if(seedProps.begin(), seedProps.end(),
+                        [](const std::shared_ptr<Expression>& expression) {
+                            return expression->constCast<PropertyExpression>().isInternalID();
+                        }),
+        seedProps.end());
+    const auto dependentExprs = getDependentExprs(keyScoped, *target->getSchema());
+    DASSERT(!dependentExprs.empty());
+    const auto outputGroupPos = target->getSchema()->getGroupPos(*dependentExprs[0]);
+    for ([[maybe_unused]] auto& dependentExpr : dependentExprs) {
+        DASSERT(target->getSchema()->getGroupPos(*dependentExpr) == outputGroupPos);
+    }
+    auto lookup = std::make_shared<LogicalQueryPrimaryKeyLookup>(seedTableID,
+        seedNode->getInternalID(), seedProps, keyScoped, outputGroupPos, target->getLastOperator());
+    lookup->computeFactorizedSchema();
+    lookup->setCardinality(target->getCardinality());
+    target->setLastOperator(std::move(lookup));
+    chainOutputs.push_back(seedNode->getInternalID());
+    for (auto& prop : seedProps) {
+        chainOutputs.push_back(prop);
+    }
+    struct FreshPair {
+        std::shared_ptr<Expression> freshID;
+        std::string legIDName;
+    };
+    std::vector<FreshPair> freshPairs;
+    expression_vector freshEqualities;
+    for (auto& step : steps) {
+        std::shared_ptr<NodeExpression> nbrObj = step.nbr;
+        if (step.nbrIsOuter) {
+            // Fresh variable copy: same tables and type, fresh identity so the extend
+            // writes its own vectors instead of colliding with the outer scope.
+            auto freshNode = std::make_shared<NodeExpression>(step.nbr->getDataType().copy(),
+                binder.getUniqueExpressionName(step.nbr->getUniqueName()),
+                step.nbr->getVariableName(), step.nbr->getEntries());
+            auto freshID = std::make_shared<PropertyExpression>(*step.nbr->getInternalID());
+            freshID->setUniqueName(
+                binder.getUniqueExpressionName(step.nbr->getInternalID()->getUniqueName()));
+            freshNode->setInternalID(freshID);
+            nbrObj = freshNode;
+        }
+        auto dir = chainExtendDirection(*step.rel, *step.bound);
+        auto relProps = getProperties(*step.rel);
+        appendExtend(step.bound, nbrObj, step.rel, dir, relProps, *target);
+        chainOutputs.push_back(nbrObj->getInternalID());
+        for (auto& prop : relProps) {
+            chainOutputs.push_back(prop);
+        }
+        if (step.nbrIsOuter) {
+            if (haveKeyPlan) {
+                freshPairs.push_back(
+                    {nbrObj->getInternalID(), step.nbr->getInternalID()->getUniqueName()});
+            } else {
+                // Validated in the walk phase: the outer internal ID is in scope.
+                auto outerID =
+                    findInScope(*target->getSchema(), step.nbr->getInternalID()->getUniqueName());
+                DASSERT(outerID != nullptr);
+                auto eq = expressionBinder.createEqualityComparisonExpression(
+                    nbrObj->getInternalID(), outerID);
+                freshEqualities.push_back(std::move(eq));
+            }
+        } else {
+            boundNames.insert(step.nbr->getUniqueName());
+        }
+    }
+    for (auto& eq : freshEqualities) {
+        appendFilter(eq, *target);
+    }
+    // Residuals evaluable in the chain scope apply here (early filtering); the rest
+    // (e.g. outer-dependent predicates, or the f._ID=f._ID tautology the binder emits
+    // for the correlation, whose ID the DISTINCT dropped) wait for the joined scope.
+    // In append mode the target IS the outer plan, so everything applies directly.
+    expression_vector deferredResiduals;
+    for (auto i = 0u; i < predicates.size(); ++i) {
+        if (static_cast<int>(i) == convertIdx) {
+            continue;
+        }
+        if (!haveKeyPlan || target->getSchema()->evaluable(*predicates[i])) {
+            appendFilter(predicates[i], *target);
+        } else {
+            deferredResiduals.push_back(predicates[i]);
+        }
+    }
+    if (haveKeyPlan) {
+        // Project the chain outputs: the copied prefix columns would otherwise collide
+        // with the probe side's same-named columns at the join below.
+        auto proj = std::make_shared<LogicalProjection>(chainOutputs, target->getLastOperator());
+        proj->computeFactorizedSchema();
+        proj->setCardinality(target->getCardinality());
+        target->setLastOperator(std::move(proj));
+        // Join back: fresh pairs plus the seed-key pair (airtight under multi-valued
+        // keys). Probe streams the outer plan, build materializes the small chain.
+        std::vector<expression_pair> joinConditions;
+        for (auto& pair : freshPairs) {
+            auto outerObj = findInScope(*leftPlan.getSchema(), pair.legIDName);
+            if (outerObj == nullptr) {
+                return false;
+            }
+            joinConditions.emplace_back(outerObj, pair.freshID);
+        }
+        auto keyOuter = findInScope(*leftPlan.getSchema(), seedKey->getUniqueName());
+        auto keyChain = findInScope(*target->getSchema(), seedKey->getUniqueName());
+        if (keyOuter == nullptr || keyChain == nullptr) {
+            return false;
+        }
+        joinConditions.emplace_back(keyOuter, keyChain);
+        appendHashJoin(joinConditions, JoinType::INNER, nullptr, leftPlan, keyPlan, leftPlan);
+        // Never SIP from probe to build here: the build side recomputes the probe's own
+        // prefix plus a chain keyed by probe values, so its values are contained in the
+        // probe's and a probe-to-build mask prunes nothing while materializing (and
+        // rescanning) the whole wide probe side. Build-to-probe masks still apply.
+        leftPlan.getLastOperator()->cast<LogicalHashJoin>().getSIPInfoUnsafe().position =
+            SemiMaskPosition::PROHIBIT_PROBE_TO_BUILD;
+        for (auto& pred : deferredResiduals) {
+            appendFilter(pred, leftPlan);
+        }
+    }
+    for (auto i = 0u; i < queryGraph->getNumQueryNodes(); ++i) {
+        auto node = queryGraph->getQueryNode(i);
+        expression_vector missing;
+        for (auto& prop : getProperties(*node)) {
+            if (!leftPlan.getSchema()->isExpressionInScope(*prop)) {
+                missing.push_back(prop);
+            }
+        }
+        if (missing.empty()) {
+            continue;
+        }
+        LogicalPlan propsPlan;
+        appendScanNodeTable(node->getInternalID(), node->getTableIDs(), missing, propsPlan,
+            node.get());
+        appendHashJoin(expression_vector{node->getInternalID()}, JoinType::INNER, leftPlan,
+            propsPlan, leftPlan);
+        // Never SIP from probe to build here: the probe side carries the whole outer
+        // row (including dead-weight lists like the friends collection), so
+        // materializing it to seed a build-side mask costs far more than the mask
+        // saves on these small dimension scans. Build-to-probe masks still apply.
+        leftPlan.getLastOperator()->cast<LogicalHashJoin>().getSIPInfoUnsafe().position =
+            SemiMaskPosition::PROHIBIT_PROBE_TO_BUILD;
+    }
+    return true;
+}
+
 // ---- Staged distinct pre-aggregation over LEFT-join chains ----
 // Shape: AGGREGATE(keys=K, aggs=[COUNT DISTINCT x_1 .. x_m]) over a left-deep chain
 // of LEFT joins J_1..J_n (n>=2, each probe = previous output, build = one leg), e.g.
@@ -1724,6 +2170,10 @@ void Planner::planRegularMatch(const QueryGraphCollection& queryGraphCollection,
     // Property collect-membership with a PK-seeded chain (e.g. Q12's tag.ID IN tags):
     // consumes the whole leg when applicable.
     if (tryPlanPropertySeededChain(queryGraphCollection, predicates, leftPlan)) {
+        return;
+    }
+    // Scalar-seeded chain for correlated PK equalities (e.g. Q6's t.ID = knownTagId).
+    if (tryPlanScalarSeededChain(queryGraphCollection, predicates, leftPlan)) {
         return;
     }
     expression_vector predicatesToPushDown, predicatesToPullUp;
