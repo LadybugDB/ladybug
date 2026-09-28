@@ -770,13 +770,15 @@ void PrimaryKeyIndex::checkpoint(main::ClientContext*, storage::PageAllocator& p
             indexChanged = true;
         }
     }
+    // Assign both header pages under one condition: the constructor rejects an overflow
+    // header page without index header pages.
     if (indexChanged) {
         writeHeaders(pageAllocator);
         hashIndexDiskArrays->checkpoint(getDiskArrayFirstHeaderPage(), pageAllocator);
-    }
-    if (overflowFile) {
-        overflowFile->checkpoint(pageAllocator);
-        updateOverflowHeaderPageIfNeeded(storageInfo.get(), overflowFile.get());
+        if (overflowFile) {
+            overflowFile->checkpoint(pageAllocator);
+            updateOverflowHeaderPageIfNeeded(storageInfo.get(), overflowFile.get());
+        }
     }
     // Make sure that changes which bypassed the WAL are written.
     // There is no other mechanism for enforcing that they are flushed
