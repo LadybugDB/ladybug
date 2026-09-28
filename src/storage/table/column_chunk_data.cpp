@@ -1,6 +1,7 @@
 #include "storage/table/column_chunk_data.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "common/data_chunk/sel_vector.h"
 #include "common/exception/copy.h"
@@ -244,12 +245,41 @@ void ColumnChunkData::updateStats(const ValueVector* vector, const SelectionView
                 if (!firstValue) {
                     return;
                 }
-                T min = *firstValue, max = *firstValue;
+                // For floats, seed from the first non-NaN value: NaN is unordered
+                // and would otherwise pin min/max (gh-1043). If every value is
+                // NaN, fall back to the first value.
+                std::optional<T> min, max;
+                if constexpr (std::floating_point<T>) {
+                    selView.forEachBreakWhenFalse([&](auto i) {
+                        if (vector->isNull(i)) {
+                            return true;
+                        }
+                        const auto val = vector->getValue<T>(i);
+                        if (std::isnan(val)) {
+                            return true;
+                        }
+                        min = val;
+                        max = val;
+                        return false;
+                    });
+                    if (!min) {
+                        min = *firstValue;
+                        max = *firstValue;
+                    }
+                } else {
+                    min = *firstValue;
+                    max = *firstValue;
+                }
                 auto update = [&](sel_t pos) {
                     const auto val = vector->getValue<T>(pos);
-                    if (val < min) {
+                    if constexpr (std::floating_point<T>) {
+                        if (std::isnan(val)) {
+                            return;
+                        }
+                    }
+                    if (val < *min) {
                         min = val;
-                    } else if (val > max) {
+                    } else if (val > *max) {
                         max = val;
                     }
                 };
@@ -262,7 +292,7 @@ void ColumnChunkData::updateStats(const ValueVector* vector, const SelectionView
                         }
                     });
                 }
-                inMemoryStats.update(StorageValue(min), StorageValue(max),
+                inMemoryStats.update(StorageValue(*min), StorageValue(*max),
                     getDataType().getPhysicalType());
             },
             []<typename T>(T) { static_assert(!StorageValueType<T>); });
