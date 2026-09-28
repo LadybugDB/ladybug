@@ -27,7 +27,9 @@ using namespace lbug::common;
 namespace lbug {
 namespace storage {
 
-VMRegion::VMRegion(PageSizeClass pageSizeClass, uint64_t maxRegionSize) : numFrameGroups{0} {
+VMRegion::VMRegion(PageSizeClass pageSizeClass, uint64_t maxRegionSize)
+    : numFrameGroups{0},
+      residentFramesPerDiscardGranule{0 /* initialNumElements */, 0 /* initialBlockSize */} {
     if (maxRegionSize > static_cast<std::size_t>(-1)) {
         throw BufferManagerException("maxRegionSize is beyond the max available mmap region size.");
     }
@@ -86,7 +88,7 @@ VMRegion::~VMRegion() {
 
 uint64_t VMRegion::claimFrame(frame_idx_t frameIdx) {
     const auto frameGroupIdx = getFrameGroupIdx(frameIdx);
-    DASSERT(frameGroupIdx < residentFramesPerDiscardGranule.size());
+    DASSERT(frameGroupIdx < numFrameGroups.load(std::memory_order_relaxed));
     const auto granuleIdx = getDiscardGranuleIdxInFrameGroup(frameIdx);
     auto& numResidentFrames = residentFramesPerDiscardGranule[frameGroupIdx][granuleIdx];
     const auto previousNumResidentFrames = numResidentFrames.fetch_add(1);
@@ -96,7 +98,7 @@ uint64_t VMRegion::claimFrame(frame_idx_t frameIdx) {
 
 uint64_t VMRegion::releaseFrame(frame_idx_t frameIdx) {
     const auto frameGroupIdx = getFrameGroupIdx(frameIdx);
-    DASSERT(frameGroupIdx < residentFramesPerDiscardGranule.size());
+    DASSERT(frameGroupIdx < numFrameGroups.load(std::memory_order_relaxed));
     const auto granuleIdx = getDiscardGranuleIdxInFrameGroup(frameIdx);
     auto& numResidentFrames = residentFramesPerDiscardGranule[frameGroupIdx][granuleIdx];
     const auto previousNumResidentFrames = numResidentFrames.fetch_sub(1);

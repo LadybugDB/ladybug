@@ -1,4 +1,6 @@
+#include <atomic>
 #include <cstdint>
+#include <thread>
 
 #include "common/constants.h"
 #include "common/system_config.h"
@@ -9,6 +11,7 @@
 #include "storage/buffer_manager/buffer_manager.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/buffer_manager/spiller.h"
+#include "storage/buffer_manager/vm_region.h"
 #include "storage/enums/residency_state.h"
 #include "storage/storage_manager.h"
 #include "storage/table/chunked_node_group.h"
@@ -29,6 +32,9 @@ public:
         auto* bm = getBufferManager(*database);
         // Can't use UINT64_MAX since it will overflow the usedMemory
         ASSERT_FALSE(bm->reserve(UINT64_MAX / 2));
+    }
+    VMRegion& getVMRegion(PageSizeClass pageSizeClass) {
+        return *getBufferManager(*database)->vmRegions[pageSizeClass];
     }
 };
 
@@ -159,6 +165,35 @@ TEST_F(BufferManagerTest, TestBMEvictionSlowRead) {
     });
 #endif
 }
+
+#if !BM_MALLOC && !defined(__SINGLE_THREADED__)
+// One VMRegion is shared by every file of a database, so a file growing (which adds a frame group)
+// must not disturb concurrent claims and releases of frames in groups that already exist.
+TEST_F(BufferManagerTest, ClaimAndReleaseFrameWhileRegionGrows) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+    auto& region = getVMRegion(REGULAR_PAGE);
+    const frame_idx_t frameIdx = region.addNewFrameGroup()
+                                 << StorageConstants::PAGE_GROUP_SIZE_LOG2;
+    constexpr uint64_t numFrameGroupsToAdd = 64;
+    std::atomic<bool> doneGrowing{false};
+    std::thread grower([&]() {
+        for (auto i = 0u; i < numFrameGroupsToAdd; ++i) {
+            region.addNewFrameGroup();
+        }
+        doneGrowing.store(true);
+    });
+    do {
+        region.claimFrame(frameIdx);
+        region.releaseFrame(frameIdx);
+    } while (!doneGrowing.load());
+    grower.join();
+    // The frame must be back to non-resident: claiming it charges a whole discard granule again.
+    ASSERT_NE(region.claimFrame(frameIdx), 0u);
+    ASSERT_NE(region.releaseFrame(frameIdx), 0u);
+}
+#endif
 
 } // namespace testing
 } // namespace lbug

@@ -3,8 +3,8 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
-#include <vector>
 
+#include "common/concurrent_vector.h"
 #include "common/constants.h"
 #include "common/types/types.h"
 
@@ -57,9 +57,13 @@ private:
     uint32_t frameSize;
     uint64_t discardGranuleSize;
     uint64_t numDiscardGranulesPerFrameGroup;
-    uint64_t numFrameGroups;
+    std::atomic<uint64_t> numFrameGroups;
     uint64_t maxNumFrameGroups;
-    std::vector<std::unique_ptr<std::atomic<uint16_t>[]>> residentFramesPerDiscardGranule;
+    // Grown under `mtx` but read without it by claimFrame/releaseFrame, which only index groups
+    // whose index was published to the caller after addNewFrameGroup returned. ConcurrentVector
+    // never moves or frees existing elements on growth, so those readers stay valid.
+    common::ConcurrentVector<std::unique_ptr<std::atomic<uint16_t>[]>>
+        residentFramesPerDiscardGranule;
 };
 
 } // namespace storage
