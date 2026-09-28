@@ -165,10 +165,12 @@ public:
     static std::unique_ptr<ChunkedCSRNodeGroup> deserialize(MemoryManager& memoryManager,
         common::Deserializer& deSer);
     // Serializes everything serialize() does except the group version info, whose
-    // serialization only supports clean post-checkpoint state. Paired with
-    // deserializeForCheckpointRollback; used to snapshot a node group's persistent chunks
-    // so a failed checkpoint can be undone (see LadybugDB/ladybug#1051). The live group's
-    // version info is transplanted on restore instead.
+    // serialization only supports clean post-checkpoint state. Per-chunk residency is
+    // recorded so empty IN_MEMORY placeholders for dropped-not-yet-vacuumed columns
+    // round-trip. Paired with deserializeForCheckpointRollback; used to snapshot a node
+    // group's persistent chunks so a failed checkpoint can be undone (see
+    // LadybugDB/ladybug#1051). The live group's version info is transplanted on restore
+    // instead.
     void serializeForCheckpointRollback(common::Serializer& serializer) const;
     static std::unique_ptr<ChunkedCSRNodeGroup> deserializeForCheckpointRollback(
         MemoryManager& memoryManager, common::Deserializer& deSer);
