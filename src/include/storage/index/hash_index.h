@@ -468,6 +468,10 @@ public:
     OverflowFile* getOverflowFile() const { return overflowFile.get(); }
 
     void rollbackCheckpoint() override;
+    // Publishes the staged storage-phase checkpoint (read headers, local-storage clear).
+    // Runs post-commit via NodeTable::finalizeCheckpoint, so a failed checkpoint never
+    // exposes half-published index state.
+    void finalize(main::ClientContext*) override;
 
     common::PhysicalTypeID keyTypeID() const {
         DASSERT(indexInfo.keyDataTypes.size() == 1);
@@ -503,6 +507,18 @@ private:
     ShadowFile& shadowFile;
     // Stores both primary and overflow slots
     std::unique_ptr<DiskArrayCollection> hashIndexDiskArrays;
+    // True once the storage phase staged a checkpoint that finalize() still has to publish.
+    // Guards finalize/rollback against checkpoints that never ran (e.g. epoch-skipped tables).
+    bool hasStagedCheckpoint = false;
+    // Whether the staged checkpoint changed the index. finalize() only publishes when set:
+    // publishing unconditionally would advance DiskArrayCollection::headerPagesOnDisk without
+    // writing anything, so a later checkpoint would skip writing new header pages and the
+    // database would become unopenable ("disk array header page 0").
+    bool stagedIndexChanged = false;
+    // Header page IDs at checkpoint entry, restored on rollback so a failed first checkpoint
+    // cannot leave dangling page IDs behind.
+    common::page_idx_t stagedFirstHeaderPage = common::INVALID_PAGE_IDX;
+    common::page_idx_t stagedOverflowHeaderPage = common::INVALID_PAGE_IDX;
 };
 
 } // namespace storage

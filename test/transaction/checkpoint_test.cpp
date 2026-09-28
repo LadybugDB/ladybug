@@ -1303,5 +1303,121 @@ TEST_F(ReviewFixesTest, SubgraphCatalogPersistsAfterCheckpointWithPreExistingTab
     ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
 }
 
+// Regression tests for #1050: a checkpoint that fails after the PK index storage phase must
+// leave lookups, uniqueness and reopen behaving as if the checkpoint had not run. The PK
+// index used to publish read headers and clear its local storage mid-checkpoint, which
+// rollback could not restore (lost keys, accepted duplicates, unopenable DB).
+class FailedCheckpointPKIndexTest : public PrivateApiTest {
+public:
+    std::string getInputDir() override { return "empty"; }
+
+    void SetUp() override {
+        PrivateApiTest::SetUp();
+        ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    }
+
+    void failCheckpointOnSerialization() const {
+        FlakyCheckpointer flakyCheckpointer([](main::ClientContext& context) {
+            return std::make_unique<FlakyCheckpointerFailsOnSerialization>(context);
+        });
+        auto context = getClientContext(*conn);
+        flakyCheckpointer.setCheckpointer(*context);
+        ASSERT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
+        FlakyCheckpointer::resetCheckpointer(*context);
+    }
+
+    void checkpoint() const {
+        auto res = conn->query("CHECKPOINT;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    }
+
+    // Asserts every key in [begin, end) resolves through a PK point lookup.
+    void checkPointLookups(const std::function<std::string(int64_t)>& keyOf, int64_t begin,
+        int64_t end, const char* phase) const {
+        for (auto k = begin; k < end; k++) {
+            auto res =
+                conn->query(std::format("MATCH (t:test) WHERE t.id = {} RETURN t.id;", keyOf(k)));
+            ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+            ASSERT_TRUE(res->hasNext()) << phase << ": PK lookup missed key " << k;
+            int rows = 0;
+            while (res->hasNext()) {
+                res->getNext();
+                rows++;
+            }
+            EXPECT_EQ(rows, 1) << phase << ": key " << k << " returned " << rows << " rows";
+        }
+    }
+
+    void checkCount(int64_t expected) const {
+        auto res = conn->query("MATCH (t:test) RETURN COUNT(t);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        ASSERT_EQ(res->getNext()->getValue(0)->getValue<int64_t>(), expected);
+    }
+};
+
+TEST_F(FailedCheckpointPKIndexTest, Int64LookupsSurviveFailedCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, v INT64);")->isSuccess());
+    for (auto i = 0; i < 300; i++) {
+        ASSERT_TRUE(
+            conn->query(std::format("CREATE (:test {{id: {}, v: {}}});", i, i))->isSuccess());
+    }
+    checkpoint();
+    for (auto i = 300; i < 400; i++) {
+        ASSERT_TRUE(
+            conn->query(std::format("CREATE (:test {{id: {}, v: {}}});", i, i))->isSuccess());
+    }
+    failCheckpointOnSerialization();
+    // Keys inserted since the last checkpoint must still resolve, and duplicates of both
+    // old and new keys must still be rejected.
+    checkPointLookups([](int64_t k) { return std::to_string(k); }, 0, 400, "after failure");
+    EXPECT_FALSE(conn->query("CREATE (:test {id: 10, v: -1});")->isSuccess());
+    EXPECT_FALSE(conn->query("CREATE (:test {id: 350, v: -1});")->isSuccess());
+    checkCount(400);
+    // A retry must persist the correct state, and it must survive a reopen.
+    checkpoint();
+    checkPointLookups([](int64_t k) { return std::to_string(k); }, 0, 400, "after retry");
+    checkCount(400);
+    createDBAndConn();
+    checkCount(400);
+    checkPointLookups([](int64_t k) { return std::to_string(k); }, 0, 400, "after reopen");
+}
+
+TEST_F(FailedCheckpointPKIndexTest, StringLookupsSurviveFailedCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE test(id STRING PRIMARY KEY, v INT64);")->isSuccess());
+    const auto keyOf = [](int64_t k) {
+        return std::format("'a-key-longer-than-twelve-bytes-{:04d}'", k);
+    };
+    for (auto i = 0; i < 100; i++) {
+        ASSERT_TRUE(conn->query(std::format("CREATE (:test {{id: {}, v: {}}});", keyOf(i), i))
+                        ->isSuccess());
+    }
+    checkpoint();
+    for (auto i = 100; i < 140; i++) {
+        ASSERT_TRUE(conn->query(std::format("CREATE (:test {{id: {}, v: {}}});", keyOf(i), i))
+                        ->isSuccess());
+    }
+    failCheckpointOnSerialization();
+    checkPointLookups(keyOf, 0, 140, "after failure");
+    EXPECT_FALSE(
+        conn->query(std::format("CREATE (:test {{id: {}, v: -1}});", keyOf(3)))->isSuccess());
+    EXPECT_FALSE(
+        conn->query(std::format("CREATE (:test {{id: {}, v: -1}});", keyOf(120)))->isSuccess());
+    checkCount(140);
+    checkpoint();
+    checkPointLookups(keyOf, 0, 140, "after retry");
+    checkCount(140);
+    createDBAndConn();
+    checkCount(140);
+    checkPointLookups(keyOf, 0, 140, "after reopen");
+}
+
 } // namespace testing
 } // namespace lbug

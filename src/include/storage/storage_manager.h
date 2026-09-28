@@ -59,7 +59,7 @@ public:
     // Capture the current changeEpoch for every table. Must be called under the
     // write gate so that no active writers can bump epochs concurrently.
     std::unordered_map<common::table_id_t, uint64_t> captureChangeEpochs() const;
-    void finalizeCheckpoint();
+    void finalizeCheckpoint(main::ClientContext& context);
     void rollbackCheckpoint(const catalog::Catalog& catalog, main::ClientContext* context);
 
     WAL& getWAL() const;

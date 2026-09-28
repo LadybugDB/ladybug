@@ -832,6 +832,16 @@ void NodeTable::rollbackCheckpoint() {
     }
 }
 
+void NodeTable::finalizeCheckpoint(main::ClientContext& context) {
+    // Publish ONLY the primary-key index's staged checkpoint. Other indexes (e.g. extension
+    // HNSW/FTS indexes) define Index::finalize for their own explicit flows with a live
+    // transaction; invoking it here post-commit crashes (no active transaction), and main
+    // never calls it from the checkpoint path.
+    if (auto* pkIndex = tryGetPKIndex()) {
+        pkIndex->finalize(&context);
+    }
+}
+
 void NodeTable::reclaimDroppedIndexes(PageAllocator& pageAllocator) {
     for (const auto& index : droppedIndexes) {
         index.reclaimStorage(pageAllocator);

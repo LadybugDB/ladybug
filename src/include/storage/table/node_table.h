@@ -212,6 +212,7 @@ public:
         PageAllocator& pageAllocator, const transaction::Transaction* snapshotTxn = nullptr,
         uint64_t epochWatermark = 0) override;
     void rollbackCheckpoint() override;
+    void finalizeCheckpoint(main::ClientContext& context) override;
     void reclaimStorage(PageAllocator& pageAllocator) const override;
 
     void rollbackPKIndexInsert(main::ClientContext* context, common::row_idx_t startRow,
