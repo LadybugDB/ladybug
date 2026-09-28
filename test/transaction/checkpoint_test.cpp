@@ -572,6 +572,101 @@ TEST_F(FlakyCheckpointerTest, CSRGroupReadsBackAfterFailedCSRHeaderCheckpoint) {
     checkRels();
 }
 
+// Same as above, but the base rels arrive as an uncheckpointed COPY batch, so the failing
+// checkpoint snapshots a persistent group whose vector versions are still dirty (their
+// serialization only supports clean post-checkpoint state). The snapshot must succeed
+// anyway, and a mid-group failure must still leave reads, retry and reopen correct.
+TEST_F(FlakyCheckpointerTest, CSRGroupReadsBackAfterFailedCheckpointWithUncheckpointedCopy) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE N(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE R(FROM N TO N, w INT64);")->isSuccess());
+    ASSERT_TRUE(conn->query("UNWIND range(0, 999) AS i CREATE (:N {id: i});")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    // 1000 rels i -> (i+1) % 1000 with w = i, batch-loaded and left uncheckpointed.
+    const auto relsPath =
+        (std::filesystem::path(databasePath).parent_path() / "copy_rels.csv").string();
+    {
+        std::ofstream csv{relsPath};
+        ASSERT_TRUE(csv.is_open());
+        for (auto i = 0; i < 1000; i++) {
+            csv << i << ',' << (i + 1) % 1000 << ',' << i << '\n';
+        }
+    }
+    auto res = conn->query(std::format("COPY R FROM '{}';", relsPath));
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    // One more rel through the write path, so the failing checkpoint also merges in-mem
+    // state.
+    res = conn->query("MATCH (a:N), (b:N) WHERE a.id = 0 AND b.id = 500 "
+                      "CREATE (a)-[:R {w: 1000}]->(b);");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+
+    auto checkRels = [&]() {
+        auto res =
+            conn->query("MATCH (a:N)-[e:R]->(b:N) RETURN COUNT(e), CAST(SUM(e.w) AS INT64);");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        auto row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 1001);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 499500 + 1000);
+        res = conn->query("MATCH (a:N {id: 0})-[e:R]->(b:N) RETURN b.id, e.w ORDER BY b.id;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        ASSERT_TRUE(res->hasNext());
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 1);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 0);
+        ASSERT_TRUE(res->hasNext());
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 500);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 1000);
+        ASSERT_FALSE(res->hasNext());
+        res = conn->query("MATCH (a:N {id: 1})-[e:R]->(b:N) RETURN b.id, e.w;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 2);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 1);
+        res = conn->query("MATCH (a:N {id: 999})-[e:R]->(b:N) RETURN b.id, e.w;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 0);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 999);
+        res = conn->query("MATCH (a:N)-[e:R]->(b:N {id: 500}) RETURN a.id, e.w ORDER BY a.id;");
+        ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        ASSERT_TRUE(res->hasNext());
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 0);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 1000);
+        ASSERT_TRUE(res->hasNext());
+        row = res->getNext();
+        ASSERT_EQ(row->getValue(0)->getValue<int64_t>(), 499);
+        ASSERT_EQ(row->getValue(1)->getValue<int64_t>(), 499);
+        ASSERT_FALSE(res->hasNext());
+    };
+    checkRels();
+
+    auto context = getClientContext(*conn);
+    bool failed = false;
+    FlakyCheckpointer flakyCheckpointer([&failed](main::ClientContext& ctx) {
+        return std::make_unique<FlakyCheckpointerFailsDuringOutOfPlaceRewrite>(ctx, failed);
+    });
+    flakyCheckpointer.setCheckpointer(*context);
+    res = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(res->isSuccess());
+    ASSERT_TRUE(failed);
+    checkRels();
+
+    FlakyCheckpointer::resetCheckpointer(*context);
+    res = conn->query("CHECKPOINT;");
+    ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+    checkRels();
+
+    res.reset();
+    createDBAndConn();
+    checkRels();
+}
+
 // Simulates a situation where a database attempts to replay a shadow file from an older database
 // with the same path
 TEST_F(FlakyCheckpointerTest, ShadowFileDatabaseIDMismatchExistingDB) {
