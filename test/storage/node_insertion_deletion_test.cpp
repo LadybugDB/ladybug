@@ -1,3 +1,8 @@
+#include <atomic>
+#include <mutex>
+#include <string>
+#include <thread>
+
 #include "common/constants.h"
 #include "common/system_config.h"
 #include "graph_test/private_graph_test.h"
@@ -109,3 +114,67 @@ TEST_F(NodeInsertionDeletionTests, InsertManyNodesTest) {
     }
     ASSERT_EQ(i, LBUG_PAGE_SIZE);
 }
+
+#ifndef __SINGLE_THREADED__
+// A delete publishes a vector's deletion status before it allocates the per-row deletion
+// versions, and may create or grow the version info, so it must hold the chunked-groups lock that
+// scans hold. This test relies on a sanitizer or a crash to detect the race: the reader's count
+// cannot observe the torn state. Rolling back frees the deletion versions again, so every round
+// re-opens the first-deletion window.
+TEST_F(NodeInsertionDeletionTests, ScanConcurrentWithFirstDeletionInVector) {
+    ASSERT_TRUE(conn->query("COMMIT")->isSuccess());
+    std::atomic<bool> stop{false};
+    std::atomic<uint64_t> scans{0};
+    std::atomic<bool> failed{false};
+    std::mutex failureMtx;
+    std::string failure;
+    auto fail = [&](std::string message) {
+        std::lock_guard<std::mutex> guard(failureMtx);
+        if (failure.empty()) {
+            failure = std::move(message);
+        }
+        failed = true;
+    };
+    std::thread reader([&] {
+        Connection scanConn(database.get());
+        while (!stop.load()) {
+            auto res = scanConn.query("MATCH (a:person) RETURN count(*)");
+            if (!res->isSuccess()) {
+                fail(res->getErrorMessage());
+                return;
+            }
+            auto count = res->getNext()->getValue(0)->getValue<int64_t>();
+            if (count != 10000) {
+                fail("reader saw count " + std::to_string(count));
+                return;
+            }
+            scans++;
+        }
+    });
+    for (auto round = 0; round < 200 && !failed.load(); round++) {
+        auto begin = conn->query("BEGIN TRANSACTION");
+        if (!begin->isSuccess()) {
+            fail(begin->getErrorMessage());
+            break;
+        }
+        for (offset_t id = 0; id < 10000; id += DEFAULT_VECTOR_CAPACITY) {
+            auto res =
+                conn->query("MATCH (a:person) WHERE a.ID = " + std::to_string(id) + " DELETE a");
+            if (!res->isSuccess()) {
+                fail(res->getErrorMessage());
+                break;
+            }
+        }
+        auto rollback = conn->query("ROLLBACK");
+        if (!rollback->isSuccess()) {
+            fail(rollback->getErrorMessage());
+            break;
+        }
+    }
+    stop = true;
+    reader.join();
+    EXPECT_GT(scans.load(), 0u);
+    std::lock_guard<std::mutex> guard(failureMtx);
+    EXPECT_TRUE(failure.empty()) << failure;
+}
+#endif
