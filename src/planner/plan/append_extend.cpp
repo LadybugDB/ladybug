@@ -84,12 +84,17 @@ void Planner::appendNonRecursiveExtend(const std::shared_ptr<NodeExpression>& bo
     auto extend = make_shared<LogicalExtend>(boundNode, nbrNode, rel, direction, extendFromSource,
         properties_, plan.getLastOperator());
     extend->computeFactorizedSchema();
-    // Update cost & cardinality. Note that extend does not change factorized cardinality.
+    // Update cost & cardinality. The factorized groups stay nested (hence the multiplier
+    // below), but the flat output estimate must model fan-out or the DP enumerator ties
+    // every extend at its input cardinality and always prefers the smallest seed (e.g. a
+    // 1-row PK anchor over a SIP-prunable filtered start whose forward fan-out is huge).
     auto transaction = Transaction::Get(*clientContext);
     const auto extensionRate =
         cardinalityEstimator.getExtensionRate(*rel, *boundNode, direction, transaction);
-    extend->setCardinality(plan.getLastOperator()->getCardinality());
-    plan.setCost(CostModel::computeExtendCost(plan));
+    const auto outputCardinality =
+        cardinalityEstimator.multiply(extensionRate, plan.getLastOperator()->getCardinality());
+    extend->setCardinality(outputCardinality);
+    plan.setCost(CostModel::computeExtendCost(plan, outputCardinality));
     auto group = extend->getSchema()->getGroup(nbrNode->getInternalID());
     group->setMultiplier(extensionRate);
     plan.setLastOperator(std::move(extend));
@@ -113,8 +118,10 @@ void Planner::appendPackedExtend(const std::shared_ptr<NodeExpression>& boundNod
     auto transaction = Transaction::Get(*clientContext);
     const auto extensionRate =
         cardinalityEstimator.getExtensionRate(*rel, *boundNode, direction, transaction);
-    extend->setCardinality(plan.getLastOperator()->getCardinality());
-    plan.setCost(CostModel::computeExtendCost(plan));
+    const auto outputCardinality =
+        cardinalityEstimator.multiply(extensionRate, plan.getLastOperator()->getCardinality());
+    extend->setCardinality(outputCardinality);
+    plan.setCost(CostModel::computeExtendCost(plan, outputCardinality));
     auto group = extend->getSchema()->getGroup(nbrNode->getInternalID());
     group->setMultiplier(extensionRate);
     plan.setLastOperator(std::move(extend));

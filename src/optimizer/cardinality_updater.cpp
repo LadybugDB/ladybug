@@ -131,6 +131,11 @@ void CardinalityUpdater::visitLimit(planner::LogicalOperator* op) {
 
 void CardinalityUpdater::visitAggregate(planner::LogicalOperator* op) {
     auto& aggregate = op->cast<planner::LogicalAggregate&>();
+    // Staged pre-aggregation installs a probe-side cardinality bound the generic estimator
+    // cannot recompute; preserve it.
+    if (aggregate.isCardinalityLocked()) {
+        return;
+    }
     aggregate.setCardinality(cardinalityEstimator.estimateAggregate(aggregate));
 }
 

@@ -77,6 +77,7 @@ public:
 
 private:
     cardinality_t getNodeIDDom(const std::string& nodeIDName) const;
+    std::optional<cardinality_t> getGroupKeyDomain(const binder::Expression& key) const;
     cardinality_t getNumNodes(const transaction::Transaction* transaction,
         const std::vector<common::table_id_t>& tableIDs) const;
     cardinality_t getNumRels(const transaction::Transaction* transaction,

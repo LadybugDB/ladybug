@@ -96,10 +96,20 @@ PlannerTableStats buildPlannerTableStats(StorageManager& storageManager, const C
         const auto& relInfo = getRelTableInfo(relGroupEntry, tableID);
         for (const auto direction : relGroupEntry.getRelDataDirections()) {
             const auto directionKey = RelDirectionUtils::relDirectionToKeyIdx(direction);
-            plannerStats.relDirectionStats[directionKey] =
-                mode == PlannerStatsMode::ANALYZE ?
-                    computeRelDirectionStats(*relTable, transaction, direction) :
+            if (mode != PlannerStatsMode::ANALYZE) {
+                plannerStats.relDirectionStats[directionKey] =
                     computeRelDirectionSchemaStats(*relTable, transaction, relInfo, direction);
+                continue;
+            }
+            try {
+                plannerStats.relDirectionStats[directionKey] =
+                    computeRelDirectionStats(*relTable, transaction, direction);
+            } catch (const std::exception&) {
+                // Degree data unavailable for this direction (e.g. single-direction
+                // storage); fall back to schema stats rather than failing planning.
+                plannerStats.relDirectionStats[directionKey] =
+                    computeRelDirectionSchemaStats(*relTable, transaction, relInfo, direction);
+            }
         }
     } break;
     default: {
