@@ -55,6 +55,19 @@ public:
         common::page_idx_t originalPage);
     void publishShadowPage(common::file_idx_t originalFile, common::page_idx_t originalPage,
         common::page_idx_t shadowPageIdx);
+    // A savepoint captures how many shadow pages have been created so far. The checkpointing
+    // thread can roll back to it to drop exactly the shadow pages created since, without
+    // disturbing shadow pages created by already-checkpointed tables. Used to undo a
+    // partially completed node group checkpoint (see LadybugDB/ladybug#1051).
+    using ShadowSavepoint = size_t;
+    ShadowSavepoint createSavepoint() const;
+    // Drops all shadow pages created after the savepoint: their map entries, their
+    // records, and their frames (evicted without flushing, so their contents never reach
+    // the data file). Later allocations reuse the freed shadow page indices, preserving
+    // the invariant that shadowPageRecords[i] describes shadow page i+1 (see flushAll).
+    // Must not be called while a published shadow page of a column data page is pinned
+    // (see mtx).
+    void rollbackToSavepoint(ShadowSavepoint savepoint);
     // Reads the shadow version of a page if the current checkpoint has one, and returns false
     // without calling readOp otherwise. Unlike the functions above, this is safe to call from
     // read transactions running concurrently with a checkpoint: a checkpoint publishes the new

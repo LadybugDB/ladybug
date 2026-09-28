@@ -1,7 +1,12 @@
 #include "storage/table/csr_node_group.h"
 
 #include "common/constants.h"
+#include "common/serializer/buffer_reader.h"
+#include "common/serializer/buffer_writer.h"
+#include "common/serializer/deserializer.h"
+#include "common/serializer/serializer.h"
 #include "storage/buffer_manager/memory_manager.h"
+#include "storage/shadow_file.h"
 #include "storage/storage_utils.h"
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/csr_chunked_node_group.h"
@@ -581,12 +586,57 @@ void CSRNodeGroup::serialize(Serializer& serializer) {
 
 void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
     const auto lock = chunkedGroups.lock();
-    if (!persistentChunkGroup) {
-        checkpointInMemOnly(lock, state);
-    } else {
-        checkpointInMemAndOnDisk(lock, state);
+    // A checkpoint that throws mid-group, after the rel data columns were checkpointed but
+    // before the CSR header, would otherwise leave the live persistent chunks describing the
+    // new data layout under the old header. Reads then return rels attached to the wrong
+    // source nodes, and the next checkpoint persists the corruption (see #1051). Snapshot
+    // the persistent group (on-disk chunks serialize to metadata only) and the shadow file
+    // so the group's work can be undone if any step below throws. Page allocations are
+    // rewound separately by PageManager::rollbackCheckpoint, and the in-memory CSR index
+    // and chunked groups are only consumed on success (see finalizeCheckpoint), so they
+    // need no restore.
+    std::shared_ptr<common::BufferWriter> persistentSnapshot;
+    if (persistentChunkGroup != nullptr) {
+        persistentSnapshot = std::make_shared<common::BufferWriter>();
+        common::Serializer serializer{persistentSnapshot};
+        persistentChunkGroup->serialize(serializer);
     }
-    checkpointDataTypesNoLock(state);
+    auto* shadowFile = state.columns.empty() ? nullptr : state.columns[0]->getShadowFile();
+    const auto shadowSavepoint =
+        shadowFile == nullptr ? ShadowFile::ShadowSavepoint{0} : shadowFile->createSavepoint();
+    try {
+        if (!persistentChunkGroup) {
+            checkpointInMemOnly(lock, state);
+        } else {
+            checkpointInMemAndOnDisk(lock, state);
+        }
+        checkpointDataTypesNoLock(state);
+    } catch (...) {
+        // Restore the pre-checkpoint persistent chunks, then drop this group's shadow pages,
+        // so both reads and a retried checkpoint see the old data under the old header.
+        if (persistentSnapshot != nullptr) {
+            common::Deserializer deserializer{std::make_unique<common::BufferReader>(
+                persistentSnapshot->getBlobData(), persistentSnapshot->getSize())};
+            auto restoredGroup = ChunkedCSRNodeGroup::deserialize(*state.mm, deserializer);
+            // Serialization covers chunk metadata and the group's version info, but not the
+            // per-chunk pending updates. Checkpoint only reads update info (it is reset on
+            // success), so the live chunks still hold the pre-checkpoint updates: move them
+            // into the restored chunks so a retry re-applies them. The column set only
+            // changes on success, so the chunk counts must match here.
+            DASSERT(restoredGroup->getNumColumns() == persistentChunkGroup->getNumColumns());
+            if (restoredGroup->getNumColumns() == persistentChunkGroup->getNumColumns()) {
+                for (auto i = 0u; i < restoredGroup->getNumColumns(); i++) {
+                    restoredGroup->getColumnChunk(i).adoptUpdateInfo(
+                        persistentChunkGroup->getColumnChunk(i));
+                }
+            }
+            persistentChunkGroup = std::move(restoredGroup);
+        }
+        if (shadowFile != nullptr) {
+            shadowFile->rollbackToSavepoint(shadowSavepoint);
+        }
+        throw;
+    }
 }
 
 void CSRNodeGroup::reclaimStorage(PageAllocator& pageAllocator, const UniqLock& lock) const {

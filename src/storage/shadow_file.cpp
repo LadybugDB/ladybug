@@ -72,6 +72,49 @@ void ShadowFile::publishShadowPage(file_idx_t originalFile, page_idx_t originalP
     hasShadowPages.store(true, std::memory_order_release);
 }
 
+ShadowFile::ShadowSavepoint ShadowFile::createSavepoint() const {
+    std::shared_lock lck{mtx};
+    return shadowPageRecords.size();
+}
+
+void ShadowFile::rollbackToSavepoint(ShadowSavepoint savepoint) {
+    std::unique_lock lck{mtx};
+    DASSERT(savepoint <= shadowPageRecords.size());
+    if (savepoint == shadowPageRecords.size()) {
+        return;
+    }
+    // Drop the map entries for shadow pages created since the savepoint. An entry may
+    // already be gone if its page was reclaimed via clearShadowPage, so tolerate misses.
+    for (auto i = savepoint; i < shadowPageRecords.size(); i++) {
+        const auto& record = shadowPageRecords[i];
+        auto fileIt = shadowPagesMap.find(record.originalFileIdx);
+        if (fileIt != shadowPagesMap.end()) {
+            fileIt->second.erase(record.originalPageIdx);
+            if (fileIt->second.empty()) {
+                shadowPagesMap.erase(fileIt);
+            }
+        }
+    }
+    if (shadowingFH != nullptr) {
+        // Evict the dropped pages' frames without flushing: their contents belong to the
+        // failed checkpoint attempt and must not reach the data file. Frames of other
+        // groups' shadow pages are left untouched. removePageFromFrameIfNecessary skips
+        // pages that are not in a frame.
+        const auto numPages = shadowingFH->getNumPages();
+        for (auto pageIdx = savepoint + 1; pageIdx < numPages; pageIdx++) {
+            shadowingFH->removePageFromFrameIfNecessary(static_cast<page_idx_t>(pageIdx));
+        }
+        // Truncate the page counter so later allocations reuse the freed indices, keeping
+        // shadowPageRecords[i] describing shadow page i+1. Frame groups are retained at
+        // their high-water mark and reused when the file grows again. Stale bytes possibly
+        // left on disk past the truncation point are harmless: createShadowPage pins new
+        // pages without reading them and fills them with the original page contents.
+        shadowingFH->removePageIdxAndTruncateIfNecessary(static_cast<page_idx_t>(savepoint + 1));
+    }
+    shadowPageRecords.resize(savepoint);
+    hasShadowPages.store(!shadowPagesMap.empty(), std::memory_order_relaxed);
+}
+
 page_idx_t ShadowFile::getShadowPage(file_idx_t originalFile, page_idx_t originalPage) const {
     DASSERT(hasShadowPage(originalFile, originalPage));
     return shadowPagesMap.at(originalFile).at(originalPage);

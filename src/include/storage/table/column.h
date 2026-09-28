@@ -40,6 +40,8 @@ public:
     static ColumnChunkMetadata flushData(const ColumnChunkData& chunkData,
         PageAllocator& pageAllocator);
 
+    ShadowFile* getShadowFile() const { return shadowFile; }
+
     // Use lookupInternal to specialize
     void lookupValue(const ChunkState& state, common::offset_t nodeOffset,
         common::ValueVector* resultVector, uint32_t posInVector) const;
