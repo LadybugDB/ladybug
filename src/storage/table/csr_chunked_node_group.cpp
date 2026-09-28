@@ -285,16 +285,65 @@ std::unique_ptr<ChunkedCSRNodeGroup> ChunkedCSRNodeGroup::deserialize(MemoryMana
     return chunkedGroup;
 }
 
+namespace {
+
+// Persistent groups can hold empty IN_MEMORY placeholder chunks for dropped-not-yet-vacuumed
+// columns (see the ChunkedCSRNodeGroup constructor used by batch insert). Those carry no
+// values and ColumnChunk::serialize rejects them, so record residency per chunk and recreate
+// placeholders on restore.
+void snapshotChunkForRollback(const ColumnChunk& chunk, Serializer& serializer) {
+    const auto isOnDisk = chunk.getResidencyState() == ResidencyState::ON_DISK;
+    serializer.writeDebuggingInfo("chunk_is_on_disk");
+    serializer.write<bool>(isOnDisk);
+    if (isOnDisk) {
+        chunk.serialize(serializer);
+        return;
+    }
+    DASSERT(chunk.getNumValues() == 0);
+    serializer.writeDebuggingInfo("data_type");
+    chunk.getDataType().serialize(serializer);
+    serializer.writeDebuggingInfo("capacity");
+    serializer.write<uint64_t>(chunk.getCapacity());
+    serializer.writeDebuggingInfo("enable_compression");
+    serializer.write<bool>(chunk.isCompressionEnabled());
+}
+
+std::unique_ptr<ColumnChunk> restoreChunkForRollback(MemoryManager& memoryManager,
+    Deserializer& deSer) {
+    std::string key;
+    bool isOnDisk = true;
+    deSer.validateDebuggingInfo(key, "chunk_is_on_disk");
+    deSer.deserializeValue<bool>(isOnDisk);
+    if (isOnDisk) {
+        return ColumnChunk::deserialize(memoryManager, deSer);
+    }
+    deSer.validateDebuggingInfo(key, "data_type");
+    auto dataType = LogicalType::deserialize(deSer);
+    deSer.validateDebuggingInfo(key, "capacity");
+    uint64_t capacity = 0;
+    deSer.deserializeValue<uint64_t>(capacity);
+    deSer.validateDebuggingInfo(key, "enable_compression");
+    bool enableCompression = false;
+    deSer.deserializeValue<bool>(enableCompression);
+    return std::make_unique<ColumnChunk>(memoryManager, std::move(dataType), capacity,
+        enableCompression, ResidencyState::IN_MEMORY);
+}
+
+} // namespace
+
 void ChunkedCSRNodeGroup::serializeForCheckpointRollback(Serializer& serializer) const {
     // Mirrors serialize(), minus the group version info. Must stay in sync with
     // deserializeForCheckpointRollback().
     DASSERT(csrHeader.offset && csrHeader.length);
     serializer.writeDebuggingInfo("csr_header_offset");
-    csrHeader.offset->serialize(serializer);
+    snapshotChunkForRollback(*csrHeader.offset, serializer);
     serializer.writeDebuggingInfo("csr_header_length");
-    csrHeader.length->serialize(serializer);
+    snapshotChunkForRollback(*csrHeader.length, serializer);
     serializer.writeDebuggingInfo("chunks");
-    serializer.serializeVectorOfPtrs(chunks);
+    serializer.write<uint64_t>(chunks.size());
+    for (auto& chunk : chunks) {
+        snapshotChunkForRollback(*chunk, serializer);
+    }
     serializer.writeDebuggingInfo("startRowIdx");
     serializer.write(startRowIdx);
 }
@@ -303,13 +352,17 @@ std::unique_ptr<ChunkedCSRNodeGroup> ChunkedCSRNodeGroup::deserializeForCheckpoi
     MemoryManager& memoryManager, Deserializer& deSer) {
     std::string key;
     deSer.validateDebuggingInfo(key, "csr_header_offset");
-    auto offset = ColumnChunk::deserialize(memoryManager, deSer);
+    auto offset = restoreChunkForRollback(memoryManager, deSer);
     deSer.validateDebuggingInfo(key, "csr_header_length");
-    auto length = ColumnChunk::deserialize(memoryManager, deSer);
+    auto length = restoreChunkForRollback(memoryManager, deSer);
     std::vector<std::unique_ptr<ColumnChunk>> chunks;
     deSer.validateDebuggingInfo(key, "chunks");
-    deSer.deserializeVectorOfPtrs<ColumnChunk>(chunks,
-        [&](Deserializer& deser) { return ColumnChunk::deserialize(memoryManager, deser); });
+    uint64_t numChunks = 0;
+    deSer.deserializeValue<uint64_t>(numChunks);
+    chunks.reserve(numChunks);
+    for (uint64_t i = 0; i < numChunks; i++) {
+        chunks.push_back(restoreChunkForRollback(memoryManager, deSer));
+    }
     deSer.validateDebuggingInfo(key, "startRowIdx");
     row_idx_t startRowIdx = 0;
     deSer.deserializeValue<row_idx_t>(startRowIdx);
