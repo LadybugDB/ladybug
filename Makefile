@@ -310,13 +310,13 @@ extension-release:
 shell:
 	BM_MALLOC=1 $(call run-cmake-release, \
 		-DBUILD_SHELL=TRUE \
-		-DEXTENSION_STATIC_LINK_LIST="duckdb;json" \
+		-DEXTENSION_STATIC_LINK_LIST="$(or $(EXTENSION_STATIC_LINK_LIST),duckdb;json)" \
 	)
 
 shell-debug:
 	BM_MALLOC=1 $(call run-cmake-debug, \
 		-DBUILD_SHELL=TRUE \
-		-DEXTENSION_STATIC_LINK_LIST="duckdb;json" \
+		-DEXTENSION_STATIC_LINK_LIST="$(or $(EXTENSION_STATIC_LINK_LIST),duckdb;json)" \
 	)
 
 shell-test:
