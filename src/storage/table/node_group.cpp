@@ -392,11 +392,11 @@ void NodeGroup::update(const Transaction* transaction, row_idx_t rowIdxInGroup,
 
 // NOLINTNEXTLINE(readability-make-member-function-const): Semantically non-const.
 bool NodeGroup::delete_(const Transaction* transaction, row_idx_t rowIdxInGroup) {
-    ChunkedNodeGroup* groupToDelete = nullptr;
-    {
-        const auto lock = chunkedGroups.lock();
-        groupToDelete = findChunkedGroupFromRowIdx(lock, rowIdxInGroup);
-    }
+    // Hold the chunked-groups lock for the whole delete, as scans, commit and rollback do. The
+    // delete may create the chunked group's version info and allocates a vector's deletion
+    // versions after publishing its deletion status; a scan must not observe either halfway.
+    const auto lock = chunkedGroups.lock();
+    auto* groupToDelete = findChunkedGroupFromRowIdx(lock, rowIdxInGroup);
     DASSERT(groupToDelete);
     const auto rowIdxInChunkedGroup = rowIdxInGroup - groupToDelete->getStartRowIdx();
     return groupToDelete->delete_(transaction, rowIdxInChunkedGroup);
