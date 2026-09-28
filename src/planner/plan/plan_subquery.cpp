@@ -800,6 +800,432 @@ bool Planner::tryUnnestCollectMembership(const QueryGraphCollection& queryGraphC
     return true;
 }
 
+// ---- Property collect-membership unnest with PK-seeded chain ----
+// Shape: WITH ... COLLECT(n.Prop) AS list ... MATCH <linear chain> WHERE m.Prop IN list,
+// where m.Prop is m's single-table primary key (e.g. LDBC SNB Q12's tag.ID IN tags).
+// tryUnnestCollectMembership above only handles node/rel elements; a property element
+// cannot seed the DP enumerator (correlation is node-ID-centric), so the leg is planned
+// directly instead:
+//   1. UNWIND(list AS freshElem)+DISTINCT on the outer plan. The element gets a FRESH
+//      variable: the same `var.Prop` name may be bound in both parts, so reusing the
+//      collect arg would collide scopes.
+//   2. PK lookup of the seed node keyed by the unwound values (every ID comes from the
+//      node's own table, so the lookup is exact and the IN predicate is consumed).
+//   3. index-nested-loop extends along the linear chain away from the seed.
+//   4. when the far end carries a constant PK equality (person anchor), stop one hop
+//      short and meet the anchor side (PK scan + one extend, plus the meeting node's
+//      properties) with an INNER hash join on the meeting node's ID instead of
+//      expanding into the anchor: the expansion fans out (6k friends -> 260k person
+//      rows) only to be filtered back to one person, while the meet keeps both sides
+//      small and SIP-prunable.
+// Fires only for a single-graph leg that is a simple path from the seed node, with the
+// seed property the single-table PK (backed by a PK index), no predicate touching any
+// leg variable except the consumed IN and the anchor PK, and all rels non-recursive.
+// Anything else returns false and the caller falls back to regular planning.
+
+static common::ExtendDirection chainExtendDirection(const RelExpression& rel,
+    const NodeExpression& boundNode) {
+    if (rel.getDirectionType() == binder::RelDirectionType::BOTH) {
+        return common::ExtendDirection::BOTH;
+    }
+    return *rel.getSrcNode() == boundNode ? common::ExtendDirection::FWD :
+                                            common::ExtendDirection::BWD;
+}
+
+// Top-down search for the nearest AGGREGATE producing the collect variable via a
+// single-arg COLLECT. Unlike findCollectAggregate (which serves the node-element
+// rewrite and requires group keys), a global (keyless) collect is accepted: unwinding
+// it still yields exactly the collected values.
+static planner::LogicalOperator* findPropertyCollectAggregate(planner::LogicalOperator* op,
+    const std::string& collectVarName, std::shared_ptr<Expression>& collectArg,
+    expression_vector& groupKeys) {
+    if (op->getOperatorType() == LogicalOperatorType::AGGREGATE) {
+        auto& aggregate = op->constCast<LogicalAggregate>();
+        for (auto& aggExpr : aggregate.getAggregates()) {
+            if (aggExpr->expressionType != ExpressionType::AGGREGATE_FUNCTION) {
+                continue;
+            }
+            auto& aggFunc = aggExpr->constCast<AggregateFunctionExpression>();
+            if (aggFunc.getFunction().name != function::CollectFunction::name ||
+                aggFunc.getNumChildren() != 1) {
+                continue;
+            }
+            if (aggExpr->getUniqueName() == collectVarName) {
+                collectArg = aggFunc.getChild(0);
+                groupKeys = aggregate.getKeys();
+                return op;
+            }
+        }
+    }
+    for (auto i = 0u; i < op->getNumChildren(); ++i) {
+        if (auto found = findPropertyCollectAggregate(op->getChild(i).get(), collectVarName,
+                collectArg, groupKeys)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+static bool isVarFree(const std::shared_ptr<Expression>& expr) {
+    auto collector = DependentVarNameCollector();
+    collector.visit(expr);
+    return collector.getVarNames().empty();
+}
+
+bool Planner::tryPlanPropertySeededChain(const QueryGraphCollection& queryGraphCollection,
+    const expression_vector& predicates, LogicalPlan& leftPlan) {
+    if (leftPlan.isEmpty() || leftPlan.hasUpdate() ||
+        queryGraphCollection.getNumQueryGraphs() != 1) {
+        return false;
+    }
+    auto queryGraph = queryGraphCollection.getQueryGraph(0);
+    if (queryGraph->getNumQueryRels() == 0) {
+        return false;
+    }
+    for (auto i = 0u; i < queryGraph->getNumQueryRels(); ++i) {
+        if (queryGraph->getQueryRel(i)->getRelType() != QueryRelType::NON_RECURSIVE) {
+            return false;
+        }
+    }
+    // 1. Find the single convertible IN predicate: outer-scope list, leg-local
+    // single-label property element.
+    auto outerScope = collectOuterScopeNames(*leftPlan.getSchema());
+    auto legVars = collectGraphVarNames(queryGraphCollection);
+    int convertIdx = -1;
+    std::shared_ptr<Expression> listObj;
+    std::shared_ptr<Expression> elemProp;
+    for (auto i = 0u; i < predicates.size(); ++i) {
+        auto& pred = predicates[i];
+        if (!isListContainsFunc(pred) || pred->getNumChildren() != 2) {
+            continue;
+        }
+        auto c0 = pred->getChild(0);
+        auto c1 = pred->getChild(1);
+        auto c0Outer = outerScope.contains(c0->getUniqueName());
+        auto c1Outer = outerScope.contains(c1->getUniqueName());
+        std::shared_ptr<Expression> listSide;
+        std::shared_ptr<Expression> elemSide;
+        if (c0Outer && !c1Outer) {
+            listSide = c0;
+            elemSide = c1;
+        } else if (c1Outer && !c0Outer) {
+            listSide = c1;
+            elemSide = c0;
+        } else {
+            return false;
+        }
+        if (elemSide->expressionType != ExpressionType::PROPERTY ||
+            !elemSide->constCast<PropertyExpression>().isSingleLabel()) {
+            return false;
+        }
+        auto& elemPropRef = elemSide->constCast<PropertyExpression>();
+        if (!legVars.contains(elemPropRef.getVariableName()) ||
+            legVars.contains(listSide->getUniqueName())) {
+            return false;
+        }
+        if (convertIdx >= 0) {
+            return false;
+        }
+        convertIdx = static_cast<int>(i);
+        listObj = listSide;
+        elemProp = elemSide;
+    }
+    if (convertIdx < 0) {
+        return false;
+    }
+    auto collectName = listObj->getUniqueName();
+    // Every other predicate must be free of hidden references; leg-variable touches are
+    // validated below (only the anchor PK may remain).
+    for (auto i = 0u; i < predicates.size(); ++i) {
+        if (static_cast<int>(i) == convertIdx) {
+            continue;
+        }
+        if (containsSubqueryOrLambda(predicates[i]) || containsRef(predicates[i], collectName)) {
+            return false;
+        }
+    }
+    // 2. Validate the producing COLLECT: single-arg over a property of the same
+    // table/property, null-free subtree, no fan-out above it.
+    std::shared_ptr<Expression> collectArg;
+    expression_vector groupKeys;
+    auto aggOp = findPropertyCollectAggregate(leftPlan.getLastOperator().get(), collectName,
+        collectArg, groupKeys);
+    if (aggOp == nullptr || collectArg == nullptr ||
+        collectArg->expressionType != ExpressionType::PROPERTY ||
+        !collectArg->constCast<PropertyExpression>().isSingleLabel()) {
+        return false;
+    }
+    auto& collectProp = collectArg->constCast<PropertyExpression>();
+    auto& elemPropRef = elemProp->constCast<PropertyExpression>();
+    if (collectProp.getSingleTableID() != elemPropRef.getSingleTableID() ||
+        collectProp.getPropertyName() != elemPropRef.getPropertyName()) {
+        return false;
+    }
+    if (subtreeHasNullSupply(aggOp)) {
+        return false;
+    }
+    std::vector<planner::LogicalOperator*> path;
+    if (!findPath(leftPlan.getLastOperator().get(), aggOp, path) || pathHasFanOut(path)) {
+        return false;
+    }
+    auto& schema = *leftPlan.getSchema();
+    auto listScoped = findInScope(schema, collectName);
+    if (listScoped == nullptr) {
+        return false;
+    }
+    expression_vector distinctKeys;
+    for (auto& key : groupKeys) {
+        auto scoped = findInScope(schema, key->getUniqueName());
+        if (scoped == nullptr) {
+            return false;
+        }
+        distinctKeys.push_back(scoped);
+    }
+    // 3. Seed viability: the element's node, single table, PK with an index.
+    std::shared_ptr<NodeExpression> seedNode;
+    for (auto i = 0u; i < queryGraph->getNumQueryNodes(); ++i) {
+        auto node = queryGraph->getQueryNode(i);
+        if (node->getUniqueName() == elemPropRef.getVariableName()) {
+            seedNode = node;
+            break;
+        }
+    }
+    if (seedNode == nullptr || seedNode->getTableIDs().size() != 1) {
+        return false;
+    }
+    auto seedTableID = seedNode->getTableIDs()[0];
+    if (!elemPropRef.isPrimaryKey(seedTableID)) {
+        return false;
+    }
+    auto seedTable = storage::StorageManager::Get(*clientContext)
+                         ->getTable(seedTableID)
+                         ->ptrCast<storage::NodeTable>();
+    if (seedTable->tryGetPrimaryKeyIndex() == nullptr) {
+        return false;
+    }
+    // Anchor: a constant PK equality on another single-table node (at most one), and no
+    // other predicate may touch any leg variable.
+    std::shared_ptr<NodeExpression> anchorNode;
+    int anchorPredIdx = -1;
+    for (auto i = 0u; i < predicates.size(); ++i) {
+        if (static_cast<int>(i) == convertIdx) {
+            continue;
+        }
+        auto& pred = predicates[i];
+        if (pred->expressionType != ExpressionType::EQUALS) {
+            // Residual non-equality predicates are applied after the chain; they must not
+            // touch leg variables (they cannot be placed mid-chain).
+            if (!isVarFree(pred)) {
+                auto collector = DependentVarNameCollector();
+                collector.visit(pred);
+                for (auto& var : collector.getVarNames()) {
+                    if (legVars.contains(var)) {
+                        return false;
+                    }
+                }
+            }
+            continue;
+        }
+        auto lhs = pred->getChild(0);
+        auto rhs = pred->getChild(1);
+        bool matched = false;
+        for (auto n = 0u; n < queryGraph->getNumQueryNodes(); ++n) {
+            auto node = queryGraph->getQueryNode(n);
+            if (node->getTableIDs().size() != 1) {
+                continue;
+            }
+            auto tableID = node->getTableIDs()[0];
+            auto l = lhs;
+            auto r = rhs;
+            if (isNodePrimaryKey(*r, *node, tableID)) {
+                std::swap(l, r);
+            }
+            if (isNodePrimaryKey(*l, *node, tableID) && isVarFree(r)) {
+                if (anchorNode != nullptr || node->getUniqueName() == seedNode->getUniqueName()) {
+                    return false;
+                }
+                anchorNode = node;
+                anchorPredIdx = static_cast<int>(i);
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            // A leg-variable-touching equality that is not the anchor disqualifies.
+            auto collector = DependentVarNameCollector();
+            collector.visit(pred);
+            for (auto& var : collector.getVarNames()) {
+                if (legVars.contains(var)) {
+                    return false;
+                }
+            }
+        }
+    }
+    // 4. Linearity walk from the seed. Stops at the anchor (meet mode) or at the path
+    // end (full-walk mode, anchor-free only).
+    std::unordered_map<std::string, std::shared_ptr<NodeExpression>> nodeByName;
+    for (auto i = 0u; i < queryGraph->getNumQueryNodes(); ++i) {
+        auto node = queryGraph->getQueryNode(i);
+        nodeByName[node->getUniqueName()] = node;
+    }
+    struct ChainStep {
+        std::shared_ptr<RelExpression> rel;
+        std::shared_ptr<NodeExpression> nbr;
+    };
+    std::vector<ChainStep> steps;
+    std::unordered_set<std::string> usedRels;
+    std::shared_ptr<RelExpression> meetRel;
+    auto meetNode = seedNode;
+    auto cur = seedNode;
+    auto numRels = queryGraph->getNumQueryRels();
+    while (true) {
+        std::vector<ChainStep> cands;
+        for (auto i = 0u; i < numRels; ++i) {
+            auto rel = queryGraph->getQueryRel(i);
+            if (usedRels.contains(rel->getUniqueName())) {
+                continue;
+            }
+            auto srcIsCur = *rel->getSrcNode() == *cur;
+            auto dstIsCur = *rel->getDstNode() == *cur;
+            if (srcIsCur && dstIsCur) {
+                return false;
+            }
+            if (!srcIsCur && !dstIsCur) {
+                continue;
+            }
+            auto nbr = srcIsCur ? rel->getDstNode() : rel->getSrcNode();
+            cands.push_back({rel, nbr});
+        }
+        if (cands.size() != 1) {
+            if (!cands.empty() || anchorNode != nullptr || usedRels.size() != numRels) {
+                return false;
+            }
+            break;
+        }
+        auto stepRel = cands[0].rel;
+        auto stepNbr = cands[0].nbr;
+        if (anchorNode != nullptr && *stepNbr == *anchorNode) {
+            meetRel = stepRel;
+            meetNode = cur;
+            break;
+        }
+        steps.push_back({stepRel, stepNbr});
+        usedRels.insert(stepRel->getUniqueName());
+        cur = stepNbr;
+        if (steps.size() > numRels) {
+            return false;
+        }
+    }
+    if (meetRel != nullptr && usedRels.size() + 1 != numRels) {
+        return false;
+    }
+    // 5. Mutate: UNWIND + DISTINCT, PK lookup, chain extends, anchor meet.
+    // Hand-built scans bypass DP enumeration, which normally initializes the cardinality
+    // estimator (planQueryGraph); initialize it for this leg explicitly.
+    cardinalityEstimator.init(*queryGraph);
+    Binder binder(clientContext);
+    auto freshElem = std::make_shared<PropertyExpression>(elemPropRef);
+    freshElem->setUniqueName(binder.getUniqueExpressionName(elemProp->getUniqueName()));
+    auto unwind =
+        std::make_shared<LogicalUnwind>(listScoped, freshElem, nullptr, leftPlan.getLastOperator());
+    appendFlattens(unwind->getGroupsPosToFlatten(), leftPlan);
+    unwind->setChild(0, leftPlan.getLastOperator());
+    unwind->computeFactorizedSchema();
+    leftPlan.setLastOperator(unwind);
+    distinctKeys.push_back(freshElem);
+    expression_vector payloads;
+    for (auto& expr : leftPlan.getSchema()->getExpressionsInScope()) {
+        auto name = expr->getUniqueName();
+        if (name == collectName || name == freshElem->getUniqueName()) {
+            continue;
+        }
+        bool isKey = false;
+        for (auto& key : distinctKeys) {
+            isKey = isKey || name == key->getUniqueName();
+        }
+        if (!isKey) {
+            payloads.push_back(expr);
+        }
+    }
+    auto distinct = std::make_shared<LogicalDistinct>(distinctKeys, leftPlan.getLastOperator());
+    distinct->setPayloads(std::move(payloads));
+    appendFlattens(distinct->getGroupsPosToFlatten(), leftPlan);
+    distinct->setChild(0, leftPlan.getLastOperator());
+    distinct->computeFactorizedSchema();
+    leftPlan.setLastOperator(distinct);
+    // PK lookup of the seed node keyed by the unwound values.
+    appendFlattens(leftPlan.getSchema()->getGroupsPosInScope(), leftPlan);
+    auto seedProps = getProperties(*seedNode);
+    seedProps.erase(std::remove_if(seedProps.begin(), seedProps.end(),
+                        [](const std::shared_ptr<Expression>& expression) {
+                            return expression->constCast<PropertyExpression>().isInternalID();
+                        }),
+        seedProps.end());
+    const auto dependentExprs = getDependentExprs(freshElem, *leftPlan.getSchema());
+    DASSERT(!dependentExprs.empty());
+    const auto outputGroupPos = leftPlan.getSchema()->getGroupPos(*dependentExprs[0]);
+    for ([[maybe_unused]] auto& dependentExpr : dependentExprs) {
+        DASSERT(leftPlan.getSchema()->getGroupPos(*dependentExpr) == outputGroupPos);
+    }
+    auto lookup =
+        std::make_shared<LogicalQueryPrimaryKeyLookup>(seedTableID, seedNode->getInternalID(),
+            seedProps, freshElem, outputGroupPos, leftPlan.getLastOperator());
+    lookup->computeFactorizedSchema();
+    lookup->setCardinality(leftPlan.getCardinality());
+    leftPlan.setLastOperator(std::move(lookup));
+    // Walk the chain.
+    auto curObj = seedNode;
+    for (auto& step : steps) {
+        auto dir = chainExtendDirection(*step.rel, *curObj);
+        appendExtend(curObj, step.nbr, step.rel, dir, getProperties(*step.rel), leftPlan);
+        curObj = step.nbr;
+    }
+    // Anchor meet: PK scan + one extend, the meeting node's properties, then the meet
+    // join. Skipped in anchor-free full-walk mode.
+    if (meetRel != nullptr) {
+        LogicalPlan anchorPlan;
+        appendScanNodeTable(anchorNode->getInternalID(), anchorNode->getTableIDs(),
+            getProperties(*anchorNode), anchorPlan, anchorNode.get());
+        appendFilter(predicates[anchorPredIdx], anchorPlan);
+        auto meetDir = chainExtendDirection(*meetRel, *anchorNode);
+        appendExtend(anchorNode, meetNode, meetRel, meetDir, getProperties(*meetRel), anchorPlan);
+        LogicalPlan propsPlan;
+        appendScanNodeTable(meetNode->getInternalID(), meetNode->getTableIDs(),
+            getProperties(*meetNode), propsPlan, meetNode.get());
+        appendHashJoin(expression_vector{meetNode->getInternalID()}, JoinType::INNER, anchorPlan,
+            propsPlan, anchorPlan);
+        appendHashJoin(expression_vector{meetNode->getInternalID()}, JoinType::INNER, leftPlan,
+            anchorPlan, leftPlan);
+    }
+    // Attach any still-missing leg-node properties (extends bind IDs only; the seed
+    // lookup and anchor scan carry their own).
+    for (auto i = 0u; i < queryGraph->getNumQueryNodes(); ++i) {
+        auto node = queryGraph->getQueryNode(i);
+        expression_vector missing;
+        for (auto& prop : getProperties(*node)) {
+            if (!leftPlan.getSchema()->isExpressionInScope(*prop)) {
+                missing.push_back(prop);
+            }
+        }
+        if (missing.empty()) {
+            continue;
+        }
+        LogicalPlan propsPlan;
+        appendScanNodeTable(node->getInternalID(), node->getTableIDs(), missing, propsPlan,
+            node.get());
+        appendHashJoin(expression_vector{node->getInternalID()}, JoinType::INNER, leftPlan,
+            propsPlan, leftPlan);
+    }
+    // Residual predicates (none may touch leg variables by construction).
+    for (auto i = 0u; i < predicates.size(); ++i) {
+        if (static_cast<int>(i) == convertIdx || static_cast<int>(i) == anchorPredIdx) {
+            continue;
+        }
+        appendFilter(predicates[i], leftPlan);
+    }
+    return true;
+}
+
 // ---- Staged distinct pre-aggregation over LEFT-join chains ----
 // Shape: AGGREGATE(keys=K, aggs=[COUNT DISTINCT x_1 .. x_m]) over a left-deep chain
 // of LEFT joins J_1..J_n (n>=2, each probe = previous output, build = one leg), e.g.
@@ -1078,7 +1504,16 @@ bool Planner::tryPreAggregateDistinctLeftChain(const expression_vector& keys,
             stageAgg->setChild(0, flatten);
         }
         stageAgg->computeFactorizedSchema();
-        stageAgg->setCardinality(cardinalityEstimator.estimateAggregate(*stageAgg));
+        // Output rows = distinct K values. K is carried by the probe side and LEFT joins
+        // preserve probe rows, so distinct K values cannot exceed probe-side rows — a bound
+        // the generic group-count estimator cannot see (it only sees the compounded
+        // join output). Lock it so CardinalityUpdater preserves it.
+        const auto childTopProbeCard = childTop->getNumChildren() > 0 ?
+                                           childTop->getChild(0)->getCardinality() :
+                                           stageAgg->getChild(0)->getCardinality();
+        stageAgg->setCardinality(std::min(cardinalityEstimator.estimateAggregate(*stageAgg),
+            std::max<cardinality_t>(childTopProbeCard, 1)));
+        stageAgg->setCardinalityLocked(true);
         return stageAgg;
     };
     // Materialize K above the chain base so every stage input carries the group key
@@ -1284,6 +1719,11 @@ void Planner::planRegularMatch(const QueryGraphCollection& queryGraphCollection,
     // Correlated subqueries and OPTIONAL MATCH use dedicated join planning paths. Extending this
     // lookup to them requires a rewrite that preserves their Mark/Left Join semantics.
     if (tryPlanQueryPrimaryKeyLookup(queryGraphCollection, predicates, leftPlan)) {
+        return;
+    }
+    // Property collect-membership with a PK-seeded chain (e.g. Q12's tag.ID IN tags):
+    // consumes the whole leg when applicable.
+    if (tryPlanPropertySeededChain(queryGraphCollection, predicates, leftPlan)) {
         return;
     }
     expression_vector predicatesToPushDown, predicatesToPullUp;

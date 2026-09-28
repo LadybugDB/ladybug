@@ -58,10 +58,17 @@ public:
         return result;
     }
     binder::expression_vector getAggregates() const { return aggregates; }
+    // Staged pre-aggregation (tryPreAggregateDistinctLeftChain) installs a cardinality bound
+    // (probe-side row count) that the generic group-count estimator cannot recompute, so
+    // CardinalityUpdater must preserve it. Propagated by copy().
+    void setCardinalityLocked(bool locked) { cardinalityLocked = locked; }
+    bool isCardinalityLocked() const { return cardinalityLocked; }
 
     std::unique_ptr<LogicalOperator> copy() override {
-        return make_unique<LogicalAggregate>(keys, dependentKeys, aggregates, children[0]->copy(),
-            cardinality);
+        auto result = make_unique<LogicalAggregate>(keys, dependentKeys, aggregates,
+            children[0]->copy(), cardinality);
+        result->setCardinalityLocked(cardinalityLocked);
+        return result;
     }
 
 private:
@@ -73,6 +80,7 @@ private:
     // be treated as a hash key during hash aggregation.
     binder::expression_vector dependentKeys;
     binder::expression_vector aggregates;
+    bool cardinalityLocked = false;
 };
 
 } // namespace planner

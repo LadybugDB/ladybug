@@ -307,6 +307,11 @@ public:
     // semantics. See plan_subquery.cpp for the conditions.
     bool tryUnnestCollectMembership(const binder::QueryGraphCollection& queryGraphCollection,
         binder::expression_vector& predicates, LogicalPlan& leftPlan);
+    // Property collect-membership unnest with PK-seeded chain (Q12): rewrites
+    // `node.Prop IN COLLECT(node.Prop)` + plans the leg as a PK-seeded chain with an
+    // anchor meet (see plan_subquery.cpp). Consumes the whole leg on success.
+    bool tryPlanPropertySeededChain(const binder::QueryGraphCollection& queryGraphCollection,
+        const binder::expression_vector& predicates, LogicalPlan& leftPlan);
     // Staged distinct pre-aggregation over LEFT-join chains: AGGREGATE(keys=K, all COUNT
     // DISTINCT) over a left-deep LEFT-only chain becomes per-stage aggregates grouping
     // by K plus payloads (see plan_subquery.cpp). Runs at appendAggregate time;

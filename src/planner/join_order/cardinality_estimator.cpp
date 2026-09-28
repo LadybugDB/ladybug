@@ -1,11 +1,13 @@
 #include "planner/join_order/cardinality_estimator.h"
 
 #include "binder/expression/property_expression.h"
+#include "binder/expression/scalar_function_expression.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/enums/extend_direction_util.h"
+#include "function/list/vector_list_functions.h"
 #include "main/client_context.h"
 #include "main/database_manager.h"
 #include "planner/join_order/join_order_util.h"
@@ -41,9 +43,14 @@ static PlannerTableStats getPlannerStats(main::ClientContext* context,
         cachedStats.has_value() && cachedStats->tableChangeEpoch == table->getChangeEpoch()) {
         return std::move(cachedStats.value());
     }
-    return storage::buildPlannerTableStats(storageManager, catalog,
+    // No fresh cache entry: build full ANALYZE stats (real CSR degree distributions for
+    // rel tables) so one-hop extend fan-out estimation sees true degrees instead of
+    // schema-only row counts, and cache them for subsequent plannings on this epoch.
+    auto stats = storage::buildPlannerTableStats(storageManager, catalog,
         transaction::Transaction::Get(*context), tableEntry, physicalTableID,
-        storage::PlannerStatsMode::SCHEMA_ONLY);
+        storage::PlannerStatsMode::ANALYZE);
+    storageManager.setCachedPlannerTableStats(stats.copy());
+    return stats;
 }
 
 void CardinalityEstimator::init(const QueryGraph& queryGraph) {
@@ -172,8 +179,25 @@ uint64_t CardinalityEstimator::estimateScanNode(const LogicalOperator& op) const
 }
 
 uint64_t CardinalityEstimator::estimateAggregate(const LogicalAggregate& op) const {
-    // TODO(Royi) we can use HLL to better estimate the number of distinct keys here
-    return op.getKeys().empty() ? 1 : op.getChild(0)->getCardinality();
+    if (op.getKeys().empty()) {
+        return 1;
+    }
+    // Output rows = number of distinct key combinations, bounded above by both the input
+    // rows and the product of per-key domains. Any key with an unknown domain falls back
+    // to the input cardinality (previous behavior).
+    const auto childCard = static_cast<double>(op.getChild(0)->getCardinality());
+    auto domainProduct = 1.0;
+    for (auto& key : op.getKeys()) {
+        auto domain = getGroupKeyDomain(*key);
+        if (!domain.has_value()) {
+            return op.getChild(0)->getCardinality();
+        }
+        domainProduct *= static_cast<double>(domain.value());
+        if (domainProduct >= childCard) {
+            return op.getChild(0)->getCardinality();
+        }
+    }
+    return atLeastOne(static_cast<cardinality_t>(std::min(domainProduct, childCard)));
 }
 
 cardinality_t CardinalityEstimator::multiply(double extensionRate, cardinality_t card) const {
@@ -258,27 +282,63 @@ static bool isSingleLabelledProperty(const Expression& expression) {
     return expression.constCast<PropertyExpression>().isSingleLabel();
 }
 
+static std::optional<cardinality_t> getPropertyNumDistinct(main::ClientContext* context,
+    const Expression& propertyExpr,
+    const std::unordered_map<common::table_id_t, PlannerTableStats>& tableStats) {
+    if (!isSingleLabelledProperty(propertyExpr)) {
+        return {};
+    }
+    auto& prop = propertyExpr.constCast<PropertyExpression>();
+    auto tableID = prop.getSingleTableID();
+    if (tableStats.contains(tableID) && tableStats.at(tableID).storageStats.has_value() &&
+        prop.hasProperty(tableID)) {
+        auto transaction = Transaction::Get(*context);
+        auto [cat, sm] = main::DatabaseManager::resolveTableStorage(*context, tableID);
+        auto entry = cat->getTableCatalogEntry(transaction, tableID);
+        if (!entry->containsProperty(prop.getPropertyName())) {
+            return {};
+        }
+        auto columnID = entry->getColumnID(prop.getPropertyName());
+        if (columnID != INVALID_COLUMN_ID && columnID != ROW_IDX_COLUMN_ID) {
+            auto& stats = tableStats.at(tableID).storageStats.value();
+            return atLeastOne(stats.getNumDistinctValues(columnID));
+        }
+    }
+    return {};
+}
+
 static std::optional<cardinality_t> getTableStatsIfPossible(main::ClientContext* context,
     const Expression& predicate,
     const std::unordered_map<common::table_id_t, PlannerTableStats>& tableStats) {
     DASSERT(predicate.getNumChildren() >= 1);
-    if (isSingleLabelledProperty(*predicate.getChild(0))) {
-        auto& propertyExpr = predicate.getChild(0)->cast<PropertyExpression>();
-        auto tableID = propertyExpr.getSingleTableID();
-        if (tableStats.contains(tableID) && tableStats.at(tableID).storageStats.has_value() &&
-            propertyExpr.hasProperty(tableID)) {
-            auto transaction = Transaction::Get(*context);
-            auto [cat, sm] = main::DatabaseManager::resolveTableStorage(*context, tableID);
-            auto entry = cat->getTableCatalogEntry(transaction, tableID);
-            if (!entry->containsProperty(propertyExpr.getPropertyName())) {
+    return getPropertyNumDistinct(context, *predicate.getChild(0), tableStats);
+}
+
+// Upper bound on the number of distinct values of a GROUP BY key: node internal IDs are
+// bounded by the node count, single-label properties by the column NDV, and LIST_CREATION
+// packs (e.g. Q14's personIdsInPath) by the product of their children's bounds.
+std::optional<cardinality_t> CardinalityEstimator::getGroupKeyDomain(const Expression& key) const {
+    if (nodeIDName2dom.contains(key.getUniqueName())) {
+        return getNodeIDDom(key.getUniqueName());
+    }
+    if (key.expressionType == ExpressionType::PROPERTY) {
+        return getPropertyNumDistinct(context, key, tableStats);
+    }
+    if (key.expressionType == ExpressionType::FUNCTION &&
+        key.constCast<ScalarFunctionExpression>().getFunction().name ==
+            function::ListCreationFunction::name) {
+        auto product = 1.0;
+        for (auto& child : key.getChildren()) {
+            auto childDomain = getGroupKeyDomain(*child);
+            if (!childDomain.has_value()) {
                 return {};
             }
-            auto columnID = entry->getColumnID(propertyExpr.getPropertyName());
-            if (columnID != INVALID_COLUMN_ID && columnID != ROW_IDX_COLUMN_ID) {
-                auto& stats = tableStats.at(tableID).storageStats.value();
-                return atLeastOne(stats.getNumDistinctValues(columnID));
+            product *= static_cast<double>(childDomain.value());
+            if (product >= static_cast<double>(std::numeric_limits<cardinality_t>::max())) {
+                return std::numeric_limits<cardinality_t>::max();
             }
         }
+        return static_cast<cardinality_t>(product);
     }
     return {};
 }
@@ -332,8 +392,15 @@ uint64_t CardinalityEstimator::getNumRels(const Transaction* transaction,
 
 double CardinalityEstimator::getOneHopExtensionRate(const std::vector<table_id_t>& tableIDs,
     const std::vector<table_id_t>& boundTableIDs, RelDataDirection direction) const {
+    // Expected fan-out of a one-hop extend: total incident edges over ALL bound-table rows.
+    // (Dividing by only the edge-active bound nodes overestimates full-scan extends: bound
+    // rows without edges still produce no output, and the zeros are part of the mean.)
+    // Measured ANALYZE degrees feed the numerator exactly; schema-only stats fall back to
+    // the same ratio from row counts.
     cardinality_t numBoundNodes = 0;
     cardinality_t numRels = 0;
+    bool sawRelStats = false;
+    bool allBoundKeysUnique = true;
     for (auto tableID : boundTableIDs) {
         if (tableStats.contains(tableID) && tableStats.at(tableID).storageStats.has_value()) {
             numBoundNodes += tableStats.at(tableID).storageStats.value().getTableCard();
@@ -348,24 +415,12 @@ double CardinalityEstimator::getOneHopExtensionRate(const std::vector<table_id_t
         if (!stats.relDirectionStats[directionKey].has_value()) {
             continue;
         }
+        sawRelStats = true;
         const auto& relStats = stats.relDirectionStats[directionKey].value();
+        allBoundKeysUnique &= relStats.boundKeysUnique;
         numRels += relStats.numRows;
     }
     auto rate = static_cast<double>(numRels) / atLeastOne(numBoundNodes);
-    bool sawRelStats = false;
-    bool allBoundKeysUnique = true;
-    for (auto tableID : tableIDs) {
-        if (!tableStats.contains(tableID)) {
-            continue;
-        }
-        const auto& stats = tableStats.at(tableID);
-        const auto directionKey = RelDirectionUtils::relDirectionToKeyIdx(direction);
-        if (!stats.relDirectionStats[directionKey].has_value()) {
-            continue;
-        }
-        sawRelStats = true;
-        allBoundKeysUnique &= stats.relDirectionStats[directionKey]->boundKeysUnique;
-    }
     return sawRelStats && allBoundKeysUnique ? std::min<double>(rate, 1) : rate;
 }
 

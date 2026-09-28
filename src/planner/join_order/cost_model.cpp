@@ -9,8 +9,11 @@ using namespace lbug::common;
 namespace lbug {
 namespace planner {
 
-uint64_t CostModel::computeExtendCost(const LogicalPlan& childPlan) {
-    return childPlan.getCost() + childPlan.getCardinality();
+uint64_t CostModel::computeExtendCost(const LogicalPlan& childPlan,
+    cardinality_t estimatedOutputCardinality) {
+    // Extending scans the adjacency of every bound row and materializes the fan-out, so
+    // both the input scan and the produced rows contribute to the cost.
+    return childPlan.getCost() + childPlan.getCardinality() + estimatedOutputCardinality;
 }
 
 uint64_t CostModel::computeHashJoinCost(const std::vector<binder::expression_pair>& joinConditions,
