@@ -394,12 +394,12 @@ void Checkpointer::postCheckpointCleanup(bool canResetPageManagerToCurrent) {
     // letting it propagate (and crash the process) is safer than continuing with partially
     // reset in-memory state.  On the next startup the database loads from the stable
     // on-disk checkpoint and is fully consistent.
-    mainStorageManager->finalizeCheckpoint();
+    mainStorageManager->finalizeCheckpoint(clientContext);
     for (const auto& target : checkpointTargets) {
         if (target.storageManager == mainStorageManager) {
             continue;
         }
-        target.storageManager->finalizeCheckpoint();
+        target.storageManager->finalizeCheckpoint(clientContext);
     }
     // Finalize partition children's page managers: their allocations were committed when the
     // main header was written and their shadow pages applied.

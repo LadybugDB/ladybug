@@ -702,6 +702,11 @@ void PrimaryKeyIndex::discardPrimaryKey(ValueVector* keyVector) {
 }
 
 void PrimaryKeyIndex::checkpointInMemory() {
+    // Publish the disk-array headers before the per-index slot state: updateLastPageOnDisk()
+    // derives lastPageOnDisk from the read headers, so slots must observe the new headers.
+    // Publishing them later leaves lastPageOnDisk stale, and the next checkpoint then treats
+    // existing slot pages as new (in-place writes flushed before the commit point).
+    hashIndexDiskArrays->checkpointInMemory();
     bool indexChanged = false;
     for (auto i = 0u; i < NUM_HASH_INDEXES; i++) {
         if (hashIndices[i]->checkpointInMemory()) {
@@ -712,7 +717,6 @@ void PrimaryKeyIndex::checkpointInMemory() {
         for (size_t i = 0; i < NUM_HASH_INDEXES; i++) {
             hashIndexHeadersForReadTrx[i] = hashIndexHeadersForWriteTrx[i];
         }
-        hashIndexDiskArrays->checkpointInMemory();
     }
     if (overflowFile) {
         overflowFile->checkpointInMemory();
@@ -743,6 +747,16 @@ void PrimaryKeyIndex::writeHeaders(PageAllocator& pageAllocator) const {
 }
 
 void PrimaryKeyIndex::rollbackCheckpoint() {
+    if (hasStagedCheckpoint) {
+        // The storage phase never published (publication waits for finalize), so restoring
+        // the entry header page IDs fully rewinds the in-memory state. Local storage is
+        // intact and read headers were never touched.
+        auto& hashIndexStorageInfo = storageInfo->cast<PrimaryKeyIndexStorageInfo>();
+        hashIndexStorageInfo.firstHeaderPage = stagedFirstHeaderPage;
+        hashIndexStorageInfo.overflowHeaderPage = stagedOverflowHeaderPage;
+        hasStagedCheckpoint = false;
+        stagedIndexChanged = false;
+    }
     for (idx_t i = 0; i < NUM_HASH_INDEXES; ++i) {
         hashIndices[i]->rollbackCheckpoint();
     }
@@ -751,6 +765,21 @@ void PrimaryKeyIndex::rollbackCheckpoint() {
         hashIndexHeadersForReadTrx.end());
     if (overflowFile) {
         overflowFile->rollbackInMemory();
+    }
+}
+
+void PrimaryKeyIndex::finalize(main::ClientContext*) {
+    if (!hasStagedCheckpoint) {
+        return;
+    }
+    hasStagedCheckpoint = false;
+    // Publish only when the storage phase staged changes. An unconditional publish would
+    // advance DiskArrayCollection::headerPagesOnDisk without writing anything, so a later
+    // checkpoint would skip writing new header pages, leaving zeroed pages behind that fail
+    // to load ("disk array header page 0").
+    if (stagedIndexChanged) {
+        stagedIndexChanged = false;
+        checkpointInMemory();
     }
 }
 
@@ -764,6 +793,9 @@ static void updateOverflowHeaderPageIfNeeded(IndexStorageInfo* storageInfo,
 
 void PrimaryKeyIndex::checkpoint(main::ClientContext*, storage::PageAllocator& pageAllocator,
     ShadowFile&) {
+    auto& hashIndexStorageInfo = storageInfo->cast<PrimaryKeyIndexStorageInfo>();
+    stagedFirstHeaderPage = hashIndexStorageInfo.firstHeaderPage;
+    stagedOverflowHeaderPage = hashIndexStorageInfo.overflowHeaderPage;
     bool indexChanged = false;
     for (auto i = 0u; i < NUM_HASH_INDEXES; i++) {
         if (hashIndices[i]->checkpoint(pageAllocator)) {
@@ -787,7 +819,12 @@ void PrimaryKeyIndex::checkpoint(main::ClientContext*, storage::PageAllocator& p
     // generally handle bypassing the WAL, but should only be run once per file, not once per
     // disk array
     pageAllocator.getDataFH()->flushAllDirtyPagesInFrames();
-    checkpointInMemory();
+    // Do NOT publish here. checkpointInMemory() swaps the read headers and clears the local
+    // storage; if a later checkpoint phase fails, rollback could not restore either (lost
+    // keys, accepted duplicates, unopenable DB). Publication waits for finalize(), which runs
+    // post-commit.
+    hasStagedCheckpoint = true;
+    stagedIndexChanged = indexChanged;
 }
 
 PrimaryKeyIndex::~PrimaryKeyIndex() = default;

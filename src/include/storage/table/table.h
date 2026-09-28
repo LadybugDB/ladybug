@@ -190,6 +190,9 @@ public:
         PageAllocator& pageAllocator, const transaction::Transaction* snapshotTxn = nullptr,
         uint64_t epochWatermark = 0) = 0;
     virtual void rollbackCheckpoint() = 0;
+    // Runs after the checkpoint commit point (shadow pages applied). Used to publish
+    // in-memory state that must not become visible if the checkpoint still fails.
+    virtual void finalizeCheckpoint(main::ClientContext&) {};
     virtual void reclaimStorage(PageAllocator& pageAllocator) const = 0;
 
     virtual common::row_idx_t getNumTotalRows(const transaction::Transaction* transaction) = 0;

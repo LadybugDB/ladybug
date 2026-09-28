@@ -510,8 +510,15 @@ std::unordered_map<table_id_t, uint64_t> StorageManager::captureChangeEpochs() c
     return epochs;
 }
 
-void StorageManager::finalizeCheckpoint() {
+void StorageManager::finalizeCheckpoint(main::ClientContext& context) {
     dataFH->getPageManager()->finalizeCheckpoint();
+    // Publish staged per-table state (e.g. PK index read headers) now that the checkpoint
+    // committed. Must run post-commit: publishing earlier would expose half-checkpointed
+    // state to a rollback that cannot restore it.
+    std::unique_lock lck{mtx};
+    for (auto& [id, table] : tables) {
+        table->finalizeCheckpoint(context);
+    }
 }
 
 void StorageManager::rollbackCheckpoint(const Catalog& catalog, main::ClientContext* context) {
