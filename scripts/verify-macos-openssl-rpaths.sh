@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Verifies that a macOS Mach-O binary's OpenSSL dependency has been relocated
+# by scripts/relocate-macos-openssl.sh: it must reference
+# @rpath/libssl.3.dylib and @rpath/libcrypto.3.dylib, must not reference any
+# build-environment absolute OpenSSL path (pixi/conda, CI runner work dir),
+# and must carry the common Homebrew/MacPorts OpenSSL locations as LC_RPATH.
+# See https://github.com/LadybugDB/ladybug/issues/1069.
+
 if [ "$#" -ne 1 ]; then
     echo "usage: $0 <mach-o-binary>" >&2
     exit 2
@@ -21,11 +28,10 @@ for library in libssl.3.dylib libcrypto.3.dylib; do
     fi
 done
 
-# The leading '/' is matched by the '^[[:space:]]+/' portion of the regex, so the
-# alternatives within the group omit it: 'opt/homebrew', 'usr/local', 'opt/local'.
-if grep -Eq '^[[:space:]]+/(opt/homebrew|usr/local|opt/local)/.*lib(ssl|crypto)\.3\.dylib' \
-    <<<"$dependencies"; then
-    echo "package-manager-specific OpenSSL dependency remains in $binary" >&2
+# No absolute OpenSSL dependency may remain (Homebrew, MacPorts, pixi/conda,
+# or any other absolute path ending in libssl/libcrypto).
+if grep -Eq '^[[:space:]]+/.*lib(ssl|crypto)(\.3)?\.dylib' <<<"$dependencies"; then
+    echo "absolute OpenSSL dependency remains in $binary" >&2
     exit 1
 fi
 
@@ -39,3 +45,14 @@ for required in \
         exit 1
     fi
 done
+
+# Build-environment rpaths (CI pixi/conda envs) must not ship.
+while IFS= read -r rpath; do
+    [ -n "$rpath" ] || continue
+    case "$rpath" in
+        *.pixi/*|*conda*|*miniconda*|*/runner/work/*)
+            echo "build-environment rpath $rpath remains in $binary" >&2
+            exit 1
+            ;;
+    esac
+done <<<"$rpaths"
