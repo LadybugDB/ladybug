@@ -93,7 +93,15 @@ void Planner::appendNonRecursiveExtend(const std::shared_ptr<NodeExpression>& bo
         cardinalityEstimator.getExtensionRate(*rel, *boundNode, direction, transaction);
     const auto outputCardinality =
         cardinalityEstimator.multiply(extensionRate, plan.getLastOperator()->getCardinality());
-    extend->setCardinality(outputCardinality);
+    // Keep the input (factorized) cardinality here: the nbr group stays nested with the
+    // multiplier below, and every downstream flat estimate is computed as
+    // card * multiplier (FLATTEN, getJoinKeysFlatCardinality). Propagating the flat
+    // fan-out output as the extend cardinality counts the rate twice (e.g. LSQB Q8's
+    // 16k tags x246 fan-out explodes to 976M phantom rows two hops down), which makes DP
+    // avoid small SIP-prunable seeds and regressed Q8 755ms -> 1.3s. Fan-out still
+    // reaches DP through the extend cost below, so chains with huge fan-out (Q12)
+    // keep comparing honestly.
+    extend->setCardinality(plan.getLastOperator()->getCardinality());
     plan.setCost(CostModel::computeExtendCost(plan, outputCardinality));
     auto group = extend->getSchema()->getGroup(nbrNode->getInternalID());
     group->setMultiplier(extensionRate);
@@ -120,7 +128,9 @@ void Planner::appendPackedExtend(const std::shared_ptr<NodeExpression>& boundNod
         cardinalityEstimator.getExtensionRate(*rel, *boundNode, direction, transaction);
     const auto outputCardinality =
         cardinalityEstimator.multiply(extensionRate, plan.getLastOperator()->getCardinality());
-    extend->setCardinality(outputCardinality);
+    // Same as appendNonRecursiveExtend above: keep the input (factorized) cardinality so
+    // downstream flat estimates (card * multiplier) do not count the fan-out twice.
+    extend->setCardinality(plan.getLastOperator()->getCardinality());
     plan.setCost(CostModel::computeExtendCost(plan, outputCardinality));
     auto group = extend->getSchema()->getGroup(nbrNode->getInternalID());
     group->setMultiplier(extensionRate);
