@@ -36,9 +36,14 @@ struct IceDiskRelTableScanState final : RelTableScanState {
     // this cursor (O(1) amortized) instead of a binary search per row.
     common::offset_t csrSrcNodeIdx = 0;
 
-    // Per-scan-state readers for thread safety
+    // Per-scan-state readers for thread safety. A single scan state is shared across all
+    // rel tables in a multi-rel scan (see RelTableCollectionScanner), so the readers must be
+    // re-created whenever the scan switches to a table backed by a different file. The paths
+    // below track which file each reader was opened for.
     std::unique_ptr<processor::ParquetReader> indicesReader;
+    std::string indicesReaderPath;
     std::unique_ptr<processor::ParquetReader> indptrReader;
+    std::string indptrReaderPath;
 
     IceDiskRelTableScanState(MemoryManager& mm, common::ValueVector* nodeIDVector,
         std::vector<common::ValueVector*> outputVectors,

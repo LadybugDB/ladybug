@@ -119,15 +119,21 @@ void IceDiskRelTable::initScanState(Transaction* transaction, TableScanState& sc
     auto vfs = VirtualFileSystem::GetUnsafe(*context);
     auto& iceDiskScanState = static_cast<IceDiskRelTableScanState&>(relScanState);
 
-    // Initialize readers if not already done for this scan state
-    if (!iceDiskScanState.indicesReader) {
+    // The scan state is shared across all rel tables in a multi-rel scan, so the readers
+    // must follow the current table: re-open them whenever the scan switches to a table
+    // backed by a different file. Without this, every table after the first would scan the
+    // first table's file (wrong counts, empty tables returning rows, etc.).
+    if (!iceDiskScanState.indicesReader || iceDiskScanState.indicesReaderPath != indicesFilePath) {
         iceDiskScanState.indicesReader =
             std::make_unique<ParquetReader>(indicesFilePath, std::vector<bool>{}, context);
+        iceDiskScanState.indicesReaderPath = indicesFilePath;
     }
 
-    if (layout == IceDiskRelTableLayout::CSR && !iceDiskScanState.indptrReader) {
+    if (layout == IceDiskRelTableLayout::CSR &&
+        (!iceDiskScanState.indptrReader || iceDiskScanState.indptrReaderPath != indptrFilePath)) {
         iceDiskScanState.indptrReader =
             std::make_unique<ParquetReader>(indptrFilePath, std::vector<bool>{}, context);
+        iceDiskScanState.indptrReaderPath = indptrFilePath;
     }
 
     // Load shared indptr data - thread-safe to read
