@@ -67,6 +67,8 @@ std::string PhysicalOperatorUtils::operatorTypeToString(PhysicalOperatorType ope
         return "FILTER";
     case PhysicalOperatorType::FLATTEN:
         return "FLATTEN";
+    case PhysicalOperatorType::GROUPED_REACHABLE_COUNT:
+        return "GROUPED_REACHABLE_COUNT";
     case PhysicalOperatorType::HASH_JOIN_BUILD:
         return "HASH_JOIN_BUILD";
     case PhysicalOperatorType::HASH_JOIN_PROBE:

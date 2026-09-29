@@ -481,6 +481,7 @@ bool isNullFreeOperator(LogicalOperatorType type) {
     case LogicalOperatorType::PROJECTION:
     case LogicalOperatorType::QUERY_PRIMARY_KEY_LOOKUP:
     case LogicalOperatorType::REACHABLE_COUNT:
+    case LogicalOperatorType::GROUPED_REACHABLE_COUNT:
     case LogicalOperatorType::RECURSIVE_EXTEND:
     case LogicalOperatorType::REL_DEGREE_TABLE:
     case LogicalOperatorType::SCAN_NODE_TABLE:

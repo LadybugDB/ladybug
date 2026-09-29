@@ -31,6 +31,7 @@
 #include "planner/operator/scan/logical_count_anti_edge_chain.h"
 #include "planner/operator/scan/logical_count_extend_chain.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
+#include "planner/operator/scan/logical_grouped_reachable_count.h"
 #include "planner/operator/scan/logical_reachable_count.h"
 #include "planner/operator/scan/logical_rel_degree_table.h"
 #include "planner/operator/scan/logical_scan_node_table.h"
@@ -1157,6 +1158,9 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::visitAggregateReplace(
     if (auto rewritten = tryRewriteReachableCount(op); rewritten != op) {
         return rewritten;
     }
+    if (auto rewritten = tryRewriteGroupedReachableCount(op); rewritten != op) {
+        return rewritten;
+    }
     if (auto rewritten = tryRewriteActiveBoundCount(op); rewritten != op) {
         return rewritten;
     }
@@ -1525,6 +1529,258 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteReachableCoun
     auto result = std::make_shared<LogicalReachableCount>(relGroupEntry, boundNode, nbrNode,
         bindData.extendDirection, bindData.lowerBound, bindData.upperBound, countExpr,
         std::vector<offset_t>{offset});
+    result->computeFlatSchema();
+    return result;
+}
+
+static bool isSupportedGroupKey(const Expression& key, const NodeExpression& nbrNode) {
+    if (key.expressionType != ExpressionType::PROPERTY) {
+        return false;
+    }
+    auto& prop = key.constCast<PropertyExpression>();
+    if (prop.getVariableName() != nbrNode.getUniqueName()) {
+        return false;
+    }
+    if (prop.isInternalID()) {
+        return true;
+    }
+    if (!prop.isSingleLabel() || !prop.hasProperty(nbrNode.getTableIDs()[0])) {
+        return false;
+    }
+    switch (prop.getDataType().getPhysicalType()) {
+    case PhysicalTypeID::BOOL:
+    case PhysicalTypeID::INT8:
+    case PhysicalTypeID::INT16:
+    case PhysicalTypeID::INT32:
+    case PhysicalTypeID::INT64:
+    case PhysicalTypeID::UINT8:
+    case PhysicalTypeID::UINT16:
+    case PhysicalTypeID::UINT32:
+    case PhysicalTypeID::UINT64:
+    case PhysicalTypeID::FLOAT:
+    case PhysicalTypeID::DOUBLE:
+    case PhysicalTypeID::STRING:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool isSupportedAvgChild(const Expression& child, const NodeExpression& nbrNode) {
+    if (child.expressionType != ExpressionType::PROPERTY) {
+        return false;
+    }
+    auto& prop = child.constCast<PropertyExpression>();
+    if (prop.getVariableName() != nbrNode.getUniqueName() || prop.isInternalID()) {
+        return false;
+    }
+    if (!prop.isSingleLabel() || !prop.hasProperty(nbrNode.getTableIDs()[0])) {
+        return false;
+    }
+    switch (prop.getDataType().getPhysicalType()) {
+    case PhysicalTypeID::INT8:
+    case PhysicalTypeID::INT16:
+    case PhysicalTypeID::INT32:
+    case PhysicalTypeID::INT64:
+    case PhysicalTypeID::UINT8:
+    case PhysicalTypeID::UINT16:
+    case PhysicalTypeID::UINT32:
+    case PhysicalTypeID::UINT64:
+    case PhysicalTypeID::FLOAT:
+    case PhysicalTypeID::DOUBLE:
+        return true;
+    default:
+        return false;
+    }
+}
+
+std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteGroupedReachableCount(
+    std::shared_ptr<LogicalOperator> op) {
+    // Target: AGGREGATE grouped by properties of the end node `b` with COUNT(*) / COUNT(b)
+    // and at most one AVG(b.prop), over a full-table forward WALK variable-length path
+    // (a)-[r*lo..up]->(b) with `a` and `b` bound to the same single node table:
+    //
+    //   MATCH (a:T)-[:R*0..3]->(b:T)
+    //   RETURN b.active, count(b), avg(b.score)
+    //
+    // The unoptimized plan materializes every (a, b) walk in RECURSIVE_EXTEND before the
+    // hash join + aggregate. The rewrite instead counts walks per distinct end node with a
+    // level DP over CSR (O(up * E) time, O(V) memory) and folds the counts into the GROUP
+    // BY accumulators, reading each end node's properties once.
+    if (op->getOperatorType() != LogicalOperatorType::AGGREGATE) {
+        return op;
+    }
+    auto& aggregate = op->constCast<LogicalAggregate>();
+    if (!aggregate.hasKeys() || !aggregate.getDependentKeys().empty()) {
+        return op;
+    }
+    auto keys = aggregate.getKeys();
+    if (keys.empty()) {
+        return op;
+    }
+    auto aggregates = aggregate.getAggregates();
+    if (aggregates.empty() || aggregates.size() > 2) {
+        return op;
+    }
+    auto* current = skipProjections(op->getChild(0).get());
+    if (current->getOperatorType() != LogicalOperatorType::HASH_JOIN) {
+        return op;
+    }
+    auto& join = current->constCast<LogicalHashJoin>();
+    if (join.getJoinType() != JoinType::INNER) {
+        return op;
+    }
+    LogicalRecursiveExtend* recursiveExtend = nullptr;
+    std::function<void(LogicalOperator*)> findRecursive = [&](LogicalOperator* n) {
+        if (recursiveExtend != nullptr) {
+            return;
+        }
+        if (n->getOperatorType() == LogicalOperatorType::RECURSIVE_EXTEND) {
+            recursiveExtend = n->ptrCast<LogicalRecursiveExtend>();
+            return;
+        }
+        for (auto i = 0u; i < n->getNumChildren(); ++i) {
+            findRecursive(n->getChild(i).get());
+        }
+    };
+    findRecursive(current);
+    if (recursiveExtend == nullptr) {
+        return op;
+    }
+    auto& bindData = recursiveExtend->getBindData();
+    // v1 handles forward walks only; rejects bounded-source masks (the DP counts from the
+    // full source table), node predicates, limits and non-walk semantics.
+    if (bindData.extendDirection != ExtendDirection::FWD ||
+        bindData.semantic != common::PathSemantic::WALK || bindData.upperBound == 0 ||
+        recursiveExtend->hasNodePredicate() || recursiveExtend->hasInputNodeMask() ||
+        recursiveExtend->hasOutputNodeMask() || recursiveExtend->getLimitNum() != INVALID_LIMIT) {
+        return op;
+    }
+    auto boundNode = std::static_pointer_cast<NodeExpression>(bindData.nodeInput);
+    auto nbrNode = std::static_pointer_cast<NodeExpression>(bindData.nodeOutput);
+    if (boundNode->isMultiLabeled() || nbrNode->isMultiLabeled() ||
+        boundNode->getNumEntries() != 1 || nbrNode->getNumEntries() != 1 ||
+        boundNode->getTableIDs()[0] != nbrNode->getTableIDs()[0]) {
+        return op;
+    }
+    for (auto& key : keys) {
+        if (!isSupportedGroupKey(*key, *nbrNode)) {
+            return op;
+        }
+    }
+    std::shared_ptr<Expression> countExpr;
+    std::shared_ptr<Expression> avgExpr;
+    std::shared_ptr<Expression> avgChild;
+    for (auto& agg : aggregates) {
+        if (agg->expressionType != ExpressionType::AGGREGATE_FUNCTION) {
+            return op;
+        }
+        auto& aggFunc = agg->constCast<AggregateFunctionExpression>();
+        if (aggFunc.isDistinct()) {
+            return op;
+        }
+        const auto& name = aggFunc.getFunction().name;
+        if (name == function::CountStarFunction::name) {
+            if (countExpr != nullptr || aggFunc.getNumChildren() != 0) {
+                return op;
+            }
+            countExpr = agg;
+        } else if (name == function::CountFunction::name) {
+            if (countExpr != nullptr || aggFunc.getNumChildren() != 1) {
+                return op;
+            }
+            if (!(*aggFunc.getChild(0) == *nbrNode->getInternalID())) {
+                return op;
+            }
+            countExpr = agg;
+        } else if (name == function::AggregateAvgFunction::name) {
+            if (avgExpr != nullptr || aggFunc.getNumChildren() != 1) {
+                return op;
+            }
+            if (!isSupportedAvgChild(*aggFunc.getChild(0), *nbrNode)) {
+                return op;
+            }
+            avgExpr = agg;
+            avgChild = aggFunc.getChild(0);
+        } else {
+            return op;
+        }
+    }
+    if (countExpr == nullptr && avgExpr == nullptr) {
+        return op;
+    }
+    // The join side without the recursion must be an unfiltered scan of the end-node table
+    // (projections/semi-maskers allowed); the INNER join on b._ID then preserves one row
+    // per walk, which is exactly what the per-node walk counts reproduce.
+    auto subtreeHasRecursive = [](LogicalOperator* n) {
+        std::function<bool(LogicalOperator*)> containsRec = [&](LogicalOperator* m) -> bool {
+            if (m->getOperatorType() == LogicalOperatorType::RECURSIVE_EXTEND) {
+                return true;
+            }
+            for (auto i = 0u; i < m->getNumChildren(); ++i) {
+                if (containsRec(m->getChild(i).get())) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        return containsRec(n);
+    };
+    auto* leftChild = current->getChild(0).get();
+    auto* rightChild = current->getChild(1).get();
+    bool leftHasRecursive = subtreeHasRecursive(leftChild);
+    bool rightHasRecursive = subtreeHasRecursive(rightChild);
+    if (leftHasRecursive == rightHasRecursive) {
+        return op;
+    }
+    auto* buildSide = leftHasRecursive ? rightChild : leftChild;
+    LogicalOperator* build = buildSide;
+    while (build->getOperatorType() == LogicalOperatorType::PROJECTION ||
+           build->getOperatorType() == LogicalOperatorType::SEMI_MASKER) {
+        build = build->getChild(0).get();
+    }
+    if (build->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE) {
+        return op;
+    }
+    auto& scan = build->constCast<LogicalScanNodeTable>();
+    if (scan.getScanType() == LogicalScanNodeTableType::PRIMARY_KEY_SCAN ||
+        scan.getTableIDs().size() != 1 || scan.getTableIDs()[0] != nbrNode->getTableIDs()[0]) {
+        return op;
+    }
+    for (auto& predicateSet : scan.getPropertyPredicates()) {
+        if (!predicateSet.isEmpty()) {
+            return op;
+        }
+    }
+    // Every join condition must equate the end node's internal ID on both sides; anything
+    // else can change row multiplicities in ways the walk counts do not capture.
+    bool hasJoinCondition = false;
+    for (auto& condition : join.getJoinConditions()) {
+        hasJoinCondition = true;
+        for (auto& key : {condition.first, condition.second}) {
+            if (key->expressionType != ExpressionType::PROPERTY ||
+                !key->constCast<PropertyExpression>().isInternalID() ||
+                key->constCast<PropertyExpression>().getVariableName() !=
+                    nbrNode->getUniqueName()) {
+                return op;
+            }
+        }
+    }
+    if (!hasJoinCondition) {
+        return op;
+    }
+    auto relEntries = bindData.graphEntry.getRelEntries();
+    if (relEntries.size() != 1) {
+        return op;
+    }
+    auto* relGroupEntry = relEntries[0]->ptrCast<RelGroupCatalogEntry>();
+    if (!isNativeRelGroupEntry(relGroupEntry) ||
+        !isNativeNodeEntry(nbrNode->getEntry(0)->ptrCast<NodeTableCatalogEntry>())) {
+        return op;
+    }
+    auto result = std::make_shared<LogicalGroupedReachableCount>(relGroupEntry, boundNode, nbrNode,
+        bindData.extendDirection, bindData.lowerBound, bindData.upperBound, keys, countExpr,
+        avgExpr, avgChild, op->getCardinality());
     result->computeFlatSchema();
     return result;
 }

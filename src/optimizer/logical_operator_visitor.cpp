@@ -82,6 +82,9 @@ void LogicalOperatorVisitor::visitOperatorSwitch(LogicalOperator* op) {
     case LogicalOperatorType::REACHABLE_COUNT: {
         visitReachableCount(op);
     } break;
+    case LogicalOperatorType::GROUPED_REACHABLE_COUNT: {
+        visitGroupedReachableCount(op);
+    } break;
     case LogicalOperatorType::REL_DEGREE_TABLE: {
         visitRelDegreeTable(op);
     } break;
@@ -185,6 +188,9 @@ std::shared_ptr<LogicalOperator> LogicalOperatorVisitor::visitOperatorReplaceSwi
     }
     case LogicalOperatorType::REACHABLE_COUNT: {
         return visitReachableCountReplace(op);
+    }
+    case LogicalOperatorType::GROUPED_REACHABLE_COUNT: {
+        return visitGroupedReachableCountReplace(op);
     }
     case LogicalOperatorType::REL_DEGREE_TABLE: {
         return visitRelDegreeTableReplace(op);
