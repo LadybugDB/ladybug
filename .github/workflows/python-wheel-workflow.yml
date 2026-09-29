@@ -87,12 +87,16 @@ jobs:
             runner: windows-2022
             os: windows
             deployment-target: ''
+            msvc_arch: x64
+            openssl_exe: Win64OpenSSL_Light-3_5_9.exe
 
           # Job 6: Windows ARM64 build
           - platform: arm64
             runner: windows-11-arm
             os: windows
             deployment-target: ''
+            msvc_arch: arm64
+            openssl_exe: Win64ARMOpenSSL_Light-3_5_9.exe
 
     env:
       CIBW_PLATFORM: ${{ matrix.os }}
@@ -236,16 +240,34 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.platform }}-ccache-wheel-
 
+      - name: Install OpenSSL (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          # Recent Windows images no longer ship C:/Program Files/OpenSSL,
+          # so download the Shining Light Productions installer directly
+          # (Inno Setup, silent). winget is not available on windows-11-arm.
+          $url = "https://slproweb.com/download/${{ matrix.openssl_exe }}"
+          $dst = "$env:RUNNER_TEMP\slp_openssl.exe"
+          Invoke-WebRequest -Uri $url -OutFile $dst
+          Start-Process -FilePath $dst -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+          if (-not (Test-Path "C:\Program Files\OpenSSL\include\openssl\ssl.h")) {
+            Write-Error "OpenSSL install not found at C:\Program Files\OpenSSL"
+            exit 1
+          }
+          "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
+
+      - name: Setup MSVC environment (Windows)
+        if: matrix.os == 'windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
       - name: Build wheels on ${{ matrix.platform }} (Windows)
         if: matrix.os == 'windows'
         shell: cmd
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
-          if "${{ matrix.platform }}"=="arm64" (
-            call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsarm64.bat"
-          ) else (
-            call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          )
           ccache -s
           pipx run --spec cibuildwheel cibuildwheel %LBUG_PYTHON_CIBW_SOURCE_DIR% --output-dir scripts\pip-package\wheelhouse
           if errorlevel 1 exit /b 1
