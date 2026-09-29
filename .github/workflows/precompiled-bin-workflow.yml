@@ -44,11 +44,13 @@ jobs:
           # Windows x86_64. Produces shared + static + CLI.
           - os: windows-2022
             arch: x86_64
-            vcvars_bat: vcvars64
+            msvc_arch: x64
+            openssl_exe: Win64OpenSSL_Light-3_5_9.exe
           # Windows ARM64. Produces shared + static + CLI.
           - os: windows-11-arm
             arch: arm64
-            vcvars_bat: vcvarsarm64
+            msvc_arch: arm64
+            openssl_exe: Win64ARMOpenSSL_Light-3_5_9.exe
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
     steps:
@@ -172,17 +174,28 @@ jobs:
           New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
           git config --system core.longpaths true
 
-      - name: Install OpenSSL (Windows ARM64)
-        if: runner.os == 'Windows' && matrix.arch == 'arm64'
+      - name: Install OpenSSL (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # winget is not available on this image, so download the Shining
-          # Light Productions ARM64 installer directly (Inno Setup, silent).
-          $url = "https://slproweb.com/download/Win64ARMOpenSSL_Light-3_5_9.exe"
-          $dst = "$env:RUNNER_TEMP\Win64ARMOpenSSL_Light.exe"
+          # Recent Windows images no longer ship C:/Program Files/OpenSSL,
+          # so download the Shining Light Productions installer directly
+          # (Inno Setup, silent). winget is not available on windows-11-arm.
+          $url = "https://slproweb.com/download/${{ matrix.openssl_exe }}"
+          $dst = "$env:RUNNER_TEMP\slp_openssl.exe"
           Invoke-WebRequest -Uri $url -OutFile $dst
           Start-Process -FilePath $dst -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+          if (-not (Test-Path "C:\Program Files\OpenSSL\include\openssl\ssl.h")) {
+            Write-Error "OpenSSL install not found at C:\Program Files\OpenSSL"
+            exit 1
+          }
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
+
+      - name: Setup MSVC environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
 
       - name: Build (Windows)
         if: runner.os == 'Windows'
@@ -192,8 +205,6 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
-          for /f "delims=" %%i in ('"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools -property installationPath') do set VSDIR=%%i
-          call "%VSDIR%\VC\Auxiliary\Build\${{ matrix.vcvars_bat }}.bat"
           make GEN=Ninja
           make install
 
