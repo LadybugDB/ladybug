@@ -19,14 +19,22 @@ namespace processor {
 // Normally the two maps should have the same tableIDs.
 // An exception is in GDS with filtered projected graph, multiple semiMasker will work on
 // the same target GDS operator so masksPerTable may have fewer tableIDs.
-static void initMask(table_id_map_t<std::vector<SemiMask*>>& masksPerTable,
+static bool initMask(table_id_map_t<std::vector<SemiMask*>>& masksPerTable,
     const table_id_map_t<SemiMask*>& maskPerTable) {
+    auto attached = false;
     for (auto& [tableID, masks] : masksPerTable) {
-        DASSERT(maskPerTable.contains(tableID));
-        auto mask = maskPerTable.at(tableID);
+        auto it = maskPerTable.find(tableID);
+        if (it == maskPerTable.end()) {
+            // The target does not hold a mask for this table (e.g. a GDS target with
+            // fewer tables, or a scan whose mask lives elsewhere). Leave it unpruned.
+            continue;
+        }
+        auto mask = it->second;
         mask->enable();
         masks.emplace_back(mask);
+        attached = true;
     }
+    return attached;
 }
 
 std::unique_ptr<PhysicalOperator> PlanMapper::mapSemiMasker(
@@ -40,14 +48,22 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapSemiMasker(
         masksPerTable.insert({tableID, std::vector<SemiMask*>{}});
     }
     std::vector<std::string> operatorNames;
+    auto anyMaskAttached = false;
     for (auto& op : semiMasker.getTargetOperators()) {
-        const auto physicalOp = logicalOpToPhysicalOpMap.at(op);
+        auto it = logicalOpToPhysicalOpMap.find(op);
+        if (it == logicalOpToPhysicalOpMap.end()) {
+            // The target has no physical operator: it was fused into its parent (e.g. an
+            // ice-disk rel scan absorbing a bound-node scan, #1068) and unmapped. There
+            // is nothing to attach the mask to, so skip the target.
+            continue;
+        }
+        const auto physicalOp = it->second;
         operatorNames.push_back(PhysicalOperatorUtils::operatorToString(physicalOp));
         switch (physicalOp->getOperatorType()) {
         case PhysicalOperatorType::SCAN_NODE_TABLE: {
             DASSERT(semiMasker.getTargetType() == SemiMaskTargetType::SCAN_NODE);
             auto scan = physicalOp->ptrCast<ScanNodeTable>();
-            initMask(masksPerTable, scan->getSemiMasks());
+            anyMaskAttached |= initMask(masksPerTable, scan->getSemiMasks());
         } break;
         case PhysicalOperatorType::SCAN_REL_TABLE:
         case PhysicalOperatorType::PACKED_EXTEND: {
@@ -58,10 +74,10 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapSemiMasker(
             // carrying the PACKED_EXTEND type. Dispatch on the concrete class rather
             // than the physical type.
             if (auto multiRel = dynamic_cast<ScanMultiRelTable*>(physicalOp)) {
-                initMask(masksPerTable, multiRel->getNbrNodeMasks());
+                anyMaskAttached |= initMask(masksPerTable, multiRel->getNbrNodeMasks());
             } else {
                 auto scanRel = physicalOp->ptrCast<ScanRelTable>();
-                initMask(masksPerTable, scanRel->getNbrNodeMasks());
+                anyMaskAttached |= initMask(masksPerTable, scanRel->getNbrNodeMasks());
             }
         } break;
         case PhysicalOperatorType::TABLE_FUNCTION_CALL: {
@@ -69,11 +85,13 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapSemiMasker(
             switch (semiMasker.getTargetType()) {
             case SemiMaskTargetType::GDS_GRAPH_NODE: {
                 auto funcSharedState = sharedState->ptrCast<function::GDSFuncSharedState>();
-                initMask(masksPerTable, funcSharedState->getGraphNodeMaskMap()->getMasks());
+                anyMaskAttached |=
+                    initMask(masksPerTable, funcSharedState->getGraphNodeMaskMap()->getMasks());
             } break;
             case SemiMaskTargetType::SCAN_NODE: {
                 auto tableFunc = physicalOp->ptrCast<TableFunctionCall>();
-                initMask(masksPerTable, tableFunc->getSharedState()->getSemiMasks());
+                anyMaskAttached |=
+                    initMask(masksPerTable, tableFunc->getSharedState()->getSemiMasks());
             } break;
             default:
                 UNREACHABLE_CODE;
@@ -96,13 +114,18 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapSemiMasker(
                 UNREACHABLE_CODE;
             }
             DASSERT(maskMap != nullptr);
-            initMask(masksPerTable, maskMap->getMasks());
+            anyMaskAttached |= initMask(masksPerTable, maskMap->getMasks());
         } break;
         default:
             UNREACHABLE_CODE;
         }
     }
     auto keyPos = DataPos(inSchema->getExpressionPos(*semiMasker.getKey()));
+    if (!anyMaskAttached) {
+        // No target could take the mask (all fused away). The masker would be a pure
+        // pass-through, so drop it and keep the child plan as is.
+        return prevOperator;
+    }
     auto sharedState = std::make_shared<SemiMaskerSharedState>(std::move(masksPerTable));
     auto printInfo = std::make_unique<SemiMaskerPrintInfo>(operatorNames);
     switch (semiMasker.getKeyType()) {
