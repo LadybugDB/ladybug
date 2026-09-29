@@ -176,9 +176,12 @@ jobs:
         if: runner.os == 'Windows' && matrix.arch == 'arm64'
         shell: pwsh
         run: |
-          winget install --exact --silent --accept-package-agreements --accept-source-agreements `
-            --id ShiningLight.OpenSSL.LTS.Light --version 3.5.6 --architecture arm64 `
-            --override "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+          # winget is not available on this image, so download the Shining
+          # Light Productions ARM64 installer directly (Inno Setup, silent).
+          $url = "https://slproweb.com/download/Win64ARMOpenSSL_Light-3_5_9.exe"
+          $dst = "$env:RUNNER_TEMP\Win64ARMOpenSSL_Light.exe"
+          Invoke-WebRequest -Uri $url -OutFile $dst
+          Start-Process -FilePath $dst -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
           "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
 
       - name: Build (Windows)
