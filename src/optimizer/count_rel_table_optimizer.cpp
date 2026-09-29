@@ -140,10 +140,13 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteAntiEdgeChain
         return op;
     }
 
-    // Exactly one MARK join and exactly one other (top) join, and >= 4 extends
-    // (2 triangle hops + anti-edge + >= 1 suffix hop).
+    // Exactly one MARK join and one top INNER join, and >= 4 extends
+    // (2 triangle hops + anti-edge + >= 1 suffix hop). The join orderer may
+    // alternatively plan the two triangle hops as a bushy hash join on the
+    // middle node (one extra INNER join inside the MARK probe) instead of
+    // stacked extends; that shape is accepted and parsed below.
     LogicalHashJoin* markJoin = nullptr;
-    LogicalHashJoin* topJoin = nullptr;
+    std::vector<LogicalHashJoin*> innerJoins;
     for (auto* join : joins) {
         if (join->getJoinType() == JoinType::MARK) {
             if (markJoin != nullptr) {
@@ -151,14 +154,35 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteAntiEdgeChain
             }
             markJoin = join;
         } else {
-            if (topJoin != nullptr) {
-                return op;
-            }
-            topJoin = join;
+            innerJoins.push_back(join);
         }
     }
-    if (markJoin == nullptr || topJoin == nullptr || extends.size() < 4) {
+    if (markJoin == nullptr || innerJoins.empty() || innerJoins.size() > 2 || extends.size() < 4) {
         return op;
+    }
+    LogicalHashJoin* topJoin = nullptr;
+    LogicalHashJoin* triangleJoin = nullptr;
+    if (innerJoins.size() == 1) {
+        topJoin = innerJoins[0];
+    } else {
+        // One INNER must be the top join (MARK in its subtree); the other, if
+        // any, must be the bushy triangle join inside the MARK probe.
+        for (auto* join : innerJoins) {
+            if (containsOp(join, markJoin)) {
+                if (topJoin != nullptr) {
+                    return op;
+                }
+                topJoin = join;
+            } else {
+                if (triangleJoin != nullptr) {
+                    return op;
+                }
+                triangleJoin = join;
+            }
+        }
+        if (topJoin == nullptr || triangleJoin == nullptr) {
+            return op;
+        }
     }
     if (topJoin->getJoinType() != JoinType::INNER || topJoin->getJoinNodeIDs().size() != 1) {
         return op;
@@ -275,7 +299,112 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteAntiEdgeChain
     std::shared_ptr<NodeExpression> midNode;
     common::ExtendDirection chainN0Dir = common::ExtendDirection::BOTH;
     common::ExtendDirection chainN2Dir = common::ExtendDirection::BOTH;
-    {
+    // Bushy triangle: the join orderer may hash-join two single-hop extends on the
+    // middle node instead of stacking them. Semantically identical to the linear
+    // chain (same two hops, same mid scan root, same id<> filter above).
+    if (triangleJoin != nullptr) {
+        if (!containsOp(markProbeChild, triangleJoin)) {
+            return op;
+        }
+        if (triangleJoin->getJoinType() != JoinType::INNER ||
+            triangleJoin->getJoinNodeIDs().size() != 1) {
+            return op;
+        }
+        const auto midKey = triangleJoin->getJoinNodeIDs()[0];
+        if (midKey->expressionType != ExpressionType::PROPERTY ||
+            !midKey->ptrCast<PropertyExpression>()->isInternalID()) {
+            return op;
+        }
+        const auto midName = midKey->ptrCast<PropertyExpression>()->getVariableName();
+        auto* current = skipProjections(markProbeChild);
+        // Only id(a)<>id(b) NOT_EQUALS filters may sit above the bushy join.
+        while (current->getOperatorType() == LogicalOperatorType::FILTER) {
+            const auto predicate = current->ptrCast<LogicalFilter>()->getPredicate();
+            if (predicate->expressionType != ExpressionType::NOT_EQUALS ||
+                predicate->getNumChildren() != 2) {
+                return op;
+            }
+            const auto& c0 = predicate->getChild(0);
+            const auto& c1 = predicate->getChild(1);
+            const auto isIdProp = [&](const std::shared_ptr<Expression>& e) {
+                return e->expressionType == ExpressionType::PROPERTY &&
+                       e->ptrCast<PropertyExpression>()->isInternalID();
+            };
+            if (!isIdProp(c0) || !isIdProp(c1)) {
+                return op;
+            }
+            const auto n0 = antiNodeA->getUniqueName();
+            const auto n2 = antiNodeB->getUniqueName();
+            const auto v0 = c0->ptrCast<PropertyExpression>()->getVariableName();
+            const auto v1 = c1->ptrCast<PropertyExpression>()->getVariableName();
+            if (!((v0 == n0 && v1 == n2) || (v0 == n2 && v1 == n0))) {
+                return op;
+            }
+            current = skipProjections(current->getChild(0).get());
+        }
+        if (current != triangleJoin) {
+            return op;
+        }
+        std::vector<LogicalExtend*> chainExtends;
+        for (auto i = 0u; i < 2; ++i) {
+            auto* branch = skipProjections(triangleJoin->getChild(i).get());
+            if (branch->getOperatorType() != LogicalOperatorType::EXTEND &&
+                branch->getOperatorType() != LogicalOperatorType::PACKED_EXTEND) {
+                return op;
+            }
+            auto* ext = branch->ptrCast<LogicalExtend>();
+            if (ext->getRel()->getNumEntries() != 1 ||
+                ext->getRel()->getEntry(0)->ptrCast<RelGroupCatalogEntry>() != antiRelEntry) {
+                return op;
+            }
+            auto* scanChild = skipProjections(ext->getChild(0).get());
+            if (scanChild->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE) {
+                return op;
+            }
+            auto* scan = scanChild->ptrCast<LogicalScanNodeTable>();
+            if (scan->getNodeID()->expressionType != ExpressionType::PROPERTY ||
+                !scan->getNodeID()->ptrCast<PropertyExpression>()->isInternalID() ||
+                scan->getNodeID()->ptrCast<PropertyExpression>()->getVariableName() != midName) {
+                return op;
+            }
+            chainExtends.push_back(ext);
+        }
+        midNode = nullptr;
+        for (auto* ext : chainExtends) {
+            if (ext->getBoundNode()->getUniqueName() == midName) {
+                midNode = ext->getBoundNode();
+                break;
+            }
+            if (ext->getNbrNode()->getUniqueName() == midName) {
+                midNode = ext->getNbrNode();
+            }
+        }
+        if (midNode == nullptr) {
+            return op;
+        }
+        const auto aName = antiNodeA->getUniqueName();
+        const auto bName = antiNodeB->getUniqueName();
+        std::unordered_set<std::string> others;
+        std::unordered_map<std::string, common::ExtendDirection> hopDirByOther;
+        for (auto* ext : chainExtends) {
+            const auto boundName = ext->getBoundNode()->getUniqueName();
+            const auto nbrName = ext->getNbrNode()->getUniqueName();
+            if (boundName == midName) {
+                others.insert(nbrName);
+                hopDirByOther[nbrName] = ext->getDirection();
+            } else if (nbrName == midName) {
+                others.insert(boundName);
+                hopDirByOther[boundName] = ext->getDirection();
+            } else {
+                return op;
+            }
+        }
+        if (others.size() != 2 || !others.contains(aName) || !others.contains(bName)) {
+            return op;
+        }
+        chainN0Dir = hopDirByOther.at(aName);
+        chainN2Dir = hopDirByOther.at(bName);
+    } else {
         auto* current = skipProjections(markProbeChild);
         std::vector<LogicalExtend*> chainExtends;
         LogicalScanNodeTable* scanNode = nullptr;
