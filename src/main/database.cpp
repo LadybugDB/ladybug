@@ -15,6 +15,10 @@
 #include <unistd.h>
 #endif
 
+#include <cstdint>
+#include <fstream>
+#include <string>
+
 #include "common/exception/exception.h"
 #include "common/file_system/virtual_file_system.h"
 #include "main/db_config.h"
@@ -31,6 +35,65 @@ using namespace lbug::transaction;
 
 namespace lbug {
 namespace main {
+namespace {
+
+// Returns the cgroup memory limit in bytes, or UINT64_MAX if no limit is set or
+// if the limit cannot be determined (non-Linux, unreadable files, ...).
+// Inside a container the host's physical memory (sysconf(_SC_PHYS_PAGES)) is
+// visible, so the default buffer pool must be sized from the container's limit
+// instead (see #1070).
+uint64_t getCGroupMemoryLimit() {
+#if defined(__linux__)
+    // cgroup v2, then cgroup v1 locations.
+    const char* paths[] = {
+        "/sys/fs/cgroup/memory.max",
+        "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+        "/sys/fs/cgroup/memory.limit_in_bytes",
+    };
+    for (const char* path : paths) {
+        std::ifstream file(path);
+        if (!file.is_open()) {
+            continue;
+        }
+        std::string content;
+        std::getline(file, content);
+        // Trim trailing whitespace (e.g. the trailing newline).
+        while (!content.empty() && (content.back() == '\n' || content.back() == '\r' ||
+                                       content.back() == ' ' || content.back() == '\t')) {
+            content.pop_back();
+        }
+        if (content.empty() || content == "max") {
+            // "max" means no limit on cgroup v2.
+            continue;
+        }
+        try {
+            auto limit = std::stoull(content);
+            if (limit == 0) {
+                continue;
+            }
+            return limit;
+        } catch (...) {
+            continue;
+        }
+    }
+#endif
+    return UINT64_MAX;
+}
+
+uint64_t getAvailableSystemMemory() {
+#if defined(_WIN32)
+    MEMORYSTATUSEX status;
+    status.dwLength = sizeof(status);
+    GlobalMemoryStatusEx(&status);
+    return static_cast<uint64_t>(status.ullTotalPhys);
+#else
+    auto hostMemSize = static_cast<uint64_t>(sysconf(_SC_PHYS_PAGES)) *
+                       static_cast<uint64_t>(sysconf(_SC_PAGESIZE));
+    return std::min(hostMemSize, getCGroupMemoryLimit());
+#endif
+}
+
+} // namespace
 
 SystemConfig::SystemConfig(uint64_t bufferPoolSize_, uint64_t maxNumThreads, bool enableCompression,
     bool readOnly, uint64_t maxDBSize, bool autoCheckpoint, uint64_t checkpointThreshold,
@@ -50,15 +113,7 @@ SystemConfig::SystemConfig(uint64_t bufferPoolSize_, uint64_t maxNumThreads, boo
     this->threadQos = threadQos;
 #endif
     if (bufferPoolSize_ == -1u || bufferPoolSize_ == 0) {
-#if defined(_WIN32)
-        MEMORYSTATUSEX status;
-        status.dwLength = sizeof(status);
-        GlobalMemoryStatusEx(&status);
-        auto systemMemSize = (std::uint64_t)status.ullTotalPhys;
-#else
-        auto systemMemSize = static_cast<std::uint64_t>(sysconf(_SC_PHYS_PAGES)) *
-                             static_cast<std::uint64_t>(sysconf(_SC_PAGESIZE));
-#endif
+        auto systemMemSize = getAvailableSystemMemory();
         bufferPoolSize_ = static_cast<uint64_t>(
             BufferPoolConstants::DEFAULT_PHY_MEM_SIZE_RATIO_FOR_BM *
             static_cast<double>(std::min(systemMemSize, static_cast<uint64_t>(UINTPTR_MAX))));
