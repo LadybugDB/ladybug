@@ -68,6 +68,7 @@ enum class PhysicalOperatorType : uint8_t {
     EXTENSION_CLAUSE,
     FILTER,
     FLATTEN,
+    GROUPED_REACHABLE_COUNT,
     HASH_JOIN_BUILD,
     HASH_JOIN_PROBE,
     IMPORT_DATABASE,

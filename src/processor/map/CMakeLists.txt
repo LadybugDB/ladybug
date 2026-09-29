@@ -29,6 +29,7 @@ add_library(lbug_processor_mapper
         map_extend.cpp
         map_filter.cpp
         map_flatten.cpp
+        map_grouped_reachable_count.cpp
         map_hash_join.cpp
         map_index_scan_node.cpp
         map_intersect.cpp

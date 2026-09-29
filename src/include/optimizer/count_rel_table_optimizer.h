@@ -82,6 +82,8 @@ private:
         std::shared_ptr<planner::LogicalOperator> op);
     std::shared_ptr<planner::LogicalOperator> tryRewriteReachableCount(
         std::shared_ptr<planner::LogicalOperator> op);
+    std::shared_ptr<planner::LogicalOperator> tryRewriteGroupedReachableCount(
+        std::shared_ptr<planner::LogicalOperator> op);
     std::shared_ptr<planner::LogicalOperator> tryRewriteDegreeTopK(
         std::shared_ptr<planner::LogicalOperator> op);
 
