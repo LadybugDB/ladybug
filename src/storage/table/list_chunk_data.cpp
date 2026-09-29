@@ -1,5 +1,6 @@
 #include "storage/table/list_chunk_data.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "common/data_chunk/sel_vector.h"
@@ -124,6 +125,27 @@ void ListChunkData::resetToEmpty() {
     sizeColumnChunk->resetToEmpty();
     offsetColumnChunk->resetToEmpty();
     dataColumnChunk->resetToEmpty();
+}
+
+void ListChunkData::setNumValues(uint64_t numValues_) {
+    if (numValues_ < numValues) {
+        // Shrinking forgets trailing lists: trim packed payloads that only those lists
+        // referenced. Truncation backs split() segment sizing (gh-1071), which can now shrink
+        // a segment by many batches at once; without this the data child keeps -- and flushes
+        // -- payloads of removed rows, duplicating data on disk. Payloads are located via the
+        // stored end offsets; the maximum over the kept rows is used (rather than the last
+        // row's end) so out-of-order writes remain safe.
+        offset_t payloadEnd = 0;
+        for (auto i = 0u; i < numValues_; i++) {
+            payloadEnd = std::max(payloadEnd, getListEndOffset(i));
+        }
+        if (payloadEnd < dataColumnChunk->getNumValues()) {
+            dataColumnChunk->setNumValues(payloadEnd);
+        }
+    }
+    ColumnChunkData::setNumValues(numValues_);
+    sizeColumnChunk->setNumValues(numValues_);
+    offsetColumnChunk->setNumValues(numValues_);
 }
 
 void ListChunkData::resetNumValuesFromMetadata() {

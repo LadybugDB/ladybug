@@ -1136,6 +1136,45 @@ std::vector<std::unique_ptr<ColumnChunkData>> ColumnChunkData::split(bool target
     std::vector<std::unique_ptr<ColumnChunkData>> newSegments;
     uint64_t pos = 0;
     const uint64_t chunkSize = 64;
+    // Shrinks an oversized segment back under targetSize. Each size evaluation scans the whole
+    // segment (e.g. full ALP analysis for floats), so removing one batch per evaluation is
+    // O(N^2) when the fill bound overshoots by many batches (gh-1071: 581 evaluations over
+    // ~280k values for a single DOUBLE segment whose segment-local ALP encoding was one bit
+    // wider than the whole-chunk encoding the count bound was derived from). Jump to the
+    // estimated fit instead and re-estimate a bounded number of times; size is near-linear in
+    // row count locally so this converges in a couple of evaluations.
+    auto shrinkSegmentToFit = [&](ColumnChunkData& segment, uint64_t& posRef) {
+        for (uint64_t round = 0; round < 4; ++round) {
+            if (posRef >= numValues || segment.getNumValues() <= chunkSize) {
+                break;
+            }
+            auto segSize = segment.getSizeOnDiskInMemoryStats();
+            if (segSize <= targetSize) {
+                break;
+            }
+            auto segValues = segment.getNumValues();
+            // Estimate the row count that fits, rounded down to a batch boundary
+            // (at least one batch is always kept).
+            uint64_t fitValues =
+                segSize == 0 ? 0 :
+                               (uint64_t)((double)targetSize * (double)segValues / (double)segSize);
+            fitValues = fitValues / chunkSize * chunkSize;
+            if (fitValues < chunkSize) {
+                fitValues = chunkSize;
+            }
+            if (fitValues >= segValues) {
+                // The estimate grants the whole segment but it still measures over target
+                // (nonlinear size function): remove one batch and re-measure.
+                posRef -= chunkSize;
+                segment.truncate(segValues - chunkSize);
+            } else {
+                posRef -= (segValues - fitValues);
+                segment.truncate(fitValues);
+            }
+        }
+        // If the segment still exceeds targetSize after the bounded rounds above, keep it
+        // as-is (it's the minimum viable segment / best effort; see FIXME above).
+    };
     // A chunk large enough to require splitting must receive a target size of at least one
     // page; a smaller (especially zero) target fragments it into single-batch segments.
     DASSERT(numValues <= chunkSize || getSizeOnDisk() <= common::StorageConfig::MAX_SEGMENT_SIZE ||
@@ -1147,15 +1186,40 @@ std::vector<std::unique_ptr<ColumnChunkData>> ColumnChunkData::split(bool target
                 isCompressionEnabled(), initialCapacity, ResidencyState::IN_MEMORY, hasNullData());
 
         // Fast inner loop: use the count-based bound for fixed-size types (avoiding O(N) metadata
-        // recomputation), or fall back to the metadata-based check for variable-size types
-        // (strings/lists), which don't trigger expensive ALP analysis.
+        // recomputation). Variable-size types (strings/lists) have no count bound, so fall back
+        // to size evaluations; those still scan the whole segment, so evaluate them periodically
+        // (adapted to the observed density) instead of after every batch: per-batch evaluation
+        // is O(N^2) over the segment fill (gh-1071).
+        uint64_t rowsSinceEval = 0;
+        uint64_t evalInterval = chunkSize * 4;
         while (pos < numValues) {
             if (maxValuesPerSegment != UINT64_MAX) {
                 if (newSegment->getNumValues() >= maxValuesPerSegment) {
                     break;
                 }
-            } else if (newSegment->getSizeOnDiskInMemoryStats() > targetSize) {
-                break;
+            } else if (rowsSinceEval >= evalInterval) {
+                auto curSize = newSegment->getSizeOnDiskInMemoryStats();
+                if (curSize > targetSize) {
+                    break;
+                }
+                rowsSinceEval = 0;
+                // Space out evaluations so each segment needs only a handful of them: aim to
+                // re-evaluate ~16 times over the remaining fill at the current bytes-per-row,
+                // keeping at least one batch between evaluations (to bound overshoot past the
+                // target) and at most 64 batches (so a single segment can't grow without bound
+                // before its first evaluation).
+                auto curValues = newSegment->getNumValues();
+                if (curValues > 0 && curSize > 0) {
+                    uint64_t estTotalRows =
+                        (uint64_t)((double)targetSize * (double)curValues / (double)curSize);
+                    uint64_t remaining = estTotalRows > curValues ? estTotalRows - curValues : 0;
+                    evalInterval = remaining / 16 / chunkSize * chunkSize;
+                    if (evalInterval < chunkSize) {
+                        evalInterval = chunkSize;
+                    } else if (evalInterval > chunkSize * 64) {
+                        evalInterval = chunkSize * 64;
+                    }
+                }
             }
             if (newSegment->getNumValues() == newSegment->getCapacity()) {
                 newSegment->resize(newSegment->getCapacity() * 2);
@@ -1163,27 +1227,24 @@ std::vector<std::unique_ptr<ColumnChunkData>> ColumnChunkData::split(bool target
             auto numValuesToAppendInChunk = std::min(numValues - pos, chunkSize);
             newSegment->append(this, pos, numValuesToAppendInChunk);
             pos += numValuesToAppendInChunk;
+            rowsSinceEval += numValuesToAppendInChunk;
         }
 
         // Verify the segment fits within targetSize. The count-based bound is an approximation;
         // segment-specific overhead (e.g., null pages, per-segment bitpacking width) can make
-        // the actual size differ. Backtrack until the segment fits.
+        // the actual size differ. Shrink until the segment fits (bounded evaluations).
         if (maxValuesPerSegment != UINT64_MAX && pos < numValues &&
             newSegment->getNumValues() > chunkSize &&
             newSegment->getSizeOnDiskInMemoryStats() > targetSize) {
-            // Remove full batches until the segment fits within targetSize.
-            while (pos < numValues && newSegment->getNumValues() > chunkSize &&
-                   newSegment->getSizeOnDiskInMemoryStats() > targetSize) {
-                pos -= chunkSize;
-                newSegment->truncate(newSegment->getNumValues() - chunkSize);
-            }
-            // If the segment still exceeds targetSize after removing all but one batch,
+            shrinkSegmentToFit(*newSegment, pos);
+            // If the segment still exceeds targetSize after the bounded shrink above,
             // keep it as-is (it's the minimum viable segment).
         } else if (maxValuesPerSegment == UINT64_MAX && pos < numValues &&
-                   newSegment->getNumValues() > chunkSize) {
-            // Original backtracking logic for variable-size types.
-            pos -= chunkSize;
-            newSegment->truncate(newSegment->getNumValues() - chunkSize);
+                   newSegment->getNumValues() > chunkSize &&
+                   newSegment->getSizeOnDiskInMemoryStats() > targetSize) {
+            // The throttled in-loop checks above can overshoot the target by more than one
+            // batch; shrink back under it with a bounded number of size evaluations.
+            shrinkSegmentToFit(*newSegment, pos);
         }
         newSegments.push_back(std::move(newSegment));
     }

@@ -24,8 +24,7 @@ static constexpr uint64_t INITIAL_OFFSET_CHUNK_CAPACITY = 3;
 
 DictionaryChunk::DictionaryChunk(MemoryManager& mm, uint64_t capacity, bool enableCompression,
     ResidencyState residencyState)
-    : enableCompression{enableCompression},
-      indexTable(0, StringOps(this) /*hash*/, StringOps(this) /*equals*/) {
+    : enableCompression{enableCompression}, indexTable(this) {
     // Bitpacking might save 1 bit per value with regular ascii compared to UTF-8
     stringDataChunk = ColumnChunkFactory::createColumnChunkData(mm, LogicalType::UINT8(),
         false /*enableCompression*/, 0, residencyState, false /*hasNullData*/);
@@ -70,10 +69,11 @@ void DictionaryChunk::validateStringRange(string_offset_t startOffset,
 }
 
 DictionaryChunk::string_index_t DictionaryChunk::appendString(std::string_view val) {
-    const auto found = indexTable.find(val);
     // If the string already exists in the dictionary, skip it and refer to the existing string
-    if (enableCompression && found != indexTable.end()) {
-        return found->index;
+    if (enableCompression) {
+        if (const auto found = indexTable.find(val)) {
+            return *found;
+        }
     }
     const auto leftSpace = stringDataChunk->getCapacity() - stringDataChunk->getNumValues();
     if (leftSpace < val.size()) {
@@ -91,7 +91,7 @@ DictionaryChunk::string_index_t DictionaryChunk::appendString(std::string_view v
     offsetChunk->setValue<string_offset_t>(startOffset, index);
     offsetChunk->setNumValues(index + 1);
     if (enableCompression) {
-        indexTable.insert({static_cast<string_index_t>(index)});
+        indexTable.insert(static_cast<string_index_t>(index));
     }
     return index;
 }

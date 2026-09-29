@@ -40,11 +40,7 @@ public:
 
     void resetToEmpty() override;
 
-    void setNumValues(uint64_t numValues_) override {
-        ColumnChunkData::setNumValues(numValues_);
-        sizeColumnChunk->setNumValues(numValues_);
-        offsetColumnChunk->setNumValues(numValues_);
-    }
+    void setNumValues(uint64_t numValues_) override;
 
     void resetNumValuesFromMetadata() override;
     void syncNumValues() override {
