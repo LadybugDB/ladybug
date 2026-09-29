@@ -1,5 +1,10 @@
 #pragma once
 
+#include <cstddef>
+#include <functional>
+#include <optional>
+#include <vector>
+
 #include "storage/enums/residency_state.h"
 #include "storage/table/column_chunk_data.h"
 
@@ -14,7 +19,7 @@ public:
 
     DictionaryChunk(MemoryManager& mm, uint64_t capacity, bool enableCompression,
         ResidencyState residencyState);
-    // A pointer to the dictionary chunk is stored in the StringOps for the indexTable
+    // A pointer to the dictionary chunk is stored in the indexTable for key comparisons
     // and can't be modified easily. Moving would invalidate that pointer
     DictionaryChunk(DictionaryChunk&& other) = delete;
 
@@ -71,37 +76,107 @@ private:
     std::unique_ptr<ColumnChunkData> stringDataChunk;
     std::unique_ptr<ColumnChunkData> offsetChunk;
 
-    struct DictionaryEntry {
-        string_index_t index;
+    // Open-addressing hash set of dictionary indexes, keyed by string content. Replaces a
+    // node-based std::unordered_set (gh-1071): one malloc per distinct string plus
+    // pointer-chasing lookups made COPY of STRING columns grow faster than the row count once
+    // the table outgrew the cache. Flat slots with cached hashes keep probes contiguous and
+    // rehashes free of string comparisons.
+    class DictionaryIndexTable {
+    public:
+        explicit DictionaryIndexTable(const DictionaryChunk* dict) : dict{dict} {}
 
-        std::string_view get(const DictionaryChunk& dict) const { return dict.getString(index); }
-    };
+        void clear() {
+            slots.clear();
+            numElements = 0;
+        }
 
-    struct StringOps {
-        explicit StringOps(const DictionaryChunk* dict) : dict(dict) {}
+        std::optional<string_index_t> find(std::string_view key) const {
+            if (slots.empty()) {
+                return std::nullopt;
+            }
+            const auto hash = hashKey(key);
+            auto pos = hash & mask();
+            while (true) {
+                const auto& slot = slots[pos];
+                if (!slot.occupied) {
+                    return std::nullopt;
+                }
+                if (slot.hash == hash && dict->getString(slot.index) == key) {
+                    return slot.index;
+                }
+                pos = (pos + 1) & mask();
+            }
+        }
+
+        void insert(string_index_t index) {
+            const auto key = dict->getString(index);
+            const auto hash = hashKey(key);
+            growForInsert();
+            auto pos = hash & mask();
+            while (true) {
+                auto& slot = slots[pos];
+                if (!slot.occupied) {
+                    slot.hash = hash;
+                    slot.index = index;
+                    slot.occupied = true;
+                    numElements++;
+                    return;
+                }
+                // Same de-duplication semantics as the unordered_set this replaces:
+                // inserting an already-present value keeps the existing entry.
+                if (slot.hash == hash && dict->getString(slot.index) == key) {
+                    return;
+                }
+                pos = (pos + 1) & mask();
+            }
+        }
+
+    private:
+        struct Slot {
+            std::size_t hash = 0;
+            string_index_t index = 0;
+            bool occupied = false;
+        };
+        // Keep the load factor at or below this ratio; probes stay short.
+        static constexpr double MAX_LOAD_FACTOR = 0.7;
+        static constexpr uint64_t MIN_CAPACITY = 16;
+
+        static std::size_t hashKey(std::string_view key) {
+            return std::hash<std::string_view>{}(key);
+        }
+
+        uint64_t mask() const { return slots.size() - 1; }
+
+        void growForInsert() {
+            if (!slots.empty() &&
+                (double)(numElements + 1) <= (double)slots.size() * MAX_LOAD_FACTOR) {
+                return;
+            }
+            uint64_t newCapacity = slots.empty() ? MIN_CAPACITY : slots.size() * 2;
+            while ((double)(numElements + 1) > (double)newCapacity * MAX_LOAD_FACTOR) {
+                newCapacity *= 2;
+            }
+            std::vector<Slot> newSlots(newCapacity);
+            const auto newMask = newCapacity - 1;
+            for (auto& slot : slots) {
+                if (!slot.occupied) {
+                    continue;
+                }
+                auto pos = slot.hash & newMask;
+                while (newSlots[pos].occupied) {
+                    pos = (pos + 1) & newMask;
+                }
+                newSlots[pos] = slot;
+            }
+            slots = std::move(newSlots);
+        }
+
         const DictionaryChunk* dict;
-        using hash_type = std::hash<std::string_view>;
-        using is_transparent = void;
-
-        std::size_t operator()(const DictionaryEntry& entry) const {
-            return std::hash<std::string_view>()(entry.get(*dict));
-        }
-        std::size_t operator()(const char* str) const { return hash_type{}(str); }
-        std::size_t operator()(std::string_view str) const { return hash_type{}(str); }
-        std::size_t operator()(std::string const& str) const { return hash_type{}(str); }
-
-        bool operator()(const DictionaryEntry& lhs, const DictionaryEntry& rhs) const {
-            return lhs.get(*dict) == rhs.get(*dict);
-        }
-        bool operator()(const DictionaryEntry& lhs, std::string_view rhs) const {
-            return lhs.get(*dict) == rhs;
-        }
-        bool operator()(std::string_view lhs, const DictionaryEntry& rhs) const {
-            return lhs == rhs.get(*dict);
-        }
+        std::vector<Slot> slots;
+        uint64_t numElements = 0;
     };
 
-    std::unordered_set<DictionaryEntry, StringOps /*hash*/, StringOps /*equals*/> indexTable;
+    DictionaryIndexTable indexTable;
 };
 } // namespace storage
 } // namespace lbug
