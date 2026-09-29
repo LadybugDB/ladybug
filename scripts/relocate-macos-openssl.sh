@@ -29,6 +29,21 @@ for library in libssl.3.dylib libcrypto.3.dylib; do
     fi
 done
 
+# Drop build-environment rpaths (CI pixi/conda envs) so the shipped binary
+# does not carry the runner's absolute path (e.g.
+# /Users/runner/work/ladybug/ladybug/.pixi/envs/default/lib). dyld skips
+# nonexistent rpath dirs, but leaking the CI path breaks `LOAD` on user
+# machines where the OpenSSL lookup falls through to it. See #1069.
+existing_rpaths="$(otool -l "$binary" | awk '/cmd LC_RPATH/{getline; getline; print $2}')"
+while IFS= read -r rpath; do
+    [ -n "$rpath" ] || continue
+    case "$rpath" in
+        *.pixi/*|*conda*|*miniconda*|*/runner/work/*)
+            install_name_tool -delete_rpath "$rpath" "$binary"
+            ;;
+    esac
+done <<<"$existing_rpaths"
+
 for rpath in \
     /opt/homebrew/opt/openssl@3/lib \
     /usr/local/opt/openssl@3/lib \

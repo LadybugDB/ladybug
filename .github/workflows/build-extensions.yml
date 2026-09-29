@@ -188,6 +188,31 @@ jobs:
             extension/scripts/verify-macos-libpq-rpaths.sh "$ext"
           done < <(find extension/pg_client/build -maxdepth 1 -name '*.lbug_extension' -print0)
 
+      - name: Relocate OpenSSL dependency for distribution (macOS)
+        if: runner.os == 'macOS'
+        # httpfs (and llm via httpfs crypto) link OpenSSL from the CI pixi
+        # environment, baking the runner's absolute path into LC_RPATH
+        # (e.g. /Users/runner/work/ladybug/ladybug/.pixi/envs/default/lib).
+        # The released binary then fails to `LOAD` on user machines without
+        # that env. Relocate the dependency to @rpath with the common
+        # Homebrew/MacPorts locations as fallbacks, drop the
+        # build-environment rpaths, and verify the result.
+        # See https://github.com/LadybugDB/ladybug/issues/1069.
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' ext; do
+            scripts/relocate-macos-openssl.sh "$ext"
+            scripts/verify-macos-openssl-rpaths.sh "$ext"
+          done < <(find extension/httpfs/build -maxdepth 1 -name '*.lbug_extension' -print0)
+          # llm links OpenSSL too when built; relocate when present.
+          for dir in extension/llm/build; do
+            [ -d "$dir" ] || continue
+            while IFS= read -r -d '' ext; do
+              scripts/relocate-macos-openssl.sh "$ext"
+              scripts/verify-macos-openssl-rpaths.sh "$ext"
+            done < <(find "$dir" -maxdepth 1 -name '*.lbug_extension' -print0)
+          done
+
       - name: Enable long paths (Windows)
         if: runner.os == 'Windows'
         run: |
