@@ -214,6 +214,8 @@ bool KeyBlockMerger::compareTuplePtrWithStringCol(uint8_t* leftTuplePtr,
             bool isRightStrLong =
                 OrderByKeyEncoder::isLongStr(rightStrColPtr, strKeyColInfo.isAscOrder);
             if (!isLeftStrLong && !isRightStrLong) {
+                lastComparedBytes =
+                    strKeyColInfo.colOffsetInEncodedKeyBlock + strKeyColInfo.getEncodingSize();
                 continue;
             } else if (isLeftStrLong && !isRightStrLong) {
                 return strKeyColInfo.isAscOrder;
@@ -248,8 +250,14 @@ bool KeyBlockMerger::compareTuplePtrWithStringCol(uint8_t* leftTuplePtr,
         }
         return result > 0;
     }
-    // The string tie can't be solved, just add the tuple in the leftMemBlock to
-    // resultMemBlock.
+    // All string keys (including overflow strings) tied. Compare the remaining bytes after
+    // the last string column (e.g. numeric keys following a STRING key). The encoded bytes
+    // already embed ASC/DESC, so a plain memcmp yields the correct sort order.
+    // If the last string column is also the last key, there is nothing left to compare.
+    if (lastComparedBytes < numBytesToCompare) {
+        return memcmp(leftTuplePtr + lastComparedBytes, rightTuplePtr + lastComparedBytes,
+                   numBytesToCompare - lastComparedBytes) > 0;
+    }
     return false;
 }
 
