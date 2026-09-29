@@ -172,6 +172,15 @@ jobs:
           New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
           git config --system core.longpaths true
 
+      - name: Install OpenSSL (Windows ARM64)
+        if: runner.os == 'Windows' && matrix.arch == 'arm64'
+        shell: pwsh
+        run: |
+          winget install --exact --silent --accept-package-agreements --accept-source-agreements `
+            --id ShiningLight.OpenSSL.LTS.Light --version 3.5.6 --architecture arm64 `
+            --override "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+          "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
+
       - name: Build (Windows)
         if: runner.os == 'Windows'
         shell: cmd
@@ -180,7 +189,8 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
         run: |
           powershell.exe -Command "Add-MpPreference -ExclusionPath '${{ github.workspace }}'"
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\${{ matrix.vcvars_bat }}.bat"
+          for /f "delims=" %%i in ('"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools -property installationPath') do set VSDIR=%%i
+          call "%VSDIR%\VC\Auxiliary\Build\${{ matrix.vcvars_bat }}.bat"
           make GEN=Ninja
           make install
 
