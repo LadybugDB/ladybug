@@ -310,6 +310,10 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
                             getOperatorID(), printInfo->copy(), physicalOperatorType);
                     scanRel->setNbrNodeMaskMap(
                         createNbrNodeMaskMap(this, *nbrNode, extend->shouldScanNbrID()));
+                    // The fused scan absorbs the child SCAN_NODE_TABLE, so prevOperator is
+                    // discarded here. Erase its stale mapping: otherwise a later SEMI_MASKER
+                    // targeting the child scan would dereference a dangling pointer (#1068).
+                    eraseOperatorMapping(logicalOperator->getChild(0).get());
                     return scanRel;
                 }
                 // Only apply the existing no-property optimization if scan node is not already
@@ -329,6 +333,9 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(const LogicalOperator* l
                         printInfo->copy(), physicalOperatorType);
                     sourceScanRel->setNbrNodeMaskMap(
                         createNbrNodeMaskMap(this, *nbrNode, extend->shouldScanNbrID()));
+                    // Same as the fused ice-disk branch above: the child scan's physical
+                    // operator is discarded, so erase its stale mapping (#1068).
+                    eraseOperatorMapping(logicalOperator->getChild(0).get());
                     return sourceScanRel;
                 }
             }

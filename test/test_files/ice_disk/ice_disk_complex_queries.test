@@ -100,3 +100,11 @@ Waterloo|Karissa|Adam|Waterloo
 Waterloo|Karissa|Zhang|Kitchener
 Guelph|Noura|Adam|Waterloo
 Kitchener|Zhang|Noura|Guelph
+
+-LOG SemiMaskerOnFusedBoundScan
+-STATEMENT MATCH (a:user)-[:livesin]->(d:city)<-[:livesin]-(c:user)-[:follows]->(e:user) WHERE e.age > 40 RETURN d.name ORDER BY d.name;
+---- 4
+Waterloo
+Waterloo
+Waterloo
+Waterloo
