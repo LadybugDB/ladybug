@@ -3,6 +3,9 @@
 #include <vector>
 
 #include "api_test/api_test.h"
+#include "common/vector/value_vector.h"
+#include "function/gds/gds.h"
+#include "processor/result/factorized_table.h"
 
 using namespace lbug::common;
 using namespace lbug::main;
@@ -1104,4 +1107,34 @@ TEST_F(ApiTest, RepeatedExecuteParameterizedSkipLimit985) {
             << "run " << run;
     }
     ASSERT_TRUE(cachedPlanExists(conn.get(), *literalStmt));
+}
+
+TEST_F(ApiTest, GDSSharedStateResetForReuse) {
+    // Simulates two executions of a cached GDS table-function plan sharing one
+    // GDSFuncSharedState (TableFunctionCall::copy() shares it between the cached
+    // template and the executing clone). mergeLocalTables() moves block collections
+    // out of the pooled local tables, so without a reset the second execution
+    // re-claims moved-from tables: stale rows are re-merged and the merge can crash.
+    auto* mm = getMemoryManager(*database);
+    lbug::processor::FactorizedTableSchema schema;
+    schema.appendColumn(
+        lbug::processor::ColumnSchema(false /*isUnFlat*/, 0 /*groupID*/, 8 /*numBytes*/));
+    auto globalTable = std::make_shared<lbug::processor::FactorizedTable>(mm, schema.copy());
+    lbug::function::GDSFuncSharedState sharedState(globalTable, nullptr /*graph*/);
+    auto runExecution = [&](int64_t value) {
+        auto* localTable = sharedState.factorizedTablePool.claimLocalTable(mm);
+        ValueVector vector(LogicalType::INT64(), mm);
+        vector.state = DataChunkState::getSingleValueDataChunkState();
+        vector.setValue(0, value);
+        localTable->append({&vector});
+        sharedState.factorizedTablePool.returnLocalTable(localTable);
+        sharedState.factorizedTablePool.mergeLocalTables();
+    };
+    runExecution(1);
+    ASSERT_EQ(1u, globalTable->getNumTuples());
+    // What TableFunctionCall::prepareForReuse() runs on the cached-plan fast path.
+    sharedState.resetState();
+    runExecution(2);
+    ASSERT_EQ(1u, globalTable->getNumTuples())
+        << "second execution must see only its own rows, not the first execution's";
 }
