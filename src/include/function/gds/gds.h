@@ -61,6 +61,14 @@ struct LBUG_API GDSFuncSharedState : public TableFuncSharedState {
     void setGraphNodeMask(std::unique_ptr<common::NodeOffsetMaskMap> maskMap);
     common::NodeOffsetMaskMap* getGraphNodeMaskMap() const { return graphNodeMask.get(); }
 
+    // Re-arm the factorized-table pool when a cached physical plan is re-executed.
+    // TableFunctionCall shares this state between the cached plan template and the
+    // executing clone, and mergeLocalTables() moves block collections out of the
+    // pooled local tables; without a reset the next execution re-claims moved-from
+    // tables and crashes in FactorizedTable::merge. Runs via
+    // TableFunctionCall::prepareForReuse() on the cached-plan fast path.
+    void resetState() override { factorizedTablePool.resetForReuse(); }
+
 public:
     processor::FactorizedTablePool factorizedTablePool;
 
