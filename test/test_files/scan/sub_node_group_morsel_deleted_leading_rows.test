@@ -1,0 +1,31 @@
+-DATASET CSV empty
+--
+
+-CASE ScanAfterLeadingRowsDeletedCheckpointed
+-STATEMENT CREATE NODE TABLE T(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT UNWIND range(1, 5000) AS i CREATE (:T {id: i});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT MATCH (t:T) DELETE t;
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT UNWIND range(5001, 8000) AS i CREATE (:T {id: i});
+---- ok
+-STATEMENT CHECKPOINT;
+---- ok
+-STATEMENT CALL threads=16;
+---- ok
+-STATEMENT MATCH (t:T) RETURN count(*);
+---- 1
+3000
+-STATEMENT MATCH (t:T) RETURN count(DISTINCT t.id);
+---- 1
+3000
+-STATEMENT CALL threads=1;
+---- ok
+-STATEMENT MATCH (t:T) RETURN count(*);
+---- 1
+3000

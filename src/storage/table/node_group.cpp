@@ -212,6 +212,12 @@ NodeGroupScanResult NodeGroup::scan(const Transaction* transaction, TableScanSta
     auto numRowsToScan =
         std::min(chunkedGroupToScan.getNumRows() - rowIdxInChunkToScan, DEFAULT_VECTOR_CAPACITY);
     // Honor sub-node-group morsel boundaries (see ScanNodeTableSharedState::nextMorsel).
+    // A morsel may end before the first live row of the group; stop the range once it is
+    // past its end, before the subtraction below (row_idx_t is unsigned, so the
+    // subtraction would otherwise wrap and the clamp would scan to end of group).
+    if (nodeGroupScanState.nextRowToScan >= state.scanEndRowInGroup) {
+        return NODE_GROUP_SCAN_EMPTY_RESULT;
+    }
     numRowsToScan = std::min<row_idx_t>(numRowsToScan,
         state.scanEndRowInGroup - nodeGroupScanState.nextRowToScan);
     if (numRowsToScan == 0) {
