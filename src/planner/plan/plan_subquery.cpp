@@ -1630,8 +1630,11 @@ void Planner::planOptionalMatch(const QueryGraphCollection& queryGraphCollection
             }
             auto collector = DependentVarNameCollector();
             collector.visit(pred);
-            constFilteredVars.insert(collector.getVarNames().begin(),
-                collector.getVarNames().end());
+            // Note: getVarNames() returns by value, so bind it once. Calling it twice for
+            // begin()/end() would make the insert range span two different temporaries
+            // (undefined behavior: the loop can spin forever or walk freed memory).
+            auto predVarNames = collector.getVarNames();
+            constFilteredVars.insert(predVarNames.begin(), predVarNames.end());
         }
         for (auto& node : queryGraphCollection.getQueryNodes()) {
             if (leftPlan.getSchema()->isExpressionInScope(*node->getInternalID()) &&
