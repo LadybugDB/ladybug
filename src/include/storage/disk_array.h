@@ -226,6 +226,7 @@ protected:
 
 private:
     bool checkOutOfBoundAccess(transaction::TransactionType trxType, uint64_t idx) const;
+    void validateArrayPageIdxs() const;
     bool hasPIPUpdatesNoLock(uint64_t pipIdx) const;
 
     const DiskArrayHeader& getDiskArrayHeader(transaction::TransactionType trxType) const {
