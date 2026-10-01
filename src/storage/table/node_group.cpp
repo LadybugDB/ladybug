@@ -179,6 +179,7 @@ void NodeGroup::initializeScanState(const Transaction*, const UniqLock& lock,
     TableScanState& state) const {
     auto& nodeGroupScanState = *state.nodeGroupScanState;
     nodeGroupScanState.chunkedGroupIdx = 0;
+    nodeGroupScanState.numCheckpoints = numCheckpoints;
     ChunkedNodeGroup* firstChunkedGroup = chunkedGroups.getFirstGroup(lock);
     // A sub-node-group morsel may start after the first row of the group.
     nodeGroupScanState.nextRowToScan =
@@ -186,9 +187,28 @@ void NodeGroup::initializeScanState(const Transaction*, const UniqLock& lock,
     initializeScanStateForChunkedGroup(state, firstChunkedGroup);
 }
 
+// Read-only transactions keep running across a checkpoint, which merges all chunked groups into a
+// single persistent one and rewrites its column chunk metadata. A scan state initialized before
+// the checkpoint still holds the old chunked group index and the old metadata (page ranges,
+// compression metadata, dictionary sizes), so re-initialize it against the checkpointed group.
+// Row indices within the node group are stable across a checkpoint, so nextRowToScan is kept.
+void NodeGroup::refreshScanStateIfCheckpointed(const UniqLock& lock,
+    const TableScanState& state) const {
+    auto& nodeGroupScanState = *state.nodeGroupScanState;
+    if (nodeGroupScanState.numCheckpoints == numCheckpoints) {
+        return;
+    }
+    nodeGroupScanState.numCheckpoints = numCheckpoints;
+    nodeGroupScanState.chunkedGroupIdx = 0;
+    if (const auto* firstChunkedGroup = chunkedGroups.getFirstGroup(lock)) {
+        initializeScanStateForChunkedGroup(state, firstChunkedGroup);
+    }
+}
+
 NodeGroupScanResult NodeGroup::scan(const Transaction* transaction, TableScanState& state) const {
     // TODO(Guodong): Move the locked part of figuring out the chunked group to initScan.
     const auto lock = chunkedGroups.lock();
+    refreshScanStateIfCheckpointed(lock, state);
     auto& nodeGroupScanState = *state.nodeGroupScanState;
     DASSERT(nodeGroupScanState.chunkedGroupIdx < chunkedGroups.getNumGroups(lock));
     // A sub-node-group morsel may start several chunked groups past the beginning of the
@@ -313,6 +333,7 @@ NodeGroupScanResult NodeGroup::scanInternal(const UniqLock& lock, Transaction* t
         return NodeGroupScanResult{startOffsetInGroup, numRowsToScan};
     }
 
+    refreshScanStateIfCheckpointed(lock, state);
     auto& nodeGroupScanState = *state.nodeGroupScanState;
     nodeGroupScanState.nextRowToScan = startOffsetInGroup;
 
@@ -356,6 +377,7 @@ bool NodeGroup::lookupNoLock(const Transaction* transaction, const TableScanStat
 
 bool NodeGroup::lookupMultiple(const UniqLock& lock, const Transaction* transaction,
     const TableScanState& state) const {
+    refreshScanStateIfCheckpointed(lock, state);
     idx_t numTuplesFound = 0;
     for (auto i = 0u; i < state.rowIdxVector->state->getSelVector().getSelSize(); i++) {
         auto& nodeGroupScanState = *state.nodeGroupScanState;
@@ -374,6 +396,7 @@ bool NodeGroup::lookupMultiple(const UniqLock& lock, const Transaction* transact
 bool NodeGroup::lookup(const Transaction* transaction, const TableScanState& state,
     sel_t posInSel) const {
     const auto lock = chunkedGroups.lock();
+    refreshScanStateIfCheckpointed(lock, state);
     return lookupNoLock(transaction, state, posInSel);
 }
 
@@ -471,6 +494,7 @@ void NodeGroup::checkpoint(MemoryManager& memoryManager, NodeGroupCheckpointStat
     }
     chunkedGroups.clear(lock);
     chunkedGroups.appendGroup(lock, std::move(checkpointedChunkedGroup));
+    numCheckpoints++;
     checkpointDataTypesNoLock(state);
 }
 
