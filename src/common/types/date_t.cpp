@@ -346,7 +346,8 @@ date_t Date::fromCString(const char* str, uint64_t len) {
     uint64_t pos = 0;
     if (!tryConvertDate(str, len, pos, result)) {
         throw ConversionException("Error occurred during parsing date. Given: \"" +
-                                  std::string(str, len) + "\". Expected format: (YYYY-MM-DD)");
+                                  StringUtils::safeCStringToString(str, len) +
+                                  "\". Expected format: (YYYY-MM-DD)");
     }
     return result;
 }

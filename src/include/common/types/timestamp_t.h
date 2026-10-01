@@ -118,7 +118,10 @@ public:
 
     static std::string getTimestampConversionExceptionMsg(const char* str, uint64_t len,
         const std::string& typeID = "TIMESTAMP") {
-        return "Error occurred during parsing " + typeID + ". Given: \"" + std::string(str, len) +
+        // NB: str may be null with len 0 (empty-string storage); std::string(nullptr, 0)
+        // is UB, so guard inline here to avoid pulling string_utils.h into the public header tree.
+        return "Error occurred during parsing " + typeID + ". Given: \"" +
+               (str == nullptr ? std::string{} : std::string(str, len)) +
                "\". Expected format: (YYYY-MM-DD hh:mm:ss[.zzzzzz][+-TT[:tt]])";
     }
 

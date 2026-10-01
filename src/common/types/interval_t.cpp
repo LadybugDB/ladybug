@@ -187,7 +187,7 @@ parse_interval:
         } else {
             // unrecognized character, expected a number or end of string
             throw ConversionException("Error occurred during parsing interval. Given: \"" +
-                                      std::string(str, len) + "\".");
+                                      StringUtils::safeCStringToString(str, len) + "\".");
         }
     }
     goto end_of_string;
@@ -324,8 +324,8 @@ interval_parse_identifier:
 
 end_of_string:
     if (!foundAny) {
-        throw ConversionException(
-            "Error occurred during parsing interval. Given: \"" + std::string(str, len) + "\".");
+        throw ConversionException("Error occurred during parsing interval. Given: \"" +
+                                  StringUtils::safeCStringToString(str, len) + "\".");
     }
     return result;
 }

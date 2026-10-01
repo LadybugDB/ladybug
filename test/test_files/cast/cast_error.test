@@ -876,3 +876,20 @@ True
 -STATEMENT RETURN {'a':12, 'b':24} = {'c':12, 'd':24};
 ---- 1
 False
+
+-LOG CastEmptyStringToTemporalNoCrash
+-STATEMENT RETURN cast("", "TIMESTAMP");
+---- error
+Conversion exception: Error occurred during parsing TIMESTAMP. Given: "". Expected format: (YYYY-MM-DD hh:mm:ss[.zzzzzz][+-TT[:tt]])
+-STATEMENT RETURN cast("", "DATE");
+---- error
+Conversion exception: Error occurred during parsing date. Given: "". Expected format: (YYYY-MM-DD)
+-STATEMENT RETURN cast("", "INTERVAL");
+---- error
+Conversion exception: Error occurred during parsing interval. Given empty string.
+-STATEMENT RETURN cast("", "UUID");
+---- error(regex)
+Conversion exception: Invalid UUID:.*
+-STATEMENT RETURN cast("", "BOOLEAN");
+---- error(regex)
+Conversion exception: Value .* is not a valid boolean

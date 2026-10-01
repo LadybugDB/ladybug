@@ -4,6 +4,7 @@
 
 #include "common/assert.h"
 #include "common/exception/conversion.h"
+#include "common/string_utils.h"
 #include "common/types/cast_helpers.h"
 #include "common/types/date_t.h"
 #include <format>
@@ -165,7 +166,7 @@ dtime_t Time::fromCString(const char* buf, uint64_t len) {
     if (!Time::tryConvertTime(buf, len, pos, result)) {
         throw ConversionException(std::format("Error occurred during parsing time. Given: \"{}\". "
                                               "Expected format: (hh:mm:ss[.zzzzzz]).",
-            std::string(buf, len)));
+            StringUtils::safeCStringToString(buf, len)));
     }
     return result;
 }
