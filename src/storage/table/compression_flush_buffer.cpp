@@ -19,6 +19,19 @@ ColumnChunkMetadata uncompressedFlushBuffer(std::span<const uint8_t> buffer, Fil
     DASSERT(dataFH->getNumPages() >= entry.startPageIdx + entry.numPages);
     DASSERT(buffer.size_bytes() <= entry.numPages * LBUG_PAGE_SIZE);
     dataFH->writePagesToFile(buffer.data(), buffer.size(), entry.startPageIdx);
+    if (!dataFH->isInMemoryMode() && buffer.size_bytes() < entry.numPages * LBUG_PAGE_SIZE) {
+        const auto zeroBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
+        memset(zeroBuffer.get(), 0, LBUG_PAGE_SIZE);
+        const auto startOffset = entry.startPageIdx * LBUG_PAGE_SIZE + buffer.size_bytes();
+        const auto totalAllocatedBytes = entry.numPages * LBUG_PAGE_SIZE;
+        auto bytesWritten = buffer.size_bytes();
+        while (bytesWritten < totalAllocatedBytes) {
+            const auto chunkToWrite = std::min<uint64_t>(totalAllocatedBytes - bytesWritten, LBUG_PAGE_SIZE);
+            dataFH->getFileInfo()->writeFile(zeroBuffer.get(), chunkToWrite,
+                entry.startPageIdx * LBUG_PAGE_SIZE + bytesWritten);
+            bytesWritten += chunkToWrite;
+        }
+    }
     return ColumnChunkMetadata(entry.startPageIdx, entry.numPages, metadata.numValues,
         metadata.compMeta);
 }
@@ -134,6 +147,14 @@ std::pair<std::unique_ptr<uint8_t[]>, uint64_t> flushCompressedFloats(const Comp
         }
         dataFH->writePageToFile(compressedBuffer.get(), entry.startPageIdx + numPages);
         numPages++;
+    }
+
+    if (!dataFH->isInMemoryMode() && numPages < entry.numPages - numExceptionPages) {
+        memset(compressedBuffer.get(), 0, LBUG_PAGE_SIZE);
+        while (numPages < entry.numPages - numExceptionPages) {
+            dataFH->writePageToFile(compressedBuffer.get(), entry.startPageIdx + numPages);
+            ++numPages;
+        }
     }
 
     if (totalExceptionCount != floatMetadata.exceptionCount) [[unlikely]] {
