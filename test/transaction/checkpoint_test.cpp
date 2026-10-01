@@ -12,6 +12,8 @@
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/exception/runtime.h"
+#include "common/vector/value_vector.h"
+#include "storage/buffer_manager/memory_manager.h"
 #include "storage/checkpointer.h"
 #include "storage/page_allocator.h"
 #include "storage/page_manager.h"
@@ -766,6 +768,113 @@ TEST_F(FlakyCheckpointerTest, ReadBeforeShadowPagesAreAppliedSeesCommittedString
     }
 }
 #endif // __SINGLE_THREADED__
+
+// Read-only transactions are not blocked by a checkpoint, so a checkpoint can run between two
+// vectors of the same table scan. It merges the node group's chunked groups into a single
+// persistent one and rewrites its column chunk metadata, while the scan state still holds the
+// chunked group index and the metadata from before the checkpoint. The scan must pick up the
+// checkpointed state instead of reading the new pages with stale metadata (which returns e.g.
+// strings assembled from the wrong dictionary offsets).
+class ScanAcrossCheckpointTest : public FlakyCheckpointerTest {
+public:
+    static constexpr uint64_t NUM_PERSISTENT_ROWS = 5000;
+    static constexpr uint64_t NUM_ROWS = 10000;
+
+    static std::string getName(uint64_t id) {
+        return std::format("string value {} {}", id, std::string(20 + id % 50, 'x'));
+    }
+
+    void insertRows(uint64_t start, uint64_t end) {
+        ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+        for (auto id = start; id < end; id++) {
+            auto res =
+                conn->query(std::format("CREATE (:test {{id: {}, name: '{}'}});", id, getName(id)));
+            ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+        }
+        ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+    }
+
+    // Scans `test` in a read-only transaction and checkpoints after `numScansBeforeCheckpoint`
+    // vectors have been scanned.
+    void scanAcrossCheckpoint(uint64_t numScansBeforeCheckpoint) {
+        if (inMemMode || systemConfig->checkpointThreshold == 0) {
+            GTEST_SKIP();
+        }
+        conn->query("CALL force_checkpoint_on_close=false;");
+        conn->query("CALL auto_checkpoint=false;");
+        ASSERT_TRUE(
+            conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+        // One persistent chunked group, followed by committed rows that are still in memory.
+        insertRows(0, NUM_PERSISTENT_ROWS);
+        ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+        insertRows(NUM_PERSISTENT_ROWS, NUM_ROWS);
+
+        auto readConn = std::make_unique<main::Connection>(database.get());
+        ASSERT_TRUE(readConn->query("BEGIN TRANSACTION READ ONLY;")->isSuccess());
+        auto* context = getClientContext(*readConn);
+        auto* transaction = Transaction::Get(*context);
+        const auto* tableEntry =
+            catalog::Catalog::Get(*context)->getTableCatalogEntry(transaction, "test");
+        auto& nodeTable =
+            StorageManager::Get(*context)->getTable(tableEntry->getTableID())->cast<NodeTable>();
+        ASSERT_GT(nodeTable.getNodeGroup(0)->getNumChunkedGroups(), 1u);
+
+        auto* memoryManager = MemoryManager::Get(*context);
+        std::vector<LogicalType> types;
+        types.push_back(LogicalType::INT64());
+        types.push_back(LogicalType::STRING());
+        auto dataChunk = Table::constructDataChunk(memoryManager, std::move(types));
+        ValueVector nodeIDVector(LogicalType::INTERNAL_ID(), memoryManager);
+        nodeIDVector.state = dataChunk.state;
+        std::vector<ValueVector*> outVectors{&dataChunk.getValueVectorMutable(0),
+            &dataChunk.getValueVectorMutable(1)};
+        NodeTableScanState scanState(&nodeIDVector, outVectors, dataChunk.state);
+        scanState.setToTable(transaction, &nodeTable,
+            {tableEntry->getColumnID("id"), tableEntry->getColumnID("name")}, {});
+        scanState.source = TableScanSource::COMMITTED;
+        scanState.nodeGroupIdx = 0;
+        nodeTable.initScanState(transaction, scanState);
+
+        std::vector<bool> scanned(NUM_ROWS, false);
+        uint64_t numRowsScanned = 0;
+        uint64_t numScans = 0;
+        while (true) {
+            if (numScans == numScansBeforeCheckpoint) {
+                auto res = conn->query("CHECKPOINT;");
+                ASSERT_TRUE(res->isSuccess()) << res->getErrorMessage();
+                ASSERT_EQ(nodeTable.getNodeGroup(0)->getNumChunkedGroups(), 1u);
+            }
+            if (!nodeTable.scan(transaction, scanState)) {
+                break;
+            }
+            numScans++;
+            const auto& selVector = dataChunk.state->getSelVector();
+            for (auto i = 0u; i < selVector.getSelSize(); i++) {
+                const auto pos = selVector[i];
+                const auto id = static_cast<uint64_t>(outVectors[0]->getValue<int64_t>(pos));
+                ASSERT_LT(id, NUM_ROWS);
+                ASSERT_FALSE(scanned[id]) << "row " << id << " was scanned twice";
+                scanned[id] = true;
+                ASSERT_EQ(outVectors[1]->getValue<string_t>(pos).getAsString(), getName(id));
+                numRowsScanned++;
+            }
+        }
+        ASSERT_GT(numScans, numScansBeforeCheckpoint);
+        ASSERT_EQ(numRowsScanned, NUM_ROWS);
+        ASSERT_TRUE(readConn->query("COMMIT;")->isSuccess());
+    }
+};
+
+// The checkpoint runs while the scan is in the persistent chunked group.
+TEST_F(ScanAcrossCheckpointTest, CheckpointWhileScanningPersistentGroup) {
+    scanAcrossCheckpoint(1);
+}
+
+// The checkpoint runs while the scan is in a committed in-memory chunked group, which no longer
+// exists afterwards.
+TEST_F(ScanAcrossCheckpointTest, CheckpointWhileScanningInMemoryGroup) {
+    scanAcrossCheckpoint(NUM_PERSISTENT_ROWS / DEFAULT_VECTOR_CAPACITY + 2);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ReviewFixesTest

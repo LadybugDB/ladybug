@@ -27,6 +27,8 @@ struct NodeGroupScanState {
     common::row_idx_t nextRowToScan = 0;
     // State of each chunk in the checkpointed chunked group.
     std::vector<ChunkState> chunkStates;
+    // Value of NodeGroup::numCheckpoints when chunkStates was initialized.
+    uint64_t numCheckpoints = 0;
 
     explicit NodeGroupScanState() {}
     explicit NodeGroupScanState(common::idx_t numChunks) { chunkStates.resize(numChunks); }
@@ -250,6 +252,9 @@ private:
     common::row_idx_t getStartRowIdxInGroupNoLock() const;
     common::row_idx_t getStartRowIdxInGroup(const common::UniqLock& lock) const;
 
+    void refreshScanStateIfCheckpointed(const common::UniqLock& lock,
+        const TableScanState& state) const;
+
     void scanCommittedUpdatesForColumn(std::vector<ChunkCheckpointState>& chunkCheckpointStates,
         MemoryManager& memoryManager, const common::UniqLock& lock, common::column_id_t columnID,
         const Column* column, const transaction::Transaction* transaction) const;
@@ -268,6 +273,10 @@ protected:
     common::row_idx_t capacity;
     std::vector<common::LogicalType> dataTypes;
     GroupCollection<ChunkedNodeGroup> chunkedGroups;
+    // Number of times this node group has been checkpointed. A checkpoint replaces the chunked
+    // groups and rewrites their on-disk metadata, so scan states initialized before it are stale.
+    // Protected by the chunkedGroups lock.
+    uint64_t numCheckpoints = 0;
 };
 
 } // namespace storage
