@@ -2,6 +2,7 @@
 
 #include "common/exception/conversion.h"
 #include "common/random_engine.h"
+#include "common/string_utils.h"
 #include "re2.h"
 
 namespace lbug {
@@ -74,7 +75,7 @@ int128_t UUID::fromString(std::string str) {
 }
 
 int128_t UUID::fromCString(const char* str, uint64_t len) {
-    return fromString(std::string(str, len));
+    return fromString(StringUtils::safeCStringToString(str, len));
 }
 
 void UUID::toString(int128_t input, char* buf) {

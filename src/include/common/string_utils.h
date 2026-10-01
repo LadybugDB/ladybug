@@ -89,6 +89,17 @@ public:
 
     static void removeCStringWhiteSpaces(const char*& input, uint64_t& len);
 
+    // Build a std::string from a (possibly null) C buffer. Cast error paths can
+    // receive a null data pointer with length 0 (e.g. casting an empty string
+    // whose storage is null); std::string(nullptr, 0) is UB and segfaults in
+    // libc memcpy, so guard it centrally here.
+    static std::string safeCStringToString(const char* str, uint64_t len) {
+        if (str == nullptr || len == 0) {
+            return std::string{};
+        }
+        return std::string(str, len);
+    }
+
     static void replaceAll(std::string& str, const std::string& search,
         const std::string& replacement);
 

@@ -251,7 +251,7 @@ template<class T, bool IS_SIGNED = true>
 inline void simpleIntegerCast(const char* input, uint64_t len, T& result, LogicalTypeID typeID) {
     if (!trySimpleIntegerCast<T, IS_SIGNED>(input, len, result)) {
         throw ConversionException(std::format("Cast failed. Could not convert \"{}\" to {}.",
-            std::string{input, (size_t)len}, LogicalTypeUtils::toString(typeID)));
+            StringUtils::safeCStringToString(input, len), LogicalTypeUtils::toString(typeID)));
     }
 }
 
@@ -280,7 +280,7 @@ inline void doubleCast(const char* input, uint64_t len, T& result,
     LogicalTypeID typeID = LogicalTypeID::ANY) {
     if (!tryDoubleCast<T>(input, len, result)) {
         throw ConversionException(std::format("Cast failed. {} is not in {} range.",
-            std::string{input, (size_t)len}, LogicalTypeUtils::toString(typeID)));
+            StringUtils::safeCStringToString(input, len), LogicalTypeUtils::toString(typeID)));
     }
 }
 
@@ -387,7 +387,7 @@ void decimalCast(const char* input, uint64_t len, T& result, const LogicalType& 
     if (!tryDecimalCast(input, len, result, DecimalType::getPrecision(type),
             DecimalType::getScale(type))) {
         throw ConversionException(std::format("Cast failed. {} is not in {} range.",
-            std::string{input, (size_t)len}, type.toString()));
+            StringUtils::safeCStringToString(input, len), type.toString()));
     }
 }
 
