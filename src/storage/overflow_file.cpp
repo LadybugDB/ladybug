@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "common/exception/runtime.h"
 #include "common/type_utils.h"
 #include "common/types/types.h"
 #include "storage/buffer_manager/memory_manager.h"
@@ -9,6 +10,7 @@
 #include "storage/shadow_utils.h"
 #include "storage/storage_utils.h"
 #include "transaction/transaction.h"
+#include <format>
 
 using namespace lbug::transaction;
 using namespace lbug::common;
@@ -238,6 +240,14 @@ common::page_idx_t OverflowFile::getNewPageIdx(PageAllocator* pageAllocator) {
 void OverflowFile::readFromDisk(TransactionType trxType, page_idx_t pageIdx,
     const std::function<void(uint8_t*)>& func) const {
     DASSERT(shadowFile);
+    // The page index comes from on-disk data (a string's overflow pointer or a page's next-page
+    // link). The buffer manager does not bounds-check it.
+    if (pageIdx >= fileHandle->getNumPages()) [[unlikely]] {
+        throw RuntimeException(std::format(
+            "Cannot read overflow page {}: out of bounds for file with {} pages. The database file "
+            "may be corrupted.",
+            pageIdx, fileHandle->getNumPages()));
+    }
     auto [fileHandleToPin, pageIdxToPin] = ShadowUtils::getFileHandleAndPhysicalPageIdxToPin(
         *fileHandle, pageIdx, *shadowFile, trxType);
     fileHandleToPin->optimisticReadPage(pageIdxToPin, func);
