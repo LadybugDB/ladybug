@@ -71,8 +71,16 @@ void PathsOutputWriter::write(FactorizedTable& fTable, table_id_t tableID, Limit
     for (auto& [offset, _] : sparseGraph.getCurrentData()) {
         write(fTable, {offset, tableID}, counter);
     }
+    // A zero lower bound must also yield the empty (source, source) walk. writeInternal only
+    // emits it when the source has no parent entry, so when the source reached itself take
+    // the covered-source path instead of re-running the DFS (which would duplicate every
+    // non-empty source-to-source walk instead of producing the single length-0 row).
     if (info.lowerBound == 0 && sourceNodeID_.tableID == tableID) {
-        write(fTable, sourceNodeID_, counter);
+        if (findFirstParent(sourceNodeID_.offset) == nullptr) {
+            write(fTable, sourceNodeID_, counter);
+        } else {
+            writeCoveredSourceWalk(fTable, counter);
+        }
     }
 }
 

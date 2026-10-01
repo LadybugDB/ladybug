@@ -46,6 +46,7 @@
 #include "planner/operator/scan/logical_count_anti_edge_chain.h"
 #include "planner/operator/scan/logical_count_extend_chain.h"
 #include "planner/operator/scan/logical_count_rel_table.h"
+#include "planner/operator/scan/logical_grouped_reachable_count.h"
 #include "planner/operator/scan/logical_query_primary_key_lookup.h"
 #include "planner/operator/scan/logical_reachable_count.h"
 #include "planner/operator/scan/logical_rel_degree_table.h"
@@ -236,6 +237,15 @@ void dumpLogicalTree(const planner::LogicalOperator* op, int depth,
             count.getBoundNode()->getUniqueName().c_str(),
             count.getNbrNode()->getUniqueName().c_str(), count.getLowerBound(),
             count.getUpperBound());
+    } else if (op->getOperatorType() == planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT) {
+        auto& count = op->constCast<planner::LogicalGroupedReachableCount>();
+        fprintf(stderr, " [%s dir=%s bound=%s nbr=%s range=%u..%u keys=%llu%s%s]",
+            count.getRelGroupEntry()->getName().c_str(),
+            common::ExtendDirectionUtil::toString(count.getDirection()).c_str(),
+            count.getBoundNode()->getUniqueName().c_str(),
+            count.getNbrNode()->getUniqueName().c_str(), count.getLowerBound(),
+            count.getUpperBound(), (unsigned long long)count.getKeys().size(),
+            count.hasCount() ? " COUNT" : "", count.hasAvg() ? " AVG" : "");
     } else if (op->getOperatorType() == planner::LogicalOperatorType::REL_DEGREE_TABLE) {
         auto& degree = op->constCast<planner::LogicalRelDegreeTable>();
         fprintf(stderr, " [%s dir=%s mode=%s]", degree.getRelGroupEntry()->getName().c_str(),

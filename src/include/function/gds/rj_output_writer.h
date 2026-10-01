@@ -76,6 +76,14 @@ public:
 protected:
     virtual void writeInternal(processor::FactorizedTable& fTable, common::nodeID_t dstNodeID,
         common::LimitCounter* counter) = 0;
+    // Emits the source's own row for a zero lower bound when the source already reached
+    // itself (its non-empty walks were emitted by the table scan above). Defaults to the
+    // historical re-emit, which is a no-op for writers that skip the source; writers that
+    // emit source rows override it to produce just the length-0 walk.
+    virtual void writeCoveredSourceWalk(processor::FactorizedTable& fTable,
+        common::LimitCounter* counter) {
+        write(fTable, sourceNodeID_, counter);
+    }
     // Fast path when there is no node predicate or semantic check
     void dfsFast(ParentList* firstParent, processor::FactorizedTable& fTable,
         common::LimitCounter* counter);

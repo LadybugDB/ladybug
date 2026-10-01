@@ -992,6 +992,92 @@ TEST_F(OptimizerTest, CountReachableDistinctNodes) {
     ASSERT_EQ(resultNoCsr->getNext()->getValue(0)->getValue<int64_t>(), 2);
 }
 
+TEST_F(OptimizerTest, GroupedReachableCount) {
+#if defined(_WIN32)
+    GTEST_SKIP() << "Windows may pick a different recursive-extend plan shape for grouped "
+                    "reachable-count queries, so this plan-shape test is nondeterministic there.";
+#endif
+    // Grouped aggregate over a full-table variable-length path, including a self-loop (node
+    // 0) so *0.. ranges also pin the length-0 row semantics:
+    //
+    //   0 -+-> 0 (self-loop)      active / score: 0:T/10, 1:F/20, 2:T/30, 3:F/40, 4:T/50
+    //        |-> 1 -> 2 -+-> 3 -> 0
+    //        \-> 2 -------+-> 4
+    //
+    // Hand-computed walks of length 0..2 ending at each node: 0:6, 1:4, 2:6, 3:4, 4:4.
+    // Grouped by active: T(0,2,4) -> count 16, avg (6*10+6*30+4*50)/16 = 27.5;
+    // F(1,3) -> count 8, avg (4*20+4*40)/8 = 30.0.
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE grc_n(id INT64, active BOOLEAN, score DOUBLE, "
+                            "PRIMARY KEY(id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE grc_e(FROM grc_n TO grc_n);")->isSuccess());
+    struct GrpcNode {
+        int64_t id;
+        bool active;
+        double score;
+    };
+    const std::vector<GrpcNode> nodes = {{0, true, 10.0}, {1, false, 20.0}, {2, true, 30.0},
+        {3, false, 40.0}, {4, true, 50.0}};
+    for (const auto& node : nodes) {
+        std::string q = std::format("CREATE (:grc_n {{id: {}, active: {}, score: {}}});", node.id,
+            node.active ? "true" : "false", node.score);
+        ASSERT_TRUE(conn->query(q)->isSuccess()) << q;
+    }
+    struct Edge {
+        int64_t src;
+        int64_t dst;
+    };
+    const std::vector<Edge> edges = {{0, 0}, {0, 1}, {0, 2}, {1, 2}, {2, 3}, {2, 4}, {3, 0}};
+    for (const auto& [src, dst] : edges) {
+        std::string q = std::format("MATCH (a:grc_n {{id: {}}}), (b:grc_n {{id: {}}}) "
+                                    "CREATE (a)-[:grc_e]->(b);",
+            src, dst);
+        ASSERT_TRUE(conn->query(q)->isSuccess()) << q;
+    }
+    auto q1 = "MATCH (a:grc_n)-[e:grc_e*0..2]->(b:grc_n) RETURN b.active AS active, count(b) "
+              "AS total, avg(b.score) AS avg_score ORDER BY total DESC, active;";
+    auto plan1 = getRoot(q1);
+    ASSERT_TRUE(hasOperatorType(plan1->getLastOperator().get(),
+        planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT))
+        << "Grouped COUNT/AVG over a full-table variable-length path should be rewritten to "
+           "GROUPED_REACHABLE_COUNT";
+    auto result1 = conn->query(q1);
+    ASSERT_TRUE(result1->isSuccess());
+    ASSERT_TRUE(result1->hasNext());
+    auto tuple1 = result1->getNext();
+    ASSERT_EQ(tuple1->getValue(0)->getValue<bool>(), true);
+    ASSERT_EQ(tuple1->getValue(1)->getValue<int64_t>(), 16);
+    ASSERT_DOUBLE_EQ(tuple1->getValue(2)->getValue<double>(), 27.5);
+    ASSERT_TRUE(result1->hasNext());
+    auto tuple2 = result1->getNext();
+    ASSERT_EQ(tuple2->getValue(0)->getValue<bool>(), false);
+    ASSERT_EQ(tuple2->getValue(1)->getValue<int64_t>(), 8);
+    ASSERT_DOUBLE_EQ(tuple2->getValue(2)->getValue<double>(), 30.0);
+    ASSERT_FALSE(result1->hasNext());
+
+    // COUNT(*) takes the same path.
+    auto qCountStar = "MATCH (a:grc_n)-[e:grc_e*0..2]->(b:grc_n) RETURN b.active AS active, "
+                      "count(*) AS total ORDER BY active;";
+    ASSERT_TRUE(hasOperatorType(getRoot(qCountStar)->getLastOperator().get(),
+        planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT));
+    auto resultCountStar = conn->query(qCountStar);
+    ASSERT_TRUE(resultCountStar->isSuccess());
+    ASSERT_EQ(resultCountStar->getNext()->getValue(1)->getValue<int64_t>(), 8);
+    ASSERT_EQ(resultCountStar->getNext()->getValue(1)->getValue<int64_t>(), 16);
+
+    // DISTINCT aggregates, filters and grouping by the start node keep the original plan.
+    for (auto negative : {
+             "MATCH (a:grc_n)-[e:grc_e*0..2]->(b:grc_n) RETURN b.active, count(DISTINCT b);",
+             "MATCH (a:grc_n)-[e:grc_e*0..2]->(b:grc_n) WHERE b.score > 15.0 RETURN b.active, "
+             "count(b);",
+             "MATCH (a:grc_n)-[e:grc_e*0..2]->(b:grc_n) RETURN a.active, count(b);",
+         }) {
+        ASSERT_FALSE(hasOperatorType(getRoot(negative)->getLastOperator().get(),
+            planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT))
+            << negative;
+    }
+}
+
 // The COUNT_ANTI_EDGE_CHAIN fast path walks the committed node-group grid and reads
 // the CSR of native tables, so it must decline tables backed by another storage
 // format.

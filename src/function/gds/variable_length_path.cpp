@@ -19,6 +19,18 @@ public:
         nodeID_t sourceNodeID, PathsOutputWriterInfo info, BaseBFSGraph& bfsGraph)
         : PathsOutputWriter{context, outputNodeMask, sourceNodeID, info, bfsGraph} {}
 
+    void writeCoveredSourceWalk(FactorizedTable& fTable, LimitCounter* counter) override {
+        // The source reached itself, so its non-empty walks are already in the table: emit
+        // only the missing length-0 row (mirrors the no-parent branch of writeInternal).
+        if (!inOutputNodeMask(sourceNodeID_.offset)) {
+            return;
+        }
+        dstNodeIDVector->setValue<nodeID_t>(0, sourceNodeID_);
+        writePath({});
+        fTable.append(vectors);
+        updateCounterAndTerminate(counter);
+    }
+
     void writeInternal(FactorizedTable& fTable, nodeID_t dstNodeID,
         LimitCounter* counter) override {
         auto firstParent = findFirstParent(dstNodeID.offset);

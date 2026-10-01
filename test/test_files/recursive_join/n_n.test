@@ -35,6 +35,16 @@
 ---- 1
 108
 
+# Node 5 reaches itself in two steps (5->0->5, 5->2->5, 5->3->5). With a zero lower bound
+# the source must contribute exactly one length-0 row: walks 5->5 of length 0..2 are the
+# empty walk plus those three 2-step returns, i.e. 4 rows, not 6 (the pre-fix code
+# re-emitted every non-empty source-to-source walk a second time and dropped the empty
+# walk).
+-LOG KnowsZeroLowerBoundSelfReachingSourceCount
+-STATEMENT MATCH (a:person)-[e:knows*0..2]->(b:person) WHERE a.ID = 5 AND b.ID = 5 RETURN COUNT(*)
+---- 1
+4
+
 -LOG KnowsKnows2To4HopTest
 -STATEMENT MATCH (a:person)-[:knows]->(b:person)-[:knows*2..4]->(c:person) RETURN COUNT(*)
 ---- 1

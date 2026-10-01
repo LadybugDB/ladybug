@@ -68,6 +68,8 @@ std::string LogicalOperatorUtils::logicalOperatorTypeToString(LogicalOperatorTyp
         return "FILTER";
     case LogicalOperatorType::FLATTEN:
         return "FLATTEN";
+    case LogicalOperatorType::GROUPED_REACHABLE_COUNT:
+        return "GROUPED_REACHABLE_COUNT";
     case LogicalOperatorType::HASH_JOIN:
         return "HASH_JOIN";
     case LogicalOperatorType::IMPORT_DATABASE:
