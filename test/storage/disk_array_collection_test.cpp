@@ -140,7 +140,7 @@ TEST_F(DiskArrayCollectionTest, RejectsCorruptedPageIndexPages) {
     // The only array page is stored beyond the end of the file (e.g. the PIP was overwritten).
     const auto outOfBoundsPIP = allocateHeaderPage();
     PIP pip;
-    std::memset(&pip, 0xFF, sizeof(pip));
+    std::memset(static_cast<void*>(&pip), 0xFF, sizeof(pip));
     writePIP(outOfBoundsPIP, pip);
     expectCorruptedDiskArray(1, outOfBoundsPIP);
 
