@@ -395,6 +395,15 @@ lbug_value* lbug_value_create_uuid(const char* val_) {
     LBUG_C_API_GUARD_END(nullptr)
 }
 
+lbug_value* lbug_value_create_blob(const uint8_t* data, uint64_t length) {
+    LBUG_C_API_GUARD_BEGIN
+    auto* c_value = (lbug_value*)calloc(1, sizeof(lbug_value));
+    c_value->_value = new Value(LogicalType::BLOB(),
+        std::string(reinterpret_cast<const char*>(data), length));
+    return c_value;
+    LBUG_C_API_GUARD_END(nullptr)
+}
+
 lbug_state lbug_value_create_list(uint64_t num_elements, lbug_value** elements,
     lbug_value** out_value) {
     LBUG_C_API_GUARD_BEGIN

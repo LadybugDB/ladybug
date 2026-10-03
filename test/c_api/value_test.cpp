@@ -279,6 +279,22 @@ TEST(CApiValueTestEmptyDB, CreateString) {
     lbug_value_destroy(value);
 }
 
+TEST(CApiValueTestEmptyDB, CreateBlob) {
+    const uint8_t blob_data[] = {0x01, 0x02, 0x00, 0xFF, 0xFE};
+    lbug_value* value = lbug_value_create_blob(blob_data, sizeof(blob_data));
+    ASSERT_FALSE(value->_is_owned_by_cpp);
+    auto cppValue = static_cast<Value*>(value->_value);
+    ASSERT_EQ(cppValue->getDataType().getLogicalTypeID(), LogicalTypeID::BLOB);
+    ASSERT_EQ(cppValue->getValue<std::string>(), std::string(reinterpret_cast<const char*>(blob_data), sizeof(blob_data)));
+    uint8_t* out_data = nullptr;
+    uint64_t out_len = 0;
+    ASSERT_EQ(lbug_value_get_blob(value, &out_data, &out_len), LbugSuccess);
+    ASSERT_EQ(out_len, sizeof(blob_data));
+    ASSERT_EQ(memcmp(out_data, blob_data, sizeof(blob_data)), 0);
+    free(out_data);
+    lbug_value_destroy(value);
+}
+
 TEST_F(CApiValueTest, CreateList) {
     auto connection = getConnection();
     lbug_value* value1 = lbug_value_create_int64(123);

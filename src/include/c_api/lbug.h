@@ -1081,6 +1081,13 @@ LBUG_C_API lbug_value* lbug_value_create_json(const char* val_);
  */
 LBUG_C_API lbug_value* lbug_value_create_uuid(const char* val_);
 /**
+ * @brief Creates a value with BLOB type and the given binary data and length.
+ * Caller is responsible for destroying the returned value.
+ * @param data The binary data buffer.
+ * @param length The length of the binary data in bytes.
+ */
+LBUG_C_API lbug_value* lbug_value_create_blob(const uint8_t* data, uint64_t length);
+/**
  * @brief Creates a list value with the given number of elements and the given elements.
  * The caller needs to make sure that all elements have the same type.
  * The elements are copied into the list value, so destroying the elements after creating the list
