@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -49,9 +50,12 @@ public:
     // the checkpoint itself can be marked clean.
     void postCheckpointCleanup(bool canResetPageManagerToCurrent = true);
     void rollback();
+    void releaseCheckpointLocks() noexcept;
     bool wasWalRotated() const { return walRotated; }
 
-    void readCheckpoint();
+    void readCheckpoint(bool applyPartitionCheckpointShadows = false,
+        std::optional<common::uuid> legacyCheckpointDatabaseID = std::nullopt,
+        bool checkpointBundle = false);
 
     static bool canAutoCheckpoint(const main::ClientContext& clientContext,
         const transaction::Transaction& transaction);
@@ -68,7 +72,12 @@ protected:
         bool hasStorageChanges);
     virtual void writeDatabaseHeader(const DatabaseHeader& header);
     virtual void logCheckpointAndApplyShadowPages(bool walRotated = false);
+    virtual void beforeWALRetirement(bool walRotated);
+    virtual void onWALRetired(bool walRotated);
+    virtual void beforeGraphShadowApply(StorageManager& storageManager);
     void applyShadowPagesForPartitionChildren();
+    void flushGraphShadowFiles();
+    void applyGraphShadowPages();
 
 private:
     struct CheckpointTarget {
@@ -79,9 +88,10 @@ private:
     std::vector<CheckpointTarget> collectCheckpointTargets() const;
 
     static void readCheckpoint(main::ClientContext* context, catalog::Catalog* catalog,
-        StorageManager* storageManager);
+        StorageManager* storageManager, bool applyPartitionCheckpointShadows = false,
+        std::optional<common::uuid> legacyCheckpointDatabaseID = std::nullopt,
+        bool checkpointBundle = false);
     void acquireCheckpointLocks();
-    void releaseCheckpointLocks();
 
     PageRange serializeCatalog(const catalog::Catalog& catalog, StorageManager& storageManager);
     PageRange serializeCatalogSnapshot(const catalog::Catalog& catalog,

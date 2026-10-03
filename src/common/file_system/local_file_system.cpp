@@ -307,6 +307,11 @@ static bool isAllowedDeletionPath(const std::string& path, const std::string& db
     const auto dbExt = dbPathP.extension().string();
     const auto dbFileName = dbBase + dbExt;
 
+    // Frozen WALs: <allowed WAL>.checkpoint
+    if (extension == ".checkpoint" && p.stem().extension() == ".wal") {
+        return isAllowedDeletionPath((p.parent_path() / p.stem()).string(), dbPath);
+    }
+
     // Main DB sidecars: db.lbdb.{wal|shadow|tmp|lock}
     if (extension == ".wal" || extension == ".shadow" || extension == ".tmp" ||
         extension == ".lock" || extension == ".checkpoint") {
@@ -566,6 +571,56 @@ void LocalFileSystem::syncFile(const FileInfo& fileInfo) const {
     if (!syncSuccess) {
         throw IOException(std::format("Failed to sync file {}.", fileInfo.path));
     }
+#endif
+}
+
+void LocalFileSystem::syncParentDirectory(const std::string& path) {
+#if defined(_WIN32)
+    (void)path;
+#else
+    if (!isLocalPath(path)) {
+        return;
+    }
+    auto parentPath = std::filesystem::path(path).parent_path();
+    if (parentPath.empty()) {
+        parentPath = ".";
+    }
+    const auto directorySyncUnsupported = [](int error) {
+        return error == EBADF || error == EINVAL || error == EISDIR || error == ENOTSUP ||
+               error == EOPNOTSUPP;
+    };
+    const int directoryFD = open(parentPath.c_str(), O_RDONLY | O_DIRECTORY);
+    if (directoryFD < 0) {
+        if (directorySyncUnsupported(errno)) {
+            return;
+        }
+        throw IOException(std::format("Failed to open parent directory {} for sync: {}",
+            parentPath.string(), posixErrMessage()));
+    }
+    bool syncSucceeded = false;
+#if HAS_FULLFSYNC and defined(__APPLE__)
+    syncSucceeded = fcntl(directoryFD, F_FULLFSYNC) == 0;
+    if (!syncSucceeded && !directorySyncUnsupported(errno)) {
+        const auto errorMessage = posixErrMessage();
+        close(directoryFD);
+        throw IOException(std::format("Failed to sync parent directory {}: {}", parentPath.string(),
+            errorMessage));
+    }
+#endif
+    if (!syncSucceeded) {
+        syncSucceeded = fsync(directoryFD) == 0;
+    }
+    if (!syncSucceeded) {
+        if (directorySyncUnsupported(errno)) {
+            close(directoryFD);
+            return;
+        }
+        const auto errorMessage = posixErrMessage();
+        close(directoryFD);
+        throw IOException(std::format("Failed to sync parent directory {}: {}", parentPath.string(),
+            errorMessage));
+    }
+    close(directoryFD);
 #endif
 }
 

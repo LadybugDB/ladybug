@@ -49,6 +49,8 @@ public:
 
     void syncFile(const FileInfo& fileInfo) const override;
 
+    void syncParentDirectory(const std::string& path) const;
+
     void cleanUP(main::ClientContext* context) override;
 
     bool handleFileViaFunction(const std::string& path) const override;

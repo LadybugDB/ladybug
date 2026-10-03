@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <functional>
+#include <optional>
 #include <shared_mutex>
 
 #include "common/types/uuid.h"
@@ -24,6 +25,12 @@ struct ShadowPageRecord {
 struct ShadowFileHeader {
     common::uuid databaseID{0};
     common::page_idx_t numShadowPages = 0;
+    // The database that owns the pending checkpoint bundle this shadow file belongs to. A shadow
+    // flushed while another database runs the checkpoint (a graph's or partition child's shadow
+    // during a parent checkpoint) carries that parent's ID, so a standalone open of the child file
+    // can refuse to decide the bundle's fate instead of discarding its shadow. Zero means the
+    // header predates bundle ownership stamping and is treated as the file's own bundle.
+    common::uuid ownerDatabaseID{0};
 };
 static_assert(std::is_trivially_copyable_v<ShadowFileHeader>);
 
@@ -32,6 +39,9 @@ class BufferManager;
 // transactions running concurrently with a checkpoint may only use readShadowVersionIfExists.
 class ShadowFile {
 public:
+    static constexpr common::uuid CHECKPOINT_BUNDLE_DATABASE_ID{
+        common::int128_t{UINT64_MAX, INT64_MAX}};
+
     ShadowFile(BufferManager& bm, common::VirtualFileSystem* vfs, const std::string& databasePath);
 
     // Mutex protocol: hasShadowPage, getShadowPage, clearShadowPage, createShadowPage and
@@ -80,9 +90,11 @@ public:
 
     void applyShadowPages(StorageManager& storageManager, main::ClientContext& context) const;
 
-    void flushAll(main::ClientContext& context) const;
+    // `ownerDatabaseID` is the ID of the database running the checkpoint, stamped into the shadow
+    // header (see ShadowFileHeader::ownerDatabaseID).
+    void flushAll(const common::uuid& ownerDatabaseID) const;
     // Clear any buffer in the WAL writer. Also truncate the WAL file to 0 bytes.
-    void clear(BufferManager& bm);
+    void clear(BufferManager& bm, bool syncParentDirectory = true);
     bool hasShadowingFH() const { return shadowingFH != nullptr; }
     void setDatabasePath(const std::string& databasePath);
     // Reset the WAL writer to nullptr, and remove the WAL file if it exists.
@@ -95,17 +107,20 @@ public:
     // rather than the main database path. `databasePath` is the DATA file path; the shadow
     // path is derived from it.
     static void replayShadowPageRecords(main::ClientContext& context,
-        const std::string& databasePath);
+        const std::string& databasePath,
+        std::optional<common::uuid> legacyDatabaseID = std::nullopt);
     // Variant for files whose handle is already open and locked by the given storage manager
     // (partition children during recovery): avoids taking a second lock on the data file.
     static void replayShadowPageRecordsForStorageManager(main::ClientContext& context,
-        StorageManager& storageManager);
+        StorageManager& storageManager,
+        std::optional<common::uuid> legacyDatabaseID = std::nullopt);
 
 private:
     FileHandle* getOrCreateShadowingFH();
 
     static void replayShadowPageRecordsCore(common::FileInfo& shadowFileInfo,
-        common::FileInfo& dataFileInfo);
+        common::FileInfo& dataFileInfo, uint64_t maxDatabasePages,
+        std::optional<common::uuid> legacyDatabaseID = std::nullopt);
 
 private:
     BufferManager& bm;

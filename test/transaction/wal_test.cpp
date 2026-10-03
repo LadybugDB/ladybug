@@ -35,13 +35,28 @@ protected:
     void setupChecksumMismatchTest(std::function<void(std::ofstream&)> corruptFunc);
 };
 
-class FailingSyncFileSystem final : public FileSystem {
+class FailingSyncFileSystem final : public FileSystem, public DirectorySyncFileSystem {
 public:
     explicit FailingSyncFileSystem(bool failSync) : failSync{failSync} {}
 
     void setFailSync(bool fail) {
         std::unique_lock lck{mtx};
         failSync = fail;
+    }
+
+    void setFailRemove(bool fail) {
+        std::unique_lock lck{mtx};
+        failRemove = fail;
+    }
+
+    void setFailAfterRename(bool fail) {
+        std::unique_lock lck{mtx};
+        failAfterRename = fail;
+    }
+
+    void setFailDirectorySync(bool fail) {
+        std::unique_lock lck{mtx};
+        failDirectorySync = fail;
     }
 
     bool canHandleFile(const std::string_view path) const override {
@@ -67,11 +82,21 @@ public:
         std::unique_lock lck{mtx};
         files[to] = std::move(files[from]);
         files.erase(from);
+        if (failAfterRename) {
+            throw IOException{"Injected failure after WAL rename."};
+        }
     }
 
     void removeFileIfExists(const std::string& path,
         const lbug::main::ClientContext* /*context*/ = nullptr) override {
         std::unique_lock lck{mtx};
+        removeAttemptPath = path;
+        if (syncedAfterTruncatePath == path) {
+            removalAttemptAfterSyncPath = path;
+        }
+        if (failRemove) {
+            throw IOException{"Injected WAL removal failure."};
+        }
         files.erase(path);
     }
 
@@ -86,11 +111,43 @@ public:
         return path;
     }
 
-    void syncFile(const FileInfo& /*fileInfo*/) const override {
+    void syncFile(const FileInfo& fileInfo) const override {
         std::unique_lock lck{mtx};
         if (failSync) {
             throw IOException{"Injected WAL sync failure."};
         }
+        if (truncatedPath == fileInfo.path) {
+            syncedAfterTruncatePath = fileInfo.path;
+        }
+    }
+
+    void syncParentDirectory(const std::string& path) const override {
+        std::unique_lock lck{mtx};
+        parentDirectorySyncCount++;
+        parentDirectorySyncPath = path;
+        if (failDirectorySync) {
+            throw IOException{"Injected parent-directory sync failure."};
+        }
+    }
+
+    uint64_t getParentDirectorySyncCount() const {
+        std::unique_lock lck{mtx};
+        return parentDirectorySyncCount;
+    }
+
+    bool wasParentDirectorySynced(const std::string& path) const {
+        std::unique_lock lck{mtx};
+        return parentDirectorySyncPath == path;
+    }
+
+    bool wasSyncedAfterTruncate(const std::string& path) const {
+        std::unique_lock lck{mtx};
+        return truncatedPath == path && syncedAfterTruncatePath == path;
+    }
+
+    bool wasRemovalAttempted(const std::string& path) const {
+        std::unique_lock lck{mtx};
+        return removeAttemptPath == path && removalAttemptAfterSyncPath == path;
     }
 
 protected:
@@ -122,6 +179,8 @@ protected:
     void truncate(FileInfo& fileInfo, uint64_t size) const override {
         std::unique_lock lck{mtx};
         files[fileInfo.path].resize(size);
+        truncatedPath = fileInfo.path;
+        syncedAfterTruncatePath.clear();
     }
 
     uint64_t getFileSize(const FileInfo& fileInfo) const override {
@@ -132,6 +191,15 @@ protected:
 
 private:
     bool failSync;
+    bool failRemove = false;
+    bool failAfterRename = false;
+    bool failDirectorySync = false;
+    mutable uint64_t parentDirectorySyncCount = 0;
+    mutable std::string parentDirectorySyncPath;
+    mutable std::string truncatedPath;
+    mutable std::string syncedAfterTruncatePath;
+    std::string removeAttemptPath;
+    std::string removalAttemptAfterSyncPath;
     mutable std::mutex mtx;
     mutable std::unordered_map<std::string, std::vector<uint8_t>> files;
 };
@@ -162,6 +230,146 @@ TEST_F(WalTest, WALSyncFailurePoisonsWALAndReturnsAllocatedCommitSequence) {
 
     walCommitSequence = 0;
     EXPECT_THROW(wal.logCommittedWAL(secondLocalWAL, conn->getClientContext(), walCommitSequence),
+        RuntimeException);
+    EXPECT_EQ(walCommitSequence, 0);
+}
+
+TEST_F(WalTest, CheckpointSyncFailureReportsPossibleCommitRecord) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(true /* failSync */);
+    vfs.registerFileSystem(std::move(failingFS));
+
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    EXPECT_THROW(wal.logAndFlushCheckpoint(conn->getClientContext()), RuntimeException);
+    EXPECT_TRUE(wal.mayHaveCheckpointRecord());
+}
+
+TEST_F(WalTest, CheckpointOnRegisteredFileSystemDoesNotTouchLocalNamespace) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    EXPECT_NO_THROW(wal.logAndFlushCheckpoint(conn->getClientContext()));
+    EXPECT_TRUE(wal.mayHaveCheckpointRecord());
+    EXPECT_EQ(failingFSPtr->getParentDirectorySyncCount(), 1);
+    EXPECT_TRUE(failingFSPtr->wasParentDirectorySynced(
+        lbug::storage::StorageUtils::getWALFilePath("failing-sync://db")));
+}
+
+TEST_F(WalTest, OrdinaryCommitSyncsRegisteredNamespace) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    lbug::storage::WAL wal("failing-sync://db", false /* readOnly */, false /* enableChecksums */,
+        &vfs);
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("dummy");
+    localWAL.logCommit();
+    uint64_t walCommitSequence = 0;
+    ASSERT_NO_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence));
+    EXPECT_EQ(walCommitSequence, 1);
+    EXPECT_EQ(failingFSPtr->getParentDirectorySyncCount(), 1);
+    EXPECT_TRUE(failingFSPtr->wasParentDirectorySynced(
+        lbug::storage::StorageUtils::getWALFilePath("failing-sync://db")));
+}
+
+TEST_F(WalTest, FailureAfterCheckpointRenamePoisonsWAL) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    const std::string databasePath = "failing-sync://db";
+    lbug::storage::WAL wal(databasePath, false /* readOnly */, false /* enableChecksums */, &vfs);
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("dummy");
+    localWAL.logCommit();
+    uint64_t walCommitSequence = 0;
+    ASSERT_NO_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence));
+
+    failingFSPtr->setFailAfterRename(true);
+    EXPECT_THROW(wal.rotateForCheckpoint(conn->getClientContext()), RuntimeException);
+    EXPECT_FALSE(vfs.fileOrPathExists(lbug::storage::StorageUtils::getWALFilePath(databasePath)));
+    EXPECT_TRUE(
+        vfs.fileOrPathExists(lbug::storage::StorageUtils::getCheckpointWALFilePath(databasePath)));
+
+    lbug::storage::LocalWAL laterWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    laterWAL.logLoadExtension("later");
+    laterWAL.logCommit();
+    walCommitSequence = 0;
+    EXPECT_THROW(wal.logCommittedWAL(laterWAL, conn->getClientContext(), walCommitSequence),
+        RuntimeException);
+    EXPECT_EQ(walCommitSequence, 0);
+}
+
+TEST_F(WalTest, DirectorySyncFailureAfterCheckpointRenamePoisonsWAL) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    const std::string databasePath = "failing-sync://db";
+    lbug::storage::WAL wal(databasePath, false /* readOnly */, false /* enableChecksums */, &vfs);
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("dummy");
+    localWAL.logCommit();
+    uint64_t walCommitSequence = 0;
+    ASSERT_NO_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence));
+
+    failingFSPtr->setFailDirectorySync(true);
+    EXPECT_THROW(wal.rotateForCheckpoint(conn->getClientContext()), RuntimeException);
+    EXPECT_FALSE(vfs.fileOrPathExists(lbug::storage::StorageUtils::getWALFilePath(databasePath)));
+    EXPECT_TRUE(
+        vfs.fileOrPathExists(lbug::storage::StorageUtils::getCheckpointWALFilePath(databasePath)));
+
+    lbug::storage::LocalWAL laterWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    laterWAL.logLoadExtension("later");
+    laterWAL.logCommit();
+    walCommitSequence = 0;
+    EXPECT_THROW(wal.logCommittedWAL(laterWAL, conn->getClientContext(), walCommitSequence),
+        RuntimeException);
+    EXPECT_EQ(walCommitSequence, 0);
+}
+
+TEST_F(WalTest, FrozenWALRemovalFailurePoisonsWALAfterDurableTruncate) {
+    VirtualFileSystem vfs;
+    auto failingFS = std::make_unique<FailingSyncFileSystem>(false /* failSync */);
+    auto* failingFSPtr = failingFS.get();
+    vfs.registerFileSystem(std::move(failingFS));
+
+    const std::string databasePath = "failing-sync://db";
+    lbug::storage::WAL wal(databasePath, false /* readOnly */, false /* enableChecksums */, &vfs);
+    const auto frozenWALPath = lbug::storage::StorageUtils::getCheckpointWALFilePath(databasePath);
+    auto frozenFile = vfs.openFile(frozenWALPath,
+        FileOpenFlags(FileFlags::CREATE_IF_NOT_EXISTS | FileFlags::READ_ONLY | FileFlags::WRITE));
+    const uint8_t marker = 1;
+    frozenFile->writeFile(&marker, sizeof(marker), 0);
+    frozenFile.reset();
+    failingFSPtr->setFailRemove(true);
+
+    EXPECT_THROW(wal.retireFrozenWAL(), RuntimeException);
+    EXPECT_TRUE(failingFSPtr->wasSyncedAfterTruncate(frozenWALPath));
+    EXPECT_TRUE(failingFSPtr->wasRemovalAttempted(frozenWALPath));
+    auto retiredFile = vfs.openFile(frozenWALPath, FileOpenFlags(FileFlags::READ_ONLY));
+    EXPECT_EQ(retiredFile->getFileSize(), 0);
+
+    lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
+        false /* enableChecksums */);
+    localWAL.logLoadExtension("dummy");
+    localWAL.logCommit();
+    uint64_t walCommitSequence = 0;
+    EXPECT_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence),
         RuntimeException);
     EXPECT_EQ(walCommitSequence, 0);
 }

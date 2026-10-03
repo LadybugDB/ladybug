@@ -12,6 +12,7 @@
 #include "main/db_config.h"
 #include "storage/checkpointer.h"
 #include "storage/wal/local_wal.h"
+#include "storage/wal/wal.h"
 #include <format>
 
 using namespace lbug::common;
@@ -313,6 +314,11 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
     } catch (std::exception& e) {
         throw CheckpointException{e};
     }
+    try {
+        clientContext.getDatabase()->getStorageManager()->getWAL().throwIfPoisoned();
+    } catch (std::exception& e) {
+        throw CheckpointException{e};
+    }
     auto checkpointer = initCheckpointerFunc(clientContext);
     try {
         // lastTimestamp is atomic, so we can snapshot it without taking
@@ -342,6 +348,17 @@ void TransactionManager::checkpointNoLock(main::ClientContext& clientContext) {
         checkpointer->finishCheckpoint();
         progress.update(0.95);
     } catch (std::exception& e) {
+        auto* wal = &clientContext.getDatabase()->getStorageManager()->getWAL();
+        if (wal->mayHaveCheckpointRecord()) {
+            checkpointer->releaseCheckpointLocks();
+            wal->poison(std::format(
+                "Checkpoint failed after its commit record may have reached storage: {}",
+                e.what()));
+            throw CheckpointException(std::format(
+                "Checkpoint failed after its commit record may have reached storage; the database "
+                "refuses further writes until restart. Original error: {}",
+                e.what()));
+        }
         checkpointer->rollback();
         throw CheckpointException{e};
     }

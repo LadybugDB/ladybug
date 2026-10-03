@@ -44,6 +44,10 @@ class RecordSpec:
         return self.metadata.get("record_type", camel_to_enum(self.model_name))
 
     @property
+    def explicit_constructor(self) -> bool:
+        return self.metadata.get("explicit_constructor", "false").lower() in {"1", "true", "yes"}
+
+    @property
     def header_output(self) -> Path:
         name = camel_to_snake(self.model_name)
         return Path("src/include/storage/wal/record") / f"{name}.h"
@@ -168,6 +172,9 @@ def render_template(base_template: Path, record: RecordSpec) -> str:
         + " %}\n"
         + "{% set debug_fields = "
         + ("true" if record.debug_fields else "false")
+        + " %}\n"
+        + "{% set explicit_constructor = "
+        + ("true" if record.explicit_constructor else "false")
         + " %}\n"
         + base_template.read_text(encoding="utf-8")
     )

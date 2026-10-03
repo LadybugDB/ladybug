@@ -12,6 +12,7 @@
 #include "main/database_manager.h"
 #include "main/db_config.h"
 #include "storage/database_header.h"
+#include "storage/shadow_file.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
 #include "storage/table/node_table.h"
@@ -39,16 +40,17 @@ static std::string getChildPath(main::ClientContext* context, const std::string&
 // Restore the child file's page manager from its own header. The checkpointer persists each
 // partition child's free-space state into its file (persistPartitionChildFiles); without this
 // reload, a freshly opened child would hand out page indices that overwrite existing data.
-static void loadChildHeaderAndPageManager(StorageManager& sm) {
+static bool loadChildHeaderAndPageManager(StorageManager& sm) {
     auto* dataFH = sm.getDataFH();
     if (dataFH->isInMemoryMode() || dataFH->getNumPages() == 0) {
-        return;
+        return dataFH->isInMemoryMode();
     }
     auto* fileInfo = dataFH->getFileInfo();
     auto header = DatabaseHeader::readDatabaseHeader(*fileInfo);
     if (!header.has_value()) {
-        return;
+        return false;
     }
+    sm.setDatabaseHeader(std::make_unique<DatabaseHeader>(*header));
     auto* pageManager = dataFH->getPageManager();
     if (header->metadataPageRange.startPageIdx != INVALID_PAGE_IDX) {
         auto reader = std::make_unique<common::BufferedFileReader>(*fileInfo);
@@ -59,10 +61,12 @@ static void loadChildHeaderAndPageManager(StorageManager& sm) {
     if (header->dataFileNumPages != 0) {
         pageManager->reclaimTailPagesIfNeeded(header->dataFileNumPages);
     }
+    return true;
 }
 
 StorageManager& PartitionStorageRegistry::getOrCreate(main::ClientContext* context,
-    table_id_t tableID, const std::string& childName) {
+    table_id_t tableID, const std::string& childName, bool requireExistingFile,
+    bool loadChildState) {
     {
         std::shared_lock slock{mtx};
         if (auto it = managers.find(tableID); it != managers.end()) {
@@ -74,11 +78,19 @@ StorageManager& PartitionStorageRegistry::getOrCreate(main::ClientContext* conte
         return *it->second;
     }
     auto path = getChildPath(context, childName);
-    auto storageManager = std::make_unique<StorageManager>(path, false /* readOnly */,
+    auto* vfs = VirtualFileSystem::GetUnsafe(*context);
+    if (requireExistingFile && !vfs->fileOrPathExists(path, context)) {
+        throw RuntimeException(std::format(
+            "Cannot recover committed checkpoint: partition file {} is missing.", path));
+    }
+    auto storageManager = std::make_unique<StorageManager>(path, context->getDBConfig()->readOnly,
         false /* enableChecksums */, *MemoryManager::Get(*context), false /* enableCompression */,
-        context->getDBConfig()->enableDefaultHashIndex, VirtualFileSystem::GetUnsafe(*context));
-    storageManager->initDataFileHandle(VirtualFileSystem::GetUnsafe(*context), context);
-    loadChildHeaderAndPageManager(*storageManager);
+        context->getDBConfig()->enableDefaultHashIndex, vfs);
+    storageManager->initDataFileHandle(vfs, context);
+    if (loadChildState && !loadChildHeaderAndPageManager(*storageManager) && requireExistingFile) {
+        throw RuntimeException(std::format(
+            "Cannot recover committed checkpoint: partition file {} has no valid header.", path));
+    }
     auto* raw = storageManager.get();
     managers.emplace(tableID, std::move(storageManager));
     return *raw;
@@ -151,7 +163,7 @@ std::vector<StorageManager*> PartitionStorageRegistry::getAllManagers() {
 }
 
 void PartitionStorageRegistry::openAllChildren(main::ClientContext* context,
-    const catalog::Catalog& catalog) {
+    const catalog::Catalog& catalog, bool recoveringCommittedCheckpoint) {
     const auto* txn = &transaction::DUMMY_CHECKPOINT_TRANSACTION;
     for (auto* entry : catalog.getNodeTableEntries(txn)) {
         auto* nodeEntry = entry->ptrCast<NodeTableCatalogEntry>();
@@ -163,17 +175,51 @@ void PartitionStorageRegistry::openAllChildren(main::ClientContext* context,
             continue;
         }
         const auto tableID = nodeEntry->getTableID();
-        auto& sm = getOrCreate(context, tableID, nodeEntry->getName());
+        if (recoveringCommittedCheckpoint) {
+            // An interrupted shadow-page apply can leave a child's header or page-manager pages
+            // half-replaced, so the file cannot be parsed yet. Register it and repair first
+            // (replayCheckpointShadows), which loads the header and page manager afterwards —
+            // the same repair-then-parse order the main database file already follows. Tables
+            // are constructed later from the main file's metadata stream
+            // (StorageManager::deserialize).
+            static_cast<void>(getOrCreate(context, tableID, nodeEntry->getName(),
+                /*requireExistingFile=*/true, /*loadChildState=*/false));
+            continue;
+        }
+        auto& sm = getOrCreate(context, tableID, nodeEntry->getName(), false);
         if (!sm.containsTable(tableID)) {
             sm.createTable(nodeEntry, context);
         }
     }
 }
 
-void PartitionStorageRegistry::reloadPageManagers() {
-    std::shared_lock slock{mtx};
-    for (auto& [_, sm] : managers) {
-        loadChildHeaderAndPageManager(*sm);
+void PartitionStorageRegistry::replayCheckpointShadows(main::ClientContext* context,
+    std::optional<uuid> legacyDatabaseID, bool checkpointBundle) {
+    auto* vfs = VirtualFileSystem::GetUnsafe(*context);
+    for (auto* sm : getAllManagers()) {
+        const auto shadowPath = StorageUtils::getShadowFilePath(sm->getDatabasePath());
+        if (!vfs->fileOrPathExists(shadowPath, context)) {
+            if (checkpointBundle) {
+                throw RuntimeException(std::format(
+                    "Cannot recover committed checkpoint: partition shadow file {} is missing.",
+                    shadowPath));
+            }
+            // The legacy protocol applied and removed each child's shadow before the checkpoint
+            // committed, so a missing shadow means the child file is already fully applied.
+            continue;
+        }
+        ShadowFile::replayShadowPageRecordsForStorageManager(*context, *sm, legacyDatabaseID);
+    }
+    // After the replay the files hold a consistent view for the first time in this open: load
+    // the header and page manager now, before anything allocates from them. Children without
+    // shadows (already applied by the legacy protocol) load straight from their files.
+    for (auto* sm : getAllManagers()) {
+        if (!loadChildHeaderAndPageManager(*sm)) {
+            throw RuntimeException(std::format(
+                "Cannot recover committed checkpoint: partition file {} has no valid header "
+                "after replaying its shadow.",
+                sm->getDatabasePath()));
+        }
     }
 }
 
