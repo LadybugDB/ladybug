@@ -2582,7 +2582,8 @@ TEST_P(LegacyMarkerUnflushedGraphShadowTest, DiscardsGraphShadow) {
     result = conn->query("MATCH (n:User) RETURN n.name;");
     ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
     ASSERT_EQ(result->getNumTuples(), 1);
-    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Alice");
+    // n.name is JSON-typed in ANY graphs; toString() is the type-correct accessor for it.
+    ASSERT_EQ(result->getNext()->getValue(0)->toString(), "Alice");
 }
 
 INSTANTIATE_TEST_SUITE_P(GraphShadow, LegacyMarkerUnflushedGraphShadowTest,
