@@ -3,6 +3,7 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
+#include <unordered_set>
 #include <vector>
 
 #include "common/types/types.h"
@@ -12,6 +13,7 @@ namespace binder {
 struct BoundAlterInfo;
 }
 namespace catalog {
+class Catalog;
 class CatalogEntry;
 class CatalogSet;
 class SequenceCatalogEntry;
@@ -21,6 +23,7 @@ namespace main {
 class ClientContext;
 } // namespace main
 namespace storage {
+class Table;
 class LocalWAL;
 class LocalStorage;
 class UndoBuffer;
@@ -126,14 +129,14 @@ public:
 
     storage::LocalStorage* getLocalStorage() const { return localStorage.get(); }
     LocalCacheManager& getLocalCacheManager() { return localCacheManager; }
-    bool isUnCommitted(common::table_id_t tableID, common::offset_t nodeOffset) const;
-    common::row_idx_t getLocalRowIdx(common::table_id_t tableID,
+    bool isUnCommitted(const storage::Table& table, common::offset_t nodeOffset) const;
+    common::row_idx_t getLocalRowIdx(const storage::Table& table,
         common::offset_t nodeOffset) const {
-        return nodeOffset - getMinUncommittedNodeOffset(tableID);
+        return nodeOffset - getMinUncommittedNodeOffset(table);
     }
-    common::offset_t getUncommittedOffset(common::table_id_t tableID,
+    common::offset_t getUncommittedOffset(const storage::Table& table,
         common::row_idx_t localRowIdx) const {
-        return getMinUncommittedNodeOffset(tableID) + localRowIdx;
+        return getMinUncommittedNodeOffset(table) + localRowIdx;
     }
 
     main::ClientContext* getClientContext() const { return clientContext; }
@@ -154,7 +157,8 @@ public:
     static Transaction* Get(const main::ClientContext& context);
 
 private:
-    common::offset_t getMinUncommittedNodeOffset(common::table_id_t tableID) const;
+    common::offset_t getMinUncommittedNodeOffset(const storage::Table& table) const;
+    void recordCatalogChange(catalog::Catalog* catalog);
 
 private:
     TransactionType type;
@@ -170,7 +174,8 @@ private:
     std::vector<std::function<void(Transaction&)>> commitCallbacks;
     std::vector<std::function<void(Transaction&)>> rollbackCallbacks;
     bool forceCheckpoint;
-    std::atomic<bool> hasCatalogChanges;
+    std::unordered_set<catalog::Catalog*> changedCatalogs;
+    std::mutex changedCatalogsMutex;
 };
 
 // TODO(bmwinger): These shouldn't need to be exported

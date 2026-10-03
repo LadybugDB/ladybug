@@ -2,11 +2,17 @@
 
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "storage/wal/wal_record.h"
 
 namespace lbug {
+namespace catalog {
+class Catalog;
+} // namespace catalog
+
 namespace main {
 class ClientContext;
 } // namespace main
@@ -47,6 +53,10 @@ private:
     };
 
     void replayWALRecord(WALRecord& walRecord) const;
+    void recordReplayedEntryID(catalog::CatalogEntryType entryType, common::oid_t recordedEntryID,
+        common::oid_t replayedEntryID) const;
+    common::oid_t getReplayedEntryID(catalog::CatalogEntryType entryType,
+        common::oid_t recordedEntryID) const;
     void replayCreateCatalogEntryRecord(WALRecord& walRecord) const;
     void replayCreateIndexRecord(WALRecord& walRecord) const;
     void replayDropCatalogEntryRecord(const WALRecord& walRecord) const;
@@ -100,6 +110,22 @@ private:
     std::string walPath;
     std::string checkpointWalPath;
     std::string shadowFilePath;
+    // Owner names whose materialization already failed during this replay pass, so
+    // their remaining records skip the graph-recovery pass instead of repeating it.
+    // Cleared whenever replayed graph DDL can change which owners are loadable.
+    mutable std::unordered_set<std::string> failedOwnerNames;
+    // Entry IDs recorded in a graph's WAL come from the recording session's view of its
+    // catalog, which can differ from the replaying catalog: a standalone session's plain
+    // catalog lacks the ANY-graph infrastructure entries the graph materializes with,
+    // and rolled-back CREATEs consume IDs without leaving WAL records. CREATE replay
+    // records each recorded->replayed ID per entry type (each type has an independent
+    // ID space); ID-addressed records translate through this map, scoped to the owning
+    // catalog the record replays against, and fall back to the recorded ID. Cleared per
+    // replayGraphWAL call.
+    mutable std::unordered_map<const catalog::Catalog*,
+        std::unordered_map<catalog::CatalogEntryType,
+            std::unordered_map<common::oid_t, common::oid_t>>>
+        replayedEntryIDs;
 };
 
 } // namespace storage

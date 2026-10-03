@@ -39,6 +39,18 @@ namespace main {
 
 DatabaseManager::DatabaseManager() : defaultDatabase{""} {}
 
+DatabaseManager::~DatabaseManager() = default;
+
+// A graph materialized during an active recovery transaction cannot replay its own WAL
+// inline: graph WALs hold standalone-session transactions whose BEGIN/COMMIT would nest
+// inside the caller's recovery transaction. The loader queues one of these and
+// replayPendingGraphWALs() runs the queued replays at the next transaction-free point.
+struct GraphWALReplayRequest {
+    storage::StorageManager* storageManager = nullptr;
+    std::string graphName;
+    storage::WALReplayer::GraphRecoveryState recoveryState;
+};
+
 void DatabaseManager::registerAttachedDatabase(std::unique_ptr<AttachedDatabase> attachedDatabase) {
     if (defaultDatabase == "") {
         defaultDatabase = attachedDatabase->getDBName();
@@ -111,6 +123,56 @@ DatabaseManager* DatabaseManager::Get(const ClientContext& context) {
     return context.getDatabase()->getDatabaseManager();
 }
 
+static void createAnyGraphTables(catalog::Catalog& catalog) {
+    // Use DUMMY_CHECKPOINT_TRANSACTION to create tables
+    auto* dummyTransaction = &transaction::DUMMY_CHECKPOINT_TRANSACTION;
+
+    // Create serial name for the id column: _nodes_id_serial
+    auto serialName = "_nodes_id_serial";
+    auto serialLiteral =
+        std::make_unique<parser::ParsedLiteralExpression>(Value(serialName), serialName);
+    auto serialDefault = std::make_unique<parser::ParsedFunctionExpression>(
+        function::NextValFunction::name, std::move(serialLiteral), serialName);
+
+    std::vector<binder::PropertyDefinition> nodeProperties;
+    nodeProperties.emplace_back(binder::PropertyDefinition(
+        binder::ColumnDefinition("id", common::LogicalType::SERIAL()), std::move(serialDefault)));
+    nodeProperties.emplace_back(binder::PropertyDefinition(binder::ColumnDefinition("label",
+        common::LogicalType::LIST(common::LogicalType::STRING()))));
+    nodeProperties.emplace_back(
+        binder::PropertyDefinition(binder::ColumnDefinition("data", LogicalType::JSON())));
+
+    auto nodeExtraInfo = std::make_unique<binder::BoundExtraCreateNodeTableInfo>("id",
+        std::move(nodeProperties), "");
+    auto nodeTableInfo = binder::BoundCreateTableInfo(catalog::CatalogEntryType::NODE_TABLE_ENTRY,
+        "_nodes", common::ConflictAction::ON_CONFLICT_THROW, std::move(nodeExtraInfo), false);
+    auto* nodeEntry = catalog.createTableEntry(dummyTransaction, nodeTableInfo);
+    // Mark entry as committed so it's visible to all transactions
+    nodeEntry->setTimestamp(0);
+    catalog.getStorageManager()->createTable(nodeEntry->ptrCast<catalog::TableCatalogEntry>());
+    auto nodeTableID = nodeEntry->ptrCast<catalog::TableCatalogEntry>()->getTableID();
+
+    std::vector<binder::PropertyDefinition> relProperties;
+    relProperties.emplace_back(binder::ColumnDefinition("_id", common::LogicalType::INTERNAL_ID()));
+    relProperties.emplace_back(binder::ColumnDefinition("label", common::LogicalType::STRING()));
+    relProperties.emplace_back(binder::ColumnDefinition("data", LogicalType::JSON()));
+
+    std::vector<binder::BoundRelTableInfo> relTableInfos;
+    relTableInfos.emplace_back(catalog::NodeTableIDPair(nodeTableID, nodeTableID),
+        common::RelMultiplicity::MANY, common::RelMultiplicity::MANY);
+
+    auto relExtraInfo = std::unique_ptr<binder::BoundExtraCreateRelTableGroupInfo>(
+        new binder::BoundExtraCreateRelTableGroupInfo(std::move(relProperties),
+            common::RelMultiplicity::MANY, common::RelMultiplicity::MANY,
+            common::ExtendDirection::BOTH, std::move(relTableInfos), std::string("")));
+    auto relTableInfo = binder::BoundCreateTableInfo(catalog::CatalogEntryType::REL_GROUP_ENTRY,
+        "_edges", common::ConflictAction::ON_CONFLICT_THROW, std::move(relExtraInfo), false);
+    auto* relEntry = catalog.createTableEntry(dummyTransaction, relTableInfo);
+    // Mark entry as committed so it's visible to all transactions
+    relEntry->setTimestamp(0);
+    catalog.getStorageManager()->createTable(relEntry->ptrCast<catalog::TableCatalogEntry>());
+}
+
 void DatabaseManager::createGraph(const std::string& graphName,
     storage::MemoryManager* memoryManager, main::ClientContext* clientContext, bool isAnyGraph) {
     if (StringUtils::caseInsensitiveEquals(graphName, "main")) {
@@ -154,60 +216,13 @@ void DatabaseManager::createGraph(const std::string& graphName,
     catalog->setStorageManager(std::move(storageManager));
 
     if (isAnyGraph) {
-        // Use DUMMY_CHECKPOINT_TRANSACTION to create tables
-        auto* dummyTransaction = &transaction::DUMMY_CHECKPOINT_TRANSACTION;
-
-        // Create serial name for the id column: _nodes_id_serial
-        auto serialName = "_nodes_id_serial";
-        auto serialLiteral =
-            std::make_unique<parser::ParsedLiteralExpression>(Value(serialName), serialName);
-        auto serialDefault = std::make_unique<parser::ParsedFunctionExpression>(
-            function::NextValFunction::name, std::move(serialLiteral), serialName);
-
-        std::vector<binder::PropertyDefinition> nodeProperties;
-        nodeProperties.emplace_back(binder::PropertyDefinition(
-            binder::ColumnDefinition("id", common::LogicalType::SERIAL()),
-            std::move(serialDefault)));
-        nodeProperties.emplace_back(binder::PropertyDefinition(binder::ColumnDefinition("label",
-            common::LogicalType::LIST(common::LogicalType::STRING()))));
-        nodeProperties.emplace_back(
-            binder::PropertyDefinition(binder::ColumnDefinition("data", LogicalType::JSON())));
-
-        auto nodeExtraInfo = std::make_unique<binder::BoundExtraCreateNodeTableInfo>("id",
-            std::move(nodeProperties), "");
-        auto nodeTableInfo =
-            binder::BoundCreateTableInfo(catalog::CatalogEntryType::NODE_TABLE_ENTRY, "_nodes",
-                common::ConflictAction::ON_CONFLICT_THROW, std::move(nodeExtraInfo), false);
-        auto* nodeEntry = catalog->createTableEntry(dummyTransaction, nodeTableInfo);
-        // Mark entry as committed so it's visible to all transactions
-        nodeEntry->setTimestamp(0);
-        catalog->getStorageManager()->createTable(nodeEntry->ptrCast<catalog::TableCatalogEntry>());
-        auto nodeTableID = nodeEntry->ptrCast<catalog::TableCatalogEntry>()->getTableID();
-
-        std::vector<binder::PropertyDefinition> relProperties;
-        relProperties.emplace_back(
-            binder::ColumnDefinition("_id", common::LogicalType::INTERNAL_ID()));
-        relProperties.emplace_back(
-            binder::ColumnDefinition("label", common::LogicalType::STRING()));
-        relProperties.emplace_back(binder::ColumnDefinition("data", LogicalType::JSON()));
-
-        std::vector<binder::BoundRelTableInfo> relTableInfos;
-        relTableInfos.emplace_back(catalog::NodeTableIDPair(nodeTableID, nodeTableID),
-            common::RelMultiplicity::MANY, common::RelMultiplicity::MANY);
-
-        auto relExtraInfo = std::unique_ptr<binder::BoundExtraCreateRelTableGroupInfo>(
-            new binder::BoundExtraCreateRelTableGroupInfo(std::move(relProperties),
-                common::RelMultiplicity::MANY, common::RelMultiplicity::MANY,
-                common::ExtendDirection::BOTH, std::move(relTableInfos), std::string("")));
-        auto relTableInfo = binder::BoundCreateTableInfo(catalog::CatalogEntryType::REL_GROUP_ENTRY,
-            "_edges", common::ConflictAction::ON_CONFLICT_THROW, std::move(relExtraInfo), false);
-        auto* relEntry = catalog->createTableEntry(dummyTransaction, relTableInfo);
-        // Mark entry as committed so it's visible to all transactions
-        relEntry->setTimestamp(0);
-        catalog->getStorageManager()->createTable(relEntry->ptrCast<catalog::TableCatalogEntry>());
+        createAnyGraphTables(*catalog);
     }
 
-    graphs.push_back(std::move(catalog));
+    {
+        std::unique_lock lck{graphsMutex};
+        graphs.push_back(std::move(catalog));
+    }
     // NOTE: Do NOT set defaultGraph here. Setting defaultGraph before the transaction
     // commits causes Catalog::Get() in Transaction::publishCommit() to return the graph's
     // catalog instead of the main catalog, so the main catalog's version is never
@@ -241,6 +256,7 @@ void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContex
     // Remove from system catalog
     mainCatalog->dropGraph(transaction, graphName);
 
+    std::unique_lock lck{graphsMutex};
     for (auto it = graphs.begin(); it != graphs.end(); ++it) {
         auto graphNameUpper = StringUtils::getUpper((*it)->getCatalogName());
         if (graphNameUpper == upperCaseName) {
@@ -257,6 +273,7 @@ void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContex
                 detachDatabase(graphName);
             }
             graphs.erase(it);
+            lck.unlock();
 
             // Delete the physical graph files
             if (!graphPath.empty() &&
@@ -290,6 +307,7 @@ void DatabaseManager::setDefaultGraph(const std::string& graphName) {
         defaultGraph = "main";
         return;
     }
+    std::shared_lock lck{graphsMutex};
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
         if (graphNameUpper == upperCaseName) {
@@ -313,14 +331,23 @@ void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManage
     main::ClientContext* clientContext, bool mainCheckpointCommitted, bool checkpointBundle,
     std::optional<common::uuid> legacyCheckpointDatabaseID) {
     auto mainCatalog = clientContext->getDatabase()->getCatalog();
-    // Use DUMMY_CHECKPOINT_TRANSACTION since we're loading from disk during startup
-    // and there's no active transaction yet
-    auto* transaction = &transaction::DUMMY_CHECKPOINT_TRANSACTION;
+    // During WAL replay, a tagged record can trigger materialization of a graph whose
+    // create-graph record is part of the still-uncommitted recovery transaction; enumerate
+    // with that transaction so such a graph is visible to the loader. Every replayed BEGIN is
+    // guaranteed to reach its COMMIT record (dryReplay advances the replay bound only past
+    // COMMIT records), so a graph visible here can never belong to an aborted transaction.
+    // Outside replay there is no active transaction and DUMMY_CHECKPOINT_TRANSACTION applies.
+    auto* transaction = TransactionContext::Get(*clientContext)->hasActiveTransaction() ?
+                            Transaction::Get(*clientContext) :
+                            &transaction::DUMMY_CHECKPOINT_TRANSACTION;
     auto graphEntries = mainCatalog->getGraphEntries(transaction);
     std::unordered_set<std::string> loadedGraphNames;
-    loadedGraphNames.reserve(graphs.size());
-    for (const auto& graph : graphs) {
-        loadedGraphNames.insert(StringUtils::getUpper(graph->getCatalogName()));
+    {
+        std::shared_lock lck{graphsMutex};
+        loadedGraphNames.reserve(graphs.size());
+        for (const auto& graph : graphs) {
+            loadedGraphNames.insert(StringUtils::getUpper(graph->getCatalogName()));
+        }
     }
 
     for (auto* graphEntry : graphEntries) {
@@ -339,66 +366,155 @@ void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManage
             continue;
         }
 
-        // Load the graph
-        auto catalog = std::make_unique<catalog::Catalog>();
-        catalog->setCatalogName(graphName);
-        // Extension functions are registered in the main catalog only; let
-        // function lookup fall back to it while the session is on this graph.
-        catalog->setFunctionFallback(mainCatalog);
-        auto dbPath = clientContext->getDatabasePath();
-        auto graphPath = DBConfig::isDBPathInMemory(dbPath) ?
-                             ":" + graphName :
-                             storage::StorageUtils::getGraphPath(dbPath, graphName);
-
-        // Check if graph file exists before trying to load
-        auto vfs = common::VirtualFileSystem::GetUnsafe(*clientContext);
-        if (!DBConfig::isDBPathInMemory(dbPath) && !vfs->fileOrPathExists(graphPath)) {
-            if (mainCheckpointCommitted &&
-                vfs->fileOrPathExists(storage::StorageUtils::getShadowFilePath(graphPath))) {
-                throw RuntimeException(std::format(
-                    "Cannot recover committed checkpoint: graph file {} is missing.", graphPath));
-            }
-            // Graph file doesn't exist, skip this graph
-            continue;
+        if (loadGraph(clientContext, memoryManager, graphEntry, mainCheckpointCommitted,
+                checkpointBundle, legacyCheckpointDatabaseID)) {
+            loadedGraphNames.insert(std::move(upperCaseName));
         }
+    }
+}
 
-        auto storageManager = std::make_unique<storage::StorageManager>(graphPath,
-            clientContext->getDBConfig()->readOnly, false, *memoryManager, false,
-            clientContext->getDBConfig()->enableDefaultHashIndex, vfs);
-        storageManager->initDataFileHandle(vfs, clientContext);
-        storage::WALReplayer walReplayer{*clientContext};
-        auto recoveryState = walReplayer.prepareGraphCheckpoint(*storageManager, checkpointBundle,
-            legacyCheckpointDatabaseID);
-        if (storageManager->getDataFH()->getNumPages() > 0) {
-            storage::Checkpointer::readCheckpoint(clientContext, catalog.get(),
-                storageManager.get());
+bool DatabaseManager::loadGraph(main::ClientContext* clientContext,
+    storage::MemoryManager* memoryManager, catalog::GraphCatalogEntry* graphEntry,
+    bool mainCheckpointCommitted, bool checkpointBundle,
+    std::optional<common::uuid> legacyCheckpointDatabaseID) {
+    auto graphName = graphEntry->getName();
+    auto catalog = std::make_unique<catalog::Catalog>();
+    catalog->setCatalogName(graphName);
+    // Extension functions are registered in the main catalog only; let
+    // function lookup fall back to it while the session is on this graph.
+    auto* mainCatalog = clientContext->getDatabase()->getCatalog();
+    catalog->setFunctionFallback(mainCatalog);
+    auto dbPath = clientContext->getDatabasePath();
+    auto graphPath = DBConfig::isDBPathInMemory(dbPath) ?
+                         ":" + graphName :
+                         storage::StorageUtils::getGraphPath(dbPath, graphName);
+
+    // Check if graph file exists before trying to load
+    auto vfs = common::VirtualFileSystem::GetUnsafe(*clientContext);
+    if (!DBConfig::isDBPathInMemory(dbPath) && !vfs->fileOrPathExists(graphPath)) {
+        if (mainCheckpointCommitted &&
+            vfs->fileOrPathExists(storage::StorageUtils::getShadowFilePath(graphPath))) {
+            throw RuntimeException(std::format(
+                "Cannot recover committed checkpoint: graph file {} is missing.", graphPath));
         }
-        catalog->setStorageManager(std::move(storageManager));
-        auto* graphStorageManager = catalog->getStorageManager();
+        // Graph file doesn't exist, skip this graph
+        return false;
+    }
+
+    auto storageManager = std::make_unique<storage::StorageManager>(graphPath,
+        clientContext->getDBConfig()->readOnly, false, *memoryManager, false,
+        clientContext->getDBConfig()->enableDefaultHashIndex, vfs);
+    storageManager->initDataFileHandle(vfs, clientContext);
+    storage::WALReplayer walReplayer{*clientContext};
+    auto recoveryState = walReplayer.prepareGraphCheckpoint(*storageManager, checkpointBundle,
+        legacyCheckpointDatabaseID);
+    bool hasPersistedCatalog = false;
+    if (storageManager->getDataFH()->getNumPages() > 0) {
+        auto persistedHeader = storage::DatabaseHeader::readDatabaseHeader(
+            *storageManager->getDataFH()->getFileInfo());
+        hasPersistedCatalog =
+            persistedHeader.has_value() &&
+            persistedHeader->catalogPageRange.startPageIdx != common::INVALID_PAGE_IDX;
+        storage::Checkpointer::readCheckpoint(clientContext, catalog.get(), storageManager.get());
+    }
+    catalog->setStorageManager(std::move(storageManager));
+    if (graphEntry->isAnyGraphType() && !hasPersistedCatalog) {
+        // A graph whose create-graph record replayed from the WAL (never checkpointed)
+        // materializes without the ANY-graph infrastructure that createGraph built in
+        // memory: it was not WAL-logged. Recreate it so the catalog's ID space matches
+        // logging time and ANY-graph label queries keep working. An empty table set in
+        // a persisted snapshot is deliberate state, not missing initialization.
+        createAnyGraphTables(*catalog);
+    }
+    auto* graphStorageManager = catalog->getStorageManager();
+    {
+        std::unique_lock lck{graphsMutex};
         graphs.push_back(std::move(catalog));
-        loadedGraphNames.insert(std::move(upperCaseName));
+    }
 
+    if (TransactionContext::Get(*clientContext)->hasActiveTransaction()) {
+        // Lazy materialization runs inside the caller's recovery transaction, and a
+        // graph WAL holds standalone-session transactions: replaying it here would
+        // begin a second recovery transaction nested inside the caller's. Queue the
+        // replay for the next transaction-free point (replayPendingGraphWALs) instead.
+        pendingGraphWALReplays.push_back(std::make_unique<GraphWALReplayRequest>(
+            GraphWALReplayRequest{graphStorageManager, graphName, std::move(recoveryState)}));
+        return true;
+    }
+
+    const auto previousDefaultGraph = defaultGraph;
+    defaultGraph = graphName;
+    try {
+        walReplayer.replayGraphWAL(*graphStorageManager, recoveryState);
+    } catch (...) {
+        defaultGraph = previousDefaultGraph;
+        throw;
+    }
+    defaultGraph = previousDefaultGraph;
+    walReplayer.retireGraphCheckpointWALs(*graphStorageManager, recoveryState);
+    if (!mainCheckpointCommitted) {
+        walReplayer.removeGraphCheckpointShadow(*graphStorageManager);
+    }
+    // NOTE: defaultGraph is only set around replayGraphWAL above (see createGraph for
+    // the rationale against leaving it set). Users must explicitly USE GRAPH to work
+    // in the graph.
+    return true;
+}
+
+bool DatabaseManager::loadGraphFromCatalog(storage::MemoryManager* memoryManager,
+    main::ClientContext* clientContext, const std::string& graphName) {
+    auto mainCatalog = clientContext->getDatabase()->getCatalog();
+    // Lazy materialization is only requested from inside WAL replay, where the active
+    // recovery transaction must see graphs whose create-graph record already replayed
+    // (see loadGraphsFromCatalog for the same visibility argument).
+    auto* transaction = TransactionContext::Get(*clientContext)->hasActiveTransaction() ?
+                            Transaction::Get(*clientContext) :
+                            &transaction::DUMMY_CHECKPOINT_TRANSACTION;
+    if (!mainCatalog->containsGraph(transaction, graphName)) {
+        return false;
+    }
+    // A partition subgraph's data files are owned by the partition storage registry and
+    // must not be opened here (see the loadGraphsFromCatalog loop).
+    if (mainCatalog->containsTable(transaction, graphName)) {
+        return false;
+    }
+    if (hasGraph(graphName)) {
+        return true;
+    }
+    auto* graphEntry = mainCatalog->getGraphEntry(transaction, graphName);
+    return loadGraph(clientContext, memoryManager, graphEntry, false /* mainCheckpointCommitted */,
+        false /* checkpointBundle */, std::nullopt);
+}
+
+void DatabaseManager::replayPendingGraphWALs(main::ClientContext* clientContext) {
+    if (pendingGraphWALReplays.empty()) {
+        return;
+    }
+    auto pendingReplays = std::move(pendingGraphWALReplays);
+    pendingGraphWALReplays.clear();
+    storage::WALReplayer walReplayer{*clientContext};
+    for (auto& replayRequest : pendingReplays) {
         const auto previousDefaultGraph = defaultGraph;
-        defaultGraph = graphName;
+        defaultGraph = replayRequest->graphName;
         try {
-            walReplayer.replayGraphWAL(*graphStorageManager, recoveryState);
+            walReplayer.replayGraphWAL(*replayRequest->storageManager,
+                replayRequest->recoveryState);
         } catch (...) {
             defaultGraph = previousDefaultGraph;
             throw;
         }
         defaultGraph = previousDefaultGraph;
-        walReplayer.retireGraphCheckpointWALs(*graphStorageManager, recoveryState);
-        if (!mainCheckpointCommitted) {
-            walReplayer.removeGraphCheckpointShadow(*graphStorageManager);
-        }
-
-        // NOTE: Do NOT set defaultGraph here (see createGraph for rationale).
-        // Users must explicitly USE GRAPH to work in the graph.
+        walReplayer.retireGraphCheckpointWALs(*replayRequest->storageManager,
+            replayRequest->recoveryState);
+        // Deferred requests only come from lazy materialization during main-WAL replay,
+        // which always runs with mainCheckpointCommitted=false.
+        walReplayer.removeGraphCheckpointShadow(*replayRequest->storageManager);
     }
 }
 
 bool DatabaseManager::hasGraph(const std::string& graphName) {
     auto upperCaseName = StringUtils::getUpper(graphName);
+    std::shared_lock lck{graphsMutex};
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
         if (graphNameUpper == upperCaseName) {
@@ -410,10 +526,25 @@ bool DatabaseManager::hasGraph(const std::string& graphName) {
 
 catalog::Catalog* DatabaseManager::getGraphCatalog(const std::string& graphName) {
     auto upperCaseName = StringUtils::getUpper(graphName);
+    std::shared_lock lck{graphsMutex};
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
         if (graphNameUpper == upperCaseName) {
             return graph.get();
+        }
+    }
+    throw BinderException{std::format("No graph named {}.", graphName)};
+}
+
+void DatabaseManager::withGraphCatalog(const std::string& graphName,
+    const std::function<void(catalog::Catalog*)>& action) {
+    auto upperCaseName = StringUtils::getUpper(graphName);
+    std::shared_lock lck{graphsMutex};
+    for (auto& graph : graphs) {
+        auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
+        if (graphNameUpper == upperCaseName) {
+            action(graph.get());
+            return;
         }
     }
     throw BinderException{std::format("No graph named {}.", graphName)};
@@ -424,6 +555,7 @@ catalog::Catalog* DatabaseManager::getDefaultGraphCatalog() const {
         return nullptr;
     }
     auto upperCaseName = StringUtils::getUpper(defaultGraph);
+    std::shared_lock lck{graphsMutex};
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
         if (graphNameUpper == upperCaseName) {
@@ -443,10 +575,21 @@ storage::StorageManager* DatabaseManager::getDefaultGraphStorageManager() const 
 
 std::vector<catalog::Catalog*> DatabaseManager::getGraphs() const {
     std::vector<catalog::Catalog*> result;
+    std::shared_lock lck{graphsMutex};
     for (auto& graph : graphs) {
         result.push_back(graph.get());
     }
     return result;
+}
+
+void DatabaseManager::bumpGraphCatalogVersions(
+    const std::unordered_set<catalog::Catalog*>& catalogs) {
+    std::shared_lock lck{graphsMutex};
+    for (auto& graph : graphs) {
+        if (catalogs.contains(graph.get())) {
+            graph->incrementVersion();
+        }
+    }
 }
 
 std::pair<catalog::Catalog*, storage::StorageManager*> DatabaseManager::resolveTableStorage(

@@ -92,8 +92,7 @@ void ScanNodeTableSharedState::initialize(const transaction::Transaction* transa
         this->numCommittedNodeGroups = table->getNumCommittedNodeGroups();
     }
     if (transaction->isWriteTransaction()) {
-        if (const auto localTable =
-                transaction->getLocalStorage()->getLocalTable(this->table->getTableID())) {
+        if (const auto localTable = transaction->getLocalStorage()->getLocalTable(*this->table)) {
             auto& localNodeTable = localTable->cast<LocalNodeTable>();
             this->numUnCommittedNodeGroups = localNodeTable.getNumNodeGroups();
         }

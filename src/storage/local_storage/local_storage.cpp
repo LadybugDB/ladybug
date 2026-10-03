@@ -1,6 +1,9 @@
 #include "storage/local_storage/local_storage.h"
 
 #include "catalog/catalog.h"
+#include "main/client_context.h"
+#include "main/database.h"
+#include "main/database_manager.h"
 #include "storage/local_storage/local_node_table.h"
 #include "storage/local_storage/local_rel_table.h"
 #include "storage/local_storage/local_table.h"
@@ -16,33 +19,58 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace storage {
 
-LocalTable* LocalStorage::getOrCreateLocalTable(Table& table) {
-    const auto tableID = table.getTableID();
-    auto catalog = catalog::Catalog::Get(clientContext);
-    auto transaction = transaction::Transaction::Get(clientContext);
-    auto& mm = *MemoryManager::Get(clientContext);
-    if (!tables.contains(tableID)) {
-        switch (table.getTableType()) {
-        case TableType::NODE: {
-            auto tableEntry = catalog->getTableCatalogEntry(transaction, table.getTableID());
-            tables[tableID] = std::make_unique<LocalNodeTable>(tableEntry, table, mm);
-        } break;
-        case TableType::REL: {
-            // We have to fetch the rel group entry from the catalog to based on the relGroupID.
-            auto tableEntry =
-                catalog->getTableCatalogEntry(transaction, table.cast<RelTable>().getRelGroupID());
-            tables[tableID] = std::make_unique<LocalRelTable>(tableEntry, table, mm);
-        } break;
-        default:
-            UNREACHABLE_CODE;
-        }
-    }
-    return tables.at(tableID).get();
+namespace {
+catalog::Catalog* getMainCatalog(main::ClientContext& clientContext) {
+    return clientContext.getDatabase()->getCatalog();
 }
 
-LocalTable* LocalStorage::getLocalTable(table_id_t tableID) const {
-    if (tables.contains(tableID)) {
-        return tables.at(tableID).get();
+std::unique_ptr<LocalTable> makeLocalTable(catalog::Catalog* ownerCatalog,
+    transaction::Transaction* transaction, const LocalTableKey& key, Table& table,
+    MemoryManager& mm) {
+    switch (table.getTableType()) {
+    case TableType::NODE: {
+        auto tableEntry = ownerCatalog->getTableCatalogEntry(transaction, key.tableID);
+        return std::make_unique<LocalNodeTable>(tableEntry, table, mm);
+    } break;
+    case TableType::REL: {
+        // We have to fetch the rel group entry from the catalog to based on the relGroupID.
+        auto tableEntry =
+            ownerCatalog->getTableCatalogEntry(transaction, table.cast<RelTable>().getRelGroupID());
+        return std::make_unique<LocalRelTable>(tableEntry, table, mm);
+    } break;
+    default:
+        UNREACHABLE_CODE;
+    }
+}
+} // namespace
+
+LocalTable* LocalStorage::getOrCreateLocalTable(Table& table) {
+    const auto tableID = table.getTableID();
+    const auto key = LocalTableKey{table.getOwnerCatalogName(), tableID};
+    auto transaction = transaction::Transaction::Get(clientContext);
+    auto& mm = *MemoryManager::Get(clientContext);
+    if (!tables.contains(key)) {
+        // The owner catalog must stay alive while the local table reads its entry, so a
+        // graph owner is resolved under the registry's shared lock (withGraphCatalog) —
+        // a concurrent DROP GRAPH can destroy the catalog the moment a plain
+        // getGraphCatalog lookup releases it.
+        if (key.ownerCatalogName.empty()) {
+            tables[key] =
+                makeLocalTable(getMainCatalog(clientContext), transaction, key, table, mm);
+        } else {
+            main::DatabaseManager::Get(clientContext)
+                ->withGraphCatalog(key.ownerCatalogName, [&](catalog::Catalog* ownerCatalog) {
+                    tables[key] = makeLocalTable(ownerCatalog, transaction, key, table, mm);
+                });
+        }
+    }
+    return tables.at(key).get();
+}
+
+LocalTable* LocalStorage::getLocalTable(const Table& table) const {
+    const auto key = LocalTableKey{table.getOwnerCatalogName(), table.getTableID()};
+    if (tables.contains(key)) {
+        return tables.at(key).get();
     }
     return nullptr;
 }
@@ -66,23 +94,43 @@ PageAllocator* LocalStorage::addOptimisticAllocator(StorageManager* sm) {
 }
 
 void LocalStorage::commit() {
-    auto catalog = catalog::Catalog::Get(clientContext);
     auto transaction = transaction::Transaction::Get(clientContext);
-    auto storageManager = StorageManager::Get(clientContext);
-    for (auto& [tableID, localTable] : tables) {
+    for (auto& [key, localTable] : tables) {
         if (localTable->getTableType() == TableType::NODE) {
-            const auto tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
-            const auto table =
-                storage::PartitionStorageRegistry::resolveNodeTableByID(&clientContext, tableID);
-            table->commit(&clientContext, tableEntry, localTable.get());
+            // Catalog read, table resolution, and the commit below must run under one
+            // hold of the graph registry's shared lock: a concurrent DROP GRAPH must not
+            // destroy the owner catalog while staged graph data is being committed.
+            const auto commitInto = [&](catalog::Catalog* ownerCatalog) {
+                const auto tableEntry =
+                    ownerCatalog->getTableCatalogEntry(transaction, key.tableID);
+                const auto table = storage::PartitionStorageRegistry::resolveNodeTableByID(
+                    &clientContext, key.tableID, ownerCatalog);
+                table->commit(&clientContext, tableEntry, localTable.get());
+            };
+            if (key.ownerCatalogName.empty()) {
+                commitInto(getMainCatalog(clientContext));
+            } else {
+                main::DatabaseManager::Get(clientContext)
+                    ->withGraphCatalog(key.ownerCatalogName, commitInto);
+            }
         }
     }
-    for (auto& [tableID, localTable] : tables) {
+    for (auto& [key, localTable] : tables) {
         if (localTable->getTableType() == TableType::REL) {
-            const auto table = storageManager->getTable(tableID);
-            const auto tableEntry =
-                catalog->getTableCatalogEntry(transaction, table->cast<RelTable>().getRelGroupID());
-            table->commit(&clientContext, tableEntry, localTable.get());
+            const auto commitInto = [&](catalog::Catalog* ownerCatalog) {
+                const auto table = PartitionStorageRegistry::resolveOwnerStorageManager(
+                    &clientContext, ownerCatalog)
+                                       ->getTable(key.tableID);
+                const auto tableEntry = ownerCatalog->getTableCatalogEntry(transaction,
+                    table->cast<RelTable>().getRelGroupID());
+                table->commit(&clientContext, tableEntry, localTable.get());
+            };
+            if (key.ownerCatalogName.empty()) {
+                commitInto(getMainCatalog(clientContext));
+            } else {
+                main::DatabaseManager::Get(clientContext)
+                    ->withGraphCatalog(key.ownerCatalogName, commitInto);
+            }
         }
     }
     for (auto& optimisticAllocator : optimisticAllocators) {

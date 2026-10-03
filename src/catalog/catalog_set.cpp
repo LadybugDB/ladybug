@@ -3,6 +3,7 @@
 #include <mutex>
 
 #include "binder/ddl/bound_alter_info.h"
+#include "catalog/catalog.h"
 #include "catalog/catalog_entry/dummy_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/assert.h"
@@ -18,6 +19,12 @@ namespace lbug {
 namespace catalog {
 
 CatalogSet::CatalogSet(bool isInternal) {
+    if (isInternal) {
+        nextOID = INTERNAL_CATALOG_SET_START_OID;
+    }
+}
+
+CatalogSet::CatalogSet(Catalog* catalog, bool isInternal) : catalog{catalog} {
     if (isInternal) {
         nextOID = INTERNAL_CATALOG_SET_START_OID;
     }
@@ -104,6 +111,7 @@ CatalogEntry* CatalogSet::createEntryNoLock(const Transaction* transaction,
 }
 
 void CatalogSet::emplaceNoLock(std::unique_ptr<CatalogEntry> entry) {
+    entry->setOwningCatalog(catalog);
     if (entries.contains(entry->getName())) {
         entry->setPrev(std::move(entries.at(entry->getName())));
         entries.erase(entry->getName());
@@ -300,8 +308,13 @@ void CatalogSet::serializeSnapshot(Serializer serializer, const Transaction* sna
 }
 
 std::unique_ptr<CatalogSet> CatalogSet::deserialize(Deserializer& deserializer) {
+    return deserialize(nullptr, deserializer);
+}
+
+std::unique_ptr<CatalogSet> CatalogSet::deserialize(Catalog* catalog, Deserializer& deserializer) {
     std::string debuggingInfo;
     auto catalogSet = std::make_unique<CatalogSet>();
+    catalogSet->catalog = catalog;
     deserializer.validateDebuggingInfo(debuggingInfo, "nextOID");
     deserializer.deserializeValue<oid_t>(catalogSet->nextOID);
     uint64_t numEntries = 0;
@@ -314,6 +327,10 @@ std::unique_ptr<CatalogSet> CatalogSet::deserialize(Deserializer& deserializer) 
         }
     }
     return catalogSet;
+}
+
+std::string CatalogSet::getOwnerCatalogName() const {
+    return catalog ? catalog->getCatalogName() : "";
 }
 
 // Ideally we should not trigger the following check. Instead, we should throw more informative

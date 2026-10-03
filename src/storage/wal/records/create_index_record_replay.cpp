@@ -19,11 +19,22 @@ void WALReplayer::replayCreateIndexRecord(WALRecord& walRecord) const {
     auto* catalog = Catalog::Get(clientContext);
     auto* trx = transaction::Transaction::Get(clientContext);
     auto* storageManager = StorageManager::Get(clientContext);
-    auto& indexCatalogEntry = record.ownedCatalogEntry->constCast<IndexCatalogEntry>();
-    if (!catalog->containsIndex(trx, indexCatalogEntry.getTableID(),
-            indexCatalogEntry.getIndexName())) {
-        catalog->createIndex(trx, std::move(record.ownedCatalogEntry));
+    auto* indexCatalogEntry = record.ownedCatalogEntry->ptrCast<IndexCatalogEntry>();
+    const auto recordedIndexID = indexCatalogEntry->getOID();
+    indexCatalogEntry->setTableID(
+        getReplayedEntryID(CatalogEntryType::NODE_TABLE_ENTRY, indexCatalogEntry->getTableID()));
+    if (!catalog->containsIndex(trx, indexCatalogEntry->getTableID(),
+            indexCatalogEntry->getIndexName())) {
+        const auto replayedIndexID = catalog->createIndex(trx, std::move(record.ownedCatalogEntry));
+        recordReplayedEntryID(CatalogEntryType::INDEX_ENTRY, recordedIndexID, replayedIndexID);
+    } else {
+        auto* existingIndex = catalog->getIndex(trx, indexCatalogEntry->getTableID(),
+            indexCatalogEntry->getIndexName());
+        recordReplayedEntryID(CatalogEntryType::INDEX_ENTRY, recordedIndexID,
+            existingIndex->getOID());
     }
+    record.indexInfo->tableID =
+        getReplayedEntryID(CatalogEntryType::NODE_TABLE_ENTRY, record.indexInfo->tableID);
     auto* table = storage::PartitionStorageRegistry::resolveNodeTableByID(&clientContext,
         record.indexInfo->tableID)
                       ->ptrCast<NodeTable>();

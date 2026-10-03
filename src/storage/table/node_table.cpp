@@ -73,7 +73,7 @@ NodeGroupScanResult NodeTableScanState::scanNext(Transaction* transaction, offse
     auto nodeGroupStartOffset = StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
     const auto tableID = table->getTableID();
     if (source == TableScanSource::UNCOMMITTED) {
-        nodeGroupStartOffset = transaction->getUncommittedOffset(tableID, nodeGroupStartOffset);
+        nodeGroupStartOffset = transaction->getUncommittedOffset(*table, nodeGroupStartOffset);
     }
     auto startOffsetInGroup = startOffset - nodeGroupStartOffset;
     const NodeGroupScanResult scanResult =
@@ -252,7 +252,7 @@ bool NodeTableScanState::scanNext(Transaction* transaction) {
     auto nodeGroupStartOffset = StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
     const auto tableID = table->getTableID();
     if (source == TableScanSource::UNCOMMITTED) {
-        nodeGroupStartOffset = transaction->getUncommittedOffset(tableID, nodeGroupStartOffset);
+        nodeGroupStartOffset = transaction->getUncommittedOffset(*table, nodeGroupStartOffset);
     }
     for (auto i = 0u; i < scanResult.numRows; i++) {
         auto& nodeID = nodeIDVector->getValue<nodeID_t>(i);
@@ -298,7 +298,7 @@ NodeTable::NodeTable(const StorageManager* storageManager,
 row_idx_t NodeTable::getNumTotalRows(const Transaction* transaction) {
     auto numLocalRows = 0u;
     if (transaction && transaction->getLocalStorage()) {
-        if (const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID)) {
+        if (const auto localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
             numLocalRows = localTable->getNumTotalRows();
         }
     }
@@ -313,7 +313,7 @@ void NodeTable::initScanState(Transaction* transaction, TableScanState& scanStat
         nodeGroup = nodeGroups->getNodeGroup(nodeScanState.nodeGroupIdx);
     } break;
     case TableScanSource::UNCOMMITTED: {
-        const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+        const auto localTable = transaction->getLocalStorage()->getLocalTable(*this);
         // An UNCOMMITTED morsel without a local table means a stale scan shared state
         // survived from an earlier (committed) write transaction (see
         // https://github.com/LadybugDB/ladybug/issues/1030). Throw instead of
@@ -339,10 +339,10 @@ void NodeTable::initScanState(Transaction* transaction, TableScanState& scanStat
 
 void NodeTable::initScanState(Transaction* transaction, TableScanState& scanState,
     table_id_t tableID, offset_t startOffset) const {
-    if (transaction->isUnCommitted(tableID, startOffset)) {
+    if (transaction->isUnCommitted(*this, startOffset)) {
         scanState.source = TableScanSource::UNCOMMITTED;
         scanState.nodeGroupIdx =
-            StorageUtils::getNodeGroupIdx(transaction->getLocalRowIdx(tableID, startOffset));
+            StorageUtils::getNodeGroupIdx(transaction->getLocalRowIdx(*this, startOffset));
     } else {
         scanState.source = TableScanSource::COMMITTED;
         scanState.nodeGroupIdx = StorageUtils::getNodeGroupIdx(startOffset);
@@ -364,8 +364,8 @@ bool NodeTable::lookup(const Transaction* transaction, const TableScanState& sca
     }
     const auto nodeOffset = scanState.nodeIDVector->readNodeOffset(nodeIDPos);
     const offset_t rowIdxInGroup =
-        transaction->isUnCommitted(tableID, nodeOffset) ?
-            transaction->getLocalRowIdx(tableID, nodeOffset) -
+        transaction->isUnCommitted(*this, nodeOffset) ?
+            transaction->getLocalRowIdx(*this, nodeOffset) -
                 StorageUtils::getStartOffsetOfNodeGroup(scanState.nodeGroupIdx) :
             nodeOffset - StorageUtils::getStartOffsetOfNodeGroup(scanState.nodeGroupIdx);
     scanState.rowIdxVector->setValue<row_idx_t>(nodeIDPos, rowIdxInGroup);
@@ -391,15 +391,15 @@ bool NodeTable::lookupMultiple(Transaction* transaction, TableScanState& scanSta
             continue;
         }
         const auto nodeOffset = scanState.nodeIDVector->readNodeOffset(nodeIDPos);
-        const auto isUnCommitted = transaction->isUnCommitted(tableID, nodeOffset);
+        const auto isUnCommitted = transaction->isUnCommitted(*this, nodeOffset);
         const auto source =
             isUnCommitted ? TableScanSource::UNCOMMITTED : TableScanSource::COMMITTED;
         const auto nodeGroupIdx =
             isUnCommitted ?
-                StorageUtils::getNodeGroupIdx(transaction->getLocalRowIdx(tableID, nodeOffset)) :
+                StorageUtils::getNodeGroupIdx(transaction->getLocalRowIdx(*this, nodeOffset)) :
                 StorageUtils::getNodeGroupIdx(nodeOffset);
         const offset_t rowIdxInGroup =
-            isUnCommitted ? transaction->getLocalRowIdx(tableID, nodeOffset) -
+            isUnCommitted ? transaction->getLocalRowIdx(*this, nodeOffset) -
                                 StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx) :
                             nodeOffset - StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
         if (scanState.source == source && scanState.nodeGroupIdx == nodeGroupIdx) {
@@ -434,7 +434,7 @@ offset_t NodeTable::validateUniquenessConstraint(const Transaction* transaction,
         lookupPK(transaction, propertyVectors[pkColumnID], pkVectorPos, offset)) {
         return offset;
     }
-    if (const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID)) {
+    if (const auto localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
         return localTable->cast<LocalNodeTable>().validateUniquenessConstraint(transaction,
             *pkVector);
     }
@@ -503,7 +503,7 @@ void NodeTable::insert(Transaction* transaction, TableInsertState& insertState) 
     if (insertState.logToWAL && transaction->shouldLogToWAL()) {
         DASSERT(transaction->isWriteTransaction());
         auto& wal = transaction->getLocalWAL();
-        wal.logTableInsertion(tableID, TableType::NODE,
+        wal.logTableInsertion(getOwnerCatalogName(), tableID, TableType::NODE,
             nodeInsertState.nodeIDVector.state->getSelVector().getSelSize(),
             insertState.propertyVectors);
     }
@@ -563,8 +563,8 @@ void NodeTable::update(Transaction* transaction, TableUpdateState& updateState) 
     }
     // Indexes that re-scan the node table to observe the NEW value during update (e.g. HNSW)
     // must be updated after the row is written.
-    if (transaction->isUnCommitted(tableID, nodeOffset)) {
-        const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+    if (transaction->isUnCommitted(*this, nodeOffset)) {
+        const auto localTable = transaction->getLocalStorage()->getLocalTable(*this);
         DASSERT(localTable);
         localTable->update(&DUMMY_TRANSACTION, updateState);
     } else {
@@ -590,7 +590,7 @@ void NodeTable::update(Transaction* transaction, TableUpdateState& updateState) 
     if (updateState.logToWAL && transaction->shouldLogToWAL()) {
         DASSERT(transaction->isWriteTransaction());
         auto& wal = transaction->getLocalWAL();
-        wal.logNodeUpdate(tableID, nodeUpdateState.columnID, nodeOffset,
+        wal.logNodeUpdate(getOwnerCatalogName(), tableID, nodeUpdateState.columnID, nodeOffset,
             &nodeUpdateState.propertyVector);
     }
     setHasChanges();
@@ -616,8 +616,8 @@ bool NodeTable::delete_(Transaction* transaction, TableDeleteState& deleteState)
         index.getIndex()->delete_(transaction, nodeDeleteState.nodeIDVector, *indexDeleteState);
     }
 
-    if (transaction->isUnCommitted(tableID, nodeOffset)) {
-        const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+    if (transaction->isUnCommitted(*this, nodeOffset)) {
+        const auto localTable = transaction->getLocalStorage()->getLocalTable(*this);
         isDeleted = localTable->delete_(&DUMMY_TRANSACTION, deleteState);
     } else {
         const auto nodeGroupIdx = StorageUtils::getNodeGroupIdx(nodeOffset);
@@ -633,7 +633,8 @@ bool NodeTable::delete_(Transaction* transaction, TableDeleteState& deleteState)
         if (deleteState.logToWAL && transaction->shouldLogToWAL()) {
             DASSERT(transaction->isWriteTransaction());
             auto& wal = transaction->getLocalWAL();
-            wal.logNodeDeletion(tableID, nodeOffset, &nodeDeleteState.pkVector);
+            wal.logNodeDeletion(getOwnerCatalogName(), tableID, nodeOffset,
+                &nodeDeleteState.pkVector);
         }
     }
     return isDeleted;
@@ -646,7 +647,7 @@ void NodeTable::addColumn(Transaction* transaction, TableAddColumnState& addColu
         pageAllocator.getDataFH(), memoryManager, shadowFile, enableCompression));
     LocalTable* localTable = nullptr;
     if (transaction->getLocalStorage()) {
-        localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+        localTable = transaction->getLocalStorage()->getLocalTable(*this);
     }
     if (localTable) {
         localTable->addColumn(addColumnState);
@@ -692,7 +693,7 @@ void NodeTable::commit(main::ClientContext* context, TableCatalogEntry* tableEnt
     // 2. Set deleted flag for tuples that are deleted in local storage.
     row_idx_t numLocalRows = 0u;
     for (auto localNodeGroupIdx = 0u; localNodeGroupIdx < localNodeTable.getNumNodeGroups();
-         localNodeGroupIdx++) {
+        localNodeGroupIdx++) {
         const auto localNodeGroup = localNodeTable.getNodeGroup(localNodeGroupIdx);
         if (localNodeGroup->hasDeletions(transaction)) {
             // TODO(Guodong): Assume local storage is small here. Should optimize the loop away by
@@ -863,7 +864,7 @@ void NodeTable::reclaimStorage(PageAllocator& pageAllocator) const {
 
 TableStats NodeTable::getStats(const Transaction* transaction) const {
     auto stats = nodeGroups->getStats();
-    if (const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID)) {
+    if (const auto localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
         const auto localStats = localTable->cast<LocalNodeTable>().getStats();
         stats.merge(localStats);
     }
@@ -871,8 +872,8 @@ TableStats NodeTable::getStats(const Transaction* transaction) const {
 }
 
 bool NodeTable::isVisible(const Transaction* transaction, offset_t offset) const {
-    if (transaction && transaction->isUnCommitted(tableID, offset)) {
-        const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+    if (transaction && transaction->isUnCommitted(*this, offset)) {
+        const auto localTable = transaction->getLocalStorage()->getLocalTable(*this);
         DASSERT(localTable);
         return localTable->cast<LocalNodeTable>().isVisible(transaction, offset);
     }
@@ -889,8 +890,8 @@ bool NodeTable::isVisibleNoLock(const Transaction* transaction, offset_t offset)
         throw RuntimeException(
             "Index contains an invalid node offset. Please drop and rebuild the index.");
     }
-    if (transaction && transaction->isUnCommitted(tableID, offset)) {
-        const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+    if (transaction && transaction->isUnCommitted(*this, offset)) {
+        const auto localTable = transaction->getLocalStorage()->getLocalTable(*this);
         DASSERT(localTable);
         return localTable->cast<LocalNodeTable>().isVisible(transaction, offset);
     }
@@ -947,7 +948,7 @@ Index* NodeTable::tryGetPrimaryKeyIndex() const {
 bool NodeTable::lookupPK(const Transaction* transaction, ValueVector* keyVector, uint64_t vectorPos,
     offset_t& result) const {
     if (transaction->getLocalStorage()) {
-        if (const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+        if (const auto localTable = transaction->getLocalStorage()->getLocalTable(*this);
             localTable && localTable->cast<LocalNodeTable>().lookupPK(transaction, keyVector,
                               vectorPos, result)) {
             return true;
@@ -1059,7 +1060,7 @@ void NodeTable::scanIndexColumns(main::ClientContext* context, IndexScanHelper& 
         progressBar->updateProgress(queryID.value(), numNodeGroups == 0 ? 1.0 : 0.01);
     }
     for (node_group_idx_t nodeGroupToScan = 0u; nodeGroupToScan < numNodeGroups;
-         ++nodeGroupToScan) {
+        ++nodeGroupToScan) {
         scanState->nodeGroup = nodeGroups_.getNodeGroupNoLock(nodeGroupToScan);
 
         // It is possible for the node group to have no chunked groups if we are rolling back due to

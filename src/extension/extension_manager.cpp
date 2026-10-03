@@ -46,7 +46,7 @@ void ExtensionManager::loadExtension(const std::string& path, main::ClientContex
         isOfficial ? ExtensionSource::OFFICIAL : ExtensionSource::USER));
     auto transaction = transaction::Transaction::Get(*context);
     if (transaction->shouldLogToWAL()) {
-        transaction->getLocalWAL().logLoadExtension(path);
+        transaction->getLocalWAL().logLoadExtension("" /* main catalog */, path);
     }
 }
 

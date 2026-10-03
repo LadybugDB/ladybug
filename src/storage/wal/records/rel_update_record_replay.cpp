@@ -1,3 +1,4 @@
+#include "catalog/catalog_entry/catalog_entry_type.h"
 #include "storage/storage_manager.h"
 #include "storage/table/rel_table.h"
 #include "storage/wal/wal_replayer.h"
@@ -10,7 +11,8 @@ namespace storage {
 
 void WALReplayer::replayRelUpdateRecord(const WALRecord& walRecord) const {
     const auto& updateRecord = walRecord.constCast<RelUpdateRecord>();
-    const auto tableID = updateRecord.tableID;
+    const auto tableID =
+        getReplayedEntryID(catalog::CatalogEntryType::REL_GROUP_ENTRY, updateRecord.tableID);
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<RelTable>();
     const auto anchorState = updateRecord.ownedRelIDVector->state;
     DASSERT(anchorState == updateRecord.ownedSrcNodeIDVector->state &&

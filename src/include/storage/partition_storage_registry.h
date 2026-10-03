@@ -61,11 +61,21 @@ public:
     // children resolve through the main StorageManager exactly as before.
     static storage::NodeTable* resolveNodeTable(main::ClientContext* context,
         catalog::TableCatalogEntry& entry);
+    static storage::NodeTable* resolveNodeTable(main::ClientContext* context,
+        catalog::TableCatalogEntry& entry, catalog::Catalog* ownerCatalog);
+
+    // StorageManager of an owner catalog resolved from a WAL/local-storage owner tag. Graph
+    // catalogs own their storage managers; the main catalog never does — main's tables live
+    // in the main database's StorageManager, owned by main::Database.
+    static storage::StorageManager* resolveOwnerStorageManager(main::ClientContext* context,
+        catalog::Catalog* ownerCatalog);
 
     // By-ID variant for paths that only carry a table ID (local-storage commit, WAL replay).
     // Throws if the ID is unknown to the catalog.
     static storage::NodeTable* resolveNodeTableByID(main::ClientContext* context,
         common::table_id_t tableID);
+    static storage::NodeTable* resolveNodeTableByID(main::ClientContext* context,
+        common::table_id_t tableID, catalog::Catalog* ownerCatalog);
 
     // Closes each listed child's file handles and deletes its data + WAL files. Used by the
     // DROP-parent cascade and by rollback cleanup of dynamically created partitions.

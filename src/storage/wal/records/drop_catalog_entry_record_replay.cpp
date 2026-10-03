@@ -14,7 +14,7 @@ void WALReplayer::replayDropCatalogEntryRecord(const WALRecord& walRecord) const
     auto& dropEntryRecord = walRecord.constCast<DropCatalogEntryRecord>();
     auto catalog = Catalog::Get(clientContext);
     auto transaction = transaction::Transaction::Get(clientContext);
-    const auto entryID = dropEntryRecord.entryID;
+    const auto entryID = getReplayedEntryID(dropEntryRecord.entryType, dropEntryRecord.entryID);
     switch (dropEntryRecord.entryType) {
     case CatalogEntryType::NODE_TABLE_ENTRY:
     case CatalogEntryType::REL_GROUP_ENTRY: {

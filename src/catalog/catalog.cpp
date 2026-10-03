@@ -77,6 +77,10 @@ Catalog* Catalog::Get(const main::ClientContext& context) {
         return context.getAttachedDatabase()->getCatalog();
     }
     auto dbManager = main::DatabaseManager::Get(context);
+    if (auto* replayOwnerCatalog = dbManager->getReplayOwnerCatalog();
+        replayOwnerCatalog != nullptr) {
+        return replayOwnerCatalog;
+    }
     if (dbManager->hasDefaultGraph()) {
         auto graphCatalog = dbManager->getDefaultGraphCatalog();
         if (graphCatalog != nullptr) {
@@ -87,16 +91,16 @@ Catalog* Catalog::Get(const main::ClientContext& context) {
 }
 
 void Catalog::initCatalogSets() {
-    tables = std::make_unique<CatalogSet>();
-    sequences = std::make_unique<CatalogSet>();
-    functions = std::make_unique<CatalogSet>();
-    types = std::make_unique<CatalogSet>();
-    indexes = std::make_unique<CatalogSet>();
-    macros = std::make_unique<CatalogSet>();
-    internalTables = std::make_unique<CatalogSet>(true /* isInternal */);
-    internalSequences = std::make_unique<CatalogSet>(true /* isInternal */);
-    internalFunctions = std::make_unique<CatalogSet>(true /* isInternal */);
-    graphs = std::make_unique<CatalogSet>();
+    tables = std::make_unique<CatalogSet>(this);
+    sequences = std::make_unique<CatalogSet>(this);
+    functions = std::make_unique<CatalogSet>(this);
+    types = std::make_unique<CatalogSet>(this);
+    indexes = std::make_unique<CatalogSet>(this);
+    macros = std::make_unique<CatalogSet>(this);
+    internalTables = std::make_unique<CatalogSet>(this, true /* isInternal */);
+    internalSequences = std::make_unique<CatalogSet>(this, true /* isInternal */);
+    internalFunctions = std::make_unique<CatalogSet>(this, true /* isInternal */);
+    graphs = std::make_unique<CatalogSet>(this);
 }
 
 bool Catalog::containsTable(const Transaction* transaction, const std::string& tableName,
@@ -413,10 +417,10 @@ bool Catalog::containsType(const Transaction* transaction, const std::string& ty
     return types->containsEntry(transaction, typeName);
 }
 
-void Catalog::createIndex(Transaction* transaction, std::unique_ptr<CatalogEntry> indexCatalogEntry,
-    bool skipLoggingToWAL) {
+oid_t Catalog::createIndex(Transaction* transaction,
+    std::unique_ptr<CatalogEntry> indexCatalogEntry, bool skipLoggingToWAL) {
     DASSERT(indexCatalogEntry->getType() == CatalogEntryType::INDEX_ENTRY);
-    indexes->createEntry(transaction, std::move(indexCatalogEntry), skipLoggingToWAL);
+    return indexes->createEntry(transaction, std::move(indexCatalogEntry), skipLoggingToWAL);
 }
 
 IndexCatalogEntry* Catalog::getIndex(const Transaction* transaction, table_id_t tableID,
@@ -820,17 +824,17 @@ void Catalog::serializeSnapshot(Serializer& ser, common::transaction_t snapshotT
 }
 
 void Catalog::deserialize(Deserializer& deSer) {
-    tables = CatalogSet::deserialize(deSer);
-    sequences = CatalogSet::deserialize(deSer);
-    functions = CatalogSet::deserialize(deSer);
+    tables = CatalogSet::deserialize(this, deSer);
+    sequences = CatalogSet::deserialize(this, deSer);
+    functions = CatalogSet::deserialize(this, deSer);
     registerBuiltInFunctions();
-    types = CatalogSet::deserialize(deSer);
-    indexes = CatalogSet::deserialize(deSer);
-    macros = CatalogSet::deserialize(deSer);
-    internalTables = CatalogSet::deserialize(deSer);
-    internalSequences = CatalogSet::deserialize(deSer);
-    internalFunctions = CatalogSet::deserialize(deSer);
-    graphs = CatalogSet::deserialize(deSer);
+    types = CatalogSet::deserialize(this, deSer);
+    indexes = CatalogSet::deserialize(this, deSer);
+    macros = CatalogSet::deserialize(this, deSer);
+    internalTables = CatalogSet::deserialize(this, deSer);
+    internalSequences = CatalogSet::deserialize(this, deSer);
+    internalFunctions = CatalogSet::deserialize(this, deSer);
+    graphs = CatalogSet::deserialize(this, deSer);
 }
 
 } // namespace catalog

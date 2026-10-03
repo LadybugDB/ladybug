@@ -1,3 +1,4 @@
+#include "catalog/catalog_entry/catalog_entry_type.h"
 #include "common/exception/runtime.h"
 #include "storage/local_storage/local_rel_table.h"
 #include "storage/partition_storage_registry.h"
@@ -29,7 +30,8 @@ void WALReplayer::replayTableInsertionRecord(const WALRecord& walRecord) const {
 
 void WALReplayer::replayNodeTableInsertRecord(const WALRecord& walRecord) const {
     const auto& insertionRecord = walRecord.constCast<TableInsertionRecord>();
-    const auto tableID = insertionRecord.tableID;
+    const auto tableID =
+        getReplayedEntryID(catalog::CatalogEntryType::NODE_TABLE_ENTRY, insertionRecord.tableID);
     // A torn WAL tail can deserialize to a record with zero vectors. operator[] on an empty
     // vector is UB (native crash, uncatchable by dry-replay truncation), so reject it here.
     if (insertionRecord.ownedVectors.empty() || insertionRecord.ownedVectors[0] == nullptr ||
@@ -69,7 +71,8 @@ void WALReplayer::replayNodeTableInsertRecord(const WALRecord& walRecord) const 
 
 void WALReplayer::replayRelTableInsertRecord(const WALRecord& walRecord) const {
     const auto& insertionRecord = walRecord.constCast<TableInsertionRecord>();
-    const auto tableID = insertionRecord.tableID;
+    const auto tableID =
+        getReplayedEntryID(catalog::CatalogEntryType::REL_GROUP_ENTRY, insertionRecord.tableID);
     if (insertionRecord.ownedVectors.empty() || insertionRecord.ownedVectors[0] == nullptr ||
         insertionRecord.ownedVectors[0]->state == nullptr) {
         throw RuntimeException(

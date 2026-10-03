@@ -27,6 +27,8 @@ public:
     virtual common::TableType getTableType() const = 0;
     virtual common::row_idx_t getNumTotalRows() = 0;
 
+    const Table& getTable() const { return table; }
+
     template<class TARGET>
     const TARGET& constCast() {
         return common::dynamic_cast_checked<const TARGET&>(*this);

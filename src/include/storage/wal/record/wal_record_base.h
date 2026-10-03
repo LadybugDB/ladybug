@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
 #include "common/cast.h"
 #include "common/copy_constructors.h"
@@ -50,6 +51,7 @@ struct WALHeader {
 
 struct WALRecord {
     WALRecordType type = WALRecordType::INVALID_RECORD;
+    std::string ownerCatalogName;
 
     WALRecord() = default;
     explicit WALRecord(WALRecordType type) : type{type} {}

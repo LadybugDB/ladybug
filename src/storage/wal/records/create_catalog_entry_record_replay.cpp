@@ -1,6 +1,8 @@
+#include "binder/ddl/bound_create_table_info.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
+#include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/scalar_macro_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
@@ -53,9 +55,33 @@ void WALReplayer::replayCreateCatalogEntryRecord(WALRecord& walRecord) const {
     case CatalogEntryType::NODE_TABLE_ENTRY:
     case CatalogEntryType::REL_GROUP_ENTRY: {
         auto& entry = record.ownedCatalogEntry->constCast<TableCatalogEntry>();
-        auto newEntry = catalog->createTableEntry(transaction,
-            entry.getBoundCreateTableInfo(transaction, record.isInternal));
-        storageManager->createTable(newEntry->ptrCast<TableCatalogEntry>(), &clientContext);
+        auto boundInfo = entry.getBoundCreateTableInfo(transaction, record.isInternal);
+        const auto isRelGroup = entry.getType() == CatalogEntryType::REL_GROUP_ENTRY;
+        if (isRelGroup) {
+            for (auto& relTableInfo :
+                boundInfo.extraInfo->ptrCast<binder::BoundExtraCreateRelTableGroupInfo>()
+                    ->relTableInfos) {
+                relTableInfo.nodePair.srcTableID = getReplayedEntryID(
+                    CatalogEntryType::NODE_TABLE_ENTRY, relTableInfo.nodePair.srcTableID);
+                relTableInfo.nodePair.dstTableID = getReplayedEntryID(
+                    CatalogEntryType::NODE_TABLE_ENTRY, relTableInfo.nodePair.dstTableID);
+            }
+        }
+        auto newEntry = catalog->createTableEntry(transaction, boundInfo);
+        auto* newTableEntry = newEntry->ptrCast<TableCatalogEntry>();
+        recordReplayedEntryID(entry.getType(), entry.getTableID(), newTableEntry->getTableID());
+        if (isRelGroup) {
+            const auto& recordedRelEntryInfos =
+                entry.constCast<RelGroupCatalogEntry>().getRelEntryInfos();
+            const auto& replayedRelEntryInfos =
+                newTableEntry->constCast<RelGroupCatalogEntry>().getRelEntryInfos();
+            DASSERT(recordedRelEntryInfos.size() == replayedRelEntryInfos.size());
+            for (auto i = 0u; i < recordedRelEntryInfos.size(); i++) {
+                recordReplayedEntryID(entry.getType(), recordedRelEntryInfos[i].oid,
+                    replayedRelEntryInfos[i].oid);
+            }
+        }
+        storageManager->createTable(newTableEntry, &clientContext);
     } break;
     case CatalogEntryType::SCALAR_MACRO_ENTRY: {
         auto& macroEntry = record.ownedCatalogEntry->constCast<ScalarMacroCatalogEntry>();
@@ -64,17 +90,24 @@ void WALReplayer::replayCreateCatalogEntryRecord(WALRecord& walRecord) const {
     } break;
     case CatalogEntryType::SEQUENCE_ENTRY: {
         auto& sequenceEntry = record.ownedCatalogEntry->constCast<SequenceCatalogEntry>();
-        catalog->createSequence(transaction,
+        const auto replayedSequenceID = catalog->createSequence(transaction,
             sequenceEntry.getBoundCreateSequenceInfo(record.isInternal));
+        recordReplayedEntryID(CatalogEntryType::SEQUENCE_ENTRY, sequenceEntry.getOID(),
+            replayedSequenceID);
     } break;
     case CatalogEntryType::TYPE_ENTRY: {
         auto& typeEntry = record.ownedCatalogEntry->constCast<TypeCatalogEntry>();
         catalog->createType(transaction, typeEntry.getName(), typeEntry.getLogicalType().copy());
     } break;
     case CatalogEntryType::INDEX_ENTRY: {
-        auto& indexEntry = record.ownedCatalogEntry->constCast<IndexCatalogEntry>();
-        auto indexEntryCopy = indexEntry.copy();
-        catalog->createIndex(transaction, std::move(record.ownedCatalogEntry));
+        auto* indexEntry = record.ownedCatalogEntry->ptrCast<IndexCatalogEntry>();
+        indexEntry->setTableID(
+            getReplayedEntryID(CatalogEntryType::NODE_TABLE_ENTRY, indexEntry->getTableID()));
+        auto indexEntryCopy = indexEntry->copy();
+        const auto recordedIndexID = indexEntry->getOID();
+        const auto replayedIndexID =
+            catalog->createIndex(transaction, std::move(record.ownedCatalogEntry));
+        recordReplayedEntryID(CatalogEntryType::INDEX_ENTRY, recordedIndexID, replayedIndexID);
         rebuildArtIndexFromCatalog(clientContext, storageManager, catalog, transaction,
             *indexEntryCopy);
     } break;

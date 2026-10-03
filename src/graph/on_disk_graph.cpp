@@ -361,8 +361,8 @@ bool OnDiskGraphVertexScanState::next() {
     auto endOffset = std::min(endOffsetExclusive,
         tableScanState->source == TableScanSource::COMMITTED ?
             startOffsetOfNextGroup :
-            startOffsetOfNextGroup + transaction->getUncommittedOffset(
-                                         tableScanState->table->getTableID(), currentOffset));
+            startOffsetOfNextGroup +
+                transaction->getUncommittedOffset(*tableScanState->table, currentOffset));
     numNodesToScan = std::min(endOffset - currentOffset, DEFAULT_VECTOR_CAPACITY);
     auto result = tableScanState->scanNext(transaction, currentOffset, numNodesToScan);
     currentOffset += result.numRows;

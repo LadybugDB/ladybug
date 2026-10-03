@@ -22,12 +22,15 @@ class Transaction;
 using CatalogEntrySet = common::case_insensitive_map_t<catalog::CatalogEntry*>;
 
 namespace catalog {
+class Catalog;
+
 class LBUG_API CatalogSet {
     friend class storage::UndoBuffer;
 
 public:
     CatalogSet() = default;
     explicit CatalogSet(bool isInternal);
+    explicit CatalogSet(Catalog* catalog, bool isInternal = false);
     bool containsEntry(const transaction::Transaction* transaction, const std::string& name);
     CatalogEntry* getEntry(const transaction::Transaction* transaction, const std::string& name);
     common::oid_t createEntry(transaction::Transaction* transaction,
@@ -45,6 +48,11 @@ public:
     void serializeSnapshot(common::Serializer serializer,
         const transaction::Transaction* snapshotTxn) const;
     static std::unique_ptr<CatalogSet> deserialize(common::Deserializer& deserializer);
+    static std::unique_ptr<CatalogSet> deserialize(Catalog* catalog,
+        common::Deserializer& deserializer);
+
+    Catalog* getCatalog() const { return catalog; }
+    std::string getOwnerCatalogName() const;
 
     common::oid_t getNextOID() {
         std::unique_lock lck{mtx};
@@ -86,6 +94,7 @@ public:
 
 private:
     mutable std::shared_mutex mtx;
+    Catalog* catalog = nullptr;
     common::oid_t nextOID = 0;
     common::case_insensitive_map_t<std::unique_ptr<CatalogEntry>> entries;
 };

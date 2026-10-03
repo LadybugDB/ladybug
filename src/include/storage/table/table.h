@@ -166,6 +166,7 @@ public:
     common::TableType getTableType() const { return tableType; }
     common::table_id_t getTableID() const { return tableID; }
     std::string getTableName() const { return tableName; }
+    const std::string& getOwnerCatalogName() const { return ownerCatalogName; }
     // The StorageManager that owns this table's data file. Partition children report their
     // own per-partition manager, not the main database's.
     StorageManager* getStorageManager() const { return storageManager; }
@@ -227,6 +228,7 @@ protected:
     common::TableType tableType;
     common::table_id_t tableID;
     std::string tableName;
+    std::string ownerCatalogName;
     bool enableCompression;
     MemoryManager* memoryManager;
     StorageManager* storageManager;

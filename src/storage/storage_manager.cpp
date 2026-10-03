@@ -747,6 +747,10 @@ StorageManager* StorageManager::Get(const main::ClientContext& context) {
         return context.getAttachedDatabase()->getStorageManager();
     }
     auto dbManager = main::DatabaseManager::Get(context);
+    if (auto* replayOwnerCatalog = dbManager->getReplayOwnerCatalog();
+        replayOwnerCatalog != nullptr) {
+        return replayOwnerCatalog->getStorageManager();
+    }
     auto graphStorageManager = dbManager->getDefaultGraphStorageManager();
     if (graphStorageManager != nullptr) {
         return graphStorageManager;
