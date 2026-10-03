@@ -1,5 +1,7 @@
 #include "main/database_manager.h"
 
+#include <unordered_set>
+
 #include "binder/ddl/bound_create_table_info.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
@@ -23,6 +25,7 @@
 #include "storage/shadow_utils.h"
 #include "storage/storage_manager.h"
 #include "storage/storage_utils.h"
+#include "storage/wal/wal_replayer.h"
 #include "transaction/transaction.h"
 #include "transaction/transaction_context.h"
 #include <format>
@@ -303,11 +306,22 @@ void DatabaseManager::clearDefaultGraph() {
 
 void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManager,
     main::ClientContext* clientContext) {
+    loadGraphsFromCatalog(memoryManager, clientContext, false, false);
+}
+
+void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManager,
+    main::ClientContext* clientContext, bool mainCheckpointCommitted, bool checkpointBundle,
+    std::optional<common::uuid> legacyCheckpointDatabaseID) {
     auto mainCatalog = clientContext->getDatabase()->getCatalog();
     // Use DUMMY_CHECKPOINT_TRANSACTION since we're loading from disk during startup
     // and there's no active transaction yet
     auto* transaction = &transaction::DUMMY_CHECKPOINT_TRANSACTION;
     auto graphEntries = mainCatalog->getGraphEntries(transaction);
+    std::unordered_set<std::string> loadedGraphNames;
+    loadedGraphNames.reserve(graphs.size());
+    for (const auto& graph : graphs) {
+        loadedGraphNames.insert(StringUtils::getUpper(graph->getCatalogName()));
+    }
 
     for (auto* graphEntry : graphEntries) {
         auto graphName = graphEntry->getName();
@@ -320,16 +334,8 @@ void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManage
             continue;
         }
 
-        // Check if graph is already loaded
         auto upperCaseName = StringUtils::getUpper(graphName);
-        bool alreadyLoaded = false;
-        for (auto& graph : graphs) {
-            if (StringUtils::getUpper(graph->getCatalogName()) == upperCaseName) {
-                alreadyLoaded = true;
-                break;
-            }
-        }
-        if (alreadyLoaded) {
+        if (loadedGraphNames.contains(upperCaseName)) {
             continue;
         }
 
@@ -347,20 +353,44 @@ void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManage
         // Check if graph file exists before trying to load
         auto vfs = common::VirtualFileSystem::GetUnsafe(*clientContext);
         if (!DBConfig::isDBPathInMemory(dbPath) && !vfs->fileOrPathExists(graphPath)) {
+            if (mainCheckpointCommitted &&
+                vfs->fileOrPathExists(storage::StorageUtils::getShadowFilePath(graphPath))) {
+                throw RuntimeException(std::format(
+                    "Cannot recover committed checkpoint: graph file {} is missing.", graphPath));
+            }
             // Graph file doesn't exist, skip this graph
             continue;
         }
 
-        auto storageManager = std::make_unique<storage::StorageManager>(graphPath, false, false,
-            *memoryManager, false, clientContext->getDBConfig()->enableDefaultHashIndex, vfs);
+        auto storageManager = std::make_unique<storage::StorageManager>(graphPath,
+            clientContext->getDBConfig()->readOnly, false, *memoryManager, false,
+            clientContext->getDBConfig()->enableDefaultHashIndex, vfs);
         storageManager->initDataFileHandle(vfs, clientContext);
+        storage::WALReplayer walReplayer{*clientContext};
+        auto recoveryState = walReplayer.prepareGraphCheckpoint(*storageManager, checkpointBundle,
+            legacyCheckpointDatabaseID);
         if (storageManager->getDataFH()->getNumPages() > 0) {
             storage::Checkpointer::readCheckpoint(clientContext, catalog.get(),
                 storageManager.get());
         }
         catalog->setStorageManager(std::move(storageManager));
-
+        auto* graphStorageManager = catalog->getStorageManager();
         graphs.push_back(std::move(catalog));
+        loadedGraphNames.insert(std::move(upperCaseName));
+
+        const auto previousDefaultGraph = defaultGraph;
+        defaultGraph = graphName;
+        try {
+            walReplayer.replayGraphWAL(*graphStorageManager, recoveryState);
+        } catch (...) {
+            defaultGraph = previousDefaultGraph;
+            throw;
+        }
+        defaultGraph = previousDefaultGraph;
+        walReplayer.retireGraphCheckpointWALs(*graphStorageManager, recoveryState);
+        if (!mainCheckpointCommitted) {
+            walReplayer.removeGraphCheckpointShadow(*graphStorageManager);
+        }
 
         // NOTE: Do NOT set defaultGraph here (see createGraph for rationale).
         // Users must explicitly USE GRAPH to work in the graph.

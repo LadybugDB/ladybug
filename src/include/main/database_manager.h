@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "attached_database.h"
 #include "storage/partition_storage_registry.h"
 
@@ -35,6 +37,9 @@ public:
     void dropGraph(const std::string& graphName, main::ClientContext* clientContext);
     void loadGraphsFromCatalog(storage::MemoryManager* memoryManager,
         main::ClientContext* clientContext);
+    void loadGraphsFromCatalog(storage::MemoryManager* memoryManager,
+        main::ClientContext* clientContext, bool mainCheckpointCommitted, bool checkpointBundle,
+        std::optional<common::uuid> legacyCheckpointDatabaseID = std::nullopt);
     void setDefaultGraph(const std::string& graphName);
     void clearDefaultGraph();
     bool hasGraph(const std::string& graphName);

@@ -86,6 +86,8 @@ DiskArrayCollection::DiskArrayCollection(FileHandle& fileHandle, ShadowFile& sha
 }
 
 void DiskArrayCollection::checkpoint(page_idx_t firstHeaderPage, PageAllocator& pageAllocator) {
+    stagedHeaderPagesOnDisk = headerPagesOnDisk;
+    hasStagedCheckpoint = true;
     // Write headers to disk
     page_idx_t headerPage = firstHeaderPage;
     for (page_idx_t indexInMemory = 0; indexInMemory < headersForWriteTrx.size(); indexInMemory++) {

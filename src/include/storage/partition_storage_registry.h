@@ -1,11 +1,13 @@
 #pragma once
 
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "common/types/types.h"
+#include "common/types/uuid.h"
 
 namespace lbug {
 namespace common {
@@ -40,9 +42,14 @@ public:
     static bool isRemotelyRouted(common::table_id_t parentTableID, uint64_t partitionIndex);
 
     // Returns the child's StorageManager, creating (and registering) its data file on first
-    // use. Idempotent.
+    // use. Idempotent. With requireExistingFile, throws instead of creating a missing or
+    // headerless data file. With loadChildState=false, registers the child without parsing its
+    // database header or page manager: committed-checkpoint recovery uses this because an
+    // interrupted shadow-page apply can leave those pages half-replaced; the caller must load
+    // them afterwards (replayCheckpointShadows does) before anything reads or allocates from
+    // the file.
     storage::StorageManager& getOrCreate(main::ClientContext* context, common::table_id_t tableID,
-        const std::string& childName);
+        const std::string& childName, bool requireExistingFile = false, bool loadChildState = true);
 
     // Existing entry or nullptr; never opens a new file.
     storage::StorageManager* tryGet(common::table_id_t tableID);
@@ -73,13 +80,23 @@ public:
 
     // Eagerly open storage for every partition child in the catalog. Called once at database
     // open so every session holds live Table objects for all partitions (checkpoint serialize,
-    // planner stats, and SHOW_INDEXES all resolve through the registry).
-    void openAllChildren(main::ClientContext* context, const catalog::Catalog& catalog);
+    // planner stats, and SHOW_INDEXES all resolve through the registry). With
+    // recoveringCommittedCheckpoint, throws on a missing child file instead of creating it and
+    // defers parsing each child's header/page manager and constructing its table until
+    // replayCheckpointShadows has repaired the file; the main file's metadata stream then
+    // constructs the tables (StorageManager::deserialize).
+    void openAllChildren(main::ClientContext* context, const catalog::Catalog& catalog,
+        bool recoveringCommittedCheckpoint = false);
 
-    // Re-read each child's database header and page manager from disk. Recovery calls this
-    // after applying pending child shadow pages, which may have replaced the header and
-    // page-manager serialization that was already loaded when the file was opened.
-    void reloadPageManagers();
+    // Recovery of a committed checkpoint only, after openAllChildren(..., true): applies every
+    // registered child's shadow file, then loads each child's database header and page manager
+    // from the repaired file. A legacyDatabaseID also accepts shadow files stamped with that
+    // pre-bundle database ID. With checkpointBundle (version-1 bundle protocol) every child's
+    // shadow must exist; the legacy protocol applied and removed each child's shadow before the
+    // checkpoint committed, so a missing shadow there means the child file is already fully
+    // applied.
+    void replayCheckpointShadows(main::ClientContext* context,
+        std::optional<common::uuid> legacyDatabaseID, bool checkpointBundle);
 
     // Move a partition child's data file (and sidecars) after its catalog rename, keeping the
     // live Table object and its page mappings intact.

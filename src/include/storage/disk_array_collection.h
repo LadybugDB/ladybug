@@ -42,11 +42,19 @@ public:
             *headersForReadTrx[i] = *headersForWriteTrx[i];
         }
         headerPagesOnDisk = headersForReadTrx.size();
+        hasStagedCheckpoint = false;
     }
 
     void rollbackCheckpoint() {
         for (size_t i = 0; i < headersForWriteTrx.size(); i++) {
             *headersForWriteTrx[i] = *headersForReadTrx[i];
+        }
+        if (hasStagedCheckpoint) {
+            // checkpoint() counts header pages as persisted before the checkpoint commits. A
+            // rolled back checkpoint never applied its header pages, so the next checkpoint
+            // must not skip writing them.
+            headerPagesOnDisk = stagedHeaderPagesOnDisk;
+            hasStagedCheckpoint = false;
         }
     }
 
@@ -80,6 +88,8 @@ private:
     ShadowFile& shadowFile;
     bool bypassShadowing;
     common::page_idx_t headerPagesOnDisk;
+    common::page_idx_t stagedHeaderPagesOnDisk = 0;
+    bool hasStagedCheckpoint = false;
     std::vector<std::unique_ptr<HeaderPage>> headersForReadTrx;
     std::vector<std::unique_ptr<HeaderPage>> headersForWriteTrx;
     uint64_t numHeaders;

@@ -53,6 +53,7 @@ public:
     void syncFile(const FileInfo& fileInfo) const override;
 
     static bool isLocalPath(const std::string& path);
+    static void syncParentDirectory(const std::string& path);
 
     static bool fileExists(const std::string& filename);
 
