@@ -14,8 +14,11 @@ class VirtualFileSystem;
 
 namespace storage {
 class LocalWAL;
+class StorageManager;
 class WAL {
 public:
+    static constexpr uint64_t CHECKPOINT_BUNDLE_FORMAT_VERSION = 1;
+
     // Recovery only: adopt the frozen WAL for one checkpoint, clearing the request on exit even
     // if the checkpoint fails before rotation.
     class FrozenWALAdoptionGuard {
@@ -31,7 +34,7 @@ public:
     };
 
     WAL(const std::string& dbPath, bool readOnly, bool enableChecksums,
-        common::VirtualFileSystem* vfs);
+        common::VirtualFileSystem* vfs, StorageManager* storageManager = nullptr);
     ~WAL();
 
     void logCommittedWAL(LocalWAL& localWAL, main::ClientContext* context,
@@ -45,23 +48,26 @@ public:
     void logAndFlushCheckpointToFrozen(main::ClientContext* context);
     // Undoes rotateForCheckpoint() for a checkpoint that failed before its CHECKPOINT record was
     // written, so the records it froze become part of the active WAL again. Never throws; on
-    // failure the frozen WAL is left for recovery.
+    // failure the frozen WAL is left for recovery and the WAL is poisoned.
     void undoRotationForCheckpoint() noexcept;
     void clearFrozenWAL();
+    void retireFrozenWAL();
+    void retireActiveWAL();
 
-    // Clear any buffer in the WAL writer. Also truncate the WAL file to 0 bytes.
-    void clear();
     // Reset the WAL writer to nullptr, and remove the WAL file if it exists.
     void reset();
 
     uint64_t getFileSize();
+    bool mayHaveCheckpointRecord();
     void throwIfPoisoned();
+    void poison(const std::string& reason);
 
     static WAL* Get(const main::ClientContext& context);
 
 private:
     void initWriter(main::ClientContext* context);
     void addNewWALRecordNoLock(const WALRecord& walRecord);
+    void retireFileNoLock(const std::string& path, const char* walName);
     void throwIfPoisonedNoLock() const;
     void poisonNoLock(const std::string& reason);
     void waitForDurabilityNoLock(uint64_t commitSequence, std::unique_lock<std::mutex>& lck);
@@ -75,17 +81,19 @@ private:
     bool inMemory;
     [[maybe_unused]] bool readOnly;
     common::VirtualFileSystem* vfs;
+    StorageManager* storageManager;
     std::unique_ptr<common::FileInfo> fileInfo;
     std::condition_variable groupCommitCV;
     uint64_t appendedCommitSequence = 0;
     uint64_t durableCommitSequence = 0;
     bool adoptFrozenWAL = false;
     bool syncInProgress = false;
+    bool activeWALDirectorySynced = false;
     bool poisoned = false;
     std::string poisonReason;
-    // Set once a CHECKPOINT record may have reached the frozen WAL. From then on, the frozen WAL
-    // is the checkpoint's commit record and must be left for recovery.
+    // Set before serializing a CHECKPOINT record because a failed sync has an ambiguous outcome.
     bool frozenWALHasCheckpointRecord = false;
+    bool checkpointRecordMayExist = false;
 
     // Since most writes to the shared WAL will be flushing local WAL (which has its own checksums),
     // these writes can go through the normal writer. We do still need a checksum writer though for

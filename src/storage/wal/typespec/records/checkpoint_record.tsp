@@ -1,3 +1,7 @@
 import "../common.tsp";
+import <cstdint>;
 
-model CheckpointRecord extends WalRecordBase {}
+// @explicit_constructor=true
+model CheckpointRecord extends WalRecordBase {
+    bundleFormatVersion: uint64_t;
+}

@@ -1,5 +1,9 @@
 #pragma once
 
+#include <optional>
+#include <string>
+#include <vector>
+
 #include "storage/wal/wal_record.h"
 
 namespace lbug {
@@ -9,16 +13,37 @@ class ClientContext;
 
 namespace storage {
 class Checkpointer;
+class StorageManager;
 class WALReplayer {
 public:
+    struct GraphRecoveryState {
+        struct WALReplayRange {
+            std::string path;
+            uint64_t endOffset;
+        };
+
+        std::vector<WALReplayRange> walReplayRanges;
+        bool retireActiveWAL = false;
+        bool retireFrozenWAL = false;
+    };
+
     explicit WALReplayer(main::ClientContext& clientContext);
 
     void replay(bool throwOnWalReplayFailure, bool enableChecksums) const;
+    GraphRecoveryState prepareGraphCheckpoint(StorageManager& storageManager, bool checkpointBundle,
+        std::optional<common::uuid> checkpointDatabaseID = std::nullopt) const;
+    void replayGraphWAL(StorageManager& storageManager,
+        const GraphRecoveryState& recoveryState) const;
+    void retireGraphCheckpointWALs(StorageManager& storageManager,
+        const GraphRecoveryState& recoveryState) const;
+    void removeGraphCheckpointShadow(StorageManager& storageManager) const;
 
 private:
     struct WALReplayInfo {
         uint64_t offsetDeserialized = 0;
         bool isLastRecordCheckpoint = false;
+        common::uuid walDatabaseID{};
+        uint64_t checkpointFormatVersion = 0;
     };
 
     void replayWALRecord(WALRecord& walRecord) const;
@@ -48,10 +73,19 @@ private:
     void replayFrozenWAL(Checkpointer& checkpointer, bool throwOnWalReplayFailure,
         bool enableChecksums) const;
     void replayActiveWAL(Checkpointer& checkpointer, bool throwOnWalReplayFailure,
-        bool enableChecksums) const;
+        bool enableChecksums, bool checkpointRead) const;
+    void replayCommittedCheckpoint(Checkpointer& checkpointer,
+        std::unique_ptr<common::FileInfo>& fileInfo, const std::string& checkpointWALPath,
+        const WALReplayInfo& replayInfo) const;
     // Checkpoints the state replayed from a frozen WAL without a CHECKPOINT record, committing
     // that frozen WAL instead of rotating the active WAL.
     void completeInterruptedCheckpoint() const;
+
+    common::uuid readShadowDatabaseID(const std::string& path) const;
+    // A shadow file stamped with another database's ID belongs to a checkpoint bundle whose fate
+    // only that database can decide, so a standalone open must leave every recovery artifact in
+    // place instead of discarding the bundle's shadow (see the call site in replay()).
+    void throwIfShadowOwnedByAnotherDatabase() const;
 
     void removeWALAndShadowFiles(const std::string& walFilePath) const;
     void removeFileAndSyncParentDirectory(const std::string& path) const;

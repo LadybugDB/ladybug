@@ -86,7 +86,11 @@ void VirtualFileSystem::overwriteFile(const std::string& from, const std::string
 }
 
 void VirtualFileSystem::renameFile(const std::string& from, const std::string& to) {
-    defaultFS->renameFile(from, to);
+    auto* sourceFileSystem = findFileSystem(from);
+    if (sourceFileSystem != findFileSystem(to)) {
+        throw IOException{"Cannot rename files across file systems."};
+    }
+    sourceFileSystem->renameFile(from, to);
 }
 
 void VirtualFileSystem::createDir(const std::string& dir) const {
@@ -123,6 +127,16 @@ void VirtualFileSystem::writeFile(FileInfo& /*fileInfo*/, const uint8_t* /*buffe
 
 void VirtualFileSystem::syncFile(const FileInfo& fileInfo) const {
     findFileSystem(fileInfo.path)->syncFile(fileInfo);
+}
+
+void VirtualFileSystem::syncParentDirectory(const std::string& path) const {
+    auto* fileSystem = findFileSystem(path);
+    if (fileSystem == defaultFS.get()) {
+        LocalFileSystem::syncParentDirectory(path);
+    } else if (auto* directorySyncFileSystem =
+                   dynamic_cast<const DirectorySyncFileSystem*>(fileSystem)) {
+        directorySyncFileSystem->syncParentDirectory(path);
+    }
 }
 
 void VirtualFileSystem::cleanUP(main::ClientContext* context) {

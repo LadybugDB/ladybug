@@ -135,7 +135,7 @@ struct {{ dc.name }} final : WALRecord {
 {% endif -%}
 {% endfor %} {}
 {% if dc.fields %}
-    {{ dc.name }}(
+    {% if explicit_constructor %}explicit {% endif %}{{ dc.name }}(
 {%- for field in dc.fields -%}
 {% set parts = field.rsplit(' ', 1) -%}
 {% set raw_type = parts[0] -%}
