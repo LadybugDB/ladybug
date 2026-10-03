@@ -736,7 +736,7 @@ void WALReplayer::replayCommittedCheckpoint(Checkpointer& checkpointer,
             checkpointWALPath, clientContext.getDatabasePath()));
     }
     if (!VirtualFileSystem::GetUnsafe(clientContext)
-            ->fileOrPathExists(shadowFilePath, &clientContext)) {
+             ->fileOrPathExists(shadowFilePath, &clientContext)) {
         throw RuntimeException(std::format(
             "Cannot recover committed checkpoint: shadow file {} is missing.", shadowFilePath));
     }

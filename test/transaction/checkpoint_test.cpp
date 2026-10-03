@@ -17,6 +17,7 @@
 #include "api_test/private_api_test.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
+#include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/checksum.h"
 #include "common/exception/runtime.h"
@@ -1094,11 +1095,23 @@ static BinaryData serializeCheckpointRecord(const WALRecord& record) {
     return writer->getData();
 }
 
+// The pre-owner-tagging WAL record layout: a length-prefixed payload with no owner suffix.
+static BinaryData serializeLegacyFormatRecord(const WALRecord& record) {
+    auto recordBufferWriter = std::make_shared<BufferWriter>();
+    Serializer recordSerializer{recordBufferWriter};
+    record.serialize(recordSerializer);
+    auto writer = std::make_shared<BufferWriter>();
+    Serializer serializer{writer};
+    const auto recordLength = recordBufferWriter->getSize();
+    serializer.write(recordLength);
+    serializer.write(recordBufferWriter->getBlobData(), recordLength);
+    return writer->getData();
+}
+
 static void rewriteCheckpointRecord(main::ClientContext& context, const std::string& walPath,
-    const WALRecord& replacement, std::optional<bool> enableChecksumsOverride = std::nullopt) {
+    BinaryData replacementRecord, std::optional<bool> enableChecksumsOverride = std::nullopt) {
     const auto currentRecord =
         serializeCheckpointRecord(CheckpointRecord{WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION});
-    const auto legacyRecord = serializeCheckpointRecord(replacement);
     const auto enableChecksums =
         enableChecksumsOverride.value_or(context.getDBConfig()->enableChecksums);
     const auto checksumSize = enableChecksums ? sizeof(uint64_t) : 0;
@@ -1123,18 +1136,20 @@ static void rewriteCheckpointRecord(main::ClientContext& context, const std::str
         }
     }
     fileInfo->truncate(recordOffset);
-    fileInfo->writeFile(legacyRecord.data.get(), legacyRecord.size, recordOffset);
+    fileInfo->writeFile(replacementRecord.data.get(), replacementRecord.size, recordOffset);
     if (enableChecksums) {
-        const auto legacyChecksum = checksum(legacyRecord.data.get(), legacyRecord.size);
-        fileInfo->writeFile(reinterpret_cast<const uint8_t*>(&legacyChecksum),
-            sizeof(legacyChecksum), recordOffset + legacyRecord.size);
+        const auto replacementChecksum =
+            checksum(replacementRecord.data.get(), replacementRecord.size);
+        fileInfo->writeFile(reinterpret_cast<const uint8_t*>(&replacementChecksum),
+            sizeof(replacementChecksum), recordOffset + replacementRecord.size);
     }
     fileInfo->syncFile();
 }
 
 static void rewriteCheckpointRecordAsLegacy(main::ClientContext& context,
     const std::string& walPath, std::optional<bool> enableChecksumsOverride) {
-    rewriteCheckpointRecord(context, walPath, LegacyCheckpointRecord{}, enableChecksumsOverride);
+    rewriteCheckpointRecord(context, walPath, serializeLegacyFormatRecord(LegacyCheckpointRecord{}),
+        enableChecksumsOverride);
 }
 
 static void writeShadowDatabaseID(main::ClientContext& context, const std::string& shadowPath,
@@ -1361,7 +1376,7 @@ TEST_F(CheckpointRetryAfterFailureTest, RejectsNewerCheckpointFormatVersion) {
 
     auto* context = getClientContext(*conn);
     rewriteCheckpointRecord(*context, StorageUtils::getCheckpointWALFilePath(databasePath),
-        CheckpointRecord{WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION + 1});
+        serializeCheckpointRecord(CheckpointRecord{WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION + 1}));
     conn.reset();
     database.reset();
     const auto databaseBeforeRecovery = readFile(databasePath);
@@ -1369,11 +1384,41 @@ TEST_F(CheckpointRetryAfterFailureTest, RejectsNewerCheckpointFormatVersion) {
         createDBAndConn();
         FAIL() << "Expected a newer checkpoint format version to be rejected.";
     } catch (const RuntimeException& e) {
-        EXPECT_NE(std::string{e.what()}.find("unsupported checkpoint format version 2"),
+        EXPECT_NE(std::string{e.what()}.find(std::format("unsupported checkpoint format version {}",
+                      WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION + 1)),
             std::string::npos)
             << e.what();
     }
     EXPECT_EQ(readFile(databasePath), databaseBeforeRecovery);
+}
+
+// A checkpoint bundle persisted by an earlier bundle-format version (e.g. 1) must recover
+// through the bundle path, not the pre-bundle legacy path that discards graph shadows.
+TEST_F(CheckpointRetryAfterFailureTest, RecoversOlderCheckpointBundleFormatVersion) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    ASSERT_TRUE(conn->query("CREATE GRAPH bundle_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH bundle_graph;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE User(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {id: 1, name: 'Alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    rewriteCheckpointRecord(*context, StorageUtils::getCheckpointWALFilePath(databasePath),
+        serializeCheckpointRecord(CheckpointRecord{1}));
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+
+    checkNodes(100);
+    ASSERT_TRUE(conn->query("USE GRAPH bundle_graph;")->isSuccess());
+    auto result = conn->query("MATCH (n:User {name: 'Alice'}) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
 }
 
 TEST_F(CheckpointRetryAfterFailureTest, BundledShadowUsesCompatibilityGuardAndRecovers) {
@@ -2229,7 +2274,7 @@ TEST_F(FlakyCheckpointerTest, RejectsNewerGraphCheckpointFormatVersion) {
     FlakyCheckpointer::resetCheckpointer(*graphContext);
     ASSERT_TRUE(std::filesystem::exists(graphCheckpointWALPath));
     rewriteCheckpointRecord(*graphContext, graphCheckpointWALPath,
-        CheckpointRecord{WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION + 1});
+        serializeCheckpointRecord(CheckpointRecord{WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION + 1}));
 
     graphConnection.reset();
     graphDatabase.reset();
@@ -2243,7 +2288,9 @@ TEST_F(FlakyCheckpointerTest, RejectsNewerGraphCheckpointFormatVersion) {
     } catch (const RuntimeException& e) {
         const std::string message = e.what();
         EXPECT_NE(message.find("Cannot recover graph WAL"), std::string::npos) << message;
-        EXPECT_NE(message.find("unsupported checkpoint format version 2"), std::string::npos)
+        EXPECT_NE(message.find(std::format("unsupported checkpoint format version {}",
+                      WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION + 1)),
+            std::string::npos)
             << message;
     }
     EXPECT_EQ(readFile(graphPath), graphDataBefore);
@@ -2420,6 +2467,803 @@ TEST_P(TornGraphWALHeaderTest, FollowsReplayFailureMode) {
 
 INSTANTIATE_TEST_SUITE_P(ReplayFailureMode, TornGraphWALHeaderTest, ::testing::Bool(),
     [](const ::testing::TestParamInfo<bool>& info) { return info.param ? "Strict" : "NonStrict"; });
+
+// Graph-table commits are logged to the main WAL. Replaying that WAL must route each record
+// through its owning graph's catalog: table IDs are per-catalog, so resolving a graph's row
+// against main's catalog misroutes it into a same-ID main table.
+TEST_F(FlakyCheckpointerTest, ReplaysGraphOwnedRecordsIntoOwnerCatalog) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE main_test(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH owner_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH owner_graph;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE User(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH owner_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {id: 1, name: 'Alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:main_test {id: 1});")->isSuccess());
+
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+
+    auto result = conn->query("MATCH (n:main_test) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    result = conn->query("MATCH (n:User) RETURN COUNT(n);");
+    EXPECT_FALSE(result->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH owner_graph;")->isSuccess());
+    result = conn->query("MATCH (n:User {name: 'Alice'}) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+
+    ASSERT_TRUE(conn->query("CREATE (:User {id: 2, name: 'Bob'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+    ASSERT_TRUE(conn->query("USE GRAPH owner_graph;")->isSuccess());
+    result = conn->query("MATCH (n:User) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+}
+
+// A manual transaction that inserts into two graphs stages both graphs' local tables in one
+// local storage and commits all its records into one WAL. The per-owner local-storage key
+// keeps the two inserts distinct at commit, and the per-record owner tags route replay of
+// the single WAL into each graph's catalog.
+TEST_F(FlakyCheckpointerTest, ReplaysCrossGraphTransactionIntoEachOwnerCatalog) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH left_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH right_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH left_graph;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE User(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH right_graph;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE User(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH left_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {id: 1, name: 'A'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH right_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {id: 1, name: 'B'});")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH left_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {id: 2, name: 'C'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH right_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {id: 2, name: 'D'});")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+
+    ASSERT_TRUE(conn->query("USE GRAPH left_graph;")->isSuccess());
+    auto result = conn->query("MATCH (n:User) RETURN n.name ORDER BY n.name;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    std::vector<std::string> names;
+    while (result->hasNext()) {
+        names.push_back(result->getNext()->getValue(0)->getValue<std::string>());
+    }
+    ASSERT_EQ(names, (std::vector<std::string>{"A", "C"}));
+
+    ASSERT_TRUE(conn->query("USE GRAPH right_graph;")->isSuccess());
+    result = conn->query("MATCH (n:User) RETURN n.name ORDER BY n.name;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    names.clear();
+    while (result->hasNext()) {
+        names.push_back(result->getNext()->getValue(0)->getValue<std::string>());
+    }
+    ASSERT_EQ(names, (std::vector<std::string>{"B", "D"}));
+}
+
+// A manual transaction that stages rel inserts for two graphs routes each rel to its own
+// graph's rel table at commit, even though both graphs' rel tables share the same table ID.
+// The two rels use different directions (left: L3->L4, right: R4->R3) so a swapped owner
+// replay is detectable instead of producing an isomorphic end state.
+TEST_F(FlakyCheckpointerTest, ReplaysCrossGraphRelTransactionIntoEachOwnerCatalog) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH left_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH right_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH left_graph;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE User(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE Follows(FROM User TO User);")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH right_graph;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE User(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE Follows(FROM User TO User);")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH left_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {id: 1, name: 'L3'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {id: 2, name: 'L4'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH right_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {id: 1, name: 'R3'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {id: 2, name: 'R4'});")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH left_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:User {name: 'L3'}), (b:User {name: 'L4'}) "
+                            "CREATE (a)-[:Follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH right_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("MATCH (a:User {name: 'R4'}), (b:User {name: 'R3'}) "
+                            "CREATE (a)-[:Follows]->(b);")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+
+    ASSERT_TRUE(conn->query("USE GRAPH left_graph;")->isSuccess());
+    auto result = conn->query("MATCH (:User {name: 'L3'})-[:Follows]->(b:User) RETURN b.name;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "L4");
+    ASSERT_FALSE(result->hasNext());
+    result = conn->query("MATCH (:User {name: 'L4'})-[:Follows]->(b:User) RETURN COUNT(b);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
+
+    ASSERT_TRUE(conn->query("USE GRAPH right_graph;")->isSuccess());
+    result = conn->query("MATCH (:User {name: 'R4'})-[:Follows]->(b:User) RETURN b.name;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "R3");
+    ASSERT_FALSE(result->hasNext());
+    result = conn->query("MATCH (:User {name: 'R3'})-[:Follows]->(b:User) RETURN COUNT(b);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
+// CREATE GRAPH and the graph's first table and row all commit into the main WAL before any
+// checkpoint. Replaying the WAL must rebuild the graph's catalog entry and load the row
+// through the freshly created entry.
+TEST_F(FlakyCheckpointerTest, ReplaysGraphDDLAndDataInOneWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH ddl_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH ddl_graph;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE Person(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:Person {id: 1, name: 'Alice'});")->isSuccess());
+
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+
+    ASSERT_TRUE(conn->query("USE GRAPH ddl_graph;")->isSuccess());
+    auto result = conn->query("MATCH (n:Person {id: 1}) RETURN n.name;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Alice");
+    result = conn->query("MATCH (n:Person) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    result = conn->query("MATCH (n:Person) RETURN COUNT(n);");
+    EXPECT_FALSE(result->isSuccess());
+}
+
+// A graph created and used inside one committed transaction also recovers: during replay
+// the graph's catalog entry lives in the still-active recovery transaction, so graph
+// materialization triggered by the transaction's own tagged records must see it.
+TEST_F(FlakyCheckpointerTest, ReplaysGraphCreatedAndUsedInOneTransaction) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH same_txn_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH same_txn_graph;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE User(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {id: 1, name: 'Alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+
+    ASSERT_TRUE(conn->query("USE GRAPH same_txn_graph;")->isSuccess());
+    auto result = conn->query("MATCH (n:User {id: 1}) RETURN n.name;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Alice");
+    result = conn->query("MATCH (n:User) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    result = conn->query("MATCH (n:User) RETURN COUNT(n);");
+    EXPECT_FALSE(result->isSuccess());
+}
+
+// A sequence advance records the owning catalog for a version bump at commit. If the same
+// transaction later drops that graph, the catalog is destroyed before commit, and the
+// commit's version pass must not touch the destroyed catalog.
+TEST_F(FlakyCheckpointerTest, CommitSkipsCatalogDroppedLaterInTransaction) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH seq_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH seq_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE s;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH seq_graph;")->isSuccess());
+    auto result = conn->query("RETURN nextval('s');");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("DROP GRAPH seq_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+
+    result = conn->query("USE GRAPH seq_graph;");
+    EXPECT_FALSE(result->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    result = conn->query("MATCH (n:T) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
+}
+
+// Parallel evaluators of nextval share one transaction, so catalog-change recording from
+// concurrent threads must be synchronized. Each thread advances the same sequence through
+// the active transaction; every advance must survive commit exactly once.
+TEST_F(FlakyCheckpointerTest, ConcurrentNextvalRecordsCatalogChangesWithoutRacing) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE s;")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    auto* context = getClientContext(*conn);
+    auto* transaction = Transaction::Get(*context);
+    auto* catalog = context->getDatabase()->getCatalog();
+    const auto catalogVersion0 = catalog->getVersion();
+    auto* sequenceEntry = catalog->getSequenceEntry(transaction, "s", false);
+    constexpr auto threadCount = 8;
+    constexpr auto callsPerThread = 500;
+    std::vector<std::thread> threads;
+    for (auto t = 0; t < threadCount; ++t) {
+        threads.emplace_back([&] {
+            for (auto i = 0; i < callsPerThread; ++i) {
+                sequenceEntry->nextKVal(transaction, 1);
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+    ASSERT_EQ(catalog->getVersion(), catalogVersion0 + 1)
+        << "commit must advance the changed catalog's version exactly once";
+    auto result = conn->query("RETURN nextval('s');");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(),
+        threadCount * callsPerThread + 1);
+}
+
+// A transaction's catalog-version bump at commit must land on exactly the catalogs it
+// changed, regardless of which graph is current when the transaction commits.
+TEST_F(FlakyCheckpointerTest, CommitBumpsVersionOnlyOfChangedGraphCatalog) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH version_graph_a ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH version_graph_a;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE s;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH version_graph_b ANY;")->isSuccess());
+    auto* context = getClientContext(*conn);
+    auto* dbManager = main::DatabaseManager::Get(*context);
+    const auto mainVersion0 = context->getDatabase()->getCatalog()->getVersion();
+    const auto graphAVersion0 = dbManager->getGraphCatalog("version_graph_a")->getVersion();
+    const auto graphBVersion0 = dbManager->getGraphCatalog("version_graph_b")->getVersion();
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH version_graph_a;")->isSuccess());
+    auto result = conn->query("RETURN nextval('s');");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(conn->query("USE GRAPH version_graph_b;")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+    ASSERT_EQ(dbManager->getGraphCatalog("version_graph_a")->getVersion(), graphAVersion0 + 1)
+        << "commit must advance the changed graph's catalog version exactly once";
+    ASSERT_EQ(dbManager->getGraphCatalog("version_graph_b")->getVersion(), graphBVersion0);
+    ASSERT_EQ(context->getDatabase()->getCatalog()->getVersion(), mainVersion0);
+}
+
+// DROP GRAPH reclaims the graph's files immediately, while the owner-tagged records its
+// earlier committed transactions logged stay in the main WAL until the next checkpoint.
+// Recovery must skip those records instead of failing to reopen the database forever.
+TEST_F(FlakyCheckpointerTest, DroppedGraphRecordsDoNotBlockRecovery) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH drop_recovery_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH drop_recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE s;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH keep_recovery_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH keep_recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE k;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    for (auto i = 0; i < 3; ++i) {
+        ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH drop_recovery_graph;")->isSuccess());
+        auto droppedResult = conn->query("RETURN nextval('s');");
+        ASSERT_TRUE(droppedResult->isSuccess()) << droppedResult->getErrorMessage();
+        ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+        ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+        ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH keep_recovery_graph;")->isSuccess());
+        auto keptResult = conn->query("RETURN nextval('k');");
+        ASSERT_TRUE(keptResult->isSuccess()) << keptResult->getErrorMessage();
+        ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+        ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+    }
+    ASSERT_TRUE(conn->query("DROP GRAPH drop_recovery_graph;")->isSuccess());
+
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_EQ(openResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH keep_recovery_graph;")->isSuccess());
+    auto keptResult = conn->query("RETURN nextval('k');");
+    ASSERT_TRUE(keptResult->isSuccess()) << keptResult->getErrorMessage();
+    ASSERT_EQ(keptResult->getNext()->getValue(0)->getValue<int64_t>(), 4);
+    auto useResult = conn->query("USE GRAPH drop_recovery_graph;");
+    EXPECT_FALSE(useResult->isSuccess());
+}
+
+// A commit bumping a graph catalog's version must not touch a catalog that a concurrent
+// DROP GRAPH on another connection destroys mid-commit. The registry lock serializes
+// the commit-time bump against the drop's removal.
+TEST_F(FlakyCheckpointerTest, ConcurrentDropGraphDuringCommitKeepsCatalogsAlive) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL debug_enable_multi_writes=true;")->isSuccess());
+    main::Connection dropConn(database.get());
+    constexpr auto iterations = 100;
+    for (auto i = 0; i < iterations; ++i) {
+        ASSERT_TRUE(conn->query("CREATE GRAPH race_graph ANY;")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH race_graph;")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE SEQUENCE s;")->isSuccess());
+        ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH race_graph;")->isSuccess());
+        ASSERT_TRUE(conn->query("RETURN nextval('s');")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+        bool dropSucceeded = false;
+        std::thread dropper(
+            [&] { dropSucceeded = dropConn.query("DROP GRAPH race_graph;")->isSuccess(); });
+        auto commitResult = conn->query("COMMIT;");
+        dropper.join();
+        ASSERT_TRUE(commitResult->isSuccess())
+            << "iteration " << i << ": " << commitResult->getErrorMessage();
+        ASSERT_TRUE(dropSucceeded) << "iteration " << i;
+    }
+    auto result = conn->query("RETURN 1;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+// A standalone session opened directly on a graph's data file commits into the graph's own
+// WAL. Replaying the main WAL hits owner-tagged records for that graph, which must
+// materialize only the named graph and defer its WAL replay to the enclosing transaction's
+// commit instead of forcing a full catalog load inside the active recovery transaction. The
+// standalone session writes catalog-entry DDL only: a node table it creates has a plain
+// schema that no longer matches the ANY-graph catalog the records replay into, and an
+// UPDATE_SEQUENCE record it logs resolves by raw sequence ID against the standalone
+// catalog's incompatible ID space, so only its by-name DDL records are assertable.
+TEST_F(FlakyCheckpointerTest, StandaloneGraphFileCommitDoesNotWedgeMainWALReplay) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH wedge_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH wedge_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE parent_seq;")->isSuccess());
+    auto nextResult = conn->query("RETURN nextval('parent_seq');");
+    ASSERT_TRUE(nextResult->isSuccess()) << nextResult->getErrorMessage();
+    ASSERT_EQ(nextResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "wedge_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+    ASSERT_FALSE(std::filesystem::exists(graphWALPath));
+
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto tableResult = graphConnection->query("CREATE SEQUENCE carol_seq;");
+    ASSERT_TRUE(tableResult->isSuccess()) << tableResult->getErrorMessage();
+    ASSERT_TRUE(std::filesystem::exists(graphWALPath));
+    // DDL results hold empty-schema factorized tables, which must be destroyed while their
+    // database is still open.
+    tableResult.reset();
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    createDBAndConn();
+
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_EQ(openResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH wedge_graph;")->isSuccess());
+    nextResult = conn->query("RETURN nextval('parent_seq');");
+    ASSERT_TRUE(nextResult->isSuccess()) << nextResult->getErrorMessage();
+    ASSERT_EQ(nextResult->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    nextResult = conn->query("RETURN nextval('carol_seq');");
+    ASSERT_TRUE(nextResult->isSuccess()) << nextResult->getErrorMessage();
+    ASSERT_EQ(nextResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    EXPECT_FALSE(std::filesystem::exists(graphShadowPath));
+}
+
+// A standalone session's graph WAL records entry IDs from that session's catalog, which
+// lacks the ANY-graph infrastructure entries the graph materializes with, so raw
+// recorded IDs can point at infrastructure entries here. Replay must translate the
+// DROP SEQUENCE ID to the entry the standalone CREATE installed; resolving it raw
+// drops the graph's infra serial, the following CREATE SEQUENCE record then fails on
+// the name collision, and every later open wedges. The nextval results also pin the
+// translation: both sequences replay fresh here, so any value other than 1 means a
+// replay targeted the wrong entry.
+TEST_F(FlakyCheckpointerTest, StandaloneSequenceDropRecreateDoesNotPoisonRecovery) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH wedge_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH wedge_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE parent_seq;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "wedge_graph");
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto ddl1 = graphConnection->query("CREATE SEQUENCE carol_seq;");
+    ASSERT_TRUE(ddl1->isSuccess()) << ddl1->getErrorMessage();
+    auto ddl2 = graphConnection->query("DROP SEQUENCE carol_seq;");
+    ASSERT_TRUE(ddl2->isSuccess()) << ddl2->getErrorMessage();
+    auto ddl3 = graphConnection->query("CREATE SEQUENCE carol_seq;");
+    ASSERT_TRUE(ddl3->isSuccess()) << ddl3->getErrorMessage();
+    ddl1.reset();
+    ddl2.reset();
+    ddl3.reset();
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_EQ(openResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH wedge_graph;")->isSuccess());
+    auto parentResult = conn->query("RETURN nextval('parent_seq');");
+    ASSERT_TRUE(parentResult->isSuccess()) << parentResult->getErrorMessage();
+    ASSERT_EQ(parentResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    auto carolResult = conn->query("RETURN nextval('carol_seq');");
+    ASSERT_TRUE(carolResult->isSuccess()) << carolResult->getErrorMessage();
+    ASSERT_EQ(carolResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+// A standalone session's graph WAL addresses rel data by the per-direction physical
+// rel-table ID and binds a rel group through its endpoint node-table IDs, all recorded
+// in that session's plain catalog, which lacks the ANY-graph infrastructure entries
+// the graph materializes with. Replayed raw, the physical ID can land on a node table
+// (the cast to RelTable fails and wedges every later open), and the recorded endpoints
+// bind the group to infrastructure tables instead of the replayed node tables. CREATE
+// replay must translate the group's endpoints and record the physical-table IDs so rel
+// data replays against the tables this recovery created.
+TEST_F(FlakyCheckpointerTest, StandaloneRelTableReplayDoesNotPoisonRecovery) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH rel_graph ANY;")->isSuccess());
+    conn.reset();
+    database.reset();
+
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "rel_graph");
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto ddl1 = graphConnection->query("CREATE NODE TABLE Person(id INT64 PRIMARY KEY);");
+    ASSERT_TRUE(ddl1->isSuccess()) << ddl1->getErrorMessage();
+    auto ddl2 = graphConnection->query("CREATE REL TABLE Knows(FROM Person TO Person);");
+    ASSERT_TRUE(ddl2->isSuccess()) << ddl2->getErrorMessage();
+    auto nodeInsert = graphConnection->query("CREATE (:Person {id: 1});");
+    ASSERT_TRUE(nodeInsert->isSuccess()) << nodeInsert->getErrorMessage();
+    nodeInsert = graphConnection->query("CREATE (:Person {id: 2});");
+    ASSERT_TRUE(nodeInsert->isSuccess()) << nodeInsert->getErrorMessage();
+    auto relInsert = graphConnection->query(
+        "MATCH (a:Person {id: 1}), (b:Person {id: 2}) CREATE (a)-[:Knows]->(b);");
+    ASSERT_TRUE(relInsert->isSuccess()) << relInsert->getErrorMessage();
+    ddl1.reset();
+    ddl2.reset();
+    nodeInsert.reset();
+    relInsert.reset();
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_EQ(openResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH rel_graph;")->isSuccess());
+    auto nodeResult = conn->query("MATCH (n:Person) RETURN COUNT(n);");
+    ASSERT_TRUE(nodeResult->isSuccess()) << nodeResult->getErrorMessage();
+    ASSERT_EQ(nodeResult->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    auto relResult = conn->query("MATCH (:Person)-[k:Knows]->(:Person) RETURN COUNT(k);");
+    ASSERT_TRUE(relResult->isSuccess()) << relResult->getErrorMessage();
+    ASSERT_EQ(relResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+// A standalone session's graph WAL records index operations in the standalone catalog's own
+// index-ID space, which starts empty because the parent session's graph-owned records live in
+// the main WAL. Parent recovery installs those parent-created indexes first, so replaying the
+// standalone DROP INDEX by its recorded raw ID drops a parent-created index instead. CREATE
+// INDEX replay must record the recorded-to-replayed index-ID mapping for the DROP to resolve.
+TEST_F(FlakyCheckpointerTest, StandaloneIndexReplayDoesNotDropParentIndex) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH idx_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH idx_graph;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE ParentT(id INT64 PRIMARY KEY, val INT64);")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE ART INDEX parent_idx FOR (p:ParentT) ON (p.val);")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "idx_graph");
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto ddl1 =
+        graphConnection->query("CREATE NODE TABLE Person(id INT64 PRIMARY KEY, val INT64);");
+    ASSERT_TRUE(ddl1->isSuccess()) << ddl1->getErrorMessage();
+    auto ddl2 = graphConnection->query("CREATE ART INDEX person_idx FOR (p:Person) ON (p.val);");
+    ASSERT_TRUE(ddl2->isSuccess()) << ddl2->getErrorMessage();
+    auto ddl3 = graphConnection->query("DROP INDEX Person.person_idx;");
+    ASSERT_TRUE(ddl3->isSuccess()) << ddl3->getErrorMessage();
+    auto ddl4 = graphConnection->query("CREATE ART INDEX person_idx FOR (p:Person) ON (p.val);");
+    ASSERT_TRUE(ddl4->isSuccess()) << ddl4->getErrorMessage();
+    ddl1.reset();
+    ddl2.reset();
+    ddl3.reset();
+    ddl4.reset();
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_EQ(openResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH idx_graph;")->isSuccess());
+    auto parentIdxResult =
+        conn->query("CALL SHOW_INDEXES() WHERE index_name = 'parent_idx' RETURN count(*);");
+    ASSERT_TRUE(parentIdxResult->isSuccess()) << parentIdxResult->getErrorMessage();
+    ASSERT_EQ(parentIdxResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    parentIdxResult.reset();
+    auto personIdxResult =
+        conn->query("CALL SHOW_INDEXES() WHERE index_name = 'person_idx' RETURN count(*);");
+    ASSERT_TRUE(personIdxResult->isSuccess()) << personIdxResult->getErrorMessage();
+    ASSERT_EQ(personIdxResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    personIdxResult.reset();
+    auto dropParentResult = conn->query("DROP INDEX ParentT.parent_idx;");
+    ASSERT_TRUE(dropParentResult->isSuccess()) << dropParentResult->getErrorMessage();
+    auto dropPersonResult = conn->query("DROP INDEX Person.person_idx;");
+    ASSERT_TRUE(dropPersonResult->isSuccess()) << dropPersonResult->getErrorMessage();
+}
+
+// A staged rel insert into a graph-owned table resolves its owning catalog under the registry
+// lock at commit time. When DROP GRAPH wins the race the commit must fail cleanly with the
+// missing-graph binder error and leave the connection usable; when the commit wins it must
+// succeed. Only the rel table is staged: a staged node table would crash the post-failure
+// rollback, whose clear() dereferences the dropped table's freed storage (a pre-existing
+// issue to fix separately). The drop-first phase pins the failure deterministically; the
+// concurrent iterations alone accept whichever operation wins and so cannot detect a commit
+// that silently discards the staged insert instead of failing.
+TEST_F(FlakyCheckpointerTest, ConcurrentDropGraphDuringStagedInsertCommitFailsCleanly) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL debug_enable_multi_writes=true;")->isSuccess());
+    main::Connection dropConn(database.get());
+
+    auto stageRelInsert = [&] {
+        ASSERT_TRUE(conn->query("CREATE GRAPH race_graph ANY;")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH race_graph;")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE NODE TABLE t(id INT64 PRIMARY KEY);")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE REL TABLE e(FROM t TO t);")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE (:t {id: 1});")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE (:t {id: 2});")->isSuccess());
+        ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH race_graph;")->isSuccess());
+        ASSERT_TRUE(
+            conn->query("MATCH (a:t {id: 1}), (b:t {id: 2}) CREATE (a)-[:e]->(b);")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    };
+
+    ASSERT_NO_FATAL_FAILURE(stageRelInsert());
+    ASSERT_TRUE(dropConn.query("DROP GRAPH race_graph;")->isSuccess());
+    auto droppedCommitResult = conn->query("COMMIT;");
+    ASSERT_FALSE(droppedCommitResult->isSuccess()) << droppedCommitResult->getErrorMessage();
+    EXPECT_NE(droppedCommitResult->getErrorMessage().find("No graph named race_graph"),
+        std::string::npos)
+        << droppedCommitResult->getErrorMessage();
+    auto droppedProbe = conn->query("RETURN 1;");
+    EXPECT_TRUE(droppedProbe->isSuccess()) << droppedProbe->getErrorMessage();
+
+    constexpr auto iterations = 100;
+    for (auto i = 0; i < iterations; ++i) {
+        ASSERT_NO_FATAL_FAILURE(stageRelInsert());
+        bool dropSucceeded = false;
+        std::thread dropper(
+            [&] { dropSucceeded = dropConn.query("DROP GRAPH race_graph;")->isSuccess(); });
+        auto commitResult = conn->query("COMMIT;");
+        dropper.join();
+        ASSERT_TRUE(dropSucceeded) << "iteration " << i;
+        if (commitResult->isSuccess()) {
+            continue;
+        }
+        EXPECT_NE(commitResult->getErrorMessage().find("No graph named race_graph"),
+            std::string::npos)
+            << "iteration " << i << ": " << commitResult->getErrorMessage();
+        auto probe = conn->query("RETURN 1;");
+        EXPECT_TRUE(probe->isSuccess()) << "iteration " << i << ": " << probe->getErrorMessage();
+    }
+    auto result = conn->query("RETURN 1;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+// The deferred graph-WAL flush must replay into the owning graph only: records committed by
+// a standalone session on one graph's file must not appear in a sibling graph's catalog,
+// while the sibling's own owner-tagged records from the main WAL must still be applied.
+TEST_F(FlakyCheckpointerTest, DeferredGraphWALReplayIsScopedToItsOwningGraph) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH multi_a ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH multi_a;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE seq_a;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH multi_b ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH multi_b;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE seq_b;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+
+    const auto graphPathB = StorageUtils::getGraphPath(databasePath, "multi_b");
+    const auto graphWALPathB = StorageUtils::getWALFilePath(graphPathB);
+    const auto graphShadowPathB = StorageUtils::getShadowFilePath(graphPathB);
+    ASSERT_FALSE(std::filesystem::exists(graphWALPathB));
+
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPathB, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto tableResult = graphConnection->query("CREATE SEQUENCE carol_seq;");
+    ASSERT_TRUE(tableResult->isSuccess()) << tableResult->getErrorMessage();
+    ASSERT_TRUE(std::filesystem::exists(graphWALPathB));
+    // DDL results hold empty-schema factorized tables, which must be destroyed while their
+    // database is still open.
+    tableResult.reset();
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    createDBAndConn();
+
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_TRUE(conn->query("USE GRAPH multi_b;")->isSuccess());
+    auto nextB = conn->query("RETURN nextval('seq_b');");
+    ASSERT_TRUE(nextB->isSuccess()) << nextB->getErrorMessage();
+    ASSERT_EQ(nextB->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    nextB = conn->query("RETURN nextval('carol_seq');");
+    ASSERT_TRUE(nextB->isSuccess()) << nextB->getErrorMessage();
+    ASSERT_EQ(nextB->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH multi_a;")->isSuccess());
+    auto nextA = conn->query("RETURN nextval('seq_a');");
+    ASSERT_TRUE(nextA->isSuccess()) << nextA->getErrorMessage();
+    ASSERT_EQ(nextA->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    auto userA = conn->query("RETURN nextval('carol_seq');");
+    EXPECT_FALSE(userA->isSuccess());
+    EXPECT_FALSE(std::filesystem::exists(graphShadowPathB));
+}
+
+// A checkpointed ANY graph whose infra tables were dropped reopens with them still
+// dropped: an empty persisted table set is deliberate state, not missing initialization.
+TEST_F(FlakyCheckpointerTest, KeepsDroppedAnyGraphTablesDroppedAfterCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH dropped_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH dropped_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("DROP TABLE _edges;")->isSuccess());
+    ASSERT_TRUE(conn->query("DROP TABLE _nodes;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+
+    ASSERT_TRUE(conn->query("USE GRAPH dropped_graph;")->isSuccess());
+    auto result = conn->query("MATCH (n:_nodes) RETURN COUNT(n);");
+    EXPECT_FALSE(result->isSuccess()) << "_nodes was recreated after a checkpointed drop";
+    result = conn->query("MATCH ()-[e:_edges]->() RETURN COUNT(e);");
+    EXPECT_FALSE(result->isSuccess()) << "_edges was recreated after a checkpointed drop";
+}
 
 class LegacyGraphMarkerWithoutShadowTest : public FlakyCheckpointerTest,
                                            public ::testing::WithParamInterface<bool> {};

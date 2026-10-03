@@ -214,7 +214,7 @@ TEST_F(WalTest, WALSyncFailurePoisonsWALAndReturnsAllocatedCommitSequence) {
         &vfs);
     lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
         false /* enableChecksums */);
-    localWAL.logLoadExtension("dummy");
+    localWAL.logLoadExtension("" /* main */, "dummy");
     localWAL.logCommit();
 
     uint64_t walCommitSequence = 0;
@@ -225,7 +225,7 @@ TEST_F(WalTest, WALSyncFailurePoisonsWALAndReturnsAllocatedCommitSequence) {
     failingFSPtr->setFailSync(false);
     lbug::storage::LocalWAL secondLocalWAL(
         *lbug::storage::MemoryManager::Get(*conn->getClientContext()), false /* enableChecksums */);
-    secondLocalWAL.logLoadExtension("dummy2");
+    secondLocalWAL.logLoadExtension("" /* main */, "dummy2");
     secondLocalWAL.logCommit();
 
     walCommitSequence = 0;
@@ -270,7 +270,7 @@ TEST_F(WalTest, OrdinaryCommitSyncsRegisteredNamespace) {
         &vfs);
     lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
         false /* enableChecksums */);
-    localWAL.logLoadExtension("dummy");
+    localWAL.logLoadExtension("" /* main */, "dummy");
     localWAL.logCommit();
     uint64_t walCommitSequence = 0;
     ASSERT_NO_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence));
@@ -290,7 +290,7 @@ TEST_F(WalTest, FailureAfterCheckpointRenamePoisonsWAL) {
     lbug::storage::WAL wal(databasePath, false /* readOnly */, false /* enableChecksums */, &vfs);
     lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
         false /* enableChecksums */);
-    localWAL.logLoadExtension("dummy");
+    localWAL.logLoadExtension("" /* main */, "dummy");
     localWAL.logCommit();
     uint64_t walCommitSequence = 0;
     ASSERT_NO_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence));
@@ -303,7 +303,7 @@ TEST_F(WalTest, FailureAfterCheckpointRenamePoisonsWAL) {
 
     lbug::storage::LocalWAL laterWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
         false /* enableChecksums */);
-    laterWAL.logLoadExtension("later");
+    laterWAL.logLoadExtension("" /* main */, "later");
     laterWAL.logCommit();
     walCommitSequence = 0;
     EXPECT_THROW(wal.logCommittedWAL(laterWAL, conn->getClientContext(), walCommitSequence),
@@ -321,7 +321,7 @@ TEST_F(WalTest, DirectorySyncFailureAfterCheckpointRenamePoisonsWAL) {
     lbug::storage::WAL wal(databasePath, false /* readOnly */, false /* enableChecksums */, &vfs);
     lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
         false /* enableChecksums */);
-    localWAL.logLoadExtension("dummy");
+    localWAL.logLoadExtension("" /* main */, "dummy");
     localWAL.logCommit();
     uint64_t walCommitSequence = 0;
     ASSERT_NO_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence));
@@ -334,7 +334,7 @@ TEST_F(WalTest, DirectorySyncFailureAfterCheckpointRenamePoisonsWAL) {
 
     lbug::storage::LocalWAL laterWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
         false /* enableChecksums */);
-    laterWAL.logLoadExtension("later");
+    laterWAL.logLoadExtension("" /* main */, "later");
     laterWAL.logCommit();
     walCommitSequence = 0;
     EXPECT_THROW(wal.logCommittedWAL(laterWAL, conn->getClientContext(), walCommitSequence),
@@ -366,7 +366,7 @@ TEST_F(WalTest, FrozenWALRemovalFailurePoisonsWALAfterDurableTruncate) {
 
     lbug::storage::LocalWAL localWAL(*lbug::storage::MemoryManager::Get(*conn->getClientContext()),
         false /* enableChecksums */);
-    localWAL.logLoadExtension("dummy");
+    localWAL.logLoadExtension("" /* main */, "dummy");
     localWAL.logCommit();
     uint64_t walCommitSequence = 0;
     EXPECT_THROW(wal.logCommittedWAL(localWAL, conn->getClientContext(), walCommitSequence),
