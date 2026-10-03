@@ -13,11 +13,19 @@ namespace storage {
 
 void CheckpointRecord::serialize(Serializer& serializer) const {
     WALRecord::serialize(serializer);
+    serializer.writeDebuggingInfo("bundleFormatVersion");
+    serializer.write<uint64_t>(bundleFormatVersion);
 }
 
-std::unique_ptr<CheckpointRecord> CheckpointRecord::deserialize(Deserializer&) {
+std::unique_ptr<CheckpointRecord> CheckpointRecord::deserialize(Deserializer& deserializer) {
+    std::string key;
+    uint64_t bundleFormatVersion = 0;
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "bundleFormatVersion");
+        deserializer.deserializeValue<uint64_t>(bundleFormatVersion);
+    }
 
-    return std::make_unique<CheckpointRecord>();
+    return std::make_unique<CheckpointRecord>(std::move(bundleFormatVersion));
 }
 
 } // namespace storage

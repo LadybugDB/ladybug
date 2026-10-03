@@ -1,22 +1,37 @@
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <future>
+#include <iterator>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <unordered_set>
+#include <vector>
 
 #include "api_test/private_api_test.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
+#include "common/checksum.h"
 #include "common/exception/runtime.h"
+#include "common/file_system/virtual_file_system.h"
+#include "common/serializer/buffer_reader.h"
+#include "common/serializer/buffer_writer.h"
+#include "common/serializer/deserializer.h"
+#include "common/serializer/serializer.h"
 #include "common/vector/value_vector.h"
+#include "main/database_manager.h"
+#include "main/db_config.h"
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/checkpointer.h"
+#include "storage/database_header.h"
 #include "storage/page_allocator.h"
 #include "storage/page_manager.h"
+#include "storage/shadow_file.h"
 #include "storage/storage_manager.h"
 #include "storage/table/node_table.h"
 #include "storage/table/string_chunk_data.h"
@@ -55,7 +70,8 @@ class FlakyCheckpointerTest : public PrivateApiTest {
 public:
     std::string getInputDir() override { return "empty"; }
 
-    void runFlakyCheckpoint(const FlakyCheckpointer& flakyCheckpointer) {
+    void runFlakyCheckpoint(const FlakyCheckpointer& flakyCheckpointer,
+        std::string* errorMessage = nullptr, bool resetWALBeforeCheckpoint = false) {
         conn->query("CALL force_checkpoint_on_close=false;");
         conn->query("CALL auto_checkpoint=false");
         conn->query("CREATE NODE TABLE test(id INT64 PRIMARY KEY, name STRING);");
@@ -63,9 +79,15 @@ public:
             conn->query(std::format("CREATE (a:test {{id: {}, name: 'name_{}'}});", i, i));
         }
         auto context = getClientContext(*conn);
+        if (resetWALBeforeCheckpoint) {
+            WAL::Get(*context)->reset();
+        }
         flakyCheckpointer.setCheckpointer(*context);
         auto res = conn->query("CHECKPOINT;");
         ASSERT_FALSE(res->isSuccess());
+        if (errorMessage != nullptr) {
+            *errorMessage = res->getErrorMessage();
+        }
     }
 
     void runTest(const FlakyCheckpointer& flakyCheckpointer) {
@@ -253,7 +275,7 @@ public:
     void logCheckpointAndApplyShadowPages(bool /*walRotated*/) override {
         const auto storageManager = mainStorageManager;
         auto& shadowFile = storageManager->getShadowFile();
-        shadowFile.flushAll(clientContext);
+        shadowFile.flushAll(storageManager->getOrInitDatabaseID(clientContext));
         throw RuntimeException("checkpoint failed.");
     }
 };
@@ -277,7 +299,7 @@ public:
     void logCheckpointAndApplyShadowPages(bool walRotated) override {
         const auto storageManager = mainStorageManager;
         auto& shadowFile = storageManager->getShadowFile();
-        shadowFile.flushAll(clientContext);
+        shadowFile.flushAll(storageManager->getOrInitDatabaseID(clientContext));
         auto wal = WAL::Get(clientContext);
         if (walRotated) {
             wal->logAndFlushCheckpointToFrozen(&clientContext);
@@ -287,6 +309,23 @@ public:
         throw RuntimeException("checkpoint failed.");
     }
 };
+
+class PartitionChildShadowApplier final : public Checkpointer {
+public:
+    explicit PartitionChildShadowApplier(main::ClientContext& context) : Checkpointer(context) {}
+
+    void applyPartitionChildShadowPages() { applyShadowPagesForPartitionChildren(); }
+};
+
+static void rewriteCheckpointRecordAsLegacy(main::ClientContext& context,
+    const std::string& walPath, std::optional<bool> enableChecksumsOverride = std::nullopt);
+static void writeShadowDatabaseID(main::ClientContext& context, const std::string& shadowPath,
+    uuid databaseID);
+
+static std::vector<uint8_t> readFile(const std::string& path) {
+    std::ifstream stream{path, std::ios::binary};
+    return {std::istreambuf_iterator<char>{stream}, std::istreambuf_iterator<char>{}};
+}
 
 TEST_F(FlakyCheckpointerTest, RecoverFromCheckpointApplyingShadowFailure) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
@@ -305,12 +344,12 @@ TEST_F(CheckpointRetryAfterFailureTest, RetryAfterFailureWithDurableCheckpointRe
     }
     insertNodes(0, 100);
     failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
-    insertNodes(100, 200);
-    // The frozen WAL now holds a durable CHECKPOINT record that only recovery can apply, so a
-    // retry must not replace it.
+    auto rejectedWrite = conn->query("CREATE (:test {id: 100, name: 'rejected'});");
+    ASSERT_FALSE(rejectedWrite->isSuccess());
+    ASSERT_NE(rejectedWrite->getErrorMessage().find("panic state"), std::string::npos);
     EXPECT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
     createDBAndConn();
-    checkNodes(200);
+    checkNodes(100);
 }
 
 TEST_F(CheckpointRetryAfterFailureTest, FailedRetryKeepsDurableCheckpointRecord) {
@@ -319,14 +358,612 @@ TEST_F(CheckpointRetryAfterFailureTest, FailedRetryKeepsDurableCheckpointRecord)
     }
     insertNodes(0, 100);
     failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
-    insertNodes(100, 200);
-    // A retry that fails in its storage phase must not replace the frozen WAL that holds the
-    // first checkpoint's CHECKPOINT record.
-    failCheckpoint();
-    // Close without checkpointing, as a crash would.
+    const auto frozenWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    ASSERT_TRUE(std::filesystem::exists(frozenWALPath));
+    auto retry = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(retry->isSuccess());
+    ASSERT_NE(retry->getErrorMessage().find("panic state"), std::string::npos);
+    ASSERT_TRUE(std::filesystem::exists(frozenWALPath));
     createDBAndConn();
-    checkNodes(200);
+    checkNodes(100);
 }
+
+TEST_F(CheckpointRetryAfterFailureTest, MainMarkerRecoversLegacyPartitionShadows) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
+    checkpoint();
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    const auto parentDatabaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    auto* vfs = VirtualFileSystem::GetUnsafe(*context);
+    const auto activeWALPath = StorageUtils::getWALFilePath(databasePath);
+    const auto frozenWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    rewriteCheckpointRecordAsLegacy(*context,
+        vfs->fileOrPathExists(frozenWALPath, context) ? frozenWALPath : activeWALPath);
+    writeShadowDatabaseID(*context, StorageUtils::getShadowFilePath(databasePath),
+        parentDatabaseID);
+    const auto childManagers =
+        main::DatabaseManager::Get(*context)->getPartitionStorageRegistry()->getAllManagers();
+    ASSERT_EQ(childManagers.size(), 2);
+    for (auto* childManager : childManagers) {
+        const auto shadowPath = StorageUtils::getShadowFilePath(childManager->getDatabasePath());
+        ASSERT_TRUE(std::filesystem::exists(shadowPath));
+        writeShadowDatabaseID(*context, shadowPath, parentDatabaseID);
+    }
+
+    createDBAndConn();
+    auto result = conn->query("MATCH (n:partitioned) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    result = conn->query("MATCH (n:partitioned_p0) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    result = conn->query("MATCH (n:partitioned_p1) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, LegacyMarkerRecoversAppliedChildrenWithoutShadows) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
+    checkpoint();
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    const auto parentDatabaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    auto* vfs = VirtualFileSystem::GetUnsafe(*context);
+    const auto activeWALPath = StorageUtils::getWALFilePath(databasePath);
+    const auto frozenWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    rewriteCheckpointRecordAsLegacy(*context,
+        vfs->fileOrPathExists(frozenWALPath, context) ? frozenWALPath : activeWALPath);
+    writeShadowDatabaseID(*context, StorageUtils::getShadowFilePath(databasePath),
+        parentDatabaseID);
+    const auto childManagers =
+        main::DatabaseManager::Get(*context)->getPartitionStorageRegistry()->getAllManagers();
+    ASSERT_EQ(childManagers.size(), 2);
+    std::vector<std::string> childShadowPaths;
+    for (auto* childManager : childManagers) {
+        childShadowPaths.push_back(
+            StorageUtils::getShadowFilePath(childManager->getDatabasePath()));
+        ASSERT_TRUE(std::filesystem::exists(childShadowPaths.back()));
+    }
+    // The legacy protocol applied and removed each child's shadow before the checkpoint
+    // committed, so simulate a crash in that window: children applied, shadows gone.
+    PartitionChildShadowApplier applier(*context);
+    applier.applyPartitionChildShadowPages();
+    conn.reset();
+    database.reset();
+    for (const auto& childShadowPath : childShadowPaths) {
+        std::filesystem::remove(childShadowPath);
+    }
+
+    createDBAndConn();
+    auto result = conn->query("MATCH (n:partitioned) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    result = conn->query("MATCH (n:partitioned_p0) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    result = conn->query("MATCH (n:partitioned_p1) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, BundleMarkerRequiresEveryChildShadow) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
+    checkpoint();
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    const auto childManagers =
+        main::DatabaseManager::Get(*context)->getPartitionStorageRegistry()->getAllManagers();
+    ASSERT_EQ(childManagers.size(), 2);
+    std::vector<std::string> childShadowPaths;
+    for (auto* childManager : childManagers) {
+        childShadowPaths.push_back(
+            StorageUtils::getShadowFilePath(childManager->getDatabasePath()));
+        ASSERT_TRUE(std::filesystem::exists(childShadowPaths.back()));
+    }
+    conn.reset();
+    database.reset();
+    std::filesystem::remove(childShadowPaths[0]);
+    try {
+        createDBAndConn();
+        FAIL() << "Expected a missing partition shadow to block bundle recovery.";
+    } catch (const RuntimeException& e) {
+        EXPECT_NE(std::string{e.what()}.find("partition shadow file"), std::string::npos)
+            << e.what();
+        EXPECT_NE(std::string{e.what()}.find("is missing"), std::string::npos) << e.what();
+    }
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, MissingMainMarkerDiscardsPartitionShadows) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
+    checkpoint();
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+
+    auto* context = getClientContext(*conn);
+    auto stagedCheckpoint = std::make_unique<Checkpointer>(*context);
+    stagedCheckpoint->beginCheckpoint(0);
+    stagedCheckpoint->checkpointStoragePhase();
+    stagedCheckpoint->persistPartitionChildFiles();
+    stagedCheckpoint.reset();
+    const auto childManagers =
+        main::DatabaseManager::Get(*context)->getPartitionStorageRegistry()->getAllManagers();
+    ASSERT_EQ(childManagers.size(), 2);
+    std::vector<std::string> childShadowPaths;
+    auto* vfs = VirtualFileSystem::GetUnsafe(*context);
+    for (auto* childManager : childManagers) {
+        childShadowPaths.push_back(
+            StorageUtils::getShadowFilePath(childManager->getDatabasePath()));
+        ASSERT_TRUE(std::filesystem::exists(childShadowPaths.back()));
+        auto shadowFile = vfs->openFile(childShadowPaths.back(),
+            FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE), context);
+        ShadowFileHeader header;
+        shadowFile->readFromFile(reinterpret_cast<uint8_t*>(&header), sizeof(header), 0);
+        header.numShadowPages = INVALID_PAGE_IDX;
+        shadowFile->writeFile(reinterpret_cast<const uint8_t*>(&header), sizeof(header), 0);
+        shadowFile->syncFile();
+    }
+    createDBAndConn();
+    for (const auto& childShadowPath : childShadowPaths) {
+        ASSERT_FALSE(std::filesystem::exists(childShadowPath));
+    }
+    auto result = conn->query("MATCH (n:partitioned) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    result = conn->query("MATCH (n:partitioned_p0) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    result = conn->query("MATCH (n:partitioned_p1) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, ReadOnlyOpenPreservesOrphanPartitionShadow) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
+    checkpoint();
+
+    const auto childManagers = main::DatabaseManager::Get(*getClientContext(*conn))
+                                   ->getPartitionStorageRegistry()
+                                   ->getAllManagers();
+    ASSERT_EQ(childManagers.size(), 2);
+    const auto shadowPath =
+        StorageUtils::getShadowFilePath(childManagers.front()->getDatabasePath());
+    const std::string shadowContents = "orphan partition shadow";
+    std::ofstream{shadowPath, std::ios::binary}.write(shadowContents.data(), shadowContents.size());
+    ASSERT_TRUE(std::filesystem::exists(shadowPath));
+
+    conn.reset();
+    database.reset();
+    systemConfig->readOnly = true;
+    EXPECT_THROW(createDBAndConn(), RuntimeException);
+    std::ifstream shadowStream{shadowPath, std::ios::binary};
+    const std::string persistedShadow{std::istreambuf_iterator<char>{shadowStream},
+        std::istreambuf_iterator<char>{}};
+    EXPECT_EQ(persistedShadow, shadowContents);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, ReadOnlyOpenPreservesOrphanGraphShadow) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE GRAPH orphan_shadow_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH orphan_shadow_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:orphan {name: 'x'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    checkpoint();
+
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "orphan_shadow_graph");
+    const auto shadowPath = StorageUtils::getShadowFilePath(graphPath);
+    const std::string shadowContents = "orphan graph shadow";
+    std::ofstream{shadowPath, std::ios::binary}.write(shadowContents.data(), shadowContents.size());
+    ASSERT_TRUE(std::filesystem::exists(shadowPath));
+
+    conn.reset();
+    database.reset();
+    systemConfig->readOnly = true;
+    EXPECT_THROW(createDBAndConn(), RuntimeException);
+    std::ifstream shadowStream{shadowPath, std::ios::binary};
+    const std::string persistedShadow{std::istreambuf_iterator<char>{shadowStream},
+        std::istreambuf_iterator<char>{}};
+    EXPECT_EQ(persistedShadow, shadowContents);
+}
+
+class CheckpointerFailsBeforeWALRetirement final : public Checkpointer {
+public:
+    explicit CheckpointerFailsBeforeWALRetirement(main::ClientContext& context)
+        : Checkpointer(context) {}
+
+    void beforeWALRetirement(bool) override {
+        throw RuntimeException("checkpoint interrupted before WAL retirement");
+    }
+};
+
+TEST_F(CheckpointRetryAfterFailureTest, PartitionShadowsSurviveUntilMainWALRetirement) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
+    checkpoint();
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    failCheckpointWith<CheckpointerFailsBeforeWALRetirement>();
+
+    auto* context = getClientContext(*conn);
+    const auto childManagers =
+        main::DatabaseManager::Get(*context)->getPartitionStorageRegistry()->getAllManagers();
+    ASSERT_EQ(childManagers.size(), 2);
+    for (auto* childManager : childManagers) {
+        const auto childShadowPath =
+            StorageUtils::getShadowFilePath(childManager->getDatabasePath());
+        ASSERT_TRUE(std::filesystem::exists(childShadowPath));
+        ShadowFile::replayShadowPageRecordsForStorageManager(*context, *childManager,
+            ShadowFile::CHECKPOINT_BUNDLE_DATABASE_ID);
+        ASSERT_TRUE(std::filesystem::exists(childShadowPath));
+    }
+    auto retry = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(retry->isSuccess());
+    ASSERT_NE(retry->getErrorMessage().find("panic state"), std::string::npos);
+    for (auto* childManager : childManagers) {
+        ASSERT_TRUE(std::filesystem::exists(
+            StorageUtils::getShadowFilePath(childManager->getDatabasePath())));
+    }
+
+    createDBAndConn();
+    auto result = conn->query("MATCH (n:partitioned_p0) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    result = conn->query("MATCH (n:partitioned_p1) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+class CommittedPartitionMissingBaseTest : public CheckpointRetryAfterFailureTest,
+                                          public ::testing::WithParamInterface<bool> {};
+
+TEST_P(CommittedPartitionMissingBaseTest, RejectsWithoutRecreatingFile) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const bool walRotated = GetParam();
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
+    checkpoint();
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
+    auto* context = getClientContext(*conn);
+    if (!walRotated) {
+        WAL::Get(*context)->reset();
+    }
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+    ASSERT_EQ(std::filesystem::exists(StorageUtils::getCheckpointWALFilePath(databasePath)),
+        walRotated);
+
+    const auto childManagers =
+        main::DatabaseManager::Get(*context)->getPartitionStorageRegistry()->getAllManagers();
+    ASSERT_EQ(childManagers.size(), 2);
+    const auto missingPath = childManagers.front()->getDatabasePath();
+    conn.reset();
+    database.reset();
+    ASSERT_TRUE(std::filesystem::remove(missingPath));
+    try {
+        createDBAndConn();
+        FAIL() << "Expected committed recovery to reject a missing partition file.";
+    } catch (const RuntimeException& e) {
+        EXPECT_NE(std::string{e.what()}.find("partition file"), std::string::npos) << e.what();
+    }
+    EXPECT_FALSE(std::filesystem::exists(missingPath));
+}
+
+INSTANTIATE_TEST_SUITE_P(WALRotation, CommittedPartitionMissingBaseTest, ::testing::Bool(),
+    [](const ::testing::TestParamInfo<bool>& info) { return info.param ? "Frozen" : "Active"; });
+
+TEST_F(CheckpointRetryAfterFailureTest, CommittedPartitionRecoveryRejectsMissingShadowFile) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
+    checkpoint();
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    const auto childManagers =
+        main::DatabaseManager::Get(*context)->getPartitionStorageRegistry()->getAllManagers();
+    ASSERT_EQ(childManagers.size(), 2);
+    const auto missingPath =
+        StorageUtils::getShadowFilePath(childManagers.front()->getDatabasePath());
+    conn.reset();
+    database.reset();
+    ASSERT_TRUE(std::filesystem::remove(missingPath));
+    EXPECT_THROW(createDBAndConn(), RuntimeException);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, CommittedRecoveryReplaysChildShadowBeforeParsingChildFile) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
+    checkpoint();
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    // Power loss during the child's shadow-page apply can persist the child's new header page
+    // while the pages it references — including the page-manager metadata — are still torn or
+    // missing. Recovery must replay the committed child shadow before parsing the child file,
+    // the same repair-then-parse order the main file already follows.
+    const auto childPath = StorageUtils::getGraphPath(databasePath, "partitioned_p0");
+    const auto childShadowPath = StorageUtils::getShadowFilePath(childPath);
+    conn.reset();
+    database.reset();
+
+    const auto shadowBytes = readFile(childShadowPath);
+    ASSERT_GE(shadowBytes.size(), LBUG_PAGE_SIZE + sizeof(uint64_t));
+    ShadowFileHeader shadowHeader;
+    std::memcpy(&shadowHeader, shadowBytes.data(), sizeof(shadowHeader));
+    ASSERT_GT(shadowHeader.numShadowPages, 0u);
+    const auto recordsOffset =
+        (static_cast<uint64_t>(shadowHeader.numShadowPages) + 1) * LBUG_PAGE_SIZE;
+    uint64_t numRecords = 0;
+    ASSERT_GE(shadowBytes.size(), recordsOffset + sizeof(numRecords));
+    std::memcpy(&numRecords, shadowBytes.data() + recordsOffset, sizeof(numRecords));
+    ASSERT_EQ(numRecords, shadowHeader.numShadowPages);
+    std::optional<uint64_t> headerPageOffset;
+    for (auto i = 0u; i < numRecords; ++i) {
+        const auto recordOffset =
+            recordsOffset + sizeof(uint64_t) + i * (sizeof(file_idx_t) + sizeof(page_idx_t));
+        page_idx_t pageIdx = INVALID_PAGE_IDX;
+        std::memcpy(&pageIdx, shadowBytes.data() + recordOffset + sizeof(file_idx_t),
+            sizeof(pageIdx));
+        if (pageIdx == common::StorageConstants::DB_HEADER_PAGE_IDX) {
+            headerPageOffset = (i + 1) * LBUG_PAGE_SIZE;
+        }
+    }
+    ASSERT_TRUE(headerPageOffset.has_value());
+    ASSERT_GE(shadowBytes.size(), *headerPageOffset + LBUG_PAGE_SIZE);
+
+    auto headerPage = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
+    std::memcpy(headerPage.get(), shadowBytes.data() + *headerPageOffset, LBUG_PAGE_SIZE);
+    common::Deserializer headerDeserializer{
+        std::make_unique<common::BufferReader>(headerPage.get(), LBUG_PAGE_SIZE)};
+    const auto childHeader = DatabaseHeader::deserialize(headerDeserializer);
+    ASSERT_NE(childHeader.metadataPageRange.startPageIdx, INVALID_PAGE_IDX);
+
+    const auto poisonOffset = childHeader.metadataPageRange.startPageIdx * LBUG_PAGE_SIZE;
+    auto childBytes = readFile(childPath);
+    childBytes.resize(std::max<size_t>(childBytes.size(), poisonOffset + LBUG_PAGE_SIZE), 0);
+    std::memcpy(childBytes.data(), shadowBytes.data() + *headerPageOffset, LBUG_PAGE_SIZE);
+    std::fill_n(childBytes.begin() + poisonOffset, LBUG_PAGE_SIZE, 0xFF);
+    {
+        std::ofstream stream{childPath, std::ios::binary};
+        stream.write(reinterpret_cast<const char*>(childBytes.data()), childBytes.size());
+    }
+
+    createDBAndConn();
+    auto result = conn->query("MATCH (a:partitioned_p0) RETURN COUNT(a);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+
+    // The recovered page manager must be usable: allocate and durably checkpoint on top of it.
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 2, amount: 20});")->isSuccess());
+    checkpoint();
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+    result = conn->query("MATCH (a:partitioned_p0) RETURN COUNT(a);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, CommittedRecoverySurvivesRetriesThatAdvanceExtent) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE partitioned(id INT64 PRIMARY KEY, amount INT64) "
+                            "PARTITION BY HASH(amount) PARTITIONS 2;")
+                    ->isSuccess());
+    checkpoint();
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 1, amount: 10});")->isSuccess());
+    failCheckpointWith<FlakyCheckpointerFailsOnLoggingCheckpoint>();
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p1 {id: 2, amount: 20});")->isSuccess());
+    failCheckpointWith<FlakyCheckpointerFailsOnLoggingCheckpoint>();
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 3, amount: 30});")->isSuccess());
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    // Each failed attempt allocates pages it never applies, so the committed checkpoint's
+    // page extent recorded in the shadow's header page reaches beyond the physical files.
+    // Recovery must still accept every page that extent covers.
+    createDBAndConn();
+    auto result = conn->query("MATCH (n:partitioned_p0) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    result = conn->query("MATCH (n:partitioned_p1) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+
+    ASSERT_TRUE(conn->query("CREATE (:partitioned_p0 {id: 4, amount: 40});")->isSuccess());
+    checkpoint();
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+    result = conn->query("MATCH (n:partitioned_p0) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, CommittedRecoveryRejectsOversizedShadowPageCount) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    auto* vfs = VirtualFileSystem::GetUnsafe(*context);
+    const auto shadowPath = StorageUtils::getShadowFilePath(databasePath);
+    auto shadowFile =
+        vfs->openFile(shadowPath, FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE), context);
+    ShadowFileHeader header;
+    shadowFile->readFromFile(reinterpret_cast<uint8_t*>(&header), sizeof(header), 0);
+    header.numShadowPages = systemConfig->maxDBSize / LBUG_PAGE_SIZE + 1;
+    shadowFile->writeFile(reinterpret_cast<const uint8_t*>(&header), sizeof(header), 0);
+    shadowFile->syncFile();
+    shadowFile.reset();
+    conn.reset();
+    database.reset();
+    try {
+        createDBAndConn();
+        FAIL() << "Expected oversized shadow page count to be rejected.";
+    } catch (const RuntimeException& e) {
+        EXPECT_NE(std::string{e.what()}.find("invalid shadow page count"), std::string::npos);
+    }
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, CommittedRecoveryRejectsInvalidShadowTargetPage) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    auto* vfs = VirtualFileSystem::GetUnsafe(*context);
+    const auto shadowPath = StorageUtils::getShadowFilePath(databasePath);
+    auto shadowFile =
+        vfs->openFile(shadowPath, FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE), context);
+    ShadowFileHeader header;
+    shadowFile->readFromFile(reinterpret_cast<uint8_t*>(&header), sizeof(header), 0);
+    ASSERT_GT(header.numShadowPages, 0);
+    const auto targetPageOffset =
+        (static_cast<uint64_t>(header.numShadowPages) + 1) * LBUG_PAGE_SIZE + sizeof(uint64_t) +
+        sizeof(file_idx_t);
+    const page_idx_t invalidTarget = INVALID_PAGE_IDX;
+    shadowFile->writeFile(reinterpret_cast<const uint8_t*>(&invalidTarget), sizeof(invalidTarget),
+        targetPageOffset);
+    shadowFile->syncFile();
+    shadowFile.reset();
+    conn.reset();
+    database.reset();
+    EXPECT_THROW(createDBAndConn(), RuntimeException);
+}
+
+class ShadowTargetPageBoundaryTest : public CheckpointRetryAfterFailureTest,
+                                     public ::testing::WithParamInterface<bool> {};
+
+TEST_P(ShadowTargetPageBoundaryTest, AcceptsOnlyPagesBelowCheckpointedExtent) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const bool targetIsFirstPagePastExtent = GetParam();
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    auto* storageManager = StorageManager::Get(*context);
+    auto* vfs = VirtualFileSystem::GetUnsafe(*context);
+    auto shadowFile = vfs->openFile(StorageUtils::getShadowFilePath(databasePath),
+        FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE), context);
+    ShadowFileHeader header;
+    shadowFile->readFromFile(reinterpret_cast<uint8_t*>(&header), sizeof(header), 0);
+    ASSERT_GT(header.numShadowPages, 0);
+
+    // The committed checkpoint's page extent is the one recorded in the shadow's embedded
+    // database header page, not the physical file size plus the shadow page count.
+    const auto recordsOffset = (static_cast<uint64_t>(header.numShadowPages) + 1) * LBUG_PAGE_SIZE;
+    std::optional<uint64_t> headerRecordIdx;
+    for (auto i = 0u; i < header.numShadowPages; ++i) {
+        const auto recordOffset =
+            recordsOffset + sizeof(uint64_t) + i * (sizeof(file_idx_t) + sizeof(page_idx_t));
+        page_idx_t pageIdx = INVALID_PAGE_IDX;
+        shadowFile->readFromFile(reinterpret_cast<uint8_t*>(&pageIdx), sizeof(pageIdx),
+            recordOffset + sizeof(file_idx_t));
+        if (pageIdx == StorageConstants::DB_HEADER_PAGE_IDX) {
+            headerRecordIdx = i;
+        }
+    }
+    ASSERT_TRUE(headerRecordIdx.has_value());
+    auto headerPage = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
+    shadowFile->readFromFile(headerPage.get(), LBUG_PAGE_SIZE,
+        (*headerRecordIdx + 1) * LBUG_PAGE_SIZE);
+    common::Deserializer headerDeserializer{
+        std::make_unique<common::BufferReader>(headerPage.get(), LBUG_PAGE_SIZE)};
+    const auto checkpointHeader = DatabaseHeader::deserialize(headerDeserializer);
+    const auto extentPages = static_cast<page_idx_t>(checkpointHeader.dataFileNumPages);
+    ASSERT_GT(extentPages, 0);
+    const auto target =
+        static_cast<page_idx_t>(targetIsFirstPagePastExtent ? extentPages : extentPages - 1);
+    const auto targetPageOffset =
+        (static_cast<uint64_t>(header.numShadowPages) + 1) * LBUG_PAGE_SIZE + sizeof(uint64_t) +
+        sizeof(file_idx_t);
+    page_idx_t originalTarget = INVALID_PAGE_IDX;
+    shadowFile->readFromFile(reinterpret_cast<uint8_t*>(&originalTarget), sizeof(originalTarget),
+        targetPageOffset);
+    ASSERT_NE(originalTarget, StorageConstants::DB_HEADER_PAGE_IDX);
+    shadowFile->writeFile(reinterpret_cast<const uint8_t*>(&target), sizeof(target),
+        targetPageOffset);
+    shadowFile->syncFile();
+    shadowFile.reset();
+
+    const auto databaseBeforeReplay = readFile(databasePath);
+    const auto replay = [&] {
+        ShadowFile::replayShadowPageRecordsForStorageManager(*context, *storageManager,
+            ShadowFile::CHECKPOINT_BUNDLE_DATABASE_ID);
+    };
+    if (!targetIsFirstPagePastExtent) {
+        EXPECT_NO_THROW(replay());
+        return;
+    }
+    try {
+        replay();
+        FAIL() << "Expected the first page past the checkpointed extent to be rejected.";
+    } catch (const RuntimeException& e) {
+        EXPECT_NE(std::string{e.what()}.find("invalid target page"), std::string::npos) << e.what();
+    }
+    EXPECT_EQ(readFile(databasePath), databaseBeforeReplay);
+}
+
+INSTANTIATE_TEST_SUITE_P(Extent, ShadowTargetPageBoundaryTest, ::testing::Bool(),
+    [](const ::testing::TestParamInfo<bool>& info) {
+        return info.param ? "FirstPagePastExtent" : "LastPageInExtent";
+    });
 
 class FlakyCheckpointerFailsOnClearingFiles final : public Checkpointer {
 public:
@@ -336,7 +973,7 @@ public:
     void logCheckpointAndApplyShadowPages(bool walRotated) override {
         const auto storageManager = mainStorageManager;
         auto& shadowFile = storageManager->getShadowFile();
-        shadowFile.flushAll(clientContext);
+        shadowFile.flushAll(storageManager->getOrInitDatabaseID(clientContext));
         auto wal = WAL::Get(clientContext);
         if (walRotated) {
             wal->logAndFlushCheckpointToFrozen(&clientContext);
@@ -357,6 +994,1755 @@ TEST_F(FlakyCheckpointerTest, RecoverFromCheckpointClearingFilesFailure) {
     };
     FlakyCheckpointer flakyCheckpointer(initFlakyCheckpointer);
     runTest(flakyCheckpointer);
+}
+
+class FlakyCheckpointerFailsAfterRetiringWAL final : public Checkpointer {
+public:
+    FlakyCheckpointerFailsAfterRetiringWAL(main::ClientContext& context, bool expectedWalRotated,
+        bool& reachedExpectedTarget)
+        : Checkpointer(context), expectedWalRotated{expectedWalRotated},
+          reachedExpectedTarget{reachedExpectedTarget} {}
+
+    void onWALRetired(bool walRotated) override {
+        ASSERT_EQ(walRotated, expectedWalRotated);
+        reachedExpectedTarget = true;
+        throw RuntimeException("checkpoint interrupted after retiring the WAL.");
+    }
+
+private:
+    bool expectedWalRotated;
+    bool& reachedExpectedTarget;
+};
+
+class MainWALRetirementTest : public FlakyCheckpointerTest,
+                              public ::testing::WithParamInterface<bool> {};
+
+TEST_P(MainWALRetirementTest, RecoverAfterRetiringWALBeforeRemovingShadow) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const auto expectedWalRotated = GetParam();
+    bool reachedExpectedTarget = false;
+    auto initFlakyCheckpointer = [expectedWalRotated, &reachedExpectedTarget](
+                                     main::ClientContext& context) {
+        return std::make_unique<FlakyCheckpointerFailsAfterRetiringWAL>(context, expectedWalRotated,
+            reachedExpectedTarget);
+    };
+    FlakyCheckpointer flakyCheckpointer(initFlakyCheckpointer);
+    std::string checkpointError;
+    runFlakyCheckpoint(flakyCheckpointer, &checkpointError,
+        !expectedWalRotated /* resetWALBeforeCheckpoint */);
+
+    ASSERT_TRUE(reachedExpectedTarget);
+    ASSERT_NE(checkpointError.find("refuses further writes until restart"), std::string::npos);
+    ASSERT_NE(checkpointError.find("checkpoint interrupted after retiring the WAL"),
+        std::string::npos);
+    const auto activeWALPath = StorageUtils::getWALFilePath(databasePath);
+    const auto checkpointWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    ASSERT_FALSE(std::filesystem::exists(activeWALPath));
+    ASSERT_FALSE(std::filesystem::exists(checkpointWALPath));
+    ASSERT_TRUE(std::filesystem::exists(StorageUtils::getShadowFilePath(databasePath)));
+    auto rejectedWrite = conn->query("CREATE (:test {id: 5000, name: 'rejected'});");
+    ASSERT_FALSE(rejectedWrite->isSuccess());
+    ASSERT_NE(rejectedWrite->getErrorMessage().find("panic state"), std::string::npos);
+
+    createDBAndConn();
+    auto result = conn->query("MATCH (a:test) RETURN COUNT(a);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 5000);
+    ASSERT_FALSE(std::filesystem::exists(activeWALPath));
+    ASSERT_FALSE(std::filesystem::exists(checkpointWALPath));
+    ASSERT_FALSE(std::filesystem::exists(StorageUtils::getShadowFilePath(databasePath)));
+    ASSERT_TRUE(conn->query("CREATE (:test {id: 5000, name: 'after-recovery'});")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    createDBAndConn();
+    result = conn->query("MATCH (a:test) RETURN COUNT(a);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 5001);
+}
+
+INSTANTIATE_TEST_SUITE_P(ActiveAndFrozen, MainWALRetirementTest, ::testing::Bool(),
+    [](const ::testing::TestParamInfo<bool>& info) { return info.param ? "Frozen" : "Active"; });
+
+class CheckpointerFailsBeforeGraphShadowApply final : public Checkpointer {
+public:
+    explicit CheckpointerFailsBeforeGraphShadowApply(main::ClientContext& context)
+        : Checkpointer(context) {}
+
+    void beforeGraphShadowApply(StorageManager&) override {
+        throw RuntimeException("checkpoint interrupted before graph shadow apply");
+    }
+};
+
+class LegacyCheckpointRecord final : public WALRecord {
+public:
+    LegacyCheckpointRecord() : WALRecord{WALRecordType::CHECKPOINT_RECORD} {}
+
+    void serialize(Serializer& serializer) const override { WALRecord::serialize(serializer); }
+};
+
+static BinaryData serializeCheckpointRecord(const WALRecord& record) {
+    auto writer = std::make_shared<BufferWriter>();
+    Serializer serializer{writer};
+    WALRecord::serializeWithLength(serializer, record);
+    return writer->getData();
+}
+
+static void rewriteCheckpointRecord(main::ClientContext& context, const std::string& walPath,
+    const WALRecord& replacement, std::optional<bool> enableChecksumsOverride = std::nullopt) {
+    const auto currentRecord =
+        serializeCheckpointRecord(CheckpointRecord{WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION});
+    const auto legacyRecord = serializeCheckpointRecord(replacement);
+    const auto enableChecksums =
+        enableChecksumsOverride.value_or(context.getDBConfig()->enableChecksums);
+    const auto checksumSize = enableChecksums ? sizeof(uint64_t) : 0;
+    auto fileInfo = VirtualFileSystem::GetUnsafe(context)->openFile(walPath,
+        FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE), &context);
+    const auto fileSize = fileInfo->getFileSize();
+    if (fileSize < currentRecord.size + checksumSize) {
+        throw RuntimeException("Checkpoint WAL does not contain the current checkpoint record.");
+    }
+    const auto recordOffset = fileSize - currentRecord.size - checksumSize;
+    auto actualRecord = std::make_unique<uint8_t[]>(currentRecord.size);
+    fileInfo->readFromFile(actualRecord.get(), currentRecord.size, recordOffset);
+    if (std::memcmp(actualRecord.get(), currentRecord.data.get(), currentRecord.size) != 0) {
+        throw RuntimeException("Checkpoint WAL does not end with the current checkpoint record.");
+    }
+    if (enableChecksums) {
+        uint64_t storedChecksum;
+        fileInfo->readFromFile(reinterpret_cast<uint8_t*>(&storedChecksum), sizeof(storedChecksum),
+            recordOffset + currentRecord.size);
+        if (storedChecksum != checksum(currentRecord.data.get(), currentRecord.size)) {
+            throw RuntimeException("Current checkpoint record checksum does not match.");
+        }
+    }
+    fileInfo->truncate(recordOffset);
+    fileInfo->writeFile(legacyRecord.data.get(), legacyRecord.size, recordOffset);
+    if (enableChecksums) {
+        const auto legacyChecksum = checksum(legacyRecord.data.get(), legacyRecord.size);
+        fileInfo->writeFile(reinterpret_cast<const uint8_t*>(&legacyChecksum),
+            sizeof(legacyChecksum), recordOffset + legacyRecord.size);
+    }
+    fileInfo->syncFile();
+}
+
+static void rewriteCheckpointRecordAsLegacy(main::ClientContext& context,
+    const std::string& walPath, std::optional<bool> enableChecksumsOverride) {
+    rewriteCheckpointRecord(context, walPath, LegacyCheckpointRecord{}, enableChecksumsOverride);
+}
+
+static void writeShadowDatabaseID(main::ClientContext& context, const std::string& shadowPath,
+    uuid databaseID) {
+    auto fileInfo = VirtualFileSystem::GetUnsafe(context)->openFile(shadowPath,
+        FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE), &context);
+    ShadowFileHeader header;
+    fileInfo->readFromFile(reinterpret_cast<uint8_t*>(&header), sizeof(header), 0);
+    header.databaseID = databaseID;
+    fileInfo->writeFile(reinterpret_cast<const uint8_t*>(&header), sizeof(header), 0);
+    fileInfo->syncFile();
+}
+
+static void writeWALHeaderDatabaseID(main::ClientContext& context, const std::string& walPath,
+    uuid expectedDatabaseID, uuid databaseID, bool enableChecksums) {
+    auto fileInfo = VirtualFileSystem::GetUnsafe(context)->openFile(walPath,
+        FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE), &context);
+    std::array<uint8_t, sizeof(uuid) + sizeof(uint8_t)> header{};
+    fileInfo->readFromFile(header.data(), header.size(), 0);
+    uuid currentDatabaseID;
+    std::memcpy(&currentDatabaseID, header.data(), sizeof(uuid));
+    if (currentDatabaseID.value != expectedDatabaseID.value) {
+        throw RuntimeException("WAL header does not hold the expected database ID.");
+    }
+    std::memcpy(header.data(), &databaseID, sizeof(uuid));
+    fileInfo->writeFile(header.data(), header.size(), 0);
+    if (enableChecksums) {
+        const auto headerChecksum = checksum(header.data(), header.size());
+        fileInfo->writeFile(reinterpret_cast<const uint8_t*>(&headerChecksum),
+            sizeof(headerChecksum), header.size());
+    }
+    fileInfo->syncFile();
+}
+
+static uuid foreignDatabaseID(uuid databaseID, uint64_t flippedBits = 1) {
+    databaseID.value.low ^= flippedBits;
+    return databaseID;
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, NonStrictRecoveryDiscardsCheckpointWithTrailingRecord) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 1);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    const auto walPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    auto* vfs = VirtualFileSystem::GetUnsafe(*context);
+    auto fileInfo =
+        vfs->openFile(walPath, FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE), context);
+    const auto trailingRecord = serializeCheckpointRecord(CommitRecord{});
+    auto offset = fileInfo->getFileSize();
+    fileInfo->writeFile(trailingRecord.data.get(), trailingRecord.size, offset);
+    offset += trailingRecord.size;
+    if (context->getDBConfig()->enableChecksums) {
+        const auto recordChecksum = checksum(trailingRecord.data.get(), trailingRecord.size);
+        fileInfo->writeFile(reinterpret_cast<const uint8_t*>(&recordChecksum),
+            sizeof(recordChecksum), offset);
+    }
+    fileInfo->syncFile();
+    fileInfo.reset();
+    const auto shadowPath = StorageUtils::getShadowFilePath(databasePath);
+    writeShadowDatabaseID(*context, shadowPath,
+        foreignDatabaseID(StorageManager::Get(*context)->getOrInitDatabaseID(*context)));
+
+    systemConfig->throwOnWalReplayFailure = false;
+    conn.reset();
+    database.reset();
+    createDBAndConn();
+    checkNodes(1);
+    EXPECT_FALSE(std::filesystem::exists(walPath));
+    EXPECT_FALSE(std::filesystem::exists(shadowPath));
+}
+
+enum class LegacyShadowID : uint8_t { MatchesDatabase, MatchesWAL, MatchesNeither };
+
+class LegacyMainWALDatabaseIDTest : public CheckpointRetryAfterFailureTest,
+                                    public ::testing::WithParamInterface<LegacyShadowID> {};
+
+TEST_P(LegacyMainWALDatabaseIDTest, RecoversWithSelectedGraphIDs) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    const auto walPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    ASSERT_TRUE(std::filesystem::exists(walPath));
+    const auto databaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    const auto walDatabaseID = foreignDatabaseID(databaseID);
+    rewriteCheckpointRecordAsLegacy(*context, walPath);
+    writeWALHeaderDatabaseID(*context, walPath, databaseID, walDatabaseID,
+        context->getDBConfig()->enableChecksums);
+    uuid shadowDatabaseID = databaseID;
+    switch (GetParam()) {
+    case LegacyShadowID::MatchesDatabase:
+        break;
+    case LegacyShadowID::MatchesWAL:
+        shadowDatabaseID = walDatabaseID;
+        break;
+    case LegacyShadowID::MatchesNeither:
+        shadowDatabaseID = foreignDatabaseID(databaseID, 2);
+        break;
+    }
+    writeShadowDatabaseID(*context, StorageUtils::getShadowFilePath(databasePath),
+        shadowDatabaseID);
+
+    createDBAndConn();
+    checkNodes(100);
+    EXPECT_FALSE(std::filesystem::exists(walPath));
+}
+
+INSTANTIATE_TEST_SUITE_P(ShadowID, LegacyMainWALDatabaseIDTest,
+    ::testing::Values(LegacyShadowID::MatchesDatabase, LegacyShadowID::MatchesWAL,
+        LegacyShadowID::MatchesNeither),
+    [](const ::testing::TestParamInfo<LegacyShadowID>& info) {
+        switch (info.param) {
+        case LegacyShadowID::MatchesDatabase:
+            return std::string{"ShadowMatchesDatabase"};
+        case LegacyShadowID::MatchesWAL:
+            return std::string{"ShadowMatchesWAL"};
+        case LegacyShadowID::MatchesNeither:
+            return std::string{"ShadowMatchesNeither"};
+        }
+        return std::string{};
+    });
+
+TEST_F(CheckpointRetryAfterFailureTest, LegacyMainShadowRejectsReplacementDatabase) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    auto* storageManager = StorageManager::Get(*context);
+    const auto databaseID = storageManager->getOrInitDatabaseID(*context);
+    rewriteCheckpointRecordAsLegacy(*context, StorageUtils::getCheckpointWALFilePath(databasePath));
+    writeShadowDatabaseID(*context, StorageUtils::getShadowFilePath(databasePath), databaseID);
+
+    const auto replacementPath = databasePath + ".replacement";
+    {
+        main::Database replacementDatabase{replacementPath, *systemConfig};
+        main::Connection replacementConnection{&replacementDatabase};
+        ASSERT_TRUE(
+            replacementConnection.query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(
+            replacementConnection.query("CREATE NODE TABLE replacement(id INT64 PRIMARY KEY);")
+                ->isSuccess());
+        ASSERT_TRUE(replacementConnection.query("CHECKPOINT;")->isSuccess());
+    }
+    const auto replacementHeader = readFile(replacementPath);
+    ASSERT_GE(replacementHeader.size(), LBUG_PAGE_SIZE);
+    storageManager->getDataFH()->getFileInfo()->writeFile(replacementHeader.data(), LBUG_PAGE_SIZE,
+        0);
+    storageManager->getDataFH()->getFileInfo()->syncFile();
+
+    conn.reset();
+    database.reset();
+    const auto databaseBeforeRecovery = readFile(databasePath);
+    try {
+        createDBAndConn();
+        FAIL() << "Expected a legacy main shadow to reject a replacement database file.";
+    } catch (const RuntimeException& e) {
+        EXPECT_NE(std::string{e.what()}.find("Database ID"), std::string::npos) << e.what();
+    }
+    EXPECT_EQ(readFile(databasePath), databaseBeforeRecovery);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, BundleRejectsForeignMainWALDatabaseID) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    const auto databaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    writeWALHeaderDatabaseID(*context, StorageUtils::getCheckpointWALFilePath(databasePath),
+        databaseID, foreignDatabaseID(databaseID), context->getDBConfig()->enableChecksums);
+    conn.reset();
+    database.reset();
+    const auto databaseBeforeRecovery = readFile(databasePath);
+    try {
+        createDBAndConn();
+        FAIL() << "Expected a bundled checkpoint with a foreign WAL to be rejected.";
+    } catch (const RuntimeException& e) {
+        EXPECT_NE(std::string{e.what()}.find("Database ID"), std::string::npos) << e.what();
+        EXPECT_NE(std::string{e.what()}.find("Do not delete"), std::string::npos) << e.what();
+    }
+    EXPECT_EQ(readFile(databasePath), databaseBeforeRecovery);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, BundleRejectsShadowWithoutCompatibilityGuard) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    writeShadowDatabaseID(*context, StorageUtils::getShadowFilePath(databasePath),
+        StorageManager::Get(*context)->getOrInitDatabaseID(*context));
+    conn.reset();
+    database.reset();
+    const auto databaseBeforeRecovery = readFile(databasePath);
+    try {
+        createDBAndConn();
+        FAIL() << "Expected a bundled checkpoint without its shadow guard to be rejected.";
+    } catch (const RuntimeException& e) {
+        EXPECT_NE(std::string{e.what()}.find("compatibility guard"), std::string::npos) << e.what();
+    }
+    EXPECT_EQ(readFile(databasePath), databaseBeforeRecovery);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, RejectsNewerCheckpointFormatVersion) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    rewriteCheckpointRecord(*context, StorageUtils::getCheckpointWALFilePath(databasePath),
+        CheckpointRecord{WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION + 1});
+    conn.reset();
+    database.reset();
+    const auto databaseBeforeRecovery = readFile(databasePath);
+    try {
+        createDBAndConn();
+        FAIL() << "Expected a newer checkpoint format version to be rejected.";
+    } catch (const RuntimeException& e) {
+        EXPECT_NE(std::string{e.what()}.find("unsupported checkpoint format version 2"),
+            std::string::npos)
+            << e.what();
+    }
+    EXPECT_EQ(readFile(databasePath), databaseBeforeRecovery);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, BundledShadowUsesCompatibilityGuardAndRecovers) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    auto* vfs = VirtualFileSystem::GetUnsafe(*context);
+    const auto shadowPath = StorageUtils::getShadowFilePath(databasePath);
+    auto shadowFile = vfs->openFile(shadowPath, FileOpenFlags(FileFlags::READ_ONLY), context);
+    ShadowFileHeader shadowHeader;
+    shadowFile->readFromFile(reinterpret_cast<uint8_t*>(&shadowHeader), sizeof(shadowHeader), 0);
+    const auto databaseHeader = DatabaseHeader::readDatabaseHeader(
+        *StorageManager::Get(*context)->getDataFH()->getFileInfo());
+    ASSERT_TRUE(databaseHeader.has_value());
+    EXPECT_EQ(shadowHeader.databaseID.value, ShadowFile::CHECKPOINT_BUNDLE_DATABASE_ID.value);
+    EXPECT_NE(shadowHeader.databaseID.value, databaseHeader->databaseID.value);
+    shadowFile.reset();
+
+    createDBAndConn();
+    checkNodes(100);
+}
+
+TEST_F(CheckpointRetryAfterFailureTest, FinalDuplicateDatabaseHeaderIsValidatedBeforeReplay) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+
+    auto* context = getClientContext(*conn);
+    auto* storageManager = StorageManager::Get(*context);
+    auto* dataFile = storageManager->getDataFH()->getFileInfo();
+    const auto databaseBeforeReplay = readFile(databasePath);
+    auto corruptHeader = DatabaseHeader::readDatabaseHeader(*dataFile);
+    ASSERT_TRUE(corruptHeader.has_value());
+    corruptHeader->databaseID.value.low ^= 1;
+
+    auto headerWriter = std::make_shared<BufferWriter>(LBUG_PAGE_SIZE);
+    Serializer headerSerializer{headerWriter};
+    corruptHeader->serialize(headerSerializer);
+    ASSERT_LE(headerWriter->getSize(), LBUG_PAGE_SIZE);
+    std::vector<uint8_t> corruptHeaderPage(LBUG_PAGE_SIZE);
+    std::memcpy(corruptHeaderPage.data(), headerWriter->getBlobData(), headerWriter->getSize());
+
+    auto* vfs = VirtualFileSystem::GetUnsafe(*context);
+    const auto shadowPath = StorageUtils::getShadowFilePath(databasePath);
+    auto shadowFile =
+        vfs->openFile(shadowPath, FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE), context);
+    ShadowFileHeader shadowHeader;
+    shadowFile->readFromFile(reinterpret_cast<uint8_t*>(&shadowHeader), sizeof(shadowHeader), 0);
+    ASSERT_GT(shadowHeader.numShadowPages, 0);
+    const auto oldRecordsOffset =
+        (static_cast<uint64_t>(shadowHeader.numShadowPages) + 1) * LBUG_PAGE_SIZE;
+    const auto oldRecordsSize = shadowFile->getFileSize() - oldRecordsOffset;
+    auto oldRecords = std::make_unique<uint8_t[]>(oldRecordsSize);
+    shadowFile->readFromFile(oldRecords.get(), oldRecordsSize, oldRecordsOffset);
+    Deserializer recordDeserializer{
+        std::make_unique<BufferReader>(oldRecords.get(), oldRecordsSize)};
+    std::vector<ShadowPageRecord> records;
+    recordDeserializer.deserializeVector(records);
+    const auto pageZeroRecord =
+        std::find_if(records.rbegin(), records.rend(), [](const auto& record) {
+            return record.originalPageIdx == StorageConstants::DB_HEADER_PAGE_IDX;
+        });
+    ASSERT_NE(pageZeroRecord, records.rend());
+    records.push_back({pageZeroRecord->originalFileIdx, StorageConstants::DB_HEADER_PAGE_IDX});
+
+    auto recordsWriter = std::make_shared<BufferWriter>();
+    Serializer recordsSerializer{recordsWriter};
+    recordsSerializer.serializeVector(records);
+    shadowFile->writeFile(corruptHeaderPage.data(), corruptHeaderPage.size(), oldRecordsOffset);
+    const auto newRecordsOffset = oldRecordsOffset + LBUG_PAGE_SIZE;
+    shadowFile->writeFile(recordsWriter->getBlobData(), recordsWriter->getSize(), newRecordsOffset);
+    shadowFile->truncate(newRecordsOffset + recordsWriter->getSize());
+    shadowHeader.numShadowPages++;
+    shadowFile->writeFile(reinterpret_cast<const uint8_t*>(&shadowHeader), sizeof(shadowHeader), 0);
+    shadowFile->syncFile();
+    shadowFile.reset();
+
+    EXPECT_THROW(ShadowFile::replayShadowPageRecordsForStorageManager(*context, *storageManager,
+                     ShadowFile::CHECKPOINT_BUNDLE_DATABASE_ID),
+        RuntimeException);
+    EXPECT_EQ(readFile(databasePath), databaseBeforeReplay);
+}
+
+struct GraphCheckpointRecoveryParam {
+    bool walRotated;
+    bool graphShadowAlreadyApplied;
+    bool legacySelectedGraphID;
+};
+
+class GraphCheckpointRecoveryTest
+    : public FlakyCheckpointerTest,
+      public ::testing::WithParamInterface<GraphCheckpointRecoveryParam> {};
+
+TEST_P(GraphCheckpointRecoveryTest, MainMarkerRecoversGraphShadow) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE main_test(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH recovery_graph ANY;")->isSuccess());
+    if (GetParam().legacySelectedGraphID) {
+        ASSERT_TRUE(conn->query("CREATE GRAPH selector_graph ANY;")->isSuccess());
+    }
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {name: 'Alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:main_test {id: 1});")->isSuccess());
+    if (GetParam().legacySelectedGraphID) {
+        ASSERT_TRUE(conn->query("USE GRAPH selector_graph;")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE (:Selector {name: 'Bob'});")->isSuccess());
+    }
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+
+    auto* context = getClientContext(*conn);
+    if (!GetParam().walRotated) {
+        WAL::Get(*context)->reset();
+    }
+    FlakyCheckpointer([](main::ClientContext& clientContext) {
+        return std::make_unique<CheckpointerFailsBeforeGraphShadowApply>(clientContext);
+    }).setCheckpointer(*context);
+    auto result = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(result->isSuccess());
+    ASSERT_NE(result->getErrorMessage().find("before graph shadow apply"), std::string::npos);
+    auto rejectedWrite = conn->query("CREATE (:main_test {id: 2});");
+    ASSERT_FALSE(rejectedWrite->isSuccess());
+    ASSERT_NE(rejectedWrite->getErrorMessage().find("panic state"), std::string::npos);
+
+    const auto mainWALPath = GetParam().walRotated ?
+                                 StorageUtils::getCheckpointWALFilePath(databasePath) :
+                                 StorageUtils::getWALFilePath(databasePath);
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+    ASSERT_TRUE(std::filesystem::exists(mainWALPath));
+    ASSERT_TRUE(std::filesystem::exists(graphShadowPath));
+    auto* graphStorageManager = main::DatabaseManager::Get(*context)
+                                    ->getGraphCatalog("recovery_graph")
+                                    ->getStorageManager();
+    if (GetParam().legacySelectedGraphID) {
+        rewriteCheckpointRecordAsLegacy(*context, mainWALPath);
+        const auto selectedDatabaseID = main::DatabaseManager::Get(*context)
+                                            ->getGraphCatalog("selector_graph")
+                                            ->getStorageManager()
+                                            ->getOrInitDatabaseID(*context);
+        graphStorageManager->getWAL().reset();
+        ASSERT_TRUE(conn->query("USE GRAPH selector_graph;")->isSuccess());
+        graphStorageManager->getWAL().logAndFlushCheckpoint(context);
+        const auto graphWALPath =
+            StorageUtils::getWALFilePath(graphStorageManager->getDatabasePath());
+        rewriteCheckpointRecordAsLegacy(*context, graphWALPath,
+            false /* enableChecksumsOverride */);
+        writeWALHeaderDatabaseID(*context, graphWALPath,
+            graphStorageManager->getOrInitDatabaseID(*context), selectedDatabaseID,
+            false /* enableChecksums */);
+        ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+        const auto selectorGraphPath = StorageUtils::getGraphPath(databasePath, "selector_graph");
+        for (const auto& path : {StorageUtils::getShadowFilePath(databasePath), graphShadowPath,
+                 StorageUtils::getShadowFilePath(selectorGraphPath)}) {
+            writeShadowDatabaseID(*context, path, selectedDatabaseID);
+        }
+    }
+    if (GetParam().graphShadowAlreadyApplied) {
+        ShadowFile::replayShadowPageRecordsForStorageManager(*context, *graphStorageManager,
+            ShadowFile::CHECKPOINT_BUNDLE_DATABASE_ID);
+        ASSERT_TRUE(std::filesystem::exists(graphShadowPath));
+    }
+
+    createDBAndConn();
+    result = conn->query("MATCH (n:main_test) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    result = conn->query("MATCH (n:User) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    if (GetParam().legacySelectedGraphID) {
+        ASSERT_TRUE(conn->query("USE GRAPH selector_graph;")->isSuccess());
+        result = conn->query("MATCH (n:Selector) RETURN COUNT(n);");
+        ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+        ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 0);
+        ASSERT_FALSE(std::filesystem::exists(StorageUtils::getShadowFilePath(
+            StorageUtils::getGraphPath(databasePath, "selector_graph"))));
+    }
+    ASSERT_FALSE(std::filesystem::exists(mainWALPath));
+    ASSERT_FALSE(std::filesystem::exists(graphShadowPath));
+}
+
+TEST_F(FlakyCheckpointerTest, LegacyGraphShadowRejectsReplacementBaseBeforeReplay) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE main_test(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH recovery_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH selector_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:main_test {id: 1});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {name: 'Alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+
+    auto* context = getClientContext(*conn);
+    FlakyCheckpointer([](main::ClientContext& clientContext) {
+        return std::make_unique<CheckpointerFailsBeforeGraphShadowApply>(clientContext);
+    }).setCheckpointer(*context);
+    ASSERT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
+
+    const auto mainWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+    rewriteCheckpointRecordAsLegacy(*context, mainWALPath);
+    const auto selectedDatabaseID = main::DatabaseManager::Get(*context)
+                                        ->getGraphCatalog("selector_graph")
+                                        ->getStorageManager()
+                                        ->getOrInitDatabaseID(*context);
+    writeShadowDatabaseID(*context, StorageUtils::getShadowFilePath(databasePath),
+        selectedDatabaseID);
+    writeShadowDatabaseID(*context, graphShadowPath, selectedDatabaseID);
+
+    const auto replacementPath = databasePath + ".replacement";
+    {
+        main::Database replacementDatabase{replacementPath, *systemConfig};
+        main::Connection replacementConnection{&replacementDatabase};
+        ASSERT_TRUE(
+            replacementConnection.query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(replacementConnection.query("CALL auto_checkpoint=false;")->isSuccess());
+        ASSERT_TRUE(
+            replacementConnection.query("CREATE NODE TABLE replacement(id INT64 PRIMARY KEY);")
+                ->isSuccess());
+        ASSERT_TRUE(replacementConnection.query("CHECKPOINT;")->isSuccess());
+    }
+    const auto replacementHeader = readFile(replacementPath);
+    ASSERT_GE(replacementHeader.size(), LBUG_PAGE_SIZE);
+    auto* graphStorageManager = main::DatabaseManager::Get(*context)
+                                    ->getGraphCatalog("recovery_graph")
+                                    ->getStorageManager();
+    graphStorageManager->getWAL().reset();
+    std::filesystem::remove(StorageUtils::getCheckpointWALFilePath(graphPath));
+    graphStorageManager->getWAL().logAndFlushCheckpoint(context);
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+    rewriteCheckpointRecordAsLegacy(*context, graphWALPath, false /* enableChecksumsOverride */);
+    writeWALHeaderDatabaseID(*context, graphWALPath,
+        graphStorageManager->getOrInitDatabaseID(*context), selectedDatabaseID,
+        false /* enableChecksums */);
+    graphStorageManager->getDataFH()->getFileInfo()->writeFile(replacementHeader.data(),
+        LBUG_PAGE_SIZE, 0);
+    graphStorageManager->getDataFH()->getFileInfo()->syncFile();
+
+    conn.reset();
+    database.reset();
+    const auto graphBeforeRecovery = readFile(graphPath);
+    try {
+        createDBAndConn();
+        FAIL() << "Expected legacy graph shadow to reject a replacement graph file.";
+    } catch (const RuntimeException& e) {
+        EXPECT_NE(std::string{e.what()}.find("Database ID"), std::string::npos) << e.what();
+        EXPECT_NE(std::string{e.what()}.find(graphShadowPath), std::string::npos) << e.what();
+    }
+    EXPECT_EQ(readFile(graphPath), graphBeforeRecovery);
+}
+
+static void writeShadowPageZeroDatabaseID(main::ClientContext& context,
+    const std::string& shadowPath, uuid databaseID) {
+    auto fileInfo = VirtualFileSystem::GetUnsafe(context)->openFile(shadowPath,
+        FileOpenFlags(FileFlags::READ_ONLY | FileFlags::WRITE), &context);
+    ShadowFileHeader header;
+    fileInfo->readFromFile(reinterpret_cast<uint8_t*>(&header), sizeof(header), 0);
+    const auto recordsOffset = (static_cast<uint64_t>(header.numShadowPages) + 1) * LBUG_PAGE_SIZE;
+    const auto recordsSize = fileInfo->getFileSize() - recordsOffset;
+    auto recordsData = std::make_unique<uint8_t[]>(recordsSize);
+    fileInfo->readFromFile(recordsData.get(), recordsSize, recordsOffset);
+    Deserializer recordsDeserializer{
+        std::make_unique<BufferReader>(recordsData.get(), recordsSize)};
+    std::vector<ShadowPageRecord> records;
+    recordsDeserializer.deserializeVector(records);
+    const auto headerRecord =
+        std::find_if(records.rbegin(), records.rend(), [](const auto& record) {
+            return record.originalPageIdx == StorageConstants::DB_HEADER_PAGE_IDX;
+        });
+    if (headerRecord == records.rend()) {
+        throw RuntimeException("Shadow file has no database header page.");
+    }
+    const auto shadowPageOffset =
+        (records.size() - static_cast<size_t>(std::distance(records.rbegin(), headerRecord))) *
+        LBUG_PAGE_SIZE;
+    std::vector<uint8_t> page(LBUG_PAGE_SIZE);
+    fileInfo->readFromFile(page.data(), page.size(), shadowPageOffset);
+    Deserializer headerDeserializer{std::make_unique<BufferReader>(page.data(), page.size())};
+    auto databaseHeader = DatabaseHeader::deserialize(headerDeserializer);
+    databaseHeader.databaseID = databaseID;
+    auto headerWriter = std::make_shared<BufferWriter>(LBUG_PAGE_SIZE);
+    Serializer headerSerializer{headerWriter};
+    databaseHeader.serialize(headerSerializer);
+    std::fill(page.begin(), page.end(), 0);
+    std::memcpy(page.data(), headerWriter->getBlobData(), headerWriter->getSize());
+    fileInfo->writeFile(page.data(), page.size(), shadowPageOffset);
+    fileInfo->syncFile();
+}
+
+enum class LegacyGraphShadowArtifact : uint8_t {
+    MainStamped,
+    ReplacementGraphBase,
+    ForeignPageZero,
+    UncommittedBundle
+};
+
+class LegacyGraphMarkerAfterMainCheckpointTest
+    : public FlakyCheckpointerTest,
+      public ::testing::WithParamInterface<LegacyGraphShadowArtifact> {};
+
+TEST_P(LegacyGraphMarkerAfterMainCheckpointTest, ValidatesGraphShadowByPageZero) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const auto artifact = GetParam();
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE main_test(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH recovery_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {name: 'Alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:main_test {id: 1});")->isSuccess());
+
+    auto* context = getClientContext(*conn);
+    WAL::Get(*context)->reset();
+    FlakyCheckpointer([](main::ClientContext& clientContext) {
+        return std::make_unique<CheckpointerFailsBeforeGraphShadowApply>(clientContext);
+    }).setCheckpointer(*context);
+    ASSERT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
+
+    const auto mainWALPath = StorageUtils::getWALFilePath(databasePath);
+    const auto mainShadowPath = StorageUtils::getShadowFilePath(databasePath);
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+    ASSERT_TRUE(std::filesystem::exists(mainWALPath));
+    ASSERT_FALSE(std::filesystem::exists(StorageUtils::getCheckpointWALFilePath(databasePath)));
+    ASSERT_TRUE(std::filesystem::exists(graphShadowPath));
+    const auto mainDatabaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    auto* graphStorageManager = main::DatabaseManager::Get(*context)
+                                    ->getGraphCatalog("recovery_graph")
+                                    ->getStorageManager();
+    const auto graphDatabaseID = graphStorageManager->getOrInitDatabaseID(*context);
+    graphStorageManager->getWAL().reset();
+    graphStorageManager->getWAL().logAndFlushCheckpoint(context);
+    rewriteCheckpointRecordAsLegacy(*context, graphWALPath, false /* enableChecksumsOverride */);
+    writeWALHeaderDatabaseID(*context, graphWALPath, graphDatabaseID, mainDatabaseID,
+        false /* enableChecksums */);
+    switch (artifact) {
+    case LegacyGraphShadowArtifact::MainStamped:
+        writeShadowDatabaseID(*context, graphShadowPath, mainDatabaseID);
+        break;
+    case LegacyGraphShadowArtifact::ReplacementGraphBase: {
+        writeShadowDatabaseID(*context, graphShadowPath, mainDatabaseID);
+        const auto replacementPath = databasePath + ".replacement";
+        {
+            main::Database replacementDatabase{replacementPath, *systemConfig};
+            main::Connection replacementConnection{&replacementDatabase};
+            ASSERT_TRUE(
+                replacementConnection.query("CALL force_checkpoint_on_close=false;")->isSuccess());
+            ASSERT_TRUE(
+                replacementConnection.query("CREATE NODE TABLE replacement(id INT64 PRIMARY KEY);")
+                    ->isSuccess());
+            ASSERT_TRUE(replacementConnection.query("CHECKPOINT;")->isSuccess());
+        }
+        const auto replacementHeader = readFile(replacementPath);
+        ASSERT_GE(replacementHeader.size(), LBUG_PAGE_SIZE);
+        graphStorageManager->getDataFH()->getFileInfo()->writeFile(replacementHeader.data(),
+            LBUG_PAGE_SIZE, 0);
+        graphStorageManager->getDataFH()->getFileInfo()->syncFile();
+    } break;
+    case LegacyGraphShadowArtifact::ForeignPageZero:
+        writeShadowDatabaseID(*context, graphShadowPath, graphDatabaseID);
+        writeShadowPageZeroDatabaseID(*context, graphShadowPath,
+            foreignDatabaseID(graphDatabaseID));
+        break;
+    case LegacyGraphShadowArtifact::UncommittedBundle:
+        break;
+    }
+    conn.reset();
+    database.reset();
+    std::filesystem::resize_file(mainWALPath, 0);
+    ASSERT_TRUE(std::filesystem::remove(mainShadowPath));
+
+    if (artifact != LegacyGraphShadowArtifact::MainStamped) {
+        const auto graphBeforeRecovery = readFile(graphPath);
+        try {
+            createDBAndConn();
+            FAIL() << "Expected the legacy graph shadow to be rejected.";
+        } catch (const RuntimeException& e) {
+            const std::string message = e.what();
+            EXPECT_NE(message.find(graphShadowPath), std::string::npos) << message;
+            if (artifact == LegacyGraphShadowArtifact::UncommittedBundle) {
+                EXPECT_NE(message.find("never committed"), std::string::npos) << message;
+            } else {
+                EXPECT_NE(message.find("Database ID"), std::string::npos) << message;
+            }
+        }
+        EXPECT_EQ(readFile(graphPath), graphBeforeRecovery);
+        return;
+    }
+    createDBAndConn();
+    auto result = conn->query("MATCH (n:main_test) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    result = conn->query("MATCH (n:User) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    EXPECT_FALSE(std::filesystem::exists(graphWALPath));
+    EXPECT_FALSE(std::filesystem::exists(graphShadowPath));
+}
+
+INSTANTIATE_TEST_SUITE_P(Artifact, LegacyGraphMarkerAfterMainCheckpointTest,
+    ::testing::Values(LegacyGraphShadowArtifact::MainStamped,
+        LegacyGraphShadowArtifact::ReplacementGraphBase, LegacyGraphShadowArtifact::ForeignPageZero,
+        LegacyGraphShadowArtifact::UncommittedBundle),
+    [](const ::testing::TestParamInfo<LegacyGraphShadowArtifact>& info) {
+        switch (info.param) {
+        case LegacyGraphShadowArtifact::MainStamped:
+            return std::string{"MainStamped"};
+        case LegacyGraphShadowArtifact::ReplacementGraphBase:
+            return std::string{"ReplacementGraphBase"};
+        case LegacyGraphShadowArtifact::ForeignPageZero:
+            return std::string{"ForeignPageZero"};
+        case LegacyGraphShadowArtifact::UncommittedBundle:
+            return std::string{"UncommittedBundle"};
+        }
+        return std::string{};
+    });
+
+struct LegacyGraphMarkerRecoveryFixture {
+    void setUp(main::Connection* connection) {
+        ASSERT_TRUE(connection->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+        ASSERT_TRUE(connection->query("CALL auto_checkpoint=false;")->isSuccess());
+        ASSERT_TRUE(
+            connection->query("CREATE NODE TABLE main_test(id INT64 PRIMARY KEY);")->isSuccess());
+        ASSERT_TRUE(connection->query("CREATE GRAPH recovery_graph ANY;")->isSuccess());
+        ASSERT_TRUE(connection->query("USE GRAPH recovery_graph;")->isSuccess());
+        ASSERT_TRUE(connection->query("CREATE (:User {name: 'Alice'});")->isSuccess());
+        ASSERT_TRUE(connection->query("USE GRAPH main;")->isSuccess());
+        ASSERT_TRUE(connection->query("CREATE (:main_test {id: 1});")->isSuccess());
+        ASSERT_TRUE(connection->query("CHECKPOINT;")->isSuccess());
+    }
+};
+
+TEST_F(FlakyCheckpointerTest, RecoversLegacyFrozenGraphMarkerWithActiveWALCommits) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    LegacyGraphMarkerRecoveryFixture{}.setUp(conn.get());
+
+    // Current builds log graph-table commits to the main WAL, so a graph WAL holding real
+    // commit records can only be produced by opening the graph data file as a standalone
+    // database. The standalone session commits Carol and then fails its checkpoint after the
+    // shadow is flushed but before the marker is logged, so Carol's pages live only in the
+    // shadow; the later legacy marker subsumes her frozen-WAL records, so recovery replays
+    // only the active WAL on top of the shadow. Carol is therefore recoverable only by
+    // replaying the shadow, which distinguishes shadow replay from shadow skip, while Bob's
+    // active-WAL commit must still be replayed on top. A standalone session has no default
+    // graph, so the ANY-graph insert rewrite does not fire there and the committed rows are
+    // written with null label/data columns (the serial ids are still assigned and logged), so
+    // the replayed rows are asserted by id.
+    auto* context = getClientContext(*conn);
+    const auto mainWALPath = StorageUtils::getWALFilePath(databasePath);
+    const auto mainShadowPath = StorageUtils::getShadowFilePath(databasePath);
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+    const auto graphCheckpointWALPath = StorageUtils::getCheckpointWALFilePath(graphPath);
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+    ASSERT_FALSE(std::filesystem::exists(mainWALPath));
+    ASSERT_FALSE(std::filesystem::exists(mainShadowPath));
+    ASSERT_FALSE(std::filesystem::exists(graphWALPath));
+    ASSERT_FALSE(std::filesystem::exists(graphCheckpointWALPath));
+    ASSERT_FALSE(std::filesystem::exists(graphShadowPath));
+    const auto mainDatabaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    auto* graphStorageManager = main::DatabaseManager::Get(*context)
+                                    ->getGraphCatalog("recovery_graph")
+                                    ->getStorageManager();
+    const auto graphDatabaseID = graphStorageManager->getOrInitDatabaseID(*context);
+
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    graphConfig.enableChecksums = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto* graphContext = getClientContext(*graphConnection);
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Carol'});")->isSuccess());
+    FlakyCheckpointer([](main::ClientContext& clientContext) {
+        return std::make_unique<FlakyCheckpointerFailsOnLoggingCheckpoint>(clientContext);
+    }).setCheckpointer(*graphContext);
+    ASSERT_FALSE(graphConnection->query("CHECKPOINT;")->isSuccess());
+    FlakyCheckpointer::resetCheckpointer(*graphContext);
+    ASSERT_TRUE(std::filesystem::exists(graphShadowPath));
+    // The failed checkpoint undid its WAL rotation, so Carol's commit is back in the active
+    // WAL and the frozen WAL is gone.
+    ASSERT_TRUE(std::filesystem::exists(graphWALPath));
+    ASSERT_FALSE(std::filesystem::exists(graphCheckpointWALPath));
+
+    auto& graphWAL = graphDatabase->getStorageManager()->getWAL();
+    graphWAL.logAndFlushCheckpoint(graphContext);
+    rewriteCheckpointRecordAsLegacy(*graphContext, graphWALPath,
+        false /* enableChecksumsOverride */);
+    writeWALHeaderDatabaseID(*graphContext, graphWALPath, graphDatabaseID, mainDatabaseID,
+        false /* enableChecksums */);
+    writeShadowDatabaseID(*graphContext, graphShadowPath, mainDatabaseID);
+    std::filesystem::rename(graphWALPath, graphCheckpointWALPath);
+    graphWAL.reset();
+
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Bob'});")->isSuccess());
+    ASSERT_TRUE(std::filesystem::exists(graphWALPath));
+
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    createDBAndConn();
+    auto result = conn->query("MATCH (n:main_test) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    result = conn->query("MATCH (n:User) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    result = conn->query("MATCH (n:User {name: 'Alice'}) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    result = conn->query("MATCH (n) WHERE n.id = 1 RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1)
+        << "Carol is recoverable only by replaying the interrupted checkpoint's shadow.";
+    result = conn->query("MATCH (n) WHERE n.id = 2 RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1)
+        << "Bob's active-WAL commit must be replayed on top of the recovered shadow state.";
+    result = conn->query("MATCH (n) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 3);
+    EXPECT_FALSE(std::filesystem::exists(graphCheckpointWALPath));
+    EXPECT_FALSE(std::filesystem::exists(graphShadowPath));
+}
+
+TEST_F(FlakyCheckpointerTest, RejectsActiveGraphMarkerWithNonCheckpointFrozenWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    LegacyGraphMarkerRecoveryFixture{}.setUp(conn.get());
+
+    auto* context = getClientContext(*conn);
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+    const auto graphCheckpointWALPath = StorageUtils::getCheckpointWALFilePath(graphPath);
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+    const auto mainDatabaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    auto* graphStorageManager = main::DatabaseManager::Get(*context)
+                                    ->getGraphCatalog("recovery_graph")
+                                    ->getStorageManager();
+    const auto graphDatabaseID = graphStorageManager->getOrInitDatabaseID(*context);
+
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    graphConfig.enableChecksums = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto* graphContext = getClientContext(*graphConnection);
+    FlakyCheckpointer([](main::ClientContext& clientContext) {
+        return std::make_unique<FlakyCheckpointerFailsOnLoggingCheckpoint>(clientContext);
+    }).setCheckpointer(*graphContext);
+    ASSERT_FALSE(graphConnection->query("CHECKPOINT;")->isSuccess());
+    FlakyCheckpointer::resetCheckpointer(*graphContext);
+    ASSERT_TRUE(std::filesystem::exists(graphShadowPath));
+
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Bob'});")->isSuccess());
+    std::filesystem::copy_file(graphWALPath, graphCheckpointWALPath);
+    auto& graphWAL = graphDatabase->getStorageManager()->getWAL();
+    graphWAL.reset();
+    graphWAL.logAndFlushCheckpoint(graphContext);
+    rewriteCheckpointRecordAsLegacy(*graphContext, graphWALPath,
+        false /* enableChecksumsOverride */);
+    writeWALHeaderDatabaseID(*graphContext, graphWALPath, graphDatabaseID, mainDatabaseID,
+        false /* enableChecksums */);
+    writeShadowDatabaseID(*graphContext, graphShadowPath, mainDatabaseID);
+
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    try {
+        createDBAndConn();
+        FAIL() << "Expected an active-WAL graph checkpoint marker to conflict with a "
+                  "non-checkpoint frozen graph WAL.";
+    } catch (const RuntimeException& e) {
+        const std::string message = e.what();
+        EXPECT_NE(message.find("an active-WAL checkpoint marker conflicts with a non-checkpoint "
+                               "frozen WAL"),
+            std::string::npos)
+            << message;
+    }
+    EXPECT_TRUE(std::filesystem::exists(graphWALPath));
+    EXPECT_TRUE(std::filesystem::exists(graphCheckpointWALPath));
+}
+
+TEST_F(FlakyCheckpointerTest, RecoversInterruptedStandaloneGraphBundleCheckpoint) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    LegacyGraphMarkerRecoveryFixture{}.setUp(conn.get());
+
+    // A standalone session that has already committed an insert rotates the graph WAL at its
+    // next checkpoint and appends a version 1 CHECKPOINT record to the frozen WAL. A crash
+    // after that record is durable — with the graph shadow flushed but not yet applied —
+    // leaves the checkpoint's committed pages only in the shadow, so the parent reopen must
+    // accept the bundle-format marker and replay the sentinel-stamped shadow. The graph WAL
+    // keeps the standalone session's own checksum setting, so recovery must take the checksum
+    // flag from the WAL header; this test runs with the harness's default checksums enabled.
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+    const auto graphCheckpointWALPath = StorageUtils::getCheckpointWALFilePath(graphPath);
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto* graphContext = getClientContext(*graphConnection);
+    // A standalone session has no default graph, so the ANY-graph insert rewrite does not
+    // fire there and the committed row is written with null label/data columns (the serial
+    // id is still assigned). The row is therefore asserted by its id after recovery.
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Bob'});")->isSuccess());
+    FlakyCheckpointer([](main::ClientContext& clientContext) {
+        return std::make_unique<FlakyCheckpointerFailsOnApplyingShadow>(clientContext);
+    }).setCheckpointer(*graphContext);
+    ASSERT_FALSE(graphConnection->query("CHECKPOINT;")->isSuccess());
+    FlakyCheckpointer::resetCheckpointer(*graphContext);
+    ASSERT_TRUE(std::filesystem::exists(graphCheckpointWALPath));
+    ASSERT_TRUE(std::filesystem::exists(graphShadowPath));
+
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    createDBAndConn();
+    auto result = conn->query("MATCH (n:main_test) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    result = conn->query("MATCH (n:User {name: 'Alice'}) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    result = conn->query("MATCH (n) WHERE n.id = 1 RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1)
+        << "Bob is recoverable only by applying the interrupted checkpoint's shadow.";
+    result = conn->query("MATCH (n) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    EXPECT_FALSE(std::filesystem::exists(graphWALPath));
+    EXPECT_FALSE(std::filesystem::exists(graphCheckpointWALPath));
+    EXPECT_FALSE(std::filesystem::exists(graphShadowPath));
+}
+
+TEST_F(FlakyCheckpointerTest, BundleRejectsForeignGraphCheckpointWALDatabaseID) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    LegacyGraphMarkerRecoveryFixture{}.setUp(conn.get());
+
+    // RecoversInterruptedStandaloneGraphBundleCheckpoint is the positive row: the parent
+    // reopen recovers a standalone session's interrupted bundle checkpoint. Here the same
+    // bundle's graph WAL header is rewritten to the parent's database ID. A version 1 marker
+    // must still be checked against the graph data file's identity, so the reopen is
+    // rejected before the sentinel-stamped shadow is applied and every recovery artifact is
+    // left untouched.
+    auto* context = getClientContext(*conn);
+    const auto mainDatabaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    auto* graphStorageManager = main::DatabaseManager::Get(*context)
+                                    ->getGraphCatalog("recovery_graph")
+                                    ->getStorageManager();
+    const auto graphDatabaseID = graphStorageManager->getOrInitDatabaseID(*context);
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphCheckpointWALPath = StorageUtils::getCheckpointWALFilePath(graphPath);
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto* graphContext = getClientContext(*graphConnection);
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Bob'});")->isSuccess());
+    FlakyCheckpointer([](main::ClientContext& clientContext) {
+        return std::make_unique<FlakyCheckpointerFailsOnApplyingShadow>(clientContext);
+    }).setCheckpointer(*graphContext);
+    ASSERT_FALSE(graphConnection->query("CHECKPOINT;")->isSuccess());
+    FlakyCheckpointer::resetCheckpointer(*graphContext);
+    ASSERT_TRUE(std::filesystem::exists(graphCheckpointWALPath));
+    ASSERT_TRUE(std::filesystem::exists(graphShadowPath));
+
+    writeWALHeaderDatabaseID(*graphContext, graphCheckpointWALPath, graphDatabaseID, mainDatabaseID,
+        graphContext->getDBConfig()->enableChecksums);
+
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    const auto graphDataBefore = readFile(graphPath);
+    const auto graphCheckpointWALBefore = readFile(graphCheckpointWALPath);
+    const auto graphShadowBefore = readFile(graphShadowPath);
+    try {
+        createDBAndConn();
+        FAIL() << "Expected a bundled graph checkpoint with a foreign WAL to be rejected.";
+    } catch (const RuntimeException& e) {
+        const std::string message = e.what();
+        EXPECT_NE(message.find("Database ID"), std::string::npos) << message;
+        EXPECT_NE(message.find("Do not delete the WAL or shadow files"), std::string::npos)
+            << message;
+        EXPECT_NE(message.find("Restore the database file they were written for"),
+            std::string::npos)
+            << message;
+    }
+    EXPECT_EQ(readFile(graphPath), graphDataBefore);
+    EXPECT_EQ(readFile(graphCheckpointWALPath), graphCheckpointWALBefore);
+    EXPECT_EQ(readFile(graphShadowPath), graphShadowBefore);
+}
+
+TEST_F(FlakyCheckpointerTest, StandaloneGraphOpenPreservesParentOwnedBundle) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    LegacyGraphMarkerRecoveryFixture{}.setUp(conn.get());
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {name: 'Bob'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+
+    // The parent's bundle checkpoint commits its marker, then crashes before applying the
+    // graph shadow. Bob's committed pages then live only in a bundle whose fate only the
+    // parent's WAL can decide, so a standalone open of the graph must neither replay that
+    // bundle nor discard its shadow: it must refuse and leave every recovery artifact
+    // untouched.
+    auto* context = getClientContext(*conn);
+    const auto mainDatabaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    FlakyCheckpointer([](main::ClientContext& clientContext) {
+        return std::make_unique<CheckpointerFailsBeforeGraphShadowApply>(clientContext);
+    }).setCheckpointer(*context);
+    ASSERT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
+    FlakyCheckpointer::resetCheckpointer(*context);
+
+    const auto mainCheckpointWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+    ASSERT_TRUE(std::filesystem::exists(mainCheckpointWALPath));
+    ASSERT_TRUE(std::filesystem::exists(graphShadowPath));
+    {
+        auto vfs = VirtualFileSystem::GetUnsafe(*context);
+        auto shadowFile =
+            vfs->openFile(graphShadowPath, FileOpenFlags(FileFlags::READ_ONLY), context);
+        ShadowFileHeader shadowHeader;
+        shadowFile->readFromFile(reinterpret_cast<uint8_t*>(&shadowHeader), sizeof(shadowHeader),
+            0);
+        ASSERT_EQ(shadowHeader.databaseID.value, ShadowFile::CHECKPOINT_BUNDLE_DATABASE_ID.value);
+        ASSERT_EQ(shadowHeader.ownerDatabaseID.value, mainDatabaseID.value);
+    }
+
+    conn.reset();
+    database.reset();
+    const auto graphDataBefore = readFile(graphPath);
+    const auto graphShadowBefore = readFile(graphShadowPath);
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    try {
+        auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+        FAIL() << "Expected a standalone open of a graph with a parent-owned pending bundle to "
+                  "be refused.";
+    } catch (const RuntimeException& e) {
+        const std::string message = e.what();
+        EXPECT_NE(message.find("pending checkpoint bundle owned by another database"),
+            std::string::npos)
+            << message;
+    }
+    EXPECT_EQ(readFile(graphPath), graphDataBefore);
+    EXPECT_EQ(readFile(graphShadowPath), graphShadowBefore);
+    EXPECT_TRUE(std::filesystem::exists(mainCheckpointWALPath));
+
+    createDBAndConn();
+    auto result = conn->query("MATCH (n:main_test) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    result = conn->query("MATCH (n:User {name: 'Bob'}) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1)
+        << "Bob is recoverable only through the preserved parent-owned bundle.";
+    result = conn->query("MATCH (n:User) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    EXPECT_FALSE(std::filesystem::exists(graphShadowPath));
+}
+
+TEST_F(FlakyCheckpointerTest, RejectsNewerGraphCheckpointFormatVersion) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    LegacyGraphMarkerRecoveryFixture{}.setUp(conn.get());
+
+    // A standalone session's bundle checkpoint is interrupted after its version 1 marker
+    // commits. Rewriting that marker to a newer format version must make the parent reopen
+    // reject the graph WAL before the graph shadow is applied or removed, leaving every
+    // recovery artifact untouched.
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphCheckpointWALPath = StorageUtils::getCheckpointWALFilePath(graphPath);
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto* graphContext = getClientContext(*graphConnection);
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Bob'});")->isSuccess());
+    FlakyCheckpointer([](main::ClientContext& clientContext) {
+        return std::make_unique<FlakyCheckpointerFailsOnApplyingShadow>(clientContext);
+    }).setCheckpointer(*graphContext);
+    ASSERT_FALSE(graphConnection->query("CHECKPOINT;")->isSuccess());
+    FlakyCheckpointer::resetCheckpointer(*graphContext);
+    ASSERT_TRUE(std::filesystem::exists(graphCheckpointWALPath));
+    rewriteCheckpointRecord(*graphContext, graphCheckpointWALPath,
+        CheckpointRecord{WAL::CHECKPOINT_BUNDLE_FORMAT_VERSION + 1});
+
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    const auto graphDataBefore = readFile(graphPath);
+    const auto graphCheckpointWALBefore = readFile(graphCheckpointWALPath);
+    const auto graphShadowBefore = readFile(graphShadowPath);
+    try {
+        createDBAndConn();
+        FAIL() << "Expected a newer graph checkpoint format version to be rejected.";
+    } catch (const RuntimeException& e) {
+        const std::string message = e.what();
+        EXPECT_NE(message.find("Cannot recover graph WAL"), std::string::npos) << message;
+        EXPECT_NE(message.find("unsupported checkpoint format version 2"), std::string::npos)
+            << message;
+    }
+    EXPECT_EQ(readFile(graphPath), graphDataBefore);
+    EXPECT_EQ(readFile(graphCheckpointWALPath), graphCheckpointWALBefore);
+    EXPECT_EQ(readFile(graphShadowPath), graphShadowBefore);
+}
+
+TEST_F(FlakyCheckpointerTest, RejectsGraphBundleShadowWithoutCompatibilityGuard) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    LegacyGraphMarkerRecoveryFixture{}.setUp(conn.get());
+
+    // Same interrupted state as RecoversInterruptedStandaloneGraphBundleCheckpoint, except the
+    // graph shadow's sentinel is replaced with the graph's real database ID. A version 1
+    // checkpoint only commits a sentinel-stamped shadow, so recovery must reject the shadow
+    // instead of applying it, and must leave every recovery artifact untouched.
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphCheckpointWALPath = StorageUtils::getCheckpointWALFilePath(graphPath);
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto* graphContext = getClientContext(*graphConnection);
+    ASSERT_TRUE(graphConnection->query("CREATE (:User {name: 'Bob'});")->isSuccess());
+    FlakyCheckpointer([](main::ClientContext& clientContext) {
+        return std::make_unique<FlakyCheckpointerFailsOnApplyingShadow>(clientContext);
+    }).setCheckpointer(*graphContext);
+    ASSERT_FALSE(graphConnection->query("CHECKPOINT;")->isSuccess());
+    FlakyCheckpointer::resetCheckpointer(*graphContext);
+    const auto graphDatabaseID =
+        graphDatabase->getStorageManager()->getOrInitDatabaseID(*graphContext);
+    writeShadowDatabaseID(*graphContext, graphShadowPath, graphDatabaseID);
+
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    const auto graphDataBefore = readFile(graphPath);
+    const auto graphCheckpointWALBefore = readFile(graphCheckpointWALPath);
+    const auto graphShadowBefore = readFile(graphShadowPath);
+    try {
+        createDBAndConn();
+        FAIL() << "Expected a version 1 graph checkpoint whose shadow is not sentinel-stamped "
+                  "to be rejected.";
+    } catch (const RuntimeException& e) {
+        const std::string message = e.what();
+        EXPECT_NE(message.find("is missing its checkpoint-bundle compatibility guard"),
+            std::string::npos)
+            << message;
+    }
+    EXPECT_EQ(readFile(graphPath), graphDataBefore);
+    EXPECT_EQ(readFile(graphCheckpointWALPath), graphCheckpointWALBefore);
+    EXPECT_EQ(readFile(graphShadowPath), graphShadowBefore);
+}
+
+class CheckpointerObservesWALRetirement final : public Checkpointer {
+public:
+    CheckpointerObservesWALRetirement(main::ClientContext& context, std::function<void()> observe)
+        : Checkpointer(context), observe{std::move(observe)} {}
+
+    void beforeWALRetirement(bool) override {
+        observe();
+        throw RuntimeException("checkpoint interrupted before retiring the main WAL.");
+    }
+
+private:
+    std::function<void()> observe;
+};
+
+TEST_F(FlakyCheckpointerTest, GraphWALRetiresBeforeMainMarker) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE main_test(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH recovery_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:main_test {id: 1});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {name: 'Alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+
+    const auto mainCheckpointWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+    const auto graphCheckpointWALPath = StorageUtils::getCheckpointWALFilePath(graphPath);
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+    std::ofstream(graphWALPath).close();
+    std::ofstream(graphCheckpointWALPath).close();
+
+    bool reachedBeforeMainRetirement = false;
+    bool graphWALsRetiredFirst = false;
+    FlakyCheckpointer([&](main::ClientContext& context) {
+        return std::make_unique<CheckpointerObservesWALRetirement>(context, [&] {
+            reachedBeforeMainRetirement = true;
+            graphWALsRetiredFirst = !std::filesystem::exists(graphWALPath) &&
+                                    !std::filesystem::exists(graphCheckpointWALPath) &&
+                                    std::filesystem::exists(mainCheckpointWALPath);
+        });
+    }).setCheckpointer(*getClientContext(*conn));
+    const auto checkpointResult = conn->query("CHECKPOINT;");
+    ASSERT_FALSE(checkpointResult->isSuccess());
+    ASSERT_TRUE(reachedBeforeMainRetirement);
+    EXPECT_TRUE(graphWALsRetiredFirst);
+    ASSERT_TRUE(std::filesystem::exists(mainCheckpointWALPath));
+    ASSERT_FALSE(std::filesystem::exists(graphWALPath));
+    ASSERT_FALSE(std::filesystem::exists(graphCheckpointWALPath));
+    ASSERT_TRUE(std::filesystem::exists(graphShadowPath));
+
+    createDBAndConn();
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    auto result = conn->query("MATCH (n:User) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_FALSE(std::filesystem::exists(graphWALPath));
+    ASSERT_FALSE(std::filesystem::exists(graphCheckpointWALPath));
+    ASSERT_FALSE(std::filesystem::exists(graphShadowPath));
+}
+
+class TornGraphWALHeaderTest : public FlakyCheckpointerTest,
+                               public ::testing::WithParamInterface<bool> {};
+
+TEST_P(TornGraphWALHeaderTest, FollowsReplayFailureMode) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const bool throwOnWalReplayFailure = GetParam();
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH recovery_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {name: 'Alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    conn.reset();
+    database.reset();
+
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+    ASSERT_FALSE(std::filesystem::exists(graphWALPath));
+    {
+        std::ofstream torn{graphWALPath, std::ios::binary};
+        const std::string partialHeader(sizeof(uuid) / 2, '\xAB');
+        torn.write(partialHeader.data(), static_cast<std::streamsize>(partialHeader.size()));
+    }
+
+    systemConfig->throwOnWalReplayFailure = throwOnWalReplayFailure;
+    if (throwOnWalReplayFailure) {
+        EXPECT_ANY_THROW(createDBAndConn());
+        EXPECT_TRUE(std::filesystem::exists(graphWALPath));
+        return;
+    }
+    createDBAndConn();
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    auto result = conn->query("MATCH (n:User) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    EXPECT_FALSE(std::filesystem::exists(graphWALPath));
+    ASSERT_TRUE(conn->query("CREATE (:User {name: 'Bob'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    createDBAndConn();
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    result = conn->query("MATCH (n:User) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+}
+
+INSTANTIATE_TEST_SUITE_P(ReplayFailureMode, TornGraphWALHeaderTest, ::testing::Bool(),
+    [](const ::testing::TestParamInfo<bool>& info) { return info.param ? "Strict" : "NonStrict"; });
+
+class LegacyGraphMarkerWithoutShadowTest : public FlakyCheckpointerTest,
+                                           public ::testing::WithParamInterface<bool> {};
+
+TEST_P(LegacyGraphMarkerWithoutShadowTest, FailsClosed) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const bool frozenMarker = GetParam();
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH recovery_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {name: 'Alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+
+    auto* context = getClientContext(*conn);
+    const auto mainDatabaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    auto* graphStorageManager = main::DatabaseManager::Get(*context)
+                                    ->getGraphCatalog("recovery_graph")
+                                    ->getStorageManager();
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+    const auto markerPath =
+        frozenMarker ? StorageUtils::getCheckpointWALFilePath(graphPath) : graphWALPath;
+    graphStorageManager->getWAL().logAndFlushCheckpoint(context);
+    rewriteCheckpointRecordAsLegacy(*context, graphWALPath, false /* enableChecksumsOverride */);
+    writeWALHeaderDatabaseID(*context, graphWALPath,
+        graphStorageManager->getOrInitDatabaseID(*context), mainDatabaseID,
+        false /* enableChecksums */);
+    conn.reset();
+    database.reset();
+    if (frozenMarker) {
+        std::filesystem::rename(graphWALPath, markerPath);
+    }
+    ASSERT_TRUE(std::filesystem::exists(markerPath));
+    ASSERT_FALSE(std::filesystem::exists(graphShadowPath));
+    const auto graphBeforeRecovery = readFile(graphPath);
+
+    try {
+        createDBAndConn();
+        FAIL() << "Expected a legacy graph marker without its shadow to be rejected.";
+    } catch (const RuntimeException& e) {
+        EXPECT_NE(std::string{e.what()}.find(graphShadowPath + " is missing"), std::string::npos)
+            << e.what();
+    }
+    EXPECT_TRUE(std::filesystem::exists(markerPath));
+    EXPECT_EQ(readFile(graphPath), graphBeforeRecovery);
+}
+
+INSTANTIATE_TEST_SUITE_P(MarkerWAL, LegacyGraphMarkerWithoutShadowTest, ::testing::Bool(),
+    [](const ::testing::TestParamInfo<bool>& info) { return info.param ? "Frozen" : "Active"; });
+
+TEST_F(FlakyCheckpointerTest, TornLegacyGraphCheckpointRecordIsDiscarded) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH recovery_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {name: 'Alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+
+    auto* context = getClientContext(*conn);
+    const auto mainDatabaseID = StorageManager::Get(*context)->getOrInitDatabaseID(*context);
+    auto* graphStorageManager = main::DatabaseManager::Get(*context)
+                                    ->getGraphCatalog("recovery_graph")
+                                    ->getStorageManager();
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+    graphStorageManager->getWAL().logAndFlushCheckpoint(context);
+    rewriteCheckpointRecordAsLegacy(*context, graphWALPath, false /* enableChecksumsOverride */);
+    writeWALHeaderDatabaseID(*context, graphWALPath,
+        graphStorageManager->getOrInitDatabaseID(*context), mainDatabaseID,
+        false /* enableChecksums */);
+    conn.reset();
+    database.reset();
+    std::filesystem::resize_file(graphWALPath, std::filesystem::file_size(graphWALPath) - 1);
+
+    systemConfig->throwOnWalReplayFailure = false;
+    createDBAndConn();
+    EXPECT_FALSE(std::filesystem::exists(graphWALPath));
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    auto result = conn->query("MATCH (n:User) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+INSTANTIATE_TEST_SUITE_P(ActiveAndFrozen, GraphCheckpointRecoveryTest,
+    ::testing::Values(GraphCheckpointRecoveryParam{false, false, false},
+        GraphCheckpointRecoveryParam{true, false, false},
+        GraphCheckpointRecoveryParam{false, true, false},
+        GraphCheckpointRecoveryParam{true, true, false},
+        GraphCheckpointRecoveryParam{true, false, true}),
+    [](const ::testing::TestParamInfo<GraphCheckpointRecoveryParam>& info) {
+        if (info.param.legacySelectedGraphID) {
+            return std::string{"FrozenLegacySelectedGraphID"};
+        }
+        return std::string{info.param.walRotated ? "Frozen" : "Active"} +
+               (info.param.graphShadowAlreadyApplied ? "AfterGraphApply" : "BeforeGraphApply");
+    });
+
+enum class UnflushedGraphShadow : uint8_t { Empty, ZeroedHeader };
+
+class LegacyMarkerUnflushedGraphShadowTest
+    : public FlakyCheckpointerTest,
+      public ::testing::WithParamInterface<UnflushedGraphShadow> {};
+
+TEST_P(LegacyMarkerUnflushedGraphShadowTest, DiscardsGraphShadow) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE main_test(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH recovery_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {name: 'Alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {name: 'Bob'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:main_test {id: 1});")->isSuccess());
+
+    auto* context = getClientContext(*conn);
+    FlakyCheckpointer([](main::ClientContext& clientContext) {
+        return std::make_unique<CheckpointerFailsBeforeGraphShadowApply>(clientContext);
+    }).setCheckpointer(*context);
+    ASSERT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
+
+    const auto mainWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    const auto graphShadowPath = StorageUtils::getShadowFilePath(graphPath);
+    ASSERT_TRUE(std::filesystem::exists(mainWALPath));
+    ASSERT_TRUE(std::filesystem::exists(graphShadowPath));
+    rewriteCheckpointRecordAsLegacy(*context, mainWALPath);
+    writeShadowDatabaseID(*context, StorageUtils::getShadowFilePath(databasePath),
+        StorageManager::Get(*context)->getOrInitDatabaseID(*context));
+    auto* graphStorageManager = main::DatabaseManager::Get(*context)
+                                    ->getGraphCatalog("recovery_graph")
+                                    ->getStorageManager();
+    graphStorageManager->getWAL().reset();
+    std::filesystem::remove(StorageUtils::getCheckpointWALFilePath(graphPath));
+    conn.reset();
+    database.reset();
+    ASSERT_FALSE(std::filesystem::exists(StorageUtils::getWALFilePath(graphPath)));
+    ASSERT_FALSE(std::filesystem::exists(StorageUtils::getCheckpointWALFilePath(graphPath)));
+    if (GetParam() == UnflushedGraphShadow::Empty) {
+        std::filesystem::resize_file(graphShadowPath, 0);
+    } else {
+        std::fstream shadow{graphShadowPath, std::ios::binary | std::ios::in | std::ios::out};
+        const std::string zeroedHeader(LBUG_PAGE_SIZE, '\0');
+        shadow.write(zeroedHeader.data(), static_cast<std::streamsize>(zeroedHeader.size()));
+    }
+    const auto graphBeforeRecovery = readFile(graphPath);
+
+    createDBAndConn();
+    auto result = conn->query("MATCH (n:main_test) RETURN COUNT(n);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    EXPECT_FALSE(std::filesystem::exists(graphShadowPath));
+    EXPECT_EQ(readFile(graphPath), graphBeforeRecovery);
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    result = conn->query("MATCH (n:User) RETURN n.name;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNumTuples(), 1);
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "Alice");
+}
+
+INSTANTIATE_TEST_SUITE_P(GraphShadow, LegacyMarkerUnflushedGraphShadowTest,
+    ::testing::Values(UnflushedGraphShadow::Empty, UnflushedGraphShadow::ZeroedHeader),
+    [](const ::testing::TestParamInfo<UnflushedGraphShadow>& info) {
+        return std::string{info.param == UnflushedGraphShadow::Empty ? "Empty" : "ZeroedHeader"};
+    });
+
+TEST_F(CheckpointRetryAfterFailureTest, CommittedRecoverySkipsCatalogGraphWithoutFiles) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CREATE GRAPH missing_graph ANY;")->isSuccess());
+    checkpoint();
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "missing_graph");
+    conn.reset();
+    database.reset();
+    ASSERT_TRUE(std::filesystem::remove(graphPath));
+
+    createDBAndConn();
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    insertNodes(0, 100);
+    failCheckpointWith<FlakyCheckpointerFailsOnApplyingShadow>();
+    ASSERT_TRUE(std::filesystem::exists(StorageUtils::getCheckpointWALFilePath(databasePath)));
+
+    createDBAndConn();
+    checkNodes(100);
+    EXPECT_FALSE(std::filesystem::exists(graphPath));
+    EXPECT_FALSE(std::filesystem::exists(StorageUtils::getCheckpointWALFilePath(databasePath)));
+}
+
+TEST_F(FlakyCheckpointerTest, CommittedGraphRecoveryRejectsMissingBaseFile) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH recovery_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH recovery_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:User {name: 'Alice'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+
+    auto* context = getClientContext(*conn);
+    FlakyCheckpointer([](main::ClientContext& clientContext) {
+        return std::make_unique<CheckpointerFailsBeforeGraphShadowApply>(clientContext);
+    }).setCheckpointer(*context);
+    ASSERT_FALSE(conn->query("CHECKPOINT;")->isSuccess());
+
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "recovery_graph");
+    conn.reset();
+    database.reset();
+    ASSERT_TRUE(std::filesystem::remove(graphPath));
+    try {
+        createDBAndConn();
+        FAIL() << "Expected committed recovery to reject a missing graph file.";
+    } catch (const RuntimeException& e) {
+        EXPECT_NE(std::string{e.what()}.find("graph file " + graphPath), std::string::npos)
+            << e.what();
+    }
+    EXPECT_FALSE(std::filesystem::exists(graphPath));
+}
+
+class CheckpointerMakesWALDirectoryReadOnly final : public Checkpointer {
+public:
+    CheckpointerMakesWALDirectoryReadOnly(main::ClientContext& context,
+        std::function<void()> makeReadOnly)
+        : Checkpointer(context), makeReadOnly{std::move(makeReadOnly)} {}
+
+    void beforeWALRetirement(bool walRotated) override {
+        ASSERT_TRUE(walRotated);
+        makeReadOnly();
+    }
+
+private:
+    std::function<void()> makeReadOnly;
+};
+
+class DirectoryPermissionRestorer final {
+public:
+    DirectoryPermissionRestorer(std::filesystem::path directory, std::filesystem::perms permissions,
+        std::filesystem::path probePath)
+        : directory{std::move(directory)}, permissions{permissions},
+          probePath{std::move(probePath)} {}
+
+    ~DirectoryPermissionRestorer() { restore(); }
+
+    void restore() {
+        if (!active) {
+            return;
+        }
+        std::error_code error;
+        std::filesystem::permissions(directory, permissions, std::filesystem::perm_options::replace,
+            error);
+        std::filesystem::remove(probePath, error);
+        active = false;
+    }
+
+private:
+    std::filesystem::path directory;
+    std::filesystem::perms permissions;
+    std::filesystem::path probePath;
+    bool active = true;
+};
+
+TEST_F(FlakyCheckpointerTest, RecoverAfterFrozenWALRemovalFailure) {
+#ifdef _WIN32
+    GTEST_SKIP();
+#endif
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    const auto directory = std::filesystem::path(databasePath).parent_path();
+    const auto originalPermissions = std::filesystem::status(directory).permissions();
+    const auto probePath = directory / ".checkpoint-unlink-probe";
+    std::ofstream(probePath).close();
+    DirectoryPermissionRestorer permissionRestorer{directory, originalPermissions, probePath};
+    bool madeReadOnly = false;
+    bool deletionWasBlocked = false;
+    auto initFlakyCheckpointer = [&](main::ClientContext& context) {
+        return std::make_unique<CheckpointerMakesWALDirectoryReadOnly>(context, [&]() {
+            madeReadOnly = true;
+            std::filesystem::permissions(directory,
+                std::filesystem::perms::owner_write | std::filesystem::perms::group_write |
+                    std::filesystem::perms::others_write,
+                std::filesystem::perm_options::remove);
+            std::error_code error;
+            const auto removed = std::filesystem::remove(probePath, error);
+            deletionWasBlocked = !removed && std::filesystem::exists(probePath);
+            if (!deletionWasBlocked) {
+                throw RuntimeException("directory permissions do not prevent file deletion");
+            }
+        });
+    };
+    FlakyCheckpointer flakyCheckpointer(initFlakyCheckpointer);
+    std::string checkpointError;
+    runFlakyCheckpoint(flakyCheckpointer, &checkpointError);
+    permissionRestorer.restore();
+
+    ASSERT_TRUE(madeReadOnly) << checkpointError;
+    if (!deletionWasBlocked) {
+        GTEST_SKIP() << "Directory permissions do not prevent file deletion in this environment.";
+    }
+
+    ASSERT_NE(checkpointError.find("Frozen WAL retirement failed"), std::string::npos);
+    const auto frozenWALPath = StorageUtils::getCheckpointWALFilePath(databasePath);
+    ASSERT_TRUE(std::filesystem::exists(frozenWALPath));
+    ASSERT_EQ(std::filesystem::file_size(frozenWALPath), 0);
+    ASSERT_TRUE(std::filesystem::exists(StorageUtils::getShadowFilePath(databasePath)));
+    auto rejectedWrite = conn->query("CREATE (:test {id: 5000, name: 'rejected'});");
+    ASSERT_FALSE(rejectedWrite->isSuccess());
+    ASSERT_NE(rejectedWrite->getErrorMessage().find("panic state"), std::string::npos);
+
+    createDBAndConn();
+    auto result = conn->query("MATCH (a:test) RETURN COUNT(a);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 5000);
+    ASSERT_FALSE(std::filesystem::exists(frozenWALPath));
+    ASSERT_FALSE(std::filesystem::exists(StorageUtils::getShadowFilePath(databasePath)));
 }
 
 // Page allocator that fails the first page allocation. In-place checkpoints do not allocate
@@ -649,8 +3035,10 @@ TEST_F(FlakyCheckpointerTest, ShadowFileDatabaseIDMismatchCorruptedDB) {
     ofs << "1a1a1a1a1a1a1a1a1a1a";
     ofs.close();
 
-    // The shadow file replay should now fail
-    EXPECT_THROW(createDBAndConn(), InternalException);
+    // Opening must refuse: the garbage data file has no readable database ID, so the pending
+    // checkpoint bundle in the shadow is treated as foreign and the open is refused before any
+    // shadow page is written, leaving the shadow file intact.
+    EXPECT_THROW(createDBAndConn(), RuntimeException);
 }
 
 // A checkpoint publishes the new chunk metadata of a node group during its storage phase, but
@@ -993,6 +3381,34 @@ TEST_F(ReviewFixesTest, CheckpointUsesMatchingCatalogForMainAndDefaultGraph) {
     auto graphTables = graphConnection->query("CALL SHOW_TABLES() RETURN count(*)");
     ASSERT_TRUE(graphTables->isSuccess()) << graphTables->getErrorMessage();
     ASSERT_EQ(graphTables->getNext()->getValue(0)->getValue<int64_t>(), 2);
+}
+
+TEST_F(ReviewFixesTest, ReadOnlyOpenAllowsEmptyGraphWAL) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH readonly_graph ANY;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "readonly_graph");
+    const auto graphWALPath = StorageUtils::getWALFilePath(graphPath);
+
+    conn.reset();
+    database.reset();
+    std::ofstream(graphWALPath).close();
+    ASSERT_TRUE(std::filesystem::exists(graphWALPath));
+    ASSERT_EQ(std::filesystem::file_size(graphWALPath), 0);
+    auto readOnlyConfig = *systemConfig;
+    readOnlyConfig.readOnly = true;
+    auto readOnlyDatabase = std::make_unique<main::Database>(databasePath, readOnlyConfig);
+    auto readOnlyConnection = std::make_unique<main::Connection>(readOnlyDatabase.get());
+    auto result = readOnlyConnection->query("USE GRAPH readonly_graph;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = readOnlyConnection->query("CALL SHOW_TABLES() RETURN count(*);");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_EQ(result->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    EXPECT_TRUE(std::filesystem::exists(graphWALPath));
 }
 
 // Fix #2 – remove const_cast from NodeGroup::checkpointInMemOnly and

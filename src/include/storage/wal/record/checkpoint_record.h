@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -15,8 +16,12 @@ namespace lbug {
 namespace storage {
 
 struct CheckpointRecord final : WALRecord {
+    uint64_t bundleFormatVersion;
 
-    CheckpointRecord() : WALRecord{WALRecordType::CHECKPOINT_RECORD} {}
+    CheckpointRecord() : WALRecord{WALRecordType::CHECKPOINT_RECORD}, bundleFormatVersion{0} {}
+
+    explicit CheckpointRecord(uint64_t bundleFormatVersion)
+        : WALRecord{WALRecordType::CHECKPOINT_RECORD}, bundleFormatVersion{bundleFormatVersion} {}
 
     void serialize(common::Serializer& serializer) const override;
     static std::unique_ptr<CheckpointRecord> deserialize(common::Deserializer& deserializer);

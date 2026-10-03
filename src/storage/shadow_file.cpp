@@ -1,7 +1,10 @@
 #include "storage/shadow_file.h"
 
+#include <algorithm>
+
 #include "common/exception/io.h"
 #include "common/file_system/virtual_file_system.h"
+#include "common/serializer/buffer_reader.h"
 #include "common/serializer/buffered_file.h"
 #include "common/serializer/deserializer.h"
 #include "common/serializer/serializer.h"
@@ -20,6 +23,34 @@ using namespace lbug::main;
 
 namespace lbug {
 namespace storage {
+
+namespace {
+// Bounds every read to the buffer so a corrupted length field in a database header page (e.g. a
+// debugging-string length) cannot read past the page allocation.
+class BoundedPageReader final : public Reader {
+public:
+    BoundedPageReader(uint8_t* data, uint64_t dataSize, std::string outOfBoundsMessage)
+        : data{data}, dataSize{dataSize}, outOfBoundsMessage{std::move(outOfBoundsMessage)} {}
+
+    void read(uint8_t* outputData, uint64_t size) override {
+        if (size > dataSize - readOffset) {
+            throw RuntimeException(outOfBoundsMessage);
+        }
+        std::memcpy(outputData, data + readOffset, size);
+        readOffset += size;
+    }
+
+    bool finished() override { return readOffset >= dataSize; }
+
+    uint64_t getReadOffset() const override { return readOffset; }
+
+private:
+    uint8_t* data;
+    uint64_t dataSize;
+    uint64_t readOffset = 0;
+    std::string outOfBoundsMessage;
+};
+} // namespace
 
 void ShadowPageRecord::serialize(Serializer& serializer) const {
     serializer.write<file_idx_t>(originalFileIdx);
@@ -166,7 +197,8 @@ void ShadowFile::replayShadowPageRecords(ClientContext& context) {
     replayShadowPageRecords(context, context.getDatabasePath());
 }
 
-void ShadowFile::replayShadowPageRecords(ClientContext& context, const std::string& databasePath) {
+void ShadowFile::replayShadowPageRecords(ClientContext& context, const std::string& databasePath,
+    std::optional<uuid> legacyDatabaseID) {
     if (context.getDBConfig()->readOnly) {
         throw RuntimeException("Couldn't replay shadow pages under read-only mode. Please re-open "
                                "the database with read-write mode to replay shadow pages.");
@@ -186,11 +218,12 @@ void ShadowFile::replayShadowPageRecords(ClientContext& context, const std::stri
             "to do so, please delete this file and restart the database.",
             shadowFilePath));
     }
-    replayShadowPageRecordsCore(*shadowFileInfo, *dataFileInfo);
+    replayShadowPageRecordsCore(*shadowFileInfo, *dataFileInfo,
+        context.getDBConfig()->maxDBSize / LBUG_PAGE_SIZE, legacyDatabaseID);
 }
 
 void ShadowFile::replayShadowPageRecordsForStorageManager(ClientContext& context,
-    StorageManager& storageManager) {
+    StorageManager& storageManager, std::optional<uuid> legacyDatabaseID) {
     // Variant for files whose handle is already open and locked by the given storage manager
     // (partition children during recovery): avoids taking a second lock on the data file,
     // which fails on platforms with per-handle locks (Windows).
@@ -201,31 +234,144 @@ void ShadowFile::replayShadowPageRecordsForStorageManager(ClientContext& context
     auto vfs = VirtualFileSystem::GetUnsafe(context);
     auto shadowFilePath = StorageUtils::getShadowFilePath(storageManager.getDatabasePath());
     auto shadowFileInfo = vfs->openFile(shadowFilePath, FileOpenFlags(FileFlags::READ_ONLY));
-    replayShadowPageRecordsCore(*shadowFileInfo, *storageManager.getDataFH()->getFileInfo());
+    auto* dataFH = storageManager.getDataFH();
+    replayShadowPageRecordsCore(*shadowFileInfo, *dataFH->getFileInfo(),
+        context.getDBConfig()->maxDBSize / LBUG_PAGE_SIZE, legacyDatabaseID);
+    const auto fileSize = dataFH->getFileInfo()->getFileSize();
+    const auto numPages = (fileSize + dataFH->getPageSize() - 1) / dataFH->getPageSize();
+    if (numPages > dataFH->getNumPages()) {
+        dataFH->addNewPages(numPages - dataFH->getNumPages());
+    }
 }
 
-void ShadowFile::replayShadowPageRecordsCore(FileInfo& shadowFileInfo, FileInfo& dataFileInfo) {
+void ShadowFile::replayShadowPageRecordsCore(FileInfo& shadowFileInfo, FileInfo& dataFileInfo,
+    uint64_t maxDatabasePages, std::optional<uuid> legacyDatabaseID) {
+    const auto shadowFileSize = shadowFileInfo.getFileSize();
+    if (shadowFileSize < LBUG_PAGE_SIZE + sizeof(uint64_t)) {
+        throw RuntimeException(
+            std::format("Cannot replay shadow file {}: file is too small.", shadowFileInfo.path));
+    }
     ShadowFileHeader header;
     const auto headerBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
     shadowFileInfo.readFromFile(headerBuffer.get(), LBUG_PAGE_SIZE, 0);
     memcpy(&header, headerBuffer.get(), sizeof(ShadowFileHeader));
+    const auto maxShadowPagesInFile = shadowFileSize / LBUG_PAGE_SIZE - 1;
+    if (header.numShadowPages == INVALID_PAGE_IDX || header.numShadowPages > maxShadowPagesInFile) {
+        throw RuntimeException(
+            std::format("Cannot replay shadow file {}: invalid shadow page count {}.",
+                shadowFileInfo.path, header.numShadowPages));
+    }
+    if (header.numShadowPages > maxDatabasePages) {
+        throw RuntimeException(std::format(
+            "Cannot replay shadow file {}: it needs {} shadow pages, but max_db_size limits "
+            "the database to {} pages ({} bytes). Reopen the database with a larger "
+            "max_db_size, keeping the WAL and shadow files in place.",
+            shadowFileInfo.path, header.numShadowPages, maxDatabasePages,
+            maxDatabasePages * LBUG_PAGE_SIZE));
+    }
+    const auto recordsOffset = (static_cast<uint64_t>(header.numShadowPages) + 1) * LBUG_PAGE_SIZE;
+    const auto recordsSize = sizeof(uint64_t) + static_cast<uint64_t>(header.numShadowPages) *
+                                                    (sizeof(file_idx_t) + sizeof(page_idx_t));
+    if (recordsOffset > shadowFileSize || recordsSize > shadowFileSize - recordsOffset) {
+        throw RuntimeException(std::format(
+            "Cannot replay shadow file {}: page records are truncated.", shadowFileInfo.path));
+    }
 
     // When replaying the shadow file we haven't read the database ID from the database
     // header yet
     // So we need to do it separately here to verify the shadow file matches the database
-    auto oldDatabaseID = getOldDatabaseID(dataFileInfo);
-    FileDBIDUtils::verifyDatabaseID(shadowFileInfo, oldDatabaseID, header.databaseID);
+    const auto oldDatabaseID = getOldDatabaseID(dataFileInfo);
+    const bool usesLegacyDatabaseID = header.databaseID.value != oldDatabaseID.value &&
+                                      legacyDatabaseID.has_value() &&
+                                      header.databaseID.value == legacyDatabaseID->value;
+    if (header.databaseID.value != oldDatabaseID.value && !usesLegacyDatabaseID) {
+        FileDBIDUtils::verifyDatabaseID(shadowFileInfo, oldDatabaseID, header.databaseID);
+    }
 
-    std::vector<ShadowPageRecord> shadowPageRecords;
-    shadowPageRecords.reserve(header.numShadowPages);
     auto reader = std::make_unique<BufferedFileReader>(shadowFileInfo);
-    reader->resetReadOffset((header.numShadowPages + 1) * LBUG_PAGE_SIZE);
+    reader->resetReadOffset(recordsOffset);
     Deserializer deSer(std::move(reader));
-    deSer.deserializeVector(shadowPageRecords);
+    uint64_t numShadowPageRecords = 0;
+    deSer.deserializeValue(numShadowPageRecords);
+    if (numShadowPageRecords != header.numShadowPages) {
+        throw RuntimeException(std::format(
+            "Cannot replay shadow file {}: header declares {} pages but the record list declares "
+            "{}.",
+            shadowFileInfo.path, header.numShadowPages, numShadowPageRecords));
+    }
+
+    const auto dataFileSize = dataFileInfo.getFileSize();
+    const auto currentDataPages =
+        dataFileSize / LBUG_PAGE_SIZE + static_cast<uint64_t>(dataFileSize % LBUG_PAGE_SIZE != 0);
+    if (currentDataPages > maxDatabasePages) {
+        throw RuntimeException(std::format(
+            "Cannot replay shadow file {}: database file exceeds the configured maximum size.",
+            shadowFileInfo.path));
+    }
+    std::vector<ShadowPageRecord> records;
+    records.reserve(numShadowPageRecords);
+    for (auto i = 0u; i < numShadowPageRecords; i++) {
+        const auto record = ShadowPageRecord::deserialize(deSer);
+        if (record.originalFileIdx == INVALID_FILE_IDX ||
+            record.originalPageIdx == INVALID_PAGE_IDX) {
+            throw RuntimeException(
+                std::format("Cannot replay shadow file {}: invalid target page {}.",
+                    shadowFileInfo.path, record.originalPageIdx));
+        }
+        if (record.originalPageIdx >= maxDatabasePages) {
+            throw RuntimeException(std::format(
+                "Cannot replay shadow file {}: its target page {} is beyond the {} pages "
+                "({} bytes) allowed by max_db_size. Reopen the database with a larger "
+                "max_db_size, keeping the WAL and shadow files in place.",
+                shadowFileInfo.path, record.originalPageIdx, maxDatabasePages,
+                maxDatabasePages * LBUG_PAGE_SIZE));
+        }
+        records.push_back(record);
+    }
+
+    // The last database header page record identifies both the checkpoint's Database ID and,
+    // through the header's dataFileNumPages, the page extent the checkpoint allocated. Failed
+    // pre-marker checkpoint attempts can leave that extent ahead of the physical file size, so
+    // the extent recorded in the committed checkpoint is the only valid upper bound for target
+    // pages, not the physical file size plus the shadow page count.
+    const auto headerRecord =
+        std::find_if(records.rbegin(), records.rend(), [](const auto& record) {
+            return record.originalPageIdx == StorageConstants::DB_HEADER_PAGE_IDX;
+        });
+    if (headerRecord == records.rend()) {
+        throw RuntimeException(std::format(
+            "Cannot replay shadow file {}: database header page is missing.", shadowFileInfo.path));
+    }
+    const auto headerShadowPageIdx = static_cast<page_idx_t>(
+        records.size() - static_cast<size_t>(std::distance(records.rbegin(), headerRecord)));
+    const auto headerPage = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
+    shadowFileInfo.readFromFile(headerPage.get(), LBUG_PAGE_SIZE,
+        headerShadowPageIdx * LBUG_PAGE_SIZE);
+    Deserializer headerDeserializer{
+        std::make_unique<BoundedPageReader>(headerPage.get(), LBUG_PAGE_SIZE,
+            std::format("Cannot recover committed checkpoint: shadow file {} holds a "
+                        "corrupt database header page.",
+                shadowFileInfo.path))};
+    const auto checkpointHeader = DatabaseHeader::deserialize(headerDeserializer);
+    if (checkpointHeader.databaseID.value != oldDatabaseID.value) {
+        throw RuntimeException(std::format(
+            "Cannot recover committed checkpoint: shadow file {} does not match the Database "
+            "ID "
+            "of {}. Do not delete the shadow file; it holds committed pages. Restore the "
+            "database file it was written for.",
+            shadowFileInfo.path, dataFileInfo.path));
+    }
+    for (const auto& record : records) {
+        if (record.originalPageIdx >= checkpointHeader.dataFileNumPages) {
+            throw RuntimeException(
+                std::format("Cannot replay shadow file {}: invalid target page {}.",
+                    shadowFileInfo.path, record.originalPageIdx));
+        }
+    }
 
     const auto pageBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
     page_idx_t shadowPageIdx = 1;
-    for (const auto& record : shadowPageRecords) {
+    for (const auto& record : records) {
         shadowFileInfo.readFromFile(pageBuffer.get(), LBUG_PAGE_SIZE,
             shadowPageIdx * LBUG_PAGE_SIZE);
         dataFileInfo.writeFile(pageBuffer.get(), LBUG_PAGE_SIZE,
@@ -235,11 +381,12 @@ void ShadowFile::replayShadowPageRecordsCore(FileInfo& shadowFileInfo, FileInfo&
     dataFileInfo.syncFile();
 }
 
-void ShadowFile::flushAll(main::ClientContext& context) const {
+void ShadowFile::flushAll(const uuid& ownerDatabaseID) const {
     // Write header page to file.
     ShadowFileHeader header;
     header.numShadowPages = shadowPageRecords.size();
-    header.databaseID = StorageManager::Get(context)->getOrInitDatabaseID(context);
+    header.databaseID = CHECKPOINT_BUNDLE_DATABASE_ID;
+    header.ownerDatabaseID = ownerDatabaseID;
     const auto headerBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
     memcpy(headerBuffer.get(), &header, sizeof(ShadowFileHeader));
     DASSERT(shadowingFH && !shadowingFH->isInMemoryMode());
@@ -257,7 +404,7 @@ void ShadowFile::flushAll(main::ClientContext& context) const {
     writer->sync();
 }
 
-void ShadowFile::clear(BufferManager& bm) {
+void ShadowFile::clear(BufferManager& bm, bool syncParentDirectory) {
     DASSERT(shadowingFH);
     // Concurrent readers may be reading shadow pages (see readShadowVersionIfExists).
     std::unique_lock lck{mtx};
@@ -268,12 +415,15 @@ void ShadowFile::clear(BufferManager& bm) {
     // lazily by getOrCreateShadowingFH on the next checkpoint, which also re-reserves the
     // header page.
     bm.removeFilePagesFromFrames(*shadowingFH);
+    shadowPagesMap.clear();
+    shadowPageRecords.clear();
+    hasShadowPages.store(false, std::memory_order_release);
     shadowingFH->resetToZeroPagesAndPageCapacity();
     shadowingFH->resetFileInfo();
     vfs->removeFileIfExists(shadowFilePath);
-    shadowPagesMap.clear();
-    shadowPageRecords.clear();
-    hasShadowPages.store(false, std::memory_order_relaxed);
+    if (syncParentDirectory) {
+        vfs->syncParentDirectory(shadowFilePath);
+    }
 }
 
 void ShadowFile::reset() {
@@ -290,6 +440,9 @@ void ShadowFile::reset() {
         return;
     }
     std::unique_lock lck{mtx};
+    shadowPagesMap.clear();
+    shadowPageRecords.clear();
+    hasShadowPages.store(false, std::memory_order_release);
     // If clear() already ran (the normal checkpoint flow calls both), the file was truncated,
     // unlinked and the fd dropped; just make sure the in-memory maps are empty.
     if (shadowingFH->getFileInfo() != nullptr) {
@@ -297,10 +450,8 @@ void ShadowFile::reset() {
         shadowingFH->resetToZeroPagesAndPageCapacity();
         shadowingFH->resetFileInfo();
         vfs->removeFileIfExists(shadowFilePath);
+        vfs->syncParentDirectory(shadowFilePath);
     }
-    shadowPagesMap.clear();
-    shadowPageRecords.clear();
-    hasShadowPages.store(false, std::memory_order_relaxed);
 }
 
 FileHandle* ShadowFile::getOrCreateShadowingFH() {

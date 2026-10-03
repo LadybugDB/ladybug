@@ -1,5 +1,6 @@
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 
 #include "common/exception/io.h"
@@ -7,6 +8,24 @@
 #include "gtest/gtest.h"
 
 using namespace lbug::common;
+
+TEST(VFSTests, VirtualFileSystemDeletesFrozenWALs) {
+    VirtualFileSystem vfs("/tmp/dbHome.lbdb");
+    const std::string mainFrozenWAL = "/tmp/dbHome.lbdb.wal.checkpoint";
+    const std::string graphFrozenWAL = "/tmp/dbHome.graph.lbdb.wal.checkpoint";
+    std::ofstream(mainFrozenWAL).close();
+    std::ofstream(graphFrozenWAL).close();
+    ASSERT_TRUE(std::filesystem::exists(mainFrozenWAL));
+    ASSERT_TRUE(std::filesystem::exists(graphFrozenWAL));
+
+    EXPECT_NO_THROW(vfs.removeFileIfExists(mainFrozenWAL));
+    EXPECT_NO_THROW(vfs.removeFileIfExists(graphFrozenWAL));
+    EXPECT_FALSE(std::filesystem::exists(mainFrozenWAL));
+    EXPECT_FALSE(std::filesystem::exists(graphFrozenWAL));
+
+    EXPECT_THROW(vfs.removeFileIfExists("/tmp/other.lbdb.wal.checkpoint"), IOException);
+    EXPECT_THROW(vfs.removeFileIfExists("/tmp/other.graph.lbdb.wal.checkpoint"), IOException);
+}
 
 TEST(VFSTests, VirtualFileSystemDeleteFiles) {
     std::string homeDir = "/tmp/dbHome";
@@ -273,4 +292,72 @@ TEST(VFSTests, VirtualFileSystemDeleteFilesPatternValidation) {
     ASSERT_TRUE(std::filesystem::exists("/tmp/foo.db"));
 
     std::filesystem::remove_all("/tmp/foo.db");
+}
+
+class CrossFileSystemRenameProbe final : public FileSystem {
+public:
+    explicit CrossFileSystemRenameProbe(std::string knownPath) : knownPath{std::move(knownPath)} {}
+
+    bool canHandleFile(const std::string_view path) const override {
+        return path.starts_with("probe://");
+    }
+
+    bool fileOrPathExists(const std::string& path,
+        lbug::main::ClientContext* /*context*/ = nullptr) override {
+        return path == knownPath;
+    }
+
+    void renameFile(const std::string& /*from*/, const std::string& /*to*/) override {
+        renameCalled = true;
+    }
+
+    bool wasRenameCalled() const { return renameCalled; }
+
+    void syncFile(const FileInfo& /*fileInfo*/) const override {}
+
+protected:
+    void readFromFile(FileInfo& /*fileInfo*/, void* /*buffer*/, uint64_t /*numBytes*/,
+        uint64_t /*position*/) const override {}
+
+    int64_t readFile(FileInfo& /*fileInfo*/, void* /*buf*/, size_t /*numBytes*/) const override {
+        return 0;
+    }
+
+    int64_t seek(FileInfo& /*fileInfo*/, uint64_t /*offset*/, int /*whence*/) const override {
+        return 0;
+    }
+
+    uint64_t getFileSize(const FileInfo& /*fileInfo*/) const override { return 0; }
+
+private:
+    std::string knownPath;
+    bool renameCalled = false;
+};
+
+TEST(VFSTests, VirtualFileSystemRejectsRenameAcrossFileSystems) {
+    const std::string registeredPath = "probe://db.wal";
+    auto probe = std::make_unique<CrossFileSystemRenameProbe>(registeredPath);
+    auto* probePtr = probe.get();
+    VirtualFileSystem vfs;
+    vfs.registerFileSystem(std::move(probe));
+
+    const std::string destinationDirectory = "/tmp/lbug_vfs_cross_fs_rename";
+    const auto localDestination = destinationDirectory + "/dest.wal";
+    std::filesystem::create_directories(destinationDirectory);
+    std::ofstream(localDestination) << "keep";
+
+    try {
+        vfs.renameFile(registeredPath, localDestination);
+        FAIL() << "Expected renaming across file systems to be rejected.";
+    } catch (const lbug::common::IOException& e) {
+        EXPECT_STREQ(e.what(), "IO exception: Cannot rename files across file systems.");
+    }
+    EXPECT_FALSE(probePtr->wasRenameCalled());
+    EXPECT_TRUE(vfs.fileOrPathExists(registeredPath));
+    std::ifstream destination{localDestination};
+    std::string content;
+    std::getline(destination, content);
+    EXPECT_EQ(content, "keep");
+
+    std::filesystem::remove_all(destinationDirectory);
 }

@@ -132,5 +132,12 @@ protected:
     std::string dbPath;
 };
 
+// Kept out of FileSystem's vtable so prebuilt extension file systems stay ABI-compatible.
+class LBUG_API DirectorySyncFileSystem {
+public:
+    virtual ~DirectorySyncFileSystem() = default;
+    virtual void syncParentDirectory(const std::string& path) const = 0;
+};
+
 } // namespace common
 } // namespace lbug

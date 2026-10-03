@@ -34,6 +34,7 @@ Record metadata comments preserve existing WAL wire compatibility:
 - `// @owned_names=field:member_name` keeps replay-visible owned payload names stable.
 - `// @debug_fields=false` keeps records that historically serialized fields without
   debug keys on that same wire format.
+- `// @explicit_constructor=true` marks the generated field constructor `explicit`.
 
 `ValueVector` and `ValueVector[]` are Ladybug-specific generator types:
 
