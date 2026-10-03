@@ -131,8 +131,8 @@ void CreateIndex::executeInternal(ExecutionContext* context) {
             auto treeBytes =
                 physicalIndex.value()->cast<storage::ArtPrimaryKeyIndex>().serializeTreeToBytes();
             auto* indexEntry = catalog->getIndex(transaction, info.tableID, info.indexName);
-            transaction->getLocalWAL().logCreateIndexRecord(indexEntry,
-                physicalIndex.value()->getIndexInfo(), std::move(treeBytes));
+            transaction->getLocalWAL().logCreateIndexRecord(indexEntry->getOwningCatalogName(),
+                indexEntry, physicalIndex.value()->getIndexInfo(), std::move(treeBytes));
         }
         appendMessage(std::format("Index {} has been created.", info.indexName), memoryManager);
         return;

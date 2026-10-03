@@ -127,8 +127,7 @@ bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
 
         // Add uncommitted insertions from local storage
         if (transaction->isWriteTransaction()) {
-            if (auto* localTable =
-                    transaction->getLocalStorage()->getLocalTable(relTable->getTableID())) {
+            if (auto* localTable = transaction->getLocalStorage()->getLocalTable(*relTable)) {
                 auto& localRelTable = localTable->cast<LocalRelTable>();
                 // Count entries in the CSR index for this direction.
                 // We can't use getNumTotalRows() because it includes deleted rows.

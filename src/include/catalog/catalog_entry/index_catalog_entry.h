@@ -73,6 +73,13 @@ public:
 
     common::table_id_t getTableID() const { return tableID; }
 
+    // The catalog-set key embeds the table ID (see getInternalIndexName), so the
+    // name must change with it.
+    void setTableID(common::table_id_t tableID_) {
+        tableID = tableID_;
+        rename(getInternalIndexName(tableID_, indexName));
+    }
+
     std::string getIndexName() const { return indexName; }
 
     std::vector<common::property_id_t> getPropertyIDs() const { return propertyIDs; }

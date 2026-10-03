@@ -27,70 +27,88 @@ void LocalWAL::logCommit() {
     addNewWALRecordNoLock(walRecord);
 }
 
-void LocalWAL::logCreateCatalogEntryRecord(CatalogEntry* catalogEntry, bool isInternal) {
+void LocalWAL::logCreateCatalogEntryRecord(const std::string& ownerCatalogName,
+    CatalogEntry* catalogEntry, bool isInternal) {
     CreateCatalogEntryRecord walRecord(catalogEntry, isInternal);
+    walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }
 
-void LocalWAL::logCreateIndexRecord(CatalogEntry* catalogEntry, IndexInfo indexInfo,
-    std::vector<uint8_t> treeBytes) {
+void LocalWAL::logCreateIndexRecord(const std::string& ownerCatalogName, CatalogEntry* catalogEntry,
+    IndexInfo indexInfo, std::vector<uint8_t> treeBytes) {
     CreateIndexRecord walRecord(catalogEntry, std::move(indexInfo), std::move(treeBytes));
+    walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }
 
-void LocalWAL::logDropCatalogEntryRecord(table_id_t tableID, CatalogEntryType type) {
+void LocalWAL::logDropCatalogEntryRecord(const std::string& ownerCatalogName, table_id_t tableID,
+    CatalogEntryType type) {
     DropCatalogEntryRecord walRecord(tableID, type);
+    walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }
 
-void LocalWAL::logAlterCatalogEntryRecord(const BoundAlterInfo* alterInfo) {
+void LocalWAL::logAlterCatalogEntryRecord(const std::string& ownerCatalogName,
+    const BoundAlterInfo* alterInfo) {
     AlterTableEntryRecord walRecord(alterInfo);
+    walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }
 
-void LocalWAL::logTableInsertion(table_id_t tableID, TableType tableType, row_idx_t numRows,
-    const std::vector<ValueVector*>& vectors) {
+void LocalWAL::logTableInsertion(const std::string& ownerCatalogName, table_id_t tableID,
+    TableType tableType, row_idx_t numRows, const std::vector<ValueVector*>& vectors) {
     TableInsertionRecord walRecord(tableID, tableType, numRows, vectors);
+    walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }
 
-void LocalWAL::logNodeDeletion(table_id_t tableID, offset_t nodeOffset, ValueVector* pkVector) {
+void LocalWAL::logNodeDeletion(const std::string& ownerCatalogName, table_id_t tableID,
+    offset_t nodeOffset, ValueVector* pkVector) {
     NodeDeletionRecord walRecord(tableID, nodeOffset, pkVector);
+    walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }
 
-void LocalWAL::logNodeUpdate(table_id_t tableID, column_id_t columnID, offset_t nodeOffset,
-    ValueVector* propertyVector) {
+void LocalWAL::logNodeUpdate(const std::string& ownerCatalogName, table_id_t tableID,
+    column_id_t columnID, offset_t nodeOffset, ValueVector* propertyVector) {
     NodeUpdateRecord walRecord(tableID, columnID, nodeOffset, propertyVector);
+    walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }
 
-void LocalWAL::logRelDelete(table_id_t tableID, ValueVector* srcNodeVector,
-    ValueVector* dstNodeVector, ValueVector* relIDVector) {
+void LocalWAL::logRelDelete(const std::string& ownerCatalogName, table_id_t tableID,
+    ValueVector* srcNodeVector, ValueVector* dstNodeVector, ValueVector* relIDVector) {
     RelDeletionRecord walRecord(tableID, srcNodeVector, dstNodeVector, relIDVector);
+    walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }
 
-void LocalWAL::logRelDetachDelete(table_id_t tableID, RelDataDirection direction,
-    ValueVector* srcNodeVector) {
+void LocalWAL::logRelDetachDelete(const std::string& ownerCatalogName, table_id_t tableID,
+    RelDataDirection direction, ValueVector* srcNodeVector) {
     RelDetachDeleteRecord walRecord(tableID, direction, srcNodeVector);
+    walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }
 
-void LocalWAL::logRelUpdate(table_id_t tableID, column_id_t columnID, ValueVector* srcNodeVector,
-    ValueVector* dstNodeVector, ValueVector* relIDVector, ValueVector* propertyVector) {
+void LocalWAL::logRelUpdate(const std::string& ownerCatalogName, table_id_t tableID,
+    column_id_t columnID, ValueVector* srcNodeVector, ValueVector* dstNodeVector,
+    ValueVector* relIDVector, ValueVector* propertyVector) {
     RelUpdateRecord walRecord(tableID, columnID, srcNodeVector, dstNodeVector, relIDVector,
         propertyVector);
+    walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }
 
-void LocalWAL::logUpdateSequenceRecord(sequence_id_t sequenceID, uint64_t kCount) {
+void LocalWAL::logUpdateSequenceRecord(const std::string& ownerCatalogName,
+    sequence_id_t sequenceID, uint64_t kCount) {
     UpdateSequenceRecord walRecord(sequenceID, kCount);
+    walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }
 
-void LocalWAL::logLoadExtension(std::string path) {
+void LocalWAL::logLoadExtension(const std::string& ownerCatalogName, std::string path) {
     LoadExtensionRecord walRecord(std::move(path));
+    walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }
 

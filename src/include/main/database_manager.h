@@ -1,6 +1,9 @@
 #pragma once
 
+#include <functional>
 #include <optional>
+#include <shared_mutex>
+#include <unordered_set>
 
 #include "attached_database.h"
 #include "storage/partition_storage_registry.h"
@@ -8,6 +11,7 @@
 namespace lbug {
 namespace catalog {
 class Catalog;
+class GraphCatalogEntry;
 } // namespace catalog
 
 namespace storage {
@@ -19,9 +23,12 @@ class PartitionStorageRegistry;
 
 namespace main {
 
+struct GraphWALReplayRequest;
+
 class DatabaseManager {
 public:
     DatabaseManager();
+    ~DatabaseManager();
 
     void registerAttachedDatabase(std::unique_ptr<AttachedDatabase> attachedDatabase);
     bool hasAttachedDatabase(const std::string& name);
@@ -40,14 +47,32 @@ public:
     void loadGraphsFromCatalog(storage::MemoryManager* memoryManager,
         main::ClientContext* clientContext, bool mainCheckpointCommitted, bool checkpointBundle,
         std::optional<common::uuid> legacyCheckpointDatabaseID = std::nullopt);
+    // Materializes one named graph on demand (see loadGraphsFromCatalog for the batch
+    // equivalent). Used during WAL replay when a record tagged with the graph's name
+    // arrives before the graph is loaded. Returns true when the graph is loaded afterwards.
+    bool loadGraphFromCatalog(storage::MemoryManager* memoryManager,
+        main::ClientContext* clientContext, const std::string& graphName);
+    // Replays graph WALs queued by loadGraphFromCatalog. Deferred while a recovery
+    // transaction is active and run at the next transaction-free point (a replayed commit
+    // or the end of a replay pass).
+    void replayPendingGraphWALs(main::ClientContext* clientContext);
     void setDefaultGraph(const std::string& graphName);
     void clearDefaultGraph();
     bool hasGraph(const std::string& graphName);
     catalog::Catalog* getGraphCatalog(const std::string& graphName);
+    // Runs action with the graph registry's shared lock held, so a concurrent DROP GRAPH
+    // cannot destroy the catalog for the action's duration. Callers that dereference the
+    // catalog after a getGraphCatalog lookup must use this instead; getGraphCatalog only
+    // guards the lookup itself.
+    void withGraphCatalog(const std::string& graphName,
+        const std::function<void(catalog::Catalog*)>& action);
     catalog::Catalog* getDefaultGraphCatalog() const;
+    catalog::Catalog* getReplayOwnerCatalog() const { return replayOwnerCatalog; }
+    void setReplayOwnerCatalog(catalog::Catalog* catalog) { replayOwnerCatalog = catalog; }
     bool hasDefaultGraph() const { return defaultGraph != "" && defaultGraph != "main"; }
     std::string getDefaultGraphName() const { return defaultGraph; }
     std::vector<catalog::Catalog*> getGraphs() const;
+    void bumpGraphCatalogVersions(const std::unordered_set<catalog::Catalog*>& catalogs);
     storage::StorageManager* getDefaultGraphStorageManager() const;
 
     LBUG_API void invalidateCache();
@@ -62,12 +87,19 @@ public:
     LBUG_API static DatabaseManager* Get(const ClientContext& context);
 
 private:
+    bool loadGraph(main::ClientContext* clientContext, storage::MemoryManager* memoryManager,
+        catalog::GraphCatalogEntry* graphEntry, bool mainCheckpointCommitted, bool checkpointBundle,
+        std::optional<common::uuid> legacyCheckpointDatabaseID);
+
     std::vector<std::unique_ptr<AttachedDatabase>> attachedDatabases;
     std::string defaultDatabase;
     std::vector<std::unique_ptr<catalog::Catalog>> graphs;
+    mutable std::shared_mutex graphsMutex;
     // Owns the per-partition data files of partitioned node tables (phase-B per-partition
     // storage; see docs/partitioning.md 6b).
     storage::PartitionStorageRegistry partitionStorageRegistry;
+    catalog::Catalog* replayOwnerCatalog = nullptr;
+    std::vector<std::unique_ptr<GraphWALReplayRequest>> pendingGraphWALReplays;
 
 public:
     storage::PartitionStorageRegistry* getPartitionStorageRegistry() {

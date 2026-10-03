@@ -20,6 +20,8 @@ void WALRecord::serializeWithLength(Serializer& serializer, const WALRecord& rec
     auto bufferWriter = std::make_shared<BufferWriter>();
     Serializer bufferSerializer{bufferWriter};
     record.serialize(bufferSerializer);
+    bufferSerializer.writeDebuggingInfo("ownerCatalogName");
+    bufferSerializer.write<std::string>(record.ownerCatalogName);
 
     const auto recordLength = bufferWriter->getSize();
     serializer.write(recordLength);
@@ -89,6 +91,10 @@ std::unique_ptr<WALRecord> WALRecord::deserialize(Deserializer& deserializer,
     default: {
         throw RuntimeException("Corrupted wal file. Read out invalid WAL record type.");
     }
+    }
+    if (deserializer.hasRemainingData()) {
+        deserializer.validateDebuggingInfo(key, "ownerCatalogName");
+        deserializer.deserializeValue<std::string>(walRecord->ownerCatalogName);
     }
     walRecord->type = type;
     deserializer.skipReadLimit();

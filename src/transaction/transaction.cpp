@@ -4,6 +4,8 @@
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "main/client_context.h"
+#include "main/database.h"
+#include "main/database_manager.h"
 #include "main/db_config.h"
 #include "storage/local_storage/local_node_table.h"
 #include "storage/local_storage/local_storage.h"
@@ -31,7 +33,7 @@ bool LocalCacheManager::put(std::unique_ptr<LocalCacheObject> object) {
 Transaction::Transaction(main::ClientContext& clientContext, TransactionType transactionType,
     common::transaction_t transactionID, common::transaction_t startTS)
     : type{transactionType}, ID{transactionID}, startTS{startTS},
-      commitTS{common::INVALID_TRANSACTION}, forceCheckpoint{false}, hasCatalogChanges{false} {
+      commitTS{common::INVALID_TRANSACTION}, forceCheckpoint{false} {
     this->clientContext = &clientContext;
     localStorage = std::make_unique<storage::LocalStorage>(clientContext);
     undoBuffer = std::make_unique<storage::UndoBuffer>(storage::MemoryManager::Get(clientContext));
@@ -43,15 +45,14 @@ Transaction::Transaction(main::ClientContext& clientContext, TransactionType tra
 Transaction::Transaction(TransactionType transactionType) noexcept
     : type{transactionType}, ID{DUMMY_TRANSACTION_ID}, startTS{DUMMY_START_TIMESTAMP},
       commitTS{common::INVALID_TRANSACTION}, clientContext{nullptr}, undoBuffer{nullptr},
-      forceCheckpoint{false}, hasCatalogChanges{false} {
+      forceCheckpoint{false} {
     currentTS = common::Timestamp::getCurrentTimestamp().value;
 }
 
 Transaction::Transaction(TransactionType transactionType, common::transaction_t ID,
     common::transaction_t startTS) noexcept
     : type{transactionType}, ID{ID}, startTS{startTS}, commitTS{common::INVALID_TRANSACTION},
-      clientContext{nullptr}, undoBuffer{nullptr}, forceCheckpoint{false},
-      hasCatalogChanges{false} {
+      clientContext{nullptr}, undoBuffer{nullptr}, forceCheckpoint{false} {
     currentTS = common::Timestamp::getCurrentTimestamp().value;
 }
 
@@ -89,9 +90,31 @@ void Transaction::publishCommit() {
     }
     localStorage->commit();
     undoBuffer->commit(commitTS);
-    if (hasCatalogChanges) {
-        Catalog::Get(*clientContext)->incrementVersion();
-        hasCatalogChanges = false;
+    {
+        std::lock_guard lck{changedCatalogsMutex};
+        if (!changedCatalogs.empty()) {
+            auto* mainCatalog = clientContext->getDatabase()->getCatalog();
+            for (auto it = changedCatalogs.begin(); it != changedCatalogs.end();) {
+                if (*it == mainCatalog) {
+                    mainCatalog->incrementVersion();
+                    it = changedCatalogs.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            // A graph dropped after its change was recorded - in this or a concurrent
+            // transaction - destroys its catalog. Route the graph bumps through the
+            // database manager: under its registry lock, only catalogs it currently
+            // owns are advanced, so a catalog being dropped concurrently is either
+            // still owned (bumped before removal) or already gone (never touched).
+            if (!changedCatalogs.empty()) {
+                auto* dbManager = main::DatabaseManager::Get(*clientContext);
+                if (dbManager != nullptr) {
+                    dbManager->bumpGraphCatalogVersions(changedCatalogs);
+                }
+            }
+        }
+        changedCatalogs.clear();
     }
     for (auto& callback : commitCallbacks) {
         callback(*this);
@@ -106,7 +129,10 @@ void Transaction::rollback(storage::WAL*) {
     // this must be rolled back first
     undoBuffer->rollback(clientContext);
     localStorage->rollback();
-    hasCatalogChanges = false;
+    {
+        std::lock_guard lck{changedCatalogsMutex};
+        changedCatalogs.clear();
+    }
     for (auto& callback : rollbackCallbacks) {
         callback(*this);
     }
@@ -122,15 +148,15 @@ void Transaction::pushRollbackCallback(std::function<void(Transaction&)> callbac
     rollbackCallbacks.push_back(std::move(callback));
 }
 
-bool Transaction::isUnCommitted(common::table_id_t tableID, common::offset_t nodeOffset) const {
-    return localStorage && localStorage->getLocalTable(tableID) &&
-           nodeOffset >= getMinUncommittedNodeOffset(tableID);
+bool Transaction::isUnCommitted(const storage::Table& table, common::offset_t nodeOffset) const {
+    return localStorage && localStorage->getLocalTable(table) &&
+           nodeOffset >= getMinUncommittedNodeOffset(table);
 }
 
 void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntry& catalogEntry,
     bool isInternal, bool skipLoggingToWAL) {
     undoBuffer->createCatalogEntry(catalogSet, catalogEntry);
-    hasCatalogChanges = true;
+    recordCatalogChange(catalogSet.getCatalog());
     if (!shouldLogToWAL() || skipLoggingToWAL) {
         return;
     }
@@ -142,7 +168,8 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
     case CatalogEntryType::REL_GROUP_ENTRY: {
         if (catalogEntry.getType() == CatalogEntryType::DUMMY_ENTRY) {
             DASSERT(catalogEntry.isDeleted());
-            localWAL->logCreateCatalogEntryRecord(newCatalogEntry, isInternal);
+            localWAL->logCreateCatalogEntryRecord(catalogSet.getOwnerCatalogName(), newCatalogEntry,
+                isInternal);
         } else {
             throw common::RuntimeException("This shouldn't happen. Alter table is not supported.");
         }
@@ -154,14 +181,16 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
             // We don't log SERIAL catalog entry creation as it is implicit
             return;
         }
-        localWAL->logCreateCatalogEntryRecord(newCatalogEntry, isInternal);
+        localWAL->logCreateCatalogEntryRecord(catalogSet.getOwnerCatalogName(), newCatalogEntry,
+            isInternal);
     } break;
     case CatalogEntryType::SCALAR_MACRO_ENTRY:
     case CatalogEntryType::TYPE_ENTRY:
     case CatalogEntryType::GRAPH_ENTRY: {
         DASSERT(
             catalogEntry.getType() == CatalogEntryType::DUMMY_ENTRY && catalogEntry.isDeleted());
-        localWAL->logCreateCatalogEntryRecord(newCatalogEntry, isInternal);
+        localWAL->logCreateCatalogEntryRecord(catalogSet.getOwnerCatalogName(), newCatalogEntry,
+            isInternal);
     } break;
     case CatalogEntryType::DUMMY_ENTRY: {
         DASSERT(newCatalogEntry->isDeleted());
@@ -175,7 +204,8 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
         case CatalogEntryType::REL_GROUP_ENTRY:
         case CatalogEntryType::SEQUENCE_ENTRY:
         case CatalogEntryType::GRAPH_ENTRY: {
-            localWAL->logDropCatalogEntryRecord(catalogEntry.getOID(), catalogEntry.getType());
+            localWAL->logDropCatalogEntryRecord(catalogSet.getOwnerCatalogName(),
+                catalogEntry.getOID(), catalogEntry.getType());
         } break;
         case CatalogEntryType::SCALAR_FUNCTION_ENTRY:
         case CatalogEntryType::TABLE_FUNCTION_ENTRY:
@@ -204,20 +234,21 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
 void Transaction::pushAlterCatalogEntry(CatalogSet& catalogSet, CatalogEntry& catalogEntry,
     const binder::BoundAlterInfo& alterInfo, bool skipLoggingToWAL) {
     undoBuffer->createCatalogEntry(catalogSet, catalogEntry);
-    hasCatalogChanges = true;
+    recordCatalogChange(catalogSet.getCatalog());
     if (shouldLogToWAL() && !skipLoggingToWAL) {
         DASSERT(localWAL);
-        localWAL->logAlterCatalogEntryRecord(&alterInfo);
+        localWAL->logAlterCatalogEntryRecord(catalogSet.getOwnerCatalogName(), &alterInfo);
     }
 }
 
 void Transaction::pushSequenceChange(SequenceCatalogEntry* sequenceEntry, int64_t kCount,
     const SequenceRollbackData& data) {
     undoBuffer->createSequenceChange(*sequenceEntry, data);
-    hasCatalogChanges = true;
+    recordCatalogChange(sequenceEntry->getOwningCatalog());
     if (shouldLogToWAL()) {
         DASSERT(localWAL);
-        localWAL->logUpdateSequenceRecord(sequenceEntry->getOID(), kCount);
+        localWAL->logUpdateSequenceRecord(sequenceEntry->getOwningCatalogName(),
+            sequenceEntry->getOID(), kCount);
     }
 }
 
@@ -239,13 +270,19 @@ void Transaction::pushVectorUpdateInfo(storage::UpdateInfo& updateInfo,
 
 Transaction::~Transaction() = default;
 
-common::offset_t Transaction::getMinUncommittedNodeOffset(common::table_id_t tableID) const {
-    if (localStorage && localStorage->getLocalTable(tableID)) {
-        return localStorage->getLocalTable(tableID)
-            ->cast<storage::LocalNodeTable>()
-            .getStartOffset();
+common::offset_t Transaction::getMinUncommittedNodeOffset(const storage::Table& table) const {
+    if (localStorage && localStorage->getLocalTable(table)) {
+        return localStorage->getLocalTable(table)->cast<storage::LocalNodeTable>().getStartOffset();
     }
     return 0;
+}
+
+void Transaction::recordCatalogChange(catalog::Catalog* catalog) {
+    if (catalog == nullptr) {
+        return;
+    }
+    std::lock_guard lck{changedCatalogsMutex};
+    changedCatalogs.insert(catalog);
 }
 
 Transaction* Transaction::Get(const main::ClientContext& context) {

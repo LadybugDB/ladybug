@@ -15,6 +15,8 @@ class ClientContext;
 
 namespace catalog {
 
+class Catalog;
+
 struct LBUG_API ToCypherInfo {
     virtual ~ToCypherInfo() = default;
 
@@ -40,6 +42,9 @@ public:
     // getter & setter
     //===--------------------------------------------------------------------===//
     CatalogEntryType getType() const { return type; }
+    void setOwningCatalog(Catalog* catalog) { owningCatalog = catalog; }
+    Catalog* getOwningCatalog() const { return owningCatalog; }
+    std::string getOwningCatalogName() const;
     void rename(std::string name_) { this->name = std::move(name_); }
     std::string getName() const { return name; }
     common::transaction_t getTimestamp() const { return timestamp; }
@@ -99,6 +104,8 @@ protected:
 
 protected:
     CatalogEntryType type;
+    // Never serialized; re-established from the owning CatalogSet on load.
+    Catalog* owningCatalog = nullptr;
     std::string name;
     common::oid_t oid;
     common::transaction_t timestamp;

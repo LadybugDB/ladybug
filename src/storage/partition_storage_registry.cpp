@@ -9,6 +9,7 @@
 #include "common/serializer/buffered_file.h"
 #include "common/serializer/deserializer.h"
 #include "main/client_context.h"
+#include "main/database.h"
 #include "main/database_manager.h"
 #include "main/db_config.h"
 #include "storage/database_header.h"
@@ -114,7 +115,13 @@ bool PartitionStorageRegistry::isRemotelyRouted(table_id_t parentTableID, uint64
 
 NodeTable* PartitionStorageRegistry::resolveNodeTable(main::ClientContext* context,
     TableCatalogEntry& entry) {
-    auto* mainSM = StorageManager::Get(*context);
+    return resolveNodeTable(context, entry, nullptr /* ambient */);
+}
+
+NodeTable* PartitionStorageRegistry::resolveNodeTable(main::ClientContext* context,
+    TableCatalogEntry& entry, catalog::Catalog* ownerCatalog) {
+    auto* mainSM = ownerCatalog != nullptr ? resolveOwnerStorageManager(context, ownerCatalog) :
+                                             StorageManager::Get(*context);
     const auto tableID = entry.getTableID();
     if (entry.getType() != CatalogEntryType::NODE_TABLE_ENTRY ||
         !entry.ptrCast<NodeTableCatalogEntry>()->isPartitionChild()) {
@@ -150,6 +157,25 @@ NodeTable* PartitionStorageRegistry::resolveNodeTableByID(main::ClientContext* c
     auto* entry = Catalog::Get(*context)->getTableCatalogEntry(
         transaction::Transaction::Get(*context), tableID);
     return resolveNodeTable(context, *entry);
+}
+
+NodeTable* PartitionStorageRegistry::resolveNodeTableByID(main::ClientContext* context,
+    table_id_t tableID, catalog::Catalog* ownerCatalog) {
+    auto* ownerSM = resolveOwnerStorageManager(context, ownerCatalog);
+    if (ownerSM->containsTable(tableID)) {
+        return ownerSM->getTable(tableID)->ptrCast<NodeTable>();
+    }
+    auto* entry =
+        ownerCatalog->getTableCatalogEntry(transaction::Transaction::Get(*context), tableID);
+    return resolveNodeTable(context, *entry, ownerCatalog);
+}
+
+StorageManager* PartitionStorageRegistry::resolveOwnerStorageManager(main::ClientContext* context,
+    catalog::Catalog* ownerCatalog) {
+    if (auto* sm = ownerCatalog->getStorageManager()) {
+        return sm;
+    }
+    return context->getDatabase()->getStorageManager();
 }
 
 std::vector<StorageManager*> PartitionStorageRegistry::getAllManagers() {

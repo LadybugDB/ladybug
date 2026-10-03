@@ -1,3 +1,4 @@
+#include "catalog/catalog_entry/catalog_entry_type.h"
 #include "storage/storage_manager.h"
 #include "storage/table/rel_table.h"
 #include "storage/wal/wal_replayer.h"
@@ -10,7 +11,8 @@ namespace storage {
 
 void WALReplayer::replayRelDetachDeletionRecord(const WALRecord& walRecord) const {
     const auto& deletionRecord = walRecord.constCast<RelDetachDeleteRecord>();
-    const auto tableID = deletionRecord.tableID;
+    const auto tableID =
+        getReplayedEntryID(catalog::CatalogEntryType::REL_GROUP_ENTRY, deletionRecord.tableID);
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<RelTable>();
     DASSERT(transaction::Transaction::Get(clientContext) &&
             transaction::Transaction::Get(clientContext)->isRecovery());

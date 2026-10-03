@@ -68,8 +68,7 @@ void RelTableScanState::setToTable(const Transaction* transaction, Table* table_
     csrOffsetColumn = table->cast<RelTable>().getCSROffsetColumn(direction);
     csrLengthColumn = table->cast<RelTable>().getCSRLengthColumn(direction);
     nodeGroupIdx = INVALID_NODE_GROUP_IDX;
-    if (const auto localRelTable =
-            transaction->getLocalStorage()->getLocalTable(table->getTableID())) {
+    if (const auto localRelTable = transaction->getLocalStorage()->getLocalTable(*table)) {
         auto localTableColumnIDs = LocalRelTable::rewriteLocalColumnIDs(direction, columnIDs);
         localTableScanState = std::make_unique<LocalRelTableScanState>(*this,
             localRelTable->ptrCast<LocalRelTable>(), localTableColumnIDs);
@@ -344,7 +343,7 @@ void RelTable::insert(Transaction* transaction, TableInsertState& insertState) {
             relInsertState.propertyVectors.end());
         DASSERT(relInsertState.srcNodeIDVector.state->getSelVector().getSelSize() == 1);
         auto& wal = transaction->getLocalWAL();
-        wal.logTableInsertion(tableID, TableType::REL,
+        wal.logTableInsertion(getOwnerCatalogName(), tableID, TableType::REL,
             relInsertState.srcNodeIDVector.state->getSelVector().getSelSize(), vectorsToLog);
     }
     setHasChanges();
@@ -356,7 +355,7 @@ void RelTable::update(Transaction* transaction, TableUpdateState& updateState) {
     const auto relIDPos = relUpdateState.relIDVector.state->getSelVector()[0];
     if (const auto relOffset = relUpdateState.relIDVector.readNodeOffset(relIDPos);
         relOffset >= StorageConstants::MAX_NUM_ROWS_IN_TABLE) {
-        const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+        const auto localTable = transaction->getLocalStorage()->getLocalTable(*this);
         DASSERT(localTable);
         localTable->update(&DUMMY_TRANSACTION, updateState);
     } else {
@@ -369,9 +368,9 @@ void RelTable::update(Transaction* transaction, TableUpdateState& updateState) {
     if (updateState.logToWAL && transaction->shouldLogToWAL()) {
         DASSERT(transaction->isWriteTransaction());
         auto& wal = transaction->getLocalWAL();
-        wal.logRelUpdate(tableID, relUpdateState.columnID, &relUpdateState.srcNodeIDVector,
-            &relUpdateState.dstNodeIDVector, &relUpdateState.relIDVector,
-            &relUpdateState.propertyVector);
+        wal.logRelUpdate(getOwnerCatalogName(), tableID, relUpdateState.columnID,
+            &relUpdateState.srcNodeIDVector, &relUpdateState.dstNodeIDVector,
+            &relUpdateState.relIDVector, &relUpdateState.propertyVector);
     }
     setHasChanges();
 }
@@ -383,7 +382,7 @@ bool RelTable::delete_(Transaction* transaction, TableDeleteState& deleteState) 
     bool isDeleted = false;
     if (const auto relOffset = relDeleteState.relIDVector.readNodeOffset(relIDPos);
         relOffset >= StorageConstants::MAX_NUM_ROWS_IN_TABLE) {
-        const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+        const auto localTable = transaction->getLocalStorage()->getLocalTable(*this);
         DASSERT(localTable);
         isDeleted = localTable->delete_(transaction, deleteState);
     } else {
@@ -401,7 +400,7 @@ bool RelTable::delete_(Transaction* transaction, TableDeleteState& deleteState) 
         if (deleteState.logToWAL && transaction->shouldLogToWAL()) {
             DASSERT(transaction->isWriteTransaction());
             auto& wal = transaction->getLocalWAL();
-            wal.logRelDelete(tableID, &relDeleteState.srcNodeIDVector,
+            wal.logRelDelete(getOwnerCatalogName(), tableID, &relDeleteState.srcNodeIDVector,
                 &relDeleteState.dstNodeIDVector, &relDeleteState.relIDVector);
         }
     }
@@ -433,7 +432,8 @@ void RelTable::detachDelete(Transaction* transaction, RelTableDeleteState* delet
     if (deleteState->logToWAL && transaction->shouldLogToWAL()) {
         DASSERT(transaction->isWriteTransaction());
         auto& wal = transaction->getLocalWAL();
-        wal.logRelDetachDelete(tableID, direction, &deleteState->srcNodeIDVector);
+        wal.logRelDetachDelete(getOwnerCatalogName(), tableID, direction,
+            &deleteState->srcNodeIDVector);
     }
     setHasChanges();
 }
@@ -466,7 +466,7 @@ void RelTable::detachDeleteBatch(Transaction* transaction, ValueVector& srcNodeI
         directedRelData.size() == NUM_REL_DIRECTIONS ?
             getDirectedTableData(RelDirectionUtils::getOppositeDirection(direction)) :
             nullptr;
-    const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+    const auto localTable = transaction->getLocalStorage()->getLocalTable(*this);
 
     for (const auto srcNodeID : srcNodeIDs) {
         const auto srcState = std::make_shared<DataChunkState>();
@@ -515,7 +515,8 @@ void RelTable::detachDeleteBatch(Transaction* transaction, ValueVector& srcNodeI
     }
     if (transaction->shouldLogToWAL()) {
         DASSERT(transaction->isWriteTransaction());
-        transaction->getLocalWAL().logRelDetachDelete(tableID, direction, &srcNodeIDVector);
+        transaction->getLocalWAL().logRelDetachDelete(getOwnerCatalogName(), tableID, direction,
+            &srcNodeIDVector);
     }
     setHasChanges();
 }
@@ -531,7 +532,7 @@ std::vector<RelDataDirection> RelTable::getStorageDirections() const {
 bool RelTable::checkIfNodeHasRels(Transaction* transaction, RelDataDirection direction,
     ValueVector* srcNodeIDVector) const {
     bool hasRels = false;
-    const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+    const auto localTable = transaction->getLocalStorage()->getLocalTable(*this);
     if (localTable) {
         hasRels = localTable->cast<LocalRelTable>().checkIfNodeHasRels(srcNodeIDVector, direction);
     }
@@ -552,7 +553,7 @@ void RelTable::throwIfNodeHasRels(Transaction* transaction, RelDataDirection dir
 void RelTable::detachDeleteForCSRRels(Transaction* transaction, RelTableData* tableData,
     RelTableData* reverseTableData, RelTableScanState* relDataReadState,
     RelTableDeleteState* deleteState) {
-    const auto localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+    const auto localTable = transaction->getLocalStorage()->getLocalTable(*this);
     const auto tempState = deleteState->dstNodeIDVector.state.get();
     while (scan(transaction, *relDataReadState)) {
         const auto numRelsScanned = tempState->getSelVector().getSelSize();
@@ -593,7 +594,7 @@ void RelTable::addColumn(Transaction* transaction, TableAddColumnState& addColum
     PageAllocator& pageAllocator) {
     LocalTable* localTable = nullptr;
     if (transaction->getLocalStorage()) {
-        localTable = transaction->getLocalStorage()->getLocalTable(tableID);
+        localTable = transaction->getLocalStorage()->getLocalTable(*this);
     }
     if (localTable) {
         localTable->addColumn(addColumnState);
@@ -742,7 +743,7 @@ bool RelTable::checkpoint(main::ClientContext*, TableCatalogEntry* tableEntry,
 
 row_idx_t RelTable::getNumTotalRows(const Transaction* transaction) {
     auto numLocalRows = 0u;
-    if (auto localTable = transaction->getLocalStorage()->getLocalTable(tableID)) {
+    if (auto localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
         numLocalRows = localTable->getNumTotalRows();
     }
     return numLocalRows + nextRelOffset;
@@ -755,7 +756,7 @@ std::vector<std::pair<offset_t, row_idx_t>> RelTable::getDegreeEntries(
     auto* relTableData = getDirectedTableData(direction);
     auto* csrLengthColumn = relTableData->getCSRLengthColumn();
     for (node_group_idx_t nodeGroupIdx = 0; nodeGroupIdx < relTableData->getNumNodeGroups();
-         nodeGroupIdx++) {
+        nodeGroupIdx++) {
         auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx);
         if (!nodeGroup) {
             continue;
@@ -790,7 +791,7 @@ std::vector<std::pair<offset_t, row_idx_t>> RelTable::getDegreeEntries(
         }
     }
     if (transaction->isWriteTransaction()) {
-        if (auto* localTable = transaction->getLocalStorage()->getLocalTable(tableID)) {
+        if (auto* localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
             auto& localRelTable = localTable->cast<LocalRelTable>();
             for (const auto& [nodeOffset, rowIndices] : localRelTable.getCSRIndex(direction)) {
                 degrees[nodeOffset] += rowIndices.size();
@@ -867,7 +868,7 @@ row_idx_t RelTable::getDegreeForOffset(const Transaction* transaction, RelDataDi
         count += csrIndex->getNumRows(offsetInGroup);
     }
     if (transaction->isWriteTransaction()) {
-        if (auto* localTable = transaction->getLocalStorage()->getLocalTable(tableID)) {
+        if (auto* localTable = transaction->getLocalStorage()->getLocalTable(*this)) {
             auto& localCSRIndex = localTable->cast<LocalRelTable>().getCSRIndex(direction);
             if (auto it = localCSRIndex.find(nodeOffset); it != localCSRIndex.end()) {
                 count += it->second.size();

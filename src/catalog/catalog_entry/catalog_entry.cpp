@@ -1,5 +1,6 @@
 #include "catalog/catalog_entry/catalog_entry.h"
 
+#include "catalog/catalog.h"
 #include "catalog/catalog_entry/graph_catalog_entry.h"
 #include "catalog/catalog_entry/index_catalog_entry.h"
 #include "catalog/catalog_entry/scalar_macro_catalog_entry.h"
@@ -76,6 +77,10 @@ void CatalogEntry::copyFrom(const CatalogEntry& other) {
     timestamp = other.timestamp;
     deleted = other.deleted;
     hasParent_ = other.hasParent_;
+}
+
+std::string CatalogEntry::getOwningCatalogName() const {
+    return owningCatalog ? owningCatalog->getCatalogName() : "";
 }
 
 } // namespace catalog

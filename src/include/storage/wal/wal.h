@@ -17,7 +17,7 @@ class LocalWAL;
 class StorageManager;
 class WAL {
 public:
-    static constexpr uint64_t CHECKPOINT_BUNDLE_FORMAT_VERSION = 1;
+    static constexpr uint64_t CHECKPOINT_BUNDLE_FORMAT_VERSION = 2;
 
     // Recovery only: adopt the frozen WAL for one checkpoint, clearing the request on exit even
     // if the checkpoint fails before rotation.
