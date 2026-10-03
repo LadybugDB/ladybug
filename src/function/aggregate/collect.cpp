@@ -183,10 +183,16 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
 function_set CollectFunction::getFunctionSet() {
     function_set result;
     for (auto isDistinct : std::vector<bool>{true, false}) {
-        result.push_back(std::make_unique<AggregateFunction>(name,
+        auto func = std::make_unique<AggregateFunction>(name,
             std::vector<LogicalTypeID>{LogicalTypeID::ANY}, LogicalTypeID::LIST, initialize,
             updateAll, updatePos, combine, finalize, isDistinct, bindFunc,
-            nullptr /* paramRewriteFunc */));
+            nullptr /* paramRewriteFunc */);
+        // COLLECT skips NULL inputs, so an empty group or an all-NULL group must yield an
+        // empty list rather than NULL (openCypher TCK Aggregation5/Aggregation8). Marking the
+        // aggregate as null-handled routes the result through writeAggResultWithoutNullToVector,
+        // which always materializes the (possibly empty) list via CollectState::writeToVector.
+        func->needToHandleNulls = true;
+        result.push_back(std::move(func));
     }
     return result;
 }

@@ -38,6 +38,7 @@
            RETURN collect(DISTINCT x) AS c;
 ## Outcome: the result should be, in any order:
 ---- 1
+[]
 
 
 #  Collect distinct values mixed with nulls
