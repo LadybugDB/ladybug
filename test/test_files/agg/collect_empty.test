@@ -33,3 +33,14 @@
 -STATEMENT MATCH (n:CollectEmptyT) RETURN collect(n.id)
 ---- 1
 []
+
+-LOG CollectOverEmptyOptionalMatch
+-STATEMENT CREATE NODE TABLE CollectN(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT CREATE (:CollectN {id: 1})
+---- ok
+-STATEMENT CREATE REL TABLE CollectEmptyRel(FROM CollectN TO CollectN, MANY_MANY)
+---- ok
+-STATEMENT MATCH (n:CollectN) OPTIONAL MATCH (n)-[:CollectEmptyRel]->(x) RETURN collect(x)
+---- 1
+[]
