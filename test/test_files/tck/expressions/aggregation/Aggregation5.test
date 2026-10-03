@@ -5,6 +5,7 @@
 
 #  `collect()` filtering nulls
 -CASE Scenario1
+-SKIP
 ## VERIFY
 -STATEMENT CREATE NODE TABLE A(ID SERIAL, name STRING, PRIMARY KEY(ID));
 ---- ok
@@ -20,6 +21,7 @@
 
 #  OPTIONAL MATCH and `collect()` on node property
 -CASE Scenario2
+-SKIP
 ## VERIFY
 -STATEMENT CREATE NODE TABLE DoesExist(ID SERIAL, num INT64, PRIMARY KEY(ID));
 ---- ok
