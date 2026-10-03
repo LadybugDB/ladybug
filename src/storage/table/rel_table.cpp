@@ -756,7 +756,7 @@ std::vector<std::pair<offset_t, row_idx_t>> RelTable::getDegreeEntries(
     auto* relTableData = getDirectedTableData(direction);
     auto* csrLengthColumn = relTableData->getCSRLengthColumn();
     for (node_group_idx_t nodeGroupIdx = 0; nodeGroupIdx < relTableData->getNumNodeGroups();
-        nodeGroupIdx++) {
+         nodeGroupIdx++) {
         auto* nodeGroup = relTableData->getNodeGroup(nodeGroupIdx);
         if (!nodeGroup) {
             continue;
