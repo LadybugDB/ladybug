@@ -1,0 +1,35 @@
+-DATASET CSV tinysnb
+--
+
+# Regression tests for https://github.com/LadybugDB/ladybug/issues/1090:
+# collect() must return [] (not null) over empty groups and all-null inputs,
+# matching openCypher TCK Aggregation5/Aggregation8 and Neo4j behaviour.
+
+-CASE CollectOverEmptyOrNullInput
+
+-LOG CollectOverEmptyUnwind
+-STATEMENT UNWIND [] AS x RETURN collect(x)
+---- 1
+[]
+
+-LOG CollectOverAllNullUnwind
+-STATEMENT UNWIND [null, null] AS x RETURN collect(x)
+---- 1
+[]
+
+-LOG CollectDistinctOverAllNullUnwind
+-STATEMENT UNWIND [null, null] AS x RETURN collect(DISTINCT x)
+---- 1
+[]
+
+-LOG CollectSkipsNulls
+-STATEMENT UNWIND [null, 1, null] AS x RETURN collect(x)
+---- 1
+[1]
+
+-LOG CollectOverEmptyTable
+-STATEMENT CREATE NODE TABLE CollectEmptyT(id INT64, PRIMARY KEY(id))
+---- ok
+-STATEMENT MATCH (n:CollectEmptyT) RETURN collect(n.id)
+---- 1
+[]
