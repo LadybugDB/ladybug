@@ -508,8 +508,7 @@ TEST_F(CApiPreparedStatementTest, BindBlobValue) {
     ASSERT_TRUE(lbug_prepared_statement_is_success(&preparedStatement));
     const uint8_t blob_data[] = {0xAA, 0xBB, 0xCC, 0xDD};
     auto blobValue = lbug_value_create_blob(blob_data, sizeof(blob_data));
-    ASSERT_EQ(lbug_prepared_statement_bind_value(&preparedStatement, "1", blobValue),
-        LbugSuccess);
+    ASSERT_EQ(lbug_prepared_statement_bind_value(&preparedStatement, "1", blobValue), LbugSuccess);
     lbug_value_destroy(blobValue);
     state = lbug_connection_execute(connection, &preparedStatement, &result);
     ASSERT_EQ(state, LbugSuccess);
