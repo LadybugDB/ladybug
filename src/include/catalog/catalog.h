@@ -238,6 +238,13 @@ public:
     void setCatalogName(const std::string& name) { catalogName = name; }
     std::string getCatalogName() const { return catalogName; }
 
+    // Function entries are database-global: built-ins are registered into every
+    // catalog at construction, but extension functions only into the main
+    // catalog. Per-graph catalogs point at the main catalog so function lookup
+    // still resolves extension functions while the session is on a non-main
+    // graph (see Catalog::getFunctionEntry).
+    void setFunctionFallback(Catalog* fallback) { functionFallback = fallback; }
+
     storage::StorageManager* getStorageManager() const { return storageManager.get(); }
     void setStorageManager(std::unique_ptr<storage::StorageManager> sm) {
         storageManager = std::move(sm);
@@ -298,6 +305,8 @@ private:
     uint64_t lastCheckpointVersion = 0;
     std::string catalogName;
     std::unique_ptr<storage::StorageManager> storageManager;
+    // Main catalog for function lookup (nullptr for the main catalog itself).
+    Catalog* functionFallback = nullptr;
 };
 
 } // namespace catalog
