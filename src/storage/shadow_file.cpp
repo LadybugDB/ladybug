@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "common/exception/io.h"
+#include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/serializer/buffer_reader.h"
 #include "common/serializer/buffered_file.h"
