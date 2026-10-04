@@ -761,9 +761,9 @@ std::vector<std::pair<offset_t, row_idx_t>> RelTable::getDegreeEntries(
             auto& csrPersistentGroup = persistentGroup->cast<ChunkedCSRNodeGroup>();
             auto& csrHeader = csrPersistentGroup.getCSRHeader();
             auto numNodes = csrHeader.length->getNumValues();
-            auto lengthChunk =
-                ColumnChunkFactory::createColumnChunkData(*memoryManager, LogicalType::UINT64(),
-                    false, StorageConfig::NODE_GROUP_SIZE, ResidencyState::IN_MEMORY, false);
+            auto lengthChunk = ColumnChunkFactory::createColumnChunkData(*memoryManager,
+                LogicalType::UINT64(), false /*enableCompression*/, StorageConfig::NODE_GROUP_SIZE,
+                ResidencyState::IN_MEMORY, false /*hasNullData*/, false /*initializeToZero*/);
             ChunkState chunkState;
             csrHeader.length->initializeScanState(chunkState, csrLengthColumn);
             csrLengthColumn->scan(chunkState, lengthChunk.get(), 0, numNodes);

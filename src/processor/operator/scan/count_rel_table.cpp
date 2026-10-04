@@ -82,10 +82,10 @@ bool CountRelTable::getNextTuplesInternal(ExecutionContext* context) {
                 }
 
                 // Create an in-memory chunk to scan the CSR length column into
-                auto lengthChunk =
-                    ColumnChunkFactory::createColumnChunkData(*memoryManager, LogicalType::UINT64(),
-                        false /*enableCompression*/, StorageConfig::NODE_GROUP_SIZE,
-                        ResidencyState::IN_MEMORY, false /*initializeToZero*/);
+                auto lengthChunk = ColumnChunkFactory::createColumnChunkData(*memoryManager,
+                    LogicalType::UINT64(), false /*enableCompression*/,
+                    StorageConfig::NODE_GROUP_SIZE, ResidencyState::IN_MEMORY,
+                    false /*hasNullData*/, false /*initializeToZero*/);
 
                 // Initialize scan state and scan the length column from disk
                 ChunkState chunkState;

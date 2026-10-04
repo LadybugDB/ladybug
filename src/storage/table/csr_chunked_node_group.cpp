@@ -391,9 +391,11 @@ void InMemChunkedCSRHeader::fillDefaultValues(const offset_t newNumValues) const
 InMemChunkedCSRHeader::InMemChunkedCSRHeader(MemoryManager& memoryManager, bool enableCompression,
     uint64_t capacity) {
     offset = ColumnChunkFactory::createColumnChunkData(memoryManager, LogicalType::UINT64(),
-        enableCompression, capacity, ResidencyState::IN_MEMORY, false);
+        enableCompression, capacity, ResidencyState::IN_MEMORY, false /*hasNullData*/,
+        false /*initializeToZero*/);
     length = ColumnChunkFactory::createColumnChunkData(memoryManager, LogicalType::UINT64(),
-        enableCompression, capacity, ResidencyState::IN_MEMORY, false);
+        enableCompression, capacity, ResidencyState::IN_MEMORY, false /*hasNullData*/,
+        false /*initializeToZero*/);
 }
 
 offset_t InMemChunkedCSRHeader::getStartCSROffset(offset_t nodeOffset) const {

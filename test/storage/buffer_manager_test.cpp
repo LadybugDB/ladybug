@@ -16,6 +16,8 @@
 #include "storage/storage_manager.h"
 #include "storage/table/chunked_node_group.h"
 #include "storage/table/column_chunk.h"
+#include "storage/table/csr_node_group.h"
+#include "test_runner/test_parser.h"
 
 using namespace lbug::common;
 using namespace lbug::storage;
@@ -194,6 +196,39 @@ TEST_F(BufferManagerTest, ClaimAndReleaseFrameWhileRegionGrows) {
     ASSERT_NE(region.releaseFrame(frameIdx), 0u);
 }
 #endif
+
+// A rel scan state carries an in-memory CSR header sized for a whole node group, one per worker
+// per rel scan. Its two UINT64 columns are plain data buffers: no null chunk, and the buffer pool
+// is charged exactly their size.
+TEST_F(EmptyBufferManagerTest, CSRScanStateHeaderIsTwoPlainUInt64Buffers) {
+    // Smaller node groups can make a column exactly TEMP_PAGE_SIZE, which is served from paged
+    // memory and accounted differently.
+    if (StorageConfig::NODE_GROUP_SIZE_LOG2 != TestParser::STANDARD_NODE_GROUP_SIZE_LOG_2) {
+        GTEST_SKIP();
+    }
+    auto* bm = getBufferManager(*database);
+    auto* mm = getMemoryManager(*database);
+    const auto initialUsedMemory = bm->getUsedMemory();
+    constexpr auto headerBytes = 2 * StorageConfig::NODE_GROUP_SIZE * sizeof(uint64_t);
+    {
+        CSRNodeGroupScanState scanState(*mm);
+        const auto& header = *scanState.header;
+        ASSERT_EQ(header.offset->getCapacity(), StorageConfig::NODE_GROUP_SIZE);
+        ASSERT_EQ(header.length->getCapacity(), StorageConfig::NODE_GROUP_SIZE);
+        ASSERT_FALSE(header.offset->hasNullData());
+        ASSERT_FALSE(header.length->hasNullData());
+        ASSERT_EQ(header.offset->getNumValues(), 0u);
+        ASSERT_EQ(header.length->getNumValues(), 0u);
+        ASSERT_EQ(bm->getUsedMemory(), initialUsedMemory + headerBytes);
+    }
+    ASSERT_EQ(bm->getUsedMemory(), initialUsedMemory);
+    {
+        CSRNodeGroupScanState lookupState(*mm, true /*randomLookup*/);
+        ASSERT_EQ(lookupState.header->offset->getCapacity(), 1u);
+        ASSERT_FALSE(lookupState.header->offset->hasNullData());
+        ASSERT_EQ(bm->getUsedMemory(), initialUsedMemory + 2 * sizeof(uint64_t));
+    }
+}
 
 } // namespace testing
 } // namespace lbug
