@@ -24,6 +24,8 @@ public:
 
     // Get the primary key property expression for a given table ID.
     std::shared_ptr<Expression> getPrimaryKey(common::table_id_t tableID) const;
+    // Returns nullptr when the primary key is not among the node's property expressions.
+    std::shared_ptr<Expression> tryGetPrimaryKey(common::table_id_t tableID) const;
 
 private:
     std::shared_ptr<PropertyExpression> internalID;
