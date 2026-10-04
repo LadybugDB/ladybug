@@ -97,6 +97,15 @@ void ExtensionManager::autoLoadLinkedExtensions(main::ClientContext* context) {
     trxContext->commit();
 }
 
+void ExtensionManager::setData(const std::string& key, std::string value) {
+    dataMap[key] = std::move(value);
+}
+
+std::string ExtensionManager::getData(const std::string& key) const {
+    auto it = dataMap.find(key);
+    return it == dataMap.end() ? std::string{} : it->second;
+}
+
 ExtensionManager* ExtensionManager::Get(const main::ClientContext& context) {
     return context.getDatabase()->getExtensionManager();
 }
