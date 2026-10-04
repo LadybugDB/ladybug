@@ -122,7 +122,7 @@ public:
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,
         bool resetCachedBoundNodeIDs = true) const override;
     void initScanState(transaction::Transaction* transaction, TableScanState& scanState,
-        common::table_id_t tableID, common::offset_t startOffset) const;
+        [[maybe_unused]] common::table_id_t tableID, common::offset_t startOffset) const;
 
     // Virtual method for operator-level scan coordination initialization
     // Called once per scan operation (not per scan state)
