@@ -496,3 +496,31 @@ TEST_F(CApiPreparedStatementTest, BindValue) {
     lbug_query_result_destroy(&result);
     lbug_prepared_statement_destroy(&preparedStatement);
 }
+
+TEST_F(CApiPreparedStatementTest, BindBlobValue) {
+    lbug_prepared_statement preparedStatement;
+    lbug_query_result result;
+    lbug_state state;
+    auto connection = getConnection();
+    auto query = "RETURN octet_length($1)";
+    state = lbug_connection_prepare(connection, query, &preparedStatement);
+    ASSERT_EQ(state, LbugSuccess);
+    ASSERT_TRUE(lbug_prepared_statement_is_success(&preparedStatement));
+    const uint8_t blob_data[] = {0xAA, 0xBB, 0xCC, 0xDD};
+    auto blobValue = lbug_value_create_blob(blob_data, sizeof(blob_data));
+    ASSERT_EQ(lbug_prepared_statement_bind_value(&preparedStatement, "1", blobValue), LbugSuccess);
+    lbug_value_destroy(blobValue);
+    state = lbug_connection_execute(connection, &preparedStatement, &result);
+    ASSERT_EQ(state, LbugSuccess);
+    ASSERT_NE(result._query_result, nullptr);
+    ASSERT_EQ(lbug_query_result_get_num_tuples(&result), 1);
+    ASSERT_EQ(lbug_query_result_get_num_columns(&result), 1);
+    ASSERT_TRUE(lbug_query_result_is_success(&result));
+    ASSERT_TRUE(lbug_query_result_has_next(&result));
+    auto resultCpp = static_cast<QueryResult*>(result._query_result);
+    auto tuple = resultCpp->getNext();
+    auto value = tuple->getValue(0)->getValue<int64_t>();
+    ASSERT_EQ(value, 4);
+    lbug_query_result_destroy(&result);
+    lbug_prepared_statement_destroy(&preparedStatement);
+}
