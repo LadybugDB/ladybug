@@ -19,11 +19,13 @@ struct ListPosition {
         }
         auto listElements =
             reinterpret_cast<T*>(common::ListVector::getListValues(&listVector, list));
+        auto dataVector = common::ListVector::getDataVector(&listVector);
         uint8_t comparisonResult = 0;
         for (auto i = 0u; i < list.size; i++) {
-            Equals::operation(listElements[i], element, comparisonResult,
-                common::ListVector::getDataVector(&listVector), &elementVector);
-            if (comparisonResult) {
+            Equals::operation(listElements[i], element, comparisonResult, dataVector,
+                &elementVector);
+            // A NULL element's slot holds a placeholder value, so a match there does not count.
+            if (comparisonResult && !dataVector->isNull(list.offset + i)) {
                 result = i + 1;
                 return;
             }

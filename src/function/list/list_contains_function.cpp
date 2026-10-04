@@ -32,7 +32,9 @@ static std::unique_ptr<FunctionBindData> bindFunc(const ScalarBindFuncInput& inp
     LogicalType childType;
     auto listExpr = input.arguments[0];
     auto elementExpr = input.arguments[1];
-    if (ExpressionUtil::isEmptyList(*listExpr)) {
+    // A NULL literal (or unbound parameter) list has type ANY and no child type.
+    if (ExpressionUtil::isEmptyList(*listExpr) ||
+        listExpr->getDataType().getLogicalTypeID() == LogicalTypeID::ANY) {
         childType = elementExpr->getDataType().copy();
     } else {
         auto& listChildType = ListType::getChildType(listExpr->getDataType());
