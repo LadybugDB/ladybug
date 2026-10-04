@@ -1,0 +1,42 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1102StringListToUUIDListINPredicate
+# Reproduction for github issue #1102:
+# Binder: no implicit cast STRING[] -> UUID[] for list expressions (literals
+# and parameters), while scalar STRING -> UUID implicit cast works.
+# `x IN [...]` rewrites to LIST_CONTAINS(list, x), which unifies the list child
+# type with the element type via tryGetMaxLogicalType (STRING always casts, so
+# the combined type is UUID) and then implicit-casts the list to UUID[].
+# hasImplicitCast(STRING, UUID) used to be false, so the binder threw
+# "Implicit cast is not supported" for both literal lists and bound list
+# parameters. Bound-parameter execution is covered by the C++ API (no PARAM
+# support in the .test format); see the issue for the manual verification.
+
+-STATEMENT CREATE NODE TABLE N(id UUID, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE (:N {id: '11111111-1111-7111-8111-000000000001'});
+---- ok
+
+# Scalar control: already worked before the fix.
+-STATEMENT MATCH (n:N) WHERE n.id = '11111111-1111-7111-8111-000000000001' RETURN count(*) AS c;
+---- 1
+1
+
+# Literal string list: used to fail with
+# "Expression LIST_CREATION(...) has data type STRING[] but expected UUID[].
+#  Implicit cast is not supported."
+-STATEMENT MATCH (n:N) WHERE n.id IN ['11111111-1111-7111-8111-000000000001'] RETURN count(*) AS c;
+---- 1
+1
+
+# Multi-element literal list with one non-matching entry.
+-STATEMENT MATCH (n:N) WHERE n.id IN ['11111111-1111-7111-8111-000000000001', '22222222-2222-7222-8222-000000000002'] RETURN count(*) AS c;
+---- 1
+1
+
+# Non-matching literal list returns zero rows (no spurious match).
+-STATEMENT MATCH (n:N) WHERE n.id IN ['22222222-2222-7222-8222-000000000002'] RETURN count(*) AS c;
+---- 1
+0

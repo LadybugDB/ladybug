@@ -285,6 +285,20 @@ bool CastFunction::hasImplicitCast(const LogicalType& srcType, const LogicalType
     } else if (dstType.getLogicalTypeID() == LogicalTypeID::UNION) {
         return hasImplicitCastUnion(srcType, dstType);
     }
+    if (srcType.getLogicalTypeID() == LogicalTypeID::STRING &&
+        dstType.getLogicalTypeID() == LogicalTypeID::UUID) {
+        // UUID values can only be written as strings (there is no UUID literal syntax) and
+        // CAST FROM STRING binds for UUID targets, so allow the implicit coercion. This
+        // mirrors the scalar comparison path, which already coerces STRING to UUID via
+        // tryGetMaxLogicalType + forceCast. The nested LIST/ARRAY rules above recurse into
+        // this check, so e.g. STRING[] -> UUID[] (list literals and bound list parameters
+        // in `x IN [...]` / LIST_CONTAINS) is covered as well. See
+        // https://github.com/LadybugDB/ladybug/issues/1102.
+        // NOTE: intentionally scoped to UUID only. A general STRING -> * rule would overturn
+        // deliberate binder strictness pinned by existing tests (e.g. LIST_CREATION with
+        // mixed INT/STRING elements, coalesce(1, "hello"), DDL DEFAULT type checks).
+        return true;
+    }
     if (BuiltInFunctionsUtils::getCastCost(srcType.getLogicalTypeID(),
             dstType.getLogicalTypeID()) != UNDEFINED_CAST_COST) {
         return true;
