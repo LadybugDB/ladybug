@@ -14,6 +14,10 @@ namespace lbug {
 namespace parser {
 
 std::string StandaloneCallRewriter::getRewriteQuery(const Statement& statement) {
+    // Each statement starts with no rewrite. Without the reset, a multi-statement
+    // batch would leak the previous statement's rewrite text into statements
+    // that have none (and into statements whose rewrite failed to fire).
+    rewriteQuery.clear();
     visit(statement);
     return rewriteQuery;
 }

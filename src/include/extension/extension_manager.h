@@ -33,6 +33,12 @@ public:
         return loadedExtensions;
     }
 
+    // Per-database key/value state for extensions (e.g. the GQL extension's
+    // graph-type registry). Lives and dies with the Database object; not
+    // persisted to WAL — in-memory only.
+    LBUG_API void setData(const std::string& key, std::string value);
+    LBUG_API std::string getData(const std::string& key) const;
+
     static std::optional<ExtensionEntry> lookupExtensionsByFunctionName(
         std::string_view functionName);
     static std::optional<ExtensionEntry> lookupExtensionsByTypeName(std::string_view typeName);
@@ -45,6 +51,7 @@ private:
     std::vector<LoadedExtension> loadedExtensions;
     std::unordered_map<std::string, main::ExtensionOption> extensionOptions;
     common::case_insensitive_map_t<std::unique_ptr<storage::StorageExtension>> storageExtensions;
+    std::unordered_map<std::string, std::string> dataMap;
 };
 
 } // namespace extension

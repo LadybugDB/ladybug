@@ -136,6 +136,9 @@ void DatabaseManager::createGraph(const std::string& graphName,
 
     auto catalog = std::make_unique<catalog::Catalog>();
     catalog->setCatalogName(graphName);
+    // Extension functions are registered in the main catalog only; let function
+    // lookup fall back to it while the session is on this graph.
+    catalog->setFunctionFallback(mainCatalog);
     auto dbPath = clientContext->getDatabasePath();
     auto graphPath = DBConfig::isDBPathInMemory(dbPath) ?
                          ":" + graphName :
@@ -333,6 +336,9 @@ void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManage
         // Load the graph
         auto catalog = std::make_unique<catalog::Catalog>();
         catalog->setCatalogName(graphName);
+        // Extension functions are registered in the main catalog only; let
+        // function lookup fall back to it while the session is on this graph.
+        catalog->setFunctionFallback(mainCatalog);
         auto dbPath = clientContext->getDatabasePath();
         auto graphPath = DBConfig::isDBPathInMemory(dbPath) ?
                              ":" + graphName :

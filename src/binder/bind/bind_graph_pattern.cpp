@@ -76,6 +76,10 @@ QueryGraph Binder::bindPatternElement(const PatternElement& patternElement) {
     if (patternElement.hasPathName()) {
         auto pathName = patternElement.getPathName();
         auto pathExpression = createPath(pathName, nodeAndRels);
+        // Every other scoped variable carries its name as alias (needed by
+        // WITH * star expansion, which rejects empty aliases); do the same
+        // for path variables so `MATCH p = ... WITH *` can bind.
+        pathExpression->setAlias(pathName);
         addToScope(pathName, pathExpression);
     }
     return queryGraph;
