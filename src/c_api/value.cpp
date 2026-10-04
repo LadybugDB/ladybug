@@ -397,9 +397,17 @@ lbug_value* lbug_value_create_uuid(const char* val_) {
 
 lbug_value* lbug_value_create_blob(const uint8_t* data, uint64_t length) {
     LBUG_C_API_GUARD_BEGIN
+    if (data == nullptr && length != 0) {
+        // A null buffer with a non-zero length would read out of bounds in the length-based
+        // std::string construction below, which the exception guard cannot catch.
+        return nullptr;
+    }
     auto* c_value = (lbug_value*)calloc(1, sizeof(lbug_value));
-    c_value->_value = new Value(LogicalType::BLOB(),
-        std::string(reinterpret_cast<const char*>(data), length));
+    std::string blobStr;
+    if (data != nullptr) {
+        blobStr.assign(reinterpret_cast<const char*>(data), length);
+    }
+    c_value->_value = new Value(LogicalType::BLOB(), std::move(blobStr));
     return c_value;
     LBUG_C_API_GUARD_END(nullptr)
 }

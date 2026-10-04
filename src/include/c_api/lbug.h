@@ -1083,8 +1083,10 @@ LBUG_C_API lbug_value* lbug_value_create_uuid(const char* val_);
 /**
  * @brief Creates a value with BLOB type and the given binary data and length.
  * Caller is responsible for destroying the returned value.
- * @param data The binary data buffer.
+ * @param data The binary data buffer. Must be non-null when length is non-zero; a null buffer
+ * with zero length creates an empty blob.
  * @param length The length of the binary data in bytes.
+ * @return The created value, or nullptr if data is null while length is non-zero.
  */
 LBUG_C_API lbug_value* lbug_value_create_blob(const uint8_t* data, uint64_t length);
 /**
