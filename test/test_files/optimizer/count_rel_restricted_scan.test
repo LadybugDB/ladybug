@@ -1,0 +1,93 @@
+-DATASET CSV empty
+
+--
+
+-CASE CountExtendChainWithSecondaryIndexScan
+-STATEMENT CREATE NODE TABLE P (ID INT64, name STRING, PRIMARY KEY(ID));
+---- ok
+-STATEMENT CREATE REL TABLE R (FROM P TO P);
+---- ok
+-STATEMENT UNWIND range(1, 10) AS i CREATE (:P {ID: i, name: 'n' + cast(i AS STRING)});
+---- ok
+-STATEMENT MATCH (a:P), (b:P) WHERE b.ID = a.ID + 1 CREATE (a)-[:R]->(b);
+---- ok
+-STATEMENT CREATE ART INDEX p_name FOR (p:P) ON (p.name);
+---- ok
+# A zone-map predicate on the scan would block the rewrite and hide the index scan.
+-STATEMENT CALL enable_zone_map=false;
+---- ok
+-STATEMENT MATCH (p:P)-[:R]->()-[:R]->() WHERE p.name = 'n1' RETURN count(*);
+---- 1
+1
+-STATEMENT MATCH (p:P)-[:R]->()-[:R]->() RETURN count(*);
+---- 1
+8
+
+-CASE ActiveBoundCountWithPrimaryKeyScan
+-STATEMENT CREATE NODE TABLE P (ID INT64, PRIMARY KEY(ID));
+---- ok
+-STATEMENT CREATE REL TABLE R (FROM P TO P);
+---- ok
+-STATEMENT UNWIND range(1, 10) AS i CREATE (:P {ID: i});
+---- ok
+-STATEMENT MATCH (a:P), (b:P) WHERE b.ID = a.ID + 1 CREATE (a)-[:R]->(b);
+---- ok
+-STATEMENT MATCH (a:P)-[:R]->(b) WHERE a.ID = 1 RETURN count(distinct a.ID);
+---- 1
+1
+-STATEMENT MATCH (a:P)-[:R]->(b) RETURN count(distinct a.ID);
+---- 1
+9
+
+-CASE CsrCountWithPrimaryKeyScan
+-STATEMENT CREATE NODE TABLE V (id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE G (FROM V TO V);
+---- ok
+-STATEMENT UNWIND range(0, 6) AS i CREATE (:V {id: i});
+---- ok
+-STATEMENT MATCH (a:V), (b:V) WHERE b.id > a.id CREATE (a)-[:G]->(b);
+---- ok
+-STATEMENT ALTER TABLE V SET SORTED BY (id ASC) CSR;
+---- ok
+-STATEMENT MATCH (a:V)-[:G*1..5]->(b:V) WHERE a.id = 0 RETURN count(distinct b);
+---- 1
+6
+-STATEMENT MATCH (a:V)-[:G*1..5]->(b:V) WHERE a.id = 0 AND b.id = 3 RETURN count(distinct b);
+---- 1
+1
+-STATEMENT MATCH (a:V)-[:G*1..5]->(b:V) WHERE a.id = 2 AND b.id = 3 RETURN count(distinct b);
+---- 1
+1
+-STATEMENT MATCH (a:V)-[:G]->(b:V) RETURN a.id, count(*) AS c ORDER BY c DESC LIMIT 1;
+---- 1
+0|6
+-STATEMENT MATCH (a:V)-[:G]->(b:V) WHERE a.id = 3 RETURN a.id, count(*) AS c ORDER BY c DESC LIMIT 1;
+---- 1
+3|3
+
+-CASE ReachableCountWithSecondaryIndexScan
+# Without a primary-key index, a.id = 0 stays a filter and the name lookup becomes the index scan.
+-STATEMENT CALL enable_default_hash_index=false;
+---- ok
+-STATEMENT CREATE NODE TABLE U (id INT64, name STRING, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE F (FROM U TO U);
+---- ok
+-STATEMENT UNWIND range(0, 6) AS i CREATE (:U {id: i, name: 'n' + cast(i AS STRING)});
+---- ok
+-STATEMENT MATCH (a:U), (b:U) WHERE b.id = a.id + 1 CREATE (a)-[:F]->(b);
+---- ok
+-STATEMENT CREATE ART INDEX u_name FOR (u:U) ON (u.name);
+---- ok
+-STATEMENT ALTER TABLE U SET SORTED BY (id ASC) CSR;
+---- ok
+-STATEMENT MATCH (a:U)-[:F*1..5]->(b:U) WHERE a.id = 0 RETURN count(distinct b);
+---- 1
+5
+-STATEMENT MATCH (a:U)-[:F*1..5]->(b:U) WHERE a.id = 0 AND a.name = 'n3' RETURN count(distinct b);
+---- 1
+0
+-STATEMENT MATCH (a:U)-[:F*1..5]->(b:U) WHERE a.id = 0 AND a.name = 'n0' RETURN count(distinct b);
+---- 1
+5
