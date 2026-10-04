@@ -75,6 +75,20 @@ LocalTable* LocalStorage::getLocalTable(const Table& table) const {
     return nullptr;
 }
 
+LocalTable* LocalStorage::getLocalTable(common::table_id_t tableID) const {
+    LocalTable* result = nullptr;
+    for (const auto& [key, table] : tables) {
+        if (key.tableID != tableID) {
+            continue;
+        }
+        if (result != nullptr) {
+            return nullptr;
+        }
+        result = table.get();
+    }
+    return result;
+}
+
 PageAllocator* LocalStorage::addOptimisticAllocator(StorageManager* sm) {
     auto* effectiveSM = sm != nullptr ? sm : StorageManager::Get(clientContext);
     auto* dataFH = effectiveSM->getDataFH();

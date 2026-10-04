@@ -153,6 +153,11 @@ bool Transaction::isUnCommitted(const storage::Table& table, common::offset_t no
            nodeOffset >= getMinUncommittedNodeOffset(table);
 }
 
+bool Transaction::isUnCommitted(common::table_id_t tableID, common::offset_t nodeOffset) const {
+    return localStorage && localStorage->getLocalTable(tableID) &&
+           nodeOffset >= getMinUncommittedNodeOffset(tableID);
+}
+
 void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntry& catalogEntry,
     bool isInternal, bool skipLoggingToWAL) {
     undoBuffer->createCatalogEntry(catalogSet, catalogEntry);
@@ -273,6 +278,15 @@ Transaction::~Transaction() = default;
 common::offset_t Transaction::getMinUncommittedNodeOffset(const storage::Table& table) const {
     if (localStorage && localStorage->getLocalTable(table)) {
         return localStorage->getLocalTable(table)->cast<storage::LocalNodeTable>().getStartOffset();
+    }
+    return 0;
+}
+
+common::offset_t Transaction::getMinUncommittedNodeOffset(common::table_id_t tableID) const {
+    if (localStorage) {
+        if (auto* localTable = localStorage->getLocalTable(tableID)) {
+            return localTable->cast<storage::LocalNodeTable>().getStartOffset();
+        }
     }
     return 0;
 }
