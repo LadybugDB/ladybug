@@ -714,6 +714,15 @@ Binder exception: Cannot compare INT64 and STRUCT(a INT64) in list_contains func
 -STATEMENT RETURN 1 IN [null]
 ---- 1
 False
+-STATEMENT RETURN 0 IN [null]
+---- 1
+False
+-STATEMENT RETURN list_position([null, 0], 0)
+---- 1
+2
+-STATEMENT RETURN 5 IN NULL
+---- 1
+
 -STATEMENT RETURN null in []
 ---- 1
 
