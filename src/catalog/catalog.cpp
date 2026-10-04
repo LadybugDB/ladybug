@@ -507,7 +507,10 @@ bool Catalog::containsFunction(const Transaction* transaction, const std::string
     bool useInternal) const {
     auto hasEntry = functions->containsEntry(transaction, name);
     if (!hasEntry && useInternal) {
-        return internalFunctions->containsEntry(transaction, name);
+        hasEntry = internalFunctions->containsEntry(transaction, name);
+    }
+    if (!hasEntry && functionFallback != nullptr) {
+        return functionFallback->containsFunction(transaction, name, useInternal);
     }
     return hasEntry;
 }
@@ -548,8 +551,12 @@ CatalogEntry* Catalog::getFunctionEntry(const Transaction* transaction, const st
         result = functions->getEntry(transaction, name);
     } else if (macros->containsEntry(transaction, name)) {
         result = macros->getEntry(transaction, name);
-    } else if (useInternal) {
+    } else if (useInternal && internalFunctions->containsEntry(transaction, name)) {
         result = internalFunctions->getEntry(transaction, name);
+    } else if (functionFallback != nullptr) {
+        // Extension functions live in the main catalog only; resolve them there
+        // when the session is on a non-main graph.
+        return functionFallback->getFunctionEntry(transaction, name, useInternal);
     } else {
         throw CatalogException(getFunctionDoesNotExistMessage(name));
     }
