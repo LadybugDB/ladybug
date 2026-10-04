@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(Lbug VERSION 0.21.2 LANGUAGES CXX C)
+project(Lbug VERSION 0.22.0 LANGUAGES CXX C)
 
 option(SINGLE_THREADED "Single-threaded mode" FALSE)
 if(SINGLE_THREADED)
