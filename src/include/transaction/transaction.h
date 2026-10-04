@@ -130,9 +130,14 @@ public:
     storage::LocalStorage* getLocalStorage() const { return localStorage.get(); }
     LocalCacheManager& getLocalCacheManager() { return localCacheManager; }
     bool isUnCommitted(const storage::Table& table, common::offset_t nodeOffset) const;
+    bool isUnCommitted(common::table_id_t tableID, common::offset_t nodeOffset) const;
     common::row_idx_t getLocalRowIdx(const storage::Table& table,
         common::offset_t nodeOffset) const {
         return nodeOffset - getMinUncommittedNodeOffset(table);
+    }
+    common::row_idx_t getLocalRowIdx(common::table_id_t tableID,
+        common::offset_t nodeOffset) const {
+        return nodeOffset - getMinUncommittedNodeOffset(tableID);
     }
     common::offset_t getUncommittedOffset(const storage::Table& table,
         common::row_idx_t localRowIdx) const {
@@ -158,6 +163,7 @@ public:
 
 private:
     common::offset_t getMinUncommittedNodeOffset(const storage::Table& table) const;
+    common::offset_t getMinUncommittedNodeOffset(common::table_id_t tableID) const;
     void recordCatalogChange(catalog::Catalog* catalog);
 
 private:

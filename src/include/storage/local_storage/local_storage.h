@@ -41,6 +41,8 @@ public:
     LocalTable* getOrCreateLocalTable(Table& table);
     // Return nullptr if no local table exists.
     LocalTable* getLocalTable(const Table& table) const;
+    // Return nullptr if no local table exists, or several owners hold the same table ID.
+    LocalTable* getLocalTable(common::table_id_t tableID) const;
 
     // Optimistic page allocation is scoped to one storage manager (each partition child has
     // its own data file and page manager). `sm == nullptr` selects the main database file.
