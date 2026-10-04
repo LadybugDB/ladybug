@@ -338,7 +338,7 @@ void NodeTable::initScanState(Transaction* transaction, TableScanState& scanStat
 }
 
 void NodeTable::initScanState(Transaction* transaction, TableScanState& scanState,
-    table_id_t tableID, offset_t startOffset) const {
+    [[maybe_unused]] table_id_t tableID, offset_t startOffset) const {
     if (transaction->isUnCommitted(*this, startOffset)) {
         scanState.source = TableScanSource::UNCOMMITTED;
         scanState.nodeGroupIdx =
