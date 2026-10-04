@@ -2882,9 +2882,11 @@ TEST_F(FlakyCheckpointerTest, ConcurrentDropGraphDuringCommitKeepsCatalogsAlive)
 // materialize only the named graph and defer its WAL replay to the enclosing transaction's
 // commit instead of forcing a full catalog load inside the active recovery transaction. The
 // standalone session writes catalog-entry DDL only: a node table it creates has a plain
-// schema that no longer matches the ANY-graph catalog the records replay into, and an
-// UPDATE_SEQUENCE record it logs resolves by raw sequence ID against the standalone
-// catalog's incompatible ID space, so only its by-name DDL records are assertable.
+// schema that no longer matches the ANY-graph catalog the records replay into. Its
+// UPDATE_SEQUENCE record addresses the sequence by the standalone catalog's ID space, which
+// the ANY-graph infrastructure shifts here, so replay must translate it through the entry-ID
+// mapping the CREATE record recorded: the standalone session's acknowledged nextval of 1
+// must not be handed out twice after the parent reopen.
 TEST_F(FlakyCheckpointerTest, StandaloneGraphFileCommitDoesNotWedgeMainWALReplay) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
@@ -2916,10 +2918,14 @@ TEST_F(FlakyCheckpointerTest, StandaloneGraphFileCommitDoesNotWedgeMainWALReplay
     auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
     auto tableResult = graphConnection->query("CREATE SEQUENCE carol_seq;");
     ASSERT_TRUE(tableResult->isSuccess()) << tableResult->getErrorMessage();
+    auto standaloneNextResult = graphConnection->query("RETURN nextval('carol_seq');");
+    ASSERT_TRUE(standaloneNextResult->isSuccess()) << standaloneNextResult->getErrorMessage();
+    ASSERT_EQ(standaloneNextResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
     ASSERT_TRUE(std::filesystem::exists(graphWALPath));
     // DDL results hold empty-schema factorized tables, which must be destroyed while their
     // database is still open.
     tableResult.reset();
+    standaloneNextResult.reset();
     graphConnection.reset();
     graphDatabase.reset();
 
@@ -2934,7 +2940,7 @@ TEST_F(FlakyCheckpointerTest, StandaloneGraphFileCommitDoesNotWedgeMainWALReplay
     ASSERT_EQ(nextResult->getNext()->getValue(0)->getValue<int64_t>(), 2);
     nextResult = conn->query("RETURN nextval('carol_seq');");
     ASSERT_TRUE(nextResult->isSuccess()) << nextResult->getErrorMessage();
-    ASSERT_EQ(nextResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_EQ(nextResult->getNext()->getValue(0)->getValue<int64_t>(), 2);
     EXPECT_FALSE(std::filesystem::exists(graphShadowPath));
 }
 

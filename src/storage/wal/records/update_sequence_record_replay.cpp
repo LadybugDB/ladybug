@@ -12,7 +12,8 @@ namespace storage {
 
 void WALReplayer::replayUpdateSequenceRecord(const WALRecord& walRecord) const {
     auto& sequenceEntryRecord = walRecord.constCast<UpdateSequenceRecord>();
-    const auto sequenceID = sequenceEntryRecord.sequenceID;
+    const auto sequenceID =
+        getReplayedEntryID(CatalogEntryType::SEQUENCE_ENTRY, sequenceEntryRecord.sequenceID);
     const auto entry =
         Catalog::Get(clientContext)
             ->getSequenceEntry(transaction::Transaction::Get(clientContext), sequenceID);
