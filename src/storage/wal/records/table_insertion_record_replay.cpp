@@ -30,6 +30,13 @@ void WALReplayer::replayTableInsertionRecord(const WALRecord& walRecord) const {
 void WALReplayer::replayNodeTableInsertRecord(const WALRecord& walRecord) const {
     const auto& insertionRecord = walRecord.constCast<TableInsertionRecord>();
     const auto tableID = insertionRecord.tableID;
+    // A torn WAL tail can deserialize to a record with zero vectors. operator[] on an empty
+    // vector is UB (native crash, uncatchable by dry-replay truncation), so reject it here.
+    if (insertionRecord.ownedVectors.empty() || insertionRecord.ownedVectors[0] == nullptr ||
+        insertionRecord.ownedVectors[0]->state == nullptr) {
+        throw RuntimeException(
+            "Corrupted WAL record: table insertion has no vectors; discarding torn tail.");
+    }
     // Partition children live in their own data files (phase-B); dispatch by table ID.
     auto& table = storage::PartitionStorageRegistry::resolveNodeTableByID(&clientContext, tableID)
                       ->cast<NodeTable>();
@@ -63,8 +70,12 @@ void WALReplayer::replayNodeTableInsertRecord(const WALRecord& walRecord) const 
 void WALReplayer::replayRelTableInsertRecord(const WALRecord& walRecord) const {
     const auto& insertionRecord = walRecord.constCast<TableInsertionRecord>();
     const auto tableID = insertionRecord.tableID;
+    if (insertionRecord.ownedVectors.empty() || insertionRecord.ownedVectors[0] == nullptr ||
+        insertionRecord.ownedVectors[0]->state == nullptr) {
+        throw RuntimeException(
+            "Corrupted WAL record: rel insertion has no vectors; discarding torn tail.");
+    }
     auto& table = StorageManager::Get(clientContext)->getTable(tableID)->cast<RelTable>();
-    DASSERT(!insertionRecord.ownedVectors.empty());
     const auto anchorState = insertionRecord.ownedVectors[0]->state;
     const auto numRels = anchorState->getSelVector().getSelSize();
     DASSERT(insertionRecord.numRows == numRels);

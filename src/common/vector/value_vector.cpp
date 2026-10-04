@@ -11,6 +11,7 @@
 #include "common/types/value/nested.h"
 #include "common/types/value/value.h"
 #include "common/vector/auxiliary_buffer.h"
+#include <format>
 
 namespace lbug {
 namespace common {
@@ -430,6 +431,15 @@ std::unique_ptr<ValueVector> ValueVector::deSerialize(Deserializer& deSer,
     deSer.validateDebuggingInfo(key, "num_values");
     sel_t numValues = 0;
     deSer.deserializeValue<sel_t>(numValues);
+    // A torn/corrupt WAL tail can decode to a huge count. ValueVector storage only holds
+    // DEFAULT_VECTOR_CAPACITY values, so anything larger would overflow the null mask and
+    // value buffer below (native crash, uncatchable by the WAL dry-replay truncation).
+    // Fail with a catchable exception so recovery can discard the torn tail instead.
+    if (numValues > DEFAULT_VECTOR_CAPACITY) {
+        throw RuntimeException(
+            std::format("Corrupted WAL record: vector num_values {} exceeds capacity {}.",
+                numValues, DEFAULT_VECTOR_CAPACITY));
+    }
     result->state->getSelVectorUnsafe().setSelSize(numValues);
     DASSERT(result->state->getSelVector().isUnfiltered());
     bool isNull = false;
