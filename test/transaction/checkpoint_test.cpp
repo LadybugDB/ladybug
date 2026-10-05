@@ -8,6 +8,7 @@
 #include <functional>
 #include <future>
 #include <iterator>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -15,6 +16,7 @@
 #include <vector>
 
 #include "api_test/private_api_test.h"
+#include "binder/ddl/bound_create_sequence_info.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
@@ -25,6 +27,7 @@
 #include "common/serializer/buffer_reader.h"
 #include "common/serializer/buffer_writer.h"
 #include "common/serializer/deserializer.h"
+#include "common/serializer/in_mem_file_writer.h"
 #include "common/serializer/serializer.h"
 #include "common/vector/value_vector.h"
 #include "main/database_manager.h"
@@ -42,6 +45,7 @@
 #include "storage/table/rel_table.h"
 #include "storage/table/rel_table_data.h"
 #include "storage/table/string_chunk_data.h"
+#include "storage/wal/checksum_writer.h"
 #include "storage/wal/wal.h"
 #include "test_env.h"
 #include "transaction/transaction_manager.h"
@@ -3047,6 +3051,86 @@ TEST_F(FlakyCheckpointerTest, StandaloneSerialTableSurvivesParentReopen) {
     ASSERT_TRUE(idsResult->hasNext());
     ASSERT_EQ(idsResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
     ASSERT_FALSE(idsResult->hasNext());
+}
+
+// A pre-named-format binary logged sequence advances as UPDATE_SEQUENCE records carrying no
+// sequence name, so replay must resolve their recorded entry ID through the create-replay ID
+// map. The crafted transaction appended below reproduces the shift that map exists for: its
+// CREATE record claims the entry ID of the table's SERIAL-column sequence (implicit serials
+// have no create record, so replay cannot re-derive their IDs), and replay assigns the new
+// sequence the next ID. Reading the recorded ID raw would advance the serial instead; the
+// translated path must advance the crafted sequence and leave the serial untouched.
+TEST_F(FlakyCheckpointerTest, LegacyUpdateSequenceReplayResolvesRecordedEntryID) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    auto tableResult = conn->query("CREATE NODE TABLE T(id SERIAL, name STRING, PRIMARY KEY(id));");
+    ASSERT_TRUE(tableResult->isSuccess()) << tableResult->getErrorMessage();
+    tableResult.reset();
+
+    auto& context = *conn->getClientContext();
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    const auto recordedSequenceID =
+        catalog::Catalog::Get(context)
+            ->getSequenceEntry(transaction::Transaction::Get(context), "T_id_serial")
+            ->getOID();
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+
+    BinaryData craftedWAL;
+    {
+        auto* memoryManager = MemoryManager::Get(context);
+        auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+        std::shared_ptr<Writer> writer;
+        if (systemConfig->enableChecksums) {
+            writer = std::make_shared<ChecksumWriter>(inMemWriter, *memoryManager);
+        } else {
+            writer = inMemWriter;
+        }
+        Serializer serializer{writer};
+        const auto appendRecord = [&serializer, &writer](const WALRecord& record) {
+            writer->onObjectBegin();
+            WALRecord::serializeWithLength(serializer, record);
+            writer->onObjectEnd();
+        };
+        appendRecord(BeginTransactionRecord{});
+        {
+            binder::BoundCreateSequenceInfo sequenceInfo("s", 1 /* startWith */, 1 /* increment */,
+                1 /* minValue */, std::numeric_limits<int64_t>::max(), false /* cycle */,
+                ConflictAction::ON_CONFLICT_THROW, false /* isInternal */);
+            catalog::SequenceCatalogEntry sequenceEntry(sequenceInfo);
+            sequenceEntry.setOID(recordedSequenceID);
+            CreateCatalogEntryRecord createRecord(&sequenceEntry, false);
+            appendRecord(createRecord);
+        }
+        appendRecord(UpdateSequenceRecord{recordedSequenceID, 42});
+        appendRecord(CommitRecord{});
+        auto bufferWriter = std::make_shared<BufferWriter>();
+        inMemWriter->flush(*bufferWriter);
+        craftedWAL = bufferWriter->getData();
+    }
+    conn.reset();
+    database.reset();
+
+    std::ofstream walFile{StorageUtils::getWALFilePath(databasePath),
+        std::ios::binary | std::ios::app};
+    ASSERT_TRUE(walFile.is_open());
+    walFile.write(reinterpret_cast<const char*>(craftedWAL.data.get()),
+        static_cast<std::streamsize>(craftedWAL.size));
+    walFile.close();
+    ASSERT_TRUE(walFile.good());
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_EQ(openResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    auto serialResult = conn->query("RETURN nextval('T_id_serial');");
+    ASSERT_TRUE(serialResult->isSuccess()) << serialResult->getErrorMessage();
+    ASSERT_EQ(serialResult->getNext()->getValue(0)->getValue<int64_t>(), 0);
+    auto sequenceResult = conn->query("RETURN nextval('s');");
+    ASSERT_TRUE(sequenceResult->isSuccess()) << sequenceResult->getErrorMessage();
+    ASSERT_EQ(sequenceResult->getNext()->getValue(0)->getValue<int64_t>(), 43);
 }
 
 // A standalone session's graph WAL addresses rel data by the per-direction physical
