@@ -69,6 +69,9 @@ private:
     void replayRelUpdateRecord(const WALRecord& walRecord) const;
     void replayCopyTableRecord(const WALRecord& walRecord) const;
     void replayUpdateSequenceRecord(const WALRecord& walRecord) const;
+    void replayUpdateSequenceNamedRecord(const WALRecord& walRecord) const;
+    void replaySequenceRecord(common::sequence_id_t sequenceID, uint64_t kCount,
+        const std::string& sequenceName) const;
 
     void replayNodeTableInsertRecord(const WALRecord& walRecord) const;
     void replayRelTableInsertRecord(const WALRecord& walRecord) const;

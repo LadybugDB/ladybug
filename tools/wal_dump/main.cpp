@@ -70,6 +70,8 @@ static std::string walRecordTypeToString(WALRecordType type) {
         return "ALTER_TABLE_ENTRY_RECORD";
     case WALRecordType::UPDATE_SEQUENCE_RECORD:
         return "UPDATE_SEQUENCE_RECORD";
+    case WALRecordType::UPDATE_SEQUENCE_NAMED_RECORD:
+        return "UPDATE_SEQUENCE_NAMED_RECORD";
     case WALRecordType::TABLE_INSERTION_RECORD:
         return "TABLE_INSERTION_RECORD";
     case WALRecordType::NODE_DELETION_RECORD:
@@ -170,6 +172,14 @@ static void dumpRecord(const WALRecord& record) {
         std::cout << "      Type: UPDATE_SEQUENCE\n";
         std::cout << "      SequenceID: " << seqRecord.sequenceID << "\n";
         std::cout << "      KCount: " << seqRecord.kCount << "\n";
+        break;
+    }
+    case WALRecordType::UPDATE_SEQUENCE_NAMED_RECORD: {
+        const auto& seqRecord = record.constCast<UpdateSequenceNamedRecord>();
+        std::cout << "      Type: UPDATE_SEQUENCE_NAMED\n";
+        std::cout << "      SequenceID: " << seqRecord.sequenceID << "\n";
+        std::cout << "      KCount: " << seqRecord.kCount << "\n";
+        std::cout << "      SequenceName: " << seqRecord.sequenceName << "\n";
         break;
     }
     case WALRecordType::LOAD_EXTENSION_RECORD: {

@@ -33,6 +33,7 @@ add_library(lbug_storage_wal
         records/alter_table_entry_record.cpp
         records/copy_table_record.cpp
         records/update_sequence_record.cpp
+        records/update_sequence_named_record.cpp
         records/table_insertion_record.cpp
         records/node_deletion_record.cpp
         records/node_update_record.cpp
