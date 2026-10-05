@@ -403,8 +403,13 @@ TEST_F(WalTest, WALRecordDeserializeSkipsUnknownTrailingBytes) {
 TEST_F(WalTest, WALRecordDeserializeKeepsLegacyUpdateSequenceOwnerIntact) {
     auto recordBuffer = std::make_shared<BufferWriter>();
     Serializer recordSerializer{recordBuffer};
-    lbug::storage::UpdateSequenceRecord record{7, 42};
-    record.serialize(recordSerializer);
+    // Hand-write the pre-named-format payload instead of delegating to the current writer, so a
+    // matching incompatible change to both writer and reader cannot still pass as legacy
+    // decoding.
+    recordSerializer.writeDebuggingInfo("type");
+    recordSerializer.write(lbug::storage::WALRecordType::UPDATE_SEQUENCE_RECORD);
+    recordSerializer.write<sequence_id_t>(7);
+    recordSerializer.write<uint64_t>(42);
     recordSerializer.writeDebuggingInfo("ownerCatalogName");
     recordSerializer.write<std::string>("mygraph");
 
