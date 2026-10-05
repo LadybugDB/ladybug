@@ -4,6 +4,7 @@
 
 #include "binder/expression/expression.h"
 #include "join_hash_table.h"
+#include "processor/operator/filtering_operator.h"
 #include "processor/operator/physical_operator.h"
 #include "processor/operator/sink.h"
 #include "processor/result/factorized_table.h"
@@ -77,7 +78,7 @@ private:
           tableSchema{other.tableSchema.copy()} {}
 };
 
-class HashJoinBuild : public Sink {
+class HashJoinBuild : public Sink, public SelVectorOverWriter {
 public:
     HashJoinBuild(PhysicalOperatorType operatorType,
         std::shared_ptr<HashJoinSharedState> sharedState, HashJoinBuildInfo info,
