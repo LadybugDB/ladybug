@@ -566,12 +566,27 @@ void DatabaseManager::withGraphCatalog(const std::string& graphName,
     throw BinderException{std::format("No graph named {}.", graphName)};
 }
 
+bool DatabaseManager::withGraphCatalogIfAlive(catalog::Catalog* catalog,
+    const std::function<void()>& action) const {
+    if (catalog == nullptr) {
+        return false;
+    }
+    GraphsSharedLock lck{*this};
+    for (auto& graph : graphs) {
+        if (graph.get() == catalog) {
+            action();
+            return true;
+        }
+    }
+    return false;
+}
+
 catalog::Catalog* DatabaseManager::getDefaultGraphCatalog() const {
     if (defaultGraph == "" || defaultGraph == "main") {
         return nullptr;
     }
     auto upperCaseName = StringUtils::getUpper(defaultGraph);
-    std::shared_lock lck{graphsMutex};
+    GraphsSharedLock lck{*this};
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
         if (graphNameUpper == upperCaseName) {

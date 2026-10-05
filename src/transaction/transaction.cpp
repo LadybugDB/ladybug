@@ -89,7 +89,7 @@ void Transaction::publishCommit() {
         throw common::RuntimeException{"Cannot publish commit with an invalid commit timestamp."};
     }
     localStorage->commit();
-    undoBuffer->commit(commitTS);
+    undoBuffer->commit(clientContext, commitTS);
     {
         std::lock_guard lck{changedCatalogsMutex};
         if (!changedCatalogs.empty()) {

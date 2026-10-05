@@ -17,8 +17,9 @@ using namespace lbug::transaction;
 namespace lbug {
 namespace storage {
 
-PersistentVersionRecordHandler::PersistentVersionRecordHandler(RelTableData* relTableData)
-    : relTableData(relTableData) {}
+PersistentVersionRecordHandler::PersistentVersionRecordHandler(RelTableData* relTableData,
+    catalog::Catalog* ownerCatalog)
+    : VersionRecordHandler(ownerCatalog), relTableData(relTableData) {}
 
 void PersistentVersionRecordHandler::applyFuncToChunkedGroups(version_record_handler_op_t func,
     node_group_idx_t nodeGroupIdx, row_idx_t startRow, row_idx_t numRows,
@@ -37,8 +38,9 @@ void PersistentVersionRecordHandler::rollbackInsert(main::ClientContext* context
     relTableData->rollbackGroupCollectionInsert(numRows, true);
 }
 
-InMemoryVersionRecordHandler::InMemoryVersionRecordHandler(RelTableData* relTableData)
-    : relTableData(relTableData) {}
+InMemoryVersionRecordHandler::InMemoryVersionRecordHandler(RelTableData* relTableData,
+    catalog::Catalog* ownerCatalog)
+    : VersionRecordHandler(ownerCatalog), relTableData(relTableData) {}
 
 void InMemoryVersionRecordHandler::applyFuncToChunkedGroups(version_record_handler_op_t func,
     node_group_idx_t nodeGroupIdx, row_idx_t startRow, row_idx_t numRows,
@@ -61,7 +63,10 @@ RelTableData::RelTableData(FileHandle* dataFH, MemoryManager* mm, ShadowFile* sh
     Table& table, RelDataDirection direction, table_id_t nbrTableID, bool enableCompression)
     : table{table}, mm{mm}, shadowFile{shadowFile}, enableCompression{enableCompression},
       direction{direction}, multiplicity{relTableInfo.getMultiplicity(direction)},
-      persistentVersionRecordHandler(this), inMemoryVersionRecordHandler(this) {
+      persistentVersionRecordHandler(this,
+          table.getOwnerCatalogName().empty() ? nullptr : relGroupEntry.getOwningCatalog()),
+      inMemoryVersionRecordHandler(this,
+          table.getOwnerCatalogName().empty() ? nullptr : relGroupEntry.getOwningCatalog()) {
     initCSRHeaderColumns(dataFH);
     initPropertyColumns(relGroupEntry, nbrTableID, dataFH);
     // default to using the persistent version record handler
