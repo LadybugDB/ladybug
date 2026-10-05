@@ -425,7 +425,8 @@ TEST_F(CopyTest, RelCopyMultiPageUncheckpointedScan) {
     result = conn->query(std::format("COPY R FROM '{}'", relPath));
     ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
 
-    result = conn->query("MATCH (a:N), (b:N) WHERE a.id = 0 AND b.id = 500 CREATE (a)-[:R {w: 1000}]->(b)");
+    result = conn->query(
+        "MATCH (a:N), (b:N) WHERE a.id = 0 AND b.id = 500 CREATE (a)-[:R {w: 1000}]->(b)");
     ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
 
     result = conn->query("MATCH (a:N)-[e:R]->(b:N) RETURN COUNT(e), CAST(SUM(e.w) AS INT64)");
@@ -434,6 +435,43 @@ TEST_F(CopyTest, RelCopyMultiPageUncheckpointedScan) {
     auto tuple = result->getNext();
     ASSERT_EQ(tuple->getValue(0)->getValue<int64_t>(), 1001);
     ASSERT_EQ(tuple->getValue(1)->getValue<int64_t>(), 500500);
+}
+
+TEST_F(CopyTest, RelCopyMultiPageFloatUncheckpointedScan) {
+    createDBAndConn();
+    auto result = conn->query("CALL force_checkpoint_on_close=false");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CALL auto_checkpoint=false");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE NODE TABLE N(id INT64, PRIMARY KEY(id))");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CREATE REL TABLE R(FROM N TO N, w DOUBLE)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query("UNWIND range(0, 999) AS i CREATE (:N {id: i})");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    result = conn->query("CHECKPOINT");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    std::vector<std::string> relRows;
+    for (int i = 0; i < 1000; i++) {
+        relRows.push_back(
+            std::format("{},{},{:.2f}", i, (i + 1) % 1000, static_cast<double>(i) * 1.5));
+    }
+    const auto relPath = writeCSV("multi_page_float_rels.csv", relRows);
+    result = conn->query(std::format("COPY R FROM '{}'", relPath));
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query(
+        "MATCH (a:N), (b:N) WHERE a.id = 0 AND b.id = 500 CREATE (a)-[:R {w: 1500.0}]->(b)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+
+    result = conn->query("MATCH (a:N)-[e:R]->(b:N) RETURN COUNT(e), SUM(e.w)");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    auto tuple = result->getNext();
+    ASSERT_EQ(tuple->getValue(0)->getValue<int64_t>(), 1001);
+    ASSERT_DOUBLE_EQ(tuple->getValue(1)->getValue<double>(), 750750.0);
 }
 
 // The no-hash-index COPY path used to keep all primary keys in an in-memory std::set, which OOMs

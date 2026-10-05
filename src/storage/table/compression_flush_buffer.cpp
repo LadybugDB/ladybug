@@ -22,11 +22,11 @@ ColumnChunkMetadata uncompressedFlushBuffer(std::span<const uint8_t> buffer, Fil
     if (!dataFH->isInMemoryMode() && buffer.size_bytes() < entry.numPages * LBUG_PAGE_SIZE) {
         const auto zeroBuffer = std::make_unique<uint8_t[]>(LBUG_PAGE_SIZE);
         memset(zeroBuffer.get(), 0, LBUG_PAGE_SIZE);
-        const auto startOffset = entry.startPageIdx * LBUG_PAGE_SIZE + buffer.size_bytes();
         const auto totalAllocatedBytes = entry.numPages * LBUG_PAGE_SIZE;
         auto bytesWritten = buffer.size_bytes();
         while (bytesWritten < totalAllocatedBytes) {
-            const auto chunkToWrite = std::min<uint64_t>(totalAllocatedBytes - bytesWritten, LBUG_PAGE_SIZE);
+            const auto chunkToWrite =
+                std::min<uint64_t>(totalAllocatedBytes - bytesWritten, LBUG_PAGE_SIZE);
             dataFH->getFileInfo()->writeFile(zeroBuffer.get(), chunkToWrite,
                 entry.startPageIdx * LBUG_PAGE_SIZE + bytesWritten);
             bytesWritten += chunkToWrite;
