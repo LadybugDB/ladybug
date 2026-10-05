@@ -15,6 +15,7 @@ void UpdateSequenceRecord::serialize(Serializer& serializer) const {
     WALRecord::serialize(serializer);
     serializer.write<sequence_id_t>(sequenceID);
     serializer.write<uint64_t>(kCount);
+    serializer.write<std::string>(sequenceName);
 }
 
 std::unique_ptr<UpdateSequenceRecord> UpdateSequenceRecord::deserialize(
@@ -27,8 +28,13 @@ std::unique_ptr<UpdateSequenceRecord> UpdateSequenceRecord::deserialize(
     if (deserializer.hasRemainingData()) {
         deserializer.deserializeValue<uint64_t>(kCount);
     }
+    std::string sequenceName{};
+    if (deserializer.hasRemainingData()) {
+        deserializer.deserializeValue<std::string>(sequenceName);
+    }
 
-    return std::make_unique<UpdateSequenceRecord>(std::move(sequenceID), std::move(kCount));
+    return std::make_unique<UpdateSequenceRecord>(std::move(sequenceID), std::move(kCount),
+        std::move(sequenceName));
 }
 
 } // namespace storage

@@ -2999,6 +2999,56 @@ TEST_F(FlakyCheckpointerTest, StandaloneSequenceDropRecreateDoesNotPoisonRecover
     ASSERT_EQ(carolResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
 }
 
+// A standalone session's CREATE NODE TABLE with a SERIAL column creates the column's
+// sequence implicitly, and implicit sequence creates are deliberately not WAL-logged,
+// so replay has no create record from which to translate the recorded sequence entry
+// ID. The graph materializes the ANY-graph infrastructure before replaying the
+// standalone WAL, shifting entry IDs, so the raw-ID fallback advances an infrastructure
+// sequence instead: the table's own serial stays unadvanced, the next generated id
+// repeats the committed id, and the insert fails on the duplicate primary key. The
+// UPDATE_SEQUENCE record's name field resolves the sequence across the shift.
+TEST_F(FlakyCheckpointerTest, StandaloneSerialTableSurvivesParentReopen) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH serial_graph ANY;")->isSuccess());
+    conn.reset();
+    database.reset();
+
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "serial_graph");
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto tableResult =
+        graphConnection->query("CREATE NODE TABLE P(id SERIAL, name STRING, PRIMARY KEY(id));");
+    ASSERT_TRUE(tableResult->isSuccess()) << tableResult->getErrorMessage();
+    auto insertResult = graphConnection->query("CREATE (:P {name: 'a'});");
+    ASSERT_TRUE(insertResult->isSuccess()) << insertResult->getErrorMessage();
+    tableResult.reset();
+    insertResult.reset();
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_EQ(openResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH serial_graph;")->isSuccess());
+    insertResult = conn->query("CREATE (:P {name: 'b'});");
+    ASSERT_TRUE(insertResult->isSuccess()) << insertResult->getErrorMessage();
+    auto idsResult = conn->query("MATCH (p:P) RETURN p.id ORDER BY p.id;");
+    ASSERT_TRUE(idsResult->isSuccess()) << idsResult->getErrorMessage();
+    ASSERT_TRUE(idsResult->hasNext());
+    ASSERT_EQ(idsResult->getNext()->getValue(0)->getValue<int64_t>(), 0);
+    ASSERT_TRUE(idsResult->hasNext());
+    ASSERT_EQ(idsResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_FALSE(idsResult->hasNext());
+}
+
 // A standalone session's graph WAL addresses rel data by the per-direction physical
 // rel-table ID and binds a rel group through its endpoint node-table IDs, all recorded
 // in that session's plain catalog, which lacks the ANY-graph infrastructure entries

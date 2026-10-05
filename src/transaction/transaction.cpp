@@ -253,7 +253,7 @@ void Transaction::pushSequenceChange(SequenceCatalogEntry* sequenceEntry, int64_
     if (shouldLogToWAL()) {
         DASSERT(localWAL);
         localWAL->logUpdateSequenceRecord(sequenceEntry->getOwningCatalogName(),
-            sequenceEntry->getOID(), kCount);
+            sequenceEntry->getOID(), kCount, sequenceEntry->getName());
     }
 }
 

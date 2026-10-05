@@ -33,7 +33,7 @@ public:
     void logAlterCatalogEntryRecord(const std::string& ownerCatalogName,
         const binder::BoundAlterInfo* alterInfo);
     void logUpdateSequenceRecord(const std::string& ownerCatalogName,
-        common::sequence_id_t sequenceID, uint64_t kCount);
+        common::sequence_id_t sequenceID, uint64_t kCount, const std::string& sequenceName);
 
     void logTableInsertion(const std::string& ownerCatalogName, common::table_id_t tableID,
         common::TableType tableType, common::row_idx_t numRows,
