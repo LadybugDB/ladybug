@@ -48,14 +48,9 @@ bool HashJoinProbe::getMatchedTuplesForFlatKey(ExecutionContext* context) {
         return true;
     }
     if (probeState->probedTuples[0] == nullptr) { // No more matched tuples on the chain.
-        // We still need to save and restore for flat input because we are discarding NULL join keys
-        // which changes the selected position.
-        // TODO(Guodong): we have potential bugs here because all keys' states should be restored.
-        restoreSelVector(*keyVectors[0]->state);
         if (!children[0]->getNextTuple(context)) {
             return false;
         }
-        saveSelVector(*keyVectors[0]->state);
         sharedState->getHashTable()->probe(keyVectors, *hashVector, hashSelVec, tmpHashVector.get(),
             probeState->probedTuples.get());
     }
@@ -128,13 +123,6 @@ uint64_t HashJoinProbe::getLeftJoinResult() {
     if (getInnerJoinResult() == 0) {
         for (auto& vector : vectorsToReadInto) {
             vector->setAsSingleNullEntry();
-        }
-        // TODO(Xiyang): We have a bug in LEFT JOIN which should not discard NULL keys. To be more
-        // clear, NULL keys should only be discarded for probe but should not reflect on the vector.
-        // The following for loop is a temporary hack.
-        for (auto& vector : keyVectors) {
-            DASSERT(vector->state->isFlat());
-            vector->state->getSelVectorUnsafe().setSelSize(1);
         }
         probeState->probedTuples[0] = nullptr;
         writeLeftJoinMarkVector(markVector, false);

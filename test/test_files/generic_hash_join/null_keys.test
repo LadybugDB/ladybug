@@ -1,0 +1,109 @@
+-DATASET CSV empty
+
+--
+
+-CASE NullFlatJoinKey
+# A null flat join key must not change its data chunk's selection vector: the chunk's producer
+# writes its next rows through it, or every row after the null is lost. The two-key
+# joins below have keys in different data chunks.
+
+-STATEMENT CREATE NODE TABLE Person(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE Comment(id INT64, x INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE Post(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE hasCreator(FROM Comment TO Person);
+---- ok
+-STATEMENT CREATE REL TABLE replyOf(FROM Comment TO Post);
+---- ok
+-STATEMENT UNWIND range(0, 3) AS i CREATE (:Person {id: i});
+---- ok
+-STATEMENT CREATE (:Post {id: 0});
+---- ok
+-STATEMENT UNWIND [0, 2, 3] AS p UNWIND range(1, 2) AS k CREATE (:Comment {id: p * 10 + k});
+---- ok
+-STATEMENT MATCH (c:Comment), (p:Person {id: c.id / 10}) CREATE (c)-[:hasCreator]->(p);
+---- ok
+-STATEMENT MATCH (c:Comment), (m:Post {id: 0}) CREATE (c)-[:replyOf]->(m);
+---- ok
+
+-STATEMENT MATCH (a:Person) OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           WITH a, c MATCH (a)<-[:hasCreator]-(c3:Comment)-[:replyOf]->(m:Post)<-[:replyOf]-(c)
+           RETURN count(*), count(DISTINCT c);
+---- 1
+12|6
+
+# The update puts the outer side, which carries the null, on the build side.
+-STATEMENT MATCH (a:Person) OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment) SET c.x = 1
+           WITH a, c MATCH (a)<-[:hasCreator]-(c3:Comment)-[:replyOf]->(m:Post)<-[:replyOf]-(c)
+           RETURN count(*), count(DISTINCT c);
+---- 1
+12|6
+
+-STATEMENT MATCH (a:Person) OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           WITH a, c OPTIONAL MATCH (a)<-[:hasCreator]-(c3:Comment)-[:replyOf]->(m:Post)<-[:replyOf]-(c)
+           RETURN count(*), count(c3);
+---- 1
+13|12
+
+-STATEMENT MATCH (a:Person) OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           WITH a, c WHERE EXISTS { MATCH (a)<-[:hasCreator]-(c3:Comment)-[:replyOf]->(m:Post)<-[:replyOf]-(c) }
+           RETURN count(*), count(DISTINCT c);
+---- 1
+6|6
+
+# A single-key join probed with a flat key that is null in one row.
+-STATEMENT MATCH (a:Person) OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           OPTIONAL MATCH (c)-[:replyOf]->(m:Post)
+           WITH a, c, m MATCH (c2:Comment) WHERE c2 = c
+           RETURN count(*);
+---- 1
+6
+
+-STATEMENT MATCH (a:Person) OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           RETURN a.id, COUNT { MATCH (c)-[:replyOf]->(m:Post) WHERE m.id <= a.id } AS n, count(*);
+---- 4
+0|1|2
+1|0|1
+2|1|2
+3|1|2
+
+-CASE NullFlatJoinKeyCountSubquery
+# The count join's null key row comes after many matched rows here.
+
+-STATEMENT CREATE NODE TABLE Person(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE Comment(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE Post(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE hasCreator(FROM Comment TO Person);
+---- ok
+-STATEMENT CREATE REL TABLE replyOf(FROM Comment TO Post);
+---- ok
+-STATEMENT UNWIND range(0, 64) AS i CREATE (:Person {id: i});
+---- ok
+-STATEMENT CREATE (:Post {id: 0});
+---- ok
+-STATEMENT UNWIND range(0, 64) AS p WITH p WHERE p <> 32
+           UNWIND range(1, 500) AS k CREATE (:Comment {id: p * 100000 + k});
+---- ok
+-STATEMENT MATCH (c:Comment), (p:Person {id: c.id / 100000}) CREATE (c)-[:hasCreator]->(p);
+---- ok
+-STATEMENT MATCH (c:Comment), (m:Post {id: 0}) CREATE (c)-[:replyOf]->(m);
+---- ok
+
+-STATEMENT UNWIND range(0, 64) AS i MATCH (a:Person {id: i})
+           OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           RETURN COUNT { MATCH (c)-[:replyOf]->(m:Post) WHERE m.id <= a.id } AS n, count(*);
+---- 2
+0|1
+1|32000
+
+-STATEMENT UNWIND [31, 32] AS i MATCH (a:Person {id: i})
+           OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           RETURN a.id, c IS NULL, COUNT { MATCH (c)-[:replyOf]->(m:Post) WHERE m.id <= a.id } AS n, count(*);
+---- 2
+31|False|1|500
+32|True|0|1
