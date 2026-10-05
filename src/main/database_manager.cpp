@@ -307,7 +307,7 @@ void DatabaseManager::setDefaultGraph(const std::string& graphName) {
         defaultGraph = "main";
         return;
     }
-    std::shared_lock lck{graphsMutex};
+    GraphsSharedLock lck{*this};
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
         if (graphNameUpper == upperCaseName) {
@@ -343,7 +343,7 @@ void DatabaseManager::loadGraphsFromCatalog(storage::MemoryManager* memoryManage
     auto graphEntries = mainCatalog->getGraphEntries(transaction);
     std::unordered_set<std::string> loadedGraphNames;
     {
-        std::shared_lock lck{graphsMutex};
+        GraphsSharedLock lck{*this};
         loadedGraphNames.reserve(graphs.size());
         for (const auto& graph : graphs) {
             loadedGraphNames.insert(StringUtils::getUpper(graph->getCatalogName()));
@@ -514,7 +514,7 @@ void DatabaseManager::replayPendingGraphWALs(main::ClientContext* clientContext)
 
 bool DatabaseManager::hasGraph(const std::string& graphName) {
     auto upperCaseName = StringUtils::getUpper(graphName);
-    std::shared_lock lck{graphsMutex};
+    GraphsSharedLock lck{*this};
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
         if (graphNameUpper == upperCaseName) {
@@ -526,7 +526,7 @@ bool DatabaseManager::hasGraph(const std::string& graphName) {
 
 catalog::Catalog* DatabaseManager::getGraphCatalog(const std::string& graphName) {
     auto upperCaseName = StringUtils::getUpper(graphName);
-    std::shared_lock lck{graphsMutex};
+    GraphsSharedLock lck{*this};
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
         if (graphNameUpper == upperCaseName) {
@@ -536,10 +536,26 @@ catalog::Catalog* DatabaseManager::getGraphCatalog(const std::string& graphName)
     throw BinderException{std::format("No graph named {}.", graphName)};
 }
 
+void DatabaseManager::acquireGraphsShared() const {
+    if (graphsSharedHolds > 0) {
+        ++graphsSharedHolds;
+        return;
+    }
+    graphsMutex.lock_shared();
+    ++graphsSharedHolds;
+}
+
+void DatabaseManager::releaseGraphsShared() const {
+    --graphsSharedHolds;
+    if (graphsSharedHolds == 0) {
+        graphsMutex.unlock_shared();
+    }
+}
+
 void DatabaseManager::withGraphCatalog(const std::string& graphName,
     const std::function<void(catalog::Catalog*)>& action) {
     auto upperCaseName = StringUtils::getUpper(graphName);
-    std::shared_lock lck{graphsMutex};
+    GraphsSharedLock lck{*this};
     for (auto& graph : graphs) {
         auto graphNameUpper = StringUtils::getUpper(graph->getCatalogName());
         if (graphNameUpper == upperCaseName) {
@@ -575,7 +591,7 @@ storage::StorageManager* DatabaseManager::getDefaultGraphStorageManager() const 
 
 std::vector<catalog::Catalog*> DatabaseManager::getGraphs() const {
     std::vector<catalog::Catalog*> result;
-    std::shared_lock lck{graphsMutex};
+    GraphsSharedLock lck{*this};
     for (auto& graph : graphs) {
         result.push_back(graph.get());
     }
@@ -584,7 +600,7 @@ std::vector<catalog::Catalog*> DatabaseManager::getGraphs() const {
 
 void DatabaseManager::bumpGraphCatalogVersions(
     const std::unordered_set<catalog::Catalog*>& catalogs) {
-    std::shared_lock lck{graphsMutex};
+    GraphsSharedLock lck{*this};
     for (auto& graph : graphs) {
         if (catalogs.contains(graph.get())) {
             graph->incrementVersion();

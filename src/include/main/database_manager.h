@@ -1,11 +1,13 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <shared_mutex>
 #include <unordered_set>
 
 #include "attached_database.h"
+#include "common/copy_constructors.h"
 #include "storage/partition_storage_registry.h"
 
 namespace lbug {
@@ -95,6 +97,26 @@ private:
     std::string defaultDatabase;
     std::vector<std::unique_ptr<catalog::Catalog>> graphs;
     mutable std::shared_mutex graphsMutex;
+    // withGraphCatalog callbacks re-enter registry lookups on the same thread (e.g.
+    // index initialization resolving the default graph catalog); std::shared_mutex is
+    // not recursive, so nested same-thread acquisitions are counted instead of
+    // reacquired.
+    inline static thread_local uint64_t graphsSharedHolds = 0;
+
+    void acquireGraphsShared() const;
+    void releaseGraphsShared() const;
+
+    class GraphsSharedLock {
+    public:
+        explicit GraphsSharedLock(const DatabaseManager& dbManager) : dbManager(dbManager) {
+            dbManager.acquireGraphsShared();
+        }
+        DELETE_COPY_AND_MOVE(GraphsSharedLock);
+        ~GraphsSharedLock() { dbManager.releaseGraphsShared(); }
+
+    private:
+        const DatabaseManager& dbManager;
+    };
     // Owns the per-partition data files of partitioned node tables (phase-B per-partition
     // storage; see docs/partitioning.md 6b).
     storage::PartitionStorageRegistry partitionStorageRegistry;
