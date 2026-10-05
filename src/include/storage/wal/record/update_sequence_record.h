@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -19,13 +20,15 @@ namespace storage {
 struct UpdateSequenceRecord final : WALRecord {
     common::sequence_id_t sequenceID;
     uint64_t kCount;
+    std::string sequenceName;
 
     UpdateSequenceRecord()
         : WALRecord{WALRecordType::UPDATE_SEQUENCE_RECORD}, sequenceID{0}, kCount{0} {}
 
-    UpdateSequenceRecord(common::sequence_id_t sequenceID, uint64_t kCount)
-        : WALRecord{WALRecordType::UPDATE_SEQUENCE_RECORD}, sequenceID{sequenceID}, kCount{kCount} {
-    }
+    UpdateSequenceRecord(common::sequence_id_t sequenceID, uint64_t kCount,
+        std::string sequenceName)
+        : WALRecord{WALRecordType::UPDATE_SEQUENCE_RECORD}, sequenceID{sequenceID}, kCount{kCount},
+          sequenceName{sequenceName} {}
 
     void serialize(common::Serializer& serializer) const override;
     static std::unique_ptr<UpdateSequenceRecord> deserialize(common::Deserializer& deserializer);
