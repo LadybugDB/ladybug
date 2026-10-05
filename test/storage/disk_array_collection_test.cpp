@@ -198,6 +198,13 @@ TEST_F(DiskArrayCollectionTest, RejectsElementIndexOutsideDiskArray) {
     EXPECT_THROW(
         diskArray->get(LBUG_PAGE_SIZE * NUM_PAGE_IDXS_PER_PIP, &transaction::DUMMY_TRANSACTION),
         RuntimeException);
+    // update() takes the same kind of on-disk index. In a release build its check was a DASSERT,
+    // which is compiled out, so an index past numElements was written instead of rejected.
+    EXPECT_THROW(diskArray->update(&transaction::DUMMY_TRANSACTION, NUM_ELEMENTS, uint64_t{0}),
+        RuntimeException);
+    EXPECT_THROW(diskArray->update(&transaction::DUMMY_TRANSACTION,
+                     static_cast<uint64_t>(LBUG_PAGE_SIZE) * NUM_PAGE_IDXS_PER_PIP, uint64_t{0}),
+        RuntimeException);
 }
 
 // Overflow pointers of long string keys are stored in hash index slots.
