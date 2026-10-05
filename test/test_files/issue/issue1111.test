@@ -1,0 +1,103 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1111AggregateOverValueDerivedFromAggregate
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH c + 1 AS n RETURN sum(n);
+---- 1
+4
+-STATEMENT UNWIND [1, 2, 3] AS x WITH x % 2 AS k, count(*) AS c WITH k, c + 1 AS n RETURN sum(n);
+---- 1
+5
+-STATEMENT UNWIND [1, 2, 3, 4] AS x WITH x % 2 AS k, count(*) AS c WITH k, c + 1 AS n RETURN n, sum(n);
+---- 1
+3|6
+-STATEMENT UNWIND [1, 2, 3] AS x WITH collect(x) AS xs UNWIND xs AS y WITH y, size(xs) AS n RETURN sum(n);
+---- 1
+9
+-STATEMENT UNWIND [1, 2, 3] AS x WITH collect(x) AS xs WITH list_transform(xs, y -> y * 2) AS ys RETURN collect(size(ys));
+---- 1
+[3]
+-STATEMENT UNWIND [1, 2, 3] AS x WITH collect(x) AS xs WITH xs[1] AS n RETURN sum(n);
+---- 1
+1
+-STATEMENT UNWIND [1, 2, 3] AS x WITH sum(x) AS s WITH s * 2 AS n RETURN sum(n);
+---- 1
+12
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH DISTINCT c + 1 AS n RETURN sum(n);
+---- 1
+4
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH c + 1 AS n WHERE n > 0 RETURN sum(n);
+---- 1
+4
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH c + 1 AS n LIMIT 1 RETURN sum(n);
+---- 1
+4
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH c + 1 AS n RETURN sum(n) AS s ORDER BY s;
+---- 1
+4
+-STATEMENT UNWIND [1, 2, 3] AS x WITH x % 2 AS k, count(*) AS c WITH k, c + 1 AS n ORDER BY c LIMIT 5 RETURN k, sum(n);
+---- 2
+0|2
+1|3
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH * WITH c + 1 AS n RETURN sum(n);
+---- 1
+4
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH c + 1 AS n WITH n * 2 AS m RETURN sum(m);
+---- 1
+8
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH c + 1 AS n WITH sum(n) AS s WITH s + 1 AS t RETURN sum(t);
+---- 1
+5
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH c AS n RETURN sum(n);
+---- 1
+3
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE (:P {id: 1}), (:P {id: 2}), (:P {id: 3});
+---- ok
+-STATEMENT MATCH (p:P) WITH p, count(*) AS c WITH p, c + 1 AS n RETURN p.id, sum(n);
+---- 3
+1|2
+2|2
+3|2
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH c + 1 AS n RETURN sum(n + count(*));
+---- error
+Binder exception: Expression SUM(+(n,COUNT_STAR())) contains nested aggregation.
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH c + 1 AS n RETURN sum(CASE WHEN n > 3 THEN count(*) ELSE 0 END);
+---- error
+Binder exception: Expression SUM(CASE WHEN GREATER_THAN(n,3) THEN COUNT_STAR() ELSE 0) contains nested aggregation.
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c RETURN sum(count(*));
+---- error
+Binder exception: Expression SUM(COUNT_STAR()) contains nested aggregation.
+-STATEMENT UNWIND [1, 2, 3] AS x RETURN sum(count(*) + 1);
+---- error
+Binder exception: Expression SUM(+(COUNT_STAR(),1)) contains nested aggregation.
+-STATEMENT UNWIND [[1, 2]] AS xs RETURN collect(list_transform(xs, x -> count(x)));
+---- error
+Binder exception: Expression COLLECT(LIST_TRANSFORM(xs,x -> count(x))) contains nested aggregation.
+
+-CASE Issue1111ReAliasedScopeExpression
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c RETURN c AS m, c + 1;
+---- 1
+3|4
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH c + 1 AS n RETURN n AS m, sum(n);
+---- 1
+4|4
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c RETURN c AS m, sum(c);
+---- 1
+3|3
+-STATEMENT UNWIND [1, 2, 3] AS x WITH sum(x) AS s WITH s + 1 AS n RETURN n AS m, n + 1 AS k;
+---- 1
+7|8
+
+-CASE Issue1111NamedArgumentShadowingScopeVariable
+-STATEMENT UNWIND [1, 2, 3] AS x WITH 1 AS a RETURN struct_pack(a := count(*) + 1);
+---- 1
+{a: 4}
+-STATEMENT UNWIND [1, 2, 3] AS x WITH 1 AS a RETURN sum(abs(a := count(*) + 1));
+---- error
+Binder exception: Expression SUM(ABS(a)) contains nested aggregation.
+-STATEMENT UNWIND [1, 2, 3] AS x WITH 1 AS a RETURN collect(struct_pack(a := count(*)));
+---- error
+Binder exception: Expression COLLECT(STRUCT_PACK(a)) contains nested aggregation.

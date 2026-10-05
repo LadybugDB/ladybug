@@ -85,10 +85,23 @@ BoundReturnClause Binder::bindReturnClause(const ReturnClause& returnClause) {
     return BoundReturnClause(std::move(boundProjectionBody), std::move(statementResult));
 }
 
+using expr_ptr_set = std::unordered_set<const Expression*>;
+
+// Expressions computed by an earlier clause, compared by identity. Aliases don't identify them:
+// RETURN n AS m re-aliases the scope's expression, and a named argument f(a := ...) aliases a
+// fresh one. Unique names don't either, as they are structural.
+static expr_ptr_set getScopeExprs(const BinderScope& scope) {
+    expr_ptr_set result;
+    for (auto& expr : scope.getExpressions()) {
+        result.insert(expr.get());
+    }
+    return result;
+}
+
 static expression_vector getAggregateExpressions(const std::shared_ptr<Expression>& expression,
-    const BinderScope& scope) {
+    const expr_ptr_set& scopeExprs) {
     expression_vector result;
-    if (expression->hasAlias() && scope.contains(expression->getAlias())) {
+    if (scopeExprs.contains(expression.get())) {
         return result;
     }
     if (expression->expressionType == ExpressionType::AGGREGATE_FUNCTION) {
@@ -96,7 +109,7 @@ static expression_vector getAggregateExpressions(const std::shared_ptr<Expressio
         return result;
     }
     for (auto& child : ExpressionChildrenCollector::collectChildren(*expression)) {
-        for (auto& expr : getAggregateExpressions(child, scope)) {
+        for (auto& expr : getAggregateExpressions(child, scopeExprs)) {
             result.push_back(expr);
         }
     }
@@ -143,11 +156,18 @@ std::pair<expression_vector, std::vector<std::string>> Binder::bindProjectionLis
 
 class NestedAggCollector final : public ExpressionVisitor {
 public:
+    explicit NestedAggCollector(const expr_ptr_set& scopeExprs) : scopeExprs{scopeExprs} {}
+
     expression_vector exprs;
 
 protected:
     void visitAggFunctionExpr(std::shared_ptr<Expression> expr) override { exprs.push_back(expr); }
     void visitChildren(const Expression& expr) override {
+        // An expression in scope was computed by an earlier projection, so aggregates below it
+        // are not nested, e.g. n in WITH COUNT(*) AS c WITH c + 1 AS n RETURN SUM(n).
+        if (scopeExprs.contains(&expr)) {
+            return;
+        }
         switch (expr.expressionType) {
         case ExpressionType::CASE_ELSE: {
             visitCaseExprChildren(expr);
@@ -168,17 +188,20 @@ protected:
         }
         }
     }
+
+private:
+    const expr_ptr_set& scopeExprs;
 };
 
-static void validateNestedAggregate(const Expression& expr, const BinderScope& scope) {
+static void validateNestedAggregate(const Expression& expr, const expr_ptr_set& scopeExprs) {
     DASSERT(expr.expressionType == ExpressionType::AGGREGATE_FUNCTION);
     if (expr.getNumChildren() == 0) { // Skip COUNT(*)
         return;
     }
-    auto collector = NestedAggCollector();
+    auto collector = NestedAggCollector(scopeExprs);
     collector.visit(expr.getChild(0));
     for (auto& childAgg : collector.exprs) {
-        if (!scope.contains(childAgg->getAlias())) {
+        if (!scopeExprs.contains(childAgg.get())) {
             throw BinderException(
                 std::format("Expression {} contains nested aggregation.", expr.toString()));
         }
@@ -190,9 +213,10 @@ BoundProjectionBody Binder::bindProjectionBody(const parser::ProjectionBody& pro
     expression_vector groupByExprs;
     expression_vector aggregateExprs;
     DASSERT(projectionExprs.size() == aliases.size());
+    auto scopeExprs = getScopeExprs(scope);
     for (auto i = 0u; i < projectionExprs.size(); ++i) {
         auto expr = projectionExprs[i];
-        auto aggExprs = getAggregateExpressions(expr, scope);
+        auto aggExprs = getAggregateExpressions(expr, scopeExprs);
         if (!aggExprs.empty()) {
             for (auto& agg : aggExprs) {
                 aggregateExprs.push_back(agg);
@@ -208,7 +232,7 @@ BoundProjectionBody Binder::bindProjectionBody(const parser::ProjectionBody& pro
 
     if (!aggregateExprs.empty()) {
         for (auto& expr : aggregateExprs) {
-            validateNestedAggregate(*expr, scope);
+            validateNestedAggregate(*expr, scopeExprs);
         }
         if (!groupByExprs.empty()) {
             // TODO(Xiyang): we can remove augment group by. But make sure we test sufficient
