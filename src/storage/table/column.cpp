@@ -1,7 +1,5 @@
 #include "storage/table/column.h"
 
-#include "storage/table/page_reclaim_deferral.h"
-
 #include <algorithm>
 #include <cstdint>
 #include <memory>
@@ -22,6 +20,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/list_column.h"
 #include "storage/table/null_column.h"
+#include "storage/table/page_reclaim_deferral.h"
 #include "storage/table/string_column.h"
 #include "storage/table/struct_column.h"
 #include <bit>
