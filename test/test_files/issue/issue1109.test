@@ -1,0 +1,76 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1109NullKeyOnHashJoinBuildSide
+# A null join key on the build side, here the null node bound by an OPTIONAL MATCH
+# that found nothing, must not corrupt the keys of later build batches
+# (github issue #1109).
+
+-STATEMENT CALL threads=1
+---- ok
+-STATEMENT CREATE NODE TABLE Person(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE Comment(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE NODE TABLE Post(id INT64, x INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE REL TABLE hasCreator(FROM Comment TO Person);
+---- ok
+-STATEMENT CREATE REL TABLE replyOf(FROM Comment TO Post);
+---- ok
+-STATEMENT UNWIND range(0, 64) AS i CREATE (:Person {id: i});
+---- ok
+-STATEMENT CREATE (:Post {id: 0});
+---- ok
+-STATEMENT UNWIND range(0, 64) AS p WITH p WHERE p <> 32
+           UNWIND range(1, 500) AS k CREATE (:Comment {id: p * 100000 + k});
+---- ok
+-STATEMENT MATCH (c:Comment), (p:Person {id: c.id / 100000}) CREATE (c)-[:hasCreator]->(p);
+---- ok
+-STATEMENT MATCH (c:Comment), (m:Post {id: 0}) CREATE (c)-[:replyOf]->(m);
+---- ok
+
+-STATEMENT UNWIND range(0, 64) AS i MATCH (a:Person {id: i})
+           OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           OPTIONAL MATCH (c)-[:replyOf]->(m:Post)
+           RETURN count(*), count(c), count(m), count(DISTINCT c);
+---- 1
+32001|32000|32000|32000
+
+-STATEMENT UNWIND range(0, 64) AS i MATCH (a:Person {id: i})
+           OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           OPTIONAL MATCH (c)-[:replyOf]->(m:Post)
+           WITH a, c, count(m) AS n WHERE n <> 1
+           RETURN a.id, c.id, n;
+---- 1
+32||0
+
+-STATEMENT UNWIND range(0, 64) AS i MATCH (a:Person {id: i})
+           OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           OPTIONAL MATCH (c)-[:replyOf]->(m:Post) WHERE m.id <= a.id
+           RETURN count(*), count(m);
+---- 1
+32001|32000
+
+-STATEMENT UNWIND range(0, 64) AS i MATCH (a:Person {id: i})
+           OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           WITH a, c WHERE EXISTS { MATCH (c)-[:replyOf]->(m:Post) WHERE m.id <= a.id }
+           RETURN count(*);
+---- 1
+32000
+
+-STATEMENT UNWIND range(0, 64) AS i MATCH (a:Person {id: i})
+           OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           OPTIONAL MATCH (c)-[:replyOf*1..2]->(m:Post)
+           RETURN count(*), count(m);
+---- 1
+32001|32000
+
+# The update puts the outer side, which carries the null, on the build side.
+-STATEMENT MATCH (a:Person) OPTIONAL MATCH (a)<-[:hasCreator]-(c:Comment)
+           WITH DISTINCT c MATCH (p:Post {id: 0}) SET p.x = 1
+           WITH c MATCH (c)-[:replyOf]->(m:Post)
+           RETURN count(*), count(DISTINCT c);
+---- 1
+32000|32000
