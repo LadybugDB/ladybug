@@ -162,14 +162,18 @@ public:
 
     void resetNumRowsFromChunks();
     void truncate(common::offset_t numRows);
-    void setVersionInfo(std::unique_ptr<VersionInfo> versionInfo) {
-        this->versionInfo = std::move(versionInfo);
+    void setVersionInfo(std::shared_ptr<VersionInfo> versionInfo_) {
+        versionInfo = std::move(versionInfo_);
     }
+    // Shared with a scan that started before a checkpoint. reset() on this group drops only
+    // this reference.
+    std::shared_ptr<VersionInfo> getVersionInfo() const { return versionInfo; }
     // Moves out the group's version info, leaving it null. Used to preserve uncheckpointed
     // deletes when restoring persistent chunks after a failed checkpoint (see #1051); the
     // checkpoint reads version info but only resets it on success, so the live object still
-    // holds pre-checkpoint state when the checkpoint throws.
-    std::unique_ptr<VersionInfo> moveVersionInfo() { return std::move(versionInfo); }
+    // holds pre-checkpoint state when the checkpoint throws. Other owners (an in-flight scan)
+    // keep the object.
+    std::shared_ptr<VersionInfo> moveVersionInfo() { return std::move(versionInfo); }
     void resetVersionAndUpdateInfo();
 
     uint64_t append(const transaction::Transaction* transaction,
@@ -258,7 +262,7 @@ protected:
     uint64_t capacity;
     std::atomic<common::row_idx_t> numRows;
     std::vector<std::unique_ptr<ColumnChunk>> chunks;
-    std::unique_ptr<VersionInfo> versionInfo;
+    std::shared_ptr<VersionInfo> versionInfo;
 };
 
 } // namespace storage

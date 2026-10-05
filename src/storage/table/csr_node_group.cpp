@@ -153,24 +153,61 @@ bool CSRNodeGroupScanState::tryScanCachedTuplesPacked(RelTableScanState& tableSc
     return true;
 }
 
+void CSRNodeGroup::captureScanPin(const UniqLock& lock, CSRNodeGroupScanState& scanState) const {
+    CSRNodeGroupScanPin pin;
+    if (!scanPagePin) {
+        scanPagePin = PageReclaimDeferral::create();
+    }
+    pin.pages = scanPagePin;
+    pin.index = csrIndex;
+    const auto& groups = chunkedGroups.getAllGroups(lock);
+    pin.inMemGroups.reserve(groups.size());
+    for (const auto& group : groups) {
+        pin.inMemGroups.push_back(group);
+    }
+    if (persistentChunkGroup) {
+        // Metadata only. The move constructor used by checkpoint would leave a pin of the
+        // live group empty, and version info is not part of the rollback snapshot.
+        auto buffer = std::make_shared<BufferWriter>();
+        Serializer serializer{buffer};
+        persistentChunkGroup->cast<ChunkedCSRNodeGroup>().serializeForCheckpointRollback(
+            serializer);
+        Deserializer deserializer{std::make_unique<BufferReader>(buffer->getBlobData(),
+            buffer->getSize())};
+        auto snapshot = ChunkedCSRNodeGroup::deserializeForCheckpointRollback(mm, deserializer);
+        snapshot->setVersionInfo(persistentChunkGroup->getVersionInfo());
+        for (auto i = 0u; i < snapshot->getNumColumns(); i++) {
+            snapshot->getColumnChunk(i).shareUpdateInfo(persistentChunkGroup->getColumnChunk(i));
+        }
+        pin.persistent = std::move(snapshot);
+    }
+    scanState.pin = std::move(pin);
+}
+
 void CSRNodeGroup::initializeScanState(const Transaction* transaction,
     TableScanState& state) const {
     auto& relScanState = state.cast<RelTableScanState>();
     DASSERT(relScanState.nodeGroupScanState);
     auto& nodeGroupScanState = relScanState.nodeGroupScanState->cast<CSRNodeGroupScanState>();
+    // Checkpoint holds this lock for the whole operation, so a scan cannot observe a
+    // half-rewritten group, and the page pin's use_count is stable for that checkpoint.
+    const auto lock = chunkedGroups.lock();
     if (relScanState.nodeGroupIdx != nodeGroupIdx || relScanState.randomLookup) {
         relScanState.nodeGroupIdx = nodeGroupIdx;
+        captureScanPin(lock, nodeGroupScanState);
         if (persistentChunkGroup) {
             initScanForCommittedPersistent(transaction, relScanState, nodeGroupScanState);
         }
     }
     // Switch to a new Vector of bound nodes (i.e., new csr lists) in the node group.
-    if (persistentChunkGroup) {
+    // Use the pin, not the live group: a checkpoint may have replaced it since this scan
+    // state was initialized.
+    if (nodeGroupScanState.pin.persistent) {
         nodeGroupScanState.nextRowToScan = 0;
         nodeGroupScanState.numCachedRows = 0;
         nodeGroupScanState.nextCachedRowToScan = 0;
         nodeGroupScanState.source = CSRNodeGroupScanSource::COMMITTED_PERSISTENT;
-    } else if (csrIndex) {
+    } else if (nodeGroupScanState.pin.index) {
         initScanForCommittedInMem(relScanState, nodeGroupScanState);
     } else {
         nodeGroupScanState.source = CSRNodeGroupScanSource::NONE;
@@ -238,7 +275,7 @@ NodeGroupScanResult CSRNodeGroup::scan(const Transaction* transaction,
         switch (nodeGroupScanState.source) {
         case CSRNodeGroupScanSource::COMMITTED_PERSISTENT: {
             auto result = scanCommittedPersistent(transaction, relScanState, nodeGroupScanState);
-            if (result == NODE_GROUP_SCAN_EMPTY_RESULT && csrIndex) {
+            if (result == NODE_GROUP_SCAN_EMPTY_RESULT && nodeGroupScanState.pin.index) {
                 initScanForCommittedInMem(relScanState, nodeGroupScanState);
                 continue;
             }
@@ -300,7 +337,7 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedPersistentWithCache(const Transac
         const auto numToScan =
             std::min(nodeGroupScanState.numTotalRows - nodeGroupScanState.nextRowToScan,
                 DEFAULT_VECTOR_CAPACITY);
-        persistentChunkGroup->scan(transaction, tableState, nodeGroupScanState,
+        nodeGroupScanState.pin.persistent->scan(transaction, tableState, nodeGroupScanState,
             nodeGroupScanState.nextRowToScan, numToScan);
         nodeGroupScanState.numCachedRows = numToScan;
         nodeGroupScanState.nextRowToScan += numToScan;
@@ -331,7 +368,8 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedPersistentWithoutCache(
                           nodeGroupScanState.nextRowToScan;
     const auto numToScan =
         std::min(csrListLength - nodeGroupScanState.nextRowToScan, DEFAULT_VECTOR_CAPACITY);
-    persistentChunkGroup->scan(transaction, tableState, nodeGroupScanState, startRow, numToScan);
+    nodeGroupScanState.pin.persistent->scan(transaction, tableState, nodeGroupScanState, startRow,
+        numToScan);
     nodeGroupScanState.nextRowToScan += numToScan;
     tableState.setNodeIDVectorToFlat(
         tableState.cachedBoundNodeSelVector[tableState.currBoundNodeIdx]);
@@ -349,7 +387,8 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedInMem(const Transaction* transact
                 tableState.cachedBoundNodeSelVector[tableState.currBoundNodeIdx];
             const auto boundNodeOffset = tableState.nodeIDVector->readNodeOffset(boundNodePos);
             const auto offsetInGroup = boundNodeOffset % StorageConfig::NODE_GROUP_SIZE;
-            nodeGroupScanState.inMemCSRList = csrIndex->indices[offsetInGroup];
+            nodeGroupScanState.inMemCSRList =
+                nodeGroupScanState.pin.index->indices[offsetInGroup];
         }
         if (!nodeGroupScanState.inMemCSRList.isSequential) {
             DASSERT(std::is_sorted(nodeGroupScanState.inMemCSRList.rowIndices.begin(),
@@ -384,18 +423,15 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedInMemSequential(const Transaction
     if (numRows == 0) {
         return NODE_GROUP_SCAN_EMPTY_RESULT;
     }
-    const ChunkedNodeGroup* chunkedGroup = nullptr;
-    {
-        const auto lock = chunkedGroups.lock();
-        // A stale CSR index entry (e.g. an INVALID_ROW_IDX sentinel) can yield an
-        // out-of-range chunk group index. Guard against it instead of dereferencing
-        // a null/out-of-bounds group. See LadybugDB/ladybug#611.
-        if (chunkIdx >= chunkedGroups.getNumGroups(lock)) {
-            return NODE_GROUP_SCAN_EMPTY_RESULT;
-        }
-        chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
+    const auto& inMemGroups = nodeGroupScanState.pin.inMemGroups;
+    // A stale CSR index entry (e.g. an INVALID_ROW_IDX sentinel) can yield an
+    // out-of-range chunk group index. Guard against it instead of dereferencing
+    // a null/out-of-bounds group. See LadybugDB/ladybug#611.
+    if (chunkIdx >= inMemGroups.size() || !inMemGroups[chunkIdx]) {
+        return NODE_GROUP_SCAN_EMPTY_RESULT;
     }
-    chunkedGroup->scan(transaction, tableState, nodeGroupScanState, startRowInChunk, numRows);
+    inMemGroups[chunkIdx]->scan(transaction, tableState, nodeGroupScanState, startRowInChunk,
+        numRows);
     nodeGroupScanState.nextRowToScan += numRows;
     return NodeGroupScanResult{startRow, numRows};
 }
@@ -412,22 +448,22 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedInMemRandom(const Transaction* tr
     ChunkedNodeGroup* chunkedGroup = nullptr;
     node_group_idx_t currentChunkIdx = INVALID_NODE_GROUP_IDX;
     sel_t numSelected = 0;
+    const auto& inMemGroups = nodeGroupScanState.pin.inMemGroups;
     while (nextRow < numRows) {
         const auto rowIdx =
             nodeGroupScanState.inMemCSRList.rowIndices[nextRow + nodeGroupScanState.nextRowToScan];
         auto [chunkIdx, rowInChunk] =
             StorageUtils::getQuotientRemainder(rowIdx, StorageConfig::CHUNKED_NODE_GROUP_CAPACITY);
         if (chunkIdx != currentChunkIdx) {
-            const auto lock = chunkedGroups.lock();
             // A stale CSR index entry (e.g. an INVALID_ROW_IDX sentinel) can yield an
             // out-of-range chunk group index. Skip such rows instead of dereferencing
             // a null/out-of-bounds group. See LadybugDB/ladybug#611.
-            if (chunkIdx >= chunkedGroups.getNumGroups(lock)) {
+            if (chunkIdx >= inMemGroups.size() || !inMemGroups[chunkIdx]) {
                 nextRow++;
                 continue;
             }
             currentChunkIdx = chunkIdx;
-            chunkedGroup = chunkedGroups.getGroup(lock, chunkIdx);
+            chunkedGroup = inMemGroups[chunkIdx].get();
         }
         DASSERT(chunkedGroup);
         numSelected += chunkedGroup->lookup(transaction, tableState, nodeGroupScanState, rowInChunk,
@@ -449,7 +485,7 @@ void CSRNodeGroup::appendChunkedCSRGroup(const Transaction* transaction,
     auto startRow = NodeGroup::append(transaction, columnIDs, chunkedGroupForProperties, 0,
         chunkedGroup.getNumRows());
     if (!csrIndex) {
-        csrIndex = std::make_unique<CSRIndex>();
+        csrIndex = std::make_shared<CSRIndex>();
     }
     for (auto i = 0u; i < csrHeader.offset->getNumValues(); i++) {
         const auto length = csrHeader.length->getValue<length_t>(i);
@@ -464,7 +500,7 @@ void CSRNodeGroup::append(const Transaction* transaction, const std::vector<colu
     const auto startRow =
         NodeGroup::append(transaction, columnIDs, chunks, startRowInChunks, numRows);
     if (!csrIndex) {
-        csrIndex = std::make_unique<CSRIndex>();
+        csrIndex = std::make_shared<CSRIndex>();
     }
     updateCSRIndex(boundOffsetInGroup, startRow, 1 /*length*/);
 }
@@ -586,6 +622,15 @@ void CSRNodeGroup::serialize(Serializer& serializer) {
 
 void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
     const auto lock = chunkedGroups.lock();
+    // A scan holds the index object itself. setInvalid during this checkpoint must not
+    // change the row lists that scan is still walking.
+    if (csrIndex && csrIndex.use_count() > 1) {
+        csrIndex = std::make_shared<CSRIndex>(*csrIndex);
+    }
+    std::shared_ptr<PageReclaimDeferral> deferredPages;
+    if (scanPagePin && scanPagePin.use_count() > 1) {
+        deferredPages = scanPagePin;
+    }
     // A checkpoint that throws mid-group, after the rel data columns were checkpointed but
     // before the CSR header, would otherwise leave the live persistent chunks describing the
     // new data layout under the old header. Reads then return rels attached to the wrong
@@ -606,6 +651,7 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
     const auto shadowSavepoint =
         shadowFile == nullptr ? ShadowFile::ShadowSavepoint{0} : shadowFile->createSavepoint();
     try {
+        PageReclaimDeferralScope deferralScope{deferredPages.get()};
         if (!persistentChunkGroup) {
             checkpointInMemOnly(lock, state);
         } else {
@@ -613,6 +659,9 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
         }
         checkpointDataTypesNoLock(state);
     } catch (...) {
+        if (deferredPages) {
+            deferredPages->discard();
+        }
         // Restore the pre-checkpoint persistent chunks, then drop this group's shadow pages,
         // so both reads and a retried checkpoint see the old data under the old header.
         if (persistentSnapshot != nullptr) {
@@ -640,6 +689,10 @@ void CSRNodeGroup::checkpoint(MemoryManager&, NodeGroupCheckpointState& state) {
             shadowFile->rollbackToSavepoint(shadowSavepoint);
         }
         throw;
+    }
+    if (deferredPages) {
+        deferredPages->commit();
+        scanPagePin = PageReclaimDeferral::create();
     }
 }
 

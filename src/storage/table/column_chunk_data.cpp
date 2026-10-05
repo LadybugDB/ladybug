@@ -1,5 +1,7 @@
 #include "storage/table/column_chunk_data.h"
 
+#include "storage/table/page_reclaim_deferral.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -37,6 +39,10 @@ namespace lbug {
 namespace storage {
 
 void SegmentState::reclaimAllocatedPages(PageAllocator& pageAllocator) const {
+    if (auto* deferral = PageReclaimDeferral::current()) {
+        deferral->defer(*this, pageAllocator);
+        return;
+    }
     const auto& entry = metadata.pageRange;
     if (entry.startPageIdx != INVALID_PAGE_IDX) {
         pageAllocator.freePageRange(entry);
@@ -47,6 +53,46 @@ void SegmentState::reclaimAllocatedPages(PageAllocator& pageAllocator) const {
     for (const auto& child : childrenStates) {
         child.reclaimAllocatedPages(pageAllocator);
     }
+}
+
+std::shared_ptr<PageReclaimDeferral> PageReclaimDeferral::create() {
+    return std::make_shared<PageReclaimDeferral>();
+}
+
+void PageReclaimDeferral::defer(PageRange range, PageAllocator& pageAllocator) {
+    if (range.startPageIdx == INVALID_PAGE_IDX) {
+        return;
+    }
+    frees.push_back(Free{range, &pageAllocator});
+}
+
+void PageReclaimDeferral::defer(const SegmentState& state, PageAllocator& pageAllocator) {
+    defer(state.metadata.pageRange, pageAllocator);
+    if (state.nullState) {
+        defer(*state.nullState, pageAllocator);
+    }
+    for (const auto& child : state.childrenStates) {
+        defer(child, pageAllocator);
+    }
+}
+
+void PageReclaimDeferral::discard() {
+    frees.clear();
+    committed = false;
+}
+
+PageReclaimDeferral::~PageReclaimDeferral() {
+    if (!committed) {
+        return;
+    }
+    for (auto& freePage : frees) {
+        freePage.pageAllocator->freePageRange(freePage.range);
+    }
+}
+
+PageReclaimDeferral*& PageReclaimDeferral::current() {
+    static thread_local PageReclaimDeferral* currentDeferral = nullptr;
+    return currentDeferral;
 }
 
 static std::shared_ptr<CompressionAlg> getCompression(const LogicalType& dataType,
@@ -1058,6 +1104,15 @@ SpillResult ColumnChunkData::spillToDisk() {
 }
 
 void ColumnChunkData::reclaimStorage(PageAllocator& pageAllocator) {
+    if (auto* deferral = PageReclaimDeferral::current()) {
+        if (nullData) {
+            nullData->reclaimStorage(pageAllocator);
+        }
+        if (residencyState == ResidencyState::ON_DISK) {
+            deferral->defer(metadata.pageRange, pageAllocator);
+        }
+        return;
+    }
     if (nullData) {
         nullData->reclaimStorage(pageAllocator);
     }
