@@ -21,20 +21,28 @@ JoinHashTable::JoinHashTable(MemoryManager& memoryManager, logical_type_vec_t ke
     factorizedTable = std::make_unique<FactorizedTable>(&memoryManager, std::move(tableSchema));
 }
 
+// Returns false if no tuple has all keys non-null. Only the unflat keys' state is compacted
+// (callers restore it); a flat key's state is left alone, since its producer keeps writing
+// through that selection vector.
 static bool discardNullFromKeys(const std::vector<ValueVector*>& vectors) {
-    bool hasNonNullKeys = true;
     for (auto& vector : vectors) {
-        if (!ValueVector::discardNull(*vector)) {
-            hasNonNullKeys = false;
-            break;
+        if (vector->state->isFlat()) {
+            const auto& selVector = vector->state->getSelVector();
+            if (selVector.getSelSize() == 0 || vector->isNull(selVector[0])) {
+                return false;
+            }
+        } else if (!ValueVector::discardNull(*vector)) {
+            return false;
         }
     }
-    return hasNonNullKeys;
+    return true;
 }
 
 uint64_t JoinHashTable::appendVectors(const std::vector<ValueVector*>& keyVectors,
     const std::vector<ValueVector*>& payloadVectors, DataChunkState* keyState) {
-    discardNullFromKeys(keyVectors);
+    if (!discardNullFromKeys(keyVectors)) {
+        return 0;
+    }
     auto numTuplesToAppend = keyState->getSelVector().getSelSize();
     auto appendInfos = factorizedTable->allocateFlatTupleBlocks(numTuplesToAppend);
     computeVectorHashes(keyVectors);
@@ -133,6 +141,8 @@ void JoinHashTable::probe(const std::vector<ValueVector*>& keyVectors, ValueVect
         return;
     }
     if (!discardNullFromKeys(keyVectors)) {
+        // A null flat key keeps its selection size, so drop the chain left by the previous probe.
+        probedTuples[0] = nullptr;
         return;
     }
     hashSelVec.setSelSize(keyVectors[0]->state->getSelVector().getSelSize());
