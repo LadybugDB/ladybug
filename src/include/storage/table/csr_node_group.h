@@ -2,12 +2,14 @@
 
 #include <array>
 #include <bitset>
+#include <memory>
 
 #include "common/constants.h"
 #include "common/system_config.h"
 #include "storage/enums/csr_node_group_scan_source.h"
 #include "storage/table/csr_chunked_node_group.h"
 #include "storage/table/node_group.h"
+#include "storage/table/page_reclaim_deferral.h"
 
 namespace lbug {
 namespace transaction {
@@ -111,6 +113,16 @@ struct PackedCSRInfo {
 
 class CSRNodeGroup;
 struct RelTableScanState;
+
+// What one rel scan started with. Checkpoint may replace the live CSR node group;
+// the scan keeps reading this copy until the scan state is destroyed.
+struct CSRNodeGroupScanPin {
+    std::shared_ptr<ChunkedNodeGroup> persistent;
+    std::shared_ptr<CSRIndex> index;
+    std::vector<std::shared_ptr<ChunkedNodeGroup>> inMemGroups;
+    std::shared_ptr<PageReclaimDeferral> pages;
+};
+
 struct CSRNodeGroupScanState final : NodeGroupScanState {
     // Cached offsets and lengths for a sequence of CSR lists within the current vector of
     // boundNodes.
@@ -127,6 +139,7 @@ struct CSRNodeGroupScanState final : NodeGroupScanState {
     NodeCSRIndex inMemCSRList;
 
     CSRNodeGroupScanSource source;
+    CSRNodeGroupScanPin pin;
 
     // This is for local scan state where we don't need `header`.
     explicit CSRNodeGroupScanState()
@@ -255,6 +268,8 @@ private:
     NodeGroupScanResult scanCommittedInMemRandom(const transaction::Transaction* transaction,
         const RelTableScanState& tableState, CSRNodeGroupScanState& nodeGroupScanState) const;
 
+    void captureScanPin(const common::UniqLock& lock, CSRNodeGroupScanState& scanState) const;
+
     void checkpointInMemOnly(const common::UniqLock& lock, NodeGroupCheckpointState& state);
     void checkpointInMemAndOnDisk(const common::UniqLock& lock, NodeGroupCheckpointState& state);
 
@@ -292,8 +307,11 @@ private:
     void finalizeCheckpoint(const common::UniqLock& lock);
 
 private:
-    std::unique_ptr<ChunkedNodeGroup> persistentChunkGroup;
-    std::unique_ptr<CSRIndex> csrIndex;
+    std::shared_ptr<ChunkedNodeGroup> persistentChunkGroup;
+    std::shared_ptr<CSRIndex> csrIndex;
+    // Copied into a scan pin at initializeScanState. use_count > 1 means a scan still
+    // names the pages this checkpoint would reclaim or overwrite.
+    mutable std::shared_ptr<PageReclaimDeferral> scanPagePin;
 };
 
 } // namespace storage

@@ -1,5 +1,7 @@
 #include "storage/table/column.h"
 
+#include "storage/table/page_reclaim_deferral.h"
+
 #include <algorithm>
 #include <cstdint>
 #include <memory>
@@ -529,7 +531,11 @@ std::vector<std::unique_ptr<ColumnChunkData>> Column::checkpointSegment(
     }
     SegmentState chunkState;
     checkpointState.persistentData.initializeScanState(chunkState, this);
-    if (canCheckpointInPlace(chunkState, checkpointState)) {
+    // An in-flight scan's chunk state names these pages. Rewriting them in place would
+    // change the bytes that scan is still reading, so the replacement goes to new pages
+    // and the old ones stay until the scan drops its pin.
+    if (PageReclaimDeferral::current() == nullptr &&
+        canCheckpointInPlace(chunkState, checkpointState)) {
         checkpointColumnChunkInPlace(chunkState, checkpointState, pageAllocator);
 
         if (chunkState.metadata.compMeta.compression == CompressionType::ALP) {

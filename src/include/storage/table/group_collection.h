@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 #include "common/serializer/deserializer.h"
@@ -23,9 +24,13 @@ public:
     void deserializeGroups(MemoryManager& memoryManager, common::Deserializer& deSer,
         const std::vector<common::LogicalType>& columnTypes) {
         auto lockGuard = lock();
-        deSer.deserializeVectorOfPtrs<T>(groups, [&](common::Deserializer& deser) {
-            return T::deserialize(memoryManager, deser, columnTypes);
-        });
+        uint64_t numGroups = 0;
+        deSer.deserializeValue<uint64_t>(numGroups);
+        groups.clear();
+        groups.reserve(numGroups);
+        for (auto i = 0u; i < numGroups; i++) {
+            groups.push_back(T::deserialize(memoryManager, deSer, columnTypes));
+        }
     }
 
     void removeTrailingGroups([[maybe_unused]] const common::UniqLock& lock,
@@ -37,14 +42,17 @@ public:
 
     void serializeGroups(common::Serializer& ser) {
         auto lockGuard = lock();
-        ser.serializeVectorOfPtrs<T>(groups);
+        ser.serializeValue<uint64_t>(groups.size());
+        for (auto& group : groups) {
+            group->serialize(ser);
+        }
     }
 
     void appendGroup(const common::UniqLock& lock, std::unique_ptr<T> group) {
         DASSERT(group);
         DASSERT(lock.isLocked());
         UNUSED(lock);
-        groups.push_back(std::move(group));
+        groups.push_back(std::shared_ptr<T>(std::move(group)));
     }
     T* getGroup(const common::UniqLock& lock, common::idx_t groupIdx) const {
         DASSERT(lock.isLocked());
@@ -88,7 +96,7 @@ public:
     }
     common::idx_t getNumGroupsNoLock() const { return groups.size(); }
 
-    const std::vector<std::unique_ptr<T>>& getAllGroups(const common::UniqLock& lock) const {
+    const std::vector<std::shared_ptr<T>>& getAllGroups(const common::UniqLock& lock) const {
         DASSERT(lock.isLocked());
         UNUSED(lock);
         return groups;
@@ -132,7 +140,8 @@ public:
 
 private:
     mutable std::mutex mtx;
-    std::vector<std::unique_ptr<T>> groups;
+    // shared_ptr so a CSR scan can retain in-memory groups after checkpoint clears them.
+    std::vector<std::shared_ptr<T>> groups;
 };
 
 } // namespace storage

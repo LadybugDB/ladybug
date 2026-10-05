@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 #include "common/assert.h"
 #include "common/cast.h"
@@ -222,11 +223,29 @@ public:
         RUNTIME_CHECK(for (auto& chunk : data) { DASSERT(chunk->getResidencyState() == state); });
         return state;
     }
-    bool hasUpdates() const { return updateInfo.isSet(); }
+    bool hasUpdates() const { return updateInfo && updateInfo->isSet(); }
+    // A scan snapshot keeps the UpdateInfo this chunk had when the scan started.
+    void shareUpdateInfo(const ColumnChunk& other) { updateInfo = other.updateInfo; }
     // Moves pending updates from `other`'s chunk (see UpdateInfo::adoptUpdates).
-    void adoptUpdateInfo(ColumnChunk& other) { updateInfo.adoptUpdates(other.updateInfo); }
+    void adoptUpdateInfo(ColumnChunk& other) {
+        if (!other.updateInfo) {
+            updateInfo.reset();
+            return;
+        }
+        // An in-flight scan holds the other reference. Share the object instead of
+        // stealing the updates out from under it.
+        if (other.updateInfo.use_count() > 1) {
+            updateInfo = other.updateInfo;
+            return;
+        }
+        if (!updateInfo) {
+            updateInfo = std::make_shared<UpdateInfo>();
+        }
+        updateInfo->adoptUpdates(*other.updateInfo);
+    }
     bool hasUpdates(const transaction::Transaction* transaction, common::row_idx_t startRow,
         common::length_t numRows) const;
+    // Drops this chunk's reference. A scan that shared it keeps the pre-checkpoint updates.
     void resetUpdateInfo() { updateInfo.reset(); }
 
     MergedColumnChunkStats getMergedColumnChunkStats() const;
@@ -337,7 +356,16 @@ private:
     // dbConfig.
     bool enableCompression;
     std::vector<std::unique_ptr<ColumnChunkData>> data;
-    UpdateInfo updateInfo;
+    // Null when the chunk has no updates. Shared with a scan snapshot so checkpoint can
+    // drop this chunk's reference without destroying updates the scan is still applying.
+    std::shared_ptr<UpdateInfo> updateInfo;
+
+    UpdateInfo& getOrCreateUpdateInfo() {
+        if (!updateInfo) {
+            updateInfo = std::make_shared<UpdateInfo>();
+        }
+        return *updateInfo;
+    }
 };
 
 } // namespace storage
