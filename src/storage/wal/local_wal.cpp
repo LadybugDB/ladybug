@@ -101,7 +101,7 @@ void LocalWAL::logRelUpdate(const std::string& ownerCatalogName, table_id_t tabl
 
 void LocalWAL::logUpdateSequenceRecord(const std::string& ownerCatalogName,
     sequence_id_t sequenceID, uint64_t kCount, const std::string& sequenceName) {
-    UpdateSequenceRecord walRecord(sequenceID, kCount, sequenceName);
+    UpdateSequenceNamedRecord walRecord(sequenceID, kCount, sequenceName);
     walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }

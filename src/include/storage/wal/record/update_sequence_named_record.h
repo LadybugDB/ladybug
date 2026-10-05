@@ -17,19 +17,22 @@
 namespace lbug {
 namespace storage {
 
-struct UpdateSequenceRecord final : WALRecord {
+struct UpdateSequenceNamedRecord final : WALRecord {
     common::sequence_id_t sequenceID;
     uint64_t kCount;
+    std::string sequenceName;
 
-    UpdateSequenceRecord()
-        : WALRecord{WALRecordType::UPDATE_SEQUENCE_RECORD}, sequenceID{0}, kCount{0} {}
+    UpdateSequenceNamedRecord()
+        : WALRecord{WALRecordType::UPDATE_SEQUENCE_NAMED_RECORD}, sequenceID{0}, kCount{0} {}
 
-    UpdateSequenceRecord(common::sequence_id_t sequenceID, uint64_t kCount)
-        : WALRecord{WALRecordType::UPDATE_SEQUENCE_RECORD}, sequenceID{sequenceID}, kCount{kCount} {
-    }
+    UpdateSequenceNamedRecord(common::sequence_id_t sequenceID, uint64_t kCount,
+        std::string sequenceName)
+        : WALRecord{WALRecordType::UPDATE_SEQUENCE_NAMED_RECORD}, sequenceID{sequenceID},
+          kCount{kCount}, sequenceName{sequenceName} {}
 
     void serialize(common::Serializer& serializer) const override;
-    static std::unique_ptr<UpdateSequenceRecord> deserialize(common::Deserializer& deserializer);
+    static std::unique_ptr<UpdateSequenceNamedRecord> deserialize(
+        common::Deserializer& deserializer);
 };
 
 } // namespace storage

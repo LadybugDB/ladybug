@@ -85,6 +85,9 @@ std::unique_ptr<WALRecord> WALRecord::deserialize(Deserializer& deserializer,
     case WALRecordType::UPDATE_SEQUENCE_RECORD: {
         walRecord = UpdateSequenceRecord::deserialize(deserializer);
     } break;
+    case WALRecordType::UPDATE_SEQUENCE_NAMED_RECORD: {
+        walRecord = UpdateSequenceNamedRecord::deserialize(deserializer);
+    } break;
     case WALRecordType::LOAD_EXTENSION_RECORD: {
         walRecord = LoadExtensionRecord::deserialize(deserializer);
     } break;

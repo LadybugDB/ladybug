@@ -15,5 +15,6 @@
 #include "storage/wal/record/rel_detach_delete_record.h"
 #include "storage/wal/record/rel_update_record.h"
 #include "storage/wal/record/table_insertion_record.h"
+#include "storage/wal/record/update_sequence_named_record.h"
 #include "storage/wal/record/update_sequence_record.h"
 #include "storage/wal/record/wal_record_base.h"

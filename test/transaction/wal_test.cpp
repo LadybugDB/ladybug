@@ -396,6 +396,61 @@ TEST_F(WalTest, WALRecordDeserializeSkipsUnknownTrailingBytes) {
     EXPECT_TRUE(deserializer.finished());
 }
 
+// A pre-named-format binary wrote UPDATE_SEQUENCE records as [sequenceID][kCount]
+// followed by the ownerCatalogName trailer that every record carries. The current
+// reader must keep decoding that layout: the fields survive and the owner trailer is
+// still routed as ownerCatalogName, never misread as a sequence name.
+TEST_F(WalTest, WALRecordDeserializeKeepsLegacyUpdateSequenceOwnerIntact) {
+    auto recordBuffer = std::make_shared<BufferWriter>();
+    Serializer recordSerializer{recordBuffer};
+    lbug::storage::UpdateSequenceRecord record{7, 42};
+    record.serialize(recordSerializer);
+    recordSerializer.writeDebuggingInfo("ownerCatalogName");
+    recordSerializer.write<std::string>("mygraph");
+
+    auto walBuffer = std::make_shared<BufferWriter>();
+    Serializer walSerializer{walBuffer};
+    walSerializer.write(recordBuffer->getSize());
+    walSerializer.write(recordBuffer->getBlobData(), recordBuffer->getSize());
+
+    auto walData = walBuffer->getData();
+    Deserializer deserializer{std::make_unique<BufferReader>(walData.data.get(), walData.size)};
+    auto deserialized =
+        lbug::storage::WALRecord::deserialize(deserializer, *conn->getClientContext());
+
+    ASSERT_EQ(deserialized->type, lbug::storage::WALRecordType::UPDATE_SEQUENCE_RECORD);
+    const auto& sequenceRecord = deserialized->constCast<lbug::storage::UpdateSequenceRecord>();
+    EXPECT_EQ(sequenceRecord.sequenceID, 7);
+    EXPECT_EQ(sequenceRecord.kCount, 42);
+    EXPECT_EQ(deserialized->ownerCatalogName, "mygraph");
+    EXPECT_TRUE(deserializer.finished());
+}
+
+// The named variant travels under its own record type, so its sequenceName field can
+// never be confused with the legacy layout, and the owner trailer stays last.
+TEST_F(WalTest, WALRecordDeserializeRoundTripsNamedUpdateSequenceRecord) {
+    lbug::storage::UpdateSequenceNamedRecord record{5, 3, "person_id_serial"};
+    record.ownerCatalogName = "mygraph";
+
+    auto walBuffer = std::make_shared<BufferWriter>();
+    Serializer walSerializer{walBuffer};
+    lbug::storage::WALRecord::serializeWithLength(walSerializer, record);
+
+    auto walData = walBuffer->getData();
+    Deserializer deserializer{std::make_unique<BufferReader>(walData.data.get(), walData.size)};
+    auto deserialized =
+        lbug::storage::WALRecord::deserialize(deserializer, *conn->getClientContext());
+
+    ASSERT_EQ(deserialized->type, lbug::storage::WALRecordType::UPDATE_SEQUENCE_NAMED_RECORD);
+    const auto& sequenceRecord =
+        deserialized->constCast<lbug::storage::UpdateSequenceNamedRecord>();
+    EXPECT_EQ(sequenceRecord.sequenceID, 5);
+    EXPECT_EQ(sequenceRecord.kCount, 3);
+    EXPECT_EQ(sequenceRecord.sequenceName, "person_id_serial");
+    EXPECT_EQ(deserialized->ownerCatalogName, "mygraph");
+    EXPECT_TRUE(deserializer.finished());
+}
+
 // Simulates the scenario where the declared record length is smaller than the actual serialized
 // record. This happens when an older writer (e.g. v42) wrote a WAL record with fewer fields than
 // the current reader (e.g. v43) expects. The deserializer must gracefully handle the size mismatch

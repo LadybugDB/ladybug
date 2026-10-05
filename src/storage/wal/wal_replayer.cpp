@@ -892,6 +892,9 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
     case WALRecordType::UPDATE_SEQUENCE_RECORD: {
         replayUpdateSequenceRecord(walRecord);
     } break;
+    case WALRecordType::UPDATE_SEQUENCE_NAMED_RECORD: {
+        replayUpdateSequenceNamedRecord(walRecord);
+    } break;
     case WALRecordType::LOAD_EXTENSION_RECORD: {
         replayLoadExtensionRecord(walRecord);
     } break;
