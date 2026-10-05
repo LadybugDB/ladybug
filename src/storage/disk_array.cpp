@@ -168,7 +168,9 @@ void DiskArrayInternal::update(const Transaction* transaction, uint64_t idx,
     std::span<std::byte> val) {
     std::unique_lock xLck{diskArraySharedMtx};
     hasTransactionalUpdates = true;
-    DASSERT(checkOutOfBoundAccess(transaction->getType(), idx));
+    // The index can come from on-disk data, as in get(). DASSERT is compiled out of release
+    // builds, which would skip the throw in checkOutOfBoundAccess.
+    checkOutOfBoundAccess(transaction->getType(), idx);
     auto apCursor = getAPIdxAndOffsetInAP(storageInfo, idx);
     // TODO: We are currently supporting only DiskArrays that can grow in size and not
     // those that can shrink in size. That is why we can use
