@@ -4,6 +4,7 @@
 #include <functional>
 #include <optional>
 #include <shared_mutex>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "attached_database.h"
@@ -103,12 +104,17 @@ private:
     std::vector<std::unique_ptr<AttachedDatabase>> attachedDatabases;
     std::string defaultDatabase;
     std::vector<std::unique_ptr<catalog::Catalog>> graphs;
+    // Mirror of graphs keyed by catalog identity for O(1) liveness checks; mutated only
+    // under graphsMutex alongside graphs.
+    std::unordered_set<const catalog::Catalog*> graphIdentities;
     mutable std::shared_mutex graphsMutex;
     // withGraphCatalog callbacks re-enter registry lookups on the same thread (e.g.
     // index initialization resolving the default graph catalog); std::shared_mutex is
     // not recursive, so nested same-thread acquisitions are counted instead of
-    // reacquired.
-    inline static thread_local uint64_t graphsSharedHolds = 0;
+    // reacquired. Counts are kept per manager: a callback nested over another
+    // manager's registry must still take that manager's lock.
+    inline static thread_local std::unordered_map<const DatabaseManager*, uint64_t>
+        graphsSharedHolds;
 
     void acquireGraphsShared() const;
     void releaseGraphsShared() const;
