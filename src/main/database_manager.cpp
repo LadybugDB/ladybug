@@ -221,6 +221,7 @@ void DatabaseManager::createGraph(const std::string& graphName,
 
     {
         std::unique_lock lck{graphsMutex};
+        graphIdentities.insert(catalog.get());
         graphs.push_back(std::move(catalog));
     }
     // NOTE: Do NOT set defaultGraph here. Setting defaultGraph before the transaction
@@ -272,6 +273,7 @@ void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContex
             if (hasAttachedDatabase(graphName)) {
                 detachDatabase(graphName);
             }
+            graphIdentities.erase(it->get());
             graphs.erase(it);
             lck.unlock();
 
@@ -429,6 +431,7 @@ bool DatabaseManager::loadGraph(main::ClientContext* clientContext,
     auto* graphStorageManager = catalog->getStorageManager();
     {
         std::unique_lock lck{graphsMutex};
+        graphIdentities.insert(catalog.get());
         graphs.push_back(std::move(catalog));
     }
 
@@ -537,17 +540,19 @@ catalog::Catalog* DatabaseManager::getGraphCatalog(const std::string& graphName)
 }
 
 void DatabaseManager::acquireGraphsShared() const {
-    if (graphsSharedHolds > 0) {
-        ++graphsSharedHolds;
+    auto& holds = graphsSharedHolds[this];
+    if (holds > 0) {
+        ++holds;
         return;
     }
     graphsMutex.lock_shared();
-    ++graphsSharedHolds;
+    ++holds;
 }
 
 void DatabaseManager::releaseGraphsShared() const {
-    --graphsSharedHolds;
-    if (graphsSharedHolds == 0) {
+    auto& holds = graphsSharedHolds.at(this);
+    --holds;
+    if (holds == 0) {
         graphsMutex.unlock_shared();
     }
 }
@@ -572,11 +577,9 @@ bool DatabaseManager::withGraphCatalogIfAlive(catalog::Catalog* catalog,
         return false;
     }
     GraphsSharedLock lck{*this};
-    for (auto& graph : graphs) {
-        if (graph.get() == catalog) {
-            action();
-            return true;
-        }
+    if (graphIdentities.contains(catalog)) {
+        action();
+        return true;
     }
     return false;
 }
