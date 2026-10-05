@@ -90,7 +90,7 @@ public:
     void createVectorUpdateInfo(UpdateInfo* updateInfo, common::idx_t vectorIdx,
         VectorUpdateInfo* vectorUpdateInfo, common::transaction_t version);
 
-    void commit(common::transaction_t commitTS) const;
+    void commit(main::ClientContext* context, common::transaction_t commitTS) const;
     void rollback(main::ClientContext* context) const;
 
 private:
@@ -100,8 +100,8 @@ private:
         common::row_idx_t numRows, const VersionRecordHandler* versionRecordHandler,
         common::node_group_idx_t nodeGroupIdx = 0);
 
-    static void commitRecord(UndoRecordType recordType, const uint8_t* record,
-        common::transaction_t commitTS);
+    static void commitRecord(main::ClientContext* context, UndoRecordType recordType,
+        const uint8_t* record, common::transaction_t commitTS);
     static void rollbackRecord(main::ClientContext* context, UndoRecordType recordType,
         const uint8_t* record);
 
@@ -111,8 +111,8 @@ private:
     static void commitSequenceEntry(uint8_t const* entry, common::transaction_t commitTS);
     static void rollbackSequenceEntry(uint8_t const* entry);
 
-    static void commitVersionInfo(UndoRecordType recordType, const uint8_t* record,
-        common::transaction_t commitTS);
+    static void commitVersionInfo(main::ClientContext* context, UndoRecordType recordType,
+        const uint8_t* record, common::transaction_t commitTS);
     static void rollbackVersionInfo(main::ClientContext* context, UndoRecordType recordType,
         const uint8_t* record);
 

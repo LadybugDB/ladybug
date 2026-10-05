@@ -68,6 +68,13 @@ public:
     // guards the lookup itself.
     void withGraphCatalog(const std::string& graphName,
         const std::function<void(catalog::Catalog*)>& action);
+    // Runs action with the graph registry's shared lock held if this catalog is still
+    // owned by the database manager, and returns true; a concurrent DROP GRAPH either
+    // waited (still owned) or already destroyed it (action skipped, returns false).
+    // Compares by identity, so a graph recreated under the same name cannot adopt the
+    // old catalog's outstanding work.
+    bool withGraphCatalogIfAlive(catalog::Catalog* catalog,
+        const std::function<void()>& action) const;
     catalog::Catalog* getDefaultGraphCatalog() const;
     catalog::Catalog* getReplayOwnerCatalog() const { return replayOwnerCatalog; }
     void setReplayOwnerCatalog(catalog::Catalog* catalog) { replayOwnerCatalog = catalog; }

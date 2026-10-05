@@ -28,7 +28,7 @@ struct CSRHeaderColumns {
 
 class PersistentVersionRecordHandler final : public VersionRecordHandler {
 public:
-    explicit PersistentVersionRecordHandler(RelTableData* relTableData);
+    PersistentVersionRecordHandler(RelTableData* relTableData, catalog::Catalog* ownerCatalog);
 
     void applyFuncToChunkedGroups(version_record_handler_op_t func,
         common::node_group_idx_t nodeGroupIdx, common::row_idx_t startRow,
@@ -42,7 +42,7 @@ private:
 
 class InMemoryVersionRecordHandler final : public VersionRecordHandler {
 public:
-    explicit InMemoryVersionRecordHandler(RelTableData* relTableData);
+    InMemoryVersionRecordHandler(RelTableData* relTableData, catalog::Catalog* ownerCatalog);
 
     void applyFuncToChunkedGroups(version_record_handler_op_t func,
         common::node_group_idx_t nodeGroupIdx, common::row_idx_t startRow,

@@ -4,6 +4,8 @@
 #include "catalog/catalog_entry/sequence_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "catalog/catalog_set.h"
+#include "main/client_context.h"
+#include "main/database_manager.h"
 #include "storage/table/chunked_node_group.h"
 #include "storage/table/update_info.h"
 #include "storage/table/version_record_handler.h"
@@ -43,6 +45,7 @@ struct VersionRecord {
     row_idx_t numRows;
     node_group_idx_t nodeGroupIdx;
     const VersionRecordHandler* versionRecordHandler;
+    catalog::Catalog* ownerCatalog;
 };
 
 struct VectorUpdateRecord {
@@ -131,8 +134,8 @@ void UndoBuffer::createVersionInfo(const UndoRecordType recordType, row_idx_t st
     const UndoRecordHeader recordHeader{recordType, sizeof(VersionRecord)};
     *reinterpret_cast<UndoRecordHeader*>(buffer) = recordHeader;
     buffer += sizeof(UndoRecordHeader);
-    *reinterpret_cast<VersionRecord*>(buffer) =
-        VersionRecord{startRow, numRows, nodeGroupIdx, versionRecordHandler};
+    *reinterpret_cast<VersionRecord*>(buffer) = VersionRecord{startRow, numRows, nodeGroupIdx,
+        versionRecordHandler, versionRecordHandler->getOwnerCatalog()};
 }
 
 void UndoBuffer::createVectorUpdateInfo(UpdateInfo* updateInfo, const idx_t vectorIdx,
@@ -161,10 +164,31 @@ uint8_t* UndoBuffer::createUndoRecord(const uint64_t size) {
     return res;
 }
 
-void UndoBuffer::commit(transaction_t commitTS) const {
+namespace {
+// A version record stores the owning catalog captured when it was pushed. If that
+// catalog is no longer in the graph registry, a concurrent DROP GRAPH has destroyed the
+// table's storage, so the record's handler dangles and there is nothing to apply: the
+// graph's data, the only reader of this version info, died with it. Liveness is decided
+// by pointer identity, so a graph recreated under the same name cannot adopt an old
+// transaction's records. The apply runs under the registry shared lock, so a DROP GRAPH
+// that has not won the race yet cannot destroy the storage mid-apply.
+void applyVersionInfoIfOwnerGraphAlive(ClientContext* context, catalog::Catalog* ownerCatalog,
+    const std::function<void()>& applyVersionInfo) {
+    if (ownerCatalog == nullptr) {
+        applyVersionInfo();
+        return;
+    }
+    auto* dbManager = DatabaseManager::Get(*context);
+    if (dbManager != nullptr) {
+        dbManager->withGraphCatalogIfAlive(ownerCatalog, applyVersionInfo);
+    }
+}
+} // namespace
+
+void UndoBuffer::commit(ClientContext* context, transaction_t commitTS) const {
     UndoBufferIterator iterator{*this};
     iterator.iterate([&](UndoRecordType entryType, uint8_t const* entry) {
-        commitRecord(entryType, entry, commitTS);
+        commitRecord(context, entryType, entry, commitTS);
     });
 }
 
@@ -175,8 +199,8 @@ void UndoBuffer::rollback(ClientContext* context) const {
     });
 }
 
-void UndoBuffer::commitRecord(UndoRecordType recordType, const uint8_t* record,
-    transaction_t commitTS) {
+void UndoBuffer::commitRecord(ClientContext* context, UndoRecordType recordType,
+    const uint8_t* record, transaction_t commitTS) {
     switch (recordType) {
     case UndoRecordType::CATALOG_ENTRY: {
         commitCatalogEntryRecord(record, commitTS);
@@ -186,7 +210,7 @@ void UndoBuffer::commitRecord(UndoRecordType recordType, const uint8_t* record,
     } break;
     case UndoRecordType::INSERT_INFO:
     case UndoRecordType::DELETE_INFO: {
-        commitVersionInfo(recordType, record, commitTS);
+        commitVersionInfo(context, recordType, record, commitTS);
     } break;
     case UndoRecordType::UPDATE_INFO: {
         commitVectorUpdateInfo(record, commitTS);
@@ -203,22 +227,26 @@ void UndoBuffer::commitCatalogEntryRecord(const uint8_t* record, const transacti
     newCatalogEntry->setTimestamp(commitTS);
 }
 
-void UndoBuffer::commitVersionInfo(UndoRecordType recordType, const uint8_t* record,
-    transaction_t commitTS) {
+void UndoBuffer::commitVersionInfo(ClientContext* context, UndoRecordType recordType,
+    const uint8_t* record, transaction_t commitTS) {
     const auto& undoRecord = *reinterpret_cast<VersionRecord const*>(record);
-    switch (recordType) {
-    case UndoRecordType::INSERT_INFO: {
-        undoRecord.versionRecordHandler->applyFuncToChunkedGroups(&ChunkedNodeGroup::commitInsert,
-            undoRecord.nodeGroupIdx, undoRecord.startRow, undoRecord.numRows, commitTS);
-    } break;
-    case UndoRecordType::DELETE_INFO: {
-        undoRecord.versionRecordHandler->applyFuncToChunkedGroups(&ChunkedNodeGroup::commitDelete,
-            undoRecord.nodeGroupIdx, undoRecord.startRow, undoRecord.numRows, commitTS);
-    } break;
-    default: {
-        UNREACHABLE_CODE;
-    }
-    }
+    applyVersionInfoIfOwnerGraphAlive(context, undoRecord.ownerCatalog, [&]() {
+        switch (recordType) {
+        case UndoRecordType::INSERT_INFO: {
+            undoRecord.versionRecordHandler->applyFuncToChunkedGroups(
+                &ChunkedNodeGroup::commitInsert, undoRecord.nodeGroupIdx, undoRecord.startRow,
+                undoRecord.numRows, commitTS);
+        } break;
+        case UndoRecordType::DELETE_INFO: {
+            undoRecord.versionRecordHandler->applyFuncToChunkedGroups(
+                &ChunkedNodeGroup::commitDelete, undoRecord.nodeGroupIdx, undoRecord.startRow,
+                undoRecord.numRows, commitTS);
+        } break;
+        default: {
+            UNREACHABLE_CODE;
+        }
+        }
+    });
 }
 
 void UndoBuffer::commitVectorUpdateInfo(const uint8_t* record, transaction_t commitTS) {
@@ -283,20 +311,22 @@ void UndoBuffer::rollbackSequenceEntry(const uint8_t* entry) {
 void UndoBuffer::rollbackVersionInfo(ClientContext* context, UndoRecordType recordType,
     const uint8_t* record) {
     auto& undoRecord = *reinterpret_cast<VersionRecord const*>(record);
-    switch (recordType) {
-    case UndoRecordType::INSERT_INFO: {
-        undoRecord.versionRecordHandler->rollbackInsert(context, undoRecord.nodeGroupIdx,
-            undoRecord.startRow, undoRecord.numRows);
-    } break;
-    case UndoRecordType::DELETE_INFO: {
-        undoRecord.versionRecordHandler->applyFuncToChunkedGroups(&ChunkedNodeGroup::rollbackDelete,
-            undoRecord.nodeGroupIdx, undoRecord.startRow, undoRecord.numRows,
-            transaction::Transaction::Get(*context)->getCommitTS());
-    } break;
-    default: {
-        UNREACHABLE_CODE;
-    }
-    }
+    applyVersionInfoIfOwnerGraphAlive(context, undoRecord.ownerCatalog, [&]() {
+        switch (recordType) {
+        case UndoRecordType::INSERT_INFO: {
+            undoRecord.versionRecordHandler->rollbackInsert(context, undoRecord.nodeGroupIdx,
+                undoRecord.startRow, undoRecord.numRows);
+        } break;
+        case UndoRecordType::DELETE_INFO: {
+            undoRecord.versionRecordHandler->applyFuncToChunkedGroups(
+                &ChunkedNodeGroup::rollbackDelete, undoRecord.nodeGroupIdx, undoRecord.startRow,
+                undoRecord.numRows, transaction::Transaction::Get(*context)->getCommitTS());
+        } break;
+        default: {
+            UNREACHABLE_CODE;
+        }
+        }
+    });
 }
 
 void UndoBuffer::rollbackVectorUpdateInfo(const uint8_t* record) {

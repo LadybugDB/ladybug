@@ -39,7 +39,9 @@ bool updatesAfterTableWrite(const Index& index) {
 }
 } // namespace
 
-NodeTableVersionRecordHandler::NodeTableVersionRecordHandler(NodeTable* table) : table(table) {}
+NodeTableVersionRecordHandler::NodeTableVersionRecordHandler(NodeTable* table,
+    catalog::Catalog* ownerCatalog)
+    : VersionRecordHandler(ownerCatalog), table(table) {}
 
 void NodeTableVersionRecordHandler::applyFuncToChunkedGroups(version_record_handler_op_t func,
     node_group_idx_t nodeGroupIdx, row_idx_t startRow, row_idx_t numRows,
@@ -266,7 +268,9 @@ NodeTable::NodeTable(const StorageManager* storageManager,
     const NodeTableCatalogEntry* nodeTableEntry, MemoryManager* mm)
     : Table{nodeTableEntry, storageManager, mm},
       pkColumnID{nodeTableEntry->getColumnID(nodeTableEntry->getPrimaryKeyName())},
-      versionRecordHandler(this) {
+      versionRecordHandler(this, nodeTableEntry->getOwningCatalogName().empty() ?
+                                     nullptr :
+                                     nodeTableEntry->getOwningCatalog()) {
     auto* dataFH = storageManager->getDataFH();
     auto& pageAllocator = *dataFH->getPageManager();
     const auto maxColumnID = nodeTableEntry->getMaxColumnID();
