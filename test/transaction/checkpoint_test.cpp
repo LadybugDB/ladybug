@@ -4308,8 +4308,8 @@ TEST_F(CheckpointRunningRelScanTest, RelScanStartingInShadowWindow) {
     const auto relGroupEntry = catalog::Catalog::Get(*context)
                                    ->getTableCatalogEntry(&DUMMY_CHECKPOINT_TRANSACTION, "K")
                                    ->ptrCast<catalog::RelGroupCatalogEntry>();
-    auto& relTable = storageManager->getTable(relGroupEntry->getSingleRelEntryInfo().oid)
-                         ->cast<RelTable>();
+    auto& relTable =
+        storageManager->getTable(relGroupEntry->getSingleRelEntryInfo().oid)->cast<RelTable>();
     std::unordered_set<page_idx_t> relPages;
     auto addPages = [&](const ColumnChunk& chunk) {
         for (const auto* segment : chunk.getSegments()) {

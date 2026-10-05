@@ -172,8 +172,8 @@ void CSRNodeGroup::captureScanPin(const UniqLock& lock, CSRNodeGroupScanState& s
         Serializer serializer{buffer};
         persistentChunkGroup->cast<ChunkedCSRNodeGroup>().serializeForCheckpointRollback(
             serializer);
-        Deserializer deserializer{std::make_unique<BufferReader>(buffer->getBlobData(),
-            buffer->getSize())};
+        Deserializer deserializer{
+            std::make_unique<BufferReader>(buffer->getBlobData(), buffer->getSize())};
         auto snapshot = ChunkedCSRNodeGroup::deserializeForCheckpointRollback(mm, deserializer);
         snapshot->setVersionInfo(persistentChunkGroup->getVersionInfo());
         for (auto i = 0u; i < snapshot->getNumColumns(); i++) {
@@ -387,8 +387,7 @@ NodeGroupScanResult CSRNodeGroup::scanCommittedInMem(const Transaction* transact
                 tableState.cachedBoundNodeSelVector[tableState.currBoundNodeIdx];
             const auto boundNodeOffset = tableState.nodeIDVector->readNodeOffset(boundNodePos);
             const auto offsetInGroup = boundNodeOffset % StorageConfig::NODE_GROUP_SIZE;
-            nodeGroupScanState.inMemCSRList =
-                nodeGroupScanState.pin.index->indices[offsetInGroup];
+            nodeGroupScanState.inMemCSRList = nodeGroupScanState.pin.index->indices[offsetInGroup];
         }
         if (!nodeGroupScanState.inMemCSRList.isSequential) {
             DASSERT(std::is_sorted(nodeGroupScanState.inMemCSRList.rowIndices.begin(),

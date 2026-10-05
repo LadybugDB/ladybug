@@ -1,7 +1,5 @@
 #include "storage/table/column_chunk_data.h"
 
-#include "storage/table/page_reclaim_deferral.h"
-
 #include <algorithm>
 #include <cmath>
 
@@ -27,6 +25,7 @@
 #include "storage/table/column_chunk_metadata.h"
 #include "storage/table/compression_flush_buffer.h"
 #include "storage/table/list_chunk_data.h"
+#include "storage/table/page_reclaim_deferral.h"
 #include "storage/table/string_chunk_data.h"
 #include "storage/table/struct_chunk_data.h"
 #include <format>
