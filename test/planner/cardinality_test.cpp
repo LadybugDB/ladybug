@@ -74,6 +74,47 @@ TEST_F(CardinalityTest, TestOperators) {
         EXPECT_EQ(4, parent->getCardinality());
     }
 
+    // Range filter selectivity from observed [min, max] (person IDs are 0..10).
+    // A filter keeping every row estimates the full input instead of the fixed 0.1.
+    {
+        auto keepsAll = getRoot("EXPLAIN LOGICAL MATCH (p1: person) WHERE p1.ID >= 0 RETURN p1.ID");
+        auto [parent, source] = getSource(keepsAll->getLastOperator().get());
+        EXPECT_EQ(planner::LogicalOperatorType::FILTER, parent->getOperatorType());
+        EXPECT_EQ(8, parent->getCardinality());
+    }
+    {
+        // Property on the right flips the comparison.
+        auto keepsAll = getRoot("EXPLAIN LOGICAL MATCH (p1: person) WHERE 0 <= p1.ID RETURN p1.ID");
+        auto [parent, source] = getSource(keepsAll->getLastOperator().get());
+        EXPECT_EQ(planner::LogicalOperatorType::FILTER, parent->getOperatorType());
+        EXPECT_EQ(8, parent->getCardinality());
+    }
+    {
+        // Half the observed range keeps half the rows (uniformity assumption).
+        auto keepsHalf =
+            getRoot("EXPLAIN LOGICAL MATCH (p1: person) WHERE p1.ID >= 5 RETURN p1.ID");
+        auto [parent, source] = getSource(keepsHalf->getLastOperator().get());
+        EXPECT_EQ(planner::LogicalOperatorType::FILTER, parent->getOperatorType());
+        EXPECT_EQ(4, parent->getCardinality());
+    }
+    {
+        // A filter outside the range estimates (at least) one row, never zero.
+        auto keepsNone = getRoot("EXPLAIN LOGICAL MATCH (p1: person) WHERE p1.ID < 0 RETURN p1.ID");
+        auto [parent, source] = getSource(keepsNone->getLastOperator().get());
+        EXPECT_EQ(planner::LogicalOperatorType::FILTER, parent->getOperatorType());
+        EXPECT_EQ(1, parent->getCardinality());
+    }
+    {
+        // Binder-inserted CASTs (INT32 column vs INT64 literal) unwrap to the property:
+        // a keep-all filter estimates the full scan input (fallback would estimate 1).
+        auto keepsAll =
+            getRoot("EXPLAIN LOGICAL MATCH (m: movies) WHERE m.length >= 0 RETURN m.name");
+        auto [parent, source] = getSource(keepsAll->getLastOperator().get());
+        EXPECT_EQ(planner::LogicalOperatorType::FILTER, parent->getOperatorType());
+        EXPECT_EQ(source->getCardinality(), parent->getCardinality());
+        EXPECT_GT(parent->getCardinality(), 1);
+    }
+
     // Limit
     {
         auto plan = getRoot("EXPLAIN LOGICAL MATCH (p1: person) RETURN p1.ID LIMIT 2");

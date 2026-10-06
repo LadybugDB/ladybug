@@ -1,5 +1,6 @@
 #include "planner/join_order/cardinality_estimator.h"
 
+#include "binder/expression/literal_expression.h"
 #include "binder/expression/property_expression.h"
 #include "binder/expression/scalar_function_expression.h"
 #include "catalog/catalog.h"
@@ -314,6 +315,171 @@ static std::optional<cardinality_t> getTableStatsIfPossible(main::ClientContext*
     return getPropertyNumDistinct(context, *predicate.getChild(0), tableStats);
 }
 
+// Observed [min, max] of a single-label property's column, for range-selectivity
+// estimation. Empty when stats are unavailable or the type is not min/max-tracked.
+static std::optional<std::pair<double, double>> getPropertyMinMax(main::ClientContext* context,
+    const Expression& propertyExpr,
+    const std::unordered_map<common::table_id_t, PlannerTableStats>& tableStats) {
+    if (!isSingleLabelledProperty(propertyExpr)) {
+        return {};
+    }
+    auto& prop = propertyExpr.constCast<PropertyExpression>();
+    auto tableID = prop.getSingleTableID();
+    if (!tableStats.contains(tableID) || !tableStats.at(tableID).storageStats.has_value() ||
+        !prop.hasProperty(tableID)) {
+        return {};
+    }
+    auto transaction = Transaction::Get(*context);
+    auto [cat, sm] = main::DatabaseManager::resolveTableStorage(*context, tableID);
+    auto entry = cat->getTableCatalogEntry(transaction, tableID);
+    if (!entry->containsProperty(prop.getPropertyName())) {
+        return {};
+    }
+    auto columnID = entry->getColumnID(prop.getPropertyName());
+    if (columnID == INVALID_COLUMN_ID || columnID == ROW_IDX_COLUMN_ID) {
+        return {};
+    }
+    return tableStats.at(tableID).storageStats.value().getColumnMinMax(columnID);
+}
+
+// Converts a folded literal to double in the column's physical domain (integers, DATE
+// days, TIMESTAMP micros), matching ColumnStats::updateMinMax. Parameters and other
+// non-constant expressions stay on the fixed-selectivity path: their values are
+// unknown at plan time.
+static std::optional<double> literalToDouble(const Expression& expr) {
+    if (expr.expressionType != ExpressionType::LITERAL) {
+        return {};
+    }
+    const auto& value = expr.constCast<LiteralExpression>().getValue();
+    if (value.isNull()) {
+        return {};
+    }
+    switch (value.getDataType().getLogicalTypeID()) {
+    case LogicalTypeID::INT8:
+        return value.getValue<int8_t>();
+    case LogicalTypeID::INT16:
+        return value.getValue<int16_t>();
+    case LogicalTypeID::INT32:
+        return value.getValue<int32_t>();
+    case LogicalTypeID::INT64:
+        return static_cast<double>(value.getValue<int64_t>());
+    case LogicalTypeID::UINT8:
+        return value.getValue<uint8_t>();
+    case LogicalTypeID::UINT16:
+        return value.getValue<uint16_t>();
+    case LogicalTypeID::UINT32:
+        return value.getValue<uint32_t>();
+    case LogicalTypeID::UINT64:
+        return static_cast<double>(value.getValue<uint64_t>());
+    case LogicalTypeID::FLOAT:
+        return value.getValue<float>();
+    case LogicalTypeID::DOUBLE:
+        return value.getValue<double>();
+    case LogicalTypeID::DATE:
+        return value.getValue<date_t>().days;
+    case LogicalTypeID::TIMESTAMP:
+    case LogicalTypeID::TIMESTAMP_TZ:
+    case LogicalTypeID::TIMESTAMP_MS:
+    case LogicalTypeID::TIMESTAMP_NS:
+    case LogicalTypeID::TIMESTAMP_SEC:
+        return static_cast<double>(value.getValue<timestamp_t>().value);
+    default:
+        return {};
+    }
+}
+
+// Strips binder-inserted CASTs (e.g. an INT32 column vs an INT64 literal compares as
+// CAST(prop) OP literal) to the underlying property. Value-preserving numeric and
+// temporal casts keep the range fraction valid.
+static const Expression* unwrapCast(const Expression* expr) {
+    while (expr->expressionType == ExpressionType::FUNCTION && expr->getNumChildren() == 1) {
+        const auto& name = expr->constCast<ScalarFunctionExpression>().getFunction().name;
+        if (std::string(name).rfind("CAST", 0) != 0) {
+            break;
+        }
+        expr = expr->getChild(0).get();
+    }
+    return expr;
+}
+
+// Selectivity of `property OP constant` for ordered comparisons, as the fraction of the
+// observed [min, max] range satisfying OP under uniformity, clamped to [0, 1]. A filter
+// keeping every row (e.g. `c.length >= 0` when min is 0) estimates 1.0 instead of the
+// fixed 0.1 below, so the DP comparison sees true cardinalities; a filter outside the
+// range estimates 0 (exactly one row via atLeastOne at the call site). Anything else
+// (parameters, unresolvable columns, non-literal sides) stays empty for the fallback.
+static std::optional<double> getRangeSelectivity(main::ClientContext* context,
+    const Expression& predicate,
+    const std::unordered_map<common::table_id_t, PlannerTableStats>& tableStats) {
+    const auto op = predicate.expressionType;
+    if (op != ExpressionType::GREATER_THAN && op != ExpressionType::GREATER_THAN_EQUALS &&
+        op != ExpressionType::LESS_THAN && op != ExpressionType::LESS_THAN_EQUALS) {
+        return {};
+    }
+    DASSERT(predicate.getNumChildren() == 2);
+    auto lhs = unwrapCast(predicate.getChild(0).get());
+    auto rhs = unwrapCast(predicate.getChild(1).get());
+    const Expression* propSide = nullptr;
+    const Expression* constSide = nullptr;
+    auto effectiveOp = op;
+    if (isSingleLabelledProperty(*lhs) && rhs->expressionType == ExpressionType::LITERAL) {
+        propSide = lhs;
+        constSide = rhs;
+    } else if (isSingleLabelledProperty(*rhs) && lhs->expressionType == ExpressionType::LITERAL) {
+        propSide = rhs;
+        constSide = lhs;
+        switch (op) {
+        case ExpressionType::GREATER_THAN:
+            effectiveOp = ExpressionType::LESS_THAN;
+            break;
+        case ExpressionType::GREATER_THAN_EQUALS:
+            effectiveOp = ExpressionType::LESS_THAN_EQUALS;
+            break;
+        case ExpressionType::LESS_THAN:
+            effectiveOp = ExpressionType::GREATER_THAN;
+            break;
+        default:
+            effectiveOp = ExpressionType::GREATER_THAN_EQUALS;
+            break;
+        }
+    } else {
+        return {};
+    }
+    const auto constant = literalToDouble(*constSide);
+    const auto minMax = getPropertyMinMax(context, *propSide, tableStats);
+    if (!constant.has_value() || !minMax.has_value()) {
+        return {};
+    }
+    const auto [minValue, maxValue] = *minMax;
+    const auto c = *constant;
+    double selectivity;
+    if (minValue >= maxValue) {
+        // Single-valued column: the predicate is decided.
+        bool keeps = false;
+        switch (effectiveOp) {
+        case ExpressionType::GREATER_THAN:
+            keeps = minValue > c;
+            break;
+        case ExpressionType::GREATER_THAN_EQUALS:
+            keeps = minValue >= c;
+            break;
+        case ExpressionType::LESS_THAN:
+            keeps = minValue < c;
+            break;
+        default:
+            keeps = minValue <= c;
+            break;
+        }
+        selectivity = keeps ? 1.0 : 0.0;
+    } else if (effectiveOp == ExpressionType::GREATER_THAN ||
+               effectiveOp == ExpressionType::GREATER_THAN_EQUALS) {
+        selectivity = (maxValue - c) / (maxValue - minValue);
+    } else {
+        selectivity = (c - minValue) / (maxValue - minValue);
+    }
+    return std::min(1.0, std::max(0.0, selectivity));
+}
+
 // Upper bound on the number of distinct values of a GROUP BY key: node internal IDs are
 // bounded by the node count, single-label properties by the column NDV, and LIST_CREATION
 // packs (e.g. Q14's personIdsInPath) by the product of their children's bounds.
@@ -357,6 +523,12 @@ uint64_t CardinalityEstimator::estimateFilter(const LogicalOperator& childPlan,
                 childPlan.getCardinality() * PlannerKnobs::EQUALITY_PREDICATE_SELECTIVITY);
         }
     } else {
+        // Ordered comparison against a folded constant uses the observed [min, max]
+        // range; everything else (parameters, unresolvable sides) keeps the fixed
+        // selectivity.
+        if (const auto selectivity = getRangeSelectivity(context, predicate, tableStats)) {
+            return atLeastOne(childPlan.getCardinality() * *selectivity);
+        }
         return atLeastOne(
             childPlan.getCardinality() * PlannerKnobs::NON_EQUALITY_PREDICATE_SELECTIVITY);
     }
