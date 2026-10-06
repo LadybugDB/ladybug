@@ -231,8 +231,8 @@ void GroupedReachableCount::readNodeProperties(Transaction* transaction, offset_
     }
 }
 
-void GroupedReachableCount::addWalk(uint64_t& target, uint64_t addend) {
-    if (addend > std::numeric_limits<uint64_t>::max() - target) {
+void GroupedReachableCount::addWalk(uint64_t& target, uint64_t addend, uint64_t limit) {
+    if (addend > limit - target) {
         throw RuntimeException(
             "The number of walks matched by the variable-length pattern exceeds the 64-bit "
             "counter range. Narrow the pattern's upper bound (e.g. *1..3 instead of *1..30) or "
@@ -276,14 +276,14 @@ void GroupedReachableCount::compute(ExecutionContext* context) {
                         if (nbr.tableID != dstTableID) {
                             return;
                         }
-                        addWalk(next[nbr.offset], count);
+                        addWalk(next[nbr.offset], count, std::numeric_limits<uint64_t>::max());
                     });
                 }
             }
         }
         if (depth >= lowerBound) {
             for (offset_t offset = 0; offset < maxOffset; ++offset) {
-                addWalk(total[offset], next[offset]);
+                addWalk(total[offset], next[offset], std::numeric_limits<uint64_t>::max());
             }
         }
         cur.swap(next);
@@ -325,10 +325,12 @@ void GroupedReachableCount::compute(ExecutionContext* context) {
             idx = it->second;
         }
         auto& group = groups[idx];
-        addWalk(group.count, walkCount);
+        // The COUNT is emitted as a signed 64-bit integer, so cap the accumulator there
+        // rather than at the uint64 range.
+        addWalk(group.count, walkCount, static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
         if (hasAvg && !scoreIsNull) {
             group.avgSum += static_cast<double>(walkCount) * score;
-            addWalk(group.avgCount, walkCount);
+            addWalk(group.avgCount, walkCount, std::numeric_limits<uint64_t>::max());
         }
     }
 }
