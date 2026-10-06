@@ -77,13 +77,12 @@ protected:
     virtual void writeInternal(processor::FactorizedTable& fTable, common::nodeID_t dstNodeID,
         common::LimitCounter* counter) = 0;
     // Emits the source's own row for a zero lower bound when the source already reached
-    // itself (its non-empty walks were emitted by the table scan above). Defaults to the
-    // historical re-emit, which is a no-op for writers that skip the source; writers that
-    // emit source rows override it to produce just the length-0 walk.
-    virtual void writeCoveredSourceWalk(processor::FactorizedTable& fTable,
-        common::LimitCounter* counter) {
-        write(fTable, sourceNodeID_, counter);
-    }
+    // itself, i.e. when its non-empty walks were emitted by the table scan above and only
+    // the missing length-0 walk is left. The per-row preamble (output-node mask check and
+    // dst node ID) is already done by the caller, so implementations only emit the row.
+    // Writers that never emit the source itself -- every shortest-path variant bails out on
+    // dstNodeID == sourceNodeID_ -- have nothing to add and keep this no-op.
+    virtual void writeCoveredSourceWalk(processor::FactorizedTable&, common::LimitCounter*) {}
     // Fast path when there is no node predicate or semantic check
     void dfsFast(ParentList* firstParent, processor::FactorizedTable& fTable,
         common::LimitCounter* counter);

@@ -52,6 +52,12 @@ struct GroupedReachableCountPrintInfo final : OPPrintInfo {
  *  2. One point lookup of the group keys + AVG input per destination node with a non-zero
  *     walk count, folded into per-group (count, sum) accumulators. COUNT and AVG weight
  *     every walk, matching row-wise aggregation over the unoptimized plan.
+ *
+ * Every group is materialized before the first tuple is emitted, so total memory is
+ * O(V + sum over groups of the group's serialized key width), not O(V): the DP vectors are
+ * O(V), the accumulators are O(#groups). That is the right trade for the queries this
+ * operator targets -- high fan-out walks grouped by a low-cardinality key -- but it is a
+ * real cost for `GROUP BY <node id>`, where #groups approaches V.
  */
 class GroupedReachableCount final : public PhysicalOperator {
     static constexpr PhysicalOperatorType type_ = PhysicalOperatorType::GROUPED_REACHABLE_COUNT;
@@ -101,7 +107,6 @@ public:
 
 private:
     struct KeyValue {
-        common::LogicalType type;
         bool isNull = true;
         int64_t intVal = 0;
         double dblVal = 0.0;
@@ -118,9 +123,16 @@ private:
     static void appendToKey(std::string& out, const KeyValue& key,
         common::PhysicalTypeID physicalType);
     void compute(ExecutionContext* context);
+    // Builds the reusable point-lookup state (value vectors, scan state, column IDs). Done
+    // once per operator instance rather than per destination node.
+    void initLookupState(ExecutionContext* context, transaction::Transaction* transaction);
     void readNodeProperties(transaction::Transaction* transaction, common::offset_t offset,
         std::vector<KeyValue>& keys, bool& scoreIsNull, double& score);
     void emitRow(uint32_t pos, const GroupAccumulator& group);
+    // Walks grow like branching^depth, so a wide upper bound on a dense graph can overflow
+    // the accumulator. Report it instead of silently returning a wrapped COUNT: the
+    // unoptimized plan would have been slow, not wrong.
+    static void addWalk(uint64_t& target, uint64_t addend);
 
 private:
     graph::NativeGraphEntry graphEntry;
@@ -145,6 +157,19 @@ private:
     std::unique_ptr<graph::OnDiskGraph> graph;
     std::vector<graph::GraphRelInfo> relInfos;
     std::vector<std::unique_ptr<graph::NbrScanState>> scanStates;
+
+    // Point-lookup state for readNodeProperties, reused across destination nodes.
+    std::shared_ptr<common::DataChunkState> lookupChunkState;
+    std::unique_ptr<common::ValueVector> lookupIDVector;
+    std::vector<std::unique_ptr<common::ValueVector>> lookupKeyVectors;
+    std::unique_ptr<common::ValueVector> lookupScoreVector;
+    // One entry per scanned column, in lookupColumnIDs order.
+    std::vector<common::ValueVector*> lookupOutVectors;
+    // For each entry of lookupOutVectors: the key index it feeds, or keyInfos.size() for the
+    // AVG input.
+    std::vector<size_t> lookupKeyIdxByColumn;
+    std::vector<common::column_id_t> lookupColumnIDs;
+    std::unique_ptr<storage::NodeTableScanState> lookupScanState;
 
     std::vector<GroupAccumulator> groups;
     size_t emitIdx = 0;

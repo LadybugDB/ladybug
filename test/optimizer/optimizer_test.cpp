@@ -1,6 +1,9 @@
+#include <algorithm>
 #include <functional>
+#include <map>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "catalog/catalog.h"
@@ -1065,16 +1068,232 @@ TEST_F(OptimizerTest, GroupedReachableCount) {
     ASSERT_EQ(resultCountStar->getNext()->getValue(1)->getValue<int64_t>(), 8);
     ASSERT_EQ(resultCountStar->getNext()->getValue(1)->getValue<int64_t>(), 16);
 
-    // DISTINCT aggregates, filters and grouping by the start node keep the original plan.
-    for (auto negative : {
-             "MATCH (a:grc_n)-[e:grc_e*0..2]->(b:grc_n) RETURN b.active, count(DISTINCT b);",
-             "MATCH (a:grc_n)-[e:grc_e*0..2]->(b:grc_n) WHERE b.score > 15.0 RETURN b.active, "
-             "count(b);",
-             "MATCH (a:grc_n)-[e:grc_e*0..2]->(b:grc_n) RETURN a.active, count(b);",
+    // A zero lower bound is not required for the rewrite: *1..2 over the full table takes
+    // the same path. Walk counts per end node (in-degrees + two-hop walks):
+    // 0: 2+3, 1: 1+2, 2: 2+3, 3: 1+2, 4: 1+2, so active T(0,2,4) = 13 and F(1,3) = 6.
+    auto qBounded = "MATCH (a:grc_n)-[:grc_e*1..2]->(b:grc_n) RETURN b.active AS active, "
+                    "count(*) AS total ORDER BY total DESC;";
+    ASSERT_TRUE(hasOperatorType(getRoot(qBounded)->getLastOperator().get(),
+        planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT));
+    auto resultBounded = conn->query(qBounded);
+    ASSERT_TRUE(resultBounded->isSuccess());
+    ASSERT_TRUE(resultBounded->hasNext());
+    auto boundedTuple1 = resultBounded->getNext();
+    ASSERT_TRUE(boundedTuple1->getValue(0)->getValue<bool>()); // T (0, 2, 4)
+    ASSERT_EQ(boundedTuple1->getValue(1)->getValue<int64_t>(), 13);
+    ASSERT_TRUE(resultBounded->hasNext());
+    auto boundedTuple2 = resultBounded->getNext();
+    ASSERT_FALSE(boundedTuple2->getValue(0)->getValue<bool>()); // F (1, 3)
+    ASSERT_EQ(boundedTuple2->getValue(1)->getValue<int64_t>(), 6);
+    ASSERT_FALSE(resultBounded->hasNext());
+
+    // High-cardinality grouping (one group per node) takes the same path: the walk counts
+    // of length 0..2 per end node are 6, 4, 6, 4, 4 as computed above.
+    auto qById = "MATCH (a:grc_n)-[:grc_e*0..2]->(b:grc_n) RETURN b.id AS id, count(*) AS total "
+                 "ORDER BY id;";
+    ASSERT_TRUE(hasOperatorType(getRoot(qById)->getLastOperator().get(),
+        planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT));
+    auto resultById = conn->query(qById);
+    ASSERT_TRUE(resultById->isSuccess());
+    const std::vector<int64_t> expectedTotals = {6, 4, 6, 4, 4};
+    for (auto i = 0u; i < expectedTotals.size(); ++i) {
+        ASSERT_TRUE(resultById->hasNext()) << "row " << i;
+        auto tuple = resultById->getNext();
+        ASSERT_EQ(tuple->getValue(0)->getValue<int64_t>(), static_cast<int64_t>(i));
+        ASSERT_EQ(tuple->getValue(1)->getValue<int64_t>(), expectedTotals[i]);
+    }
+    ASSERT_FALSE(resultById->hasNext());
+
+    // The DP seeds the traversal from every visible source, so a predicate on the *source*
+    // node `a` must keep the original plan rather than be silently ignored. Only the
+    // active sources {0, 2, 4} contribute, giving 8 active and 4 inactive end-node rows.
+    for (auto sourcePredicate : {
+             "MATCH (a:grc_n)-[:grc_e*1..2]->(b:grc_n) WHERE a.active = true RETURN b.active, "
+             "count(*);",
+             "MATCH (a:grc_n {active: true})-[:grc_e*1..2]->(b:grc_n) RETURN b.active, count(*);",
+             // A primary-key-pinned source becomes a PRIMARY_KEY_SCAN, not a full scan.
+             "MATCH (a:grc_n {id: 0})-[:grc_e*1..2]->(b:grc_n) RETURN b.active, count(*);",
          }) {
-        ASSERT_FALSE(hasOperatorType(getRoot(negative)->getLastOperator().get(),
+        ASSERT_FALSE(hasOperatorType(getRoot(sourcePredicate)->getLastOperator().get(),
             planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT))
-            << negative;
+            << sourcePredicate;
+    }
+    auto resultSourcePred = conn->query(
+        "MATCH (a:grc_n)-[:grc_e*1..2]->(b:grc_n) WHERE a.active = true RETURN b.active AS "
+        "active, count(*) AS total ORDER BY total DESC;");
+    ASSERT_TRUE(resultSourcePred->isSuccess());
+    ASSERT_TRUE(resultSourcePred->hasNext());
+    auto sourceTuple1 = resultSourcePred->getNext();
+    ASSERT_TRUE(sourceTuple1->getValue(0)->getValue<bool>());
+    ASSERT_EQ(sourceTuple1->getValue(1)->getValue<int64_t>(), 8);
+    ASSERT_TRUE(resultSourcePred->hasNext());
+    auto sourceTuple2 = resultSourcePred->getNext();
+    ASSERT_FALSE(sourceTuple2->getValue(0)->getValue<bool>());
+    ASSERT_EQ(sourceTuple2->getValue(1)->getValue<int64_t>(), 4);
+    ASSERT_FALSE(resultSourcePred->hasNext());
+
+    // Anything else that re-shapes the rows between the recursion and the aggregate must
+    // also keep the original plan. (An inline path predicate is not expressible in this
+    // Cypher dialect, so hasNodePredicate() stays as defence in depth rather than a case
+    // reachable from SQL.)
+    for (auto reshaped : {
+             "MATCH (a:grc_n)-[:grc_e*0..2]->(b:grc_n) WITH a, b LIMIT 3 RETURN b.active, "
+             "count(*);",
+             // Non-walk semantics (shortest / trail / acyclic) do not enumerate every walk.
+             "MATCH (a:grc_n)-[:grc_e*SHORTEST 1..2]->(b:grc_n) RETURN b.active, count(*);",
+             "MATCH (a:grc_n)-[:grc_e*TRAIL 1..2]->(b:grc_n) RETURN b.active, count(*);",
+             "MATCH (a:grc_n)-[:grc_e*ACYCLIC 1..2]->(b:grc_n) RETURN b.active, count(*);",
+             "MATCH (a:grc_n)-[:grc_e*0..2]->(b:grc_n) RETURN b.active, count(DISTINCT b);",
+             "MATCH (a:grc_n)-[:grc_e*0..2]->(b:grc_n) WHERE b.score > 15.0 RETURN b.active, "
+             "count(b);",
+             "MATCH (a:grc_n)-[:grc_e*0..2]->(b:grc_n) RETURN a.active, count(b);",
+         }) {
+        ASSERT_FALSE(hasOperatorType(getRoot(reshaped)->getLastOperator().get(),
+            planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT))
+            << reshaped;
+    }
+}
+
+// Group keys of STRING type must be distinguished by their exact bytes: the group's
+// serialized key is the concatenation of its key columns, so a NUL-terminated encoding
+// would merge ("a\0", "b") with ("a", "\0b"). A NULL key must stay its own group too.
+TEST_F(OptimizerTest, GroupedReachableCountStringAndNullKeys) {
+#if defined(_WIN32)
+    GTEST_SKIP() << "Windows may pick a different recursive-extend plan shape for grouped "
+                    "reachable-count queries, so this plan-shape test is nondeterministic there.";
+#endif
+    // Nodes 0..3 with in-degrees 0, 1, 2, 3, so walks of length 0..1 ending at each node
+    // number 1, 2, 3 and 4 -- all distinct, which lets each group be identified by its
+    // count regardless of how NULLs and NUL bytes order.
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE grc3_n(id INT64, k1 STRING, k2 STRING, "
+                            "score DOUBLE, PRIMARY KEY(id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE grc3_e(FROM grc3_n TO grc3_n);")->isSuccess());
+    // Node 0 and node 1 collide under a NUL-terminated encoding of (k1, k2):
+    // ("a\0", "b") and ("a", "\0b") both serialize to the bytes 'a' 00 00 'b' 00.
+    // Node 3 leaves k1 unset so it is NULL.
+    const std::vector<std::string> props = {"{id: 0, k1: 'a\\u0000', k2: 'b', score: 1.0}",
+        "{id: 1, k1: 'a', k2: '\\u0000b', score: 2.0}", "{id: 2, k1: 'x', k2: 'y', score: 4.0}",
+        "{id: 3, k2: 'z', score: 8.0}"};
+    for (auto& p : props) {
+        auto q = std::format("CREATE (:grc3_n {});", p);
+        ASSERT_TRUE(conn->query(q)->isSuccess()) << q;
+    }
+    for (auto i = 0u; i < 4u; ++i) {
+        for (auto j = 0u; j < 4u; ++j) {
+            if (j <= i) {
+                continue;
+            }
+            auto q = std::format("MATCH (a:grc3_n {{id: {}}}), (b:grc3_n {{id: {}}}) "
+                                 "CREATE (a)-[:grc3_e]->(b);",
+                i, j);
+            ASSERT_TRUE(conn->query(q)->isSuccess()) << q;
+        }
+    }
+    auto q = "MATCH (a:grc3_n)-[:grc3_e*0..1]->(b:grc3_n) RETURN b.k1 AS k1, b.k2 AS k2, "
+             "count(*) AS total, avg(b.score) AS avg_score;";
+    ASSERT_TRUE(hasOperatorType(getRoot(q)->getLastOperator().get(),
+        planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT));
+
+    auto result = conn->query(q);
+    ASSERT_TRUE(result->isSuccess());
+    // Four groups: the NUL-bearing pair must not collapse into one, and the NULL key must
+    // not collapse into any other.
+    std::map<int64_t, std::pair<bool, double>> byCount;
+    auto numRows = 0u;
+    while (result->hasNext()) {
+        auto tuple = result->getNext();
+        auto total = tuple->getValue(2)->getValue<int64_t>();
+        ASSERT_TRUE(total >= 1 && total <= 4) << total;
+        byCount[total] = {tuple->getValue(0)->isNull(),
+            tuple->getValue(3)->isNull() ? -1.0 : tuple->getValue(3)->getValue<double>()};
+        numRows++;
+    }
+    ASSERT_EQ(numRows, 4u);
+    ASSERT_EQ(byCount.size(), 4u); // counts must be 1, 2, 3 and 4 -- one per group
+    ASSERT_EQ(byCount.at(1).second, 1.0);
+    ASSERT_EQ(byCount.at(2).second, 2.0);
+    ASSERT_EQ(byCount.at(3).second, 4.0);
+    ASSERT_EQ(byCount.at(4).second, 8.0);
+    ASSERT_FALSE(byCount.at(1).first); // k1 = "a\0"
+    ASSERT_FALSE(byCount.at(2).first); // k1 = "a"
+    ASSERT_TRUE(byCount.at(4).first);  // k1 = NULL
+
+    // The NUL bytes really do survive the round trip, so the counts above are meaningful.
+    auto probe = conn->query("MATCH (n:grc3_n) WHERE n.id = 0 RETURN n.k1;");
+    ASSERT_TRUE(probe->isSuccess());
+    ASSERT_TRUE(probe->hasNext());
+    ASSERT_EQ(probe->getNext()->getValue(0)->getValue<std::string>(), std::string("a\x00", 2));
+}
+
+// Differential check: the rewritten plan must return exactly the rows the unoptimized plan
+// does. Besides guarding the rewrite, this is the only coverage in this file that runs the
+// variable-length path through the real RECURSIVE_EXTEND operator, so it also pins the
+// length-0 walk semantics that PathsOutputWriter has to get right -- in particular the
+// single length-0 row a self-reaching source contributes under a zero lower bound.
+TEST_F(OptimizerTest, GroupedReachableCountMatchesUnoptimizedPlan) {
+#if defined(_WIN32)
+    GTEST_SKIP() << "Windows may pick a different recursive-extend plan shape for grouped "
+                    "reachable-count queries, so this plan-shape test is nondeterministic there.";
+#endif
+    // Node 0 has a self-loop, so it reaches itself; 0 -> 1 -> 2 -> 3 -> 0 is a cycle. Node 4
+    // and 5 are unreachable from the rest, and node 4 has a NULL score.
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE grc4_n(id INT64, active BOOLEAN, score DOUBLE, "
+                            "PRIMARY KEY(id));")
+                    ->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE REL TABLE grc4_e(FROM grc4_n TO grc4_n);")->isSuccess());
+    const std::vector<std::string> props = {"{id: 0, active: true, score: 1.0}",
+        "{id: 1, active: false, score: 2.0}", "{id: 2, active: true, score: NULL}",
+        "{id: 3, active: false, score: 4.0}", "{id: 4, active: true, score: 8.0}",
+        "{id: 5, active: false, score: 16.0}"};
+    for (auto& p : props) {
+        auto q = std::format("CREATE (:grc4_n {});", p);
+        ASSERT_TRUE(conn->query(q)->isSuccess()) << q;
+    }
+    const std::vector<std::pair<int, int>> edges = {{0, 0}, {0, 1}, {1, 2}, {2, 3}, {3, 0}, {3, 4}};
+    for (auto& [src, dst] : edges) {
+        auto q = std::format("MATCH (a:grc4_n {{id: {}}}), (b:grc4_n {{id: {}}}) "
+                             "CREATE (a)-[:grc4_e]->(b);",
+            src, dst);
+        ASSERT_TRUE(conn->query(q)->isSuccess()) << q;
+    }
+
+    // Collects every row as a sorted vector of stringified values so the two plans can be
+    // compared without depending on the engine's ordering of NULLs and booleans.
+    auto collect = [this](const std::string& query) {
+        auto result = conn->query(query);
+        EXPECT_TRUE(result->isSuccess()) << query;
+        std::vector<std::vector<std::string>> rows;
+        while (result->hasNext()) {
+            auto tuple = result->getNext();
+            std::vector<std::string> row;
+            for (auto i = 0u; i < tuple->len(); ++i) {
+                row.push_back(
+                    tuple->getValue(i)->isNull() ? "<null>" : tuple->getValue(i)->toString());
+            }
+            rows.push_back(std::move(row));
+        }
+        std::sort(rows.begin(), rows.end());
+        return rows;
+    };
+
+    for (auto range : {"0..1", "0..2", "0..3", "1..2", "1..3", "2..2"}) {
+        for (auto& projection : std::vector<std::string>{"b.active, count(*), avg(b.score)",
+                 "b.id, count(*), avg(b.score)", "b.active, count(b), sum(b.score)"}) {
+            auto q = std::format("MATCH (a:grc4_n)-[:grc4_e*{}]->(b:grc4_n) RETURN {};", range,
+                projection);
+            // Only assert that the fast path is available for the shapes it targets.
+            if (projection == "b.active, count(*), avg(b.score)") {
+                ASSERT_TRUE(hasOperatorType(getRoot(q)->getLastOperator().get(),
+                    planner::LogicalOperatorType::GROUPED_REACHABLE_COUNT))
+                    << q;
+            }
+            ASSERT_TRUE(conn->query("CALL enable_plan_optimizer=false")->isSuccess());
+            auto unoptimized = collect(q);
+            ASSERT_TRUE(conn->query("CALL enable_plan_optimizer=true")->isSuccess());
+            auto optimized = collect(q);
+            ASSERT_EQ(optimized, unoptimized) << q;
+        }
     }
 }
 
