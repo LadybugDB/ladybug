@@ -85,7 +85,7 @@ public:
 
 private:
     ColumnStats(const ColumnStats& other)
-        : hll{other.hll}, hashes{nullptr}, minValue{other.minValue}, maxValue{other.maxValue} {}
+        : minValue{other.minValue}, maxValue{other.maxValue}, hll{other.hll}, hashes{nullptr} {}
 
 private:
     std::optional<double> minValue;
