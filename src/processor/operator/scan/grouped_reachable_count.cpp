@@ -1,7 +1,9 @@
 #include "processor/operator/scan/grouped_reachable_count.h"
 
+#include <limits>
 #include <unordered_map>
 
+#include "common/exception/runtime.h"
 #include "common/system_config.h"
 #include "common/vector/value_vector.h"
 #include "main/client_context.h"
@@ -65,8 +67,11 @@ void GroupedReachableCount::appendToKey(std::string& out, const KeyValue& key,
         out.append(reinterpret_cast<const char*>(&key.dblVal), sizeof(key.dblVal));
     } break;
     case PhysicalTypeID::STRING: {
+        // Length-prefixed: a NUL-terminated encoding would let ("a\0", "b") and
+        // ("a", "\0b") serialize identically and merge two distinct groups.
+        auto len = key.strVal.size();
+        out.append(reinterpret_cast<const char*>(&len), sizeof(len));
         out.append(key.strVal);
-        out.push_back('\x00');
     } break;
     case PhysicalTypeID::INTERNAL_ID: {
         out.append(reinterpret_cast<const char*>(&key.nodeID.tableID), sizeof(table_id_t));
@@ -74,74 +79,64 @@ void GroupedReachableCount::appendToKey(std::string& out, const KeyValue& key,
     } break;
     default:
         // Unreachable: the optimizer only admits fixed-size numeric, string and internal-ID
-        // keys.
-        DASSERT(false);
+        // keys. Throw rather than append nothing, which would silently alias this key onto
+        // whatever follows it.
+        throw RuntimeException(
+            "Unsupported group key type in grouped reachable-count aggregation.");
     }
 }
 
-void GroupedReachableCount::readNodeProperties(Transaction* transaction, offset_t offset,
-    std::vector<KeyValue>& keys, bool& scoreIsNull, double& score) {
-    struct LookupState {
-        std::unique_ptr<ValueVector> idVector;
-        std::vector<std::unique_ptr<ValueVector>> outVectors;
-        // For each read column (in output-vector order): key index, or keyInfos.size() for
-        // the AVG input.
-        std::vector<size_t> keyIdxByColumn;
-        std::unique_ptr<NodeTableScanState> scanState;
-    };
-    // Rebinding to the offset's node group per offset is a pointer chase, so rebuilding the
-    // small lookup state per call is cheap enough and always correct.
-    auto* mm = storage::MemoryManager::Get(*transaction->getClientContext());
-    auto chunkState = DataChunkState::getSingleValueDataChunkState();
-    LookupState state;
-    state.idVector = std::make_unique<ValueVector>(LogicalType::INTERNAL_ID(), mm, chunkState);
-    state.idVector->state = chunkState;
-    std::vector<ValueVector*> outPtrs;
+void GroupedReachableCount::initLookupState(ExecutionContext* context, Transaction* transaction) {
+    auto* mm = storage::MemoryManager::Get(*context->clientContext);
+    lookupChunkState = DataChunkState::getSingleValueDataChunkState();
+    lookupIDVector =
+        std::make_unique<ValueVector>(LogicalType::INTERNAL_ID(), mm, lookupChunkState);
+    lookupIDVector->state = lookupChunkState;
     for (auto i = 0u; i < keyInfos.size(); ++i) {
         if (keyInfos[i].isInternalID) {
             continue;
         }
-        state.outVectors.push_back(
-            std::make_unique<ValueVector>(keyInfos[i].logicalType.copy(), mm, chunkState));
-        state.outVectors.back()->state = chunkState;
-        outPtrs.push_back(state.outVectors.back().get());
-        state.keyIdxByColumn.push_back(i);
-    }
-    std::unique_ptr<ValueVector> scoreVector;
-    if (hasAvg) {
-        scoreVector = std::make_unique<ValueVector>(scoreType.copy(), mm, chunkState);
-        scoreVector->state = chunkState;
-        outPtrs.push_back(scoreVector.get());
-        state.keyIdxByColumn.push_back(keyInfos.size());
-    }
-    state.scanState =
-        std::make_unique<NodeTableScanState>(state.idVector.get(), outPtrs, chunkState);
-    std::vector<column_id_t> columnIDs;
-    for (auto i = 0u; i < keyInfos.size(); ++i) {
-        if (!keyInfos[i].isInternalID) {
-            columnIDs.push_back(keyInfos[i].columnID);
-        }
+        lookupKeyVectors.push_back(
+            std::make_unique<ValueVector>(keyInfos[i].logicalType.copy(), mm, lookupChunkState));
+        lookupKeyVectors.back()->state = lookupChunkState;
+        lookupOutVectors.push_back(lookupKeyVectors.back().get());
+        lookupColumnIDs.push_back(keyInfos[i].columnID);
+        lookupKeyIdxByColumn.push_back(i);
     }
     if (hasAvg) {
-        columnIDs.push_back(scoreColumnID);
+        lookupScoreVector = std::make_unique<ValueVector>(scoreType.copy(), mm, lookupChunkState);
+        lookupScoreVector->state = lookupChunkState;
+        lookupOutVectors.push_back(lookupScoreVector.get());
+        lookupColumnIDs.push_back(scoreColumnID);
+        lookupKeyIdxByColumn.push_back(keyInfos.size());
     }
-    state.scanState->setToTable(transaction, nodeTable, columnIDs, {});
-    nodeTable->initScanState(transaction, *state.scanState, dstTableID, offset);
-    state.idVector->setValue<nodeID_t>(0, nodeID_t{offset, dstTableID});
-    if (!nodeTable->lookup(transaction, *state.scanState)) {
+    lookupScanState = std::make_unique<NodeTableScanState>(lookupIDVector.get(), lookupOutVectors,
+        lookupChunkState);
+    lookupScanState->setToTable(transaction, nodeTable, lookupColumnIDs, {});
+}
+void GroupedReachableCount::readNodeProperties(Transaction* transaction, offset_t offset,
+    std::vector<KeyValue>& keys, bool& scoreIsNull, double& score) {
+    // Reset the reused vectors to the state a freshly allocated one would have, so a value
+    // left over from the previous node cannot be mistaken for this node's.
+    lookupChunkState->getSelVectorUnsafe().setToUnfiltered(1);
+    lookupIDVector->setNull(0, false);
+    for (auto* vec : lookupOutVectors) {
+        vec->resetAuxiliaryBuffer();
+        vec->setNull(0, true);
+    }
+    nodeTable->initScanState(transaction, *lookupScanState, dstTableID, offset);
+    lookupIDVector->setValue<nodeID_t>(0, nodeID_t{offset, dstTableID});
+    if (!nodeTable->lookup(transaction, *lookupScanState)) {
         // Deleted or otherwise invisible: contributes no rows.
         keys.clear();
         return;
     }
     keys.resize(keyInfos.size());
-    for (auto i = 0u; i < keyInfos.size(); ++i) {
-        keys[i].type = keyInfos[i].logicalType.copy();
-    }
     scoreIsNull = true;
     score = 0.0;
-    for (auto c = 0u; c < outPtrs.size(); ++c) {
-        auto* vec = outPtrs[c];
-        auto keyIdx = state.keyIdxByColumn[c];
+    for (auto c = 0u; c < lookupOutVectors.size(); ++c) {
+        auto* vec = lookupOutVectors[c];
+        auto keyIdx = lookupKeyIdxByColumn[c];
         if (keyIdx < keyInfos.size()) {
             auto& key = keys[keyIdx];
             if (keyInfos[keyIdx].isInternalID) {
@@ -189,7 +184,8 @@ void GroupedReachableCount::readNodeProperties(Transaction* transaction, offset_
                 key.strVal = vec->getValue<string_t>(0).getAsString();
                 break;
             default:
-                DASSERT(false);
+                throw RuntimeException(
+                    "Unsupported group key type in grouped reachable-count aggregation.");
             }
         } else {
             scoreIsNull = vec->isNull(0);
@@ -228,10 +224,21 @@ void GroupedReachableCount::readNodeProperties(Transaction* transaction, offset_
                 score = vec->getValue<double>(0);
                 break;
             default:
-                DASSERT(false);
+                throw RuntimeException(
+                    "Unsupported AVG input type in grouped reachable-count aggregation.");
             }
         }
     }
+}
+
+void GroupedReachableCount::addWalk(uint64_t& target, uint64_t addend) {
+    if (addend > std::numeric_limits<uint64_t>::max() - target) {
+        throw RuntimeException(
+            "The number of walks matched by the variable-length pattern exceeds the 64-bit "
+            "counter range. Narrow the pattern's upper bound (e.g. *1..3 instead of *1..30) or "
+            "restrict the set of source nodes.");
+    }
+    target += addend;
 }
 
 void GroupedReachableCount::compute(ExecutionContext* context) {
@@ -239,6 +246,7 @@ void GroupedReachableCount::compute(ExecutionContext* context) {
     auto* clientContext = context->clientContext;
     auto* transaction = Transaction::Get(*clientContext);
     auto maxOffset = graph->getMaxOffset(transaction, srcTableID);
+    initLookupState(context, transaction);
 
     // Per-destination walk counts: L_0[v] = 1 per visible source, L_{d+1} propagated over
     // forward edges. The walk count of `v` is sum_{d in [lo, up]} L_d[v].
@@ -251,7 +259,9 @@ void GroupedReachableCount::compute(ExecutionContext* context) {
             }
         }
     }
-    for (uint16_t depth = 1; depth <= upperBound; ++depth) {
+    // uint32_t, not uint16_t: varLengthMaxDepth is user-settable without an upper clamp, so
+    // upperBound can be UINT16_MAX and a uint16_t counter would wrap and loop forever.
+    for (uint32_t depth = 1; depth <= upperBound; ++depth) {
         std::fill(next.begin(), next.end(), 0);
         for (offset_t offset = 0; offset < maxOffset; ++offset) {
             auto count = cur[offset];
@@ -266,14 +276,14 @@ void GroupedReachableCount::compute(ExecutionContext* context) {
                         if (nbr.tableID != dstTableID) {
                             return;
                         }
-                        next[nbr.offset] += count;
+                        addWalk(next[nbr.offset], count);
                     });
                 }
             }
         }
         if (depth >= lowerBound) {
             for (offset_t offset = 0; offset < maxOffset; ++offset) {
-                total[offset] += next[offset];
+                addWalk(total[offset], next[offset]);
             }
         }
         cur.swap(next);
@@ -300,7 +310,7 @@ void GroupedReachableCount::compute(ExecutionContext* context) {
         }
         std::string serialized;
         for (auto i = 0u; i < keys.size(); ++i) {
-            appendToKey(serialized, keys[i], keys[i].type.getPhysicalType());
+            appendToKey(serialized, keys[i], keyInfos[i].logicalType.getPhysicalType());
         }
         auto it = groupIndex.find(serialized);
         size_t idx;
@@ -315,10 +325,10 @@ void GroupedReachableCount::compute(ExecutionContext* context) {
             idx = it->second;
         }
         auto& group = groups[idx];
-        group.count += walkCount;
+        addWalk(group.count, walkCount);
         if (hasAvg && !scoreIsNull) {
             group.avgSum += static_cast<double>(walkCount) * score;
-            group.avgCount += walkCount;
+            addWalk(group.avgCount, walkCount);
         }
     }
 }
@@ -332,7 +342,7 @@ void GroupedReachableCount::emitRow(uint32_t pos, const GroupAccumulator& group)
             continue;
         }
         vec->setNull(pos, false);
-        switch (key.type.getPhysicalType()) {
+        switch (keyInfos[i].logicalType.getPhysicalType()) {
         case PhysicalTypeID::BOOL:
             vec->setValue<bool>(pos, key.intVal != 0);
             break;
@@ -373,7 +383,8 @@ void GroupedReachableCount::emitRow(uint32_t pos, const GroupAccumulator& group)
             vec->setValue<nodeID_t>(pos, key.nodeID);
             break;
         default:
-            DASSERT(false);
+            throw RuntimeException(
+                "Unsupported group key type in grouped reachable-count aggregation.");
         }
     }
     if (hasCount) {
@@ -399,6 +410,8 @@ bool GroupedReachableCount::getNextTuplesInternal(ExecutionContext* context) {
         return false;
     }
     auto numRows = std::min<uint64_t>(DEFAULT_VECTOR_CAPACITY, groups.size() - emitIdx);
+    // All output vectors of the result chunk share one DataChunkState, so setting the
+    // selection vector through any of them marks every column.
     keyVectors[0]->state->getSelVectorUnsafe().setToUnfiltered(numRows);
     for (auto i = 0u; i < numRows; ++i) {
         emitRow(i, groups[emitIdx + i]);

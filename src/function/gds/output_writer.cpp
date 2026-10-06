@@ -78,7 +78,10 @@ void PathsOutputWriter::write(FactorizedTable& fTable, table_id_t tableID, Limit
     if (info.lowerBound == 0 && sourceNodeID_.tableID == tableID) {
         if (findFirstParent(sourceNodeID_.offset) == nullptr) {
             write(fTable, sourceNodeID_, counter);
-        } else {
+        } else if (inOutputNodeMask(sourceNodeID_.offset)) {
+            // Same preamble write(fTable, nodeID, counter) does, so writeCoveredSourceWalk
+            // only has to emit the row and cannot drift from the nodeID overload.
+            dstNodeIDVector->setValue<nodeID_t>(0, sourceNodeID_);
             writeCoveredSourceWalk(fTable, counter);
         }
     }

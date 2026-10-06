@@ -1594,6 +1594,131 @@ static bool isSupportedAvgChild(const Expression& child, const NodeExpression& n
     }
 }
 
+// Operators that only forward their single child's rows, so they cannot change the
+// multiset of rows feeding the join above them.
+static bool isWalkPreservingPassThrough(LogicalOperatorType type) {
+    return type == LogicalOperatorType::PROJECTION ||
+           type == LogicalOperatorType::PATH_PROPERTY_PROBE;
+}
+
+// Strips walk-preserving pass-through operators, returning the first operator below them.
+static LogicalOperator* skipWalkPreservingOps(LogicalOperator* op) {
+    while (op != nullptr && isWalkPreservingPassThrough(op->getOperatorType())) {
+        op = op->getChild(0).get();
+    }
+    return op;
+}
+
+// True when `op` is (below pass-through operators) a plain full scan of a single node table
+// that contributes exactly one row per visible node. The grouped walk-count DP assumes
+// precisely this of both sides of the aggregate's join, so anything that narrows the scan --
+// property predicates, a primary-key or secondary-index scan, or any extra operator such as
+// a filter, limit or semi-masker in between -- is rejected.
+static const LogicalScanNodeTable* asUnfilteredFullScan(LogicalOperator* op) {
+    op = skipWalkPreservingOps(op);
+    if (op == nullptr || op->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE) {
+        return nullptr;
+    }
+    auto& scan = op->constCast<LogicalScanNodeTable>();
+    if (scan.getScanType() != LogicalScanNodeTableType::SCAN || scan.getExtraInfo() != nullptr ||
+        scan.getTableIDs().size() != 1) {
+        return nullptr;
+    }
+    for (auto& predicateSet : scan.getPropertyPredicates()) {
+        if (!predicateSet.isEmpty()) {
+            return nullptr;
+        }
+    }
+    return &scan;
+}
+
+// True when every join condition equates the internal ID of `varName` on both sides. Such a
+// join is multiplicity preserving: the scan side holds exactly one row per visible node, so
+// each walk row matches exactly one of them and the walk multiset passes through unchanged.
+// Any other condition can change row multiplicities in ways the walk counts cannot capture.
+static bool joinsOnlyOnInternalIDOf(const LogicalHashJoin& join, const std::string& varName) {
+    bool hasJoinCondition = false;
+    for (auto& condition : join.getJoinConditions()) {
+        for (auto& key : {condition.first, condition.second}) {
+            if (key->expressionType != ExpressionType::PROPERTY ||
+                !key->constCast<PropertyExpression>().isInternalID() ||
+                key->constCast<PropertyExpression>().getVariableName() != varName) {
+                return false;
+            }
+        }
+        hasJoinCondition = true;
+    }
+    return hasJoinCondition;
+}
+
+// The recursive side of the aggregate's join must be sourced from an unfiltered full scan of
+// the bound node's table. That shows up in one of two shapes:
+//
+//   [PROJECTION|PATH_PROPERTY_PROBE]* -> RECURSIVE_EXTEND
+//     RemoveUnnecessaryJoinOptimizer already dropped the HASH_JOIN that ties the recursion's
+//     output back to its input node, and it only drops that join when the source side is a
+//     bare SCAN_NODE_TABLE projecting no properties -- exactly one row per visible node. A
+//     predicate, filter or any other operator on the source keeps the join in place, so an
+//     absent join is itself proof that the source is unfiltered.
+//
+//   HASH_JOIN[INNER on boundNode._ID]
+//     [PROJECTION|PATH_PROPERTY_PROBE]* -> RECURSIVE_EXTEND
+//     [PROJECTION]*                      -> SCAN_NODE_TABLE(boundTable, unfiltered)
+struct RecursiveSideMatch {
+    LogicalRecursiveExtend* recursiveExtend = nullptr;
+    // Null when the source join was already pruned away.
+    const LogicalHashJoin* sourceJoin = nullptr;
+    const LogicalScanNodeTable* sourceScan = nullptr;
+};
+
+// Matches exactly one of those shapes, or returns an empty match. Matching strictly rather
+// than searching the subtree for any RECURSIVE_EXTEND is the point: the rewrite drops the
+// whole subtree and reconstructs its row multiset from per-end-node walk counts, so any
+// operator that filters, limits or re-shapes rows in between (a source-node predicate scan, a
+// LIMIT, a nested aggregate, a MARK/LEFT join, a semi masker) has to keep the original plan.
+static RecursiveSideMatch matchFullTableRecursiveSide(LogicalOperator* op) {
+    RecursiveSideMatch result;
+    op = skipWalkPreservingOps(op);
+    if (op == nullptr) {
+        return result;
+    }
+    if (op->getOperatorType() == LogicalOperatorType::RECURSIVE_EXTEND) {
+        result.recursiveExtend = op->ptrCast<LogicalRecursiveExtend>();
+        return result;
+    }
+    if (op->getOperatorType() != LogicalOperatorType::HASH_JOIN) {
+        return result;
+    }
+    auto& sourceJoin = op->constCast<LogicalHashJoin>();
+    if (sourceJoin.getJoinType() != JoinType::INNER) {
+        return result;
+    }
+    for (auto i = 0u; i < sourceJoin.getNumChildren(); ++i) {
+        auto* child = skipWalkPreservingOps(sourceJoin.getChild(i).get());
+        if (child == nullptr) {
+            return RecursiveSideMatch{};
+        }
+        if (child->getOperatorType() == LogicalOperatorType::RECURSIVE_EXTEND) {
+            if (result.recursiveExtend != nullptr) {
+                return RecursiveSideMatch{}; // Two recursions: not the modelled shape.
+            }
+            result.recursiveExtend = child->ptrCast<LogicalRecursiveExtend>();
+        } else if (auto* scan = asUnfilteredFullScan(child)) {
+            if (result.sourceScan != nullptr) {
+                return RecursiveSideMatch{};
+            }
+            result.sourceScan = scan;
+        } else {
+            return RecursiveSideMatch{};
+        }
+    }
+    if (result.recursiveExtend == nullptr || result.sourceScan == nullptr) {
+        return RecursiveSideMatch{};
+    }
+    result.sourceJoin = &sourceJoin;
+    return result;
+}
+
 std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteGroupedReachableCount(
     std::shared_ptr<LogicalOperator> op) {
     // Target: AGGREGATE grouped by properties of the end node `b` with COUNT(*) / COUNT(b)
@@ -1607,6 +1732,13 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteGroupedReacha
     // hash join + aggregate. The rewrite instead counts walks per distinct end node with a
     // level DP over CSR (O(up * E) time, O(V) memory) and folds the counts into the GROUP
     // BY accumulators, reading each end node's properties once.
+    //
+    // Because the walk counts are derived from "every visible source seeds the traversal,
+    // every end node is counted once per walk", the whole subtree below the aggregate is
+    // only replaceable when it is exactly that shape. Both scans feeding the aggregate's
+    // join must be unfiltered full scans of their table, and both joins must be INNER
+    // joins on the respective node's internal ID. Anything narrower -- a predicate on the
+    // source node `a`, a filter, a limit, a nested join -- keeps the original plan.
     if (op->getOperatorType() != LogicalOperatorType::AGGREGATE) {
         return op;
     }
@@ -1630,23 +1762,28 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteGroupedReacha
     if (join.getJoinType() != JoinType::INNER) {
         return op;
     }
-    LogicalRecursiveExtend* recursiveExtend = nullptr;
-    std::function<void(LogicalOperator*)> findRecursive = [&](LogicalOperator* n) {
-        if (recursiveExtend != nullptr) {
-            return;
-        }
-        if (n->getOperatorType() == LogicalOperatorType::RECURSIVE_EXTEND) {
-            recursiveExtend = n->ptrCast<LogicalRecursiveExtend>();
-            return;
-        }
-        for (auto i = 0u; i < n->getNumChildren(); ++i) {
-            findRecursive(n->getChild(i).get());
-        }
-    };
-    findRecursive(current);
-    if (recursiveExtend == nullptr) {
+    // Exactly one side of the join must be the recursive-extend subtree and the other an
+    // unfiltered full scan of the end-node table. Both checks are structural: anything less
+    // specific risks reproducing the wrong row multiset.
+    auto* leftChild = current->getChild(0).get();
+    auto* rightChild = current->getChild(1).get();
+    auto leftMatch = matchFullTableRecursiveSide(leftChild);
+    auto rightMatch = matchFullTableRecursiveSide(rightChild);
+    RecursiveSideMatch match;
+    const LogicalScanNodeTable* buildScan = nullptr;
+    if (leftMatch.recursiveExtend != nullptr && rightMatch.recursiveExtend == nullptr) {
+        match = leftMatch;
+        buildScan = asUnfilteredFullScan(rightChild);
+    } else if (rightMatch.recursiveExtend != nullptr && leftMatch.recursiveExtend == nullptr) {
+        match = rightMatch;
+        buildScan = asUnfilteredFullScan(leftChild);
+    } else {
         return op;
     }
+    if (buildScan == nullptr) {
+        return op;
+    }
+    auto* recursiveExtend = match.recursiveExtend;
     auto& bindData = recursiveExtend->getBindData();
     // v1 handles forward walks only; rejects bounded-source masks (the DP counts from the
     // full source table), node predicates, limits and non-walk semantics.
@@ -1661,6 +1798,16 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteGroupedReacha
     if (boundNode->isMultiLabeled() || nbrNode->isMultiLabeled() ||
         boundNode->getNumEntries() != 1 || nbrNode->getNumEntries() != 1 ||
         boundNode->getTableIDs()[0] != nbrNode->getTableIDs()[0]) {
+        return op;
+    }
+    // The DP seeds the traversal from every visible node of the source table and folds each
+    // end node's walk count into one output row. So the source must contribute exactly one
+    // row per visible node: either its join was pruned (see matchFullTableRecursiveSide), or
+    // it survives as an INNER join on the bound node's internal ID with an unfiltered scan of
+    // the bound table on the other side.
+    if (match.sourceScan != nullptr &&
+        (match.sourceScan->getTableIDs()[0] != boundNode->getTableIDs()[0] ||
+            !joinsOnlyOnInternalIDOf(*match.sourceJoin, boundNode->getUniqueName()))) {
         return op;
     }
     for (auto& key : keys) {
@@ -1709,64 +1856,10 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteGroupedReacha
     if (countExpr == nullptr && avgExpr == nullptr) {
         return op;
     }
-    // The join side without the recursion must be an unfiltered scan of the end-node table
-    // (projections/semi-maskers allowed); the INNER join on b._ID then preserves one row
-    // per walk, which is exactly what the per-node walk counts reproduce.
-    auto subtreeHasRecursive = [](LogicalOperator* n) {
-        std::function<bool(LogicalOperator*)> containsRec = [&](LogicalOperator* m) -> bool {
-            if (m->getOperatorType() == LogicalOperatorType::RECURSIVE_EXTEND) {
-                return true;
-            }
-            for (auto i = 0u; i < m->getNumChildren(); ++i) {
-                if (containsRec(m->getChild(i).get())) {
-                    return true;
-                }
-            }
-            return false;
-        };
-        return containsRec(n);
-    };
-    auto* leftChild = current->getChild(0).get();
-    auto* rightChild = current->getChild(1).get();
-    bool leftHasRecursive = subtreeHasRecursive(leftChild);
-    bool rightHasRecursive = subtreeHasRecursive(rightChild);
-    if (leftHasRecursive == rightHasRecursive) {
-        return op;
-    }
-    auto* buildSide = leftHasRecursive ? rightChild : leftChild;
-    LogicalOperator* build = buildSide;
-    while (build->getOperatorType() == LogicalOperatorType::PROJECTION ||
-           build->getOperatorType() == LogicalOperatorType::SEMI_MASKER) {
-        build = build->getChild(0).get();
-    }
-    if (build->getOperatorType() != LogicalOperatorType::SCAN_NODE_TABLE) {
-        return op;
-    }
-    auto& scan = build->constCast<LogicalScanNodeTable>();
-    if (scan.getScanType() == LogicalScanNodeTableType::PRIMARY_KEY_SCAN ||
-        scan.getTableIDs().size() != 1 || scan.getTableIDs()[0] != nbrNode->getTableIDs()[0]) {
-        return op;
-    }
-    for (auto& predicateSet : scan.getPropertyPredicates()) {
-        if (!predicateSet.isEmpty()) {
-            return op;
-        }
-    }
-    // Every join condition must equate the end node's internal ID on both sides; anything
-    // else can change row multiplicities in ways the walk counts do not capture.
-    bool hasJoinCondition = false;
-    for (auto& condition : join.getJoinConditions()) {
-        hasJoinCondition = true;
-        for (auto& key : {condition.first, condition.second}) {
-            if (key->expressionType != ExpressionType::PROPERTY ||
-                !key->constCast<PropertyExpression>().isInternalID() ||
-                key->constCast<PropertyExpression>().getVariableName() !=
-                    nbrNode->getUniqueName()) {
-                return op;
-            }
-        }
-    }
-    if (!hasJoinCondition) {
+    // The aggregate's join must tie each walk to the single end-node scan row it matched,
+    // which the per-node walk counts reproduce exactly.
+    if (buildScan->getTableIDs()[0] != nbrNode->getTableIDs()[0] ||
+        !joinsOnlyOnInternalIDOf(join, nbrNode->getUniqueName())) {
         return op;
     }
     auto relEntries = bindData.graphEntry.getRelEntries();
