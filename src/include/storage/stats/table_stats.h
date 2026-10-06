@@ -42,6 +42,18 @@ public:
         return columnStats[columnID].getNumDistinctValues();
     }
 
+    // Observed [min, max] of a column, for range-selectivity estimation. Empty when the
+    // column saw no non-null values or its type is not min/max-tracked.
+    std::optional<std::pair<double, double>> getColumnMinMax(common::column_id_t columnID) const {
+        DASSERT(columnID < columnStats.size());
+        const auto& min = columnStats[columnID].getMinValue();
+        const auto& max = columnStats[columnID].getMaxValue();
+        if (!min.has_value() || !max.has_value()) {
+            return {};
+        }
+        return std::make_pair(*min, *max);
+    }
+
     void update(const std::vector<common::ValueVector*>& vectors,
         size_t numColumns = std::numeric_limits<size_t>::max());
     void update(const std::vector<common::column_id_t>& columnIDs,
