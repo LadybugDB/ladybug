@@ -131,8 +131,10 @@ private:
     void emitRow(uint32_t pos, const GroupAccumulator& group);
     // Walks grow like branching^depth, so a wide upper bound on a dense graph can overflow
     // the accumulator. Report it instead of silently returning a wrapped COUNT: the
-    // unoptimized plan would have been slow, not wrong.
-    static void addWalk(uint64_t& target, uint64_t addend);
+    // unoptimized plan would have been slow, not wrong. The COUNT itself is emitted as a
+    // signed 64-bit integer, so group counts stop at INT64_MAX; the DP-internal
+    // accumulators and the AVG denominator only need the uint64 range.
+    static void addWalk(uint64_t& target, uint64_t addend, uint64_t limit);
 
 private:
     graph::NativeGraphEntry graphEntry;

@@ -37,6 +37,12 @@ std::shared_ptr<LogicalOperator> RemoveUnnecessaryJoinOptimizer::visitHashJoinRe
         break;
     }
     // TODO(Xiyang): Double check on these changes here.
+    // NOTE: CountRelTableOptimizer::tryRewriteGroupedReachableCount relies on this pruning
+    // staying limited to bare scans. When the source join of a variable-length path is gone,
+    // that rewrite treats it as proof the source is an unfiltered full-table scan (see
+    // matchFullTableRecursiveSide). Pruning through a filter, a predicate-carrying scan or
+    // any other row-narrowing operator would silently produce wrong aggregate results --
+    // keep this condition tight.
     if (op->getChild(1)->getOperatorType() == LogicalOperatorType::SCAN_NODE_TABLE) {
         const auto scanNode = dynamic_cast_checked<LogicalScanNodeTable*>(op->getChild(1).get());
         if (scanNode->getProperties().empty()) {

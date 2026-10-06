@@ -1133,12 +1133,16 @@ TEST_F(OptimizerTest, GroupedReachableCount) {
     ASSERT_FALSE(resultSourcePred->hasNext());
 
     // Anything else that re-shapes the rows between the recursion and the aggregate must
-    // also keep the original plan. (An inline path predicate is not expressible in this
-    // Cypher dialect, so hasNodePredicate() stays as defence in depth rather than a case
-    // reachable from SQL.)
+    // also keep the original plan -- including a predicate on the intermediate path nodes,
+    // which a recursive comprehension can express and which lands in the recursion's own
+    // node predicate (see hasNodePredicate()).
     for (auto reshaped : {
              "MATCH (a:grc_n)-[:grc_e*0..2]->(b:grc_n) WITH a, b LIMIT 3 RETURN b.active, "
              "count(*);",
+             // A path-node predicate restricts the reachable set, so the walk counts no
+             // longer reproduce the join's rows.
+             "MATCH (a:grc_n)-[:grc_e*1..2 (r2, n | WHERE n.active)]->(b:grc_n) RETURN "
+             "b.active, count(*);",
              // Non-walk semantics (shortest / trail / acyclic) do not enumerate every walk.
              "MATCH (a:grc_n)-[:grc_e*SHORTEST 1..2]->(b:grc_n) RETURN b.active, count(*);",
              "MATCH (a:grc_n)-[:grc_e*TRAIL 1..2]->(b:grc_n) RETURN b.active, count(*);",
