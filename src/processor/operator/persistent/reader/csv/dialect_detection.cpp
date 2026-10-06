@@ -34,8 +34,7 @@ std::vector<DialectOption> generateDialectOptions(const common::CSVOption& optio
     for (auto& delim : delimiters) {
         for (auto& quote : quoteChars) {
             for (auto& escape : escapeChars) {
-                DialectOption option{delim, quote, escape};
-                options.push_back(option);
+                options.emplace_back(delim, quote, escape);
             }
         }
     }
