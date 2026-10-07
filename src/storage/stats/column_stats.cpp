@@ -17,7 +17,7 @@ void ColumnStats::updateMinMax(const common::ValueVector* vector) {
     using common::LogicalTypeID;
     const auto typeID = vector->dataType.getLogicalTypeID();
     const auto& selVector = vector->state->getSelVector();
-    auto track = [this, vector, &selVector](double value, uint32_t selPos) {
+    auto track = [this, vector](double value, uint32_t selPos) {
         if (vector->isNull(selPos)) {
             return;
         }
