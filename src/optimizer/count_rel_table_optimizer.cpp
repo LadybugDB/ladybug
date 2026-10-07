@@ -1671,6 +1671,18 @@ struct RecursiveSideMatch {
     const LogicalScanNodeTable* sourceScan = nullptr;
 };
 
+// The CSR level-DP used by the rewrite has no rel-predicate filtering (rel filtering
+// happens at scan time via relPredicateEvaluator), so any relationship predicate on the
+// variable-length pattern must keep the original plan.
+static bool hasRelPredicate(const function::RJBindData& bindData) {
+    for (auto& relInfo : bindData.graphEntry.relInfos) {
+        if (relInfo.predicate != nullptr) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Matches exactly one of those shapes, or returns an empty match. Matching strictly rather
 // than searching the subtree for any RECURSIVE_EXTEND is the point: the rewrite drops the
 // whole subtree and reconstructs its row multiset from per-end-node walk counts, so any
@@ -1786,11 +1798,14 @@ std::shared_ptr<LogicalOperator> CountRelTableOptimizer::tryRewriteGroupedReacha
     auto* recursiveExtend = match.recursiveExtend;
     auto& bindData = recursiveExtend->getBindData();
     // v1 handles forward walks only; rejects bounded-source masks (the DP counts from the
-    // full source table), node predicates, limits and non-walk semantics.
+    // full source table), node/relationship predicates, limits and non-walk semantics.
+    // The level DP over CSR skips the scan-time relPredicateEvaluator, so any rel
+    // predicate must keep the original plan (see #1127).
     if (bindData.extendDirection != ExtendDirection::FWD ||
         bindData.semantic != common::PathSemantic::WALK || bindData.upperBound == 0 ||
-        recursiveExtend->hasNodePredicate() || recursiveExtend->hasInputNodeMask() ||
-        recursiveExtend->hasOutputNodeMask() || recursiveExtend->getLimitNum() != INVALID_LIMIT) {
+        recursiveExtend->hasNodePredicate() || hasRelPredicate(bindData) ||
+        recursiveExtend->hasInputNodeMask() || recursiveExtend->hasOutputNodeMask() ||
+        recursiveExtend->getLimitNum() != INVALID_LIMIT) {
         return op;
     }
     auto boundNode = std::static_pointer_cast<NodeExpression>(bindData.nodeInput);
