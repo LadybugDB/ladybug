@@ -72,6 +72,8 @@ public:
     }
 
 private:
+    uint64_t appendVectorsDiscardingNulls(const std::vector<common::ValueVector*>& keyVectors,
+        const std::vector<common::ValueVector*>& payloadVectors, common::DataChunkState* keyState);
     uint8_t** findHashSlot(const uint8_t* tuple) const;
     // This function returns the pointer that previously stored in the same slot.
     uint8_t* insertEntry(uint8_t* tuple) const;
@@ -85,6 +87,8 @@ private:
     static constexpr uint64_t PREV_PTR_COL_IDX = 1;
     static constexpr uint64_t HASH_COL_IDX = 2;
     uint64_t prevPtrColOffset;
+    // The copy of the unflat key state's selection vector that appendVectors compacts.
+    std::shared_ptr<common::SelectionVector> nullFreeSelVector;
 };
 
 } // namespace processor
