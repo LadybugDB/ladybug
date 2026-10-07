@@ -284,6 +284,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
                 }
             }
             if (!fetchNextBoundNodeBatch(transaction)) {
+                scanState->releaseScanPin();
                 return false;
             }
         }
@@ -303,6 +304,7 @@ bool ScanRelTable::getNextTuplesInternal(ExecutionContext* context) {
             }
         }
         if (!children[0]->getNextTuple(context)) {
+            scanState->releaseScanPin();
             return false;
         }
         tableInfo.table->initScanState(transaction, *scanState);

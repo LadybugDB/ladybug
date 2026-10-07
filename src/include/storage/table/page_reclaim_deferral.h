@@ -22,7 +22,14 @@ public:
     // Drop queued frees without releasing the pages. Used when a checkpoint
     // throws and the old pages are still the live ones.
     void discard();
-    void commit() { committed = true; }
+    // The checkpoint that queued these frees succeeded. `next` is the deferral of the group
+    // it wrote, which can still share pages with the one the scans pinned (unchanged columns
+    // are not rewritten). Holding it keeps later checkpoints deferring those pages for as
+    // long as a scan holds this one.
+    void commit(std::shared_ptr<PageReclaimDeferral> next) {
+        committed = true;
+        successor = std::move(next);
+    }
 
     ~PageReclaimDeferral();
 
@@ -36,6 +43,7 @@ private:
 
     std::vector<Free> frees;
     bool committed = false;
+    std::shared_ptr<PageReclaimDeferral> successor;
 };
 
 class PageReclaimDeferralScope {

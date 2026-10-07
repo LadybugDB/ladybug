@@ -12,6 +12,7 @@
 #include "storage/table/column_chunk_data.h"
 #include "storage/table/list_chunk_data.h"
 #include "storage/table/null_column.h"
+#include "storage/table/page_reclaim_deferral.h"
 #include <bit>
 
 using namespace lbug::common;
@@ -359,9 +360,12 @@ std::vector<std::unique_ptr<ColumnChunkData>> ListColumn::checkpointSegment(
     checkpointState.persistentData.initializeScanState(chunkState, this);
     ColumnCheckpointState listDataCheckpointState(*persistentDataChunk,
         std::move(listDataChunkCheckpointStates));
-    const auto listDataCanCheckpointInPlace = dataColumn->canCheckpointInPlace(
-        chunkState.childrenStates[ListChunkData::DATA_COLUMN_CHILD_READ_STATE_IDX],
-        listDataCheckpointState);
+    // Never in place while a scan pins these pages (see Column::checkpointSegment).
+    const auto listDataCanCheckpointInPlace =
+        PageReclaimDeferral::current() == nullptr &&
+        dataColumn->canCheckpointInPlace(
+            chunkState.childrenStates[ListChunkData::DATA_COLUMN_CHILD_READ_STATE_IDX],
+            listDataCheckpointState);
     if (!listDataCanCheckpointInPlace) {
         // If we cannot checkpoint list data chunk in place, we need to checkpoint the whole chunk
         // out of place.
