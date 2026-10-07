@@ -22,6 +22,9 @@ std::shared_ptr<Expression> ExpressionBinder::bindVariableExpression(
 std::shared_ptr<Expression> ExpressionBinder::bindVariableExpression(
     const std::string& varName) const {
     if (binder->scope.contains(varName)) {
+        // Return the scope's own expression object rather than a copy of it: callers identify
+        // scope expressions by pointer identity. bind_projection_clause.cpp, for one, decides
+        // that an aggregate below an in-scope expression is not nested by comparing raw pointers.
         return binder->scope.getExpression(varName);
     }
     throw BinderException(ExceptionMessage::variableNotInScope(varName));

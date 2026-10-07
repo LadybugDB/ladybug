@@ -158,13 +158,19 @@ class NestedAggCollector final : public ExpressionVisitor {
 public:
     explicit NestedAggCollector(const expr_ptr_set& scopeExprs) : scopeExprs{scopeExprs} {}
 
+    // Aggregates that are nested inside the visited expression. Aggregates already in scope are
+    // not collected: they were computed by an earlier clause.
     expression_vector exprs;
 
 protected:
-    void visitAggFunctionExpr(std::shared_ptr<Expression> expr) override { exprs.push_back(expr); }
+    void visitAggFunctionExpr(std::shared_ptr<Expression> expr) override {
+        if (!scopeExprs.contains(expr.get())) {
+            exprs.push_back(std::move(expr));
+        }
+    }
     void visitChildren(const Expression& expr) override {
-        // An expression in scope was computed by an earlier projection, so aggregates below it
-        // are not nested, e.g. n in WITH COUNT(*) AS c WITH c + 1 AS n RETURN SUM(n).
+        // Do not descend into an expression in scope, e.g. n in
+        // WITH COUNT(*) AS c WITH c + 1 AS n RETURN SUM(n).
         if (scopeExprs.contains(&expr)) {
             return;
         }
@@ -200,11 +206,9 @@ static void validateNestedAggregate(const Expression& expr, const expr_ptr_set& 
     }
     auto collector = NestedAggCollector(scopeExprs);
     collector.visit(expr.getChild(0));
-    for (auto& childAgg : collector.exprs) {
-        if (!scopeExprs.contains(childAgg.get())) {
-            throw BinderException(
-                std::format("Expression {} contains nested aggregation.", expr.toString()));
-        }
+    if (!collector.exprs.empty()) {
+        throw BinderException(
+            std::format("Expression {} contains nested aggregation.", expr.toString()));
     }
 }
 
