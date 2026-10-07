@@ -2460,8 +2460,7 @@ TEST_P(LegacyGraphMarkerWithoutShadowTest, FailsClosed) {
         FAIL() << "Expected a legacy graph marker without its shadow to be rejected.";
     } catch (const RuntimeException& e) {
         const std::string message = TestHelper::normalizeForFind(e.what());
-        const auto expectedNeedle =
-            TestHelper::normalizeForFind(graphShadowPath) + " is missing";
+        const auto expectedNeedle = TestHelper::normalizeForFind(graphShadowPath) + " is missing";
         EXPECT_NE(message.find(expectedNeedle), std::string::npos) << message;
     }
     EXPECT_TRUE(std::filesystem::exists(markerPath));
