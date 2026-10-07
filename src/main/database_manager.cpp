@@ -175,6 +175,9 @@ static void createAnyGraphTables(catalog::Catalog& catalog) {
 
 void DatabaseManager::createGraph(const std::string& graphName,
     storage::MemoryManager* memoryManager, main::ClientContext* clientContext, bool isAnyGraph) {
+    if (graphName.find('\0') != std::string::npos) {
+        throw RuntimeException{"Graph names must not contain null bytes."};
+    }
     if (StringUtils::caseInsensitiveEquals(graphName, "main")) {
         throw RuntimeException{"MAIN is a reserved graph name."};
     }
