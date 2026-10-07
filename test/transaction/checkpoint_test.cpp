@@ -4391,18 +4391,22 @@ public:
     // 1..numRelsOfNode1). Not checkpointed yet: rels 4000..numDsts-1, the deletion of every
     // 7th rel, and an update that negates w of rel `updatedRel`. Returns the rels of node 0 a
     // reader should see.
-    std::vector<int64_t> setUpPersistentRelsWithPendingChanges() const {
+    // If `deleteInMemRels` is false, only persistent rels are deleted.
+    std::vector<int64_t> setUpPersistentRelsWithPendingChanges(bool deleteInMemRels = true) const {
         insertRels(1, 4000);
         runQuery(std::format("MATCH (a:P), (b:P) WHERE a.id = 1 AND b.id >= 1 AND b.id <= {} "
                              "CREATE (a)-[:K {{w: b.id}}]->(b);",
             numRelsOfNode1));
         runQuery("CHECKPOINT;");
         insertRels(4000, numDsts);
-        runQuery("MATCH (a:P)-[r:K]->(b:P) WHERE a.id = 0 AND r.w % 7 = 0 DELETE r;");
+        const auto deleteEnd = deleteInMemRels ? numDsts : 4000;
+        runQuery(std::format(
+            "MATCH (a:P)-[r:K]->(b:P) WHERE a.id = 0 AND r.w % 7 = 0 AND r.w < {} DELETE r;",
+            deleteEnd));
         runQuery(std::format(
             "MATCH (a:P)-[r:K]->(b:P) WHERE a.id = 0 AND b.id = {} SET r.w = -r.w;", updatedRel));
         std::unordered_set<int64_t> deleted{updatedRel};
-        for (auto i = 7; i < numDsts; i += 7) {
+        for (auto i = 7; i < deleteEnd; i += 7) {
             deleted.insert(i);
         }
         auto expected = expectedRels(1, numDsts, deleted);
@@ -4660,7 +4664,10 @@ TEST_F(CheckpointRunningRelScanTest, FailedCheckpointWhileRelScanPinned) {
     if (inMemMode || systemConfig->checkpointThreshold == 0) {
         GTEST_SKIP();
     }
-    const auto expected = setUpPersistentRelsWithPendingChanges();
+    // No deleted in-memory rels here. A failed checkpoint leaves their CSR index entries
+    // marked invalid, which later scans tolerate but a runtime-check build asserts on,
+    // with or without a pinned scan.
+    const auto expected = setUpPersistentRelsWithPendingChanges(false /*deleteInMemRels*/);
     std::string error;
     {
         const auto relScanPtr = startRelScan(false /*randomLookup*/);
