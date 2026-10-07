@@ -67,4 +67,8 @@ model DropFromToConnectionAlterPayload {
 
 model AlterTableEntryRecord extends WalRecordBase {
     alterInfo: BoundAlterInfoPayload;
+    // Physical rel-table OID allocated for an added connection; INVALID_TABLE_ID otherwise.
+    // Lets replay map runtime data records to the replay-added connection's physical table
+    // when the recorded and replayed ID spaces diverge.
+    addedRelTableOID: table_id_t;
 }

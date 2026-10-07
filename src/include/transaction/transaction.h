@@ -149,7 +149,8 @@ public:
     void pushCreateDropCatalogEntry(catalog::CatalogSet& catalogSet,
         catalog::CatalogEntry& catalogEntry, bool isInternal, bool skipLoggingToWAL = false);
     void pushAlterCatalogEntry(catalog::CatalogSet& catalogSet, catalog::CatalogEntry& catalogEntry,
-        const binder::BoundAlterInfo& alterInfo, bool skipLoggingToWAL = false);
+        const binder::BoundAlterInfo& alterInfo, bool skipLoggingToWAL = false,
+        common::table_id_t addedRelTableOID = common::INVALID_TABLE_ID);
     void pushSequenceChange(catalog::SequenceCatalogEntry* sequenceEntry, int64_t kCount,
         const catalog::SequenceRollbackData& data);
     // The transaction's undo records may point into the parked catalog; destroying it

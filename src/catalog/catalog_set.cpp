@@ -5,6 +5,7 @@
 #include "binder/ddl/bound_alter_info.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/dummy_catalog_entry.h"
+#include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/assert.h"
 #include "common/exception/catalog.h"
@@ -206,9 +207,14 @@ void CatalogSet::alterTableEntry(Transaction* transaction, const binder::BoundAl
     case AlterType::SET_SORTED_BY:
     case AlterType::ADD_FROM_TO_CONNECTION:
     case AlterType::DROP_FROM_TO_CONNECTION: {
+        auto addedRelTableOID = common::INVALID_TABLE_ID;
+        if (alterInfo.alterType == AlterType::ADD_FROM_TO_CONNECTION) {
+            addedRelTableOID =
+                newEntry->ptrCast<RelGroupCatalogEntry>()->getRelEntryInfos().back().oid;
+        }
         emplaceNoLock(std::move(newEntry));
         if (transaction->shouldAppendToUndoBuffer()) {
-            transaction->pushAlterCatalogEntry(*this, *entry, alterInfo);
+            transaction->pushAlterCatalogEntry(*this, *entry, alterInfo, false, addedRelTableOID);
         }
     } break;
     default: {

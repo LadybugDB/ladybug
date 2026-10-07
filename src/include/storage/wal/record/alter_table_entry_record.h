@@ -18,11 +18,14 @@ namespace storage {
 struct AlterTableEntryRecord final : WALRecord {
     const binder::BoundAlterInfo* alterInfo;
     std::unique_ptr<binder::BoundAlterInfo> ownedAlterInfo;
+    common::table_id_t addedRelTableOID = common::INVALID_TABLE_ID;
 
     AlterTableEntryRecord()
         : WALRecord{WALRecordType::ALTER_TABLE_ENTRY_RECORD}, alterInfo{nullptr} {}
-    explicit AlterTableEntryRecord(const binder::BoundAlterInfo* alterInfo)
-        : WALRecord{WALRecordType::ALTER_TABLE_ENTRY_RECORD}, alterInfo{alterInfo} {}
+    explicit AlterTableEntryRecord(const binder::BoundAlterInfo* alterInfo,
+        common::table_id_t addedRelTableOID = common::INVALID_TABLE_ID)
+        : WALRecord{WALRecordType::ALTER_TABLE_ENTRY_RECORD}, alterInfo{alterInfo},
+          addedRelTableOID{addedRelTableOID} {}
 
     void serialize(common::Serializer& serializer) const override;
     static std::unique_ptr<AlterTableEntryRecord> deserialize(common::Deserializer& deserializer);

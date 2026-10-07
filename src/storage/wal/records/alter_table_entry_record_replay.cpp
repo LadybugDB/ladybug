@@ -24,6 +24,14 @@ void WALReplayer::replayAlterTableEntryRecord(const WALRecord& walRecord) const 
     auto transaction = transaction::Transaction::Get(clientContext);
     auto storageManager = StorageManager::Get(clientContext);
     auto ownedAlterInfo = alterEntryRecord.ownedAlterInfo.get();
+    if (ownedAlterInfo->alterType == AlterType::ADD_FROM_TO_CONNECTION ||
+        ownedAlterInfo->alterType == AlterType::DROP_FROM_TO_CONNECTION) {
+        auto& connectionInfo = ownedAlterInfo->extraInfo->cast<BoundExtraAlterFromToConnection>();
+        connectionInfo.fromTableID =
+            getReplayedEntryID(CatalogEntryType::NODE_TABLE_ENTRY, connectionInfo.fromTableID);
+        connectionInfo.toTableID =
+            getReplayedEntryID(CatalogEntryType::NODE_TABLE_ENTRY, connectionInfo.toTableID);
+    }
     catalog->alterTableEntry(transaction, *ownedAlterInfo);
     auto& pageAllocator = *PageManager::Get(clientContext);
     switch (ownedAlterInfo->alterType) {
@@ -62,6 +70,10 @@ void WALReplayer::replayAlterTableEntryRecord(const WALRecord& walRecord) const 
         auto relEntryInfo =
             relGroupEntry->getRelEntryInfo(extraInfo->fromTableID, extraInfo->toTableID);
         storageManager->addRelTable(relGroupEntry, *relEntryInfo, &clientContext);
+        if (alterEntryRecord.addedRelTableOID != INVALID_TABLE_ID) {
+            recordReplayedEntryID(CatalogEntryType::REL_GROUP_ENTRY,
+                alterEntryRecord.addedRelTableOID, relEntryInfo->oid);
+        }
     } break;
     default:
         break;

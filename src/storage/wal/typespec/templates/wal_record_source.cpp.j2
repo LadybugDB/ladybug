@@ -195,6 +195,7 @@ static decltype(auto) deserializeAlterRecord(Deserializer& deserializer) {
 void AlterTableEntryRecord::serialize(Serializer& serializer) const {
     WALRecord::serialize(serializer);
     serializeAlterExtraInfo(serializer, alterInfo);
+    serializer.write(addedRelTableOID);
 }
 
 std::unique_ptr<AlterTableEntryRecord> AlterTableEntryRecord::deserialize(
@@ -203,6 +204,9 @@ std::unique_ptr<AlterTableEntryRecord> AlterTableEntryRecord::deserialize(
     auto retval = std::make_unique<AlterTableEntryRecord>();
     retval->ownedAlterInfo =
         std::make_unique<BoundAlterInfo>(alterType, tableName, std::move(extraInfo));
+    if (deserializer.getRemainingReadLimit() >= sizeof(uint64_t) * 2) {
+        deserializer.deserializeValue(retval->addedRelTableOID);
+    }
     return retval;
 }
 {% elif dc.name == "CreateCatalogEntryRecord" %}
