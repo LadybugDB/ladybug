@@ -257,6 +257,10 @@ void Transaction::pushSequenceChange(SequenceCatalogEntry* sequenceEntry, int64_
     }
 }
 
+void Transaction::retireGraphCatalog(std::unique_ptr<catalog::Catalog> catalog) {
+    retiredGraphCatalogs.push_back(std::move(catalog));
+}
+
 void Transaction::pushInsertInfo(common::node_group_idx_t nodeGroupIdx, common::row_idx_t startRow,
     common::row_idx_t numRows, const storage::VersionRecordHandler* versionRecordHandler) const {
     undoBuffer->createInsertInfo(nodeGroupIdx, startRow, numRows, versionRecordHandler);

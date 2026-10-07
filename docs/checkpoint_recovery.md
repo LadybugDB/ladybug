@@ -34,19 +34,32 @@ and recovery finishes the checkpoint.
 
 ## Checkpoint bundle format
 
-`CheckpointRecord::bundleFormatVersion` is 1 for checkpoints written by builds that include this
-recovery format, including nightly builds made from it. Version 0 records come from older builds,
-including 0.21.2 and every earlier release, and have no version field. Recovery rejects an
-unsupported checkpoint version before applying that checkpoint's shadow pages; opening a database
-may already have recovered other graphs before it encounters the unsupported version.
+`CheckpointRecord::bundleFormatVersion` is 2 for checkpoints written by current builds, including
+nightly builds made from them. Version 1 records come from the first builds of this recovery
+format, and version 0 records come from older builds, including 0.21.2 and every earlier release,
+and have no version field. Recovery rejects an unsupported checkpoint version before applying that
+checkpoint's shadow pages; opening a database may already have recovered other graphs before it
+encounters the unsupported version.
 
-A version 1 checkpoint stamps every shadow file header with
-`ShadowFile::CHECKPOINT_BUNDLE_DATABASE_ID` instead of a real database ID. Recovery identifies the
-data file through the last database-header page in the shadow, which must match the data file's
-database ID before any page is written.
+Version 1 and version 2 share the bundle layout. A checkpoint of either version stamps every
+shadow file header with `ShadowFile::CHECKPOINT_BUNDLE_DATABASE_ID` instead of a real database ID,
+and recovery identifies the data file through the last database-header page in the shadow, which
+must match the data file's database ID before any page is written.
+
+Version 2 changes the WAL record encoding. Every record a version 2 build writes ends with an
+`ownerCatalogName` trailer naming the graph catalog the record replays against; the trailer is
+empty for main-database records, and its absence in a version 1 record is detected from the
+record's framed length. A sequence update that names its sequence is written as the distinct
+`UPDATE_SEQUENCE_NAMED` record type — the name lets replay find the sequence by name, because an
+implicit serial sequence has no create record, so its entry ID can shift between logging and
+replay — while a version 1 build writes only the plain `UPDATE_SEQUENCE` record. Recovery decodes
+both versions' records. An older build cannot: it reads a record type it does not know as an
+invalid record type, and a record type it does know decodes with the trailer skipped and replays
+against the main catalog, so a WAL written by a version 2 build must be replayed and checkpointed
+by a version 2 build before an older build opens the database (see Downgrades).
 
 A graph data file opened on its own (outside the database it was created in) checkpoints through
-the same format: its WAL ends in a version 1 `CHECKPOINT` record and its shadow carries the
+the same format: its WAL ends in a version 2 `CHECKPOINT` record and its shadow carries the
 sentinel. Reopening the parent database recovers such a graph from that record — including a
 checkpoint interrupted after the record became durable — after validating the graph's WAL header
 against the graph data file and requiring the sentinel in its shadow header.
@@ -65,18 +78,32 @@ or its committed checkpoint recovered when the parent database is reopened.
 
 ## Downgrades
 
-Open a database with a build that writes version 1 if it was last closed while a version 1
-checkpoint was pending. Pending means `<db>.wal` or `<db>.wal.checkpoint` ends in a `CHECKPOINT`
-record and `<db>.shadow` exists.
+Before opening a database that a version 2 build has written with an older build, run `CHECKPOINT`
+on a version 2 build and let it succeed. The checkpoint is the step that empties the WAL; a clean
+close does not, because `force_checkpoint_on_close=false` leaves version 2 records in the WAL tail
+and an auto-checkpoint fires only once the WAL grows past `checkpoint_threshold`.
 
-Older builds refuse such a database because the shadow header does not match the data file. Their
-error message suggests deleting the shadow file. **Do not delete it.** After the commit point, the
-shadow files hold the only copy of the committed pages, and deleting them loses committed data.
-Reopen the database with a build that writes version 1, let recovery finish, and close it cleanly
-before going back to an older build.
+A pending version 2 checkpoint means `<db>.wal` or `<db>.wal.checkpoint` ends in a `CHECKPOINT`
+record and `<db>.shadow` exists. Older builds refuse such a database because the shadow header does
+not match the data file. Their error message suggests deleting the shadow file. **Do not delete it.**
+After the commit point, the shadow files hold the only copy of the committed pages, and deleting them
+loses committed data. Reopen the database with a build that writes version 2, let recovery finish,
+and checkpoint before going back to an older build.
 
-A database without a pending checkpoint has the same on-disk format as before and opens with older
-builds.
+An ordinary version 2 WAL tail — owner trailers on the records but no pending checkpoint — is the
+quieter hazard: an older build does not reliably refuse it. A record type the older build knows
+decodes with the trailer skipped as unknown trailing bytes and replays against the main catalog,
+silently misapplying records meant for a graph. A record type the older build does not know, such
+as `UPDATE_SEQUENCE_NAMED`, is no safer: with the default non-throwing replay configuration the
+decoding error is treated like a corrupt WAL tail — the older build replays the committed prefix
+and truncates the WAL there, silently discarding that transaction and every transaction recorded
+after it. Setting `throwOnWalReplayFailure` to true rejects an unknown record before that WAL
+is applied, but it still does not make downgrading safe: a WAL containing only recognized
+record types passes validation, and its owner trailers are ignored. This is why the successful
+`CHECKPOINT`, not a clean close, is the downgrade gate.
+
+A database with neither a pending checkpoint nor any remaining version 2 records has the same
+on-disk format as before and opens with older builds.
 
 ## Version 0 checkpoints
 

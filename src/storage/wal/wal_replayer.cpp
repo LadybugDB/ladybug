@@ -13,6 +13,7 @@
 #include "common/file_system/file_system.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/serializer/buffered_file.h"
+#include "common/string_utils.h"
 #include "common/system_message.h"
 #include "common/type_utils.h"
 #include "common/types/types.h"
@@ -498,6 +499,11 @@ WALReplayer::GraphRecoveryState WALReplayer::prepareGraphCheckpoint(StorageManag
 void WALReplayer::replayGraphWAL(StorageManager& storageManager,
     const GraphRecoveryState& recoveryState) const {
     replayedEntryIDs.clear();
+    // A graph's own WAL pass may run after the main pass has already inserted
+    // entries into its catalog, so the floor cannot be captured lazily here:
+    // it must be the persisted ID counter captured when the catalog loaded.
+    graphOIDReplayFloor = recoveryState.persistedGraphOIDFloor;
+    graphOIDReplayFloorValid = true;
     try {
         for (const auto& range : recoveryState.walReplayRanges) {
             auto flags = FileFlags::READ_ONLY;
@@ -541,19 +547,29 @@ void WALReplayer::recordReplayedEntryID(catalog::CatalogEntryType entryType,
 
 common::oid_t WALReplayer::getReplayedEntryID(catalog::CatalogEntryType entryType,
     common::oid_t recordedEntryID) const {
+    common::oid_t replayedEntryID;
+    if (!tryGetReplayedEntryID(entryType, recordedEntryID, replayedEntryID)) {
+        return recordedEntryID;
+    }
+    return replayedEntryID;
+}
+
+bool WALReplayer::tryGetReplayedEntryID(catalog::CatalogEntryType entryType,
+    common::oid_t recordedEntryID, common::oid_t& replayedEntryID) const {
     const auto catalogIt = replayedEntryIDs.find(catalog::Catalog::Get(clientContext));
     if (catalogIt == replayedEntryIDs.end()) {
-        return recordedEntryID;
+        return false;
     }
     const auto typeIt = catalogIt->second.find(entryType);
     if (typeIt == catalogIt->second.end()) {
-        return recordedEntryID;
+        return false;
     }
     const auto idIt = typeIt->second.find(recordedEntryID);
     if (idIt == typeIt->second.end()) {
-        return recordedEntryID;
+        return false;
     }
-    return idIt->second;
+    replayedEntryID = idIt->second;
+    return true;
 }
 
 void WALReplayer::retireGraphCheckpointWALs(StorageManager& storageManager,
@@ -811,11 +827,20 @@ WALReplayer::WALReplayInfo WALReplayer::dryReplay(FileInfo& fileInfo, bool throw
 }
 
 void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
+    if (!graphOIDReplayFloorValid) {
+        // The main-WAL pass captures the floor before applying any record, when
+        // its catalog is in the persisted state: every ID replay assigns is at
+        // or above it, and persisted entries are below it. A graph pass seeds
+        // the floor from its recovery state instead (see replayGraphWAL).
+        graphOIDReplayFloor = catalog::Catalog::Get(clientContext)->peekNextGraphOID();
+        graphOIDReplayFloorValid = true;
+    }
     std::optional<ReplayOwnerScope> replayOwnerScope;
     if (!walRecord.ownerCatalogName.empty()) {
         auto dbManager = main::DatabaseManager::Get(clientContext);
+        const auto upperOwnerName = StringUtils::getUpper(walRecord.ownerCatalogName);
         if (dbManager == nullptr || !dbManager->hasGraph(walRecord.ownerCatalogName)) {
-            if (dbManager != nullptr && !failedOwnerNames.contains(walRecord.ownerCatalogName)) {
+            if (dbManager != nullptr && !failedOwnerNames.contains(upperOwnerName)) {
                 // A graph created earlier in this same WAL is not registered yet: its
                 // create-graph record only adds the catalog entry. Materialize that one
                 // graph (not the full graph-recovery pass) before routing this record into
@@ -827,7 +852,7 @@ void WALReplayer::replayWALRecord(WALRecord& walRecord) const {
                 dbManager->loadGraphFromCatalog(MemoryManager::Get(clientContext), &clientContext,
                     walRecord.ownerCatalogName);
                 if (!dbManager->hasGraph(walRecord.ownerCatalogName)) {
-                    failedOwnerNames.insert(walRecord.ownerCatalogName);
+                    failedOwnerNames.insert(upperOwnerName);
                 }
             }
         }

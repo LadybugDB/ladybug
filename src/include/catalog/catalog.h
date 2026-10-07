@@ -216,6 +216,11 @@ public:
     // Get all graph entries.
     std::vector<GraphCatalogEntry*> getGraphEntries(
         const transaction::Transaction* transaction) const;
+    // The next graph-entry OID this catalog would assign. Replay compares recorded
+    // GRAPH_ENTRY IDs against the value from before the replay pass: IDs at or above
+    // it were assigned after the last checkpoint and shift during recovery, while IDs
+    // below it belong to persisted entries and stay stable.
+    common::oid_t peekNextGraphOID() const { return graphs->peekNextOID(); }
 
     // Create graph entry.
     void createGraph(transaction::Transaction* transaction, std::string name, bool isAnyGraph);

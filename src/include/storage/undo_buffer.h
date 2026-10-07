@@ -105,11 +105,12 @@ private:
     static void rollbackRecord(main::ClientContext* context, UndoRecordType recordType,
         const uint8_t* record);
 
-    static void commitCatalogEntryRecord(const uint8_t* record, common::transaction_t commitTS);
-    static void rollbackCatalogEntryRecord(const uint8_t* record);
+    static void commitCatalogEntryRecord(main::ClientContext* context, const uint8_t* record,
+        common::transaction_t commitTS);
+    static void rollbackCatalogEntryRecord(main::ClientContext* context, const uint8_t* record);
 
     static void commitSequenceEntry(uint8_t const* entry, common::transaction_t commitTS);
-    static void rollbackSequenceEntry(uint8_t const* entry);
+    static void rollbackSequenceEntry(main::ClientContext* context, uint8_t const* entry);
 
     static void commitVersionInfo(main::ClientContext* context, UndoRecordType recordType,
         const uint8_t* record, common::transaction_t commitTS);

@@ -31,6 +31,7 @@ public:
         std::vector<WALReplayRange> walReplayRanges;
         bool retireActiveWAL = false;
         bool retireFrozenWAL = false;
+        common::oid_t persistedGraphOIDFloor = 0;
     };
 
     explicit WALReplayer(main::ClientContext& clientContext);
@@ -57,6 +58,8 @@ private:
         common::oid_t replayedEntryID) const;
     common::oid_t getReplayedEntryID(catalog::CatalogEntryType entryType,
         common::oid_t recordedEntryID) const;
+    bool tryGetReplayedEntryID(catalog::CatalogEntryType entryType, common::oid_t recordedEntryID,
+        common::oid_t& replayedEntryID) const;
     void replayCreateCatalogEntryRecord(WALRecord& walRecord) const;
     void replayCreateIndexRecord(WALRecord& walRecord) const;
     void replayDropCatalogEntryRecord(const WALRecord& walRecord) const;
@@ -129,6 +132,17 @@ private:
         std::unordered_map<catalog::CatalogEntryType,
             std::unordered_map<common::oid_t, common::oid_t>>>
         replayedEntryIDs;
+    // Graph-entry IDs this pass could have assigned, from the base catalog's graph-set
+    // counter captured when the pass applies its first record (the persisted state).
+    // GRAPH_ENTRY drops treat recorded IDs at or above this floor as shifting replay
+    // IDs rather than stable persisted ones. Captured once per pass; graph WAL passes
+    // reset it alongside replayedEntryIDs.
+    mutable common::oid_t graphOIDReplayFloor = 0;
+    mutable bool graphOIDReplayFloorValid = false;
+    // Catalogs a GRAPH_ENTRY drop unregistered mid-pass. The active recovery transaction
+    // can hold undo records pointing into them, so destruction waits until the replayer
+    // dies, after the pass and its transactions have completed.
+    mutable std::vector<std::unique_ptr<catalog::Catalog>> retiredCatalogs;
 };
 
 } // namespace storage

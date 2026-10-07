@@ -273,9 +273,15 @@ void DatabaseManager::dropGraph(const std::string& graphName, main::ClientContex
             if (hasAttachedDatabase(graphName)) {
                 detachDatabase(graphName);
             }
-            graphIdentities.erase(it->get());
+            // The dropping transaction can hold undo records pointing into the catalog,
+            // so destruction waits until commit or rollback finishes.
+            auto retiredCatalog = std::move(*it);
+            graphIdentities.erase(retiredCatalog.get());
             graphs.erase(it);
             lck.unlock();
+            if (transaction != nullptr) {
+                transaction->retireGraphCatalog(std::move(retiredCatalog));
+            }
 
             // Delete the physical graph files
             if (!graphPath.empty() &&
@@ -419,6 +425,11 @@ bool DatabaseManager::loadGraph(main::ClientContext* clientContext,
             persistedHeader->catalogPageRange.startPageIdx != common::INVALID_PAGE_IDX;
         storage::Checkpointer::readCheckpoint(clientContext, catalog.get(), storageManager.get());
     }
+    // Capture the persisted graph-ID counter before any replay can insert into
+    // this catalog: it is the floor separating persisted entries from the ones
+    // the graph's own WAL pass assigns, and the pass may run after the main WAL
+    // pass has already replayed tagged records into it.
+    recoveryState.persistedGraphOIDFloor = catalog->peekNextGraphOID();
     catalog->setStorageManager(std::move(storageManager));
     if (graphEntry->isAnyGraphType() && !hasPersistedCatalog) {
         // A graph whose create-graph record replayed from the WAL (never checkpointed)
@@ -539,6 +550,41 @@ catalog::Catalog* DatabaseManager::getGraphCatalog(const std::string& graphName)
     throw BinderException{std::format("No graph named {}.", graphName)};
 }
 
+std::unique_ptr<catalog::Catalog> DatabaseManager::unloadGraphCatalog(
+    const std::string& graphName) {
+    auto upperCaseName = StringUtils::getUpper(graphName);
+    std::unique_ptr<catalog::Catalog> unloadedCatalog;
+    storage::StorageManager* unloadedStorageManager = nullptr;
+    {
+        std::unique_lock lck{graphsMutex};
+        for (auto it = graphs.begin(); it != graphs.end(); ++it) {
+            auto graphNameUpper = StringUtils::getUpper((*it)->getCatalogName());
+            if (graphNameUpper != upperCaseName) {
+                continue;
+            }
+            if (defaultGraph != "" && StringUtils::getUpper(defaultGraph) == upperCaseName) {
+                defaultGraph = "";
+            }
+            unloadedStorageManager = (*it)->getStorageManager();
+            if (unloadedStorageManager != nullptr) {
+                unloadedStorageManager->closeFileHandle();
+            }
+            unloadedCatalog = std::move(*it);
+            graphIdentities.erase(unloadedCatalog.get());
+            graphs.erase(it);
+            break;
+        }
+    }
+    if (unloadedCatalog == nullptr) {
+        return nullptr;
+    }
+    std::erase_if(pendingGraphWALReplays,
+        [&unloadedStorageManager](const std::unique_ptr<GraphWALReplayRequest>& request) {
+            return request->storageManager == unloadedStorageManager;
+        });
+    return unloadedCatalog;
+}
+
 void DatabaseManager::acquireGraphsShared() const {
     auto& holds = graphsSharedHolds[this];
     if (holds > 0) {
@@ -554,6 +600,7 @@ void DatabaseManager::releaseGraphsShared() const {
     --holds;
     if (holds == 0) {
         graphsMutex.unlock_shared();
+        graphsSharedHolds.erase(this);
     }
 }
 

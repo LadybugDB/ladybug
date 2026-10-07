@@ -3255,6 +3255,136 @@ TEST_F(FlakyCheckpointerTest, StandaloneIndexReplayDoesNotDropParentIndex) {
     ASSERT_TRUE(dropPersonResult->isSuccess()) << dropPersonResult->getErrorMessage();
 }
 
+// A standalone session on a graph file is that file's main session: its records go to
+// the graph's own WAL untagged, and the graph's WAL pass runs after the main pass has
+// already replayed tagged records into the graph's catalog. If that pass captured its
+// graph-ID floor lazily at that point, an untagged subgraph drop recorded at or above
+// the persisted counter — but below the post-main-pass counter — would identity-match
+// a main-pass-created subgraph and drop it. The floor must come from the persisted
+// counter captured when the graph's catalog loaded. The graph is never checkpointed,
+// so the main recovery pass materializes it mid-replay and defers its WAL pass.
+TEST_F(FlakyCheckpointerTest, DeferredGraphWALFloorSkipsReplayCreatedSubgraphs) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH floor_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH floor_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE ExtraT(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "floor_graph");
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto ddl1 = graphConnection->query("CREATE NODE TABLE t(id INT64 PRIMARY KEY);");
+    ASSERT_TRUE(ddl1->isSuccess()) << ddl1->getErrorMessage();
+    auto ddl2 = graphConnection->query("DROP TABLE t;");
+    ASSERT_TRUE(ddl2->isSuccess()) << ddl2->getErrorMessage();
+    ddl1.reset();
+    ddl2.reset();
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_TRUE(conn->query("USE GRAPH floor_graph;")->isSuccess());
+    auto extra = conn->query("MATCH (n:ExtraT) RETURN count(n);");
+    ASSERT_TRUE(extra->isSuccess()) << extra->getErrorMessage();
+    ASSERT_EQ(extra->getNext()->getValue(0)->getValue<int64_t>(), 0);
+    extra.reset();
+    // Query binding resolves node tables from the catalog's table set, so the wrongly
+    // dropped entry is only observable at the graph-entry level: the main-pass-created
+    // subgraph must remain in the graph's own catalog, and the dropped table's must not.
+    auto* context = getClientContext(*conn);
+    std::unordered_set<std::string> subgraphs;
+    main::DatabaseManager::Get(*context)->withGraphCatalog("floor_graph",
+        [&subgraphs](catalog::Catalog* catalog) {
+            for (auto* entry :
+                catalog->getGraphEntries(&transaction::DUMMY_CHECKPOINT_TRANSACTION)) {
+                subgraphs.insert(entry->getName());
+            }
+        });
+    EXPECT_TRUE(subgraphs.contains("ExtraT"))
+        << "the deferred graph-WAL pass dropped the main-pass-created ExtraT subgraph";
+    EXPECT_FALSE(subgraphs.contains("t"));
+}
+
+// The same standalone setup as above, but the untagged records are a nested
+// CREATE GRAPH and DROP GRAPH under the outer graph's own name. Replaying the drop
+// must remove the nested entry from the graph's catalog without unloading the outer,
+// registered graph through the manager — otherwise the rest of the pass (and any
+// later records) route to the main catalog instead of the graph being replayed.
+TEST_F(FlakyCheckpointerTest, NestedGraphDropInGraphWALDoesNotUnloadOuterGraph) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH nested_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH nested_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE Pin(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "nested_graph");
+    conn.reset();
+    database.reset();
+
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto ddl1 = graphConnection->query("CREATE GRAPH nested_graph;");
+    ASSERT_TRUE(ddl1->isSuccess()) << ddl1->getErrorMessage();
+    auto ddl2 = graphConnection->query("DROP GRAPH nested_graph;");
+    ASSERT_TRUE(ddl2->isSuccess()) << ddl2->getErrorMessage();
+    auto ddl3 = graphConnection->query("CREATE NODE TABLE Survivor(id INT64 PRIMARY KEY);");
+    ASSERT_TRUE(ddl3->isSuccess()) << ddl3->getErrorMessage();
+    ddl1.reset();
+    ddl2.reset();
+    ddl3.reset();
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_TRUE(conn->query("USE GRAPH nested_graph;")->isSuccess());
+    auto survivor = conn->query("MATCH (n:Survivor) RETURN count(n);");
+    ASSERT_TRUE(survivor->isSuccess()) << survivor->getErrorMessage();
+    ASSERT_EQ(survivor->getNext()->getValue(0)->getValue<int64_t>(), 0);
+    survivor.reset();
+    auto pin = conn->query("MATCH (n:Pin) RETURN count(n);");
+    ASSERT_TRUE(pin->isSuccess()) << pin->getErrorMessage();
+    ASSERT_EQ(pin->getNext()->getValue(0)->getValue<int64_t>(), 0);
+    pin.reset();
+
+    std::unordered_set<std::string> outerGraphEntries;
+    main::DatabaseManager::Get(*getClientContext(*conn))
+        ->withGraphCatalog("nested_graph", [&outerGraphEntries](catalog::Catalog* catalog) {
+            for (auto* entry :
+                catalog->getGraphEntries(&transaction::DUMMY_CHECKPOINT_TRANSACTION)) {
+                outerGraphEntries.insert(entry->getName());
+            }
+        });
+    EXPECT_FALSE(outerGraphEntries.contains("nested_graph"))
+        << "the replayed nested drop left its entry in the outer graph's catalog";
+    EXPECT_TRUE(outerGraphEntries.contains("Pin"))
+        << "the outer graph lost the Pin table's implicit subgraph entry";
+}
+
 // A staged rel insert into a graph-owned table resolves its owning catalog under the registry
 // lock at commit time. When DROP GRAPH wins the race the commit must fail cleanly with the
 // missing-graph binder error and leave the connection usable; when the commit wins it must
@@ -4933,6 +5063,347 @@ TEST_F(ReviewFixesTest, SubgraphCatalogPersistsAfterCheckpointWithPreExistingTab
     ASSERT_TRUE(tables->isSuccess()) << tables->getErrorMessage();
     // Clean up
     ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+}
+
+// Regression test for the #1113 review: replaying a DROP GRAPH record was a no-op, so a
+// graph dropped and recreated within the same WAL tail replayed its second CREATE onto
+// the stale main-catalog entry and wedged recovery. The dropped graph's materialized
+// catalog also stayed loaded, keeping replay state keyed to it. Replay must mirror the
+// in-memory half of DROP GRAPH: drop the catalog entry and unload the materialized
+// catalog (which also evicts any WAL-replay request still queued for it).
+TEST_F(ReviewFixesTest, DroppedGraphRecreatedInSameWALTailReplaysCleanly) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    // Consume a graph entry ID in a rolled-back transaction: the recorded entry IDs now
+    // diverge from the ones replay assigns, so the DROP record can only find its entry
+    // through the translation recorded at CREATE replay. The results are scoped so they
+    // are destroyed before the database below is torn down.
+    {
+        auto beginTx = conn->query("BEGIN TRANSACTION;");
+        ASSERT_TRUE(beginTx->isSuccess()) << beginTx->getErrorMessage();
+        ASSERT_TRUE(conn->query("CREATE GRAPH oid_burner;")->isSuccess());
+        auto rb = conn->query("ROLLBACK;");
+        ASSERT_TRUE(rb->isSuccess()) << rb->getErrorMessage();
+    }
+    ASSERT_TRUE(conn->query("CREATE GRAPH churn_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH churn_graph;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE Gen1(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:Gen1 {id: 1, name: 'one'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("DROP GRAPH churn_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH churn_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH churn_graph;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE Gen2(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:Gen2 {id: 2, name: 'two'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+
+    createDBAndConn();
+
+    ASSERT_TRUE(conn->query("USE GRAPH churn_graph;")->isSuccess());
+    auto result = conn->query("MATCH (n:Gen2 {id: 2}) RETURN n.name;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "two");
+    EXPECT_FALSE(result->hasNext());
+    // The first generation must be gone with the drop, not resurrected by replay.
+    auto gen1 = conn->query("MATCH (n:Gen1) RETURN COUNT(n);");
+    EXPECT_FALSE(gen1->isSuccess());
+}
+
+// A DROP TABLE logs a GRAPH_ENTRY drop for the table's implicit subgraph. The subgraph's
+// create is never WAL-logged, so replay cannot translate its recorded ID, and replay
+// assigns that ID range fresh: the record can collide with another replay-created graph's
+// ID. Acting on that collision drops a graph the user never dropped, so the record must
+// stay a no-op (the table record's own replay already removed the subgraph).
+TEST_F(ReviewFixesTest, ImplicitSubgraphDropRecordSkipsUnrelatedGraphs) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    {
+        auto beginTx = conn->query("BEGIN TRANSACTION;");
+        ASSERT_TRUE(beginTx->isSuccess()) << beginTx->getErrorMessage();
+        ASSERT_TRUE(conn->query("CREATE GRAPH oid_burner;")->isSuccess());
+        auto rb = conn->query("ROLLBACK;");
+        ASSERT_TRUE(rb->isSuccess()) << rb->getErrorMessage();
+    }
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE t(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH survivor;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH survivor;")->isSuccess());
+    ASSERT_TRUE(
+        conn->query("CREATE NODE TABLE S(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE (:S {id: 7, name: 'seven'});")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("DROP TABLE t;")->isSuccess());
+
+    createDBAndConn();
+
+    auto droppedTable = conn->query("MATCH (n:t) RETURN COUNT(n);");
+    EXPECT_FALSE(droppedTable->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH survivor;")->isSuccess());
+    auto result = conn->query("MATCH (n:S {id: 7}) RETURN n.name;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "seven");
+    EXPECT_FALSE(result->hasNext());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+}
+
+// A DROP GRAPH whose recorded entry ID is below the graph-ID floor targets a graph that
+// the checkpoint persisted into the catalog before the session dropped it. The floor
+// guards against replay-created ID collisions, not against persisted drops: replay
+// must identity-apply the recorded ID so the entry is gone after recovery.
+TEST_F(ReviewFixesTest, PersistedGraphDropBelowOIDFloorAppliesByIdentity) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    ASSERT_TRUE(conn->query("CREATE GRAPH doomed_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+    ASSERT_TRUE(conn->query("DROP GRAPH doomed_graph;")->isSuccess());
+
+    createDBAndConn();
+
+    auto graphs = conn->query("CALL show_graphs() RETURN name ORDER BY name;");
+    ASSERT_TRUE(graphs->isSuccess()) << graphs->getErrorMessage();
+    while (graphs->hasNext()) {
+        const auto name = graphs->getNext()->getValue(0)->getValue<std::string>();
+        EXPECT_NE(name, "doomed_graph") << "drop of a persisted graph was skipped by replay";
+    }
+    graphs.reset();
+    auto recreate = conn->query("CREATE GRAPH doomed_graph;");
+    ASSERT_TRUE(recreate->isSuccess()) << recreate->getErrorMessage();
+}
+
+// A GRAPH_ENTRY drop tagged with an owning graph replays against that graph's catalog,
+// where replay assigns subgraph IDs from the graph's own ID counter. The main pass's
+// OID floor counts the main catalog's entries, so the tagged record's untranslated ID
+// must skip the floor fallback's identity lookup: a match there is a replay-created
+// subgraph of the same graph that happens to carry the recorded ID, not the entry the
+// runtime dropped. The rolled-back CREATE below shifts the recorded IDs by one so the
+// dropped table's tagged record collides with another table's replay-assigned subgraph
+// exactly when the tag guard is missing.
+TEST_F(ReviewFixesTest, TaggedSubgraphDropSkipsMainFloorIdentityLookup) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    // Two persisted graphs put the main pass's graph-ID floor at 2.
+    ASSERT_TRUE(conn->query("CREATE GRAPH floor_one;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH drop_owner;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+
+    ASSERT_TRUE(conn->query("USE GRAPH drop_owner;")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE consumed(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("ROLLBACK;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE t(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE survivor(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("DROP TABLE t;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+
+    std::unordered_set<std::string> subgraphs;
+    main::DatabaseManager::Get(*getClientContext(*conn))
+        ->withGraphCatalog("drop_owner", [&subgraphs](catalog::Catalog* catalog) {
+            for (auto* entry :
+                catalog->getGraphEntries(&transaction::DUMMY_CHECKPOINT_TRANSACTION)) {
+                subgraphs.insert(entry->getName());
+            }
+        });
+    EXPECT_TRUE(subgraphs.contains("survivor"))
+        << "the tagged subgraph drop removed the surviving table's subgraph";
+    EXPECT_FALSE(subgraphs.contains("t"));
+}
+
+// The whole lifecycle in one explicit transaction makes recovery replay the drop inside
+// the same recovery transaction that created the dropped graph's catalog entries. The
+// transaction's undo records point into that catalog, so replay must unregister it
+// without destroying it until the pass ends. The runtime drop faces the same constraint:
+// it parks the catalog on the transaction so the commit below cannot apply its records
+// to freed memory, no matter what the later same-name recreation allocates there.
+TEST_F(ReviewFixesTest, DroppedGraphInSingleTransactionReplaysCleanly) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    {
+        auto beginTx = conn->query("BEGIN TRANSACTION;");
+        ASSERT_TRUE(beginTx->isSuccess()) << beginTx->getErrorMessage();
+        ASSERT_TRUE(conn->query("CREATE GRAPH churn_graph;")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH churn_graph;")->isSuccess());
+        ASSERT_TRUE(
+            conn->query("CREATE NODE TABLE Gen1(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+        // Gen1 is DDL-only on purpose: staging rows into it before the drop would hit
+        // the pre-existing local-storage generation conflation (drop + recreate in one
+        // transaction), which is tracked as a separate follow-up.
+        ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+        ASSERT_TRUE(conn->query("DROP GRAPH churn_graph;")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE GRAPH churn_graph;")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH churn_graph;")->isSuccess());
+        ASSERT_TRUE(
+            conn->query("CREATE NODE TABLE Gen2(id INT64 PRIMARY KEY, name STRING);")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE (:Gen2 {id: 2, name: 'two'});")->isSuccess());
+        ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+        auto commitTx = conn->query("COMMIT;");
+        ASSERT_TRUE(commitTx->isSuccess()) << commitTx->getErrorMessage();
+        ASSERT_TRUE(conn->query("USE GRAPH churn_graph;")->isSuccess());
+        auto committedIds = conn->query("MATCH (n:Gen2) RETURN n.id ORDER BY n.id;");
+        ASSERT_TRUE(committedIds->isSuccess()) << committedIds->getErrorMessage();
+        std::vector<int64_t> committed;
+        while (committedIds->hasNext()) {
+            committed.push_back(committedIds->getNext()->getValue(0)->getValue<int64_t>());
+        }
+        EXPECT_EQ(committed, (std::vector<int64_t>{2}));
+        ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    }
+
+    createDBAndConn();
+
+    ASSERT_TRUE(conn->query("USE GRAPH churn_graph;")->isSuccess());
+    auto result = conn->query("MATCH (n:Gen2 {id: 2}) RETURN n.name;");
+    ASSERT_TRUE(result->isSuccess()) << result->getErrorMessage();
+    ASSERT_TRUE(result->hasNext());
+    EXPECT_EQ(result->getNext()->getValue(0)->getValue<std::string>(), "two");
+    EXPECT_FALSE(result->hasNext());
+    auto replayedIds = conn->query("MATCH (n:Gen2) RETURN n.id ORDER BY n.id;");
+    ASSERT_TRUE(replayedIds->isSuccess()) << replayedIds->getErrorMessage();
+    std::vector<int64_t> replayed;
+    while (replayedIds->hasNext()) {
+        replayed.push_back(replayedIds->getNext()->getValue(0)->getValue<int64_t>());
+    }
+    EXPECT_EQ(replayed, (std::vector<int64_t>{2}));
+    auto gen1 = conn->query("MATCH (n:Gen1) RETURN COUNT(n);");
+    EXPECT_FALSE(gen1->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+}
+
+// DROP GRAPH removes the catalog's liveness identity from the manager immediately, even
+// though the catalog itself stays parked on the dropping transaction until commit. The
+// undo-buffer liveness guard relies on that identity: records owned by a dropped graph
+// must be rejected while the catalog is parked, not admitted into retired storage, and
+// the registry must not keep a stale identity after the transaction frees the catalog.
+TEST_F(ReviewFixesTest, DroppedGraphLivenessIdentityRemovedAtDrop) {
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    ASSERT_TRUE(conn->query("CREATE GRAPH gone_graph;")->isSuccess());
+    catalog::Catalog* droppedCatalog = nullptr;
+    main::DatabaseManager::Get(*getClientContext(*conn))
+        ->withGraphCatalog("gone_graph",
+            [&droppedCatalog](catalog::Catalog* catalog) { droppedCatalog = catalog; });
+    ASSERT_NE(droppedCatalog, nullptr);
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("DROP GRAPH gone_graph;")->isSuccess());
+    auto invoked = false;
+    EXPECT_FALSE(main::DatabaseManager::Get(*getClientContext(*conn))
+                     ->withGraphCatalogIfAlive(droppedCatalog, [&invoked] { invoked = true; }));
+    EXPECT_FALSE(invoked);
+    ASSERT_TRUE(conn->query("COMMIT;")->isSuccess());
+}
+
+// A transaction holding a graph-owned catalog-entry undo record must skip the record once
+// another connection's committed DROP GRAPH has retired the owning catalog: the version chain
+// and the catalog set the record points into dangle with it, so applying the rollback would
+// write through freed memory instead of restoring anything a reader can still reach. The
+// live-owner row asserts the same rollback path still removes an uncommitted entry when the
+// owning graph survives.
+TEST_F(ReviewFixesTest, RollbackSkipsDroppedGraphCatalogEntryUndo) {
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    conn->query("CALL debug_enable_multi_writes=true;");
+    ASSERT_TRUE(conn->query("CREATE GRAPH live_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH doomed_graph;")->isSuccess());
+
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH live_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE t(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("ROLLBACK;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH live_graph;")->isSuccess());
+    auto uncommitted = conn->query("MATCH (n:t) RETURN count(n);");
+    EXPECT_FALSE(uncommitted->isSuccess()) << "rollback left the uncommitted table resolvable";
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+
+    main::Connection dropConn(database.get());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH doomed_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE t(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(dropConn.query("DROP GRAPH doomed_graph;")->isSuccess());
+    auto rollback = conn->query("ROLLBACK;");
+    ASSERT_TRUE(rollback->isSuccess()) << rollback->getErrorMessage();
+    auto probe = conn->query("RETURN 1;");
+    ASSERT_TRUE(probe->isSuccess()) << probe->getErrorMessage();
+    ASSERT_EQ(probe->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    auto graphs = conn->query("CALL show_graphs() RETURN name;");
+    ASSERT_TRUE(graphs->isSuccess()) << graphs->getErrorMessage();
+    while (graphs->hasNext()) {
+        const auto name = graphs->getNext()->getValue(0)->getValue<std::string>();
+        EXPECT_NE(name, "doomed_graph") << "the skipped rollback resurrected the dropped graph";
+    }
+}
+
+// The sequence counterpart of the rollback above: advancing a graph-owned sequence inside a
+// transaction records the owning catalog with the restore data. After another connection's
+// committed DROP GRAPH retires that catalog, the rollback must skip restoring the dead
+// sequence; with the owner alive it must still restore the sequence state the transaction
+// consumed.
+TEST_F(ReviewFixesTest, RollbackSkipsDroppedGraphSequenceUndo) {
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    conn->query("CALL debug_enable_multi_writes=true;");
+    ASSERT_TRUE(conn->query("CREATE GRAPH live_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH doomed_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH live_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE live_seq;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH doomed_graph;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE SEQUENCE doomed_seq;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH live_graph;")->isSuccess());
+    auto consumed = conn->query("RETURN nextval('live_seq');");
+    ASSERT_TRUE(consumed->isSuccess()) << consumed->getErrorMessage();
+    const auto consumedVal = consumed->getNext()->getValue(0)->getValue<int64_t>();
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(conn->query("ROLLBACK;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH live_graph;")->isSuccess());
+    auto restored = conn->query("RETURN nextval('live_seq');");
+    ASSERT_TRUE(restored->isSuccess()) << restored->getErrorMessage();
+    EXPECT_EQ(restored->getNext()->getValue(0)->getValue<int64_t>(), consumedVal)
+        << "rollback did not restore the sequence state the transaction consumed";
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+
+    main::Connection dropConn(database.get());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("USE GRAPH doomed_graph;")->isSuccess());
+    auto doomedUse = conn->query("RETURN nextval('doomed_seq');");
+    ASSERT_TRUE(doomedUse->isSuccess()) << doomedUse->getErrorMessage();
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    ASSERT_TRUE(dropConn.query("DROP GRAPH doomed_graph;")->isSuccess());
+    auto rollback = conn->query("ROLLBACK;");
+    ASSERT_TRUE(rollback->isSuccess()) << rollback->getErrorMessage();
+    auto probe = conn->query("RETURN 1;");
+    ASSERT_TRUE(probe->isSuccess()) << probe->getErrorMessage();
+    ASSERT_EQ(probe->getNext()->getValue(0)->getValue<int64_t>(), 1);
 }
 
 // Regression tests for #1050: a checkpoint that fails after the PK index storage phase must
