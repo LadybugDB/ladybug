@@ -49,8 +49,8 @@ void LocalWAL::logDropCatalogEntryRecord(const std::string& ownerCatalogName, ta
 }
 
 void LocalWAL::logAlterCatalogEntryRecord(const std::string& ownerCatalogName,
-    const BoundAlterInfo* alterInfo) {
-    AlterTableEntryRecord walRecord(alterInfo);
+    const BoundAlterInfo* alterInfo, table_id_t addedRelTableOID) {
+    AlterTableEntryRecord walRecord(alterInfo, addedRelTableOID);
     walRecord.ownerCatalogName = ownerCatalogName;
     addNewWALRecord(walRecord);
 }

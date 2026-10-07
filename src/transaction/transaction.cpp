@@ -237,12 +237,14 @@ void Transaction::pushCreateDropCatalogEntry(CatalogSet& catalogSet, CatalogEntr
 }
 
 void Transaction::pushAlterCatalogEntry(CatalogSet& catalogSet, CatalogEntry& catalogEntry,
-    const binder::BoundAlterInfo& alterInfo, bool skipLoggingToWAL) {
+    const binder::BoundAlterInfo& alterInfo, bool skipLoggingToWAL,
+    common::table_id_t addedRelTableOID) {
     undoBuffer->createCatalogEntry(catalogSet, catalogEntry);
     recordCatalogChange(catalogSet.getCatalog());
     if (shouldLogToWAL() && !skipLoggingToWAL) {
         DASSERT(localWAL);
-        localWAL->logAlterCatalogEntryRecord(catalogSet.getOwnerCatalogName(), &alterInfo);
+        localWAL->logAlterCatalogEntryRecord(catalogSet.getOwnerCatalogName(), &alterInfo,
+            addedRelTableOID);
     }
 }
 

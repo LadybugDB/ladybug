@@ -53,6 +53,12 @@ public:
 
     uint64_t getReadOffset() const { return reader->getReadOffset(); }
     void beginReadLimit(uint64_t size) { readLimit = getReadOffset() + size; }
+    uint64_t getRemainingReadLimit() const {
+        if (!readLimit.has_value()) {
+            return std::numeric_limits<uint64_t>::max();
+        }
+        return *readLimit > getReadOffset() ? *readLimit - getReadOffset() : 0;
+    }
     bool hasRemainingData() const { return !readLimit.has_value() || getReadOffset() < *readLimit; }
     void skipReadLimit() {
         if (!readLimit.has_value()) {
