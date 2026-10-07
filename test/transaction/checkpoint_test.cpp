@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "api_test/private_api_test.h"
+#include "binder/ddl/bound_alter_info.h"
 #include "binder/ddl/bound_create_sequence_info.h"
 #include "catalog/catalog.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
@@ -3133,6 +3134,341 @@ TEST_F(FlakyCheckpointerTest, LegacyUpdateSequenceReplayResolvesRecordedEntryID)
     ASSERT_EQ(sequenceResult->getNext()->getValue(0)->getValue<int64_t>(), 43);
 }
 
+// The committed sentinel appended after the frame under test. A scanner that accepts
+// the preceding frame reaches this commit and replays the sequence it creates; a
+// scanner that rejects the frame truncates recovery before it and the sequence stays
+// absent.
+static BinaryData craftPostFrameSentinelWAL(main::ClientContext& context) {
+    auto* memoryManager = MemoryManager::Get(context);
+    auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+    std::shared_ptr<Writer> writer = inMemWriter;
+    Serializer serializer{writer};
+    const auto appendRecord = [&serializer, &writer](const WALRecord& record) {
+        writer->onObjectBegin();
+        WALRecord::serializeWithLength(serializer, record);
+        writer->onObjectEnd();
+    };
+    appendRecord(BeginTransactionRecord{});
+    {
+        binder::BoundCreateSequenceInfo sequenceInfo("post_torn", 1 /* startWith */,
+            1 /* increment */, 1 /* minValue */, std::numeric_limits<int64_t>::max(),
+            false /* cycle */, ConflictAction::ON_CONFLICT_THROW, false /* isInternal */);
+        catalog::SequenceCatalogEntry sequenceEntry(sequenceInfo);
+        sequenceEntry.setOID(101);
+        CreateCatalogEntryRecord createRecord(&sequenceEntry, false);
+        appendRecord(createRecord);
+    }
+    appendRecord(CommitRecord{});
+    auto bufferWriter = std::make_shared<BufferWriter>();
+    inMemWriter->flush(*bufferWriter);
+    return bufferWriter->getData();
+}
+
+// The owner trailer's declared length must stay inside the record's WAL frame. A torn
+// trailer whose length field overruns the frame used to zero-fill the name silently, so
+// the record replayed into whichever catalog the garbage name selected. The strict
+// length check must reject the record so the scan truncates at the last committed
+// record instead. Checksummed WALs reject any physical tear at the checksum layer
+// before this check can fire, so this exercises the checksum-less configuration.
+TEST_F(FlakyCheckpointerTest, TornOwnerTrailerOverrunTruncatesAtLastCommit) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    // A committed record leaves a WAL file with a database-ID header to append to.
+    auto tableResult = conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY);");
+    ASSERT_TRUE(tableResult->isSuccess()) << tableResult->getErrorMessage();
+
+    auto& context = *conn->getClientContext();
+    BinaryData craftedWAL;
+    {
+        auto* memoryManager = MemoryManager::Get(context);
+        auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+        std::shared_ptr<Writer> writer = inMemWriter;
+        Serializer serializer{writer};
+        const auto appendRecord = [&serializer, &writer](const WALRecord& record) {
+            writer->onObjectBegin();
+            WALRecord::serializeWithLength(serializer, record);
+            writer->onObjectEnd();
+        };
+        appendRecord(BeginTransactionRecord{});
+        {
+            binder::BoundCreateSequenceInfo sequenceInfo("s", 1 /* startWith */, 1 /* increment */,
+                1 /* minValue */, std::numeric_limits<int64_t>::max(), false /* cycle */,
+                ConflictAction::ON_CONFLICT_THROW, false /* isInternal */);
+            catalog::SequenceCatalogEntry sequenceEntry(sequenceInfo);
+            sequenceEntry.setOID(100);
+            CreateCatalogEntryRecord createRecord(&sequenceEntry, false);
+            appendRecord(createRecord);
+        }
+        appendRecord(CommitRecord{});
+        UpdateSequenceRecord tornRecord{100, 43};
+        tornRecord.ownerCatalogName = "ABCD";
+        appendRecord(tornRecord);
+        auto bufferWriter = std::make_shared<BufferWriter>();
+        inMemWriter->flush(*bufferWriter);
+        craftedWAL = bufferWriter->getData();
+    }
+    // The trailer's 8-byte length field sits directly before the 4-byte name.
+    std::memset(craftedWAL.data.get() + craftedWAL.size - 12, 0xFF, 8);
+    auto sentinelWAL = craftPostFrameSentinelWAL(context);
+
+    conn.reset();
+    database.reset();
+    std::ofstream walFile{StorageUtils::getWALFilePath(databasePath),
+        std::ios::binary | std::ios::app};
+    ASSERT_TRUE(walFile.is_open());
+    walFile.write(reinterpret_cast<const char*>(craftedWAL.data.get()),
+        static_cast<std::streamsize>(craftedWAL.size));
+    walFile.write(reinterpret_cast<const char*>(sentinelWAL.data.get()),
+        static_cast<std::streamsize>(sentinelWAL.size));
+    walFile.close();
+    ASSERT_TRUE(walFile.good());
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    auto sequenceResult = conn->query("RETURN nextval('s');");
+    ASSERT_TRUE(sequenceResult->isSuccess()) << sequenceResult->getErrorMessage();
+    ASSERT_EQ(sequenceResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    // The scan must stop at the torn frame: the committed sentinel behind it never
+    // replays, so the sequence it creates stays absent.
+    auto sentinelResult = conn->query("RETURN nextval('post_torn');");
+    EXPECT_FALSE(sentinelResult->isSuccess()) << sentinelResult->getErrorMessage();
+}
+
+// A frame that still has bytes left after a fully decoded owner trailer is torn the
+// same way: the old reader skipped the leftovers, so a record could carry a valid
+// name plus trailing garbage and still replay. The trailer must consume the frame
+// exactly or the record is rejected.
+TEST_F(FlakyCheckpointerTest, TornOwnerTrailerTrailingBytesTruncatesAtLastCommit) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    // A committed record leaves a WAL file with a database-ID header to append to.
+    auto tableResult = conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY);");
+    ASSERT_TRUE(tableResult->isSuccess()) << tableResult->getErrorMessage();
+
+    auto& context = *conn->getClientContext();
+    BinaryData goodWAL, tornWAL;
+    {
+        auto* memoryManager = MemoryManager::Get(context);
+        auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+        std::shared_ptr<Writer> writer = inMemWriter;
+        Serializer serializer{writer};
+        const auto appendRecord = [&serializer, &writer](const WALRecord& record) {
+            writer->onObjectBegin();
+            WALRecord::serializeWithLength(serializer, record);
+            writer->onObjectEnd();
+        };
+        appendRecord(BeginTransactionRecord{});
+        {
+            binder::BoundCreateSequenceInfo sequenceInfo("s", 1 /* startWith */, 1 /* increment */,
+                1 /* minValue */, std::numeric_limits<int64_t>::max(), false /* cycle */,
+                ConflictAction::ON_CONFLICT_THROW, false /* isInternal */);
+            catalog::SequenceCatalogEntry sequenceEntry(sequenceInfo);
+            sequenceEntry.setOID(100);
+            CreateCatalogEntryRecord createRecord(&sequenceEntry, false);
+            appendRecord(createRecord);
+        }
+        appendRecord(CommitRecord{});
+        auto bufferWriter = std::make_shared<BufferWriter>();
+        inMemWriter->flush(*bufferWriter);
+        goodWAL = bufferWriter->getData();
+    }
+    {
+        auto* memoryManager = MemoryManager::Get(context);
+        auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+        std::shared_ptr<Writer> writer = inMemWriter;
+        Serializer serializer{writer};
+        writer->onObjectBegin();
+        UpdateSequenceRecord tornRecord{100, 43};
+        tornRecord.ownerCatalogName = "ABCD";
+        WALRecord::serializeWithLength(serializer, tornRecord);
+        writer->onObjectEnd();
+        auto bufferWriter = std::make_shared<BufferWriter>();
+        inMemWriter->flush(*bufferWriter);
+        tornWAL = bufferWriter->getData();
+    }
+    // Grow the torn record's frame by 8 so it covers 8 bytes of trailing garbage
+    // written after the (empty) trailer.
+    uint64_t frameLength = 0;
+    std::memcpy(&frameLength, tornWAL.data.get(), sizeof(frameLength));
+    frameLength += 8;
+    std::memcpy(tornWAL.data.get(), &frameLength, sizeof(frameLength));
+    auto sentinelWAL = craftPostFrameSentinelWAL(context);
+
+    conn.reset();
+    database.reset();
+    std::ofstream walFile{StorageUtils::getWALFilePath(databasePath),
+        std::ios::binary | std::ios::app};
+    ASSERT_TRUE(walFile.is_open());
+    walFile.write(reinterpret_cast<const char*>(goodWAL.data.get()),
+        static_cast<std::streamsize>(goodWAL.size));
+    walFile.write(reinterpret_cast<const char*>(tornWAL.data.get()),
+        static_cast<std::streamsize>(tornWAL.size));
+    const uint8_t trailing[8] = {0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE};
+    walFile.write(reinterpret_cast<const char*>(trailing), sizeof(trailing));
+    walFile.write(reinterpret_cast<const char*>(sentinelWAL.data.get()),
+        static_cast<std::streamsize>(sentinelWAL.size));
+    walFile.close();
+    ASSERT_TRUE(walFile.good());
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    auto sequenceResult = conn->query("RETURN nextval('s');");
+    ASSERT_TRUE(sequenceResult->isSuccess()) << sequenceResult->getErrorMessage();
+    ASSERT_EQ(sequenceResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    // The scan must stop at the torn frame: the committed sentinel behind it never
+    // replays, so the sequence it creates stays absent.
+    auto sentinelResult = conn->query("RETURN nextval('post_torn');");
+    EXPECT_FALSE(sentinelResult->isSuccess()) << sentinelResult->getErrorMessage();
+}
+
+// A zero byte inside a decoded owner name is the signature of a payload torn from
+// zeroed file blocks: real catalog names are identifiers and never contain NUL. The
+// strict decode must reject such a record rather than route it to a bogus owner.
+TEST_F(FlakyCheckpointerTest, TornOwnerTrailerNullByteTruncatesAtLastCommit) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    // A committed record leaves a WAL file with a database-ID header to append to.
+    auto tableResult = conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY);");
+    ASSERT_TRUE(tableResult->isSuccess()) << tableResult->getErrorMessage();
+
+    auto& context = *conn->getClientContext();
+    BinaryData craftedWAL;
+    {
+        auto* memoryManager = MemoryManager::Get(context);
+        auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+        std::shared_ptr<Writer> writer = inMemWriter;
+        Serializer serializer{writer};
+        const auto appendRecord = [&serializer, &writer](const WALRecord& record) {
+            writer->onObjectBegin();
+            WALRecord::serializeWithLength(serializer, record);
+            writer->onObjectEnd();
+        };
+        appendRecord(BeginTransactionRecord{});
+        {
+            binder::BoundCreateSequenceInfo sequenceInfo("s", 1 /* startWith */, 1 /* increment */,
+                1 /* minValue */, std::numeric_limits<int64_t>::max(), false /* cycle */,
+                ConflictAction::ON_CONFLICT_THROW, false /* isInternal */);
+            catalog::SequenceCatalogEntry sequenceEntry(sequenceInfo);
+            sequenceEntry.setOID(100);
+            CreateCatalogEntryRecord createRecord(&sequenceEntry, false);
+            appendRecord(createRecord);
+        }
+        appendRecord(CommitRecord{});
+        UpdateSequenceRecord tornRecord{100, 43};
+        tornRecord.ownerCatalogName = "ABCD";
+        appendRecord(tornRecord);
+        auto bufferWriter = std::make_shared<BufferWriter>();
+        inMemWriter->flush(*bufferWriter);
+        craftedWAL = bufferWriter->getData();
+    }
+    craftedWAL.data.get()[craftedWAL.size - 4 + 1] = 0x00;
+    auto sentinelWAL = craftPostFrameSentinelWAL(context);
+
+    conn.reset();
+    database.reset();
+    std::ofstream walFile{StorageUtils::getWALFilePath(databasePath),
+        std::ios::binary | std::ios::app};
+    ASSERT_TRUE(walFile.is_open());
+    walFile.write(reinterpret_cast<const char*>(craftedWAL.data.get()),
+        static_cast<std::streamsize>(craftedWAL.size));
+    walFile.write(reinterpret_cast<const char*>(sentinelWAL.data.get()),
+        static_cast<std::streamsize>(sentinelWAL.size));
+    walFile.close();
+    ASSERT_TRUE(walFile.good());
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    auto sequenceResult = conn->query("RETURN nextval('s');");
+    ASSERT_TRUE(sequenceResult->isSuccess()) << sequenceResult->getErrorMessage();
+    ASSERT_EQ(sequenceResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    // The scan must stop at the torn frame: the committed sentinel behind it never
+    // replays, so the sequence it creates stays absent.
+    auto sentinelResult = conn->query("RETURN nextval('post_torn');");
+    EXPECT_FALSE(sentinelResult->isSuccess()) << sentinelResult->getErrorMessage();
+}
+
+// The control for the three torn-trailer tests: the identical frame left well formed
+// decodes and the scanner walks on to the committed sentinel behind it, so the sentinel
+// sequence replays. Its absence in the torn tests is therefore the torn frames' doing.
+TEST_F(FlakyCheckpointerTest, WellFormedOwnerTrailerFrameReachesLaterCommit) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0 || systemConfig->enableChecksums) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    // A committed record leaves a WAL file with a database-ID header to append to.
+    auto tableResult = conn->query("CREATE NODE TABLE T(id INT64 PRIMARY KEY);");
+    ASSERT_TRUE(tableResult->isSuccess()) << tableResult->getErrorMessage();
+
+    auto& context = *conn->getClientContext();
+    BinaryData craftedWAL;
+    {
+        auto* memoryManager = MemoryManager::Get(context);
+        auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+        std::shared_ptr<Writer> writer = inMemWriter;
+        Serializer serializer{writer};
+        const auto appendRecord = [&serializer, &writer](const WALRecord& record) {
+            writer->onObjectBegin();
+            WALRecord::serializeWithLength(serializer, record);
+            writer->onObjectEnd();
+        };
+        appendRecord(BeginTransactionRecord{});
+        {
+            binder::BoundCreateSequenceInfo sequenceInfo("s", 1 /* startWith */, 1 /* increment */,
+                1 /* minValue */, std::numeric_limits<int64_t>::max(), false /* cycle */,
+                ConflictAction::ON_CONFLICT_THROW, false /* isInternal */);
+            catalog::SequenceCatalogEntry sequenceEntry(sequenceInfo);
+            sequenceEntry.setOID(100);
+            CreateCatalogEntryRecord createRecord(&sequenceEntry, false);
+            appendRecord(createRecord);
+        }
+        appendRecord(CommitRecord{});
+        UpdateSequenceRecord updateRecord{100, 43};
+        updateRecord.ownerCatalogName = "ABCD";
+        appendRecord(updateRecord);
+        auto bufferWriter = std::make_shared<BufferWriter>();
+        inMemWriter->flush(*bufferWriter);
+        craftedWAL = bufferWriter->getData();
+    }
+    auto sentinelWAL = craftPostFrameSentinelWAL(context);
+
+    conn.reset();
+    database.reset();
+    std::ofstream walFile{StorageUtils::getWALFilePath(databasePath),
+        std::ios::binary | std::ios::app};
+    ASSERT_TRUE(walFile.is_open());
+    walFile.write(reinterpret_cast<const char*>(craftedWAL.data.get()),
+        static_cast<std::streamsize>(craftedWAL.size));
+    walFile.write(reinterpret_cast<const char*>(sentinelWAL.data.get()),
+        static_cast<std::streamsize>(sentinelWAL.size));
+    walFile.close();
+    ASSERT_TRUE(walFile.good());
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    auto sequenceResult = conn->query("RETURN nextval('s');");
+    ASSERT_TRUE(sequenceResult->isSuccess()) << sequenceResult->getErrorMessage();
+    ASSERT_EQ(sequenceResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    // The well-formed frame lets the scan reach the sentinel commit; the update itself
+    // routes to the unknown ABCD graph, so sequence s stays untouched.
+    auto sentinelResult = conn->query("RETURN nextval('post_torn');");
+    ASSERT_TRUE(sentinelResult->isSuccess()) << sentinelResult->getErrorMessage();
+    ASSERT_EQ(sentinelResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
 // A standalone session's graph WAL addresses rel data by the per-direction physical
 // rel-table ID and binds a rel group through its endpoint node-table IDs, all recorded
 // in that session's plain catalog, which lacks the ANY-graph infrastructure entries
@@ -3186,6 +3522,64 @@ TEST_F(FlakyCheckpointerTest, StandaloneRelTableReplayDoesNotPoisonRecovery) {
     auto relResult = conn->query("MATCH (:Person)-[k:Knows]->(:Person) RETURN COUNT(k);");
     ASSERT_TRUE(relResult->isSuccess()) << relResult->getErrorMessage();
     ASSERT_EQ(relResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+// One graph written from two namespaces: the main session logs owner-tagged records
+// into the main WAL, then a standalone session on the graph file logs plain records
+// into the graph's own WAL. Both WALs replay in a single reopen — the main pass first,
+// then the graph pass — and both namespaces recorded their table IDs against the same
+// persisted catalog counter, so their recorded IDs overlap. The rolled-back DDL in the
+// main session exercises the counter rewind in the same WAL. Each table's data must
+// still land in that table after the reopen.
+TEST_F(FlakyCheckpointerTest, TwoNamespaceReopenKeepsPerTableData) {
+    if (inMemMode || systemConfig->checkpointThreshold == 0) {
+        GTEST_SKIP();
+    }
+    ASSERT_TRUE(conn->query("CALL force_checkpoint_on_close=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CALL auto_checkpoint=false;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE GRAPH two_ns;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+
+    ASSERT_TRUE(conn->query("USE GRAPH two_ns;")->isSuccess());
+    ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE consumed(id INT64 PRIMARY KEY);")->isSuccess());
+    ASSERT_TRUE(conn->query("ROLLBACK;")->isSuccess());
+    ASSERT_TRUE(conn->query("CREATE NODE TABLE Person(id INT64 PRIMARY KEY);")->isSuccess());
+    for (auto id = 1; id <= 2; id++) {
+        auto insert = conn->query(std::format("CREATE (:Person {{id: {}}});", id));
+        ASSERT_TRUE(insert->isSuccess()) << insert->getErrorMessage();
+    }
+    ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    conn.reset();
+    database.reset();
+
+    const auto graphPath = StorageUtils::getGraphPath(databasePath, "two_ns");
+    auto graphConfig = *systemConfig;
+    graphConfig.autoCheckpoint = false;
+    graphConfig.forceCheckpointOnClose = false;
+    auto graphDatabase = std::make_unique<main::Database>(graphPath, graphConfig);
+    auto graphConnection = std::make_unique<main::Connection>(graphDatabase.get());
+    auto ddl = graphConnection->query("CREATE NODE TABLE Bookstand(id INT64 PRIMARY KEY);");
+    ASSERT_TRUE(ddl->isSuccess()) << ddl->getErrorMessage();
+    for (auto id = 10; id <= 12; id++) {
+        auto insert = graphConnection->query(std::format("CREATE (:Bookstand {{id: {}}});", id));
+        ASSERT_TRUE(insert->isSuccess()) << insert->getErrorMessage();
+    }
+    ddl.reset();
+    graphConnection.reset();
+    graphDatabase.reset();
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_EQ(openResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    ASSERT_TRUE(conn->query("USE GRAPH two_ns;")->isSuccess());
+    auto personResult = conn->query("MATCH (n:Person) RETURN COUNT(n);");
+    ASSERT_TRUE(personResult->isSuccess()) << personResult->getErrorMessage();
+    ASSERT_EQ(personResult->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    auto bookstandResult = conn->query("MATCH (n:Bookstand) RETURN COUNT(n);");
+    ASSERT_TRUE(bookstandResult->isSuccess()) << bookstandResult->getErrorMessage();
+    ASSERT_EQ(bookstandResult->getNext()->getValue(0)->getValue<int64_t>(), 3);
 }
 
 // A standalone session's graph WAL records index operations in the standalone catalog's own
@@ -5230,6 +5624,392 @@ TEST_F(ReviewFixesTest, TaggedSubgraphDropSkipsMainFloorIdentityLookup) {
     EXPECT_TRUE(subgraphs.contains("survivor"))
         << "the tagged subgraph drop removed the surviving table's subgraph";
     EXPECT_FALSE(subgraphs.contains("t"));
+}
+
+// ALTER ADD/DROP FROM TO records carry the endpoint node-table IDs as bound at log time,
+// and the ALTER-added connection is recorded under its physical rel-table OID. Natural
+// graph-session recovery is identity-preserving (a rolled-back DDL rewinds the catalog
+// counter), so this test guards the whole ALTER + replay lifecycle end to end under
+// identity; CraftedAlterFromToEndpointsTranslateRecordedEntryIDs below forces a
+// recorded/replayed ID gap and proves the translations themselves.
+TEST_F(ReviewFixesTest, AlterFromToEndpointsResolveReplayedNodeIDs) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    ASSERT_TRUE(conn->query("CREATE GRAPH alter_replay;")->isSuccess());
+    ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+
+    {
+        ASSERT_TRUE(conn->query("USE GRAPH alter_replay;")->isSuccess());
+        ASSERT_TRUE(conn->query("BEGIN TRANSACTION;")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE NODE TABLE consumed(id INT64 PRIMARY KEY);")->isSuccess());
+        ASSERT_TRUE(conn->query("ROLLBACK;")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE NODE TABLE Person(id INT64 PRIMARY KEY);")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE NODE TABLE Hobby(id INT64 PRIMARY KEY);")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE REL TABLE Knows(FROM Person TO Person);")->isSuccess());
+        for (auto id = 1; id <= 2; id++) {
+            auto insert = conn->query(std::format("CREATE (:Person {{id: {}}});", id));
+            ASSERT_TRUE(insert->isSuccess()) << insert->getErrorMessage();
+        }
+        auto initialRel =
+            conn->query("MATCH (a:Person {id: 1}), (b:Person {id: 2}) CREATE (a)-[:Knows]->(b);");
+        ASSERT_TRUE(initialRel->isSuccess()) << initialRel->getErrorMessage();
+        auto hobbyInsert = conn->query("CREATE (:Hobby {id: 9});");
+        ASSERT_TRUE(hobbyInsert->isSuccess()) << hobbyInsert->getErrorMessage();
+        auto alterResult = conn->query("ALTER TABLE Knows ADD FROM Hobby TO Person;");
+        ASSERT_TRUE(alterResult->isSuccess()) << alterResult->getErrorMessage();
+        auto addedRelResult =
+            conn->query("MATCH (h:Hobby {id: 9}), (p:Person {id: 1}) CREATE (h)-[:Knows]->(p);");
+        ASSERT_TRUE(addedRelResult->isSuccess()) << addedRelResult->getErrorMessage();
+        ASSERT_TRUE(conn->query("USE GRAPH main;")->isSuccess());
+    }
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_TRUE(conn->query("USE GRAPH alter_replay;")->isSuccess());
+    auto personResult = conn->query("MATCH (n:Person) RETURN COUNT(n);");
+    ASSERT_TRUE(personResult->isSuccess()) << personResult->getErrorMessage();
+    ASSERT_EQ(personResult->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    auto hobbyResult = conn->query("MATCH (n:Hobby) RETURN COUNT(n);");
+    ASSERT_TRUE(hobbyResult->isSuccess()) << hobbyResult->getErrorMessage();
+    ASSERT_EQ(hobbyResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    auto initialRelResult = conn->query("MATCH (:Person)-[k:Knows]->(:Person) RETURN COUNT(k);");
+    ASSERT_TRUE(initialRelResult->isSuccess()) << initialRelResult->getErrorMessage();
+    ASSERT_EQ(initialRelResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    auto addedRelCount = conn->query("MATCH (:Hobby)-[k:Knows]->(:Person) RETURN COUNT(k);");
+    ASSERT_TRUE(addedRelCount->isSuccess()) << addedRelCount->getErrorMessage();
+    ASSERT_EQ(addedRelCount->getNext()->getValue(0)->getValue<int64_t>(), 1);
+}
+
+// The crafted WAL below appends owner-tagged records whose recorded entry IDs (node tables
+// 100/200, group 300, per-connection rel-table OIDs 350/400) deliberately disagree with the
+// IDs replay assigns in graph craft's empty catalog. CREATE replay translates the group's
+// relTableInfos endpoints, ALTER ADD FROM TO translates its from/to IDs and re-registers the
+// added connection under its recorded physical rel-table OID, and node/rel data records
+// resolve their own table IDs and rel endpoints through the same map. Reading any of these
+// raw binds the added connection to missing entries and misroutes the crafted rows.
+TEST_F(ReviewFixesTest, CraftedAlterFromToEndpointsTranslateRecordedEntryID) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    {
+        ASSERT_TRUE(conn->query("CREATE GRAPH craft;")->isSuccess());
+        ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+        // Source entries for the crafted records; these tables replay into main's catalog.
+        ASSERT_TRUE(conn->query("CREATE NODE TABLE Person(id INT64 PRIMARY KEY);")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE NODE TABLE Hobby(id INT64 PRIMARY KEY);")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE REL TABLE Knows(FROM Person TO Person);")->isSuccess());
+    }
+
+    auto& context = *conn->getClientContext();
+    BinaryData craftedWAL;
+    {
+        auto* memoryManager = MemoryManager::Get(context);
+        auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+        std::shared_ptr<Writer> writer;
+        if (systemConfig->enableChecksums) {
+            writer = std::make_shared<ChecksumWriter>(inMemWriter, *memoryManager);
+        } else {
+            writer = inMemWriter;
+        }
+        Serializer serializer{writer};
+        const auto appendRecord = [&serializer, &writer](const WALRecord& record) {
+            writer->onObjectBegin();
+            WALRecord::serializeWithLength(serializer, record);
+            writer->onObjectEnd();
+        };
+        const auto appendCraftRecord = [&appendRecord](WALRecord& record) {
+            record.ownerCatalogName = "craft";
+            appendRecord(record);
+        };
+
+        auto catalog = catalog::Catalog::Get(context);
+        auto personCopy =
+            catalog->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "Person")
+                ->copy();
+        auto hobbyCopy =
+            catalog->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "Hobby")
+                ->copy();
+        auto knowsCopy =
+            catalog->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "Knows")
+                ->copy();
+        auto& knowsGroup = knowsCopy->cast<catalog::RelGroupCatalogEntry>();
+        auto recordedInfos = knowsGroup.getRelEntryInfos();
+        for (const auto& recordedInfo : recordedInfos) {
+            knowsGroup.dropFromToConnection(recordedInfo.nodePair.srcTableID,
+                recordedInfo.nodePair.dstTableID);
+        }
+        personCopy->setOID(100);
+        hobbyCopy->setOID(200);
+        knowsGroup.addFromToConnection(100, 100, 350);
+        knowsGroup.setOID(300);
+
+        appendRecord(BeginTransactionRecord{});
+        {
+            CreateCatalogEntryRecord personCreate(personCopy.get(), false);
+            appendCraftRecord(personCreate);
+            CreateCatalogEntryRecord hobbyCreate(hobbyCopy.get(), false);
+            appendCraftRecord(hobbyCreate);
+            CreateCatalogEntryRecord knowsCreate(knowsCopy.get(), false);
+            appendCraftRecord(knowsCreate);
+            binder::BoundAlterInfo alterInfo(AlterType::ADD_FROM_TO_CONNECTION, "Knows",
+                std::make_unique<binder::BoundExtraAlterFromToConnection>(200, 100));
+            AlterTableEntryRecord alterRecord(&alterInfo, 400);
+            appendCraftRecord(alterRecord);
+        }
+        appendRecord(CommitRecord{});
+
+        appendRecord(BeginTransactionRecord{});
+        {
+            const auto craftNodeInsert = [&appendCraftRecord, memoryManager](
+                                             common::table_id_t recordedTableID, int64_t key) {
+                auto keyVector = std::make_unique<ValueVector>(LogicalTypeID::INT64, memoryManager);
+                keyVector->setState(DataChunkState::getSingleValueDataChunkState());
+                keyVector->setValue<int64_t>(0, key);
+                keyVector->setNull(0, false);
+                TableInsertionRecord insertRecord(recordedTableID, TableType::NODE, 1,
+                    {keyVector.get()});
+                appendCraftRecord(insertRecord);
+            };
+            const auto craftRelInsert = [&appendCraftRecord,
+                                            memoryManager](common::table_id_t recordedTableID,
+                                            nodeID_t src, nodeID_t dst) {
+                auto srcVector =
+                    std::make_unique<ValueVector>(LogicalTypeID::INTERNAL_ID, memoryManager);
+                srcVector->setState(DataChunkState::getSingleValueDataChunkState());
+                srcVector->setValue<nodeID_t>(0, src);
+                srcVector->setNull(0, false);
+                auto dstVector =
+                    std::make_unique<ValueVector>(LogicalTypeID::INTERNAL_ID, memoryManager);
+                dstVector->setState(DataChunkState::getSingleValueDataChunkState());
+                dstVector->setValue<nodeID_t>(0, dst);
+                dstVector->setNull(0, false);
+                auto relIDVector =
+                    std::make_unique<ValueVector>(LogicalTypeID::INTERNAL_ID, memoryManager);
+                relIDVector->setState(DataChunkState::getSingleValueDataChunkState());
+                relIDVector->setValue<nodeID_t>(0, nodeID_t{0, recordedTableID});
+                relIDVector->setNull(0, false);
+                TableInsertionRecord insertRecord(recordedTableID, TableType::REL, 1,
+                    {srcVector.get(), dstVector.get(), relIDVector.get()});
+                appendCraftRecord(insertRecord);
+            };
+            craftNodeInsert(100, 1);
+            craftNodeInsert(100, 2);
+            craftNodeInsert(200, 9);
+            craftRelInsert(350, nodeID_t{0, 100}, nodeID_t{1, 100});
+            craftRelInsert(400, nodeID_t{0, 200}, nodeID_t{0, 100});
+        }
+        appendRecord(CommitRecord{});
+
+        auto bufferWriter = std::make_shared<BufferWriter>();
+        inMemWriter->flush(*bufferWriter);
+        craftedWAL = bufferWriter->getData();
+    }
+    conn.reset();
+    database.reset();
+
+    std::ofstream walFile{StorageUtils::getWALFilePath(databasePath),
+        std::ios::binary | std::ios::app};
+    ASSERT_TRUE(walFile.is_open());
+    walFile.write(reinterpret_cast<const char*>(craftedWAL.data.get()),
+        static_cast<std::streamsize>(craftedWAL.size));
+    walFile.close();
+    ASSERT_TRUE(walFile.good());
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_TRUE(conn->query("USE GRAPH craft;")->isSuccess());
+    auto personResult = conn->query("MATCH (n:Person) RETURN COUNT(n);");
+    ASSERT_TRUE(personResult->isSuccess()) << personResult->getErrorMessage();
+    ASSERT_EQ(personResult->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    auto hobbyResult = conn->query("MATCH (n:Hobby) RETURN COUNT(n);");
+    ASSERT_TRUE(hobbyResult->isSuccess()) << hobbyResult->getErrorMessage();
+    ASSERT_EQ(hobbyResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    auto initialRelResult = conn->query("MATCH (:Person)-[k:Knows]->(:Person) RETURN COUNT(k);");
+    ASSERT_TRUE(initialRelResult->isSuccess()) << initialRelResult->getErrorMessage();
+    ASSERT_EQ(initialRelResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    auto addedRelResult = conn->query("MATCH (:Hobby)-[k:Knows]->(:Person) RETURN COUNT(k);");
+    ASSERT_TRUE(addedRelResult->isSuccess()) << addedRelResult->getErrorMessage();
+    ASSERT_EQ(addedRelResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+    // The neighbor reads resolve the stored dst node IDs by table ID, so they fail when a
+    // replayed row keeps a stale recorded endpoint.
+    auto initialNbrResult =
+        conn->query("MATCH (:Person {id: 1})-[k:Knows]->(p:Person) RETURN p.id;");
+    ASSERT_TRUE(initialNbrResult->isSuccess()) << initialNbrResult->getErrorMessage();
+    ASSERT_TRUE(initialNbrResult->hasNext());
+    ASSERT_EQ(initialNbrResult->getNext()->getValue(0)->getValue<int64_t>(), 2);
+    auto addedNbrResult = conn->query("MATCH (:Hobby {id: 9})-[k:Knows]->(p:Person) RETURN p.id;");
+    ASSERT_TRUE(addedNbrResult->isSuccess()) << addedNbrResult->getErrorMessage();
+    ASSERT_TRUE(addedNbrResult->hasNext());
+    ASSERT_EQ(addedNbrResult->getNext()->getValue(0)->getValue<int64_t>(), 1);
+
+    common::table_id_t personID = common::INVALID_TABLE_ID;
+    common::table_id_t hobbyID = common::INVALID_TABLE_ID;
+    std::vector<catalog::RelTableCatalogInfo> recoveredRelEntryInfos;
+    main::DatabaseManager::Get(*conn->getClientContext())
+        ->withGraphCatalog("craft", [&](catalog::Catalog* graphCatalog) {
+            personID =
+                graphCatalog
+                    ->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "Person")
+                    ->getTableID();
+            hobbyID =
+                graphCatalog
+                    ->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "Hobby")
+                    ->getTableID();
+            recoveredRelEntryInfos =
+                graphCatalog
+                    ->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "Knows")
+                    ->constCast<catalog::RelGroupCatalogEntry>()
+                    .getRelEntryInfos();
+        });
+    ASSERT_EQ(recoveredRelEntryInfos.size(), 2);
+    const auto hasPair = [&](common::table_id_t src, common::table_id_t dst) {
+        return std::any_of(recoveredRelEntryInfos.begin(), recoveredRelEntryInfos.end(),
+            [&](const catalog::RelTableCatalogInfo& info) {
+                return info.nodePair.srcTableID == src && info.nodePair.dstTableID == dst;
+            });
+    };
+    ASSERT_TRUE(hasPair(personID, personID));
+    ASSERT_TRUE(hasPair(hobbyID, personID));
+}
+
+// The DROP arm of the ALTER endpoint translation. The crafted WAL logs a committed
+// DROP_FROM_TO record whose recorded endpoints (Hobby 200 → Person 100) disagree with
+// the IDs replay assigns in graph craftdrop's empty catalog. dropFromToConnection
+// silently preserves a pair it cannot match, so replaying the stale recorded pair
+// would keep both connections; with the translation, exactly the Hobby→Person
+// connection disappears while Person→Person survives under its recovered IDs.
+TEST_F(ReviewFixesTest, CraftedAlterDropFromToEndpointsTranslateRecordedEntryID) {
+    if (inMemMode) {
+        GTEST_SKIP();
+    }
+
+    conn->query("CALL auto_checkpoint=false;");
+    conn->query("CALL force_checkpoint_on_close=false;");
+    {
+        ASSERT_TRUE(conn->query("CREATE GRAPH craftdrop;")->isSuccess());
+        ASSERT_TRUE(conn->query("CHECKPOINT;")->isSuccess());
+        // Source entries for the crafted records; these tables replay into main's catalog.
+        ASSERT_TRUE(conn->query("CREATE NODE TABLE Person(id INT64 PRIMARY KEY);")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE NODE TABLE Hobby(id INT64 PRIMARY KEY);")->isSuccess());
+        ASSERT_TRUE(conn->query("CREATE REL TABLE Knows(FROM Person TO Person);")->isSuccess());
+    }
+
+    auto& context = *conn->getClientContext();
+    BinaryData craftedWAL;
+    {
+        auto* memoryManager = MemoryManager::Get(context);
+        auto inMemWriter = std::make_shared<InMemFileWriter>(*memoryManager);
+        std::shared_ptr<Writer> writer;
+        if (systemConfig->enableChecksums) {
+            writer = std::make_shared<ChecksumWriter>(inMemWriter, *memoryManager);
+        } else {
+            writer = inMemWriter;
+        }
+        Serializer serializer{writer};
+        const auto appendRecord = [&serializer, &writer](const WALRecord& record) {
+            writer->onObjectBegin();
+            WALRecord::serializeWithLength(serializer, record);
+            writer->onObjectEnd();
+        };
+        const auto appendCraftRecord = [&appendRecord](WALRecord& record) {
+            record.ownerCatalogName = "craftdrop";
+            appendRecord(record);
+        };
+
+        auto catalog = catalog::Catalog::Get(context);
+        auto personCopy =
+            catalog->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "Person")
+                ->copy();
+        auto hobbyCopy =
+            catalog->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "Hobby")
+                ->copy();
+        auto knowsCopy =
+            catalog->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "Knows")
+                ->copy();
+        auto& knowsGroup = knowsCopy->cast<catalog::RelGroupCatalogEntry>();
+        auto recordedInfos = knowsGroup.getRelEntryInfos();
+        for (const auto& recordedInfo : recordedInfos) {
+            knowsGroup.dropFromToConnection(recordedInfo.nodePair.srcTableID,
+                recordedInfo.nodePair.dstTableID);
+        }
+        personCopy->setOID(100);
+        hobbyCopy->setOID(200);
+        knowsGroup.addFromToConnection(100, 100, 350);
+        knowsGroup.addFromToConnection(200, 100, 400);
+        knowsGroup.setOID(300);
+
+        appendRecord(BeginTransactionRecord{});
+        {
+            CreateCatalogEntryRecord personCreate(personCopy.get(), false);
+            appendCraftRecord(personCreate);
+            CreateCatalogEntryRecord hobbyCreate(hobbyCopy.get(), false);
+            appendCraftRecord(hobbyCreate);
+            CreateCatalogEntryRecord knowsCreate(knowsCopy.get(), false);
+            appendCraftRecord(knowsCreate);
+            binder::BoundAlterInfo alterInfo(AlterType::DROP_FROM_TO_CONNECTION, "Knows",
+                std::make_unique<binder::BoundExtraAlterFromToConnection>(200, 100));
+            AlterTableEntryRecord alterRecord(&alterInfo);
+            appendCraftRecord(alterRecord);
+        }
+        appendRecord(CommitRecord{});
+
+        auto bufferWriter = std::make_shared<BufferWriter>();
+        inMemWriter->flush(*bufferWriter);
+        craftedWAL = bufferWriter->getData();
+    }
+    conn.reset();
+    database.reset();
+
+    std::ofstream walFile{StorageUtils::getWALFilePath(databasePath),
+        std::ios::binary | std::ios::app};
+    ASSERT_TRUE(walFile.is_open());
+    walFile.write(reinterpret_cast<const char*>(craftedWAL.data.get()),
+        static_cast<std::streamsize>(craftedWAL.size));
+    walFile.close();
+    ASSERT_TRUE(walFile.good());
+
+    createDBAndConn();
+    auto openResult = conn->query("RETURN 1;");
+    ASSERT_TRUE(openResult->isSuccess()) << openResult->getErrorMessage();
+    ASSERT_TRUE(conn->query("USE GRAPH craftdrop;")->isSuccess());
+
+    common::table_id_t personID = common::INVALID_TABLE_ID;
+    common::table_id_t hobbyID = common::INVALID_TABLE_ID;
+    std::vector<catalog::RelTableCatalogInfo> recoveredRelEntryInfos;
+    main::DatabaseManager::Get(*conn->getClientContext())
+        ->withGraphCatalog("craftdrop", [&](catalog::Catalog* graphCatalog) {
+            personID =
+                graphCatalog
+                    ->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "Person")
+                    ->getTableID();
+            hobbyID =
+                graphCatalog
+                    ->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "Hobby")
+                    ->getTableID();
+            recoveredRelEntryInfos =
+                graphCatalog
+                    ->getTableCatalogEntry(&transaction::DUMMY_CHECKPOINT_TRANSACTION, "Knows")
+                    ->constCast<catalog::RelGroupCatalogEntry>()
+                    .getRelEntryInfos();
+        });
+    ASSERT_EQ(recoveredRelEntryInfos.size(), 1);
+    const auto hasPair = [&](common::table_id_t src, common::table_id_t dst) {
+        return std::any_of(recoveredRelEntryInfos.begin(), recoveredRelEntryInfos.end(),
+            [&](const catalog::RelTableCatalogInfo& info) {
+                return info.nodePair.srcTableID == src && info.nodePair.dstTableID == dst;
+            });
+    };
+    ASSERT_TRUE(hasPair(personID, personID));
+    ASSERT_FALSE(hasPair(hobbyID, personID));
 }
 
 // The whole lifecycle in one explicit transaction makes recovery replay the drop inside

@@ -4,6 +4,7 @@
 #include <unordered_map>
 
 #include "api_test/api_test.h"
+#include "binder/ddl/bound_alter_info.h"
 #include "common/exception/io.h"
 #include "common/exception/runtime.h"
 #include "common/exception/storage.h"
@@ -16,6 +17,7 @@
 #include "storage/buffer_manager/memory_manager.h"
 #include "storage/storage_utils.h"
 #include "storage/wal/local_wal.h"
+#include "storage/wal/record/alter_table_entry_record.h"
 #include "storage/wal/wal.h"
 #include <format>
 
@@ -374,26 +376,166 @@ TEST_F(WalTest, FrozenWALRemovalFailurePoisonsWALAfterDurableTruncate) {
     EXPECT_EQ(walCommitSequence, 0);
 }
 
-TEST_F(WalTest, WALRecordDeserializeSkipsUnknownTrailingBytes) {
-    auto recordBuffer = std::make_shared<BufferWriter>();
-    Serializer recordSerializer{recordBuffer};
-    lbug::storage::CopyTableRecord record{123};
-    record.serialize(recordSerializer);
-    recordSerializer.write<uint64_t>(456);
+// A record that ends exactly at its body (pre-owner-format writer) decodes with an empty
+// owner name. Unknown bytes trailing the body are indistinguishable from a torn owner
+// trailer, so they must be rejected instead of being absorbed into a garbage name.
+TEST_F(WalTest, WALRecordDeserializeRejectsUnknownTrailingBytes) {
+    {
+        auto recordBuffer = std::make_shared<BufferWriter>();
+        Serializer recordSerializer{recordBuffer};
+        lbug::storage::CopyTableRecord record{123};
+        record.serialize(recordSerializer);
 
-    auto walBuffer = std::make_shared<BufferWriter>();
-    Serializer walSerializer{walBuffer};
-    walSerializer.write(recordBuffer->getSize());
-    walSerializer.write(recordBuffer->getBlobData(), recordBuffer->getSize());
+        auto walBuffer = std::make_shared<BufferWriter>();
+        Serializer walSerializer{walBuffer};
+        walSerializer.write(recordBuffer->getSize());
+        walSerializer.write(recordBuffer->getBlobData(), recordBuffer->getSize());
 
-    auto walData = walBuffer->getData();
-    Deserializer deserializer{std::make_unique<BufferReader>(walData.data.get(), walData.size)};
-    auto deserialized =
-        lbug::storage::WALRecord::deserialize(deserializer, *conn->getClientContext());
+        auto walData = walBuffer->getData();
+        Deserializer deserializer{std::make_unique<BufferReader>(walData.data.get(), walData.size)};
+        auto deserialized =
+            lbug::storage::WALRecord::deserialize(deserializer, *conn->getClientContext());
 
-    ASSERT_EQ(deserialized->type, lbug::storage::WALRecordType::COPY_TABLE_RECORD);
-    EXPECT_EQ(deserialized->constCast<lbug::storage::CopyTableRecord>().tableID, 123);
-    EXPECT_TRUE(deserializer.finished());
+        ASSERT_EQ(deserialized->type, lbug::storage::WALRecordType::COPY_TABLE_RECORD);
+        EXPECT_EQ(deserialized->constCast<lbug::storage::CopyTableRecord>().tableID, 123);
+        EXPECT_EQ(deserialized->ownerCatalogName, "");
+        EXPECT_TRUE(deserializer.finished());
+    }
+    {
+        auto recordBuffer = std::make_shared<BufferWriter>();
+        Serializer recordSerializer{recordBuffer};
+        lbug::storage::CopyTableRecord record{123};
+        record.serialize(recordSerializer);
+        recordSerializer.write<uint64_t>(456);
+
+        auto walBuffer = std::make_shared<BufferWriter>();
+        Serializer walSerializer{walBuffer};
+        walSerializer.write(recordBuffer->getSize());
+        walSerializer.write(recordBuffer->getBlobData(), recordBuffer->getSize());
+
+        auto walData = walBuffer->getData();
+        Deserializer deserializer{std::make_unique<BufferReader>(walData.data.get(), walData.size)};
+        EXPECT_THROW(lbug::storage::WALRecord::deserialize(deserializer, *conn->getClientContext()),
+            lbug::common::RuntimeException);
+    }
+}
+
+// Hand-crafted owner trailers pin the strict validation: a torn trailer must never
+// decode into a name the replayer would route, while complete trailers — including
+// empty ones — must keep decoding.
+TEST_F(WalTest, WALRecordDeserializeValidatesOwnerTrailer) {
+    const auto deserializeWithTrailer = [&](const std::function<void(Serializer&)>& appendTrailer) {
+        auto recordBuffer = std::make_shared<BufferWriter>();
+        Serializer recordSerializer{recordBuffer};
+        lbug::storage::CopyTableRecord record{123};
+        record.serialize(recordSerializer);
+        appendTrailer(recordSerializer);
+
+        auto walBuffer = std::make_shared<BufferWriter>();
+        Serializer walSerializer{walBuffer};
+        walSerializer.write(recordBuffer->getSize());
+        walSerializer.write(recordBuffer->getBlobData(), recordBuffer->getSize());
+
+        auto walData = walBuffer->getData();
+        Deserializer deserializer{std::make_unique<BufferReader>(walData.data.get(), walData.size)};
+        return lbug::storage::WALRecord::deserialize(deserializer, *conn->getClientContext());
+    };
+
+    {
+        auto deserialized = deserializeWithTrailer(
+            [](Serializer& serializer) { serializer.write<std::string>("craft"); });
+        EXPECT_EQ(deserialized->ownerCatalogName, "craft");
+    }
+    {
+        auto deserialized =
+            deserializeWithTrailer([](Serializer& serializer) { serializer.write<uint64_t>(0); });
+        EXPECT_EQ(deserialized->ownerCatalogName, "");
+    }
+    {
+        EXPECT_THROW(deserializeWithTrailer([](Serializer& serializer) {
+            serializer.write<uint64_t>(std::numeric_limits<uint64_t>::max());
+            const std::string name = "ABCD";
+            serializer.write((const uint8_t*)name.data(), name.size());
+        }),
+            lbug::common::RuntimeException);
+    }
+    {
+        EXPECT_THROW(deserializeWithTrailer([](Serializer& serializer) {
+            serializer.write<uint64_t>(0);
+            const uint8_t garbage[8] = {0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE};
+            serializer.write(garbage, sizeof(garbage));
+        }),
+            lbug::common::RuntimeException);
+    }
+    {
+        EXPECT_THROW(deserializeWithTrailer([](Serializer& serializer) {
+            serializer.write<std::string>(std::string("AB\0D", 4));
+        }),
+            lbug::common::RuntimeException);
+    }
+    {
+        EXPECT_THROW(deserializeWithTrailer([](Serializer& serializer) {
+            const uint8_t tornZeros[3] = {0x00, 0x00, 0x00};
+            serializer.write(tornZeros, sizeof(tornZeros));
+        }),
+            lbug::common::RuntimeException);
+    }
+}
+
+// A WAL written by the pre-extension revision carries ALTER records as
+// [body][owner trailer] with no addedRelTableOID field. Short owners keep decoding
+// exactly, with the field left at its INVALID_TABLE_ID default; an owner of eight or
+// more bytes is indistinguishable from the extension, so the record is rejected and
+// replay truncates at the last commit instead of replaying with a misread field.
+TEST_F(WalTest, WALRecordDeserializeDecodesHeadFormatAlterTableEntry) {
+    const auto deserializeHeadFormat = [&](const std::string& ownerName) {
+        lbug::binder::BoundAlterInfo alterInfo(AlterType::ADD_FROM_TO_CONNECTION, "Knows",
+            std::make_unique<lbug::binder::BoundExtraAlterFromToConnection>(200, 100));
+        lbug::storage::AlterTableEntryRecord record(&alterInfo);
+        record.ownerCatalogName = ownerName;
+
+        auto walBuffer = std::make_shared<BufferWriter>();
+        Serializer walSerializer{walBuffer};
+        lbug::storage::WALRecord::serializeWithLength(walSerializer, record);
+        auto walData = walBuffer->getData();
+
+        uint64_t recordLength = 0;
+        std::memcpy(&recordLength, walData.data.get(), sizeof(recordLength));
+        const auto bodyEnd =
+            recordLength - sizeof(uint64_t) * 2 - static_cast<uint64_t>(ownerName.size());
+        auto headBuffer = std::make_shared<BufferWriter>();
+        Serializer headSerializer{headBuffer};
+        headSerializer.write<uint64_t>(recordLength - sizeof(uint64_t));
+        headSerializer.write(walData.data.get() + sizeof(recordLength), bodyEnd);
+        headSerializer.write(walData.data.get() + sizeof(recordLength) + bodyEnd + sizeof(uint64_t),
+            recordLength - bodyEnd - sizeof(uint64_t));
+
+        auto headData = headBuffer->getData();
+        Deserializer deserializer{
+            std::make_unique<BufferReader>(headData.data.get(), headData.size)};
+        return lbug::storage::WALRecord::deserialize(deserializer, *conn->getClientContext());
+    };
+
+    {
+        auto deserialized = deserializeHeadFormat("");
+        const auto& alterRecord = deserialized->constCast<lbug::storage::AlterTableEntryRecord>();
+        EXPECT_EQ(alterRecord.addedRelTableOID, lbug::common::INVALID_TABLE_ID);
+        EXPECT_EQ(deserialized->ownerCatalogName, "");
+    }
+    {
+        auto deserialized = deserializeHeadFormat("graph");
+        const auto& alterRecord = deserialized->constCast<lbug::storage::AlterTableEntryRecord>();
+        EXPECT_EQ(alterRecord.addedRelTableOID, lbug::common::INVALID_TABLE_ID);
+        EXPECT_EQ(deserialized->ownerCatalogName, "graph");
+    }
+    { EXPECT_THROW(deserializeHeadFormat("12345678"), lbug::common::RuntimeException); }
+}
+
+TEST_F(WalTest, GraphNameContainingNullByteIsRejected) {
+    const std::string query = "CREATE GRAPH `" + std::string(1, '\0') + "`;";
+    auto result = conn->query(query);
+    EXPECT_FALSE(result->isSuccess());
+    EXPECT_THAT(result->getErrorMessage(), testing::HasSubstr("null byte"));
 }
 
 // A pre-named-format binary wrote UPDATE_SEQUENCE records as [sequenceID][kCount]
@@ -461,18 +603,20 @@ TEST_F(WalTest, WALRecordDeserializeRoundTripsNamedUpdateSequenceRecord) {
 // the current reader (e.g. v43) expects. The deserializer must gracefully handle the size mismatch
 // by truncating reads at the declared record boundary and zero-filling any remaining bytes in the
 // new field. This allows silent forward-compatible migration without corrupting the next record.
+// Declared lengths that reach past the body into a partial owner trailer are torn frames and are
+// rejected by the strict trailer validation instead.
 TEST_F(WalTest, WALRecordDeserializeHandlesSizeMismatch) {
     auto recordBuffer = std::make_shared<BufferWriter>();
     Serializer recordSerializer{recordBuffer};
     lbug::storage::CopyTableRecord record{123};
     record.serialize(recordSerializer);
-    recordSerializer.write<uint64_t>(456);
 
-    // Declare a record length one byte shorter than the actual serialized size, simulating
-    // an older version that wrote a smaller struct.
+    // Declare a record length 4 bytes shorter than the actual serialized size, simulating
+    // an older version that wrote a smaller struct. The high 4 bytes of tableID fall past
+    // the declared boundary and must be zero-filled.
     const auto realRecordSize = recordBuffer->getSize();
-    ASSERT_GT(realRecordSize, 1u);
-    const auto truncatedLength = realRecordSize - 1;
+    ASSERT_GT(realRecordSize, 4u);
+    const auto truncatedLength = realRecordSize - 4;
 
     auto walBuffer = std::make_shared<BufferWriter>();
     Serializer walSerializer{walBuffer};
@@ -486,8 +630,11 @@ TEST_F(WalTest, WALRecordDeserializeHandlesSizeMismatch) {
     auto deserialized =
         lbug::storage::WALRecord::deserialize(deserializer, *conn->getClientContext());
     ASSERT_EQ(deserialized->type, lbug::storage::WALRecordType::COPY_TABLE_RECORD);
+    // tableID 123 fits entirely in its low 4 bytes, so zero-filling preserves its value.
     EXPECT_EQ(deserialized->constCast<lbug::storage::CopyTableRecord>().tableID, 123);
+    EXPECT_EQ(deserialized->ownerCatalogName, "");
     // The stream should be positioned at the declared record boundary, not past it.
+    EXPECT_EQ(deserializer.getReadOffset(), 8u + truncatedLength);
     EXPECT_FALSE(deserializer.finished());
 }
 
