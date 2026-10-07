@@ -1,0 +1,50 @@
+-DATASET CSV empty
+
+--
+
+-CASE Issue1121OptionalMatchInlinePropertyMap
+# Reproduction for github issue #1121 (0.21.x regression):
+# When the outer MATCH filtered with an inline property map, an OPTIONAL MATCH
+# that found nothing nulled the whole row, including the outer variable, instead
+# of only the optional variable. The same filter as WHERE was correct.
+# Root cause: the unnested OPTIONAL MATCH leg re-scanned the outer variable into
+# its build schema, and the hash-join probe re-read that build payload over the
+# probe's own vector, so a LEFT miss (setAsSingleNullEntry on every payload
+# vector) wiped the outer value too. The probe now only materializes build
+# expressions that are not already in the probe's scope.
+
+-STATEMENT CREATE NODE TABLE N(id INT64, name STRING, type STRING, PRIMARY KEY(id));
+---- ok
+
+-STATEMENT CREATE REL TABLE R(FROM N TO N);
+---- ok
+
+-STATEMENT CREATE (:N {id: 0, name: 'p', type: 'P'});
+---- ok
+
+-STATEMENT CREATE (:N {id: 1, name: 'a', type: 'T'});
+---- ok
+
+-STATEMENT CREATE (:N {id: 2, name: 'b', type: 'T'});
+---- ok
+
+-STATEMENT MATCH (x:N {id: 1}), (y:N {id: 0}) CREATE (x)-[:R]->(y);
+---- ok
+
+# Inline property map: used to return [None, None] for the second row.
+-STATEMENT MATCH (t:N {type: 'T'}) OPTIONAL MATCH (t)-[:R]->(p:N) RETURN t.name, p.name ORDER BY t.name;
+---- 2
+a|p
+b|
+
+# Same filter as WHERE: always correct, kept as control.
+-STATEMENT MATCH (t:N) WHERE t.type = 'T' OPTIONAL MATCH (t)-[:R]->(p:N) RETURN t.name, p.name ORDER BY t.name;
+---- 2
+a|p
+b|
+
+# Projecting the outer variable before the OPTIONAL MATCH was nulled as well.
+-STATEMENT MATCH (t:N {type: 'T'}) WITH t, t.name AS n OPTIONAL MATCH (t)-[:R]->(p:N) RETURN n, p.name ORDER BY n;
+---- 2
+a|p
+b|
