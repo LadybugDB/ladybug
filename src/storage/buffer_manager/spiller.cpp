@@ -18,9 +18,11 @@ namespace storage {
 Spiller::Spiller(std::string tmpFilePath, BufferManager& bufferManager,
     common::VirtualFileSystem* vfs)
     : tmpFilePath{std::move(tmpFilePath)}, bufferManager{bufferManager}, vfs{vfs}, dataFH{nullptr} {
-    // Clear the file if it already existed (e.g. from a previous run which
-    // failed to clean up).
-    vfs->removeFileIfExists(this->tmpFilePath);
+    // Do NOT remove a stale spill file here. The Spiller is constructed in
+    // Database::initMembers before the data-file lock is acquired (see #1129), so
+    // eager cleanup would delete the lock holder's active <db>.tmp. Stale cleanup
+    // happens lazily in getOrCreateDataFH, i.e. only after this process holds the
+    // lock and actually spills.
 }
 
 FileHandle* Spiller::getOrCreateDataFH() const {
@@ -32,6 +34,10 @@ FileHandle* Spiller::getOrCreateDataFH() const {
     if (dataFH.load()) {
         return dataFH;
     }
+    // Lazily clear a stale spill file from a previous run that failed to clean up.
+    // This runs only when this process actually spills, i.e. after the data-file
+    // lock is held, so a refused open never mutates the holder's active <db>.tmp.
+    vfs->removeFileIfExists(this->tmpFilePath);
     const_cast<Spiller*>(this)->dataFH = bufferManager.getFileHandle(tmpFilePath,
         FileHandle::O_PERSISTENT_FILE_CREATE_NOT_EXISTS, vfs, nullptr);
     return dataFH;
