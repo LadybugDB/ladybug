@@ -101,3 +101,19 @@ Binder exception: Expression SUM(ABS(a)) contains nested aggregation.
 -STATEMENT UNWIND [1, 2, 3] AS x WITH 1 AS a RETURN collect(struct_pack(a := count(*)));
 ---- error
 Binder exception: Expression COLLECT(STRUCT_PACK(a)) contains nested aggregation.
+
+# These bind now that a value derived from an aggregate can be referenced, and reach a planner
+# limitation that is not addressed here: decorrelating a subquery that is correlated only on such
+# a value produces no equality join key. Planner::appendMarkJoin rejects that instead of reading
+# joinConditions[0] out of bounds. Tracked separately.
+-CASE Issue1111CorrelatedSubqueryOnDerivedAggregate
+-STATEMENT CREATE NODE TABLE P(id INT64, PRIMARY KEY(id));
+---- ok
+-STATEMENT CREATE (:P {id: 1}), (:P {id: 2}), (:P {id: 3});
+---- ok
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c WITH c + 1 AS n WHERE EXISTS { MATCH (p:P) WHERE p.id = n } RETURN n;
+---- error
+Runtime exception: Unable to construct a hash join without any join condition.
+-STATEMENT UNWIND [1, 2, 3] AS x WITH count(*) AS c RETURN COUNT { MATCH (p:P) WHERE p.id = c + 1 };
+---- error
+Runtime exception: Unable to construct a hash join without any join condition.
