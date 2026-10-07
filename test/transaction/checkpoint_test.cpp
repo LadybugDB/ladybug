@@ -1631,8 +1631,10 @@ TEST_F(FlakyCheckpointerTest, LegacyGraphShadowRejectsReplacementBaseBeforeRepla
         createDBAndConn();
         FAIL() << "Expected legacy graph shadow to reject a replacement graph file.";
     } catch (const RuntimeException& e) {
-        EXPECT_NE(std::string{e.what()}.find("Database ID"), std::string::npos) << e.what();
-        EXPECT_NE(std::string{e.what()}.find(graphShadowPath), std::string::npos) << e.what();
+        const std::string message = TestHelper::normalizeForFind(e.what());
+        EXPECT_NE(message.find("Database ID"), std::string::npos) << message;
+        EXPECT_NE(message.find(TestHelper::normalizeForFind(graphShadowPath)), std::string::npos)
+            << message;
     }
     EXPECT_EQ(readFile(graphPath), graphBeforeRecovery);
 }
@@ -1768,8 +1770,9 @@ TEST_P(LegacyGraphMarkerAfterMainCheckpointTest, ValidatesGraphShadowByPageZero)
             createDBAndConn();
             FAIL() << "Expected the legacy graph shadow to be rejected.";
         } catch (const RuntimeException& e) {
-            const std::string message = e.what();
-            EXPECT_NE(message.find(graphShadowPath), std::string::npos) << message;
+            const std::string message = TestHelper::normalizeForFind(e.what());
+            const auto expectedPath = TestHelper::normalizeForFind(graphShadowPath);
+            EXPECT_NE(message.find(expectedPath), std::string::npos) << message;
             if (artifact == LegacyGraphShadowArtifact::UncommittedBundle) {
                 EXPECT_NE(message.find("never committed"), std::string::npos) << message;
             } else {
@@ -2456,8 +2459,10 @@ TEST_P(LegacyGraphMarkerWithoutShadowTest, FailsClosed) {
         createDBAndConn();
         FAIL() << "Expected a legacy graph marker without its shadow to be rejected.";
     } catch (const RuntimeException& e) {
-        EXPECT_NE(std::string{e.what()}.find(graphShadowPath + " is missing"), std::string::npos)
-            << e.what();
+        const std::string message = TestHelper::normalizeForFind(e.what());
+        const auto expectedNeedle =
+            TestHelper::normalizeForFind(graphShadowPath) + " is missing";
+        EXPECT_NE(message.find(expectedNeedle), std::string::npos) << message;
     }
     EXPECT_TRUE(std::filesystem::exists(markerPath));
     EXPECT_EQ(readFile(graphPath), graphBeforeRecovery);
@@ -2642,8 +2647,9 @@ TEST_F(FlakyCheckpointerTest, CommittedGraphRecoveryRejectsMissingBaseFile) {
         createDBAndConn();
         FAIL() << "Expected committed recovery to reject a missing graph file.";
     } catch (const RuntimeException& e) {
-        EXPECT_NE(std::string{e.what()}.find("graph file " + graphPath), std::string::npos)
-            << e.what();
+        const std::string message = TestHelper::normalizeForFind(e.what());
+        const auto expectedNeedle = "graph file " + TestHelper::normalizeForFind(graphPath);
+        EXPECT_NE(message.find(expectedNeedle), std::string::npos) << message;
     }
     EXPECT_FALSE(std::filesystem::exists(graphPath));
 }
