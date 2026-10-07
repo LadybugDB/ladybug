@@ -82,6 +82,16 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapHashJoin(const LogicalOperator*
     auto buildKeyTypes = ExpressionUtil::getDataTypes(buildKeys);
     auto payloads =
         ExpressionUtil::excludeExpressions(hashJoin->getExpressionsToMaterialize(), probeKeys);
+    // The logical output schema keeps the probe side's DataPos for expressions present on
+    // both sides (LogicalHashJoin::computeFactorizedSchema dedups via
+    // insertToGroupAndScopeMayRepeat), so re-reading a probe-side expression from the
+    // build table aliases the probe's own vector: on a LEFT miss
+    // HashJoinProbe::getLeftJoinResult nulls every payload vector, wiping the outer row
+    // as well (see #1121, where an unnested OPTIONAL MATCH leg re-scanned the outer
+    // variable into its build schema). Only materialize build expressions not already in
+    // the probe's scope.
+    payloads = ExpressionUtil::excludeExpressions(payloads,
+        hashJoin->getChild(0)->getSchema()->getExpressionsInScope());
     // Create build
     auto buildInfo = createHashBuildInfo(*buildSchema, buildKeys, payloads);
     auto globalHashTable =
