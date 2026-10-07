@@ -113,6 +113,9 @@ static void printValueVector(const ValueVector& vector, uint64_t numRows) {
 }
 
 static void dumpRecord(const WALRecord& record) {
+    if (!record.ownerCatalogName.empty()) {
+        std::cout << "      OwnerCatalog: " << record.ownerCatalogName << "\n";
+    }
     switch (record.type) {
     case WALRecordType::BEGIN_TRANSACTION_RECORD:
         std::cout << "      Type: BEGIN_TRANSACTION\n";

@@ -63,6 +63,13 @@ public:
     void clearDefaultGraph();
     bool hasGraph(const std::string& graphName);
     catalog::Catalog* getGraphCatalog(const std::string& graphName);
+    // Unloads the named graph's in-memory catalog and any graph-WAL replay queued for it,
+    // without file or database-header work (the runtime drop removed the dropped graph's
+    // files; at replay the files under the name can belong to a recreated graph). Returns
+    // ownership of the removed catalog so the caller can evict state keyed by its address
+    // and defer destruction until no active transaction can hold undo records into it.
+    // Returns nullptr when no loaded catalog holds the name.
+    std::unique_ptr<catalog::Catalog> unloadGraphCatalog(const std::string& graphName);
     // Runs action with the graph registry's shared lock held, so a concurrent DROP GRAPH
     // cannot destroy the catalog for the action's duration. Callers that dereference the
     // catalog after a getGraphCatalog lookup must use this instead; getGraphCatalog only

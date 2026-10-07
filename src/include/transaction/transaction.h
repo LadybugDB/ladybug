@@ -152,6 +152,9 @@ public:
         const binder::BoundAlterInfo& alterInfo, bool skipLoggingToWAL = false);
     void pushSequenceChange(catalog::SequenceCatalogEntry* sequenceEntry, int64_t kCount,
         const catalog::SequenceRollbackData& data);
+    // The transaction's undo records may point into the parked catalog; destroying it
+    // before commit or rollback finishes would leave those records dangling.
+    void retireGraphCatalog(std::unique_ptr<catalog::Catalog> catalog);
     void pushInsertInfo(common::node_group_idx_t nodeGroupIdx, common::row_idx_t startRow,
         common::row_idx_t numRows, const storage::VersionRecordHandler* versionRecordHandler) const;
     void pushDeleteInfo(common::node_group_idx_t nodeGroupIdx, common::row_idx_t startRow,
@@ -180,6 +183,7 @@ private:
     std::vector<std::function<void(Transaction&)>> commitCallbacks;
     std::vector<std::function<void(Transaction&)>> rollbackCallbacks;
     bool forceCheckpoint;
+    std::vector<std::unique_ptr<catalog::Catalog>> retiredGraphCatalogs;
     std::unordered_set<catalog::Catalog*> changedCatalogs;
     std::mutex changedCatalogsMutex;
 };

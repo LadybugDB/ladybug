@@ -61,6 +61,11 @@ public:
 
     common::oid_t getNextOIDNoLock() { return nextOID++; }
 
+    common::oid_t peekNextOID() const {
+        std::shared_lock lck{mtx};
+        return nextOID;
+    }
+
 private:
     bool containsEntryNoLock(const transaction::Transaction* transaction,
         const std::string& name) const;

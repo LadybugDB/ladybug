@@ -114,6 +114,11 @@ void WALReplayer::replayCreateCatalogEntryRecord(WALRecord& walRecord) const {
     case CatalogEntryType::GRAPH_ENTRY: {
         auto& graphEntry = record.ownedCatalogEntry->constCast<GraphCatalogEntry>();
         catalog->createGraph(transaction, graphEntry.getName(), graphEntry.isAnyGraphType());
+        // Graph-entry IDs shift when rolled-back DDL consumed IDs between logging and
+        // replay, so a later GRAPH_ENTRY drop must translate through this map like every
+        // other entry type.
+        recordReplayedEntryID(CatalogEntryType::GRAPH_ENTRY, graphEntry.getOID(),
+            catalog->getGraphEntry(transaction, graphEntry.getName())->getOID());
     } break;
     default: {
         UNREACHABLE_CODE;
